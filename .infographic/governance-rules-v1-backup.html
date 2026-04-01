@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Maestro — Governance Rules v0.27.2</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Teko:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#070707;--surface:#0e0e0e;--border:rgba(255,255,255,0.08);
+  --text:#e8e8e8;--muted:#7a7a7a;--dim:#555;
+  --manager:#FF4444;--cos:#FFB800;--orchestrator:#A764F6;
+  --architect:#29B7FF;--integrator:#00E88A;--member:#6B6B6B;
+  --primary:#00E88A;--secondary:#29B7FF;--accent:#FFB800;
+  --glow-primary:rgba(0,232,138,0.15);--glow-accent:rgba(255,184,0,0.12);
+}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:'Montserrat',sans-serif;
+  width:2160px;min-height:3840px;
+  position:relative;
+}
+body::before{
+  content:'';position:absolute;top:0;left:0;right:0;bottom:0;
+  background:radial-gradient(ellipse at 20% 10%,rgba(0,232,138,0.04),transparent 50%),
+             radial-gradient(ellipse at 80% 30%,rgba(41,183,255,0.03),transparent 50%),
+             radial-gradient(ellipse at 50% 80%,rgba(167,100,246,0.03),transparent 50%);
+  pointer-events:none;z-index:0;
+}
+.canvas{position:relative;z-index:1;padding:48px 64px 40px;}
+
+/* ═══ HERO ═══ */
+.hero{text-align:center;padding:40px 0 32px;border-bottom:2px solid rgba(0,232,138,0.2);margin-bottom:36px;}
+.hero-label{font-family:'Teko',sans-serif;font-size:28px;font-weight:500;letter-spacing:0.25em;text-transform:uppercase;color:var(--primary);margin-bottom:8px;}
+.hero h1{font-family:'Bebas Neue',sans-serif;font-size:96px;letter-spacing:0.04em;color:#fff;line-height:1;margin-bottom:12px;}
+.hero h1 span{color:var(--primary);}
+.hero-sub{font-size:22px;color:var(--muted);font-weight:500;}
+.hero-sub strong{color:var(--text);font-weight:700;}
+
+/* ═══ SECTION BAND ═══ */
+.section-band{
+  background:linear-gradient(90deg,rgba(0,232,138,0.12),rgba(0,232,138,0.03));
+  padding:14px 28px;margin:32px 0 20px;border-left:4px solid var(--primary);
+  font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:0.08em;color:var(--primary);
+  display:flex;align-items:center;gap:16px;
+}
+.section-band i{font-size:28px;}
+.section-band.amber{
+  background:linear-gradient(90deg,rgba(255,184,0,0.12),rgba(255,184,0,0.03));
+  border-left-color:var(--accent);color:var(--accent);
+}
+.section-band.blue{
+  background:linear-gradient(90deg,rgba(41,183,255,0.12),rgba(41,183,255,0.03));
+  border-left-color:var(--secondary);color:var(--secondary);
+}
+.section-band.purple{
+  background:linear-gradient(90deg,rgba(167,100,246,0.12),rgba(167,100,246,0.03));
+  border-left-color:var(--orchestrator);color:var(--orchestrator);
+}
+.section-band.red{
+  background:linear-gradient(90deg,rgba(255,68,68,0.12),rgba(255,68,68,0.03));
+  border-left-color:var(--manager);color:var(--manager);
+}
+
+/* ═══ HIERARCHY ═══ */
+.hierarchy{display:flex;justify-content:center;gap:24px;padding:20px 0 8px;flex-wrap:nowrap;}
+.role-card{
+  width:300px;text-align:center;position:relative;
+  border:2px solid var(--border);border-radius:16px;
+  background:var(--surface);overflow:hidden;
+  transition:transform 0.2s;
+}
+.role-card .avatar-frame{
+  width:100%;height:240px;overflow:hidden;position:relative;
+}
+.role-card .avatar-frame img{width:100%;height:100%;object-fit:cover;}
+.role-card .avatar-frame::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:60px;
+  background:linear-gradient(transparent,var(--surface));
+}
+.role-card .info{padding:12px 16px 16px;}
+.role-card .title-badge{
+  display:inline-block;padding:4px 14px;border-radius:4px;
+  font-size:16px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;
+  margin-bottom:6px;
+}
+.role-card .role-name{font-size:14px;color:var(--muted);font-weight:500;margin-bottom:4px;}
+.role-card .role-desc{font-size:13px;color:var(--dim);line-height:1.4;}
+.badge-manager{background:rgba(255,68,68,0.2);color:var(--manager);border:1px solid rgba(255,68,68,0.4);}
+.badge-cos{background:rgba(255,184,0,0.2);color:var(--cos);border:1px solid rgba(255,184,0,0.4);}
+.badge-orchestrator{background:rgba(167,100,246,0.2);color:var(--orchestrator);border:1px solid rgba(167,100,246,0.4);}
+.badge-architect{background:rgba(41,183,255,0.2);color:var(--architect);border:1px solid rgba(41,183,255,0.4);}
+.badge-integrator{background:rgba(0,232,138,0.2);color:var(--integrator);border:1px solid rgba(0,232,138,0.4);}
+.badge-member{background:rgba(107,107,107,0.2);color:var(--member);border:1px solid rgba(107,107,107,0.4);}
+/* glow on top cards */
+.role-card.glow-manager{border-color:rgba(255,68,68,0.3);box-shadow:0 0 24px rgba(255,68,68,0.08);}
+.role-card.glow-cos{border-color:rgba(255,184,0,0.3);box-shadow:0 0 24px rgba(255,184,0,0.08);}
+.role-card.glow-orchestrator{border-color:rgba(167,100,246,0.3);box-shadow:0 0 20px rgba(167,100,246,0.06);}
+.role-card.glow-architect{border-color:rgba(41,183,255,0.3);box-shadow:0 0 20px rgba(41,183,255,0.06);}
+.role-card.glow-integrator{border-color:rgba(0,232,138,0.3);box-shadow:0 0 20px rgba(0,232,138,0.06);}
+
+/* arrow between cards */
+.h-arrow{display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--primary);opacity:0.5;align-self:center;}
+
+/* ═══ DENSE TABLE ═══ */
+.dense-table{width:100%;border-collapse:collapse;font-size:18px;margin:8px 0;}
+.dense-table th{
+  background:rgba(0,232,138,0.1);color:var(--primary);
+  font-size:15px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;
+  padding:10px 16px;text-align:left;border-bottom:2px solid rgba(0,232,138,0.25);
+}
+.dense-table td{
+  padding:9px 16px;color:var(--text);border-bottom:1px solid rgba(255,255,255,0.04);line-height:1.4;
+}
+.dense-table tr:nth-child(even) td{background:rgba(255,255,255,0.02);}
+.dense-table .accent{font-weight:600;}
+.dense-table .check{color:var(--primary);font-weight:700;}
+.dense-table .cross{color:var(--manager);opacity:0.5;}
+.dense-table .warn{color:var(--cos);}
+.title-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:middle;}
+
+/* ═══ FLOW ═══ */
+.flow-row{display:flex;align-items:center;gap:0;margin:12px 0;}
+.flow-node{
+  flex:1;padding:16px 20px;
+  border:2px solid rgba(0,232,138,0.3);border-radius:12px;
+  background:rgba(0,232,138,0.04);text-align:center;
+}
+.flow-node .label{font-size:16px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:0.05em;}
+.flow-node .sub{font-size:14px;color:var(--muted);margin-top:4px;}
+.flow-arrow{display:flex;align-items:center;justify-content:center;width:52px;flex-shrink:0;color:var(--primary);font-size:24px;}
+.flow-node.amber{border-color:rgba(255,184,0,0.3);background:rgba(255,184,0,0.04);}
+.flow-node.amber .label{color:var(--cos);}
+.flow-node.red{border-color:rgba(255,68,68,0.3);background:rgba(255,68,68,0.04);}
+.flow-node.red .label{color:var(--manager);}
+.flow-node.purple{border-color:rgba(167,100,246,0.3);background:rgba(167,100,246,0.04);}
+.flow-node.purple .label{color:var(--orchestrator);}
+.flow-node.blue{border-color:rgba(41,183,255,0.3);background:rgba(41,183,255,0.04);}
+.flow-node.blue .label{color:var(--architect);}
+
+/* ═══ BULLET PANEL ═══ */
+.bullet-panel{
+  border:2px solid rgba(0,232,138,0.25);border-radius:12px;
+  padding:20px 24px;background:rgba(0,232,138,0.03);
+}
+.bullet-panel.amber{border-color:rgba(255,184,0,0.25);background:rgba(255,184,0,0.03);}
+.bullet-panel.blue{border-color:rgba(41,183,255,0.25);background:rgba(41,183,255,0.03);}
+.bullet-panel.red{border-color:rgba(255,68,68,0.25);background:rgba(255,68,68,0.03);}
+.bullet-panel.purple{border-color:rgba(167,100,246,0.25);background:rgba(167,100,246,0.03);}
+.bullet-panel h4{
+  font-size:17px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--primary);margin-bottom:12px;padding-bottom:8px;
+  border-bottom:1px solid rgba(0,232,138,0.15);
+}
+.bullet-panel.amber h4{color:var(--cos);border-bottom-color:rgba(255,184,0,0.15);}
+.bullet-panel.blue h4{color:var(--secondary);border-bottom-color:rgba(41,183,255,0.15);}
+.bullet-panel.red h4{color:var(--manager);border-bottom-color:rgba(255,68,68,0.15);}
+.bullet-panel.purple h4{color:var(--orchestrator);border-bottom-color:rgba(167,100,246,0.15);}
+.bullet-panel ul{list-style:none;display:flex;flex-direction:column;gap:7px;}
+.bullet-panel li{font-size:17px;line-height:1.45;color:var(--text);padding-left:20px;position:relative;}
+.bullet-panel li::before{content:'▸';position:absolute;left:0;color:var(--primary);font-size:14px;}
+.bullet-panel.amber li::before{color:var(--cos);}
+.bullet-panel.blue li::before{color:var(--secondary);}
+.bullet-panel.red li::before{color:var(--manager);}
+.bullet-panel.purple li::before{color:var(--orchestrator);}
+
+/* ═══ GRID LAYOUTS ═══ */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:12px 0;}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin:12px 0;}
+
+/* ═══ STEP PROCESS ═══ */
+.step-list{display:flex;flex-direction:column;gap:0;position:relative;margin:12px 0;}
+.step-list::before{content:'';position:absolute;left:22px;top:44px;bottom:22px;width:3px;background:rgba(0,232,138,0.15);}
+.step-item{display:flex;gap:20px;align-items:flex-start;padding:0 0 20px;position:relative;}
+.step-num{
+  width:44px;height:44px;border-radius:50%;background:var(--primary);color:#000;
+  font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;position:relative;z-index:1;
+}
+.step-content .title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px;}
+.step-content .desc{font-size:16px;color:var(--muted);line-height:1.45;}
+
+/* ═══ TEAM DIAGRAM ═══ */
+.team-box{
+  border:2px solid rgba(255,184,0,0.3);border-radius:16px;
+  padding:28px;background:rgba(255,184,0,0.03);position:relative;
+  margin:12px 0;
+}
+.team-box .team-label{
+  position:absolute;top:-14px;left:28px;
+  background:var(--bg);padding:0 12px;
+  font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--cos);letter-spacing:0.06em;
+}
+.team-inner{display:flex;gap:24px;align-items:stretch;}
+.team-cos-gate{
+  width:200px;flex-shrink:0;border:2px solid rgba(255,184,0,0.4);border-radius:12px;
+  background:rgba(255,184,0,0.06);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:16px;text-align:center;
+}
+.team-cos-gate img{width:80px;height:80px;border-radius:50%;border:2px solid var(--cos);margin-bottom:8px;object-fit:cover;}
+.team-cos-gate .gate-label{font-size:14px;font-weight:700;color:var(--cos);text-transform:uppercase;letter-spacing:0.08em;}
+.team-cos-gate .gate-sub{font-size:12px;color:var(--muted);margin-top:4px;}
+.team-members{flex:1;display:flex;flex-wrap:wrap;gap:12px;align-content:flex-start;}
+.team-member{
+  width:100px;text-align:center;
+}
+.team-member img{width:56px;height:56px;border-radius:50%;border:2px solid var(--border);object-fit:cover;}
+.team-member .name{font-size:11px;color:var(--muted);margin-top:4px;}
+.gate-arrow{display:flex;align-items:center;justify-content:center;width:40px;flex-shrink:0;font-size:28px;color:var(--cos);}
+
+/* ═══ LAYER DIAGRAM ═══ */
+.layer-stack{display:flex;flex-direction:column;gap:6px;margin:12px 0;}
+.layer-row{
+  display:flex;align-items:center;gap:16px;
+  padding:12px 20px;border-radius:8px;
+  border-left:4px solid;
+}
+.layer-row .layer-num{font-family:'Bebas Neue',sans-serif;font-size:28px;min-width:40px;}
+.layer-row .layer-name{font-size:17px;font-weight:700;flex:1;}
+.layer-row .layer-desc{font-size:15px;color:var(--muted);flex:2;}
+
+/* ═══ STAT STRIP ═══ */
+.stat-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:16px 0;}
+.stat-item{
+  border-top:3px solid var(--primary);background:rgba(0,232,138,0.05);
+  border-radius:0 0 8px 8px;padding:16px 20px;text-align:center;
+}
+.stat-item .number{font-family:'Bebas Neue',sans-serif;font-size:52px;color:var(--primary);line-height:1;}
+.stat-item .label{font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:6px;}
+
+/* ═══ FOOTER ═══ */
+.footer{
+  margin-top:32px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.06);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.footer .left{font-size:16px;color:var(--dim);}
+.footer .right{font-size:14px;color:var(--dim);}
+</style>
+</head>
+<body>
+<div class="canvas">
+
+<!-- ═══════════ HERO ═══════════ -->
+<div class="hero">
+  <div class="hero-label"><i class="ph-bold ph-shield-star"></i> Complete Reference</div>
+  <h1>AI MAESTRO <span>GOVERNANCE RULES</span></h1>
+  <div class="hero-sub">Version <strong>0.27.2</strong> &mdash; 6 Titles &bull; Closed Teams &bull; Multi-Host Federation &bull; Ed25519 Trust</div>
+</div>
+
+<!-- ═══════════ STATS ═══════════ -->
+<div class="stat-strip">
+  <div class="stat-item"><div class="number">6</div><div class="label">Governance Titles</div></div>
+  <div class="stat-item" style="border-top-color:var(--secondary)"><div class="number" style="color:var(--secondary)">100+</div><div class="label">API Endpoints</div></div>
+  <div class="stat-item" style="border-top-color:var(--accent)"><div class="number" style="color:var(--accent)">6</div><div class="label">Federation Layers</div></div>
+  <div class="stat-item" style="border-top-color:var(--orchestrator)"><div class="number" style="color:var(--orchestrator)">Ed25519</div><div class="label">Cross-Host Trust</div></div>
+</div>
+
+<!-- ═══════════ 1. HIERARCHY ═══════════ -->
+<div class="section-band red"><i class="ph-bold ph-crown"></i> 1 &mdash; GOVERNANCE HIERARCHY</div>
+
+<div class="hierarchy">
+  <div class="role-card glow-manager">
+    <div class="avatar-frame"><img src="../public/avatars/robots_40.jpg" alt="Manager"></div>
+    <div class="info">
+      <span class="title-badge badge-manager">MANAGER</span>
+      <div class="role-name">Singleton per host</div>
+      <div class="role-desc">Full authority. Creates teams, assigns COS, approves transfers.</div>
+    </div>
+  </div>
+  <div class="h-arrow">&#x2192;</div>
+  <div class="role-card glow-cos">
+    <div class="avatar-frame"><img src="../public/avatars/robots_10.jpg" alt="COS"></div>
+    <div class="info">
+      <span class="title-badge badge-cos">CHIEF OF STAFF</span>
+      <div class="role-name">1 per closed team</div>
+      <div class="role-desc">Team gatekeeper. Routes external messages, manages roster.</div>
+    </div>
+  </div>
+  <div class="h-arrow">&#x2192;</div>
+  <div class="role-card glow-orchestrator">
+    <div class="avatar-frame"><img src="../public/avatars/robots_30.jpg" alt="Orchestrator"></div>
+    <div class="info">
+      <span class="title-badge badge-orchestrator">ORCHESTRATOR</span>
+      <div class="role-name">Task coordination</div>
+      <div class="role-desc">Assigns tasks to team members. Pipeline management.</div>
+    </div>
+  </div>
+  <div class="h-arrow">&#x2192;</div>
+  <div class="role-card glow-architect">
+    <div class="avatar-frame"><img src="../public/avatars/robots_50.jpg" alt="Architect"></div>
+    <div class="info">
+      <span class="title-badge badge-architect">ARCHITECT</span>
+      <div class="role-name">System design</div>
+      <div class="role-desc">Architecture decisions. Code structure oversight.</div>
+    </div>
+  </div>
+  <div class="h-arrow">&#x2192;</div>
+  <div class="role-card glow-integrator">
+    <div class="avatar-frame"><img src="../public/avatars/robots_00.jpg" alt="Integrator"></div>
+    <div class="info">
+      <span class="title-badge badge-integrator">INTEGRATOR</span>
+      <div class="role-name">System integration</div>
+      <div class="role-desc">Connects services. API bridging and compatibility.</div>
+    </div>
+  </div>
+  <div class="h-arrow">&#x2192;</div>
+  <div class="role-card">
+    <div class="avatar-frame"><img src="../public/avatars/robots_20.jpg" alt="Member"></div>
+    <div class="info">
+      <span class="title-badge badge-member">MEMBER</span>
+      <div class="role-name">Default title</div>
+      <div class="role-desc">General programmer. Custom role-plugin optional.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 2. PERMISSIONS TABLE ═══════════ -->
+<div class="section-band"><i class="ph-bold ph-table"></i> 2 &mdash; TITLE PERMISSIONS MATRIX</div>
+
+<table class="dense-table">
+<thead>
+<tr>
+  <th style="width:22%">Capability</th>
+  <th style="width:13%"><span class="title-dot" style="background:var(--manager)"></span>Manager</th>
+  <th style="width:13%"><span class="title-dot" style="background:var(--cos)"></span>COS</th>
+  <th style="width:13%"><span class="title-dot" style="background:var(--orchestrator)"></span>Orchestrator</th>
+  <th style="width:13%"><span class="title-dot" style="background:var(--architect)"></span>Architect</th>
+  <th style="width:13%"><span class="title-dot" style="background:var(--integrator)"></span>Integrator</th>
+  <th style="width:13%"><span class="title-dot" style="background:var(--member)"></span>Member</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>Create/delete teams</td><td class="check">&#10003;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td></tr>
+<tr><td>Assign COS to team</td><td class="check">&#10003;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td></tr>
+<tr><td>Set governance password</td><td class="check">&#10003;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td></tr>
+<tr><td>Approve cross-host requests</td><td class="check">&#10003;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td></tr>
+<tr><td>Manage team roster</td><td class="check">&#10003;</td><td class="check" style="color:var(--cos)">&#10003;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td></tr>
+<tr><td>Route external messages</td><td class="cross">&#10007;</td><td class="check" style="color:var(--cos)">&#10003;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td></tr>
+<tr><td>Assign tasks to members</td><td class="check">&#10003;</td><td class="check" style="color:var(--cos)">&#10003;</td><td class="check" style="color:var(--orchestrator)">&#10003;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td></tr>
+<tr><td>Architecture decisions</td><td class="check">&#10003;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td><td class="check" style="color:var(--architect)">&#10003;</td><td class="cross">&#10007;</td><td class="cross">&#10007;</td></tr>
+<tr><td>Message within team</td><td class="check">&#10003;</td><td class="check" style="color:var(--cos)">&#10003;</td><td class="check" style="color:var(--orchestrator)">&#10003;</td><td class="check" style="color:var(--architect)">&#10003;</td><td class="check" style="color:var(--integrator)">&#10003;</td><td class="check" style="color:var(--member)">&#10003;</td></tr>
+<tr><td>Message outside team</td><td class="check">&#10003;</td><td class="check" style="color:var(--cos)">&#10003;</td><td class="warn">via COS</td><td class="warn">via COS</td><td class="warn">via COS</td><td class="warn">via COS</td></tr>
+<tr><td>Required AI client</td><td style="color:var(--manager)">Claude only</td><td style="color:var(--cos)">Claude only</td><td>Any</td><td>Any</td><td>Any</td><td>Any</td></tr>
+<tr><td>Auto-installed plugin</td><td style="font-size:14px">assistant-manager</td><td style="font-size:14px">chief-of-staff</td><td style="font-size:14px">orchestrator</td><td style="font-size:14px">architect</td><td style="font-size:14px">integrator</td><td style="font-size:14px">programmer</td></tr>
+<tr><td>Plugin locked to title?</td><td class="check">Locked</td><td class="check" style="color:var(--cos)">Locked</td><td class="check" style="color:var(--orchestrator)">Locked</td><td class="check" style="color:var(--architect)">Locked</td><td class="check" style="color:var(--integrator)">Locked</td><td class="cross">User choice</td></tr>
+</tbody>
+</table>
+
+<!-- ═══════════ 3. TEAM STRUCTURE ═══════════ -->
+<div class="section-band amber"><i class="ph-bold ph-users-three"></i> 3 &mdash; CLOSED TEAM STRUCTURE</div>
+
+<div class="grid-2">
+  <div class="team-box">
+    <div class="team-label">CLOSED TEAM &mdash; &ldquo;BACKEND SQUAD&rdquo;</div>
+    <div class="team-inner">
+      <div class="team-cos-gate">
+        <img src="../public/avatars/robots_10.jpg" alt="COS">
+        <div class="gate-label">COS Gateway</div>
+        <div class="gate-sub">All external msgs route through COS</div>
+      </div>
+      <div class="gate-arrow">&#x2192;</div>
+      <div class="team-members">
+        <div class="team-member"><img src="../public/avatars/robots_30.jpg"><div class="name">Orchestrator</div></div>
+        <div class="team-member"><img src="../public/avatars/robots_50.jpg"><div class="name">Architect</div></div>
+        <div class="team-member"><img src="../public/avatars/robots_00.jpg"><div class="name">Integrator</div></div>
+        <div class="team-member"><img src="../public/avatars/robots_20.jpg"><div class="name">Member A</div></div>
+        <div class="team-member"><img src="../public/avatars/robots_25.jpg"><div class="name">Member B</div></div>
+        <div class="team-member"><img src="../public/avatars/robots_35.jpg"><div class="name">Member C</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bullet-panel amber">
+    <h4><i class="ph-bold ph-lock-key"></i> Closed Team Rules</h4>
+    <ul>
+      <li>All teams are <strong>closed</strong> after governance simplification</li>
+      <li>Internal messaging: any member &#x2192; any member (free)</li>
+      <li>External messaging: must route through <strong>COS gateway</strong></li>
+      <li>COS manages roster: add/remove agents</li>
+      <li>Manager creates teams, assigns COS</li>
+      <li>Each agent can belong to <strong>one team only</strong></li>
+      <li>Groups replace old &ldquo;open teams&rdquo; (no governance)</li>
+      <li>Team deletion requires <strong>governance password</strong></li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════ 4. MESSAGING RULES ═══════════ -->
+<div class="section-band blue"><i class="ph-bold ph-envelope"></i> 4 &mdash; MESSAGING ISOLATION RULES</div>
+
+<div class="flow-row">
+  <div class="flow-node" style="flex:0.7"><div class="label">Agent A</div><div class="sub">Team Alpha</div></div>
+  <div class="flow-arrow" style="color:var(--manager)">&#10007;</div>
+  <div class="flow-node" style="flex:0.7"><div class="label">Agent B</div><div class="sub">Team Beta</div></div>
+</div>
+<div style="text-align:center;color:var(--muted);font-size:15px;margin:4px 0 12px;">Direct cross-team messaging is <strong style="color:var(--manager)">BLOCKED</strong></div>
+
+<div class="flow-row">
+  <div class="flow-node" style="flex:0.6"><div class="label">Agent A</div><div class="sub">Team Alpha</div></div>
+  <div class="flow-arrow">&#x2192;</div>
+  <div class="flow-node amber" style="flex:0.5"><div class="label">COS Alpha</div><div class="sub">Gateway</div></div>
+  <div class="flow-arrow" style="color:var(--cos)">&#x2192;</div>
+  <div class="flow-node amber" style="flex:0.5"><div class="label">COS Beta</div><div class="sub">Gateway</div></div>
+  <div class="flow-arrow">&#x2192;</div>
+  <div class="flow-node" style="flex:0.6"><div class="label">Agent B</div><div class="sub">Team Beta</div></div>
+</div>
+<div style="text-align:center;color:var(--muted);font-size:15px;margin:4px 0 8px;">Cross-team messaging routed through <strong style="color:var(--cos)">COS GATEWAYS</strong></div>
+
+<div class="grid-3" style="margin-top:16px;">
+  <div class="bullet-panel blue">
+    <h4>R6.1 &mdash; Same Team</h4>
+    <ul>
+      <li>Free messaging between all members</li>
+      <li>No COS routing needed</li>
+      <li>AMP signatures verified</li>
+    </ul>
+  </div>
+  <div class="bullet-panel amber">
+    <h4>R6.2 &mdash; Cross-Team</h4>
+    <ul>
+      <li>Must route through both COS gateways</li>
+      <li>COS can block/filter messages</li>
+      <li>Governance attestation attached</li>
+    </ul>
+  </div>
+  <div class="bullet-panel red">
+    <h4>R6.3 &mdash; No Team</h4>
+    <ul>
+      <li>Unaffiliated agents: open messaging</li>
+      <li>Cannot message into closed teams</li>
+      <li>Groups allow broadcast (no governance)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════ 5. MULTI-HOST FEDERATION ═══════════ -->
+<div class="section-band purple"><i class="ph-bold ph-globe"></i> 5 &mdash; MULTI-HOST FEDERATION LAYERS</div>
+
+<div class="layer-stack">
+  <div class="layer-row" style="border-left-color:var(--primary);background:rgba(0,232,138,0.04);">
+    <div class="layer-num" style="color:var(--primary)">L1</div>
+    <div class="layer-name" style="color:var(--primary)">Governance State Replication</div>
+    <div class="layer-desc">Team rosters, titles, and COS assignments synced across hosts</div>
+  </div>
+  <div class="layer-row" style="border-left-color:var(--secondary);background:rgba(41,183,255,0.04);">
+    <div class="layer-num" style="color:var(--secondary)">L2</div>
+    <div class="layer-name" style="color:var(--secondary)">Cross-Host Identity Attestation</div>
+    <div class="layer-desc">Ed25519 signed attestations with 5-min freshness + recipient binding</div>
+  </div>
+  <div class="layer-row" style="border-left-color:var(--orchestrator);background:rgba(167,100,246,0.04);">
+    <div class="layer-num" style="color:var(--orchestrator)">L3</div>
+    <div class="layer-name" style="color:var(--orchestrator)">Cross-Host Governance Requests</div>
+    <div class="layer-desc">Dual-approval workflow: requesting host + target host must both approve</div>
+  </div>
+  <div class="layer-row" style="border-left-color:var(--cos);background:rgba(255,184,0,0.04);">
+    <div class="layer-num" style="color:var(--cos)">L4</div>
+    <div class="layer-name" style="color:var(--cos)">Host-Scoped Manager Authority</div>
+    <div class="layer-desc">Manager trust registry with explicit autoApprove flags per peer</div>
+  </div>
+  <div class="layer-row" style="border-left-color:var(--manager);background:rgba(255,68,68,0.04);">
+    <div class="layer-num" style="color:var(--manager)">L5</div>
+    <div class="layer-name" style="color:var(--manager)">Agent Config Enforcement</div>
+    <div class="layer-desc">Role-plugins enforced server-side; title changes trigger auto-install</div>
+  </div>
+  <div class="layer-row" style="border-left-color:var(--integrator);background:rgba(0,232,138,0.04);">
+    <div class="layer-num" style="color:var(--integrator)">L6</div>
+    <div class="layer-name" style="color:var(--integrator)">Governance Sync Service</div>
+    <div class="layer-desc">Periodic sync of governance state, request status, trust changes</div>
+  </div>
+</div>
+
+<!-- ═══════════ 6. SECURITY ═══════════ -->
+<div class="section-band red"><i class="ph-bold ph-shield-check"></i> 6 &mdash; SECURITY MEASURES</div>
+
+<div class="grid-3">
+  <div class="bullet-panel red">
+    <h4><i class="ph-bold ph-key"></i> Authentication</h4>
+    <ul>
+      <li>Phase 1: localhost-only, no auth required</li>
+      <li>Bearer token auth for agent-to-agent API calls</li>
+      <li>API keys: 256-bit random, SHA-256 hashed at rest</li>
+      <li>Constant-time key validation (timing-safe)</li>
+      <li>MANAGER + COS titles restricted to Claude clients</li>
+    </ul>
+  </div>
+  <div class="bullet-panel purple">
+    <h4><i class="ph-bold ph-clock-countdown"></i> Rate Limiting</h4>
+    <ul>
+      <li>All password-protected endpoints rate-limited</li>
+      <li>Atomic check-and-record (no TOCTOU race)</li>
+      <li>Per-agent rate limit keys</li>
+      <li>Reset on successful auth</li>
+      <li>AMP route: max requests/min per agent</li>
+    </ul>
+  </div>
+  <div class="bullet-panel blue">
+    <h4><i class="ph-bold ph-fingerprint"></i> Cryptography</h4>
+    <ul>
+      <li>Ed25519 host keypairs (0o600 file perms)</li>
+      <li>Signed attestations with timestamp freshness (5 min)</li>
+      <li>Recipient binding prevents replay across hosts</li>
+      <li>AMP messages signed with Ed25519 per-agent keys</li>
+      <li>bcrypt for governance passwords (72-byte limit)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════ 7. TRANSFER WORKFLOW ═══════════ -->
+<div class="section-band amber"><i class="ph-bold ph-arrows-left-right"></i> 7 &mdash; TITLE TRANSFER WORKFLOW</div>
+
+<div class="flow-row">
+  <div class="flow-node red"><div class="label">1. Request</div><div class="sub">Manager or COS initiates transfer</div></div>
+  <div class="flow-arrow" style="color:var(--cos)">&#x2192;</div>
+  <div class="flow-node amber"><div class="label">2. Pending</div><div class="sub">Status forced to pending on receive</div></div>
+  <div class="flow-arrow" style="color:var(--cos)">&#x2192;</div>
+  <div class="flow-node purple"><div class="label">3. Dual Approve</div><div class="sub">Both requesting + target host approve</div></div>
+  <div class="flow-arrow" style="color:var(--primary)">&#x2192;</div>
+  <div class="flow-node"><div class="label">4. Execute</div><div class="sub">Title changed, plugin auto-installed</div></div>
+</div>
+
+<div class="grid-2" style="margin-top:16px;">
+  <div class="bullet-panel">
+    <h4>Transfer Rules</h4>
+    <ul>
+      <li>Only MANAGER and COS can initiate transfers</li>
+      <li>Cross-host requests require dual approval</li>
+      <li>Incoming requests always forced to <strong>pending</strong> (prevents pre-approved injection)</li>
+      <li>Old role-plugin uninstalled before new one installed</li>
+      <li>Transfer history preserved in registry</li>
+    </ul>
+  </div>
+  <div class="bullet-panel amber">
+    <h4>Governance Password</h4>
+    <ul>
+      <li>Required for: team deletion, manager assignment, COS assignment</li>
+      <li>bcrypt hashed (cost factor 10)</li>
+      <li>Rate-limited: lockout after repeated failures</li>
+      <li>System owner (web UI) can override with password</li>
+      <li>72-character max (bcrypt byte limit)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════ 8. GROUPS ═══════════ -->
+<div class="section-band"><i class="ph-bold ph-broadcast"></i> 8 &mdash; GROUPS (LIGHTWEIGHT COLLECTIONS)</div>
+
+<div class="grid-2">
+  <div class="bullet-panel">
+    <h4>What Groups Are</h4>
+    <ul>
+      <li>Lightweight agent collections for <strong>broadcast messaging</strong></li>
+      <li>Replace old &ldquo;open teams&rdquo; concept</li>
+      <li>No governance, no COS, no kanban</li>
+      <li>Just a subscriber list</li>
+      <li>Agents can subscribe to multiple groups</li>
+    </ul>
+  </div>
+  <div class="bullet-panel blue">
+    <h4>Group Operations</h4>
+    <ul>
+      <li>Create / update / delete groups</li>
+      <li>Subscribe / unsubscribe agents</li>
+      <li>Broadcast notify all subscribers</li>
+      <li>File-based storage: <code>~/.aimaestro/teams/groups.json</code></li>
+      <li>API: <code>GET/POST /api/groups</code></li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════ FOOTER ═══════════ -->
+<div class="footer">
+  <div class="left"><i class="ph ph-robot"></i> AI Maestro v0.27.2 &mdash; Governance Rules Reference</div>
+  <div class="right">github.com/Emasoft/ai-maestro &bull; 2026</div>
+</div>
+
+</div>
+</body>
+</html>

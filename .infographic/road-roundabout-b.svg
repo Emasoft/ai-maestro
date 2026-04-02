@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+  <defs>
+    <marker id="arrB" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="rgba(41,183,255,0.6)"/></marker>
+    <marker id="arrBRed" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="rgba(255,68,68,0.8)"/></marker>
+    <!-- Avatar clip paths -->
+    <clipPath id="clip-b1"><circle cx="300" cy="175" r="33"/></clipPath>
+    <clipPath id="clip-b2"><circle cx="500" cy="175" r="33"/></clipPath>
+    <clipPath id="clip-b3"><circle cx="545" cy="270" r="33"/></clipPath>
+    <clipPath id="clip-b4"><circle cx="500" cy="365" r="33"/></clipPath>
+  </defs>
+
+  <!-- Entry road (top center) -->
+  <rect x="370" y="0" width="60" height="110" fill="#1c1c1c" rx="0"/>
+  <line x1="371" y1="0" x2="371" y2="110" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <line x1="429" y1="0" x2="429" y2="110" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <line x1="400" y1="0" x2="400" y2="110" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="12,8"/>
+
+  <!-- Roundabout outer ring road (asphalt) -->
+  <circle cx="400" cy="270" r="140" fill="none" stroke="#1c1c1c" stroke-width="54"/>
+  <!-- Road edge markings -->
+  <circle cx="400" cy="270" r="166" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+  <circle cx="400" cy="270" r="114" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+  <!-- Road center dashed line -->
+  <circle cx="400" cy="270" r="140" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="10,7"/>
+  <!-- Center island (blue fill) -->
+  <circle cx="400" cy="270" r="86" fill="rgba(41,183,255,0.08)" stroke="rgba(41,183,255,0.35)" stroke-width="3"/>
+  <!-- Island label -->
+  <text x="400" y="262" text-anchor="middle" fill="rgba(41,183,255,0.7)" font-size="12" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">DESIGN</text>
+  <text x="400" y="280" text-anchor="middle" fill="rgba(41,183,255,0.7)" font-size="12" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">LOOP</text>
+
+  <!-- Clockwise flow arrows on the ring -->
+  <path d="M 370 140 A 140 140 0 0 1 530 220" fill="none" stroke="rgba(41,183,255,0.4)" stroke-width="2.5" marker-end="url(#arrB)"/>
+  <path d="M 530 320 A 140 140 0 0 1 370 400" fill="none" stroke="rgba(41,183,255,0.4)" stroke-width="2.5" marker-end="url(#arrB)"/>
+  <path d="M 330 350 A 140 140 0 0 1 330 190" fill="none" stroke="rgba(41,183,255,0.4)" stroke-width="2.5" marker-end="url(#arrB)"/>
+
+  <!-- Exit road (bottom center) -->
+  <rect x="370" y="384" width="60" height="116" fill="#1c1c1c" rx="0"/>
+  <line x1="371" y1="384" x2="371" y2="500" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <line x1="429" y1="384" x2="429" y2="500" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <line x1="400" y1="384" x2="400" y2="500" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="12,8"/>
+
+  <!-- Loop-back road: dashed red curved path on left side — REJECTED → REVISE -->
+  <path d="M 370 430 C 200 430 120 300 120 180 C 120 100 200 60 370 50" fill="none" stroke="rgba(255,68,68,0.7)" stroke-width="2.5" stroke-dasharray="10,6" marker-end="url(#arrBRed)"/>
+  <text x="145" y="280" text-anchor="middle" fill="rgba(255,68,68,0.8)" font-size="8" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.05em" transform="rotate(-80,145,280)">REJECTED → REVISE</text>
+
+  <!-- ═══ ROAD SIGN: BEND AHEAD (left side) ═══ -->
+  <rect x="88" y="200" width="5" height="50" fill="rgba(255,255,255,0.25)" rx="2"/>
+  <rect x="30" y="140" width="120" height="62" rx="8" fill="#0a0a0a" stroke="rgba(41,183,255,0.5)" stroke-width="2"/>
+  <text x="90" y="163" text-anchor="middle" fill="rgba(41,183,255,0.9)" font-size="14">📐</text>
+  <text x="90" y="182" text-anchor="middle" fill="#29B7FF" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">BEND AHEAD</text>
+  <text x="90" y="195" text-anchor="middle" fill="#7a7a7a" font-size="7" font-family="Montserrat,sans-serif">Design iterations</text>
+
+  <!-- ═══ ROAD SIGN: STOP / MANAGER + USER APPROVAL (right side) ═══ -->
+  <rect x="688" y="340" width="5" height="50" fill="rgba(255,255,255,0.25)" rx="2"/>
+  <polygon points="690,280 710,270 730,270 750,280 750,300 730,310 710,310 690,300" fill="#FF4444" stroke="#FF4444" stroke-width="1" opacity="0.9"/>
+  <text x="720" y="294" text-anchor="middle" fill="white" font-size="8" font-weight="900" font-family="Montserrat,sans-serif">STOP</text>
+  <rect x="648" y="312" width="148" height="30" rx="4" fill="#0a0a0a" stroke="rgba(255,68,68,0.4)" stroke-width="1.5"/>
+  <text x="722" y="325" text-anchor="middle" fill="#FF4444" font-size="6.5" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.03em">MANAGER + USER</text>
+  <text x="722" y="337" text-anchor="middle" fill="#FF4444" font-size="6.5" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.03em">APPROVAL</text>
+
+  <!-- ═══ AVATAR 1: MANAGER (top-left ~10:30) ═══ -->
+  <!-- Glow -->
+  <circle cx="300" cy="175" r="38" fill="none" stroke="#FF4444" stroke-width="6" stroke-opacity="0.18"/>
+  <!-- Border circle -->
+  <circle cx="300" cy="175" r="35" fill="none" stroke="#FF4444" stroke-width="3"/>
+  <!-- Clipped avatar -->
+  <image href="../public/avatars/robots_40.jpg" x="267" y="142" width="66" height="66" clip-path="url(#clip-b1)"/>
+  <!-- Title label -->
+  <text x="300" y="225" text-anchor="middle" fill="#FF4444" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">MANAGER</text>
+  <!-- Description -->
+  <text x="300" y="237" text-anchor="middle" fill="#7a7a7a" font-size="7" font-family="Montserrat,sans-serif">Approves design. Sends to all team.</text>
+
+  <!-- ═══ AVATAR 2: CHIEF-OF-STAFF (top-right ~1:30) ═══ -->
+  <!-- Glow -->
+  <circle cx="500" cy="175" r="38" fill="none" stroke="#FFB800" stroke-width="6" stroke-opacity="0.18"/>
+  <!-- Border circle -->
+  <circle cx="500" cy="175" r="35" fill="none" stroke="#FFB800" stroke-width="3"/>
+  <!-- Clipped avatar -->
+  <image href="../public/avatars/robots_50.jpg" x="467" y="142" width="66" height="66" clip-path="url(#clip-b2)"/>
+  <!-- Title label -->
+  <text x="500" y="225" text-anchor="middle" fill="#FFB800" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">CHIEF-OF-STAFF</text>
+  <!-- Description -->
+  <text x="500" y="237" text-anchor="middle" fill="#7a7a7a" font-size="7" font-family="Montserrat,sans-serif">Routes messages.</text>
+
+  <!-- ═══ AVATAR 3: ARCHITECT (right ~3:00) ═══ -->
+  <!-- Glow -->
+  <circle cx="545" cy="270" r="38" fill="none" stroke="#29B7FF" stroke-width="6" stroke-opacity="0.18"/>
+  <!-- Border circle -->
+  <circle cx="545" cy="270" r="35" fill="none" stroke="#29B7FF" stroke-width="3"/>
+  <!-- Clipped avatar -->
+  <image href="../public/avatars/robots_30.jpg" x="512" y="237" width="66" height="66" clip-path="url(#clip-b3)"/>
+  <!-- Title label -->
+  <text x="545" y="320" text-anchor="middle" fill="#29B7FF" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">ARCHITECT</text>
+  <!-- Description -->
+  <text x="545" y="332" text-anchor="middle" fill="#7a7a7a" font-size="7" font-family="Montserrat,sans-serif">Creates architecture, specs, ADRs.</text>
+
+  <!-- ═══ AVATAR 4: ORCHESTRATOR (bottom-right ~4:30) ═══ -->
+  <!-- Glow -->
+  <circle cx="500" cy="365" r="38" fill="none" stroke="#A764F6" stroke-width="6" stroke-opacity="0.18"/>
+  <!-- Border circle -->
+  <circle cx="500" cy="365" r="35" fill="none" stroke="#A764F6" stroke-width="3"/>
+  <!-- Clipped avatar -->
+  <image href="../public/avatars/robots_10.jpg" x="467" y="332" width="66" height="66" clip-path="url(#clip-b4)"/>
+  <!-- Title label -->
+  <text x="500" y="415" text-anchor="middle" fill="#A764F6" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">ORCHESTRATOR</text>
+  <!-- Description -->
+  <text x="500" y="427" text-anchor="middle" fill="#7a7a7a" font-size="7" font-family="Montserrat,sans-serif">Can order design revisions.</text>
+</svg>

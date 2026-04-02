@@ -1,0 +1,719 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 4800" width="1600" height="4800">
+  <defs>
+    <!-- ═══ ARROW MARKERS ═══ -->
+    <marker id="arrAmber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="rgba(255,184,0,0.7)"/></marker>
+    <marker id="arrBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="rgba(41,183,255,0.7)"/></marker>
+    <marker id="arrPurple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="rgba(167,100,246,0.7)"/></marker>
+    <marker id="arrGray" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="rgba(180,180,180,0.7)"/></marker>
+    <marker id="arrGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="rgba(0,232,138,0.7)"/></marker>
+    <marker id="arrRed" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="rgba(255,68,68,0.85)"/></marker>
+    <marker id="arrBlueDark" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="rgba(41,183,255,0.85)"/></marker>
+    <marker id="arrGreenNext" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8" fill="rgba(0,232,138,0.9)"/></marker>
+
+    <!-- ═══ CLIP PATHS — ROUNDABOUT A ═══ -->
+    <clipPath id="clip-a1"><circle cx="700" cy="475" r="40"/></clipPath>
+    <clipPath id="clip-a2"><circle cx="900" cy="475" r="40"/></clipPath>
+    <clipPath id="clip-a3"><circle cx="800" cy="710" r="40"/></clipPath>
+
+    <!-- ═══ CLIP PATHS — ROUNDABOUT B ═══ -->
+    <clipPath id="clip-b1"><circle cx="700" cy="1275" r="40"/></clipPath>
+    <clipPath id="clip-b2"><circle cx="900" cy="1275" r="40"/></clipPath>
+    <clipPath id="clip-b3"><circle cx="945" cy="1300" r="40"/></clipPath>
+    <clipPath id="clip-b4"><circle cx="900" cy="1365" r="40"/></clipPath>
+
+    <!-- ═══ CLIP PATHS — ROUNDABOUT C ═══ -->
+    <clipPath id="clip-c1"><circle cx="700" cy="2075" r="40"/></clipPath>
+    <clipPath id="clip-c2"><circle cx="900" cy="2075" r="40"/></clipPath>
+    <clipPath id="clip-c3"><circle cx="800" cy="2310" r="40"/></clipPath>
+
+    <!-- ═══ CLIP PATHS — ROUNDABOUT D ═══ -->
+    <clipPath id="clip-d1"><circle cx="700" cy="2875" r="40"/></clipPath>
+    <clipPath id="clip-d2"><circle cx="900" cy="2875" r="40"/></clipPath>
+    <clipPath id="clip-d3"><circle cx="945" cy="2900" r="40"/></clipPath>
+
+    <!-- ═══ CLIP PATHS — ROUNDABOUT E ═══ -->
+    <clipPath id="clip-e1"><circle cx="678" cy="3678" r="40"/></clipPath>
+    <clipPath id="clip-e2"><circle cx="800" cy="3612" r="40"/></clipPath>
+    <clipPath id="clip-e3"><circle cx="922" cy="3678" r="40"/></clipPath>
+    <clipPath id="clip-e4"><circle cx="968" cy="3780" r="40"/></clipPath>
+
+    <!-- ═══ CLIP PATHS — ROUNDABOUT F ═══ -->
+    <clipPath id="clip-f1"><circle cx="700" cy="4375" r="40"/></clipPath>
+    <clipPath id="clip-f2"><circle cx="900" cy="4375" r="40"/></clipPath>
+    <clipPath id="clip-f3"><circle cx="945" cy="4400" r="40"/></clipPath>
+    <clipPath id="clip-f4"><circle cx="900" cy="4465" r="40"/></clipPath>
+
+    <!-- ═══ FILTERS ═══ -->
+    <filter id="glow-amber" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="1 0.7 0 0 0  0.6 0.4 0 0 0  0 0 0 0 0  0 0 0 0.5 0"/>
+    </filter>
+    <filter id="glow-green" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0.8 0 0 0  0.6 1 0.4 0 0  0 0.4 0.6 0 0  0 0 0 0.4 0"/>
+    </filter>
+  </defs>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--                      BACKGROUND (transparent)                      -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- No fill rect — HTML page provides dark background -->
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--                   START BANNER (Y=0–150)                           -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <rect x="500" y="15" width="600" height="80" rx="12" fill="rgba(0,232,138,0.08)" stroke="rgba(0,232,138,0.5)" stroke-width="2"/>
+  <!-- Checkered flag pattern (manual squares) -->
+  <rect x="520" y="30" width="12" height="12" fill="rgba(0,232,138,0.7)"/>
+  <rect x="532" y="30" width="12" height="12" fill="rgba(255,255,255,0.1)"/>
+  <rect x="544" y="30" width="12" height="12" fill="rgba(0,232,138,0.7)"/>
+  <rect x="556" y="30" width="12" height="12" fill="rgba(255,255,255,0.1)"/>
+  <rect x="520" y="42" width="12" height="12" fill="rgba(255,255,255,0.1)"/>
+  <rect x="532" y="42" width="12" height="12" fill="rgba(0,232,138,0.7)"/>
+  <rect x="544" y="42" width="12" height="12" fill="rgba(255,255,255,0.1)"/>
+  <rect x="556" y="42" width="12" height="12" fill="rgba(0,232,138,0.7)"/>
+  <rect x="520" y="54" width="12" height="12" fill="rgba(0,232,138,0.7)"/>
+  <rect x="532" y="54" width="12" height="12" fill="rgba(255,255,255,0.1)"/>
+  <rect x="544" y="54" width="12" height="12" fill="rgba(0,232,138,0.7)"/>
+  <rect x="556" y="54" width="12" height="12" fill="rgba(255,255,255,0.1)"/>
+  <!-- Mirror on right -->
+  <rect x="1032" y="30" width="12" height="12" fill="rgba(0,232,138,0.7)"/>
+  <rect x="1020" y="30" width="12" height="12" fill="rgba(255,255,255,0.1)"/>
+  <rect x="1008" y="30" width="12" height="12" fill="rgba(0,232,138,0.7)"/>
+  <rect x="996" y="30" width="12" height="12" fill="rgba(255,255,255,0.1)"/>
+  <rect x="1032" y="42" width="12" height="12" fill="rgba(255,255,255,0.1)"/>
+  <rect x="1020" y="42" width="12" height="12" fill="rgba(0,232,138,0.7)"/>
+  <rect x="1008" y="42" width="12" height="12" fill="rgba(255,255,255,0.1)"/>
+  <rect x="996" y="42" width="12" height="12" fill="rgba(0,232,138,0.7)"/>
+  <rect x="1032" y="54" width="12" height="12" fill="rgba(0,232,138,0.7)"/>
+  <rect x="1020" y="54" width="12" height="12" fill="rgba(255,255,255,0.1)"/>
+  <rect x="1008" y="54" width="12" height="12" fill="rgba(0,232,138,0.7)"/>
+  <rect x="996" y="54" width="12" height="12" fill="rgba(255,255,255,0.1)"/>
+  <text x="800" y="56" text-anchor="middle" fill="#e8e8e8" font-size="22" font-weight="900" font-family="Montserrat,sans-serif" letter-spacing="0.12em">AI MAESTRO WORKFLOW</text>
+  <text x="800" y="80" text-anchor="middle" fill="rgba(0,232,138,0.8)" font-size="12" font-weight="600" font-family="Montserrat,sans-serif" letter-spacing="0.2em">FROM REQUIREMENTS TO RELEASE</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--             CONNECTOR ROAD A: Start banner → Roundabout A          -->
+  <!--                          Y=100 to Y=300                            -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <rect x="760" y="100" width="80" height="200" fill="#1a1a1a"/>
+  <line x1="761" y1="100" x2="761" y2="300" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="839" y1="100" x2="839" y2="300" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="800" y1="100" x2="800" y2="300" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="16,10"/>
+  <!-- Road label -->
+  <text x="870" y="205" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Montserrat,sans-serif" letter-spacing="0.08em">📄 Requirements via GitHub Issue URL</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--               ROUNDABOUT A — TEAM FORMATION                        -->
+  <!--               Center: x=800, y=500  (Y span: 300–720)              -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+  <!-- Roundabout outer ring road (r=190, stroke=80 → inner r=150, outer r=230) -->
+  <circle cx="800" cy="500" r="190" fill="none" stroke="#1a1a1a" stroke-width="80"/>
+  <!-- Road edge markings -->
+  <circle cx="800" cy="500" r="230" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+  <circle cx="800" cy="500" r="150" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+  <!-- Road center dashed line -->
+  <circle cx="800" cy="500" r="190" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2" stroke-dasharray="14,9"/>
+  <!-- Center island — amber -->
+  <circle cx="800" cy="500" r="116" fill="rgba(255,184,0,0.07)" stroke="rgba(255,184,0,0.35)" stroke-width="3"/>
+  <!-- Island label -->
+  <text x="800" y="492" text-anchor="middle" fill="rgba(255,184,0,0.75)" font-size="15" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">TEAM</text>
+  <text x="800" y="513" text-anchor="middle" fill="rgba(255,184,0,0.75)" font-size="15" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">FORMATION</text>
+  <!-- Section label pill -->
+  <rect x="620" y="310" width="360" height="28" rx="14" fill="rgba(255,184,0,0.1)" stroke="rgba(255,184,0,0.3)" stroke-width="1"/>
+  <text x="800" y="329" text-anchor="middle" fill="rgba(255,184,0,0.8)" font-size="11" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.15em">ROUNDABOUT A</text>
+  <!-- Clockwise arrows on ring -->
+  <path d="M 770 315 A 190 190 0 0 1 985 415" fill="none" stroke="rgba(255,184,0,0.4)" stroke-width="3" marker-end="url(#arrAmber)"/>
+  <path d="M 985 585 A 190 190 0 0 1 770 685" fill="none" stroke="rgba(255,184,0,0.4)" stroke-width="3" marker-end="url(#arrAmber)"/>
+  <path d="M 720 620 A 190 190 0 0 1 720 380" fill="none" stroke="rgba(255,184,0,0.4)" stroke-width="3" marker-end="url(#arrAmber)"/>
+
+  <!-- Entry road (top, from banner connector) already drawn above connects to roundabout -->
+  <!-- Exit road (bottom of roundabout → connector B) -->
+  <rect x="760" y="690" width="80" height="30" fill="#1a1a1a"/>
+  <line x1="761" y1="690" x2="761" y2="720" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="839" y1="690" x2="839" y2="720" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="800" y1="690" x2="800" y2="720" stroke="rgba(255,255,255,0.22)" stroke-width="2" stroke-dasharray="16,10"/>
+
+  <!-- ═══ ROAD SIGN A: ROUNDABOUT WARNING (left side) ═══ -->
+  <rect x="478" y="470" width="6" height="60" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <!-- Warning triangle (amber) -->
+  <polygon points="484,390 454,450 514,450" fill="#0a0a0a" stroke="#FFB800" stroke-width="2.5"/>
+  <!-- Circular arrows icon inside triangle -->
+  <circle cx="484" cy="430" r="12" fill="none" stroke="rgba(255,184,0,0.8)" stroke-width="2"/>
+  <path d="M 479 420 L 484 417 L 486 423" fill="rgba(255,184,0,0.8)"/>
+  <!-- Sign plate -->
+  <rect x="430" y="453" width="110" height="40" rx="5" fill="#0a0a0a" stroke="rgba(255,184,0,0.4)" stroke-width="1.5"/>
+  <text x="485" y="469" text-anchor="middle" fill="#FFB800" font-size="10" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">ROUNDABOUT</text>
+  <text x="485" y="485" text-anchor="middle" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">Road Work Ahead</text>
+
+  <!-- ═══ ROAD SIGN A: STOP — MANAGER APPROVAL (right side) ═══ -->
+  <rect x="1118" y="470" width="6" height="60" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <!-- Octagon STOP sign -->
+  <polygon points="1090,390 1114,380 1138,380 1162,390 1162,414 1152,424 1114,424 1090,414" fill="#CC1111" stroke="#FF4444" stroke-width="2"/>
+  <text x="1126" y="407" text-anchor="middle" fill="white" font-size="11" font-weight="900" font-family="Montserrat,sans-serif" letter-spacing="0.1em">STOP</text>
+  <!-- Sign plate -->
+  <rect x="1072" y="426" width="150" height="40" rx="5" fill="#0a0a0a" stroke="rgba(255,68,68,0.4)" stroke-width="1.5"/>
+  <text x="1147" y="442" text-anchor="middle" fill="#FF4444" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">MANAGER</text>
+  <text x="1147" y="457" text-anchor="middle" fill="#FF4444" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">APPROVAL</text>
+
+  <!-- ═══ AVATAR A1: MANAGER (top-left ~10:30) at ~(700,475) ═══ -->
+  <circle cx="700" cy="475" r="50" fill="none" stroke="#FF4444" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="700" cy="475" r="43" fill="none" stroke="#FF4444" stroke-width="3"/>
+  <image href="../public/avatars/robots_40.jpg" x="660" y="435" width="80" height="80" clip-path="url(#clip-a1)"/>
+  <text x="700" y="535" text-anchor="middle" fill="#FF4444" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">MANAGER</text>
+  <text x="700" y="551" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Creates project.</text>
+  <text x="700" y="564" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Sends requirements. Approves team.</text>
+
+  <!-- ═══ AVATAR A2: CHIEF-OF-STAFF (top-right ~1:30) at ~(900,475) ═══ -->
+  <circle cx="900" cy="475" r="50" fill="none" stroke="#FFB800" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="900" cy="475" r="43" fill="none" stroke="#FFB800" stroke-width="3"/>
+  <image href="../public/avatars/robots_50.jpg" x="860" y="435" width="80" height="80" clip-path="url(#clip-a2)"/>
+  <text x="900" y="535" text-anchor="middle" fill="#FFB800" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">CHIEF-OF-STAFF</text>
+  <text x="900" y="551" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Evaluates project.</text>
+  <text x="900" y="564" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Creates &amp; configures agents.</text>
+
+  <!-- ═══ AVATAR A3: ARCHITECT standby (bottom ~5:00) at ~(800,710) ═══ -->
+  <circle cx="800" cy="710" r="50" fill="none" stroke="#29B7FF" stroke-width="8" stroke-opacity="0.08" opacity="0.5"/>
+  <circle cx="800" cy="710" r="43" fill="none" stroke="#29B7FF" stroke-width="3" opacity="0.5"/>
+  <image href="../public/avatars/robots_30.jpg" x="760" y="670" width="80" height="80" clip-path="url(#clip-a3)" opacity="0.5"/>
+  <text x="800" y="770" text-anchor="middle" fill="#29B7FF" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em" opacity="0.5">ARCHITECT</text>
+  <text x="800" y="786" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif" opacity="0.5">On standby.</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--           CONNECTOR ROAD A→B  (Y=720 to Y=1000)                   -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <rect x="760" y="720" width="80" height="280" fill="#1a1a1a"/>
+  <line x1="761" y1="720" x2="761" y2="1000" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="839" y1="720" x2="839" y2="1000" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="800" y1="720" x2="800" y2="1000" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="16,10"/>
+  <text x="870" y="870" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Montserrat,sans-serif" letter-spacing="0.08em">📄 Design doc → ALL team</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--               ROUNDABOUT B — DESIGN LOOP                           -->
+  <!--               Center: x=800, y=1300  (Y span: 1000–1600)           -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+  <circle cx="800" cy="1300" r="190" fill="none" stroke="#1a1a1a" stroke-width="80"/>
+  <circle cx="800" cy="1300" r="230" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+  <circle cx="800" cy="1300" r="150" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+  <circle cx="800" cy="1300" r="190" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2" stroke-dasharray="14,9"/>
+  <!-- Center island — blue -->
+  <circle cx="800" cy="1300" r="116" fill="rgba(41,183,255,0.07)" stroke="rgba(41,183,255,0.35)" stroke-width="3"/>
+  <text x="800" y="1292" text-anchor="middle" fill="rgba(41,183,255,0.75)" font-size="15" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">DESIGN</text>
+  <text x="800" y="1313" text-anchor="middle" fill="rgba(41,183,255,0.75)" font-size="15" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">LOOP</text>
+  <!-- Section label pill -->
+  <rect x="620" y="1010" width="360" height="28" rx="14" fill="rgba(41,183,255,0.1)" stroke="rgba(41,183,255,0.3)" stroke-width="1"/>
+  <text x="800" y="1029" text-anchor="middle" fill="rgba(41,183,255,0.8)" font-size="11" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.15em">ROUNDABOUT B</text>
+  <!-- Clockwise arrows -->
+  <path d="M 770 1115 A 190 190 0 0 1 985 1215" fill="none" stroke="rgba(41,183,255,0.4)" stroke-width="3" marker-end="url(#arrBlue)"/>
+  <path d="M 985 1385 A 190 190 0 0 1 770 1485" fill="none" stroke="rgba(41,183,255,0.4)" stroke-width="3" marker-end="url(#arrBlue)"/>
+  <path d="M 720 1420 A 190 190 0 0 1 720 1180" fill="none" stroke="rgba(41,183,255,0.4)" stroke-width="3" marker-end="url(#arrBlue)"/>
+
+  <!-- Loop-back road: dashed red on LEFT — REJECTED → REVISE -->
+  <path d="M 770 1530 C 540 1530 400 1380 400 1200 C 400 1060 500 990 770 980" fill="none" stroke="rgba(255,68,68,0.7)" stroke-width="3" stroke-dasharray="12,7" marker-end="url(#arrRed)"/>
+  <text x="460" y="1310" text-anchor="middle" fill="rgba(255,68,68,0.8)" font-size="10" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.05em" transform="rotate(-85,460,1310)">REJECTED → REVISE</text>
+
+  <!-- ═══ ROAD SIGN B: BEND AHEAD (left side) ═══ -->
+  <rect x="478" y="1270" width="6" height="60" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <!-- Triangle warning sign (blue/pencil) -->
+  <polygon points="484,1190 454,1250 514,1250" fill="#0a0a0a" stroke="#29B7FF" stroke-width="2.5"/>
+  <!-- Pencil icon inside -->
+  <rect x="478" y="1218" width="5" height="16" rx="1" fill="rgba(41,183,255,0.7)" transform="rotate(-20,481,1226)"/>
+  <polygon points="475,1242 478,1234 484,1240" fill="rgba(41,183,255,0.7)"/>
+  <!-- Sign plate -->
+  <rect x="430" y="1253" width="110" height="40" rx="5" fill="#0a0a0a" stroke="rgba(41,183,255,0.4)" stroke-width="1.5"/>
+  <text x="485" y="1269" text-anchor="middle" fill="#29B7FF" font-size="10" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">BEND AHEAD</text>
+  <text x="485" y="1285" text-anchor="middle" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">Design iterations</text>
+
+  <!-- ═══ ROAD SIGN B: STOP — MANAGER+USER APPROVAL (right side) ═══ -->
+  <rect x="1118" y="1270" width="6" height="60" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <polygon points="1090,1190 1114,1180 1138,1180 1162,1190 1162,1214 1152,1224 1114,1224 1090,1214" fill="#CC1111" stroke="#FF4444" stroke-width="2"/>
+  <text x="1126" y="1207" text-anchor="middle" fill="white" font-size="11" font-weight="900" font-family="Montserrat,sans-serif" letter-spacing="0.1em">STOP</text>
+  <rect x="1060" y="1226" width="172" height="40" rx="5" fill="#0a0a0a" stroke="rgba(255,68,68,0.4)" stroke-width="1.5"/>
+  <text x="1146" y="1242" text-anchor="middle" fill="#FF4444" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">MANAGER + USER</text>
+  <text x="1146" y="1258" text-anchor="middle" fill="#FF4444" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">APPROVAL</text>
+
+  <!-- ═══ AVATAR B1: MANAGER (top-left ~10:30) at ~(700,1275) ═══ -->
+  <circle cx="700" cy="1275" r="50" fill="none" stroke="#FF4444" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="700" cy="1275" r="43" fill="none" stroke="#FF4444" stroke-width="3"/>
+  <image href="../public/avatars/robots_40.jpg" x="660" y="1235" width="80" height="80" clip-path="url(#clip-b1)"/>
+  <text x="700" y="1335" text-anchor="middle" fill="#FF4444" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">MANAGER</text>
+  <text x="700" y="1351" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Approves design.</text>
+  <text x="700" y="1364" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Sends to ALL team + user.</text>
+
+  <!-- ═══ AVATAR B2: CHIEF-OF-STAFF (top-right ~1:30) at ~(900,1275) ═══ -->
+  <circle cx="900" cy="1275" r="50" fill="none" stroke="#FFB800" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="900" cy="1275" r="43" fill="none" stroke="#FFB800" stroke-width="3"/>
+  <image href="../public/avatars/robots_50.jpg" x="860" y="1235" width="80" height="80" clip-path="url(#clip-b2)"/>
+  <text x="900" y="1335" text-anchor="middle" fill="#FFB800" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">CHIEF-OF-STAFF</text>
+  <text x="900" y="1351" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Routes messages</text>
+  <text x="900" y="1364" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">to Architect.</text>
+
+  <!-- ═══ AVATAR B3: ARCHITECT (right ~3:00) at ~(945,1300) ═══ -->
+  <circle cx="945" cy="1300" r="50" fill="none" stroke="#29B7FF" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="945" cy="1300" r="43" fill="none" stroke="#29B7FF" stroke-width="3"/>
+  <image href="../public/avatars/robots_30.jpg" x="905" y="1260" width="80" height="80" clip-path="url(#clip-b3)"/>
+  <text x="945" y="1360" text-anchor="middle" fill="#29B7FF" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">ARCHITECT</text>
+  <text x="945" y="1376" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Creates architecture,</text>
+  <text x="945" y="1389" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">modules, specs, ADRs.</text>
+
+  <!-- ═══ AVATAR B4: ORCHESTRATOR (bottom-right ~4:30) at ~(900,1365) ═══ -->
+  <circle cx="900" cy="1430" r="50" fill="none" stroke="#A764F6" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="900" cy="1430" r="43" fill="none" stroke="#A764F6" stroke-width="3"/>
+  <image href="../public/avatars/robots_10.jpg" x="860" y="1390" width="80" height="80" clip-path="url(#clip-b4)"/>
+  <text x="900" y="1490" text-anchor="middle" fill="#A764F6" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">ORCHESTRATOR</text>
+  <text x="900" y="1506" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Can order Architect</text>
+  <text x="900" y="1519" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">to revise or expand design.</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--           CONNECTOR ROAD B→C  (Y=1530 to Y=1800)                  -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <rect x="760" y="1530" width="80" height="270" fill="#1a1a1a"/>
+  <line x1="761" y1="1530" x2="761" y2="1800" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="839" y1="1530" x2="839" y2="1800" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="800" y1="1530" x2="800" y2="1800" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="16,10"/>
+  <text x="870" y="1675" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Montserrat,sans-serif" letter-spacing="0.08em">📋 Task design docs</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--               ROUNDABOUT C — TASK PLANNING LOOP                    -->
+  <!--               Center: x=800, y=2100  (Y span: 1800–2400)           -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+  <circle cx="800" cy="2100" r="190" fill="none" stroke="#1a1a1a" stroke-width="80"/>
+  <circle cx="800" cy="2100" r="230" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+  <circle cx="800" cy="2100" r="150" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+  <circle cx="800" cy="2100" r="190" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2" stroke-dasharray="14,9"/>
+  <!-- Center island — purple -->
+  <circle cx="800" cy="2100" r="116" fill="rgba(167,100,246,0.07)" stroke="rgba(167,100,246,0.35)" stroke-width="3"/>
+  <text x="800" y="2092" text-anchor="middle" fill="rgba(167,100,246,0.75)" font-size="15" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">TASK</text>
+  <text x="800" y="2113" text-anchor="middle" fill="rgba(167,100,246,0.75)" font-size="15" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">PLANNING</text>
+  <!-- Section label pill -->
+  <rect x="620" y="1810" width="360" height="28" rx="14" fill="rgba(167,100,246,0.1)" stroke="rgba(167,100,246,0.3)" stroke-width="1"/>
+  <text x="800" y="1829" text-anchor="middle" fill="rgba(167,100,246,0.8)" font-size="11" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.15em">ROUNDABOUT C</text>
+  <!-- Clockwise arrows -->
+  <path d="M 770 1915 A 190 190 0 0 1 985 2015" fill="none" stroke="rgba(167,100,246,0.4)" stroke-width="3" marker-end="url(#arrPurple)"/>
+  <path d="M 985 2185 A 190 190 0 0 1 770 2285" fill="none" stroke="rgba(167,100,246,0.4)" stroke-width="3" marker-end="url(#arrPurple)"/>
+  <path d="M 720 2220 A 190 190 0 0 1 720 1980" fill="none" stroke="rgba(167,100,246,0.4)" stroke-width="3" marker-end="url(#arrPurple)"/>
+
+  <!-- Loop-back road: dashed red on LEFT — REJECTED → REVISE -->
+  <path d="M 770 2330 C 540 2330 400 2180 400 2000 C 400 1860 500 1790 770 1780" fill="none" stroke="rgba(255,68,68,0.7)" stroke-width="3" stroke-dasharray="12,7" marker-end="url(#arrRed)"/>
+  <text x="460" y="2110" text-anchor="middle" fill="rgba(255,68,68,0.8)" font-size="10" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.05em" transform="rotate(-85,460,2110)">REJECTED → REVISE</text>
+
+  <!-- ═══ ROAD SIGN C: ROAD WORK (left side) ═══ -->
+  <rect x="478" y="2070" width="6" height="60" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <!-- Warning triangle purple -->
+  <polygon points="484,1990 454,2050 514,2050" fill="#0a0a0a" stroke="#A764F6" stroke-width="2.5"/>
+  <!-- Hard hat icon -->
+  <rect x="474" y="2015" width="20" height="12" rx="2" fill="rgba(167,100,246,0.7)"/>
+  <rect x="478" y="2027" width="12" height="5" rx="1" fill="rgba(167,100,246,0.5)"/>
+  <!-- Sign plate -->
+  <rect x="430" y="2053" width="110" height="40" rx="5" fill="#0a0a0a" stroke="rgba(167,100,246,0.4)" stroke-width="1.5"/>
+  <text x="485" y="2069" text-anchor="middle" fill="#A764F6" font-size="10" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">ROAD WORK</text>
+  <text x="485" y="2085" text-anchor="middle" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">Tasks under construction</text>
+
+  <!-- ═══ ROAD SIGN C: AGENTS CREATED (right side upper) ═══ -->
+  <rect x="1118" y="2070" width="6" height="60" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <rect x="1072" y="1990" width="162" height="40" rx="8" fill="#0a0a0a" stroke="rgba(255,184,0,0.5)" stroke-width="2"/>
+  <text x="1153" y="2007" text-anchor="middle" fill="#FFB800" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">AGENTS CREATED</text>
+  <text x="1153" y="2022" text-anchor="middle" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">COS: 1 Programmer per task</text>
+
+  <!-- ═══ ROAD SIGN C: STOP — MANAGER APPROVAL (right side lower) ═══ -->
+  <polygon points="1090,2050 1114,2040 1138,2040 1162,2050 1162,2074 1152,2084 1114,2084 1090,2074" fill="#CC1111" stroke="#FF4444" stroke-width="2"/>
+  <text x="1126" y="2067" text-anchor="middle" fill="white" font-size="11" font-weight="900" font-family="Montserrat,sans-serif" letter-spacing="0.1em">STOP</text>
+  <rect x="1072" y="2086" width="150" height="40" rx="5" fill="#0a0a0a" stroke="rgba(255,68,68,0.4)" stroke-width="1.5"/>
+  <text x="1147" y="2102" text-anchor="middle" fill="#FF4444" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">MANAGER</text>
+  <text x="1147" y="2118" text-anchor="middle" fill="#FF4444" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">APPROVAL</text>
+
+  <!-- ═══ AVATAR C1: MANAGER (top-left ~10:30) at ~(700,2075) ═══ -->
+  <circle cx="700" cy="2075" r="50" fill="none" stroke="#FF4444" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="700" cy="2075" r="43" fill="none" stroke="#FF4444" stroke-width="3"/>
+  <image href="../public/avatars/robots_40.jpg" x="660" y="2035" width="80" height="80" clip-path="url(#clip-c1)"/>
+  <text x="700" y="2135" text-anchor="middle" fill="#FF4444" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">MANAGER</text>
+  <text x="700" y="2151" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Approves each</text>
+  <text x="700" y="2164" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">task-design-doc.</text>
+
+  <!-- ═══ AVATAR C2: ORCHESTRATOR (top-right ~1:30) at ~(900,2075) ═══ -->
+  <circle cx="900" cy="2075" r="50" fill="none" stroke="#A764F6" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="900" cy="2075" r="43" fill="none" stroke="#A764F6" stroke-width="3"/>
+  <image href="../public/avatars/robots_10.jpg" x="860" y="2035" width="80" height="80" clip-path="url(#clip-c2)"/>
+  <text x="900" y="2135" text-anchor="middle" fill="#A764F6" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">ORCHESTRATOR</text>
+  <text x="900" y="2151" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Splits design into tasks.</text>
+  <text x="900" y="2164" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Populates kanban.</text>
+
+  <!-- ═══ AVATAR C3: ARCHITECT (bottom ~5:00) at ~(800,2310) ═══ -->
+  <circle cx="800" cy="2310" r="50" fill="none" stroke="#29B7FF" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="800" cy="2310" r="43" fill="none" stroke="#29B7FF" stroke-width="3"/>
+  <image href="../public/avatars/robots_30.jpg" x="760" y="2270" width="80" height="80" clip-path="url(#clip-c3)"/>
+  <text x="800" y="2370" text-anchor="middle" fill="#29B7FF" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">ARCHITECT</text>
+  <text x="800" y="2386" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Provides specs on request.</text>
+  <text x="800" y="2399" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Obeys Orchestrator.</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--           CONNECTOR ROAD C→D  (Y=2410 to Y=2600)                  -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <rect x="760" y="2410" width="80" height="190" fill="#1a1a1a"/>
+  <line x1="761" y1="2410" x2="761" y2="2600" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="839" y1="2410" x2="839" y2="2600" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="800" y1="2410" x2="800" y2="2600" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="16,10"/>
+  <text x="870" y="2510" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Montserrat,sans-serif" letter-spacing="0.08em">💻 Code + PRs</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--           ROUNDABOUT D — IMPLEMENTATION FEEDBACK                   -->
+  <!--               Center: x=800, y=2900  (Y span: 2600–3200)           -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+  <circle cx="800" cy="2900" r="190" fill="none" stroke="#1a1a1a" stroke-width="80"/>
+  <circle cx="800" cy="2900" r="230" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+  <circle cx="800" cy="2900" r="150" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+  <circle cx="800" cy="2900" r="190" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2" stroke-dasharray="14,9"/>
+  <!-- Center island — gray -->
+  <circle cx="800" cy="2900" r="116" fill="rgba(107,107,107,0.07)" stroke="rgba(107,107,107,0.35)" stroke-width="3"/>
+  <text x="800" y="2892" text-anchor="middle" fill="rgba(180,180,180,0.75)" font-size="15" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">IMPLEMENT</text>
+  <text x="800" y="2913" text-anchor="middle" fill="rgba(180,180,180,0.75)" font-size="15" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">FEEDBACK</text>
+  <!-- Section label pill -->
+  <rect x="620" y="2610" width="360" height="28" rx="14" fill="rgba(107,107,107,0.1)" stroke="rgba(107,107,107,0.3)" stroke-width="1"/>
+  <text x="800" y="2629" text-anchor="middle" fill="rgba(180,180,180,0.8)" font-size="11" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.15em">ROUNDABOUT D</text>
+  <!-- Clockwise arrows -->
+  <path d="M 770 2715 A 190 190 0 0 1 985 2815" fill="none" stroke="rgba(107,107,107,0.5)" stroke-width="3" marker-end="url(#arrGray)"/>
+  <path d="M 985 2985 A 190 190 0 0 1 770 3085" fill="none" stroke="rgba(107,107,107,0.5)" stroke-width="3" marker-end="url(#arrGray)"/>
+  <path d="M 720 3020 A 190 190 0 0 1 720 2780" fill="none" stroke="rgba(107,107,107,0.5)" stroke-width="3" marker-end="url(#arrGray)"/>
+
+  <!-- Loop-back road: dashed BLUE on RIGHT — DESIGN FLAW → FIX -->
+  <path d="M 830 3090 C 1100 3090 1220 2920 1220 2760 C 1220 2620 1120 2590 830 2610" fill="none" stroke="rgba(41,183,255,0.7)" stroke-width="3" stroke-dasharray="12,7" marker-end="url(#arrBlueDark)"/>
+  <text x="1175" y="2870" text-anchor="middle" fill="rgba(41,183,255,0.8)" font-size="10" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.05em" transform="rotate(85,1175,2870)">DESIGN FLAW → FIX</text>
+
+  <!-- ═══ ROAD SIGN D: TWO WAY TRAFFIC (left side upper) ═══ -->
+  <rect x="478" y="2870" width="6" height="60" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <!-- Info rectangle sign (white/yellow) -->
+  <rect x="420" y="2790" width="130" height="44" rx="6" fill="#0a0a0a" stroke="rgba(255,255,255,0.4)" stroke-width="2"/>
+  <!-- Bidirectional arrows drawn as lines -->
+  <line x1="438" y1="2808" x2="438" y2="2818" stroke="rgba(255,255,255,0.7)" stroke-width="2"/>
+  <polygon points="438,2805 434,2812 442,2812" fill="rgba(255,255,255,0.7)"/>
+  <line x1="454" y1="2818" x2="454" y2="2808" stroke="rgba(255,255,255,0.7)" stroke-width="2"/>
+  <polygon points="454,2821 450,2814 458,2814" fill="rgba(255,255,255,0.7)"/>
+  <text x="485" y="2812" text-anchor="middle" fill="#e8e8e8" font-size="10" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">TWO WAY</text>
+  <text x="485" y="2827" text-anchor="middle" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">Constant feedback</text>
+
+  <!-- ═══ ROAD SIGN D: BLOCKED — DEPENDENCY WAIT (left side lower) ═══ -->
+  <rect x="478" y="3020" width="6" height="60" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <rect x="420" y="2940" width="130" height="44" rx="6" fill="#0a0a0a" stroke="rgba(255,160,0,0.5)" stroke-width="2"/>
+  <!-- Stop-hand icon (simplified) -->
+  <rect x="434" y="2952" width="8" height="14" rx="1" fill="rgba(255,160,0,0.7)"/>
+  <rect x="444" y="2950" width="6" height="16" rx="1" fill="rgba(255,160,0,0.7)"/>
+  <rect x="452" y="2952" width="6" height="14" rx="1" fill="rgba(255,160,0,0.7)"/>
+  <rect x="434" y="2966" width="24" height="5" rx="1" fill="rgba(255,160,0,0.7)"/>
+  <text x="485" y="2962" text-anchor="middle" fill="#FFA000" font-size="10" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">BLOCKED</text>
+  <text x="485" y="2977" text-anchor="middle" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">Dependency wait</text>
+
+  <!-- ═══ ROAD SIGN D: U-TURN DESIGN FLAW (right side) ═══ -->
+  <rect x="1118" y="2870" width="6" height="60" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <rect x="1060" y="2790" width="152" height="44" rx="6" fill="#0a0a0a" stroke="rgba(41,183,255,0.5)" stroke-width="2"/>
+  <!-- U-turn arrow -->
+  <path d="M 1076 2815 L 1076 2805 Q 1076 2796 1085 2796 L 1095 2796 Q 1104 2796 1104 2805 L 1104 2820" fill="none" stroke="rgba(41,183,255,0.8)" stroke-width="2.5"/>
+  <polygon points="1104,2823 1100,2816 1108,2816" fill="rgba(41,183,255,0.8)"/>
+  <text x="1136" y="2811" text-anchor="middle" fill="#29B7FF" font-size="10" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">U-TURN</text>
+  <text x="1136" y="2826" text-anchor="middle" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">Design flaw → Architect</text>
+
+  <!-- ═══ AVATAR D1: ORCHESTRATOR (top-left ~10:30) at ~(700,2875) ═══ -->
+  <circle cx="700" cy="2875" r="50" fill="none" stroke="#A764F6" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="700" cy="2875" r="43" fill="none" stroke="#A764F6" stroke-width="3"/>
+  <image href="../public/avatars/robots_10.jpg" x="660" y="2835" width="80" height="80" clip-path="url(#clip-d1)"/>
+  <text x="700" y="2935" text-anchor="middle" fill="#A764F6" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">ORCHESTRATOR</text>
+  <text x="700" y="2951" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Assigns tasks.</text>
+  <text x="700" y="2964" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Rejects bad work.</text>
+
+  <!-- ═══ AVATAR D2: ARCHITECT (top-right ~1:30) at ~(900,2875) ═══ -->
+  <circle cx="900" cy="2875" r="50" fill="none" stroke="#29B7FF" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="900" cy="2875" r="43" fill="none" stroke="#29B7FF" stroke-width="3"/>
+  <image href="../public/avatars/robots_30.jpg" x="860" y="2835" width="80" height="80" clip-path="url(#clip-d2)"/>
+  <text x="900" y="2935" text-anchor="middle" fill="#29B7FF" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">ARCHITECT</text>
+  <text x="900" y="2951" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Fixes design flaws.</text>
+  <text x="900" y="2964" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Clarifies specs.</text>
+
+  <!-- ═══ AVATAR D3: MEMBER ×N (right ~3:00) at ~(945,2900) ═══ -->
+  <circle cx="945" cy="2900" r="50" fill="none" stroke="#6B6B6B" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="945" cy="2900" r="43" fill="none" stroke="#6B6B6B" stroke-width="3"/>
+  <image href="../public/avatars/robots_00.jpg" x="905" y="2860" width="80" height="80" clip-path="url(#clip-d3)"/>
+  <text x="945" y="2960" text-anchor="middle" fill="#6B6B6B" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">MEMBER ×N</text>
+  <text x="945" y="2976" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Codes, tests, submits PRs.</text>
+  <text x="945" y="2989" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Reports blockers.</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--           CONNECTOR ROAD D→E  (Y=3090 to Y=3400)                  -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <rect x="760" y="3090" width="80" height="310" fill="#1a1a1a"/>
+  <line x1="761" y1="3090" x2="761" y2="3400" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="839" y1="3090" x2="839" y2="3400" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="800" y1="3090" x2="800" y2="3400" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="16,10"/>
+  <text x="870" y="3250" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Montserrat,sans-serif" letter-spacing="0.08em">📝 Unreviewed PR</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--           ROUNDABOUT E — THE BIG TRINITY (LARGER r=220)            -->
+  <!--               Center: x=800, y=3700  (Y span: 3400–4050)           -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+  <!-- LARGER roundabout for E -->
+  <circle cx="800" cy="3700" r="220" fill="none" stroke="#1a1a1a" stroke-width="88"/>
+  <circle cx="800" cy="3700" r="264" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+  <circle cx="800" cy="3700" r="176" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+  <circle cx="800" cy="3700" r="220" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2" stroke-dasharray="14,9"/>
+  <!-- Center island — green -->
+  <circle cx="800" cy="3700" r="140" fill="rgba(0,232,138,0.07)" stroke="rgba(0,232,138,0.35)" stroke-width="3"/>
+  <text x="800" y="3688" text-anchor="middle" fill="rgba(0,232,138,0.75)" font-size="15" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">PLAN → CODE</text>
+  <text x="800" y="3710" text-anchor="middle" fill="rgba(0,232,138,0.75)" font-size="15" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">→ REVIEW</text>
+  <!-- Section label pill -->
+  <rect x="580" y="3410" width="440" height="28" rx="14" fill="rgba(0,232,138,0.1)" stroke="rgba(0,232,138,0.3)" stroke-width="1"/>
+  <text x="800" y="3429" text-anchor="middle" fill="rgba(0,232,138,0.8)" font-size="11" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.15em">ROUNDABOUT E — THE BIG TRINITY</text>
+  <!-- Clockwise arrows -->
+  <path d="M 770 3490 A 220 220 0 0 1 1000 3600" fill="none" stroke="rgba(0,232,138,0.4)" stroke-width="3" marker-end="url(#arrGreen)"/>
+  <path d="M 1000 3800 A 220 220 0 0 1 770 3910" fill="none" stroke="rgba(0,232,138,0.4)" stroke-width="3" marker-end="url(#arrGreen)"/>
+  <path d="M 710 3840 A 220 220 0 0 1 710 3560" fill="none" stroke="rgba(0,232,138,0.4)" stroke-width="3" marker-end="url(#arrGreen)"/>
+
+  <!-- Loop-back road: dashed red on RIGHT — REJECTED → FIX -->
+  <path d="M 830 3920 C 1140 3920 1260 3730 1260 3560 C 1260 3420 1140 3400 830 3410" fill="none" stroke="rgba(255,68,68,0.7)" stroke-width="3" stroke-dasharray="12,7" marker-end="url(#arrRed)"/>
+  <text x="1215" y="3700" text-anchor="middle" fill="rgba(255,68,68,0.8)" font-size="10" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.05em" transform="rotate(85,1215,3700)">REJECTED → FIX</text>
+
+  <!-- ═══ ROAD SIGN E: QUALITY GATE / STOP (left side) ═══ -->
+  <rect x="440" y="3670" width="6" height="70" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <!-- STOP Octagon red -->
+  <polygon points="412,3575 436,3565 460,3565 484,3575 484,3599 474,3609 436,3609 412,3599" fill="#CC1111" stroke="#FF4444" stroke-width="2"/>
+  <text x="448" y="3592" text-anchor="middle" fill="white" font-size="11" font-weight="900" font-family="Montserrat,sans-serif" letter-spacing="0.1em">STOP</text>
+  <rect x="390" y="3611" width="172" height="40" rx="5" fill="#0a0a0a" stroke="rgba(255,68,68,0.4)" stroke-width="1.5"/>
+  <text x="476" y="3627" text-anchor="middle" fill="#FF4444" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">QUALITY GATE</text>
+  <text x="476" y="3643" text-anchor="middle" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">All PRs must pass</text>
+
+  <!-- ═══ ROAD SIGN E: SLIPPERY ROAD warning (left side lower) ═══ -->
+  <rect x="440" y="3830" width="6" height="70" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <polygon points="446,3750 416,3810 476,3810" fill="#0a0a0a" stroke="#FFA000" stroke-width="2.5"/>
+  <!-- Skid marks icon -->
+  <line x1="436" y1="3782" x2="456" y2="3798" stroke="rgba(255,160,0,0.7)" stroke-width="2" stroke-dasharray="3,2"/>
+  <line x1="444" y1="3778" x2="464" y2="3794" stroke="rgba(255,160,0,0.5)" stroke-width="1.5" stroke-dasharray="3,2"/>
+  <rect x="390" y="3812" width="172" height="40" rx="5" fill="#0a0a0a" stroke="rgba(255,160,0,0.4)" stroke-width="1.5"/>
+  <text x="476" y="3828" text-anchor="middle" fill="#FFA000" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">SLIPPERY ROAD</text>
+  <text x="476" y="3844" text-anchor="middle" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">Hotfixes may revert</text>
+
+  <!-- ═══ ROAD SIGN E: MERGE (right side) ═══ -->
+  <rect x="1118" y="3670" width="6" height="70" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <rect x="1072" y="3590" width="152" height="44" rx="8" fill="#0a0a0a" stroke="rgba(0,232,138,0.5)" stroke-width="2"/>
+  <!-- Merge arrows icon -->
+  <line x1="1088" y1="3604" x2="1100" y2="3612" stroke="rgba(0,232,138,0.8)" stroke-width="2"/>
+  <line x1="1100" y1="3612" x2="1112" y2="3604" stroke="rgba(0,232,138,0.8)" stroke-width="2"/>
+  <line x1="1100" y1="3612" x2="1100" y2="3624" stroke="rgba(0,232,138,0.8)" stroke-width="2"/>
+  <polygon points="1100,3627 1096,3620 1104,3620" fill="rgba(0,232,138,0.8)"/>
+  <text x="1148" y="3607" text-anchor="middle" fill="#00E88A" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">MERGE</text>
+  <text x="1148" y="3624" text-anchor="middle" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">PR → dev branch</text>
+
+  <!-- ═══ AVATAR E1: MANAGER (top-left ~10:00) at ~(678,3678) ═══ -->
+  <circle cx="678" cy="3678" r="50" fill="none" stroke="#FF4444" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="678" cy="3678" r="43" fill="none" stroke="#FF4444" stroke-width="3"/>
+  <image href="../public/avatars/robots_40.jpg" x="638" y="3638" width="80" height="80" clip-path="url(#clip-e1)"/>
+  <text x="678" y="3738" text-anchor="middle" fill="#FF4444" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">MANAGER</text>
+  <text x="678" y="3754" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">human-review column.</text>
+  <text x="678" y="3767" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Approves merge (~90%).</text>
+
+  <!-- ═══ AVATAR E2: ORCHESTRATOR (top ~12:00) at ~(800,3612) ═══ -->
+  <circle cx="800" cy="3480" r="50" fill="none" stroke="#A764F6" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="800" cy="3480" r="43" fill="none" stroke="#A764F6" stroke-width="3"/>
+  <image href="../public/avatars/robots_10.jpg" x="760" y="3440" width="80" height="80" clip-path="url(#clip-e2)"/>
+  <text x="800" y="3540" text-anchor="middle" fill="#A764F6" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">ORCHESTRATOR</text>
+  <text x="800" y="3556" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Routes PRs to Integrator.</text>
+  <text x="800" y="3569" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Can push hotfixes.</text>
+
+  <!-- ═══ AVATAR E3: MEMBER ×N (top-right ~2:00) at ~(922,3678) ═══ -->
+  <circle cx="922" cy="3678" r="50" fill="none" stroke="#6B6B6B" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="922" cy="3678" r="43" fill="none" stroke="#6B6B6B" stroke-width="3"/>
+  <image href="../public/avatars/robots_00.jpg" x="882" y="3638" width="80" height="80" clip-path="url(#clip-e3)"/>
+  <text x="922" y="3738" text-anchor="middle" fill="#6B6B6B" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">MEMBER ×N</text>
+  <text x="922" y="3754" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Submits PR.</text>
+  <text x="922" y="3767" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Fixes on rejection.</text>
+
+  <!-- ═══ AVATAR E4: INTEGRATOR (right ~4:00) at ~(968,3780) ═══ -->
+  <circle cx="968" cy="3790" r="50" fill="none" stroke="#00E88A" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="968" cy="3790" r="43" fill="none" stroke="#00E88A" stroke-width="3"/>
+  <image href="../public/avatars/robots_20.jpg" x="928" y="3750" width="80" height="80" clip-path="url(#clip-e4)"/>
+  <text x="968" y="3850" text-anchor="middle" fill="#00E88A" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">INTEGRATOR</text>
+  <text x="968" y="3866" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">ai-review column.</text>
+  <text x="968" y="3879" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Code review, tests, CI/CD.</text>
+
+  <!-- PR STATUS EVOLUTION STRIP -->
+  <rect x="400" y="3950" width="800" height="60" rx="10" fill="rgba(0,0,0,0.3)" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <text x="800" y="3968" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.15em">PR LIFECYCLE</text>
+  <!-- Badge 1: UNREVIEWED -->
+  <rect x="418" y="3977" width="140" height="24" rx="12" fill="rgba(107,107,107,0.3)" stroke="rgba(107,107,107,0.5)" stroke-width="1.5"/>
+  <text x="488" y="3993" text-anchor="middle" fill="#9a9a9a" font-size="9" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.06em">UNREVIEWED</text>
+  <!-- Arrow -->
+  <text x="574" y="3993" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="14" font-family="sans-serif">→</text>
+  <!-- Badge 2: AI-REVIEWED -->
+  <rect x="588" y="3977" width="140" height="24" rx="12" fill="rgba(41,183,255,0.15)" stroke="rgba(41,183,255,0.4)" stroke-width="1.5"/>
+  <text x="658" y="3993" text-anchor="middle" fill="#29B7FF" font-size="9" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.06em">AI-REVIEWED</text>
+  <!-- Arrow -->
+  <text x="744" y="3993" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="14" font-family="sans-serif">→</text>
+  <!-- Badge 3: HUMAN-REVIEWED -->
+  <rect x="758" y="3977" width="156" height="24" rx="12" fill="rgba(255,68,68,0.15)" stroke="rgba(255,68,68,0.4)" stroke-width="1.5"/>
+  <text x="836" y="3993" text-anchor="middle" fill="#FF7777" font-size="9" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.06em">HUMAN-REVIEWED</text>
+  <!-- Arrow -->
+  <text x="928" y="3993" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="14" font-family="sans-serif">→</text>
+  <!-- Badge 4: MERGED -->
+  <rect x="942" y="3977" width="100" height="24" rx="12" fill="rgba(0,232,138,0.2)" stroke="rgba(0,232,138,0.5)" stroke-width="1.5"/>
+  <text x="992" y="3993" text-anchor="middle" fill="#00E88A" font-size="9" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.06em">MERGED</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--           CONNECTOR ROAD E→F  (Y=4020 to Y=4200)                  -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <rect x="760" y="4020" width="80" height="180" fill="#1a1a1a"/>
+  <line x1="761" y1="4020" x2="761" y2="4200" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="839" y1="4020" x2="839" y2="4200" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="800" y1="4020" x2="800" y2="4200" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="16,10"/>
+  <text x="870" y="4115" fill="rgba(255,255,255,0.5)" font-size="11" font-family="Montserrat,sans-serif" letter-spacing="0.08em">🏁 All tasks completed</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--           ROUNDABOUT F — RELEASE AND DOCS                          -->
+  <!--               Center: x=800, y=4400  (Y span: 4200–4650)           -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+  <circle cx="800" cy="4400" r="190" fill="none" stroke="#1a1a1a" stroke-width="80"/>
+  <circle cx="800" cy="4400" r="230" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+  <circle cx="800" cy="4400" r="150" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+  <circle cx="800" cy="4400" r="190" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2" stroke-dasharray="14,9"/>
+  <!-- Center island — green -->
+  <circle cx="800" cy="4400" r="116" fill="rgba(0,232,138,0.07)" stroke="rgba(0,232,138,0.35)" stroke-width="3"/>
+  <text x="800" y="4392" text-anchor="middle" fill="rgba(0,232,138,0.75)" font-size="15" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">RELEASE</text>
+  <text x="800" y="4413" text-anchor="middle" fill="rgba(0,232,138,0.75)" font-size="15" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">&amp; DOCS</text>
+  <!-- Section label pill -->
+  <rect x="620" y="4210" width="360" height="28" rx="14" fill="rgba(0,232,138,0.1)" stroke="rgba(0,232,138,0.3)" stroke-width="1"/>
+  <text x="800" y="4229" text-anchor="middle" fill="rgba(0,232,138,0.8)" font-size="11" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.15em">ROUNDABOUT F</text>
+  <!-- Clockwise arrows -->
+  <path d="M 770 4215 A 190 190 0 0 1 985 4315" fill="none" stroke="rgba(0,232,138,0.4)" stroke-width="3" marker-end="url(#arrGreen)"/>
+  <path d="M 985 4485 A 190 190 0 0 1 770 4585" fill="none" stroke="rgba(0,232,138,0.4)" stroke-width="3" marker-end="url(#arrGreen)"/>
+  <path d="M 720 4520 A 190 190 0 0 1 720 4280" fill="none" stroke="rgba(0,232,138,0.4)" stroke-width="3" marker-end="url(#arrGreen)"/>
+
+  <!-- ═══ ROAD SIGN F: FINISH LINE CHECKERED (left side) ═══ -->
+  <rect x="478" y="4370" width="6" height="60" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <rect x="420" y="4290" width="130" height="44" rx="6" fill="#0a0a0a" stroke="rgba(0,232,138,0.5)" stroke-width="2"/>
+  <!-- Checkered flag mini -->
+  <rect x="428" y="4298" width="8" height="8" fill="rgba(0,232,138,0.7)"/>
+  <rect x="436" y="4298" width="8" height="8" fill="rgba(255,255,255,0.15)"/>
+  <rect x="428" y="4306" width="8" height="8" fill="rgba(255,255,255,0.15)"/>
+  <rect x="436" y="4306" width="8" height="8" fill="rgba(0,232,138,0.7)"/>
+  <rect x="428" y="4314" width="8" height="8" fill="rgba(0,232,138,0.7)"/>
+  <rect x="436" y="4314" width="8" height="8" fill="rgba(255,255,255,0.15)"/>
+  <text x="485" y="4308" text-anchor="middle" fill="#00E88A" font-size="10" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">FINISH LINE</text>
+  <text x="485" y="4323" text-anchor="middle" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">Release complete</text>
+
+  <!-- ═══ ROAD SIGN F: PARKING / VERSION TAGGED (right side) ═══ -->
+  <rect x="1118" y="4370" width="6" height="60" fill="rgba(255,255,255,0.22)" rx="2"/>
+  <rect x="1060" y="4290" width="152" height="44" rx="8" fill="#0a0a0a" stroke="rgba(255,184,0,0.5)" stroke-width="2"/>
+  <!-- Package/box icon -->
+  <rect x="1076" y="4300" width="18" height="14" rx="2" fill="none" stroke="rgba(255,184,0,0.7)" stroke-width="1.5"/>
+  <line x1="1085" y1="4300" x2="1085" y2="4314" stroke="rgba(255,184,0,0.5)" stroke-width="1"/>
+  <line x1="1076" y1="4307" x2="1094" y2="4307" stroke="rgba(255,184,0,0.5)" stroke-width="1"/>
+  <text x="1136" y="4308" text-anchor="middle" fill="#FFB800" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.05em">PARKING</text>
+  <text x="1136" y="4323" text-anchor="middle" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">Version tagged</text>
+
+  <!-- ═══ AVATAR F1: MANAGER (top-left ~10:30) at ~(700,4375) ═══ -->
+  <circle cx="700" cy="4375" r="50" fill="none" stroke="#FF4444" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="700" cy="4375" r="43" fill="none" stroke="#FF4444" stroke-width="3"/>
+  <image href="../public/avatars/robots_40.jpg" x="660" y="4335" width="80" height="80" clip-path="url(#clip-f1)"/>
+  <text x="700" y="4435" text-anchor="middle" fill="#FF4444" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">MANAGER</text>
+  <text x="700" y="4451" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Approves release.</text>
+
+  <!-- ═══ AVATAR F2: ORCHESTRATOR (top-right ~1:30) at ~(900,4375) ═══ -->
+  <circle cx="900" cy="4375" r="50" fill="none" stroke="#A764F6" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="900" cy="4375" r="43" fill="none" stroke="#A764F6" stroke-width="3"/>
+  <image href="../public/avatars/robots_10.jpg" x="860" y="4335" width="80" height="80" clip-path="url(#clip-f2)"/>
+  <text x="900" y="4435" text-anchor="middle" fill="#A764F6" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">ORCHESTRATOR</text>
+  <text x="900" y="4451" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Orders release.</text>
+  <text x="900" y="4464" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Requests code examples.</text>
+
+  <!-- ═══ AVATAR F3: INTEGRATOR (right ~3:00) at ~(945,4400) ═══ -->
+  <circle cx="945" cy="4400" r="50" fill="none" stroke="#00E88A" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="945" cy="4400" r="43" fill="none" stroke="#00E88A" stroke-width="3"/>
+  <image href="../public/avatars/robots_20.jpg" x="905" y="4360" width="80" height="80" clip-path="url(#clip-f3)"/>
+  <text x="945" y="4460" text-anchor="middle" fill="#00E88A" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">INTEGRATOR</text>
+  <text x="945" y="4476" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Merges dev→main.</text>
+  <text x="945" y="4489" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Tags. Builds. CI/CD.</text>
+
+  <!-- ═══ AVATAR F4: ARCHITECT (bottom-right ~4:30) at ~(900,4465) ═══ -->
+  <circle cx="900" cy="4530" r="50" fill="none" stroke="#29B7FF" stroke-width="8" stroke-opacity="0.15"/>
+  <circle cx="900" cy="4530" r="43" fill="none" stroke="#29B7FF" stroke-width="3"/>
+  <image href="../public/avatars/robots_30.jpg" x="860" y="4490" width="80" height="80" clip-path="url(#clip-f4)"/>
+  <text x="900" y="4590" text-anchor="middle" fill="#29B7FF" font-size="11" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">ARCHITECT</text>
+  <text x="900" y="4606" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Writes docs, wiki, Mintlify.</text>
+  <text x="900" y="4619" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Uses auto-gen API docs.</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--           LOOP-BACK ROAD — NEXT RELEASE CYCLE → ROUNDABOUT B       -->
+  <!--           Big S-curve from bottom of F back up the LEFT side        -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- Road F exit -->
+  <rect x="760" y="4590" width="80" height="100" fill="#1a1a1a"/>
+  <line x1="761" y1="4590" x2="761" y2="4690" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="839" y1="4590" x2="839" y2="4690" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+  <line x1="800" y1="4590" x2="800" y2="4690" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="16,10"/>
+
+  <!-- Big loop-back curve — green dashed, large Bezier arc up the left side -->
+  <path d="M 770 4700
+           C 600 4700 320 4600 240 4400
+           C 140 4100 200 3800 220 3400
+           C 240 3000 200 2700 220 2300
+           C 240 1900 200 1600 220 1200
+           C 240 900 300 800 770 1080"
+        fill="none"
+        stroke="rgba(0,232,138,0.65)"
+        stroke-width="4"
+        stroke-dasharray="18,10"
+        marker-end="url(#arrGreenNext)"/>
+
+  <!-- Rotating label on the loop-back road -->
+  <text fill="rgba(0,232,138,0.75)" font-size="12" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.1em">
+    <textPath href="#loop-path-label" startOffset="20%">↺ NEXT RELEASE CYCLE → BACK TO DESIGN LOOP</textPath>
+  </text>
+  <!-- Invisible path for textPath reference (same curve, slightly offset for text) -->
+  <defs>
+    <path id="loop-path-label"
+          d="M 770 4700
+             C 600 4700 320 4600 240 4400
+             C 140 4100 200 3800 220 3400
+             C 240 3000 200 2700 220 2300
+             C 240 1900 200 1600 220 1200
+             C 240 900 300 800 770 1080"/>
+  </defs>
+
+  <!-- Fallback static label for the loop-back -->
+  <rect x="40" y="2900" width="260" height="40" rx="8" fill="rgba(0,0,0,0.6)" stroke="rgba(0,232,138,0.35)" stroke-width="1.5"/>
+  <text x="170" y="2916" text-anchor="middle" fill="rgba(0,232,138,0.8)" font-size="10" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.08em">↺ NEXT RELEASE CYCLE</text>
+  <text x="170" y="2932" text-anchor="middle" fill="rgba(0,232,138,0.6)" font-size="9" font-family="Montserrat,sans-serif">→ BACK TO ROUNDABOUT B</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!--                       LEGEND (bottom)                              -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <rect x="350" y="4720" width="900" height="65" rx="12" fill="rgba(0,0,0,0.4)" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <text x="800" y="4740" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.2em">LEGEND</text>
+  <!-- Manager -->
+  <circle cx="390" cy="4758" r="8" fill="none" stroke="#FF4444" stroke-width="2.5"/>
+  <text x="406" y="4762" fill="#FF4444" font-size="9" font-weight="700" font-family="Montserrat,sans-serif">MANAGER</text>
+  <!-- COS -->
+  <circle cx="510" cy="4758" r="8" fill="none" stroke="#FFB800" stroke-width="2.5"/>
+  <text x="526" y="4762" fill="#FFB800" font-size="9" font-weight="700" font-family="Montserrat,sans-serif">CHIEF-OF-STAFF</text>
+  <!-- Orchestrator -->
+  <circle cx="680" cy="4758" r="8" fill="none" stroke="#A764F6" stroke-width="2.5"/>
+  <text x="696" y="4762" fill="#A764F6" font-size="9" font-weight="700" font-family="Montserrat,sans-serif">ORCHESTRATOR</text>
+  <!-- Architect -->
+  <circle cx="850" cy="4758" r="8" fill="none" stroke="#29B7FF" stroke-width="2.5"/>
+  <text x="866" y="4762" fill="#29B7FF" font-size="9" font-weight="700" font-family="Montserrat,sans-serif">ARCHITECT</text>
+  <!-- Integrator -->
+  <circle cx="1000" cy="4758" r="8" fill="none" stroke="#00E88A" stroke-width="2.5"/>
+  <text x="1016" y="4762" fill="#00E88A" font-size="9" font-weight="700" font-family="Montserrat,sans-serif">INTEGRATOR</text>
+  <!-- Member -->
+  <circle cx="1130" cy="4758" r="8" fill="none" stroke="#6B6B6B" stroke-width="2.5"/>
+  <text x="1146" y="4762" fill="#9a9a9a" font-size="9" font-weight="700" font-family="Montserrat,sans-serif">MEMBER ×N</text>
+  <!-- Dashed lines key -->
+  <line x1="390" y1="4776" x2="430" y2="4776" stroke="rgba(255,68,68,0.7)" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="440" y="4780" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">Rejection loop</text>
+  <line x1="570" y1="4776" x2="610" y2="4776" stroke="rgba(41,183,255,0.7)" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="620" y="4780" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">Design flaw loop</text>
+  <line x1="760" y1="4776" x2="800" y2="4776" stroke="rgba(0,232,138,0.7)" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="810" y="4780" fill="#7a7a7a" font-size="8.5" font-family="Montserrat,sans-serif">Next release cycle</text>
+
+</svg>

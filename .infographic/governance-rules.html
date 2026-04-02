@@ -316,6 +316,67 @@ body::before{
   box-shadow:0 4px 16px rgba(0,0,0,0.4);
 }
 
+/* ======= SVG ROAD ROUNDABOUTS ======= */
+.rbt-section{position:relative;width:100%;margin:0 auto;padding:0;}
+.rbt-wrap{position:relative;min-height:500px;}
+.rbt-svg{width:100%;height:100%;}
+/* Road surface */
+.road-surface{fill:none;stroke:#1e1e1e;stroke-linecap:round;}
+.road-edge{fill:none;stroke:rgba(255,255,255,0.06);stroke-width:1;}
+.road-center{fill:none;stroke:rgba(255,255,255,0.2);stroke-width:2;stroke-dasharray:14,10;stroke-linecap:round;}
+/* Roundabout ring */
+.rbt-ring-outer{fill:none;stroke:#1e1e1e;stroke-width:50;}
+.rbt-ring-edge{fill:none;stroke:rgba(255,255,255,0.08);stroke-width:1;}
+.rbt-ring-center{fill:none;stroke:rgba(255,255,255,0.2);stroke-width:2;stroke-dasharray:10,8;}
+.rbt-island{stroke:rgba(255,255,255,0.1);stroke-width:2;}
+/* Agent node on roundabout */
+.rbt-agent{position:absolute;display:flex;flex-direction:column;align-items:center;z-index:5;text-align:center;}
+.rbt-agent img{width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid;}
+.rbt-agent .ra-title{margin-top:6px;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;}
+.rbt-agent .ra-desc{font-size:10px;color:var(--muted);margin-top:3px;max-width:130px;line-height:1.35;}
+/* Road sign on post */
+.rsign{position:absolute;z-index:6;display:flex;flex-direction:column;align-items:center;}
+.rsign .rsign-post{width:4px;height:36px;background:rgba(255,255,255,0.2);border-radius:2px;}
+.rsign .rsign-plate{
+  border:2px solid;border-radius:6px;padding:6px 10px;
+  display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;
+  min-width:100px;background:var(--bg);
+  box-shadow:0 4px 20px rgba(0,0,0,0.6);
+}
+.rsign .rsign-icon{font-size:20px;}
+.rsign .rsign-text{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;}
+.rsign .rsign-sub{font-size:8px;color:var(--muted);}
+/* Vertical road connector between roundabouts */
+.road-vconnect{
+  width:60px;margin:0 auto;position:relative;
+  background:linear-gradient(to right,rgba(255,255,255,0.04),#1e1e1e 8px,#1e1e1e 52px,rgba(255,255,255,0.04));
+  border-left:1px solid rgba(255,255,255,0.06);
+  border-right:1px solid rgba(255,255,255,0.06);
+}
+.road-vconnect::after{
+  content:'';position:absolute;top:0;bottom:0;left:50%;width:2px;
+  transform:translateX(-50%);
+  background:repeating-linear-gradient(to bottom,rgba(255,255,255,0.2) 0,rgba(255,255,255,0.2) 14px,transparent 14px,transparent 24px);
+}
+.road-vlabel{position:absolute;left:80px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--dim);font-weight:600;white-space:nowrap;}
+/* Roundabout title */
+.rbt-title{
+  font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:0.06em;
+  text-align:center;margin-bottom:8px;
+}
+/* Loop-back indicator */
+.loop-back{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  margin-top:8px;padding:6px 14px;border-radius:6px;
+  border:1px dashed rgba(255,68,68,0.3);background:rgba(255,68,68,0.04);
+  font-size:11px;font-weight:600;
+}
+/* Exit gate */
+.exit-gate{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  margin-top:10px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;
+}
+
 /* ======= DENSE TABLE ======= */
 .dense-table{width:100%;border-collapse:collapse;font-size:18px;margin:8px 0;}
 .dense-table th{
@@ -389,7 +450,7 @@ body::before{
 
       <!-- ORCHESTRATOR -->
       <div class="tree-node">
-        <img src="../public/avatars/robots_30.jpg" alt="Orchestrator" class="tree-avatar orchestrator">
+        <img src="../public/avatars/robots_10.jpg" alt="Orchestrator" class="tree-avatar orchestrator">
         <div class="tree-label lbl-orchestrator">ORCHESTRATOR</div>
         <div class="tree-sublabel">Task coordination &bull; Pipeline mgmt</div>
       </div>
@@ -435,7 +496,7 @@ body::before{
 
         <!-- ARCHITECT -->
         <div class="tree-node">
-          <img src="../public/avatars/robots_10.jpg" alt="Architect" class="tree-avatar architect">
+          <img src="../public/avatars/robots_30.jpg" alt="Architect" class="tree-avatar architect">
           <div class="tree-label lbl-architect">ARCHITECT</div>
           <div class="tree-sublabel">System design</div>
         </div>
@@ -454,8 +515,8 @@ body::before{
   <th>Capability</th>
   <th><img src="../public/avatars/robots_40.jpg" class="th-avatar" style="border:2px solid var(--manager);">Manager</th>
   <th><img src="../public/avatars/robots_50.jpg" class="th-avatar" style="border:2px solid var(--cos);">COS</th>
-  <th><img src="../public/avatars/robots_30.jpg" class="th-avatar" style="border:2px solid var(--orchestrator);">Orchestrator</th>
-  <th><img src="../public/avatars/robots_10.jpg" class="th-avatar" style="border:2px solid var(--architect);">Architect</th>
+  <th><img src="../public/avatars/robots_10.jpg" class="th-avatar" style="border:2px solid var(--orchestrator);">Orchestrator</th>
+  <th><img src="../public/avatars/robots_30.jpg" class="th-avatar" style="border:2px solid var(--architect);">Architect</th>
   <th><img src="../public/avatars/robots_20.jpg" class="th-avatar" style="border:2px solid var(--integrator);">Integrator</th>
   <th><img src="../public/avatars/robots_00.jpg" class="th-avatar" style="border:2px solid var(--member);">Member</th>
 </tr>
@@ -610,7 +671,7 @@ body::before{
       </div>
     </div>
     <div class="scene-actor">
-      <img src="../public/avatars/robots_30.jpg" alt="Target" style="border-color:var(--orchestrator);">
+      <img src="../public/avatars/robots_10.jpg" alt="Target" style="border-color:var(--orchestrator);">
       <div class="actor-name" style="color:var(--orchestrator);">Target Agent</div>
       <div class="actor-sub">New title + plugin</div>
     </div>
@@ -737,7 +798,7 @@ body::before{
   </div>
   <div class="scene-actor">
     <div style="display:flex;align-items:center;gap:12px;">
-      <img src="../public/avatars/robots_10.jpg" alt="Now Architect" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid var(--architect);">
+      <img src="../public/avatars/robots_30.jpg" alt="Now Architect" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid var(--architect);">
     </div>
     <div class="actor-name" style="color:var(--architect);">Now ARCHITECT</div>
     <div class="actor-sub">architect-agent plugin locked</div>
@@ -898,9 +959,9 @@ body::before{
     <!-- mesh nodes -->
     <img src="../public/avatars/robots_40.jpg" class="ts-mesh-node" style="top:0;left:112px;">
     <img src="../public/avatars/robots_50.jpg" class="ts-mesh-node" style="top:94px;left:12px;">
-    <img src="../public/avatars/robots_30.jpg" class="ts-mesh-node" style="top:94px;right:12px;">
+    <img src="../public/avatars/robots_10.jpg" class="ts-mesh-node" style="top:94px;right:12px;">
     <img src="../public/avatars/robots_00.jpg" class="ts-mesh-node" style="bottom:12px;left:52px;">
-    <img src="../public/avatars/robots_10.jpg" class="ts-mesh-node" style="bottom:12px;right:52px;">
+    <img src="../public/avatars/robots_30.jpg" class="ts-mesh-node" style="bottom:12px;right:52px;">
   </div>
 </div>
 
@@ -939,153 +1000,20 @@ body::before{
 </div>
 
 
-<!-- ==================== 5. PROJECT PIPELINE ROAD + FEDERATION RULES AS ROAD SIGNS ==================== -->
-<div class="section-band blue"><i class="ph-bold ph-path"></i> 5 &mdash; PROJECT PIPELINE ROAD</div>
+<!-- ==================== 5. PROJECT WORKFLOW ROAD — ROUNDABOUT LOOPS ==================== -->
+<div class="section-band blue"><i class="ph-bold ph-path"></i> 5 &mdash; PROJECT WORKFLOW ROAD</div>
 
-<div class="road-container" style="min-height:720px;">
-  <!-- SVG winding road -->
-  <svg class="road-svg" viewBox="0 0 2032 720" preserveAspectRatio="none">
-    <!-- Road path - winding S-curve -->
-    <path d="M 80 120 C 300 120, 350 360, 550 360 S 800 600, 1020 600 C 1200 600, 1250 360, 1450 360 S 1700 120, 1950 120"
-      stroke="rgba(255,255,255,0.08)" stroke-width="80" fill="none" stroke-linecap="round"/>
-    <!-- Road center line (dashed) -->
-    <path d="M 80 120 C 300 120, 350 360, 550 360 S 800 600, 1020 600 C 1200 600, 1250 360, 1450 360 S 1700 120, 1950 120"
-      stroke="rgba(255,255,255,0.12)" stroke-width="3" fill="none" stroke-dasharray="16,12" stroke-linecap="round"/>
-    <!-- Road edge lines -->
-    <path d="M 80 80 C 300 80, 350 320, 550 320 S 800 560, 1020 560 C 1200 560, 1250 320, 1450 320 S 1700 80, 1950 80"
-      stroke="rgba(0,232,138,0.15)" stroke-width="2" fill="none" stroke-linecap="round"/>
-    <path d="M 80 160 C 300 160, 350 400, 550 400 S 800 640, 1020 640 C 1200 640, 1250 400, 1450 400 S 1700 160, 1950 160"
-      stroke="rgba(0,232,138,0.15)" stroke-width="2" fill="none" stroke-linecap="round"/>
-  </svg>
-
-  <!-- Stop 1: Requirement -->
-  <div class="road-stop" style="left:20px;top:40px;">
-    <div class="stop-circle" style="border-color:var(--manager);">
-      <i class="ph-bold ph-clipboard-text" style="color:var(--manager);"></i>
-    </div>
-    <div class="stop-label" style="background:rgba(255,68,68,0.15);color:var(--manager);">Requirement</div>
-    <div class="stop-desc">MANAGER defines project scope</div>
-  </div>
-
-  <!-- Stop 2: Design -->
-  <div class="road-stop" style="left:280px;top:60px;">
-    <div class="stop-circle" style="border-color:var(--architect);">
-      <img src="../public/avatars/robots_10.jpg" alt="Architect">
-    </div>
-    <div class="stop-label" style="background:rgba(41,183,255,0.15);color:var(--architect);">Design</div>
-    <div class="stop-desc">ARCHITECT creates system design</div>
-  </div>
-
-  <!-- Stop 3: Task Breakdown -->
-  <div class="road-stop" style="left:490px;top:280px;">
-    <div class="stop-circle" style="border-color:var(--orchestrator);">
-      <img src="../public/avatars/robots_30.jpg" alt="Orchestrator">
-    </div>
-    <div class="stop-label" style="background:rgba(167,100,246,0.15);color:var(--orchestrator);">Tasks</div>
-    <div class="stop-desc">ORCHESTRATOR breaks into tasks</div>
-  </div>
-
-  <!-- Stop 4: Git Repo -->
-  <div class="road-stop" style="left:730px;top:420px;">
-    <div class="stop-circle" style="border-color:var(--cos);">
-      <i class="ph-bold ph-git-branch" style="color:var(--cos);"></i>
-    </div>
-    <div class="stop-label" style="background:rgba(255,184,0,0.15);color:var(--cos);">Git Project</div>
-    <div class="stop-desc">COS manages repo setup</div>
-  </div>
-
-  <!-- Stop 5: Code -->
-  <div class="road-stop" style="left:960px;top:520px;">
-    <div class="stop-circle" style="border-color:var(--member);">
-      <img src="../public/avatars/robots_00.jpg" alt="Member">
-    </div>
-    <div class="stop-label" style="background:rgba(107,107,107,0.15);color:var(--member);">Code</div>
-    <div class="stop-desc">MEMBERS write code</div>
-  </div>
-
-  <!-- Stop 6: Integration -->
-  <div class="road-stop" style="left:1230px;top:360px;">
-    <div class="stop-circle" style="border-color:var(--integrator);">
-      <img src="../public/avatars/robots_20.jpg" alt="Integrator">
-    </div>
-    <div class="stop-label" style="background:rgba(0,232,138,0.15);color:var(--integrator);">PR Request</div>
-    <div class="stop-desc">INTEGRATOR connects services</div>
-  </div>
-
-  <!-- Stop 7: Review & Accept -->
-  <div class="road-stop" style="left:1500px;top:260px;">
-    <div class="stop-circle" style="border-color:var(--architect);">
-      <img src="../public/avatars/robots_10.jpg" alt="Architect">
-    </div>
-    <div class="stop-label" style="background:rgba(41,183,255,0.15);color:var(--architect);">Code Review</div>
-    <div class="stop-desc">ARCHITECT reviews PR</div>
-  </div>
-
-  <!-- Stop 8: Accepted -->
-  <div class="road-stop" style="left:1850px;top:40px;">
-    <div class="stop-circle" style="border-color:var(--green);background:rgba(0,232,138,0.1);">
-      <i class="ph-bold ph-seal-check" style="color:var(--green);font-size:48px;"></i>
-    </div>
-    <div class="stop-label" style="background:rgba(0,232,138,0.15);color:var(--green);">Accepted PR</div>
-    <div class="stop-desc">Merged to main</div>
-  </div>
-
-  <!-- ═══ FEDERATION RULES AS ROAD SIGNS ═══ -->
-  <!-- Sign 1: Tailscale VPN -->
-  <div class="road-sign" style="left:140px;top:200px;">
-    <div class="sign-post"></div>
-    <div class="sign-plate" style="border-color:var(--primary);background:rgba(0,232,138,0.12);">
-      <i class="ph-bold ph-shield-check" style="color:var(--primary);font-size:18px;"></i>
-      <div style="font-size:11px;font-weight:800;color:var(--primary);text-transform:uppercase;letter-spacing:0.05em;">TAILSCALE VPN</div>
-      <div style="font-size:9px;color:var(--muted);">All traffic encrypted</div>
-    </div>
-  </div>
-  <!-- Sign 2: Ed25519 Required -->
-  <div class="road-sign" style="left:420px;top:450px;">
-    <div class="sign-post"></div>
-    <div class="sign-plate" style="border-color:var(--secondary);background:rgba(41,183,255,0.12);">
-      <i class="ph-bold ph-fingerprint" style="color:var(--secondary);font-size:18px;"></i>
-      <div style="font-size:11px;font-weight:800;color:var(--secondary);text-transform:uppercase;letter-spacing:0.05em;">Ed25519 SIGNED</div>
-      <div style="font-size:9px;color:var(--muted);">L2: Identity attestation</div>
-    </div>
-  </div>
-  <!-- Sign 3: COS Gateway Only -->
-  <div class="road-sign" style="left:700px;top:200px;">
-    <div class="sign-post"></div>
-    <div class="sign-plate" style="border-color:var(--cos);background:rgba(255,184,0,0.12);">
-      <i class="ph-bold ph-traffic-sign" style="color:var(--cos);font-size:18px;"></i>
-      <div style="font-size:11px;font-weight:800;color:var(--cos);text-transform:uppercase;letter-spacing:0.05em;">COS GATEWAY ONLY</div>
-      <div style="font-size:9px;color:var(--muted);">Cross-team via COS</div>
-    </div>
-  </div>
-  <!-- Sign 4: Dual Approval Zone -->
-  <div class="road-sign" style="left:1100px;top:480px;">
-    <div class="sign-post"></div>
-    <div class="sign-plate" style="border-color:var(--orchestrator);background:rgba(167,100,246,0.12);">
-      <i class="ph-bold ph-hand-palm" style="color:var(--orchestrator);font-size:18px;"></i>
-      <div style="font-size:11px;font-weight:800;color:var(--orchestrator);text-transform:uppercase;letter-spacing:0.05em;">DUAL APPROVAL</div>
-      <div style="font-size:9px;color:var(--muted);">L3: Both hosts approve</div>
-    </div>
-  </div>
-  <!-- Sign 5: Password Required -->
-  <div class="road-sign" style="left:1380px;top:180px;">
-    <div class="sign-post"></div>
-    <div class="sign-plate" style="border-color:var(--manager);background:rgba(255,68,68,0.12);">
-      <i class="ph-bold ph-lock-key" style="color:var(--manager);font-size:18px;"></i>
-      <div style="font-size:11px;font-weight:800;color:var(--manager);text-transform:uppercase;letter-spacing:0.05em;">PASSWORD REQ'D</div>
-      <div style="font-size:9px;color:var(--muted);">Destructive ops only</div>
-    </div>
-  </div>
-  <!-- Sign 6: Rate Limit -->
-  <div class="road-sign" style="left:1700px;top:200px;">
-    <div class="sign-post"></div>
-    <div class="sign-plate" style="border-color:var(--cos);background:rgba(255,184,0,0.12);">
-      <i class="ph-bold ph-gauge" style="color:var(--cos);font-size:18px;"></i>
-      <div style="font-size:11px;font-weight:800;color:var(--cos);text-transform:uppercase;letter-spacing:0.05em;">RATE LIMIT</div>
-      <div style="font-size:9px;color:var(--muted);">5 attempts/min max</div>
-    </div>
-  </div>
+<div style="font-size:15px;color:var(--muted);margin:0 0 20px 0;line-height:1.6;max-width:1600px;">
+  The project workflow is a series of <strong style="color:var(--text);">nested loops</strong>, not a linear pipeline. Each roundabout represents a collaboration cycle between 3&ndash;4 agents. Documents travel as <strong style="color:var(--primary);">GitHub Issue URLs</strong> inside AMP messages. The <span style="color:var(--manager);font-weight:700;">MANAGER</span> is the invisible approval authority in every loop &mdash; nothing exits a roundabout without Manager approval. One <span style="color:var(--member);">MEMBER</span> (Programmer) agent is created per task; extra <span style="color:var(--integrator);">INTEGRATOR</span> agents are created if the review backlog grows.
 </div>
+
+
+<!-- ═══════ ROUNDABOUT SYSTEM (single composite SVG map) ═══════ -->
+<div style="display:flex;flex-direction:column;align-items:center;padding:24px 0;">
+  <object type="image/svg+xml" data="road-workflow-map.svg" style="width:100%;max-width:1600px;display:block;"></object>
+</div>
+
+
 
 
 <!-- ==================== FOOTER ==================== -->

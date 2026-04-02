@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+  <defs>
+    <marker id="arrE" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="rgba(0,232,138,0.6)"/></marker>
+    <marker id="arrERed" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="rgba(255,68,68,0.8)"/></marker>
+    <!-- Avatar clip paths — positions adjusted for larger r=160 roundabout -->
+    <clipPath id="clip-e1"><circle cx="278" cy="178" r="33"/></clipPath>
+    <clipPath id="clip-e2"><circle cx="400" cy="112" r="33"/></clipPath>
+    <clipPath id="clip-e3"><circle cx="522" cy="178" r="33"/></clipPath>
+    <clipPath id="clip-e4"><circle cx="568" cy="280" r="33"/></clipPath>
+  </defs>
+
+  <!-- Entry road (top center) — slightly shifted for taller center -->
+  <rect x="370" y="0" width="60" height="100" fill="#1c1c1c" rx="0"/>
+  <line x1="371" y1="0" x2="371" y2="100" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <line x1="429" y1="0" x2="429" y2="100" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <line x1="400" y1="0" x2="400" y2="100" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="12,8"/>
+
+  <!-- Roundabout outer ring road — LARGER: r=160, center 400,280 -->
+  <circle cx="400" cy="280" r="160" fill="none" stroke="#1c1c1c" stroke-width="54"/>
+  <!-- Road edge markings -->
+  <circle cx="400" cy="280" r="186" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+  <circle cx="400" cy="280" r="134" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+  <!-- Road center dashed line -->
+  <circle cx="400" cy="280" r="160" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="10,7"/>
+  <!-- Center island (green fill) -->
+  <circle cx="400" cy="280" r="106" fill="rgba(0,232,138,0.08)" stroke="rgba(0,232,138,0.35)" stroke-width="3"/>
+  <!-- Island label -->
+  <text x="400" y="272" text-anchor="middle" fill="rgba(0,232,138,0.7)" font-size="12" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">PLAN→CODE</text>
+  <text x="400" y="290" text-anchor="middle" fill="rgba(0,232,138,0.7)" font-size="12" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">→REVIEW</text>
+
+  <!-- Clockwise flow arrows on the ring -->
+  <path d="M 370 130 A 160 160 0 0 1 548 220" fill="none" stroke="rgba(0,232,138,0.4)" stroke-width="2.5" marker-end="url(#arrE)"/>
+  <path d="M 548 340 A 160 160 0 0 1 370 430" fill="none" stroke="rgba(0,232,138,0.4)" stroke-width="2.5" marker-end="url(#arrE)"/>
+  <path d="M 310 370 A 160 160 0 0 1 310 190" fill="none" stroke="rgba(0,232,138,0.4)" stroke-width="2.5" marker-end="url(#arrE)"/>
+
+  <!-- Exit road (bottom center) -->
+  <rect x="370" y="420" width="60" height="80" fill="#1c1c1c" rx="0"/>
+  <line x1="371" y1="420" x2="371" y2="500" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <line x1="429" y1="420" x2="429" y2="500" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <line x1="400" y1="420" x2="400" y2="500" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="12,8"/>
+
+  <!-- Loop-back road: dashed red curved path on RIGHT side — REJECTED → FIX -->
+  <path d="M 430 450 C 650 450 740 320 740 180 C 740 90 650 40 430 30" fill="none" stroke="rgba(255,68,68,0.7)" stroke-width="2.5" stroke-dasharray="10,6" marker-end="url(#arrERed)"/>
+  <text x="715" y="280" text-anchor="middle" fill="rgba(255,68,68,0.8)" font-size="8" font-weight="700" font-family="Montserrat,sans-serif" letter-spacing="0.05em" transform="rotate(80,715,280)">REJECTED → FIX</text>
+
+  <!-- ═══ ROAD SIGN: QUALITY GATE (left side, upper) ═══ -->
+  <rect x="78" y="200" width="5" height="50" fill="rgba(255,255,255,0.25)" rx="2"/>
+  <rect x="20" y="140" width="120" height="62" rx="8" fill="#0a0a0a" stroke="rgba(255,68,68,0.5)" stroke-width="2"/>
+  <text x="80" y="163" text-anchor="middle" fill="rgba(255,68,68,0.9)" font-size="14">⛔</text>
+  <text x="80" y="182" text-anchor="middle" fill="#FF4444" font-size="8.5" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">QUALITY GATE</text>
+  <text x="80" y="195" text-anchor="middle" fill="#7a7a7a" font-size="7" font-family="Montserrat,sans-serif">All PRs must pass</text>
+
+  <!-- ═══ ROAD SIGN: SLIPPERY ROAD (left side, lower) ═══ -->
+  <rect x="78" y="360" width="5" height="50" fill="rgba(255,255,255,0.25)" rx="2"/>
+  <rect x="20" y="300" width="120" height="62" rx="8" fill="#0a0a0a" stroke="rgba(255,160,0,0.5)" stroke-width="2"/>
+  <text x="80" y="323" text-anchor="middle" fill="rgba(255,160,0,0.9)" font-size="14">⚠️</text>
+  <text x="80" y="342" text-anchor="middle" fill="#FFA000" font-size="8.5" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">SLIPPERY ROAD</text>
+  <text x="80" y="355" text-anchor="middle" fill="#7a7a7a" font-size="7" font-family="Montserrat,sans-serif">Hotfixes may revert</text>
+
+  <!-- ═══ ROAD SIGN: MERGE (right side) ═══ -->
+  <rect x="628" y="230" width="5" height="50" fill="rgba(255,255,255,0.25)" rx="2"/>
+  <rect x="575" y="170" width="120" height="62" rx="8" fill="#0a0a0a" stroke="rgba(0,232,138,0.5)" stroke-width="2"/>
+  <text x="635" y="193" text-anchor="middle" fill="rgba(0,232,138,0.9)" font-size="14">⤵️</text>
+  <text x="635" y="212" text-anchor="middle" fill="#00E88A" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">MERGE</text>
+  <text x="635" y="225" text-anchor="middle" fill="#7a7a7a" font-size="7" font-family="Montserrat,sans-serif">PR → dev branch</text>
+
+  <!-- ═══ AVATAR 1: MANAGER (top-left ~10:30) ═══ -->
+  <!-- Glow -->
+  <circle cx="278" cy="178" r="38" fill="none" stroke="#FF4444" stroke-width="6" stroke-opacity="0.18"/>
+  <!-- Border circle -->
+  <circle cx="278" cy="178" r="35" fill="none" stroke="#FF4444" stroke-width="3"/>
+  <!-- Clipped avatar -->
+  <image href="../public/avatars/robots_40.jpg" x="245" y="145" width="66" height="66" clip-path="url(#clip-e1)"/>
+  <!-- Title label -->
+  <text x="278" y="228" text-anchor="middle" fill="#FF4444" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">MANAGER</text>
+  <!-- Description -->
+  <text x="278" y="240" text-anchor="middle" fill="#7a7a7a" font-size="7" font-family="Montserrat,sans-serif">human-review. Approves merge.</text>
+
+  <!-- ═══ AVATAR 2: ORCHESTRATOR (top ~12:00) ═══ -->
+  <!-- Glow -->
+  <circle cx="400" cy="112" r="38" fill="none" stroke="#A764F6" stroke-width="6" stroke-opacity="0.18"/>
+  <!-- Border circle -->
+  <circle cx="400" cy="112" r="35" fill="none" stroke="#A764F6" stroke-width="3"/>
+  <!-- Clipped avatar -->
+  <image href="../public/avatars/robots_10.jpg" x="367" y="79" width="66" height="66" clip-path="url(#clip-e2)"/>
+  <!-- Title label -->
+  <text x="400" y="162" text-anchor="middle" fill="#A764F6" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">ORCHESTRATOR</text>
+  <!-- Description -->
+  <text x="400" y="174" text-anchor="middle" fill="#7a7a7a" font-size="7" font-family="Montserrat,sans-serif">Routes PRs. Can push hotfixes.</text>
+
+  <!-- ═══ AVATAR 3: MEMBER ×N (top-right ~1:30) ═══ -->
+  <!-- Glow -->
+  <circle cx="522" cy="178" r="38" fill="none" stroke="#6B6B6B" stroke-width="6" stroke-opacity="0.18"/>
+  <!-- Border circle -->
+  <circle cx="522" cy="178" r="35" fill="none" stroke="#6B6B6B" stroke-width="3"/>
+  <!-- Clipped avatar -->
+  <image href="../public/avatars/robots_00.jpg" x="489" y="145" width="66" height="66" clip-path="url(#clip-e3)"/>
+  <!-- Title label -->
+  <text x="522" y="228" text-anchor="middle" fill="#6B6B6B" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">MEMBER ×N</text>
+  <!-- Description -->
+  <text x="522" y="240" text-anchor="middle" fill="#7a7a7a" font-size="7" font-family="Montserrat,sans-serif">Submits PR. Fixes on rejection.</text>
+
+  <!-- ═══ AVATAR 4: INTEGRATOR (right ~3:00) ═══ -->
+  <!-- Glow -->
+  <circle cx="568" cy="280" r="38" fill="none" stroke="#00E88A" stroke-width="6" stroke-opacity="0.18"/>
+  <!-- Border circle -->
+  <circle cx="568" cy="280" r="35" fill="none" stroke="#00E88A" stroke-width="3"/>
+  <!-- Clipped avatar -->
+  <image href="../public/avatars/robots_20.jpg" x="535" y="247" width="66" height="66" clip-path="url(#clip-e4)"/>
+  <!-- Title label -->
+  <text x="568" y="330" text-anchor="middle" fill="#00E88A" font-size="9" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">INTEGRATOR</text>
+  <!-- Description -->
+  <text x="568" y="342" text-anchor="middle" fill="#7a7a7a" font-size="7" font-family="Montserrat,sans-serif">ai-review. Code review, CI/CD.</text>
+</svg>

@@ -58,15 +58,19 @@ Bidirectional connections (like Manager↔COS) should show TWO parallel offset a
 
 ## Subagents
 
-Below each main node, show smaller circles (40px, half the diameter of main nodes) fanning out symmetrically downward, connected by thin lines to the parent. Each small circle has a gear/robot icon and a name label below it:
+Below each main node, show smaller circles (40px, half the diameter of main nodes) fanning out symmetrically downward, connected by thin lines to the parent. Each small circle has a **unique icon/symbol** (invent a distinct badge for each subagent — they must all be visually different from each other) and a name label below it.
 
-- Below MANAGER (1): report-generator
-- Below COS (9, two rows): approval-coord, lifecycle-mgr, perf-reporter, plugin-config, recovery-coord, resource-mon, skill-valid, staff-planner, team-coord
-- Below ORCHESTRATOR (5): checklist, docker-expert, experimenter, task-summary, team-orch
-- Below ARCHITECT (5): api-research, cicd-design, doc-writer, modularizer, planner
-- Below INTEGRATOR (10, two rows): api-coord, bug-invest, code-review, committer, debug, github-sync, verifier, pr-eval, screenshot, test-eng
-- Below MEMBER: label "main-agent only"
-- Below AUTONOMOUS: label "no role-plugin"
+**CRITICAL PLACEMENT RULE:** Subagents must be placed in the **same zone** as their parent agent. If the parent agent is INSIDE the team frame, ALL its subagents must also be INSIDE the team frame. If the parent agent is OUTSIDE the team frame, ALL its subagents must also be OUTSIDE the team frame. Never place a subagent on the opposite side of the team boundary from its parent.
+
+- Below MANAGER — OUTSIDE team frame (1): report-generator
+- Below COS — INSIDE team frame (9, two rows): approval-coord, lifecycle-mgr, perf-reporter, plugin-config, recovery-coord, resource-mon, skill-valid, staff-planner, team-coord
+- Below ORCHESTRATOR — INSIDE team frame (5): checklist, docker-expert, experimenter, task-summary, team-orch
+- Below ARCHITECT — INSIDE team frame (5): api-research, cicd-design, doc-writer, modularizer, planner
+- Below INTEGRATOR — INSIDE team frame (10, two rows): api-coord, bug-invest, code-review, committer, debug, github-sync, verifier, pr-eval, screenshot, test-eng
+- Below MEMBER — INSIDE team frame: label "main-agent only"
+- Below AUTONOMOUS — OUTSIDE team frame: label "no role-plugin"
+
+Each subagent icon must be **unique and consistent** — every subagent gets its own distinct symbol/badge that visually represents its function. No two subagents should share the same icon.
 
 ## Bottom Panel
 

@@ -1090,7 +1090,7 @@ body::before{
 
 <!-- Communication rules directed graph (inline SVG — redesigned) -->
 <div style="display:flex;flex-direction:column;align-items:center;padding:24px 0;">
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 2000 1500" style="width:100%;max-width:2000px;height:auto;">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 2000 1560" style="width:100%;max-width:2000px;height:auto;">
   <defs>
     <!-- Single arrow style — bright teal, large triangular head -->
     <marker id="arw" markerWidth="14" markerHeight="10" refX="13" refY="5" orient="auto">
@@ -1112,7 +1112,7 @@ body::before{
   <!-- ════════════════════════════════════════════════════ -->
   <!-- BACKGROUND                                          -->
   <!-- ════════════════════════════════════════════════════ -->
-  <rect width="2000" height="1500" fill="#070707"/>
+  <rect width="2000" height="1560" fill="#070707"/>
 
   <!-- ════════════════════════════════════════════════════ -->
   <!-- TEAM BOUNDARY FRAME                                  -->
@@ -1241,35 +1241,99 @@ body::before{
   <text x="1700" y="533" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">No team &bull; Can message: Manager, COS</text>
 
   <!-- ════════════════════════════════════════════════════ -->
+  <!-- SUBAGENT CLUSTERS (small dots below each agent)     -->
+  <!-- ════════════════════════════════════════════════════ -->
+
+  <!-- MANAGER subagents (1): centered below node at y=240 -->
+  <circle cx="1000" cy="248" r="8" fill="rgba(255,68,68,0.2)" stroke="#FF4444" stroke-width="1.5"/>
+  <text x="1000" y="252" text-anchor="middle" fill="#FF4444" font-size="7" font-weight="700" font-family="Montserrat,sans-serif">R</text>
+  <text x="1000" y="268" text-anchor="middle" fill="#555" font-size="7" font-family="Montserrat,sans-serif">1 subagent: report-generator</text>
+
+  <!-- COS subagents (9): fan of dots at y=555, centered on x=720 -->
+  <g opacity="0.85">
+    <circle cx="540" cy="558" r="7" fill="rgba(255,184,0,0.2)" stroke="#FFB800" stroke-width="1.2"/>
+    <circle cx="565" cy="558" r="7" fill="rgba(255,184,0,0.2)" stroke="#FFB800" stroke-width="1.2"/>
+    <circle cx="590" cy="558" r="7" fill="rgba(255,184,0,0.2)" stroke="#FFB800" stroke-width="1.2"/>
+    <circle cx="615" cy="558" r="7" fill="rgba(255,184,0,0.2)" stroke="#FFB800" stroke-width="1.2"/>
+    <circle cx="640" cy="558" r="7" fill="rgba(255,184,0,0.15)" stroke="#FFB800" stroke-width="1.2"/>
+    <circle cx="665" cy="570" r="7" fill="rgba(255,184,0,0.15)" stroke="#FFB800" stroke-width="1.2"/>
+    <circle cx="690" cy="570" r="7" fill="rgba(255,184,0,0.15)" stroke="#FFB800" stroke-width="1.2"/>
+    <circle cx="715" cy="570" r="7" fill="rgba(255,184,0,0.15)" stroke="#FFB800" stroke-width="1.2"/>
+    <circle cx="740" cy="570" r="7" fill="rgba(255,184,0,0.15)" stroke="#FFB800" stroke-width="1.2"/>
+    <text x="640" y="592" text-anchor="middle" fill="#555" font-size="7" font-family="Montserrat,sans-serif">9 subagents: approval, lifecycle, performance, plugin, recovery, resource, skill, staff, team</text>
+  </g>
+
+  <!-- ORCHESTRATOR subagents (5): fan below node at y=815 -->
+  <g opacity="0.85">
+    <circle cx="940" cy="818" r="7" fill="rgba(167,100,246,0.2)" stroke="#A764F6" stroke-width="1.2"/>
+    <circle cx="965" cy="818" r="7" fill="rgba(167,100,246,0.2)" stroke="#A764F6" stroke-width="1.2"/>
+    <circle cx="990" cy="818" r="7" fill="rgba(167,100,246,0.2)" stroke="#A764F6" stroke-width="1.2"/>
+    <circle cx="1015" cy="818" r="7" fill="rgba(167,100,246,0.2)" stroke="#A764F6" stroke-width="1.2"/>
+    <circle cx="1040" cy="818" r="7" fill="rgba(167,100,246,0.2)" stroke="#A764F6" stroke-width="1.2"/>
+    <text x="990" y="838" text-anchor="middle" fill="#555" font-size="7" font-family="Montserrat,sans-serif">5 subagents: checklist, docker, experimenter, summarizer, team-orchestrator</text>
+  </g>
+
+  <!-- ARCHITECT subagents (5): fan below node at y=1088 -->
+  <g opacity="0.85">
+    <circle cx="540" cy="1090" r="7" fill="rgba(41,183,255,0.2)" stroke="#29B7FF" stroke-width="1.2"/>
+    <circle cx="565" cy="1090" r="7" fill="rgba(41,183,255,0.2)" stroke="#29B7FF" stroke-width="1.2"/>
+    <circle cx="590" cy="1090" r="7" fill="rgba(41,183,255,0.2)" stroke="#29B7FF" stroke-width="1.2"/>
+    <circle cx="615" cy="1090" r="7" fill="rgba(41,183,255,0.2)" stroke="#29B7FF" stroke-width="1.2"/>
+    <circle cx="640" cy="1090" r="7" fill="rgba(41,183,255,0.2)" stroke="#29B7FF" stroke-width="1.2"/>
+    <text x="590" y="1108" text-anchor="middle" fill="#555" font-size="7" font-family="Montserrat,sans-serif">5 subagents: api-researcher, cicd-designer, doc-writer, modularizer, planner</text>
+  </g>
+
+  <!-- INTEGRATOR subagents (10): two rows of dots below node at y=1088 -->
+  <g opacity="0.85">
+    <circle cx="920" cy="1088" r="7" fill="rgba(0,232,138,0.2)" stroke="#00E88A" stroke-width="1.2"/>
+    <circle cx="945" cy="1088" r="7" fill="rgba(0,232,138,0.2)" stroke="#00E88A" stroke-width="1.2"/>
+    <circle cx="970" cy="1088" r="7" fill="rgba(0,232,138,0.2)" stroke="#00E88A" stroke-width="1.2"/>
+    <circle cx="995" cy="1088" r="7" fill="rgba(0,232,138,0.2)" stroke="#00E88A" stroke-width="1.2"/>
+    <circle cx="1020" cy="1088" r="7" fill="rgba(0,232,138,0.2)" stroke="#00E88A" stroke-width="1.2"/>
+    <circle cx="932" cy="1104" r="7" fill="rgba(0,232,138,0.15)" stroke="#00E88A" stroke-width="1.2"/>
+    <circle cx="957" cy="1104" r="7" fill="rgba(0,232,138,0.15)" stroke="#00E88A" stroke-width="1.2"/>
+    <circle cx="982" cy="1104" r="7" fill="rgba(0,232,138,0.15)" stroke="#00E88A" stroke-width="1.2"/>
+    <circle cx="1007" cy="1104" r="7" fill="rgba(0,232,138,0.15)" stroke="#00E88A" stroke-width="1.2"/>
+    <circle cx="1032" cy="1104" r="7" fill="rgba(0,232,138,0.15)" stroke="#00E88A" stroke-width="1.2"/>
+    <text x="980" y="1124" text-anchor="middle" fill="#555" font-size="6.5" font-family="Montserrat,sans-serif">10 subagents: api-coord, bug-invest, code-review, committer, debug, github-sync, verifier, pr-eval, screenshot, test-eng</text>
+  </g>
+
+  <!-- MEMBER: programmer role-plugin, main-agent only, no subagents -->
+  <text x="1400" y="1090" text-anchor="middle" fill="#555" font-size="7" font-family="Montserrat,sans-serif">programmer role-plugin &bull; main-agent only (no subagents)</text>
+
+  <!-- AUTONOMOUS subagents: none -->
+  <text x="1700" y="550" text-anchor="middle" fill="#555" font-size="7" font-style="italic" font-family="Montserrat,sans-serif">no subagents &bull; no role-plugin</text>
+
+  <!-- ════════════════════════════════════════════════════ -->
   <!-- RULES PANEL (bottom)                                -->
   <!-- ════════════════════════════════════════════════════ -->
-  <rect x="100" y="1110" width="1800" height="370" rx="16" fill="rgba(255,255,255,0.025)" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <rect x="100" y="1210" width="1800" height="370" rx="16" fill="rgba(255,255,255,0.025)" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
 
   <!-- Title -->
-  <text x="1000" y="1148" text-anchor="middle" fill="#e8e8e8" font-size="22" font-weight="800" font-family="Bebas Neue,sans-serif" letter-spacing="0.12em">COMMUNICATION RULES</text>
+  <text x="1000" y="1198" text-anchor="middle" fill="#e8e8e8" font-size="22" font-weight="800" font-family="Bebas Neue,sans-serif" letter-spacing="0.12em">COMMUNICATION RULES</text>
 
   <!-- Arrow legend -->
   <line x1="200" y1="1178" x2="300" y2="1178" stroke="#00E88A" stroke-width="3" marker-end="url(#arw)"/>
-  <text x="320" y="1183" fill="#e8e8e8" font-size="13" font-weight="600" font-family="Montserrat,sans-serif">= &quot;can send AMP message to&quot; (Ed25519 signed) &nbsp;&nbsp;&nbsp; Missing arrow = FORBIDDEN</text>
+  <text x="320" y="1233" fill="#e8e8e8" font-size="13" font-weight="600" font-family="Montserrat,sans-serif">= &quot;can send AMP message to&quot; (Ed25519 signed) &nbsp;&nbsp;&nbsp; Missing arrow = FORBIDDEN</text>
 
   <!-- Rules as imperative statements -->
-  <text x="200" y="1215" fill="#FF4444" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">&#x25CF; MANAGER must be able to message any agent of any title directly.</text>
-  <text x="200" y="1237" fill="#FFB800" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">&#x25CF; CHIEF-OF-STAFF must be able to message any agent of any title (acts as message gateway).</text>
-  <text x="200" y="1259" fill="#A764F6" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">&#x25CF; ORCHESTRATOR can message: Chief-of-Staff, Architect, Integrator, Member. Cannot message Manager or Autonomous.</text>
-  <text x="200" y="1281" fill="#29B7FF" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">&#x25CF; ARCHITECT, INTEGRATOR, MEMBER can only message: Chief-of-Staff and Orchestrator. All others are forbidden.</text>
-  <text x="200" y="1303" fill="#C0C0C0" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">&#x25CF; AUTONOMOUS can message: Manager and Chief-of-Staff only. Cannot reach team members directly.</text>
-  <text x="200" y="1325" fill="#e8e8e8" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">&#x25CF; Forbidden messages are blocked by the server. Error includes who to route through instead.</text>
+  <text x="200" y="1265" fill="#FF4444" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">&#x25CF; MANAGER must be able to message any agent of any title directly.</text>
+  <text x="200" y="1287" fill="#FFB800" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">&#x25CF; CHIEF-OF-STAFF must be able to message any agent of any title (acts as message gateway).</text>
+  <text x="200" y="1309" fill="#A764F6" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">&#x25CF; ORCHESTRATOR can message: Chief-of-Staff, Architect, Integrator, Member. Cannot message Manager or Autonomous.</text>
+  <text x="200" y="1331" fill="#29B7FF" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">&#x25CF; ARCHITECT, INTEGRATOR, MEMBER can only message: Chief-of-Staff and Orchestrator. All others are forbidden.</text>
+  <text x="200" y="1353" fill="#C0C0C0" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">&#x25CF; AUTONOMOUS can message: Manager and Chief-of-Staff only. Cannot reach team members directly.</text>
+  <text x="200" y="1375" fill="#e8e8e8" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">&#x25CF; Forbidden messages are blocked by the server. Error includes who to route through instead.</text>
 
   <!-- Three layers -->
   <line x1="160" y1="1348" x2="1840" y2="1348" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
-  <text x="200" y="1372" fill="#FF4444" font-size="11" font-weight="700" font-family="Montserrat,sans-serif">LAYER 1 — SERVER API:</text>
-  <text x="430" y="1372" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Ed25519 signature verification. Graph lookup on every message. Blocks + suggests routing.</text>
-  <text x="200" y="1394" fill="#A764F6" font-size="11" font-weight="700" font-family="Montserrat,sans-serif">LAYER 2 — AGENT PROMPTS:</text>
-  <text x="460" y="1394" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Role-plugin main-agent files encode rules. AI Maestro skills teach rules. Agents self-enforce.</text>
-  <text x="200" y="1416" fill="#00E88A" font-size="11" font-weight="700" font-family="Montserrat,sans-serif">LAYER 3 — SUBAGENTS:</text>
-  <text x="430" y="1416" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Only the 1 main-agent per role-plugin uses AMP. Subagents cannot send messages. They talk only to their spawner.</text>
-  <text x="200" y="1446" fill="#e8e8e8" font-size="11" font-weight="700" font-family="Montserrat,sans-serif">THE USER:</text>
-  <text x="310" y="1446" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Exempt from rules. Can message any agent; any agent can reply. Must authenticate. Agents respond only to user-initiated contact.</text>
+  <text x="200" y="1422" fill="#FF4444" font-size="11" font-weight="700" font-family="Montserrat,sans-serif">LAYER 1 — SERVER API:</text>
+  <text x="430" y="1422" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Ed25519 signature verification. Graph lookup on every message. Blocks + suggests routing.</text>
+  <text x="200" y="1444" fill="#A764F6" font-size="11" font-weight="700" font-family="Montserrat,sans-serif">LAYER 2 — AGENT PROMPTS:</text>
+  <text x="460" y="1444" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Role-plugin main-agent files encode rules. AI Maestro skills teach rules. Agents self-enforce.</text>
+  <text x="200" y="1466" fill="#00E88A" font-size="11" font-weight="700" font-family="Montserrat,sans-serif">LAYER 3 — SUBAGENTS:</text>
+  <text x="430" y="1466" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Only the 1 main-agent per role-plugin uses AMP. Subagents cannot send messages. They talk only to their spawner.</text>
+  <text x="200" y="1496" fill="#e8e8e8" font-size="11" font-weight="700" font-family="Montserrat,sans-serif">THE USER:</text>
+  <text x="310" y="1496" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Exempt from rules. Can message any agent; any agent can reply. Must authenticate. Agents respond only to user-initiated contact.</text>
 </svg>
 </div>
 

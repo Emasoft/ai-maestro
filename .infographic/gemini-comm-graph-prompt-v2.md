@@ -1,86 +1,88 @@
-# Gemini Image Prompt — Communication Rules Graph
+# Gemini Image Prompt — AI Maestro Communication Rules
 
-Generate a directed graph diagram on a dark background (#070707).
+Create a dark-mode infographic showing a directed graph of 7 AI agent roles and how they can communicate. The image title at the top is "AMP COMMUNICATION RULES" in large bold white text.
 
-## Layout
+## What this image shows
 
-7 circular nodes arranged hierarchically, connected by bright glowing arrows:
+This is a hierarchical directed graph like a network topology map. 7 robot characters are arranged in layers on a near-black background (#070707). Bright glowing neon-teal arrows connect them, showing who can send messages to whom. The arrow direction matters — an arrow FROM A TO B means A can message B, not the reverse.
 
-```
-            MANAGER (red border)
-           ↙     ↘
-  CHIEF-OF-STAFF    AUTONOMOUS (yellow, far right)
-    (amber)         
-        ↓
-   ORCHESTRATOR (purple, center)
-    ↙    ↓    ↘
-ARCHITECT  INTEGRATOR  MEMBER
- (blue)    (green)    (gray)
-```
+## The 7 agents — arranged in 4 layers
 
-A dashed amber rounded rectangle labeled "CLOSED TEAM" encloses COS, ORCHESTRATOR, ARCHITECT, INTEGRATOR, and MEMBER. MANAGER and AUTONOMOUS are outside this frame.
+**Top layer (outside team):**
+MANAGER — a robot character inside a circle with a thick bright RED glowing border. Positioned top-center. This is the boss — arrows radiate FROM it to all other agents below.
 
-## Nodes
+**Second layer:**
+Left side, inside a large rounded dashed golden frame labeled "CLOSED TEAM":
+CHIEF-OF-STAFF — robot in a circle with thick bright AMBER/GOLD glowing border. This is the gateway — almost as many arrows as the Manager.
 
-Each node is a circular robot portrait (80px) with a bright glowing colored border ring and ONLY the title name in bold below. No subtitles or descriptions — just the title.
+Right side, OUTSIDE the team frame:
+AUTONOMOUS — robot in a circle with thick bright YELLOW glowing border. Isolated, with only 2 outgoing arrows.
 
-- **MANAGER** — red (#FF4444) border, top center, outside team frame
-- **CHIEF-OF-STAFF** — amber (#FFB800) border, upper-left inside team
-- **ORCHESTRATOR** — lilac (#BE8CFF) border, center inside team
-- **ARCHITECT** — blue (#29B7FF) border, bottom-left inside team
-- **INTEGRATOR** — green (#00E88A) border, bottom-center inside team
-- **MEMBER** — gray (#A0A0A0) border, bottom-right inside team
-- **AUTONOMOUS** — yellow (#FFDC32) border, upper-right, outside team frame
+**Third layer (inside team frame):**
+ORCHESTRATOR — robot in a circle with thick bright LILAC/PURPLE glowing border. Center of the team, hub for the bottom row.
 
-## Arrows — THICK, 3D, GLOWING
+**Bottom layer (inside team frame):**
+Three agents side by side:
+ARCHITECT (bright BLUE glowing border) — INTEGRATOR (bright GREEN glowing border) — MEMBER (bright SILVER/GRAY glowing border)
 
-All arrows are **bright teal (#00E88A)**, **5-6px thick**, with a **3D tube/pipe appearance** (highlight on top edge, shadow on bottom edge to create depth). Large triangular arrowheads. Every arrow must **glow** with a teal halo (like neon tubing).
+Each circle shows a unique robot character portrait, with the role title in bold text below in the matching color. No other text near the nodes.
 
-Where arrows cross each other, one must clearly pass **OVER** and the other **UNDER** — use the 3D shading to show which is in front (the one on top has a shadow falling on the one below). This is critical for readability.
+## The team frame
 
-Draw exactly these 24 directed arrows:
+A large rounded rectangle with a dashed golden/amber border encloses CHIEF-OF-STAFF, ORCHESTRATOR, ARCHITECT, INTEGRATOR, and MEMBER. Label "CLOSED TEAM" in small amber text at the top-left corner. MANAGER and AUTONOMOUS are OUTSIDE this frame.
 
-**MANAGER sends to:** COS, Orchestrator, Architect, Integrator, Member, Autonomous (6 arrows radiating down and right)
+## The arrows — the star of the image
 
-**COS sends to:** Manager, Orchestrator, Architect, Integrator, Member, Autonomous (6 arrows)
+All arrows are the same bright neon TEAL color (#00E88A). They are THICK (like glowing neon tubes), with a subtle 3D appearance — a brighter highlight along the top edge and a darker shadow along the bottom, giving them depth like illuminated pipes. Each arrow has a large solid triangular arrowhead at the destination end.
 
-**ORCHESTRATOR sends to:** COS, Architect, Integrator, Member (4 arrows)
+Where two arrows travel between the same pair of nodes in opposite directions, show them as two parallel lines slightly offset (like a two-lane road), each with its own arrowhead pointing in its direction.
 
-**ARCHITECT sends to:** COS, Orchestrator (2 arrows upward)
+Where arrows cross over each other, render one ABOVE and one BELOW using the 3D shading — the foreground arrow casts a subtle shadow on the one behind it.
 
-**INTEGRATOR sends to:** COS, Orchestrator (2 arrows upward)
+**The arrow connections (what you must draw):**
 
-**MEMBER sends to:** COS, Orchestrator (2 arrows upward)
+The MANAGER (top, red) sends arrows DOWN to every other node — 6 arrows radiating outward like sunbeams. These are the most prominent arrows.
 
-**AUTONOMOUS sends to:** Manager, COS (2 arrows to the left)
+The CHIEF-OF-STAFF (amber) sends arrows to every other node too — 6 arrows. Notably, an arrow goes UP to Manager (making that link bidirectional) and one goes RIGHT to Autonomous.
 
-Bidirectional connections (like Manager↔COS) should show TWO parallel offset arrows going in opposite directions, like a two-lane highway.
+The ORCHESTRATOR (purple) sends arrows to 4 nodes: up-left to COS, down-left to Architect, down to Integrator, down-right to Member.
 
-## Subagents
+ARCHITECT, INTEGRATOR, and MEMBER each send only 2 arrows: one up-left to COS and one up to Orchestrator. These are thinner/dimmer to show their limited reach.
 
-Below each main node, show smaller circles (40px, half the diameter of main nodes) fanning out symmetrically downward, connected by thin lines to the parent. Each small circle has a **unique icon/symbol** (invent a distinct badge for each subagent — they must all be visually different from each other) and a name label below it.
+AUTONOMOUS sends 2 arrows: up-left to Manager and left to COS.
 
-**CRITICAL PLACEMENT RULE:** Subagents must be placed in the **same zone** as their parent agent. If the parent agent is INSIDE the team frame, ALL its subagents must also be INSIDE the team frame. If the parent agent is OUTSIDE the team frame, ALL its subagents must also be OUTSIDE the team frame. Never place a subagent on the opposite side of the team boundary from its parent.
+**Arrows that do NOT exist (important for correctness):**
+- No arrow from Orchestrator to Manager (must route through COS)
+- No arrow from Architect/Integrator/Member to Manager (must route through COS)
+- No arrow from Architect/Integrator/Member to Autonomous
+- No arrow from Autonomous to Orchestrator/Architect/Integrator/Member
 
-- Below MANAGER — OUTSIDE team frame (1): report-generator
-- Below COS — INSIDE team frame (9, two rows): approval-coord, lifecycle-mgr, perf-reporter, plugin-config, recovery-coord, resource-mon, skill-valid, staff-planner, team-coord
-- Below ORCHESTRATOR — INSIDE team frame (5): checklist, docker-expert, experimenter, task-summary, team-orch
-- Below ARCHITECT — INSIDE team frame (5): api-research, cicd-design, doc-writer, modularizer, planner
-- Below INTEGRATOR — INSIDE team frame (10, two rows): api-coord, bug-invest, code-review, committer, debug, github-sync, verifier, pr-eval, screenshot, test-eng
-- Below MEMBER — INSIDE team frame: label "main-agent only"
-- Below AUTONOMOUS — OUTSIDE team frame: label "no role-plugin"
+## Subagents — small icons fanning below each main agent
 
-Each subagent icon must be **unique and consistent** — every subagent gets its own distinct symbol/badge that visually represents its function. No two subagents should share the same icon.
+Each main agent has helper subagents shown as smaller circles (half the diameter of the main agent circles) fanning out in a symmetric arc below their parent. A thin line connects each subagent to its parent. Each subagent has a unique small icon/symbol inside its circle and its name in tiny text below.
 
-## Bottom Panel
+**CRITICAL: Subagents must be in the SAME ZONE as their parent.** If the parent is inside the team frame, subagents are inside. If outside, subagents are outside. Never cross the team boundary.
 
-A dark rounded box at the bottom with:
-- Arrow legend: "→ = can send AMP message (Ed25519 signed)"
-- "Missing arrow = FORBIDDEN — server blocks and suggests routing"
-- Rules in colored bullets matching each node's color
-- Three enforcement layers: SERVER API, AGENT PROMPTS, SUBAGENTS
-- User note: "Exempt from rules. Can message any agent."
+The subagents per parent:
+- MANAGER (outside frame): 1 subagent — report-generator
+- COS (inside frame): 9 subagents in two rows — approval-coord, lifecycle-mgr, perf-reporter, plugin-config, recovery-coord, resource-mon, skill-valid, staff-planner, team-coord
+- ORCHESTRATOR (inside frame): 5 subagents — checklist, docker-expert, experimenter, task-summary, team-orch
+- ARCHITECT (inside frame): 5 subagents — api-research, cicd-design, doc-writer, modularizer, planner
+- INTEGRATOR (inside frame): 10 subagents in two rows — api-coord, bug-invest, code-review, committer, debug, github-sync, verifier, pr-eval, screenshot, test-eng
+- MEMBER (inside frame): no subagents, small label "main-agent only"
+- AUTONOMOUS (outside frame): no subagents, small label "no role-plugin"
 
-## Style
+Each subagent icon must be unique — no two should look the same.
 
-Clean, geometric, technical — like a professional network topology diagram or circuit board. No hand-drawn look. Symmetric where possible. Arrows route AROUND node circles, never through them. Where arrows must cross, use 3D over/under rendering. Dark background with colored glows behind each node. The arrows should be the most prominent visual element — thick, bright, glowing neon tubes that clearly show the communication topology.
+## Bottom legend bar
+
+A thin dark strip at the very bottom with small text:
+- Left: a teal arrow icon, then "= can send message"
+- Center: "Missing arrow = FORBIDDEN"
+- Right: "Enforcement: Server API + Agent Prompts + Subagent Isolation"
+
+Keep this minimal — just one line of small text, not a multi-paragraph panel.
+
+## Style direction
+
+Think: Tron Legacy meets network topology diagram. Dark background, bright neon glowing elements, clean geometric lines. The arrows are the visual hero — thick, luminous, clearly directional. The agent circles glow softly in their colors against the dark background. Professional, technical, beautiful. NOT a flowchart, NOT a mind map, NOT hand-drawn. This is a precise engineering diagram rendered with cinematic lighting.

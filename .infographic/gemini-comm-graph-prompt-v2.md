@@ -74,14 +74,30 @@ The subagents per parent:
 
 Each subagent icon must be unique — no two should look the same.
 
-## Bottom legend bar
+## Bottom legend panel
 
-A thin dark strip at the very bottom with small text:
-- Left: a teal arrow icon, then "= can send message"
-- Center: "Missing arrow = FORBIDDEN"
-- Right: "Enforcement: Server API + Agent Prompts + Subagent Isolation"
+A dark rounded panel at the bottom, organized as **distinct sections with big bold titles and icon-pointed lists**:
 
-Keep this minimal — just one line of small text, not a multi-paragraph panel.
+**ARROW LEGEND** (big title)
+▸ Teal arrow = "can send AMP message" (with a glowing arrow icon as bullet)
+▸ Missing arrow = FORBIDDEN — server blocks and suggests routing
+
+**RULES BY ROLE** (big title, each bullet uses the role's color as the icon/bullet)
+🔴 MANAGER — can message all agents directly
+🟡 CHIEF-OF-STAFF — can message all agents (acts as gateway)
+🟣 ORCHESTRATOR — can message COS, Architect, Integrator, Member
+🔵 ARCHITECT / INTEGRATOR / MEMBER — can only message COS and Orchestrator
+🟡 AUTONOMOUS — can only message Manager and COS
+
+**THREE ENFORCEMENT LAYERS** (big title)
+🛡️ SERVER API — Ed25519 signature verification on every message
+🤖 AGENT PROMPTS — role-plugins encode allowed recipients
+🔒 SUBAGENT ISOLATION — only main-agents use AMP, subagents cannot
+
+**THE USER** (big title)
+👤 Exempt from all rules. Can message any agent. Must authenticate.
+
+Each section title should be large, bold, and clearly separated. Each list item should use a distinctive icon or colored bullet point — not plain text dashes. The panel should look like a polished reference card, not a wall of text.
 
 ## Style direction
 

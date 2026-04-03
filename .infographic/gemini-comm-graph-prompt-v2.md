@@ -43,19 +43,19 @@ Where arrows cross over each other, render one ABOVE and one BELOW using the 3D 
 
 The MANAGER (top, red) sends arrows DOWN to every other node — 6 arrows radiating outward like sunbeams. These are the most prominent arrows.
 
-The CHIEF-OF-STAFF (amber) sends arrows to every other node too — 6 arrows. Notably, an arrow goes UP to Manager (making that link bidirectional) and one goes RIGHT to Autonomous.
+The CHIEF-OF-STAFF (amber) sends arrows to every other node too — 6 arrows. Notably, an arrow goes UP to MANAGER (making that link bidirectional) and one goes RIGHT to Autonomous.
 
-The ORCHESTRATOR (purple) sends arrows to 4 nodes: up-left to COS, down-left to Architect, down to Integrator, down-right to Member.
+The ORCHESTRATOR (purple) sends arrows to 4 nodes: up-left to CHIEF-OF-STAFF, down-left to ARCHITECT, down to INTEGRATOR, down-right to MEMBER.
 
-ARCHITECT, INTEGRATOR, and MEMBER each send only 2 arrows: one up-left to COS and one up to Orchestrator. These are thinner/dimmer to show their limited reach.
+ARCHITECT, INTEGRATOR, and MEMBER each send only 2 arrows: one up-left to CHIEF-OF-STAFF and one up to ORCHESTRATOR. These are thinner/dimmer to show their limited reach.
 
-AUTONOMOUS sends 2 arrows: up-left to Manager and left to COS.
+AUTONOMOUS sends 2 arrows: up-left to MANAGER and left to CHIEF-OF-STAFF.
 
 **Arrows that do NOT exist (important for correctness):**
-- No arrow from Orchestrator to Manager (must route through COS)
-- No arrow from Architect/Integrator/Member to Manager (must route through COS)
-- No arrow from Architect/Integrator/Member to Autonomous
-- No arrow from Autonomous to Orchestrator/Architect/Integrator/Member
+- No arrow from ORCHESTRATOR to MANAGER (must route through CHIEF-OF-STAFF)
+- No arrow from Architect/Integrator/Member to MANAGER (must route through CHIEF-OF-STAFF)
+- No arrow from ARCHITECT/INTEGRATOR/MEMBER to AUTONOMOUS
+- No arrow from AUTONOMOUS to ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER
 
 ## Subagents — small icons fanning below each main agent
 
@@ -65,7 +65,7 @@ Each main agent has helper subagents shown as smaller circles fanning out in a s
 
 The subagents per parent:
 - MANAGER (outside frame): 1 subagent — report-generator
-- COS (inside frame): 9 subagents in two rows — approval-coord, lifecycle-mgr, perf-reporter, plugin-config, recovery-coord, resource-mon, skill-valid, staff-planner, team-coord
+- CHIEF-OF-STAFF (inside frame): 9 subagents in two rows — approval-coord, lifecycle-mgr, perf-reporter, plugin-config, recovery-coord, resource-mon, skill-valid, staff-planner, team-coord
 - ORCHESTRATOR (inside frame): 5 subagents — checklist, docker-expert, experimenter, task-summary, team-orch
 - ARCHITECT (inside frame): 5 subagents — api-research, cicd-design, doc-writer, modularizer, planner
 - INTEGRATOR (inside frame): 10 subagents in two rows — api-coord, bug-invest, code-review, committer, debug, github-sync, verifier, pr-eval, screenshot, test-eng
@@ -85,9 +85,9 @@ A dark rounded panel at the bottom, organized as **distinct sections with big bo
 **RULES BY ROLE** (big title, each bullet uses the role's color as the icon/bullet)
 🔴 MANAGER — can message all agents directly
 🟡 CHIEF-OF-STAFF — can message all agents (acts as gateway)
-🟣 ORCHESTRATOR — can message COS, Architect, Integrator, Member
-🔵 ARCHITECT / INTEGRATOR / MEMBER — can only message COS and Orchestrator
-🟡 AUTONOMOUS — can only message Manager and COS
+🟣 ORCHESTRATOR — can message CHIEF-OF-STAFF, Architect, Integrator, Member
+🔵 ARCHITECT / INTEGRATOR / MEMBER — can only message CHIEF-OF-STAFF and Orchestrator
+🟡 AUTONOMOUS — can only message MANAGER and CHIEF-OF-STAFF
 
 **THREE ENFORCEMENT LAYERS** (big title)
 🛡️ SERVER API — Ed25519 signature verification on every message

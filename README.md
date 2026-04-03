@@ -15,6 +15,10 @@
 
 ![AI Maestro Dashboard](./docs/images/aiteam-web.png)
 
+### Governance & Communication Rules
+
+<img src="./docs/images/ai-maestro-governance-infographic.jpg" alt="AI Maestro Governance — Communication Hierarchy & Rules" width="100%"/>
+
 [Quick Start](#-quick-start) · [Features](#-features) · [Documentation](#-documentation) · [Contributing](./CONTRIBUTING.md)
 
 </div>
@@ -84,16 +88,6 @@ Role Plugins are installed with `--scope local` in the agent's project folder. S
 - All other Role Plugins — available to any title (typically `MEMBER`)
 
 An agent can change its Role Plugin at any time through the Profile panel — the old plugin is uninstalled, the new one installed, and Claude Code is gracefully restarted in the same tmux session (preserving chat history).
-
----
-
-## Governance & Communication Rules
-
-AI Maestro enforces a directed communication graph between 7 agent titles. The MANAGER and CHIEF-OF-STAFF can reach all agents; lower-tier agents (ARCHITECT, INTEGRATOR, MEMBER) must route through CHIEF-OF-STAFF or ORCHESTRATOR. Enforcement happens at three layers: server API (Ed25519 signatures), agent prompts (role-plugin rules), and subagent isolation (only main-agents use AMP).
-
-<div align="center">
-<img src="./docs/images/ai-maestro-governance-infographic.jpg" alt="AI Maestro Governance — Communication Hierarchy & Rules" width="100%"/>
-</div>
 
 ---
 

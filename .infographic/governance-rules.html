@@ -1088,8 +1088,14 @@ body::before{
   All inter-agent communication uses the <strong style="color:var(--primary);">Agent Messaging Protocol (AMP)</strong> with Ed25519 cryptographic signatures. The rules are a <strong style="color:var(--text);">directed graph</strong> of 7 nodes and 27 connections. An arrow from A to B means A can send messages to B. Missing arrow = <span style="color:var(--manager);font-weight:700;">FORBIDDEN</span>. Enforcement happens at <strong style="color:var(--text);">three layers</strong>: (1) the server API verifies titles via cryptographic signatures and blocks forbidden paths; (2) role-plugin main-agent prompts and user-scoped skills encode allowed recipients (self-enforcement); (3) only main-agents use AMP &mdash; subagents cannot. The <strong style="color:var(--text);">user</strong> is exempt from these rules: can message any agent, and any agent can reply &mdash; but agents only respond to user-initiated contact, and the user must authenticate to prevent impersonation.
 </div>
 
-<!-- Communication rules directed graph (inline SVG — redesigned) -->
+<!-- Communication rules graph (Gemini-generated + real avatars composited via OpenCV) -->
 <div style="display:flex;flex-direction:column;align-items:center;padding:24px 0;">
+  <img src="ai-maestro-communication-graph-fixed.png" style="width:100%;max-width:1600px;border-radius:12px;border:2px solid rgba(255,255,255,0.08);" alt="AMP Communication Rules — Directed Graph">
+</div>
+
+<!-- SVG graph removed — replaced by Gemini image with real avatars -->
+<!-- Original inline SVG kept below as hidden reference -->
+<div style="display:none;">
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 2000 1560" style="width:100%;max-width:2000px;height:auto;">
   <defs>
     <!-- Single arrow style — bright teal, large triangular head -->

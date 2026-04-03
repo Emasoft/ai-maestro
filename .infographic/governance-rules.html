@@ -30,7 +30,7 @@ body::before{
              radial-gradient(ellipse at 50% 80%,rgba(167,100,246,0.03),transparent 50%);
   pointer-events:none;z-index:0;
 }
-.canvas{position:relative;z-index:1;padding:48px 64px 60px;}
+.canvas{position:relative;z-index:1;padding:48px 64px 60px;border:2px solid rgba(0,232,138,0.12);border-radius:4px;}
 
 /* ======= HERO ======= */
 .hero{text-align:center;padding:48px 0 40px;border-bottom:2px solid rgba(0,232,138,0.2);margin-bottom:48px;}
@@ -411,74 +411,81 @@ body::before{
 <div class="hero">
   <div class="hero-label"><i class="ph-bold ph-shield-star"></i> Complete Visual Reference</div>
   <h1>AI MAESTRO <span>GOVERNANCE</span></h1>
-  <div class="hero-sub">Version <strong>0.27.2</strong> &mdash; 6 Titles &bull; Closed Teams &bull; Multi-Host Federation &bull; Ed25519 Trust &bull; Tailscale VPN</div>
+  <div class="hero-sub">Version <strong>0.27.2</strong> &mdash; 7 Titles &bull; Closed Teams &bull; Multi-Host Federation &bull; Ed25519 Trust &bull; Tailscale VPN</div>
 </div>
 
 <!-- ==================== STAT STRIP ==================== -->
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:32px 0 48px;">
-  <div style="border-top:3px solid var(--primary);background:rgba(0,232,138,0.06);border-radius:0 0 8px 8px;padding:16px 20px;text-align:center;">
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--primary);line-height:1;">7</div>
-    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:4px;">Governance Titles</div>
+  <div style="border-top:4px solid var(--primary);background:rgba(0,232,138,0.06);border-radius:0 0 10px 10px;padding:20px 20px 16px;text-align:center;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:64px;color:var(--primary);line-height:1;text-shadow:0 0 24px rgba(0,232,138,0.4);">7</div>
+    <div style="font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:6px;font-weight:600;">Governance Titles</div>
   </div>
-  <div style="border-top:3px solid var(--secondary);background:rgba(41,183,255,0.06);border-radius:0 0 8px 8px;padding:16px 20px;text-align:center;">
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--secondary);line-height:1;">100+</div>
-    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:4px;">API Endpoints</div>
+  <div style="border-top:4px solid var(--secondary);background:rgba(41,183,255,0.06);border-radius:0 0 10px 10px;padding:20px 20px 16px;text-align:center;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:64px;color:var(--secondary);line-height:1;text-shadow:0 0 24px rgba(41,183,255,0.4);">100+</div>
+    <div style="font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:6px;font-weight:600;">API Endpoints</div>
   </div>
-  <div style="border-top:3px solid var(--orchestrator);background:rgba(167,100,246,0.06);border-radius:0 0 8px 8px;padding:16px 20px;text-align:center;">
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--orchestrator);line-height:1;">27</div>
-    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:4px;">AMP Connections</div>
+  <div style="border-top:4px solid var(--orchestrator);background:rgba(167,100,246,0.06);border-radius:0 0 10px 10px;padding:20px 20px 16px;text-align:center;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:64px;color:var(--orchestrator);line-height:1;text-shadow:0 0 24px rgba(167,100,246,0.4);">27</div>
+    <div style="font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:6px;font-weight:600;">AMP Connections</div>
   </div>
-  <div style="border-top:3px solid var(--manager);background:rgba(255,68,68,0.06);border-radius:0 0 8px 8px;padding:16px 20px;text-align:center;">
-    <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:var(--manager);line-height:1;">ED25519</div>
-    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:4px;">Cross-Host Trust</div>
+  <div style="border-top:4px solid var(--manager);background:rgba(255,68,68,0.06);border-radius:0 0 10px 10px;padding:20px 20px 16px;text-align:center;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--manager);line-height:1;text-shadow:0 0 24px rgba(255,68,68,0.4);">ED25519</div>
+    <div style="font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:6px;font-weight:600;">Cross-Host Trust</div>
   </div>
 </div>
 
 <!-- ==================== 1. GOVERNANCE HIERARCHY ==================== -->
 <div class="section-band red"><i class="ph-bold ph-crown"></i> 1 &mdash; GOVERNANCE HIERARCHY</div>
 
-<!-- Big avatar lineup -->
-<div style="display:flex;align-items:flex-start;justify-content:center;gap:20px;padding:32px 0 40px;">
+<!-- Big avatar lineup — cinematic cards with neon borders -->
+<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:16px;padding:28px 0 40px;">
   <!-- MANAGER -->
-  <div style="display:flex;flex-direction:column;align-items:center;text-align:center;width:200px;">
-    <img src="../public/avatars/robots_40.jpg" style="width:180px;height:180px;border-radius:16px;object-fit:cover;border:4px solid var(--manager);box-shadow:0 0 32px rgba(255,68,68,0.3);">
-    <div style="margin-top:12px;padding:4px 16px;border-radius:4px;font-size:14px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;background:rgba(255,68,68,0.2);color:var(--manager);border:1px solid rgba(255,68,68,0.4);">MANAGER</div>
-    <div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4;">Singleton per host. Full authority. Creates teams, assigns COS, approves transfers.</div>
+  <div style="border:2px solid rgba(255,68,68,0.4);border-radius:16px;background:linear-gradient(180deg,rgba(255,68,68,0.08) 0%,rgba(255,68,68,0.02) 100%);padding:16px 12px 18px;text-align:center;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:-40px;left:50%;transform:translateX(-50%);width:200px;height:200px;background:radial-gradient(circle,rgba(255,68,68,0.12),transparent 70%);pointer-events:none;"></div>
+    <img src="../public/avatars/robots_40.jpg" style="width:100%;aspect-ratio:1;border-radius:12px;object-fit:cover;border:3px solid var(--manager);box-shadow:0 0 40px rgba(255,68,68,0.35),0 8px 32px rgba(0,0,0,0.5);position:relative;">
+    <div style="margin-top:14px;padding:5px 0;font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.08em;color:var(--manager);text-shadow:0 0 20px rgba(255,68,68,0.4);">MANAGER</div>
+    <div style="font-size:12px;color:var(--text);font-weight:600;margin-top:2px;">Singleton per host</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Full authority. Creates teams, assigns COS, approves transfers.</div>
   </div>
-  <div style="display:flex;align-items:center;padding-top:80px;color:var(--dim);font-size:24px;">→</div>
   <!-- CHIEF-OF-STAFF -->
-  <div style="display:flex;flex-direction:column;align-items:center;text-align:center;width:200px;">
-    <img src="../public/avatars/robots_50.jpg" style="width:180px;height:180px;border-radius:16px;object-fit:cover;border:4px solid var(--cos);box-shadow:0 0 32px rgba(255,184,0,0.3);">
-    <div style="margin-top:12px;padding:4px 16px;border-radius:4px;font-size:14px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;background:rgba(255,184,0,0.2);color:var(--cos);border:1px solid rgba(255,184,0,0.4);">CHIEF OF STAFF</div>
-    <div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4;">1 per closed team. Team gatekeeper. Routes external messages, manages roster.</div>
+  <div style="border:2px solid rgba(255,184,0,0.4);border-radius:16px;background:linear-gradient(180deg,rgba(255,184,0,0.08) 0%,rgba(255,184,0,0.02) 100%);padding:16px 12px 18px;text-align:center;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:-40px;left:50%;transform:translateX(-50%);width:200px;height:200px;background:radial-gradient(circle,rgba(255,184,0,0.12),transparent 70%);pointer-events:none;"></div>
+    <img src="../public/avatars/robots_50.jpg" style="width:100%;aspect-ratio:1;border-radius:12px;object-fit:cover;border:3px solid var(--cos);box-shadow:0 0 40px rgba(255,184,0,0.35),0 8px 32px rgba(0,0,0,0.5);position:relative;">
+    <div style="margin-top:14px;padding:5px 0;font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.08em;color:var(--cos);text-shadow:0 0 20px rgba(255,184,0,0.4);">CHIEF OF STAFF</div>
+    <div style="font-size:12px;color:var(--text);font-weight:600;margin-top:2px;">1 per closed team</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Team gatekeeper. Routes external messages, manages roster.</div>
   </div>
-  <div style="display:flex;align-items:center;padding-top:80px;color:var(--dim);font-size:24px;">→</div>
   <!-- ORCHESTRATOR -->
-  <div style="display:flex;flex-direction:column;align-items:center;text-align:center;width:200px;">
-    <img src="../public/avatars/robots_10.jpg" style="width:180px;height:180px;border-radius:16px;object-fit:cover;border:4px solid var(--orchestrator);box-shadow:0 0 32px rgba(167,100,246,0.3);">
-    <div style="margin-top:12px;padding:4px 16px;border-radius:4px;font-size:14px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;background:rgba(167,100,246,0.2);color:var(--orchestrator);border:1px solid rgba(167,100,246,0.4);">ORCHESTRATOR</div>
-    <div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4;">Task coordination. Assigns tasks to team members. Kanban management.</div>
+  <div style="border:2px solid rgba(167,100,246,0.4);border-radius:16px;background:linear-gradient(180deg,rgba(167,100,246,0.08) 0%,rgba(167,100,246,0.02) 100%);padding:16px 12px 18px;text-align:center;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:-40px;left:50%;transform:translateX(-50%);width:200px;height:200px;background:radial-gradient(circle,rgba(167,100,246,0.12),transparent 70%);pointer-events:none;"></div>
+    <img src="../public/avatars/robots_10.jpg" style="width:100%;aspect-ratio:1;border-radius:12px;object-fit:cover;border:3px solid var(--orchestrator);box-shadow:0 0 40px rgba(167,100,246,0.35),0 8px 32px rgba(0,0,0,0.5);position:relative;">
+    <div style="margin-top:14px;padding:5px 0;font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.08em;color:var(--orchestrator);text-shadow:0 0 20px rgba(167,100,246,0.4);">ORCHESTRATOR</div>
+    <div style="font-size:12px;color:var(--text);font-weight:600;margin-top:2px;">1 per team</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Task coordination. Assigns tasks to team members. Kanban management.</div>
   </div>
-  <div style="display:flex;align-items:center;padding-top:80px;color:var(--dim);font-size:24px;">→</div>
   <!-- ARCHITECT -->
-  <div style="display:flex;flex-direction:column;align-items:center;text-align:center;width:200px;">
-    <img src="../public/avatars/robots_30.jpg" style="width:180px;height:180px;border-radius:16px;object-fit:cover;border:4px solid var(--architect);box-shadow:0 0 32px rgba(41,183,255,0.3);">
-    <div style="margin-top:12px;padding:4px 16px;border-radius:4px;font-size:14px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;background:rgba(41,183,255,0.15);color:var(--architect);border:1px solid rgba(41,183,255,0.3);">ARCHITECT</div>
-    <div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4;">System design. Architecture decisions. Code structure oversight.</div>
+  <div style="border:2px solid rgba(41,183,255,0.4);border-radius:16px;background:linear-gradient(180deg,rgba(41,183,255,0.08) 0%,rgba(41,183,255,0.02) 100%);padding:16px 12px 18px;text-align:center;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:-40px;left:50%;transform:translateX(-50%);width:200px;height:200px;background:radial-gradient(circle,rgba(41,183,255,0.12),transparent 70%);pointer-events:none;"></div>
+    <img src="../public/avatars/robots_30.jpg" style="width:100%;aspect-ratio:1;border-radius:12px;object-fit:cover;border:3px solid var(--architect);box-shadow:0 0 40px rgba(41,183,255,0.35),0 8px 32px rgba(0,0,0,0.5);position:relative;">
+    <div style="margin-top:14px;padding:5px 0;font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.08em;color:var(--architect);text-shadow:0 0 20px rgba(41,183,255,0.4);">ARCHITECT</div>
+    <div style="font-size:12px;color:var(--text);font-weight:600;margin-top:2px;">Design authority</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">System design. Architecture decisions. Code structure oversight.</div>
   </div>
-  <div style="display:flex;align-items:center;padding-top:80px;color:var(--dim);font-size:24px;">→</div>
   <!-- INTEGRATOR -->
-  <div style="display:flex;flex-direction:column;align-items:center;text-align:center;width:200px;">
-    <img src="../public/avatars/robots_20.jpg" style="width:180px;height:180px;border-radius:16px;object-fit:cover;border:4px solid var(--integrator);box-shadow:0 0 32px rgba(0,232,138,0.3);">
-    <div style="margin-top:12px;padding:4px 16px;border-radius:4px;font-size:14px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;background:rgba(0,232,138,0.2);color:var(--integrator);border:1px solid rgba(0,232,138,0.4);">INTEGRATOR</div>
-    <div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4;">Quality gates. Code review. PR merge authority. CI/CD &amp; releases.</div>
+  <div style="border:2px solid rgba(0,232,138,0.4);border-radius:16px;background:linear-gradient(180deg,rgba(0,232,138,0.08) 0%,rgba(0,232,138,0.02) 100%);padding:16px 12px 18px;text-align:center;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:-40px;left:50%;transform:translateX(-50%);width:200px;height:200px;background:radial-gradient(circle,rgba(0,232,138,0.12),transparent 70%);pointer-events:none;"></div>
+    <img src="../public/avatars/robots_20.jpg" style="width:100%;aspect-ratio:1;border-radius:12px;object-fit:cover;border:3px solid var(--integrator);box-shadow:0 0 40px rgba(0,232,138,0.35),0 8px 32px rgba(0,0,0,0.5);position:relative;">
+    <div style="margin-top:14px;padding:5px 0;font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.08em;color:var(--integrator);text-shadow:0 0 20px rgba(0,232,138,0.4);">INTEGRATOR</div>
+    <div style="font-size:12px;color:var(--text);font-weight:600;margin-top:2px;">Quality gatekeeper</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">Code review. PR merge authority. CI/CD pipelines &amp; releases.</div>
   </div>
-  <div style="display:flex;align-items:center;padding-top:80px;color:var(--dim);font-size:24px;">→</div>
   <!-- MEMBER -->
-  <div style="display:flex;flex-direction:column;align-items:center;text-align:center;width:200px;">
-    <img src="../public/avatars/robots_00.jpg" style="width:180px;height:180px;border-radius:16px;object-fit:cover;border:4px solid var(--member);box-shadow:0 0 24px rgba(107,107,107,0.2);">
-    <div style="margin-top:12px;padding:4px 16px;border-radius:4px;font-size:14px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;background:rgba(107,107,107,0.2);color:var(--member);border:1px solid rgba(107,107,107,0.4);">MEMBER</div>
-    <div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4;">Default title. General programmer. Custom role-plugin optional.</div>
+  <div style="border:2px solid rgba(107,107,107,0.35);border-radius:16px;background:linear-gradient(180deg,rgba(107,107,107,0.06) 0%,rgba(107,107,107,0.02) 100%);padding:16px 12px 18px;text-align:center;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:-40px;left:50%;transform:translateX(-50%);width:200px;height:200px;background:radial-gradient(circle,rgba(107,107,107,0.08),transparent 70%);pointer-events:none;"></div>
+    <img src="../public/avatars/robots_00.jpg" style="width:100%;aspect-ratio:1;border-radius:12px;object-fit:cover;border:3px solid var(--member);box-shadow:0 0 28px rgba(107,107,107,0.2),0 8px 32px rgba(0,0,0,0.5);position:relative;">
+    <div style="margin-top:14px;padding:5px 0;font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:0.08em;color:var(--member);text-shadow:0 0 12px rgba(107,107,107,0.3);">MEMBER</div>
+    <div style="font-size:12px;color:var(--text);font-weight:600;margin-top:2px;">Default title</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;">General programmer. Custom role-plugin optional.</div>
   </div>
 </div>
 

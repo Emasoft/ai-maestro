@@ -1,0 +1,215 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1600 1200" width="1600" height="1200">
+  <defs>
+    <!-- Arrowhead markers per sender color -->
+    <marker id="arr-m" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7" fill="#FF4444"/></marker>
+    <marker id="arr-c" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7" fill="#FFB800"/></marker>
+    <marker id="arr-o" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7" fill="#A764F6"/></marker>
+    <marker id="arr-a" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7" fill="#29B7FF"/></marker>
+    <marker id="arr-i" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7" fill="#00E88A"/></marker>
+    <marker id="arr-e" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7" fill="#8B8B8B"/></marker>
+    <marker id="arr-u" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7" fill="#C0C0C0"/></marker>
+    <!-- Avatar clip paths -->
+    <clipPath id="cM"><circle cx="800" cy="100" r="44"/></clipPath>
+    <clipPath id="cC"><circle cx="480" cy="340" r="44"/></clipPath>
+    <clipPath id="cO"><circle cx="800" cy="520" r="44"/></clipPath>
+    <clipPath id="cA"><circle cx="440" cy="760" r="44"/></clipPath>
+    <clipPath id="cI"><circle cx="800" cy="760" r="44"/></clipPath>
+    <clipPath id="cE"><circle cx="1160" cy="760" r="44"/></clipPath>
+    <clipPath id="cU"><circle cx="1200" cy="340" r="44"/></clipPath>
+  </defs>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- BACKGROUND & TITLE                                  -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <rect width="1600" height="1200" fill="#070707"/>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- CONNECTION ARROWS                                    -->
+  <!-- Drawn FIRST so nodes render on top                  -->
+  <!-- Bidirectional = two parallel lines offset ±4px      -->
+  <!-- ════════════════════════════════════════════════════ -->
+
+  <!-- === MANAGER (M) outbound — can message EVERYONE === -->
+  <!-- M→C (offset left) -->
+  <line x1="755" y1="140" x2="525" y2="300" stroke="#FF4444" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-m)"/>
+  <!-- M→O -->
+  <line x1="796" y1="150" x2="796" y2="470" stroke="#FF4444" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-m)"/>
+  <!-- M→A (long diagonal) -->
+  <path d="M 760 145 C 600 300, 450 500, 445 710" fill="none" stroke="#FF4444" stroke-width="2" stroke-opacity="0.5" marker-end="url(#arr-m)"/>
+  <!-- M→I -->
+  <path d="M 800 150 Q 820 450, 804 710" fill="none" stroke="#FF4444" stroke-width="2" stroke-opacity="0.5" marker-end="url(#arr-m)"/>
+  <!-- M→E (long diagonal) -->
+  <path d="M 840 145 C 1000 300, 1150 500, 1155 710" fill="none" stroke="#FF4444" stroke-width="2" stroke-opacity="0.5" marker-end="url(#arr-m)"/>
+  <!-- M→U -->
+  <line x1="845" y1="118" x2="1155" y2="318" stroke="#FF4444" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-m)"/>
+  <!-- M→M (self-loop) -->
+  <path d="M 844 80 C 900 30, 920 30, 844 80" fill="none" stroke="#FF4444" stroke-width="2" stroke-opacity="0.4" marker-end="url(#arr-m)"/>
+  <circle cx="880" cy="55" r="20" fill="none" stroke="#FF4444" stroke-width="2" stroke-opacity="0.4"/>
+  <path d="M 862 40 L 856 48" fill="none" stroke="#FF4444" stroke-width="2" stroke-opacity="0.4" marker-end="url(#arr-m)"/>
+
+  <!-- === CHIEF-OF-STAFF (C) outbound === -->
+  <!-- C→M (offset right from M→C) -->
+  <line x1="520" y1="296" x2="760" y2="136" stroke="#FFB800" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-c)"/>
+  <!-- C→O -->
+  <line x1="520" y1="378" x2="760" y2="498" stroke="#FFB800" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-c)"/>
+  <!-- C→A -->
+  <line x1="468" y1="388" x2="448" y2="710" stroke="#FFB800" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-c)"/>
+  <!-- C→I -->
+  <path d="M 525 370 C 600 500, 750 650, 790 710" fill="none" stroke="#FFB800" stroke-width="2" stroke-opacity="0.5" marker-end="url(#arr-c)"/>
+  <!-- C→E -->
+  <path d="M 530 360 C 700 500, 1050 600, 1145 710" fill="none" stroke="#FFB800" stroke-width="2" stroke-opacity="0.5" marker-end="url(#arr-c)"/>
+  <!-- C→U -->
+  <line x1="530" y1="340" x2="1150" y2="340" stroke="#FFB800" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-c)"/>
+  <!-- C→C (self-loop) -->
+  <circle cx="420" cy="295" r="22" fill="none" stroke="#FFB800" stroke-width="2" stroke-opacity="0.4"/>
+  <path d="M 404 278 L 398 286" fill="none" stroke="#FFB800" stroke-width="2" stroke-opacity="0.4" marker-end="url(#arr-c)"/>
+
+  <!-- === ORCHESTRATOR (O) outbound === -->
+  <!-- O→C -->
+  <line x1="756" y1="502" x2="524" y2="374" stroke="#A764F6" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-o)"/>
+  <!-- O→A -->
+  <line x1="756" y1="550" x2="484" y2="730" stroke="#A764F6" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-o)"/>
+  <!-- O→I -->
+  <line x1="804" y1="570" x2="804" y2="710" stroke="#A764F6" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-o)"/>
+  <!-- O→E -->
+  <line x1="844" y1="550" x2="1116" y2="730" stroke="#A764F6" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-o)"/>
+
+  <!-- === ARCHITECT (A) outbound === -->
+  <!-- A→C -->
+  <line x1="452" y1="714" x2="472" y2="388" stroke="#29B7FF" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-a)"/>
+  <!-- A→O -->
+  <line x1="480" y1="730" x2="760" y2="554" stroke="#29B7FF" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-a)"/>
+
+  <!-- === INTEGRATOR (I) outbound === -->
+  <!-- I→C -->
+  <path d="M 770 730 C 680 600, 540 480, 500 388" fill="none" stroke="#00E88A" stroke-width="2" stroke-opacity="0.6" marker-end="url(#arr-i)"/>
+  <!-- I→O -->
+  <line x1="796" y1="714" x2="796" y2="574" stroke="#00E88A" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-i)"/>
+
+  <!-- === MEMBER (E) outbound === -->
+  <!-- E→C -->
+  <path d="M 1120 730 C 950 600, 600 460, 520 388" fill="none" stroke="#8B8B8B" stroke-width="2" stroke-opacity="0.6" marker-end="url(#arr-e)"/>
+  <!-- E→O -->
+  <line x1="1120" y1="734" x2="844" y2="554" stroke="#8B8B8B" stroke-width="2.5" stroke-opacity="0.7" marker-end="url(#arr-e)"/>
+
+  <!-- === AUTONOMOUS (U) outbound === -->
+  <!-- U→U (self-loop) -->
+  <circle cx="1260" cy="295" r="22" fill="none" stroke="#C0C0C0" stroke-width="2" stroke-opacity="0.4"/>
+  <path d="M 1244 278 L 1238 286" fill="none" stroke="#C0C0C0" stroke-width="2" stroke-opacity="0.4" marker-end="url(#arr-u)"/>
+  <!-- U→M -->
+  <line x1="1160" y1="316" x2="840" y2="128" stroke="#C0C0C0" stroke-width="2.5" stroke-opacity="0.6" marker-end="url(#arr-u)"/>
+  <!-- U→C -->
+  <line x1="1150" y1="344" x2="534" y2="344" stroke="#C0C0C0" stroke-width="2" stroke-opacity="0.5" marker-end="url(#arr-u)"/>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- NODE: MANAGER (top center)                          -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <circle cx="800" cy="100" r="52" fill="#070707" stroke="#FF4444" stroke-width="4"/>
+  <circle cx="800" cy="100" r="58" fill="none" stroke="#FF4444" stroke-width="6" stroke-opacity="0.15"/>
+  <image href="../public/avatars/robots_40.jpg" x="756" y="56" width="88" height="88" clip-path="url(#cM)"/>
+  <text x="800" y="172" text-anchor="middle" fill="#FF4444" font-size="16" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">MANAGER</text>
+  <text x="800" y="192" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">1 per host &bull; Can message everyone</text>
+  <text x="800" y="208" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Approves everything &bull; No team</text>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- NODE: CHIEF-OF-STAFF (mid-left)                     -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <circle cx="480" cy="340" r="52" fill="#070707" stroke="#FFB800" stroke-width="4"/>
+  <circle cx="480" cy="340" r="58" fill="none" stroke="#FFB800" stroke-width="6" stroke-opacity="0.15"/>
+  <image href="../public/avatars/robots_50.jpg" x="436" y="296" width="88" height="88" clip-path="url(#cC)"/>
+  <text x="480" y="412" text-anchor="middle" fill="#FFB800" font-size="16" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">CHIEF-OF-STAFF</text>
+  <text x="480" y="432" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">1 per team &bull; Message gateway</text>
+  <text x="480" y="448" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Routes cross-team messages</text>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- NODE: ORCHESTRATOR (center)                         -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <circle cx="800" cy="520" r="52" fill="#070707" stroke="#A764F6" stroke-width="4"/>
+  <circle cx="800" cy="520" r="58" fill="none" stroke="#A764F6" stroke-width="6" stroke-opacity="0.15"/>
+  <image href="../public/avatars/robots_10.jpg" x="756" y="476" width="88" height="88" clip-path="url(#cO)"/>
+  <text x="800" y="592" text-anchor="middle" fill="#A764F6" font-size="16" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">ORCHESTRATOR</text>
+  <text x="800" y="612" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">1 per team &bull; Task distribution</text>
+  <text x="800" y="628" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Routes to COS, workers &amp; integrator</text>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- NODE: ARCHITECT (bottom-left)                       -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <circle cx="440" cy="760" r="52" fill="#070707" stroke="#29B7FF" stroke-width="4"/>
+  <circle cx="440" cy="760" r="58" fill="none" stroke="#29B7FF" stroke-width="6" stroke-opacity="0.15"/>
+  <image href="../public/avatars/robots_30.jpg" x="396" y="716" width="88" height="88" clip-path="url(#cA)"/>
+  <text x="440" y="832" text-anchor="middle" fill="#29B7FF" font-size="16" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">ARCHITECT</text>
+  <text x="440" y="852" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Design authority &bull; Communicates</text>
+  <text x="440" y="868" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">via COS + Orchestrator only</text>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- NODE: INTEGRATOR (bottom-center)                    -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <circle cx="800" cy="760" r="52" fill="#070707" stroke="#00E88A" stroke-width="4"/>
+  <circle cx="800" cy="760" r="58" fill="none" stroke="#00E88A" stroke-width="6" stroke-opacity="0.15"/>
+  <image href="../public/avatars/robots_20.jpg" x="756" y="716" width="88" height="88" clip-path="url(#cI)"/>
+  <text x="800" y="832" text-anchor="middle" fill="#00E88A" font-size="16" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">INTEGRATOR</text>
+  <text x="800" y="852" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Quality gatekeeper &bull; Communicates</text>
+  <text x="800" y="868" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">via COS + Orchestrator only</text>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- NODE: MEMBER (bottom-right)                         -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <circle cx="1160" cy="760" r="52" fill="#070707" stroke="#8B8B8B" stroke-width="4"/>
+  <circle cx="1160" cy="760" r="58" fill="none" stroke="#8B8B8B" stroke-width="6" stroke-opacity="0.15"/>
+  <image href="../public/avatars/robots_00.jpg" x="1116" y="716" width="88" height="88" clip-path="url(#cE)"/>
+  <text x="1160" y="832" text-anchor="middle" fill="#8B8B8B" font-size="16" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">MEMBER</text>
+  <text x="1160" y="852" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Programmer &times;N &bull; Communicates</text>
+  <text x="1160" y="868" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">via COS + Orchestrator only</text>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- NODE: AUTONOMOUS (mid-right, separate)              -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <circle cx="1200" cy="340" r="52" fill="#070707" stroke="#C0C0C0" stroke-width="3" stroke-dasharray="6,4"/>
+  <circle cx="1200" cy="340" r="58" fill="none" stroke="#C0C0C0" stroke-width="4" stroke-opacity="0.1"/>
+  <image href="../public/avatars/robots_25.jpg" x="1156" y="296" width="88" height="88" clip-path="url(#cU)"/>
+  <text x="1200" y="412" text-anchor="middle" fill="#C0C0C0" font-size="16" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">AUTONOMOUS</text>
+  <text x="1200" y="432" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">No team &bull; Default title</text>
+  <text x="1200" y="448" text-anchor="middle" fill="#7a7a7a" font-size="11" font-family="Montserrat,sans-serif">Can message: self, Manager, COS</text>
+
+  <!-- ════════════════════════════════════════════════════ -->
+  <!-- LEGEND (bottom)                                      -->
+  <!-- ════════════════════════════════════════════════════ -->
+  <rect x="120" y="930" width="1360" height="240" rx="16" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+  <text x="800" y="968" text-anchor="middle" fill="#e8e8e8" font-size="18" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.1em">COMMUNICATION RULES</text>
+
+  <!-- Legend: arrow means "can send message to" -->
+  <line x1="200" y1="1005" x2="280" y2="1005" stroke="#e8e8e8" stroke-width="2.5" marker-end="url(#arr-m)"/>
+  <text x="296" y="1010" fill="#e8e8e8" font-size="12" font-weight="600" font-family="Montserrat,sans-serif">Arrow = &quot;can send AMP message to&quot;</text>
+
+  <line x1="700" y1="1005" x2="780" y2="1005" stroke="#FF4444" stroke-width="2.5" stroke-opacity="0.5"/>
+  <text x="796" y="1010" fill="#7a7a7a" font-size="12" font-family="Montserrat,sans-serif">Faint line = infrequent / long path</text>
+
+  <!-- Color key -->
+  <circle cx="200" cy="1050" r="8" fill="#FF4444"/>
+  <text x="220" y="1055" fill="#FF4444" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">MANAGER &mdash; can message ALL titles</text>
+
+  <circle cx="200" cy="1080" r="8" fill="#FFB800"/>
+  <text x="220" y="1085" fill="#FFB800" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">CHIEF-OF-STAFF &mdash; can message: Manager, Orchestrator, Architect, Integrator, Member, Autonomous, self</text>
+
+  <circle cx="200" cy="1110" r="8" fill="#A764F6"/>
+  <text x="220" y="1115" fill="#A764F6" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">ORCHESTRATOR &mdash; can message: COS, Architect, Integrator, Member</text>
+
+  <circle cx="200" cy="1140" r="8" fill="#29B7FF"/>
+  <text x="220" y="1145" fill="#29B7FF" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">ARCHITECT / INTEGRATOR / MEMBER &mdash; can message: COS + Orchestrator only</text>
+
+  <circle cx="200" cy="1170" r="8" fill="#C0C0C0"/>
+  <text x="220" y="1175" fill="#C0C0C0" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">AUTONOMOUS &mdash; can message: self, Manager, COS (no team affiliation)</text>
+
+  <!-- Blocked message note -->
+  <text x="800" y="1010" text-anchor="middle" fill="transparent" font-size="1">spacer</text>
+  <rect x="900" y="1040" width="520" height="80" rx="8" fill="rgba(255,68,68,0.06)" stroke="rgba(255,68,68,0.2)" stroke-width="1"/>
+  <text x="1160" y="1065" text-anchor="middle" fill="#FF4444" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">BLOCKED MESSAGES</text>
+  <text x="1160" y="1085" text-anchor="middle" fill="#7a7a7a" font-size="10" font-family="Montserrat,sans-serif">Missing arrow = forbidden. Server returns error:</text>
+  <text x="1160" y="1103" text-anchor="middle" fill="#e8e8e8" font-size="10" font-style="italic" font-family="Montserrat,sans-serif">&quot;INTEGRATOR cannot message MANAGER. Route through CHIEF-OF-STAFF.&quot;</text>
+
+  <!-- Subagent note -->
+  <rect x="900" y="1130" width="520" height="48" rx="8" fill="rgba(167,100,246,0.06)" stroke="rgba(167,100,246,0.2)" stroke-width="1"/>
+  <text x="1160" y="1152" text-anchor="middle" fill="#A764F6" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">SUBAGENTS</text>
+  <text x="1160" y="1170" text-anchor="middle" fill="#7a7a7a" font-size="10" font-family="Montserrat,sans-serif">Only main-agents use AMP. Subagents communicate only with their spawner.</text>
+</svg>

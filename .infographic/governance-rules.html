@@ -1000,17 +1000,16 @@ body::before{
 </div>
 
 
-<!-- ==================== 5. PROJECT WORKFLOW ROAD — ROUNDABOUT LOOPS ==================== -->
-<div class="section-band blue"><i class="ph-bold ph-path"></i> 5 &mdash; PROJECT WORKFLOW ROAD</div>
+<!-- ==================== 5. COMMUNICATION RULES GRAPH ==================== -->
+<div class="section-band blue"><i class="ph-bold ph-graph"></i> 5 &mdash; AMP COMMUNICATION RULES</div>
 
 <div style="font-size:15px;color:var(--muted);margin:0 0 20px 0;line-height:1.6;max-width:1600px;">
-  The project workflow is a series of <strong style="color:var(--text);">nested loops</strong>, not a linear pipeline. Each roundabout represents a collaboration cycle between 3&ndash;4 agents. Documents travel as <strong style="color:var(--primary);">GitHub Issue URLs</strong> inside AMP messages. The <span style="color:var(--manager);font-weight:700;">MANAGER</span> is the invisible approval authority in every loop &mdash; nothing exits a roundabout without Manager approval. One <span style="color:var(--member);">MEMBER</span> (Programmer) agent is created per task; extra <span style="color:var(--integrator);">INTEGRATOR</span> agents are created if the review backlog grows.
+  All inter-agent communication uses the <strong style="color:var(--primary);">Agent Messaging Protocol (AMP)</strong>. Messages are cryptographically signed with Ed25519 keys. Documents travel as <strong style="color:var(--text);">GitHub Issue URLs</strong> inside AMP messages &mdash; agents download from GitHub. The server enforces a <strong style="color:var(--text);">directed graph</strong> of allowed connections: an arrow from A to B means A can send messages to B. Missing arrow = <span style="color:var(--manager);font-weight:700;">FORBIDDEN</span> &mdash; the server blocks and suggests routing through an allowed intermediary. Only <strong style="color:var(--text);">main-agents</strong> (1 per role-plugin) use AMP. Subagents communicate only with their spawner.
 </div>
 
-
-<!-- ═══════ ROUNDABOUT SYSTEM (single composite SVG map) ═══════ -->
+<!-- Communication rules directed graph -->
 <div style="display:flex;flex-direction:column;align-items:center;padding:24px 0;">
-  <object type="image/svg+xml" data="road-workflow-map.svg" style="width:100%;max-width:1600px;display:block;"></object>
+  <object type="image/svg+xml" data="communication-rules-graph.svg" style="width:100%;max-width:1600px;display:block;"></object>
 </div>
 
 

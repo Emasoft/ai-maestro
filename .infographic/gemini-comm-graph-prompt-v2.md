@@ -59,7 +59,7 @@ AUTONOMOUS sends 2 arrows: up-left to Manager and left to COS.
 
 ## Subagents — small icons fanning below each main agent
 
-Each main agent has helper subagents shown as smaller circles (half the diameter of the main agent circles) fanning out in a symmetric arc below their parent. A thin line connects each subagent to its parent. Each subagent has a unique small icon/symbol inside its circle and its name in tiny text below.
+Each main agent has helper subagents shown as smaller circles fanning out in a symmetric arc below their parent. Subagent circle diameter must be **half** the diameter of the main agent circles. A thin line connects each subagent to its parent. Each subagent has a unique small icon/symbol inside its circle and its name in tiny text below.
 
 **CRITICAL: Subagents must be in the SAME ZONE as their parent.** If the parent is inside the team frame, subagents are inside. If outside, subagents are outside. Never cross the team boundary.
 

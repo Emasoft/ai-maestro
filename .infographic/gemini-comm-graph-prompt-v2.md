@@ -89,13 +89,11 @@ A dark rounded panel at the bottom, organized as **distinct sections with big bo
 🔵 ARCHITECT / INTEGRATOR / MEMBER — can only message CHIEF-OF-STAFF and Orchestrator
 🟡 AUTONOMOUS — can only message MANAGER and CHIEF-OF-STAFF
 
-**THREE ENFORCEMENT LAYERS** (big title)
-🛡️ SERVER API — Ed25519 signature verification on every message
-🤖 AGENT PROMPTS — role-plugins encode allowed recipients
-🔒 SUBAGENT ISOLATION — only main-agents use AMP, subagents cannot
-
-**THE USER** (big title)
-👤 Exempt from all rules. Can message any agent. Must authenticate.
+**FOUR ENFORCEMENT LAYERS** (big title)
+🛡️ LAYER 1 — SERVER API: Ed25519 signature verification on every message
+🤖 LAYER 2 — AGENT PROMPTS: role-plugins encode allowed recipients
+🔒 LAYER 3 — SUBAGENT ISOLATION: only main-agents use AMP, subagents cannot
+👤 LAYER 4 — USER AUTHENTICATION: the user is exempt from agent rules but must authenticate with the server. Can message any agent. Agents respond only to user-initiated contact.
 
 Each section title should be large, bold, and clearly separated. Each list item should use a distinctive icon or colored bullet point — not plain text dashes. The panel should look like a polished reference card, not a wall of text.
 

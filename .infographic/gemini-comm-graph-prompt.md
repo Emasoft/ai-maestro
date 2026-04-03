@@ -4,7 +4,7 @@
 
 Create a **directed graph diagram** on a pure dark background (#070707). The style should be clean, geometric, and technical — like a network topology diagram or a system architecture poster. NOT a flowchart. NOT a mind map. It's a **directed graph** where nodes are circular avatar portraits and edges are colored arrows showing who can send messages to whom.
 
-Canvas: **1800×1200px**, dark mode, landscape orientation.
+Canvas: **1800×1600px**, dark mode, portrait-ish orientation (the subagent trees need vertical space below the graph).
 
 ---
 
@@ -101,19 +101,107 @@ For **long-distance** connections (e.g., M→A, M→I, M→E), make the arrows s
 
 ---
 
-## Subagent Clusters
+## Subagent Trees
 
-Below each main agent node, show a cluster of **small dots** (6-8px each) in the agent's color, representing its subagents. Each dot is a tiny circle. Add a small label with the count.
+Below each main-agent node, its subagents radiate downward in a **symmetric fan/tree projection**. Each subagent is shown as a **circular icon** (half the diameter of the main-agent avatar, so ~40-45px) in the same color family as the parent but slightly dimmer. A thin line connects each subagent circle to the parent node. Below each subagent circle, its **name** is shown in small text (8-9px, the parent's color at 70% opacity).
 
-| Agent | Subagent Count | Dot Color |
-|-------|---------------|-----------|
-| MANAGER | 1 dot | Red |
-| CHIEF-OF-STAFF | 9 dots (two rows: 5+4) | Amber |
-| ORCHESTRATOR | 5 dots | Lilac |
-| ARCHITECT | 5 dots | Blue |
-| INTEGRATOR | 10 dots (two rows: 5+5) | Green |
-| MEMBER | 0 (label: "main-agent only") | — |
-| AUTONOMOUS | 0 (label: "no role-plugin") | — |
+The subagent circles should use a **generic robot/gear icon** inside (not avatar photos) — a simple monochrome silhouette or the Phosphor `ph-robot` / `ph-gear-six` icon shape, filled with the parent's color at low opacity.
+
+Subagents are arranged in a **symmetric arc** below the parent — evenly spaced, fanning outward. If there are many (9-10), use two rows.
+
+### MANAGER — 1 subagent
+```
+        [MANAGER]
+            |
+     (report-generator)
+```
+- **report-generator** — Generates detailed status reports
+
+### CHIEF-OF-STAFF — 9 subagents
+```
+                    [CHIEF-OF-STAFF]
+        /    /    /    |    \    \    \    \    \
+  approval lifecycle perf  plugin recov resource skill staff  team
+  coord    manager   report config coord  monitor  valid plan  coord
+```
+1. **approval-coordinator** — Manages approval workflows with Manager
+2. **lifecycle-manager** — Creates, terminates, hibernates agents
+3. **performance-reporter** — Tracks agent utilization and success rates
+4. **plugin-configurator** — Configures agent plugins and skills
+5. **recovery-coordinator** — Handles failure recovery and rollbacks
+6. **resource-monitor** — Tracks memory, disk, CPU across team agents
+7. **skill-validator** — Validates agent skill configurations
+8. **staff-planner** — Analyzes staffing needs, recommends team changes
+9. **team-coordinator** — Coordinates intra-team operations
+
+### ORCHESTRATOR — 5 subagents
+```
+            [ORCHESTRATOR]
+        /    /    |    \    \
+  checklist docker exper  task   team
+  compiler  expert iment  summ   orch
+```
+1. **checklist-compiler** — Compiles task checklists from requirements
+2. **docker-container-expert** — Manages DevOps and container tasks
+3. **experimenter** — Handles prototyping and experimentation
+4. **task-summarizer** — Summarizes task results for reporting
+5. **team-orchestrator** — Coordinates multi-agent parallel work
+
+### ARCHITECT — 5 subagents
+```
+            [ARCHITECT]
+        /    /    |    \    \
+    api   cicd   doc   modul  planner
+  research design writer izer
+```
+1. **api-researcher** — Researches external APIs and integrations
+2. **cicd-designer** — Designs CI/CD pipeline architecture
+3. **documentation-writer** — Writes technical documentation
+4. **modularizer-expert** — Breaks designs into independent modules
+5. **planner** — Creates implementation plans from requirements
+
+### INTEGRATOR — 10 subagents
+```
+                        [INTEGRATOR]
+        /    /    /    /    \    \    \    \    \    \
+   api   bug   code commit debug github integ   pr   screen  test
+  coord invest review ter  spec  sync  verif  eval  analyz  engin
+```
+1. **api-coordinator** — Coordinates GitHub API operations
+2. **bug-investigator** — Root-cause analysis for CI failures and bugs
+3. **code-reviewer** — Reviews PR code quality and architecture
+4. **committer** — Creates commits with proper metadata
+5. **debug-specialist** — Complex debugging and stack trace analysis
+6. **github-sync** — Repository state sync and branch cleanup
+7. **integration-verifier** — Post-merge integration testing
+8. **pr-evaluator** — PR readiness check before merge
+9. **screenshot-analyzer** — Visual regression testing
+10. **test-engineer** — Test creation, coverage analysis, gap identification
+
+### MEMBER (Programmer) — 0 subagents
+```
+        [MEMBER]
+            |
+    (main-agent only)
+```
+No subagents. The programmer role-plugin has only the main-agent.
+
+### AUTONOMOUS — 0 subagents
+```
+      [AUTONOMOUS]
+            |
+    (no role-plugin)
+```
+No subagents. No role-plugin installed. Follows AI Maestro skills only.
+
+### Visual rules for subagent trees:
+- Subagent circles are **half the diameter** of main-agent avatars (~40-45px vs ~80-90px)
+- Each subagent circle contains a **monochrome icon** (robot or gear silhouette) in the parent's color
+- A **thin connecting line** (1.5px, parent's color at 30% opacity) runs from parent to each subagent
+- Subagent **name text** below each circle is small (8-9px), parent's color at 70% opacity
+- Arrangement is a **symmetric fan** — centered below the parent, evenly spaced
+- For 9-10 subagents, use **two rows** (5 top + 4-5 bottom) to avoid horizontal overflow
+- Subagent trees must NOT overlap with the directed graph arrows — place them in the space below each node, extending downward from the bottom row of the hierarchy
 
 ---
 

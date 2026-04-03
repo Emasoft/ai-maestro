@@ -174,42 +174,60 @@
   <!-- ════════════════════════════════════════════════════ -->
   <!-- LEGEND (bottom)                                      -->
   <!-- ════════════════════════════════════════════════════ -->
-  <rect x="120" y="930" width="1360" height="240" rx="16" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <rect x="120" y="920" width="1360" height="270" rx="16" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
 
-  <text x="800" y="968" text-anchor="middle" fill="#e8e8e8" font-size="18" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.1em">COMMUNICATION RULES</text>
+  <text x="800" y="955" text-anchor="middle" fill="#e8e8e8" font-size="18" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.1em">AMP COMMUNICATION RULES — 27 DIRECTED CONNECTIONS</text>
 
-  <!-- Legend: arrow means "can send message to" -->
-  <line x1="200" y1="1005" x2="280" y2="1005" stroke="#e8e8e8" stroke-width="2.5" marker-end="url(#arr-m)"/>
-  <text x="296" y="1010" fill="#e8e8e8" font-size="12" font-weight="600" font-family="Montserrat,sans-serif">Arrow = &quot;can send AMP message to&quot;</text>
+  <!-- Legend: arrow key -->
+  <line x1="180" y1="985" x2="260" y2="985" stroke="#e8e8e8" stroke-width="2.5" marker-end="url(#arr-m)"/>
+  <text x="276" y="990" fill="#e8e8e8" font-size="12" font-weight="600" font-family="Montserrat,sans-serif">Arrow = &quot;can send AMP message to&quot; (Ed25519 signed)</text>
 
-  <line x1="700" y1="1005" x2="780" y2="1005" stroke="#FF4444" stroke-width="2.5" stroke-opacity="0.5"/>
-  <text x="796" y="1010" fill="#7a7a7a" font-size="12" font-family="Montserrat,sans-serif">Faint line = infrequent / long path</text>
+  <text x="720" y="990" fill="#7a7a7a" font-size="12" font-family="Montserrat,sans-serif">|</text>
+
+  <text x="740" y="990" fill="#7a7a7a" font-size="12" font-family="Montserrat,sans-serif">Missing arrow = FORBIDDEN (server blocks + suggests routing)</text>
 
   <!-- Color key -->
-  <circle cx="200" cy="1050" r="8" fill="#FF4444"/>
-  <text x="220" y="1055" fill="#FF4444" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">MANAGER &mdash; can message ALL titles</text>
+  <circle cx="180" cy="1020" r="6" fill="#FF4444"/>
+  <text x="196" y="1025" fill="#FF4444" font-size="11" font-weight="700" font-family="Montserrat,sans-serif">MANAGER — all 7 titles (broadcast)</text>
 
-  <circle cx="200" cy="1080" r="8" fill="#FFB800"/>
-  <text x="220" y="1085" fill="#FFB800" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">CHIEF-OF-STAFF &mdash; can message: Manager, Orchestrator, Architect, Integrator, Member, Autonomous, self</text>
+  <circle cx="500" cy="1020" r="6" fill="#FFB800"/>
+  <text x="516" y="1025" fill="#FFB800" font-size="11" font-weight="700" font-family="Montserrat,sans-serif">CHIEF-OF-STAFF — all 7 titles (gateway)</text>
 
-  <circle cx="200" cy="1110" r="8" fill="#A764F6"/>
-  <text x="220" y="1115" fill="#A764F6" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">ORCHESTRATOR &mdash; can message: COS, Architect, Integrator, Member</text>
+  <circle cx="880" cy="1020" r="6" fill="#A764F6"/>
+  <text x="896" y="1025" fill="#A764F6" font-size="11" font-weight="700" font-family="Montserrat,sans-serif">ORCHESTRATOR — COS, A, I, E</text>
 
-  <circle cx="200" cy="1140" r="8" fill="#29B7FF"/>
-  <text x="220" y="1145" fill="#29B7FF" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">ARCHITECT / INTEGRATOR / MEMBER &mdash; can message: COS + Orchestrator only</text>
+  <circle cx="1160" cy="1020" r="6" fill="#29B7FF"/>
+  <text x="1176" y="1025" fill="#29B7FF" font-size="11" font-weight="700" font-family="Montserrat,sans-serif">A / I / E — COS + O only</text>
 
-  <circle cx="200" cy="1170" r="8" fill="#C0C0C0"/>
-  <text x="220" y="1175" fill="#C0C0C0" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">AUTONOMOUS &mdash; can message: self, Manager, COS (no team affiliation)</text>
+  <circle cx="1370" cy="1020" r="6" fill="#C0C0C0"/>
+  <text x="1386" y="1025" fill="#C0C0C0" font-size="11" font-weight="700" font-family="Montserrat,sans-serif">U — self, M, C</text>
 
-  <!-- Blocked message note -->
-  <text x="800" y="1010" text-anchor="middle" fill="transparent" font-size="1">spacer</text>
-  <rect x="900" y="1040" width="520" height="80" rx="8" fill="rgba(255,68,68,0.06)" stroke="rgba(255,68,68,0.2)" stroke-width="1"/>
-  <text x="1160" y="1065" text-anchor="middle" fill="#FF4444" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">BLOCKED MESSAGES</text>
-  <text x="1160" y="1085" text-anchor="middle" fill="#7a7a7a" font-size="10" font-family="Montserrat,sans-serif">Missing arrow = forbidden. Server returns error:</text>
-  <text x="1160" y="1103" text-anchor="middle" fill="#e8e8e8" font-size="10" font-style="italic" font-family="Montserrat,sans-serif">&quot;INTEGRATOR cannot message MANAGER. Route through CHIEF-OF-STAFF.&quot;</text>
+  <!-- ── THREE ENFORCEMENT LAYERS ── -->
+  <line x1="160" y1="1048" x2="1440" y2="1048" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
 
-  <!-- Subagent note -->
-  <rect x="900" y="1130" width="520" height="48" rx="8" fill="rgba(167,100,246,0.06)" stroke="rgba(167,100,246,0.2)" stroke-width="1"/>
-  <text x="1160" y="1152" text-anchor="middle" fill="#A764F6" font-size="12" font-weight="700" font-family="Montserrat,sans-serif">SUBAGENTS</text>
-  <text x="1160" y="1170" text-anchor="middle" fill="#7a7a7a" font-size="10" font-family="Montserrat,sans-serif">Only main-agents use AMP. Subagents communicate only with their spawner.</text>
+  <text x="800" y="1072" text-anchor="middle" fill="#e8e8e8" font-size="14" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.08em">THREE ENFORCEMENT LAYERS</text>
+
+  <!-- Layer 1 -->
+  <rect x="160" y="1085" width="400" height="90" rx="8" fill="rgba(255,68,68,0.06)" stroke="rgba(255,68,68,0.2)" stroke-width="1"/>
+  <text x="360" y="1105" text-anchor="middle" fill="#FF4444" font-size="12" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">LAYER 1 — SERVER API</text>
+  <text x="360" y="1122" text-anchor="middle" fill="#e8e8e8" font-size="10" font-family="Montserrat,sans-serif">Ed25519 signature verification of sender/recipient titles.</text>
+  <text x="360" y="1137" text-anchor="middle" fill="#e8e8e8" font-size="10" font-family="Montserrat,sans-serif">Graph lookup on every AMP message. Blocks forbidden paths.</text>
+  <text x="360" y="1152" text-anchor="middle" fill="#7a7a7a" font-size="9" font-style="italic" font-family="Montserrat,sans-serif">&quot;INTEGRATOR cannot message MANAGER. Route through COS.&quot;</text>
+  <text x="360" y="1167" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">User must also authenticate (but can reach all titles).</text>
+
+  <!-- Layer 2 -->
+  <rect x="600" y="1085" width="400" height="90" rx="8" fill="rgba(167,100,246,0.06)" stroke="rgba(167,100,246,0.2)" stroke-width="1"/>
+  <text x="800" y="1105" text-anchor="middle" fill="#A764F6" font-size="12" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">LAYER 2 — AGENT PROMPTS</text>
+  <text x="800" y="1122" text-anchor="middle" fill="#e8e8e8" font-size="10" font-family="Montserrat,sans-serif">Role-plugin main-agent .md files encode allowed recipients.</text>
+  <text x="800" y="1137" text-anchor="middle" fill="#e8e8e8" font-size="10" font-family="Montserrat,sans-serif">User-scope AI Maestro skills teach communication rules.</text>
+  <text x="800" y="1152" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">AUTONOMOUS agents follow skills only (no role-plugin).</text>
+  <text x="800" y="1167" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Agents self-enforce before the server even checks.</text>
+
+  <!-- Layer 3 -->
+  <rect x="1040" y="1085" width="400" height="90" rx="8" fill="rgba(0,232,138,0.06)" stroke="rgba(0,232,138,0.2)" stroke-width="1"/>
+  <text x="1240" y="1105" text-anchor="middle" fill="#00E88A" font-size="12" font-weight="800" font-family="Montserrat,sans-serif" letter-spacing="0.06em">LAYER 3 — SUBAGENTS</text>
+  <text x="1240" y="1122" text-anchor="middle" fill="#e8e8e8" font-size="10" font-family="Montserrat,sans-serif">Only the 1 main-agent per role-plugin uses AMP.</text>
+  <text x="1240" y="1137" text-anchor="middle" fill="#e8e8e8" font-size="10" font-family="Montserrat,sans-serif">Subagents cannot send AMP messages at all.</text>
+  <text x="1240" y="1152" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Subagents communicate only with their spawning main-agent.</text>
+  <text x="1240" y="1167" text-anchor="middle" fill="#7a7a7a" font-size="9" font-family="Montserrat,sans-serif">Instructed in their .md files to never use AMP.</text>
 </svg>

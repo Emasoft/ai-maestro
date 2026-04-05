@@ -254,74 +254,138 @@ Example: `SCEN-001_title-change-lifecycle.scen.md`
 
 ### Frontmatter (YAML):
 
+All fields are **required** unless marked (optional).
+
 ```yaml
 ---
-number: <unique integer, e.g. 1>
-name: <human-readable scenario name>
-version: "1.0"
-description: >
-  <What this scenario tests — which subsystem, which UI sections,
-  what data is produced during the test>
-subsystems:
-  - governance
-  - role-plugins
-  - agent-registry
-ui_sections:
-  - Agent Profile → Overview tab → Governance Title
-  - Agent Profile → Config tab → Role Plugin
-  - Sidebar → Teams tab
-  - Title Assignment Dialog
-  - Governance Password Dialog
-data_produced:
-  - Agent registry entries (temporary, cleaned up)
-  - Team entries (temporary, cleaned up)
-  - Plugin settings.local.json modifications (restored)
-required_tools:
+number: <unique integer>            # Matches filename SCEN-<NNN>. Never reused.
+name: <human-readable scenario name> # Short title, no quotes needed
+version: "1.0"                      # Semver string. Bump on breaking step changes.
+description: >                      # Multi-line. Must answer: what is tested, why,
+  <What this scenario tests>        # and what governance rules are validated.
+subsystems:                         # Backend services/modules exercised.
+  - governance                      # Pick from: governance, teams, agent-registry,
+  - role-plugins                    # element-management-service, agent-messaging,
+  - agent-registry                  # role-plugins, kanban, cross-client-conversion-service,
+                                    # sessions-service, groups-service
+ui_sections:                        # Every UI area the scenario touches.
+  - Sidebar -> Agents tab           # Use arrow notation: Section -> Tab -> Element
+  - Agent Profile -> Overview tab -> Governance Title
+  - Title Assignment Dialog (radio cards, password prompt)
+data_produced:                      # Every artifact created during the test.
+  - 2 test agents (temporary)       # Format: <count> <what> (<lifecycle>)
+  - 1 test team (temporary)         # Lifecycle: "temporary, created and deleted"
+  - Plugin settings modifications   # or "temporary, restored via STATE-WIPE"
+required_tools:                     # CDP tools used. Always include all 6 below.
   - mcp__chrome-devtools__navigate_page
   - mcp__chrome-devtools__take_snapshot
   - mcp__chrome-devtools__take_screenshot
   - mcp__chrome-devtools__click
   - mcp__chrome-devtools__fill
   - mcp__chrome-devtools__wait_for
-prerequisites:
+prerequisites:                      # Conditions that must be true BEFORE Phase 0.
   - AI Maestro server running at http://localhost:23000
   - Governance password set
-  - At least 1 active agent with tmux session
-  - Chrome browser open with DevTools accessible
-governance_password: "<the governance password for title changes>"
-commit: <git-hash>
-author: <who wrote the scenario>
+  - Chrome browser open with DevTools accessible via CDP
+  - ai-maestro-plugins marketplace registered
+  - <any scenario-specific requirements, e.g. "Codex CLI installed">
+governance_password: "<password>"   # The actual password value, in quotes.
+                                    # Every step that needs it must reference it
+                                    # verbatim — never write just "password".
+commit: <git-hash or TBD>          # Hash at time of writing. Updated after first run.
+author: <who wrote the scenario>    # (optional) Person or team name.
 ---
 ```
 
-### Step format:
+**Field rules:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `number` | integer | yes | Must match `SCEN-<NNN>` in filename. Unique, never reused. |
+| `name` | string | yes | Short, descriptive. Used in report headers. |
+| `version` | string | yes | Always quoted (`"1.0"`). Bump on step changes. |
+| `description` | multiline | yes | Use `>` folded scalar. Explain what and why. |
+| `subsystems` | list | yes | Backend modules exercised. At least 1. |
+| `ui_sections` | list | yes | UI areas touched. Use `->` arrow notation. |
+| `data_produced` | list | yes | Every artifact created. Include lifecycle note. |
+| `required_tools` | list | yes | Always include the 6 standard CDP tools. |
+| `prerequisites` | list | yes | Testable conditions. Include CLI checks (e.g., `which codex`). |
+| `governance_password` | string | yes | Actual password in quotes. Referenced verbatim in steps. |
+| `commit` | string | yes | Git hash or `TBD`. Updated after first successful run. |
+| `author` | string | no | Person or team. |
+
+### Phase format:
+
+Phases are numbered starting at 0. Use `##` heading level. Phase 0 is always `SAFE-SETUP`. The last phase is always `CLEANUP`.
 
 ```markdown
-### Phase N: <phase-name>
-
-#### S<NNN>: <action-description>
-- **Action:** <what to do in the UI>
-- **Goal:** <what must be true after this step — verifiable from UI state>
-- **Creates:** <list of elements created, or "nothing">
-- **Modifies:** <list of existing state modified, or "nothing">
-- **Verify:** <how to verify — screenshot, snapshot check, text match>
+## Phase 0: SAFE-SETUP
+## Phase 1: <name>
+## Phase 2: <name>
+...
+## Phase CLEANUP: Restore Original State
 ```
 
-### Cleanup phase (mandatory, always last):
+A `---` horizontal rule separates each phase.
+
+Between phases, you may add a `> **Note:**` blockquote to explain context, known discrepancies, or what to observe. These are documentation — not executable steps.
+
+### Step format:
+
+Steps are numbered sequentially across all phases: S001, S002, ... S028. Never restart numbering within a phase. Use `####` heading level.
+
+**Regular steps (creating, modifying, or verifying):**
 
 ```markdown
-### Phase CLEANUP: Restore Original State
+#### S<NNN>: <imperative action description>
+- **Action:** <exact UI actions — button names, field values, passwords verbatim>
+- **Goal:** <what must be true after this step — one verifiable assertion>
+- **Creates:** <list of elements created, or "nothing">
+- **Modifies:** <list of existing state modified, or "nothing">
+- **Verify:** <how to confirm — API check, screenshot, text match in snapshot>
+```
 
-#### S<NNN>: Revert <action>
-- **Action:** <undo step S<XXX>>
+**Rules for each field:**
+
+| Field | Required | Content |
+|-------|----------|---------|
+| `Action` | yes | Exact UI sequence. Spell out button labels, input values, passwords. Never write "enter password" — write `enter password \`mYkri1-xoxrap-gogtan\``. |
+| `Goal` | yes | Single verifiable assertion. Not a wish — a testable fact. |
+| `Creates` | yes | List of artifacts created, or `nothing`. Include where (registry, filesystem, tmux). |
+| `Modifies` | yes | List of state changes, or `nothing`. Be specific (field names, file paths). |
+| `Verify` | yes | How to confirm. API endpoint + expected value, screenshot filename, or snapshot text match. |
+
+**Do NOT add** non-standard fields (Timeout, Note, Failure handling, etc.) to steps. If context is needed, put it in a blockquote before the step or phase.
+
+**Cleanup steps (deleting, removing, restoring):**
+
+```markdown
+#### S<NNN>: Revert <what>
+- **Action:** <exact UI actions to undo>
 - **Goal:** <element removed / state restored>
-- **Removes:** <what is being removed>
-- **Verify:** <confirmation>
+- **Removes:** <what is being removed — replaces Creates/Modifies>
+- **Verify:** <confirmation — API 404, file hash match, screenshot comparison>
+```
 
+**The last cleanup step is always STATE-WIPE:**
+
+```markdown
 #### S<LAST>: STATE-WIPE — Restore configuration files
-- **Action:** Copy backed-up files back to original locations
+- **Action:** Compare current config files with backups from S002. Restore any that differ.
 - **Goal:** All config files match pre-test state
-- **Verify:** File hash comparison
+- **Removes:** nothing
+- **Verify:** File hash comparison — all 6 files match
+```
+
+**The final step is always a post-test screenshot:**
+
+```markdown
+#### S<LAST+1>: Post-test screenshot
+- **Action:** `take_screenshot` of full page
+- **Goal:** UI identical to Phase 0 baseline
+- **Creates:** nothing
+- **Modifies:** nothing
+- **Verify:** Screenshot saved. Visual comparison with baseline screenshot.
 ```
 
 ---

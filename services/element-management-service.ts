@@ -894,6 +894,21 @@ export async function ChangeTitle(
     await updateAgent(agentId, { governanceTitle: effectiveTitle as any })
     ops.push(`G14: Set governanceTitle="${effectiveTitle || 'null'}" in agent registry`)
 
+    // ── GATE 14b: Revoke existing AID governance tokens ─────
+    // Title changed → existing tokens embed the old title → revoke them.
+    // Agent must re-authenticate to get a token with the new title.
+    try {
+      const { revokeTokensForAgent } = await import('@/lib/aid-token')
+      const revoked = revokeTokensForAgent(agentId)
+      if (revoked > 0) {
+        ops.push(`G14b: Revoked ${revoked} AID governance token(s) (old title invalidated)`)
+      } else {
+        ops.push(`G14b: No active AID tokens to revoke`)
+      }
+    } catch {
+      ops.push(`G14b: WARN — Token revocation skipped (aid-token module error)`)
+    }
+
     // ── GATE 15: Determine plugin swap (N:1 compatible-plugins model) ──
     // Find what plugin the agent currently has installed, and what plugin
     // is compatible with the NEW title + client combo.

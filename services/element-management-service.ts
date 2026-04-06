@@ -2473,6 +2473,17 @@ export async function CreateAgent(
     }
     ops.push(`G01: Name "${name}" is valid`)
 
+    // ── G01b: Check name uniqueness in registry ──────────────
+    {
+      const { loadAgents: loadAll } = await import('@/lib/agent-registry')
+      const existingByName = loadAll().find(a => a.name === name)
+      if (existingByName) {
+        result.error = `Agent with name "${name}" already exists (id=${existingByName.id}). Choose a different name.`
+        return result
+      }
+      ops.push(`G01b: Name "${name}" is unique in registry`)
+    }
+
     // ── G02: Infer client/program (smart, with deprecated client handling) ──
     // Supported clients ranked by capability (tiebreaker when counts are equal)
     // Order: plugin support, tool use, context window, ecosystem maturity

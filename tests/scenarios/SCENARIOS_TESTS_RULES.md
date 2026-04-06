@@ -170,6 +170,16 @@ Scenario tests use **Chrome DevTools Protocol (CDP)** via the `mcp__chrome-devto
 - Use `wait_for` after actions that trigger async operations (API calls, plugin installs)
 - Use `bringToFront: false` on `select_page` to avoid desktop switching
 
+### CDP tool reconnection:
+At the start of **each phase**, verify CDP tools are loaded by taking a snapshot. If tools fail (e.g., "No such tool available"), reload via `ToolSearch` with `select:mcp__plugin_chromedev-tools_cdt__take_snapshot,...`. Tool schemas can expire during long scenario runs.
+
+### Reading agent terminal history:
+Claude Code uses the xterm alternate screen buffer — `tmux capture-pane` only captures the visible pane (not scrollback from Claude's session). To read what an agent actually did:
+
+1. Find the conversation log: `ls -lt ~/.claude/projects/-Users-<user>-agents-<name>/*.jsonl | head -1`
+2. Analyze with LLM Externalizer: `code_task` with instructions to extract actions, errors, and outcomes
+3. This is the **authoritative source** — not terminal screenshots (which may only show the final idle prompt)
+
 ---
 
 ## Rule 9: REPORT-FORMAT

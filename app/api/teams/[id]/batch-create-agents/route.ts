@@ -37,6 +37,16 @@ export async function POST(
       return NextResponse.json({ error: 'Maximum 10 agents per batch' }, { status: 400 })
     }
 
+    // Check for intra-batch name collisions (same name appears twice in the request)
+    const nameSet = new Set<string>()
+    for (const agentSpec of body.agents) {
+      const n = (agentSpec.name || '').toLowerCase().trim()
+      if (n && nameSet.has(n)) {
+        return NextResponse.json({ error: `Duplicate agent name "${n}" in batch` }, { status: 400 })
+      }
+      nameSet.add(n)
+    }
+
     const { CreateAgent } = await import('@/services/element-management-service')
 
     const created: Array<{ id: string; name: string; governanceTitle: string }> = []

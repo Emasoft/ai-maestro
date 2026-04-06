@@ -27,9 +27,20 @@ export function discoverAgentDatabases(): string[] {
 
   try {
     const entries = fs.readdirSync(AGENTS_DIR, { withFileTypes: true })
-    const agentIds = entries
+    const allDirs = entries
       .filter(entry => entry.isDirectory())
       .map(entry => entry.name)
+
+    // Cross-reference with registry: only return agent IDs that actually exist
+    // in the registry. Stale directories from deleted agents should not inflate
+    // the subconscious count. (ISSUE-005 fix)
+    const { loadAgents } = require('@/lib/agent-registry')
+    const registeredIds = new Set(loadAgents().map((a: { id: string }) => a.id))
+    const agentIds = allDirs.filter(id => registeredIds.has(id))
+
+    if (agentIds.length < allDirs.length) {
+      console.log(`[AgentStartup] Filtered ${allDirs.length - agentIds.length} stale agent dirs (not in registry)`)
+    }
 
     return agentIds
   } catch (error) {

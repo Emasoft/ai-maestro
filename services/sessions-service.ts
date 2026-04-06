@@ -654,6 +654,20 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
     }
   }
 
+  // Record session-agent pairing in persistent history (survives agent deletion)
+  if (registeredAgent) {
+    const { recordSessionPairing } = await import('@/lib/session-history')
+    recordSessionPairing(
+      actualSessionName,
+      registeredAgent.id,
+      agentName,
+      registeredAgent.label,
+      registeredAgent.program || program,
+      registeredAgent.programArgs || programArgs,
+      registeredAgent.workingDirectory || cwd,
+    )
+  }
+
   // Persist session metadata (legacy)
   // Use only registeredAgent.id as the canonical agentId source
   persistSession({

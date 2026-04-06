@@ -256,6 +256,16 @@ export interface UnregisteredSession {
   windows: number
   paneCommand?: string
   programRunning?: boolean
+  /** From session history: the agent name that originally owned this session */
+  originalAgentName?: string
+  /** From session history: the agent label/persona name */
+  originalAgentLabel?: string
+  /** From session history: the agent ID (may no longer exist in registry) */
+  originalAgentId?: string
+  /** From session history: the AI client used */
+  originalProgram?: string
+  /** From session history: the CLI arguments */
+  originalProgramArgs?: string
 }
 
 /** Check what process is running in the tmux pane (e.g., "claude", "zsh", "node") */
@@ -524,7 +534,22 @@ export async function listAgents(): Promise<ServiceResult<{
         })
       }
     }
+    // Enrich unregistered sessions with history data (original agent name)
     if (unregisteredSessions.length > 0) {
+      try {
+        const { lookupSessionAgents } = await import('@/lib/session-history')
+        const historyMap = lookupSessionAgents(unregisteredSessions.map(s => s.tmuxSessionName))
+        for (const session of unregisteredSessions) {
+          const entry = historyMap[session.tmuxSessionName]
+          if (entry) {
+            session.originalAgentName = entry.agentName
+            session.originalAgentLabel = entry.agentLabel
+            session.originalAgentId = entry.agentId
+            session.originalProgram = entry.program
+            session.originalProgramArgs = entry.programArgs
+          }
+        }
+      } catch { /* history file missing or corrupt — no enrichment */ }
       console.log(`[Agents] Found ${unregisteredSessions.length} unregistered tmux session(s) (not auto-registered — awaiting user adoption)`)
     }
 

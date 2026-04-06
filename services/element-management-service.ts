@@ -2675,40 +2675,67 @@ export async function DeleteAgent(
       ops.push(`G07: WARN — governance request cleanup failed: ${err instanceof Error ? err.message : err}`)
     }
 
-    // ── G08: Delete from registry ──────────────────────────────
+    // ── G08: Archive agent to cemetery (soft-delete) ─────────
+    // Soft-delete: export full agent zip to ~/.aimaestro/cemetery/ for future revival.
+    // Hard-delete: skip archive (caller explicitly chose permanent deletion).
+    let archivePath: string | null = null
+    if (!hard) {
+      try {
+        const { exportAgentZip } = await import('@/services/agents-transfer-service')
+        const zipResult = await exportAgentZip(agentId)
+        if (zipResult.data) {
+          const cemeteryDir = require('path').join(require('os').homedir(), '.aimaestro', 'cemetery')
+          require('fs').mkdirSync(cemeteryDir, { recursive: true, mode: 0o700 })
+          archivePath = require('path').join(cemeteryDir, zipResult.data.filename)
+          require('fs').writeFileSync(archivePath, zipResult.data.buffer)
+          ops.push(`G08: Archived to cemetery: ${zipResult.data.filename} (${Math.round(zipResult.data.buffer.length / 1024)}KB)`)
+        } else {
+          ops.push(`G08: WARN — zip export failed: ${zipResult.error || 'unknown'}. Proceeding with soft-delete without archive.`)
+        }
+      } catch (err) {
+        ops.push(`G08: WARN — cemetery archive failed: ${err instanceof Error ? err.message : err}. Proceeding without archive.`)
+      }
+    } else {
+      ops.push('G08: Hard-delete — skipping cemetery archive')
+    }
+
+    // ── G09: Delete from registry ──────────────────────────────
     const deleted = await registryDelete(agentId, hard)
     if (!deleted) {
       result.error = 'Registry deletion failed'
-      ops.push('G08: FAILED — registry delete returned false')
+      ops.push('G09: FAILED — registry delete returned false')
       return result
     }
-    ops.push(`G08: ${hard ? 'Hard' : 'Soft'}-deleted from registry`)
+    ops.push(`G09: ${hard ? 'Hard' : 'Soft'}-deleted from registry`)
 
-    // ── G09: Optionally delete agent folder ────────────────────
-    if (options?.deleteFolder && agent.workingDirectory) {
+    // ── G10: Delete agent folder (hard-delete only) ────────────
+    // Soft-delete preserves the folder (data is in the cemetery zip).
+    // Hard-delete + deleteFolder flag removes the ~/agents/<name>/ folder.
+    if (hard && options?.deleteFolder && agent.workingDirectory) {
       try {
         const { resolve } = await import('path')
         const { rm, stat } = await import('fs/promises')
         const HOME = (await import('os')).homedir()
         const resolvedDir = resolve(agent.workingDirectory)
-        // Safety: only delete folders under ~/agents/ to prevent accidental data loss
         const agentsRoot = resolve(HOME, 'agents')
         if (resolvedDir.startsWith(agentsRoot + '/') && resolvedDir !== agentsRoot) {
           const dirStat = await stat(resolvedDir).catch(() => null)
           if (dirStat?.isDirectory()) {
             await rm(resolvedDir, { recursive: true, force: true })
-            ops.push(`G09: Deleted agent folder ${resolvedDir}`)
+            ops.push(`G10: Deleted agent folder ${resolvedDir}`)
           } else {
-            ops.push(`G09: Folder ${resolvedDir} not found — skipped`)
+            ops.push(`G10: Folder ${resolvedDir} not found — skipped`)
           }
         } else {
-          ops.push(`G09: REFUSED — folder outside ~/agents/: ${resolvedDir}`)
+          ops.push(`G10: REFUSED — folder outside ~/agents/: ${resolvedDir}`)
         }
       } catch (err) {
-        ops.push(`G09: WARN — folder deletion failed: ${err instanceof Error ? err.message : err}`)
+        ops.push(`G10: WARN — folder deletion failed: ${err instanceof Error ? err.message : err}`)
       }
+    } else if (hard) {
+      ops.push('G10: Hard-delete but no folder deletion requested')
     } else {
-      ops.push('G09: Folder deletion not requested')
+      ops.push('G10: Soft-delete — folder preserved')
     }
 
     result.success = true

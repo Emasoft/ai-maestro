@@ -1,8 +1,8 @@
 'use client'
 
-import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store, Puzzle, Bot, TerminalSquare } from 'lucide-react'
+import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store, Puzzle, Bot, TerminalSquare, Archive } from 'lucide-react'
 
-type SectionId = 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands'
+type SectionId = 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery'
 
 interface SettingsSidebarProps {
   activeSection: SectionId
@@ -52,6 +52,12 @@ export default function SettingsSidebar({ activeSection, onSectionChange }: Sett
       label: 'Plugins',
       icon: Puzzle,
       description: 'Plugins & marketplaces',
+    },
+    {
+      id: 'cemetery' as const,
+      label: 'Cemetery',
+      icon: Archive,
+      description: 'Revive deleted agents',
     },
     {
       id: 'experiments' as const,

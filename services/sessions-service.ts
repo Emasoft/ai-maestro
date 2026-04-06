@@ -593,8 +593,10 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
   // Local session creation
   const runtime = getRuntime()
   const normalizedName = name.toLowerCase()
-  const selfHostId = getSelfHostId()
-  const actualSessionName = agentId ? `${agentId}@${selfHostId}` : normalizedName
+  // Always use the human-readable agent name as the tmux session name.
+  // NEVER use UUID@host — it breaks session kill on delete, causes orphan detection failures,
+  // and makes the terminal header unreadable. The agent name is unique on this host.
+  const actualSessionName = normalizedName
 
   const alreadyExists = await runtime.sessionExists(actualSessionName)
   if (alreadyExists) {

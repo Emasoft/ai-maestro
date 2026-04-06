@@ -47,7 +47,20 @@ Configuration files can be modified by side effects (settings.json, settings.loc
 
    Backups are saved to `tests/scenarios/state-backups/<scenario-name>_<timestamp>/`
 
-2. **CHECKPOINT-RESTORE (during cleanup, after Rule 1 steps):** Restore all backed-up files to their original content. Verify file contents match the backup byte-for-byte.
+2. **CHECKPOINT-RESTORE (during cleanup):**
+
+   **IMPORTANT: Cleanup MUST use the UI, not file restoration.**
+
+   The correct cleanup order is:
+   1. **Delete teams via UI** (Teams page → Delete Team → password → Delete Agents Too)
+   2. **Remove governance titles via UI** (Profile → title badge → AUTONOMOUS → password)
+   3. **Delete remaining agents via UI** (Profile → Danger Zone → Delete Agent → check "Also delete agent folder" → type name → Delete Forever)
+   4. **Verify via API** that all test artifacts are gone
+   5. **THEN restore config files** from backup — ONLY for files that may have been modified by side effects (settings.json, settings.local.json, governance.json). Do NOT restore registry.json or teams.json — the UI deletions already cleaned those.
+
+   **Why UI-first:** Restoring registry.json removes agents from the registry but leaves their tmux sessions running. These orphan sessions cause resource leaks and phantom entries on the next server poll. The UI Delete button correctly kills both the registry entry AND the tmux session.
+
+   After restoration, verify file contents match the backup byte-for-byte.
 
 The scenario report MUST include the backup file list and restoration verification.
 

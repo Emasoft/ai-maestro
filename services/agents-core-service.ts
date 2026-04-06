@@ -245,58 +245,17 @@ async function discoverLocalSessions(): Promise<DiscoveredSession[]> {
 }
 
 /**
- * Auto-create an agent for an orphan session.
- * Uses parseSessionName to extract agent name from tmux session name.
+ * Lightweight struct for tmux sessions not linked to any registered agent.
+ * NOT stored in registry. NOT given a subconscious. Zero resource cost.
+ * Displayed in the sidebar as "Unregistered Sessions" for user adoption.
  */
-function createOrphanAgent(
-  session: DiscoveredSession,
-  hostId: string,
-  hostName: string,
-  hostUrl: string
-): Agent {
-  const { agentName: rawAgentName, index } = parseSessionName(session.name)
-  const agentName = rawAgentName.toLowerCase()
-  const { tags } = parseNameForDisplay(agentName)
-
-  const agentSession: AgentSession = {
-    index,
-    status: 'online',
-    workingDirectory: session.workingDirectory || process.cwd(),
-    createdAt: session.createdAt,
-    lastActive: session.lastActivity,
-  }
-
-  const agent: Agent = {
-    id: uuidv4(),
-    name: agentName,
-    label: undefined,
-    workingDirectory: session.workingDirectory || process.cwd(),
-    sessions: [agentSession],
-    hostId,
-    hostName,
-    hostUrl,
-    program: 'claude-code',
-    taskDescription: 'Auto-registered from orphan tmux session',
-    tags,
-    capabilities: [],
-    deployment: {
-      type: 'local',
-      local: {
-        hostname: os.hostname(),
-        platform: os.platform(),
-      }
-    },
-    tools: {},
-    status: 'active',
-    createdAt: session.createdAt,
-    lastActive: session.lastActivity,
-    metadata: {
-      autoRegistered: true,
-      autoRegisteredAt: new Date().toISOString(),
-    }
-  }
-
-  return agent
+export interface UnregisteredSession {
+  tmuxSessionName: string
+  workingDirectory: string
+  createdAt: string
+  windows: number
+  paneCommand?: string
+  programRunning?: boolean
 }
 
 /** Check what process is running in the tmux pane (e.g., "claude", "zsh", "node") */
@@ -424,6 +383,7 @@ function updateAgentSessionInRegistry(
 
 export async function listAgents(): Promise<ServiceResult<{
   agents: Agent[]
+  unregisteredSessions: UnregisteredSession[]
   stats: AgentStats
   hostInfo: { id: string; name: string; url: string; isSelf: boolean }
 }>> {
@@ -453,7 +413,7 @@ export async function listAgents(): Promise<ServiceResult<{
 
     // 4. Process agents and update their session status
     const resultAgents: Agent[] = []
-    const newOrphanAgents: Agent[] = []
+    // (orphan creation removed — unregistered sessions collected in step 5 instead)
     const processedAgentNames = new Set<string>()
 
     for (const agent of agents) {
@@ -547,54 +507,25 @@ export async function listAgents(): Promise<ServiceResult<{
       resultAgents.push(mergeAgentWithSession(updatedAgent, sessionStatus, hostId, hostName, hostUrl, false))
     }
 
-    // 5. Process orphan sessions (sessions without matching agents)
+    // 5. Collect unregistered sessions (tmux sessions with no matching agent).
+    // These are NOT agents — they are displayed as "potential agents" in the UI.
+    // Zero resource cost: no UUID, no registry entry, no subconscious.
+    const unregisteredSessions: UnregisteredSession[] = []
     for (const [agentName, sessions] of sessionsByAgentName.entries()) {
       if (!processedAgentNames.has(agentName)) {
-        const primarySession = sessions.find(s => {
-          const { index } = parseSessionName(s.name)
-          return index === 0
-        }) || sessions[0]
-
-        const orphanAgent = createOrphanAgent(primarySession, hostId, hostName, hostUrl)
-
-        orphanAgent.sessions = sessions.map(session => {
-          const { index } = parseSessionName(session.name)
-          return {
-            index,
-            status: 'online' as const,
-            workingDirectory: session.workingDirectory,
-            createdAt: session.createdAt,
-            lastActive: session.lastActivity,
-          }
-        }).sort((a, b) => a.index - b.index)
-
-        newOrphanAgents.push(orphanAgent)
-
-        const orphanPaneInfo = getPaneCommand(primarySession.name)
-        const sessionStatus: AgentSessionStatus = {
-          status: 'online',
+        const primarySession = sessions[0]
+        const paneInfo = getPaneCommand(primarySession.name)
+        unregisteredSessions.push({
           tmuxSessionName: primarySession.name,
-          workingDirectory: primarySession.workingDirectory,
-          lastActivity: primarySession.lastActivity,
+          workingDirectory: primarySession.workingDirectory || '',
+          createdAt: primarySession.createdAt,
           windows: primarySession.windows,
-          hostId,
-          hostName,
-          ...orphanPaneInfo,
-        }
-
-        resultAgents.push({
-          ...orphanAgent,
-          session: sessionStatus,
-          isOrphan: true
+          ...paneInfo,
         })
       }
     }
-
-    // 6. Save registry updates (orphan agents)
-    if (newOrphanAgents.length > 0) {
-      const updatedAgents = [...agents, ...newOrphanAgents]
-      saveAgents(updatedAgents)
-      console.log(`[Agents] Auto-registered ${newOrphanAgents.length} orphan session(s) as agents`)
+    if (unregisteredSessions.length > 0) {
+      console.log(`[Agents] Found ${unregisteredSessions.length} unregistered tmux session(s) (not auto-registered — awaiting user adoption)`)
     }
 
     // 7. Sort: online agents first, then alphabetically by name
@@ -609,12 +540,12 @@ export async function listAgents(): Promise<ServiceResult<{
     return {
       data: {
         agents: resultAgents,
+        unregisteredSessions,
         stats: {
           total: resultAgents.length,
           online: resultAgents.filter(a => a.session?.status === 'online').length,
           offline: resultAgents.filter(a => a.session?.status === 'offline').length,
-          orphans: resultAgents.filter(a => a.isOrphan).length,
-          newlyRegistered: newOrphanAgents.length,
+          unregistered: unregisteredSessions.length,
         },
         hostInfo: {
           id: hostId,
@@ -1188,8 +1119,7 @@ export async function getUnifiedAgents(params: UnifiedAgentsParams): Promise<Ser
     total: 0,
     online: 0,
     offline: 0,
-    orphans: 0,
-    newlyRegistered: 0,
+    unregistered: 0,
   }
 
   const hostResults: Array<{
@@ -1240,8 +1170,7 @@ export async function getUnifiedAgents(params: UnifiedAgentsParams): Promise<Ser
       aggregatedStats.total += result.stats.total
       aggregatedStats.online += result.stats.online
       aggregatedStats.offline += result.stats.offline
-      aggregatedStats.orphans += result.stats.orphans
-      aggregatedStats.newlyRegistered += result.stats.newlyRegistered
+      aggregatedStats.unregistered += result.stats.unregistered || 0
     }
   }
 

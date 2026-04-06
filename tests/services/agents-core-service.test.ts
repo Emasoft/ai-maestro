@@ -179,7 +179,7 @@ describe('listAgents', () => {
     expect(result.data?.agents[0].name).toBe('my-agent')
   })
 
-  it('creates orphan agents for sessions without registry entries', async () => {
+  it('collects unregistered sessions instead of creating orphan agents', async () => {
     mockAgentRegistry.loadAgents.mockReturnValue([])
     mockRuntime.listSessions.mockResolvedValue([
       { name: 'orphan-session', workingDirectory: '/home', createdAt: '2025-01-01T00:00:00Z', windows: 1 },
@@ -187,11 +187,14 @@ describe('listAgents', () => {
 
     const result = await listAgents()
 
-    expect(result.data?.agents).toHaveLength(1)
-    expect(result.data?.agents[0].isOrphan).toBe(true)
-    expect(result.data?.stats.orphans).toBe(1)
-    // Orphan should be saved to registry
-    expect(mockAgentRegistry.saveAgents).toHaveBeenCalled()
+    // No agents created from unregistered sessions
+    expect(result.data?.agents).toHaveLength(0)
+    // Unregistered sessions collected separately
+    expect(result.data?.unregisteredSessions).toHaveLength(1)
+    expect(result.data?.unregisteredSessions[0].tmuxSessionName).toBe('orphan-session')
+    expect(result.data?.stats.unregistered).toBe(1)
+    // Registry NOT modified
+    expect(mockAgentRegistry.saveAgents).not.toHaveBeenCalled()
   })
 
   it('marks agents offline when no matching tmux session', async () => {

@@ -27,8 +27,7 @@ interface AggregatedStats {
   total: number
   online: number
   offline: number
-  orphans: number
-  newlyRegistered: number
+  unregistered: number
   cached: number // Number of agents loaded from cache
 }
 
@@ -113,8 +112,7 @@ async function fetchHostAgents(host: Host): Promise<HostFetchResult> {
               total: cachedAgents.length,
               online: cachedAgents.filter(a => a.session?.status === 'online').length,
               offline: cachedAgents.filter(a => a.session?.status === 'offline').length,
-              orphans: cachedAgents.filter(a => a.isOrphan).length,
-              newlyRegistered: 0
+              unregistered: 0
             },
             hostInfo: {
               id: host.id,
@@ -178,20 +176,17 @@ function aggregateResults(results: HostFetchResult[]): {
   // Reduces from 4 array iterations (3 filter + 1 length) to 1 iteration
   let online = 0
   let offline = 0
-  let orphans = 0
   for (const agent of sortedAgents) {
     if (agent.session?.status === 'online') online++
     if (agent.session?.status === 'offline') offline++
-    if (agent.isOrphan) orphans++
   }
 
   const stats: AggregatedStats = {
     total: sortedAgents.length,
     online,
     offline,
-    orphans,
-    newlyRegistered: results.reduce((sum, r) =>
-      sum + (r.response?.stats.newlyRegistered || 0), 0),
+    unregistered: results.reduce((sum, r) =>
+      sum + (r.response?.stats.unregistered || 0), 0),
     cached: cachedCount
   }
 
@@ -302,11 +297,8 @@ export function useAgents() {
     [agents]
   )
 
-  // Computed: orphan agents (auto-registered from sessions)
-  const orphanAgents = useMemo(
-    () => agents.filter(a => a.isOrphan),
-    [agents]
-  )
+  // Orphan agents no longer exist — unregistered sessions are returned separately by the API
+  const orphanAgents: Agent[] = []
 
   // Computed: cached agents (loaded from cache because remote was unreachable)
   const cachedAgents = useMemo(

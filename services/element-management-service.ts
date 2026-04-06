@@ -2448,6 +2448,7 @@ export async function CreateAgent(
     client?: string           // 'claude' | 'codex' | 'gemini' | 'aider' | 'opencode'
     program?: string           // Explicit program path (overrides client inference)
     workingDirectory?: string
+    allowExternalFolder?: boolean  // true ONLY when user explicitly chose "Browse existing folder" in wizard
     governanceTitle?: string   // If set, ChangeTitle is called after creation
     teamId?: string            // If set, ChangeTeam is called after creation
     avatar?: string
@@ -2610,6 +2611,20 @@ export async function CreateAgent(
       }
     }
 
+    // G03-ENFORCE: Unless the user explicitly chose "Browse existing folder" in the wizard,
+    // the working directory MUST be under ~/agents/. No exceptions. No fallbacks to cwd, /tmp,
+    // $HOME, or any other location. This is the primary defense against agents being created
+    // in the wrong place.
+    const agentsRoot = join(HOME, 'agents')
+    if (!desired.allowExternalFolder) {
+      const normalizedForCheck = workDir.startsWith('~') ? workDir.replace(/^~/, HOME) : workDir
+      if (!normalizedForCheck.startsWith(agentsRoot + '/') && normalizedForCheck !== agentsRoot) {
+        // Force it back to ~/agents/<name>/
+        console.warn(`[CreateAgent] G03-ENFORCE: Rejected workDir "${workDir}" (not under ~/agents/). Forcing to ~/agents/${name}/`)
+        workDir = join(agentsRoot, name)
+      }
+    }
+
     // G03-SAFETY: Resolve path and reject forbidden directories + their children.
     // Uses path.resolve to neutralize traversal tricks (../../etc).
     const { resolve, sep } = await import('path')
@@ -2666,8 +2681,10 @@ export async function CreateAgent(
       const candidatePath = normalizedWorkDir + sep
       for (const existingAgent of allAgents) {
         const rawExisting = (existingAgent.workingDirectory || '').trim()
-        if (!rawExisting || rawExisting === '.' || rawExisting === '/') continue
-        const existingDir = resolve(rawExisting).replace(/[/\\]+$/, '')
+        if (!rawExisting || rawExisting === '.') continue
+        const existingDir = resolve(rawExisting).replace(/[/\\]+$/, '') || '/'
+        // Skip agents with forbidden workDirs — they are invalid claims that shouldn't block others
+        if (BLOCKED_EXACT.includes(existingDir) || BLOCKED_TREE.some(b => existingDir === b || existingDir.startsWith(b + sep))) continue
         const existingPath = existingDir + sep
         // Check: exact match, candidate is child of existing, or candidate is parent of existing
         if (

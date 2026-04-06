@@ -380,6 +380,8 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
           createSession: true,
           // Only send workingDirectory if user chose a specific folder (AUTONOMOUS only)
           workingDirectory: selectedFolder || undefined,
+          // allowExternalFolder: true ONLY when user explicitly browsed for an existing folder
+          allowExternalFolder: selectedFolder ? true : undefined,
         }),
       })
       if (!response.ok) {

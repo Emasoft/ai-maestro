@@ -589,8 +589,7 @@ export interface AgentStats {
   total: number
   online: number
   offline: number
-  orphans: number
-  newlyRegistered: number
+  unregistered: number  // tmux sessions not linked to any agent (was: orphans + newlyRegistered)
 }
 
 /**

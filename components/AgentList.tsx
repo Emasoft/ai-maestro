@@ -69,7 +69,7 @@ interface AgentListProps {
     total: number
     online: number
     offline: number
-    orphans: number
+    unregistered?: number
   } | null
   subconsciousRefreshTrigger?: number  // Increment to force subconscious status refresh
   sidebarWidth?: number  // Current sidebar width for responsive grid
@@ -1228,15 +1228,7 @@ export default function AgentList({
                                                   </span>
                                                 )}
 
-                                                {/* Orphan indicator */}
-                                                {agent.isOrphan && (
-                                                  <span
-                                                    className="text-[10px] px-1 py-0.5 rounded bg-yellow-500/20 text-yellow-400 flex-shrink-0"
-                                                    title="Auto-registered from orphan session"
-                                                  >
-                                                    NEW
-                                                  </span>
-                                                )}
+                                                {/* Orphan indicator removed — orphans no longer exist */}
 
                                                 {/* Unread message indicator */}
                                                 {unreadCounts[agent.id] && unreadCounts[agent.id] > 0 && (

@@ -33,7 +33,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Archive not found' }, { status: 404 })
   }
 
-  const buffer = fs.readFileSync(archivePath)
+  // Resolve symlinks to prevent serving arbitrary files via symlink in cemetery dir
+  const realPath = fs.realpathSync(archivePath)
+  if (!realPath.startsWith(CEMETERY_DIR + path.sep)) {
+    return NextResponse.json({ error: 'Archive path resolves outside cemetery' }, { status: 403 })
+  }
+
+  const buffer = fs.readFileSync(realPath)
 
   return new NextResponse(buffer, {
     headers: {

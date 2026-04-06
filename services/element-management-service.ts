@@ -2574,48 +2574,58 @@ export async function DeleteAgent(
       ops.push('G02: WARN — governance check failed, proceeding')
     }
 
-    // ── G03: Strip COS/Orchestrator from teams ─────────────────
-    // If the agent is COS or Orchestrator of any team, clear those slots.
+    // ── G03: Archive agent to cemetery BEFORE any cleanup ─────
+    // Must happen before team/session/credential cleanup so the archive
+    // captures the agent's full state (team membership, COS slot, title, etc.).
+    if (!hard) {
+      try {
+        const { exportAgentZip } = await import('@/services/agents-transfer-service')
+        const zipResult = await exportAgentZip(agentId)
+        if (zipResult.data) {
+          const cemeteryDir = join(HOME, '.aimaestro', 'cemetery')
+          const { mkdirSync, writeFileSync } = await import('fs')
+          mkdirSync(cemeteryDir, { recursive: true, mode: 0o700 })
+          const archFile = join(cemeteryDir, zipResult.data.filename)
+          writeFileSync(archFile, zipResult.data.buffer)
+          ops.push(`G03: Archived to cemetery: ${zipResult.data.filename} (${Math.round(zipResult.data.buffer.length / 1024)}KB)`)
+        } else {
+          ops.push(`G03: WARN — zip export failed: ${zipResult.error || 'unknown'}. Proceeding without archive.`)
+        }
+      } catch (err) {
+        ops.push(`G03: WARN — cemetery archive failed: ${err instanceof Error ? err.message : err}. Proceeding without archive.`)
+      }
+    } else {
+      ops.push('G03: Hard-delete — skipping cemetery archive')
+    }
+
+    // ── G04: Strip COS/Orchestrator from teams + remove from all teams ──
+    // Atomic: load teams once, make all changes, save once.
     try {
       const { loadTeams, saveTeams } = await import('@/lib/team-registry')
       const teams = loadTeams()
-      let teamsDirty = false
+      let dirty = false
       for (const team of teams) {
         if (team.chiefOfStaffId === agentId) {
           team.chiefOfStaffId = null
-          ops.push(`G03: Cleared COS slot in team "${team.name}"`)
-          teamsDirty = true
+          ops.push(`G04: Cleared COS slot in team "${team.name}"`)
+          dirty = true
         }
         if (team.orchestratorId === agentId) {
           team.orchestratorId = null
-          ops.push(`G03: Cleared Orchestrator slot in team "${team.name}"`)
-          teamsDirty = true
+          ops.push(`G04: Cleared Orchestrator slot in team "${team.name}"`)
+          dirty = true
         }
-      }
-      if (!teamsDirty) ops.push('G03: Agent is not COS/Orchestrator of any team')
-      else saveTeams(teams)
-    } catch (err) {
-      ops.push(`G03: WARN — team role cleanup failed: ${err instanceof Error ? err.message : err}`)
-    }
-
-    // ── G04: Remove agent from all teams ──────────────────────
-    try {
-      const { loadTeams, saveTeams } = await import('@/lib/team-registry')
-      const teams = loadTeams()
-      let removed = 0
-      for (const team of teams) {
         const before = team.agentIds.length
         team.agentIds = team.agentIds.filter((id: string) => id !== agentId)
-        if (team.agentIds.length < before) removed++
+        if (team.agentIds.length < before) {
+          ops.push(`G04: Removed from team "${team.name}"`)
+          dirty = true
+        }
       }
-      if (removed > 0) {
-        saveTeams(teams)
-        ops.push(`G04: Removed from ${removed} team(s)`)
-      } else {
-        ops.push('G04: Agent not in any team')
-      }
+      if (dirty) saveTeams(teams)
+      else ops.push('G04: Agent not in any team')
     } catch (err) {
-      ops.push(`G04: WARN — team removal failed: ${err instanceof Error ? err.message : err}`)
+      ops.push(`G04: WARN — team cleanup failed: ${err instanceof Error ? err.message : err}`)
     }
 
     // ── G05: Kill tmux sessions ────────────────────────────────
@@ -2675,67 +2685,42 @@ export async function DeleteAgent(
       ops.push(`G07: WARN — governance request cleanup failed: ${err instanceof Error ? err.message : err}`)
     }
 
-    // ── G08: Archive agent to cemetery (soft-delete) ─────────
-    // Soft-delete: export full agent zip to ~/.aimaestro/cemetery/ for future revival.
-    // Hard-delete: skip archive (caller explicitly chose permanent deletion).
-    let archivePath: string | null = null
-    if (!hard) {
-      try {
-        const { exportAgentZip } = await import('@/services/agents-transfer-service')
-        const zipResult = await exportAgentZip(agentId)
-        if (zipResult.data) {
-          const cemeteryDir = require('path').join(require('os').homedir(), '.aimaestro', 'cemetery')
-          require('fs').mkdirSync(cemeteryDir, { recursive: true, mode: 0o700 })
-          archivePath = require('path').join(cemeteryDir, zipResult.data.filename)
-          require('fs').writeFileSync(archivePath, zipResult.data.buffer)
-          ops.push(`G08: Archived to cemetery: ${zipResult.data.filename} (${Math.round(zipResult.data.buffer.length / 1024)}KB)`)
-        } else {
-          ops.push(`G08: WARN — zip export failed: ${zipResult.error || 'unknown'}. Proceeding with soft-delete without archive.`)
-        }
-      } catch (err) {
-        ops.push(`G08: WARN — cemetery archive failed: ${err instanceof Error ? err.message : err}. Proceeding without archive.`)
-      }
-    } else {
-      ops.push('G08: Hard-delete — skipping cemetery archive')
-    }
-
-    // ── G09: Delete from registry ──────────────────────────────
+    // ── G08: Delete from registry ──────────────────────────────
     const deleted = await registryDelete(agentId, hard)
     if (!deleted) {
       result.error = 'Registry deletion failed'
-      ops.push('G09: FAILED — registry delete returned false')
+      ops.push('G08: FAILED — registry delete returned false')
       return result
     }
-    ops.push(`G09: ${hard ? 'Hard' : 'Soft'}-deleted from registry`)
+    ops.push(`G08: ${hard ? 'Hard' : 'Soft'}-deleted from registry`)
 
-    // ── G10: Delete agent folder (hard-delete only) ────────────
+    // ── G09: Delete agent folder (hard-delete only) ────────────
     // Soft-delete preserves the folder (data is in the cemetery zip).
     // Hard-delete + deleteFolder flag removes the ~/agents/<name>/ folder.
     if (hard && options?.deleteFolder && agent.workingDirectory) {
       try {
         const { resolve } = await import('path')
         const { rm, stat } = await import('fs/promises')
-        const HOME = (await import('os')).homedir()
         const resolvedDir = resolve(agent.workingDirectory)
         const agentsRoot = resolve(HOME, 'agents')
         if (resolvedDir.startsWith(agentsRoot + '/') && resolvedDir !== agentsRoot) {
           const dirStat = await stat(resolvedDir).catch(() => null)
           if (dirStat?.isDirectory()) {
             await rm(resolvedDir, { recursive: true, force: true })
-            ops.push(`G10: Deleted agent folder ${resolvedDir}`)
+            ops.push(`G09: Deleted agent folder ${resolvedDir}`)
           } else {
-            ops.push(`G10: Folder ${resolvedDir} not found — skipped`)
+            ops.push(`G09: Folder ${resolvedDir} not found — skipped`)
           }
         } else {
-          ops.push(`G10: REFUSED — folder outside ~/agents/: ${resolvedDir}`)
+          ops.push(`G09: REFUSED — folder outside ~/agents/: ${resolvedDir}`)
         }
       } catch (err) {
-        ops.push(`G10: WARN — folder deletion failed: ${err instanceof Error ? err.message : err}`)
+        ops.push(`G09: WARN — folder deletion failed: ${err instanceof Error ? err.message : err}`)
       }
     } else if (hard) {
-      ops.push('G10: Hard-delete but no folder deletion requested')
+      ops.push('G09: Hard-delete but no folder deletion requested')
     } else {
-      ops.push('G10: Soft-delete — folder preserved')
+      ops.push('G09: Soft-delete — folder preserved')
     }
 
     result.success = true

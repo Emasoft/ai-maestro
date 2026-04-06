@@ -83,7 +83,7 @@ const DocumentationPanel = dynamic(
 
 export default function DashboardPage() {
   // Agent-centric: Primary hook is useAgents
-  const { agents, stats: agentStats, loading: agentsLoading, error: agentsError, refreshAgents, onlineAgents, hostErrors } = useAgents()
+  const { agents, unregisteredSessions, stats: agentStats, loading: agentsLoading, error: agentsError, refreshAgents, onlineAgents, hostErrors } = useAgents()
 
   // PRIMARY STATE: Agent ID (no longer session-driven)
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
@@ -655,6 +655,7 @@ export default function DashboardPage() {
             <ErrorBoundary fallbackLabel="Agent List">
               <AgentList
                 agents={agents}
+                unregisteredSessions={unregisteredSessions}
                 activeAgentId={activeAgentId}
                 onAgentSelect={handleAgentSelect}
                 onShowAgentProfile={handleShowAgentProfile}

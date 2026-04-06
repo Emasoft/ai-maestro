@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { Agent, AgentsApiResponse, AgentStats, AgentHostInfo } from '@/types/agent'
+import type { UnregisteredSession } from '@/services/agents-core-service'
 import type { Host } from '@/types/host'
 import { useHosts } from './useHosts'
 import { cacheRemoteAgents, getCachedAgents } from '@/lib/agent-cache'
@@ -138,16 +139,22 @@ async function fetchHostAgents(host: Host): Promise<HostFetchResult> {
  */
 function aggregateResults(results: HostFetchResult[]): {
   agents: Agent[]
+  unregisteredSessions: UnregisteredSession[]
   stats: AggregatedStats
   hostErrors: Record<string, Error>
 } {
   const allAgents: Agent[] = []
+  const allUnregistered: UnregisteredSession[] = []
   const hostErrors: Record<string, Error> = {}
   let cachedCount = 0
 
   for (const result of results) {
     if (result.success && result.response) {
       allAgents.push(...result.response.agents)
+      // Collect unregistered sessions from each host
+      if (result.response.unregisteredSessions) {
+        allUnregistered.push(...result.response.unregisteredSessions)
+      }
       if (result.fromCache) {
         cachedCount += result.response.agents.length
       }
@@ -190,7 +197,7 @@ function aggregateResults(results: HostFetchResult[]): {
     cached: cachedCount
   }
 
-  return { agents: sortedAgents, stats, hostErrors }
+  return { agents: sortedAgents, unregisteredSessions: allUnregistered, stats, hostErrors }
 }
 
 /**
@@ -202,6 +209,7 @@ function aggregateResults(results: HostFetchResult[]): {
 export function useAgents() {
   const { hosts, loading: hostsLoading } = useHosts()
   const [agents, setAgents] = useState<Agent[]>([])
+  const [unregisteredSessions, setUnregisteredSessions] = useState<UnregisteredSession[]>([])
   const [stats, setStats] = useState<AggregatedStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
@@ -227,8 +235,9 @@ export function useAgents() {
       // On first load only, show local agents right away so UI doesn't wait for remotes.
       // On subsequent refreshes, skip this to avoid replacing the full list with just local agents.
       if (remoteHosts.length > 0 && !hasLoadedOnce.current) {
-        const { agents: localAgents, stats: localStats, hostErrors: localErrors } = aggregateResults(localResults)
+        const { agents: localAgents, unregisteredSessions: localUnreg, stats: localStats, hostErrors: localErrors } = aggregateResults(localResults)
         setAgents(localAgents)
+        setUnregisteredSessions(localUnreg)
         setStats(localStats)
         setHostErrors(localErrors)
         setLoading(false)
@@ -241,9 +250,10 @@ export function useAgents() {
 
       // Merge all results
       const allResults = [...localResults, ...remoteResults]
-      const { agents: allAgents, stats: aggregatedStats, hostErrors: errors } = aggregateResults(allResults)
+      const { agents: allAgents, unregisteredSessions: allUnreg, stats: aggregatedStats, hostErrors: errors } = aggregateResults(allResults)
 
       setAgents(allAgents)
+      setUnregisteredSessions(allUnreg)
       setStats(aggregatedStats)
       setHostErrors(errors)
       hasLoadedOnce.current = true
@@ -369,6 +379,7 @@ export function useAgents() {
   return {
     // Data
     agents,
+    unregisteredSessions,
     stats,
     loading: loading || hostsLoading,
     error,

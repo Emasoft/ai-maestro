@@ -610,6 +610,19 @@ export interface AgentHostInfo {
  */
 export interface AgentsApiResponse {
   agents: UnifiedAgent[]
+  unregisteredSessions?: Array<{
+    tmuxSessionName: string
+    workingDirectory: string
+    createdAt: string
+    windows: number
+    paneCommand?: string
+    programRunning?: boolean
+    originalAgentName?: string
+    originalAgentLabel?: string
+    originalAgentId?: string
+    originalProgram?: string
+    originalProgramArgs?: string
+  }>
   stats: AgentStats
   hostInfo: AgentHostInfo
 }

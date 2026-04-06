@@ -55,8 +55,23 @@ import TeamListView from './sidebar/TeamListView'
 import GroupListView from './sidebar/GroupListView'
 import MeetingListView from './sidebar/MeetingListView'
 
+interface UnregisteredSessionUI {
+  tmuxSessionName: string
+  workingDirectory: string
+  createdAt: string
+  windows: number
+  paneCommand?: string
+  programRunning?: boolean
+  originalAgentName?: string
+  originalAgentLabel?: string
+  originalAgentId?: string
+  originalProgram?: string
+  originalProgramArgs?: string
+}
+
 interface AgentListProps {
   agents: UnifiedAgent[]
+  unregisteredSessions?: UnregisteredSessionUI[]
   activeAgentId: string | null
   onAgentSelect: (agent: UnifiedAgent) => void
   onShowAgentProfile: (agent: UnifiedAgent) => void
@@ -158,6 +173,7 @@ const DEFAULT_ICON = Layers
 
 export default function AgentList({
   agents,
+  unregisteredSessions = [],
   activeAgentId,
   onAgentSelect,
   onShowAgentProfile,
@@ -1364,6 +1380,75 @@ export default function AgentList({
           </div>
         )}
       </div>
+      )}
+
+      {/* Dead Sessions — orphan tmux sessions from deleted agents */}
+      {unregisteredSessions.length > 0 && (
+        <div className="flex-shrink-0 border-t border-red-900/30 bg-red-950/20">
+          <div className="px-3 py-2">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-red-400/70 mb-1.5">
+              Dead Sessions ({unregisteredSessions.length})
+            </div>
+            {unregisteredSessions.map((session) => {
+              const displayName = session.originalAgentName || session.tmuxSessionName
+              const label = session.originalAgentLabel || displayName
+              return (
+                <div
+                  key={session.tmuxSessionName}
+                  className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-red-950/30 border border-red-900/20 mb-1 group"
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <div className="w-2 h-2 rounded-full bg-red-500/50 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs text-red-300/80 truncate font-medium">{label}</div>
+                      <div className="text-[10px] text-gray-500 truncate">
+                        {session.originalProgram || 'unknown'} • {session.workingDirectory?.replace(/.*\/agents\//, '~/agents/') || '?'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                    <button
+                      onClick={async () => {
+                        try {
+                          await fetch(`/api/sessions/${encodeURIComponent(session.tmuxSessionName)}/kill`, { method: 'POST' })
+                          onRefresh?.()
+                        } catch { /* ignore */ }
+                      }}
+                      className="p-1 rounded hover:bg-red-900/50 text-red-400 hover:text-red-300 transition-all"
+                      title={`Kill tmux session "${session.tmuxSessionName}"`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await fetch('/api/agents', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              name: `_${displayName}`,
+                              label: label,
+                              client: session.originalProgram || 'claude',
+                              programArgs: session.originalProgramArgs || '',
+                              workingDirectory: session.workingDirectory || undefined,
+                              allowExternalFolder: true,
+                              createSession: false,
+                            }),
+                          })
+                          onRefresh?.()
+                        } catch { /* ignore */ }
+                      }}
+                      className="p-1 rounded hover:bg-green-900/50 text-green-400 hover:text-green-300 transition-all"
+                      title={`Revive as "_${displayName}" (re-create agent from history)`}
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       )}
 
       {/* Footer - Collapsible */}

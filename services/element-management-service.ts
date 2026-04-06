@@ -999,6 +999,16 @@ export async function ChangeTitle(
             if (targetPluginName) {
               await installPluginLocally(targetPluginName, agentDir, targetMarketplace).catch(() => {})
             }
+          } else if (targetPluginName && activeRolePlugins.length === 1) {
+            // Verify the active plugin matches the expected one for this title
+            const activeName = activeRolePlugins[0].split('@')[0]
+            if (activeName !== targetPluginName) {
+              ops.push(`G17: MISMATCH — active "${activeName}" != expected "${targetPluginName}" for ${newTitle}. Fixing.`)
+              await uninstallAllRolePlugins(agentDir)
+              await installPluginLocally(targetPluginName, agentDir, targetMarketplace).catch(() => {})
+            } else {
+              ops.push(`G17: Plugin state consistent (${activeName} matches ${newTitle})`)
+            }
           } else {
             ops.push(`G17: Plugin state consistent (${activeRolePlugins.length} role-plugin(s))`)
           }

@@ -1,8 +1,9 @@
 ---
-version: "3.1.0"
+version: "3.2.0"
 date: 2026-04-06
 branch: feature/team-governance
 changelog:
+  - "3.2.0: Added R16 (Password Never Shared with Agents)"
   - "3.1.0: Added R13 (Role Boundaries), R14 (Team Resilience), R15 (Written Orders & GitHub Trail)"
   - "3.0.0: Added R12 (Minimum Team Composition), PHOTOSTORY scenario rule, moved to docs/ for git tracking"
   - "2.0.0: Added R9 (Manager Requirement), R10 (Agent Lifecycle), R11 (Title-Plugin Binding), communication graph, groups"
@@ -295,6 +296,23 @@ Full spec: `docs_dev/2026-04-03-communication-graph.md`
 
 ---
 
+## R16. Password Never Shared with Agents (CRITICAL)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R16.1 | The governance password **MUST NEVER be given to any agent** in a task instruction, prompt, or AMP message | Explicit |
+| R16.2 | When an agent needs to perform a password-protected operation (team creation, title change), the API call triggers a **UI popup** that the **user enters manually** | Explicit |
+| R16.3 | The MANAGER agent requests the operation via API. If the API requires a password, the MANAGER must inform the user: "This operation requires your governance password. Please enter it in the UI popup." | Explicit |
+| R16.4 | The user **physically types** the password in the browser dialog — the agent never sees, stores, or transmits the password | Explicit |
+| R16.5 | Any agent that receives a governance password in its prompt MUST refuse to use it and ask the user to enter it via the UI instead | Explicit |
+| R16.6 | Scenario tests are the **only exception** — test automation may pass the password via API for testing purposes. This exception does not apply to production agent workflows. | Explicit |
+
+**Rationale:** The governance password exists specifically to prevent agents from performing dangerous operations without user approval. If agents can receive and use the password, the security boundary is meaningless — any compromised or misbehaving agent could create teams, change titles, or delete agents without user knowledge. The password must always require a human in the loop.
+
+**Implementation:** When an agent's API call returns HTTP 403 with `"Governance password required"`, the AI Maestro dashboard should intercept this and show a password entry popup to the user. The user enters the password, which is sent to complete the operation. The agent never sees the password.
+
+---
+
 ## Invariants (Must Never Be Violated)
 
 These are hard invariants that the system must maintain at all times:
@@ -311,6 +329,7 @@ These are hard invariants that the system must maintain at all times:
 10. **Role-boundary invariant**: No agent may perform tasks outside its title's role-plugin scope
 11. **Team-resilience invariant**: Deleted core title agents must be immediately recreated by COS (or MANAGER for COS)
 12. **Written-orders invariant**: All inter-agent commands and reports must be written .md files with GitHub issue attachments (MANAGER exempt)
+13. **Password-secrecy invariant**: The governance password must never be transmitted to, stored by, or used by any agent — only the human user may enter it
 
 ---
 

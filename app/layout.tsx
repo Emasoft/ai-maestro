@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Space_Grotesk } from 'next/font/google'
 import './globals.css'
 import { GlobalTouchScrollbars } from '@/components/GlobalTouchScrollbars'
+import LoginGate from '@/components/LoginGate'
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] })
 
@@ -33,7 +34,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={spaceGrotesk.className}>
         <GlobalTouchScrollbars />
-        {children}
+        <LoginGate>{children}</LoginGate>
       </body>
     </html>
   )

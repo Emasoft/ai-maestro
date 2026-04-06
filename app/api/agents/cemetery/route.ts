@@ -113,8 +113,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Archive not found in cemetery' }, { status: 404 })
     }
 
-    // Read the zip and import using the existing import pipeline
+    // Read the zip manifest to get the original agent name
     const zipBuffer = fs.readFileSync(archivePath)
+
+    // Clean up old soft-deleted registry entry to avoid name collision
+    // The archive filename contains the agent name: <name>-export-<timestamp>.zip
+    const nameMatch = path.basename(archivePath).match(/^(.+?)-export-/)
+    if (nameMatch) {
+      try {
+        const { loadAgents, deleteAgent: registryDelete } = await import('@/lib/agent-registry')
+        const oldAgent = loadAgents().find(
+          (a: { name: string; deletedAt?: string }) => a.name === nameMatch[1] && a.deletedAt
+        )
+        if (oldAgent) {
+          await registryDelete(oldAgent.id, true) // hard-delete the stale soft-deleted entry
+        }
+      } catch { /* best effort — import will handle collision if this fails */ }
+    }
+
+    // Import using the existing pipeline
     const { importAgent } = await import('@/services/agents-transfer-service')
     const importResult = await importAgent(zipBuffer, {
       newName: body.targetName,
@@ -125,7 +142,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: importResult.error }, { status: importResult.status })
     }
 
-    // Remove from cemetery after successful revival
+    // Verify the import actually created the agent before removing the archive
+    if (!importResult.data?.agent?.id) {
+      return NextResponse.json({ error: 'Import succeeded but agent ID missing — archive preserved' }, { status: 500 })
+    }
+
+    // Remove from cemetery after verified successful revival
     fs.unlinkSync(archivePath)
 
     return NextResponse.json({

@@ -670,7 +670,13 @@ export function getAgentById(id: string): ServiceResult<{ agent: Agent }> {
     if (!agent) {
       return { error: 'Agent not found', status: 404 }
     }
-    return { data: { agent }, status: 200 }
+    // Strip sensitive fields from API response
+    const sanitized = { ...agent }
+    if (sanitized.metadata) {
+      const { sessionSecretHash, ...safeMetadata } = sanitized.metadata as Record<string, unknown>
+      sanitized.metadata = safeMetadata as typeof sanitized.metadata
+    }
+    return { data: { agent: sanitized }, status: 200 }
   } catch (error) {
     console.error('Failed to get agent:', error)
     return { error: 'Failed to get agent', status: 500 }

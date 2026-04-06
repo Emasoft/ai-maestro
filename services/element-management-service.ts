@@ -2497,6 +2497,230 @@ export async function ChangeClient(
 }
 
 // ══════════════════════════════════════════════════════════════
+// DeleteAgent — All-in-one agent deletion with full gate pipeline
+// ══════════════════════════════════════════════════════════════
+
+export interface DeleteAgentResult {
+  success: boolean
+  agentId: string
+  hard: boolean
+  operations: string[]
+  error?: string
+}
+
+/**
+ * All-in-one agent deletion. The ONLY function that can delete an agent.
+ * Replaces: deleteAgentById (core), deleteAgentSelf (amp), deleteAssistantAgent (help).
+ *
+ * Gates:
+ *   G00: Authorization — system-owner/MANAGER can delete any agent; others denied
+ *   G01: Validate agent exists
+ *   G02: Check if agent is MANAGER — reject (must be reassigned first)
+ *   G03: Strip COS/Orchestrator title from teams
+ *   G04: Remove agent from all teams
+ *   G05: Kill tmux sessions
+ *   G06: Revoke AMP API keys + AID governance tokens
+ *   G07: Auto-reject pending governance requests
+ *   G08: Soft-delete or hard-delete from registry
+ *   G09: Optionally delete agent folder (safety: only under ~/agents/)
+ */
+export async function DeleteAgent(
+  agentId: string,
+  options?: {
+    authContext?: AuthContext
+    hard?: boolean          // true = permanent delete with backup; false = soft-delete (default)
+    deleteFolder?: boolean  // true = also rm -rf the agent's ~/agents/<name>/ folder
+  },
+): Promise<DeleteAgentResult> {
+  const ops: string[] = []
+  const hard = options?.hard ?? false
+  const result: DeleteAgentResult = { success: false, agentId, hard, operations: ops }
+
+  try {
+    // ── G00: Authorization ─────────────────────────────────────
+    // Delete is a privileged operation: only system-owner and MANAGER.
+    // COS cannot delete agents (they request MANAGER to do it).
+    // No agent can delete itself via API (use /exit to stop, MANAGER deletes).
+    const g0err = await gate0Auth('delete-agent', agentId, options?.authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
+    // ── G01: Validate agent exists ─────────────────────────────
+    const { getAgent, deleteAgent: registryDelete } = await import('@/lib/agent-registry')
+    const agent = getAgent(agentId, true) // include soft-deleted to distinguish 404 vs 410
+    if (!agent) {
+      result.error = 'Agent not found'
+      ops.push('G01: Agent not found')
+      return result
+    }
+    if (agent.deletedAt && !hard) {
+      result.error = 'Agent already deleted (soft). Use hard=true for permanent deletion.'
+      ops.push('G01: Already soft-deleted')
+      return result
+    }
+    ops.push(`G01: Agent "${agent.name}" found (id=${agentId.substring(0, 8)})`)
+
+    // ── G02: Check if agent is MANAGER ─────────────────────────
+    // Cannot delete the MANAGER — must reassign first. Deleting the MANAGER
+    // would block all teams (R10 blocking cascade).
+    try {
+      const { isManager: checkManager } = await import('@/lib/governance')
+      if (checkManager(agentId)) {
+        result.error = 'Cannot delete the MANAGER. Reassign the MANAGER title to another agent first.'
+        ops.push('G02: DENIED — agent is MANAGER, cannot delete')
+        return result
+      }
+      ops.push('G02: Agent is not MANAGER — OK to delete')
+    } catch {
+      ops.push('G02: WARN — governance check failed, proceeding')
+    }
+
+    // ── G03: Strip COS/Orchestrator from teams ─────────────────
+    // If the agent is COS or Orchestrator of any team, clear those slots.
+    try {
+      const { loadTeams, saveTeams } = await import('@/lib/team-registry')
+      const teams = loadTeams()
+      let teamsDirty = false
+      for (const team of teams) {
+        if (team.chiefOfStaffId === agentId) {
+          team.chiefOfStaffId = null
+          ops.push(`G03: Cleared COS slot in team "${team.name}"`)
+          teamsDirty = true
+        }
+        if (team.orchestratorId === agentId) {
+          team.orchestratorId = null
+          ops.push(`G03: Cleared Orchestrator slot in team "${team.name}"`)
+          teamsDirty = true
+        }
+      }
+      if (!teamsDirty) ops.push('G03: Agent is not COS/Orchestrator of any team')
+      else saveTeams(teams)
+    } catch (err) {
+      ops.push(`G03: WARN — team role cleanup failed: ${err instanceof Error ? err.message : err}`)
+    }
+
+    // ── G04: Remove agent from all teams ──────────────────────
+    try {
+      const { loadTeams, saveTeams } = await import('@/lib/team-registry')
+      const teams = loadTeams()
+      let removed = 0
+      for (const team of teams) {
+        const before = team.agentIds.length
+        team.agentIds = team.agentIds.filter((id: string) => id !== agentId)
+        if (team.agentIds.length < before) removed++
+      }
+      if (removed > 0) {
+        saveTeams(teams)
+        ops.push(`G04: Removed from ${removed} team(s)`)
+      } else {
+        ops.push('G04: Agent not in any team')
+      }
+    } catch (err) {
+      ops.push(`G04: WARN — team removal failed: ${err instanceof Error ? err.message : err}`)
+    }
+
+    // ── G05: Kill tmux sessions ────────────────────────────────
+    // The agent's tmux session name is the agent name (convention)
+    try {
+      const { getRuntime } = await import('@/lib/agent-runtime')
+      const runtime = getRuntime()
+      const sessionName = agent.name || agent.alias
+      if (sessionName) {
+        try {
+          await runtime.killSession(sessionName as string)
+          ops.push(`G05: Killed tmux session "${sessionName}"`)
+        } catch {
+          ops.push(`G05: Session "${sessionName}" already dead or not found`)
+        }
+      } else {
+        ops.push('G05: No session name — skipped')
+      }
+    } catch (err) {
+      ops.push(`G05: WARN — session kill failed: ${err instanceof Error ? err.message : err}`)
+    }
+
+    // ── G06: Revoke credentials ────────────────────────────────
+    // Revoke AMP API keys so stolen keys can't be reused
+    try {
+      const { revokeAllKeysForAgent } = await import('@/lib/amp-auth')
+      await revokeAllKeysForAgent(agentId)
+      ops.push('G06: AMP API keys revoked')
+    } catch (err) {
+      ops.push(`G06: WARN — AMP key revocation failed: ${err instanceof Error ? err.message : err}`)
+    }
+    // Revoke AID governance tokens
+    try {
+      const { revokeTokensForAgent } = await import('@/lib/aid-token')
+      const count = await revokeTokensForAgent(agentId)
+      ops.push(`G06: ${count} AID governance token(s) revoked`)
+    } catch {
+      ops.push('G06: AID token revocation skipped')
+    }
+
+    // ── G07: Auto-reject pending governance requests ───────────
+    try {
+      const { loadGovernanceRequests, rejectGovernanceRequest } = await import('@/lib/governance-request-registry')
+      const file = loadGovernanceRequests()
+      const pending = file.requests.filter((r: { status: string; payload: { agentId?: string } }) =>
+        r.status === 'pending' && r.payload?.agentId === agentId
+      )
+      for (const req of pending) {
+        await rejectGovernanceRequest(req.id, options?.authContext?.agentId || 'system', 'Target agent deleted')
+      }
+      if (pending.length > 0) {
+        ops.push(`G07: Auto-rejected ${pending.length} pending governance request(s)`)
+      } else {
+        ops.push('G07: No pending governance requests')
+      }
+    } catch (err) {
+      ops.push(`G07: WARN — governance request cleanup failed: ${err instanceof Error ? err.message : err}`)
+    }
+
+    // ── G08: Delete from registry ──────────────────────────────
+    const deleted = await registryDelete(agentId, hard)
+    if (!deleted) {
+      result.error = 'Registry deletion failed'
+      ops.push('G08: FAILED — registry delete returned false')
+      return result
+    }
+    ops.push(`G08: ${hard ? 'Hard' : 'Soft'}-deleted from registry`)
+
+    // ── G09: Optionally delete agent folder ────────────────────
+    if (options?.deleteFolder && agent.workingDirectory) {
+      try {
+        const { resolve } = await import('path')
+        const { rm, stat } = await import('fs/promises')
+        const HOME = (await import('os')).homedir()
+        const resolvedDir = resolve(agent.workingDirectory)
+        // Safety: only delete folders under ~/agents/ to prevent accidental data loss
+        const agentsRoot = resolve(HOME, 'agents')
+        if (resolvedDir.startsWith(agentsRoot + '/') && resolvedDir !== agentsRoot) {
+          const dirStat = await stat(resolvedDir).catch(() => null)
+          if (dirStat?.isDirectory()) {
+            await rm(resolvedDir, { recursive: true, force: true })
+            ops.push(`G09: Deleted agent folder ${resolvedDir}`)
+          } else {
+            ops.push(`G09: Folder ${resolvedDir} not found — skipped`)
+          }
+        } else {
+          ops.push(`G09: REFUSED — folder outside ~/agents/: ${resolvedDir}`)
+        }
+      } catch (err) {
+        ops.push(`G09: WARN — folder deletion failed: ${err instanceof Error ? err.message : err}`)
+      }
+    } else {
+      ops.push('G09: Folder deletion not requested')
+    }
+
+    result.success = true
+    console.log(`[DeleteAgent] "${agent.name}" deleted (hard=${hard}, ${ops.length} gates)`)
+    return result
+  } catch (err) {
+    result.error = err instanceof Error ? err.message : String(err)
+    console.error(`[DeleteAgent] FAILED for ${agentId}:`, result.error)
+    return result
+  }
+}
+
 // CreateAgent — All-in-one agent creation with full gate pipeline
 // ══════════════════════════════════════════════════════════════
 

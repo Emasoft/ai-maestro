@@ -849,75 +849,24 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
 // DELETE /api/agents/[id] -- delete agent (soft or hard)
 // ---------------------------------------------------------------------------
 
+/**
+ * @deprecated Use DeleteAgent from element-management-service instead.
+ * This thin wrapper delegates to the all-in-one pipeline.
+ */
 export async function deleteAgentById(id: string, hard: boolean, requestingAgentId?: string | null, deleteFolder?: boolean): Promise<ServiceResult<{ success: boolean; hard: boolean }>> {
-  try {
-    const agent = getAgent(id, true) // include deleted to distinguish 404 vs 410
-    if (!agent) {
-      return { error: 'Agent not found', status: 404 }
-    }
-    if (agent.deletedAt && !hard) {
-      // Return 410 with extra context: already deleted
-      return { error: 'Agent already deleted', status: 410 }
-    }
-
-    // Layer 5: When a requesting agent is identified, only MANAGER can delete
-    if (requestingAgentId) {
-      const isReqManager = isManager(requestingAgentId)
-      if (!isReqManager) {
-        return { error: 'Only MANAGER can delete agents', status: 403 }
-      }
-    }
-
-    const success = await deleteAgent(id, hard)
-    if (!success) {
-      return { error: 'Agent not found', status: 404 }
-    }
-
-    // SF-006: Auto-reject ALL pending governance requests targeting the deleted agent (not just configure-agent)
-    try {
-      const { loadGovernanceRequests, rejectGovernanceRequest } = await import('@/lib/governance-request-registry')
-      const file = loadGovernanceRequests()
-      const pendingForAgent = file.requests.filter((r: { type: string; status: string; payload: { agentId: string } }) =>
-        r.status === 'pending' && r.payload.agentId === id
-      )
-      for (const req of pendingForAgent) {
-        await rejectGovernanceRequest(req.id, requestingAgentId || 'system', 'Target agent deleted')
-      }
-      if (pendingForAgent.length > 0) {
-        console.log(`[agents] Auto-rejected ${pendingForAgent.length} pending request(s) of any type for deleted agent ${id}`)
-      }
-    } catch (err) {
-      console.warn('[agents] Failed to auto-reject pending config requests:', err instanceof Error ? err.message : err)
-    }
-
-    // Optionally delete the agent's working directory folder
-    if (deleteFolder && agent.workingDirectory) {
-      try {
-        const { resolve } = await import('path')
-        const { rm, stat } = await import('fs/promises')
-        const HOME = (await import('os')).homedir()
-        const resolvedDir = resolve(agent.workingDirectory)
-        // Safety: only delete folders under ~/agents/ to prevent accidental data loss
-        const agentsRoot = resolve(HOME, 'agents')
-        if (resolvedDir.startsWith(agentsRoot + '/') && resolvedDir !== agentsRoot) {
-          const dirStat = await stat(resolvedDir).catch(() => null)
-          if (dirStat?.isDirectory()) {
-            await rm(resolvedDir, { recursive: true, force: true })
-            console.log(`[agents] Deleted agent folder: ${resolvedDir}`)
-          }
-        } else {
-          console.warn(`[agents] Refused to delete folder outside ~/agents/: ${resolvedDir}`)
-        }
-      } catch (err) {
-        console.warn(`[agents] Failed to delete agent folder:`, err instanceof Error ? err.message : err)
-      }
-    }
-
-    return { data: { success: true, hard }, status: 200 }
-  } catch (error) {
-    console.error('Failed to delete agent:', error)
-    return { error: 'Failed to delete agent', status: 500 }
+  const { DeleteAgent } = await import('@/services/element-management-service')
+  const result = await DeleteAgent(id, {
+    authContext: {
+      agentId: requestingAgentId || undefined,
+      isSystemOwner: !requestingAgentId,
+    },
+    hard,
+    deleteFolder,
+  })
+  if (!result.success) {
+    return { error: result.error || 'Delete failed', status: result.error?.includes('not found') ? 404 : 403 }
   }
+  return { data: { success: true, hard }, status: 200 }
 }
 
 // ---------------------------------------------------------------------------

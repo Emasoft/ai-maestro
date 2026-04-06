@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAgentById, updateAgentById, deleteAgentById } from '@/services/agents-core-service'
+import { getAgentById, updateAgentById } from '@/services/agents-core-service'
 import type { UpdateAgentRequest } from '@/types/agent'
 import { isValidUuid } from '@/lib/validation'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
-import { authorize } from '@/lib/authorization'
 
 /**
  * GET /api/agents/[id]
@@ -82,14 +81,10 @@ export async function DELETE(
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
 
-    // Auth + RBAC
+    // Identity auth only — DeleteAgent has its own Gate 0 for authorization
     const auth = authenticateFromRequest(request)
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
-    }
-    const authz = authorize(auth, 'delete-agent', id)
-    if (!authz.allowed) {
-      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
 
     const hardParam = request.nextUrl.searchParams.get('hard')?.toLowerCase()
@@ -97,12 +92,21 @@ export async function DELETE(
     const deleteFolderParam = request.nextUrl.searchParams.get('deleteFolder')?.toLowerCase()
     const deleteFolder = deleteFolderParam === 'true' || deleteFolderParam === '1' || deleteFolderParam === 'yes'
 
-    const result = await deleteAgentById(id, hard, undefined, deleteFolder)
+    // Delegate to the all-in-one pipeline
+    const { DeleteAgent } = await import('@/services/element-management-service')
+    const result = await DeleteAgent(id, {
+      authContext: buildAuthContext(auth),
+      hard,
+      deleteFolder,
+    })
 
-    if (result.error) {
-      return NextResponse.json({ error: result.error }, { status: result.status })
+    if (!result.success) {
+      const status = result.error?.includes('not found') ? 404
+        : result.error?.includes('already deleted') ? 410
+        : 403
+      return NextResponse.json({ error: result.error }, { status })
     }
-    return NextResponse.json(result.data)
+    return NextResponse.json({ success: true, hard: result.hard })
   } catch (error) {
     console.error('[Agents DELETE] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

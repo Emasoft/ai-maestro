@@ -191,19 +191,25 @@ export async function createAssistantAgent(): Promise<ServiceResult<{
 /**
  * Kill assistant agent and clean up.
  */
+/**
+ * @deprecated Use DeleteAgent from element-management-service instead.
+ * This thin wrapper delegates to the all-in-one pipeline.
+ */
 export async function deleteAssistantAgent(): Promise<ServiceResult<{ success: boolean }>> {
   try {
-    // Kill tmux session
-    const runtime = getRuntime()
-    const sessionExists = await assistantSessionExists()
-    if (sessionExists) {
-      try { await runtime.killSession(ASSISTANT_NAME) } catch { /* ignore */ }
+    const agent = getAgentByName(ASSISTANT_NAME)
+    if (!agent) {
+      return { data: { success: true }, status: 200 } // Already gone
     }
 
-    // Remove from agent registry
-    const agent = getAgentByName(ASSISTANT_NAME)
-    if (agent) {
-      try { await deleteAgent(agent.id) } catch { /* ignore */ }
+    // Delegate to the all-in-one pipeline (system-owner context)
+    const { DeleteAgent } = await import('@/services/element-management-service')
+    const result = await DeleteAgent(agent.id, {
+      authContext: { isSystemOwner: true },
+    })
+
+    if (!result.success) {
+      return { error: result.error || 'Failed to delete assistant', status: 500 }
     }
 
     return { data: { success: true }, status: 200 }

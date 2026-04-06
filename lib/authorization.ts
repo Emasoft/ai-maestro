@@ -92,6 +92,19 @@ export function authorize(
     return { allowed: false, reason: `Only MANAGER or CHIEF-OF-STAFF can change governance titles` }
   }
 
+  // ── Special rule: delete-agent ──────────────────────────────
+  // Only system-owner and MANAGER can delete agents.
+  // No agent can delete itself via API. COS cannot delete.
+  if (action === 'delete-agent') {
+    if (targetAgentId && targetAgentId === auth.agentId) {
+      return { allowed: false, reason: 'No agent can delete itself via API' }
+    }
+    if (title === 'manager') {
+      return { allowed: true }
+    }
+    return { allowed: false, reason: 'Only MANAGER can delete agents' }
+  }
+
   // ── General rules ──────────────────────────────────────────
 
   // MANAGER → always allowed (for non-title actions)

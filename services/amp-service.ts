@@ -1488,6 +1488,12 @@ export async function updateAgentSelf(
 // DELETE /api/v1/agents/me
 // ---------------------------------------------------------------------------
 
+/**
+ * @deprecated Use DeleteAgent from element-management-service instead.
+ * This thin wrapper delegates to the all-in-one pipeline.
+ * Note: the pipeline's Gate 0 will DENY self-deletion by agents.
+ * This endpoint should be reserved for deregistration (not deletion).
+ */
 export async function deleteAgentSelf(authHeader: string | null): Promise<ServiceResult<any>> {
   const auth = authenticateRequest(authHeader)
 
@@ -1498,15 +1504,20 @@ export async function deleteAgentSelf(authHeader: string | null): Promise<Servic
     }
   }
 
-  // Revoke all API keys for this agent
-  await revokeAllKeysForAgent(auth.agentId!)
+  // Delegate to the all-in-one pipeline
+  const { DeleteAgent } = await import('@/services/element-management-service')
+  const result = await DeleteAgent(auth.agentId!, {
+    authContext: {
+      agentId: auth.agentId!,
+      isSystemOwner: false,
+    },
+    hard: true,
+  })
 
-  // Hard delete with backup
-  const deleted = await deleteAgent(auth.agentId!, true)
-  if (!deleted) {
+  if (!result.success) {
     return {
-      data: { error: 'not_found', message: 'Agent not found' } as AMPError,
-      status: 404
+      data: { error: 'forbidden' as const, message: result.error || 'Deletion denied' } as AMPError,
+      status: 403
     }
   }
 

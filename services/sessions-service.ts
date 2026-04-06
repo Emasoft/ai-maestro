@@ -698,6 +698,9 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
     if (registeredAgentId) {
       await runtime.setEnvironment(actualSessionName, 'AIM_AGENT_ID', registeredAgentId)
     }
+    // AGENT_WORK_DIR is the trusted sandbox boundary for the directory guard hook.
+    // Set at session creation, immutable — the agent cannot change it via `cd`.
+    await runtime.setEnvironment(actualSessionName, 'AGENT_WORK_DIR', cwd)
     await runtime.unsetEnvironment(actualSessionName, 'CLAUDECODE')
     // Removed redundant sendKeys export command -- tmux set-environment (above)
     // already sets AMP_DIR, AIM_AGENT_NAME, and AIM_AGENT_ID in the session environment.

@@ -657,15 +657,25 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
   // Record session-agent pairing in persistent history (survives agent deletion)
   if (registeredAgent) {
     const { recordSessionPairing } = await import('@/lib/session-history')
-    recordSessionPairing(
-      actualSessionName,
-      registeredAgent.id,
-      agentName,
-      registeredAgent.label,
-      registeredAgent.program || program,
-      registeredAgent.programArgs || programArgs,
-      registeredAgent.workingDirectory || cwd,
-    )
+    // Look up team name for history (best-effort)
+    const agentTeamId = registeredAgent.team || undefined
+    let teamName: string | undefined
+    if (agentTeamId) {
+      try {
+        const { loadTeams } = await import('@/lib/team-registry')
+        const team = loadTeams().find(t => t.id === agentTeamId)
+        teamName = team?.name
+      } catch { /* best effort */ }
+    }
+    recordSessionPairing(actualSessionName, registeredAgent.id, agentName, {
+      agentLabel: registeredAgent.label,
+      program: registeredAgent.program || program,
+      programArgs: registeredAgent.programArgs || programArgs,
+      workingDirectory: registeredAgent.workingDirectory || cwd,
+      governanceTitle: registeredAgent.governanceTitle || undefined,
+      teamId: agentTeamId,
+      teamName,
+    })
   }
 
   // Persist session metadata (legacy)

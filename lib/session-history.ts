@@ -20,9 +20,13 @@ export interface SessionHistoryEntry {
   agentId: string
   agentName: string
   agentLabel?: string
-  program?: string           // AI client: claude, codex, gemini, etc.
-  programArgs?: string       // CLI arguments (e.g. --dangerously-skip-permissions)
-  workingDirectory?: string  // Agent's working directory at session creation time
+  program?: string              // AI client: claude, codex, gemini, etc.
+  programArgs?: string          // CLI arguments (e.g. --dangerously-skip-permissions)
+  workingDirectory?: string     // Agent's working directory at session creation time
+  governanceTitle?: string      // MANAGER, MEMBER, CHIEF-OF-STAFF, etc.
+  teamId?: string               // Team ID (may no longer exist)
+  teamName?: string             // Team name (for display even if team deleted)
+  rolePlugin?: string           // Role-plugin name (e.g. ai-maestro-programmer-agent)
   createdAt: string
   lastSeen: string
 }
@@ -56,19 +60,29 @@ export function recordSessionPairing(
   tmuxSessionName: string,
   agentId: string,
   agentName: string,
-  agentLabel?: string,
-  program?: string,
-  programArgs?: string,
-  workingDirectory?: string,
+  opts?: {
+    agentLabel?: string
+    program?: string
+    programArgs?: string
+    workingDirectory?: string
+    governanceTitle?: string
+    teamId?: string
+    teamName?: string
+    rolePlugin?: string
+  },
 ): void {
   const history = loadHistory()
   history.sessions[tmuxSessionName] = {
     agentId,
     agentName,
-    agentLabel,
-    program,
-    programArgs,
-    workingDirectory,
+    agentLabel: opts?.agentLabel,
+    program: opts?.program,
+    programArgs: opts?.programArgs,
+    workingDirectory: opts?.workingDirectory,
+    governanceTitle: opts?.governanceTitle,
+    teamId: opts?.teamId,
+    teamName: opts?.teamName,
+    rolePlugin: opts?.rolePlugin,
     createdAt: history.sessions[tmuxSessionName]?.createdAt || new Date().toISOString(),
     lastSeen: new Date().toISOString(),
   }

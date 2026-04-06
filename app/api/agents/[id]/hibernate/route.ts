@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { hibernateAgent } from '@/services/agents-core-service'
 import { isValidUuid } from '@/lib/validation'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 
 /**
  * POST /api/agents/[id]/hibernate
@@ -20,12 +21,13 @@ export async function POST(
     }
 
     // Governance: user (no auth) = allowed always. Agent-initiated = MANAGER or COS (own team only).
-    const auth = authenticateAgent(
-      request.headers.get('Authorization'),
-      request.headers.get('X-Agent-Id')
-    )
+    const auth = authenticateFromRequest(request)
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'hibernate-agent', id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
     if (auth.agentId) {
       const { getManagerId } = await import('@/lib/governance')

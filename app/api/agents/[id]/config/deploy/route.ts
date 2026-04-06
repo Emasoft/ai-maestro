@@ -9,7 +9,8 @@
 
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 import { deployConfigToAgent } from '@/services/agents-config-deploy-service'
 import { isValidUuid } from '@/lib/validation'
 
@@ -22,12 +23,13 @@ export async function POST(
     if (!isValidUuid(id)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
-    const auth = authenticateAgent(
-      request.headers.get('Authorization'),
-      request.headers.get('X-Agent-Id')
-    )
+    const auth = authenticateFromRequest(request)
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
 
     let body

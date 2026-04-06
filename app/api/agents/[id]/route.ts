@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAgentById, updateAgentById, deleteAgentById } from '@/services/agents-core-service'
 import type { UpdateAgentRequest } from '@/types/agent'
 import { isValidUuid } from '@/lib/validation'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
 
 /**
@@ -45,10 +45,7 @@ export async function PATCH(
     }
 
     // Auth + RBAC
-    const auth = authenticateAgent(
-      request.headers.get('Authorization'),
-      request.headers.get('X-Agent-Id')
-    )
+    const auth = authenticateFromRequest(request)
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }
@@ -89,10 +86,7 @@ export async function DELETE(
     }
 
     // Auth + RBAC
-    const auth = authenticateAgent(
-      request.headers.get('Authorization'),
-      request.headers.get('X-Agent-Id')
-    )
+    const auth = authenticateFromRequest(request)
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }

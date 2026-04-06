@@ -9,7 +9,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSkillSettings, saveSkillSettings } from '@/services/agents-skills-service'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 import { isValidUuid } from '@/lib/validation'
 
 // Phase 1: no auth required for reads (localhost-only). Phase 2 should add auth for sensitive settings.
@@ -50,17 +51,16 @@ export async function PUT(
     try { body = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-    // SF-009: Distinguish "no auth attempted" from "auth attempted but failed"
-    const authHeader = request.headers.get('Authorization')
-    const agentIdHeader = request.headers.get('X-Agent-Id')
-    let requestingAgentId: string | null = null
-    if (authHeader || agentIdHeader) {
-      const auth = authenticateAgent(authHeader, agentIdHeader)
-      if (auth.error) {
-        return NextResponse.json({ error: auth.error }, { status: 401 })
-      }
-      requestingAgentId = auth.agentId || null
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }
+    const authz = authorize(auth, 'manage-skills', agentId)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
+    const requestingAgentId = auth.agentId || null
     // SF-044: Type guard for body.settings before passing to service
     if (!body.settings || typeof body.settings !== 'object' || Array.isArray(body.settings)) {
       return NextResponse.json({ error: 'body.settings must be a non-null object' }, { status: 400 })

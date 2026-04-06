@@ -12,7 +12,8 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getSkillsConfig, updateSkills, addSkill, removeSkill } from '@/services/agents-skills-service'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 import { isValidUuid } from '@/lib/validation'
 
 export async function GET(
@@ -52,17 +53,16 @@ export async function PATCH(
     try { body = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-    // SF-009: Distinguish "no auth attempted" from "auth attempted but failed"
-    const authHeader = request.headers.get('Authorization')
-    const agentIdHeader = request.headers.get('X-Agent-Id')
-    let requestingAgentId: string | null = null
-    if (authHeader || agentIdHeader) {
-      const auth = authenticateAgent(authHeader, agentIdHeader)
-      if (auth.error) {
-        return NextResponse.json({ error: auth.error }, { status: 401 })
-      }
-      requestingAgentId = auth.agentId || null
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }
+    const authz = authorize(auth, 'manage-skills', id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
+    const requestingAgentId = auth.agentId || null
     const result = await updateSkills(id, body, requestingAgentId)
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
@@ -91,17 +91,16 @@ export async function POST(
     try { body = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-    // SF-009: Distinguish "no auth attempted" from "auth attempted but failed"
-    const authHeader = request.headers.get('Authorization')
-    const agentIdHeader = request.headers.get('X-Agent-Id')
-    let requestingAgentId: string | null = null
-    if (authHeader || agentIdHeader) {
-      const auth = authenticateAgent(authHeader, agentIdHeader)
-      if (auth.error) {
-        return NextResponse.json({ error: auth.error }, { status: 401 })
-      }
-      requestingAgentId = auth.agentId || null
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }
+    const authz = authorize(auth, 'manage-skills', id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
+    const requestingAgentId = auth.agentId || null
     const result = await addSkill(id, body, requestingAgentId)
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
@@ -133,17 +132,16 @@ export async function DELETE(
       return NextResponse.json({ error: 'Missing required query parameter: skill' }, { status: 400 })
     }
 
-    // SF-009: Distinguish "no auth attempted" from "auth attempted but failed"
-    const authHeader = request.headers.get('Authorization')
-    const agentIdHeader = request.headers.get('X-Agent-Id')
-    let requestingAgentId: string | null = null
-    if (authHeader || agentIdHeader) {
-      const auth = authenticateAgent(authHeader, agentIdHeader)
-      if (auth.error) {
-        return NextResponse.json({ error: auth.error }, { status: 401 })
-      }
-      requestingAgentId = auth.agentId || null
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }
+    const authz = authorize(auth, 'manage-skills', id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
+    const requestingAgentId = auth.agentId || null
     const result = await removeSkill(id, skill, type, requestingAgentId)
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })

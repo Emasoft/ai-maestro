@@ -1238,7 +1238,7 @@ const routes: Route[] = [
       sendJson(res, auth.status || 401, { error: auth.error })
       return
     }
-    // Require authenticated identity -- authenticateAgent returns {} when both headers absent
+    // Require authenticated identity — authenticateAgent returns 401 when no credentials
     if (!auth.agentId) {
       sendJson(res, 401, { error: 'Authenticated agent identity required for config deployment' })
       return

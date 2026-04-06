@@ -899,7 +899,7 @@ export async function ChangeTitle(
     // Agent must re-authenticate to get a token with the new title.
     try {
       const { revokeTokensForAgent } = await import('@/lib/aid-token')
-      const revoked = revokeTokensForAgent(agentId)
+      const revoked = await revokeTokensForAgent(agentId)
       if (revoked > 0) {
         ops.push(`G14b: Revoked ${revoked} AID governance token(s) (old title invalidated)`)
       } else {

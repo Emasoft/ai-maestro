@@ -41,6 +41,7 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ success: true })
     response.headers.set('Set-Cookie', buildSessionCookie(token, isSecure))
+    response.headers.set('Cache-Control', 'no-store')
 
     return response
   } catch (err) {

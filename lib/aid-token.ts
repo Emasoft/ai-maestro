@@ -213,13 +213,13 @@ export function verifyProofWithPublicKeyHex(
  * Issue a short-lived governance token after successful proof verification.
  * The token is opaque (aim_tk_<random>) — server-side validated, not JWT.
  */
-export function issueGovernanceToken(
+export async function issueGovernanceToken(
   agentId: string,
   agentName: string,
   governanceTitle: string,
   teamId: string | null,
   scope: string = 'governance'
-): TokenExchangeResult {
+): Promise<TokenExchangeResult> {
   const rawToken = TOKEN_PREFIX + randomBytes(TOKEN_RANDOM_BYTES).toString('hex')
   const now = new Date()
   const expiresAt = new Date(now.getTime() + TOKEN_LIFETIME_SECONDS * 1000)
@@ -235,8 +235,8 @@ export function issueGovernanceToken(
     expires_at: expiresAt.toISOString()
   }
 
-  // Save to store (atomic under file lock)
-  withLock('governance-tokens', () => {
+  // Save to store (atomic under file lock) — MUST await, withLock is async
+  await withLock('governance-tokens', () => {
     const tokens = loadTokens()
     // Prune expired + limit to 200 active tokens max
     const validTokens = tokens
@@ -300,9 +300,9 @@ export function validateGovernanceToken(token: string): AIDTokenRecord | null {
  * Revoke all governance tokens for a specific agent.
  * Used when agent is deleted or title changes.
  */
-export function revokeTokensForAgent(agentId: string): number {
+export async function revokeTokensForAgent(agentId: string): Promise<number> {
   let revoked = 0
-  withLock('governance-tokens', () => {
+  await withLock('governance-tokens', () => {
     const tokens = loadTokens()
     const remaining = tokens.filter(t => {
       if (t.agent_id === agentId) {
@@ -319,9 +319,9 @@ export function revokeTokensForAgent(agentId: string): number {
 /**
  * Clean up expired tokens from storage.
  */
-export function cleanupExpiredTokens(): number {
+export async function cleanupExpiredTokens(): Promise<number> {
   let cleaned = 0
-  withLock('governance-tokens', () => {
+  await withLock('governance-tokens', () => {
     const tokens = loadTokens()
     const now = Date.now()
     const valid = tokens.filter(t => {

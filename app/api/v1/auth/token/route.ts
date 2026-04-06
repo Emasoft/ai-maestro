@@ -132,8 +132,8 @@ export async function POST(request: Request) {
 
     const scope = body.scope || 'governance'
 
-    // 8. Issue token
-    const tokenResult = issueGovernanceToken(
+    // 8. Issue token (async — persists to file under lock)
+    const tokenResult = await issueGovernanceToken(
       agent.id,
       agent.name,
       governanceTitle,
@@ -143,7 +143,9 @@ export async function POST(request: Request) {
 
     console.log(`[AID Token] Issued aim_tk_ token for agent "${agent.name}" (title=${governanceTitle}, team=${teamId || 'none'})`)
 
-    return NextResponse.json(tokenResult)
+    const response = NextResponse.json(tokenResult)
+    response.headers.set('Cache-Control', 'no-store')
+    return response
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`[AID Token] Token exchange error: ${msg}`)

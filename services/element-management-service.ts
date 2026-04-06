@@ -2751,6 +2751,20 @@ export async function CreateAgent(
         ops.push(`G07: Added to team (${teamResult.operations.length} sub-gates)`)
         result.restartNeeded = result.restartNeeded || teamResult.restartNeeded
       }
+
+      // G07b: ChangeTeam auto-assigns "member" title. If a different governanceTitle
+      // was requested, re-apply it now (after the team join completes).
+      // This fixes BUG-022: POST /api/agents with teamId + governanceTitle would
+      // silently ignore the requested title because ChangeTeam overwrites it.
+      if (desired.governanceTitle && desired.governanceTitle !== 'member' && desired.governanceTitle !== 'autonomous') {
+        const retitleResult = await ChangeTitle(agent.id, desired.governanceTitle)
+        if (!retitleResult.success) {
+          ops.push(`G07b: WARN — Re-apply title ${desired.governanceTitle} after team join failed: ${retitleResult.error}`)
+        } else {
+          ops.push(`G07b: Title corrected to ${desired.governanceTitle.toUpperCase()} after team join`)
+          result.restartNeeded = result.restartNeeded || retitleResult.restartNeeded
+        }
+      }
     } else {
       ops.push(`G07: No team requested`)
     }

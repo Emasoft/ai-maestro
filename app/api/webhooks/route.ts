@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listAllWebhooks, createNewWebhook } from '@/services/webhooks-service'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 /**
  * GET /api/webhooks
@@ -22,10 +22,7 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   // Authenticate -- webhook creation is a write path that can trigger HTTP requests to arbitrary URLs
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status ?? 401 })
   }

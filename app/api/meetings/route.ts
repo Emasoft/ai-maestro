@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listMeetings, createNewMeeting } from '@/services/messages-service'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 // NT-009: Force dynamic -- reads runtime filesystem state (meeting registry)
 export const dynamic = 'force-dynamic'
@@ -18,10 +18,7 @@ export async function GET(request: NextRequest) {
 // POST /api/meetings - Create a new meeting
 // SF-013: Authenticate agent for write operations (consistent with team-related routes)
 export async function POST(request: NextRequest) {
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }

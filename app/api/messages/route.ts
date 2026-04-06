@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getMessages, sendMessage, updateMessage, removeMessage } from '@/services/messages-service'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 /**
  * GET /api/messages?agent=<agentId|alias|sessionName>&status=<status>&from=<from>&box=<inbox|sent>
@@ -43,10 +43,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Authenticate sender identity when auth headers are present
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
@@ -66,13 +63,10 @@ export async function POST(request: NextRequest) {
 
 /**
  * PATCH /api/messages?agent=<id>&id=<messageId>&action=<action>
- * MF-002: Added authenticateAgent check to prevent unauthorized message modification
+ * MF-002: Added auth check to prevent unauthorized message modification
  */
 export async function PATCH(request: NextRequest) {
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
@@ -92,13 +86,10 @@ export async function PATCH(request: NextRequest) {
 
 /**
  * DELETE /api/messages?agent=<id>&id=<messageId>
- * MF-002: Added authenticateAgent check to prevent unauthorized message deletion
+ * MF-002: Added auth check to prevent unauthorized message deletion
  */
 export async function DELETE(request: NextRequest) {
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }

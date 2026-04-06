@@ -889,7 +889,8 @@ const routes: Route[] = [
     // Layer 5: optional governance enforcement when agent identity is provided
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     // If auth credentials were provided but invalid, reject immediately — consistent with other governed routes.
     // When no auth headers are present, auth.error is undefined and governance is not enforced (backward compat).
@@ -1207,7 +1208,7 @@ const routes: Route[] = [
   }},
   { method: 'PUT', pattern: /^\/api\/agents\/([^/]+)\/skills\/settings$/, paramNames: ['id'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
-    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'))
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     sendServiceResult(res, await saveSkillSettings(params.id, body, auth.error ? null : auth.agentId))
   }},
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/skills$/, paramNames: ['id'], handler: async (_req, res, params) => {
@@ -1215,16 +1216,16 @@ const routes: Route[] = [
   }},
   { method: 'PATCH', pattern: /^\/api\/agents\/([^/]+)\/skills$/, paramNames: ['id'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
-    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'))
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     sendServiceResult(res, await updateSkills(params.id, body, auth.error ? null : auth.agentId))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/skills$/, paramNames: ['id'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
-    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'))
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     sendServiceResult(res, await addSkill(params.id, body, auth.error ? null : auth.agentId))
   }},
   { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/skills$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
-    const auth = authenticateAgent(getHeader(_req, 'Authorization'), getHeader(_req, 'X-Agent-Id'))
+    const auth = authenticateAgent(getHeader(_req, 'Authorization'), getHeader(_req, 'X-Agent-Id'), getHeader(_req, 'Cookie'))
     sendServiceResult(res, await removeSkill(params.id, query.skill || '', undefined, auth.error ? null : auth.agentId))
   }},
 
@@ -1232,7 +1233,7 @@ const routes: Route[] = [
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/config\/deploy$/, paramNames: ['id'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
     // Accept host-signature auth (cross-host) or governance password auth (local admin)
-    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'))
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
       return
@@ -1423,7 +1424,8 @@ const routes: Route[] = [
     // Layer 5: optional governance enforcement when agent identity is provided
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     // If auth credentials were provided but invalid, reject immediately — consistent with other governed routes.
     // When no auth headers are present, auth.error is undefined and governance is not enforced (backward compat).
@@ -1437,7 +1439,8 @@ const routes: Route[] = [
     // Layer 5: optional governance enforcement when agent identity is provided
     const auth = authenticateAgent(
       getHeader(_req, 'Authorization'),
-      getHeader(_req, 'X-Agent-Id')
+      getHeader(_req, 'X-Agent-Id'),
+      getHeader(_req, 'Cookie')
     )
     // If auth credentials were provided but invalid, reject immediately — consistent with other governed routes.
     // When no auth headers are present, auth.error is undefined and governance is not enforced (backward compat).
@@ -1685,7 +1688,8 @@ const routes: Route[] = [
     const body = await readJsonBody(req)
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -1712,7 +1716,8 @@ const routes: Route[] = [
     // This prevents impersonation — body.requestedBy is overwritten by auth.agentId below.
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -1944,7 +1949,8 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/teams\/([^/]+)\/tasks\/([^/]+)$/, paramNames: ['id', 'taskId'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -1956,7 +1962,8 @@ const routes: Route[] = [
     const body = await readJsonBody(req)
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -1997,7 +2004,8 @@ const routes: Route[] = [
   { method: 'DELETE', pattern: /^\/api\/teams\/([^/]+)\/tasks\/([^/]+)$/, paramNames: ['id', 'taskId'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -2009,7 +2017,8 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/teams\/([^/]+)\/tasks$/, paramNames: ['id'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -2030,7 +2039,8 @@ const routes: Route[] = [
     const body = await readJsonBody(req)
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -2070,7 +2080,8 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/teams\/([^/]+)\/kanban-config$/, paramNames: ['id'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -2082,7 +2093,8 @@ const routes: Route[] = [
     const body = await readJsonBody(req)
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -2112,7 +2124,8 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/teams\/([^/]+)\/documents\/([^/]+)$/, paramNames: ['id', 'docId'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -2125,7 +2138,8 @@ const routes: Route[] = [
     const body = await readJsonBody(req)
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -2137,7 +2151,8 @@ const routes: Route[] = [
   { method: 'DELETE', pattern: /^\/api\/teams\/([^/]+)\/documents\/([^/]+)$/, paramNames: ['id', 'docId'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -2149,7 +2164,8 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/teams\/([^/]+)\/documents$/, paramNames: ['id'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -2162,7 +2178,8 @@ const routes: Route[] = [
     const body = await readJsonBody(req)
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -2298,7 +2315,8 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/teams\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -2311,7 +2329,8 @@ const routes: Route[] = [
     const body = await readJsonBody(req)
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -2323,7 +2342,8 @@ const routes: Route[] = [
   { method: 'DELETE', pattern: /^\/api\/teams\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })
@@ -2342,7 +2362,8 @@ const routes: Route[] = [
     const body = await readJsonBody(req)
     const auth = authenticateAgent(
       getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id')
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
     )
     if (auth.error) {
       sendJson(res, auth.status || 401, { error: auth.error })

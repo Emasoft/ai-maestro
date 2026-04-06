@@ -9,7 +9,7 @@ import { loadTransfers, createTransferRequest, getPendingTransfersForAgent } fro
 import { loadTeams } from '@/lib/team-registry'
 import { isManager, isChiefOfStaffAnywhere } from '@/lib/governance'
 import { isValidUuid } from '@/lib/validation'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 // Phase 1: localhost-only, no auth required. TODO: add ACL for Phase 2 remote access
 export async function GET(request: NextRequest) {
@@ -52,10 +52,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // Authenticate the requester identity from headers (prevents impersonation via body)
-    const auth = authenticateAgent(
-      request.headers.get('Authorization'),
-      request.headers.get('X-Agent-Id')
-    )
+    const auth = authenticateFromRequest(request)
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status ?? 401 })
     }
@@ -83,7 +80,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate UUID format for all ID fields to prevent path traversal and invalid lookups (CC-001)
-    // requestedBy is already validated by authenticateAgent
+    // requestedBy is already validated by authenticateFromRequest
     if (!isValidUuid(agentId) || !isValidUuid(fromTeamId) || !isValidUuid(toTeamId) || !isValidUuid(requestedBy)) {
       return NextResponse.json({ error: 'Invalid UUID format' }, { status: 400 })
     }

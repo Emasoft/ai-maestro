@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listAllTeams, createNewTeam } from '@/services/teams-service'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 // NT-009: Force dynamic -- reads runtime filesystem state (team registry)
 export const dynamic = 'force-dynamic'
@@ -20,10 +20,7 @@ export async function GET() {
 // Requires governance password (R9.1 + WF-003: team creation is a governance action)
 export async function POST(request: NextRequest) {
   // Authenticate requesting agent identity for governance checks
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }

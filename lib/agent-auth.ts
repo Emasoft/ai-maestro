@@ -1,25 +1,22 @@
 /**
  * Agent Authentication for Internal APIs
  *
- * Bridges AMP API key auth and AID governance tokens to governance-restricted
- * internal API calls. Agents prove identity via Bearer token.
+ * Bridges AMP API key auth, AID governance tokens, and browser session cookies
+ * to governance-restricted internal API calls.
  *
  * Four outcomes:
- * 1. No auth headers → system owner (web UI) → { agentId: undefined }
+ * 1. Valid session cookie (aim_session) → system owner (web UI) → { agentId: undefined }
  * 2. Bearer aim_tk_* → AID governance token → { agentId, governanceTitle, teamId }
  * 3. Bearer amp_live_sk_* → legacy AMP API key → { agentId }
- * 4. X-Agent-Id without valid Bearer, or invalid Bearer → { error, status: 401 }
+ * 4. No valid credentials → { error, status: 401 }
  *
- * AID tokens (aim_tk_*) embed governance context (title + team) from issuance time,
- * avoiding registry lookups on every request. AMP keys require downstream lookup.
- *
- * PHASE 2 REQUIRED: Make auth mandatory. Currently (Phase 1), governance enforcement
- * is opt-in -- endpoints skip RBAC checks when auth headers are omitted. This means
- * any localhost client can bypass governance by simply not sending Authorization headers.
- * Phase 2 must require auth on all governance-enforced endpoints. (SF-058)
+ * SF-058 CLOSED: No auth headers AND no session cookie → rejected.
+ * The web UI user must log in with governance password to get the session cookie.
+ * Agents use Bearer tokens. There is no "free" system-owner access anymore.
  */
 import { authenticateRequest } from './amp-auth'
 import { validateGovernanceToken } from './aid-token'
+import { extractSessionFromCookie, validateSession } from './session-auth'
 
 export interface AgentAuthResult {
   /** Verified agent ID, or undefined for system owner / web UI */
@@ -35,18 +32,30 @@ export interface AgentAuthResult {
 }
 
 /**
- * Authenticate an agent from HTTP header values.
+ * Authenticate a caller from HTTP header values.
  *
  * @param authHeader - Value of Authorization header (or null)
  * @param agentIdHeader - Value of X-Agent-Id header (or null)
+ * @param cookieHeader - Value of Cookie header (or null) — for browser session auth
  * @returns AgentAuthResult with agentId for success, error for failure, or empty for system owner
  */
-export function authenticateAgent(authHeader: string | null, agentIdHeader: string | null): AgentAuthResult {
-  // Case 1: No auth attempt at all → system owner / web UI
-  // Use strict null checks: request.headers.get() returns null when absent, "" when present but empty.
-  // Falsy check would treat empty string "" as no auth, granting system owner access incorrectly.
+export function authenticateAgent(
+  authHeader: string | null,
+  agentIdHeader: string | null,
+  cookieHeader?: string | null
+): AgentAuthResult {
+  // Case 1: No Bearer token — check for browser session cookie
   if (authHeader === null && agentIdHeader === null) {
-    return {}
+    const sessionToken = extractSessionFromCookie(cookieHeader ?? null)
+    if (sessionToken && validateSession(sessionToken)) {
+      // Valid session cookie → system owner (web UI user)
+      return {}
+    }
+    // SF-058 CLOSED: no credentials at all → reject
+    return {
+      error: 'Authentication required. Log in at /api/auth/login or provide a Bearer token.',
+      status: 401
+    }
   }
 
   // Case 2: X-Agent-Id present without Authorization → reject (identity spoofing)
@@ -111,6 +120,19 @@ export function authenticateAgent(authHeader: string | null, agentIdHeader: stri
 
   // Unreachable: all cases handled above. Throw to catch logic bugs instead of silently granting access.
   throw new Error('Unreachable: authenticateAgent logic error')
+}
+
+/**
+ * Convenience: authenticate from a Request/NextRequest object.
+ * Extracts Authorization, X-Agent-Id, and Cookie headers automatically.
+ * Use this in API routes to avoid repeating the 3-header extraction pattern.
+ */
+export function authenticateFromRequest(request: { headers: { get(name: string): string | null } }): AgentAuthResult {
+  return authenticateAgent(
+    request.headers.get('Authorization'),
+    request.headers.get('X-Agent-Id'),
+    request.headers.get('Cookie')
+  )
 }
 
 /**

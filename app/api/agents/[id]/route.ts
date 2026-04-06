@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAgentById, updateAgentById, deleteAgentById } from '@/services/agents-core-service'
 import type { UpdateAgentRequest } from '@/types/agent'
 import { isValidUuid } from '@/lib/validation'
+import { authenticateAgent } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 
 /**
  * GET /api/agents/[id]
@@ -41,6 +43,20 @@ export async function PATCH(
     if (!isValidUuid(id)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
+
+    // Auth + RBAC
+    const auth = authenticateAgent(
+      request.headers.get('Authorization'),
+      request.headers.get('X-Agent-Id')
+    )
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
+
     let body: UpdateAgentRequest
     try { body = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
@@ -71,6 +87,20 @@ export async function DELETE(
     if (!isValidUuid(id)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
+
+    // Auth + RBAC
+    const auth = authenticateAgent(
+      request.headers.get('Authorization'),
+      request.headers.get('X-Agent-Id')
+    )
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'delete-agent', id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
+
     const hardParam = request.nextUrl.searchParams.get('hard')?.toLowerCase()
     const hard = hardParam === 'true' || hardParam === '1' || hardParam === 'yes'
     const deleteFolderParam = request.nextUrl.searchParams.get('deleteFolder')?.toLowerCase()

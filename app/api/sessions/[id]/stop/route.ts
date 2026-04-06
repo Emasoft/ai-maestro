@@ -17,6 +17,8 @@
  * the tmux send-keys command fails (e.g. session not found).
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { authenticateAgent } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +27,23 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: sessionName } = await params
+
+  // Auth + RBAC
+  const auth = authenticateAgent(
+    request.headers.get('Authorization'),
+    request.headers.get('X-Agent-Id')
+  )
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+  const { getAgentBySession } = await import('@/lib/agent-registry')
+  const targetAgent = getAgentBySession(sessionName)
+  if (targetAgent) {
+    const authz = authorize(auth, 'send-command', targetAgent.id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
+  }
 
   try {
     const { execSync } = require('child_process')

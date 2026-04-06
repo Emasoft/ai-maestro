@@ -1572,6 +1572,19 @@ const routes: Route[] = [
   { method: 'POST', pattern: /^\/api\/v1\/auth\/rotate-keys$/, paramNames: [], handler: async (req, res) => {
     sendServiceResult(res, await rotateKeypair(getHeader(req, 'Authorization')))
   }},
+  { method: 'POST', pattern: /^\/api\/v1\/auth\/token$/, paramNames: [], handler: async (req, res) => {
+    const { POST } = await import('../app/api/v1/auth/token/route')
+    // Build a Request-like object for the Next.js route handler
+    const body = await readJsonBody(req)
+    const url = `http://localhost:${process.env.PORT || 23000}/api/v1/auth/token`
+    const headers = new Headers()
+    if (getHeader(req, 'content-type')) headers.set('content-type', getHeader(req, 'content-type')!)
+    if (getHeader(req, 'x-forwarded-host')) headers.set('x-forwarded-host', getHeader(req, 'x-forwarded-host')!)
+    const fakeRequest = new Request(url, { method: 'POST', headers, body: JSON.stringify(body) })
+    const response = await POST(fakeRequest)
+    const json = await response.json()
+    sendServiceResult(res, { status: response.status, body: json })
+  }},
   { method: 'POST', pattern: /^\/api\/v1\/federation\/deliver$/, paramNames: [], handler: async (req, res) => {
     const body = await readJsonBody(req)
     const result = await deliverFederated(

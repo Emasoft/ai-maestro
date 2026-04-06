@@ -1,13 +1,17 @@
 /**
  * Agent Authentication for Internal APIs
  *
- * Bridges AMP API key auth to governance-restricted internal API calls.
- * Agents must prove identity via Bearer token for operations requiring agent identity.
+ * Bridges AMP API key auth and AID governance tokens to governance-restricted
+ * internal API calls. Agents prove identity via Bearer token.
  *
- * Three outcomes:
+ * Four outcomes:
  * 1. No auth headers → system owner (web UI) → { agentId: undefined }
- * 2. Valid Authorization: Bearer → authenticated agent → { agentId: 'uuid' }
- * 3. X-Agent-Id without valid Bearer, or invalid Bearer → { error, status: 401 }
+ * 2. Bearer aim_tk_* → AID governance token → { agentId, governanceTitle, teamId }
+ * 3. Bearer amp_live_sk_* → legacy AMP API key → { agentId }
+ * 4. X-Agent-Id without valid Bearer, or invalid Bearer → { error, status: 401 }
+ *
+ * AID tokens (aim_tk_*) embed governance context (title + team) from issuance time,
+ * avoiding registry lookups on every request. AMP keys require downstream lookup.
  *
  * PHASE 2 REQUIRED: Make auth mandatory. Currently (Phase 1), governance enforcement
  * is opt-in -- endpoints skip RBAC checks when auth headers are omitted. This means
@@ -15,10 +19,15 @@
  * Phase 2 must require auth on all governance-enforced endpoints. (SF-058)
  */
 import { authenticateRequest } from './amp-auth'
+import { validateGovernanceToken } from './aid-token'
 
 export interface AgentAuthResult {
   /** Verified agent ID, or undefined for system owner / web UI */
   agentId?: string
+  /** Governance title from AID token (avoids registry lookup). Only set for aim_tk_ tokens. */
+  governanceTitle?: string
+  /** Team ID from AID token. Only set for aim_tk_ tokens. null = no team. */
+  teamId?: string | null
   /** Error message if authentication failed */
   error?: string
   /** HTTP status code for the error */
@@ -48,8 +57,38 @@ export function authenticateAgent(authHeader: string | null, agentIdHeader: stri
     }
   }
 
-  // Case 3: Authorization header present → validate API key
+  // Case 3: Authorization header present → validate token
   if (authHeader) {
+    const token = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : authHeader
+
+    // Case 3a: AID governance token (aim_tk_*) — includes title + team
+    if (token.startsWith('aim_tk_')) {
+      const aidRecord = validateGovernanceToken(token)
+      if (!aidRecord) {
+        return {
+          error: 'Invalid or expired governance token',
+          status: 401
+        }
+      }
+
+      // If X-Agent-Id is also present, it must match
+      if (agentIdHeader && agentIdHeader !== aidRecord.agent_id) {
+        return {
+          error: 'X-Agent-Id does not match authenticated agent identity',
+          status: 403
+        }
+      }
+
+      return {
+        agentId: aidRecord.agent_id,
+        governanceTitle: aidRecord.governance_title,
+        teamId: aidRecord.team_id
+      }
+    }
+
+    // Case 3b: Legacy AMP API key (amp_live_sk_* or amp_test_sk_*)
     const result = authenticateRequest(authHeader)
 
     if (!result.authenticated || !result.agentId) {

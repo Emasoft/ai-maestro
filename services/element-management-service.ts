@@ -2869,6 +2869,69 @@ export async function CreateAgent(
       ops.push(`G09: No session requested (agent created hibernated)`)
     }
 
+    // ── G10: Auto-provision AID identity ─────────────────────
+    // Generate Ed25519 keypair so the agent can prove its identity cryptographically.
+    // Register with local AI Maestro AMP provider to get an API key (legacy compat).
+    try {
+      const { generateKeyPair: genKP, saveKeyPair: saveKP, hasKeyPair: hasKP } = await import('@/lib/amp-keys')
+      if (!hasKP(agent.id)) {
+        const keyPair = await genKP()
+        saveKP(agent.id, keyPair)
+        ops.push(`G10: Ed25519 keypair generated (fingerprint=${keyPair.fingerprint.substring(0, 20)}...)`)
+
+        // Internal registration with AMP provider (generates amp_live_sk_* key)
+        try {
+          const { registerAgent: registerAMP } = await import('@/services/amp-service')
+          await registerAMP({
+            name,
+            public_key: keyPair.publicHex,
+            key_algorithm: 'Ed25519',
+            tenant: 'default',
+          }, null)
+          ops.push(`G10: AMP registration complete — agent can authenticate`)
+        } catch (regErr) {
+          ops.push(`G10: WARN — AMP registration failed: ${regErr instanceof Error ? regErr.message : regErr}`)
+        }
+      } else {
+        ops.push(`G10: Agent already has keypair — skipped`)
+      }
+    } catch (keyErr) {
+      ops.push(`G10: WARN — AID provisioning failed: ${keyErr instanceof Error ? keyErr.message : keyErr}`)
+    }
+
+    // ── G11: Install ai-maestro-plugin at local scope ────────
+    // Gives the agent: directory guard hook, skills, commands.
+    // Local scope means the plugin only applies to this agent's working directory.
+    if (workDir) {
+      try {
+        const { execSync } = require('child_process')
+        const pluginKey = 'ai-maestro-plugin@ai-maestro-plugins'
+        // Check if already installed locally by looking for settings.local.json
+        const localSettingsPath = require('path').join(workDir, '.claude', 'settings.local.json')
+        let alreadyInstalled = false
+        if (require('fs').existsSync(localSettingsPath)) {
+          try {
+            const localSettings = JSON.parse(require('fs').readFileSync(localSettingsPath, 'utf-8'))
+            alreadyInstalled = localSettings.enabledPlugins?.some((p: string) => p.includes('ai-maestro-plugin')) ?? false
+          } catch { /* ignore parse errors */ }
+        }
+        if (!alreadyInstalled) {
+          execSync(`claude plugin install ${pluginKey} --scope local`, {
+            cwd: workDir,
+            timeout: 30000,
+            stdio: 'pipe'
+          })
+          ops.push(`G11: ai-maestro-plugin installed (scope=local, dir=${workDir})`)
+        } else {
+          ops.push(`G11: ai-maestro-plugin already installed locally — skipped`)
+        }
+      } catch (plugErr) {
+        ops.push(`G11: WARN — Local plugin install failed: ${plugErr instanceof Error ? plugErr.message : plugErr}`)
+      }
+    } else {
+      ops.push(`G11: No workDir — skipping local plugin install`)
+    }
+
     result.success = true
     console.log(`[CreateAgent] "${name}" created (id=${agent.id}, program=${program}, ${ops.length} gates)`)
     return result

@@ -27,6 +27,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getAgentBySession } from '@/lib/agent-registry'
+import { authenticateAgent } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,8 +60,24 @@ export async function POST(
 ) {
   const { id: sessionName } = await params
 
+  // Auth + RBAC
+  const auth = authenticateAgent(
+    request.headers.get('Authorization'),
+    request.headers.get('X-Agent-Id')
+  )
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+
   // Look up the agent's stored program and args from the registry
   const agent = getAgentBySession(sessionName)
+
+  if (agent) {
+    const authz = authorize(auth, 'restart-session', agent.id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
+  }
 
   // Manager gate: team agents cannot restart without a MANAGER on the host
   if (agent) {

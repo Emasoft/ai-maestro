@@ -1,0 +1,155 @@
+/**
+ * AID Token Exchange Endpoint
+ *
+ * POST /api/v1/auth/token
+ *
+ * Accepts an Ed25519 proof-of-possession and issues a short-lived
+ * governance token (aim_tk_*) with embedded agentId + title + teamId.
+ *
+ * This is the bridge between AID (cryptographic identity) and AI Maestro
+ * governance. Scripts call this via aid-maestro-token.sh.
+ */
+
+import { NextResponse } from 'next/server'
+import {
+  verifyProofWithPublicKeyHex,
+  issueGovernanceToken
+} from '@/lib/aid-token'
+import { loadKeyPair } from '@/lib/amp-keys'
+import { loadTeams } from '@/lib/team-registry'
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+
+    // 1. Validate grant_type
+    if (body.grant_type !== 'urn:aid:agent-identity') {
+      return NextResponse.json(
+        { error: 'unsupported_grant_type', message: 'Only urn:aid:agent-identity is supported' },
+        { status: 400 }
+      )
+    }
+
+    // 2. Validate required fields
+    if (!body.agent_identity || !body.proof) {
+      return NextResponse.json(
+        { error: 'invalid_request', message: 'agent_identity and proof are required' },
+        { status: 400 }
+      )
+    }
+
+    // 3. Decode Agent Identity document
+    let identity: {
+      aid_version?: string
+      address?: string
+      alias?: string
+      public_key?: string
+      key_algorithm?: string
+      fingerprint?: string
+    }
+    try {
+      const identityJson = Buffer.from(body.agent_identity, 'base64url').toString('utf-8')
+      identity = JSON.parse(identityJson)
+    } catch {
+      return NextResponse.json(
+        { error: 'invalid_identity', message: 'Failed to decode agent_identity (expected base64url JSON)' },
+        { status: 400 }
+      )
+    }
+
+    if (!identity.fingerprint && !identity.alias) {
+      return NextResponse.json(
+        { error: 'invalid_identity', message: 'Agent identity must contain fingerprint or alias' },
+        { status: 400 }
+      )
+    }
+
+    // 4. Look up agent by fingerprint (primary) or by name (fallback)
+    const { loadAgents, getAgentByName } = await import('@/lib/agent-registry')
+    let agent: { id: string; name: string; governanceTitle?: string | null; metadata?: Record<string, unknown> } | null = null
+
+    // Try fingerprint first (most reliable — cryptographic identity)
+    if (identity.fingerprint) {
+      const allAgents = loadAgents()
+      agent = allAgents.find(a => {
+        const ampMeta = a.metadata?.amp as Record<string, unknown> | undefined
+        return ampMeta?.fingerprint === identity.fingerprint
+      }) || null
+    }
+
+    // Fallback to name match
+    if (!agent && identity.alias) {
+      agent = getAgentByName(identity.alias) as typeof agent
+    }
+
+    if (!agent) {
+      return NextResponse.json(
+        { error: 'agent_not_found', message: `No registered agent matches fingerprint or alias` },
+        { status: 404 }
+      )
+    }
+
+    // 5. Load the agent's stored public key for verification
+    const keyPair = loadKeyPair(agent.id)
+    if (!keyPair) {
+      return NextResponse.json(
+        { error: 'no_keypair', message: 'Agent has no Ed25519 keypair registered' },
+        { status: 401 }
+      )
+    }
+
+    // 6. Verify proof-of-possession
+    // The server URL is what the agent signed — use the request origin or localhost
+    const serverUrl = request.headers.get('x-forwarded-host')
+      ? `https://${request.headers.get('x-forwarded-host')}`
+      : `http://localhost:${process.env.PORT || 23000}`
+
+    const proofResult = verifyProofWithPublicKeyHex(body.proof, keyPair.publicHex, serverUrl)
+    if (!proofResult.valid) {
+      console.warn(`[AID Token] Proof verification failed for agent ${agent.name}: ${proofResult.error}`)
+      return NextResponse.json(
+        { error: 'invalid_proof', message: proofResult.error || 'Ed25519 signature verification failed' },
+        { status: 401 }
+      )
+    }
+
+    // 7. Resolve governance context
+    const governanceTitle = (agent.governanceTitle as string) || 'autonomous'
+
+    // Find the team this agent belongs to
+    let teamId: string | null = null
+    const teams = loadTeams()
+    for (const team of teams) {
+      if (
+        team.agentIds.includes(agent.id) ||
+        team.chiefOfStaffId === agent.id ||
+        team.orchestratorId === agent.id
+      ) {
+        teamId = team.id
+        break
+      }
+    }
+
+    const scope = body.scope || 'governance'
+
+    // 8. Issue token
+    const tokenResult = issueGovernanceToken(
+      agent.id,
+      agent.name,
+      governanceTitle,
+      teamId,
+      scope
+    )
+
+    console.log(`[AID Token] Issued aim_tk_ token for agent "${agent.name}" (title=${governanceTitle}, team=${teamId || 'none'})`)
+
+    return NextResponse.json(tokenResult)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[AID Token] Token exchange error: ${msg}`)
+    return NextResponse.json(
+      { error: 'server_error', message: 'Internal server error during token exchange' },
+      { status: 500 }
+    )
+  }
+}

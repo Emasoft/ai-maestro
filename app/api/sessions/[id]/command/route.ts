@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendCommand, checkIdleStatus } from '@/services/sessions-service'
+import { authenticateAgent } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 
 /**
  * @deprecated Use /api/agents/[id]/session with PATCH method instead.
@@ -26,6 +28,23 @@ export async function POST(
   logDeprecation()
   try {
     const { id: sessionName } = await params
+
+    // Auth + RBAC: sending commands to a session is a sensitive operation
+    const auth = authenticateAgent(
+      request.headers.get('Authorization'),
+      request.headers.get('X-Agent-Id')
+    )
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    // Resolve agent ID from session name for RBAC target
+    const { getAgentBySession } = await import('@/lib/agent-registry')
+    const targetAgent = getAgentBySession(sessionName)
+    const authz = authorize(auth, 'send-command', targetAgent?.id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
+
     let body
     try { body = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })

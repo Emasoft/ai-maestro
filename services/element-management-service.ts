@@ -660,6 +660,31 @@ export async function ChangeTitle(
   }
 
   try {
+    // ── GATE 0: Authorization — who is allowed to change titles? ──
+    // Only MANAGER (on any agent except self) and COS (on own team except self).
+    // System-owner (web UI) is always allowed. Self-assignment is always forbidden.
+    if (options?.authContext) {
+      const { authorize } = await import('@/lib/authorization')
+      const authResult: import('@/lib/agent-auth').AgentAuthResult = {
+        agentId: options.authContext.agentId,
+        governanceTitle: options.authContext.isSystemOwner ? undefined : undefined, // looked up by authorize()
+      }
+      // If the caller is an agent (not system-owner), enforce title-change rules
+      if (!options.authContext.isSystemOwner) {
+        const authz = authorize(authResult, 'change-title', agentId)
+        if (!authz.allowed) {
+          result.error = authz.reason || 'Not authorized to change governance titles'
+          ops.push(`G00: DENIED — ${authz.reason}`)
+          return result
+        }
+        ops.push(`G00: Authorized (caller=${options.authContext.agentId})`)
+      } else {
+        ops.push(`G00: System-owner — authorized`)
+      }
+    } else {
+      ops.push(`G00: No auth context — internal call (authorized)`)
+    }
+
     // ── GATE 1: Validate title value ─────────────────────────
     const effectiveTitle = newTitle === 'autonomous' ? null : newTitle
     if (newTitle && !VALID_TITLES.has(newTitle)) {

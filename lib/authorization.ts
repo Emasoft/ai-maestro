@@ -18,7 +18,8 @@ import type { AgentAuthResult } from './agent-auth'
 // ============================================================================
 
 export type AuthAction =
-  | 'modify-agent'      // PATCH agent properties (title, name, folder, etc.)
+  | 'modify-agent'      // PATCH agent properties (name, folder, avatar, etc.) — NOT title
+  | 'change-title'      // Change governance title — special rules: only MANAGER/COS, never self
   | 'delete-agent'      // DELETE agent
   | 'send-command'      // Send command to agent's tmux session
   | 'restart-session'   // Restart agent session
@@ -55,10 +56,45 @@ export function authorize(
     return { allowed: true }
   }
 
-  // Resolve title: prefer AID token (embedded), fall back to registry lookup
+  // Resolve title: prefer session secret (always current), fall back to registry lookup
   const title = auth.governanceTitle || lookupGovernanceTitle(auth.agentId)
 
-  // MANAGER → always allowed
+  // ── Special rule: change-title ──────────────────────────────
+  // Title changes have unique governance constraints:
+  //   - No agent can change its OWN title (not even MANAGER)
+  //   - Only MANAGER and COS can change titles at all
+  //   - COS is restricted to agents in their own team
+  if (action === 'change-title') {
+    // Self-assignment is always forbidden
+    if (targetAgentId && targetAgentId === auth.agentId) {
+      return { allowed: false, reason: 'No agent can change its own governance title' }
+    }
+
+    // MANAGER can change any other agent's title
+    if (title === 'manager') {
+      return { allowed: true }
+    }
+
+    // COS can change titles of agents in their own team
+    if (title === 'chief-of-staff') {
+      if (!targetAgentId) {
+        return { allowed: false, reason: 'Chief-of-Staff must specify target agent for title change' }
+      }
+      const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
+      const targetTeamId = lookupTeamIdForAgent(targetAgentId)
+      if (cosTeamId && cosTeamId === targetTeamId) {
+        return { allowed: true }
+      }
+      return { allowed: false, reason: 'Chief-of-Staff can only change titles of agents in their own team' }
+    }
+
+    // Everyone else: denied
+    return { allowed: false, reason: `Only MANAGER or CHIEF-OF-STAFF can change governance titles` }
+  }
+
+  // ── General rules ──────────────────────────────────────────
+
+  // MANAGER → always allowed (for non-title actions)
   if (title === 'manager') {
     return { allowed: true }
   }
@@ -66,10 +102,8 @@ export function authorize(
   // CHIEF-OF-STAFF → own team agents only
   if (title === 'chief-of-staff') {
     if (!targetAgentId) {
-      // Non-targeted actions (e.g., manage-team) — COS can manage their own team
       return { allowed: true }
     }
-    // Check if target is in the same team as the COS
     const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
     const targetTeamId = lookupTeamIdForAgent(targetAgentId)
     if (cosTeamId && cosTeamId === targetTeamId) {
@@ -84,7 +118,6 @@ export function authorize(
   }
 
   if (!targetAgentId) {
-    // Non-targeted actions by non-privileged agents → denied
     return { allowed: false, reason: `${title || 'agent'} cannot ${action}` }
   }
 

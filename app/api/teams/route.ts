@@ -17,6 +17,7 @@ export async function GET() {
 }
 
 // POST /api/teams - Create a new team
+// Requires governance password (R9.1 + WF-003: team creation is a governance action)
 export async function POST(request: NextRequest) {
   // Authenticate requesting agent identity for governance checks
   const auth = authenticateAgent(
@@ -33,6 +34,20 @@ export async function POST(request: NextRequest) {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  // Governance password required for team creation when called by an agent.
+  // System-owner (Phase 1: no auth headers → web UI / localhost) is exempt.
+  const isSystemOwner = !auth.agentId && !auth.error
+  if (!isSystemOwner) {
+    const { verifyPassword } = await import('@/lib/governance')
+    const password = body.governancePassword as string | undefined
+    if (!password) {
+      return NextResponse.json({ error: 'Governance password required for team creation. Include "governancePassword" in request body.' }, { status: 403 })
+    }
+    if (!(await verifyPassword(password))) {
+      return NextResponse.json({ error: 'Invalid governance password' }, { status: 403 })
+    }
   }
 
   // Whitelist expected fields instead of spreading raw body

@@ -22,6 +22,34 @@ vi.mock('@/lib/session-auth', () => ({
   validateSession: (...args: unknown[]) => mockValidateSession(...args),
 }))
 
+const mockIsSessionSecret = vi.fn()
+const mockValidateSessionSecret = vi.fn()
+vi.mock('@/lib/session-secret', () => ({
+  isSessionSecret: (...args: unknown[]) => mockIsSessionSecret(...args),
+  validateSessionSecret: (...args: unknown[]) => mockValidateSessionSecret(...args),
+}))
+
+// Mock registry/governance for findAgentBySessionSecret + resolveGovernanceContext
+const mockLoadAgents = vi.fn()
+const mockIsManager = vi.fn()
+const mockIsChiefOfStaffAnywhere = vi.fn()
+const mockGetAgent = vi.fn()
+const mockLoadTeams = vi.fn()
+
+vi.mock('@/lib/agent-registry', () => ({
+  loadAgents: (...args: unknown[]) => mockLoadAgents(...args),
+  getAgent: (...args: unknown[]) => mockGetAgent(...args),
+}))
+
+vi.mock('@/lib/governance', () => ({
+  isManager: (...args: unknown[]) => mockIsManager(...args),
+  isChiefOfStaffAnywhere: (...args: unknown[]) => mockIsChiefOfStaffAnywhere(...args),
+}))
+
+vi.mock('@/lib/team-registry', () => ({
+  loadTeams: (...args: unknown[]) => mockLoadTeams(...args),
+}))
+
 // ============================================================================
 // Import module under test (after mocks)
 // ============================================================================
@@ -36,6 +64,12 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockExtractSessionFromCookie.mockReturnValue(null)
   mockValidateSession.mockReturnValue(false)
+  mockIsSessionSecret.mockImplementation((t: string) => t?.startsWith('mst_'))
+  mockLoadAgents.mockReturnValue([])
+  mockIsManager.mockReturnValue(false)
+  mockIsChiefOfStaffAnywhere.mockReturnValue(false)
+  mockGetAgent.mockReturnValue(null)
+  mockLoadTeams.mockReturnValue([])
 })
 
 // ============================================================================
@@ -133,6 +167,18 @@ describe('authenticateAgent', () => {
 
       expect(result.error).toBeDefined()
       expect(result.status).toBe(403)
+    })
+  })
+
+  describe('server-issued session secret (mst_*)', () => {
+    it('returns 401 when no agent has a matching session secret hash', () => {
+      /** Session secret doesn't match any stored hash → reject */
+      // findAgentBySessionSecret uses require() internally — returns null when no match
+      const result = authenticateAgent('Bearer mst_badsecret', null)
+
+      expect(result.error).toBeDefined()
+      expect(result.status).toBe(401)
+      expect(result.error).toContain('session secret')
     })
   })
 

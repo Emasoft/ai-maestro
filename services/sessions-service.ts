@@ -701,6 +701,27 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
     // AGENT_WORK_DIR is the trusted sandbox boundary for the directory guard hook.
     // Set at session creation, immutable — the agent cannot change it via `cd`.
     await runtime.setEnvironment(actualSessionName, 'AGENT_WORK_DIR', cwd)
+
+    // MAESTRO_AUTH: server-issued session secret for API authentication.
+    // The server spawns the agent, so it IS the identity authority for local agents.
+    // The secret is set as a tmux env var (scoped to this session's process tree).
+    // No Ed25519 ceremony needed — the server trusts itself.
+    if (registeredAgentId) {
+      try {
+        const { generateSessionSecret } = await import('@/lib/session-secret')
+        const { secret, secretHash } = generateSessionSecret()
+        await runtime.setEnvironment(actualSessionName, 'MAESTRO_AUTH', secret)
+        // Store the hash in agent registry for validation
+        const { updateAgent } = await import('@/lib/agent-registry')
+        await updateAgent(registeredAgentId, {
+          metadata: { sessionSecretHash: secretHash }
+        } as any)
+        console.log(`[Sessions] Set MAESTRO_AUTH for agent ${agentName} (session secret)`)
+      } catch (secretErr) {
+        console.warn(`[Sessions] Could not set session secret for ${agentName}:`, secretErr)
+      }
+    }
+
     await runtime.unsetEnvironment(actualSessionName, 'CLAUDECODE')
     // Removed redundant sendKeys export command -- tmux set-environment (above)
     // already sets AMP_DIR, AIM_AGENT_NAME, and AIM_AGENT_ID in the session environment.

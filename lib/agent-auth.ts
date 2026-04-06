@@ -17,13 +17,14 @@
 import { authenticateRequest } from './amp-auth'
 import { validateGovernanceToken } from './aid-token'
 import { extractSessionFromCookie, validateSession } from './session-auth'
+import { isSessionSecret, validateSessionSecret } from './session-secret'
 
 export interface AgentAuthResult {
   /** Verified agent ID, or undefined for system owner / web UI */
   agentId?: string
-  /** Governance title from AID token (avoids registry lookup). Only set for aim_tk_ tokens. */
+  /** Governance title — from AID token (embedded) or registry (session secret / AMP key) */
   governanceTitle?: string
-  /** Team ID from AID token. Only set for aim_tk_ tokens. null = no team. */
+  /** Team ID — from AID token (embedded) or registry (session secret / AMP key). null = no team. */
   teamId?: string | null
   /** Error message if authentication failed */
   error?: string
@@ -97,7 +98,35 @@ export function authenticateAgent(
       }
     }
 
-    // Case 3b: Legacy AMP API key (amp_live_sk_* or amp_test_sk_*)
+    // Case 3b: Server-issued session secret (mst_*) — local agents only
+    // The server generated this at session launch and set it as a tmux env var.
+    // Title + team are looked up from current registry state (always fresh).
+    if (isSessionSecret(token)) {
+      const agentRecord = findAgentBySessionSecret(token)
+      if (!agentRecord) {
+        return {
+          error: 'Invalid or expired session secret',
+          status: 401
+        }
+      }
+
+      if (agentIdHeader && agentIdHeader !== agentRecord.id) {
+        return {
+          error: 'X-Agent-Id does not match authenticated agent identity',
+          status: 403
+        }
+      }
+
+      // Look up current governance context from registry (always fresh — no stale token)
+      const govContext = resolveGovernanceContext(agentRecord.id)
+      return {
+        agentId: agentRecord.id,
+        governanceTitle: govContext.title,
+        teamId: govContext.teamId
+      }
+    }
+
+    // Case 3c: Legacy AMP API key (amp_live_sk_* or amp_test_sk_*)
     const result = authenticateRequest(authHeader)
 
     if (!result.authenticated || !result.agentId) {
@@ -160,5 +189,77 @@ export function buildAuthContext(authResult: AgentAuthResult): AuthContext {
   return {
     agentId: authResult.agentId,
     isSystemOwner: !authResult.agentId,
+  }
+}
+
+// ============================================================================
+// Session Secret Helpers (local agent identity)
+// ============================================================================
+
+/**
+ * Find an agent by their session secret.
+ * Iterates all agents and checks the hash. Returns the agent record or null.
+ */
+/**
+ * Find an agent by their session secret.
+ * Uses the validateSessionSecret import (mockable in tests).
+ */
+function findAgentBySessionSecret(secret: string): { id: string; name: string } | null {
+  try {
+    // Dynamic import to avoid circular dependency with agent-registry
+
+    const agentRegistry = require('./agent-registry')
+    const agents: Array<{ id: string; name: string; metadata?: Record<string, unknown> }> = agentRegistry.loadAgents()
+    for (const agent of agents) {
+      const storedHash = agent.metadata?.sessionSecretHash as string | undefined
+      if (storedHash && validateSessionSecret(secret, storedHash)) {
+        return { id: agent.id, name: agent.name }
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Resolve current governance title and team for an agent.
+ * Always returns current state (no stale-token problem).
+ */
+function resolveGovernanceContext(agentId: string): { title: string; teamId: string | null } {
+  try {
+    // Dynamic imports to avoid circular dependencies
+
+    const governance = require('./governance')
+    if (governance.isManager(agentId)) return { title: 'manager', teamId: resolveTeamId(agentId) }
+    if (governance.isChiefOfStaffAnywhere(agentId)) return { title: 'chief-of-staff', teamId: resolveTeamId(agentId) }
+
+
+    const agentRegistry = require('./agent-registry')
+    const agent = agentRegistry.getAgent(agentId)
+    const title = (agent?.governanceTitle as string) || 'autonomous'
+    return { title, teamId: resolveTeamId(agentId) }
+  } catch {
+    return { title: 'autonomous', teamId: null }
+  }
+}
+
+function resolveTeamId(agentId: string): string | null {
+  try {
+
+    const teamRegistry = require('./team-registry')
+    const teams = teamRegistry.loadTeams()
+    for (const team of teams) {
+      if (
+        team.agentIds?.includes(agentId) ||
+        team.chiefOfStaffId === agentId ||
+        team.orchestratorId === agentId
+      ) {
+        return team.id
+      }
+    }
+    return null
+  } catch {
+    return null
   }
 }

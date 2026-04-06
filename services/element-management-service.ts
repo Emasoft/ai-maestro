@@ -2884,34 +2884,21 @@ export async function CreateAgent(
       ops.push(`G09: No session requested (agent created hibernated)`)
     }
 
-    // ── G10: Auto-provision AID identity ─────────────────────
-    // Generate Ed25519 keypair so the agent can prove its identity cryptographically.
-    // Register with local AI Maestro AMP provider to get an API key (legacy compat).
+    // ── G10: Auto-provision Ed25519 keypair for AMP messaging ──
+    // Keypair used for AMP message signing and remote AID proof-of-possession.
+    // Local API auth uses server-issued session secrets (MAESTRO_AUTH env var,
+    // set by sessions-service at tmux launch — not here).
     try {
       const { generateKeyPair: genKP, saveKeyPair: saveKP, hasKeyPair: hasKP } = await import('@/lib/amp-keys')
       if (!hasKP(agent.id)) {
         const keyPair = await genKP()
         saveKP(agent.id, keyPair)
-        ops.push(`G10: Ed25519 keypair generated (fingerprint=${keyPair.fingerprint.substring(0, 20)}...)`)
-
-        // Internal registration with AMP provider (generates amp_live_sk_* key)
-        try {
-          const { registerAgent: registerAMP } = await import('@/services/amp-service')
-          await registerAMP({
-            name,
-            public_key: keyPair.publicHex,
-            key_algorithm: 'Ed25519',
-            tenant: 'default',
-          }, null)
-          ops.push(`G10: AMP registration complete — agent can authenticate`)
-        } catch (regErr) {
-          ops.push(`G10: WARN — AMP registration failed: ${regErr instanceof Error ? regErr.message : regErr}`)
-        }
+        ops.push(`G10: Ed25519 keypair generated for AMP messaging (fingerprint=${keyPair.fingerprint.substring(0, 20)}...)`)
       } else {
         ops.push(`G10: Agent already has keypair — skipped`)
       }
     } catch (keyErr) {
-      ops.push(`G10: WARN — AID provisioning failed: ${keyErr instanceof Error ? keyErr.message : keyErr}`)
+      ops.push(`G10: WARN — Keypair generation failed: ${keyErr instanceof Error ? keyErr.message : keyErr}`)
     }
 
     // ── G11: Install ai-maestro-plugin at local scope ────────

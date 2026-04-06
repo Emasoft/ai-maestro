@@ -426,6 +426,41 @@ Example: `SCEN-009/S014-task-sent.png`, `SCEN-009/S033-manager-removed.png`
 
 ---
 
+## Rule 11: 11th-HOUR
+
+After the scenario test completes and the report is saved, execute an **in-depth analysis** of the results. Think deeply about unsolved problems and propose concrete solutions.
+
+**The analysis must cover:**
+1. Bugs found during the run that remain unfixed
+2. Pre-existing issues that interfered with the test
+3. Workflow inefficiencies observed in agent behavior
+4. Governance rule gaps or ambiguities exposed by the test
+5. API design issues that caused agents to fail or retry
+
+**Proposed solutions must use one or more of these methods:**
+
+| Category | Examples |
+|----------|----------|
+| **Bug fixes** | Fix root cause in ai-maestro code, UI, or API (no workarounds) |
+| **API improvements** | New endpoints, new options on existing endpoints, better error messages |
+| **Script improvements** | New options or fixes in ai-maestro CLI scripts |
+| **ai-maestro-plugin improvements** | New/improved skills, hooks, scripts in the main plugin |
+| **Role-plugin improvements** | Improve main-agent .md, sub-agents, skills, or other elements |
+| **Workflow rule changes** | Modify/add rules for agents with specific titles |
+| **Cross-title workflow changes** | Coordinated rule changes across multiple title agents |
+| **Governance rule proposals** | Changes to docs/GOVERNANCE-RULES.md |
+| **Test infrastructure** | New tracking/debugging methods for scenario UI tests |
+| **New scenarios** | Propose new scenarios focused on investigating specific issues |
+
+**Output:** Save the writeup to:
+```
+tests/scenarios/reports/scenario_proposed-improvements_<NNN>_<datetime>.md
+```
+
+The file must reference the scenario report it is based on. Each proposal must include: problem description, root cause analysis, proposed solution with specific files/changes, and priority (P0-P3).
+
+---
+
 ## Directory Structure
 
 ```

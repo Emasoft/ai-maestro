@@ -53,6 +53,38 @@ const INSTALLED_FILE = join(CLAUDE_DIR, 'plugins', 'installed_plugins.json')
 // Local marketplace name — for custom Haephestos-generated role-plugins
 const MARKETPLACE_NAME = LOCAL_MARKETPLACE_NAME
 
+// ── Shared Gate 0: Authorization helper for all Change* functions ────
+// Each Change* function calls this as Gate 0. The action determines the rules:
+// - 'change-title': only MANAGER/COS, never self (strictest)
+// - 'modify-agent': system-owner/MANAGER/COS/self (default for most properties)
+// Returns null if allowed, error string if denied.
+async function gate0Auth(
+  action: import('@/lib/authorization').AuthAction,
+  agentId: string,
+  authContext: AuthContext | undefined,
+  ops: string[]
+): Promise<string | null> {
+  if (!authContext) {
+    ops.push('G00: No auth context — internal call (authorized)')
+    return null
+  }
+  if (authContext.isSystemOwner) {
+    ops.push('G00: System-owner — authorized')
+    return null
+  }
+  const { authorize } = await import('@/lib/authorization')
+  const authResult: import('@/lib/agent-auth').AgentAuthResult = {
+    agentId: authContext.agentId,
+  }
+  const authz = authorize(authResult, action, agentId)
+  if (!authz.allowed) {
+    ops.push(`G00: DENIED — ${authz.reason}`)
+    return authz.reason || 'Not authorized'
+  }
+  ops.push(`G00: Authorized (caller=${authContext.agentId}, action=${action})`)
+  return null
+}
+
 // GitHub marketplace for predefined role plugins
 export const GITHUB_MARKETPLACE_NAME = GITHUB_MARKETPLACE_NAME_IMPORT
 
@@ -660,30 +692,9 @@ export async function ChangeTitle(
   }
 
   try {
-    // ── GATE 0: Authorization — who is allowed to change titles? ──
-    // Only MANAGER (on any agent except self) and COS (on own team except self).
-    // System-owner (web UI) is always allowed. Self-assignment is always forbidden.
-    if (options?.authContext) {
-      const { authorize } = await import('@/lib/authorization')
-      const authResult: import('@/lib/agent-auth').AgentAuthResult = {
-        agentId: options.authContext.agentId,
-        governanceTitle: options.authContext.isSystemOwner ? undefined : undefined, // looked up by authorize()
-      }
-      // If the caller is an agent (not system-owner), enforce title-change rules
-      if (!options.authContext.isSystemOwner) {
-        const authz = authorize(authResult, 'change-title', agentId)
-        if (!authz.allowed) {
-          result.error = authz.reason || 'Not authorized to change governance titles'
-          ops.push(`G00: DENIED — ${authz.reason}`)
-          return result
-        }
-        ops.push(`G00: Authorized (caller=${options.authContext.agentId})`)
-      } else {
-        ops.push(`G00: System-owner — authorized`)
-      }
-    } else {
-      ops.push(`G00: No auth context — internal call (authorized)`)
-    }
+    // ── GATE 0: Authorization (change-title: MANAGER/COS only, never self) ──
+    const g0err = await gate0Auth('change-title', agentId, options?.authContext, ops)
+    if (g0err) { result.error = g0err; return result }
 
     // ── GATE 1: Validate title value ─────────────────────────
     const effectiveTitle = newTitle === 'autonomous' ? null : newTitle
@@ -2162,12 +2173,16 @@ export async function ChangeTeam(
 export async function ChangeName(
   agentId: string,
   newName: string,
-  _authContext?: AuthContext,
+  authContext?: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
   try {
+    // ── G00: Authorization (modify-agent: self/MANAGER/COS) ──
+    const g0err = await gate0Auth('modify-agent', agentId, authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
     // ── G01: Validate name format ─────────────────────────────
     const normalized = newName.toLowerCase()
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(normalized)) {
@@ -2231,12 +2246,16 @@ export async function ChangeName(
 export async function ChangeFolder(
   agentId: string,
   newFolder: string,
-  _authContext?: AuthContext,
+  authContext?: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
   try {
+    // ── G00: Authorization (modify-agent: self/MANAGER/COS) ──
+    const g0err = await gate0Auth('modify-agent', agentId, authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
     // ── G01: Validate path ────────────────────────────────────
     if (/\.\./.test(newFolder)) {
       result.error = `Path traversal ("..") not allowed in working directory`
@@ -2305,12 +2324,16 @@ export async function ChangeFolder(
 export async function ChangeAvatar(
   agentId: string,
   avatarPath: string,
-  _authContext?: AuthContext,
+  authContext?: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
   try {
+    // ── G00: Authorization (modify-agent: self/MANAGER/COS) ──
+    const g0err = await gate0Auth('modify-agent', agentId, authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
     // ── G01: Validate file exists ─────────────────────────────
     const resolved = avatarPath.startsWith('~') ? avatarPath.replace('~', HOME) : avatarPath
     if (!existsSync(resolved)) {
@@ -2349,12 +2372,16 @@ export async function ChangeAvatar(
 export async function ChangeCLIArgs(
   agentId: string,
   newArgs: string,
-  _authContext?: AuthContext,
+  authContext?: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
   try {
+    // ── G00: Authorization (modify-agent: self/MANAGER/COS) ──
+    const g0err = await gate0Auth('modify-agent', agentId, authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
     // ── G01: Validate args (basic sanitization) ───────────────
     // Allow: a-z A-Z 0-9 space - _ . = / : @ (covers paths, flags, persona names)
     if (/[^a-zA-Z0-9 \-_\.=\/:@]/.test(newArgs)) {
@@ -2411,12 +2438,16 @@ const VALID_CLIENTS = new Set(['claude', 'codex', 'gemini', 'opencode', 'kiro'])
 export async function ChangeClient(
   agentId: string,
   newClient: string,
-  _authContext?: AuthContext,
+  authContext?: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
   try {
+    // ── G00: Authorization (modify-agent: self/MANAGER/COS) ──
+    const g0err = await gate0Auth('modify-agent', agentId, authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
     // ── G01: Validate client value ─────────────────────────────
     const normalized = newClient.toLowerCase().trim()
     if (!VALID_CLIENTS.has(normalized)) {

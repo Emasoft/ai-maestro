@@ -30,6 +30,7 @@ import path from 'path'
 import os from 'os'
 import { execSync } from 'child_process'
 import { v4 as uuidv4 } from 'uuid'
+import type { AuthContext } from '@/lib/agent-auth'
 import type {
   Agent,
   AgentSession,
@@ -680,7 +681,7 @@ export function getAgentById(id: string): ServiceResult<{ agent: Agent }> {
 // PATCH /api/agents/[id] -- update agent
 // ---------------------------------------------------------------------------
 
-export async function updateAgentById(id: string, body: UpdateAgentRequest, requestingAgentId?: string | null): Promise<ServiceResult<{ agent: Agent }>> {
+export async function updateAgentById(id: string, body: UpdateAgentRequest, requestingAgentId?: string | null, authContext?: AuthContext): Promise<ServiceResult<{ agent: Agent }>> {
   try {
     // Check if agent exists and is not soft-deleted
     const existing = getAgent(id, true) // include deleted to distinguish 404 vs 410
@@ -756,12 +757,8 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
     if (oldTitle !== newTitle) {
       try {
         const { ChangeTitle } = await import('@/services/element-management-service')
-        const titleResult = await ChangeTitle(id, newTitle, {
-          authContext: {
-            agentId: requestingAgentId || undefined,
-            isSystemOwner: !requestingAgentId,
-          },
-        })
+        const ac = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }
+        const titleResult = await ChangeTitle(id, newTitle, { authContext: ac })
         if (!titleResult.success) console.warn('[agents] ChangeTitle failed:', titleResult.error)
         anyChangeExecuted = true
       } catch (err) {
@@ -773,7 +770,8 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
     if (changeableFields.name && changeableFields.name !== existing.name) {
       try {
         const { ChangeName } = await import('@/services/element-management-service')
-        const nameResult = await ChangeName(id, changeableFields.name)
+        const ac = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }
+        const nameResult = await ChangeName(id, changeableFields.name, ac)
         if (!nameResult.success) console.warn('[agents] ChangeName failed:', nameResult.error)
         anyChangeExecuted = true
       } catch (err) {
@@ -785,7 +783,8 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
     if (changeableFields.workingDirectory && changeableFields.workingDirectory !== existing.workingDirectory) {
       try {
         const { ChangeFolder } = await import('@/services/element-management-service')
-        const folderResult = await ChangeFolder(id, changeableFields.workingDirectory)
+        const ac2 = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }
+        const folderResult = await ChangeFolder(id, changeableFields.workingDirectory, ac2)
         if (!folderResult.success) console.warn('[agents] ChangeFolder failed:', folderResult.error)
         anyChangeExecuted = true
       } catch (err) {
@@ -797,7 +796,8 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
     if (changeableFields.avatar && changeableFields.avatar !== existing.avatar) {
       try {
         const { ChangeAvatar } = await import('@/services/element-management-service')
-        const avatarResult = await ChangeAvatar(id, changeableFields.avatar)
+        const ac3 = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }
+        const avatarResult = await ChangeAvatar(id, changeableFields.avatar, ac3)
         if (!avatarResult.success) console.warn('[agents] ChangeAvatar failed:', avatarResult.error)
         anyChangeExecuted = true
       } catch (err) {
@@ -809,7 +809,8 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
     if (changeableFields.programArgs !== undefined && changeableFields.programArgs !== existing.programArgs) {
       try {
         const { ChangeCLIArgs } = await import('@/services/element-management-service')
-        const argsResult = await ChangeCLIArgs(id, changeableFields.programArgs)
+        const ac4 = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }
+        const argsResult = await ChangeCLIArgs(id, changeableFields.programArgs, ac4)
         if (!argsResult.success) console.warn('[agents] ChangeCLIArgs failed:', argsResult.error)
         anyChangeExecuted = true
       } catch (err) {
@@ -821,7 +822,8 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
     if (changeableFields.program && changeableFields.program !== (existing.program || 'claude')) {
       try {
         const { ChangeClient } = await import('@/services/element-management-service')
-        const clientResult = await ChangeClient(id, changeableFields.program)
+        const ac5 = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }
+        const clientResult = await ChangeClient(id, changeableFields.program, ac5)
         if (!clientResult.success) console.warn('[agents] ChangeClient failed:', clientResult.error)
         anyChangeExecuted = true
       } catch (err) {

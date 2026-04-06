@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAgentById, updateAgentById, deleteAgentById } from '@/services/agents-core-service'
 import type { UpdateAgentRequest } from '@/types/agent'
 import { isValidUuid } from '@/lib/validation'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
 
 /**
@@ -44,14 +44,10 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
 
-    // Auth + RBAC
+    // Identity auth only — authorization is handled by each Change* function
     const auth = authenticateFromRequest(request)
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
-    }
-    const authz = authorize(auth, 'modify-agent', id)
-    if (!authz.allowed) {
-      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
 
     let body: UpdateAgentRequest
@@ -59,7 +55,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    const result = await updateAgentById(id, body, auth.agentId || null)
+    // Pass full auth context — each Change* function decides its own authorization
+    const result = await updateAgentById(id, body, auth.agentId || null, buildAuthContext(auth))
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }

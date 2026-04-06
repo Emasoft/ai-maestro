@@ -105,9 +105,17 @@ export function authorize(
     return { allowed: false, reason: 'Only MANAGER can delete agents' }
   }
 
+  // ── Universal rule: no agent can modify itself via API ──────
+  // Agents cannot change their own properties, title, skills, or delete themselves.
+  // They operate through their own Claude Code instance directly.
+  // Only the MANAGER or COS (for their team) can modify other agents.
+  if (targetAgentId && targetAgentId === auth.agentId) {
+    return { allowed: false, reason: 'No agent can modify itself via the AI Maestro API' }
+  }
+
   // ── General rules ──────────────────────────────────────────
 
-  // MANAGER → always allowed (for non-title actions)
+  // MANAGER → always allowed (for actions on OTHER agents)
   if (title === 'manager') {
     return { allowed: true }
   }
@@ -125,16 +133,12 @@ export function authorize(
     return { allowed: false, reason: `Chief-of-Staff can only ${action} agents in their own team` }
   }
 
-  // All other titles → self only
-  if (targetAgentId && targetAgentId === auth.agentId) {
-    return { allowed: true }
-  }
-
+  // All other titles → denied (no agent can modify other agents)
   if (!targetAgentId) {
     return { allowed: false, reason: `${title || 'agent'} cannot ${action}` }
   }
 
-  return { allowed: false, reason: `${title || 'agent'} can only ${action} itself` }
+  return { allowed: false, reason: `${title || 'agent'} cannot ${action} other agents` }
 }
 
 // ============================================================================

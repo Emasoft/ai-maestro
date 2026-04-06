@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { approveCrossHostRequest } from '@/services/cross-host-governance-service'
 import { isValidUuid } from '@/lib/validation'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 export async function POST(
   request: NextRequest,
@@ -14,6 +15,12 @@ export async function POST(
 ): Promise<NextResponse> {
   try {
     const { id } = await params
+
+    // Identity auth — the caller must prove who they are (session cookie or Bearer token)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
 
     // MF-013: Validate request ID is a valid UUID before passing to service
     if (!isValidUuid(id)) {
@@ -25,16 +32,18 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    if (!body?.approverAgentId || !body?.password) {
-      return NextResponse.json({ error: 'Missing required fields: approverAgentId, password' }, { status: 400 })
+    if (!body?.password) {
+      return NextResponse.json({ error: 'Missing required field: password' }, { status: 400 })
     }
 
-    // SF-024: Validate approverAgentId is a string and valid UUID
-    if (typeof body.approverAgentId !== 'string' || !isValidUuid(body.approverAgentId)) {
-      return NextResponse.json({ error: 'Invalid approverAgentId format' }, { status: 400 })
+    // Use authenticated agent ID instead of self-asserted body field.
+    // System-owner (web UI) must provide approverAgentId in body since they have no agentId.
+    const approverAgentId = auth.agentId || body.approverAgentId
+    if (!approverAgentId || !isValidUuid(approverAgentId)) {
+      return NextResponse.json({ error: 'Could not determine approver agent ID' }, { status: 400 })
     }
 
-    const result = await approveCrossHostRequest(id, body.approverAgentId, body.password)
+    const result = await approveCrossHostRequest(id, approverAgentId, body.password)
     // MF-004 (P8): Explicit error branching instead of fragile nullish coalescing
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })

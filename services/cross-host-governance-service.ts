@@ -530,8 +530,22 @@ async function performRequestExecution(request: GovernanceRequest): Promise<void
           break
         }
 
+        case 'delete-agent': {
+          // Execute agent deletion via the all-in-one pipeline.
+          // COS requested it, MANAGER approved → DeleteAgent runs as system-owner.
+          const { DeleteAgent } = await import('@/services/element-management-service')
+          const deleteResult = await DeleteAgent(request.payload.agentId, {
+            authContext: { isSystemOwner: true }, // Approved by MANAGER → system-level execution
+          })
+          if (!deleteResult.success) {
+            console.warn(`${LOG_PREFIX} delete-agent execution failed for request ${request.id}: ${deleteResult.error}`)
+            return
+          }
+          console.log(`${LOG_PREFIX} delete-agent executed for agent ${request.payload.agentId}`)
+          break
+        }
+
         default:
-          // Other types (create-agent, delete-agent) are not yet implemented
           console.warn(`${LOG_PREFIX} Request type '${request.type}' execution is not yet implemented`)
           return
       }

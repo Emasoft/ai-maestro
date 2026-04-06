@@ -112,6 +112,16 @@ export default function TerminalView({ session, isVisible = true, hideFooter = f
   // Enter in prompt builder always sends+executes (Shift+Enter for newline)
   const enterMode = 'send' as const
 
+  // Sync React state with programmatic value changes (CDP automation, browser extensions).
+  // React's onChange doesn't fire when value is set via native setter + dispatchEvent.
+  useEffect(() => {
+    const textarea = promptTextareaRef.current
+    if (!textarea) return
+    const handler = () => setPromptDraft(textarea.value)
+    textarea.addEventListener('input', handler)
+    return () => textarea.removeEventListener('input', handler)
+  }, [])
+
   // Agent-centric storage: Use agentId as primary key (falls back to session.id for backward compatibility)
   const storageId = session.agentId || session.id
 

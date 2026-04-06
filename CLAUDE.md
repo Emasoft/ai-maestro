@@ -911,6 +911,52 @@ Defined in `lib/ecosystem-constants.ts` (TypeScript) and `scripts/ecosystem-conf
 - `lib/ecosystem-constants.ts` — `LOCAL_MARKETPLACE_NAME`, `GITHUB_MARKETPLACE_NAME`, `getLocalMarketplacePath()`
 - `agents/haephestos-creation-helper.md` — 8-step role-plugin creation protocol
 
+### Editing Role-Plugins (CRITICAL — Never Edit Cache)
+
+**NEVER edit files in `~/.claude/plugins/cache/`** — those are cached copies that get overwritten on every plugin update. All changes must go through the proper publish pipeline.
+
+**Correct workflow to edit a role-plugin:**
+
+```bash
+# 1. Clone the plugin's own GitHub repo (NOT the marketplace, NOT the cache)
+cd /tmp
+git clone git@github.com:Emasoft/<plugin-name>.git
+cd <plugin-name>
+
+# 2. Make your edits to the actual source files
+#    Main agent: agents/<plugin-name>-main-agent.md
+#    Skills: skills/<skill-name>/SKILL.md
+#    Plugin manifest: plugin.json
+#    TOML profile: <plugin-name>.agent.toml
+
+# 3. Publish using the unified publish pipeline (quality gate + version bump)
+uv run python scripts/publish.py --patch
+#    This runs: test → lint → validate → consistency-check → bump → commit → push
+
+# 4. The GitHub workflow in the plugin repo automatically triggers
+#    Emasoft/ai-maestro-plugins marketplace to update its metadata
+#    with the new version, so Claude Code auto-updates on next check.
+
+# 5. Force update on the local machine (optional, for immediate testing):
+claude plugin update <plugin-name>@ai-maestro-plugins
+```
+
+**The 6 role-plugin repos (each independent, NOT forked):**
+
+| Plugin | Repo |
+|--------|------|
+| `ai-maestro-assistant-manager-agent` | `Emasoft/ai-maestro-assistant-manager-agent` |
+| `ai-maestro-chief-of-staff` | `Emasoft/ai-maestro-chief-of-staff` |
+| `ai-maestro-architect-agent` | `Emasoft/ai-maestro-architect-agent` |
+| `ai-maestro-orchestrator-agent` | `Emasoft/ai-maestro-orchestrator-agent` |
+| `ai-maestro-integrator-agent` | `Emasoft/ai-maestro-integrator-agent` |
+| `ai-maestro-programmer-agent` | `Emasoft/ai-maestro-programmer-agent` |
+
+**What NOT to do:**
+- Do NOT edit `~/.claude/plugins/cache/<marketplace>/<plugin>/` — changes are lost on update
+- Do NOT edit `~/agents/role-plugins/<plugin>/` for predefined plugins — that's for Haephestos-created custom plugins only
+- Do NOT push directly to `Emasoft/ai-maestro-plugins` marketplace — plugin repos trigger marketplace updates automatically
+
 ## Groups Feature (v0.25+)
 
 Groups are lightweight agent collections for broadcast messaging — replacing the removed "open teams" concept. Unlike teams, groups have no governance, no COS, no kanban — just a subscriber list.
@@ -1318,6 +1364,7 @@ The PATCH `/api/agents/{id}` route is a router that dispatches to the appropriat
 - **[docs/REQUIREMENTS.md](./docs/REQUIREMENTS.md)** - Installation prerequisites
 - **[docs/OPERATIONS-GUIDE.md](./docs/OPERATIONS-GUIDE.md)** - Agent management, troubleshooting
 - **[docs/CEREBELLUM.md](./docs/CEREBELLUM.md)** - Cerebellum subsystem architecture, voice pipeline, TTS providers
+- **[docs/GOVERNANCE-RULES.md](./docs/GOVERNANCE-RULES.md)** - Team governance rules R1-R15 (semver v3.1.0): titles, teams, messaging, composition, role boundaries, resilience, written orders
 
 Refer to these when users ask about setup or usage.
 

@@ -57,35 +57,35 @@ author: AI Maestro Team
 - **Goal:** Clean git state with known commit hash
 - **Creates:** nothing
 - **Modifies:** git history (new commit if needed)
-- **Verify:** `git status` shows clean working tree
+- **Verify:** `git status` shows clean working tree. Screenshot: SCEN-002/S001-git-clean.png
 
 #### S002: STATE-WIPE Checkpoint -- Save configuration
 - **Action:** Backup config files to `tests/scenarios/state-backups/teams-groups-agents_<timestamp>/`
 - **Goal:** Copies of the following saved: `~/.claude/settings.json`, `~/.claude/settings.local.json`, `~/.aimaestro/governance.json`, `~/.aimaestro/agents/registry.json`, `~/.aimaestro/teams/teams.json`, `~/.aimaestro/teams/groups.json`
 - **Creates:** Backup directory with config copies
 - **Modifies:** nothing
-- **Verify:** Backup files exist and match originals (hash comparison)
+- **Verify:** Backup files exist and match originals (hash comparison). Screenshot: SCEN-002/S002-backup-created.png
 
 #### S003: Build and verify server
 - **Action:** `yarn build && pm2 restart ai-maestro`, wait 4s, check `GET /api/sessions` returns 200
 - **Goal:** Server running and healthy
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** API returns session list (HTTP 200)
+- **Verify:** API returns session list (HTTP 200). Screenshot: SCEN-002/S003-server-healthy.png
 
 #### S004: Navigate to dashboard
 - **Action:** `navigate_page` to `http://localhost:23000`
 - **Goal:** Dashboard loads with sidebar and agent list
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Screenshot shows AI Maestro dashboard
+- **Verify:** Screenshot shows AI Maestro dashboard. Screenshot: SCEN-002/S004-dashboard.png
 
 #### S005: Take pre-test screenshot (baseline)
 - **Action:** `take_screenshot` of full page
 - **Goal:** Baseline image for CLEAN-AFTER-YOURSELF verification
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Screenshot saved
+- **Verify:** Screenshot saved. Screenshot: SCEN-002/S005-baseline.png
 
 ## Phase 1: Create Test Agents (0-IMPACT)
 
@@ -94,42 +94,42 @@ author: AI Maestro Team
 - **Goal:** Agent creation wizard opens
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Wizard dialog visible with client selection step
+- **Verify:** Wizard dialog visible with client selection step. Screenshot: SCEN-002/S006-wizard-open.png
 
 #### S007: Create first test agent -- scen-test-agent-alpha
 - **Action:** Select "Claude Code" as client, click Next. Enter name `scen-test-agent-alpha`, click Next through remaining steps (no team, default AUTONOMOUS title, no role-plugin). Click Create/Finish.
 - **Goal:** Agent `scen-test-agent-alpha` created as AUTONOMOUS with no team
 - **Creates:** Agent `scen-test-agent-alpha` in registry
 - **Modifies:** Agent registry (new entry)
-- **Verify:** Agent appears in sidebar agent list
+- **Verify:** Agent appears in sidebar agent list. Screenshot: SCEN-002/S007-alpha-created.png
 
 #### S008: Verify scen-test-agent-alpha in sidebar
 - **Action:** Click on `scen-test-agent-alpha` in the agent list
 - **Goal:** Profile panel shows agent details, title is AUTONOMOUS, no team
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Profile heading shows `scen-test-agent-alpha`, title badge shows AUTONOMOUS, team shows "No team"
+- **Verify:** Profile heading shows `scen-test-agent-alpha`, title badge shows AUTONOMOUS, team shows "No team". Screenshot: SCEN-002/S008-alpha-profile.png
 
 #### S009: Open agent creation wizard again
 - **Action:** Click the "+" button in sidebar header
 - **Goal:** Agent creation wizard opens
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Wizard dialog visible
+- **Verify:** Wizard dialog visible. Screenshot: SCEN-002/S009-wizard-reopen.png
 
 #### S010: Create second test agent -- scen-test-agent-beta
 - **Action:** Select "Claude Code" as client, click Next. Enter name `scen-test-agent-beta`, click Next through remaining steps (no team, default AUTONOMOUS title, no role-plugin). Click Create/Finish.
 - **Goal:** Agent `scen-test-agent-beta` created as AUTONOMOUS with no team
 - **Creates:** Agent `scen-test-agent-beta` in registry
 - **Modifies:** Agent registry (new entry)
-- **Verify:** Agent appears in sidebar agent list
+- **Verify:** Agent appears in sidebar agent list. Screenshot: SCEN-002/S010-beta-created.png
 
 #### S011: Verify scen-test-agent-beta in sidebar
 - **Action:** Click on `scen-test-agent-beta` in the agent list
 - **Goal:** Profile panel shows agent details, title is AUTONOMOUS, no team
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Profile heading shows `scen-test-agent-beta`, title badge shows AUTONOMOUS
+- **Verify:** Profile heading shows `scen-test-agent-beta`, title badge shows AUTONOMOUS. Screenshot: SCEN-002/S011-beta-profile.png
 
 ## Phase 2: Team Creation
 
@@ -138,56 +138,56 @@ author: AI Maestro Team
 - **Goal:** Teams view shown with "Create Team" button
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows "Create Team" button visible
+- **Verify:** Snapshot shows "Create Team" button visible. Screenshot: SCEN-002/S012-teams-tab.png
 
 #### S013: Open Create Team modal
 - **Action:** Click "+ Create Team" button
 - **Goal:** Create Team modal opens with Name, Description, and agent multi-select fields
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Modal visible with heading "Create Team", name textbox, description textbox, agent selection list
+- **Verify:** Modal visible with heading "Create Team", name textbox, description textbox, agent selection list. Screenshot: SCEN-002/S013-create-team-modal.png
 
 #### S014: Fill team name
 - **Action:** Type `scen-test-team-alpha` in the Name field
 - **Goal:** Name field populated
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Name field shows `scen-test-team-alpha`
+- **Verify:** Name field shows `scen-test-team-alpha`. Screenshot: SCEN-002/S014-team-name.png
 
 #### S015: Fill team description
 - **Action:** Type `Scenario 002 integration testing team` in the Description field
 - **Goal:** Description field populated
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Description field shows entered text
+- **Verify:** Description field shows entered text. Screenshot: SCEN-002/S015-team-desc.png
 
 #### S016: Select scen-test-agent-alpha
 - **Action:** Click `scen-test-agent-alpha` in the agents multi-select list
 - **Goal:** Agent highlighted, selected count = 1
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Agent button highlighted, count text shows "1 selected"
+- **Verify:** Agent button highlighted, count text shows "1 selected". Screenshot: SCEN-002/S016-alpha-selected.png
 
 #### S017: Select scen-test-agent-beta
 - **Action:** Click `scen-test-agent-beta` in the agents multi-select list
 - **Goal:** Agent highlighted, selected count = 2
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Agent button highlighted, count text shows "2 selected"
+- **Verify:** Agent button highlighted, count text shows "2 selected". Screenshot: SCEN-002/S017-beta-selected.png
 
 #### S018: Submit Create Team
 - **Action:** Click "Create Team" submit button
 - **Goal:** Modal closes, team created via `POST /api/teams`, team card appears in sidebar. Auto-COS agent created (cos-scen-test-team-alpha with robot avatar).
 - **Creates:** Team `scen-test-team-alpha` in teams registry, auto-COS agent `cos-scen-test-team-alpha`
 - **Modifies:** Teams registry (new entry), agents registry (COS + members), both test agents get MEMBER title + programmer plugin
-- **Verify:** Wait 2s, team card visible in sidebar showing name `scen-test-team-alpha` and count "3" (2 test agents + 1 auto-COS)
+- **Verify:** Wait 2s, team card visible in sidebar showing name `scen-test-team-alpha` and count "3" (2 test agents + 1 auto-COS). Screenshot: SCEN-002/S018-team-created.png
 
 #### S019: Verify team card shows description
 - **Action:** Inspect the `scen-test-team-alpha` team card in sidebar
 - **Goal:** Description text visible on team card
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows "Scenario 002 integration testing team" on the card
+- **Verify:** Snapshot shows "Scenario 002 integration testing team" on the card. Screenshot: SCEN-002/S019-team-description.png
 
 ## Phase 3: Agent Title Auto-Assignment on Team Join
 
@@ -196,28 +196,28 @@ author: AI Maestro Team
 - **Goal:** Agent list shown, grouped by team
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows "Agents" tab active
+- **Verify:** Snapshot shows "Agents" tab active. Screenshot: SCEN-002/S020-agents-tab.png
 
 #### S021: Verify team group header
 - **Action:** Look for `SCEN-TEST-TEAM-ALPHA` group header in agent list
 - **Goal:** Both test agents grouped under the team heading with count 2
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows team name header with count "2"
+- **Verify:** Snapshot shows team name header with count "2". Screenshot: SCEN-002/S021-team-group.png
 
 #### S022: Check scen-test-agent-alpha title and plugin
 - **Action:** Click on `scen-test-agent-alpha` in the agent list
 - **Goal:** Profile panel opens, title auto-transitioned to MEMBER with programmer plugin
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Title badge shows "MEMBER" (was AUTONOMOUS before joining team). Plugin banner shows `ai-maestro-programmer-agent`.
+- **Verify:** Title badge shows "MEMBER" (was AUTONOMOUS before joining team). Plugin banner shows `ai-maestro-programmer-agent`. Screenshot: SCEN-002/S022-alpha-member.png
 
 #### S023: Verify team membership in profile
 - **Action:** Scroll to "Team" section in profile Overview tab
 - **Goal:** Team shows `scen-test-team-alpha`
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Team field displays `scen-test-team-alpha` (not "No team")
+- **Verify:** Team field displays `scen-test-team-alpha` (not "No team"). Screenshot: SCEN-002/S023-team-membership.png
 
 ## Phase 4: COS Assignment
 
@@ -226,42 +226,42 @@ author: AI Maestro Team
 - **Goal:** Confirm a COS agent was auto-created (every team must have a COS)
 - **Creates:** nothing (COS was auto-created during team creation at S018)
 - **Modifies:** nothing
-- **Verify:** chiefOfStaffId is NOT null. A `cos-scen-test-team-alpha` agent exists with CHIEF-OF-STAFF title and robot avatar.
+- **Verify:** chiefOfStaffId is NOT null. A `cos-scen-test-team-alpha` agent exists with CHIEF-OF-STAFF title and robot avatar. Screenshot: SCEN-002/S024-auto-cos.png
 
 #### S025: Click on scen-test-agent-beta
 - **Action:** Click `scen-test-agent-beta` in the agent list
 - **Goal:** Profile panel opens for scen-test-agent-beta
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Profile heading shows `scen-test-agent-beta`
+- **Verify:** Profile heading shows `scen-test-agent-beta`. Screenshot: SCEN-002/S025-beta-profile.png
 
 #### S026: Open Title Assignment Dialog
 - **Action:** Click the Governance Title badge/button (showing MEMBER)
 - **Goal:** Title Assignment Dialog opens with team-specific titles
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog shows MEMBER, CHIEF-OF-STAFF, ORCHESTRATOR, ARCHITECT, INTEGRATOR options
+- **Verify:** Dialog shows MEMBER, CHIEF-OF-STAFF, ORCHESTRATOR, ARCHITECT, INTEGRATOR options. Screenshot: SCEN-002/S026-title-dialog.png
 
 #### S027: Select CHIEF-OF-STAFF
 - **Action:** Click CHIEF-OF-STAFF radio card
 - **Goal:** COS selected, Confirm button enabled
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Blue border on CHIEF-OF-STAFF card
+- **Verify:** Blue border on CHIEF-OF-STAFF card. Screenshot: SCEN-002/S027-cos-selected.png
 
 #### S028: Enter governance password and confirm
 - **Action:** Click Confirm, password dialog appears. Type `<governance-password>`, click Confirm.
 - **Goal:** Title changes to CHIEF-OF-STAFF, COS role-plugin auto-installed
 - **Creates:** Plugin entry in agent's settings.local.json
 - **Modifies:** Agent governanceTitle (MEMBER -> CHIEF-OF-STAFF), team chiefOfStaffId, plugin state
-- **Verify:** Profile shows CHIEF-OF-STAFF badge
+- **Verify:** Profile shows CHIEF-OF-STAFF badge. Screenshot: SCEN-002/S028-cos-assigned.png
 
 #### S029: Verify COS role-plugin installed
 - **Action:** Click "Config" tab in profile panel
 - **Goal:** Role Plugin section shows `ai-maestro-chief-of-staff` with lock indicator
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin name `ai-maestro-chief-of-staff` displayed, "Locked by CHIEF-OF-STAFF" text visible
+- **Verify:** Plugin name `ai-maestro-chief-of-staff` displayed, "Locked by CHIEF-OF-STAFF" text visible. Screenshot: SCEN-002/S029-cos-plugin.png
 
 ## Phase 5: Assign ORCHESTRATOR Title
 
@@ -270,35 +270,35 @@ author: AI Maestro Team
 - **Goal:** Profile panel opens for scen-test-agent-alpha
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Profile heading shows `scen-test-agent-alpha`
+- **Verify:** Profile heading shows `scen-test-agent-alpha`. Screenshot: SCEN-002/S030-alpha-profile.png
 
 #### S031: Open Title Assignment Dialog
 - **Action:** Click the Governance Title badge (showing MEMBER)
 - **Goal:** Title Assignment Dialog opens
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog visible with title options
+- **Verify:** Dialog visible with title options. Screenshot: SCEN-002/S031-title-dialog.png
 
 #### S032: Verify ORCHESTRATOR is available
 - **Action:** Inspect ORCHESTRATOR radio card
 - **Goal:** ORCHESTRATOR option is visible and ENABLED (no one has it yet)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** ORCHESTRATOR card is not grayed out, is clickable
+- **Verify:** ORCHESTRATOR card is not grayed out, is clickable. Screenshot: SCEN-002/S032-orchestrator-available.png
 
 #### S033: Select ORCHESTRATOR and confirm with password
 - **Action:** Click ORCHESTRATOR, click Confirm. Enter `<governance-password>` in password dialog, submit.
 - **Goal:** Title changes to ORCHESTRATOR, orchestrator role-plugin auto-installed
 - **Creates:** Plugin entry in agent's settings.local.json
 - **Modifies:** Agent governanceTitle (MEMBER -> ORCHESTRATOR), plugin state
-- **Verify:** Profile shows ORCHESTRATOR badge
+- **Verify:** Profile shows ORCHESTRATOR badge. Screenshot: SCEN-002/S033-orchestrator-assigned.png
 
 #### S034: Verify ORCHESTRATOR role-plugin
 - **Action:** Click "Config" tab in profile panel
 - **Goal:** Role Plugin section shows `ai-maestro-orchestrator-agent` locked by ORCHESTRATOR
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin name `ai-maestro-orchestrator-agent` displayed with lock indicator
+- **Verify:** Plugin name `ai-maestro-orchestrator-agent` displayed with lock indicator. Screenshot: SCEN-002/S034-orchestrator-plugin.png
 
 ## Phase 6: Remove Agent from Team
 
@@ -307,42 +307,42 @@ author: AI Maestro Team
 - **Goal:** Teams view shown
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows teams list
+- **Verify:** Snapshot shows teams list. Screenshot: SCEN-002/S035-teams-tab.png
 
 #### S036: Open Edit Team modal
 - **Action:** Hover over `scen-test-team-alpha` team card, click edit (pencil) icon
 - **Goal:** Edit team modal opens with both test agents pre-selected
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Modal shows `scen-test-agent-alpha` and `scen-test-agent-beta` selected
+- **Verify:** Modal shows `scen-test-agent-alpha` and `scen-test-agent-beta` selected. Screenshot: SCEN-002/S036-edit-team.png
 
 #### S037: Remove scen-test-agent-alpha from team
 - **Action:** Click `scen-test-agent-alpha` to deselect
 - **Goal:** Agent unhighlighted, count decreases to 1
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows count "1 selected"
+- **Verify:** Snapshot shows count "1 selected". Screenshot: SCEN-002/S037-alpha-deselected.png
 
 #### S038: Save team changes
 - **Action:** Click "Save" / "Update Team" button
 - **Goal:** Modal closes, team updated with only scen-test-agent-beta
 - **Creates:** nothing
 - **Modifies:** Team agentIds (alpha removed), alpha's team membership, alpha's title (-> AUTONOMOUS), alpha's plugin (uninstalled)
-- **Verify:** Wait 2s, team card shows count 1
+- **Verify:** Wait 2s, team card shows count 1. Screenshot: SCEN-002/S038-team-updated.png
 
 #### S039: Verify scen-test-agent-alpha reverted to AUTONOMOUS
 - **Action:** Switch to "Agents" tab, click on `scen-test-agent-alpha`
 - **Goal:** Agent's title reverted to AUTONOMOUS, no team, no role-plugin
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Title badge shows "AUTONOMOUS", team shows "No team"
+- **Verify:** Title badge shows "AUTONOMOUS", team shows "No team". Screenshot: SCEN-002/S039-alpha-autonomous.png
 
 #### S040: Verify role-plugin removed
 - **Action:** Click "Config" tab in profile panel
 - **Goal:** No locked role-plugin
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Role Plugin section shows "None" or is empty
+- **Verify:** Role Plugin section shows "None" or is empty. Screenshot: SCEN-002/S040-no-plugin.png
 
 ## Phase 7: Re-add Agent and Re-assign ORCHESTRATOR
 
@@ -351,28 +351,28 @@ author: AI Maestro Team
 - **Goal:** Alpha re-added to team, title auto-transitions to MEMBER
 - **Creates:** nothing
 - **Modifies:** Team agentIds (alpha added back), alpha's team membership, alpha's title (-> MEMBER)
-- **Verify:** Team card shows count 2
+- **Verify:** Team card shows count 2. Screenshot: SCEN-002/S041-team-readded.png
 
 #### S042: Verify scen-test-agent-alpha is MEMBER again
 - **Action:** Switch to "Agents" tab, click on `scen-test-agent-alpha`
 - **Goal:** Title shows MEMBER (auto-assigned on team rejoin)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Title badge shows "MEMBER"
+- **Verify:** Title badge shows "MEMBER". Screenshot: SCEN-002/S042-alpha-member-again.png
 
 #### S043: Re-assign ORCHESTRATOR title
 - **Action:** Click title badge, select ORCHESTRATOR, confirm with `<governance-password>`
 - **Goal:** Title changes back to ORCHESTRATOR, plugin re-installed
 - **Creates:** Plugin entry in settings.local.json
 - **Modifies:** Agent governanceTitle (MEMBER -> ORCHESTRATOR), plugin state
-- **Verify:** Title badge shows "ORCHESTRATOR"
+- **Verify:** Title badge shows "ORCHESTRATOR". Screenshot: SCEN-002/S043-orchestrator-reassigned.png
 
 #### S044: Verify role-plugin restored
 - **Action:** Click "Config" tab
 - **Goal:** Role Plugin shows `ai-maestro-orchestrator-agent` locked by ORCHESTRATOR
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin name and lock indicator visible
+- **Verify:** Plugin name and lock indicator visible. Screenshot: SCEN-002/S044-plugin-restored.png
 
 ## Phase 8: Singleton Constraint Checks
 
@@ -381,28 +381,28 @@ author: AI Maestro Team
 - **Goal:** Title Assignment Dialog opens
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog visible with title options
+- **Verify:** Dialog visible with title options. Screenshot: SCEN-002/S045-singleton-dialog.png
 
 #### S046: Verify ORCHESTRATOR option is DISABLED
 - **Action:** Inspect ORCHESTRATOR radio card
 - **Goal:** ORCHESTRATOR is grayed out / not selectable because scen-test-agent-alpha holds the slot
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** ORCHESTRATOR card shows disabled state with explanation text (e.g. "Already assigned" or "Only one ORCHESTRATOR per team")
+- **Verify:** ORCHESTRATOR card shows disabled state with explanation text (e.g. "Already assigned" or "Only one ORCHESTRATOR per team"). Screenshot: SCEN-002/S046-orchestrator-disabled.png
 
 #### S047: Verify CHIEF-OF-STAFF shows as current
 - **Action:** Inspect CHIEF-OF-STAFF radio card
 - **Goal:** COS is shown as the current/active selection (scen-test-agent-beta IS the COS)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** CHIEF-OF-STAFF card shown as active/selected
+- **Verify:** CHIEF-OF-STAFF card shown as active/selected. Screenshot: SCEN-002/S047-cos-current.png
 
 #### S048: Close title dialog
 - **Action:** Click Cancel or close button
 - **Goal:** Dialog dismissed
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog gone, profile panel visible
+- **Verify:** Dialog gone, profile panel visible. Screenshot: SCEN-002/S048-dialog-closed.png
 
 ## Phase CLEANUP: Restore Original State
 
@@ -411,39 +411,39 @@ author: AI Maestro Team
 - **Goal:** Test agent fully removed from registry and team
 - **Creates:** nothing
 - **Modifies:** Agent registry (entry removed), team agentIds (alpha removed)
-- **Verify:** Agent no longer appears in sidebar
+- **Verify:** Agent no longer appears in sidebar. Screenshot: SCEN-002/S049-alpha-deleted.png
 
 #### S050: Delete scen-test-agent-beta
 - **Action:** Click on `scen-test-agent-beta` in sidebar, click delete button in profile panel, confirm deletion
 - **Goal:** Test agent fully removed from registry and team
 - **Creates:** nothing
 - **Modifies:** Agent registry (entry removed), team agentIds (beta removed), team chiefOfStaffId (cleared)
-- **Verify:** Agent no longer appears in sidebar
+- **Verify:** Agent no longer appears in sidebar. Screenshot: SCEN-002/S050-beta-deleted.png
 
 #### S051: Delete scen-test-team-alpha (strips all agent titles to AUTONOMOUS)
 - **Action:** Switch to "Teams" tab, find `scen-test-team-alpha` team card, click delete icon, enter governance password, confirm deletion
 - **Goal:** Test team fully removed. All agents (including auto-COS) reverted to AUTONOMOUS with no role-plugin.
 - **Creates:** nothing
 - **Modifies:** Teams registry (entry removed), all team agents get title→AUTONOMOUS, plugins stripped
-- **Verify:** Team card no longer appears in sidebar
+- **Verify:** Team card no longer appears in sidebar. Screenshot: SCEN-002/S051-team-deleted.png
 
 #### S051b: Delete auto-COS agent (cos-scen-test-team-alpha)
 - **Action:** Find `cos-scen-test-team-alpha` in agent list (ALL tab), click delete button, confirm
 - **Goal:** Auto-created COS agent removed from registry
 - **Creates:** nothing
 - **Modifies:** Agent registry (entry removed)
-- **Verify:** Agent no longer appears in sidebar
+- **Verify:** Agent no longer appears in sidebar. Screenshot: SCEN-002/S051b-cos-deleted.png
 
 #### S052: STATE-WIPE -- Restore configuration files
 - **Action:** Compare current config files with backups from S002. If any differ, restore from backup.
 - **Goal:** All config files match pre-test state
 - **Creates:** nothing
 - **Modifies:** Config files (restored to backup state if changed)
-- **Verify:** File hash comparison -- all match
+- **Verify:** File hash comparison -- all match. Screenshot: SCEN-002/S052-state-restored.png
 
 #### S053: Take post-test screenshot and compare with S005
 - **Action:** `take_screenshot` of full page
 - **Goal:** UI looks identical to pre-test baseline
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Visual comparison with S005 screenshot -- sidebar, agent list, team list unchanged
+- **Verify:** Visual comparison with S005 screenshot -- sidebar, agent list, team list unchanged. Screenshot: SCEN-002/S053-post-cleanup.png

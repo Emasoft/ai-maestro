@@ -50,35 +50,35 @@ author: AI Maestro Team
 - **Goal:** Clean git state with known commit hash
 - **Creates:** nothing
 - **Modifies:** git history (new commit if needed)
-- **Verify:** `git status` shows clean working tree
+- **Verify:** `git status` shows clean working tree. Screenshot: SCEN-001/S001-git-clean.png
 
 #### S002: STATE-WIPE Checkpoint — Save configuration
 - **Action:** Backup config files to `tests/scenarios/state-backups/title-change-lifecycle_<timestamp>/`
 - **Goal:** Copies of settings.json, registry.json, teams.json, governance.json saved
 - **Creates:** Backup directory with config copies
 - **Modifies:** nothing
-- **Verify:** Backup files exist and match originals (hash comparison)
+- **Verify:** Backup files exist and match originals (hash comparison). Screenshot: SCEN-001/S002-backup-created.png
 
 #### S003: Build and verify server
 - **Action:** `yarn build && pm2 restart ai-maestro`, wait 4s, check `/api/sessions`
 - **Goal:** Server running, returns 200
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** API returns session list
+- **Verify:** API returns session list. Screenshot: SCEN-001/S003-server-healthy.png
 
 #### S004: Navigate to dashboard
 - **Action:** `navigate_page` to `http://localhost:23000`
 - **Goal:** Dashboard loads with sidebar and agent list
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Screenshot shows AI Maestro dashboard
+- **Verify:** Screenshot shows AI Maestro dashboard. Screenshot: SCEN-001/S004-dashboard.png
 
 #### S005: Take pre-test screenshot (baseline)
 - **Action:** `take_screenshot` of full page
 - **Goal:** Baseline image for CLEAN-AFTER-YOURSELF verification
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Screenshot saved
+- **Verify:** Screenshot saved. Screenshot: SCEN-001/S005-baseline.png
 
 ## Phase 1: Create Test Agent (0-IMPACT)
 
@@ -87,42 +87,42 @@ author: AI Maestro Team
 - **Goal:** Agent creation wizard opens
 - **Creates:** nothing (wizard only)
 - **Modifies:** nothing
-- **Verify:** Wizard dialog visible with client selection step
+- **Verify:** Wizard dialog visible with client selection step. Screenshot: SCEN-001/S006-wizard-open.png
 
 #### S007: Select Claude Code as client
 - **Action:** Click "Claude Code" option in client selector
 - **Goal:** Claude Code selected
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Option highlighted/selected
+- **Verify:** Option highlighted/selected. Screenshot: SCEN-001/S007-client-selected.png
 
 #### S008: Click Next
 - **Action:** Click Next button
 - **Goal:** Advances to avatar/name step
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Avatar picker and name input visible
+- **Verify:** Avatar picker and name input visible. Screenshot: SCEN-001/S008-name-step.png
 
 #### S009: Enter test agent name
 - **Action:** Type `scen-test-title-agent` in the name field
 - **Goal:** Name entered, unique on this host
 - **Creates:** nothing (not created yet)
 - **Modifies:** nothing
-- **Verify:** Name field shows `scen-test-title-agent`
+- **Verify:** Name field shows `scen-test-title-agent`. Screenshot: SCEN-001/S009-name-entered.png
 
 #### S010: Click Next through remaining wizard steps
 - **Action:** Click Next through team selection (skip/no team), title (leave as default), finish
 - **Goal:** Agent created as AUTONOMOUS with no team
 - **Creates:** Agent `scen-test-title-agent` in registry
 - **Modifies:** Agent registry (new entry)
-- **Verify:** New agent appears in sidebar agent list
+- **Verify:** New agent appears in sidebar agent list. Screenshot: SCEN-001/S010-agent-created.png
 
 #### S011: Click on the new test agent in sidebar
 - **Action:** Click `scen-test-title-agent` in agent list
 - **Goal:** Profile panel shows the new agent's details
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Profile panel heading shows `scen-test-title-agent`, title is AUTONOMOUS
+- **Verify:** Profile panel heading shows `scen-test-title-agent`, title is AUTONOMOUS. Screenshot: SCEN-001/S011-profile-autonomous.png
 
 ## Phase 2: Assign ORCHESTRATOR Title
 
@@ -131,49 +131,49 @@ author: AI Maestro Team
 - **Goal:** Title Assignment Dialog opens with radio cards
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog shows AUTONOMOUS and MANAGER options (agent is not in a team → standalone titles only). MANAGER grayed out if already assigned, with message showing who holds it.
+- **Verify:** Dialog shows AUTONOMOUS and MANAGER options (agent is not in a team → standalone titles only). MANAGER grayed out if already assigned, with message showing who holds it. Screenshot: SCEN-001/S012-title-dialog-standalone.png
 
 #### S013: Verify only standalone titles are shown and MANAGER singleton enforced
 - **Action:** Inspect dialog options
 - **Goal:** Only AUTONOMOUS and MANAGER should be visible (agent has no team → team titles hidden). If MANAGER is already assigned, it should be disabled with explanation text.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** No ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER/COS options shown. MANAGER disabled if already taken.
+- **Verify:** No ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER/COS options shown. MANAGER disabled if already taken. Screenshot: SCEN-001/S013-singleton-enforced.png
 
 #### S014: Cancel dialog and add agent to existing team first
 - **Action:** Cancel title dialog, click "Reassign" button next to Team field, select an existing team
 - **Goal:** Agent joins a team, title auto-transitions to MEMBER with programmer plugin
 - **Creates:** nothing (joining existing team)
 - **Modifies:** Team membership (agent added), agent title (→ MEMBER), plugin (→ ai-maestro-programmer-agent)
-- **Verify:** Team name shown in profile, title badge shows MEMBER, plugin banner shows ai-maestro-programmer-agent
+- **Verify:** Team name shown in profile, title badge shows MEMBER, plugin banner shows ai-maestro-programmer-agent. Screenshot: SCEN-001/S014-joined-team-member.png
 
 #### S015: Click title badge (now showing MEMBER)
 - **Action:** Click the MEMBER title button
 - **Goal:** Title dialog opens with team-specific titles
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog shows MEMBER, CHIEF-OF-STAFF, ORCHESTRATOR, ARCHITECT, INTEGRATOR
+- **Verify:** Dialog shows MEMBER, CHIEF-OF-STAFF, ORCHESTRATOR, ARCHITECT, INTEGRATOR. Screenshot: SCEN-001/S015-team-title-dialog.png
 
 #### S016: Select ORCHESTRATOR
 - **Action:** Click ORCHESTRATOR radio card
 - **Goal:** ORCHESTRATOR selected, Confirm button enabled
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Blue border on ORCHESTRATOR card, Confirm not disabled
+- **Verify:** Blue border on ORCHESTRATOR card, Confirm not disabled. Screenshot: SCEN-001/S016-orchestrator-selected.png
 
 #### S017: Click Confirm
 - **Action:** Click Confirm button
 - **Goal:** Password dialog appears
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** "Enter Governance Password" dialog with input field
+- **Verify:** "Enter Governance Password" dialog with input field. Screenshot: SCEN-001/S017-password-dialog.png
 
 #### S018: Enter governance password and submit
 - **Action:** Type governance password, click Confirm
 - **Goal:** Title changes to ORCHESTRATOR, role-plugin installed
 - **Creates:** Plugin entry in agent's settings.local.json
 - **Modifies:** Agent governanceTitle in registry, plugin state
-- **Verify:** Profile shows ORCHESTRATOR badge, plugin banner shows `ai-maestro-orchestrator-agent`
+- **Verify:** Profile shows ORCHESTRATOR badge, plugin banner shows `ai-maestro-orchestrator-agent`. Screenshot: SCEN-001/S018-orchestrator-assigned.png
 
 ## Phase 3: Swap to ARCHITECT
 
@@ -182,21 +182,21 @@ author: AI Maestro Team
 - **Goal:** Title dialog opens
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog shows with ORCHESTRATOR pre-selected
+- **Verify:** Dialog shows with ORCHESTRATOR pre-selected. Screenshot: SCEN-001/S019-title-dialog-orchestrator.png
 
 #### S020: Select ARCHITECT and confirm with password
 - **Action:** Select ARCHITECT, click Confirm, enter password, submit
 - **Goal:** Title swaps to ARCHITECT, plugin swaps to architect
 - **Creates:** nothing (plugin swap)
 - **Modifies:** Agent title (→ ARCHITECT), plugin (orchestrator → architect)
-- **Verify:** Profile shows ARCHITECT badge, plugin banner shows `ai-maestro-architect-agent`
+- **Verify:** Profile shows ARCHITECT badge, plugin banner shows `ai-maestro-architect-agent`. Screenshot: SCEN-001/S020-architect-assigned.png
 
 #### S021: Verify only ONE role-plugin installed
 - **Action:** Click Config tab in profile panel
 - **Goal:** Only `ai-maestro-architect-agent` in plugin list, no orchestrator plugin
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Config tab shows exactly 1 role-plugin: architect
+- **Verify:** Config tab shows exactly 1 role-plugin: architect. Screenshot: SCEN-001/S021-config-one-plugin.png
 
 ## Phase 4: Revert to MEMBER (no plugin)
 
@@ -205,14 +205,14 @@ author: AI Maestro Team
 - **Goal:** Title reverts to MEMBER, programmer plugin auto-installed
 - **Creates:** nothing
 - **Modifies:** Agent title (→ MEMBER), plugin (→ ai-maestro-programmer-agent)
-- **Verify:** Profile shows MEMBER badge, plugin banner shows "ai-maestro-programmer-agent"
+- **Verify:** Profile shows MEMBER badge, plugin banner shows "ai-maestro-programmer-agent". Screenshot: SCEN-001/S022-member-programmer.png
 
 #### S023: Verify Config tab shows programmer role-plugin
 - **Action:** Click Config tab
 - **Goal:** Programmer role-plugin installed for MEMBER title
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Config tab shows `ai-maestro-programmer-agent` as active role-plugin
+- **Verify:** Config tab shows `ai-maestro-programmer-agent` as active role-plugin. Screenshot: SCEN-001/S023-config-programmer.png
 
 ## Phase 5: Singleton Constraint Check
 
@@ -221,35 +221,35 @@ author: AI Maestro Team
 - **Goal:** Test agent is now ORCHESTRATOR
 - **Creates:** Plugin entry
 - **Modifies:** Agent title, plugin
-- **Verify:** ORCHESTRATOR badge visible
+- **Verify:** ORCHESTRATOR badge visible. Screenshot: SCEN-001/S024-orchestrator-again.png
 
 #### S025: Switch to a DIFFERENT agent in the same team
 - **Action:** Click on another agent that is in the same team
 - **Goal:** Profile panel shows the other agent
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Different agent's profile loaded
+- **Verify:** Different agent's profile loaded. Screenshot: SCEN-001/S025-other-agent.png
 
 #### S026: Open title dialog for the other agent
 - **Action:** Click their title badge
 - **Goal:** Title dialog opens
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog visible
+- **Verify:** Dialog visible. Screenshot: SCEN-001/S026-title-dialog-other.png
 
 #### S027: Verify ORCHESTRATOR option is DISABLED
 - **Action:** Inspect ORCHESTRATOR radio card
 - **Goal:** ORCHESTRATOR is grayed out / not selectable, with explanation text
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** ORCHESTRATOR card shows disabled state with message like "Only one Orchestrator allowed"
+- **Verify:** ORCHESTRATOR card shows disabled state with message like "Only one Orchestrator allowed". Screenshot: SCEN-001/S027-orchestrator-disabled.png
 
 #### S028: Close the dialog
 - **Action:** Click Cancel
 - **Goal:** Dialog dismissed
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog gone
+- **Verify:** Dialog gone. Screenshot: SCEN-001/S028-dialog-closed.png
 
 ## Phase CLEANUP: Restore Original State
 
@@ -258,32 +258,32 @@ author: AI Maestro Team
 - **Goal:** Test agent's profile shown
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Profile panel shows test agent
+- **Verify:** Profile panel shows test agent. Screenshot: SCEN-001/S029-test-agent-profile.png
 
 #### S030: Revert title to AUTONOMOUS
 - **Action:** Open title dialog, leave team first (click "Leave team"), then verify title auto-reverts
 - **Goal:** Agent removed from team, title becomes AUTONOMOUS, all plugins removed
 - **Creates:** nothing
 - **Modifies:** Team membership (removed), agent title (→ AUTONOMOUS), plugins (cleared)
-- **Verify:** Title shows AUTONOMOUS, no team, no role-plugin
+- **Verify:** Title shows AUTONOMOUS, no team, no role-plugin. Screenshot: SCEN-001/S030-reverted-autonomous.png
 
 #### S031: Delete test agent
 - **Action:** Click delete button in profile panel, confirm deletion
 - **Goal:** Test agent fully removed from registry
 - **Creates:** nothing
 - **Modifies:** Agent registry (entry removed)
-- **Verify:** Agent no longer appears in sidebar, API returns 404 for agent ID
+- **Verify:** Agent no longer appears in sidebar, API returns 404 for agent ID. Screenshot: SCEN-001/S031-agent-deleted.png
 
 #### S032: STATE-WIPE — Restore configuration files
 - **Action:** Compare current config files with backups from S002. If any differ, restore from backup.
 - **Goal:** All config files match pre-test state
 - **Creates:** nothing
 - **Modifies:** Config files (restored to backup state)
-- **Verify:** File hash comparison — all match
+- **Verify:** File hash comparison — all match. Screenshot: SCEN-001/S032-state-restored.png
 
 #### S033: Take post-test screenshot and compare with S005
 - **Action:** `take_screenshot` of full page
 - **Goal:** UI looks identical to pre-test baseline
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Visual comparison with S005 screenshot — sidebar, agent list, profile panel unchanged
+- **Verify:** Visual comparison with S005 screenshot — sidebar, agent list, profile panel unchanged. Screenshot: SCEN-001/S033-post-cleanup.png

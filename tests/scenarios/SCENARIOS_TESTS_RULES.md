@@ -403,6 +403,29 @@ Steps are numbered sequentially across all phases: S001, S002, ... S028. Never r
 
 ---
 
+## Rule 10: PHOTOSTORY
+
+**Every step MUST have a screenshot saved** as proof of completion. If a scenario has 40 steps, there must be 40 screenshots — no exceptions.
+
+**Naming convention:**
+```
+tests/scenarios/screenshots/SCEN-<NNN>/S<NNN>-<short-description>.png
+```
+
+Example: `SCEN-009/S014-task-sent.png`, `SCEN-009/S033-manager-removed.png`
+
+**When to capture:**
+- **After** the step's action is completed and the expected result is visible
+- For steps that modify UI state: capture the UI showing the new state
+- For API-verification steps: capture the profile panel or sidebar showing the verified data
+- For cleanup steps: capture the UI confirming the artifact is removed
+
+**The screenshot is part of the step's verification.** A step without a screenshot is considered incomplete. The report's step table must include the screenshot filename for every row.
+
+**Why:** Screenshots create an unambiguous audit trail. When reviewing scenario results weeks later, screenshots prove what actually happened at each step, preventing false PASS claims.
+
+---
+
 ## Directory Structure
 
 ```

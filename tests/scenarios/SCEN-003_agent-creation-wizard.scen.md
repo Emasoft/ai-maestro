@@ -62,35 +62,35 @@ author: AI Maestro Team
 - **Goal:** Clean git state with known commit hash
 - **Creates:** nothing
 - **Modifies:** git history (new commit if needed)
-- **Verify:** `git status` shows clean working tree
+- **Verify:** `git status` shows clean working tree. Screenshot: SCEN-003/S001-git-clean.png
 
 #### S002: STATE-WIPE Checkpoint -- Save configuration
 - **Action:** Backup config files to `tests/scenarios/state-backups/agent-creation-wizard_<timestamp>/`
 - **Goal:** Copies of the following saved: `~/.claude/settings.json`, `~/.claude/settings.local.json`, `~/.aimaestro/governance.json`, `~/.aimaestro/agents/registry.json`, `~/.aimaestro/teams/teams.json`, `~/.aimaestro/teams/groups.json`
 - **Creates:** Backup directory with config copies
 - **Modifies:** nothing
-- **Verify:** Backup files exist and match originals (hash comparison)
+- **Verify:** Backup files exist and match originals (hash comparison). Screenshot: SCEN-003/S002-backup-created.png
 
 #### S003: Build and verify server
 - **Action:** `yarn build && pm2 restart ai-maestro`, wait 4s, check `GET /api/sessions` returns 200
 - **Goal:** Server running and healthy
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** API returns session list (HTTP 200)
+- **Verify:** API returns session list (HTTP 200). Screenshot: SCEN-003/S003-server-healthy.png
 
 #### S004: Navigate to dashboard
 - **Action:** `navigate_page` to `http://localhost:23000`
 - **Goal:** Dashboard loads with sidebar and agent list
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Screenshot shows AI Maestro dashboard
+- **Verify:** Screenshot shows AI Maestro dashboard. Screenshot: SCEN-003/S004-dashboard.png
 
 #### S005: Take pre-test screenshot (baseline)
 - **Action:** `take_screenshot` of full page
 - **Goal:** Baseline image for CLEAN-AFTER-YOURSELF verification
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Screenshot saved
+- **Verify:** Screenshot saved. Screenshot: SCEN-003/S005-baseline.png
 
 ## Phase 1: Create Test Team (0-IMPACT)
 
@@ -99,14 +99,14 @@ author: AI Maestro Team
 - **Goal:** Teams view shown with "Create Team" button
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows "Create Team" button visible
+- **Verify:** Snapshot shows "Create Team" button visible. Screenshot: SCEN-003/S006-teams-tab.png
 
 #### S007: Create test team for wizard agents
 - **Action:** Click "+ Create Team", fill name `scen-test-wizard-team`, description `Scenario 003 wizard test team`. Do NOT select any agents. Click "Create Team".
 - **Goal:** Empty team created (agents will be added via wizard)
 - **Creates:** Team `scen-test-wizard-team` in teams registry
 - **Modifies:** Teams registry (new entry)
-- **Verify:** Team card appears in sidebar showing name `scen-test-wizard-team` with count 0
+- **Verify:** Team card appears in sidebar showing name `scen-test-wizard-team` with count 0. Screenshot: SCEN-003/S007-team-created.png
 
 ## Phase 2: Create Agent via Wizard -- INTEGRATOR
 
@@ -115,98 +115,98 @@ author: AI Maestro Team
 - **Goal:** Agent creation wizard opens at Step 1 (Client)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Wizard dialog visible with client selection step
+- **Verify:** Wizard dialog visible with client selection step. Screenshot: SCEN-003/S008-wizard-open.png
 
 #### S009: Select Claude Code as client
 - **Action:** Click "Claude Code" option in client selector
 - **Goal:** Claude Code selected
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Option highlighted/selected
+- **Verify:** Option highlighted/selected. Screenshot: SCEN-003/S009-client-selected.png
 
 #### S010: Advance to Step 2
 - **Action:** Click Next
 - **Goal:** Step 2 shown: Avatar picker and Name input
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Avatar grid and name text field visible
+- **Verify:** Avatar grid and name text field visible. Screenshot: SCEN-003/S010-step2-avatar.png
 
 #### S011: Select avatar and enter name
 - **Action:** Click any robot avatar image. Type `scen-test-integrator-rex` in the Name field.
 - **Goal:** Avatar selected, name entered
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Avatar highlighted, name field shows `scen-test-integrator-rex`
+- **Verify:** Avatar highlighted, name field shows `scen-test-integrator-rex`. Screenshot: SCEN-003/S011-name-entered.png
 
 #### S012: Advance to Step 3
 - **Action:** Click Next
 - **Goal:** Step 3 shown: Team selection dropdown
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Team dropdown or selection list visible
+- **Verify:** Team dropdown or selection list visible. Screenshot: SCEN-003/S012-step3-team.png
 
 #### S013: Select test team
 - **Action:** Select `scen-test-wizard-team` from team dropdown/list
 - **Goal:** Team selected
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Team name shown as selected
+- **Verify:** Team name shown as selected. Screenshot: SCEN-003/S013-team-selected.png
 
 #### S014: Advance to Step 4
 - **Action:** Click Next
 - **Goal:** Step 4 shown: Title selection (filtered by team membership)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Title options visible: MEMBER, CHIEF-OF-STAFF, ORCHESTRATOR, ARCHITECT, INTEGRATOR
+- **Verify:** Title options visible: MEMBER, CHIEF-OF-STAFF, ORCHESTRATOR, ARCHITECT, INTEGRATOR. Screenshot: SCEN-003/S014-step4-title.png
 
 #### S015: Select INTEGRATOR title
 - **Action:** Click INTEGRATOR option
 - **Goal:** INTEGRATOR selected
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** INTEGRATOR option highlighted/selected
+- **Verify:** INTEGRATOR option highlighted/selected. Screenshot: SCEN-003/S015-integrator-selected.png
 
 #### S016: Advance to Step 5
 - **Action:** Click Next
 - **Goal:** Step 5 shown: Role-plugin selection
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Role-plugin picker visible
+- **Verify:** Role-plugin picker visible. Screenshot: SCEN-003/S016-step5-plugin.png
 
 #### S017: Verify role-plugin is auto-enforced
 - **Action:** Inspect the role-plugin selection
 - **Goal:** `ai-maestro-integrator-agent` is auto-selected and locked (INTEGRATOR title enforces this plugin)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin shown as pre-selected, possibly with lock icon or "Required by INTEGRATOR" text. User cannot change selection.
+- **Verify:** Plugin shown as pre-selected, possibly with lock icon or "Required by INTEGRATOR" text. User cannot change selection. Screenshot: SCEN-003/S017-plugin-locked.png
 
 #### S018: Complete wizard
 - **Action:** Click Next to reach Summary (Step 6), then click Create/Finish
 - **Goal:** Agent created with INTEGRATOR title, plugin installed, added to team
 - **Creates:** Agent `scen-test-integrator-rex` in registry, plugin entry in settings.local.json
 - **Modifies:** Agent registry (new entry), team agentIds (agent added)
-- **Verify:** Wait 5s, wizard closes
+- **Verify:** Wait 5s, wizard closes. Screenshot: SCEN-003/S018-wizard-complete.png
 
 #### S019: Verify agent in sidebar
 - **Action:** Look for `scen-test-integrator-rex` in the agent list under `scen-test-wizard-team`
 - **Goal:** Agent card visible under team grouping
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows agent card under team header
+- **Verify:** Snapshot shows agent card under team header. Screenshot: SCEN-003/S019-agent-in-sidebar.png
 
 #### S020: Verify agent profile -- title
 - **Action:** Click on `scen-test-integrator-rex` in the agent list
 - **Goal:** Profile panel opens, title is INTEGRATOR
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Title badge shows "INTEGRATOR"
+- **Verify:** Title badge shows "INTEGRATOR". Screenshot: SCEN-003/S020-integrator-title.png
 
 #### S021: Verify agent profile -- role-plugin
 - **Action:** Click "Config" tab in profile panel
 - **Goal:** Role Plugin section shows `ai-maestro-integrator-agent` locked by INTEGRATOR
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin name displayed with lock indicator
+- **Verify:** Plugin name displayed with lock indicator. Screenshot: SCEN-003/S021-integrator-plugin.png
 
 ## Phase 3: Create Agent via Wizard -- MEMBER with Role-Plugin
 
@@ -215,77 +215,77 @@ author: AI Maestro Team
 - **Goal:** Determine if a custom plugin is available, or if the default `ai-maestro-programmer-agent` will be used
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Record the plugin name to use (custom if available, otherwise `ai-maestro-programmer-agent`)
+- **Verify:** Record the plugin name to use (custom if available, otherwise `ai-maestro-programmer-agent`). Screenshot: SCEN-003/S022-plugin-check.png
 
 #### S023: Open agent creation wizard
 - **Action:** Click the "+" button in sidebar header
 - **Goal:** Wizard opens at Step 1
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Wizard dialog visible
+- **Verify:** Wizard dialog visible. Screenshot: SCEN-003/S023-wizard-reopen.png
 
 #### S024: Select Claude Code as client
 - **Action:** Click "Claude Code" option
 - **Goal:** Client selected
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Claude Code highlighted
+- **Verify:** Claude Code highlighted. Screenshot: SCEN-003/S024-client-selected.png
 
 #### S025: Enter avatar and name
 - **Action:** Click Next, select any avatar, type `scen-test-member-zeta` in Name field
 - **Goal:** Avatar and name set
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Avatar highlighted, name shows `scen-test-member-zeta`
+- **Verify:** Avatar highlighted, name shows `scen-test-member-zeta`. Screenshot: SCEN-003/S025-member-name.png
 
 #### S026: Select team
 - **Action:** Click Next, select `scen-test-wizard-team` from team dropdown
 - **Goal:** Team selected
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Team name shown
+- **Verify:** Team name shown. Screenshot: SCEN-003/S026-team-selected.png
 
 #### S027: Select MEMBER title
 - **Action:** Click Next, select MEMBER from title options
 - **Goal:** MEMBER selected
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** MEMBER option highlighted
+- **Verify:** MEMBER option highlighted. Screenshot: SCEN-003/S027-member-title.png
 
 #### S028: Select role-plugin
 - **Action:** Click Next to reach role-plugin step. If a custom plugin was found in S022, select it. Otherwise, verify `ai-maestro-programmer-agent` is available as default and select it.
 - **Goal:** Role-plugin selected (custom or default programmer)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin shown as selected. Unlike INTEGRATOR, MEMBER title allows user choice (not locked).
+- **Verify:** Plugin shown as selected. Unlike INTEGRATOR, MEMBER title allows user choice (not locked). Screenshot: SCEN-003/S028-plugin-selected.png
 
 #### S029: Complete wizard
 - **Action:** Click Next to Summary, then Create/Finish
 - **Goal:** Agent created with MEMBER title and selected role-plugin
 - **Creates:** Agent `scen-test-member-zeta` in registry, plugin entry in settings.local.json
 - **Modifies:** Agent registry (new entry), team agentIds (agent added)
-- **Verify:** Wait 5s, wizard closes
+- **Verify:** Wait 5s, wizard closes. Screenshot: SCEN-003/S029-wizard-complete.png
 
 #### S030: Verify agent in sidebar
 - **Action:** Look for `scen-test-member-zeta` in agent list under `scen-test-wizard-team`
 - **Goal:** Agent card visible under team grouping
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows agent card under team header
+- **Verify:** Snapshot shows agent card under team header. Screenshot: SCEN-003/S030-member-in-sidebar.png
 
 #### S031: Verify agent profile -- title
 - **Action:** Click on `scen-test-member-zeta`
 - **Goal:** Profile panel opens, title is MEMBER
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Title badge shows "MEMBER"
+- **Verify:** Title badge shows "MEMBER". Screenshot: SCEN-003/S031-member-title.png
 
 #### S032: Verify agent profile -- role-plugin
 - **Action:** Click "Config" tab
 - **Goal:** Role Plugin section shows the selected plugin (custom or `ai-maestro-programmer-agent`)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin name displayed. If MEMBER, plugin is NOT locked (user can change it later).
+- **Verify:** Plugin name displayed. If MEMBER, plugin is NOT locked (user can change it later). Screenshot: SCEN-003/S032-member-plugin.png
 
 ## Phase 4: Verify Plugin Elements in Config Tab
 
@@ -294,21 +294,21 @@ author: AI Maestro Team
 - **Goal:** Config tab loads with all plugin element sections
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Role Plugin, Skills, Agents, Hooks, Rules, Commands, MCP Servers sections visible
+- **Verify:** Role Plugin, Skills, Agents, Hooks, Rules, Commands, MCP Servers sections visible. Screenshot: SCEN-003/S033-config-sections.png
 
 #### S034: Verify Skills section
 - **Action:** Expand "Skills" section in Config tab
 - **Goal:** Skills from the `ai-maestro-integrator-agent` plugin listed with counts
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Skills count matches what the plugin actually contains
+- **Verify:** Skills count matches what the plugin actually contains. Screenshot: SCEN-003/S034-skills-section.png
 
 #### S035: Verify other element sections
 - **Action:** Expand Agents, Hooks, Rules, Commands, MCP Servers sections
 - **Goal:** Each section shows correct element count from the plugin (may be 0 for some)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Element counts are accurate (cross-reference with plugin contents if needed)
+- **Verify:** Element counts are accurate (cross-reference with plugin contents if needed). Screenshot: SCEN-003/S035-element-sections.png
 
 ## Phase CLEANUP: Restore Original State
 
@@ -317,32 +317,32 @@ author: AI Maestro Team
 - **Goal:** Agent fully removed from registry and team
 - **Creates:** nothing
 - **Modifies:** Agent registry (entry removed), team agentIds (agent removed)
-- **Verify:** Agent no longer appears in sidebar
+- **Verify:** Agent no longer appears in sidebar. Screenshot: SCEN-003/S036-integrator-deleted.png
 
 #### S037: Delete scen-test-member-zeta
 - **Action:** Click on `scen-test-member-zeta` in sidebar, click delete button in profile panel, confirm deletion
 - **Goal:** Agent fully removed from registry and team
 - **Creates:** nothing
 - **Modifies:** Agent registry (entry removed), team agentIds (agent removed)
-- **Verify:** Agent no longer appears in sidebar
+- **Verify:** Agent no longer appears in sidebar. Screenshot: SCEN-003/S037-member-deleted.png
 
 #### S038: Delete scen-test-wizard-team
 - **Action:** Switch to "Teams" tab, find `scen-test-wizard-team` team card, click delete icon, confirm deletion
 - **Goal:** Test team fully removed from teams registry
 - **Creates:** nothing
 - **Modifies:** Teams registry (entry removed)
-- **Verify:** Team card no longer appears in sidebar
+- **Verify:** Team card no longer appears in sidebar. Screenshot: SCEN-003/S038-team-deleted.png
 
 #### S039: STATE-WIPE -- Restore configuration files
 - **Action:** Compare current config files with backups from S002. If any differ, restore from backup.
 - **Goal:** All config files match pre-test state
 - **Creates:** nothing
 - **Modifies:** Config files (restored to backup state if changed)
-- **Verify:** File hash comparison -- all match
+- **Verify:** File hash comparison -- all match. Screenshot: SCEN-003/S039-state-restored.png
 
 #### S040: Take post-test screenshot and compare with S005
 - **Action:** `take_screenshot` of full page
 - **Goal:** UI looks identical to pre-test baseline
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Visual comparison with S005 screenshot -- sidebar, agent list, team list unchanged
+- **Verify:** Visual comparison with S005 screenshot -- sidebar, agent list, team list unchanged. Screenshot: SCEN-003/S040-post-cleanup.png

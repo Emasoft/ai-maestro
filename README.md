@@ -8,7 +8,7 @@
 
 **Orchestrate your AI coding agents from one dashboard — with persistent memory, agent-to-agent messaging, and multi-machine support.**
 
-[![Version](https://img.shields.io/badge/version-0.27.2-blue)](https://github.com/Emasoft/ai-maestro/releases)
+[![Version](https://img.shields.io/badge/version-0.27.3-blue)](https://github.com/Emasoft/ai-maestro/releases)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows%20(WSL2)-lightgrey)](https://github.com/Emasoft/ai-maestro)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/Emasoft/ai-maestro?style=social)](https://github.com/Emasoft/ai-maestro)
@@ -281,6 +281,7 @@ AI Maestro uses three categories of plugins:
 - [Agent Messaging Guide](./docs/AGENT-MESSAGING-GUIDE.md) · [Architecture](./docs/AGENT-COMMUNICATION-ARCHITECTURE.md)
 - [Intelligence Guide](./docs/AGENT-INTELLIGENCE.md) · [Code Graph Visualization](./docs/images/code_graph01.png)
 - [Operations Guide](./docs/OPERATIONS-GUIDE.md)
+- [Team Governance Rules](./docs/GOVERNANCE-RULES.md) — R1-R15: titles, teams, messaging, composition, role boundaries, resilience
 
 **Troubleshooting:**
 - [Common Issues](./docs/TROUBLESHOOTING.md) · [Security](./SECURITY.md) · [Windows Installation](./docs/WINDOWS-INSTALLATION.md)

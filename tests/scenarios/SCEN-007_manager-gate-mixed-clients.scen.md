@@ -77,14 +77,14 @@ trigger format-appropriate plugin swaps.
 - **Goal:** Clean git state with known commit hash
 - **Creates:** nothing
 - **Modifies:** git history (new commit if needed)
-- **Verify:** `git status` shows clean working tree
+- **Verify:** `git status` shows clean working tree. Screenshot: SCEN-007/S001-commit-current-state.png
 
 #### S002: STATE-WIPE Checkpoint -- Save configuration
 - **Action:** Backup config files to `tests/scenarios/state-backups/manager-gate-mixed-clients_<timestamp>/`
 - **Goal:** Copies of all governance-relevant config files saved
 - **Creates:** Backup directory with config copies
 - **Modifies:** nothing
-- **Verify:** Backup files exist and match originals (hash comparison)
+- **Verify:** Backup files exist and match originals (hash comparison). Screenshot: SCEN-007/S002-statewipe-checkpoint-save-configuration.png
 - **Files to backup:**
   - `~/.claude/settings.json`
   - `~/.claude/settings.local.json`
@@ -98,7 +98,7 @@ trigger format-appropriate plugin swaps.
 - **Goal:** Server running, returns 200
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** API returns session list
+- **Verify:** API returns session list. Screenshot: SCEN-007/S003-build-and-verify-server.png
 
 #### S004: Navigate to dashboard
 - **Action:** `navigate_page` to `http://localhost:23000`
@@ -119,7 +119,7 @@ trigger format-appropriate plugin swaps.
 - **Goal:** No MANAGER on the host -- required for Phase 1 tests
 - **Creates:** nothing
 - **Modifies:** Possibly removes existing MANAGER title (will be restored in cleanup)
-- **Verify:** `GET /api/governance` returns `hasManager: false`
+- **Verify:** `GET /api/governance` returns `hasManager: false`. Screenshot: SCEN-007/S006-ensure-no-manager-exists.png
 
 ---
 
@@ -130,14 +130,14 @@ trigger format-appropriate plugin swaps.
 - **Goal:** Confirm the no-MANAGER state is reflected in API
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** API response shows `hasManager: false`
+- **Verify:** API response shows `hasManager: false`. Screenshot: SCEN-007/S007-verify-governance-api-shows.png
 
 #### S008: Navigate to Teams tab in sidebar
 - **Action:** Click the "Teams" tab in the sidebar
 - **Goal:** Teams list visible in sidebar
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Teams tab is active, team list visible (may be empty or show blocked teams)
+- **Verify:** Teams tab is active, team list visible (may be empty or show blocked teams). Screenshot: SCEN-007/S008-navigate-to-teams-tab.png
 
 #### S009: Attempt to create a team via UI
 - **Action:** Click the "Create Team" button (or "+" button in teams section)
@@ -155,77 +155,77 @@ trigger format-appropriate plugin swaps.
 - **Goal:** Agent creation wizard opens
 - **Creates:** nothing (wizard only)
 - **Modifies:** nothing
-- **Verify:** Wizard dialog visible with client selection step
+- **Verify:** Wizard dialog visible with client selection step. Screenshot: SCEN-007/S010-click-create-new-agent.png
 
 #### S011: Select Claude Code as client
 - **Action:** Click "Claude Code" option in client selector
 - **Goal:** Claude Code selected -- this agent will become the host MANAGER
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Option highlighted/selected
+- **Verify:** Option highlighted/selected. Screenshot: SCEN-007/S011-select-claude-code-as.png
 
 #### S012: Click Next to avatar/name step
 - **Action:** Click Next button
 - **Goal:** Advances to avatar/name step
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Avatar picker and name input visible
+- **Verify:** Avatar picker and name input visible. Screenshot: SCEN-007/S012-click-next-to-avatarname.png
 
 #### S013: Enter test agent name `scen7-manager`
 - **Action:** Type `scen7-manager` in the name field
 - **Goal:** Name entered, unique on this host
 - **Creates:** nothing (not created yet)
 - **Modifies:** nothing
-- **Verify:** Name field shows `scen7-manager`
+- **Verify:** Name field shows `scen7-manager`. Screenshot: SCEN-007/S013-enter-test-agent-name.png
 
 #### S014: Complete wizard steps (AUTONOMOUS, no team)
 - **Action:** Click Next through remaining steps: team selection (skip/no team), title (AUTONOMOUS is default), role-plugin (select "No plugin" for AUTONOMOUS), finish
 - **Goal:** Agent created as AUTONOMOUS with no team, client=claude-code
 - **Creates:** Agent `scen7-manager` in registry with `client: "claude-code"`
 - **Modifies:** Agent registry (new entry)
-- **Verify:** New agent appears in sidebar agent list
+- **Verify:** New agent appears in sidebar agent list. Screenshot: SCEN-007/S014-complete-wizard-steps-autonomous.png
 
 #### S015: Click on `scen7-manager` in sidebar
 - **Action:** Click the agent name in the sidebar
 - **Goal:** Profile panel shows the new agent's details
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Profile panel heading shows `scen7-manager`, title is AUTONOMOUS, client is Claude Code
+- **Verify:** Profile panel heading shows `scen7-manager`, title is AUTONOMOUS, client is Claude Code. Screenshot: SCEN-007/S015-click-on-scen7manager-in.png
 
 #### S016: Open Title Assignment Dialog
 - **Action:** Click the title badge/button showing "AUTONOMOUS" in the profile panel
 - **Goal:** Title Assignment Dialog opens with radio cards
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog shows available titles. Since agent has no team, only AUTONOMOUS and MANAGER should be shown.
+- **Verify:** Dialog shows available titles. Since agent has no team, only AUTONOMOUS and MANAGER should be shown.. Screenshot: SCEN-007/S016-open-title-assignment-dialog.png
 
 #### S017: Select MANAGER title
 - **Action:** Click the MANAGER radio card
 - **Goal:** MANAGER selected, Confirm button enabled
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Blue border on MANAGER card, Confirm not disabled
+- **Verify:** Blue border on MANAGER card, Confirm not disabled. Screenshot: SCEN-007/S017-select-manager-title.png
 
 #### S018: Confirm and enter governance password
 - **Action:** Click Confirm, enter governance password `mYkri1-xoxrap-gogtan`, submit
 - **Goal:** Title changes to MANAGER, Claude-native role-plugin installed
 - **Creates:** Plugin entry in agent's settings
 - **Modifies:** Agent governanceTitle in registry, governance state (hasManager: true), plugin state
-- **Verify:** Profile shows MANAGER badge (amber/gold), plugin banner shows `ai-maestro-assistant-manager-agent` (Claude-native format)
+- **Verify:** Profile shows MANAGER badge (amber/gold), plugin banner shows `ai-maestro-assistant-manager-agent` (Claude-native format). Screenshot: SCEN-007/S018-confirm-and-enter-governance.png
 
 #### S019: Verify MANAGER assignment via API
 - **Action:** Check `GET /api/governance` returns `hasManager: true` and `managerId` matches `scen7-manager`
 - **Goal:** Governance state reflects the new MANAGER
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** API response confirms MANAGER exists with correct ID
+- **Verify:** API response confirms MANAGER exists with correct ID. Screenshot: SCEN-007/S019-verify-manager-assignment-via.png
 
 #### S020: Verify MANAGER plugin is Claude-native format
 - **Action:** Check `GET /api/agents/<managerId>` -- verify `client` is `claude-code` and role-plugin is `ai-maestro-assistant-manager-agent` in native Claude Code plugin format (not converted)
 - **Goal:** MANAGER agent has Claude-native plugin -- no conversion needed since client matches
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** API shows `client: "claude-code"`, plugin is native format
+- **Verify:** API shows `client: "claude-code"`, plugin is native format. Screenshot: SCEN-007/S020-verify-manager-plugin-is.png
 
 ---
 
@@ -236,56 +236,56 @@ trigger format-appropriate plugin swaps.
 - **Goal:** Teams list visible
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Teams tab is active
+- **Verify:** Teams tab is active. Screenshot: SCEN-007/S021-navigate-to-teams-tab.png
 
 #### S022: Click "Create Team" button
 - **Action:** Click the "Create Team" button (or "+" in teams section)
 - **Goal:** Team creation dialog opens (should succeed now that MANAGER exists)
 - **Creates:** nothing (dialog only)
 - **Modifies:** nothing
-- **Verify:** Team creation dialog/form is visible with name input
+- **Verify:** Team creation dialog/form is visible with name input. Screenshot: SCEN-007/S022-click-create-team-button.png
 
 #### S023: Enter team name `scen7-mixed-team`
 - **Action:** Type `scen7-mixed-team` in the team name field
 - **Goal:** Name entered
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Name field shows `scen7-mixed-team`
+- **Verify:** Name field shows `scen7-mixed-team`. Screenshot: SCEN-007/S023-enter-team-name-scen7mixedteam.png
 
 #### S024: Submit team creation (no COS specified)
 - **Action:** Leave the COS selection empty (or use default "auto-generate"), click Create/Submit
 - **Goal:** Team created with an auto-generated COS agent
 - **Creates:** Team `scen7-mixed-team` in teams registry, auto-COS agent (robot avatar, cos-* name) in agent registry
 - **Modifies:** Teams registry, agent registry
-- **Verify:** Team appears in teams list. Wait for creation to complete.
+- **Verify:** Team appears in teams list. Wait for creation to complete.. Screenshot: SCEN-007/S024-submit-team-creation-no.png
 
 #### S025: Verify team created via API
 - **Action:** Check `GET /api/teams` for the new team
 - **Goal:** Team `scen7-mixed-team` exists with `blocked: false`
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Team exists in API response with correct name
+- **Verify:** Team exists in API response with correct name. Screenshot: SCEN-007/S025-verify-team-created-via.png
 
 #### S026: Verify auto-COS agent created as Claude Code
 - **Action:** Check team details -- `chiefOfStaffId` should reference an agent with `cos-*` prefixed name AND `client: "claude-code"` (server default)
 - **Goal:** Auto-COS agent is Claude Code (server default), has CHIEF-OF-STAFF title
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** COS agent found in agent registry with `governanceTitle: 'CHIEF-OF-STAFF'` and `client: "claude-code"`
+- **Verify:** COS agent found in agent registry with `governanceTitle: 'CHIEF-OF-STAFF'` and `client: "claude-code"`. Screenshot: SCEN-007/S026-verify-autocos-agent-created.png
 
 #### S027: Verify COS has Claude-native plugin
 - **Action:** Check the COS agent's installed plugins via `GET /api/agents/<cosId>`
 - **Goal:** COS agent has `ai-maestro-chief-of-staff` role-plugin in Claude-native format
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin list includes `ai-maestro-chief-of-staff` in native Claude Code format (not converted)
+- **Verify:** Plugin list includes `ai-maestro-chief-of-staff` in native Claude Code format (not converted). Screenshot: SCEN-007/S027-verify-cos-has-claudenative.png
 
 #### S028: Verify COS is in team's agentIds
 - **Action:** Check team's `agentIds` array includes the COS agent's ID
 - **Goal:** COS is a member of the team
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** `agentIds` contains `chiefOfStaffId`
+- **Verify:** `agentIds` contains `chiefOfStaffId`. Screenshot: SCEN-007/S028-verify-cos-is-in.png
 
 #### S029: Screenshot of team with COS
 - **Action:** `take_screenshot` showing the team details or team list
@@ -303,49 +303,49 @@ trigger format-appropriate plugin swaps.
 - **Goal:** Agent creation wizard opens
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Wizard dialog visible
+- **Verify:** Wizard dialog visible. Screenshot: SCEN-007/S030-click-create-new-agent.png
 
 #### S031: Create Claude Code agent `scen7-claude-member`
 - **Action:** Select **Claude Code** as client, enter name `scen7-claude-member`, proceed through wizard as AUTONOMOUS with no team, finish
 - **Goal:** Agent created as AUTONOMOUS with `client: "claude-code"`
 - **Creates:** Agent `scen7-claude-member` in registry
 - **Modifies:** Agent registry
-- **Verify:** New agent appears in sidebar, title is AUTONOMOUS, client is Claude Code
+- **Verify:** New agent appears in sidebar, title is AUTONOMOUS, client is Claude Code. Screenshot: SCEN-007/S031-create-claude-code-agent.png
 
 #### S032: Click on `scen7-claude-member` in sidebar
 - **Action:** Click the agent in the sidebar
 - **Goal:** Profile panel shows agent details
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Profile shows `scen7-claude-member`, title AUTONOMOUS, client Claude Code, no team
+- **Verify:** Profile shows `scen7-claude-member`, title AUTONOMOUS, client Claude Code, no team. Screenshot: SCEN-007/S032-click-on-scen7claudemember-in.png
 
 #### S033: Add agent to test team via profile
 - **Action:** Click "Assign to Team" (or "Reassign" next to Team field), select `scen7-mixed-team` from the dropdown
 - **Goal:** Agent joins the team
 - **Creates:** nothing
 - **Modifies:** Team agentIds (agent added), agent title (auto-transition to MEMBER)
-- **Verify:** Wait for operation to complete
+- **Verify:** Wait for operation to complete. Screenshot: SCEN-007/S033-add-agent-to-test.png
 
 #### S034: Verify title auto-transitioned to MEMBER
 - **Action:** Check the profile panel -- title badge should now show MEMBER
 - **Goal:** Agent is MEMBER after joining team
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Title badge shows MEMBER
+- **Verify:** Title badge shows MEMBER. Screenshot: SCEN-007/S034-verify-title-autotransitioned-to.png
 
 #### S035: Verify Claude-native MEMBER plugin installed
 - **Action:** Check Config tab or API for installed role-plugin
 - **Goal:** `ai-maestro-programmer-agent` plugin is installed in **Claude-native format** (not converted)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin list shows `ai-maestro-programmer-agent` in native Claude Code format. No conversion artifacts present.
+- **Verify:** Plugin list shows `ai-maestro-programmer-agent` in native Claude Code format. No conversion artifacts present.. Screenshot: SCEN-007/S035-verify-claudenative-member-plugin.png
 
 #### S036: Verify agent is in team's agentIds
 - **Action:** Check `GET /api/teams/<teamId>` -- `agentIds` should include the test member
 - **Goal:** Agent is a member of the team
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** `agentIds` includes `scen7-claude-member`'s ID
+- **Verify:** `agentIds` includes `scen7-claude-member`'s ID. Screenshot: SCEN-007/S036-verify-agent-is-in.png
 
 #### S037: Screenshot of Claude agent as MEMBER
 - **Action:** `take_screenshot` of the agent profile showing MEMBER title and Claude-native plugin
@@ -363,70 +363,70 @@ trigger format-appropriate plugin swaps.
 - **Goal:** Agent creation wizard opens
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Wizard dialog visible with client selection step
+- **Verify:** Wizard dialog visible with client selection step. Screenshot: SCEN-007/S038-click-create-new-agent.png
 
 #### S039: Select Codex as client
 - **Action:** Click "Codex" option in client selector
 - **Goal:** Codex selected -- this agent will be the cross-client test subject
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Codex option highlighted/selected
+- **Verify:** Codex option highlighted/selected. Screenshot: SCEN-007/S039-select-codex-as-client.png
 
 #### S040: Click Next to avatar/name step
 - **Action:** Click Next button
 - **Goal:** Advances to avatar/name step
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Avatar picker and name input visible
+- **Verify:** Avatar picker and name input visible. Screenshot: SCEN-007/S040-click-next-to-avatarname.png
 
 #### S041: Enter test agent name `scen7-codex-member`
 - **Action:** Type `scen7-codex-member` in the name field
 - **Goal:** Name entered, unique on this host
 - **Creates:** nothing (not created yet)
 - **Modifies:** nothing
-- **Verify:** Name field shows `scen7-codex-member`
+- **Verify:** Name field shows `scen7-codex-member`. Screenshot: SCEN-007/S041-enter-test-agent-name.png
 
 #### S042: Complete wizard steps (AUTONOMOUS, no team)
 - **Action:** Click Next through remaining steps: team selection (skip/no team), title (AUTONOMOUS is default), role-plugin (select "No plugin" for AUTONOMOUS since wizard Step 5 always shows "No plugin" for non-MEMBER titles), finish
 - **Goal:** Agent created as AUTONOMOUS with `client: "codex"`
 - **Creates:** Agent `scen7-codex-member` in registry with `client: "codex"`
 - **Modifies:** Agent registry
-- **Verify:** New agent appears in sidebar, title is AUTONOMOUS, client is Codex
+- **Verify:** New agent appears in sidebar, title is AUTONOMOUS, client is Codex. Screenshot: SCEN-007/S042-complete-wizard-steps-autonomous.png
 
 #### S043: Click on `scen7-codex-member` in sidebar
 - **Action:** Click the agent in the sidebar
 - **Goal:** Profile panel shows agent details
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Profile shows `scen7-codex-member`, title AUTONOMOUS, client Codex, no team
+- **Verify:** Profile shows `scen7-codex-member`, title AUTONOMOUS, client Codex, no team. Screenshot: SCEN-007/S043-click-on-scen7codexmember-in.png
 
 #### S044: Add Codex agent to test team via profile
 - **Action:** Click "Assign to Team" (or "Reassign" next to Team field), select `scen7-mixed-team` from the dropdown
 - **Goal:** Agent joins the team, triggering auto-MEMBER title and Codex-converted plugin install
 - **Creates:** nothing
 - **Modifies:** Team agentIds (agent added), agent title (auto-transition to MEMBER), plugin state (Codex-converted plugin)
-- **Verify:** Wait for operation to complete
+- **Verify:** Wait for operation to complete. Screenshot: SCEN-007/S044-add-codex-agent-to.png
 
 #### S045: Verify title auto-transitioned to MEMBER
 - **Action:** Check the profile panel -- title badge should now show MEMBER
 - **Goal:** Codex agent is MEMBER after joining team (same governance rule regardless of client)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Title badge shows MEMBER
+- **Verify:** Title badge shows MEMBER. Screenshot: SCEN-007/S045-verify-title-autotransitioned-to.png
 
 #### S046: Verify Codex-converted MEMBER plugin installed
 - **Action:** Check Config tab or API for installed role-plugin on `scen7-codex-member`
 - **Goal:** `ai-maestro-programmer-agent` plugin is installed in **Codex-converted format** (TOML-based, compatible with Codex agent system)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin or agent configuration shows the programmer role-plugin adapted for Codex. The plugin format differs from the Claude-native version seen in S035. Check for Codex-specific markers (e.g., TOML format, codex-compatible paths).
+- **Verify:** Plugin or agent configuration shows the programmer role-plugin adapted for Codex. The plugin format differs from the Claude-native version seen in S035. Check for Codex-specific markers (e.g., TOML format, codex-compatible paths).. Screenshot: SCEN-007/S046-verify-codexconverted-member-plugin.png
 
 #### S047: Verify Codex agent is in team's agentIds
 - **Action:** Check `GET /api/teams/<teamId>` -- `agentIds` should include the Codex member
 - **Goal:** Codex agent is a member of the team alongside the Claude agent
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** `agentIds` includes both `scen7-claude-member` and `scen7-codex-member`
+- **Verify:** `agentIds` includes both `scen7-claude-member` and `scen7-codex-member`. Screenshot: SCEN-007/S047-verify-codex-agent-is.png
 
 #### S048: Verify team now has mixed clients
 - **Action:** Check team members via API -- confirm at least one `claude-code` agent and one `codex` agent exist in the same team
@@ -451,35 +451,35 @@ trigger format-appropriate plugin swaps.
 - **Goal:** Profile panel shows the Claude MEMBER agent
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Profile shows `scen7-claude-member`, title MEMBER, client Claude Code
+- **Verify:** Profile shows `scen7-claude-member`, title MEMBER, client Claude Code. Screenshot: SCEN-007/S050-click-on-scen7claudemember-in.png
 
 #### S051: Open Title Assignment Dialog
 - **Action:** Click the MEMBER title badge
 - **Goal:** Title Assignment Dialog opens with team-aware title options
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog shows team titles: MEMBER, ORCHESTRATOR, ARCHITECT, INTEGRATOR (and possibly CHIEF-OF-STAFF). AUTONOMOUS and MANAGER should NOT appear for a team member.
+- **Verify:** Dialog shows team titles: MEMBER, ORCHESTRATOR, ARCHITECT, INTEGRATOR (and possibly CHIEF-OF-STAFF). AUTONOMOUS and MANAGER should NOT appear for a team member.. Screenshot: SCEN-007/S051-open-title-assignment-dialog.png
 
 #### S052: Select ORCHESTRATOR title
 - **Action:** Click the ORCHESTRATOR radio card
 - **Goal:** ORCHESTRATOR selected, Confirm button enabled
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Blue border on ORCHESTRATOR card
+- **Verify:** Blue border on ORCHESTRATOR card. Screenshot: SCEN-007/S052-select-orchestrator-title.png
 
 #### S053: Confirm and enter governance password
 - **Action:** Click Confirm, enter governance password `mYkri1-xoxrap-gogtan`, submit
 - **Goal:** Title changes to ORCHESTRATOR, programmer plugin swapped for orchestrator plugin in Claude-native format
 - **Creates:** nothing
 - **Modifies:** Agent title (MEMBER -> ORCHESTRATOR), plugin state (programmer -> orchestrator, Claude-native)
-- **Verify:** Profile shows ORCHESTRATOR badge, plugin banner shows `ai-maestro-orchestrator-agent`
+- **Verify:** Profile shows ORCHESTRATOR badge, plugin banner shows `ai-maestro-orchestrator-agent`. Screenshot: SCEN-007/S053-confirm-and-enter-governance.png
 
 #### S054: Verify Claude-native ORCHESTRATOR plugin
 - **Action:** Check Config tab or API for installed role-plugin on `scen7-claude-member`
 - **Goal:** `ai-maestro-orchestrator-agent` plugin installed in **Claude-native format**
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin is `ai-maestro-orchestrator-agent` in native Claude Code format. Previous `ai-maestro-programmer-agent` is uninstalled.
+- **Verify:** Plugin is `ai-maestro-orchestrator-agent` in native Claude Code format. Previous `ai-maestro-programmer-agent` is uninstalled.. Screenshot: SCEN-007/S054-verify-claudenative-orchestrator-plugin.png
 
 #### S055: Screenshot of Claude ORCHESTRATOR
 - **Action:** `take_screenshot` of agent profile showing ORCHESTRATOR title and plugin
@@ -497,42 +497,42 @@ trigger format-appropriate plugin swaps.
 - **Goal:** Profile panel shows the Codex MEMBER agent
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Profile shows `scen7-codex-member`, title MEMBER, client Codex
+- **Verify:** Profile shows `scen7-codex-member`, title MEMBER, client Codex. Screenshot: SCEN-007/S056-click-on-scen7codexmember-in.png
 
 #### S057: Open Title Assignment Dialog
 - **Action:** Click the MEMBER title badge
 - **Goal:** Title Assignment Dialog opens with team-aware title options
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog shows team titles: MEMBER, ORCHESTRATOR, ARCHITECT, INTEGRATOR
+- **Verify:** Dialog shows team titles: MEMBER, ORCHESTRATOR, ARCHITECT, INTEGRATOR. Screenshot: SCEN-007/S057-open-title-assignment-dialog.png
 
 #### S058: Select ARCHITECT title
 - **Action:** Click the ARCHITECT radio card
 - **Goal:** ARCHITECT selected, Confirm button enabled
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Blue border on ARCHITECT card
+- **Verify:** Blue border on ARCHITECT card. Screenshot: SCEN-007/S058-select-architect-title.png
 
 #### S059: Confirm and enter governance password
 - **Action:** Click Confirm, enter governance password `mYkri1-xoxrap-gogtan`, submit
 - **Goal:** Title changes to ARCHITECT, programmer plugin swapped for architect plugin in **Codex-converted format**
 - **Creates:** nothing
 - **Modifies:** Agent title (MEMBER -> ARCHITECT), plugin state (programmer -> architect, Codex-converted)
-- **Verify:** Profile shows ARCHITECT badge, plugin banner shows `ai-maestro-architect-agent`
+- **Verify:** Profile shows ARCHITECT badge, plugin banner shows `ai-maestro-architect-agent`. Screenshot: SCEN-007/S059-confirm-and-enter-governance.png
 
 #### S060: Verify Codex-converted ARCHITECT plugin
 - **Action:** Check Config tab or API for installed role-plugin on `scen7-codex-member`
 - **Goal:** `ai-maestro-architect-agent` plugin installed in **Codex-converted format** (TOML-based, Codex-compatible)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin is `ai-maestro-architect-agent` converted for Codex. Previous `ai-maestro-programmer-agent` (Codex-converted) is uninstalled. Check for Codex-specific markers.
+- **Verify:** Plugin is `ai-maestro-architect-agent` converted for Codex. Previous `ai-maestro-programmer-agent` (Codex-converted) is uninstalled. Check for Codex-specific markers.. Screenshot: SCEN-007/S060-verify-codexconverted-architect-plugin.png
 
 #### S061: Verify both agents coexist in team with different titles and formats
 - **Action:** Check `GET /api/teams/<teamId>` and both agent profiles
 - **Goal:** Team has: COS (Claude, CHIEF-OF-STAFF), `scen7-claude-member` (Claude, ORCHESTRATOR), `scen7-codex-member` (Codex, ARCHITECT)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** API confirms all three agents in team with correct titles and client types
+- **Verify:** API confirms all three agents in team with correct titles and client types. Screenshot: SCEN-007/S061-verify-both-agents-coexist.png
 
 #### S062: Screenshot of Codex ARCHITECT
 - **Action:** `take_screenshot` of Codex agent profile showing ARCHITECT title and Codex-format plugin
@@ -550,35 +550,35 @@ trigger format-appropriate plugin swaps.
 - **Goal:** Profile panel shows ARCHITECT agent in team
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Title is ARCHITECT, team is `scen7-mixed-team`, client is Codex
+- **Verify:** Title is ARCHITECT, team is `scen7-mixed-team`, client is Codex. Screenshot: SCEN-007/S063-click-on-scen7codexmember-in.png
 
 #### S064: Click "Leave team" on Codex agent
 - **Action:** In the profile panel for `scen7-codex-member`, click the "Leave team" button
 - **Goal:** Agent removed from team
 - **Creates:** nothing
 - **Modifies:** Team agentIds (agent removed), agent title (reverts to AUTONOMOUS), plugin state (Codex-converted architect plugin removed)
-- **Verify:** Wait for operation to complete
+- **Verify:** Wait for operation to complete. Screenshot: SCEN-007/S064-click-leave-team-on.png
 
 #### S065: Verify title reverted to AUTONOMOUS
 - **Action:** Check the profile panel -- title badge should show AUTONOMOUS
 - **Goal:** Codex agent reverted to AUTONOMOUS after leaving team
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Title badge shows AUTONOMOUS
+- **Verify:** Title badge shows AUTONOMOUS. Screenshot: SCEN-007/S065-verify-title-reverted-to.png
 
 #### S066: Verify no role-plugin installed on Codex agent
 - **Action:** Check Config tab or API -- no role-plugin should be present
 - **Goal:** Codex-converted architect plugin removed when title reverted to AUTONOMOUS
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin list shows no role-plugin (or "No Role Plugin" indicator). No Codex-converted plugin artifacts remain.
+- **Verify:** Plugin list shows no role-plugin (or "No Role Plugin" indicator). No Codex-converted plugin artifacts remain.. Screenshot: SCEN-007/S066-verify-no-roleplugin-installed.png
 
 #### S067: Verify Codex agent removed from team's agentIds
 - **Action:** Check `GET /api/teams/<teamId>` -- `agentIds` should NOT include the Codex agent
 - **Goal:** Codex agent is no longer in the team
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** `agentIds` does not contain `scen7-codex-member`'s ID. Claude agent and COS remain.
+- **Verify:** `agentIds` does not contain `scen7-codex-member`'s ID. Claude agent and COS remain.. Screenshot: SCEN-007/S067-verify-codex-agent-removed.png
 
 #### S068: Screenshot after Codex agent removal
 - **Action:** `take_screenshot` of agent profile showing AUTONOMOUS and no plugin
@@ -596,56 +596,56 @@ trigger format-appropriate plugin swaps.
 - **Goal:** Team details visible, showing COS and Claude ORCHESTRATOR agent
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Team details panel open
+- **Verify:** Team details panel open. Screenshot: SCEN-007/S069-navigate-to-team-details.png
 
 #### S070: Note COS agent name for later verification
 - **Action:** Record the auto-COS agent's name/ID from the team details (the cos-* agent)
 - **Goal:** Have the COS agent identifier for post-deletion verification
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** COS agent name recorded
+- **Verify:** COS agent name recorded. Screenshot: SCEN-007/S070-note-cos-agent-name.png
 
 #### S071: Click Delete Team button
 - **Action:** Click "Delete Team" button on the team card/details
 - **Goal:** First confirmation dialog appears: "Are you sure you want to delete this Team 'scen7-mixed-team'?"
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog visible with Cancel and Delete buttons
+- **Verify:** Dialog visible with Cancel and Delete buttons. Screenshot: SCEN-007/S071-click-delete-team-button.png
 
 #### S072: Confirm first dialog (are you sure?)
 - **Action:** Click "Delete" in the first confirmation dialog
 - **Goal:** Second dialog appears: "Do you want to delete also all the agents belonging to the team?"
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Second dialog visible with Cancel, Keep Agents, and Delete Agents Too buttons
+- **Verify:** Second dialog visible with Cancel, Keep Agents, and Delete Agents Too buttons. Screenshot: SCEN-007/S072-confirm-first-dialog-are.png
 
 #### S073: Choose "Keep Agents" in second dialog
 - **Action:** Click "Keep Agents" button
 - **Goal:** Team deleted, agents survive as AUTONOMOUS (titles stripped, plugins removed regardless of client type)
 - **Creates:** nothing
 - **Modifies:** Teams registry (team removed), agent titles (all revert to AUTONOMOUS), plugins (role-plugins removed for both Claude and Codex agents)
-- **Verify:** Wait for deletion to complete, dialog closes
+- **Verify:** Wait for deletion to complete, dialog closes. Screenshot: SCEN-007/S073-choose-keep-agents-in.png
 
 #### S074: Verify team no longer exists
 - **Action:** Check `GET /api/teams` -- `scen7-mixed-team` should be gone
 - **Goal:** Team fully removed from registry
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** API does not include the deleted team
+- **Verify:** API does not include the deleted team. Screenshot: SCEN-007/S074-verify-team-no-longer.png
 
 #### S075: Verify auto-COS agent reverted to AUTONOMOUS
 - **Action:** Check the COS agent's profile (by name recorded in S070)
 - **Goal:** Former COS agent now has AUTONOMOUS title, Claude-native COS plugin removed
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Agent's `governanceTitle` is AUTONOMOUS, no role-plugin installed
+- **Verify:** Agent's `governanceTitle` is AUTONOMOUS, no role-plugin installed. Screenshot: SCEN-007/S075-verify-autocos-agent-reverted.png
 
 #### S076: Verify Claude agent (former ORCHESTRATOR) reverted to AUTONOMOUS
 - **Action:** Check `scen7-claude-member` profile via API or UI
 - **Goal:** Former ORCHESTRATOR agent now has AUTONOMOUS title, Claude-native orchestrator plugin removed
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** `governanceTitle` is AUTONOMOUS, no role-plugin installed
+- **Verify:** `governanceTitle` is AUTONOMOUS, no role-plugin installed. Screenshot: SCEN-007/S076-verify-claude-agent-former.png
 
 #### S077: Screenshot after team deletion
 - **Action:** `take_screenshot` of teams list and agent list
@@ -662,38 +662,38 @@ trigger format-appropriate plugin swaps.
 - **Action:** Open title dialog for `scen7-manager`, select AUTONOMOUS, enter governance password `mYkri1-xoxrap-gogtan`, confirm
 - **Goal:** Agent reverted to AUTONOMOUS, no MANAGER on host
 - **Removes:** MANAGER title assignment
-- **Verify:** Title shows AUTONOMOUS, `GET /api/governance` shows `hasManager: false`
+- **Verify:** Title shows AUTONOMOUS, `GET /api/governance` shows `hasManager: false`. Screenshot: SCEN-007/S078-remove-manager-title-from.png
 
 #### S079: Delete test agent `scen7-manager`
 - **Action:** Click delete button in profile panel for `scen7-manager`, confirm deletion
 - **Goal:** Test MANAGER agent fully removed from registry
 - **Removes:** Agent `scen7-manager` from registry
-- **Verify:** Agent no longer in sidebar, API returns 404
+- **Verify:** Agent no longer in sidebar, API returns 404. Screenshot: SCEN-007/S079-delete-test-agent-scen7manager.png
 
 #### S080: Delete test agent `scen7-claude-member`
 - **Action:** Click delete button in profile panel for `scen7-claude-member`, confirm deletion
 - **Goal:** Test Claude member agent fully removed from registry
 - **Removes:** Agent `scen7-claude-member` from registry
-- **Verify:** Agent no longer in sidebar, API returns 404
+- **Verify:** Agent no longer in sidebar, API returns 404. Screenshot: SCEN-007/S080-delete-test-agent-scen7claudemember.png
 
 #### S081: Delete test agent `scen7-codex-member`
 - **Action:** Click delete button in profile panel for `scen7-codex-member`, confirm deletion
 - **Goal:** Test Codex member agent fully removed from registry
 - **Removes:** Agent `scen7-codex-member` from registry
-- **Verify:** Agent no longer in sidebar, API returns 404
+- **Verify:** Agent no longer in sidebar, API returns 404. Screenshot: SCEN-007/S081-delete-test-agent-scen7codexmember.png
 
 #### S082: Delete any remaining auto-COS agents (cos-* prefix from this test)
 - **Action:** Check agent list for any agents with `cos-` prefix that were created during this test (recorded in S070). Delete each one.
 - **Goal:** All auto-generated COS agents from this test removed
 - **Removes:** Auto-COS agents created during Phase 3
-- **Verify:** No test-created COS agents remain in registry
+- **Verify:** No test-created COS agents remain in registry. Screenshot: SCEN-007/S082-delete-any-remaining-autocos.png
 
 #### S083: STATE-WIPE -- Restore configuration files
 - **Action:** Compare current config files with backups from S002. If any differ, restore from backup.
 - **Goal:** All config files match pre-test state
 - **Creates:** nothing
 - **Modifies:** Config files (restored to backup state)
-- **Verify:** File hash comparison -- all match
+- **Verify:** File hash comparison -- all match. Screenshot: SCEN-007/S083-statewipe-restore-configuration-files.png
 - **Files to restore:**
   - `~/.claude/settings.json`
   - `~/.claude/settings.local.json`

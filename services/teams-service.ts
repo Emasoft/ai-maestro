@@ -422,8 +422,9 @@ export async function updateTeamById(id: string, params: UpdateTeamParams): Prom
 }
 
 /**
- * Delete a team by ID.
- * Governance: closed team deletion requires MANAGER or COS authority.
+ * @deprecated Use DeleteTeam from element-management-service instead.
+ * This function is dead code — all callers now use the DeleteTeam pipeline.
+ * Kept temporarily for reference during migration; will be removed.
  */
 export async function deleteTeamById(id: string, requestingAgentId?: string, password?: string, deleteAgents: boolean = false): Promise<ServiceResult<{ success: boolean }>> {
   // Validate UUID format for consistency with getTeamById (CC-008)

@@ -50,7 +50,8 @@ vi.mock('@/lib/file-lock', () => ({
 // Mock governance module - getManagerId returns a manager so team creation works (R9 governance requires MANAGER)
 vi.mock('@/lib/governance', () => ({
   getManagerId: vi.fn(() => 'test-manager-id'),
-  isManager: vi.fn(() => false),
+  isManager: vi.fn((agentId: string) => agentId === 'test-manager-id'),
+  isChiefOfStaffAnywhere: vi.fn(() => false),
   loadGovernance: vi.fn(() => ({ managerId: 'test-manager-id', passwordHash: null, createdAt: null, updatedAt: null })),
   verifyPassword: vi.fn(() => Promise.resolve(true)),
 }))
@@ -63,18 +64,39 @@ vi.mock('@/lib/team-acl', () => ({
 // Mock agent-registry module - loadAgents returns empty array for basic team tests
 vi.mock('@/lib/agent-registry', () => ({
   loadAgents: vi.fn(() => []),
+  getAgent: vi.fn(() => null),
+  updateAgent: vi.fn(),
 }))
 
 // Mock agent-auth module - in tests, trust X-Agent-Id directly (no real API keys in test environment)
+// Returns governanceTitle='manager' for the test manager ID so that authorize() works without filesystem lookups
 vi.mock('@/lib/agent-auth', () => ({
   authenticateFromRequest: vi.fn((request: { headers: { get(name: string): string | null } }) => {
     const agentId = request.headers.get('X-Agent-Id')
-    if (agentId) return { agentId }
-    return {}
+    if (!agentId) return {}
+    // Test convention: agents with 'manager' in their ID get the manager governance title
+    const isManager = agentId.includes('manager')
+    return isManager ? { agentId, governanceTitle: 'manager' } : { agentId }
   }),
+  buildAuthContext: vi.fn((authResult: { agentId?: string; governanceTitle?: string; teamId?: string | null }) => ({
+    agentId: authResult.agentId,
+    isSystemOwner: !authResult.agentId,
+    governanceTitle: authResult.governanceTitle,
+    teamId: authResult.teamId,
+  })),
   authenticateAgent: vi.fn((authHeader: string | null, agentIdHeader: string | null) => {
-    if (agentIdHeader) return { agentId: agentIdHeader }
-    return {}
+    if (!agentIdHeader) return {}
+    const isManager = agentIdHeader.includes('manager')
+    return isManager ? { agentId: agentIdHeader, governanceTitle: 'manager' } : { agentId: agentIdHeader }
+  }),
+}))
+
+// Mock authorization — MANAGER is allowed, others denied
+vi.mock('@/lib/authorization', () => ({
+  authorize: vi.fn((auth: { agentId?: string; governanceTitle?: string }, action: string) => {
+    if (!auth.agentId) return { allowed: true }
+    if (auth.governanceTitle === 'manager') return { allowed: true }
+    return { allowed: false, reason: `Only MANAGER can ${action}` }
   }),
 }))
 
@@ -438,11 +460,11 @@ describe('DELETE /api/teams/[id]', () => {
 
     expect(res.status).toBe(403)
     const data = await res.json()
-    expect(data.error).toContain('MANAGER or the team Chief-of-Staff')
+    expect(data.error).toContain('MANAGER')
   })
 
   // CC-006: Closed team deletion guard - COS is allowed
-  it('allows COS to delete closed team', async () => {
+  it('denies COS from deleting team — only MANAGER can manage teams', async () => {
     const team = await createTeam({ name: 'COS Delete', agentIds: ['cos-agent'], type: 'closed', chiefOfStaffId: 'cos-agent' })
     vi.mocked(isManager).mockReturnValue(false)
 
@@ -452,9 +474,7 @@ describe('DELETE /api/teams/[id]', () => {
     })
     const res = await deleteTeamRoute(req, makeParams(team.id) as any)
 
-    expect(res.status).toBe(200)
-    const data = await res.json()
-    expect(data.success).toBe(true)
+    expect(res.status).toBe(403)
   })
 
   // CC-006: Closed team deletion guard - MANAGER is allowed
@@ -477,11 +497,9 @@ describe('DELETE /api/teams/[id]', () => {
     vi.mocked(getManagerId).mockReturnValue(null)
   })
 
-  // CC-003: ACL denial path - checkTeamAccess returns { allowed: false } for DELETE
-  it('returns 403 when ACL denies access', async () => {
+  // DeleteTeam pipeline: non-MANAGER agents are denied by authorize()
+  it('returns 403 when non-MANAGER agent attempts to delete', async () => {
     const team = await createTeam({ name: 'ACL Denied Delete', agentIds: [] })
-    // Toggle checkTeamAccess to deny access for this test
-    vi.mocked(checkTeamAccess).mockReturnValueOnce({ allowed: false, reason: 'Not a member' })
 
     const req = makeRequest(`/api/teams/${team.id}`, {
       method: 'DELETE',
@@ -491,6 +509,6 @@ describe('DELETE /api/teams/[id]', () => {
 
     expect(res.status).toBe(403)
     const data = await res.json()
-    expect(data.error).toContain('Not a member')
+    expect(data.error).toContain('MANAGER')
   })
 })

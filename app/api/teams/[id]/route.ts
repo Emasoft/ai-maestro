@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTeamById, updateTeamById, deleteTeamById } from '@/services/teams-service'
+import { getTeamById, updateTeamById } from '@/services/teams-service'
 import { getTeam } from '@/lib/team-registry'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
@@ -119,12 +119,21 @@ export async function DELETE(
     password = body?.password
     deleteAgents = body?.deleteAgents === true
   } catch {
-    // No body is OK — deleteTeamById will reject if password is required
+    // No body is OK — DeleteTeam will reject if password is required
   }
 
-  const result = await deleteTeamById(id, requestingAgentId, password, deleteAgents)
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+  // Delegate to the all-in-one pipeline
+  const { DeleteTeam } = await import('@/services/element-management-service')
+  const delResult = await DeleteTeam(id, {
+    authContext: { agentId: requestingAgentId, isSystemOwner: !requestingAgentId, governanceTitle: auth.governanceTitle, teamId: auth.teamId },
+    password,
+    deleteAgents,
+  })
+  if (!delResult.success) {
+    const status = delResult.error?.includes('not found') ? 404
+      : delResult.error?.includes('password') ? 401
+      : 403
+    return NextResponse.json({ error: delResult.error }, { status })
   }
-  return NextResponse.json(result.data)
+  return NextResponse.json({ success: true })
 }

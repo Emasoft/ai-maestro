@@ -211,7 +211,7 @@ import {
   createNewTeam,
   getTeamById,
   updateTeamById,
-  deleteTeamById,
+  // deleteTeamById removed — use DeleteTeam pipeline directly
   listTeamTasks,
   getTeamTask,
   createTeamTask,
@@ -2376,11 +2376,16 @@ const routes: Route[] = [
       sendJson(res, auth.status || 401, { error: auth.error })
       return
     }
-    const requestingAgentId = auth.agentId
-    // Extract governance password from request body for this destructive operation
     const body = await readJsonBody(req).catch(() => ({}))
-    const password = body?.password
-    sendServiceResult(res, await deleteTeamById(params.id, requestingAgentId, password))
+    const { DeleteTeam } = await import('@/services/element-management-service')
+    const delResult = await DeleteTeam(params.id, {
+      authContext: { agentId: auth.agentId, isSystemOwner: !auth.agentId, governanceTitle: auth.governanceTitle, teamId: auth.teamId },
+      password: body?.password,
+      deleteAgents: body?.deleteAgents === true,
+    })
+    sendServiceResult(res, delResult.success
+      ? { data: { success: true }, status: 200 }
+      : { error: delResult.error || 'Delete failed', status: delResult.error?.includes('not found') ? 404 : 403 })
   }},
   { method: 'GET', pattern: /^\/api\/teams$/, paramNames: [], handler: async (_req, res) => {
     sendServiceResult(res, await listAllTeams())

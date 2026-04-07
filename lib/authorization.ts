@@ -105,6 +105,15 @@ export function authorize(
     return { allowed: false, reason: 'Only MANAGER can delete agents' }
   }
 
+  // ── Special rule: manage-team (create/delete teams) ─────────
+  // Only system-owner and MANAGER can create or delete teams.
+  if (action === 'manage-team') {
+    if (title === 'manager') {
+      return { allowed: true }
+    }
+    return { allowed: false, reason: 'Only MANAGER can manage teams' }
+  }
+
   // ── Universal rule: no agent can modify itself via API ──────
   // Agents cannot change their own properties, title, skills, or delete themselves.
   // They operate through their own Claude Code instance directly.

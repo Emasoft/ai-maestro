@@ -12,6 +12,7 @@
 
 import { NextResponse } from 'next/server'
 import { createSession, buildSessionCookie } from '@/lib/session-auth'
+import { checkAndRecordAttempt, resetRateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: Request) {
   try {
@@ -20,6 +21,15 @@ export async function POST(request: Request) {
 
     if (!password || typeof password !== 'string') {
       return NextResponse.json({ error: 'Password required' }, { status: 400 })
+    }
+
+    // CC-GOV-014: Rate-limit login attempts
+    const rateCheck = checkAndRecordAttempt('auth-login')
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Too many login attempts. Try again later.' },
+        { status: 429 }
+      )
     }
 
     // Verify against governance password
@@ -31,6 +41,9 @@ export async function POST(request: Request) {
     if (!valid) {
       return NextResponse.json({ error: 'Invalid password' }, { status: 401 })
     }
+
+    // Reset rate limit on successful login
+    resetRateLimit('auth-login')
 
     // Create session
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined

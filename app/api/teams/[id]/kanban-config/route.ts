@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getKanbanConfig, setKanbanConfig } from '@/services/teams-service'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 import type { KanbanColumnConfig } from '@/types/team'
 
@@ -13,10 +13,7 @@ export async function GET(
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: 'Invalid team ID format' }, { status: 400 })
   }
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
@@ -37,10 +34,7 @@ export async function PUT(
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: 'Invalid team ID format' }, { status: 400 })
   }
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }

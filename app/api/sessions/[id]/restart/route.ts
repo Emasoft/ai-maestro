@@ -27,7 +27,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getAgentBySession } from '@/lib/agent-registry'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
 
 export const dynamic = 'force-dynamic'
@@ -60,11 +60,13 @@ export async function POST(
 ) {
   const { id: sessionName } = await params
 
+  // CC-GOV-001: Validate session name to prevent shell injection via tmux send-keys
+  if (!/^[a-zA-Z0-9_@.-]+$/.test(sessionName)) {
+    return NextResponse.json({ error: 'Invalid session name' }, { status: 400 })
+  }
+
   // Auth + RBAC
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }

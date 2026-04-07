@@ -27,8 +27,8 @@ export default function LoginGate({ children }: LoginGateProps) {
         setStatus('login')
       }
     } catch {
-      // Network error — allow access (server might not be ready yet)
-      setStatus('authenticated')
+      // CC-GOV-003: Network error must NOT grant access — show login form
+      setStatus('login')
     }
   }, [])
 

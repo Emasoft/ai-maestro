@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendCommand, checkIdleStatus } from '@/services/sessions-service'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
 
 /**
@@ -30,10 +30,7 @@ export async function POST(
     const { id: sessionName } = await params
 
     // Auth + RBAC: sending commands to a session is a sensitive operation
-    const auth = authenticateAgent(
-      request.headers.get('Authorization'),
-      request.headers.get('X-Agent-Id')
-    )
+    const auth = authenticateFromRequest(request)
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }
@@ -98,6 +95,12 @@ export async function GET(
 ) {
   logDeprecation()
   try {
+    // CC-GOV-012: Auth required for idle status check
+    const authCheck = authenticateFromRequest(request)
+    if (authCheck.error) {
+      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status || 401 })
+    }
+
     const { id: sessionName } = await params
     // SF-018: Wrap checkIdleStatus in try-catch with proper error response
     let data

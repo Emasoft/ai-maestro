@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getWebhookById, deleteWebhookById } from '@/services/webhooks-service'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 
 /**
@@ -39,10 +39,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'Invalid webhook ID format' }, { status: 400 })
   }
   // Authenticate -- webhook deletion is a mutating operation
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status ?? 401 })
   }

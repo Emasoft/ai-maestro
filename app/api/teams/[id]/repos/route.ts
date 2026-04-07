@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 import { getTeam, updateTeam } from '@/lib/team-registry'
 import { checkTeamAccess } from '@/lib/team-acl'
@@ -14,10 +14,7 @@ export async function GET(
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: 'Invalid team ID' }, { status: 400 })
   }
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
 
   const access = checkTeamAccess({ teamId: id, requestingAgentId: auth.agentId })
@@ -52,10 +49,7 @@ export async function POST(
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: 'Invalid team ID' }, { status: 400 })
   }
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
 
   let body: { url?: unknown; name?: unknown }

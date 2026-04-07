@@ -18,15 +18,21 @@ export async function GET(request: Request) {
   const { loadGovernance } = await import('@/lib/governance')
   const config = loadGovernance()
   if (!config.passwordHash) {
-    return NextResponse.json({ authenticated: true, passwordNotSet: true })
+    const res = NextResponse.json({ authenticated: true, passwordNotSet: true })
+    res.headers.set('Cache-Control', 'no-store')
+    return res
   }
 
   const cookieHeader = request.headers.get('Cookie')
   const token = extractSessionFromCookie(cookieHeader)
 
   if (token && validateSession(token)) {
-    return NextResponse.json({ authenticated: true })
+    const res = NextResponse.json({ authenticated: true })
+    res.headers.set('Cache-Control', 'no-store')
+    return res
   }
 
-  return NextResponse.json({ authenticated: false }, { status: 401 })
+  const res = NextResponse.json({ authenticated: false }, { status: 401 })
+  res.headers.set('Cache-Control', 'no-store')
+  return res
 }

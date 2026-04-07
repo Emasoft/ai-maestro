@@ -33,6 +33,10 @@ export async function GET(request: NextRequest) {
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
+  // CC-GOV-017: Only system owner can list cemetery archives
+  if (auth.agentId) {
+    return NextResponse.json({ error: 'Only the system owner can access cemetery archives' }, { status: 403 })
+  }
 
   try {
     if (!fs.existsSync(CEMETERY_DIR)) {
@@ -51,8 +55,9 @@ export async function GET(request: NextRequest) {
       // Parse agent name and timestamp from filename: <name>-export-<timestamp>.zip
       const match = filename.match(/^(.+?)-export-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})\.zip$/)
       const agentName = match ? match[1] : filename.replace('.zip', '')
+      // CC-GOV-006: Proper regex to convert timestamp hyphens to colons after T
       const archivedAt = match
-        ? match[2].replace(/T/, 'T').replace(/-/g, (_c, offset) => offset > 9 ? ':' : '-') // rough ISO
+        ? match[2].replace(/(\d{2})-(\d{2})-(\d{2})$/, '$1:$2:$3')
         : stat.mtime.toISOString()
 
       return {

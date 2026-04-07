@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 /**
  * POST /api/teams/[id]/batch-create-agents
@@ -14,6 +15,15 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // CC-GOV-002: Auth required — only system owner can batch-create agents
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    if (auth.agentId) {
+      return NextResponse.json({ error: 'Only system owner can batch-create agents' }, { status: 403 })
+    }
+
     const { id: teamId } = await params
     const { getTeam } = await import('@/lib/team-registry')
 

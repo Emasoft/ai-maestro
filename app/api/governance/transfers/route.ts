@@ -11,9 +11,14 @@ import { isManager, isChiefOfStaffAnywhere } from '@/lib/governance'
 import { isValidUuid } from '@/lib/validation'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 
-// Phase 1: localhost-only, no auth required. TODO: add ACL for Phase 2 remote access
+// CC-GOV-009: Auth required to prevent transfer data leaks
 export async function GET(request: NextRequest) {
   try {
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+
     const teamId = request.nextUrl.searchParams.get('teamId')
     const agentId = request.nextUrl.searchParams.get('agentId')
     const status = request.nextUrl.searchParams.get('status') // 'pending', 'approved', 'rejected', or null for all

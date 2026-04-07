@@ -699,12 +699,12 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
     }
 
     // Layer 5: When a requesting agent is identified, enforce governance roles
+    // CC-GOV-005: No self-modification — consistent with RBAC rule in authorization.ts
     if (requestingAgentId) {
       const isReqManager = isManager(requestingAgentId)
       const isReqCOS = isChiefOfStaffAnywhere(requestingAgentId)
-      const isSelf = requestingAgentId === id  // Agent updating itself
 
-      if (!isReqManager && !isReqCOS && !isSelf) {
+      if (!isReqManager && !isReqCOS) {
         // Check if requester is COS of a team the target agent belongs to
         const teams = loadTeams()
         const closedTeams = teams.filter(t => t.type === 'closed')
@@ -712,7 +712,7 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
         const isOwningCOS = agentTeams.some(t => t.chiefOfStaffId === requestingAgentId)
 
         if (!isOwningCOS) {
-          return { error: 'Only MANAGER, owning Chief-of-Staff, or the agent itself can update this agent', status: 403 }
+          return { error: 'Only MANAGER or owning Chief-of-Staff can update this agent', status: 403 }
         }
       }
     }

@@ -17,6 +17,10 @@ export async function GET(request: NextRequest) {
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
+  // CC-GOV-017: Only system owner can download cemetery archives
+  if (auth.agentId) {
+    return NextResponse.json({ error: 'Only the system owner can access cemetery archives' }, { status: 403 })
+  }
 
   const filename = request.nextUrl.searchParams.get('file')
   if (!filename) {

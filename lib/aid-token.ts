@@ -10,7 +10,7 @@
  * - AID governance tokens (aim_tk_*) → governance operations (/api/agents/*, /api/teams/*)
  */
 
-import { createHash, randomBytes, verify, createPublicKey } from 'crypto'
+import { createHash, randomBytes, verify, createPublicKey, timingSafeEqual } from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
@@ -283,7 +283,7 @@ export function validateGovernanceToken(token: string): AIDTokenRecord | null {
     const recordHashBuffer = Buffer.from(record.token_hash)
     if (hashBuffer.length === recordHashBuffer.length) {
       try {
-        const isMatch = require('crypto').timingSafeEqual(hashBuffer, recordHashBuffer)
+        const isMatch = timingSafeEqual(hashBuffer, recordHashBuffer)
         if (isMatch && new Date(record.expires_at).getTime() > now) {
           matched = record
         }

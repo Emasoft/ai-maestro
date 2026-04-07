@@ -188,6 +188,10 @@ export interface AuthContext {
   agentId?: string
   /** True when the caller is the system owner (web UI user) — full access */
   isSystemOwner: boolean
+  /** CC-GOV-004: Governance title from auth result — avoids redundant registry lookup */
+  governanceTitle?: string
+  /** CC-GOV-004: Team ID from auth result — avoids redundant registry lookup */
+  teamId?: string | null
 }
 
 /**
@@ -198,6 +202,8 @@ export function buildAuthContext(authResult: AgentAuthResult): AuthContext {
   return {
     agentId: authResult.agentId,
     isSystemOwner: !authResult.agentId,
+    governanceTitle: authResult.governanceTitle,
+    teamId: authResult.teamId,
   }
 }
 
@@ -205,10 +211,6 @@ export function buildAuthContext(authResult: AgentAuthResult): AuthContext {
 // Session Secret Helpers (local agent identity)
 // ============================================================================
 
-/**
- * Find an agent by their session secret.
- * Iterates all agents and checks the hash. Returns the agent record or null.
- */
 /**
  * Find an agent by their session secret.
  * Uses the validateSessionSecret import (mockable in tests).

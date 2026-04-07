@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getMeetingById, updateExistingMeeting, deleteExistingMeeting } from '@/services/messages-service'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 
 // GET /api/meetings/[id] - Get a single meeting
@@ -14,10 +14,7 @@ export async function GET(
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: 'Invalid meeting ID format' }, { status: 400 })
   }
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
@@ -39,10 +36,7 @@ export async function PATCH(
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: 'Invalid meeting ID format' }, { status: 400 })
   }
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
@@ -68,10 +62,7 @@ export async function DELETE(
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: 'Invalid meeting ID format' }, { status: 400 })
   }
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }

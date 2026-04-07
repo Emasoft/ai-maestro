@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTeamDocument, updateTeamDocument, deleteTeamDocument } from '@/services/teams-service'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 
 // GET /api/teams/[id]/documents/[docId] - Get a single document
@@ -13,10 +13,7 @@ export async function GET(
   if (!isValidUuid(id) || !isValidUuid(docId)) {
     return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 })
   }
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
@@ -39,10 +36,7 @@ export async function PUT(
   if (!isValidUuid(id) || !isValidUuid(docId)) {
     return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 })
   }
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
@@ -73,10 +67,7 @@ export async function DELETE(
   if (!isValidUuid(id) || !isValidUuid(docId)) {
     return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 })
   }
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }

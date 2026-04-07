@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { updateTeamTask, deleteTeamTask, UpdateTaskParams } from '@/services/teams-service'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 
 // PUT /api/teams/[id]/tasks/[taskId] - Update a task
@@ -16,10 +16,7 @@ export async function PUT(
   if (!taskId || taskId.length > 200) {
     return NextResponse.json({ error: 'Invalid task ID format' }, { status: 400 })
   }
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
@@ -110,10 +107,7 @@ export async function DELETE(
   if (!taskId || taskId.length > 200) {
     return NextResponse.json({ error: 'Invalid task ID format' }, { status: 400 })
   }
-  const auth = authenticateAgent(
-    request.headers.get('Authorization'),
-    request.headers.get('X-Agent-Id')
-  )
+  const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }

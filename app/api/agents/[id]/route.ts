@@ -9,10 +9,16 @@ import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
  * Get a specific agent by ID
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // CC-GOV-008: Auth required to prevent metadata leaks via Tailscale
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+
     const { id } = await params
     if (!isValidUuid(id)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })

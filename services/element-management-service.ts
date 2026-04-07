@@ -73,8 +73,11 @@ async function gate0Auth(
     return null
   }
   const { authorize } = await import('@/lib/authorization')
+  // CC-GOV-004: Pass governanceTitle and teamId to avoid redundant registry lookups
   const authResult: import('@/lib/agent-auth').AgentAuthResult = {
     agentId: authContext.agentId,
+    governanceTitle: authContext.governanceTitle,
+    teamId: authContext.teamId,
   }
   const authz = authorize(authResult, action, agentId)
   if (!authz.allowed) {

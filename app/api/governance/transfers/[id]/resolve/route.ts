@@ -11,7 +11,7 @@ import { getAgent } from '@/lib/agent-registry'
 import { notifyAgent } from '@/lib/notification-service'
 import { acquireLock } from '@/lib/file-lock'
 import { isValidUuid } from '@/lib/validation'
-import { authenticateAgent } from '@/lib/agent-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 export async function POST(
   request: NextRequest,
@@ -24,10 +24,7 @@ export async function POST(
     }
 
     // Authenticate the resolver identity from headers (prevents impersonation via body)
-    const auth = authenticateAgent(
-      request.headers.get('Authorization'),
-      request.headers.get('X-Agent-Id')
-    )
+    const auth = authenticateFromRequest(request)
     if (auth.error) {
       // SF-053: Use nullish coalescing to avoid hiding status 0 (though unlikely)
       return NextResponse.json({ error: auth.error }, { status: auth.status ?? 401 })

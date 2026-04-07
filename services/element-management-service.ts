@@ -2518,15 +2518,15 @@ export interface DeleteTeamResult {
  * Replaces: deleteTeamById (teams-service).
  *
  * Gates:
- *   G00: Authorization — system-owner or MANAGER only; governance password required
+ *   G00: Authorization — system-owner or MANAGER only
+ *   G00b: Governance password verification + rate limiting
  *   G01: Team exists
- *   G02: Archive team state (agents, structure) before any mutation
+ *   G02: Archive team state before mutations
  *   G03: Revert all team agents to AUTONOMOUS via ChangeTitle (strips role-plugins)
  *   G04: Remove team from teams.json
- *   G05: Cancel pending transfers involving this team (R8.3)
- *   G06: Reject pending governance requests for this team
- *   G07: Delete team data files (tasks, documents)
- *   G08: Optionally delete team agents via DeleteAgent pipeline
+ *   G05: Cancel pending transfers + reject governance requests (R8.3)
+ *   G06: Delete team data files (tasks, documents)
+ *   G07: Optionally delete team agents via DeleteAgent pipeline
  */
 export async function DeleteTeam(
   teamId: string,
@@ -2546,8 +2546,8 @@ export async function DeleteTeam(
     const g0err = await gate0Auth('manage-team', teamId, options?.authContext, ops)
     if (g0err) { result.error = g0err; return result }
 
-    // G00b: Governance password verification
-    try {
+    // G00b: Governance password verification + rate limiting
+    {
       const { loadGovernance, verifyPassword } = await import('@/lib/governance')
       const config = loadGovernance()
       if (config.passwordHash) {
@@ -2556,18 +2556,36 @@ export async function DeleteTeam(
           ops.push('G00b: DENIED — governance password not provided')
           return result
         }
-        const valid = await verifyPassword(options.password)
-        if (!valid) {
-          result.error = 'Invalid governance password'
-          ops.push('G00b: DENIED — invalid governance password')
-          return result
+        // Rate-limit password attempts to prevent brute-force
+        try {
+          const { checkAndRecordAttempt, resetRateLimit } = await import('@/lib/rate-limit')
+          const rateKey = `team-delete-password:${teamId}`
+          const rateCheck = checkAndRecordAttempt(rateKey)
+          if (!rateCheck.allowed) {
+            result.error = `Too many failed attempts. Try again in ${Math.ceil(rateCheck.retryAfterMs / 1000)}s`
+            ops.push('G00b: DENIED — rate limited')
+            return result
+          }
+          const valid = await verifyPassword(options.password)
+          if (!valid) {
+            result.error = 'Invalid governance password'
+            ops.push('G00b: DENIED — invalid governance password')
+            return result
+          }
+          resetRateLimit(rateKey)
+        } catch {
+          // Rate-limit module unavailable — still verify password
+          const valid = await verifyPassword(options.password)
+          if (!valid) {
+            result.error = 'Invalid governance password'
+            ops.push('G00b: DENIED — invalid governance password')
+            return result
+          }
         }
         ops.push('G00b: Governance password verified')
       } else {
         ops.push('G00b: No governance password set — skipped')
       }
-    } catch (err) {
-      ops.push(`G00b: WARN — password check failed: ${err instanceof Error ? err.message : err}`)
     }
 
     // ── G01: Team exists ───────────────────────────────────────
@@ -2619,44 +2637,34 @@ export async function DeleteTeam(
     }
     ops.push('G04: Deleted from teams.json')
 
-    // ── G05: Cancel pending transfers involving this team (R8.3)
+    // ── G05: Cancel pending transfers + reject governance requests ──
+    // Single pass over governance requests: cancel transfers involving this team (R8.3)
+    // AND reject any other pending requests targeting this team.
     try {
       const { loadGovernanceRequests, rejectGovernanceRequest } = await import('@/lib/governance-request-registry')
       const file = loadGovernanceRequests()
-      const transfers = file.requests.filter((r: { type: string; status: string; payload: { fromTeamId?: string; toTeamId?: string; teamId?: string } }) =>
-        r.status === 'pending' && (
-          r.type === 'transfer-agent' && (r.payload.fromTeamId === teamId || r.payload.toTeamId === teamId)
-        )
-      )
-      for (const req of transfers) {
-        await rejectGovernanceRequest(req.id, options?.authContext?.agentId || 'system', 'Team deleted — transfer cancelled')
+      const caller = options?.authContext?.agentId || 'system'
+      let transfersCancelled = 0
+      let requestsRejected = 0
+      for (const req of file.requests) {
+        if (req.status !== 'pending') continue
+        const p = req.payload as { fromTeamId?: string; toTeamId?: string; teamId?: string; agentId?: string }
+        const involvesTeam = p.teamId === teamId || p.fromTeamId === teamId || p.toTeamId === teamId
+        if (!involvesTeam) continue
+        if (req.type === 'transfer-agent') {
+          await rejectGovernanceRequest(req.id, caller, 'Team deleted — transfer cancelled')
+          transfersCancelled++
+        } else {
+          await rejectGovernanceRequest(req.id, caller, 'Team deleted')
+          requestsRejected++
+        }
       }
-      ops.push(transfers.length > 0
-        ? `G05: Cancelled ${transfers.length} pending transfer(s)`
-        : 'G05: No pending transfers')
+      ops.push(`G05: ${transfersCancelled} transfer(s) cancelled, ${requestsRejected} governance request(s) rejected`)
     } catch (err) {
-      ops.push(`G05: WARN — transfer cleanup failed: ${err instanceof Error ? err.message : err}`)
+      ops.push(`G05: WARN — governance cleanup failed: ${err instanceof Error ? err.message : err}`)
     }
 
-    // ── G06: Reject pending governance requests for this team ──
-    try {
-      const { loadGovernanceRequests, rejectGovernanceRequest } = await import('@/lib/governance-request-registry')
-      const file = loadGovernanceRequests()
-      const teamRequests = file.requests.filter((r: { status: string; payload: { teamId?: string } }) =>
-        r.status === 'pending' && r.payload?.teamId === teamId
-      )
-      for (const req of teamRequests) {
-        await rejectGovernanceRequest(req.id, options?.authContext?.agentId || 'system', 'Team deleted')
-      }
-      ops.push(teamRequests.length > 0
-        ? `G06: Rejected ${teamRequests.length} pending governance request(s)`
-        : 'G06: No pending governance requests')
-    } catch (err) {
-      ops.push(`G06: WARN — governance request cleanup failed: ${err instanceof Error ? err.message : err}`)
-    }
-
-    // ── G07: Delete team data files ────────────────────────────
-    // Tasks, documents (repos are stored in agent records, not per-team files)
+    // ── G06: Delete team data files ────────────────────────────
     try {
       const { existsSync, unlinkSync } = await import('fs')
       const path = await import('path')
@@ -2667,12 +2675,12 @@ export async function DeleteTeam(
       let cleaned = 0
       if (existsSync(taskFile)) { unlinkSync(taskFile); cleaned++ }
       if (existsSync(docsFile)) { unlinkSync(docsFile); cleaned++ }
-      ops.push(cleaned > 0 ? `G07: Deleted ${cleaned} team data file(s)` : 'G07: No team data files to clean')
+      ops.push(cleaned > 0 ? `G06: Deleted ${cleaned} team data file(s)` : 'G06: No team data files to clean')
     } catch (err) {
-      ops.push(`G07: WARN — data file cleanup failed: ${err instanceof Error ? err.message : err}`)
+      ops.push(`G06: WARN — data file cleanup failed: ${err instanceof Error ? err.message : err}`)
     }
 
-    // ── G08: Optionally delete team agents ─────────────────────
+    // ── G07: Optionally delete team agents ─────────────────────
     if (options?.deleteAgents && agentsToRevert.length > 0) {
       for (const agentId of agentsToRevert) {
         try {
@@ -2680,16 +2688,16 @@ export async function DeleteTeam(
             authContext: options.authContext || { isSystemOwner: true },
           })
           if (delResult.success) {
-            ops.push(`G08: Deleted agent ${agentId.substring(0, 8)}`)
+            ops.push(`G07: Deleted agent ${agentId.substring(0, 8)}`)
           } else {
-            ops.push(`G08: WARN — DeleteAgent failed for ${agentId.substring(0, 8)}: ${delResult.error}`)
+            ops.push(`G07: WARN — DeleteAgent failed for ${agentId.substring(0, 8)}: ${delResult.error}`)
           }
         } catch (err) {
-          ops.push(`G08: WARN — DeleteAgent exception for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
+          ops.push(`G07: WARN — DeleteAgent exception for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
         }
       }
     } else {
-      ops.push('G08: Agent deletion not requested — agents preserved as AUTONOMOUS')
+      ops.push('G07: Agent deletion not requested — agents preserved as AUTONOMOUS')
     }
 
     result.success = true

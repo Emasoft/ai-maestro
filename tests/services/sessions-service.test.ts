@@ -63,16 +63,19 @@ const {
       sessionActivity: new Map<string, number>(),
       broadcastStatusUpdate: vi.fn(),
     },
-    mockFs: {
-      default: {
+    mockFs: (() => {
+      const fns = {
         readFileSync: vi.fn().mockReturnValue(JSON.stringify({ version: '0.24.2' })),
         existsSync: vi.fn().mockReturnValue(false),
         readdirSync: vi.fn().mockReturnValue([]),
         mkdirSync: vi.fn(),
         writeFileSync: vi.fn(),
         unlinkSync: vi.fn(),
-      },
-    },
+        copyFileSync: vi.fn(),
+        renameSync: vi.fn(),
+      }
+      return { default: fns, ...fns }
+    })(),
   }
 })
 

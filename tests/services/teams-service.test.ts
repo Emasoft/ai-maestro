@@ -51,6 +51,7 @@ const { mockTeams, mockGhProject, mockDocs, mockAgentRegistry, mockNotificationS
   mockAgentRegistry: {
     getAgent: vi.fn(),
     loadAgents: vi.fn(() => []),
+    updateAgent: vi.fn(),
   },
   mockNotificationService: {
     notifyAgent: vi.fn(),
@@ -63,13 +64,13 @@ vi.mock('@/lib/document-registry', () => mockDocs)
 vi.mock('@/lib/agent-registry', () => mockAgentRegistry)
 vi.mock('@/lib/notification-service', () => mockNotificationService)
 
-// Mock governance module - getManagerId returns null (no manager configured) for service tests
+// Mock governance module - getManagerId returns a manager so team creation works (R9 governance requires MANAGER)
 vi.mock('@/lib/governance', () => ({
-  getManagerId: vi.fn(() => null),
+  getManagerId: vi.fn(() => 'test-manager-id'),
   isManager: vi.fn(() => false),
   isChiefOfStaffAnywhere: vi.fn(() => false),
   verifyPassword: vi.fn(() => Promise.resolve(true)),
-  loadGovernance: vi.fn(() => ({ passwordHash: null })),
+  loadGovernance: vi.fn(() => ({ passwordHash: null, managerId: 'test-manager-id' })),
 }))
 
 // Mock team-acl module - checkTeamAccess allows all access by default in service tests
@@ -156,7 +157,7 @@ describe('createNewTeam', () => {
     // createTeam now receives (data, managerId, agentNames); type is always 'closed'
     expect(mockTeams.createTeam).toHaveBeenCalledWith(
       { name: 'New Team', description: undefined, agentIds: [], type: 'closed', chiefOfStaffId: undefined },
-      null,
+      'test-manager-id',
       []
     )
   })
@@ -170,7 +171,7 @@ describe('createNewTeam', () => {
     expect(result.status).toBe(201)
     expect(mockTeams.createTeam).toHaveBeenCalledWith(
       { name: 'Full Team', description: 'A team', agentIds: ['a1', 'a2'], type: 'closed', chiefOfStaffId: undefined },
-      null,
+      'test-manager-id',
       []
     )
   })
@@ -214,7 +215,7 @@ describe('createNewTeam', () => {
 
     expect(mockTeams.createTeam).toHaveBeenCalledWith(
       { name: 'No Agents', description: undefined, agentIds: [], type: 'closed', chiefOfStaffId: undefined },
-      null,
+      'test-manager-id',
       []
     )
   })
@@ -280,7 +281,7 @@ describe('updateTeamById', () => {
       lastMeetingAt: '2025-06-01T00:00:00Z',
       instructions: '# Rules',
       lastActivityAt: '2025-06-01T00:00:00Z',
-    }, null, [])
+    }, 'test-manager-id', [])
   })
 
   it('returns 404 when team not found', async () => {

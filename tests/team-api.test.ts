@@ -10,8 +10,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 let fsStore: Record<string, string> = {}
 
-vi.mock('fs', () => ({
-  default: {
+vi.mock('fs', () => {
+  const fns = {
     existsSync: vi.fn((filePath: string) => filePath in fsStore),
     mkdirSync: vi.fn(),
     readFileSync: vi.fn((filePath: string) => {
@@ -22,7 +22,6 @@ vi.mock('fs', () => ({
       fsStore[filePath] = data
     }),
     renameSync: vi.fn((oldPath: string, newPath: string) => {
-      // Atomic write pattern: move temp file to target path
       if (oldPath in fsStore) {
         fsStore[newPath] = fsStore[oldPath]
         delete fsStore[oldPath]
@@ -31,8 +30,10 @@ vi.mock('fs', () => ({
     unlinkSync: vi.fn((filePath: string) => {
       delete fsStore[filePath]
     }),
-  },
-}))
+    copyFileSync: vi.fn(),
+  }
+  return { default: fns, ...fns }
+})
 
 let uuidCounter = 0
 vi.mock('uuid', () => ({
@@ -46,12 +47,12 @@ vi.mock('@/lib/file-lock', () => ({
   withLock: vi.fn((_name: string, fn: () => unknown) => Promise.resolve(fn())),
 }))
 
-// Mock governance module - getManagerId returns null (no manager configured) for basic tests
+// Mock governance module - getManagerId returns a manager so team creation works (R9 governance requires MANAGER)
 vi.mock('@/lib/governance', () => ({
-  getManagerId: vi.fn(() => null),
+  getManagerId: vi.fn(() => 'test-manager-id'),
   isManager: vi.fn(() => false),
-  loadGovernance: vi.fn(() => ({ managerId: null, passwordHash: null, createdAt: null, updatedAt: null })),
-  verifyPassword: vi.fn(() => false),
+  loadGovernance: vi.fn(() => ({ managerId: 'test-manager-id', passwordHash: null, createdAt: null, updatedAt: null })),
+  verifyPassword: vi.fn(() => Promise.resolve(true)),
 }))
 
 // Mock team-acl module - checkTeamAccess allows all access by default in tests
@@ -66,10 +67,15 @@ vi.mock('@/lib/agent-registry', () => ({
 
 // Mock agent-auth module - in tests, trust X-Agent-Id directly (no real API keys in test environment)
 vi.mock('@/lib/agent-auth', () => ({
+  authenticateFromRequest: vi.fn((request: { headers: { get(name: string): string | null } }) => {
+    const agentId = request.headers.get('X-Agent-Id')
+    if (agentId) return { agentId }
+    return {}
+  }),
   authenticateAgent: vi.fn((authHeader: string | null, agentIdHeader: string | null) => {
     if (agentIdHeader) return { agentId: agentIdHeader }
     return {}
-  })
+  }),
 }))
 
 // Mock validation module - isValidUuid accepts synthetic test UUIDs (uuid-1, uuid-2, etc.)
@@ -221,7 +227,7 @@ describe('POST /api/teams', () => {
     expect(spy.mock.calls[0][1]).toBe('manager-uuid')
 
     spy.mockRestore()
-    vi.mocked(getManagerId).mockReturnValue(null)
+    vi.mocked(getManagerId).mockReturnValue('test-manager-id')
   })
 })
 

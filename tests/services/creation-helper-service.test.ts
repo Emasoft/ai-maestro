@@ -166,7 +166,7 @@ describe('createCreationHelper', () => {
     expect(cmd).toContain('--agent haephestos-creation-helper')
     expect(cmd).toContain('--model sonnet')
     expect(cmd).toContain('--permission-mode default')
-    expect(cmd).toContain('--tools Read,Write,Bash,Glob,Grep,Agent')
+    expect(cmd).toContain('--tools Read,Write,Edit,Bash,Glob,Grep,Agent,WebFetch')
   })
 })
 

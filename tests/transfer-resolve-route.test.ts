@@ -51,10 +51,15 @@ vi.mock('@/lib/notification-service', () => ({
 
 // Mock agent-auth module - in tests, trust X-Agent-Id directly (no real API keys in test environment)
 vi.mock('@/lib/agent-auth', () => ({
+  authenticateFromRequest: vi.fn((request: { headers: { get(name: string): string | null } }) => {
+    const agentId = request.headers.get('X-Agent-Id')
+    if (agentId) return { agentId }
+    return {}
+  }),
   authenticateAgent: vi.fn((authHeader: string | null, agentIdHeader: string | null) => {
     if (agentIdHeader) return { agentId: agentIdHeader }
     return {}
-  })
+  }),
 }))
 
 const mockAcquireLock = vi.fn()

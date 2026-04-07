@@ -78,16 +78,19 @@ const {
     mockMessageQueue: {
       resolveAgentIdentifier: vi.fn(),
     },
-    mockFs: {
-      default: {
+    mockFs: (() => {
+      const fns = {
         readFileSync: vi.fn().mockReturnValue('{}'),
         existsSync: vi.fn().mockReturnValue(false),
         readdirSync: vi.fn().mockReturnValue([]),
         mkdirSync: vi.fn(),
         writeFileSync: vi.fn(),
         unlinkSync: vi.fn(),
-      },
-    },
+        copyFileSync: vi.fn(),
+        renameSync: vi.fn(),
+      }
+      return { default: fns, ...fns }
+    })(),
     mockUuid: {
       v4: vi.fn(() => `uuid-${++uuidCounter}`),
     },
@@ -109,6 +112,12 @@ vi.mock('uuid', () => mockUuid)
 vi.mock('child_process', () => ({
   exec: vi.fn((_cmd: string, cb: Function) => cb(null, { stdout: '', stderr: '' })),
   execSync: vi.fn().mockReturnValue(''),
+}))
+
+// Mock element-management-service: deleteAgentById now delegates to DeleteAgent
+const mockDeleteAgentPipeline = vi.fn()
+vi.mock('@/services/element-management-service', () => ({
+  DeleteAgent: (...args: unknown[]) => mockDeleteAgentPipeline(...args),
 }))
 
 // ============================================================================
@@ -150,6 +159,8 @@ beforeEach(() => {
   mockHostsConfig.getSelfHost.mockReturnValue({ id: 'test-host', name: 'Test Host', url: 'http://localhost:23000' })
   mockHostsConfig.getHosts.mockReturnValue([{ id: 'test-host', name: 'Test Host', url: 'http://localhost:23000' }])
   mockHostsConfig.isSelf.mockReturnValue(true)
+  // Default: DeleteAgent pipeline succeeds
+  mockDeleteAgentPipeline.mockResolvedValue({ success: true, agentId: 'agent-1', hard: false, operations: [] })
 })
 
 // ============================================================================
@@ -398,51 +409,59 @@ describe('updateAgentById', () => {
 // ============================================================================
 
 describe('deleteAgentById', () => {
-  it('soft deletes agent', async () => {
-    const agent = makeAgent({ id: 'agent-1' })
-    mockAgentRegistry.getAgent.mockReturnValue(agent)
-    mockAgentRegistry.deleteAgent.mockReturnValue(true)
+  it('soft deletes agent via DeleteAgent pipeline', async () => {
+    /** deleteAgentById now delegates to DeleteAgent from element-management-service */
+    mockDeleteAgentPipeline.mockResolvedValue({ success: true, agentId: 'agent-1', hard: false, operations: [] })
 
     const result = await deleteAgentById('agent-1', false)
 
     expect(result.status).toBe(200)
     expect(result.data?.success).toBe(true)
     expect(result.data?.hard).toBe(false)
+    expect(mockDeleteAgentPipeline).toHaveBeenCalledWith(
+      'agent-1',
+      expect.objectContaining({ hard: false, authContext: expect.objectContaining({ isSystemOwner: true }) }),
+    )
   })
 
-  it('hard deletes agent', async () => {
-    const agent = makeAgent({ id: 'agent-1' })
-    mockAgentRegistry.getAgent.mockReturnValue(agent)
-    mockAgentRegistry.deleteAgent.mockReturnValue(true)
+  it('hard deletes agent via DeleteAgent pipeline', async () => {
+    mockDeleteAgentPipeline.mockResolvedValue({ success: true, agentId: 'agent-1', hard: true, operations: [] })
 
     const result = await deleteAgentById('agent-1', true)
 
     expect(result.status).toBe(200)
     expect(result.data?.hard).toBe(true)
+    expect(mockDeleteAgentPipeline).toHaveBeenCalledWith(
+      'agent-1',
+      expect.objectContaining({ hard: true }),
+    )
   })
 
   it('returns 404 when agent not found', async () => {
-    mockAgentRegistry.getAgent.mockReturnValue(null)
+    mockDeleteAgentPipeline.mockResolvedValue({
+      success: false, agentId: 'nonexistent', hard: false, operations: [],
+      error: 'Agent not found',
+    })
 
     const result = await deleteAgentById('nonexistent', false)
 
     expect(result.status).toBe(404)
   })
 
-  it('returns 410 when already soft-deleted and not hard deleting', async () => {
-    const deleted = makeAgent({ id: 'agent-1', deletedAt: '2025-01-01T00:00:00Z' })
-    mockAgentRegistry.getAgent.mockReturnValue(deleted)
+  it('returns 403 when DeleteAgent denies authorization', async () => {
+    mockDeleteAgentPipeline.mockResolvedValue({
+      success: false, agentId: 'agent-1', hard: false, operations: [],
+      error: 'Not authorized to delete agents',
+    })
 
     const result = await deleteAgentById('agent-1', false)
 
-    expect(result.status).toBe(410)
-    expect(result.error).toMatch(/already deleted/i)
+    expect(result.status).toBe(403)
+    expect(result.error).toMatch(/Not authorized/i)
   })
 
   it('allows hard delete of already soft-deleted agent', async () => {
-    const deleted = makeAgent({ id: 'agent-1', deletedAt: '2025-01-01T00:00:00Z' })
-    mockAgentRegistry.getAgent.mockReturnValue(deleted)
-    mockAgentRegistry.deleteAgent.mockReturnValue(true)
+    mockDeleteAgentPipeline.mockResolvedValue({ success: true, agentId: 'agent-1', hard: true, operations: [] })
 
     const result = await deleteAgentById('agent-1', true)
 

@@ -67,6 +67,12 @@ vi.mock('@/lib/validation', () => ({
   isValidUuid: vi.fn(() => true),
 }))
 
+// Mock agent-auth module - authenticateFromRequest returns system-owner (no agentId) for document tests
+vi.mock('@/lib/agent-auth', () => ({
+  authenticateFromRequest: vi.fn(() => ({})),
+  authenticateAgent: vi.fn(() => ({})),
+}))
+
 // Note: team-registry is tested via its real implementation with a mocked 'fs' module.
 // This is an integration test pattern — the fs mock is picked up transitively.
 

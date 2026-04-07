@@ -133,6 +133,12 @@ vi.mock('@/lib/governance-sync', () => ({
   handleGovernanceSyncMessage: vi.fn(),
 }))
 
+// --- element-management-service: deleteAgentById now delegates to DeleteAgent ---
+const mockDeleteAgentPipeline = vi.fn()
+vi.mock('@/services/element-management-service', () => ({
+  DeleteAgent: (...args: unknown[]) => mockDeleteAgentPipeline(...args),
+}))
+
 // ============================================================================
 // Import module under test (after all mocks are declared)
 // ============================================================================
@@ -224,6 +230,8 @@ beforeEach(() => {
   // Place id after ...body so the explicit id parameter always wins over any id field in body
   mockUpdateAgent.mockImplementation((id, body) => makeAgent({ ...body, id }))
   mockDeleteAgent.mockReturnValue(true)
+  // Default: DeleteAgent pipeline succeeds
+  mockDeleteAgentPipeline.mockResolvedValue({ success: true, agentId: TARGET_AGENT_ID, hard: false, operations: [] })
 })
 
 // ============================================================================
@@ -288,13 +296,16 @@ describe('createNewAgent governance', () => {
 
 describe('updateAgentById governance', () => {
   it('allows update when requestingAgentId is null (backward compatibility)', async () => {
-    /** Verifies that omitting requestingAgentId skips all governance checks */
+    /** Verifies that omitting requestingAgentId skips governance role checks on the requester.
+     *  Note: isManager may still be called for title detection (BUG-014 fix), but NOT for auth. */
     const result = await updateAgentById(TARGET_AGENT_ID, makeUpdateRequest())
 
     expect(result.status).toBe(200)
     expect(result.data?.agent).toBeDefined()
-    expect(mockIsManager).not.toHaveBeenCalled()
-    expect(mockIsChiefOfStaffAnywhere).not.toHaveBeenCalled()
+    // Governance role checks for the requester should not be called with the requestingAgentId
+    // (isManager may be called with the TARGET agent id for title detection, which is acceptable)
+    expect(mockIsManager).not.toHaveBeenCalledWith(undefined)
+    expect(mockIsManager).not.toHaveBeenCalledWith(null)
   })
 
   it('allows update when requestingAgentId is MANAGER', async () => {
@@ -320,19 +331,19 @@ describe('updateAgentById governance', () => {
     expect(mockIsChiefOfStaffAnywhere).toHaveBeenCalledWith(COS_ID)
   })
 
-  it('allows self-update when requestingAgentId equals target agent id', async () => {
-    /** Verifies that an agent can always update itself regardless of role */
+  it('blocks self-update (CC-GOV-005: no self-modification)', async () => {
+    /** CC-GOV-005: Agents cannot modify themselves via API — consistent with RBAC authorization.ts */
     mockIsManager.mockReturnValue(false)
     mockIsChiefOfStaffAnywhere.mockReturnValue(false)
-    // getAgent must return the target with matching id
     mockGetAgent.mockReturnValue(makeAgent({ id: TARGET_AGENT_ID }))
 
     const result = await updateAgentById(TARGET_AGENT_ID, makeUpdateRequest(), TARGET_AGENT_ID)
 
-    expect(result.status).toBe(200)
-    expect(result.data?.agent).toBeDefined()
-    // loadTeams should NOT be called because self-update short-circuits
-    expect(mockLoadTeams).not.toHaveBeenCalled()
+    expect(result.status).toBe(403)
+    expect(result.error).toContain('Only MANAGER or owning Chief-of-Staff can update this agent')
+    expect(result.data).toBeUndefined()
+    // updateAgent should NOT have been called
+    expect(mockUpdateAgent).not.toHaveBeenCalled()
   })
 
   it('allows update when requestingAgentId is COS of a closed team the target belongs to', async () => {
@@ -369,7 +380,7 @@ describe('updateAgentById governance', () => {
     const result = await updateAgentById(TARGET_AGENT_ID, makeUpdateRequest(), MEMBER_ID)
 
     expect(result.status).toBe(403)
-    expect(result.error).toContain('Only MANAGER, owning Chief-of-Staff, or the agent itself can update')
+    expect(result.error).toContain('Only MANAGER or owning Chief-of-Staff can update this agent')
     expect(result.data).toBeUndefined()
     // updateAgent should NOT have been called
     expect(mockUpdateAgent).not.toHaveBeenCalled()
@@ -394,61 +405,84 @@ describe('updateAgentById governance', () => {
 
 describe('deleteAgentById governance', () => {
   it('allows deletion when requestingAgentId is null (backward compatibility)', async () => {
-    /** Verifies that omitting requestingAgentId skips all governance checks */
+    /** Verifies that omitting requestingAgentId creates system-owner auth context.
+     *  deleteAgentById now delegates to DeleteAgent from element-management-service. */
     const result = await deleteAgentById(TARGET_AGENT_ID, false)
 
     expect(result.status).toBe(200)
     expect(result.data?.success).toBe(true)
-    expect(mockIsManager).not.toHaveBeenCalled()
+    // DeleteAgent was called with system-owner auth context
+    expect(mockDeleteAgentPipeline).toHaveBeenCalledWith(
+      TARGET_AGENT_ID,
+      expect.objectContaining({
+        authContext: expect.objectContaining({ isSystemOwner: true }),
+        hard: false,
+      }),
+    )
   })
 
   it('allows deletion when requestingAgentId is MANAGER', async () => {
-    /** Verifies that only MANAGER role is permitted to delete agents */
-    mockIsManager.mockReturnValue(true)
-
+    /** Verifies that a MANAGER-identified request passes the correct auth context to DeleteAgent */
     const result = await deleteAgentById(TARGET_AGENT_ID, false, MANAGER_ID)
 
     expect(result.status).toBe(200)
     expect(result.data?.success).toBe(true)
-    expect(mockIsManager).toHaveBeenCalledWith(MANAGER_ID)
+    expect(mockDeleteAgentPipeline).toHaveBeenCalledWith(
+      TARGET_AGENT_ID,
+      expect.objectContaining({
+        authContext: expect.objectContaining({ agentId: MANAGER_ID, isSystemOwner: false }),
+        hard: false,
+      }),
+    )
   })
 
-  it('rejects deletion when requestingAgentId is Chief-of-Staff', async () => {
-    /** Verifies that COS cannot delete agents -- only MANAGER has delete authority */
-    mockIsManager.mockReturnValue(false)
-    mockIsChiefOfStaffAnywhere.mockReturnValue(true)
+  it('rejects deletion when DeleteAgent denies authorization (e.g. COS)', async () => {
+    /** Verifies that when DeleteAgent returns failure (COS not authorized), deleteAgentById returns 403 */
+    mockDeleteAgentPipeline.mockResolvedValue({
+      success: false,
+      agentId: TARGET_AGENT_ID,
+      hard: false,
+      operations: ['G00: DENIED — Only MANAGER can delete agents'],
+      error: 'Only MANAGER can delete agents',
+    })
 
     const result = await deleteAgentById(TARGET_AGENT_ID, false, COS_ID)
 
     expect(result.status).toBe(403)
     expect(result.error).toContain('Only MANAGER can delete agents')
     expect(result.data).toBeUndefined()
-    // deleteAgent should NOT have been called
-    expect(mockDeleteAgent).not.toHaveBeenCalled()
   })
 
   it('rejects deletion when requestingAgentId is a regular member', async () => {
-    /** Verifies that a regular member agent is denied agent deletion with 403 */
-    mockIsManager.mockReturnValue(false)
-    mockIsChiefOfStaffAnywhere.mockReturnValue(false)
+    /** Verifies that a regular member agent is denied agent deletion */
+    mockDeleteAgentPipeline.mockResolvedValue({
+      success: false,
+      agentId: TARGET_AGENT_ID,
+      hard: false,
+      operations: ['G00: DENIED — not authorized'],
+      error: 'Not authorized to delete agents',
+    })
 
     const result = await deleteAgentById(TARGET_AGENT_ID, false, MEMBER_ID)
 
     expect(result.status).toBe(403)
-    expect(result.error).toContain('Only MANAGER can delete agents')
+    expect(result.error).toBeDefined()
     expect(result.data).toBeUndefined()
-    expect(mockDeleteAgent).not.toHaveBeenCalled()
   })
 
   it('returns 404 when target agent does not exist', async () => {
-    /** Verifies that deleting a non-existent agent returns 404 before governance check */
-    mockGetAgent.mockReturnValue(null)
+    /** Verifies that DeleteAgent returns 'Agent not found' and deleteAgentById maps it to 404 */
+    mockDeleteAgentPipeline.mockResolvedValue({
+      success: false,
+      agentId: 'nonexistent-agent',
+      hard: false,
+      operations: ['G01: Agent not found'],
+      error: 'Agent not found',
+    })
 
     const result = await deleteAgentById('nonexistent-agent', false, MANAGER_ID)
 
     expect(result.status).toBe(404)
     expect(result.error).toContain('Agent not found')
-    // Governance check should not be reached for delete since 404 comes first
-    expect(mockDeleteAgent).not.toHaveBeenCalled()
   })
 })

@@ -171,8 +171,8 @@ describe('element-management-service', () => {
       const { uninstallAllRolePlugins } = await import('@/services/element-management-service')
       await uninstallAllRolePlugins('/tmp/agent-dir')
 
-      // Should attempt to uninstall each title-mapped plugin (5 titles mapped)
-      expect(mockExecFileAsync).toHaveBeenCalledTimes(5)
+      // Should attempt to uninstall each title-mapped plugin (6 titles mapped, including MEMBER)
+      expect(mockExecFileAsync).toHaveBeenCalledTimes(6)
     })
   })
 
@@ -228,25 +228,28 @@ describe('element-management-service', () => {
       expect(result).toBe('ai-maestro-assistant-manager-agent')
     })
 
-    it('should return null for MEMBER title (no forced plugin)', async () => {
-      /** Validates that MEMBER title does not force any specific plugin */
-      const agent = makeAgent({ workingDirectory: '/tmp/agent-dir' })
+    it('should install programmer plugin for MEMBER title', async () => {
+      /** Validates that MEMBER title installs the programmer role-plugin */
+      const agent = makeAgent({ workingDirectory: '/tmp/agent-dir', program: 'claude-code' })
       mockAgentRegistry.getAgent.mockReturnValue(agent)
+      mockClientCapabilities.detectClientType.mockReturnValue('claude')
 
       const { syncRolePlugin } = await import('@/services/element-management-service')
       const result = await syncRolePlugin(agent.id, 'member')
 
-      // MEMBER has no forced plugin — should uninstall all and return null
-      expect(result).toBeNull()
+      // MEMBER now maps to ai-maestro-programmer-agent
+      expect(result).toBe('ai-maestro-programmer-agent')
     })
   })
 
   describe('autoAssignRolePluginForTitle', () => {
-    it('should return null for titles with no required plugin', async () => {
-      /** Validates that titles like MEMBER return null (no forced plugin) */
+    it('should return programmer plugin for MEMBER title', async () => {
+      /** Validates that MEMBER title now returns the programmer role-plugin */
+      mockAgentRegistry.getAgent.mockReturnValue(makeAgent({ workingDirectory: '/tmp/agent-dir', program: 'claude-code' }))
+      mockClientCapabilities.detectClientType.mockReturnValue('claude')
       const { autoAssignRolePluginForTitle } = await import('@/services/element-management-service')
       const result = await autoAssignRolePluginForTitle('member' as never, 'agent-1')
-      expect(result).toBeNull()
+      expect(result).toBe('ai-maestro-programmer-agent')
     })
 
     it('should throw when agent is not found', async () => {

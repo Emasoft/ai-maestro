@@ -47,6 +47,15 @@ export function authenticateAgent(
 ): AgentAuthResult {
   // Case 1: No Bearer token — check for browser session cookie
   if (authHeader === null && agentIdHeader === null) {
+    // If no governance password is configured, allow open access.
+    // Otherwise the user is locked out with no way to reach Settings to set it.
+    try {
+      const { loadGovernance } = require('./governance')
+      if (!loadGovernance().passwordHash) {
+        return {} // Open access — system owner
+      }
+    } catch { /* governance module not available — enforce auth */ }
+
     const sessionToken = extractSessionFromCookie(cookieHeader ?? null)
     if (sessionToken && validateSession(sessionToken)) {
       // Valid session cookie → system owner (web UI user)

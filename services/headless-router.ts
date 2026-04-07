@@ -2984,6 +2984,12 @@ const routes: Route[] = [
     res.end(JSON.stringify({ success: true }))
   }},
   { method: 'GET', pattern: /^\/api\/auth\/session$/, paramNames: [], handler: async (req, res) => {
+    // If no governance password set → open access (avoid chicken-and-egg lockout)
+    const { loadGovernance } = await import('@/lib/governance')
+    if (!loadGovernance().passwordHash) {
+      sendJson(res, 200, { authenticated: true, passwordNotSet: true })
+      return
+    }
     const { extractSessionFromCookie, validateSession } = await import('@/lib/session-auth')
     const token = extractSessionFromCookie(getHeader(req, 'Cookie'))
     if (token && validateSession(token)) {

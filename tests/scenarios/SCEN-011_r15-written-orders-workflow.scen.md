@@ -1,38 +1,50 @@
 ---
 number: 11
 name: R15 Written Orders Workflow
-version: "1.0"
+version: "2.0"
 description: >
-  Tests R15 (Written Orders & GitHub Trail). Creates a MANAGER and a full team,
-  then sends a task to the MANAGER. Verifies that the MANAGER produces written
-  .md files from templates, and that inter-agent commands use GitHub issue URLs
-  instead of inline AMP content. This validates the paper trail requirement.
+  Tests R15 (Written Orders & GitHub Trail). Adds LoginGate authentication,
+  RBAC probes (no-self-modification, agent auth verification), COS immutability
+  probe (R4.7), kanban task creation for the team, DeleteTeam 8-gate pipeline
+  with governance password, and cemetery verification. Creates a MANAGER and a
+  full team, then sends a task to the MANAGER. Verifies that the MANAGER
+  produces written .md files from templates, and that inter-agent commands use
+  GitHub issue URLs instead of inline AMP content. Validates the paper trail
+  requirement and R16 (password never shared with agents).
+  Validates governance rules R4, R9, R12, R15, R16.
 subsystems:
   - governance
   - teams
   - agent-registry
   - agent-messaging (AMP)
   - element-management-service
+  - auth (LoginGate, agent auth mst_* secrets, RBAC, no-self-modification)
+  - kanban
 ui_sections:
+  - Login page (governance password login)
   - Sidebar -> Agents tab -> Agent list
   - Sidebar -> Teams tab -> Team list
   - Agent Profile -> Overview tab -> Governance Title
   - Terminal view (MANAGER agent input/output)
+  - Team Dashboard -> Kanban board
+  - Settings -> Cemetery tab
 data_produced:
   - 1 MANAGER agent (temporary)
   - 1 test team with 5+ agents (temporary)
   - AMP messages (temporary)
   - Written .md order files in agent work dirs (temporary)
-  - GitHub issues with attachments (temporary — close after test)
+  - GitHub issues with attachments (temporary -- close after test)
   - Agent folders under ~/agents/ (temporary)
   - Plugin settings modifications (temporary, restored via STATE-WIPE)
+  - Kanban tasks (temporary, deleted with team)
+  - Cemetery archive entries (temporary, purged)
 required_tools:
-  - mcp__plugin_chromedev-tools_cdt__navigate_page
-  - mcp__plugin_chromedev-tools_cdt__take_snapshot
-  - mcp__plugin_chromedev-tools_cdt__take_screenshot
-  - mcp__plugin_chromedev-tools_cdt__click
-  - mcp__plugin_chromedev-tools_cdt__fill
-  - mcp__plugin_chromedev-tools_cdt__wait_for
+  - mcp__chrome-devtools__navigate_page
+  - mcp__chrome-devtools__take_snapshot
+  - mcp__chrome-devtools__take_screenshot
+  - mcp__chrome-devtools__click
+  - mcp__chrome-devtools__fill
+  - mcp__chrome-devtools__wait_for
 prerequisites:
   - AI Maestro server running at http://localhost:23000
   - Governance password set
@@ -48,10 +60,6 @@ author: AI Maestro Team
 
 # R15 Written Orders Workflow Scenario
 
-> **Purpose:** Validates R15 — all inter-agent commands and reports must be
-> written .md files using role-plugin templates. Attachments must be published
-> as GitHub issues, not sent inline via AMP. The MANAGER is exempt from R15.
-
 ## Phase 0: SAFE-SETUP
 
 #### S001: Commit current state
@@ -62,108 +70,184 @@ author: AI Maestro Team
 - **Verify:** Clean working tree. Screenshot: SCEN-011/S001-git-clean.png
 
 #### S002: STATE-WIPE Checkpoint
-- **Action:** Backup config files
+- **Action:** Backup config files to `tests/scenarios/state-backups/r15-written-orders_<timestamp>/`
 - **Goal:** Pre-test state saved
 - **Creates:** Backup directory
 - **Modifies:** nothing
 - **Verify:** 6 files backed up. Screenshot: SCEN-011/S002-backup.png
 
 #### S003: Build and verify server
-- **Action:** `yarn build && pm2 restart ai-maestro`
+- **Action:** `yarn build && pm2 restart ai-maestro`, wait 4s, check `GET /api/sessions`
 - **Goal:** Server running
 - **Creates:** nothing
 - **Modifies:** nothing
 - **Verify:** API returns 200. Screenshot: SCEN-011/S003-server-ok.png
 
-#### S004: Baseline screenshot
-- **Action:** Navigate to dashboard, screenshot
-- **Goal:** Baseline captured
+#### S004: Navigate to dashboard
+- **Action:** `navigate_page` to `http://localhost:23000`
+- **Goal:** Login page loads
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Screenshot: SCEN-011/S004-baseline.png
+- **Verify:** Login form visible. Screenshot: SCEN-011/S004-login-page.png
 
 ---
 
-## Phase 1: Create MANAGER and Full Team
+## Phase 1: LoginGate Authentication
 
-#### S005: Create MANAGER agent and assign title
-- **Action:** Wizard: Claude Code → `scen-r15-mgr` → No team → AUTONOMOUS → Auto-folder → Create → Assign MANAGER → password `mYkri1-xoxrap-gogtan`
+#### S005: Log in with governance password
+- **Action:** Fill password `mYkri1-xoxrap-gogtan`, click Login
+- **Goal:** Dashboard loads
+- **Creates:** Session cookie
+- **Modifies:** nothing
+- **Verify:** Dashboard visible. Take baseline screenshot. Screenshot: SCEN-011/S005-dashboard.png
+
+---
+
+## Phase 2: Create MANAGER and Full Team
+
+#### S006: Create MANAGER agent and assign title
+- **Action:** Wizard: Claude Code -> `scen-r15-mgr` -> No team -> AUTONOMOUS -> Auto-folder -> Create -> Assign MANAGER -> password `mYkri1-xoxrap-gogtan`
 - **Goal:** MANAGER active with plugin
-- **Creates:** Agent, tmux session, folder
+- **Creates:** Agent, tmux session, folder, plugin
 - **Modifies:** Governance state
-- **Verify:** MANAGER badge, plugin installed. Screenshot: SCEN-011/S005-manager.png
+- **Verify:** MANAGER badge, plugin installed. Screenshot: SCEN-011/S006-manager.png
 
-#### S006: Create team with batch API
-- **Action:** Create team `r15-test-team`, then batch-create 4 agents (architect, orchestrator, integrator, member)
+#### S007: Verify agent auth token exists
+- **Action:** Check `GET /api/agents/<managerId>` for auth-related fields. The agent should have an mst_* session secret.
+- **Goal:** Agent has session auth token for API calls
+- **Creates:** nothing
+- **Modifies:** nothing
+- **Verify:** Auth token present. Screenshot: SCEN-011/S007-auth-token.png
+
+#### S008: Create team with agents
+- **Action:** Create team `r15-test-team`, then create 4 agents via wizard: architect (`scen-r15-arch`), orchestrator (`scen-r15-orch`), integrator (`scen-r15-integ`), member (`scen-r15-mem`)
 - **Goal:** Full R12-compliant team (COS + 4 = 5 agents)
 - **Creates:** Team + 5 agents
 - **Modifies:** Team registry
-- **Verify:** `GET /api/teams/{id}/composition-check` returns `complete: true`. Screenshot: SCEN-011/S006-team-complete.png
+- **Verify:** `GET /api/teams/{id}/composition-check` returns `complete: true`. Screenshot: SCEN-011/S008-team-complete.png
 
 ---
 
-## Phase 2: Send Task and Verify Written Orders
+## Phase 3: COS Immutability Probe (R4.7)
 
-#### S007: Launch MANAGER Claude Code session
-- **Action:** Click "New Session" in profile
+#### S009: Attempt to remove COS from team agentIds via API
+- **Action:** `PUT /api/teams/<teamId>` with agentIds excluding COS ID
+- **Goal:** 400 -- COS immutability enforced
+- **Creates:** nothing
+- **Modifies:** nothing
+- **Verify:** Response 400. Screenshot: SCEN-011/S009-cos-immutability.png
+
+---
+
+## Phase 4: RBAC Probes
+
+#### S010: Attempt MANAGER self-modification
+- **Action:** `PATCH /api/agents/<managerId>` with `X-Agent-Id: <managerId>` and body `{"label": "self-hack"}`
+- **Goal:** 403 -- no self-modification
+- **Creates:** nothing
+- **Modifies:** nothing
+- **Verify:** Response 403. Screenshot: SCEN-011/S010-no-self-mod.png
+
+#### S011: Attempt team deletion by MEMBER agent
+- **Action:** `DELETE /api/teams/<teamId>` with `X-Agent-Id: <memberId>`
+- **Goal:** 403 -- only MANAGER can delete teams
+- **Creates:** nothing
+- **Modifies:** nothing
+- **Verify:** Response 403. Screenshot: SCEN-011/S011-rbac-delete-team-denied.png
+
+---
+
+## Phase 5: Kanban Task Usage
+
+#### S012: Open team kanban and create task
+- **Action:** Team dashboard -> Kanban -> quick-add "SCEN-011 design task" in Backlog
+- **Goal:** Task created
+- **Creates:** Task in tasks file
+- **Modifies:** nothing
+- **Verify:** Task in Backlog. Screenshot: SCEN-011/S012-kanban-task.png
+
+#### S013: Assign task to ARCHITECT and move to In Progress
+- **Action:** Click task card, set assignee to `scen-r15-arch`. Drag task to In Progress.
+- **Goal:** Task assigned and in progress
+- **Creates:** nothing
+- **Modifies:** Task assignee and status
+- **Verify:** Task shows assignee and is in In Progress column. Screenshot: SCEN-011/S013-task-assigned.png
+
+---
+
+## Phase 6: Send Task to MANAGER and Verify Written Orders
+
+#### S014: Launch MANAGER Claude Code session
+- **Action:** Click "New Session" in MANAGER profile if not already running
 - **Goal:** Claude Code running with MANAGER persona
 - **Creates:** Claude process
 - **Modifies:** nothing
-- **Verify:** Idle prompt visible. Screenshot: SCEN-011/S007-claude-running.png
+- **Verify:** Idle prompt visible. Screenshot: SCEN-011/S014-claude-running.png
 
-#### S008: Send task to MANAGER
-- **Action:** In Prompt Builder: "Send a design task to the team: Design the data model for a TODO app with tags, priorities, and due dates. The ARCHITECT should produce a design document and share it with the team via a GitHub issue. Use the /team-governance skill. Governance password: mYkri1-xoxrap-gogtan"
+#### S015: Send task to MANAGER
+- **Action:** In Prompt Builder: "Send a design task to the team: Design the data model for a TODO app with tags, priorities, and due dates. The ARCHITECT should produce a design document and share it with the team via a GitHub issue. Use the /team-governance skill. If any operation requires the governance password, ask the user to enter it in the AI Maestro UI popup -- do NOT use the password directly."
 - **Goal:** MANAGER processes task
 - **Creates:** AMP messages
 - **Modifies:** nothing
-- **Verify:** Terminal shows MANAGER working. Screenshot: SCEN-011/S008-task-sent.png
+- **Verify:** Terminal shows MANAGER working. Screenshot: SCEN-011/S015-task-sent.png
 
-#### S009: Wait for MANAGER to delegate
-- **Action:** Wait for MANAGER to send AMP message to COS
+#### S016: Wait for MANAGER to delegate
+- **Action:** Wait for MANAGER to send AMP message to COS or team
 - **Goal:** Message delivered
 - **Creates:** AMP message files
 - **Modifies:** nothing
-- **Verify:** Check AMP inbox of COS. Screenshot: SCEN-011/S009-delegation.png
+- **Verify:** Check AMP inbox of COS. Screenshot: SCEN-011/S016-delegation.png
 
-#### S010: Verify MANAGER used written format
-- **Action:** Analyze MANAGER's conversation log for .md file creation or GitHub issue creation
-- **Goal:** MANAGER is EXEMPT from R15 — may send direct AMP. But should still be noted.
+#### S017: Verify MANAGER R16 compliance -- password not shared
+- **Action:** Analyze MANAGER's conversation log. Search for the governance password string.
+- **Goal:** MANAGER did NOT include the governance password in any AMP message or file. R16 says password must never be shared with agents.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Log analysis via LLM Externalizer. Screenshot: SCEN-011/S010-mgr-log.png
+- **Verify:** No occurrence of the password in AMP messages or agent-produced files. Screenshot: SCEN-011/S017-r16-compliance.png
 
-#### S011: Check for template-based .md files
+#### S018: Check for template-based .md files
 - **Action:** Search agent work directories for .md files created during this test
-- **Goal:** If any non-MANAGER agent produced work, it should be in .md format
+- **Goal:** If any non-MANAGER agent produced work, it should be in .md format (R15)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** `find ~/agents/scen-r15-*/` for new .md files. Screenshot: SCEN-011/S011-md-files.png
+- **Verify:** `find ~/agents/scen-r15-*/` for new .md files. Screenshot: SCEN-011/S018-md-files.png
+
+#### S019: Verify MANAGER exemption from R15
+- **Action:** Analyze MANAGER's conversation log for direct AMP messages (without GitHub issues)
+- **Goal:** MANAGER is EXEMPT from R15 -- may send direct AMP instructions
+- **Creates:** nothing
+- **Modifies:** nothing
+- **Verify:** MANAGER may have sent direct AMP (exempt). Non-MANAGER agents must use .md + GitHub. Screenshot: SCEN-011/S019-mgr-exemption.png
 
 ---
 
 ## Phase CLEANUP: Restore Original State
 
-#### S012: Delete team with all agents
-- **Action:** Teams page → Delete → password `mYkri1-xoxrap-gogtan` → Delete Agents Too
-- **Goal:** Team removed
+#### S020: Delete team with all agents via DeleteTeam pipeline
+- **Action:** Teams -> Delete `r15-test-team` -> password `mYkri1-xoxrap-gogtan` -> Delete Agents Too
+- **Goal:** Team and all agents deleted via 8-gate pipeline (governance password verified, tokens revoked, transfers cancelled, team data deleted)
 - **Removes:** Team + all agents
-- **Verify:** Team gone. Screenshot: SCEN-011/S012-team-deleted.png
+- **Verify:** Team gone. Screenshot: SCEN-011/S020-team-deleted.png
 
-#### S013: Remove MANAGER and delete agent
-- **Action:** AUTONOMOUS → password → Delete agent with folder
-- **Goal:** No test artifacts
+#### S021: Remove MANAGER and delete agent
+- **Action:** AUTONOMOUS -> password `mYkri1-xoxrap-gogtan` -> Delete agent with folder
 - **Removes:** MANAGER agent + folder
-- **Verify:** Baseline counts. Screenshot: SCEN-011/S013-cleanup.png
+- **Verify:** Agent gone. `hasManager: false`. Screenshot: SCEN-011/S021-mgr-deleted.png
 
-#### S014: STATE-WIPE restore
-- **Action:** Restore config files
-- **Goal:** Files match backup
+#### S022: Verify cemetery entries and purge
+- **Action:** Settings -> Cemetery. Verify test agents appear. Purge all scen-r15-* entries.
+- **Removes:** Cemetery archives
+- **Verify:** No test entries. Screenshot: SCEN-011/S022-cemetery-purged.png
+
+#### S023: STATE-WIPE -- Restore configuration files
+- **Action:** Restore from S002 backup
+- **Goal:** Files match
 - **Removes:** nothing
-- **Verify:** Hash match. Screenshot: SCEN-011/S014-state-restored.png
+- **Verify:** Hash match. Screenshot: SCEN-011/S023-state-restored.png
 
-#### S015: Post-test screenshot
-- **Action:** Screenshot
+#### S024: Post-test screenshot
+- **Action:** `take_screenshot`
 - **Goal:** UI matches baseline
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Screenshot: SCEN-011/S015-post-cleanup.png
+- **Verify:** Visual comparison with S005. Screenshot: SCEN-011/S024-post-cleanup.png

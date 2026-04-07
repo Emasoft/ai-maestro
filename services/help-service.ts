@@ -7,7 +7,7 @@
  *
  * Covers:
  *   POST   /api/help/agent   -> createAssistantAgent
- *   DELETE /api/help/agent   -> deleteAssistantAgent
+ *   DELETE /api/help/agent   -> (inlined in route: DeleteAgent pipeline)
  *   GET    /api/help/agent   -> getAssistantStatus
  */
 
@@ -183,40 +183,6 @@ export async function createAssistantAgent(): Promise<ServiceResult<{
         created: false,
       },
       error: error instanceof Error ? error.message : 'Failed to create assistant',
-      status: 500,
-    }
-  }
-}
-
-/**
- * Kill assistant agent and clean up.
- */
-/**
- * @deprecated Use DeleteAgent from element-management-service instead.
- * This thin wrapper delegates to the all-in-one pipeline.
- */
-export async function deleteAssistantAgent(): Promise<ServiceResult<{ success: boolean }>> {
-  try {
-    const agent = getAgentByName(ASSISTANT_NAME)
-    if (!agent) {
-      return { data: { success: true }, status: 200 } // Already gone
-    }
-
-    // Delegate to the all-in-one pipeline (system-owner context)
-    const { DeleteAgent } = await import('@/services/element-management-service')
-    const result = await DeleteAgent(agent.id, {
-      authContext: { isSystemOwner: true },
-    })
-
-    if (!result.success) {
-      return { error: result.error || 'Failed to delete assistant', status: 500 }
-    }
-
-    return { data: { success: true }, status: 200 }
-  } catch (error) {
-    console.error('[Help Agent] Failed to delete assistant:', error)
-    return {
-      error: error instanceof Error ? error.message : 'Failed to delete assistant',
       status: 500,
     }
   }

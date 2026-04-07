@@ -21,7 +21,6 @@ import {
   searchAgentsByQuery,
   getAgentById,
   updateAgentById,
-  deleteAgentById,
   registerAgent,
   lookupAgentByName,
   getUnifiedAgents,
@@ -186,7 +185,6 @@ import {
   listAMPAgents,
   getAgentSelf,
   updateAgentSelf,
-  deleteAgentSelf,
   resolveAgentAddress,
   revokeKey,
   rotateKey,
@@ -298,7 +296,6 @@ import {
 
 import {
   createAssistantAgent,
-  deleteAssistantAgent,
   getAssistantStatus,
 } from '@/services/help-service'
 
@@ -1451,7 +1448,14 @@ const routes: Route[] = [
       sendJson(res, auth.status || 401, { error: auth.error })
       return
     }
-    sendServiceResult(res, await deleteAgentById(params.id, query.hard === 'true', auth.agentId))
+    const { DeleteAgent } = await import('@/services/element-management-service')
+    const delResult = await DeleteAgent(params.id, {
+      authContext: buildAuthContext(auth),
+      hard: query.hard === 'true',
+    })
+    sendServiceResult(res, delResult.success
+      ? { data: { success: true, hard: delResult.hard }, status: 200 }
+      : { error: delResult.error || 'Delete failed', status: delResult.error?.includes('not found') ? 404 : 403 })
   }},
 
   // =========================================================================
@@ -1532,7 +1536,27 @@ const routes: Route[] = [
     sendServiceResult(res, await updateAgentSelf(getHeader(req, 'Authorization'), body))
   }},
   { method: 'DELETE', pattern: /^\/api\/v1\/agents\/me$/, paramNames: [], handler: async (req, res) => {
-    sendServiceResult(res, await deleteAgentSelf(getHeader(req, 'Authorization')))
+    // Inline the AMP auth + DeleteAgent pipeline (replaces deprecated deleteAgentSelf wrapper)
+    const { authenticateRequest } = await import('@/lib/amp-auth')
+    const ampAuth = authenticateRequest(getHeader(req, 'Authorization'))
+    if (!ampAuth.authenticated) {
+      sendJson(res, 401, { error: ampAuth.error || 'unauthorized', message: ampAuth.message || 'Authentication required' })
+      return
+    }
+    const { DeleteAgent } = await import('@/services/element-management-service')
+    const delResult = await DeleteAgent(ampAuth.agentId!, {
+      authContext: { agentId: ampAuth.agentId!, isSystemOwner: false },
+      hard: true,
+    })
+    if (!delResult.success) {
+      sendJson(res, 403, { error: 'forbidden', message: delResult.error || 'Deletion denied' })
+      return
+    }
+    sendJson(res, 200, {
+      deregistered: true,
+      address: ampAuth.address,
+      deregistered_at: new Date().toISOString(),
+    })
   }},
   { method: 'GET', pattern: /^\/api\/v1\/agents\/resolve\/([^/]+)$/, paramNames: ['address'], handler: async (req, res, params) => {
     sendServiceResult(res, await resolveAgentAddress(getHeader(req, 'Authorization'), decodeURIComponent(params.address)))
@@ -2483,7 +2507,23 @@ const routes: Route[] = [
     sendServiceResult(res, await createAssistantAgent())
   }},
   { method: 'DELETE', pattern: /^\/api\/help\/agent$/, paramNames: [], handler: async (_req, res) => {
-    sendServiceResult(res, await deleteAssistantAgent())
+    // Inline the assistant deletion (replaces deprecated deleteAssistantAgent wrapper)
+    const { getAgentByName } = await import('@/lib/agent-registry')
+    const assistant = getAgentByName('_aim-assistant')
+    if (!assistant) {
+      // Already gone — idempotent success
+      sendJson(res, 200, { success: true })
+      return
+    }
+    const { DeleteAgent } = await import('@/services/element-management-service')
+    const delResult = await DeleteAgent(assistant.id, {
+      authContext: { isSystemOwner: true },
+    })
+    if (!delResult.success) {
+      sendJson(res, 500, { error: delResult.error || 'Failed to delete assistant' })
+      return
+    }
+    sendJson(res, 200, { success: true })
   }},
 
   // =========================================================================

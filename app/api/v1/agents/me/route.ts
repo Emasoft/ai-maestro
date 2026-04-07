@@ -9,7 +9,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAgentSelf, updateAgentSelf, deleteAgentSelf } from '@/services/amp-service'
+import { getAgentSelf, updateAgentSelf } from '@/services/amp-service'
+import { authenticateRequest } from '@/lib/amp-auth'
+import { DeleteAgent } from '@/services/element-management-service'
 import type { AMPError } from '@/lib/types/amp'
 
 export async function GET(request: NextRequest) {
@@ -43,9 +45,27 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const authHeader = request.headers.get('Authorization')
-  const result = await deleteAgentSelf(authHeader)
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+  // Inline the AMP auth + DeleteAgent pipeline (replaces deprecated deleteAgentSelf wrapper)
+  const ampAuth = authenticateRequest(authHeader)
+  if (!ampAuth.authenticated) {
+    return NextResponse.json(
+      { error: ampAuth.error || 'unauthorized', message: ampAuth.message || 'Authentication required' } as AMPError,
+      { status: 401 }
+    )
   }
-  return NextResponse.json(result.data, { status: result.status })
+  const delResult = await DeleteAgent(ampAuth.agentId!, {
+    authContext: { agentId: ampAuth.agentId!, isSystemOwner: false },
+    hard: true,
+  })
+  if (!delResult.success) {
+    return NextResponse.json(
+      { error: 'forbidden' as const, message: delResult.error || 'Deletion denied' } as AMPError,
+      { status: 403 }
+    )
+  }
+  return NextResponse.json({
+    deregistered: true,
+    address: ampAuth.address,
+    deregistered_at: new Date().toISOString(),
+  }, { status: 200 })
 }

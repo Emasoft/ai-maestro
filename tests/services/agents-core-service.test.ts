@@ -147,10 +147,8 @@ vi.mock('@/services/element-management-service', () => ({
 import {
   listAgents,
   searchAgentsByQuery,
-  createNewAgent,
   getAgentById,
   updateAgentById,
-  deleteAgentById,
   registerAgent,
   lookupAgentByName,
   wakeAgent,
@@ -323,58 +321,6 @@ describe('searchAgentsByQuery', () => {
 })
 
 // ============================================================================
-// createNewAgent
-// ============================================================================
-
-describe('createNewAgent', () => {
-  it('delegates to CreateAgent pipeline and returns 201 on success', async () => {
-    /** createNewAgent is a thin wrapper around CreateAgent from element-management-service */
-    const agent = makeAgent({ id: 'uuid-1', name: 'new-agent' })
-    mockCreateAgentPipeline.mockResolvedValue({ success: true, agentId: 'uuid-1', operations: [], restartNeeded: false })
-    mockAgentRegistry.getAgent.mockReturnValue(agent)
-
-    const result = await createNewAgent({
-      name: 'new-agent',
-      program: 'claude-code',
-      taskDescription: 'Test agent',
-    })
-
-    expect(result.status).toBe(201)
-    expect(result.data?.agent.name).toBe('new-agent')
-    expect(mockCreateAgentPipeline).toHaveBeenCalledWith(expect.objectContaining({ name: 'new-agent' }))
-  })
-
-  it('returns 400 when CreateAgent pipeline fails', async () => {
-    /** Pipeline failures (e.g. duplicate name) are propagated as 400 errors */
-    mockCreateAgentPipeline.mockResolvedValue({ success: false, agentId: null, operations: [], restartNeeded: false, error: 'Agent name already exists' })
-
-    const result = await createNewAgent({
-      name: 'duplicate',
-      program: 'claude-code',
-      taskDescription: 'Test',
-    })
-
-    expect(result.status).toBe(400)
-    expect(result.error).toMatch(/already exists/i)
-  })
-
-  it('returns 403 when requesting agent is not MANAGER or COS', async () => {
-    /** Governance enforcement: only MANAGER or COS can create agents via API */
-    mockGovernance.isManager.mockReturnValue(false)
-    mockGovernance.isChiefOfStaffAnywhere.mockReturnValue(false)
-
-    const result = await createNewAgent({
-      name: 'new-agent',
-      program: 'claude-code',
-      taskDescription: 'Test',
-    }, 'regular-member-id')
-
-    expect(result.status).toBe(403)
-    expect(result.error).toMatch(/MANAGER or Chief-of-Staff/)
-  })
-})
-
-// ============================================================================
 // getAgentById
 // ============================================================================
 
@@ -450,71 +396,6 @@ describe('updateAgentById', () => {
 
     expect(result.status).toBe(400)
     expect(result.error).toBe('Name taken')
-  })
-})
-
-// ============================================================================
-// deleteAgentById
-// ============================================================================
-
-describe('deleteAgentById', () => {
-  it('soft deletes agent via DeleteAgent pipeline', async () => {
-    /** deleteAgentById now delegates to DeleteAgent from element-management-service */
-    mockDeleteAgentPipeline.mockResolvedValue({ success: true, agentId: 'agent-1', hard: false, operations: [] })
-
-    const result = await deleteAgentById('agent-1', false)
-
-    expect(result.status).toBe(200)
-    expect(result.data?.success).toBe(true)
-    expect(result.data?.hard).toBe(false)
-    expect(mockDeleteAgentPipeline).toHaveBeenCalledWith(
-      'agent-1',
-      expect.objectContaining({ hard: false, authContext: expect.objectContaining({ isSystemOwner: true }) }),
-    )
-  })
-
-  it('hard deletes agent via DeleteAgent pipeline', async () => {
-    mockDeleteAgentPipeline.mockResolvedValue({ success: true, agentId: 'agent-1', hard: true, operations: [] })
-
-    const result = await deleteAgentById('agent-1', true)
-
-    expect(result.status).toBe(200)
-    expect(result.data?.hard).toBe(true)
-    expect(mockDeleteAgentPipeline).toHaveBeenCalledWith(
-      'agent-1',
-      expect.objectContaining({ hard: true }),
-    )
-  })
-
-  it('returns 404 when agent not found', async () => {
-    mockDeleteAgentPipeline.mockResolvedValue({
-      success: false, agentId: 'nonexistent', hard: false, operations: [],
-      error: 'Agent not found',
-    })
-
-    const result = await deleteAgentById('nonexistent', false)
-
-    expect(result.status).toBe(404)
-  })
-
-  it('returns 403 when DeleteAgent denies authorization', async () => {
-    mockDeleteAgentPipeline.mockResolvedValue({
-      success: false, agentId: 'agent-1', hard: false, operations: [],
-      error: 'Not authorized to delete agents',
-    })
-
-    const result = await deleteAgentById('agent-1', false)
-
-    expect(result.status).toBe(403)
-    expect(result.error).toMatch(/Not authorized/i)
-  })
-
-  it('allows hard delete of already soft-deleted agent', async () => {
-    mockDeleteAgentPipeline.mockResolvedValue({ success: true, agentId: 'agent-1', hard: true, operations: [] })
-
-    const result = await deleteAgentById('agent-1', true)
-
-    expect(result.status).toBe(200)
   })
 })
 

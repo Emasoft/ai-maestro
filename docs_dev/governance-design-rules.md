@@ -245,6 +245,36 @@ These are hard invariants that the system must maintain at all times:
 
 ---
 
+## R12. Minimum Team Composition (CRITICAL)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R12.1 | Every team **MUST** contain a minimum of 5 agents with these titles: **1 CHIEF-OF-STAFF**, **1 ARCHITECT**, **1 ORCHESTRATOR**, **1 INTEGRATOR**, **1 MEMBER** (programmer role-plugin) | Explicit |
+| R12.2 | A team lacking any of the 5 required titles is a **NON-FUNCTIONAL TEAM** — the CHIEF-OF-STAFF must immediately add the missing agents | Explicit |
+| R12.3 | Each role-plugin is designed for **one role only** — an agent cannot simultaneously serve as COS and ARCHITECT, or any other title combination | Explicit |
+| R12.4 | Additional agents with the **MEMBER** title can be added at the judgment of the CHIEF-OF-STAFF, using the programmer role-plugin or any role-plugin compatible with the MEMBER title | Explicit |
+| R12.5 | The CHIEF-OF-STAFF decides team composition based on the **design requirements document** received from the MANAGER | Explicit |
+| R12.6 | The **MANAGER** must enforce R12.1 when creating teams — a team creation task must always produce at least 5 agents | Explicit |
+
+**Example of a well-composed team (10 agents):**
+
+| # | Title | Role-Plugin | Purpose |
+|---|-------|-------------|---------|
+| 1 | CHIEF-OF-STAFF | ai-maestro-chief-of-staff | Team operations, staffing, external comms |
+| 2 | ARCHITECT | ai-maestro-architect-agent | System design, data models, architecture |
+| 3 | ORCHESTRATOR | ai-maestro-orchestrator-agent | Task coordination, workflow management |
+| 4 | INTEGRATOR | ai-maestro-integrator-agent | Integration, CI/CD, deployment |
+| 5 | MEMBER | ai-maestro-programmer-agent | Core implementation |
+| 6 | MEMBER | database-expert (custom) | Database design and optimization |
+| 7 | MEMBER | react-native-programmer (custom) | Mobile frontend |
+| 8 | MEMBER | figma-designer (custom) | UI/UX design |
+| 9 | MEMBER | ai-ocr-expert (custom) | OCR/ML features |
+| 10 | MEMBER | ios-debug-expert (custom) | Platform-specific debugging |
+
+**Rationale:** Each title has a unique role-plugin providing specialized skills, guidance, and constraints. A team missing any core title cannot function because no other agent has the skills to fill that gap. The MEMBER title is the only one that supports multiple agents with different specializations, allowing teams to scale horizontally for implementation capacity.
+
+---
+
 ## Updated Invariants (v2.0)
 
 Added to the existing invariant list:
@@ -252,3 +282,4 @@ Added to the existing invariant list:
 6. **Manager-team invariant**: Teams cannot exist in an active (non-blocked) state without a MANAGER on the host
 7. **Team-agent-lifecycle invariant**: Team agents cannot be woken while teams are blocked (no MANAGER)
 8. **Title-plugin invariant**: Every titled agent (non-AUTONOMOUS) has exactly one role-plugin installed matching their title
+9. **Minimum-composition invariant**: Every team must have at least 5 agents covering all 5 required titles (COS, ARCHITECT, ORCHESTRATOR, INTEGRATOR, MEMBER)

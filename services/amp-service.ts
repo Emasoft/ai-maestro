@@ -17,7 +17,7 @@
  *   GET    /api/v1/agents                     -> listAMPAgents
  *   GET    /api/v1/agents/me                  -> getAgentSelf
  *   PATCH  /api/v1/agents/me                  -> updateAgentSelf
- *   DELETE /api/v1/agents/me                  -> deleteAgentSelf
+ *   DELETE /api/v1/agents/me                  -> (inlined in route: DeleteAgent pipeline)
  *   GET    /api/v1/agents/resolve/:address    -> resolveAgentAddress
  *   DELETE /api/v1/auth/revoke-key            -> revokeKey
  *   POST   /api/v1/auth/rotate-key            -> rotateKey
@@ -1480,53 +1480,6 @@ export async function updateAgentSelf(
 
   return {
     data: { updated: true, address: auth.address },
-    status: 200
-  }
-}
-
-// ---------------------------------------------------------------------------
-// DELETE /api/v1/agents/me
-// ---------------------------------------------------------------------------
-
-/**
- * @deprecated Use DeleteAgent from element-management-service instead.
- * This thin wrapper delegates to the all-in-one pipeline.
- * Note: the pipeline's Gate 0 will DENY self-deletion by agents.
- * This endpoint should be reserved for deregistration (not deletion).
- */
-export async function deleteAgentSelf(authHeader: string | null): Promise<ServiceResult<any>> {
-  const auth = authenticateRequest(authHeader)
-
-  if (!auth.authenticated) {
-    return {
-      data: { error: auth.error || 'unauthorized', message: auth.message || 'Authentication required' } as AMPError,
-      status: 401
-    }
-  }
-
-  // Delegate to the all-in-one pipeline
-  const { DeleteAgent } = await import('@/services/element-management-service')
-  const result = await DeleteAgent(auth.agentId!, {
-    authContext: {
-      agentId: auth.agentId!,
-      isSystemOwner: false,
-    },
-    hard: true,
-  })
-
-  if (!result.success) {
-    return {
-      data: { error: 'forbidden' as const, message: result.error || 'Deletion denied' } as AMPError,
-      status: 403
-    }
-  }
-
-  return {
-    data: {
-      deregistered: true,
-      address: auth.address,
-      deregistered_at: new Date().toISOString(),
-    },
     status: 200
   }
 }

@@ -9,9 +9,10 @@
 import { NextResponse } from 'next/server'
 import {
   createAssistantAgent,
-  deleteAssistantAgent,
   getAssistantStatus,
 } from '@/services/help-service'
+import { getAgentByName } from '@/lib/agent-registry'
+import { DeleteAgent } from '@/services/element-management-service'
 
 /**
  * POST - Create or return existing assistant agent
@@ -38,15 +39,22 @@ export async function POST() {
  */
 export async function DELETE() {
   try {
-    const result = await deleteAssistantAgent()
-
-    if (result.error) {
+    // Inline the assistant deletion (replaces deprecated deleteAssistantAgent wrapper)
+    const assistant = getAgentByName('_aim-assistant')
+    if (!assistant) {
+      // Already gone -- idempotent success
+      return NextResponse.json({ success: true })
+    }
+    const delResult = await DeleteAgent(assistant.id, {
+      authContext: { isSystemOwner: true },
+    })
+    if (!delResult.success) {
       return NextResponse.json(
-        { success: false, error: result.error },
-        { status: result.status }
+        { success: false, error: delResult.error || 'Failed to delete assistant' },
+        { status: 500 }
       )
     }
-    return NextResponse.json(result.data)
+    return NextResponse.json({ success: true })
   } catch (error) {
     console.error('[HelpAgent] DELETE error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })

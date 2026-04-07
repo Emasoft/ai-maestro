@@ -133,10 +133,12 @@ vi.mock('@/lib/governance-sync', () => ({
   handleGovernanceSyncMessage: vi.fn(),
 }))
 
-// --- element-management-service: deleteAgentById now delegates to DeleteAgent ---
+// --- element-management-service: agents-core-service delegates to these pipelines ---
 const mockDeleteAgentPipeline = vi.fn()
+const mockCreateAgentPipeline = vi.fn()
 vi.mock('@/services/element-management-service', () => ({
   DeleteAgent: (...args: unknown[]) => mockDeleteAgentPipeline(...args),
+  CreateAgent: (...args: unknown[]) => mockCreateAgentPipeline(...args),
 }))
 
 // ============================================================================
@@ -232,6 +234,8 @@ beforeEach(() => {
   mockDeleteAgent.mockReturnValue(true)
   // Default: DeleteAgent pipeline succeeds
   mockDeleteAgentPipeline.mockResolvedValue({ success: true, agentId: TARGET_AGENT_ID, hard: false, operations: [] })
+  // Default: CreateAgent pipeline succeeds — createNewAgent delegates here
+  mockCreateAgentPipeline.mockResolvedValue({ success: true, agentId: 'test-uuid-1', operations: [], restartNeeded: false })
 })
 
 // ============================================================================
@@ -239,6 +243,16 @@ beforeEach(() => {
 // ============================================================================
 
 describe('createNewAgent governance', () => {
+  // createNewAgent now delegates to CreateAgent pipeline.
+  // After pipeline success, it calls getAgent(agentId) to build the response.
+  beforeEach(() => {
+    mockCreateAgentPipeline.mockResolvedValue({ success: true, agentId: 'test-uuid-1', operations: [], restartNeeded: false })
+    mockGetAgent.mockImplementation((id: string) => {
+      if (id === 'test-uuid-1') return makeAgent({ id: 'test-uuid-1', name: 'new-test-agent' })
+      return makeAgent()
+    })
+  })
+
   it('allows creation when requestingAgentId is null (backward compatibility)', async () => {
     /** Verifies that omitting requestingAgentId skips all governance checks */
     const result = await createNewAgent(makeCreateRequest())
@@ -285,8 +299,8 @@ describe('createNewAgent governance', () => {
     expect(result.status).toBe(403)
     expect(result.error).toContain('Only MANAGER or Chief-of-Staff can create agents')
     expect(result.data).toBeUndefined()
-    // createAgent should NOT have been called
-    expect(mockCreateAgent).not.toHaveBeenCalled()
+    // CreateAgent pipeline should NOT have been called
+    expect(mockCreateAgentPipeline).not.toHaveBeenCalled()
   })
 })
 

@@ -24,6 +24,9 @@ const {
   mockMessageQueue,
   mockFs,
   mockUuid,
+  mockAuthorization,
+  mockGovernance,
+  mockTeamRegistry,
 } = vi.hoisted(() => {
   const mockRuntime = {
     listSessions: vi.fn().mockResolvedValue([]),
@@ -78,6 +81,18 @@ const {
     mockMessageQueue: {
       resolveAgentIdentifier: vi.fn(),
     },
+    mockAuthorization: {
+      authorize: vi.fn().mockReturnValue({ allowed: true }),
+    },
+    mockGovernance: {
+      getManagerId: vi.fn().mockReturnValue('manager-1'),
+      isManager: vi.fn().mockReturnValue(false),
+      isChiefOfStaffAnywhere: vi.fn().mockReturnValue(false),
+    },
+    mockTeamRegistry: {
+      isAgentInAnyTeam: vi.fn().mockReturnValue(false),
+      loadTeams: vi.fn().mockReturnValue([]),
+    },
     mockFs: (() => {
       const fns = {
         readFileSync: vi.fn().mockReturnValue('{}'),
@@ -113,11 +128,16 @@ vi.mock('child_process', () => ({
   exec: vi.fn((_cmd: string, cb: Function) => cb(null, { stdout: '', stderr: '' })),
   execSync: vi.fn().mockReturnValue(''),
 }))
+vi.mock('@/lib/authorization', () => mockAuthorization)
+vi.mock('@/lib/governance', () => mockGovernance)
+vi.mock('@/lib/team-registry', () => mockTeamRegistry)
 
-// Mock element-management-service: deleteAgentById now delegates to DeleteAgent
+// Mock element-management-service: pipelines that agents-core-service delegates to
 const mockDeleteAgentPipeline = vi.fn()
+const mockCreateAgentPipeline = vi.fn()
 vi.mock('@/services/element-management-service', () => ({
   DeleteAgent: (...args: unknown[]) => mockDeleteAgentPipeline(...args),
+  CreateAgent: (...args: unknown[]) => mockCreateAgentPipeline(...args),
 }))
 
 // ============================================================================
@@ -161,6 +181,16 @@ beforeEach(() => {
   mockHostsConfig.isSelf.mockReturnValue(true)
   // Default: DeleteAgent pipeline succeeds
   mockDeleteAgentPipeline.mockResolvedValue({ success: true, agentId: 'agent-1', hard: false, operations: [] })
+  // Default: CreateAgent pipeline succeeds
+  mockCreateAgentPipeline.mockResolvedValue({ success: true, agentId: 'uuid-1', operations: [], restartNeeded: false })
+  // Default: authorization allows all
+  mockAuthorization.authorize.mockReturnValue({ allowed: true })
+  // Default: MANAGER exists
+  mockGovernance.getManagerId.mockReturnValue('manager-1')
+  mockGovernance.isManager.mockReturnValue(false)
+  mockGovernance.isChiefOfStaffAnywhere.mockReturnValue(false)
+  // Default: agent is not in any team
+  mockTeamRegistry.isAgentInAnyTeam.mockReturnValue(false)
 })
 
 // ============================================================================
@@ -297,9 +327,11 @@ describe('searchAgentsByQuery', () => {
 // ============================================================================
 
 describe('createNewAgent', () => {
-  it('creates agent successfully', async () => {
-    const agent = makeAgent({ name: 'new-agent' })
-    mockAgentRegistry.createAgent.mockReturnValue(agent)
+  it('delegates to CreateAgent pipeline and returns 201 on success', async () => {
+    /** createNewAgent is a thin wrapper around CreateAgent from element-management-service */
+    const agent = makeAgent({ id: 'uuid-1', name: 'new-agent' })
+    mockCreateAgentPipeline.mockResolvedValue({ success: true, agentId: 'uuid-1', operations: [], restartNeeded: false })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
 
     const result = await createNewAgent({
       name: 'new-agent',
@@ -309,10 +341,12 @@ describe('createNewAgent', () => {
 
     expect(result.status).toBe(201)
     expect(result.data?.agent.name).toBe('new-agent')
+    expect(mockCreateAgentPipeline).toHaveBeenCalledWith(expect.objectContaining({ name: 'new-agent' }))
   })
 
-  it('returns 400 when createAgent throws (e.g., duplicate name)', async () => {
-    mockAgentRegistry.createAgent.mockImplementation(() => { throw new Error('Agent name already exists') })
+  it('returns 400 when CreateAgent pipeline fails', async () => {
+    /** Pipeline failures (e.g. duplicate name) are propagated as 400 errors */
+    mockCreateAgentPipeline.mockResolvedValue({ success: false, agentId: null, operations: [], restartNeeded: false, error: 'Agent name already exists' })
 
     const result = await createNewAgent({
       name: 'duplicate',
@@ -322,6 +356,21 @@ describe('createNewAgent', () => {
 
     expect(result.status).toBe(400)
     expect(result.error).toMatch(/already exists/i)
+  })
+
+  it('returns 403 when requesting agent is not MANAGER or COS', async () => {
+    /** Governance enforcement: only MANAGER or COS can create agents via API */
+    mockGovernance.isManager.mockReturnValue(false)
+    mockGovernance.isChiefOfStaffAnywhere.mockReturnValue(false)
+
+    const result = await createNewAgent({
+      name: 'new-agent',
+      program: 'claude-code',
+      taskDescription: 'Test',
+    }, 'regular-member-id')
+
+    expect(result.status).toBe(403)
+    expect(result.error).toMatch(/MANAGER or Chief-of-Staff/)
   })
 })
 
@@ -669,6 +718,85 @@ describe('wakeAgent', () => {
 
     expect(result.status).toBe(500)
   })
+
+  // Gate 0: Authorization tests
+  it('allows system-owner (no agentId) to wake any agent', async () => {
+    /** System-owner auth context bypasses all governance checks */
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/home' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(false)
+    mockAgentRegistry.loadAgents.mockReturnValue([agent])
+
+    const result = await wakeAgent('agent-1', {
+      startProgram: false,
+      authContext: { isSystemOwner: true },
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.data?.woken).toBe(true)
+  })
+
+  it('returns 403 when authorize() denies agent-initiated wake', async () => {
+    /** Regular agent (not MANAGER/COS) cannot wake other agents */
+    mockAuthorization.authorize.mockReturnValue({ allowed: false, reason: 'member cannot wake-agent other agents' })
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+
+    const result = await wakeAgent('agent-1', {
+      startProgram: false,
+      authContext: { isSystemOwner: false, agentId: 'member-agent-1', governanceTitle: 'member' },
+    })
+
+    expect(result.status).toBe(403)
+    expect(result.error).toMatch(/cannot wake/)
+  })
+
+  it('allows MANAGER agent to wake any agent', async () => {
+    /** MANAGER can wake any agent on the host */
+    mockAuthorization.authorize.mockReturnValue({ allowed: true })
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/home' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(false)
+    mockAgentRegistry.loadAgents.mockReturnValue([agent])
+
+    const result = await wakeAgent('agent-1', {
+      startProgram: false,
+      authContext: { isSystemOwner: false, agentId: 'manager-1', governanceTitle: 'manager' },
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.data?.woken).toBe(true)
+  })
+
+  it('blocks wake of team agent when no MANAGER exists', async () => {
+    /** Team agents cannot be woken without a MANAGER on the host */
+    mockAuthorization.authorize.mockReturnValue({ allowed: true })
+    mockGovernance.getManagerId.mockReturnValue(null)
+    mockTeamRegistry.isAgentInAnyTeam.mockReturnValue(true)
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/home' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+
+    const result = await wakeAgent('agent-1', {
+      startProgram: false,
+      authContext: { isSystemOwner: true },
+    })
+
+    expect(result.status).toBe(403)
+    expect(result.error).toMatch(/no MANAGER/i)
+  })
+
+  it('skips auth when no authContext is provided (internal call)', async () => {
+    /** Internal calls without authContext bypass Gate 0 entirely */
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/home' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(false)
+    mockAgentRegistry.loadAgents.mockReturnValue([agent])
+
+    const result = await wakeAgent('agent-1', { startProgram: false })
+
+    expect(result.status).toBe(200)
+    expect(mockAuthorization.authorize).not.toHaveBeenCalled()
+  })
 })
 
 // ============================================================================
@@ -741,6 +869,46 @@ describe('hibernateAgent', () => {
     // Should send Ctrl-C then "exit" before kill
     expect(mockRuntime.sendKeys).toHaveBeenCalledWith('my-agent', 'C-c')
     expect(mockRuntime.sendKeys).toHaveBeenCalledWith('my-agent', '"exit"', { enter: true })
+  })
+
+  // Gate 0: Authorization tests
+  it('allows system-owner to hibernate any agent', async () => {
+    /** System-owner auth context bypasses all governance checks */
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockAgentRegistry.loadAgents.mockReturnValue([agent])
+
+    const result = await hibernateAgent('agent-1', {
+      authContext: { isSystemOwner: true },
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.data?.hibernated).toBe(true)
+  })
+
+  it('returns 403 when authorize() denies agent-initiated hibernate', async () => {
+    /** Regular agent (not MANAGER/COS) cannot hibernate other agents */
+    mockAuthorization.authorize.mockReturnValue({ allowed: false, reason: 'member cannot hibernate-agent other agents' })
+
+    const result = await hibernateAgent('agent-1', {
+      authContext: { isSystemOwner: false, agentId: 'member-agent-1', governanceTitle: 'member' },
+    })
+
+    expect(result.status).toBe(403)
+    expect(result.error).toMatch(/cannot hibernate/)
+  })
+
+  it('skips auth when no authContext is provided (internal call)', async () => {
+    /** Internal calls without authContext bypass Gate 0 entirely */
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockAgentRegistry.loadAgents.mockReturnValue([agent])
+
+    await hibernateAgent('agent-1', {})
+
+    expect(mockAuthorization.authorize).not.toHaveBeenCalled()
   })
 })
 

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { hibernateAgent } from '@/services/agents-core-service'
 import { isValidUuid } from '@/lib/validation'
-import { authenticateFromRequest } from '@/lib/agent-auth'
-import { authorize } from '@/lib/authorization'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 
 /**
  * POST /api/agents/[id]/hibernate
  * Hibernate an agent by stopping its session and updating status.
- * Governance: only the web UI (user) or the MANAGER agent can hibernate agents.
+ * Identity auth only — all governance checks are inside hibernateAgent Gate 0.
  */
 export async function POST(
   request: NextRequest,
@@ -20,34 +19,10 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
 
-    // Governance: user (no auth) = allowed always. Agent-initiated = MANAGER or COS (own team only).
+    // Identity auth: verify caller identity, build auth context for Gate 0
     const auth = authenticateFromRequest(request)
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
-    }
-    const authz = authorize(auth, 'hibernate-agent', id)
-    if (!authz.allowed) {
-      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
-    }
-    if (auth.agentId) {
-      const { getManagerId } = await import('@/lib/governance')
-      const { loadTeams } = await import('@/lib/team-registry')
-      const managerId = getManagerId()
-      if (managerId === auth.agentId) {
-        // MANAGER — allowed
-      } else {
-        // Check if caller is COS of a team that contains the target agent
-        const teams = loadTeams()
-        const callerIsCoSOfTargetTeam = teams.some(t =>
-          t.chiefOfStaffId === auth.agentId && t.agentIds.includes(id)
-        )
-        if (!callerIsCoSOfTargetTeam) {
-          return NextResponse.json(
-            { error: 'Only the MANAGER or the team\'s CHIEF-OF-STAFF can hibernate agents.' },
-            { status: 403 }
-          )
-        }
-      }
     }
 
     // Parse optional body for sessionIndex
@@ -61,7 +36,11 @@ export async function POST(
       // No body or invalid JSON, use defaults
     }
 
-    const result = await hibernateAgent(id, { sessionIndex })
+    // Delegate to hibernateAgent — Gate 0 handles authorization internally
+    const result = await hibernateAgent(id, {
+      sessionIndex,
+      authContext: buildAuthContext(auth),
+    })
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })

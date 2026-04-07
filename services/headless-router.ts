@@ -10,7 +10,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'http'
 import type { MemoryCategory, MemoryTier } from '@/lib/cozo-schema-memory'
-import { authenticateAgent } from '../lib/agent-auth'
+import { authenticateAgent, buildAuthContext } from '../lib/agent-auth'
 
 // ---------------------------------------------------------------------------
 // Service imports (all 24 service files)
@@ -19,7 +19,6 @@ import { authenticateAgent } from '../lib/agent-auth'
 import {
   listAgents,
   searchAgentsByQuery,
-  createNewAgent,
   getAgentById,
   updateAgentById,
   deleteAgentById,
@@ -949,14 +948,18 @@ const routes: Route[] = [
     }))
   }},
 
-  // Wake / Hibernate
+  // Wake / Hibernate — auth delegated to Gate 0 inside the service functions
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/wake$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await wakeAgent(params.id, body))
+    sendServiceResult(res, await wakeAgent(params.id, { ...body, authContext: buildAuthContext(auth) }))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/hibernate$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await hibernateAgent(params.id, body))
+    sendServiceResult(res, await hibernateAgent(params.id, { ...body, authContext: buildAuthContext(auth) }))
   }},
 
   // Local Config (Agent Profile Panel)

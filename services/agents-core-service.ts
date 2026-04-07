@@ -132,10 +132,14 @@ export interface WakeAgentParams {
   startProgram?: boolean
   sessionIndex?: number
   program?: string
+  /** Auth context from the route — when provided, Gate 0 checks authorization */
+  authContext?: import('@/lib/agent-auth').AuthContext
 }
 
 export interface HibernateAgentParams {
   sessionIndex?: number
+  /** Auth context from the route — when provided, Gate 0 checks authorization */
+  authContext?: import('@/lib/agent-auth').AuthContext
 }
 
 export interface AgentSessionCommandParams {
@@ -602,9 +606,14 @@ export function searchAgentsByQuery(query: string): ServiceResult<{ agents: Agen
 // ---------------------------------------------------------------------------
 
 export async function createNewAgent(body: CreateAgentRequest, requestingAgentId?: string | null): Promise<ServiceResult<{ agent: Agent }>> {
-  // Layer 5: When a requesting agent is identified, enforce governance roles.
-  // SF-058 (P5): This enforcement is opt-in -- when no X-Agent-Id / Authorization header
-  // is provided, requestingAgentId is null and governance checks are skipped (Phase 1 behavior).
+  // Thin delegation to the all-in-one CreateAgent pipeline in element-management-service.
+  // All governance checks (MANAGER/COS enforcement), cross-client conversion, title assignment,
+  // team assignment, plugin installation, etc. are handled by CreateAgent's gate sequence.
+  //
+  // The requestingAgentId is mapped to an auth check: when provided and the caller is not
+  // MANAGER or COS, the old behavior returns 403. CreateAgent doesn't take authContext yet
+  // (it has no Gate 0 — the route handles identity auth), so we keep the governance guard here
+  // for backward compatibility with internal callers passing requestingAgentId.
   if (requestingAgentId) {
     const isReqManager = isManager(requestingAgentId)
     const isReqCOS = isChiefOfStaffAnywhere(requestingAgentId)
@@ -614,42 +623,30 @@ export async function createNewAgent(body: CreateAgentRequest, requestingAgentId
   }
 
   try {
-    const agent = await createAgent(body)
+    const { CreateAgent } = await import('@/services/element-management-service')
+    const result = await CreateAgent({
+      name: body.name,
+      label: body.label,
+      client: body.program,
+      program: body.program,
+      workingDirectory: body.workingDirectory,
+      createSession: body.createSession,
+      owner: body.owner,
+      tags: body.tags,
+      model: body.model,
+      taskDescription: body.taskDescription || '',
+      programArgs: body.programArgs,
+      avatar: body.avatar,
+    })
 
-    // Auto-install ai-maestro skills for non-Claude clients (Codex, Gemini, OpenCode, Kiro).
-    // Uses the converter library for proper format transformation.
-    // Non-fatal: agent creation succeeds even if skill installation fails.
-    const { detectClientType } = await import('@/lib/client-capabilities')
-    const clientType = detectClientType(agent.program || 'claude')
-    if (clientType !== 'claude' && clientType !== 'unknown') {
-      try {
-        const { convertElements } = await import('@/services/cross-client-conversion-service')
-        // Map old ClientType to converter ProviderId
-        const providerMap: Record<string, string> = { codex: 'codex', gemini: 'gemini', opencode: 'opencode', kiro: 'kiro' }
-        const targetProvider = providerMap[clientType]
-        if (targetProvider) {
-          // Find Claude plugin with skills to convert from
-          const { scanPluginCache } = await import('@/lib/converter/utils/plugin')
-          const plugins = await scanPluginCache()
-          let totalInstalled = 0
-          for (const plugin of plugins) {
-            const result = await convertElements({
-              source: plugin.pluginDir,
-              targetClient: targetProvider as import('@/lib/converter/types').ProviderId,
-              elements: ['skills'],
-              scope: 'user',
-              dryRun: false,
-              force: false,  // P2 fix: never overwrite existing skills
-            })
-            if (result.ok) totalInstalled += result.elements.skills
-          }
-          if (totalInstalled > 0) {
-            console.log(`[agents] Converted ${totalInstalled} skills from Claude to ${clientType} agent "${agent.name}"`)
-          }
-        }
-      } catch (err) {
-        console.warn(`[agents] Failed to convert skills for ${clientType}:`, err instanceof Error ? err.message : err)
-      }
+    if (!result.success || !result.agentId) {
+      return { error: result.error || 'Failed to create agent', status: 400 }
+    }
+
+    // Fetch the created agent for the response
+    const agent = getAgent(result.agentId)
+    if (!agent) {
+      return { error: 'Agent created but not found in registry', status: 500 }
     }
 
     return { data: { agent }, status: 201 }
@@ -1473,7 +1470,35 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
   message: string
 }>> {
   try {
-    const { startProgram = true, sessionIndex = 0, program: programOverride } = params
+    const { startProgram = true, sessionIndex = 0, program: programOverride, authContext } = params
+
+    // ── Gate 0: Authorization ───────────────────────────────────
+    // When authContext is provided (route call), check caller permissions.
+    // When absent (internal call), skip — backward compatible.
+    if (authContext) {
+      if (!authContext.isSystemOwner) {
+        const { authorize } = await import('@/lib/authorization')
+        const authResult: import('@/lib/agent-auth').AgentAuthResult = {
+          agentId: authContext.agentId,
+          governanceTitle: authContext.governanceTitle,
+          teamId: authContext.teamId,
+        }
+        const authz = authorize(authResult, 'wake-agent', agentId)
+        if (!authz.allowed) {
+          return { error: authz.reason || 'Not authorized to wake this agent', status: 403 }
+        }
+      }
+
+      // Manager gate: team agents cannot be woken without a MANAGER on the host
+      const { getManagerId } = await import('@/lib/governance')
+      const { isAgentInAnyTeam } = await import('@/lib/team-registry')
+      if (!getManagerId() && isAgentInAnyTeam(agentId)) {
+        return {
+          error: 'Cannot wake team agent: no MANAGER exists on this host. Assign a MANAGER first.',
+          status: 403,
+        }
+      }
+    }
 
     const agent = getAgent(agentId)
     if (!agent) {
@@ -1619,7 +1644,25 @@ export async function hibernateAgent(agentId: string, params: HibernateAgentPara
   message: string
 }>> {
   try {
-    const { sessionIndex = 0 } = params
+    const { sessionIndex = 0, authContext } = params
+
+    // ── Gate 0: Authorization ───────────────────────────────────
+    // When authContext is provided (route call), check caller permissions.
+    // When absent (internal call), skip — backward compatible.
+    if (authContext) {
+      if (!authContext.isSystemOwner) {
+        const { authorize } = await import('@/lib/authorization')
+        const authResult: import('@/lib/agent-auth').AgentAuthResult = {
+          agentId: authContext.agentId,
+          governanceTitle: authContext.governanceTitle,
+          teamId: authContext.teamId,
+        }
+        const authz = authorize(authResult, 'hibernate-agent', agentId)
+        if (!authz.allowed) {
+          return { error: authz.reason || 'Not authorized to hibernate this agent', status: 403 }
+        }
+      }
+    }
 
     const agent = getAgent(agentId)
     if (!agent) {

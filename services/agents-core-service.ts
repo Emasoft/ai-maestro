@@ -1392,29 +1392,28 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
 
     // ── Gate 0: Authorization ───────────────────────────────────
     // When authContext is provided (route call), check caller permissions.
-    // When absent (internal call), skip — backward compatible.
-    if (authContext) {
-      if (!authContext.isSystemOwner) {
-        const { authorize } = await import('@/lib/authorization')
-        const authResult: import('@/lib/agent-auth').AgentAuthResult = {
-          agentId: authContext.agentId,
-          governanceTitle: authContext.governanceTitle,
-          teamId: authContext.teamId,
-        }
-        const authz = authorize(authResult, 'wake-agent', agentId)
-        if (!authz.allowed) {
-          return { error: authz.reason || 'Not authorized to wake this agent', status: 403 }
-        }
+    // Gate 0: Authorization — when authContext provided, check RBAC
+    if (authContext && !authContext.isSystemOwner) {
+      const { authorize } = await import('@/lib/authorization')
+      const authResult: import('@/lib/agent-auth').AgentAuthResult = {
+        agentId: authContext.agentId,
+        governanceTitle: authContext.governanceTitle,
+        teamId: authContext.teamId,
       }
+      const authz = authorize(authResult, 'wake-agent', agentId)
+      if (!authz.allowed) {
+        return { error: authz.reason || 'Not authorized to wake this agent', status: 403 }
+      }
+    }
 
-      // Manager gate: team agents cannot be woken without a MANAGER on the host
-      const { getManagerId } = await import('@/lib/governance')
-      const { isAgentInAnyTeam } = await import('@/lib/team-registry')
-      if (!getManagerId() && isAgentInAnyTeam(agentId)) {
-        return {
-          error: 'Cannot wake team agent: no MANAGER exists on this host. Assign a MANAGER first.',
-          status: 403,
-        }
+    // Gate 1: Manager gate — team agents cannot be woken without a MANAGER (R10.5)
+    // This runs ALWAYS, even for internal calls — it's a system invariant, not just RBAC.
+    const { getManagerId } = await import('@/lib/governance')
+    const { isAgentInAnyTeam } = await import('@/lib/team-registry')
+    if (!getManagerId() && isAgentInAnyTeam(agentId)) {
+      return {
+        error: 'Cannot wake team agent: no MANAGER exists on this host. Assign a MANAGER first.',
+        status: 403,
       }
     }
 
@@ -1637,6 +1636,13 @@ export async function hibernateAgent(agentId: string, params: HibernateAgentPara
     unpersistSession(sessionName)
     // Clear activity entry so that if the session name is reused later, idle-checks start fresh
     sessionActivity.delete(sessionName)
+
+    // Post-gate: Invalidate session secret — the old MAESTRO_AUTH is no longer valid
+    // A new secret will be generated when the agent is woken again.
+    try {
+      const { updateAgent: updAgent } = await import('@/lib/agent-registry')
+      await updAgent(agentId, { metadata: { sessionSecretHash: null } } as any)
+    } catch { /* non-fatal — secret will be overwritten on next wake */ }
 
     // Update agent status in registry
     updateAgentSessionInRegistry(agentId, sessionIndex, 'offline')

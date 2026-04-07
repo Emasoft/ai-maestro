@@ -2096,10 +2096,12 @@ export async function ChangeTeam(
         return result
       }
 
-      // G04a: Check if agent is COS
+      // G04a: COS cannot be removed from their team (R4.7 — COS immutability invariant)
+      // COS title is locked to team lifecycle — only deleting the team removes COS.
       if (currentTeam.chiefOfStaffId === agentId) {
-        console.warn(`[ChangeTeam] Agent ${agentId} "${agent.name}" is COS of team "${currentTeam.name}" — caller should remove COS first`)
-        ops.push(`G04a: WARN — Agent is COS of "${currentTeam.name}" — caller should clear COS slot`)
+        result.error = `Cannot remove COS "${agent.name}" from team "${currentTeam.name}". COS is locked to team lifecycle (R4.7). Delete the team to remove the COS.`
+        ops.push(`G04a: DENIED — Agent is COS of "${currentTeam.name}" — R4.7 COS immutability`)
+        return result
       }
 
       // G04b: Check if agent is orchestrator
@@ -2686,6 +2688,46 @@ export async function DeleteAgent(
       }
     } catch (err) {
       ops.push(`G07: WARN — governance request cleanup failed: ${err instanceof Error ? err.message : err}`)
+    }
+
+    // ── G07b: Cancel pending transfers involving this agent (R8.3) ──
+    try {
+      const { loadGovernanceRequests, rejectGovernanceRequest: rejectGov } = await import('@/lib/governance-request-registry')
+      const file = loadGovernanceRequests()
+      const transfersPending = file.requests.filter((r: { type: string; status: string; payload: { agentId?: string } }) =>
+        r.status === 'pending' && r.type === 'transfer-agent' && r.payload?.agentId === agentId
+      )
+      for (const req of transfersPending) {
+        await rejectGov(req.id, options?.authContext?.agentId || 'system', 'Agent deleted — transfer cancelled')
+      }
+      if (transfersPending.length > 0) {
+        ops.push(`G07b: Cancelled ${transfersPending.length} pending transfer(s)`)
+      } else {
+        ops.push('G07b: No pending transfers')
+      }
+    } catch (err) {
+      ops.push(`G07b: WARN — transfer cleanup failed: ${err instanceof Error ? err.message : err}`)
+    }
+
+    // ── G07c: Unsubscribe from all groups ─────────────────────
+    try {
+      const { loadGroups, saveGroups } = await import('@/lib/group-registry')
+      const groups = loadGroups()
+      let unsubbed = 0
+      for (const group of groups) {
+        if (group.subscriberIds?.includes(agentId)) {
+          group.subscriberIds = group.subscriberIds.filter((id: string) => id !== agentId)
+          unsubbed++
+        }
+      }
+      if (unsubbed > 0) {
+        saveGroups(groups)
+        ops.push(`G07c: Unsubscribed from ${unsubbed} group(s)`)
+      } else {
+        ops.push('G07c: Not in any groups')
+      }
+    } catch (err) {
+      ops.push(`G07c: WARN — group cleanup failed: ${err instanceof Error ? err.message : err}`)
     }
 
     // ── G08: Delete from registry ──────────────────────────────

@@ -24,6 +24,10 @@ export class AgentDatabase {
   private agentId: string
 
   constructor(config: AgentDatabaseConfig) {
+    // Validate agentId to prevent path traversal — must be safe for path.join()
+    if (!config.agentId || !/^[a-zA-Z0-9_@.\-]+$/.test(config.agentId) || config.agentId.includes('..')) {
+      throw new Error(`Invalid agentId: contains unsafe characters — "${config.agentId}"`)
+    }
     this.agentId = config.agentId
 
     // Database location: ~/.aimaestro/agents/{agentId}/agent.db

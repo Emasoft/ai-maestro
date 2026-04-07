@@ -62,7 +62,7 @@ export async function POST(
     try { body = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-    const result = createTranscriptExportJob(id, body)
+    const result = await createTranscriptExportJob(id, body)
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })

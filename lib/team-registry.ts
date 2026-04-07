@@ -217,9 +217,14 @@ export function loadTeams(): Team[] {
     }
 
     return teams
-  } catch (error) {
-    console.error('Failed to load teams:', error)
-    return []
+  } catch (error: unknown) {
+    // ENOENT is expected when no teams file exists yet — return empty array.
+    // All other errors (JSON parse failure, permission denied, etc.) indicate
+    // real problems like file corruption and must propagate to the caller.
+    if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return []
+    }
+    throw error
   }
 }
 

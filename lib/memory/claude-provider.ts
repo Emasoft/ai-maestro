@@ -212,8 +212,9 @@ export class ClaudeProvider implements LLMProvider {
           processing_time_ms: Date.now() - startTime
         }
       }
-    } catch (error: any) {
-      console.error('[CLAUDE] Extraction failed:', error.message)
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error('[CLAUDE] Extraction failed:', msg)
       throw error
     }
   }

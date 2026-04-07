@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAgent, updateAgent } from '@/lib/agent-registry'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 import { isValidUuid } from '@/lib/validation'
 
 /**
@@ -10,8 +12,8 @@ import { isValidUuid } from '@/lib/validation'
  * This route uses agent-registry directly until a service is created.
  */
 export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: agentId } = await params
@@ -37,12 +39,21 @@ export async function GET(
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: agentId } = await params
     if (!isValidUuid(agentId)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', agentId)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
     let metadata
     try { metadata = await request.json() } catch {
@@ -93,12 +104,21 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: agentId } = await params
     if (!isValidUuid(agentId)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', agentId)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
     // MF-001 fix: Read current metadata keys and set each to undefined,
     // because updateAgent merges via spread (empty object is a no-op)

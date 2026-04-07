@@ -6,16 +6,22 @@
  * GET    /api/agents/creation-helper/session - Check creation helper status
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import {
   createCreationHelper,
   deleteCreationHelper,
   getCreationHelperStatus,
 } from '@/services/creation-helper-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+
   try {
     const result = await createCreationHelper()
     if (result.error) {
@@ -31,7 +37,12 @@ export async function POST() {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+
   try {
     const result = await deleteCreationHelper()
     if (result.error) {
@@ -47,7 +58,12 @@ export async function DELETE() {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+
   try {
     const result = await getCreationHelperStatus()
     if (result.error) {

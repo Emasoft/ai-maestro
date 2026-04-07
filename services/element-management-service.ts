@@ -2062,9 +2062,10 @@ export async function ChangeTeam(
     ops.push(`G01: Agent "${agent.name}" found`)
 
     // ── G01b: Manager gate — no team mutations without a MANAGER ──
+    // Exception: team REMOVAL (teamId=null) is allowed without MANAGER — it's a teardown operation
     const { getTeam, updateTeam, loadTeams } = await import('@/lib/team-registry')
     const { getManagerId, isManager } = await import('@/lib/governance')
-    if (!getManagerId()) {
+    if (!getManagerId() && desired.teamId !== null) {
       result.error = 'Team operations are blocked: no MANAGER exists on this host. Assign a MANAGER first.'
       return result
     }
@@ -2125,6 +2126,11 @@ export async function ChangeTeam(
         ops.push(`G04d: Title reverted to AUTONOMOUS`)
       }
 
+      // PG01: Clear agent's team field in registry
+      const { updateAgent } = await import('@/lib/agent-registry')
+      await updateAgent(agentId, { team: '' })
+      ops.push(`PG01: Cleared agent team field in registry`)
+
       result.restartNeeded = titleResult.restartNeeded
       result.success = true
       console.log(`[ChangeTeam] Agent ${agentId} "${agent.name}": removed from team "${currentTeam.name}" (${ops.length} gates)`)
@@ -2159,6 +2165,11 @@ export async function ChangeTeam(
     } else {
       ops.push(`G07: Title set to ${effectiveRole.toUpperCase()}`)
     }
+
+    // PG01: Set agent's team field in registry
+    const { updateAgent } = await import('@/lib/agent-registry')
+    await updateAgent(agentId, { team: targetTeam.name })
+    ops.push(`PG01: Set agent team field to "${targetTeam.name}" in registry`)
 
     result.restartNeeded = titleResult.restartNeeded
     result.success = true

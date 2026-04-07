@@ -8,6 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'crypto'
 import { handleGovernanceSyncMessage, buildLocalGovernanceSnapshot } from '@/lib/governance-sync'
 import { getHosts } from '@/lib/hosts-config'
 import { verifyHostAttestation } from '@/lib/host-keys'
@@ -65,7 +66,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!knownHost.publicKeyHex) {
     return NextResponse.json({ error: 'Host has no registered public key' }, { status: 403 })
   }
-  const signedData = `gov-sync|${hostId}|${hostTimestamp}`
+  // SF-059: Include body hash in signed data to prevent payload tampering
+  const bodyHash = createHash('sha256').update(JSON.stringify(body)).digest('hex')
+  const signedData = `gov-sync|${hostId}|${hostTimestamp}|${bodyHash}`
   if (!verifyHostAttestation(signedData, hostSignature, knownHost.publicKeyHex)) {
     return NextResponse.json({ error: 'Invalid host signature' }, { status: 403 })
   }

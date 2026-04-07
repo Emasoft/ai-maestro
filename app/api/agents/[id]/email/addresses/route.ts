@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listEmailAddresses, addEmailAddressToAgent } from '@/services/agents-messaging-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 import { isValidUuid } from '@/lib/validation'
 
 /**
@@ -43,6 +45,15 @@ export async function POST(
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
     if (!isValidUuid(id)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
     let body
     try { body = await request.json() } catch {

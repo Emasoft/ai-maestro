@@ -38,9 +38,14 @@ export function loadDocuments(teamId: string): TeamDocument[] {
     const data = fs.readFileSync(filePath, 'utf-8')
     const parsed: TeamDocumentsFile = JSON.parse(data)
     return Array.isArray(parsed.documents) ? parsed.documents : []
-  } catch (error) {
-    console.error(`Failed to load documents for team ${teamId}:`, error)
-    return []
+  } catch (error: unknown) {
+    // Only return [] for missing file (first use). All other errors (corruption,
+    // permissions, etc.) must propagate -- otherwise saveDocuments() overwrites
+    // the real data with an empty array = permanent data loss.
+    if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return []
+    }
+    throw error
   }
 }
 

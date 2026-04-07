@@ -16,16 +16,23 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
   const router = useRouter()
   const [teams, setTeams] = useState<Team[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [editingTeam, setEditingTeam] = useState<Team | null>(null)
 
   const fetchTeams = useCallback(async () => {
     try {
+      setFetchError(null)
       const res = await fetch('/api/teams')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        setFetchError(data.error || `Failed to load teams (${res.status})`)
+        return
+      }
       const data = await res.json()
       setTeams(data.teams || [])
     } catch {
-      // silent
+      setFetchError('Network error loading teams')
     } finally {
       setLoading(false)
     }
@@ -46,16 +53,39 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
     router.push(`/team-meeting?meeting=new&team=${team.id}`)
   }
 
-  const handleDelete = async (team: Team) => {
+  const [deleteTarget, setDeleteTarget] = useState<Team | null>(null)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteAgentsToo, setDeleteAgentsToo] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    setDeleteError(null)
     try {
-      await fetch(`/api/teams/${team.id}`, { method: 'DELETE' })
-      setTeams(prev => prev.filter(t => t.id !== team.id))
+      const res = await fetch(`/api/teams/${deleteTarget.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: deletePassword, deleteAgents: deleteAgentsToo }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setDeleteError(data.error || 'Failed to delete team')
+        return
+      }
+      setTeams(prev => prev.filter(t => t.id !== deleteTarget.id))
+      setDeleteTarget(null)
+      setDeletePassword('')
+      setDeleteAgentsToo(false)
     } catch {
-      // silent
+      setDeleteError('Network error')
+    } finally {
+      setDeleting(false)
     }
   }
 
-  const handleSave = async (name: string, description: string, agentIds: string[], teamId?: string) => {
+  const handleSave = async (name: string, description: string, agentIds: string[], teamId?: string): Promise<string | null> => {
     try {
       if (teamId) {
         const res = await fetch(`/api/teams/${teamId}`, {
@@ -64,6 +94,7 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
           body: JSON.stringify({ name, description, agentIds }),
         })
         const data = await res.json()
+        if (!res.ok) return data.error || 'Failed to update team'
         if (data.team) {
           setTeams(prev => prev.map(t => t.id === teamId ? data.team : t))
         }
@@ -74,14 +105,16 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
           body: JSON.stringify({ name, description, agentIds }),
         })
         const data = await res.json()
+        if (!res.ok) return data.error || 'Failed to create team'
         if (data.team) {
           setTeams(prev => [...prev, data.team])
         }
       }
       setShowCreate(false)
       setEditingTeam(null)
-    } catch {
-      // silent
+      return null
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Network error'
     }
   }
 
@@ -96,6 +129,14 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
 
   return (
     <div className="py-2">
+      {/* Fetch error banner */}
+      {fetchError && (
+        <div className="mx-3 mb-2 bg-red-900/20 border border-red-800 rounded-lg px-3 py-2 text-xs text-red-400 flex items-center justify-between gap-2">
+          <span>{fetchError}</span>
+          <button onClick={fetchTeams} className="text-red-300 hover:text-white underline flex-shrink-0">Retry</button>
+        </div>
+      )}
+
       {/* Create button */}
       <div className="px-3 mb-2">
         <button
@@ -128,7 +169,7 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
               agents={agents}
               onStartMeeting={handleStartMeeting}
               onEdit={(t) => { setEditingTeam(t); setShowCreate(true) }}
-              onDelete={handleDelete}
+              onDelete={(t) => { setDeleteTarget(t); setDeletePassword(''); setDeleteError(null); setDeleteAgentsToo(false) }}
             />
           ))}
         </div>
@@ -143,6 +184,63 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
           onClose={() => { setShowCreate(false); setEditingTeam(null) }}
         />
       )}
+
+      {/* Delete team confirmation modal with password */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-gray-900 rounded-xl w-full max-w-sm shadow-2xl border border-gray-700 p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-red-400 mb-3">Delete Team</h3>
+            <p className="text-xs text-gray-300 mb-4">
+              Permanently delete <span className="font-semibold text-white">{deleteTarget.name}</span> and revert all agents to AUTONOMOUS?
+            </p>
+
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Governance Password</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={e => setDeletePassword(e.target.value)}
+                  placeholder="Enter governance password"
+                  className="w-full px-3 py-2 text-sm bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                  autoFocus
+                />
+              </div>
+              <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteAgentsToo}
+                  onChange={e => setDeleteAgentsToo(e.target.checked)}
+                  className="rounded border-gray-600"
+                />
+                Also delete all agents in this team
+              </label>
+            </div>
+
+            {deleteError && (
+              <div className="bg-red-900/20 border border-red-800 rounded-lg p-2.5 text-xs text-red-400 mb-3">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg hover:bg-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={!deletePassword || deleting}
+                className="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {deleting ? 'Deleting...' : 'Delete Team'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -155,12 +253,14 @@ function TeamFormModal({
 }: {
   team: Team | null
   agents: UnifiedAgent[]
-  onSave: (name: string, description: string, agentIds: string[], teamId?: string) => void
+  onSave: (name: string, description: string, agentIds: string[], teamId?: string) => Promise<string | null>
   onClose: () => void
 }) {
   const [name, setName] = useState(team?.name || '')
   const [description, setDescription] = useState(team?.description || '')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(team?.agentIds || []))
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const toggleAgent = (id: string) => {
     setSelectedIds(prev => {
@@ -171,10 +271,14 @@ function TeamFormModal({
     })
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim() || selectedIds.size === 0) return
-    onSave(name.trim(), description.trim(), Array.from(selectedIds), team?.id)
+    setError(null)
+    setSaving(true)
+    const err = await onSave(name.trim(), description.trim(), Array.from(selectedIds), team?.id)
+    setSaving(false)
+    if (err) setError(err)
   }
 
   return (
@@ -249,6 +353,12 @@ function TeamFormModal({
             </div>
           </div>
 
+          {error && (
+            <div className="bg-red-900/20 border border-red-800 rounded-lg p-2.5 text-xs text-red-400">
+              {error}
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
@@ -259,10 +369,10 @@ function TeamFormModal({
             </button>
             <button
               type="submit"
-              disabled={!name.trim() || selectedIds.size === 0}
+              disabled={!name.trim() || selectedIds.size === 0 || saving}
               className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              {team ? 'Save Changes' : 'Create Team'}
+              {saving ? 'Saving...' : team ? 'Save Changes' : 'Create Team'}
             </button>
           </div>
         </form>

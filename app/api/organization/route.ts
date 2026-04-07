@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const result = setOrganizationName({ organization, setBy })
     // SF-011 fix: Use explicit error check instead of ?? which can swallow errors
     if (result.error) {
-      return NextResponse.json({ error: result.error }, { status: result.status })
+      return NextResponse.json({ error: result.error }, { status: result.status ?? 500 })
     }
     return NextResponse.json(result.data, { status: result.status })
   } catch (error) {

@@ -247,7 +247,30 @@ function parseAgentToml(content: string): AgentProfile | null {
     const arr = (v: string): string[] => {
       const inner = v.replace(/^\[/, '').replace(/\]$/, '').trim()
       if (!inner) return []
-      return inner.split(',').map(s => str(s.trim())).filter(Boolean)
+      // Split on commas that are NOT inside quoted strings to handle
+      // values like ["hello, world", "foo"] correctly
+      const items: string[] = []
+      let current = ''
+      let inQuote: string | null = null
+      for (let ci = 0; ci < inner.length; ci++) {
+        const ch = inner[ci]
+        if (inQuote) {
+          current += ch
+          if (ch === inQuote && inner[ci - 1] !== '\\') inQuote = null
+        } else if (ch === '"' || ch === "'") {
+          inQuote = ch
+          current += ch
+        } else if (ch === ',') {
+          const trimmed = str(current.trim())
+          if (trimmed) items.push(trimmed)
+          current = ''
+        } else {
+          current += ch
+        }
+      }
+      const last = str(current.trim())
+      if (last) items.push(last)
+      return items
     }
 
     if (section === 'agent') {

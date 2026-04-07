@@ -300,6 +300,9 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
     if (creatingMeetingRef.current) return
     if (!state.teamName.trim() || state.selectedAgentIds.length === 0) return
 
+    // SF-046: mounted guard prevents state updates after unmount
+    let mounted = true
+
     async function createMeetingRecord() {
       creatingMeetingRef.current = true
       // Ensure we have a teamId first — but skip team creation for group-originated meetings
@@ -311,6 +314,7 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
         creatingTeamRef.current = true
         try {
           const teamsRes = await fetch('/api/teams')
+          if (!mounted) return
           const teamsData = await teamsRes.json()
           const existing = (teamsData.teams || []).find((t: Team) => t.name === state.teamName)
           if (existing) {
@@ -324,15 +328,21 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
                 agentIds: state.selectedAgentIds,
               }),
             })
+            if (!mounted) return
             const createData = await createRes.json()
             resolvedTeamId = createData.team?.id || null
           }
-          setTeamId(resolvedTeamId)
+          if (mounted) setTeamId(resolvedTeamId)
         } catch {
           // continue without teamId
         } finally {
           creatingTeamRef.current = false
         }
+      }
+
+      if (!mounted) {
+        creatingMeetingRef.current = false
+        return
       }
 
       try {
@@ -348,8 +358,9 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
             sidebarMode: state.sidebarMode,
           }),
         })
+        if (!mounted) return
         const data = await res.json()
-        if (data.meeting) {
+        if (data.meeting && mounted) {
           persistedMeetingIdRef.current = data.meeting.id
           // Update URL without full navigation
           window.history.replaceState(null, '', `/team-meeting?meeting=${data.meeting.id}`)
@@ -362,6 +373,7 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
       }
     }
     createMeetingRecord()
+    return () => { mounted = false }
   }, [state.phase, state.teamName, state.selectedAgentIds, state.sidebarMode, teamId, groupId])
 
   // Persist activeAgentId changes
@@ -417,9 +429,12 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
       // MF-012: Prevent concurrent team creation from multiple useEffects
       if (creatingTeamRef.current) return
       creatingTeamRef.current = true
+      // SF-046: mounted guard prevents state updates after unmount
+      let mounted = true
       fetch('/api/teams')
         .then(r => r.json())
         .then(data => {
+          if (!mounted) return
           const existing = (data.teams || []).find((t: Team) => t.name === state.teamName)
           if (existing) {
             setTeamId(existing.id)
@@ -433,12 +448,13 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
               }),
             })
               .then(r => r.json())
-              .then(data => setTeamId(data.team?.id || null))
+              .then(data => { if (mounted) setTeamId(data.team?.id || null) })
               .catch(() => {})
           }
         })
         .catch(() => {})
         .finally(() => { creatingTeamRef.current = false })
+      return () => { mounted = false }
     }
   // groupId must be in deps: the condition checks !groupId to skip team creation for group meetings
   }, [state.phase, state.teamName, state.selectedAgentIds, teamId, groupId])

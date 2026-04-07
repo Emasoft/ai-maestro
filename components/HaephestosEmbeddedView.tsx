@@ -166,7 +166,7 @@ export default function HaephestosEmbeddedView({ agent, onAgentCreated }: Haephe
     }
     const intervalId = setInterval(checkSignal, 5000)
     return () => { cancelled = true; clearInterval(intervalId) }
-  }, [router])
+  }, [router, onAgentCreated])
 
   // File upload handler — receives (path, filename) from TerminalView's upload callback
   const handleFileUploaded = useCallback((path: string, filename: string) => {

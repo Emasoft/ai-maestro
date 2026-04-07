@@ -54,19 +54,27 @@ function ZoomAgentContent() {
     .toUpperCase()
     .slice(0, 2)
 
+  const [wakeError, setWakeError] = useState<string | null>(null)
+
   const handleWake = async () => {
     if (!agent || isWaking) return
 
     setIsWaking(true)
+    setWakeError(null)
     try {
       const baseUrl = agent.hostUrl || ''
-      await fetch(`${baseUrl}/api/agents/${agent.id}/wake`, {
+      const res = await fetch(`${baseUrl}/api/agents/${agent.id}/wake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ program: 'claude' }),
       })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        setWakeError(data.error || `Failed to wake agent (${res.status})`)
+      }
     } catch (error) {
       console.error('Failed to wake agent:', error)
+      setWakeError('Network error: could not reach agent host')
     } finally {
       setIsWaking(false)
     }
@@ -184,6 +192,17 @@ function ZoomAgentContent() {
                   Back to Zoom View
                 </Link>
               </div>
+            </div>
+          )}
+
+          {/* Wake Error Toast */}
+          {wakeError && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-red-900/90 border border-red-700 rounded-lg px-4 py-2 text-sm text-red-200 flex items-center gap-2 shadow-lg">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{wakeError}</span>
+              <button onClick={() => setWakeError(null)} className="p-0.5 hover:text-white">
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
 

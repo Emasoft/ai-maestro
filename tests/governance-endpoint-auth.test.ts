@@ -168,17 +168,19 @@ describe('SR-001: broadcastGovernanceSync signs outbound requests', () => {
     expect(headers['X-Host-Signature']).toBe('mock-signature-base64')
   })
 
-  it('signs data with format gov-sync|{hostId}|{timestamp}', async () => {
-    /** Verifies the signed data string follows the correct format for governance sync */
+  it('signs data with format gov-sync|{hostId}|{timestamp}|{bodyHash}', async () => {
+    /** Verifies the signed data string follows the correct format for governance sync (SF-059: includes body hash) */
     await broadcastGovernanceSync('team-updated', {})
 
     expect(mockSignHostAttestation).toHaveBeenCalledTimes(1)
     const signedData = mockSignHostAttestation.mock.calls[0][0] as string
     expect(signedData).toMatch(/^gov-sync\|host-local\|/)
-    // Verify the timestamp portion is an ISO string
+    // Verify the format: gov-sync|hostId|timestamp|sha256hash
     const parts = signedData.split('|')
-    expect(parts).toHaveLength(3)
+    expect(parts).toHaveLength(4)
     expect(() => new Date(parts[2]).toISOString()).not.toThrow()
+    // SF-059: Fourth part must be a 64-char hex SHA-256 hash of the request body
+    expect(parts[3]).toMatch(/^[0-9a-f]{64}$/)
   })
 
   it('uses the same timestamp in headers and signed data', async () => {

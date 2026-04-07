@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { queryCodeGraph, indexCodeGraph, deleteCodeGraph } from '@/services/agents-graph-service'
 import { isValidUuid } from '@/lib/validation'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 
 /**
  * GET /api/agents/:id/graph/code
@@ -53,6 +55,15 @@ export async function POST(
     if (!isValidUuid(agentId)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
+    // SF-009: Authenticate caller for mutating operation
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', agentId)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
 
     // Parse body - handle empty body gracefully, reject malformed non-empty JSON
     let body: Record<string, unknown> = {} // NT-012: typed instead of `any`
@@ -92,6 +103,15 @@ export async function DELETE(
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
     if (!isValidUuid(agentId)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
+    // SF-009: Authenticate caller for mutating operation
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', agentId)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
     const projectPath = request.nextUrl.searchParams.get('project') || ''
 

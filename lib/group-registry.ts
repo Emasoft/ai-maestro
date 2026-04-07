@@ -193,7 +193,26 @@ export function loadGroups(): Group[] {
     const parsed: GroupsFile = JSON.parse(data)
     return Array.isArray(parsed.groups) ? parsed.groups : []
   } catch (error) {
-    console.error('Failed to load groups:', error)
+    // Distinguish parse errors (disk corruption) from I/O errors
+    if (error instanceof SyntaxError) {
+      console.error('[group-registry] CORRUPTION: groups.json contains invalid JSON — returning empty. Manual inspection required:', GROUPS_FILE)
+      // Backup corrupted file before returning empty to prevent silent data loss
+      try {
+        const backupPath = GROUPS_FILE + '.corrupted.' + Date.now()
+        fs.copyFileSync(GROUPS_FILE, backupPath)
+        console.error(`[group-registry] Corrupted file backed up to ${backupPath}`)
+      } catch { /* backup is best-effort */ }
+      // Heal by writing empty groups, so next save doesn't append to corrupt data
+      saveGroups([])
+    } else {
+      // TOCTOU: file deleted between existsSync and readFileSync — treat as empty (not an error)
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') {
+        console.warn('[group-registry] groups.json disappeared between check and read — returning empty')
+      } else {
+        console.error(`[group-registry] Failed to load groups (${code ?? 'unknown'}):`, error)
+      }
+    }
     return []
   }
 }

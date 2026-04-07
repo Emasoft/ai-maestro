@@ -39,7 +39,7 @@ import {
   hasOrganization,
   adoptOrganization,
 } from '@/lib/hosts-config'
-import { addHostWithSync, syncWithAllPeers, getPublicUrl, hasProcessedPropagation, markPropagationProcessed } from '@/lib/host-sync'
+import { addHostWithSync, syncWithAllPeers, getPublicUrl, tryMarkPropagationProcessed } from '@/lib/host-sync'
 import type { Host } from '@/types/host'
 import type {
   PeerRegistrationRequest,
@@ -708,9 +708,9 @@ export async function registerPeer(body: PeerRegistrationRequest): Promise<Servi
       }
     }
 
-    // Check if we've already processed this propagation ID
+    // Atomically check-and-mark to prevent TOCTOU race with concurrent requests
     const propagationId = body.source?.propagationId
-    if (propagationId && hasProcessedPropagation(propagationId)) {
+    if (propagationId && !tryMarkPropagationProcessed(propagationId)) {
       console.log(`[Host Sync] Already processed propagation ${propagationId}, skipping`)
       return {
         data: {
@@ -723,11 +723,6 @@ export async function registerPeer(body: PeerRegistrationRequest): Promise<Servi
         },
         status: 200,
       }
-    }
-
-    // Mark propagation as processed
-    if (propagationId) {
-      markPropagationProcessed(propagationId)
     }
 
     // Prevent self-registration - use ID only (not URL, as URL can vary)
@@ -915,9 +910,9 @@ export async function exchangePeers(body: PeerExchangeRequest): Promise<ServiceR
       }
     }
 
-    // Check if we've already processed this propagation
+    // Atomically check-and-mark to prevent TOCTOU race with concurrent requests
     const propagationId = body.propagationId
-    if (propagationId && hasProcessedPropagation(propagationId)) {
+    if (propagationId && !tryMarkPropagationProcessed(propagationId)) {
       console.log(`[Host Sync] Already processed propagation ${propagationId} in exchange-peers, skipping`)
       return {
         data: {
@@ -928,11 +923,6 @@ export async function exchangePeers(body: PeerExchangeRequest): Promise<ServiceR
         },
         status: 200,
       }
-    }
-
-    // Mark propagation as processed
-    if (propagationId) {
-      markPropagationProcessed(propagationId)
     }
 
     const selfHost = getSelfHost()

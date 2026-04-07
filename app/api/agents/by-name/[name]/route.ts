@@ -17,7 +17,7 @@ export async function GET(
     }
     const result = lookupAgentByName(name)
 
-    if (result.error) {
+    if (result.status >= 400) {
       return NextResponse.json(result.data || { exists: false }, { status: result.status })
     }
     return NextResponse.json(result.data)

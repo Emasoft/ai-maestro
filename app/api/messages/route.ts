@@ -6,6 +6,10 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
  * GET /api/messages?agent=<agentId|alias|sessionName>&status=<status>&from=<from>&box=<inbox|sent>
  */
 export async function GET(request: NextRequest) {
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
   const { searchParams } = new URL(request.url)
   const result = await getMessages({
     agent: searchParams.get('agent'),

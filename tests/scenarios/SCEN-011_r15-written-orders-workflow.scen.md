@@ -223,6 +223,16 @@ author: AI Maestro Team
 
 ## Phase CLEANUP: Restore Original State
 
+> **MANDATORY CLEANUP ORDER (see SCENARIOS_TESTS_RULES.md WARNING section):**
+> 1. Delete test agents via UI (Profile → Danger Zone → Delete Agent → check "Also delete agent folder")
+> 2. Delete test teams via UI (Teams tab → Delete team → governance password → "Delete Agents Too")
+> 3. Purge cemetery entries via UI (Settings → Cemetery → Purge)
+> 4. Verify via API (no test artifacts remain)
+> 5. THEN STATE-WIPE restore config files from backup
+> 6. Post-test screenshot
+>
+> **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
+
 #### S020: Delete team with all agents via DeleteTeam pipeline
 - **Action:** Teams -> Delete `r15-test-team` -> password `mYkri1-xoxrap-gogtan` -> Delete Agents Too
 - **Goal:** Team and all agents deleted via 8-gate pipeline (governance password verified, tokens revoked, transfers cancelled, team data deleted)

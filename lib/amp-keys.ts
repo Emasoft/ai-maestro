@@ -40,6 +40,23 @@ const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
 const AGENTS_DIR = path.join(AIMAESTRO_DIR, 'agents')
 
 // ============================================================================
+// Path Traversal Protection
+// ============================================================================
+
+/**
+ * Validate agentId to prevent path traversal attacks.
+ * Must be safe for use in path.join() — no slashes, no "..", only safe chars.
+ */
+function validateAgentId(agentId: string): void {
+  if (!agentId || typeof agentId !== 'string') {
+    throw new Error('agentId is required')
+  }
+  if (!/^[a-zA-Z0-9_@.\-]+$/.test(agentId) || agentId.includes('..')) {
+    throw new Error(`Invalid agentId: contains unsafe characters — "${agentId}"`)
+  }
+}
+
+// ============================================================================
 // Directory Helpers
 // ============================================================================
 
@@ -47,6 +64,7 @@ const AGENTS_DIR = path.join(AIMAESTRO_DIR, 'agents')
  * Get the keys directory for an agent
  */
 export function getKeysDir(agentId: string): string {
+  validateAgentId(agentId)
   return path.join(AGENTS_DIR, agentId, 'keys')
 }
 
@@ -54,6 +72,7 @@ export function getKeysDir(agentId: string): string {
  * Get the registrations directory for an agent
  */
 export function getRegistrationsDir(agentId: string): string {
+  validateAgentId(agentId)
   return path.join(AGENTS_DIR, agentId, 'registrations')
 }
 
@@ -61,6 +80,7 @@ export function getRegistrationsDir(agentId: string): string {
  * Ensure agent directories exist
  */
 function ensureAgentDirs(agentId: string): void {
+  validateAgentId(agentId)
   const keysDir = getKeysDir(agentId)
   const registrationsDir = getRegistrationsDir(agentId)
 
@@ -298,8 +318,13 @@ export function getAMPIdentity(
  */
 export function saveRegistration(agentId: string, registration: AMPExternalRegistration): void {
   ensureAgentDirs(agentId)
+  // Validate provider name used in filename — prevent path traversal
+  const safeProvider = registration.provider.replace(/[^a-zA-Z0-9_@.\-]/g, '')
+  if (!safeProvider || safeProvider !== registration.provider || safeProvider.includes('..')) {
+    throw new Error(`Invalid provider name: "${registration.provider}"`)
+  }
   const registrationsDir = getRegistrationsDir(agentId)
-  const registrationPath = path.join(registrationsDir, `${registration.provider}.json`)
+  const registrationPath = path.join(registrationsDir, `${safeProvider}.json`)
 
   fs.writeFileSync(registrationPath, JSON.stringify(registration, null, 2), { mode: 0o600 })
   console.log(`[AMP Keys] Saved ${registration.provider} registration for agent ${agentId.substring(0, 8)}...`)
@@ -309,6 +334,10 @@ export function saveRegistration(agentId: string, registration: AMPExternalRegis
  * Load an external provider registration
  */
 export function loadRegistration(agentId: string, provider: string): AMPExternalRegistration | null {
+  // Validate provider name used in filename — prevent path traversal
+  if (!provider || !/^[a-zA-Z0-9_@.\-]+$/.test(provider) || provider.includes('..')) {
+    throw new Error(`Invalid provider name: "${provider}"`)
+  }
   const registrationsDir = getRegistrationsDir(agentId)
   const registrationPath = path.join(registrationsDir, `${provider}.json`)
 
@@ -357,6 +386,10 @@ export function loadAllRegistrations(agentId: string): AMPExternalRegistration[]
  * Delete an external provider registration
  */
 export function deleteRegistration(agentId: string, provider: string): boolean {
+  // Validate provider name used in filename — prevent path traversal
+  if (!provider || !/^[a-zA-Z0-9_@.\-]+$/.test(provider) || provider.includes('..')) {
+    throw new Error(`Invalid provider name: "${provider}"`)
+  }
   const registrationsDir = getRegistrationsDir(agentId)
   const registrationPath = path.join(registrationsDir, `${provider}.json`)
 

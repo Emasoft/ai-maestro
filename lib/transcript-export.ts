@@ -339,25 +339,25 @@ async function fetchMessages(
 ): Promise<TranscriptMessage[]> {
   const { conversationFile, startDate, endDate, maxMessages } = options
 
+  // CozoDB uses Datalog syntax -- filters are comma-separated conditions after
+  // the relation binding, NOT SQL-style "= ?" placeholders. Values are inlined.
   const filters: string[] = []
-  const params: string[] = []
 
   if (conversationFile) {
-    filters.push(`conversation_file = ?`)
-    params.push(conversationFile)
+    // Escape single quotes in the value to prevent injection
+    const escaped = conversationFile.replace(/'/g, "\\'")
+    filters.push(`conversation_file == '${escaped}'`)
   }
 
   if (startDate) {
-    filters.push(`ts >= ?`)
-    params.push(startDate.getTime().toString())
+    filters.push(`ts >= ${startDate.getTime()}`)
   }
 
   if (endDate) {
-    filters.push(`ts <= ?`)
-    params.push(endDate.getTime().toString())
+    filters.push(`ts <= ${endDate.getTime()}`)
   }
 
-  const whereClause = filters.length > 0 ? `, ${filters.join(' AND ')}` : ''
+  const whereClause = filters.length > 0 ? `, ${filters.join(', ')}` : ''
 
   let query = `?[msg_id, role, text, ts, metadata] := *messages{msg_id, role, text, ts, metadata}${whereClause} :order ts ASC`
 

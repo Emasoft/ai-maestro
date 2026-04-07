@@ -11,8 +11,9 @@
  * trying to apply incremental deltas.
  */
 
+import { createHash } from 'crypto'
 import { getHosts, getSelfHostId, isSelf } from '@/lib/hosts-config'
-import { signHostAttestation, getHostPublicKeyHex } from '@/lib/host-keys'
+import { signHostAttestation } from '@/lib/host-keys'
 import { getManagerId } from '@/lib/governance'
 import { getAgent } from '@/lib/agent-registry'
 import { loadTeams } from '@/lib/team-registry'
@@ -123,7 +124,9 @@ export async function broadcastGovernanceSync(
           const url = `${host.url}/api/v1/governance/sync`
           // Sign the outbound request with this host's Ed25519 key (SR-001)
           // SF-037: Reuse the same timestamp for message and signature consistency
-          const signedData = `gov-sync|${selfHostId}|${syncTimestamp}`
+          // SF-059: Include body hash in signed data to prevent payload tampering
+          const bodyHash = createHash('sha256').update(body).digest('hex')
+          const signedData = `gov-sync|${selfHostId}|${syncTimestamp}|${bodyHash}`
           const signature = signHostAttestation(signedData)
           const response = await fetch(url, {
             method: 'POST',

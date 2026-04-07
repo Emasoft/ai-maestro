@@ -40,6 +40,13 @@ export function useAgentPlayback(
   // Refs for timers and tracking
   const autoSaveTimerRef = useRef<NodeJS.Timeout>()
   const isMountedRef = useRef(true)
+  // Ref to track currentMessageIndex without stale closures in setInterval
+  const currentIndexRef = useRef(0)
+
+  // Keep currentIndexRef in sync so setInterval callbacks always see the latest value
+  useEffect(() => {
+    currentIndexRef.current = state?.currentMessageIndex ?? 0
+  }, [state?.currentMessageIndex])
 
   /**
    * Load playback state from API
@@ -253,6 +260,9 @@ export function useAgentPlayback(
 
   /**
    * Enable auto-save of playback state
+   * Uses currentIndexRef to avoid stale closure — setInterval would otherwise
+   * capture an outdated snapshot of state.currentMessageIndex and revert
+   * the playback position every 5s (SF-060 fix).
    */
   const enableAutoSave = useCallback(() => {
     if (autoSaveTimerRef.current) {
@@ -260,15 +270,13 @@ export function useAgentPlayback(
     }
 
     autoSaveTimerRef.current = setInterval(() => {
-      if (state) {
-        // Auto-save current state every 5 seconds while playing
-        updatePlaybackState({ action: 'seek', value: state.currentMessageIndex })
-      }
+      // Read from ref to get the latest currentMessageIndex without stale closure
+      updatePlaybackState({ action: 'seek', value: currentIndexRef.current })
     }, 5000)
 
     setAutoSaveEnabled(true)
     console.log('[useAgentPlayback] Auto-save enabled')
-  }, [state, updatePlaybackState])
+  }, [updatePlaybackState])
 
   /**
    * Disable auto-save

@@ -21,22 +21,30 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params
-
-  let body
   try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
-  }
+    const { id } = await params
 
-  const { name, description, subscriberIds } = body
+    let body
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
 
-  const result = await updateGroupById(id, { name, description, subscriberIds })
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+    const { name, description, subscriberIds } = body
+
+    const result = await updateGroupById(id, { name, description, subscriberIds })
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data)
+  } catch (error) {
+    console.error('Failed to update group:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
-  return NextResponse.json(result.data)
 }
 
 // DELETE /api/groups/[id] - Delete a group
@@ -45,10 +53,18 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params
-  const result = await deleteGroupById(id)
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+  try {
+    const { id } = await params
+    const result = await deleteGroupById(id)
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data)
+  } catch (error) {
+    console.error('Failed to delete group:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
-  return NextResponse.json(result.data)
 }

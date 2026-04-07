@@ -101,8 +101,17 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
     }
 
+    // SF-060: Validate action against allowlist to prevent injection
+    const VALID_ACTIONS = ['promote', 'prune'] as const
+    if (!body.action || !VALID_ACTIONS.includes(body.action)) {
+      return NextResponse.json(
+        { success: false, error: `Invalid action: must be one of ${VALID_ACTIONS.join(', ')}` },
+        { status: 400 }
+      )
+    }
+
     const result = await manageConsolidation(agentId, {
-      action: body.action,
+      action: body.action as 'promote' | 'prune',
       minReinforcements: body.minReinforcements,
       minAgeDays: body.minAgeDays,
       retentionDays: body.retentionDays,

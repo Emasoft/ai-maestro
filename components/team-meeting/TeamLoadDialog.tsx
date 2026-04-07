@@ -21,20 +21,30 @@ export default function TeamLoadDialog({
   useEffect(() => {
     if (!isOpen) return
 
+    const controller = new AbortController()
+
     const fetchTeams = async () => {
       setLoading(true)
       try {
-        const res = await fetch('/api/teams')
+        const res = await fetch('/api/teams', { signal: controller.signal })
         const data = await res.json()
-        setTeams(data.teams || [])
+        if (!controller.signal.aborted) {
+          setTeams(data.teams || [])
+        }
       } catch (error) {
-        console.error('Failed to load teams:', error)
+        if (!controller.signal.aborted) {
+          console.error('Failed to load teams:', error)
+        }
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
       }
     }
 
     fetchTeams()
+
+    return () => { controller.abort() }
   }, [isOpen])
 
   const handleDelete = async (teamId: string, e: React.MouseEvent) => {

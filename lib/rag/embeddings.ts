@@ -151,6 +151,13 @@ export async function embedTexts(texts: string[]): Promise<Float32Array[]> {
     results.push(l2Normalize(vec));
   }
 
+  // Validate: embedding count must match input count to prevent silent data corruption downstream
+  if (results.length !== validTexts.length) {
+    throw new Error(
+      `[Embeddings] Count mismatch: got ${results.length} embeddings for ${validTexts.length} texts`
+    );
+  }
+
   return results;
 }
 

@@ -11,6 +11,9 @@ import { embedTexts } from '../rag/embeddings'
 // Helper to embed a single text
 async function embed(text: string): Promise<number[]> {
   const embeddings = await embedTexts([text])
+  if (!embeddings || embeddings.length === 0) {
+    throw new Error('embedTexts returned empty result — cannot generate embedding for query')
+  }
   return Array.from(embeddings[0])
 }
 import {

@@ -195,7 +195,7 @@ export default function DashboardPage() {
   // Read agent from URL parameter ONCE on mount, then strip from URL.
   // The ?agent= param is only used for deep-linking (e.g., from immersive → dashboard).
   // After reading, we remove it so it doesn't interfere with future navigation.
-  const urlParamProcessedRef = useState(() => ({ current: false }))[0]
+  const urlParamProcessedRef = useRef(false)
 
   useEffect(() => {
     if (urlParamProcessedRef.current) return
@@ -228,7 +228,7 @@ export default function DashboardPage() {
       // No URL params — nothing to do
       urlParamProcessedRef.current = true
     }
-  }, [agents, urlParamProcessedRef])
+  }, [agents])
 
   // Collapse sidebar on phone/tablet
   useEffect(() => {

@@ -53,10 +53,14 @@ export function useTasks(teamId: string | null): UseTasksResult {
   }, [teamId, fetchTasks])
 
   // Poll every 5s for multi-tab sync
+  // MF-025: Use AbortController so in-flight poll fetches are cancelled on unmount/teamId change.
+  // Without this, setTasks fires after unmount if a fetch resolves after cleanup.
   useEffect(() => {
     if (!teamId) return
-    intervalRef.current = setInterval(fetchTasks, 5000)
+    const controller = new AbortController()
+    intervalRef.current = setInterval(() => fetchTasks(controller.signal), 5000)
     return () => {
+      controller.abort()
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
   }, [teamId, fetchTasks])

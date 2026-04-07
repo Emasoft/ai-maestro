@@ -4,6 +4,7 @@ import { promisify } from 'util'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as os from 'os'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 const execFileAsync = promisify(execFile)
 
@@ -51,6 +52,11 @@ function findPssBinary(): string | null {
 // Body: { names: string[] }
 // Returns: { descriptions: Record<string, { description: string; type: string; plugin: string | null }> }
 export async function POST(req: NextRequest) {
+  const auth = authenticateFromRequest(req)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+
   try {
     const body = await req.json()
     // Guard against non-object bodies (null, primitives) before accessing properties
@@ -60,6 +66,19 @@ export async function POST(req: NextRequest) {
     const names: string[] = body.names
     if (!Array.isArray(names) || names.length === 0) {
       return NextResponse.json({ descriptions: {} })
+    }
+
+    // Validate each name: must be a non-empty string with safe characters only.
+    // Reject names with commas (batch delimiter), shell metacharacters, or control chars
+    // to prevent argument injection into the PSS binary.
+    const NAME_PATTERN = /^[a-zA-Z0-9_@./-]+$/
+    for (const name of names) {
+      if (typeof name !== 'string' || name.length === 0 || name.length > 200 || !NAME_PATTERN.test(name)) {
+        return NextResponse.json(
+          { descriptions: {}, error: `Invalid element name: "${String(name).slice(0, 50)}"` },
+          { status: 400 }
+        )
+      }
     }
 
     const pssBin = findPssBinary()

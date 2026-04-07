@@ -63,65 +63,82 @@ export async function indexDatabaseSchema(
     `)
     stats.schemasIndexed++
 
-    // Index tables
+    // Index tables — isolate per-table errors so one bad table
+    // does not abort the entire schema indexing run.
     for (const table of schema.tables) {
-      await indexTable(agentDb, table, stats)
+      try {
+        await indexTable(agentDb, table, stats)
+      } catch (tableErr) {
+        console.error(`[DB Indexer] Failed to index table ${table.table_name}:`, tableErr)
+      }
     }
 
     // Index views
     for (const view of schema.views) {
-      await agentDb.run(`
-        ?[id, name, schema, definition] <- [[
-          '${view.view_id}',
-          '${escapeString(view.view_name)}',
-          '${schema.schema_id}',
-          '${escapeString(view.definition)}'
-        ]]
-        :put view_node {id, name, schema, definition}
-      `)
-      stats.viewsIndexed++
+      try {
+        await agentDb.run(`
+          ?[id, name, schema, definition] <- [[
+            '${view.view_id}',
+            '${escapeString(view.view_name)}',
+            '${schema.schema_id}',
+            '${escapeString(view.definition)}'
+          ]]
+          :put view_node {id, name, schema, definition}
+        `)
+        stats.viewsIndexed++
+      } catch (viewErr) {
+        console.error(`[DB Indexer] Failed to index view ${view.view_name}:`, viewErr)
+      }
     }
 
     // Index enums
     for (const enumType of schema.enums) {
-      await agentDb.run(`
-        ?[id, name, schema] <- [[
-          '${enumType.enum_id}',
-          '${escapeString(enumType.enum_name)}',
-          '${schema.schema_id}'
-        ]]
-        :put enum_node {id, name, schema}
-      `)
-
-      // Index enum values
-      for (const value of enumType.values) {
-        const valueId = `${enumType.enum_id}:${value}`
+      try {
         await agentDb.run(`
-          ?[id, enum_id, value] <- [[
-            '${valueId}',
+          ?[id, name, schema] <- [[
             '${enumType.enum_id}',
-            '${escapeString(value)}'
+            '${escapeString(enumType.enum_name)}',
+            '${schema.schema_id}'
           ]]
-          :put enum_value {id, enum_id, value}
+          :put enum_node {id, name, schema}
         `)
-      }
 
-      stats.enumsIndexed++
+        // Index enum values
+        for (const value of enumType.values) {
+          const valueId = `${enumType.enum_id}:${value}`
+          await agentDb.run(`
+            ?[id, enum_id, value] <- [[
+              '${valueId}',
+              '${enumType.enum_id}',
+              '${escapeString(value)}'
+            ]]
+            :put enum_value {id, enum_id, value}
+          `)
+        }
+
+        stats.enumsIndexed++
+      } catch (enumErr) {
+        console.error(`[DB Indexer] Failed to index enum ${enumType.enum_name}:`, enumErr)
+      }
     }
 
     // Index procedures
     for (const proc of schema.procedures) {
-      await agentDb.run(`
-        ?[id, name, schema, kind, lang] <- [[
-          '${proc.proc_id}',
-          '${escapeString(proc.proc_name)}',
-          '${schema.schema_id}',
-          '${proc.kind}',
-          '${proc.language}'
-        ]]
-        :put proc_node {id, name, schema, kind, lang}
-      `)
-      stats.proceduresIndexed++
+      try {
+        await agentDb.run(`
+          ?[id, name, schema, kind, lang] <- [[
+            '${proc.proc_id}',
+            '${escapeString(proc.proc_name)}',
+            '${schema.schema_id}',
+            '${escapeString(proc.kind)}',
+            '${escapeString(proc.language)}'
+          ]]
+          :put proc_node {id, name, schema, kind, lang}
+        `)
+        stats.proceduresIndexed++
+      } catch (procErr) {
+        console.error(`[DB Indexer] Failed to index procedure ${proc.proc_name}:`, procErr)
+      }
     }
   }
 
@@ -409,5 +426,8 @@ export async function analyzeColumnTypeChange(
  * Escape single quotes for CozoDB
  */
 function escapeString(str: string): string {
-  return str.replace(/'/g, "''")
+  // Guard against null/undefined so callers don't get a runtime
+  // TypeError when DB introspection returns unexpected nulls.
+  if (str == null) return ''
+  return String(str).replace(/'/g, "''")
 }

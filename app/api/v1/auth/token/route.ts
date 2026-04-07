@@ -99,10 +99,11 @@ export async function POST(request: Request) {
     }
 
     // 6. Verify proof-of-possession
-    // The server URL is what the agent signed — use the request origin or localhost
-    const serverUrl = request.headers.get('x-forwarded-host')
-      ? `https://${request.headers.get('x-forwarded-host')}`
-      : `http://localhost:${process.env.PORT || 23000}`
+    // The server URL is what the agent signed — use localhost only.
+    // SECURITY: Never trust x-forwarded-host for proof verification.
+    // An attacker could set x-forwarded-host to a domain they control,
+    // then replay a proof signed for that domain.
+    const serverUrl = `http://localhost:${process.env.PORT || 23000}`
 
     const proofResult = verifyProofWithPublicKeyHex(body.proof, keyPair.publicHex, serverUrl)
     if (!proofResult.valid) {
@@ -130,7 +131,15 @@ export async function POST(request: Request) {
       }
     }
 
-    const scope = body.scope || 'governance'
+    // Validate scope is a string if provided; reject non-string values to prevent injection
+    const rawScope = body.scope
+    if (rawScope !== undefined && typeof rawScope !== 'string') {
+      return NextResponse.json(
+        { error: 'invalid_request', message: 'scope must be a string' },
+        { status: 400 }
+      )
+    }
+    const scope = (typeof rawScope === 'string' && rawScope) ? rawScope : 'governance'
 
     // 8. Issue token (async — persists to file under lock)
     const tokenResult = await issueGovernanceToken(

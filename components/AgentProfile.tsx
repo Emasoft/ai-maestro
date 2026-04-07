@@ -428,7 +428,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
     if (!isSafeToCommand || restarting || !sessionName) return
     setRestarting(true)
     try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/restart`, {
+      const res = await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(sessionName)}/restart`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

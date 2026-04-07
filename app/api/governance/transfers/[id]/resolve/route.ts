@@ -175,7 +175,12 @@ export async function POST(
           console.error('[TransferResolve] Failed to save teams after approval:', saveError)
           // Compensating action (SR-007): revert transfer from 'approved' back to 'pending'
           // to maintain consistency when team save fails
-          await revertTransferToPending(id)
+          try {
+            await revertTransferToPending(id)
+          } catch (revertError) {
+            console.error('[TransferResolve] CRITICAL: Revert also failed — inconsistent state:', revertError)
+            return NextResponse.json({ error: 'Failed to save teams AND failed to revert transfer — manual intervention required' }, { status: 500 })
+          }
           return NextResponse.json({ error: 'Failed to save team changes after transfer approval — transfer reverted to pending' }, { status: 500 })
         }
       }

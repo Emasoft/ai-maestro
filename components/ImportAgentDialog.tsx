@@ -88,6 +88,13 @@ export default function ImportAgentDialog({
       setProgress(prev => Math.min(prev + 5, 40))
     }, 100)
 
+    // Schedule transition to setting-up phase — keep timer ID so we can cancel on error
+    const setupTimeout = setTimeout(() => {
+      clearInterval(unpackInterval)
+      setPhase('setting-up')
+      setProgress(50)
+    }, 1500)
+
     try {
       // Create form data
       const formData = new FormData()
@@ -97,19 +104,10 @@ export default function ImportAgentDialog({
       }))
 
       // Start API call
-      const responsePromise = fetch('/api/agents/import', {
+      const response = await fetch('/api/agents/import', {
         method: 'POST',
         body: formData,
       })
-
-      // Transition to setting up
-      setTimeout(() => {
-        clearInterval(unpackInterval)
-        setPhase('setting-up')
-        setProgress(50)
-      }, 1500)
-
-      const response = await responsePromise
 
       if (!response.ok) {
         const data = await response.json()
@@ -117,6 +115,10 @@ export default function ImportAgentDialog({
       }
 
       const data: AgentImportResult = await response.json()
+
+      // Ensure unpackInterval is cleared on success path too
+      // (the setTimeout may not have fired yet if fetch was fast)
+      clearInterval(unpackInterval)
 
       // Complete setup animation
       setProgress(90)
@@ -128,6 +130,7 @@ export default function ImportAgentDialog({
       onImportComplete?.(data)
 
     } catch (err) {
+      clearTimeout(setupTimeout)
       clearInterval(unpackInterval)
       setPhase('error')
       setError(err instanceof Error ? err.message : 'Import failed')

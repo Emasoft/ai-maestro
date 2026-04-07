@@ -19,6 +19,7 @@ import * as fsSync from 'fs'
 import path from 'path'
 import os from 'os'
 import type { AMPEnvelope, AMPPayload } from '@/lib/types/amp'
+import { withLock } from '@/lib/file-lock'
 
 const AMP_DIR = path.join(os.homedir(), '.agent-messaging')
 const AMP_AGENTS_DIR = path.join(AMP_DIR, 'agents')
@@ -55,30 +56,39 @@ function writeIndex(index: Record<string, string>): void {
 
 /**
  * Update a single entry in the name→UUID index.
+ * Serialized via withLock to prevent TOCTOU races on read-modify-write.
  */
-export function updateIndex(agentName: string, agentId: string): void {
-  const index = readIndex()
-  index[agentName] = agentId
-  writeIndex(index)
+export async function updateIndex(agentName: string, agentId: string): Promise<void> {
+  await withLock('amp-index', () => {
+    const index = readIndex()
+    index[agentName] = agentId
+    writeIndex(index)
+  })
 }
 
 /**
  * Remove an entry from the name→UUID index.
+ * Serialized via withLock to prevent TOCTOU races on read-modify-write.
  */
-export function removeFromIndex(agentName: string): void {
-  const index = readIndex()
-  delete index[agentName]
-  writeIndex(index)
+export async function removeFromIndex(agentName: string): Promise<void> {
+  await withLock('amp-index', () => {
+    const index = readIndex()
+    delete index[agentName]
+    writeIndex(index)
+  })
 }
 
 /**
  * Rename an entry in the name→UUID index.
+ * Serialized via withLock to prevent TOCTOU races on read-modify-write.
  */
-export function renameInIndex(oldName: string, newName: string, agentId: string): void {
-  const index = readIndex()
-  delete index[oldName]
-  index[newName] = agentId
-  writeIndex(index)
+export async function renameInIndex(oldName: string, newName: string, agentId: string): Promise<void> {
+  await withLock('amp-index', () => {
+    const index = readIndex()
+    delete index[oldName]
+    index[newName] = agentId
+    writeIndex(index)
+  })
 }
 
 /**
@@ -184,7 +194,7 @@ async function autoMigrateToUUID(agentName: string, agentId: string): Promise<bo
     }
 
     // Update the index
-    updateIndex(agentName, agentId)
+    await updateIndex(agentName, agentId)
 
     console.log(`[AMP Inbox Writer] Auto-migrated ${agentName} -> ${agentId}`)
     return true
@@ -290,7 +300,7 @@ export async function initAgentAMPHome(agentName: string, agentId?: string): Pro
 
   // Update the name→UUID index
   if (agentId) {
-    updateIndex(agentName, agentId)
+    await updateIndex(agentName, agentId)
   }
 
   return agentHome

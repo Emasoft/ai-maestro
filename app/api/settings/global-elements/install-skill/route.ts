@@ -25,6 +25,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Skill name is required' }, { status: 400 })
   }
 
+  // Security: validate skill name to prevent path traversal
+  if (!/^[a-zA-Z0-9_@.\-]+$/.test(name) || name.includes('..')) {
+    return NextResponse.json({ error: 'Invalid skill name: contains unsafe characters' }, { status: 400 })
+  }
+
   // Find the skill in Claude's installed locations
   const source = await findSkillSource(name, 'claude')
   if (!source) {

@@ -28,8 +28,11 @@ export default function TeamDocumentsSection({ teamId }: TeamDocumentsSectionPro
     return (
       <DocumentEditor
         onSave={async (data) => {
-          await createDocument(data)
-          setCreating(false)
+          try {
+            await createDocument(data)
+          } finally {
+            setCreating(false)
+          }
         }}
         onCancel={() => setCreating(false)}
       />
@@ -43,8 +46,11 @@ export default function TeamDocumentsSection({ teamId }: TeamDocumentsSectionPro
         initialContent={editingDoc.content}
         initialPinned={editingDoc.pinned}
         onSave={async (data) => {
-          await updateDocument(editingDoc.id, data)
-          setEditingDoc(null)
+          try {
+            await updateDocument(editingDoc.id, data)
+          } finally {
+            setEditingDoc(null)
+          }
         }}
         onCancel={() => setEditingDoc(null)}
       />

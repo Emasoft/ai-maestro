@@ -23,6 +23,20 @@ const AMP_BASE_DIR = path.join(os.homedir(), '.agent-messaging')
 const RELAY_DIR = path.join(AMP_BASE_DIR, 'relay')
 
 // ============================================================================
+// Input Validation (path traversal prevention)
+// ============================================================================
+
+/**
+ * Validate that an ID is safe for use in file paths.
+ * Prevents path traversal attacks via agentId or messageId.
+ */
+function validateId(id: string, label: string): void {
+  if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_@.\-]+$/.test(id) || id.includes('..')) {
+    throw new Error(`Invalid ${label}: must be alphanumeric with hyphens/underscores`)
+  }
+}
+
+// ============================================================================
 // Directory Helpers
 // ============================================================================
 
@@ -57,6 +71,7 @@ export function queueMessage(
   payload: AMPPayload,
   senderPublicKey: string
 ): AMPPendingMessage {
+  validateId(agentId, 'agentId')
   ensureRelayDir(agentId)
 
   const now = new Date()
@@ -91,6 +106,7 @@ export function getPendingMessages(
   agentId: string,
   limit: number = 100
 ): AMPPendingMessagesResponse {
+  validateId(agentId, 'agentId')
   const dir = getAgentRelayDir(agentId)
 
   if (!fs.existsSync(dir)) {
@@ -133,6 +149,8 @@ export function getPendingMessages(
  * Acknowledge receipt of a message (delete from relay queue)
  */
 export function acknowledgeMessage(agentId: string, messageId: string): boolean {
+  validateId(agentId, 'agentId')
+  validateId(messageId, 'messageId')
   const filePath = path.join(getAgentRelayDir(agentId), `${messageId}.json`)
 
   if (!fs.existsSync(filePath)) {
@@ -168,6 +186,8 @@ export function acknowledgeMessages(agentId: string, messageIds: string[]): numb
  * Get a specific pending message
  */
 export function getPendingMessage(agentId: string, messageId: string): AMPPendingMessage | null {
+  validateId(agentId, 'agentId')
+  validateId(messageId, 'messageId')
   const filePath = path.join(getAgentRelayDir(agentId), `${messageId}.json`)
 
   if (!fs.existsSync(filePath)) {
@@ -196,6 +216,8 @@ export function getPendingMessage(agentId: string, messageId: string): AMPPendin
  * Update delivery attempt count for a message
  */
 export function recordDeliveryAttempt(agentId: string, messageId: string): boolean {
+  validateId(agentId, 'agentId')
+  validateId(messageId, 'messageId')
   const filePath = path.join(getAgentRelayDir(agentId), `${messageId}.json`)
 
   if (!fs.existsSync(filePath)) {
@@ -221,6 +243,7 @@ export function recordDeliveryAttempt(agentId: string, messageId: string): boole
  * Check if an agent has any non-expired pending messages
  */
 export function hasPendingMessages(agentId: string): boolean {
+  validateId(agentId, 'agentId')
   const dir = getAgentRelayDir(agentId)
 
   if (!fs.existsSync(dir)) {
@@ -249,6 +272,7 @@ export function hasPendingMessages(agentId: string): boolean {
  * Get count of pending messages for an agent
  */
 export function getPendingCount(agentId: string): number {
+  validateId(agentId, 'agentId')
   const dir = getAgentRelayDir(agentId)
 
   if (!fs.existsSync(dir)) {
@@ -284,6 +308,7 @@ export function getPendingCount(agentId: string): number {
  * Clean up expired messages from an agent's relay queue
  */
 export function cleanupExpiredMessages(agentId: string): number {
+  validateId(agentId, 'agentId')
   const dir = getAgentRelayDir(agentId)
 
   if (!fs.existsSync(dir)) {
@@ -365,6 +390,7 @@ export function cleanupAllExpiredMessages(): { agents: number; messages: number 
  * Delete all messages for an agent (used when agent is deregistered)
  */
 export function deleteAgentRelayQueue(agentId: string): boolean {
+  validateId(agentId, 'agentId')
   const dir = getAgentRelayDir(agentId)
 
   if (!fs.existsSync(dir)) {

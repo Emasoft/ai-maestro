@@ -281,6 +281,8 @@ function CompanionContent() {
         wsUrl += `&host=${encodeURIComponent(activeAgent.hostId)}`
       }
       const ws = new WebSocket(wsUrl)
+      // Binary frames arrive as ArrayBuffer so we can distinguish them from text
+      ws.binaryType = 'arraybuffer'
       wsRef.current = ws
 
       ws.onopen = () => {
@@ -295,6 +297,13 @@ function CompanionContent() {
         // Track output for activity state
         lastOutputRef.current = Date.now()
 
+        // Binary frame: write raw bytes to terminal (PTY data that wasn't converted to string)
+        if (event.data instanceof ArrayBuffer) {
+          term.write(new Uint8Array(event.data))
+          return
+        }
+
+        // Text frame: try to parse as JSON for protocol messages
         try {
           const parsed = JSON.parse(event.data)
           if (parsed.type === 'history-complete') {
@@ -313,7 +322,7 @@ function CompanionContent() {
             return
           }
         } catch {
-          // Raw terminal data
+          // Not JSON — raw terminal data as text
         }
         term.write(event.data)
       }

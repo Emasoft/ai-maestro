@@ -33,19 +33,26 @@ export async function GET(request: NextRequest) {
   }
 
   const archivePath = path.join(CEMETERY_DIR, sanitized)
-  if (!fs.existsSync(archivePath)) {
-    return NextResponse.json({ error: 'Archive not found' }, { status: 404 })
-  }
 
   // Resolve symlinks to prevent serving arbitrary files via symlink in cemetery dir
-  const realPath = fs.realpathSync(archivePath)
+  let realPath: string
+  try {
+    realPath = fs.realpathSync(archivePath)
+  } catch {
+    return NextResponse.json({ error: 'Archive not found' }, { status: 404 })
+  }
   if (!realPath.startsWith(CEMETERY_DIR + path.sep)) {
     return NextResponse.json({ error: 'Archive path resolves outside cemetery' }, { status: 403 })
   }
 
-  const buffer = fs.readFileSync(realPath)
+  let buffer: Buffer
+  try {
+    buffer = fs.readFileSync(realPath)
+  } catch {
+    return NextResponse.json({ error: 'Archive not found' }, { status: 404 })
+  }
 
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/zip',
       'Content-Disposition': `attachment; filename="${sanitized}"`,

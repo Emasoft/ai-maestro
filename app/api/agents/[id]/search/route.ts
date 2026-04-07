@@ -48,6 +48,12 @@ export async function GET(
     }
     const searchParams = request.nextUrl.searchParams
 
+    // CC-P2-007: Validate required 'q' parameter
+    const queryParam = searchParams.get('q')
+    if (!queryParam || queryParam.trim() === '') {
+      return NextResponse.json({ error: 'Missing required query parameter "q"' }, { status: 400 })
+    }
+
     // Validate roleFilter against allowed values before casting
     const roleParam = searchParams.get('role')
     if (roleParam && !VALID_ROLES.includes(roleParam)) {
@@ -56,7 +62,7 @@ export async function GET(
 
     // NT-002 fix: Store param values in local variables instead of repeated get() calls
     const result = await searchConversations(agentId, {
-      query: searchParams.get('q') || '',
+      query: queryParam,
       mode: searchParams.get('mode') || undefined,
       limit: parseIntParam(searchParams, 'limit'),
       minScore: parseFloatParam(searchParams, 'minScore'),
@@ -99,6 +105,14 @@ export async function POST(
     let body
     try { body = await request.json() } catch {
       return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
+    }
+
+    // CC-P2-008: Validate conversationFiles is a non-empty array of strings
+    if (!Array.isArray(body.conversationFiles) || body.conversationFiles.length === 0) {
+      return NextResponse.json({ success: false, error: 'Missing or invalid "conversationFiles" field (must be a non-empty array)' }, { status: 400 })
+    }
+    if (!body.conversationFiles.every((f: unknown) => typeof f === 'string')) {
+      return NextResponse.json({ success: false, error: '"conversationFiles" must contain only string paths' }, { status: 400 })
     }
 
     const result = await ingestConversations(agentId, {

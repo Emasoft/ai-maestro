@@ -236,6 +236,12 @@ class AgentSubconscious {
         console.error(`[Agent ${this.agentId.substring(0, 8)}] Initial memory maintenance failed:`, err)
       })
 
+      // Clear any existing memoryTimer before setting a new one — rescheduleMemoryTimer()
+      // may have already created one if a host hint arrived during the initial delay.
+      if (this.memoryTimer) {
+        clearInterval(this.memoryTimer)
+      }
+
       // Start the regular interval timer
       this.memoryTimer = setInterval(() => {
         this.maintainMemory().catch(err => {
@@ -962,6 +968,9 @@ class AgentRegistry {
    * Evict least recently used agent if at capacity
    */
   private async evictIfNeeded(): Promise<void> {
+    // Track how many candidates we've skipped due to initialization — if we cycle
+    // through the entire accessOrder without finding an evictable agent, stop.
+    let skippedInitializing = 0
     while (this.agents.size >= this.maxAgents && this.accessOrder.length > 0) {
       const lruAgentId = this.accessOrder.shift()!
       // Do not evict an agent that is currently being initialized — it hasn't been
@@ -969,9 +978,14 @@ class AgentRegistry {
       if (this.initializingAgents.has(lruAgentId)) {
         // Put it back so the next iteration can try a different candidate.
         this.accessOrder.push(lruAgentId)
+        skippedInitializing++
         // If every entry is initializing we cannot evict; break to avoid an infinite loop.
-        break
+        if (skippedInitializing >= this.accessOrder.length) {
+          break
+        }
+        continue
       }
+      skippedInitializing = 0
       const agent = this.agents.get(lruAgentId)
       if (agent) {
         console.log(`[AgentRegistry] Evicting LRU agent ${lruAgentId.substring(0, 8)} (${this.agents.size}/${this.maxAgents})`)

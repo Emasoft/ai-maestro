@@ -97,9 +97,17 @@ const kiroEmitter: Emitter = {
     }
 
     // Instructions → .kiro/steering/
+    // Non-rule instructions are merged into a single AGENTS.md to avoid clobbering
+    const nonRuleInstructions: string[] = []
     for (const inst of project.instructions) {
-      const fileName = inst.isRule ? inst.fileName : 'AGENTS.md'
-      files.push({ path: `.kiro/steering/${fileName}`, content: inst.content, type: 'instructions', warnings: [] })
+      if (inst.isRule) {
+        files.push({ path: `.kiro/steering/${inst.fileName}`, content: inst.content, type: 'instructions', warnings: [] })
+      } else {
+        nonRuleInstructions.push(inst.content)
+      }
+    }
+    if (nonRuleInstructions.length > 0) {
+      files.push({ path: '.kiro/steering/AGENTS.md', content: nonRuleInstructions.join('\n\n---\n\n'), type: 'instructions', warnings: [] })
     }
 
     // MCP → .kiro/settings/mcp.json
@@ -150,9 +158,11 @@ const kiroEmitter: Emitter = {
     // Commands → skills (Kiro has no native commands)
     for (const cmd of project.commands) {
       warnings.lossyElement('commands', cmd.name, 'Kiro does not support slash commands — converted to skill')
+      // Sanitize command name for YAML: quote if it contains special chars
+      const safeName = /[:#\[\]{}&*!|>'"`,@]/.test(cmd.name) ? `"${cmd.name.replace(/"/g, '\\"')}"` : cmd.name
       files.push({
         path: `.kiro/skills/${cmd.name}/SKILL.md`,
-        content: `---\nname: ${cmd.name}\ndescription: "Converted from command /${cmd.name}"\n---\n\n${cmd.content}`,
+        content: `---\nname: ${safeName}\ndescription: "Converted from command /${safeName}"\n---\n\n${cmd.content}`,
         type: 'commands',
         warnings: [`Command "/${cmd.name}" converted to skill`],
       })

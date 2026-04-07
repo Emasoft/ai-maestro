@@ -10,14 +10,22 @@ export const dynamic = 'force-dynamic'
  * Reads from status FILES instead of loading agents into memory.
  */
 export async function GET() {
-  const result = getSubconsciousStatus()
+  try {
+    const result = getSubconsciousStatus()
 
-  if (result.error) {
+    if (result.error) {
+      return NextResponse.json(
+        { success: false, error: result.error },
+        { status: result.status }
+      )
+    }
+
+    return NextResponse.json(result.data, { status: result.status })
+  } catch (error) {
+    console.error('[Subconscious GET] error:', error)
     return NextResponse.json(
-      { success: false, error: result.error },
-      { status: result.status }
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
     )
   }
-
-  return NextResponse.json(result.data, { status: result.status })
 }

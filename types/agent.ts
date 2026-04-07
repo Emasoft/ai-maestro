@@ -743,6 +743,7 @@ export interface WebhookSubscription {
   secret: string                    // For HMAC signature verification (hidden in API responses)
   description?: string              // Optional user description
   status?: 'active' | 'inactive'    // Webhook status based on delivery health
+  createdBy?: string                // Agent ID of the creator (undefined = system-owner / web UI)
   createdAt: string
   lastDeliveryAt?: string
   lastDeliveryStatus?: 'success' | 'failed'

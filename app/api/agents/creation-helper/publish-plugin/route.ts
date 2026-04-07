@@ -18,6 +18,7 @@ import { existsSync, readFileSync } from 'fs'
 import { cp, rm, mkdir } from 'fs/promises'
 import { ensureMarketplace, updateMarketplaceManifest } from '@/services/role-plugin-service'
 import { getLocalMarketplacePath, LOCAL_MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
+import { withLock } from '@/lib/file-lock'
 
 export const dynamic = 'force-dynamic'
 
@@ -158,31 +159,34 @@ export async function POST(req: NextRequest) {
       }, { status: 422 })
     }
 
-    // ── G4: Copy to marketplace ──
+    // ── G4–G6: Wipe/copy/manifest under lock to prevent concurrent-publish races ──
     const targetDir = join(PLUGINS_DIR, dirName)
-    // Wipe existing if regenerating
-    if (existsSync(targetDir)) {
-      await rm(targetDir, { recursive: true })
-    }
-    await mkdir(PLUGINS_DIR, { recursive: true })
-    await cp(resolvedDir, targetDir, { recursive: true })
-
-    // ── G5: Register in marketplace manifest ──
     const description = extractPluginJsonField(resolvedDir, 'description') || `Role plugin for ${dirName}`
     const version = extractPluginJsonField(resolvedDir, 'version') || '1.0.0'
-    await ensureMarketplace()
-    await updateMarketplaceManifest(dirName, description, version)
 
-    // ── G6: Tell Claude CLI to refresh the marketplace ──
-    try {
-      const { execSync } = await import('child_process')
-      execSync(`claude plugin marketplace update ${LOCAL_MARKETPLACE_NAME}`, {
-        timeout: 15000,
-        stdio: 'pipe',
-      })
-    } catch {
-      // Non-blocking — marketplace will auto-refresh on next CLI use
-    }
+    await withLock('publish-plugin', async () => {
+      // G4: Copy to marketplace — wipe existing if regenerating
+      if (existsSync(targetDir)) {
+        await rm(targetDir, { recursive: true })
+      }
+      await mkdir(PLUGINS_DIR, { recursive: true })
+      await cp(resolvedDir, targetDir, { recursive: true })
+
+      // G5: Register in marketplace manifest
+      await ensureMarketplace()
+      await updateMarketplaceManifest(dirName, description, version)
+
+      // G6: Tell Claude CLI to refresh the marketplace
+      try {
+        const { execSync } = await import('child_process')
+        execSync(`claude plugin marketplace update ${LOCAL_MARKETPLACE_NAME}`, {
+          timeout: 15000,
+          stdio: 'pipe',
+        })
+      } catch {
+        // Non-blocking — marketplace will auto-refresh on next CLI use
+      }
+    })
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { listAllDomains, createNewDomain } from '@/services/domains-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 // Force dynamic -- reads runtime filesystem state
 export const dynamic = 'force-dynamic'
@@ -26,7 +27,13 @@ export async function GET() {
  * POST /api/domains
  * Create a new email domain
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // Authenticate -- domain creation is a write path (MF-003 pattern)
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status ?? 401 })
+  }
+
   try {
     let body
     try { body = await request.json() } catch {

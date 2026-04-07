@@ -1321,7 +1321,7 @@ export async function unlinkOrDeleteAgentSession(
         const exists = await runtime.sessionExists(sessionName)
         if (exists) {
           await runtime.killSession(sessionName)
-          unpersistSession(sessionName)
+          await unpersistSession(sessionName)
         }
       }
 
@@ -1347,7 +1347,7 @@ export async function unlinkOrDeleteAgentSession(
       const exists = await runtime.sessionExists(sessionName)
       if (exists) {
         await runtime.killSession(sessionName)
-        unpersistSession(sessionName)
+        await unpersistSession(sessionName)
       }
     }
 
@@ -1462,7 +1462,7 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
     }
 
     // Persist session metadata
-    persistSession({
+    await persistSession({
       id: sessionName,
       name: sessionName,
       workingDirectory,
@@ -1633,7 +1633,7 @@ export async function hibernateAgent(agentId: string, params: HibernateAgentPara
     }
 
     // Remove from session persistence
-    unpersistSession(sessionName)
+    await unpersistSession(sessionName)
     // Clear activity entry so that if the session name is reused later, idle-checks start fresh
     sessionActivity.delete(sessionName)
 

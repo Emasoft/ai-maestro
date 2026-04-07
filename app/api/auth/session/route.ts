@@ -13,26 +13,32 @@ import { NextResponse } from 'next/server'
 import { extractSessionFromCookie, validateSession } from '@/lib/session-auth'
 
 export async function GET(request: Request) {
-  // If no governance password is set, allow open access (otherwise user is locked out
-  // with no way to reach Settings to set the password — chicken-and-egg problem).
-  const { loadGovernance } = await import('@/lib/governance')
-  const config = loadGovernance()
-  if (!config.passwordHash) {
-    const res = NextResponse.json({ authenticated: true, passwordNotSet: true })
+  try {
+    // If no governance password is set, allow open access (otherwise user is locked out
+    // with no way to reach Settings to set the password — chicken-and-egg problem).
+    const { loadGovernance } = await import('@/lib/governance')
+    const config = loadGovernance()
+    if (!config.passwordHash) {
+      const res = NextResponse.json({ authenticated: true, passwordNotSet: true })
+      res.headers.set('Cache-Control', 'no-store')
+      return res
+    }
+
+    const cookieHeader = request.headers.get('Cookie')
+    const token = extractSessionFromCookie(cookieHeader)
+
+    if (token && validateSession(token)) {
+      const res = NextResponse.json({ authenticated: true })
+      res.headers.set('Cache-Control', 'no-store')
+      return res
+    }
+
+    const res = NextResponse.json({ authenticated: false }, { status: 401 })
     res.headers.set('Cache-Control', 'no-store')
     return res
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[Auth Session] Error:', msg)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
-  const cookieHeader = request.headers.get('Cookie')
-  const token = extractSessionFromCookie(cookieHeader)
-
-  if (token && validateSession(token)) {
-    const res = NextResponse.json({ authenticated: true })
-    res.headers.set('Cache-Control', 'no-store')
-    return res
-  }
-
-  const res = NextResponse.json({ authenticated: false }, { status: 401 })
-  res.headers.set('Cache-Control', 'no-store')
-  return res
 }

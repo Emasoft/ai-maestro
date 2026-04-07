@@ -35,6 +35,8 @@ export function useMeetingMessages({
   const lastFetchRef = useRef<string | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const seenCountRef = useRef(0)
+  // Track pending setTimeout handles so they can be cancelled on unmount
+  const pendingTimeoutsRef = useRef<Set<NodeJS.Timeout>>(new Set())
 
   // Stabilize participantIds — only change when the sorted list actually changes
   const participantKey = useMemo(() => [...participantIds].sort().join(','), [participantIds])
@@ -109,6 +111,9 @@ export function useMeetingMessages({
     intervalRef.current = setInterval(fetchMessages, 7000)
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
+      // Cancel all pending post-send fetch timeouts to prevent setState-after-unmount
+      for (const t of pendingTimeoutsRef.current) clearTimeout(t)
+      pendingTimeoutsRef.current.clear()
     }
   }, [meetingId, isActive, fetchMessages])
 
@@ -163,7 +168,8 @@ export function useMeetingMessages({
       console.error('Failed to send message:', err)
     }
     // Refresh after a short delay to let file I/O settle
-    setTimeout(() => fetchMessages(), 300)
+    const t = setTimeout(() => { pendingTimeoutsRef.current.delete(t); fetchMessages() }, 300)
+    pendingTimeoutsRef.current.add(t)
   }, [meetingId, teamName, participantKey, fetchMessages, addOptimistic])
 
   const broadcastToAll = useCallback(async (message: string) => {
@@ -199,7 +205,8 @@ export function useMeetingMessages({
       )
     )
     // Refresh after a short delay to let file I/O settle
-    setTimeout(() => fetchMessages(), 300)
+    const t = setTimeout(() => { pendingTimeoutsRef.current.delete(t); fetchMessages() }, 300)
+    pendingTimeoutsRef.current.add(t)
   }, [meetingId, teamName, participantKey, fetchMessages, addOptimistic])
 
   const markAsRead = useCallback(() => {

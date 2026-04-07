@@ -4,6 +4,8 @@ import {
   updateAMPAddressOnAgent,
   removeAMPAddressFromAgent,
 } from '@/services/agents-messaging-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 import { isValidUuid } from '@/lib/validation'
 
 // SF-047: Basic format validation for AMP address parameter
@@ -60,6 +62,15 @@ export async function PATCH(
     if (!ADDRESS_PATTERN.test(address) || address.length > 254) {
       return NextResponse.json({ error: 'Invalid address format' }, { status: 400 })
     }
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
     let body
     try { body = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
@@ -83,7 +94,7 @@ export async function PATCH(
  * Remove an AMP address from an agent
  */
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string; address: string } }
 ) {
   try {
@@ -95,6 +106,15 @@ export async function DELETE(
     // SF-047: Validate address format (defense-in-depth)
     if (!ADDRESS_PATTERN.test(address) || address.length > 254) {
       return NextResponse.json({ error: 'Invalid address format' }, { status: 400 })
+    }
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
 
     const result = await removeAMPAddressFromAgent(id, address)

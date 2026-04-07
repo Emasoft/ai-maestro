@@ -9,6 +9,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getPlaybackState, controlPlayback } from '@/services/agents-playback-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 import { isValidUuid } from '@/lib/validation'
 
 export async function GET(
@@ -49,6 +51,15 @@ export async function POST(
     let body
     try { body = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'send-command', id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
     const result = controlPlayback(id, body)
     if (result.error) {

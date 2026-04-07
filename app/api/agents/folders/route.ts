@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readdir, stat } from 'fs/promises'
 import { join, resolve, sep } from 'path'
+import { realpathSync } from 'fs'
 import os from 'os'
 import { loadAgents } from '@/lib/agent-registry'
 
@@ -24,8 +25,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Browsing outside home directory is not allowed' }, { status: 403 })
   }
 
+  // Resolve symlinks to the real filesystem path and re-check containment.
+  // Without this, a symlink under $HOME pointing outside $HOME would bypass
+  // the prefix check above, since resolve() does not follow symlinks but
+  // stat()/readdir() do.
+  let realDirPath: string
   try {
-    const dirStat = await stat(dirPath)
+    realDirPath = realpathSync(dirPath)
+  } catch {
+    return NextResponse.json({ error: 'Directory not found' }, { status: 404 })
+  }
+  if (!realDirPath.startsWith(HOME + sep) && realDirPath !== HOME) {
+    return NextResponse.json({ error: 'Browsing outside home directory is not allowed (symlink target)' }, { status: 403 })
+  }
+
+  try {
+    const dirStat = await stat(realDirPath)
     if (!dirStat.isDirectory()) {
       return NextResponse.json({ error: 'Not a directory' }, { status: 400 })
     }
@@ -89,7 +104,7 @@ export async function GET(request: NextRequest) {
 
   // Read directory contents — only subdirectories, skip hidden
   try {
-    const entries = await readdir(dirPath, { withFileTypes: true })
+    const entries = await readdir(realDirPath, { withFileTypes: true })
     const dirs = entries
       .filter(e => e.isDirectory() && !e.name.startsWith('.'))
       .sort((a, b) => a.name.localeCompare(b.name))

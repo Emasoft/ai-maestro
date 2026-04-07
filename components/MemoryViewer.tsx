@@ -206,14 +206,14 @@ export default function MemoryViewer({ agentId, hostUrl = '', isActive = false }
   useEffect(() => {
     if (!isActive) return
     Promise.all([fetchMemories(), fetchStats()])
-  }, [agentId, isActive])
+  }, [agentId, isActive, fetchMemories, fetchStats])
 
   // Fetch graph when view changes to graph
   useEffect(() => {
     if (view === 'graph') {
       fetchGraph()
     }
-  }, [view, agentId])
+  }, [view, agentId, fetchGraph])
 
   // Handle edit
   const startEdit = (memory: Memory) => {

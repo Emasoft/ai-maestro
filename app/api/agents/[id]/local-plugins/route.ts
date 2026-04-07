@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { ChangePlugin } from '@/services/element-management-service'
+import { isValidUuid } from '@/lib/validation'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,10 @@ export async function POST(
 ) {
   try {
     const { id: agentId } = await params
+    // SF-009: Validate UUID format for agent ID (defense-in-depth)
+    if (!isValidUuid(agentId)) {
+      return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
     const body = await req.json()
     const { key, enabled } = body as { key?: string; enabled?: boolean }
 

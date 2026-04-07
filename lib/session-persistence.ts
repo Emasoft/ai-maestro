@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
+import { withLock } from '@/lib/file-lock'
 
 export interface PersistedSession {
   id: string
@@ -45,14 +46,17 @@ export function loadPersistedSessions(): PersistedSession[] {
 }
 
 /**
- * Save sessions to disk
+ * Save sessions to disk using atomic write (tmp + rename) to prevent
+ * partial reads if the process crashes mid-write.
  */
 export function savePersistedSessions(sessions: PersistedSession[]) {
   try {
     ensurePersistenceDir()
 
     const data = JSON.stringify(sessions, null, 2)
-    fs.writeFileSync(SESSIONS_FILE, data, 'utf-8')
+    const tmpPath = SESSIONS_FILE + '.tmp.' + process.pid
+    fs.writeFileSync(tmpPath, data, 'utf-8')
+    fs.renameSync(tmpPath, SESSIONS_FILE)
 
     return true
   } catch (error) {
@@ -62,34 +66,40 @@ export function savePersistedSessions(sessions: PersistedSession[]) {
 }
 
 /**
- * Add or update a session in persistence
+ * Add or update a session in persistence.
+ * Serialized via withLock to prevent TOCTOU races on the read-modify-write cycle.
  */
-export function persistSession(session: Omit<PersistedSession, 'lastSavedAt'>) {
-  const sessions = loadPersistedSessions()
+export async function persistSession(session: Omit<PersistedSession, 'lastSavedAt'>): Promise<boolean> {
+  return withLock('sessions', () => {
+    const sessions = loadPersistedSessions()
 
-  const existingIndex = sessions.findIndex(s => s.id === session.id)
+    const existingIndex = sessions.findIndex(s => s.id === session.id)
 
-  const persistedSession: PersistedSession = {
-    ...session,
-    lastSavedAt: new Date().toISOString()
-  }
+    const persistedSession: PersistedSession = {
+      ...session,
+      lastSavedAt: new Date().toISOString()
+    }
 
-  if (existingIndex >= 0) {
-    sessions[existingIndex] = persistedSession
-  } else {
-    sessions.push(persistedSession)
-  }
+    if (existingIndex >= 0) {
+      sessions[existingIndex] = persistedSession
+    } else {
+      sessions.push(persistedSession)
+    }
 
-  return savePersistedSessions(sessions)
+    return savePersistedSessions(sessions)
+  })
 }
 
 /**
- * Remove a session from persistence
+ * Remove a session from persistence.
+ * Serialized via withLock to prevent TOCTOU races on the read-modify-write cycle.
  */
-export function unpersistSession(sessionId: string) {
-  const sessions = loadPersistedSessions()
-  const filtered = sessions.filter(s => s.id !== sessionId)
-  return savePersistedSessions(filtered)
+export async function unpersistSession(sessionId: string): Promise<boolean> {
+  return withLock('sessions', () => {
+    const sessions = loadPersistedSessions()
+    const filtered = sessions.filter(s => s.id !== sessionId)
+    return savePersistedSessions(filtered)
+  })
 }
 
 /**

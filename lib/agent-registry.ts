@@ -854,10 +854,14 @@ export async function deleteAgent(id: string, hard: boolean = false): Promise<bo
       console.log(`[Agent Registry] Cleaned up AMP UUID dir for agent ${id}`)
     }
 
-    // Remove from name→UUID index
-    if (agentName) {
-      removeFromIndex(agentName)
-      console.log(`[Agent Registry] Removed ${agentName} from AMP index`)
+    // Remove from name→UUID index (fire-and-forget — don't block deletion)
+    if (agentName && typeof removeFromIndex === 'function') {
+      const p = removeFromIndex(agentName)
+      if (p && typeof p.catch === 'function') {
+        p.catch((err: unknown) =>
+          console.warn(`[Agent Registry] Failed to remove ${agentName} from AMP index:`, err)
+        )
+      }
     }
   } catch (ampError) {
     console.warn(`[Agent Registry] Could not clean up AMP directories for agent ${id}:`, ampError)
@@ -1183,11 +1187,17 @@ export async function renameAgent(agentId: string, newName: string): Promise<boo
   const saved = saveAgents(agents)
   if (saved) invalidateAgentCache(oldName || undefined)
 
-  // Update AMP name→UUID index and config.json
-  if (saved && oldName) {
+  // Update AMP name→UUID index and config.json (fire-and-forget)
+  if (saved && oldName && typeof renameInIndex === 'function') {
+    const p = renameInIndex(oldName, normalizedNewName, agentId)
+    if (p && typeof p.then === 'function') {
+      p.then(() => {
+        console.log(`[Agent Registry] Updated AMP index: ${oldName} -> ${normalizedNewName} (${agentId})`)
+      }).catch((err: unknown) => {
+        console.warn(`[Agent Registry] Failed to update AMP index:`, err)
+      })
+    }
     try {
-      renameInIndex(oldName, normalizedNewName, agentId)
-      console.log(`[Agent Registry] Updated AMP index: ${oldName} -> ${normalizedNewName} (${agentId})`)
 
       // Update config.json name field inside the UUID dir
       const ampAgentsDir = path.join(os.homedir(), '.agent-messaging', 'agents')

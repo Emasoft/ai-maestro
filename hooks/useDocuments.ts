@@ -19,35 +19,53 @@ export function useDocuments(teamId: string | null): UseDocumentsResult {
   const [error, setError] = useState<string | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  const fetchDocuments = useCallback(async () => {
+  // MF-005: Accept optional AbortSignal to cancel stale fetches on unmount/teamId change
+  const fetchDocuments = useCallback(async (signal?: AbortSignal) => {
     if (!teamId) return
     try {
-      const res = await fetch(`/api/teams/${teamId}/documents`)
+      const res = await fetch(`/api/teams/${teamId}/documents`, { signal })
       if (!res.ok) throw new Error('Failed to fetch documents')
+      // Guard against setting state after abort
+      if (signal?.aborted) return
       const data = await res.json()
       setDocuments(data.documents || [])
       setError(null)
     } catch (err) {
+      // Silently ignore AbortError — expected when component unmounts or teamId changes
+      if (err instanceof DOMException && err.name === 'AbortError') return
       setError(err instanceof Error ? err.message : 'Failed to fetch documents')
     }
   }, [teamId])
 
-  // Initial fetch
+  // Initial fetch with AbortController for cleanup on unmount/teamId change
   useEffect(() => {
     if (!teamId) {
       setDocuments([])
+      setLoading(false)
       return
     }
+    // AbortController cancels in-flight fetch when teamId changes or component unmounts,
+    // preventing stale data from a previous teamId overwriting the current team's documents
+    const controller = new AbortController()
     setLoading(true)
-    fetchDocuments().finally(() => setLoading(false))
+    fetchDocuments(controller.signal).finally(() => {
+      if (!controller.signal.aborted) setLoading(false)
+    })
+    return () => controller.abort()
   }, [teamId, fetchDocuments])
 
   // Poll every 5s for multi-tab sync
   useEffect(() => {
     if (!teamId) return
-    intervalRef.current = setInterval(fetchDocuments, 5000)
+    // Each poll tick gets its own AbortController so cleanup aborts any in-flight poll fetch
+    let pollController: AbortController | null = null
+    intervalRef.current = setInterval(() => {
+      pollController = new AbortController()
+      fetchDocuments(pollController.signal)
+    }, 5000)
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
+      pollController?.abort()
     }
   }, [teamId, fetchDocuments])
 

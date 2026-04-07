@@ -16,7 +16,7 @@ import { isValidUuid } from '@/lib/validation'
 // Phase 1: no auth required for reads (localhost-only). Phase 2 should add auth for sensitive settings.
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: agentId } = await params
@@ -39,7 +39,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: agentId } = await params

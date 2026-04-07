@@ -32,10 +32,10 @@ export async function POST(request: NextRequest) {
     const body: CreateWithProjectRequest = await request.json()
 
     // Validate required fields
-    if (!body.name?.trim()) {
+    if (typeof body.name !== 'string' || !body.name.trim()) {
       return NextResponse.json({ error: 'Team name is required' }, { status: 400 })
     }
-    if (!body.password) {
+    if (typeof body.password !== 'string' || !body.password) {
       return NextResponse.json({ error: 'Governance password is required' }, { status: 400 })
     }
 
@@ -58,10 +58,15 @@ export async function POST(request: NextRequest) {
     })
 
     if (result.error) {
-      return NextResponse.json({ error: result.error }, { status: result.status })
+      return NextResponse.json({ error: result.error }, { status: result.status || 500 })
     }
 
-    const team = result.data!.team
+    // Guard: data must exist after error check passes (ServiceResult contract)
+    if (!result.data?.team) {
+      return NextResponse.json({ error: 'Team creation returned no data' }, { status: 500 })
+    }
+
+    const team = result.data.team
 
     // Post-creation: GitHub project linking (not part of createNewTeam)
     if (body.githubProject) {

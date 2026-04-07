@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getMeetingMessages } from '@/services/messages-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 /**
  * GET /api/messages/meeting?meetingId=<id>&participants=<id1,id2,...>&since=<timestamp>
  */
 export async function GET(request: NextRequest) {
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
   const { searchParams } = new URL(request.url)
 
   // SF-002: Validate that at least meetingId is provided

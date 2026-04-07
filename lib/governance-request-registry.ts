@@ -61,7 +61,14 @@ export function loadGovernanceRequests(): GovernanceRequestsFile {
       // Heal the corrupted file by writing defaults
       saveGovernanceRequests(DEFAULT_GOVERNANCE_REQUESTS_FILE)
     } else {
-      console.error('[governance-requests] Failed to read governance requests:', error)
+      // TOCTOU: file deleted between existsSync and readFileSync — treat as first-time init
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') {
+        console.warn('[governance-requests] governance-requests.json disappeared between check and read — reinitializing defaults')
+        saveGovernanceRequests(DEFAULT_GOVERNANCE_REQUESTS_FILE)
+      } else {
+        console.error(`[governance-requests] Failed to read governance requests (${code ?? 'unknown'}):`, error)
+      }
     }
     return { ...DEFAULT_GOVERNANCE_REQUESTS_FILE }
   }

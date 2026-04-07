@@ -252,15 +252,23 @@ export function loadHostsConfig(): Host[] {
     }
   }
 
-  // Try file
-  if (hosts.length === 0 && fs.existsSync(HOSTS_CONFIG_PATH)) {
+  // Try file — only fall through to default for ENOENT; rethrow corruption/permission errors
+  if (hosts.length === 0) {
     try {
       const fileContent = fs.readFileSync(HOSTS_CONFIG_PATH, 'utf-8')
       const config = JSON.parse(fileContent) as HostsConfig
       hosts = validateHosts(config.hosts)
       console.log(`[Hosts] Loaded ${hosts.length} host(s) from ${HOSTS_CONFIG_PATH}`)
-    } catch (error) {
-      console.error(`[Hosts] Failed to load hosts config from file:`, error)
+    } catch (error: unknown) {
+      const code = error instanceof Error && 'code' in error ? (error as NodeJS.ErrnoException).code : undefined
+      if (code === 'ENOENT') {
+        // File doesn't exist — fall through to default self host
+      } else {
+        // Corruption (bad JSON), permission denied, etc. — surface the error
+        throw new Error(
+          `[Hosts] Failed to load hosts config from ${HOSTS_CONFIG_PATH}: ${error instanceof Error ? error.message : error}`
+        )
+      }
     }
   }
 

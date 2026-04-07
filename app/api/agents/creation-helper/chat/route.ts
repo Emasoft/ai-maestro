@@ -6,10 +6,16 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { sendMessage } from '@/services/creation-helper-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+
   try {
     let body: { message?: string }
     try {

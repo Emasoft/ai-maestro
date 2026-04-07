@@ -38,8 +38,16 @@ import type { ServiceResult } from '@/types/service'
  * List all groups.
  */
 export function listAllGroups(): ServiceResult<{ groups: Group[] }> {
-  const groups = loadGroups()
-  return { data: { groups }, status: 200 }
+  try {
+    const groups = loadGroups()
+    return { data: { groups }, status: 200 }
+  } catch (err) {
+    if (err instanceof GroupValidationException) {
+      return { error: err.message, status: err.code }
+    }
+    console.error('Failed to load groups:', err)
+    return { error: err instanceof Error ? err.message : 'Failed to load groups', status: 500 }
+  }
 }
 
 /**
@@ -75,11 +83,19 @@ export async function createNewGroup(params: {
  * Get a group by ID.
  */
 export function getGroupById(id: string): ServiceResult<{ group: Group }> {
-  const group = getGroup(id)
-  if (!group) {
-    return { error: 'Group not found', status: 404 }
+  try {
+    const group = getGroup(id)
+    if (!group) {
+      return { error: 'Group not found', status: 404 }
+    }
+    return { data: { group }, status: 200 }
+  } catch (err) {
+    if (err instanceof GroupValidationException) {
+      return { error: err.message, status: err.code }
+    }
+    console.error('Failed to get group:', err)
+    return { error: err instanceof Error ? err.message : 'Failed to get group', status: 500 }
   }
-  return { data: { group }, status: 200 }
 }
 
 /**

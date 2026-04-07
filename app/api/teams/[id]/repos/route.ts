@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
-import { getTeam, updateTeam } from '@/lib/team-registry'
+import { getTeam } from '@/lib/team-registry'
 import { checkTeamAccess } from '@/lib/team-acl'
 import { listProjectItems, extractReposFromItems } from '@/lib/github-cli'
 
@@ -60,7 +60,13 @@ export async function POST(
   }
 
   const { url, name } = body
-  if (!url) return NextResponse.json({ error: 'url is required' }, { status: 400 })
+  if (!url || typeof url !== 'string') return NextResponse.json({ error: 'url is required and must be a string' }, { status: 400 })
 
-  return NextResponse.json({ registered: true, url, name })
+  const team = getTeam(id)
+  if (!team) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
+
+  // TODO: Full repo registration with persistent storage (e.g., team.repos array in team-registry).
+  // Currently returns success but only validates — no persistent write yet.
+  // When implementing, add: updateTeam(id, { repos: [...(team.repos || []), { url, name }] })
+  return NextResponse.json({ registered: false, stub: true, url, name, message: 'Repo registration not yet implemented — endpoint validates only' }, { status: 501 })
 }

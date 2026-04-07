@@ -131,11 +131,10 @@ describe('loadDocuments', () => {
     expect(docs[0].id).toBe('doc-a')
   })
 
-  it('returns empty array when file contains invalid JSON', () => {
+  it('throws on corrupted JSON (no silent data loss)', () => {
     fsStore[docsFilePath(TEAM_1)] = '{ broken json'
 
-    const docs = loadDocuments(TEAM_1)
-    expect(docs).toEqual([])
+    expect(() => loadDocuments(TEAM_1)).toThrow(SyntaxError)
   })
 
   it('returns empty array when documents property is not an array', () => {

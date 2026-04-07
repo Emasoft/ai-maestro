@@ -10,10 +10,15 @@ export const dynamic = 'force-dynamic'
  * Returns this host's identity information for peer registration.
  */
 export async function GET() {
-  const result = getHostIdentity()
-  // SF-013 fix: Check for error in result before returning data
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+  try {
+    const result = getHostIdentity()
+    // SF-013 fix: Check for error in result before returning data
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data, { status: result.status })
+  } catch (error) {
+    console.error('[Host Identity GET] error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-  return NextResponse.json(result.data, { status: result.status })
 }

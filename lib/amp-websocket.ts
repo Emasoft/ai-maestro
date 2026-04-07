@@ -93,7 +93,7 @@ export function deliverViaWebSocket(
 export function handleAMPWebSocket(ws: WebSocket): void {
   let authenticated = false
   let authTimeout: ReturnType<typeof setTimeout>
-  let heartbeatInterval: ReturnType<typeof setInterval>
+  let heartbeatInterval: ReturnType<typeof setInterval> | undefined = undefined
 
   // Require auth within AUTH_TIMEOUT_MS
   authTimeout = setTimeout(() => {
@@ -188,7 +188,7 @@ export function handleAMPWebSocket(ws: WebSocket): void {
 
   ws.on('close', () => {
     clearTimeout(authTimeout)
-    clearInterval(heartbeatInterval)
+    if (heartbeatInterval) clearInterval(heartbeatInterval)
 
     const meta = wsMetadata.get(ws)
     if (meta) {

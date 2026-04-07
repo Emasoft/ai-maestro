@@ -68,9 +68,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
   }
 
-  const result = await checkRemoteHealth(hostUrl)
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+  try {
+    const result = await checkRemoteHealth(hostUrl)
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data, { status: result.status })
+  } catch (error) {
+    console.error('[Hosts] Health check error:', error)
+    return NextResponse.json({ error: 'Health check failed' }, { status: 502 })
   }
-  return NextResponse.json(result.data, { status: result.status })
 }

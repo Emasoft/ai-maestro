@@ -11,6 +11,9 @@ import { isManager, isChiefOfStaffAnywhere } from '@/lib/governance'
 import { isValidUuid } from '@/lib/validation'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 
+// NT-023 (P8): Ensure Next.js does not cache this route
+export const dynamic = 'force-dynamic'
+
 // CC-GOV-009: Auth required to prevent transfer data leaks
 export async function GET(request: NextRequest) {
   try {

@@ -245,8 +245,10 @@ export function validateApiKey(apiKey: string): AMPApiKeyRecord | null {
     if (now - lastWrite > LAST_USED_WRITE_INTERVAL_MS) {
       record.last_used_at = new Date().toISOString()
       // MF-009: Wrap saveApiKeys in withLock to prevent concurrent cache mutation
-      // Fire-and-forget: validation remains synchronous; the debounced write serializes on disk
-      void withLock('amp-api-keys', () => { saveApiKeys(keys) })
+      // Fire-and-forget: validation remains synchronous; the debounced write serializes on disk.
+      // Must catch rejection -- `void` swallows it, hiding disk write failures.
+      withLock('amp-api-keys', () => { saveApiKeys(keys) })
+        .catch(err => console.error('[AMP-AUTH] Background save failed:', err))
       _lastUsedWriteTimestamps.set(keyHash, now)
     }
   }

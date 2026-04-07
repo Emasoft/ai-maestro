@@ -47,7 +47,31 @@ export function hasProcessedPropagation(propagationId: string): boolean {
 }
 
 /**
- * Mark a propagation as processed
+ * Atomically check-and-mark a propagation as processed.
+ * Returns true if the propagation was newly marked (first caller wins).
+ * Returns false if it was already marked (duplicate / concurrent caller).
+ *
+ * WHY: hasProcessedPropagation + markPropagationProcessed as two separate
+ * calls has a TOCTOU race — two concurrent requests with the same ID can
+ * both pass the check before either marks it. This function eliminates
+ * that gap by doing both in a single synchronous operation.
+ */
+export function tryMarkPropagationProcessed(propagationId: string): boolean {
+  if (processedPropagations.has(propagationId)) {
+    return false  // Already processed — caller should skip
+  }
+  processedPropagations.add(propagationId)
+  // Clean up after TTL
+  setTimeout(() => {
+    processedPropagations.delete(propagationId)
+  }, PROPAGATION_CACHE_TTL)
+  return true  // Newly marked — caller should proceed
+}
+
+/**
+ * Mark a propagation as processed.
+ * @deprecated Use tryMarkPropagationProcessed() for atomic check-and-mark.
+ * Kept for callers that have already checked separately.
  */
 export function markPropagationProcessed(propagationId: string): void {
   processedPropagations.add(propagationId)
@@ -216,13 +240,12 @@ export async function addHostWithSync(
     return result
   }
 
-  // Check if we've already processed this propagation
-  if (hasProcessedPropagation(propagationId)) {
+  // Atomically check-and-mark to prevent TOCTOU race with concurrent requests
+  if (!tryMarkPropagationProcessed(propagationId)) {
     console.log(`[Host Sync] Already processed propagation ${propagationId}, skipping`)
     result.errors.push('Already processed this propagation')
     return result
   }
-  markPropagationProcessed(propagationId)
 
   // Step 1: Add host locally (using async version with lock for concurrent safety)
   const existingHost = getHostById(host.id)

@@ -14,7 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { readdir, stat, readFile } from 'fs/promises'
+import { readdir, stat, lstat, readFile, realpath } from 'fs/promises'
 import { join, resolve, normalize, extname } from 'path'
 import { homedir } from 'os'
 
@@ -100,6 +100,19 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // Use lstat first to detect symlinks without following them
+    const linkStat = await lstat(normalized)
+    // If the entry is a symlink, resolve it and re-check the allowlist to prevent
+    // symlinks inside ~/agents/ or ~/.claude/ from escaping to arbitrary paths
+    if (linkStat.isSymbolicLink()) {
+      const resolvedTarget = await realpath(normalized)
+      if (!isAllowedPath(resolvedTarget)) {
+        return NextResponse.json(
+          { error: 'Symlink target is outside allowed directories' },
+          { status: 403 }
+        )
+      }
+    }
     const pathStat = await stat(normalized)
 
     // File read mode
@@ -153,7 +166,13 @@ export async function GET(req: NextRequest) {
       if (name.startsWith('.') && name !== '.claude' && name !== '.claude-plugin') continue
       try {
         const entryPath = join(normalized, name)
-        const entryStat = await stat(entryPath)
+        const entryLstat = await lstat(entryPath)
+        // Skip symlinks whose resolved target escapes the allowed directories
+        if (entryLstat.isSymbolicLink()) {
+          const resolvedEntry = await realpath(entryPath)
+          if (!isAllowedPath(resolvedEntry)) continue
+        }
+        const entryStat = entryLstat.isSymbolicLink() ? await stat(entryPath) : entryLstat
         entries.push({
           name,
           type: entryStat.isDirectory() ? 'dir' : 'file',

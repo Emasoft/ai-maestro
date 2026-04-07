@@ -73,12 +73,22 @@ function generateAndStoreKeyPair(): { publicKeyHex: string; privateKeyHex: strin
  * Returns null if either key file is missing or unreadable.
  */
 function loadKeyPairFromDisk(): { publicKeyHex: string; privateKeyHex: string } | null {
-  if (!fs.existsSync(PRIVATE_KEY_PATH) || !fs.existsSync(PUBLIC_KEY_PATH)) {
+  // Read directly without existsSync to eliminate TOCTOU race:
+  // a check-then-read pattern allows the file to be deleted between
+  // the check and the read, causing an uncaught ENOENT exception.
+  let privateKeyHex: string
+  let publicKeyHex: string
+  try {
+    privateKeyHex = fs.readFileSync(PRIVATE_KEY_PATH, 'utf-8').trim()
+    publicKeyHex = fs.readFileSync(PUBLIC_KEY_PATH, 'utf-8').trim()
+  } catch (err: unknown) {
+    // ENOENT (missing file) is expected on first run — return null to trigger generation.
+    // Any other error (EACCES, EIO) is also non-recoverable here, so regenerate.
+    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error(`[host-keys] Failed to read key files: ${(err as NodeJS.ErrnoException).code}`)
+    }
     return null
   }
-
-  const privateKeyHex = fs.readFileSync(PRIVATE_KEY_PATH, 'utf-8').trim()
-  const publicKeyHex = fs.readFileSync(PUBLIC_KEY_PATH, 'utf-8').trim()
 
   // Sanity check: Ed25519 DER-encoded keys have exact lengths
   // PKCS8 private DER = 48 bytes = 96 hex chars

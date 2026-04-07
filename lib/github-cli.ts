@@ -303,12 +303,8 @@ export function createRepo(name: string, opts: CreateRepoOptions = {}): GhRepo {
 
 /** List organizations the authenticated user belongs to */
 export function listOrgs(): string[] {
-  try {
-    const raw = gh('api /user/orgs --jq ".[].login"')
-    return raw.split('\n').filter(Boolean)
-  } catch {
-    return []
-  }
+  const raw = gh('api /user/orgs --jq ".[].login"')
+  return raw.split('\n').filter(Boolean)
 }
 
 /** Clone a repository to a target directory */
@@ -428,9 +424,10 @@ export function getProject(owner: string, number: number): GhProjectDetail {
       type: f.dataType,
       options: f.options,
     }))
-  } catch {
-    // GraphQL failed — return empty fields (non-fatal)
-    console.warn(`[github-cli] Failed to fetch field details for project ${owner}/${number} via GraphQL`)
+  } catch (err) {
+    // Re-throw: empty fields cause silent downstream failures (kanban misconfiguration,
+    // status field lookups returning undefined). Callers must handle this explicitly.
+    throw new Error(`Failed to fetch field details for project ${owner}/${number} via GraphQL: ${(err as Error).message}`)
   }
 
   return {

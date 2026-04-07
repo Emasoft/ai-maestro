@@ -129,10 +129,10 @@ export function authorize(
     return { allowed: true }
   }
 
-  // CHIEF-OF-STAFF → own team agents only
+  // CHIEF-OF-STAFF → own team agents only (target required for agent-scoped actions)
   if (title === 'chief-of-staff') {
     if (!targetAgentId) {
-      return { allowed: true }
+      return { allowed: false, reason: 'Chief-of-Staff must specify a target agent' }
     }
     const cosTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
     const targetTeamId = lookupTeamIdForAgent(targetAgentId)

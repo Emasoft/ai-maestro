@@ -120,8 +120,13 @@ export function getAllPeerGovernance(): GovernancePeerState[] {
       }
 
       results.push(state)
-    } catch {
-      // Skip corrupt files silently
+    } catch (err: unknown) {
+      // TOCTOU: file deleted between readdirSync and readFileSync — skip gracefully
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+        continue
+      }
+      // Corrupt JSON or other read errors — skip but log for diagnostics
+      console.warn(`[governance-peers] Skipping unreadable peer file ${file}:`, err instanceof Error ? err.message : err)
       continue
     }
   }

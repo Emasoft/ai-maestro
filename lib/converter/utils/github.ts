@@ -93,9 +93,14 @@ export async function downloadGitHubRepo(source: GitHubSource): Promise<string> 
 
   let repoDir = path.join(tmpDir, extractedDir.name)
 
-  // Navigate to subPath if specified
+  // Navigate to subPath if specified (with path traversal protection)
   if (source.subPath) {
-    const subDir = path.join(repoDir, source.subPath)
+    const subDir = path.resolve(repoDir, source.subPath)
+    // Prevent path traversal: resolved subDir must stay inside repoDir
+    if (!subDir.startsWith(repoDir + path.sep) && subDir !== repoDir) {
+      await fs.rm(tmpDir, { recursive: true, force: true })
+      throw new Error(`Sub-path "${source.subPath}" escapes repository directory`)
+    }
     try {
       await fs.access(subDir)
       repoDir = subDir
@@ -122,7 +127,11 @@ export function getTempRoot(repoDir: string): string {
 /** Clean up a temp directory (safety: only deletes if inside os.tmpdir()) */
 export async function cleanupTempDir(dir: string): Promise<void> {
   const root = getTempRoot(dir)
-  if (root.startsWith(os.tmpdir())) {
-    await fs.rm(root, { recursive: true, force: true })
+  // Resolve symlinks and normalize to catch traversal attacks like /tmp/../etc
+  const resolvedRoot = await fs.realpath(root).catch(() => path.resolve(root))
+  const resolvedTmp = await fs.realpath(os.tmpdir()).catch(() => path.resolve(os.tmpdir()))
+  if (!resolvedRoot.startsWith(resolvedTmp + path.sep) && resolvedRoot !== resolvedTmp) {
+    throw new Error(`Refusing to delete directory outside tmpdir: ${resolvedRoot}`)
   }
+  await fs.rm(root, { recursive: true, force: true })
 }

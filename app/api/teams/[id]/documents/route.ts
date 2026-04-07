@@ -29,7 +29,7 @@ export async function GET(
 // POST /api/teams/[id]/documents - Create a new document
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
   // MF-005: Validate UUID format for team ID to prevent path traversal

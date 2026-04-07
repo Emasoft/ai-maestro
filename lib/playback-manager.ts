@@ -12,6 +12,7 @@ import {
   upsertPlaybackState,
   getPlaybackState
 } from './cozo-schema-phase5'
+import { escapeForCozo } from './cozo-utils'
 
 /**
  * Playback state interface
@@ -86,7 +87,6 @@ export class PlaybackManager implements PlaybackControl {
       return
     }
 
-    const wasPlaying = this.state.isPlaying
     this.state.currentPosition = position
     this.state.updatedAt = Date.now()
     this.notifyStateChange()
@@ -365,8 +365,8 @@ export async function deletePlaybackState(
   try {
     await agentDb.run(`
       ?[agent_id, session_id] := *playback_state{agent_id, session_id},
-        agent_id = ?,
-        session_id = ?
+        agent_id = ${escapeForCozo(agentId)},
+        session_id = ${escapeForCozo(sessionId)}
       :delete playback_state
     `)
 

@@ -75,7 +75,7 @@ export function listAllWebhooks(): ServiceResult<{ webhooks: any[] }> {
  * Create a new webhook subscription.
  * Returns the secret ONLY on creation.
  */
-export function createNewWebhook(body: CreateWebhookRequest): ServiceResult<{ webhook: any; message?: string }> {
+export function createNewWebhook(body: CreateWebhookRequest, createdBy?: string): ServiceResult<{ webhook: any; message?: string }> {
   // Validate required fields
   if (!body.url) {
     return { error: 'URL is required', status: 400 }
@@ -103,7 +103,7 @@ export function createNewWebhook(body: CreateWebhookRequest): ServiceResult<{ we
   }
 
   try {
-    const webhook = createWebhook(body)
+    const webhook = createWebhook(body, createdBy)
 
     // Return secret ONLY on creation - user must save it now
     return {
@@ -164,9 +164,22 @@ export function getWebhookById(id: string): ServiceResult<any> {
 
 /**
  * Delete a webhook by ID.
+ * When callerAgentId is provided, only the webhook's creator (or system-owner)
+ * may delete it.  System-owner callers pass undefined (no agentId in auth).
  */
-export function deleteWebhookById(id: string): ServiceResult<{ success: boolean }> {
+export function deleteWebhookById(id: string, callerAgentId?: string): ServiceResult<{ success: boolean }> {
   try {
+    // Ownership check: fetch the webhook and verify the caller created it.
+    // System-owner (callerAgentId === undefined) may delete any webhook.
+    const webhook = getWebhook(id)
+    if (!webhook) {
+      return { error: 'Webhook not found', status: 404 }
+    }
+
+    if (callerAgentId && webhook.createdBy && webhook.createdBy !== callerAgentId) {
+      return { error: 'Forbidden: you can only delete webhooks you created', status: 403 }
+    }
+
     const success = deleteWebhook(id)
 
     if (!success) {

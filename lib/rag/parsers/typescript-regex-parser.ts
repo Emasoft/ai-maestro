@@ -31,12 +31,12 @@ const PATTERNS = {
   // Method declarations (inside classes)
   methodDecl: /^[ \t]*(public|private|protected)?\s*(async\s+)?(?:static\s+)?(\w+)\s*(?:<[^>]*>)?\s*\(([^)]*)\)/gm,
 
-  // Angular decorators
-  angularComponent: /@Component\s*\(\s*\{/g,
-  angularService: /@Injectable\s*\(/g,
-  angularModule: /@NgModule\s*\(/g,
-  angularPipe: /@Pipe\s*\(/g,
-  angularDirective: /@Directive\s*\(/g,
+  // Angular decorators — no g flag: used with .test() which must not advance lastIndex
+  angularComponent: /@Component\s*\(\s*\{/,
+  angularService: /@Injectable\s*\(/,
+  angularModule: /@NgModule\s*\(/,
+  angularPipe: /@Pipe\s*\(/,
+  angularDirective: /@Directive\s*\(/,
 
   // React patterns
   reactComponent: /(?:function|const)\s+(\w+)\s*[^{]*\{[^}]*return\s*\(?<[A-Z]/,

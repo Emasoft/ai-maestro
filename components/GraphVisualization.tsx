@@ -117,6 +117,10 @@ export function GraphVisualization({ agentId, graphType, onNodeSelect }: GraphVi
   useEffect(() => {
     if (!graphData || !containerRef.current) return
 
+    // Guard against memory leak: if component unmounts during async import,
+    // the resolved promise must not create a cy instance on a destroyed element.
+    let mounted = true
+
     const loadCytoscape = async () => {
       setRendering(true)
 
@@ -124,6 +128,9 @@ export function GraphVisualization({ agentId, graphType, onNodeSelect }: GraphVi
         // Dynamically import cytoscape to avoid SSR issues
         const cytoscape = (await import('cytoscape')).default
         const dagre = (await import('cytoscape-dagre')).default
+
+        // Abort if component unmounted while awaiting imports
+        if (!mounted) return
 
         cytoscape.use(dagre)
 
@@ -302,8 +309,10 @@ export function GraphVisualization({ agentId, graphType, onNodeSelect }: GraphVi
     loadCytoscape()
 
     return () => {
+      mounted = false
       if (cyRef.current) {
         cyRef.current.destroy()
+        cyRef.current = null
       }
     }
   }, [graphData, layout, nodeFilter, onNodeSelect])

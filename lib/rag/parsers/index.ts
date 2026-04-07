@@ -179,11 +179,19 @@ export async function parseProject(
 
   switch (projectInfo.type) {
     case 'ruby':
-      files = await parseRubyProject(projectPath, options)
+      try {
+        files = await parseRubyProject(projectPath, options)
+      } catch (err) {
+        console.error(`[Parser] Failed to parse Ruby project:`, err)
+      }
       break
 
     case 'python':
-      files = await parsePythonProject(projectPath, options)
+      try {
+        files = await parsePythonProject(projectPath, options)
+      } catch (err) {
+        console.error(`[Parser] Failed to parse Python project:`, err)
+      }
       break
 
     case 'typescript':
@@ -191,7 +199,11 @@ export async function parseProject(
       // Use regex-based parser for all TypeScript/JavaScript projects
       // Regex parser is more stable than ts-morph for large/complex projects
       console.log(`[Parser] Using regex parser for ${projectInfo.type} project`)
-      files = await parseTypeScriptProjectRegex(projectPath, options)
+      try {
+        files = await parseTypeScriptProjectRegex(projectPath, options)
+      } catch (err) {
+        console.error(`[Parser] Failed to parse ${projectInfo.type} project:`, err)
+      }
       break
     }
 

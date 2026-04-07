@@ -107,8 +107,9 @@ export async function DELETE(
     })
 
     if (!result.success) {
-      const status = result.error?.includes('not found') ? 404
-        : result.error?.includes('already deleted') ? 410
+      const errStr = String(result.error ?? '')
+      const status = errStr.includes('not found') ? 404
+        : errStr.includes('already deleted') ? 410
         : 403
       return NextResponse.json({ error: result.error }, { status })
     }

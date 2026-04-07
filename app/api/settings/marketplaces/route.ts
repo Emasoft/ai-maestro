@@ -414,7 +414,7 @@ export async function GET() {
               errors = detectPluginErrors(join(plugCacheDir, installedVersion), plugName)
             }
 
-            const outdated = !!(installed && installedVersion && availVer && installedVersion !== availVer && availVer > installedVersion)
+            const outdated = !!(installed && installedVersion && availVer && semver.valid(semver.coerce(availVer)) && semver.valid(semver.coerce(installedVersion)) && semver.gt(semver.coerce(availVer)!, semver.coerce(installedVersion)!))
 
             info.plugins.push({
               name: plugName, key, installed, enabled: installed && enabled,
@@ -1021,7 +1021,7 @@ async function handleCheckUpdates(marketplaceName?: string, force?: boolean) {
       name,
       installed: localVer,
       remote: remoteVer,
-      outdated: !!(localVer && localVer < remoteVer),
+      outdated: !!(localVer && semver.valid(semver.coerce(localVer)) && semver.valid(semver.coerce(remoteVer)) && semver.lt(semver.coerce(localVer)!, semver.coerce(remoteVer)!)),
     })
   }
 
@@ -1080,7 +1080,7 @@ async function handleCheckUpdates(marketplaceName?: string, force?: boolean) {
   const localMktJson = await readJsonSafe(join(mktPath, '.claude-plugin', 'marketplace.json'))
     || await readJsonSafe(join(mktPath, 'marketplace.json'))
   const localVersion = (localMktJson?.version as string) || null
-  const marketplaceOutdated = !!(localVersion && remoteVersion && localVersion < remoteVersion)
+  const marketplaceOutdated = !!(localVersion && remoteVersion && semver.valid(semver.coerce(localVersion)) && semver.valid(semver.coerce(remoteVersion)) && semver.lt(semver.coerce(localVersion)!, semver.coerce(remoteVersion)!))
 
   const result = {
     success: true,

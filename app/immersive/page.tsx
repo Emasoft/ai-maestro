@@ -65,6 +65,7 @@ export default function ImmersivePage() {
     let webglAddon: any
     let resizeObserver: ResizeObserver | null = null
     let inputDisposable: any
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
     let mounted = true
 
     const initTerminal = async () => {
@@ -131,28 +132,24 @@ export default function ImmersivePage() {
       fitAddonRef.current = fitAddon
 
       // ResizeObserver instead of window resize event (handles container size changes too)
-      const debouncedFit = (() => {
-        let timer: ReturnType<typeof setTimeout> | null = null
-        return () => {
-          if (timer) clearTimeout(timer)
-          timer = setTimeout(() => {
-            if (fitAddon && term) {
-              try {
-                fitAddon.fit()
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({
-                    type: 'resize',
-                    cols: term.cols,
-                    rows: term.rows
-                  }))
-                }
-              } catch (e) {
-                console.warn('[Immersive] Fit failed during resize:', e)
-              }
+      const debouncedFit = () => {
+        if (debounceTimer) clearTimeout(debounceTimer)
+        debounceTimer = setTimeout(() => {
+          if (!mounted || !fitAddon || !term) return
+          try {
+            fitAddon.fit()
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({
+                type: 'resize',
+                cols: term.cols,
+                rows: term.rows
+              }))
             }
-          }, 150)
-        }
-      })()
+          } catch (e) {
+            console.warn('[Immersive] Fit failed during resize:', e)
+          }
+        }, 150)
+      }
 
       resizeObserver = new ResizeObserver(() => debouncedFit())
       resizeObserver.observe(terminalRef.current!)
@@ -181,10 +178,12 @@ export default function ImmersivePage() {
           if (parsed.type === 'history-complete') {
             // Wait for xterm.js to finish processing history, then scroll and focus
             setTimeout(() => {
+              if (!mounted) return
               fitAddon.fit()
               const resizeMsg = JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows })
               if (ws.readyState === WebSocket.OPEN) ws.send(resizeMsg)
               setTimeout(() => {
+                if (!mounted) return
                 term.scrollToBottom()
                 term.focus()
               }, 50)
@@ -219,6 +218,7 @@ export default function ImmersivePage() {
     // Cleanup on unmount or session change
     return () => {
       mounted = false
+      if (debounceTimer) clearTimeout(debounceTimer)
       if (resizeObserver) resizeObserver.disconnect()
       if (inputDisposable) inputDisposable.dispose()
       if (wsRef.current) {

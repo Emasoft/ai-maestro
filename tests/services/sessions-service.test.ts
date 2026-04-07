@@ -752,25 +752,25 @@ describe('broadcastActivityUpdate', () => {
 // ============================================================================
 
 describe('deletePersistedSession', () => {
-  it('deletes a persisted session successfully', () => {
+  it('deletes a persisted session successfully', async () => {
     mockSessionPersistence.unpersistSession.mockReturnValue(true)
 
-    const result = deletePersistedSession('s1')
+    const result = await deletePersistedSession('s1')
 
     expect(result.status).toBe(200)
     expect(result.data?.success).toBe(true)
   })
 
-  it('returns 400 when session ID is missing', () => {
-    const result = deletePersistedSession('')
+  it('returns 400 when session ID is missing', async () => {
+    const result = await deletePersistedSession('')
 
     expect(result.status).toBe(400)
   })
 
-  it('returns 500 when unpersist fails', () => {
+  it('returns 500 when unpersist fails', async () => {
     mockSessionPersistence.unpersistSession.mockReturnValue(false)
 
-    const result = deletePersistedSession('s1')
+    const result = await deletePersistedSession('s1')
 
     expect(result.status).toBe(500)
   })

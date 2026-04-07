@@ -204,6 +204,9 @@ export default function AgentCreationHelper({ onClose, onComplete }: AgentCreati
   // ----- Session start -----
 
   const startSession = useCallback(async () => {
+    // Clear any existing polling/timeouts to prevent resource leaks on retry
+    clearPolling()
+
     try {
       setSessionState('starting')
       setSessionError(null)

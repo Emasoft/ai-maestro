@@ -434,12 +434,14 @@ export async function listTasks(
   let cursor: string | null = null
 
   while (hasNextPage) {
-    const afterClause = cursor ? `, after: "${cursor}"` : ''
+    // SECURITY: cursor is passed as a GraphQL variable to prevent injection.
+    // Never interpolate opaque API-provided values (like pagination cursors)
+    // directly into query strings — they could contain quote characters.
     const query = `
-      query($projectId: ID!) {
+      query($projectId: ID!, $cursor: String) {
         node(id: $projectId) {
           ... on ProjectV2 {
-            items(first: 100${afterClause}) {
+            items(first: 100, after: $cursor) {
               pageInfo { hasNextPage endCursor }
               nodes {
                 id
@@ -504,7 +506,7 @@ export async function listTasks(
       }
     `
 
-    const result = ghGraphQL(query, { projectId: meta.projectId }) as {
+    const result = ghGraphQL(query, { projectId: meta.projectId, cursor }) as {
       data: {
         node: {
           items: {

@@ -9,22 +9,39 @@ export async function POST(
 ) {
   const { id } = await params
 
-  let body
+  let body: unknown
   try {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { message, priority } = body
+  // Validate body is a plain object (not null, array, or primitive)
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 })
+  }
+
+  const { message, priority } = body as Record<string, unknown>
 
   if (!message || typeof message !== 'string') {
-    return NextResponse.json({ error: 'message is required' }, { status: 400 })
+    return NextResponse.json({ error: 'message is required and must be a string' }, { status: 400 })
   }
 
-  const result = await notifyGroupSubscribers(id, message, priority)
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+  if (priority !== undefined && typeof priority !== 'string') {
+    return NextResponse.json({ error: 'priority must be a string' }, { status: 400 })
   }
-  return NextResponse.json(result.data)
+
+  try {
+    const result = await notifyGroupSubscribers(id, message, priority)
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data)
+  } catch (err) {
+    console.error(`[Groups Notify] Failed to notify group ${id}:`, err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Internal server error' },
+      { status: 500 }
+    )
+  }
 }

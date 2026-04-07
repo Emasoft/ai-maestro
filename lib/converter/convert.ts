@@ -152,7 +152,16 @@ export async function convert(options: ConvertOptions): Promise<ConvertResult> {
   if (!options.dryRun) {
     const outputRoot = getOutputRoot(options, targetProvider)
     for (const file of files) {
-      const fullPath = path.join(outputRoot, file.path)
+      const fullPath = path.resolve(outputRoot, file.path)
+      // Path traversal guard: emitted file.path must not escape the output root
+      if (!fullPath.startsWith(outputRoot + path.sep) && fullPath !== outputRoot) {
+        return {
+          ok: false,
+          error: `Path traversal blocked: emitted path "${file.path}" escapes output root`,
+          files, warnings: warnings.getWarnings(), elements: emptyElements(),
+          sourceProvider: fromId, targetProvider: options.to,
+        }
+      }
       await writeFile(fullPath, file.content)
     }
   }

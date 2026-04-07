@@ -83,7 +83,8 @@ export function loadManagerTrust(): ManagerTrustFile {
       // Heal the corrupted file by writing defaults
       saveManagerTrust(DEFAULT_TRUST_FILE)
     } else {
-      console.error('[manager-trust] Failed to read manager trust file:', error)
+      // Non-parse errors (EACCES, EIO, etc.) must propagate — silent defaults hide real failures
+      throw error
     }
     return { ...DEFAULT_TRUST_FILE, trustedManagers: [] }
   }

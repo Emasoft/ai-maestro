@@ -52,13 +52,16 @@ Configuration files can be modified by side effects (settings.json, settings.loc
    **IMPORTANT: Cleanup MUST use the UI, not file restoration.**
 
    The correct cleanup order is:
-   1. **Delete teams via UI** (Teams page → Delete Team → password → Delete Agents Too)
+   1. **Delete teams via UI** (Teams tab → Delete Team → enter governance password → check "Delete Agents Too" → Delete Team)
    2. **Remove governance titles via UI** (Profile → title badge → AUTONOMOUS → password)
-   3. **Delete remaining agents via UI** (Profile → Danger Zone → Delete Agent → check "Also delete agent folder" → type name → Delete Forever)
-   4. **Verify via API** that all test artifacts are gone
-   5. **THEN restore config files** from backup — ONLY for files that may have been modified by side effects (settings.json, settings.local.json, governance.json). Do NOT restore registry.json or teams.json — the UI deletions already cleaned those.
+   3. **Delete remaining agents via UI** (Profile → Advanced → Danger Zone → Delete Agent → check "Also delete agent folder" → type name → Delete Forever)
+   4. **Purge cemetery entries via UI** (Settings → Cemetery → Purge for each test agent)
+   5. **Verify via API** that all test artifacts are gone (no test agents in registry, no test teams in teams.json, no test entries in cemetery)
+   6. **THEN restore config files** from backup — ONLY for files that may have been modified by side effects (settings.json, settings.local.json, governance.json). Do NOT restore registry.json or teams.json — the UI deletions already cleaned those.
 
-   **Why UI-first:** Restoring registry.json removes agents from the registry but leaves their tmux sessions running. These orphan sessions cause resource leaks and phantom entries on the next server poll. The UI Delete button correctly kills both the registry entry AND the tmux session.
+   **Why UI-first:** Restoring registry.json removes agents from the registry but leaves their tmux sessions running and agent folders on disk. These orphan sessions cause resource leaks and phantom entries on the next server poll. The UI Delete button correctly kills the tmux session, removes the registry entry, AND deletes the agent folder (when "Also delete agent folder" is checked).
+
+   **NEVER use bash/CLI to delete agent folders.** That is a Rule 6 violation. The "Also delete agent folder" checkbox in the Delete Agent dialog handles folder cleanup. If agent folders remain after UI deletion, that is a BUG to report — not a reason to use bash.
 
    After restoration, verify file contents match the backup byte-for-byte.
 
@@ -488,3 +491,48 @@ tests/scenarios/
   state-backups/
     SCEN-001_<timestamp>/          ← Config file backups for STATE-WIPE
 ```
+
+---
+
+## WARNING: Cleanup Order Is Non-Negotiable
+
+**The #1 most common scenario test failure is wrong cleanup order.** This has caused orphan tmux sessions, orphan agent folders, and corrupt registry state.
+
+**MANDATORY cleanup order (memorize this):**
+
+```
+STEP 1: Delete test AGENTS via UI
+         Profile → Advanced → Danger Zone → Delete Agent
+         ☑ Check "Also delete agent folder"
+         Type agent name → Delete Forever
+         (repeat for each test agent)
+
+STEP 2: Delete test TEAMS via UI
+         Teams tab → click team → Delete team
+         Enter governance password
+         ☑ Check "Also delete agents in this team"
+         Click Delete Team
+         (this also handles agents if Step 1 was skipped)
+
+STEP 3: Purge CEMETERY entries via UI
+         Settings → Cemetery tab → Purge (for each test entry)
+
+STEP 4: Verify via API
+         Check registry, teams.json, cemetery — no test artifacts
+
+STEP 5: STATE-WIPE restore
+         Compare config files with backups
+         Restore ONLY files that still differ after UI cleanup
+         (usually settings.json, governance.json — NOT registry/teams
+          since UI delete already cleaned those)
+
+STEP 6: Post-test screenshot
+         Navigate to dashboard, compare with baseline
+```
+
+**NEVER use bash/CLI to:**
+- Delete agent folders (`rm -rf ~/agents/scen-*`) — Rule 6 violation
+- Kill tmux sessions (`tmux kill-session`) — use UI hibernate/delete instead
+- Edit registry.json or teams.json directly — use UI or API
+
+**If agent folders remain after UI deletion, that is a BUG (Rule 4: fix it), not a reason to bypass the UI.**

@@ -114,12 +114,17 @@ export async function POST(request: NextRequest) {
     }
 
     const archivePath = path.join(CEMETERY_DIR, sanitized)
-    if (!fs.existsSync(archivePath)) {
-      return NextResponse.json({ error: 'Archive not found in cemetery' }, { status: 404 })
-    }
 
-    // Read the zip manifest to get the original agent name
-    const zipBuffer = fs.readFileSync(archivePath)
+    // Read the zip — handle ENOENT atomically (no TOCTOU)
+    let zipBuffer: Buffer
+    try {
+      zipBuffer = fs.readFileSync(archivePath)
+    } catch (readErr) {
+      if ((readErr as NodeJS.ErrnoException).code === 'ENOENT') {
+        return NextResponse.json({ error: 'Archive not found in cemetery' }, { status: 404 })
+      }
+      throw readErr
+    }
 
     // Clean up old soft-deleted registry entry to avoid name collision
     // The archive filename contains the agent name: <name>-export-<timestamp>.zip
@@ -200,11 +205,14 @@ export async function DELETE(request: NextRequest) {
     }
 
     const archivePath = path.join(CEMETERY_DIR, sanitized)
-    if (!fs.existsSync(archivePath)) {
-      return NextResponse.json({ error: 'Archive not found' }, { status: 404 })
+    try {
+      fs.unlinkSync(archivePath)
+    } catch (unlinkErr) {
+      if ((unlinkErr as NodeJS.ErrnoException).code === 'ENOENT') {
+        return NextResponse.json({ error: 'Archive not found' }, { status: 404 })
+      }
+      throw unlinkErr
     }
-
-    fs.unlinkSync(archivePath)
 
     return NextResponse.json({ success: true, purged: sanitized })
   } catch (err) {

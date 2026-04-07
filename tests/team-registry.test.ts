@@ -110,9 +110,9 @@ describe('loadTeams', () => {
     expect(teams[0].name).toBe('Alpha')
   })
 
-  it('returns empty array for invalid JSON', () => {
+  it('throws on corrupted JSON (no silent data loss)', () => {
     fsStore[TEAMS_FILE] = '{ broken'
-    expect(loadTeams()).toEqual([])
+    expect(() => loadTeams()).toThrow(SyntaxError)
   })
 })
 

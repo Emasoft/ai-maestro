@@ -28,6 +28,8 @@ export function useTerminal(options: UseTerminalOptions = {}) {
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const webglAddonRef = useRef<WebglAddon | null>(null)
+  const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  const safetyRefitTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const optionsRef = useRef(options)
   // Ref for sending data to PTY via WebSocket - set by TerminalView which has WebSocket access
   const sendDataRef = useRef<((data: string) => void) | null>(null)
@@ -210,6 +212,7 @@ export function useTerminal(options: UseTerminalOptions = {}) {
     })
 
     resizeObserver.observe(container)
+    resizeObserverRef.current = resizeObserver
 
     // Delayed safety refits: on iPad/touch devices, the flex layout may not be fully
     // settled when initializeTerminal runs. These catch any late layout changes that
@@ -225,6 +228,7 @@ export function useTerminal(options: UseTerminalOptions = {}) {
         try { fitAddonRef.current.fit() } catch { /* ignore */ }
       }
     }, 2000)
+    safetyRefitTimersRef.current = [safetyRefit1, safetyRefit2]
 
     // Add keyboard shortcuts for scrolling, copy, and paste
     terminal.attachCustomKeyEventHandler((event) => {
@@ -327,7 +331,9 @@ export function useTerminal(options: UseTerminalOptions = {}) {
     return () => {
       clearTimeout(safetyRefit1)
       clearTimeout(safetyRefit2)
+      safetyRefitTimersRef.current = []
       resizeObserver.disconnect()
+      resizeObserverRef.current = null
       if (optionsRef.current.onUnregister) {
         optionsRef.current.onUnregister()
       }
@@ -350,6 +356,14 @@ export function useTerminal(options: UseTerminalOptions = {}) {
 
   const disposeTerminal = useCallback(() => {
     if (terminalRef.current) {
+      // Clean up safety refit timers to prevent post-dispose layout calls
+      safetyRefitTimersRef.current.forEach(t => clearTimeout(t))
+      safetyRefitTimersRef.current = []
+      // Disconnect ResizeObserver to stop observing the now-disposed terminal container
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect()
+        resizeObserverRef.current = null
+      }
       if (optionsRef.current.onUnregister) {
         optionsRef.current.onUnregister()
       }

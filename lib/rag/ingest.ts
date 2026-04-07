@@ -264,17 +264,23 @@ export async function ingestAllConversations(
     const file = conversationFiles[i]
     console.log(`\n[Ingest] File ${i + 1}/${conversationFiles.length}: ${path.basename(file)}`)
 
-    const fileStats = await ingestConversation(agentDb, file, {
-      batchSize: options.batchSize,
-    })
+    try {
+      const fileStats = await ingestConversation(agentDb, file, {
+        batchSize: options.batchSize,
+      })
 
-    // Accumulate stats
-    totalStats.totalMessages += fileStats.totalMessages
-    totalStats.processedMessages += fileStats.processedMessages
-    totalStats.skippedMessages += fileStats.skippedMessages
-    totalStats.embeddingsGenerated += fileStats.embeddingsGenerated
-    totalStats.termsExtracted += fileStats.termsExtracted
-    totalStats.symbolsExtracted += fileStats.symbolsExtracted
+      // Accumulate stats
+      totalStats.totalMessages += fileStats.totalMessages
+      totalStats.processedMessages += fileStats.processedMessages
+      totalStats.skippedMessages += fileStats.skippedMessages
+      totalStats.embeddingsGenerated += fileStats.embeddingsGenerated
+      totalStats.termsExtracted += fileStats.termsExtracted
+      totalStats.symbolsExtracted += fileStats.symbolsExtracted
+    } catch (err) {
+      // Log and continue -- one bad file must not crash the entire bulk ingestion
+      console.error(`[Ingest] Failed to ingest file ${file}:`, err)
+      totalStats.skippedMessages++
+    }
 
     // Report progress
     if (options.onProgress) {
@@ -319,7 +325,8 @@ export function findConversationFiles(agentId: string, workingDirectories: strin
             files.push(itemPath)
           }
         } catch (err) {
-          // Skip files we can't read
+          // Skip files we can't stat (permission denied, broken symlinks, etc.)
+          console.warn(`[Ingest] Cannot stat ${itemPath}: ${(err as Error).message}`)
         }
       }
     } catch (err) {

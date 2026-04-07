@@ -47,6 +47,7 @@ export function useTTS(options: UseTTSOptions): UseTTSReturn {
 
   const providerRef = useRef<TTSProvider | null>(null)
   const speakingRef = useRef(false)
+  const isMountedRef = useRef(true)
   // Use ref for voices so speak() always has the latest list without re-creating the callback
   const voicesRef = useRef<TTSVoice[]>([])
   voicesRef.current = availableVoices
@@ -54,6 +55,12 @@ export function useTTS(options: UseTTSOptions): UseTTSReturn {
   // Use ref for config so speak() always reads the latest values
   const configRef = useRef(config)
   configRef.current = config
+
+  // Track mount state to avoid setState after unmount
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false }
+  }, [])
 
   // Re-load config when agentId changes
   useEffect(() => {
@@ -74,26 +81,30 @@ export function useTTS(options: UseTTSOptions): UseTTSReturn {
       setIsSpeaking(false)
     }
 
+    let newProvider: TTSProvider
     if (config.provider === 'elevenlabs' && config.elevenLabsApiKey) {
-      providerRef.current = createElevenLabsProvider(config.elevenLabsApiKey)
+      newProvider = createElevenLabsProvider(config.elevenLabsApiKey)
     } else if (config.provider === 'openai' && config.openaiApiKey) {
-      providerRef.current = createOpenAIProvider(config.openaiApiKey)
+      newProvider = createOpenAIProvider(config.openaiApiKey)
     } else {
-      providerRef.current = createWebSpeechProvider()
+      newProvider = createWebSpeechProvider()
     }
+    providerRef.current = newProvider
 
     // Load voices from the new provider
     let cancelled = false
-    providerRef.current.getVoices().then(voices => {
+    newProvider.getVoices().then(voices => {
       if (!cancelled) {
         setAvailableVoices(voices)
         voicesRef.current = voices
       }
     })
 
+    // Capture provider in local var so cleanup stops the correct instance,
+    // not whatever providerRef.current points to when cleanup runs
     return () => {
       cancelled = true
-      providerRef.current?.stop()
+      newProvider.stop()
     }
   }, [config.provider, config.openaiApiKey, config.elevenLabsApiKey, agentId])
 
@@ -143,7 +154,7 @@ export function useTTS(options: UseTTSOptions): UseTTSReturn {
       })
       .finally(() => {
         speakingRef.current = false
-        setIsSpeaking(false)
+        if (isMountedRef.current) setIsSpeaking(false)
       })
   }, [])
 

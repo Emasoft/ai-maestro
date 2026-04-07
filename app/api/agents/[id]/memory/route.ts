@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getMemory, initializeMemory } from '@/services/agents-memory-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 import { isValidUuid } from '@/lib/validation'
 
 /**
@@ -33,7 +35,7 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: agentId } = await params
@@ -44,6 +46,15 @@ export async function POST(
     let body: Record<string, unknown>
     try { body = await request.json() } catch {
       body = {}
+    }
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', agentId)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
 
     const result = await initializeMemory(agentId, {

@@ -92,10 +92,13 @@ const geminiEmitter: Emitter = {
 
     // Commands → .gemini/commands/ (Gemini uses TOML format per spec)
     for (const cmd of project.commands) {
+      // Sanitize command name for safe use in file path — prevent path traversal
+      const safeCmdName = cmd.name.replace(/[^a-zA-Z0-9_@.\-]/g, '')
+      if (!safeCmdName) continue // skip commands with entirely unsafe names
       // Gemini command TOML: top-level prompt field, not nested under [command]
       const escapedContent = cmd.content.replace(/"""/g, "'''")
-      const tomlContent = `name = "${cmd.name}"\ndescription = "Converted command"\nprompt = """\n${escapedContent}\n"""\n`
-      files.push({ path: `.gemini/commands/${cmd.name}.toml`, content: tomlContent, type: 'commands', warnings: [] })
+      const tomlContent = `name = "${safeCmdName}"\ndescription = "Converted command"\nprompt = """\n${escapedContent}\n"""\n`
+      files.push({ path: `.gemini/commands/${safeCmdName}.toml`, content: tomlContent, type: 'commands', warnings: [] })
     }
 
     if (warnings.hasWarnings() && files.length > 0) files[0].warnings.push(...warnings.getWarnings())

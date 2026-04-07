@@ -50,11 +50,33 @@ export async function checkStandaloneConflicts(
   const provider = getProvider(targetProvider)
   if (!provider) return { hasConflicts: false, conflicts: [], errorMessage: null }
 
-  const rootDir = scope === 'user'
-    ? (process.env.HOME || '/root')
-    : (projectDir || process.cwd())
+  // For project scope, paths are relative to the project root.
+  // For user scope, emitter paths use configDir prefix (e.g., ".opencode/commands/foo.md")
+  // but the actual user location uses userConfigDir (e.g., "~/.config/opencode/commands/foo.md").
+  // We must remap the configDir prefix to the resolved userConfigDir.
+  const projectRoot = projectDir || process.cwd()
+  const resolvedUserConfigDir = resolveHomePath(provider.userConfigDir)
+  const configDirPrefix = provider.configDir  // e.g., ".opencode"
 
   const conflicts: ConflictInfo[] = []
+
+  /**
+   * Resolve an emitter-relative file path to an absolute path,
+   * accounting for provider-specific user-scope directories.
+   */
+  function resolveFilePath(filePath: string): string {
+    if (scope === 'project') {
+      return path.join(projectRoot, filePath)
+    }
+    // User scope: remap configDir prefix → userConfigDir
+    // e.g., ".opencode/commands/foo.md" → "~/.config/opencode/commands/foo.md"
+    if (filePath.startsWith(configDirPrefix + '/')) {
+      const relativePart = filePath.slice(configDirPrefix.length + 1)
+      return path.join(resolvedUserConfigDir, relativePart)
+    }
+    // Paths not under configDir (e.g., ".agents/skills/" for codex) resolve from HOME
+    return path.join(process.env.HOME || '/root', filePath)
+  }
 
   // Extract unique element directories from the file list
   // e.g., ".agents/skills/my-skill/SKILL.md" → check if ".agents/skills/my-skill/" exists
@@ -87,8 +109,8 @@ export async function checkStandaloneConflicts(
     if (checkedDirs.has(elementPath)) continue
     checkedDirs.add(elementPath)
 
-    // Check if element exists at target
-    const fullPath = path.join(rootDir, elementPath)
+    // Check if element exists at target using provider-aware path resolution
+    const fullPath = resolveFilePath(elementPath)
 
     if (isSkillFile) {
       // For skills: check if the directory exists AND has a SKILL.md
@@ -103,11 +125,12 @@ export async function checkStandaloneConflicts(
       }
     } else {
       // For agents: check if the file exists
-      if (await fileExists(path.join(rootDir, file.path))) {
+      const resolvedAgentPath = resolveFilePath(file.path)
+      if (await fileExists(resolvedAgentPath)) {
         conflicts.push({
           name: elementName,
           type: file.type,
-          existingPath: path.join(rootDir, file.path),
+          existingPath: resolvedAgentPath,
           existingSource: 'standalone',
           scope,
         })

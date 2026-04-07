@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   try { body = await request.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
-  const result = createNewWebhook(body)
+  const result = createNewWebhook(body, auth.agentId)
 
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })

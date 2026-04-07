@@ -117,8 +117,11 @@ export async function filterSessions(
   try {
     // Get all conversation files (each represents a session)
     const result = await agentDb.run(`
-      ?[conversation_file, min_ts, max_ts, count(msg_id)] :=
-        *messages{conversation_file, ts: min_ts, ts: max_ts, msg_id}
+      ?[conversation_file, min_ts, max_ts, msg_count] :=
+        *messages{conversation_file, ts, msg_id},
+        min_ts = min(ts),
+        max_ts = max(ts),
+        msg_count = count(msg_id)
       :group conversation_file
       :order -min_ts
     `)

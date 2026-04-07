@@ -22,7 +22,8 @@ export async function POST() {
       'Enter'
     ])
     return NextResponse.json({ ok: true })
-  } catch {
-    return NextResponse.json({ ok: false })
+  } catch (error) {
+    console.error('[Clear Banner] Failed to send greeting to Haephestos:', error)
+    return NextResponse.json({ ok: false, error: 'Failed to clear banner' }, { status: 500 })
   }
 }

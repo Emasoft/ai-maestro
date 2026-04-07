@@ -11,10 +11,14 @@ import { resolveAgentAddress } from '@/services/amp-service'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { address: string } }
+  { params }: { params: Promise<{ address: string }> }
 ) {
   const authHeader = request.headers.get('Authorization')
-  const { address } = params
+  const { address } = await params
+
+  if (!address || address.trim().length === 0) {
+    return NextResponse.json({ error: 'Address parameter is required' }, { status: 400 })
+  }
 
   const result = resolveAgentAddress(authHeader, address)
   if (result.error) {

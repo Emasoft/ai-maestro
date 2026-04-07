@@ -496,13 +496,12 @@ function resolveRelativeImport(fromPath: string, importPath: string): string {
  * Compute SHA256 hash of file content
  */
 export function computeFileHash(filePath: string): string {
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8')
-    return crypto.createHash('sha256').update(content).digest('hex')
-  } catch (error) {
-    console.error(`[CodeIndexer] Failed to hash file: ${filePath}`, error)
-    return ''
-  }
+  // No try/catch: let IO errors propagate to the caller so they can
+  // decide whether to skip the file or abort the batch.  Swallowing the
+  // error here previously returned '' which caused phantom "modified"
+  // detections and corrupt metadata records.
+  const content = fs.readFileSync(filePath, 'utf-8')
+  return crypto.createHash('sha256').update(content).digest('hex')
 }
 
 /**
@@ -516,7 +515,12 @@ export function getFileStats(filePath: string): { mtime_ms: number; size_bytes: 
       size_bytes: stats.size,
     }
   } catch (error) {
-    return null
+    // Return null for genuinely missing files (ENOENT) but propagate
+    // unexpected IO errors so they are not silently swallowed.
+    if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null
+    }
+    throw error
   }
 }
 
@@ -669,8 +673,15 @@ export async function detectFileChanges(
     const stored = storedByFileId.get(fileId)
 
     if (!stored) {
-      // New file
-      const hash = computeFileHash(filePath)
+      // New file — hash can throw on IO error; skip this file
+      // rather than inserting corrupt metadata with an empty hash.
+      let hash: string
+      try {
+        hash = computeFileHash(filePath)
+      } catch (hashErr) {
+        console.warn(`[CodeIndexer] Skipping new file (hash failed): ${filePath}`, hashErr)
+        continue
+      }
       newFiles.push({
         file_id: fileId,
         path: relativePath,
@@ -684,7 +695,13 @@ export async function detectFileChanges(
       // Quick check: compare mtime and size first (fast)
       if (stats.mtime_ms > stored.mtime_ms || stats.size_bytes !== stored.size_bytes) {
         // Potentially modified - verify with hash
-        const hash = computeFileHash(filePath)
+        let hash: string
+        try {
+          hash = computeFileHash(filePath)
+        } catch (hashErr) {
+          console.warn(`[CodeIndexer] Skipping modified file (hash failed): ${filePath}`, hashErr)
+          continue
+        }
         if (hash !== stored.content_hash) {
           modifiedFiles.push({
             file_id: fileId,
@@ -719,12 +736,20 @@ export async function detectFileChanges(
           path: filePath,
           change_type: 'deleted',
         })
-      } catch {
-        deletedFiles.push({
-          file_id: fileId,
-          path: fileId,
-          change_type: 'deleted',
-        })
+      } catch (dbErr: unknown) {
+        // If the files relation doesn't exist yet (first run), fall back
+        // to using the fileId as path.  Any other DB error is unexpected
+        // and should propagate.
+        const errCode = dbErr instanceof Error && 'code' in dbErr ? (dbErr as any).code : undefined
+        if (errCode === 'eval::unknown_relation') {
+          deletedFiles.push({
+            file_id: fileId,
+            path: fileId,
+            change_type: 'deleted',
+          })
+        } else {
+          throw dbErr
+        }
       }
     }
   }
@@ -847,7 +872,9 @@ export async function indexProjectDelta(
     // Update file metadata for indexed files
     const now = Date.now()
     for (const change of [...newFiles, ...modifiedFiles]) {
-      if (change.current_hash && change.current_mtime && change.current_size) {
+      // Use != null checks instead of truthiness to avoid skipping
+      // files with mtime 0 or size 0 (0 is falsy in JS).
+      if (change.current_hash != null && change.current_mtime != null && change.current_size != null) {
         await upsertFileMetadata(agentDb, {
           file_id: change.file_id,
           project_path: projectPath,
@@ -901,8 +928,13 @@ export async function initializeFileMetadata(
       continue
     }
 
-    const hash = computeFileHash(fullPath)
-    if (!hash) continue
+    let hash: string
+    try {
+      hash = computeFileHash(fullPath)
+    } catch (hashErr) {
+      console.warn(`[CodeIndexer] Skipping file metadata init (hash failed): ${fullPath}`, hashErr)
+      continue
+    }
 
     await upsertFileMetadata(agentDb, {
       file_id: fileId,

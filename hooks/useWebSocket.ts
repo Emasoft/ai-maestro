@@ -92,6 +92,14 @@ export function useWebSocket({
       return
     }
 
+    // MF-025: Close any WebSocket still in CONNECTING state before creating a new one.
+    // Without this, calling connect() while a previous WS is mid-handshake orphans the
+    // old instance — it stays alive, fires handlers, but wsRef no longer points to it.
+    if (wsRef.current?.readyState === WebSocket.CONNECTING) {
+      wsRef.current.close()
+      wsRef.current = null
+    }
+
     setStatus('connecting')
     setConnectionError(null)
 

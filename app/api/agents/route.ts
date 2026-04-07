@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { listAgents, searchAgentsByQuery } from '@/services/agents-core-service'
 import { CreateAgent } from '@/services/element-management-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 // Force this route to be dynamic (not statically generated at build time)
 export const dynamic = 'force-dynamic'
@@ -12,8 +13,14 @@ export const dynamic = 'force-dynamic'
  * Query params:
  *   - q: Search query (searches name, label, taskDescription, tags)
  */
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    // CC-GOV-008: Auth required to prevent metadata leaks via Tailscale
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const query = searchParams.get('q')
 
@@ -44,8 +51,14 @@ export async function GET(request: Request) {
  * POST /api/agents
  * Create a new agent
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    // CC-GOV-008: Auth required — agent creation is a privileged mutation
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+
     let body: Record<string, unknown>
     try { body = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })

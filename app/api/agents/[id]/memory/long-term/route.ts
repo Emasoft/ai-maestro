@@ -131,6 +131,10 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
     }
 
+    if (!body.id || typeof body.id !== 'string') {
+      return NextResponse.json({ success: false, error: 'Missing or invalid memory ID' }, { status: 400 })
+    }
+
     const result = await updateLongTermMemory(agentId, {
       id: body.id,
       content: body.content,

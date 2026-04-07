@@ -8,6 +8,7 @@
  * No external routing library needed. All service imports are from services/.
  */
 
+import { createHash } from 'crypto'
 import type { IncomingMessage, ServerResponse } from 'http'
 import type { MemoryCategory, MemoryTier } from '@/lib/cozo-schema-memory'
 import { authenticateAgent, buildAuthContext } from '../lib/agent-auth'
@@ -658,7 +659,7 @@ const routes: Route[] = [
   }},
   { method: 'DELETE', pattern: /^\/api\/sessions\/restore$/, paramNames: [], handler: async (_req, res, _params, query) => {
     if (!query.sessionId) { sendJson(res, 400, { error: 'sessionId query param required' }); return }
-    sendServiceResult(res, deletePersistedSession(query.sessionId))
+    sendServiceResult(res, await deletePersistedSession(query.sessionId))
   }},
   { method: 'GET', pattern: /^\/api\/sessions\/activity$/, paramNames: [], handler: async (_req, res) => {
     try {
@@ -1788,7 +1789,9 @@ const routes: Route[] = [
       sendJson(res, 403, { error: 'Host has no registered public key' })
       return
     }
-    const signedData = `gov-sync|${hostId}|${hostTimestamp}`
+    // SF-059: Include body hash in signed data to prevent payload tampering
+    const bodyHash = createHash('sha256').update(JSON.stringify(body)).digest('hex')
+    const signedData = `gov-sync|${hostId}|${hostTimestamp}|${bodyHash}`
     if (!verifyHostAttestation(signedData, hostSignature, knownHost.publicKeyHex)) {
       sendJson(res, 403, { error: 'Invalid host signature' })
       return
@@ -2452,15 +2455,19 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/webhooks\/([^/]+)$/, paramNames: ['id'], handler: async (_req, res, params) => {
     sendServiceResult(res, await getWebhookById(params.id))
   }},
-  { method: 'DELETE', pattern: /^\/api\/webhooks\/([^/]+)$/, paramNames: ['id'], handler: async (_req, res, params) => {
-    sendServiceResult(res, await deleteWebhookById(params.id))
+  { method: 'DELETE', pattern: /^\/api\/webhooks\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    sendServiceResult(res, await deleteWebhookById(params.id, auth.agentId))
   }},
   { method: 'GET', pattern: /^\/api\/webhooks$/, paramNames: [], handler: async (_req, res) => {
     sendServiceResult(res, await listAllWebhooks())
   }},
   { method: 'POST', pattern: /^\/api\/webhooks$/, paramNames: [], handler: async (req, res) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await createNewWebhook(body))
+    sendServiceResult(res, await createNewWebhook(body, auth.agentId))
   }},
 
   // =========================================================================
@@ -3019,7 +3026,7 @@ const routes: Route[] = [
       sendJson(res, 401, { error: 'Invalid password' })
       return
     }
-    const token = createSession()
+    const token = await createSession()
     const cookie = buildSessionCookie(token)
     res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': cookie, 'Cache-Control': 'no-store' })
     res.end(JSON.stringify({ success: true }))

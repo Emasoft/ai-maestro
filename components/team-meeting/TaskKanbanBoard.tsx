@@ -115,15 +115,32 @@ export default function TaskKanbanBoard({
   // Horizontal scroll ref for sticky scrollbar
   const boardRef = useRef<HTMLDivElement>(null)
 
+  // Hydrate column colors from localStorage after mount to avoid SSR/hydration mismatch.
+  // localStorage is only read here (once), never during render.
+  useEffect(() => {
+    const stored: Record<string, ColumnState> = {}
+    for (const col of cols) {
+      const colorId = localStorage.getItem(`kanban-col-color-${teamId || 'default'}-${col.id}`) || 'default'
+      if (colorId !== 'default') {
+        stored[col.id] = { filter: '', sort: 'none', collapsed: false, colorId }
+      }
+    }
+    if (Object.keys(stored).length > 0) {
+      setColStates(prev => {
+        const merged = { ...prev }
+        for (const [id, state] of Object.entries(stored)) {
+          if (!merged[id]) merged[id] = state
+        }
+        return merged
+      })
+    }
+  }, [teamId, cols])
+
   // Helpers to get/set column state
   const getColState = useCallback((colId: string): ColumnState => {
     if (colStates[colId]) return colStates[colId]
-    // Load color from localStorage if available
-    const storedColor = typeof window !== 'undefined'
-      ? localStorage.getItem(`kanban-col-color-${teamId || 'default'}-${colId}`) || 'default'
-      : 'default'
-    return { filter: '', sort: 'none', collapsed: false, colorId: storedColor }
-  }, [colStates, teamId])
+    return { filter: '', sort: 'none', collapsed: false, colorId: 'default' }
+  }, [colStates])
 
   const setColState = useCallback((colId: string, patch: Partial<ColumnState>) => {
     setColStates(prev => {

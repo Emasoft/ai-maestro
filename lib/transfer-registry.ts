@@ -46,7 +46,8 @@ export function loadTransfers(): TransferRequest[] {
       // Heal the corrupted file by writing empty defaults, matching governance.ts pattern
       saveTransfers([])
     } else {
-      console.error('[transfer-registry] Error loading transfers:', error)
+      // Non-parse errors (EACCES, EIO, etc.) must propagate — silent [] hides real failures
+      throw error
     }
     return []
   }
@@ -169,8 +170,8 @@ export async function revertTransferToPending(id: string): Promise<boolean> {
 export async function cleanupOldTransfers(): Promise<number> {
   return withLock('transfers', () => {
     const requests = loadTransfers()
-    const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - 30)
+    // Use epoch arithmetic instead of setDate() which is unreliable across month boundaries
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
     const filtered = requests.filter(r => {
       if (r.status === 'pending') return true // Keep all pending

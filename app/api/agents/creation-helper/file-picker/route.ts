@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { homedir } from 'os'
 import { randomBytes } from 'crypto'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,11 @@ const ALLOWED_EXTENSIONS = new Set(['md', 'txt', 'toml'])
  * Returns: { path: string, filename: string }
  */
 export async function POST(req: NextRequest) {
+  const auth = authenticateFromRequest(req)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+
   try {
     const formData = await req.formData()
     const file = formData.get('file')
@@ -69,12 +75,20 @@ export async function POST(req: NextRequest) {
     await mkdir(UPLOAD_DIR, { recursive: true })
 
     const savedPath = join(UPLOAD_DIR, savedName)
+
+    // Defense-in-depth: verify the resolved path stays inside UPLOAD_DIR
+    // to prevent path traversal via crafted filenames
+    const resolvedPath = resolve(savedPath)
+    if (!resolvedPath.startsWith(resolve(UPLOAD_DIR) + '/')) {
+      return NextResponse.json({ error: 'Invalid filename' }, { status: 400 })
+    }
+
     // Write Buffer directly — no encoding argument needed (Buffer is already binary-safe)
-    await writeFile(savedPath, content)
+    await writeFile(resolvedPath, content)
 
     // Return the server path (for internal use) and the display filename
     return NextResponse.json({
-      path: savedPath,
+      path: resolvedPath,
       filename: originalName,
     })
   } catch (error) {

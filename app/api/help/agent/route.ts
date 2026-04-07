@@ -6,11 +6,12 @@
  * GET /api/help/agent - Check assistant agent status
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import {
   createAssistantAgent,
   getAssistantStatus,
 } from '@/services/help-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 import { getAgentByName } from '@/lib/agent-registry'
 import { DeleteAgent } from '@/services/element-management-service'
 
@@ -37,8 +38,12 @@ export async function POST() {
 /**
  * DELETE - Kill assistant agent and clean up
  */
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: 401 })
+    }
     // Inline the assistant deletion (replaces deprecated deleteAssistantAgent wrapper)
     const assistant = getAgentByName('_aim-assistant')
     if (!assistant) {

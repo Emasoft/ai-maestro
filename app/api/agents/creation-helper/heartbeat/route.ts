@@ -12,6 +12,14 @@ import { heartbeatCreationHelper } from '@/services/creation-helper-service'
 export const dynamic = 'force-dynamic'
 
 export async function POST() {
-  heartbeatCreationHelper()
+  try {
+    heartbeatCreationHelper()
+  } catch (error) {
+    console.error('[heartbeat] heartbeatCreationHelper failed:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Heartbeat failed' },
+      { status: 500 },
+    )
+  }
   return NextResponse.json({ ok: true })
 }

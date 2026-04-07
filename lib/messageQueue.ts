@@ -805,12 +805,13 @@ export async function getMessage(
  * Finds message in UUID-keyed directory and updates it in place.
  */
 export async function markMessageAsRead(agentIdentifier: string, messageId: string): Promise<boolean> {
-  // Find where the message actually exists
-  const messagePath = await findMessagePath(agentIdentifier, messageId, 'inbox')
-  if (!messagePath) return false
-
-  // SF-052: Serialize read-modify-write per message file to prevent TOCTOU races
+  // SF-052: Serialize the entire find+read+modify+write under lock to prevent TOCTOU races.
+  // Path resolution MUST happen inside the lock — if resolved outside, concurrent delete/archive
+  // can invalidate the path between resolution and lock acquisition.
   return withLock(`msg-${messageId}`, async () => {
+    const messagePath = await findMessagePath(agentIdentifier, messageId, 'inbox')
+    if (!messagePath) return false
+
     try {
       const content = await fs.readFile(messagePath, 'utf-8')
       const raw = JSON.parse(content)
@@ -830,6 +831,7 @@ export async function markMessageAsRead(agentIdentifier: string, messageId: stri
       await fs.writeFile(messagePath, JSON.stringify(raw, null, 2))
       return true
     } catch (error) {
+      console.warn(`[MessageQueue] markMessageAsRead failed for ${messageId}:`, error)
       return false
     }
   }) // end withLock
@@ -856,12 +858,13 @@ async function findMessagePath(
  * Finds message in UUID-keyed directory and sets status to archived.
  */
 export async function archiveMessage(agentIdentifier: string, messageId: string): Promise<boolean> {
-  // Find where the message actually exists
-  const inboxPath = await findMessagePath(agentIdentifier, messageId, 'inbox')
-  if (!inboxPath) return false
-
-  // SF-052: Serialize read-modify-write per message file to prevent TOCTOU races
+  // SF-052: Serialize the entire find+read+modify+write under lock to prevent TOCTOU races.
+  // Path resolution MUST happen inside the lock — if resolved outside, concurrent delete/archive
+  // can invalidate the path between resolution and lock acquisition.
   return withLock(`msg-${messageId}`, async () => {
+    const inboxPath = await findMessagePath(agentIdentifier, messageId, 'inbox')
+    if (!inboxPath) return false
+
     try {
       const content = await fs.readFile(inboxPath, 'utf-8')
       const raw = JSON.parse(content)
@@ -872,14 +875,14 @@ export async function archiveMessage(agentIdentifier: string, messageId: string)
         if (!raw.local) raw.local = {}
         raw.metadata.status = 'archived'
         raw.local.status = 'archived'
-        await fs.writeFile(inboxPath, JSON.stringify(raw, null, 2))
       } else {
         // Old flat format - update status in place
         raw.status = 'archived'
-        await fs.writeFile(inboxPath, JSON.stringify(raw, null, 2))
       }
+      await fs.writeFile(inboxPath, JSON.stringify(raw, null, 2))
       return true
     } catch (error) {
+      console.warn(`[MessageQueue] archiveMessage failed for ${messageId}:`, error)
       return false
     }
   }) // end withLock
@@ -891,16 +894,19 @@ export async function archiveMessage(agentIdentifier: string, messageId: string)
  * CC-P1-414: Intentionally searches inbox only -- sent messages are retained for audit trail.
  */
 export async function deleteMessage(agentIdentifier: string, messageId: string): Promise<boolean> {
-  // Inbox-only: sent messages cannot be deleted (retained for audit trail)
-  const messagePath = await findMessagePath(agentIdentifier, messageId, 'inbox')
-  if (!messagePath) return false
-
-  // SF-023: Serialize unlink under per-message lock to prevent races with concurrent read/archive
+  // SF-023: Serialize the entire find+unlink under per-message lock to prevent TOCTOU races.
+  // Path resolution MUST happen inside the lock — if resolved outside, concurrent archive/delete
+  // can invalidate the path between resolution and lock acquisition.
+  // Inbox-only: sent messages cannot be deleted (retained for audit trail).
   return withLock(`msg-${messageId}`, async () => {
+    const messagePath = await findMessagePath(agentIdentifier, messageId, 'inbox')
+    if (!messagePath) return false
+
     try {
       await fs.unlink(messagePath)
       return true
     } catch (error) {
+      console.warn(`[MessageQueue] deleteMessage failed for ${messageId}:`, error)
       return false
     }
   }) // end withLock

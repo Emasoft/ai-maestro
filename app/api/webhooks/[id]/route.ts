@@ -44,7 +44,9 @@ export async function DELETE(
     return NextResponse.json({ error: auth.error }, { status: auth.status ?? 401 })
   }
 
-  const result = deleteWebhookById(id)
+  // Ownership check: pass the authenticated agent ID so the service layer
+  // can verify the caller created this webhook (system-owner may delete any).
+  const result = deleteWebhookById(id, auth.agentId)
 
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })

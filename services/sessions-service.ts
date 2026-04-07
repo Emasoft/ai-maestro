@@ -680,7 +680,7 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
 
   // Persist session metadata (legacy)
   // Use only registeredAgent.id as the canonical agentId source
-  persistSession({
+  await persistSession({
     id: actualSessionName,
     name: actualSessionName,
     workingDirectory: cwd,
@@ -791,7 +791,7 @@ export async function deleteSession(sessionName: string): Promise<ServiceResult<
   }
 
   await runtime.killSession(sessionName)
-  unpersistSession(sessionName)
+  await unpersistSession(sessionName)
   // Soft-delete: preserves agent data, project folder, and backup
   await deleteAgentBySession(sessionName, false)
 
@@ -973,11 +973,11 @@ export async function restoreSessions(params: { sessionId?: string; all?: boolea
 /**
  * Delete a persisted session from storage.
  */
-export function deletePersistedSession(sessionId: string): ServiceResult<{ success: boolean }> {
+export async function deletePersistedSession(sessionId: string): Promise<ServiceResult<{ success: boolean }>> {
   if (!sessionId) {
     return { error: 'Session ID is required', status: 400, data: undefined }
   }
-  const success = unpersistSession(sessionId)
+  const success = await unpersistSession(sessionId)
   if (!success) {
     return { error: 'Failed to delete session', status: 500, data: undefined }
   }

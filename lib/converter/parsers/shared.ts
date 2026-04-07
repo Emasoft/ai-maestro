@@ -73,7 +73,7 @@ async function readReferences(skillDir: string): Promise<SkillReference[]> {
     try {
       const entries = await fs.readdir(refDir, { withFileTypes: true })
       for (const entry of entries) {
-        if (!entry.isFile()) continue
+        if (!entry.isFile() || !entry.name.endsWith('.md')) continue
         const filePath = path.join(refDir, entry.name)
         const content = await readFileOr(filePath)
         if (content) {

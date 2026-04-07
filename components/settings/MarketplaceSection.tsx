@@ -9,17 +9,26 @@
 
 import { SkillBrowser } from '@/components/marketplace'
 import type { MarketplaceSkill } from '@/types/marketplace'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Store, ExternalLink, Info } from 'lucide-react'
 import Link from 'next/link'
 
 export default function MarketplaceSection() {
   const [notification, setNotification] = useState<{ text: string; type: 'info' | 'error' | 'success' } | null>(null)
+  const notifTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
-  /** Show a timed notification toast */
+  // Clear notification timer on unmount to prevent state updates on unmounted component
+  useEffect(() => {
+    return () => {
+      if (notifTimerRef.current) clearTimeout(notifTimerRef.current)
+    }
+  }, [])
+
+  /** Show a timed notification toast — cancels any prior pending timeout first */
   const showNotification = (text: string, type: 'info' | 'error' | 'success' = 'info') => {
+    if (notifTimerRef.current) clearTimeout(notifTimerRef.current)
     setNotification({ text, type })
-    setTimeout(() => setNotification(null), 5000)
+    notifTimerRef.current = setTimeout(() => setNotification(null), 5000)
   }
 
   /**

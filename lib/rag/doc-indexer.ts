@@ -673,7 +673,11 @@ export async function searchDocsBySimilarity(
   const { cosine, bufferToVector } = await import('./embeddings')
 
   // Generate embedding for query
-  const [queryVec] = await embedTexts([queryText])
+  const embeddings = await embedTexts([queryText])
+  const queryVec = embeddings[0]
+  if (!queryVec) {
+    throw new Error(`[Doc Indexer] Failed to generate embedding for query: "${queryText.slice(0, 50)}..."`)
+  }
 
   // Get all document embeddings
   let vectorsQuery = `?[chunk_id, vec] := *doc_chunk_vec{chunk_id, vec}`
@@ -916,13 +920,10 @@ export interface DeltaDocIndexStats extends IndexStats {
  * Compute SHA256 hash of file content
  */
 export function computeDocFileHash(filePath: string): string {
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8')
-    return crypto.createHash('sha256').update(content).digest('hex')
-  } catch (error) {
-    console.error(`[Doc Indexer] Failed to hash file: ${filePath}`, error)
-    return ''
-  }
+  // Let read errors propagate -- callers must handle missing/unreadable files.
+  // Returning '' would silently cause hash mismatches and phantom re-indexing loops.
+  const content = fs.readFileSync(filePath, 'utf-8')
+  return crypto.createHash('sha256').update(content).digest('hex')
 }
 
 /**
@@ -1023,53 +1024,53 @@ export async function removeDocFileGraphData(
   const docId = docResult.rows[0][0] as string
 
   // Remove embeddings -> terms -> chunks -> sections -> tags -> document
-  try {
-    await agentDb.run(`
-      ?[chunk_id, vec] := *doc_chunk_vec{chunk_id, vec}, *doc_chunks{chunk_id, doc_id}, doc_id = ${escapeForCozo(docId)}
-      :rm doc_chunk_vec
-    `)
-  } catch (e) { /* Table might be empty */ }
+  // Each step catches only "relation not found" errors (table doesn't exist yet).
+  // Any other error (connection, corruption) must propagate.
+  const safeRm = async (query: string) => {
+    try {
+      await agentDb.run(query)
+    } catch (e: any) {
+      if (!e.message?.includes('not found')) {
+        throw e
+      }
+    }
+  }
 
-  try {
-    await agentDb.run(`
-      ?[chunk_id, term] := *doc_terms{chunk_id, term}, *doc_chunks{chunk_id, doc_id}, doc_id = ${escapeForCozo(docId)}
-      :rm doc_terms
-    `)
-  } catch (e) { /* Table might be empty */ }
+  await safeRm(`
+    ?[chunk_id, vec] := *doc_chunk_vec{chunk_id, vec}, *doc_chunks{chunk_id, doc_id}, doc_id = ${escapeForCozo(docId)}
+    :rm doc_chunk_vec
+  `)
 
-  try {
-    await agentDb.run(`
-      ?[chunk_id, doc_id, chunk_index, heading, content, char_start, char_end] :=
-        *doc_chunks{chunk_id, doc_id, chunk_index, heading, content, char_start, char_end},
-        doc_id = ${escapeForCozo(docId)}
-      :rm doc_chunks
-    `)
-  } catch (e) { /* Table might be empty */ }
+  await safeRm(`
+    ?[chunk_id, term] := *doc_terms{chunk_id, term}, *doc_chunks{chunk_id, doc_id}, doc_id = ${escapeForCozo(docId)}
+    :rm doc_terms
+  `)
 
-  try {
-    await agentDb.run(`
-      ?[section_id, doc_id, heading, level, parent_section_id, content, char_start, char_end] :=
-        *doc_sections{section_id, doc_id, heading, level, parent_section_id, content, char_start, char_end},
-        doc_id = ${escapeForCozo(docId)}
-      :rm doc_sections
-    `)
-  } catch (e) { /* Table might be empty */ }
+  await safeRm(`
+    ?[chunk_id, doc_id, chunk_index, heading, content, char_start, char_end] :=
+      *doc_chunks{chunk_id, doc_id, chunk_index, heading, content, char_start, char_end},
+      doc_id = ${escapeForCozo(docId)}
+    :rm doc_chunks
+  `)
 
-  try {
-    await agentDb.run(`
-      ?[doc_id, tag] := *doc_tags{doc_id, tag}, doc_id = ${escapeForCozo(docId)}
-      :rm doc_tags
-    `)
-  } catch (e) { /* Table might be empty */ }
+  await safeRm(`
+    ?[section_id, doc_id, heading, level, parent_section_id, content, char_start, char_end] :=
+      *doc_sections{section_id, doc_id, heading, level, parent_section_id, content, char_start, char_end},
+      doc_id = ${escapeForCozo(docId)}
+    :rm doc_sections
+  `)
 
-  try {
-    await agentDb.run(`
-      ?[doc_id, file_path, title, doc_type, project_path, checksum, created_at, updated_at] :=
-        *documents{doc_id, file_path, title, doc_type, project_path, checksum, created_at, updated_at},
-        doc_id = ${escapeForCozo(docId)}
-      :rm documents
-    `)
-  } catch (e) { /* Table might be empty */ }
+  await safeRm(`
+    ?[doc_id, tag] := *doc_tags{doc_id, tag}, doc_id = ${escapeForCozo(docId)}
+    :rm doc_tags
+  `)
+
+  await safeRm(`
+    ?[doc_id, file_path, title, doc_type, project_path, checksum, created_at, updated_at] :=
+      *documents{doc_id, file_path, title, doc_type, project_path, checksum, created_at, updated_at},
+      doc_id = ${escapeForCozo(docId)}
+    :rm documents
+  `)
 }
 
 /**

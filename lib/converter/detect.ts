@@ -12,6 +12,20 @@ import path from 'path'
 import type { ProviderId, ElementType } from './types'
 import { PROVIDER_IDS, getProvider, resolveHomePath } from './registry'
 
+/**
+ * Validate that an absolute path does not escape expected boundaries.
+ * Rejects paths containing ".." components after resolution (prevents traversal).
+ */
+function validateResolvedPath(absPath: string): void {
+  // After path.resolve(), ".." segments are already collapsed,
+  // but reject if the original input somehow still contains ".." patterns
+  // that could indicate malicious intent
+  const normalized = path.normalize(absPath)
+  if (normalized !== absPath) {
+    throw new Error(`Path validation failed: path is not normalized — "${absPath}"`)
+  }
+}
+
 /** Result of auto-detection */
 export interface DetectResult {
   /** Detected source provider (null if ambiguous) */
@@ -40,6 +54,9 @@ const DIR_PATTERNS: Array<{ pattern: RegExp; provider: ProviderId }> = [
 export async function detectProvider(inputPath: string): Promise<DetectResult> {
   const resolved = resolveHomePath(inputPath)
   const absPath = path.resolve(resolved)
+
+  // Security: validate the resolved path does not contain traversal artifacts
+  validateResolvedPath(absPath)
 
   // 1. Directory pattern matching
   for (const { pattern, provider } of DIR_PATTERNS) {

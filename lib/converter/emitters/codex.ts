@@ -17,6 +17,11 @@ import { parseFrontmatter as parseFrontmatterUtil } from '../utils/frontmatter'
 import { stringifyToml } from '../utils/toml'
 import { WarningCollector } from '../utils/warnings'
 
+/** Sanitize a name for safe use in file paths — prevent path traversal */
+function safePathName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_@.\-]/g, '')
+}
+
 /** Claude-specific frontmatter fields not supported by Codex */
 const CODEX_STRIP_FIELDS = ['allowed-tools', 'compatibility', 'metadata', 'context', 'agent', 'effort', 'model', 'hooks', 'user-invocable', 'args', 'paths']
 
@@ -72,13 +77,15 @@ const codexEmitter: Emitter = {
         body: skill.userInvokable ? transformBodyToCodex(skill.body) : skill.body,
       }
 
-      const skillPath = `.agents/skills/${skill.dirName}/SKILL.md`
+      const safeDirName = safePathName(skill.dirName)
+      if (!safeDirName) continue // skip skills with entirely unsafe dir names
+      const skillPath = `.agents/skills/${safeDirName}/SKILL.md`
       files.push(emitSkill(transformedSkill, skillPath, {
         fieldsToStrip: CODEX_STRIP_FIELDS,
         extraFrontmatter: extraFm,
         provenance,
       }))
-      files.push(...emitSkillAuxFiles(skill, `.agents/skills/${skill.dirName}`))
+      files.push(...emitSkillAuxFiles(skill, `.agents/skills/${safeDirName}`))
     }
 
     // ═══ Agents (TOML) ═══
@@ -102,9 +109,11 @@ const codexEmitter: Emitter = {
       if (agent.hooks) warnings.lossyField(agent.name, 'hooks', 'Codex agents: inline hooks not supported, use hooks.json')
       if (agent.mcpServers) warnings.lossyField(agent.name, 'mcpServers', 'Codex agents: inline MCP not supported, use config.toml')
 
+      const safeAgentFileName = safePathName(agent.fileName)
+      if (!safeAgentFileName) continue // skip agents with entirely unsafe file names
       try {
         files.push({
-          path: `.codex/agents/${agent.fileName}.toml`,
+          path: `.codex/agents/${safeAgentFileName}.toml`,
           content: stringifyToml(tomlData),
           type: 'agents',
           warnings: [],
@@ -160,16 +169,19 @@ const codexEmitter: Emitter = {
 
     // ═══ Commands → Skills (Codex has no commands, convert to skills) ═══
     for (const cmd of project.commands) {
+      // Sanitize command name for safe use in file path — prevent path traversal
+      const safeCmdName = safePathName(cmd.name)
+      if (!safeCmdName) continue // skip commands with entirely unsafe names
       warnings.lossyElement('commands', cmd.name, 'Codex does not support slash commands — converted to skill')
       // Strip original frontmatter from command content to avoid double frontmatter
       const parsed = parseFrontmatterUtil(cmd.content)
-      const desc = String(parsed.data.description || `Converted from command /${cmd.name}`)
+      const desc = String(parsed.data.description || `Converted from command /${safeCmdName}`)
       const body = parsed.body || cmd.content
       files.push({
-        path: `.agents/skills/${cmd.name}/SKILL.md`,
-        content: `---\nname: ${cmd.name}\ndescription: "${desc.replace(/"/g, '\\"')}"\n---\n\n${body}`,
+        path: `.agents/skills/${safeCmdName}/SKILL.md`,
+        content: `---\nname: ${safeCmdName}\ndescription: "${desc.replace(/"/g, '\\"')}"\n---\n\n${body}`,
         type: 'commands',
-        warnings: [`Command "/${cmd.name}" converted to skill (Codex has no native commands)`],
+        warnings: [`Command "/${safeCmdName}" converted to skill (Codex has no native commands)`],
       })
     }
 

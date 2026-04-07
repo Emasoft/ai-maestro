@@ -12,14 +12,20 @@ import {
 } from '@/lib/session-auth'
 
 export async function POST(request: Request) {
-  const cookieHeader = request.headers.get('Cookie')
-  const token = extractSessionFromCookie(cookieHeader)
+  try {
+    const cookieHeader = request.headers.get('Cookie')
+    const token = extractSessionFromCookie(cookieHeader)
 
-  if (token) {
-    invalidateSession(token)
+    if (token) {
+      invalidateSession(token)
+    }
+
+    const response = NextResponse.json({ success: true })
+    response.headers.set('Set-Cookie', buildClearSessionCookie())
+    return response
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[Auth Logout] Error:', msg)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
-  const response = NextResponse.json({ success: true })
-  response.headers.set('Set-Cookie', buildClearSessionCookie())
-  return response
 }

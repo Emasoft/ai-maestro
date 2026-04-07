@@ -25,6 +25,11 @@ export async function POST(request: NextRequest) {
       userName: body.userName,
     })
 
+    // Defense-in-depth: guard against service returning undefined at runtime
+    if (!result) {
+      return NextResponse.json({ error: 'Service returned no result' }, { status: 500 })
+    }
+
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }

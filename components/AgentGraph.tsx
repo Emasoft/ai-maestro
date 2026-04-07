@@ -301,9 +301,16 @@ export default function AgentGraph({ sessionName, agentId, workingDirectory, hos
     const dataToRender = focusMode ? focusMode.data : graphData
     if (!dataToRender || !containerRef.current) return
 
+    // Guard against memory leak: if component unmounts during async import,
+    // the resolved promise must not create a cy instance on a destroyed element.
+    let mounted = true
+
     const loadCytoscape = async () => {
       const cytoscape = (await import('cytoscape')).default
       const dagre = (await import('cytoscape-dagre')).default
+
+      // Abort if component unmounted while awaiting imports
+      if (!mounted) return
 
       cytoscape.use(dagre)
 
@@ -530,8 +537,10 @@ export default function AgentGraph({ sessionName, agentId, workingDirectory, hos
     loadCytoscape()
 
     return () => {
+      mounted = false
       if (cyRef.current) {
         cyRef.current.destroy()
+        cyRef.current = null
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

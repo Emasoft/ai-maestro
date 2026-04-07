@@ -32,6 +32,13 @@ function pruneOldEnded(meetings: Meeting[]): Meeting[] {
   })
 }
 
+/**
+ * Load meetings from disk. Does NOT auto-prune to avoid TOCTOU races —
+ * pruning writes back to disk, which can race with concurrent mutations
+ * (createMeeting / updateMeeting / deleteMeeting) that already hold the lock.
+ * Pruning is done inside saveMeetings() instead, so it happens atomically
+ * with every write under the lock.
+ */
 export function loadMeetings(): Meeting[] {
   try {
     ensureTeamsDir()
@@ -40,13 +47,7 @@ export function loadMeetings(): Meeting[] {
     }
     const data = fs.readFileSync(MEETINGS_FILE, 'utf-8')
     const parsed: MeetingsFile = JSON.parse(data)
-    const meetings = Array.isArray(parsed.meetings) ? parsed.meetings : []
-    // Auto-prune old ended meetings
-    const pruned = pruneOldEnded(meetings)
-    if (pruned.length !== meetings.length) {
-      saveMeetings(pruned)
-    }
-    return pruned
+    return Array.isArray(parsed.meetings) ? parsed.meetings : []
   } catch (error) {
     console.error('Failed to load meetings:', error)
     return []
@@ -56,7 +57,10 @@ export function loadMeetings(): Meeting[] {
 export function saveMeetings(meetings: Meeting[]): boolean {
   try {
     ensureTeamsDir()
-    const file: MeetingsFile = { version: 1, meetings }
+    // Prune old ended meetings on every save (under the caller's lock)
+    // so we never need a separate write from loadMeetings().
+    const pruned = pruneOldEnded(meetings)
+    const file: MeetingsFile = { version: 1, meetings: pruned }
     // Atomic write: write to tmp then rename to avoid partial reads
     const tmpPath = MEETINGS_FILE + '.tmp.' + process.pid
     fs.writeFileSync(tmpPath, JSON.stringify(file, null, 2), 'utf-8')

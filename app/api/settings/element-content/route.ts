@@ -11,9 +11,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { readFile, stat } from 'fs/promises'
+import { readFile, stat, realpath } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import os from 'os'
 
 export const dynamic = 'force-dynamic'
@@ -30,14 +30,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'path parameter required' }, { status: 400 })
   }
 
-  // Security: only allow reading files under ~/.claude/plugins/
-  const resolved = filePath.replace(/\.\./g, '')
-  if (!resolved.startsWith(PLUGINS_BASE)) {
-    return NextResponse.json({ error: 'Access denied — path must be under ~/.claude/plugins/' }, { status: 403 })
-  }
-
+  // Security: use realpath to resolve symlinks and ".." before containment check
+  // (the old .replace(/\.\./g, '') was insufficient — e.g. "....//" bypasses it)
+  const resolved = resolve(filePath)
   if (!existsSync(resolved)) {
     return NextResponse.json({ error: 'File not found' }, { status: 404 })
+  }
+  let realResolved: string
+  try {
+    realResolved = await realpath(resolved)
+  } catch {
+    return NextResponse.json({ error: 'File not accessible' }, { status: 404 })
+  }
+  if (!realResolved.startsWith(PLUGINS_BASE + '/')) {
+    return NextResponse.json({ error: 'Access denied — path must be under ~/.claude/plugins/' }, { status: 403 })
   }
 
   // MCP tools discovery mode

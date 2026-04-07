@@ -133,7 +133,19 @@ export class OllamaProvider implements LLMProvider {
         // Try to extract JSON from response if it has extra text
         const jsonMatch = data.response.match(/\{[\s\S]*\}/)
         if (jsonMatch) {
-          parsed = JSON.parse(jsonMatch[0])
+          try {
+            parsed = JSON.parse(jsonMatch[0])
+          } catch {
+            // Regex-recovered JSON was also invalid — give up gracefully
+            console.error('[OLLAMA] Regex-recovered JSON also invalid:', jsonMatch[0].substring(0, 200))
+            return {
+              memories: [],
+              extraction_metadata: {
+                model: this.model,
+                processing_time_ms: Date.now() - startTime
+              }
+            }
+          }
         } else {
           console.error('[OLLAMA] Failed to parse response:', data.response.substring(0, 500))
           return {

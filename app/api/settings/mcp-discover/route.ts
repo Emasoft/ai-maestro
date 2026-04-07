@@ -24,9 +24,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { readFile } from 'fs/promises'
+import { readFile, realpath } from 'fs/promises'
 import { existsSync, writeFileSync, unlinkSync } from 'fs'
-import { dirname, join } from 'path'
+import { dirname, join, resolve } from 'path'
 import os from 'os'
 
 export const dynamic = 'force-dynamic'
@@ -68,12 +68,19 @@ export async function POST(req: NextRequest) {
 
   if (configPath) {
     // Plugin-based: read from .mcp.json file
-    const resolved = configPath.replace(/\.\./g, '')
-    if (!resolved.startsWith(PLUGINS_BASE)) {
-      return NextResponse.json({ error: 'Access denied — configPath must be under ~/.claude/plugins/' }, { status: 403 })
-    }
+    // Security: use realpath to resolve symlinks and ".." before containment check
+    const resolved = resolve(configPath)
     if (!existsSync(resolved)) {
       return NextResponse.json({ error: 'Config file not found' }, { status: 404 })
+    }
+    let realResolved: string
+    try {
+      realResolved = await realpath(resolved)
+    } catch {
+      return NextResponse.json({ error: 'Config file not accessible' }, { status: 404 })
+    }
+    if (!realResolved.startsWith(PLUGINS_BASE + '/')) {
+      return NextResponse.json({ error: 'Access denied — configPath must be under ~/.claude/plugins/' }, { status: 403 })
     }
     // Resolve ${CLAUDE_PLUGIN_ROOT} and other variables in .mcp.json
     const pluginRoot = dirname(resolved)
@@ -126,7 +133,7 @@ export async function POST(req: NextRequest) {
     const output = execSync(cmd, {
       timeout: (Math.min(timeout || 25, 60) + 5) * 1000,
       maxBuffer: 2 * 1024 * 1024,
-      env: { ...process.env, ...(configPath ? { CLAUDE_PLUGIN_ROOT: dirname(configPath.replace(/\.\./g, '')) } : {}) },
+      env: { ...process.env, ...(configPath ? { CLAUDE_PLUGIN_ROOT: dirname(resolve(configPath)) } : {}) },
     }).toString()
 
     // Clean up temp file

@@ -283,11 +283,13 @@ export async function searchByTerm(
   }
 
   msgIds = msgIds.slice(0, limit)
+  // Build rank map from original order BEFORE fetching (getMessagesByIds may reorder)
+  const termRankMap = new Map(msgIds.map((id, i) => [id, i]))
   const messages = await getMessagesByIds(agentDb, msgIds)
 
-  return messages.map((msg, idx) => ({
+  return messages.map((msg) => ({
     msg_id: msg.msg_id,
-    score: 1.0 - idx * 0.1, // Simple descending score
+    score: 1.0 - (termRankMap.get(msg.msg_id!) ?? messages.length) * 0.1,
     conversation_file: msg.conversation_file,
     role: msg.role,
     ts: msg.ts,
@@ -319,11 +321,13 @@ export async function searchBySymbol(
   }
 
   msgIds = msgIds.slice(0, limit)
+  // Build rank map from original order BEFORE fetching (getMessagesByIds may reorder)
+  const symbolRankMap = new Map(msgIds.map((id, i) => [id, i]))
   const messages = await getMessagesByIds(agentDb, msgIds)
 
-  return messages.map((msg, idx) => ({
+  return messages.map((msg) => ({
     msg_id: msg.msg_id,
-    score: 1.0 - idx * 0.1,
+    score: 1.0 - (symbolRankMap.get(msg.msg_id!) ?? messages.length) * 0.1,
     conversation_file: msg.conversation_file,
     role: msg.role,
     ts: msg.ts,

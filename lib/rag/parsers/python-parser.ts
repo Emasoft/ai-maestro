@@ -10,22 +10,25 @@ import { ParsedFile, ParsedFunction, ParsedClass, ParsedImport, ParserOptions, L
 import { codeId } from '../id'
 
 // Regex patterns for Python
+// Note: These patterns store the regex source only -- flags are added at the call site
+// via `new RegExp(PATTERNS.xxx.source, 'gm')`. Do NOT add g/m flags here to avoid
+// stale lastIndex bugs if a pattern is ever used directly with exec().
 const PATTERNS = {
   // Class definition: class ClassName(ParentClass): or class ClassName:
-  class: /^[ \t]*class\s+([A-Z][a-zA-Z0-9_]*)\s*(?:\(([^)]*)\))?:/gm,
+  class: /^[ \t]*class\s+([A-Z][a-zA-Z0-9_]*)\s*(?:\(([^)]*)\))?:/m,
 
   // Function/method definition: def function_name(params): or async def function_name(params):
-  function: /^[ \t]*(async\s+)?def\s+([a-z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(?:->\s*[^:]+)?:/gm,
+  function: /^[ \t]*(async\s+)?def\s+([a-z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*(?:->\s*[^:]+)?:/m,
 
   // Import statements
-  import: /^[ \t]*import\s+([a-zA-Z0-9_.,\s]+)$/gm,
-  fromImport: /^[ \t]*from\s+([a-zA-Z0-9_.]+)\s+import\s+([a-zA-Z0-9_,*\s()]+)$/gm,
+  import: /^[ \t]*import\s+([a-zA-Z0-9_.,\s]+)$/m,
+  fromImport: /^[ \t]*from\s+([a-zA-Z0-9_.]+)\s+import\s+([a-zA-Z0-9_,*\s()]+)$/m,
 
   // Decorators
-  decorator: /^[ \t]*@([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*)\s*(?:\([^)]*\))?$/gm,
+  decorator: /^[ \t]*@([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*)\s*(?:\([^)]*\))?$/m,
 
-  // Function calls
-  functionCall: /(?:^|[^a-zA-Z0-9_])([a-z_][a-zA-Z0-9_]*)\s*\(/g,
+  // Function calls -- no g flag here; callers create their own regex with g
+  functionCall: /(?:^|[^a-zA-Z0-9_])([a-z_][a-zA-Z0-9_]*)\s*\(/,
 
   // Django/Flask specific patterns
   djangoView: /@(?:api_view|permission_classes|login_required)/,

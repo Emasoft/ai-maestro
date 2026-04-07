@@ -39,6 +39,12 @@ const MAX_SESSIONS = 50 // Prevent memory leak — oldest evicted
 
 const sessions = new Map<string, SessionRecord>()
 
+// In-memory mutex: serializes createSession to prevent concurrent calls from
+// exceeding MAX_SESSIONS. Works as a Promise chain — each call awaits the
+// previous one before proceeding. This is necessary because eviction check +
+// insert is a non-atomic read-then-write on the shared Map.
+let sessionMutex: Promise<void> = Promise.resolve()
+
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
@@ -49,32 +55,46 @@ function hashToken(token: string): string {
 
 /**
  * Create a new user session. Returns the raw token for the cookie.
+ *
+ * Serialized via in-memory mutex to prevent race conditions where concurrent
+ * calls both pass the MAX_SESSIONS check and both insert, exceeding the limit.
  */
-export function createSession(ip?: string): string {
-  // Evict oldest if at capacity
-  if (sessions.size >= MAX_SESSIONS) {
-    let oldest: string | null = null
-    let oldestTime = Infinity
-    for (const [hash, record] of sessions) {
-      if (record.created_at < oldestTime) {
-        oldestTime = record.created_at
-        oldest = hash
+export async function createSession(ip?: string): Promise<string> {
+  // Chain onto the mutex so only one createSession runs at a time
+  const result = new Promise<string>((resolve, reject) => {
+    sessionMutex = sessionMutex.then(() => {
+      try {
+        // Evict oldest if at capacity
+        if (sessions.size >= MAX_SESSIONS) {
+          let oldest: string | null = null
+          let oldestTime = Infinity
+          for (const [hash, record] of sessions) {
+            if (record.created_at < oldestTime) {
+              oldestTime = record.created_at
+              oldest = hash
+            }
+          }
+          if (oldest) sessions.delete(oldest)
+        }
+
+        const token = randomBytes(SESSION_TOKEN_BYTES).toString('hex')
+        const now = Date.now()
+
+        sessions.set(hashToken(token), {
+          token_hash: hashToken(token),
+          created_at: now,
+          expires_at: now + SESSION_LIFETIME_MS,
+          ip,
+        })
+
+        resolve(token)
+      } catch (err) {
+        reject(err)
       }
-    }
-    if (oldest) sessions.delete(oldest)
-  }
-
-  const token = randomBytes(SESSION_TOKEN_BYTES).toString('hex')
-  const now = Date.now()
-
-  sessions.set(hashToken(token), {
-    token_hash: hashToken(token),
-    created_at: now,
-    expires_at: now + SESSION_LIFETIME_MS,
-    ip,
+    })
   })
 
-  return token
+  return result
 }
 
 /**

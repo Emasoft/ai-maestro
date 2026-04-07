@@ -399,8 +399,11 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
   }, [personaName, selectedAvatar, selectedTitle, selectedTeamId, selectedPlugin, selectedClient, selectedFolder])
 
   // Animation timer sequence
+  // SF-061 fix: creationSuccess removed from deps to prevent cleanup/restart of
+  // animation timers mid-flight. The guard ensures we only run when actively creating
+  // and not yet finished. The "Let's Go" button is handled by the separate effect below.
   useEffect(() => {
-    if (!isCreating) return
+    if (!isCreating || creationSuccess) return
     setAnimationPhase('preparing')
     setAnimationProgress(5)
 
@@ -415,10 +418,10 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
       setTimeout(() => setAnimationProgress(78), 5300),
       setTimeout(() => setAnimationProgress(90), 6000),
       setTimeout(() => { setAnimationPhase('ready'); setAnimationProgress(100) }, 6500),
-      setTimeout(() => { if (creationSuccess) setShowLetsGo(true) }, 8000),
     ]
     return () => timers.forEach(clearTimeout)
-  }, [isCreating, creationSuccess])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCreating])
 
   useEffect(() => {
     if (creationSuccess && animationPhase === 'ready') {

@@ -96,8 +96,25 @@ export async function POST(
   let body: { program?: string; programArgs?: string } = {}
   try { body = await request.json() } catch { /* optional body */ }
 
+  // CC-GOV-002: Validate body.program and body.programArgs are strings to prevent
+  // type confusion attacks (e.g. sending an object/array that coerces in shell context)
+  if (body.program !== undefined && typeof body.program !== 'string') {
+    return NextResponse.json({ error: 'Invalid program: must be a string' }, { status: 400 })
+  }
+  if (body.programArgs !== undefined && typeof body.programArgs !== 'string') {
+    return NextResponse.json({ error: 'Invalid programArgs: must be a string' }, { status: 400 })
+  }
+
   const program = body.program || agent?.program || 'claude'
   const programArgs = body.programArgs || agent?.programArgs || ''
+
+  // CC-GOV-002: Reject programArgs containing shell metacharacters that could escape
+  // the single-quoted tmux send-keys argument. Only allow safe CLI flags/values.
+  // Allowed: alphanumeric, spaces, hyphens, underscores, dots, slashes, equals,
+  //          colons, commas, at-signs, double-quotes, tildes
+  if (programArgs && !/^[a-zA-Z0-9 \-_./=:,@"~]+$/.test(programArgs)) {
+    return NextResponse.json({ error: 'Invalid programArgs: contains disallowed characters' }, { status: 400 })
+  }
 
   // Resolve display program name (e.g. "Claude Code") to the actual CLI binary name
   const resolveBin = (p: string): string => {

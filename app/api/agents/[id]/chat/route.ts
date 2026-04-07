@@ -56,6 +56,10 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
     }
 
+    // CC-P2-006: Validate message field exists and is a string
+    if (!body.message || typeof body.message !== 'string') {
+      return NextResponse.json({ success: false, error: 'Missing or invalid "message" field (must be a non-empty string)' }, { status: 400 })
+    }
     const result = await sendChatMessage(agentId, body.message)
     if (result.error) {
       return NextResponse.json({ success: false, error: result.error }, { status: result.status })

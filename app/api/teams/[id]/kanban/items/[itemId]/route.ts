@@ -40,8 +40,11 @@ export async function PATCH(
   }
 
   try {
-    const { status } = await request.json()
-    if (!status) return NextResponse.json({ error: 'status is required' }, { status: 400 })
+    const body = await request.json()
+    const { status } = body
+    if (typeof status !== 'string' || !status.trim()) {
+      return NextResponse.json({ error: 'status is required and must be a string' }, { status: 400 })
+    }
 
     // Map short names to display names
     const statusMap: Record<string, string> = {

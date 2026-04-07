@@ -241,9 +241,13 @@ export function useTranscriptExport(agentId: string) {
   }, [jobs])
 
   /**
-   * Cleanup on unmount
+   * Cleanup polling timers on agentId change or unmount.
+   * Without agentId in the deps, switching agents would leave orphaned
+   * intervals polling for the previous agent's export jobs indefinitely.
    */
   useEffect(() => {
+    isMountedRef.current = true
+
     return () => {
       isMountedRef.current = false
 
@@ -253,7 +257,7 @@ export function useTranscriptExport(agentId: string) {
       }
       pollTimersRef.current = {}
     }
-  }, [])
+  }, [agentId])
 
   /**
    * Load jobs on mount

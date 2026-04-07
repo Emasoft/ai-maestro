@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readFile, readdir } from 'fs/promises'
-import { statSync } from 'fs'
+import { realpathSync, statSync } from 'fs'
 import { join, normalize } from 'path'
 
 export const dynamic = 'force-dynamic'
@@ -39,6 +39,29 @@ export async function GET(req: NextRequest) {
     )
   }
 
+  // Resolve symlinks to the real filesystem path and re-check containment.
+  // Without this, a symlink under the allowed prefix pointing elsewhere would
+  // bypass the prefix check above, since normalize() does not follow symlinks
+  // but statSync()/readFile() do.
+  try {
+    tomlPath = realpathSync(tomlPath)
+  } catch (error: unknown) {
+    const err = error as NodeJS.ErrnoException
+    if (err.code === 'ENOENT') {
+      return NextResponse.json({ exists: false, content: '', error: 'File or directory not found' })
+    }
+    return NextResponse.json(
+      { exists: false, content: '', error: `Failed to resolve path: ${err.message}` },
+      { status: 500 }
+    )
+  }
+  if (!tomlPath.startsWith(allowedPrefix)) {
+    return NextResponse.json(
+      { error: 'Path not allowed (symlink target)' },
+      { status: 403 }
+    )
+  }
+
   try {
     // If path is a directory, find the first *.agent.toml file.
     // statSync throws ENOENT when the path does not exist; it is caught below,
@@ -51,13 +74,18 @@ export async function GET(req: NextRequest) {
         // Directory exists but contains no .agent.toml — distinct from I/O error
         return NextResponse.json({ exists: false, content: '', error: 'No .agent.toml file found in directory' })
       }
-      // Normalize the joined path and re-validate it against the allowed prefix
-      // so that a symlink or crafted filename inside the directory cannot escape
-      // the allowed subtree (path traversal via directory resolution).
-      const joinedPath = normalize(join(tomlPath, tomlFile))
+      // Resolve the joined path through symlinks and re-validate against the
+      // allowed prefix. Using realpathSync ensures a symlinked .agent.toml file
+      // pointing outside the allowed subtree cannot bypass the containment check.
+      let joinedPath = normalize(join(tomlPath, tomlFile))
+      try {
+        joinedPath = realpathSync(joinedPath)
+      } catch {
+        return NextResponse.json({ exists: false, content: '', error: 'File not found after directory resolution' })
+      }
       if (!joinedPath.startsWith(allowedPrefix)) {
         return NextResponse.json(
-          { error: 'Path not allowed after directory resolution' },
+          { error: 'Path not allowed after directory resolution (symlink target)' },
           { status: 403 }
         )
       }

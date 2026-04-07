@@ -51,7 +51,7 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url)
     const sessionId = searchParams.get('sessionId')
 
-    const result = deletePersistedSession(sessionId || '')
+    const result = await deletePersistedSession(sessionId || '')
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })

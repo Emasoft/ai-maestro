@@ -50,27 +50,35 @@ function binExists(name: string): boolean {
   return fileExists(path.join(HOME, '.local', 'bin', name))
 }
 
-/** Check if hooks are installed in settings.json and point to the comprehensive script */
+/** Check if hooks are installed in settings.json and point to the comprehensive script.
+ *  Reads the file once to avoid TOCTOU races between string checks and JSON parse. */
 function diagnoseHooks(): ToolStatus {
   const settingsPath = path.join(HOME, '.claude', 'settings.json')
   if (!fileExists(settingsPath)) return 'missing'
-  const hasHook = grepFile(settingsPath, 'ai-maestro-hook')
-  if (!hasHook) return 'missing'
+
+  let content: string
+  try {
+    content = readFileSync(settingsPath, 'utf8')
+  } catch {
+    return 'error'
+  }
+
+  if (!content.includes('ai-maestro-hook')) return 'missing'
   // Check if it points to the comprehensive version (scripts/ai-maestro-hook.cjs)
   // vs the old version (scripts/claude-hooks/ai-maestro-hook.cjs)
-  const hasNew = grepFile(settingsPath, 'scripts/ai-maestro-hook.cjs')
-  const hasOld = grepFile(settingsPath, 'scripts/claude-hooks/ai-maestro-hook.cjs')
+  const hasNew = content.includes('scripts/ai-maestro-hook.cjs')
+  const hasOld = content.includes('scripts/claude-hooks/ai-maestro-hook.cjs')
   if (hasOld && !hasNew) return 'outdated'
   // Check event count — comprehensive version handles 9 events
   try {
-    const settings = JSON.parse(readFileSync(settingsPath, 'utf8'))
+    const settings = JSON.parse(content)
     const hookEvents = Object.keys(settings.hooks || {}).filter(
       e => settings.hooks[e]?.some?.((cfg: { hooks?: { command?: string }[] }) =>
         cfg.hooks?.some(h => h.command?.includes('ai-maestro-hook'))
       )
     )
     if (hookEvents.length < 5) return 'outdated'
-  } catch { /* parse error */ }
+  } catch { /* parse error — treat as installed since the string checks passed */ }
   return 'installed'
 }
 

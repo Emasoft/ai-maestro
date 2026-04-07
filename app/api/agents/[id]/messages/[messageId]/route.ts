@@ -5,6 +5,7 @@ import {
   deleteMessageById,
   forwardMessage,
 } from '@/services/agents-messaging-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 
 // SF-019: Allowed box values for runtime validation
@@ -19,6 +20,10 @@ export async function GET(
   { params }: { params: { id: string; messageId: string } }
 ) {
   try {
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: 401 })
+    }
     const { id, messageId } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
     if (!isValidUuid(id)) {
@@ -59,6 +64,10 @@ export async function PATCH(
   { params }: { params: { id: string; messageId: string } }
 ) {
   try {
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: 401 })
+    }
     const { id, messageId } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
     if (!isValidUuid(id)) {
@@ -91,10 +100,14 @@ export async function PATCH(
  * Delete a message
  */
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string; messageId: string } }
 ) {
   try {
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: 401 })
+    }
     const { id, messageId } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
     if (!isValidUuid(id)) {
@@ -127,6 +140,10 @@ export async function POST(
   { params }: { params: { id: string; messageId: string } }
 ) {
   try {
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: 401 })
+    }
     const { id, messageId } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
     if (!isValidUuid(id)) {

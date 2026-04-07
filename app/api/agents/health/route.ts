@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         hostname.startsWith('192.168.') ||
         hostname.startsWith('169.254.') ||
         hostname.startsWith('fc00:') ||
-        hostname.startsWith('fd') ||
+        /^fd[0-9a-f]{2}:/.test(hostname) ||
         hostname.startsWith('fe80:') ||
         /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
         hostname.endsWith('.local') ||

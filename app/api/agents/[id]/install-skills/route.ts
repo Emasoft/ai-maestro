@@ -46,7 +46,7 @@ export async function POST(
     const result = await convertSkill(skillName, 'claude', clientType)
     if (result.success) {
       results.installed.push(skillName)
-    } else if (result.error?.includes('not found')) {
+    } else if (String(result.error ?? '').includes('not found')) {
       results.skipped.push(skillName)
     } else {
       results.errors.push({ skill: skillName, error: result.error || 'Unknown error' })

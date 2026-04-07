@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
     // Create session
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined
-    const token = createSession(ip || undefined)
+    const token = await createSession(ip || undefined)
 
     // Determine if HTTPS (for Secure flag on cookie)
     const isSecure = request.url.startsWith('https')

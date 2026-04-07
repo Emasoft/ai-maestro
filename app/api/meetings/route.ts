@@ -6,7 +6,12 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
 export const dynamic = 'force-dynamic'
 
 // GET /api/meetings - List all meetings (optional ?status=active filter)
+// SF-014: Authenticate for read operations — consistent with meetings/[id] GET
 export async function GET(request: NextRequest) {
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
   const result = listMeetings(request.nextUrl.searchParams.get('status'))
   // SF-010 fix: Use explicit error check instead of ?? which can swallow errors
   if (result.error) {

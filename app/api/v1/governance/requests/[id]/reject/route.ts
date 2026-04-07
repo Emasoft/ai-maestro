@@ -91,10 +91,10 @@ export async function POST(
       return NextResponse.json({ error: 'password must be a string' }, { status: 400 })
     }
 
-    // Use authenticated agent ID instead of self-asserted body field
-    const rejectorAgentId = auth.agentId || body.rejectorAgentId
+    // SECURITY: Use only authenticated agent ID — never fall back to untrusted body field
+    const rejectorAgentId = auth.agentId
     if (!rejectorAgentId || !isValidUuid(rejectorAgentId)) {
-      return NextResponse.json({ error: 'Could not determine rejector agent ID' }, { status: 400 })
+      return NextResponse.json({ error: 'Could not determine rejector agent ID from auth' }, { status: 401 })
     }
 
     const result = await rejectCrossHostRequest(id, rejectorAgentId, body.password, body.reason)

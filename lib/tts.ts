@@ -168,28 +168,33 @@ export function createWebSpeechProvider(): TTSProvider {
 
       speaking = true
 
-      for (let i = 0; i < chunks.length; i++) {
-        if (!speaking) break
+      try {
+        for (let i = 0; i < chunks.length; i++) {
+          if (!speaking) break
 
-        await new Promise<void>((resolve, reject) => {
-          const utterance = new SpeechSynthesisUtterance(chunks[i])
-          if (selectedVoice) utterance.voice = selectedVoice
-          if (options.rate != null) utterance.rate = options.rate
-          if (options.pitch != null) utterance.pitch = options.pitch
-          if (options.volume != null) utterance.volume = options.volume
+          await new Promise<void>((resolve, reject) => {
+            const utterance = new SpeechSynthesisUtterance(chunks[i])
+            if (selectedVoice) utterance.voice = selectedVoice
+            if (options.rate != null) utterance.rate = options.rate
+            if (options.pitch != null) utterance.pitch = options.pitch
+            if (options.volume != null) utterance.volume = options.volume
 
-          utterance.onend = () => resolve()
-          utterance.onerror = (e) => {
-            // 'canceled' is not a real error
-            if (e.error === 'canceled') resolve()
-            else reject(e)
-          }
+            utterance.onend = () => resolve()
+            utterance.onerror = (e) => {
+              // 'canceled' is not a real error
+              if (e.error === 'canceled') resolve()
+              else reject(e)
+            }
 
-          speechSynthesis.speak(utterance)
-        })
+            speechSynthesis.speak(utterance)
+          })
+        }
+      } finally {
+        // Guarantee speaking flag is reset even if an utterance error
+        // rejects the promise — without this, the provider gets stuck in
+        // a permanent "speaking" state and can never be used again.
+        speaking = false
       }
-
-      speaking = false
     },
 
     stop() {

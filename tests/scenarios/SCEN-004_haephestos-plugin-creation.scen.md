@@ -295,6 +295,16 @@ author: AI Maestro Team
 
 ## Phase CLEANUP: Restore Original State
 
+> **MANDATORY CLEANUP ORDER (see SCENARIOS_TESTS_RULES.md WARNING section):**
+> 1. Delete test agents via UI (Profile → Danger Zone → Delete Agent → check "Also delete agent folder")
+> 2. Delete test teams via UI (Teams tab → Delete team → governance password → "Delete Agents Too")
+> 3. Purge cemetery entries via UI (Settings → Cemetery → Purge)
+> 4. Verify via API (no test artifacts remain)
+> 5. THEN STATE-WIPE restore config files from backup
+> 6. Post-test screenshot
+>
+> **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
+
 #### S030: Delete the test plugin from marketplace
 - **Action:** Remove `~/agents/role-plugins/<test-plugin-name>/` directory. Update marketplace manifest to remove the entry.
 - **Goal:** Test plugin fully removed

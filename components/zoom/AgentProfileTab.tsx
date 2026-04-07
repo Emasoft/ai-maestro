@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   User, Briefcase, Code2, Cpu, Tag,
   Activity, MessageSquare, CheckCircle, Clock, Zap,
@@ -43,6 +43,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
   const [showTitleDialog, setShowTitleDialog] = useState(false)
   const [usedAvatars, setUsedAvatars] = useState<string[]>([])
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
   // Repository state
   const [repositories, setRepositories] = useState<Repository[]>([])
@@ -67,6 +68,13 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
 
   // Governance hook for role and team membership
   const governance = useGovernance(agent.id || null)
+
+  // Clear save timer on unmount to prevent state updates on unmounted component
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [])
 
   // Sync with parent agent prop
   useEffect(() => {
@@ -169,7 +177,8 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
 
       if (response.ok) {
         setHasChanges(false)
-        setTimeout(() => setSaving(false), 500)
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = setTimeout(() => setSaving(false), 500)
       } else {
         // SF-001: Reset saving state on non-OK response so button is not stuck
         setSaving(false)

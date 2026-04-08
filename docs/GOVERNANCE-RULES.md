@@ -170,6 +170,7 @@ Full spec: `docs_dev/2026-04-03-communication-graph.md`
 | R9.8 | If a MANAGER is deleted or their title is removed, the blocking cascade triggers immediately (same as startup without MANAGER) | Explicit |
 | R9.9 | At server startup, if no MANAGER is detected, team blocking + agent hibernation runs as a startup task | Explicit |
 | R9.10 | When attempting to delete the MANAGER agent, the Delete Agent dialog MUST show a clear warning: "This agent holds the MANAGER title. Removing it will block all team operations." The system auto-demotes the MANAGER to AUTONOMOUS before proceeding with deletion | Explicit |
+| R9.11 | The MANAGER agent may create teams via the API using AID authentication. The governance password is NOT required for MANAGER-initiated team creation — the server validates the MANAGER's AID session secret (mst_* token) and grants team-creation privileges based on the MANAGER governance title | Explicit |
 
 **Rationale:** Without a MANAGER, no governance authority exists to oversee teams. Blocking prevents unsupervised team operations and ensures the system is in a safe state until governance is restored.
 
@@ -308,11 +309,12 @@ Full spec: `docs_dev/2026-04-03-communication-graph.md`
 | ID | Rule | Source |
 |----|------|--------|
 | R16.1 | The governance password **MUST NEVER be given to any agent** in a task instruction, prompt, or AMP message | Explicit |
-| R16.2 | When an agent needs to perform a password-protected operation (team creation, title change), the API call triggers a **UI popup** that the **user enters manually** | Explicit |
-| R16.3 | The MANAGER agent requests the operation via API. If the API requires a password, the MANAGER must inform the user: "This operation requires your governance password. Please enter it in the UI popup." | Explicit |
-| R16.4 | The user **physically types** the password in the browser dialog — the agent never sees, stores, or transmits the password | Explicit |
-| R16.5 | Any agent that receives a governance password in its prompt MUST refuse to use it and ask the user to enter it via the UI instead | Explicit |
-| R16.6 | Scenario tests are the **only exception** — test automation may pass the password via API for testing purposes. This exception does not apply to production agent workflows. | Explicit |
+| R16.2 | Agents MUST NEVER use the user's governance password or session cookies. The server MUST reject any API request where an agent process attempts to authenticate using user credentials. Agent authentication is exclusively via AID session secrets (`$AID_AUTH` / `mst_*` tokens) | Explicit |
+| R16.3 | When an agent needs to perform a password-protected operation (team creation, title change), the API call triggers a **UI popup** that the **user enters manually** | Explicit |
+| R16.4 | The MANAGER agent requests the operation via API. If the API requires a password, the MANAGER must inform the user: "This operation requires your governance password. Please enter it in the UI popup." | Explicit |
+| R16.5 | The user **physically types** the password in the browser dialog — the agent never sees, stores, or transmits the password | Explicit |
+| R16.6 | Any agent that receives a governance password in its prompt MUST refuse to use it and ask the user to enter it via the UI instead | Explicit |
+| R16.7 | Scenario tests are the **only exception** — test automation may pass the password via API for testing purposes. This exception does not apply to production agent workflows. | Explicit |
 
 **Rationale:** The governance password exists specifically to prevent agents from performing dangerous operations without user approval. If agents can receive and use the password, the security boundary is meaningless — any compromised or misbehaving agent could create teams, change titles, or delete agents without user knowledge. The password must always require a human in the loop.
 

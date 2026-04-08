@@ -1637,7 +1637,7 @@ export async function hibernateAgent(agentId: string, params: HibernateAgentPara
     // Clear activity entry so that if the session name is reused later, idle-checks start fresh
     sessionActivity.delete(sessionName)
 
-    // Post-gate: Invalidate session secret — the old MAESTRO_AUTH is no longer valid
+    // Post-gate: Invalidate AID session secret — the old AID_AUTH is no longer valid
     // A new secret will be generated when the agent is woken again.
     try {
       const { updateAgent: updAgent } = await import('@/lib/agent-registry')

@@ -2580,14 +2580,13 @@ export interface DeleteTeamResult {
  *   G04: Remove team from teams.json
  *   G05: Cancel pending transfers + reject governance requests (R8.3)
  *   G06: Delete team data files (tasks, documents)
- *   G07: Optionally delete team agents via DeleteAgent pipeline
+ *   G07: (removed) Agents preserved as AUTONOMOUS — deletion only via Profile → Danger Zone
  */
 export async function DeleteTeam(
   teamId: string,
   options?: {
     authContext?: AuthContext
     password?: string         // Governance password (required when passwordHash is set)
-    deleteAgents?: boolean    // Also delete all agents that were in the team
   },
 ): Promise<DeleteTeamResult> {
   const ops: string[] = []
@@ -2734,25 +2733,9 @@ export async function DeleteTeam(
       ops.push(`G06: WARN — data file cleanup failed: ${err instanceof Error ? err.message : err}`)
     }
 
-    // ── G07: Optionally delete team agents ─────────────────────
-    if (options?.deleteAgents && agentsToRevert.length > 0) {
-      for (const agentId of agentsToRevert) {
-        try {
-          const delResult = await DeleteAgent(agentId, {
-            authContext: options.authContext || { isSystemOwner: true },
-          })
-          if (delResult.success) {
-            ops.push(`G07: Deleted agent ${agentId.substring(0, 8)}`)
-          } else {
-            ops.push(`G07: WARN — DeleteAgent failed for ${agentId.substring(0, 8)}: ${delResult.error}`)
-          }
-        } catch (err) {
-          ops.push(`G07: WARN — DeleteAgent exception for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
-        }
-      }
-    } else {
-      ops.push('G07: Agent deletion not requested — agents preserved as AUTONOMOUS')
-    }
+    // G07: Removed — agent deletion via DeleteTeam is no longer supported.
+    // The ONLY way to delete an agent is through Profile → Advanced → Danger Zone → Delete Agent.
+    ops.push('G07: Agents preserved as AUTONOMOUS (agent deletion only via Profile → Danger Zone)')
 
     result.success = true
     console.log(`[DeleteTeam] "${team.name}" deleted (${ops.length} gates, ${agentsToRevert.length} agents reverted)`)
@@ -3495,7 +3478,7 @@ export async function CreateAgent(
 
     // ── G10: Auto-provision Ed25519 keypair for AMP messaging ──
     // Keypair used for AMP message signing and remote AID proof-of-possession.
-    // Local API auth uses server-issued session secrets (MAESTRO_AUTH env var,
+    // Local API auth uses server-issued session secrets (AID_AUTH env var,
     // set by sessions-service at tmux launch — not here).
     try {
       const { generateKeyPair: genKP, saveKeyPair: saveKP, hasKeyPair: hasKP } = await import('@/lib/amp-keys')

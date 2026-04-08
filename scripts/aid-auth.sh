@@ -1,22 +1,22 @@
 #!/bin/bash
 # =============================================================================
-# maestro-auth.sh — Get the best available auth token for AI Maestro API calls
+# aid-auth.sh — Get the best available AID auth token for AI Maestro API calls
 # =============================================================================
 #
 # Usage:
-#   TOKEN=$(maestro-auth.sh)
+#   TOKEN=$(aid-auth.sh)
 #   curl -H "Authorization: Bearer $TOKEN" http://localhost:23000/api/...
 #
 # Priority:
-#   1. MAESTRO_AUTH env var (session secret, set by AI Maestro at launch)
+#   1. AID_AUTH env var (AID session secret, set by AI Maestro at launch)
 #   2. aid-maestro-token.sh (AID proof-of-possession, for remote agents)
 #   3. AMP API key from config (legacy fallback)
 #
 # =============================================================================
 
-# 1. Session secret (fastest — no network call, set by server at launch)
-if [ -n "${MAESTRO_AUTH:-}" ]; then
-  echo "$MAESTRO_AUTH"
+# 1. AID session secret (fastest — no network call, set by server at launch)
+if [ -n "${AID_AUTH:-}" ]; then
+  echo "$AID_AUTH"
   exit 0
 fi
 
@@ -46,5 +46,5 @@ if [ -n "${AMP_DIR:-}" ] && [ -f "${AMP_DIR}/api-key" ]; then
 fi
 
 # No auth available
-echo "ERROR: No authentication method available. Set MAESTRO_AUTH env var or run aid-init." >&2
+echo "ERROR: No authentication method available. Set AID_AUTH env var or run aid-init." >&2
 exit 1

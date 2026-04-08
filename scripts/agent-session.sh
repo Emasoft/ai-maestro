@@ -66,9 +66,15 @@ cmd_session_add() {
     local payload
     payload=$(jq -n --arg role "$role" '{role: $role}')
 
+    # Build AID auth header if available
+    local -a auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+
     print_info "Adding session to agent..."
     local response
-    response=$(curl -s --max-time 30 -X POST "${api_base}/api/agents/${RESOLVED_AGENT_ID}/session" \
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/session" \
         -H "Content-Type: application/json" \
         -d "$payload")
 
@@ -112,9 +118,15 @@ cmd_session_remove() {
     local url="${api_base}/api/agents/${RESOLVED_AGENT_ID}/session"
     [[ "$all" == true ]] && url="${url}?all=true" || url="${url}?index=${index}"
 
+    # Build AID auth header if available
+    local -a auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+
     print_info "Removing session..."
     local response
-    response=$(curl -s --max-time 30 -X DELETE "$url")
+    response=$(curl -s --max-time 30 -X DELETE "${auth_args[@]}" "$url")
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
@@ -164,8 +176,14 @@ cmd_session_exec() {
     local payload
     payload=$(jq -n --arg cmd "$command" '{command: $cmd}')
 
+    # Build AID auth header if available
+    local -a auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+
     local response
-    response=$(curl -s --max-time 30 -X PATCH "${api_base}/api/agents/${RESOLVED_AGENT_ID}/session" \
+    response=$(curl -s --max-time 30 -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/session" \
         -H "Content-Type: application/json" \
         -d "$payload")
 
@@ -203,9 +221,15 @@ cmd_hibernate() {
     local api_base
     api_base=$(get_api_base)
 
+    # Build AID auth header if available
+    local -a auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+
     print_info "Hibernating agent '$RESOLVED_ALIAS'..."
     local response
-    response=$(curl -s --max-time 30 -X POST "${api_base}/api/agents/${RESOLVED_AGENT_ID}/hibernate")
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/hibernate")
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
@@ -238,9 +262,15 @@ cmd_wake() {
     local api_base
     api_base=$(get_api_base)
 
+    # Build AID auth header if available
+    local -a auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+
     print_info "Waking agent '$RESOLVED_ALIAS'..."
     local response
-    response=$(curl -s --max-time 30 -X POST "${api_base}/api/agents/${RESOLVED_AGENT_ID}/wake")
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/wake")
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')

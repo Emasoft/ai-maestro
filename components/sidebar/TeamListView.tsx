@@ -55,7 +55,6 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
 
   const [deleteTarget, setDeleteTarget] = useState<Team | null>(null)
   const [deletePassword, setDeletePassword] = useState('')
-  const [deleteAgentsToo, setDeleteAgentsToo] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -67,7 +66,7 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
       const res = await fetch(`/api/teams/${deleteTarget.id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: deletePassword, deleteAgents: deleteAgentsToo }),
+        body: JSON.stringify({ password: deletePassword }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -77,7 +76,6 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
       setTeams(prev => prev.filter(t => t.id !== deleteTarget.id))
       setDeleteTarget(null)
       setDeletePassword('')
-      setDeleteAgentsToo(false)
     } catch {
       setDeleteError('Network error')
     } finally {
@@ -169,7 +167,7 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
               agents={agents}
               onStartMeeting={handleStartMeeting}
               onEdit={(t) => { setEditingTeam(t); setShowCreate(true) }}
-              onDelete={(t) => { setDeleteTarget(t); setDeletePassword(''); setDeleteError(null); setDeleteAgentsToo(false) }}
+              onDelete={(t) => { setDeleteTarget(t); setDeletePassword(''); setDeleteError(null) }}
             />
           ))}
         </div>
@@ -206,20 +204,6 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
                   autoFocus
                 />
               </div>
-              <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={deleteAgentsToo}
-                  onChange={e => setDeleteAgentsToo(e.target.checked)}
-                  className="rounded border-gray-600"
-                />
-                Also delete all agents in this team
-              </label>
-              {deleteAgentsToo && (
-                <p className="text-xs text-amber-400 mt-1">
-                  Note: Agents that existed before the team was created will also be deleted. Consider using &quot;Keep Agents&quot; (uncheck above) to preserve them as autonomous agents.
-                </p>
-              )}
             </div>
 
             {deleteError && (

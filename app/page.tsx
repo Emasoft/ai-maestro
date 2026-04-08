@@ -119,9 +119,10 @@ export default function DashboardPage() {
   // Derive active agent from state
   const activeAgent = agents.find(a => a.id === activeAgentId) || null
 
-  // Compute selectable agents: online + hibernated (offline with session config)
+  // Compute selectable agents: ALL registered agents (online, hibernated, or offline)
+  // Profile panel reads from the API/registry and works regardless of session status
   const selectableAgents = useMemo(
-    () => agents.filter(a => a.session?.status === 'online' || (a.sessions && a.sessions.length > 0)),
+    () => agents,
     [agents]
   )
 
@@ -659,7 +660,6 @@ export default function DashboardPage() {
                 activeAgentId={activeAgentId}
                 onAgentSelect={handleAgentSelect}
                 onShowAgentProfile={handleShowAgentProfile}
-                onShowAgentProfileDangerZone={handleShowAgentProfileDangerZone}
                 onImportAgent={() => setShowImportDialog(true)}
                 loading={agentsLoading}
                 error={agentsError}
@@ -709,31 +709,9 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Truly offline agent (no session config) - show profile prompt */}
-            {/* Skip for Haephestos — it has its own embedded wake UI */}
-            {activeAgent && activeAgent.name !== '_aim-creation-helper' && activeAgent.session?.status === 'offline' && !(activeAgent.sessions && activeAgent.sessions.length > 0) && (
-              <div className="flex-1 flex items-center justify-center text-gray-400">
-                <div className="text-center max-w-md">
-                  <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-800 flex items-center justify-center">
-                    <User className="w-10 h-10 text-gray-500" />
-                  </div>
-                  <p className="text-xl mb-2 text-gray-300">{activeAgent.label || activeAgent.name || activeAgent.alias}</p>
-                  <p className="text-sm mb-4 text-gray-500">This agent is offline</p>
-                  <button
-                    onClick={() => handleStartSession(activeAgent)}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-all"
-                  >
-                    Start Session
-                  </button>
-                  <button
-                    onClick={() => handleShowAgentProfile(activeAgent)}
-                    className="ml-3 px-6 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-all"
-                  >
-                    View Profile
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* Offline agent placeholder removed — offline agents now render the full
+                agent page layout with toolbar + profile panel. The terminal tab shows
+                an offline placeholder instead. Profile panel reads from API/registry. */}
 
             {/* Haephestos creation helper — shows the forge UI instead of normal terminal */}
             {/* When hibernated: shows "Ask Haephestos Help" wake button */}
@@ -762,6 +740,8 @@ export default function DashboardPage() {
 
               const isActive = true  // We only render the active agent
               const isHibernated = agent.session?.status !== 'online' && (agent.sessions && agent.sessions.length > 0)
+              // Truly offline: no session config at all (not hibernated, just never started or fully removed)
+              const isOffline = agent.session?.status !== 'online' && !(agent.sessions && agent.sessions.length > 0)
               const session = agentToSession(agent)
 
               return (
@@ -923,7 +903,33 @@ export default function DashboardPage() {
                     {/* Content area — min-w-0 lets it shrink when profile panel is open */}
                     <div className="flex-1 flex min-w-0 overflow-hidden">
                     {activeTab === 'terminal' ? (
-                      isHibernated ? (
+                      isOffline ? (
+                        <div className="flex-1 flex items-center justify-center text-gray-400">
+                          <div className="text-center max-w-md">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-800 flex items-center justify-center">
+                              <User className="w-10 h-10 text-gray-500" />
+                            </div>
+                            <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name || agent.alias}</p>
+                            <p className="text-sm mb-4 text-gray-500">This agent is offline</p>
+                            <div className="flex items-center justify-center gap-3">
+                              <button
+                                onClick={() => handleStartSession(agent)}
+                                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-all"
+                              >
+                                Start Session
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (!showProfilePanel) toggleProfilePanel()
+                                }}
+                                className="px-6 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-all"
+                              >
+                                View Profile
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : isHibernated ? (
                         <div className="flex-1 flex items-center justify-center text-gray-400">
                           <div className="text-center max-w-md">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-yellow-900/30 flex items-center justify-center">
@@ -961,7 +967,7 @@ export default function DashboardPage() {
                         <Loader2 className="w-6 h-6 animate-spin" />
                       </div>
                     ) : activeTab === 'chat' ? (
-                      isHibernated ? (
+                      (isHibernated || isOffline) ? (
                         <div className="flex-1 flex items-center justify-center text-gray-400">
                           <div className="text-center max-w-md">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-yellow-900/30 flex items-center justify-center">
@@ -969,23 +975,32 @@ export default function DashboardPage() {
                             </div>
                             <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name || agent.alias}</p>
                             <p className="text-sm mb-4 text-gray-500">Wake this agent to use the chat interface</p>
-                            <button
-                              onClick={() => handleWakeAgent(agent)}
-                              disabled={wakingAgentId === agent.id}
-                              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
-                            >
-                              {wakingAgentId === agent.id ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                  Waking...
-                                </>
-                              ) : (
-                                <>
-                                  <Power className="w-4 h-4" />
-                                  Wake Agent
-                                </>
-                              )}
-                            </button>
+                            {isOffline ? (
+                              <button
+                                onClick={() => handleStartSession(agent)}
+                                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-all"
+                              >
+                                Start Session
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleWakeAgent(agent)}
+                                disabled={wakingAgentId === agent.id}
+                                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
+                              >
+                                {wakingAgentId === agent.id ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Waking...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Power className="w-4 h-4" />
+                                    Wake Agent
+                                  </>
+                                )}
+                              </button>
+                            )}
                           </div>
                         </div>
                       ) : (

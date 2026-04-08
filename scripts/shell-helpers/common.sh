@@ -350,20 +350,47 @@ init_common() {
     export HOST_ID
 }
 
+# Get AID auth header for API calls (if AID_AUTH env var is set)
+# Usage: AUTH_ARGS=($(get_auth_args))
+#        curl "${AUTH_ARGS[@]}" ...
+# Returns: -H "Authorization: Bearer <token>" or empty
+get_auth_header() {
+    if [ -n "${AID_AUTH:-}" ]; then
+        echo "-H \"Authorization: Bearer $AID_AUTH\""
+    fi
+}
+
+# Build auth args array for curl calls
+# Usage: local -a auth_args; get_auth_args auth_args; curl "${auth_args[@]}" ...
+get_auth_args() {
+    local -n _arr="$1"
+    _arr=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        _arr=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+}
+
 # Make an API query with common error handling
 # Usage: api_query "GET" "/api/agents/${AGENT_ID}/endpoint" [extra_curl_args...]
+# Automatically includes AID_AUTH Bearer header if available.
 api_query() {
     local method="$1"
     local endpoint="$2"
     shift 2
     local extra_args=("$@")
 
+    # Inject AID auth header if available
+    local -a auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+
     local api_base
     api_base=$(get_api_base)
     local url="${api_base}${endpoint}"
     local response
 
-    response=$(curl -s --max-time 30 -X "$method" "${extra_args[@]}" "$url" 2>/dev/null)
+    response=$(curl -s --max-time 30 -X "$method" "${auth_args[@]}" "${extra_args[@]}" "$url" 2>/dev/null)
 
     if [ -z "$response" ]; then
         echo "Error: API request failed" >&2

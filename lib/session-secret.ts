@@ -1,13 +1,15 @@
 /**
- * Session Secrets — Server-Issued Agent Identity for Local Agents
+ * Session Secrets — Server-Issued AID Session Tokens for Local Agents
  *
  * The AI Maestro server spawns each agent's tmux session, making it the
  * sole authority on agent identity for local (same-host) processes.
  * Instead of requiring agents to prove identity via Ed25519 ceremonies,
  * the server generates a secret at session launch and sets it as a tmux
- * env var. The agent reads it and sends it with API requests.
+ * env var ($AID_AUTH). The agent reads it and sends it with API requests.
  *
- * Token format: mst_<64 hex chars>  (maestro session token)
+ * Token format: mst_<64 hex chars>  (kept for backwards compatibility)
+ * Env var: AID_AUTH (was MAESTRO_AUTH — renamed to clarify this is
+ *          Agent Identity auth, not dashboard user auth)
  * Storage: SHA-256 hash in agent registry metadata.sessionSecretHash
  * Scope: per-session, dies when session is killed/restarted
  *

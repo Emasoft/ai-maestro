@@ -75,7 +75,6 @@ interface AgentListProps {
   activeAgentId: string | null
   onAgentSelect: (agent: UnifiedAgent) => void
   onShowAgentProfile: (agent: UnifiedAgent) => void
-  onShowAgentProfileDangerZone?: (agent: UnifiedAgent) => void  // Opens profile scrolled to danger zone
   onImportAgent?: () => void  // Opens import dialog
   loading?: boolean
   error?: Error | null
@@ -177,7 +176,6 @@ export default function AgentList({
   activeAgentId,
   onAgentSelect,
   onShowAgentProfile,
-  onShowAgentProfileDangerZone,
   onImportAgent,
   loading,
   error,
@@ -1072,7 +1070,6 @@ export default function AgentList({
                                             unreadCount={unreadCounts[agent.id]}
                                             onSelect={handleAgentClick}
                                             onRename={() => onShowAgentProfile(agent)}
-                                            onDelete={() => onShowAgentProfileDangerZone?.(agent)}
                                             onHibernate={isOnline ? (a) => handleHibernate(a) : undefined}
                                             onWake={isHibernated ? (a) => handleWake(a) : undefined}
                                             onOpenTerminal={isOnline ? () => handleAgentClick(agent) : undefined}
@@ -1357,18 +1354,6 @@ export default function AgentList({
                                               title="View agent profile"
                                             >
                                               <Edit2 className="w-3 h-3" />
-                                            </button>
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation()
-                                                if (onShowAgentProfileDangerZone) {
-                                                  onShowAgentProfileDangerZone(agent)
-                                                }
-                                              }}
-                                              className="p-1 rounded hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-all duration-200"
-                                              title="Delete agent"
-                                            >
-                                              <Trash2 className="w-3 h-3" />
                                             </button>
                                           </div>
                                         </div>

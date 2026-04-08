@@ -15,14 +15,14 @@ import { WarningCollector } from '../utils/warnings'
  * Source: https://developers.openai.com/codex/models
  */
 const CLAUDE_TO_CODEX: Record<string, string> = {
-  'sonnet': 'gpt-5.4',
-  'claude-sonnet-4-6': 'gpt-5.4',
-  'claude-sonnet-4': 'gpt-5.4',
+  'sonnet': 'gpt-5.3-codex',
+  'claude-sonnet-4-6': 'gpt-5.3-codex',
+  'claude-sonnet-4': 'gpt-5.3-codex',
   'haiku': 'gpt-5.4-mini',
   'claude-haiku-4-5': 'gpt-5.4-mini',
-  'opus': 'gpt-5.3-codex',
-  'claude-opus-4-6': 'gpt-5.3-codex',
-  'claude-opus-4': 'gpt-5.3-codex',
+  'opus': 'gpt-5.4',
+  'claude-opus-4-6': 'gpt-5.4',
+  'claude-opus-4': 'gpt-5.4',
 }
 
 /** Claude → Gemini model mapping */
@@ -42,10 +42,10 @@ const CLAUDE_TO_GEMINI: Record<string, string> = {
  * Source: https://developers.openai.com/codex/models
  */
 const CODEX_TO_CLAUDE: Record<string, string> = {
-  'gpt-5.4': 'claude-sonnet-4-6',
+  'gpt-5.4': 'claude-opus-4-6',
   'gpt-5.4-mini': 'claude-haiku-4-5',
-  'gpt-5.3-codex': 'claude-opus-4-6',
-  'gpt-5.3-codex-spark': 'claude-opus-4-6',
+  'gpt-5.3-codex': 'claude-sonnet-4-6',
+  'gpt-5.3-codex-spark': 'claude-sonnet-4-6',
   'gpt-5.2': 'claude-sonnet-4',
   'o3': 'claude-opus-4-6',
   'o3-mini': 'claude-sonnet-4-6',

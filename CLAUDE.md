@@ -1387,18 +1387,18 @@ Cross-client model conversion is in `lib/converter/rewrite/model.ts`.
 
 | Claude Model | Codex Model | Notes |
 |-------------|-------------|-------|
-| sonnet / claude-sonnet-4-6 | `gpt-5.4` | Flagship frontier model |
+| opus / claude-opus-4-6 | `gpt-5.4` | Flagship frontier model |
+| sonnet / claude-sonnet-4-6 | `gpt-5.3-codex` | Industry-leading coding model |
 | haiku / claude-haiku-4-5 | `gpt-5.4-mini` | Fast, efficient for subagents |
-| opus / claude-opus-4-6 | `gpt-5.3-codex` | Industry-leading coding model |
 
 **Codex → Claude** (reverse):
 
 | Codex Model | Claude Model |
 |-------------|-------------|
-| `gpt-5.4` | claude-sonnet-4-6 |
+| `gpt-5.4` | claude-opus-4-6 |
 | `gpt-5.4-mini` | claude-haiku-4-5 |
-| `gpt-5.3-codex` | claude-opus-4-6 |
-| `gpt-5.3-codex-spark` | claude-opus-4-6 |
+| `gpt-5.3-codex` | claude-sonnet-4-6 |
+| `gpt-5.3-codex-spark` | claude-sonnet-4-6 |
 | `gpt-5.2` | claude-sonnet-4 |
 | `o3` | claude-opus-4-6 |
 | `o3-mini` | claude-sonnet-4-6 |

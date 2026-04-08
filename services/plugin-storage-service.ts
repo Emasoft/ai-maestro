@@ -108,20 +108,20 @@ export async function convertAndStorePlugin(
 
   for (const targetClient of targetClients) {
     if (isRolePlugin) {
-      // Role-plugin: emit to ~/agents/role-plugins/<name>-<client>/
-      const suffix = targetClient === sourceClient ? '' : `-${targetClient}`
-      const rolePluginName = `${sourceName}${suffix}`
+      // Role-plugin: emit to ~/agents/role-plugins/<name>/
+      // Name stays the same — client is determined by compatible-clients in .agent.toml, NOT by name
+      const rolePluginName = sourceName
       const targetDir = path.join(ROLE_PLUGINS_DIR, rolePluginName)
 
       // NEVER overwrite existing role-plugin folder
       if (existsSync(targetDir)) {
-        console.warn(`[plugin-storage] Role-plugin folder already exists: ${targetDir} — skipping`)
+        console.warn(`[plugin-storage] Role-plugin folder already exists: ${targetDir} — conversion refused (never overwrite)`)
         continue
       }
 
       const emitted = await emitPluginToDir(sourceName, targetClient, targetDir)
       if (emitted) {
-        // Write updated .agent.toml with new compatible-clients
+        // Write updated .agent.toml with new compatible-clients (the ONLY way to indicate target client)
         await writeConvertedAgentProfile(targetDir, universalIR, rolePluginName, targetClient)
         // Ensure fourfold identity
         await ensureFourfoldIdentity(targetDir, rolePluginName)
@@ -132,12 +132,15 @@ export async function convertAndStorePlugin(
         emittedDirs[targetClient] = targetDir
       }
     } else {
-      // Ordinary plugin: emit to ~/agents/custom-plugins/<client>/<name>/
-      const targetDir = await emitForClient(sourceName, targetClient)
-      if (targetDir) {
-        // Register with custom marketplace
+      // Ordinary plugin: emit to ~/agents/custom-plugins/<client>/<name>-<client>/
+      // Name gets -<client> suffix for ordinary plugins
+      const suffixedName = `${sourceName}-${targetClient}`
+      const targetDir = path.join(CUSTOM_PLUGINS_DIR, targetClient, suffixedName)
+      await mkdir(targetDir, { recursive: true })
+      const emitted = await emitPluginToDir(sourceName, targetClient, targetDir)
+      if (emitted) {
         await ensureCustomMarketplace()
-        await updateCustomMarketplaceManifest(sourceName, universalIR.meta.description || '', universalIR.meta.version)
+        await updateCustomMarketplaceManifest(suffixedName, universalIR.meta.description || '', universalIR.meta.version)
         emittedDirs[targetClient] = targetDir
       }
     }

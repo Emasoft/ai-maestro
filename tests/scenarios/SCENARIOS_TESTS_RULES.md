@@ -166,6 +166,12 @@ Before starting a scenario:
 4. **BUILD** the project: `yarn build`
 5. **START** the server: `pm2 restart ai-maestro` (or `yarn dev`)
 6. **VERIFY** the server is healthy: check `GET /api/sessions` returns 200
+7. **KILL ORPHAN TEST SESSIONS:** Kill any tmux sessions from previous test runs:
+   ```bash
+   tmux list-sessions | grep '^scen-' | cut -d: -f1 | xargs -I{} tmux kill-session -t {}
+   tmux list-sessions | grep '^cos-scen-' | cut -d: -f1 | xargs -I{} tmux kill-session -t {}
+   ```
+   This prevents dead sessions from interfering with the test or cluttering the UI.
 
 If running in a worktree, all scenario artifacts (screenshots, reports, backups) are saved inside the worktree, then copied to the main tree on completion.
 

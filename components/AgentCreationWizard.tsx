@@ -274,9 +274,12 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
     advance(label, 'title')
   }, [teams, advance])
 
-  // Fetch compatible plugins for a title+client and decide whether to show picker or auto-assign.
-  // Returns: 'show-picker' (2+ choices) or 'skip' (0-1 choice, auto-assigned).
-  const checkPluginChoices = useCallback(async (title: AgentRole, client: string): Promise<'show-picker' | 'skip'> => {
+  // Fetch compatible plugins for a title+client and pre-load them.
+  // Auto-assigns plugin when there's exactly 1 choice (locked title).
+  // Always returns 'show-step' when client supports plugins so the role-plugin step
+  // is never skipped (consistent step numbering). Returns 'skip' only when client
+  // has no plugin support at all.
+  const checkPluginChoices = useCallback(async (title: AgentRole, client: string): Promise<'show-step' | 'skip'> => {
     if (client !== 'claude' && client !== 'codex') {
       // No plugin support → skip
       setSelectedPlugin(null)
@@ -284,7 +287,7 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
     }
     try {
       const res = await fetch(`/api/agents/role-plugins?title=${title.toUpperCase()}&client=${client}`)
-      if (!res.ok) { setSelectedPlugin(null); return 'skip' }
+      if (!res.ok) { setSelectedPlugin(null); setPlugins([]); return 'show-step' }
       const data = await res.json()
       const compatiblePlugins: RolePlugin[] = Array.isArray(data.plugins) ? data.plugins : []
 
@@ -294,18 +297,16 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
       const choiceCount = isAuto ? compatiblePlugins.length + 1 : compatiblePlugins.length
 
       if (choiceCount <= 1) {
-        // 0 or 1 choice → auto-assign and skip
+        // 0 or 1 choice → auto-assign (the step will show as read-only)
         setSelectedPlugin(compatiblePlugins.length === 1 ? compatiblePlugins[0] : null)
-        setPlugins(compatiblePlugins)
-        return 'skip'
       }
 
-      // 2+ choices → show picker
       setPlugins(compatiblePlugins)
-      return 'show-picker'
+      return 'show-step'
     } catch {
       setSelectedPlugin(null)
-      return 'skip'
+      setPlugins([])
+      return 'show-step'
     }
   }, [])
 
@@ -318,9 +319,9 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
       advance(title.toUpperCase(), 'folder')
     } else {
       // Team agent: skip folder (auto ~/agents/<name>/)
-      // Check if plugin picker is needed
+      // Pre-load plugins; always show role-plugin step when client supports plugins
       const pluginDecision = await checkPluginChoices(title, selectedClient)
-      if (pluginDecision === 'show-picker') {
+      if (pluginDecision === 'show-step') {
         advance(title.toUpperCase(), 'role-plugin')
       } else {
         advance(title.toUpperCase(), 'summary')
@@ -333,9 +334,9 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
     const agentName = personaName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '')
     const label = folder || `~/agents/${agentName}/`
 
-    // Check if plugin picker is needed for this title+client
+    // Pre-load plugins; always show role-plugin step when client supports plugins
     const pluginDecision = await checkPluginChoices(selectedTitle, selectedClient)
-    if (pluginDecision === 'show-picker') {
+    if (pluginDecision === 'show-step') {
       advance(label, 'role-plugin')
     } else {
       advance(label, 'summary')
@@ -1230,7 +1231,9 @@ function TitlePickerWidget({
   )
 }
 
-// Step 4: Role plugin picker — only shown for MEMBER and AUTONOMOUS titles
+// Step 6: Role plugin picker — shown for all titles when client supports plugins.
+// For locked titles (0-1 compatible plugin), shows a read-only card with a confirm button
+// so the step count stays consistent (no gaps in step numbering).
 function RolePluginPickerWidget({
   plugins,
   loading,
@@ -1251,6 +1254,46 @@ function RolePluginPickerWidget({
     )
   }
 
+  // Determine if this is a locked/read-only scenario (0-1 compatible plugins for non-autonomous titles)
+  const isAutonomousTitle = selectedTitle === 'autonomous'
+  const choiceCount = isAutonomousTitle ? plugins.length + 1 : plugins.length
+  const isLocked = choiceCount <= 1
+
+  // Locked: show read-only card with the auto-assigned plugin (or "no plugin")
+  if (isLocked) {
+    const autoPlugin = plugins.length === 1 ? plugins[0] : null
+    return (
+      <div className="space-y-2">
+        <div className="w-full text-left px-3 py-2.5 rounded-lg bg-gray-800/80 border border-gray-600 text-sm">
+          <div className="flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+            <div>
+              <div className="font-medium text-gray-200">
+                {autoPlugin ? autoPlugin.name : 'No plugin (bare agent)'}
+              </div>
+              <div className="text-xs text-gray-500">
+                {autoPlugin
+                  ? `Auto-assigned for ${selectedTitle.toUpperCase()} title`
+                  : `No compatible plugins for ${selectedTitle.toUpperCase()}`}
+              </div>
+              {autoPlugin?.description && (
+                <div className="text-xs text-gray-500 mt-0.5">{autoPlugin.description}</div>
+              )}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={() => onSelect(autoPlugin)}
+          className="w-full px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
+        >
+          <Check className="w-3.5 h-3.5" />
+          Continue
+        </button>
+      </div>
+    )
+  }
+
+  // Multiple choices: show interactive picker
   return (
     <div className="space-y-1.5">
       {/* Default programmer option — recommended for MEMBER */}

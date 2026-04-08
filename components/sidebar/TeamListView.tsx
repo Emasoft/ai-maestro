@@ -215,6 +215,11 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
                 />
                 Also delete all agents in this team
               </label>
+              {deleteAgentsToo && (
+                <p className="text-xs text-amber-400 mt-1">
+                  Note: Agents that existed before the team was created will also be deleted. Consider using &quot;Keep Agents&quot; (uncheck above) to preserve them as autonomous agents.
+                </p>
+              )}
             </div>
 
             {deleteError && (
@@ -356,6 +361,15 @@ function TeamFormModal({
           {error && (
             <div className="bg-red-900/20 border border-red-800 rounded-lg p-2.5 text-xs text-red-400">
               {error}
+              {error.toLowerCase().includes('manager') && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="ml-2 text-blue-400 hover:text-blue-300 underline"
+                >
+                  Close and create a MANAGER agent first
+                </button>
+              )}
             </div>
           )}
 

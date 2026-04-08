@@ -169,6 +169,7 @@ Full spec: `docs_dev/2026-04-03-communication-graph.md`
 | R9.7 | Unblocking does **NOT** auto-wake agents — agents remain hibernated until manually woken by the user or the MANAGER | Explicit |
 | R9.8 | If a MANAGER is deleted or their title is removed, the blocking cascade triggers immediately (same as startup without MANAGER) | Explicit |
 | R9.9 | At server startup, if no MANAGER is detected, team blocking + agent hibernation runs as a startup task | Explicit |
+| R9.10 | When attempting to delete the MANAGER agent, the Delete Agent dialog MUST show a clear warning: "This agent holds the MANAGER title. Removing it will block all team operations." The system auto-demotes the MANAGER to AUTONOMOUS before proceeding with deletion | Explicit |
 
 **Rationale:** Without a MANAGER, no governance authority exists to oversee teams. Blocking prevents unsupervised team operations and ensures the system is in a safe state until governance is restored.
 
@@ -184,6 +185,7 @@ Full spec: `docs_dev/2026-04-03-communication-graph.md`
 | R10.4 | All other agents (MEMBER, ORCHESTRATOR, ARCHITECT, INTEGRATOR, AUTONOMOUS) **cannot** wake or hibernate any agent | Explicit |
 | R10.5 | Team agents cannot be woken if no MANAGER exists on the host (even by the user — assign MANAGER first) | Explicit |
 | R10.6 | The restart endpoint follows the same governance rules as the wake endpoint | Explicit |
+| R10.7 | When deleting a team with "Delete Agents Too", the system SHOULD warn if any agents were created before the team and offer to keep them as AUTONOMOUS instead of deleting them | Recommended |
 
 **Enforcement points:**
 - `POST /api/agents/[id]/wake` — checks auth headers, validates caller is user/MANAGER/COS-of-team

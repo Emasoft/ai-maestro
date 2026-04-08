@@ -2782,7 +2782,7 @@ export interface DeleteAgentResult {
  * Gates:
  *   G00: Authorization — system-owner/MANAGER can delete any agent; others denied
  *   G01: Validate agent exists
- *   G02: Check if agent is MANAGER — reject (must be reassigned first)
+ *   G02: Auto-demote MANAGER to AUTONOMOUS (triggers R10 blocking cascade)
  *   G03: Strip COS/Orchestrator title from teams
  *   G04: Remove agent from all teams
  *   G05: Kill tmux sessions
@@ -2826,17 +2826,27 @@ export async function DeleteAgent(
     }
     ops.push(`G01: Agent "${agent.name}" found (id=${agentId.substring(0, 8)})`)
 
-    // ── G02: Check if agent is MANAGER ─────────────────────────
-    // Cannot delete the MANAGER — must reassign first. Deleting the MANAGER
-    // would block all teams (R10 blocking cascade).
+    // ── G02: Auto-demote MANAGER before deletion ───────────────
+    // If the agent is MANAGER, auto-demote to AUTONOMOUS first. This removes
+    // the MANAGER designation (triggering R10 blocking cascade on all teams)
+    // but avoids forcing the user through 2 manual steps.
     try {
       const { isManager: checkManager } = await import('@/lib/governance')
       if (checkManager(agentId)) {
-        result.error = 'Cannot delete the MANAGER. Reassign the MANAGER title to another agent first.'
-        ops.push('G02: DENIED — agent is MANAGER, cannot delete')
-        return result
+        ops.push('G02: Agent is MANAGER — auto-demoting to AUTONOMOUS before deletion')
+        const titleResult = await ChangeTitle(agentId, 'autonomous', {
+          authContext: options?.authContext,
+          skipRestart: true,  // No point restarting — we're about to delete
+        })
+        if (!titleResult.success) {
+          result.error = `Cannot delete the MANAGER: auto-demotion failed — ${titleResult.error}`
+          ops.push(`G02: FAILED — ChangeTitle to AUTONOMOUS failed: ${titleResult.error}`)
+          return result
+        }
+        ops.push('G02: MANAGER auto-demoted to AUTONOMOUS — proceeding with deletion')
+      } else {
+        ops.push('G02: Agent is not MANAGER — OK to delete')
       }
-      ops.push('G02: Agent is not MANAGER — OK to delete')
     } catch {
       ops.push('G02: WARN — governance check failed, proceeding')
     }

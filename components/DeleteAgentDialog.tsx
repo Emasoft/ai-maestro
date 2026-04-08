@@ -263,6 +263,7 @@ export default function DeleteAgentDialog({
                     type="text"
                     value={confirmText}
                     onChange={(e) => setConfirmText(e.target.value)}
+                    onInput={(e) => setConfirmText((e.target as HTMLInputElement).value)}
                     placeholder={agentAlias}
                     className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors"
                     autoFocus

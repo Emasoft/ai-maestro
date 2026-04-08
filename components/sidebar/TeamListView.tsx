@@ -282,7 +282,7 @@ function TeamFormModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => { if (!saving) onClose() }}>
       <div className="bg-gray-900 rounded-xl w-full max-w-md shadow-2xl border border-gray-700 p-5" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-gray-100">

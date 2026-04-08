@@ -23,6 +23,7 @@ All UI scenario tests in AI Maestro MUST follow these 11 rules. No exceptions.
 9. [Rule 9: REPORT-FORMAT](#rule-9-report-format) — Structured markdown report
 10. [Rule 10: PHOTOSTORY](#rule-10-photostory) — Screenshot at every critical step
 11. [Rule 11: 11th-HOUR](#rule-11-11th-hour) — Post-scenario deep analysis and improvement proposals
+12. [How-To: Running a Scenario](#how-to-running-a-scenario) — Practical guidance for the test executor
 
 ---
 
@@ -499,6 +500,61 @@ tests/scenarios/reports/scenario_proposed-improvements_<NNN>_<datetime>.md
 ```
 
 The file must reference the scenario report it is based on. Each proposal must include: problem description, root cause analysis, proposed solution with specific files/changes, and priority (P0-P3).
+
+---
+
+## How-To: Running a Scenario
+
+These are practical instructions for the AI assistant executing a scenario test.
+
+### You ARE the user
+
+In a scenario test, you are **impersonating the user**. You sit in front of the browser and interact with the dashboard exactly as a human would. This means:
+
+- You click buttons, fill forms, read what's on screen, and make decisions based on what you see.
+- When the scenario says "Create an agent", you use the wizard in the browser — not an API call.
+- When you need to verify something, you look at the Profile panel, the sidebar, or the terminal output — not a curl response.
+
+### Talk to your agents
+
+Agents are live Claude Code instances running in tmux sessions. They can read your messages and act on them. When a scenario requires an agent to perform an action:
+
+1. **Select the agent** in the sidebar (click its name)
+2. **Use the Prompt Builder** at the bottom of the dashboard to type instructions
+3. **Click Send** to deliver the instruction to the agent's terminal
+4. **Read the terminal output** to see what the agent is doing and whether it succeeded
+5. **Respond to the agent** if it asks questions or needs clarification
+
+If an agent refuses to do its job, pushes back, or sits idle — **talk to it**. Give it clearer instructions. Push it to act. Don't let agents slack. You are the manager of the test.
+
+### Read what agents write
+
+The terminal shows the agent's real-time output. **Read it.** The agent may:
+
+- Ask for permission (approve it if appropriate for the test)
+- Report errors (diagnose and fix per Rule 4)
+- Request clarification (answer via the Prompt Builder)
+- Show progress (wait for completion before moving to the next step)
+
+Don't blindly move to the next step without confirming the agent completed the current action.
+
+### Read-only monitoring is allowed
+
+Rule 6 forbids **actions** outside the UI. But **read-only operations** to monitor agent behavior are allowed:
+
+- **Read agent working directories** to check if files were created/modified
+- **Read conversation logs** (`~/.claude/projects/.../*.jsonl`) to understand what the agent actually did
+- **Read config files** to verify state after a UI action
+- **Use `tmux list-sessions`** to check which agents are running
+- **Use `ls`, `cat`, `grep`** on agent output files
+
+What remains forbidden:
+- Calling API endpoints with `curl` to **perform actions** (create, delete, modify)
+- Running `tmux send-keys` to type into agent terminals (use the Prompt Builder)
+- Editing config files directly (use the UI)
+- Killing sessions with `tmux kill-session` (use the UI hibernate/delete)
+
+The distinction is: **read = monitoring (allowed), write = action (forbidden, use UI)**.
 
 ---
 

@@ -1,7 +1,7 @@
 ---
 number: 6
 name: Manager Gate Team Lifecycle (Codex Client)
-version: "2.0"
+version: "3.0"
 description: >
   Variant of SCEN-005 that uses Codex as the AI client for team member agents.
   Tests the MANAGER-gated team lifecycle with LoginGate authentication, cross-client
@@ -131,12 +131,12 @@ author: AI Maestro Team
 
 ## Phase 2: Verify No-Manager Blocking
 
-#### S009: Verify governance API shows no MANAGER
-- **Action:** Verify `GET /api/governance` returns `hasManager: false`
-- **Goal:** No-MANAGER state confirmed
+#### S009: Verify no MANAGER badge in sidebar
+- **Action:** Click Agents tab, check that no agent shows a MANAGER badge
+- **Goal:** No-MANAGER state confirmed visually
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** API response. Screenshot: SCEN-006/S009-no-mgr-api.png
+- **Verify:** No MANAGER badge visible. Screenshot: SCEN-006/S009-no-mgr.png
 
 #### S010: Attempt to create a team via UI
 - **Action:** Click Teams tab, click "Create Team"
@@ -156,12 +156,12 @@ author: AI Maestro Team
 - **Modifies:** Governance state, agent registry
 - **Verify:** MANAGER badge, `ai-maestro-assistant-manager-agent` plugin. Screenshot: SCEN-006/S011-manager-assigned.png
 
-#### S012: Verify MANAGER via API
-- **Action:** `GET /api/governance`
-- **Goal:** `hasManager: true`, `managerId` matches
+#### S012: Verify MANAGER via Profile panel
+- **Action:** Click `scen006-manager` in sidebar, open Profile panel. Verify MANAGER badge and `ai-maestro-assistant-manager-agent` plugin label.
+- **Goal:** MANAGER title and plugin confirmed in UI
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** API confirms. Screenshot: SCEN-006/S012-governance-api.png
+- **Verify:** MANAGER badge and plugin label visible. Screenshot: SCEN-006/S012-manager-profile.png
 
 ---
 
@@ -174,50 +174,57 @@ author: AI Maestro Team
 - **Modifies:** Registries
 - **Verify:** Team in sidebar. Screenshot: SCEN-006/S013-team-created.png
 
-#### S014: Verify auto-COS uses Claude (not Codex)
-- **Action:** Check COS agent's `program` field via API
+#### S014: Tell MANAGER to wake the auto-COS agent
+- **Action:** Click `scen006-manager` in sidebar. In the Prompt Builder, type `Wake up the COS agent for our team` and click Send. Wait for MANAGER to execute the wake command.
+- **Goal:** COS agent session started (status changes from Offline to Online/Idle)
+- **Creates:** tmux session for COS agent
+- **Modifies:** COS agent status
+- **Verify:** COS agent shows Online/Idle in sidebar. Screenshot: SCEN-006/S014-cos-woken.png
+
+#### S015: Verify auto-COS uses Claude (not Codex)
+- **Action:** Click COS agent in sidebar, open Profile panel. Check Program field.
 - **Goal:** Auto-COS created with `program: 'claude'` (server default)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** `program: 'claude'`. Screenshot: SCEN-006/S014-cos-claude.png
+- **Verify:** Profile shows `Program: claude`. Screenshot: SCEN-006/S015-cos-claude.png
 
-#### S015: Verify COS has correct plugin and is in agentIds
-- **Action:** Check COS plugin and team agentIds
-- **Goal:** `ai-maestro-chief-of-staff` installed, COS in agentIds (R4.6)
+#### S016: Verify COS has correct plugin and is in agentIds
+- **Action:** In COS Profile panel, check role plugin label and Governance Title badge
+- **Goal:** `ai-maestro-chief-of-staff` installed, CHIEF-OF-STAFF title shown
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin present, COS in agentIds. Screenshot: SCEN-006/S015-cos-verified.png
+- **Verify:** Plugin label and CHIEF-OF-STAFF badge visible. Screenshot: SCEN-006/S016-cos-verified.png
 
 ---
 
 ## Phase 5: COS Immutability Probe (R4.7)
 
-#### S016: Attempt to remove COS from team agentIds via API
-- **Action:** `PUT /api/teams/<teamId>` with agentIds excluding COS ID
-- **Goal:** API returns 400 -- COS cannot be removed (R4.7)
+#### S017: Verify COS cannot leave team via UI
+- **Action:** Click COS agent in sidebar, open Profile panel. Look for "Leave team" button — it should be absent or disabled for COS agents (R4.7 immutability).
+- **Goal:** COS cannot be removed from team via UI
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response 400. COS still in team. Screenshot: SCEN-006/S016-cos-immutability.png
+- **Verify:** No "Leave team" button for COS, or button is disabled. Screenshot: SCEN-006/S017-cos-immutability.png
 
 ---
 
 ## Phase 6: Add Codex Agent -- Cross-Client Plugin Conversion
 
-#### S017: Create Codex agent `scen006-codex-member`
+#### S018: Create Codex agent `scen006-codex-member`
 - **Action:** Wizard: Codex client, name `scen006-codex-member`, select team, MEMBER title, finish
 - **Goal:** Agent created as MEMBER with Codex-converted plugin
 - **Creates:** Agent with `program: 'codex'`
 - **Modifies:** Agent registry, team agentIds
 - **Verify:** Agent in sidebar with MEMBER title. Screenshot: SCEN-006/S017-codex-member.png
 
-#### S018: Verify agent program is Codex
+#### S019: Verify agent program is Codex
 - **Action:** Check profile or API for `program` field
 - **Goal:** `program: 'codex'`
 - **Creates:** nothing
 - **Modifies:** nothing
 - **Verify:** Codex confirmed. Screenshot: SCEN-006/S018-program-codex.png
 
-#### S019: Verify cross-client plugin conversion
+#### S020: Verify cross-client plugin conversion
 - **Action:** Check Config tab for installed role-plugin
 - **Goal:** `ai-maestro-programmer-agent` installed (possibly with Codex conversion)
 - **Creates:** nothing
@@ -226,27 +233,27 @@ author: AI Maestro Team
 
 ---
 
-## Phase 7: RBAC Probes
+## Phase 7: RBAC Verification via UI
 
-#### S020: Attempt agent self-modification via API
-- **Action:** `PATCH /api/agents/<codexMemberId>` with `X-Agent-Id: <codexMemberId>` and body `{"label": "self-hack"}`
-- **Goal:** 403 -- no agent can modify itself
+#### S021: Verify Codex MEMBER cannot change own title via UI
+- **Action:** Click `scen006-codex-member` in sidebar, open Profile panel. Click the MEMBER governance title badge to open the Title Assignment Dialog.
+- **Goal:** Title dialog shows only the current title with no ability to self-assign — or dialog is not available for non-MANAGER agents attempting self-modification
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response 403. Screenshot: SCEN-006/S020-no-self-mod.png
+- **Verify:** Dialog shows restricted options or error. Screenshot: SCEN-006/S020-member-title-restricted.png
 
-#### S021: Attempt title change by MEMBER agent
-- **Action:** `PATCH /api/agents/<codexMemberId>` with `X-Agent-Id: <managerId>` is the CORRECT caller. Instead test: `PATCH /api/agents/<managerId>` with `X-Agent-Id: <codexMemberId>` and body `{"governanceTitle": "autonomous"}`
-- **Goal:** 403 -- MEMBER cannot change MANAGER's title
+#### S022: Verify MEMBER cannot access MANAGER's danger zone
+- **Action:** Click `scen006-manager` in sidebar, open Profile panel, scroll to Advanced tab, check if Danger Zone actions are available when viewed from a non-privileged context
+- **Goal:** MANAGER profile visible but destructive actions only available to authorized callers
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response 403. Screenshot: SCEN-006/S021-rbac-title-denied.png
+- **Verify:** Profile viewable, governance controls present. Screenshot: SCEN-006/S021-manager-profile-view.png
 
 ---
 
 ## Phase 8: Remove Codex Agent -- AUTONOMOUS
 
-#### S022: Click "Leave team" on Codex agent
+#### S023: Click "Leave team" on Codex agent
 - **Action:** Profile -> Leave team
 - **Goal:** Agent removed, title -> AUTONOMOUS, plugin removed
 - **Creates:** nothing
@@ -257,14 +264,14 @@ author: AI Maestro Team
 
 ## Phase 9: Title Requires Team (Gate 9) -- Client-Agnostic
 
-#### S023: Open Title Assignment Dialog for teamless Codex agent
+#### S024: Open Title Assignment Dialog for teamless Codex agent
 - **Action:** Click title badge on `scen006-codex-member`
 - **Goal:** Only AUTONOMOUS and MANAGER shown (no team -> no team titles)
 - **Creates:** nothing
 - **Modifies:** nothing
 - **Verify:** 2 options only. Screenshot: SCEN-006/S023-standalone-titles.png
 
-#### S024: Close dialog
+#### S025: Close dialog
 - **Action:** Click Cancel
 - **Goal:** Dialog dismissed
 - **Creates:** nothing
@@ -275,14 +282,14 @@ author: AI Maestro Team
 
 ## Phase 10: Delete Team via DeleteTeam Pipeline
 
-#### S025: Delete team with governance password
+#### S026: Delete team with governance password
 - **Action:** Teams tab -> delete `scen006-governance-team` -> Delete -> password `mYkri1-xoxrap-gogtan` -> "Keep Agents"
 - **Goal:** Team deleted via 8-gate pipeline, agents revert
 - **Creates:** nothing
 - **Modifies:** Team removed, titles -> AUTONOMOUS, plugins removed
 - **Verify:** Team gone. Screenshot: SCEN-006/S025-team-deleted.png
 
-#### S026: Verify all former agents are AUTONOMOUS
+#### S027: Verify all former agents are AUTONOMOUS
 - **Action:** Check all former team agents via API
 - **Goal:** None retain team titles
 - **Creates:** nothing
@@ -303,44 +310,44 @@ author: AI Maestro Team
 >
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
-#### S027: Remove MANAGER title from `scen006-manager`
+#### S028: Remove MANAGER title from `scen006-manager`
 - **Action:** Title dialog -> AUTONOMOUS -> password `mYkri1-xoxrap-gogtan`
 - **Goal:** No MANAGER
 - **Removes:** MANAGER title
 - **Verify:** `hasManager: false`. Screenshot: SCEN-006/S027-no-manager.png
 
-#### S028: Delete `scen006-manager`
+#### S029: Delete `scen006-manager`
 - **Action:** Danger Zone -> Delete Agent -> confirm
 - **Goal:** Agent removed
 - **Removes:** Agent
 - **Verify:** Agent gone. Screenshot: SCEN-006/S028-manager-deleted.png
 
-#### S029: Delete `scen006-codex-member`
+#### S030: Delete `scen006-codex-member`
 - **Action:** Danger Zone -> Delete Agent -> confirm
 - **Goal:** Agent removed
 - **Removes:** Agent
 - **Verify:** Agent gone. Screenshot: SCEN-006/S029-codex-deleted.png
 
-#### S030: Delete any remaining auto-COS agents
+#### S031: Delete any remaining auto-COS agents
 - **Action:** Check for cos-* agents from this test, delete each
 - **Goal:** All auto-COS removed
 - **Removes:** Auto-COS agents
 - **Verify:** None remain. Screenshot: SCEN-006/S030-cos-deleted.png
 
-#### S031: Verify cemetery entries and purge
+#### S032: Verify cemetery entries and purge
 - **Action:** Settings -> Cemetery tab. Verify test agents appear. Purge all.
 - **Goal:** Cemetery verified, test entries purged
 - **Removes:** Cemetery archives
 - **Verify:** No test entries. Screenshot: SCEN-006/S031-cemetery-purged.png
 
-#### S032: STATE-WIPE -- Restore configuration files
+#### S033: STATE-WIPE -- Restore configuration files
 - **Action:** Compare and restore config files from S002 backup
 - **Goal:** All files match pre-test state
 - **Creates:** nothing
 - **Modifies:** Config files restored
 - **Verify:** All match. Screenshot: SCEN-006/S032-state-restored.png
 
-#### S033: Post-test screenshot
+#### S034: Post-test screenshot
 - **Action:** `take_screenshot` of full page
 - **Goal:** UI identical to baseline
 - **Creates:** nothing

@@ -85,13 +85,13 @@ export default function TeamsPage() {
     return () => document.removeEventListener('keydown', handleKey)
   }, [creating])
 
-  const handleDelete = async (teamId: string, deleteAgents: boolean = false) => {
+  const handleDelete = async (teamId: string) => {
     setDeleteError(null)
     try {
       const res = await fetch(`/api/teams/${teamId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deleteAgents, password: deletePassword }),
+        body: JSON.stringify({ password: deletePassword }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: 'Failed to delete team' }))
@@ -228,6 +228,7 @@ export default function TeamsPage() {
                 {deleteError && (
                   <p className="text-xs text-red-400 mb-3">{deleteError}</p>
                 )}
+                <p className="text-xs text-gray-400 mb-3">Agents will be reverted to AUTONOMOUS and hibernated.</p>
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={() => { setDeleteConfirm(null); setDeletePhase('confirm'); setDeletePassword(''); setDeleteError(null) }}
@@ -236,18 +237,11 @@ export default function TeamsPage() {
                     Cancel
                   </button>
                   <button
-                    onClick={() => handleDelete(deleteConfirm, false)}
-                    disabled={!deletePassword}
-                    className="text-xs px-3 py-1.5 bg-gray-600 hover:bg-gray-500 text-white rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Keep Agents
-                  </button>
-                  <button
-                    onClick={() => handleDelete(deleteConfirm, true)}
+                    onClick={() => handleDelete(deleteConfirm!)}
                     disabled={!deletePassword}
                     className="text-xs px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Delete Agents Too
+                    Delete Team
                   </button>
                 </div>
               </>

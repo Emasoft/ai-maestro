@@ -437,15 +437,8 @@ export default function DashboardPage() {
     setProfileScrollToDangerZone(false)
   }
 
-  const handleShowAgentProfileDangerZone = (agent: Agent) => {
-    // Set active agent and open profile panel scrolled to danger zone
-    setActiveAgentId(agent.id)
-    if (!showProfilePanel) {
-      setShowProfilePanel(true)
-      localStorage.setItem('aimaestro-profile-panel', 'true')
-    }
-    setProfileScrollToDangerZone(true)
-  }
+  // handleShowAgentProfileDangerZone removed — sidebar delete shortcut was removed (ISSUE-002).
+  // The Danger Zone is only accessible via Profile → Advanced → Danger Zone.
 
   const handleDeleteAgent = async (agentId: string) => {
     try {

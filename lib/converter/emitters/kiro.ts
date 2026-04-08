@@ -8,7 +8,7 @@
  */
 
 import type { Emitter, ProjectIR, ConvertedFile, ConversionProvenance } from '../types'
-import { emitSkill, emitSkillAuxFiles } from './shared'
+import { emitSkill, emitSkillAuxFiles, transformMCPServerPaths } from './shared'
 import { WarningCollector } from '../utils/warnings'
 
 function getProvenance(sourceProvider: string): ConversionProvenance {
@@ -112,8 +112,9 @@ const kiroEmitter: Emitter = {
 
     // MCP → .kiro/settings/mcp.json
     if (project.mcp && project.mcp.servers.length > 0) {
+      const transformedServers = project.mcp.servers.map(transformMCPServerPaths)
       const mcpServers: Record<string, Record<string, unknown>> = {}
-      for (const s of project.mcp.servers) {
+      for (const s of transformedServers) {
         const def: Record<string, unknown> = {}
         if (s.command) def.command = s.command
         if (s.args) def.args = s.args
@@ -166,6 +167,13 @@ const kiroEmitter: Emitter = {
         type: 'commands',
         warnings: [`Command "/${cmd.name}" converted to skill`],
       })
+    }
+
+    // Emit plugin resource files
+    if (project.resources) {
+      for (const res of project.resources) {
+        files.push({ path: res.relativePath, content: res.content, type: 'resource' as const, warnings: [] })
+      }
     }
 
     if (warnings.hasWarnings() && files.length > 0) files[0].warnings.push(...warnings.getWarnings())

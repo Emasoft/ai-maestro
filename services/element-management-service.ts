@@ -363,15 +363,9 @@ export async function autoAssignRolePluginForTitle(
   const agent = getAgent(agentId)
   if (!agent) throw new Error(`Agent ${agentId} not found`)
 
-  // All title-locked roles require role-plugins which are Claude-only.
+  // Detect client type — non-Claude agents get plugins via the adapter system
   const { detectClientType } = await import('@/lib/client-capabilities')
   const clientType = detectClientType(agent.program || '')
-  if (clientType !== 'claude') {
-    throw new Error(
-      `Cannot assign ${title.toUpperCase()} title to ${clientType} agent "${agent.name || agentId}". ` +
-      `Governance titles with auto-assigned role-plugins require Claude Code (role-plugins are Claude-only).`
-    )
-  }
 
   const agentDir = agent.workingDirectory || agent.sessions?.[0]?.workingDirectory
   if (!agentDir) throw new Error(`Agent ${agentId} has no working directory`)
@@ -384,10 +378,28 @@ export async function autoAssignRolePluginForTitle(
     }
   }
 
-  // Install the required role-plugin from the GitHub marketplace (--scope local)
-  await installPluginLocally(requiredPlugin, agentDir, marketplace)
+  if (clientType !== 'claude') {
+    // Non-Claude: convert and install via adapter
+    const { convertAndStorePlugin, emitForClient } = await import('@/services/plugin-storage-service')
+    const { getAdapter } = await import('@/lib/client-plugin-adapters')
+    await convertAndStorePlugin(requiredPlugin, 'claude', [clientType as 'codex' | 'gemini' | 'opencode' | 'kiro'])
+    const emittedDir = await emitForClient(requiredPlugin, clientType as 'codex' | 'gemini' | 'opencode' | 'kiro')
+    if (emittedDir) {
+      const adapter = await getAdapter(clientType)
+      if (adapter) {
+        await adapter.install(
+          { name: requiredPlugin, clientType, storageDir: emittedDir, providerId: 'claude-code' },
+          agentDir,
+          { scope: 'local' }
+        )
+      }
+    }
+  } else {
+    // Claude: install directly (existing behavior)
+    await installPluginLocally(requiredPlugin, agentDir, marketplace)
+  }
 
-  console.log(`[element-mgmt] Auto-assigned role-plugin ${requiredPlugin} to agent ${agentId} (title: ${title})`)
+  console.log(`[element-mgmt] Auto-assigned role-plugin ${requiredPlugin} to agent ${agentId} (title: ${title}, client: ${clientType})`)
   return requiredPlugin
 }
 
@@ -1019,11 +1031,36 @@ export async function ChangeTitle(
     // ── GATE 16: Install new role-plugin ─────────────────────
     if (!options?.skipPluginSync && targetPluginName && agentDir && targetPluginName !== currentPluginName) {
       try {
-        // TODO: If needsPluginConversion, call cross-client converter first
-        // For now, install the plugin directly (works for Claude and native-compatible clients)
-        await installPluginLocally(targetPluginName, agentDir, targetMarketplace)
-        result.installedPlugin = targetPluginName
-        ops.push(`G16: Installed role-plugin "${targetPluginName}"`)
+        if (needsPluginConversion) {
+          // Non-Claude client: convert plugin to target format and install via adapter
+          const { convertAndStorePlugin, emitForClient } = await import('@/services/plugin-storage-service')
+          const { getAdapter } = await import('@/lib/client-plugin-adapters')
+          await convertAndStorePlugin(targetPluginName, 'claude', [agentClientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro'])
+          const emittedDir = await emitForClient(targetPluginName, agentClientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro')
+          if (emittedDir) {
+            const adapter = await getAdapter(agentClientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro')
+            if (adapter) {
+              const installResult = await adapter.install(
+                { name: targetPluginName, clientType: agentClientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro', storageDir: emittedDir, providerId: 'claude-code' },
+                agentDir,
+                { scope: 'local' }
+              )
+              if (installResult.success) {
+                result.installedPlugin = targetPluginName
+                ops.push(`G16: Converted + installed role-plugin "${targetPluginName}" for ${agentClientType} via adapter`)
+              } else {
+                ops.push(`G16: WARN — Adapter install failed: ${installResult.error}`)
+              }
+            }
+          } else {
+            ops.push(`G16: WARN — Failed to emit plugin "${targetPluginName}" for ${agentClientType}`)
+          }
+        } else {
+          // Claude client: install directly (existing behavior)
+          await installPluginLocally(targetPluginName, agentDir, targetMarketplace)
+          result.installedPlugin = targetPluginName
+          ops.push(`G16: Installed role-plugin "${targetPluginName}"`)
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         ops.push(`G16: WARN — Failed to install "${targetPluginName}": ${msg}`)

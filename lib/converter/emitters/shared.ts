@@ -5,7 +5,8 @@
 
 import type {
   ConvertedFile, SkillIR, AgentIR, InstructionIR,
-  MCPIR, CommandIR, HookIR, ConversionProvenance, ProviderId
+  MCPIR, CommandIR, HookIR, ConversionProvenance, ProviderId,
+  MCPServerDef, PluginResourceFile, PlatformPaths
 } from '../types'
 import { stringifyFrontmatter, stripClientSpecificFields } from '../utils/frontmatter'
 
@@ -151,4 +152,165 @@ export function emitMarkdownAgent(
  */
 export function buildArgumentHint(args: { name: string; required: boolean }[]): string {
   return args.map(a => a.required ? `<${a.name}>` : `[${a.name}]`).join(' ')
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MCP Path Transforms (from acplugin: src/converter/mcp.ts)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Transform ${CLAUDE_PLUGIN_ROOT}/path and ${CLAUDE_PLUGIN_DATA}/path
+ * to portable relative paths (./path) for non-Claude target platforms.
+ */
+export function transformPluginRootPaths(value: string): string {
+  return value
+    // Quoted: "${CLAUDE_PLUGIN_ROOT}/foo/bar" → "./foo/bar"
+    .replace(/"\$\{CLAUDE_PLUGIN_ROOT\}\/([^"]+)"/g, '"./$1"')
+    // Unquoted: ${CLAUDE_PLUGIN_ROOT}/foo → ./foo
+    .replace(/\$\{CLAUDE_PLUGIN_ROOT\}\//g, './')
+    // Bare: ${CLAUDE_PLUGIN_ROOT} → .
+    .replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, '.')
+    // Same for CLAUDE_PLUGIN_DATA
+    .replace(/"\$\{CLAUDE_PLUGIN_DATA\}\/([^"]+)"/g, '"./$1"')
+    .replace(/\$\{CLAUDE_PLUGIN_DATA\}\//g, './')
+    .replace(/\$\{CLAUDE_PLUGIN_DATA\}/g, '.')
+}
+
+/** Apply plugin root path transforms to all MCP server args */
+export function transformMCPArgs(args: string[]): string[] {
+  return args.map(transformPluginRootPaths)
+}
+
+/** Apply plugin root path transforms to all MCP server env values */
+export function transformMCPEnv(env: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const [key, val] of Object.entries(env)) {
+    result[key] = transformPluginRootPaths(val)
+  }
+  return result
+}
+
+/** Transform an entire MCPServerDef's args and env in place */
+export function transformMCPServerPaths(server: MCPServerDef): MCPServerDef {
+  return {
+    ...server,
+    args: server.args ? transformMCPArgs(server.args) : server.args,
+    env: server.env ? transformMCPEnv(server.env) : server.env,
+    command: server.command ? transformPluginRootPaths(server.command) : server.command,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Plugin Resource File Scanning
+// ═══════════════════════════════════════════════════════════════
+
+import { existsSync, readFileSync, statSync, readdirSync } from 'fs'
+import path from 'path'
+
+/**
+ * Scan MCP server definitions for files referenced via ${CLAUDE_PLUGIN_ROOT}.
+ * Returns PluginResourceFile[] with content read from disk.
+ */
+export function scanMCPResourceFiles(
+  servers: MCPServerDef[],
+  pluginRoot: string
+): PluginResourceFile[] {
+  const resourcePaths = new Set<string>()
+
+  for (const server of servers) {
+    // Extract paths from args
+    for (const arg of server.args || []) {
+      const match = arg.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/(.+)/)
+      if (match) resourcePaths.add(match[1])
+    }
+    // Extract paths from env values
+    for (const val of Object.values(server.env || {})) {
+      const match = val.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/(.+)/)
+      if (match) resourcePaths.add(match[1])
+    }
+    // Extract paths from command
+    if (server.command) {
+      const match = server.command.match(/\$\{CLAUDE_PLUGIN_ROOT\}\/(.+)/)
+      if (match) resourcePaths.add(match[1])
+    }
+  }
+
+  const resources: PluginResourceFile[] = []
+  for (const relPath of resourcePaths) {
+    // Clean up quotes and trailing args
+    const cleanPath = relPath.replace(/^["']|["']$/g, '').split(/\s/)[0]
+    const fullPath = path.resolve(pluginRoot, cleanPath)
+
+    // Only include files that exist and are inside the plugin root
+    if (!fullPath.startsWith(path.resolve(pluginRoot))) continue
+    if (!existsSync(fullPath)) continue
+
+    const stat = statSync(fullPath)
+    if (stat.isFile()) {
+      resources.push({ relativePath: cleanPath, content: readFileSync(fullPath, 'utf-8') })
+    } else if (stat.isDirectory()) {
+      // Scan directory recursively (max 3 levels) for script files
+      scanDirForResources(fullPath, pluginRoot, resources, 0)
+    }
+  }
+
+  return resources
+}
+
+function scanDirForResources(
+  dir: string, pluginRoot: string,
+  resources: PluginResourceFile[], depth: number
+): void {
+  if (depth > 3) return
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue
+    const full = path.join(dir, entry.name)
+    if (entry.isFile()) {
+      const rel = path.relative(pluginRoot, full)
+      resources.push({ relativePath: rel, content: readFileSync(full, 'utf-8') })
+    } else if (entry.isDirectory()) {
+      scanDirForResources(full, pluginRoot, resources, depth + 1)
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Platform Paths (single source of truth)
+// ═══════════════════════════════════════════════════════════════
+
+/** Output directory layout per target platform */
+export const PLATFORM_PATHS: Record<ProviderId, PlatformPaths> = {
+  'claude-code': {
+    metaDir: '.claude-plugin',
+    manifestFile: 'plugin.json',
+    skills: 'skills',
+    agents: 'agents',
+    mcp: '.mcp.json',
+  },
+  'codex': {
+    metaDir: '.codex-plugin',
+    manifestFile: 'plugin.json',
+    skills: 'skills',
+    agents: '.agents',
+    mcp: '.mcp.json',
+  },
+  'gemini': {
+    metaDir: '.gemini-plugin',
+    manifestFile: 'plugin.json',
+    skills: '.gemini/skills',
+    mcp: '.gemini/settings.json',
+  },
+  'opencode': {
+    metaDir: '.opencode-plugin',
+    manifestFile: 'plugin.json',
+    skills: '.opencode/skills',
+    mcp: 'opencode.json',
+  },
+  'kiro': {
+    metaDir: '.kiro-plugin',
+    manifestFile: 'plugin.json',
+    skills: '.kiro/skills',
+    agents: '.kiro/agents',
+    mcp: '.kiro/mcp.json',
+  },
 }

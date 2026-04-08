@@ -281,7 +281,7 @@ export async function findSkillSource(
   skillName: string,
   sourceClient: 'claude' | 'codex' | 'gemini'
 ): Promise<{ skillName: string; skillPath: string; scope: string; client: string } | null> {
-  const providerMap: Record<string, ProviderId> = { claude: 'claude-code', codex: 'codex', gemini: 'gemini' }
+  const providerMap: Record<string, ProviderId> = { claude: 'claude-code', codex: 'codex', gemini: 'gemini', opencode: 'opencode', kiro: 'kiro' }
   const providerId = providerMap[sourceClient]
   if (!providerId) return null
 
@@ -318,7 +318,7 @@ export async function findSkillSource(
  * For Claude: also scans plugin cache (most skills live there, not in ~/.claude/skills/).
  */
 export async function listClientSkills(clientType: 'claude' | 'codex' | 'gemini'): Promise<string[]> {
-  const providerMap: Record<string, ProviderId> = { claude: 'claude-code', codex: 'codex', gemini: 'gemini' }
+  const providerMap: Record<string, ProviderId> = { claude: 'claude-code', codex: 'codex', gemini: 'gemini', opencode: 'opencode', kiro: 'kiro' }
   const result = await listClientElements(providerMap[clientType] || 'claude-code', 'user')
   const skills = new Set(result.skills)
 
@@ -349,7 +349,7 @@ export async function getConversionTargets(
   skillName: string,
   sourceClient: 'claude' | 'codex' | 'gemini'
 ): Promise<string[]> {
-  const providerMap: Record<string, ProviderId> = { claude: 'claude-code', codex: 'codex', gemini: 'gemini' }
+  const providerMap: Record<string, ProviderId> = { claude: 'claude-code', codex: 'codex', gemini: 'gemini', opencode: 'opencode', kiro: 'kiro' }
   const reverseMap: Record<ProviderId, string> = { 'claude-code': 'claude', 'codex': 'codex', 'gemini': 'gemini', 'opencode': 'opencode', 'kiro': 'kiro' }
   const targets = getAvailableTargets(providerMap[sourceClient] || 'claude-code')
   return targets.map(t => reverseMap[t] || t)

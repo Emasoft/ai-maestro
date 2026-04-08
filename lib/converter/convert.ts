@@ -84,6 +84,12 @@ export async function convert(options: ConvertOptions): Promise<ConvertResult> {
     return { ok: false, error: `Parse error: ${err instanceof Error ? err.message : String(err)}`, files: [], warnings: [], elements: emptyElements(), sourceProvider: fromId, targetProvider: options.to }
   }
 
+  // 3b. Scan for plugin resource files referenced by MCP (scripts, configs)
+  if (project.mcp && project.pluginMeta) {
+    const { scanMCPResourceFiles } = await import('./emitters/shared')
+    project.resources = scanMCPResourceFiles(project.mcp.servers, sourceDir)
+  }
+
   // 4. Filter to requested element types
   if (options.elements) {
     const keep = new Set(options.elements)
@@ -210,5 +216,5 @@ function getOutputRoot(options: ConvertOptions, _targetProvider: { userConfigDir
 }
 
 function emptyElements(): Record<ElementType, number> {
-  return { skills: 0, agents: 0, instructions: 0, mcp: 0, commands: 0, hooks: 0 }
+  return { skills: 0, agents: 0, instructions: 0, mcp: 0, commands: 0, hooks: 0, manifest: 0, resource: 0 }
 }

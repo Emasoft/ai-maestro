@@ -9,6 +9,26 @@
 
 export type ClientType = 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'aider' | 'unknown'
 
+import type { ProviderId } from '@/lib/converter/types'
+
+/** Map ClientType to converter ProviderId (null if no converter support) */
+export function clientTypeToProviderId(ct: ClientType): ProviderId | null {
+  const map: Record<string, ProviderId> = {
+    claude: 'claude-code', codex: 'codex', gemini: 'gemini',
+    opencode: 'opencode', kiro: 'kiro',
+  }
+  return map[ct] ?? null
+}
+
+/** Map converter ProviderId back to ClientType */
+export function providerIdToClientType(pid: ProviderId): ClientType {
+  const map: Record<ProviderId, ClientType> = {
+    'claude-code': 'claude', 'codex': 'codex', 'gemini': 'gemini',
+    'opencode': 'opencode', 'kiro': 'kiro',
+  }
+  return map[pid] ?? 'unknown'
+}
+
 export interface ClientCapabilities {
   skills: boolean
   plugins: boolean

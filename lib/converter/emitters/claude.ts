@@ -118,6 +118,13 @@ const claudeEmitter: Emitter = {
       })
     }
 
+    // Emit plugin resource files
+    if (project.resources) {
+      for (const res of project.resources) {
+        files.push({ path: res.relativePath, content: res.content, type: 'resource' as const, warnings: [] })
+      }
+    }
+
     return files
   },
 }

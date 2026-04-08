@@ -6,7 +6,7 @@
  */
 
 import type { Emitter, ProjectIR, ConvertedFile, ConversionProvenance, SkillIR } from '../types'
-import { emitSkill, emitSkillAuxFiles, emitMarkdownAgent } from './shared'
+import { emitSkill, emitSkillAuxFiles, emitMarkdownAgent, transformMCPServerPaths } from './shared'
 import { WarningCollector } from '../utils/warnings'
 
 const GEMINI_STRIP_FIELDS = ['allowed-tools', 'compatibility', 'metadata', 'license', 'context', 'agent', 'effort', 'model', 'hooks', 'user-invocable', 'args', 'paths']
@@ -71,8 +71,9 @@ const geminiEmitter: Emitter = {
 
     // MCP → settings.json
     if (project.mcp && project.mcp.servers.length > 0) {
+      const transformedServers = project.mcp.servers.map(transformMCPServerPaths)
       const mcpServers: Record<string, Record<string, unknown>> = {}
-      for (const s of project.mcp.servers) {
+      for (const s of transformedServers) {
         const def: Record<string, unknown> = {}
         if (s.command) def.command = s.command
         if (s.args) def.args = s.args
@@ -99,6 +100,13 @@ const geminiEmitter: Emitter = {
       const escapedContent = cmd.content.replace(/"""/g, "'''")
       const tomlContent = `name = "${safeCmdName}"\ndescription = "Converted command"\nprompt = """\n${escapedContent}\n"""\n`
       files.push({ path: `.gemini/commands/${safeCmdName}.toml`, content: tomlContent, type: 'commands', warnings: [] })
+    }
+
+    // Emit plugin resource files
+    if (project.resources) {
+      for (const res of project.resources) {
+        files.push({ path: res.relativePath, content: res.content, type: 'resource' as const, warnings: [] })
+      }
     }
 
     if (warnings.hasWarnings() && files.length > 0) files[0].warnings.push(...warnings.getWarnings())

@@ -259,13 +259,15 @@ describe('element-management-service', () => {
       await expect(autoAssignRolePluginForTitle('manager' as never, 'ghost')).rejects.toThrow('not found')
     })
 
-    it('should throw for non-Claude agents with title-locked roles', async () => {
-      /** Validates that non-Claude agents cannot hold title-locked governance roles */
-      mockAgentRegistry.getAgent.mockReturnValue(makeAgent({ program: 'codex' }))
+    it('should attempt conversion for non-Claude agents with title-locked roles', async () => {
+      /** Validates that non-Claude agents use the adapter system for role-plugin installation */
+      mockAgentRegistry.getAgent.mockReturnValue(makeAgent({ program: 'codex', workingDirectory: '/tmp/test-codex-agent' }))
       mockClientCapabilities.detectClientType.mockReturnValue('codex')
 
       const { autoAssignRolePluginForTitle } = await import('@/services/element-management-service')
-      await expect(autoAssignRolePluginForTitle('manager' as never, 'agent-1')).rejects.toThrow('Cannot assign')
+      // Will throw because the source plugin dir doesn't exist in test env,
+      // but it should NOT throw "Cannot assign" — it should attempt conversion
+      await expect(autoAssignRolePluginForTitle('manager' as never, 'agent-1')).rejects.not.toThrow('Cannot assign')
     })
   })
 

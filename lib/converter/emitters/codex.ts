@@ -12,7 +12,7 @@
  */
 
 import type { Emitter, ProjectIR, ConvertedFile, ConversionProvenance, SkillIR } from '../types'
-import { emitSkill, emitSkillAuxFiles, buildArgumentHint } from './shared'
+import { emitSkill, emitSkillAuxFiles, buildArgumentHint, transformMCPServerPaths } from './shared'
 import { parseFrontmatter as parseFrontmatterUtil } from '../utils/frontmatter'
 import { stringifyToml } from '../utils/toml'
 import { WarningCollector } from '../utils/warnings'
@@ -143,8 +143,9 @@ const codexEmitter: Emitter = {
 
     // ═══ MCP → config.toml section ═══
     if (project.mcp && project.mcp.servers.length > 0) {
+      const transformedServers = project.mcp.servers.map(transformMCPServerPaths)
       const mcpSection: Record<string, Record<string, unknown>> = {}
-      for (const server of project.mcp.servers) {
+      for (const server of transformedServers) {
         const def: Record<string, unknown> = {}
         if (server.command) def.command = server.command
         if (server.args) def.args = server.args
@@ -164,6 +165,13 @@ const codexEmitter: Emitter = {
         })
       } catch {
         warnings.add('MCP TOML serialization failed')
+      }
+    }
+
+    // ═══ Plugin Resource Files ═══
+    if (project.resources) {
+      for (const res of project.resources) {
+        files.push({ path: res.relativePath, content: res.content, type: 'resource' as const, warnings: [] })
       }
     }
 

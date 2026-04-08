@@ -6,7 +6,7 @@
  */
 
 import type { Emitter, ProjectIR, ConvertedFile, ConversionProvenance } from '../types'
-import { emitSkill, emitSkillAuxFiles, emitMarkdownAgent } from './shared'
+import { emitSkill, emitSkillAuxFiles, emitMarkdownAgent, transformMCPServerPaths } from './shared'
 import { WarningCollector } from '../utils/warnings'
 
 function getProvenance(sourceProvider: string): ConversionProvenance {
@@ -50,8 +50,9 @@ const opencodeEmitter: Emitter = {
 
     // MCP → opencode.json
     if (project.mcp && project.mcp.servers.length > 0) {
+      const transformedServers = project.mcp.servers.map(transformMCPServerPaths)
       const mcpSection: Record<string, Record<string, unknown>> = {}
-      for (const s of project.mcp.servers) {
+      for (const s of transformedServers) {
         const def: Record<string, unknown> = {}
         if (s.command) { def.command = s.command; def.type = 'local' }
         if (s.args) def.args = s.args
@@ -65,6 +66,13 @@ const opencodeEmitter: Emitter = {
         type: 'mcp',
         warnings: ['MCP written to opencode.json — merge manually with existing config'],
       })
+    }
+
+    // Plugin resource files
+    if (project.resources) {
+      for (const res of project.resources) {
+        files.push({ path: res.relativePath, content: res.content, type: 'resource' as const, warnings: [] })
+      }
     }
 
     // Commands → .opencode/commands/

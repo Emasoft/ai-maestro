@@ -223,7 +223,7 @@ export interface PluginMeta {
   name: string
   description?: string
   version?: string
-  author?: { name: string; email?: string }
+  author?: { name: string; email?: string; url?: string }
   displayName?: string
   homepage?: string
   repository?: string
@@ -231,6 +231,44 @@ export interface PluginMeta {
   keywords?: string[]
   category?: string
   source?: string
+  /** Rich marketplace display metadata (Codex interface block) */
+  interface?: PluginInterface
+}
+
+/** Rich plugin interface metadata for marketplace display (Codex plugin.json interface) */
+export interface PluginInterface {
+  displayName?: string
+  shortDescription?: string
+  longDescription?: string
+  developerName?: string
+  category?: string
+  capabilities?: string[]
+  websiteURL?: string
+  brandColor?: string
+  logo?: string
+  screenshots?: string[]
+}
+
+/** Resource file referenced by MCP server args/env (scripts, configs, assets) */
+export interface PluginResourceFile {
+  /** Path relative to plugin root (e.g., 'scripts/server.py') */
+  relativePath: string
+  /** File content */
+  content: string
+}
+
+/** Platform-specific plugin packaging paths */
+export interface PlatformPaths {
+  /** Plugin metadata directory (e.g., '.claude-plugin', '.codex-plugin') */
+  metaDir: string
+  /** Plugin manifest filename */
+  manifestFile: string
+  /** Skills output directory */
+  skills?: string
+  /** Agents output directory */
+  agents?: string
+  /** MCP config path */
+  mcp?: string
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -246,6 +284,8 @@ export interface ProjectIR {
   commands: CommandIR[]
   hooks: HookIR[]
   pluginMeta?: PluginMeta
+  /** Resource files referenced by MCP server args/env (scripts, configs) */
+  resources?: PluginResourceFile[]
   /** Detected source provider */
   sourceProvider: ProviderId
   /** Root directory that was scanned */
@@ -257,7 +297,7 @@ export interface ProjectIR {
 // ═══════════════════════════════════════════════════════════════
 
 /** Element type identifiers */
-export type ElementType = 'skills' | 'agents' | 'instructions' | 'mcp' | 'commands' | 'hooks'
+export type ElementType = 'skills' | 'agents' | 'instructions' | 'mcp' | 'commands' | 'hooks' | 'manifest' | 'resource'
 
 /** Single output file from conversion */
 export interface ConvertedFile {

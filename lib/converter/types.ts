@@ -183,6 +183,68 @@ export interface MCPIR {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// LSP Server IR
+// ═══════════════════════════════════════════════════════════════
+
+/** Single LSP server definition */
+export interface LspServerDef {
+  name: string
+  command: string
+  args?: string[]
+  transport?: 'stdio' | 'socket'
+  env?: Record<string, string>
+  initializationOptions?: Record<string, unknown>
+  settings?: Record<string, unknown>
+  extensionToLanguage: Record<string, string>
+  workspaceFolder?: string
+  startupTimeout?: number
+  shutdownTimeout?: number
+  restartOnCrash?: boolean
+  maxRestarts?: number
+}
+
+/** LSP configuration IR */
+export interface LSPIR {
+  servers: LspServerDef[]
+  sourcePath: string
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Output Style IR
+// ═══════════════════════════════════════════════════════════════
+
+/** Output style definition IR */
+export interface OutputStyleIR {
+  name: string
+  content: string
+  sourcePath: string
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Executable IR
+// ═══════════════════════════════════════════════════════════════
+
+/** Executable file bundled with a plugin */
+export interface ExecutableIR {
+  name: string
+  relativePath: string
+  content: string
+  sourcePath: string
+}
+
+// ═══════════════════════════════════════════════════════════════
+// App IR
+// ═══════════════════════════════════════════════════════════════
+
+/** App configuration IR (e.g., companion apps) */
+export interface AppIR {
+  name: string
+  configFile: string
+  config: Record<string, unknown>
+  sourcePath: string
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Command IR
 // ═══════════════════════════════════════════════════════════════
 
@@ -243,6 +305,18 @@ export interface PluginMeta {
   source?: string
   /** Rich marketplace display metadata (Codex interface block) */
   interface?: PluginInterface
+  /** Plugin component path overrides (Claude plugin.json) */
+  commands?: string | string[]
+  agents?: string | string[]
+  skills?: string | string[]
+  hooks?: string | string[] | Record<string, unknown>
+  mcpServers?: string | string[] | Record<string, unknown>
+  outputStyles?: string | string[]
+  lspServers?: string | string[] | Record<string, unknown>
+  /** User-configurable values prompted at enable time (Claude) */
+  userConfig?: Record<string, { description: string; sensitive?: boolean }>
+  /** Message channels bound to MCP servers (Claude) */
+  channels?: Array<{ server: string; userConfig?: Record<string, { description: string; sensitive?: boolean }> }>
 }
 
 /** Rich plugin interface metadata for marketplace display (Codex plugin.json interface) */
@@ -257,6 +331,10 @@ export interface PluginInterface {
   brandColor?: string
   logo?: string
   screenshots?: string[]
+  privacyPolicyURL?: string
+  termsOfServiceURL?: string
+  defaultPrompt?: string[]
+  composerIcon?: string
 }
 
 /** Resource file referenced by MCP server args/env (scripts, configs, assets) */
@@ -300,6 +378,18 @@ export interface ProjectIR {
   sourceProvider: ProviderId
   /** Root directory that was scanned */
   rootDir: string
+  /** LSP server configurations (Claude only) */
+  lsp?: LSPIR | null
+  /** Output style definitions (Claude only) */
+  outputStyles?: OutputStyleIR[]
+  /** Executable files bundled with the plugin (Claude bin/) */
+  executables?: ExecutableIR[]
+  /** App configurations (Codex .app.json) */
+  apps?: AppIR[]
+  /** User-configurable values prompted at enable time (Claude) */
+  userConfig?: Record<string, { description: string; sensitive?: boolean }>
+  /** Message channels bound to MCP servers (Claude) */
+  channels?: Array<{ server: string; userConfig?: Record<string, { description: string; sensitive?: boolean }> }>
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -308,6 +398,22 @@ export interface ProjectIR {
 
 /** Element type identifiers */
 export type ElementType = 'skills' | 'agents' | 'instructions' | 'mcp' | 'commands' | 'hooks' | 'manifest' | 'resource'
+
+/** Claude Code hook lifecycle events */
+export const CLAUDE_HOOK_EVENTS = [
+  'SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest',
+  'PermissionDenied', 'PostToolUse', 'PostToolUseFailure', 'Notification',
+  'SubagentStart', 'SubagentStop', 'TaskCreated', 'TaskCompleted',
+  'Stop', 'StopFailure', 'TeammateIdle', 'InstructionsLoaded',
+  'ConfigChange', 'CwdChanged', 'FileChanged', 'WorktreeCreate',
+  'WorktreeRemove', 'PreCompact', 'PostCompact', 'Elicitation',
+  'ElicitationResult', 'SessionEnd',
+] as const
+
+/** Codex hook lifecycle events */
+export const CODEX_HOOK_EVENTS = [
+  'SessionStart', 'PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop',
+] as const
 
 /** Single output file from conversion */
 export interface ConvertedFile {

@@ -92,7 +92,7 @@ const claudeEmitter: Emitter = {
 
     // Hooks
     if (project.hooks.length > 0) {
-      const hooksConfig: Record<string, Array<{ matcher?: string; hooks: Array<{ type: string; command?: string; url?: string }> }>> = {}
+      const hooksConfig: Record<string, Array<{ matcher?: string; hooks: Array<Record<string, unknown>> }>> = {}
       for (const hook of project.hooks) {
         if (!hooksConfig[hook.event]) {
           hooksConfig[hook.event] = []
@@ -103,9 +103,13 @@ const claudeEmitter: Emitter = {
           group = { matcher: hook.matcher, hooks: [] }
           hooksConfig[hook.event].push(group)
         }
-        const hookDef: { type: string; command?: string; url?: string } = { type: hook.type }
+        const hookDef: Record<string, unknown> = { type: hook.type }
         if (hook.command) hookDef.command = hook.command
         if (hook.url) hookDef.url = hook.url
+        if (hook.prompt) hookDef.prompt = hook.prompt
+        if (hook.model) hookDef.model = hook.model
+        if (hook.timeout) hookDef.timeout = hook.timeout
+        if (hook.async) hookDef.async = hook.async
         group.hooks.push(hookDef)
       }
 
@@ -123,6 +127,19 @@ const claudeEmitter: Emitter = {
       for (const res of project.resources) {
         files.push({ path: res.relativePath, content: res.content, type: 'resource' as const, warnings: [] })
       }
+    }
+
+    // Plugin manifest
+    if (project.pluginMeta) {
+      const manifest: Record<string, unknown> = { name: project.pluginMeta.name }
+      if (project.pluginMeta.version) manifest.version = project.pluginMeta.version
+      if (project.pluginMeta.description) manifest.description = project.pluginMeta.description
+      if (project.pluginMeta.author) manifest.author = project.pluginMeta.author
+      if (project.pluginMeta.homepage) manifest.homepage = project.pluginMeta.homepage
+      if (project.pluginMeta.repository) manifest.repository = project.pluginMeta.repository
+      if (project.pluginMeta.license) manifest.license = project.pluginMeta.license
+      if (project.pluginMeta.keywords?.length) manifest.keywords = project.pluginMeta.keywords
+      files.push({ path: '.claude-plugin/plugin.json', content: JSON.stringify(manifest, null, 2), type: 'manifest' as const, warnings: [] })
     }
 
     return files

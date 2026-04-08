@@ -360,6 +360,7 @@ export function projectIRToUniversal(project: ProjectIR, targetPlatforms: string
     model: a.model || undefined,
     max_turns: a.maxTurns || undefined,
     temperature: a.temperature || undefined,
+    effort: a.reasoningEffort || undefined,
     tools: a.tools || undefined,
     disallowed_tools: a.disallowedTools || undefined,
     skills: a.skills || undefined,
@@ -382,6 +383,10 @@ export function projectIRToUniversal(project: ProjectIR, targetPlatforms: string
     brand_color: project.pluginMeta.interface.brandColor,
     logo: project.pluginMeta.interface.logo,
     screenshots: project.pluginMeta.interface.screenshots,
+    privacy_policy_url: project.pluginMeta.interface.privacyPolicyURL,
+    terms_of_service_url: project.pluginMeta.interface.termsOfServiceURL,
+    default_prompt: project.pluginMeta.interface.defaultPrompt,
+    composer_icon: project.pluginMeta.interface.composerIcon,
   } : undefined
 
   const hooks: UniversalHookEntry[] = project.hooks.map(h => ({
@@ -429,8 +434,17 @@ export function projectIRToUniversal(project: ProjectIR, targetPlatforms: string
     agents,
     commands,
     mcp,
-    lsp: [],
-    output_styles: [],
+    lsp: (project as any).lsp?.servers?.map((s: any) => ({
+      name: s.name, command: s.command, args: s.args, transport: s.transport, env: s.env,
+      initialization_options: s.initializationOptions, settings: s.settings,
+      extension_to_language: s.extensionToLanguage, workspace_folder: s.workspaceFolder,
+      startup_timeout: s.startupTimeout, shutdown_timeout: s.shutdownTimeout,
+      restart_on_crash: s.restartOnCrash, max_restarts: s.maxRestarts,
+      platforms: targetPlatforms,
+    })) || [],
+    output_styles: ((project as any).outputStyles || []).map((s: any) => ({
+      name: s.name, body_file: `output-styles/${s.name}.md`, platforms: targetPlatforms,
+    })),
     instructions: project.instructions.map(i => ({
       name: i.fileName,
       scope: i.isRule ? 'agent' as const : 'project' as const,
@@ -438,10 +452,22 @@ export function projectIRToUniversal(project: ProjectIR, targetPlatforms: string
       body_file: i.isRule ? `rules/${i.fileName}` : `instructions/${i.fileName}`,
       platforms: targetPlatforms,
     })),
-    executables: [],
-    apps: [],
-    user_config: [],
-    channels: [],
+    executables: ((project as any).executables || []).map((e: any) => ({
+      name: e.name, relative_path: e.relativePath, platforms: targetPlatforms,
+    })),
+    apps: ((project as any).apps || []).map((a: any) => ({
+      name: a.name, config_file: a.configFile, platforms: targetPlatforms,
+    })),
+    user_config: Object.entries((project as any).userConfig || {}).map(([key, val]: [string, any]) => ({
+      key, description: val.description, sensitive: val.sensitive, platforms: targetPlatforms,
+    })),
+    channels: ((project as any).channels || []).map((c: any) => ({
+      server: c.server,
+      user_config: Object.entries(c.userConfig || {}).map(([key, val]: [string, any]) => ({
+        key, description: val.description, sensitive: val.sensitive, platforms: targetPlatforms,
+      })),
+      platforms: targetPlatforms,
+    })),
     resources,
     extensions: {},
   }
@@ -451,7 +477,7 @@ export function projectIRToUniversal(project: ProjectIR, targetPlatforms: string
 // Reverse Converter: UniversalPluginIR → ProjectIR
 // ═══════════════════════════════════════════════════════════════
 
-import type { SkillIR, AgentIR, HookIR, InstructionIR, CommandIR, MCPServerDef, PluginMeta } from './types'
+import type { SkillIR, AgentIR, HookIR, InstructionIR, CommandIR, MCPServerDef, PluginMeta, LspServerDef, OutputStyleIR, ExecutableIR, AppIR } from './types'
 
 /** Convert universal IR back to our ProjectIR for re-emission */
 export function universalIRToProjectIR(ir: UniversalPluginIR): ProjectIR {
@@ -551,8 +577,61 @@ export function universalIRToProjectIR(ir: UniversalPluginIR): ProjectIR {
       brandColor: ir.interface.brand_color,
       logo: ir.interface.logo,
       screenshots: ir.interface.screenshots,
+      privacyPolicyURL: ir.interface.privacy_policy_url,
+      termsOfServiceURL: ir.interface.terms_of_service_url,
+      defaultPrompt: ir.interface.default_prompt,
+      composerIcon: ir.interface.composer_icon,
     } : undefined,
   }
+
+  const lspServers: LspServerDef[] = ir.lsp.map(l => ({
+    name: l.name,
+    command: l.command,
+    args: l.args,
+    transport: l.transport,
+    env: l.env,
+    initializationOptions: l.initialization_options,
+    settings: l.settings,
+    extensionToLanguage: l.extension_to_language,
+    workspaceFolder: l.workspace_folder,
+    startupTimeout: l.startup_timeout,
+    shutdownTimeout: l.shutdown_timeout,
+    restartOnCrash: l.restart_on_crash,
+    maxRestarts: l.max_restarts,
+  }))
+
+  const outputStyles: OutputStyleIR[] = ir.output_styles.map(s => ({
+    name: s.name,
+    content: '', // stored in .md file
+    sourcePath: s.body_file,
+  }))
+
+  const executables: ExecutableIR[] = ir.executables.map(e => ({
+    name: e.name,
+    relativePath: e.relative_path,
+    content: '', // stored on disk
+    sourcePath: e.relative_path,
+  }))
+
+  const apps: AppIR[] = ir.apps.map(a => ({
+    name: a.name,
+    configFile: a.config_file,
+    config: {},
+    sourcePath: a.config_file,
+  }))
+
+  const userConfig: Record<string, { description: string; sensitive?: boolean }> = {}
+  for (const uc of ir.user_config) {
+    userConfig[uc.key] = { description: uc.description, sensitive: uc.sensitive }
+  }
+
+  const channels = ir.channels.map(c => {
+    const chanUserConfig: Record<string, { description: string; sensitive?: boolean }> = {}
+    for (const uc of c.user_config || []) {
+      chanUserConfig[uc.key] = { description: uc.description, sensitive: uc.sensitive }
+    }
+    return { server: c.server, userConfig: chanUserConfig }
+  })
 
   return {
     skills,
@@ -562,6 +641,12 @@ export function universalIRToProjectIR(ir: UniversalPluginIR): ProjectIR {
     commands,
     hooks,
     pluginMeta,
+    lsp: lspServers.length > 0 ? { servers: lspServers, sourcePath: '' } : null,
+    outputStyles,
+    executables,
+    apps,
+    userConfig: Object.keys(userConfig).length > 0 ? userConfig : undefined,
+    channels: channels.length > 0 ? channels : undefined,
     resources: ir.resources.map(r => ({ relativePath: r.relative_path, content: '' })),
     sourceProvider: (ir.meta.source_client as 'claude-code' | 'codex' | 'gemini' | 'opencode' | 'kiro') || 'claude-code',
     rootDir: '',

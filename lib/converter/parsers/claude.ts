@@ -150,7 +150,7 @@ async function scanHooks(rootDir: string): Promise<HookIR[]> {
       if (data.hooks) {
         for (const [event, matchers] of Object.entries(data.hooks)) {
           if (!Array.isArray(matchers)) continue
-          for (const matcher of matchers as Array<{ matcher?: string; hooks?: Array<{ type: string; command?: string; url?: string }> }>) {
+          for (const matcher of matchers as Array<{ matcher?: string; hooks?: Array<{ type: string; command?: string; url?: string; prompt?: string; model?: string; timeout?: number; async?: boolean }> }>) {
             if (!matcher.hooks || !Array.isArray(matcher.hooks)) continue
             for (const hook of matcher.hooks) {
               hooks.push({
@@ -159,6 +159,10 @@ async function scanHooks(rootDir: string): Promise<HookIR[]> {
                 type: hook.type || 'command',
                 command: hook.command,
                 url: hook.url,
+                prompt: hook.prompt,
+                model: hook.model,
+                timeout: hook.timeout,
+                async: hook.async,
               })
             }
           }

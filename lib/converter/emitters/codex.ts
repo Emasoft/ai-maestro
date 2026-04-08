@@ -197,6 +197,11 @@ const codexEmitter: Emitter = {
     if (project.hooks.length > 0) {
       const hooksConfig: Record<string, Array<{ matcher?: string; hooks: Array<{ type: string; command?: string }> }>> = {}
       for (const hook of project.hooks) {
+        // Codex only supports 'command' type hooks — skip others with warning
+        if (hook.type !== 'command') {
+          warnings.add(`Hook ${hook.event}: type "${hook.type}" not supported by Codex (command only) — skipped`)
+          continue
+        }
         if (!hooksConfig[hook.event]) hooksConfig[hook.event] = []
         let group = hooksConfig[hook.event].find(g => g.matcher === hook.matcher)
         if (!group) {
@@ -205,12 +210,27 @@ const codexEmitter: Emitter = {
         }
         group.hooks.push({ type: hook.type, command: hook.command })
       }
-      files.push({
-        path: '.codex/hooks.json',
-        content: JSON.stringify({ hooks: hooksConfig }, null, 2),
-        type: 'hooks',
-        warnings: ['Hooks converted to .codex/hooks.json — verify event names match Codex conventions'],
-      })
+      // Only emit hooks.json if there are any surviving command hooks
+      if (Object.keys(hooksConfig).length > 0) {
+        files.push({
+          path: '.codex/hooks.json',
+          content: JSON.stringify({ hooks: hooksConfig }, null, 2),
+          type: 'hooks',
+          warnings: ['Hooks converted to .codex/hooks.json — verify event names match Codex conventions'],
+        })
+      }
+    }
+
+    // ═══ Codex plugin manifest ═══
+    if (project.pluginMeta) {
+      const manifest: Record<string, unknown> = {
+        name: project.pluginMeta.name,
+        version: project.pluginMeta.version || '1.0.0',
+        description: project.pluginMeta.description || '',
+      }
+      if (project.pluginMeta.author) manifest.author = project.pluginMeta.author
+      if (project.pluginMeta.interface) manifest.interface = project.pluginMeta.interface
+      files.push({ path: '.codex-plugin/plugin.json', content: JSON.stringify(manifest, null, 2), type: 'manifest' as const, warnings: [] })
     }
 
     // Attach global warnings to the first file (or create a warnings file)

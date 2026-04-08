@@ -318,6 +318,12 @@ async function writeProviderNeutralFiles(abstractDir: string, project: ProjectIR
     if (agent.maxTurns) fm.maxTurns = agent.maxTurns
     if (agent.tools) fm.tools = agent.tools
     if (agent.disallowedTools) fm.disallowedTools = agent.disallowedTools
+    if (agent.temperature !== null && agent.temperature !== undefined) fm.temperature = agent.temperature
+    if (agent.reasoningEffort) fm.effort = agent.reasoningEffort
+    if (agent.skills) fm.skills = agent.skills
+    if (agent.memory) fm.memory = agent.memory
+    if (agent.background) fm.background = agent.background
+    if (agent.isolation) fm.isolation = agent.isolation
     await writeFile(
       path.join(agentsDir, agent.fileName || `${agent.name}.md`),
       stringifyFrontmatter(fm, agent.body),

@@ -523,11 +523,12 @@ compatible-clients = [${clients.map(c => `"${c}"`).join(', ')}]
  */
 /**
  * Enforce fourfold identity for a stored role-plugin.
- * All 4 must match the folder name (the canonical identity):
- *   1. Folder name = pluginName (caller controls this)
- *   2. .claude-plugin/plugin.json name = pluginName
- *   3. <pluginName>.agent.toml [agent].name = pluginName
- *   4. agents/<pluginName>-main-agent.md frontmatter name = <pluginName>-main-agent
+ * The canonical identity is the `name` field in `.claude-plugin/plugin.json`.
+ * All 4 must match:
+ *   1. .claude-plugin/plugin.json `name` = the canonical name
+ *   2. Folder name = canonical name
+ *   3. <name>.agent.toml [agent].name = canonical name
+ *   4. agents/<name>-main-agent.md frontmatter name = <name>-main-agent
  */
 async function ensureFourfoldIdentity(pluginDir: string, pluginName: string): Promise<void> {
   // Check 1: Folder name — already correct (caller sets it)

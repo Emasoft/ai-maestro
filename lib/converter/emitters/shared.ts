@@ -4,8 +4,7 @@
  */
 
 import type {
-  ConvertedFile, SkillIR, AgentIR, InstructionIR,
-  MCPIR, CommandIR, HookIR, ConversionProvenance, ProviderId,
+  ConvertedFile, SkillIR, AgentIR, ConversionProvenance, ProviderId,
   MCPServerDef, PluginResourceFile, PlatformPaths
 } from '../types'
 import { stringifyFrontmatter, stripClientSpecificFields } from '../utils/frontmatter'
@@ -190,13 +189,14 @@ export function transformMCPEnv(env: Record<string, string>): Record<string, str
   return result
 }
 
-/** Transform an entire MCPServerDef's args and env in place */
+/** Transform an entire MCPServerDef's args, env, command, and cwd */
 export function transformMCPServerPaths(server: MCPServerDef): MCPServerDef {
   return {
     ...server,
     args: server.args ? transformMCPArgs(server.args) : server.args,
     env: server.env ? transformMCPEnv(server.env) : server.env,
     command: server.command ? transformPluginRootPaths(server.command) : server.command,
+    cwd: server.cwd ? transformPluginRootPaths(server.cwd) : server.cwd,
   }
 }
 

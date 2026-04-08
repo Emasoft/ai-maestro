@@ -167,6 +167,8 @@ export interface MCPServerDef {
   command?: string
   args?: string[]
   env?: Record<string, string>
+  /** Working directory for the MCP server process */
+  cwd?: string
   /** 'stdio' or 'http' — inferred from fields if not explicit */
   type?: string
   url?: string
@@ -206,12 +208,20 @@ export interface HookIR {
   event: string
   /** Tool/event matcher pattern (optional) */
   matcher?: string
-  /** Hook type: 'command' (shell), 'prompt', 'http' */
+  /** Hook type: 'command' (shell), 'prompt', 'http', 'agent' */
   type: string
   /** Shell command (for type=command) */
   command?: string
   /** URL (for type=http) */
   url?: string
+  /** Prompt text (for type=prompt or type=agent) */
+  prompt?: string
+  /** Model identifier (for type=prompt or type=agent) */
+  model?: string
+  /** Execution timeout in seconds */
+  timeout?: number
+  /** Whether the hook runs asynchronously (command type only) */
+  async?: boolean
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -370,12 +370,30 @@ export function projectIRToUniversal(project: ProjectIR, targetPlatforms: string
     platforms: targetPlatforms,
   }))
 
+  // Map interface metadata (Codex display)
+  const iface: UniversalInterface | undefined = project.pluginMeta?.interface ? {
+    display_name: project.pluginMeta.interface.displayName,
+    short_description: project.pluginMeta.interface.shortDescription,
+    long_description: project.pluginMeta.interface.longDescription,
+    developer_name: project.pluginMeta.interface.developerName,
+    category: project.pluginMeta.interface.category,
+    capabilities: project.pluginMeta.interface.capabilities,
+    website_url: project.pluginMeta.interface.websiteURL,
+    brand_color: project.pluginMeta.interface.brandColor,
+    logo: project.pluginMeta.interface.logo,
+    screenshots: project.pluginMeta.interface.screenshots,
+  } : undefined
+
   const hooks: UniversalHookEntry[] = project.hooks.map(h => ({
     event: h.event,
     type: h.type as 'command' | 'http' | 'prompt' | 'agent',
-    command: h.command,
-    url: h.url,
-    matcher: h.matcher,
+    command: nu(h.command),
+    url: nu(h.url),
+    prompt: h.prompt,
+    model: h.model,
+    matcher: nu(h.matcher),
+    timeout: h.timeout,
+    async: h.async,
     platforms: targetPlatforms,
   }))
 
@@ -387,12 +405,13 @@ export function projectIRToUniversal(project: ProjectIR, targetPlatforms: string
 
   const mcp: UniversalMCPEntry[] = project.mcp?.servers.map(s => ({
     name: s.name,
-    command: s.command,
-    args: s.args,
-    env: s.env,
-    type: s.type as 'stdio' | 'http' | undefined,
-    url: s.url,
-    headers: s.headers,
+    command: nu(s.command),
+    args: nu(s.args),
+    env: nu(s.env),
+    cwd: nu(s.cwd),
+    type: nu(s.type) as 'stdio' | 'http' | undefined,
+    url: nu(s.url),
+    headers: nu(s.headers),
     platforms: targetPlatforms,
   })) || []
 
@@ -404,6 +423,7 @@ export function projectIRToUniversal(project: ProjectIR, targetPlatforms: string
 
   return {
     meta,
+    interface: iface,
     hooks,
     skills,
     agents,
@@ -424,5 +444,126 @@ export function projectIRToUniversal(project: ProjectIR, targetPlatforms: string
     channels: [],
     resources,
     extensions: {},
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Reverse Converter: UniversalPluginIR → ProjectIR
+// ═══════════════════════════════════════════════════════════════
+
+import type { SkillIR, AgentIR, HookIR, InstructionIR, CommandIR, MCPServerDef, PluginMeta } from './types'
+
+/** Convert universal IR back to our ProjectIR for re-emission */
+export function universalIRToProjectIR(ir: UniversalPluginIR): ProjectIR {
+  const skills: SkillIR[] = ir.skills.map(s => ({
+    name: s.name,
+    description: s.description || '',
+    userInvokable: s.user_invocable ?? false,
+    args: s.args?.map(a => ({ name: a.name, description: a.description, required: a.required })) ?? [],
+    license: s.license ?? null,
+    compatibility: s.compatibility ?? null,
+    metadata: s.metadata ?? null,
+    allowedTools: s.allowed_tools ?? null,
+    paths: s.paths ?? null,
+    body: '', // body is stored in the .md file, not in the IR manifest
+    references: s.references?.map(r => ({ path: r.path, content: '' })) ?? [],
+    auxFiles: s.aux_files?.map(a => ({ relativePath: a.relative_path, content: '' })) ?? [],
+    dirName: s.name,
+    sourcePath: s.body_file,
+  }))
+
+  const agents: AgentIR[] = ir.agents.map(a => ({
+    name: a.name,
+    description: a.description || '',
+    body: '', // stored in .md file
+    model: a.model ?? null,
+    temperature: a.temperature ?? null,
+    reasoningEffort: a.effort ?? null,
+    tools: a.tools ?? null,
+    disallowedTools: a.disallowed_tools ?? null,
+    permissionMode: null,
+    maxTurns: a.max_turns ?? null,
+    timeoutMins: null,
+    background: a.background ?? false,
+    isolation: a.isolation ?? null,
+    mcpServers: null,
+    skills: a.skills ?? null,
+    hooks: null,
+    memory: a.memory ?? null,
+    extras: {},
+    fileName: a.name,
+    sourcePath: a.body_file,
+  }))
+
+  const hooks: HookIR[] = ir.hooks.map(h => ({
+    event: h.event,
+    type: h.type,
+    command: h.command,
+    url: h.url,
+    prompt: h.prompt,
+    model: h.model,
+    matcher: h.matcher,
+    timeout: h.timeout,
+    async: h.async,
+  }))
+
+  const commands: CommandIR[] = ir.commands.map(c => ({
+    name: c.name,
+    content: '', // stored in .md file
+    sourcePath: c.body_file,
+  }))
+
+  const servers: MCPServerDef[] = ir.mcp.map(m => ({
+    name: m.name,
+    command: m.command,
+    args: m.args,
+    env: m.env,
+    cwd: m.cwd,
+    type: m.type,
+    url: m.url,
+    headers: m.headers,
+  }))
+
+  const instructions: InstructionIR[] = ir.instructions.map(i => ({
+    fileName: i.name,
+    content: '', // stored in .md file
+    isRule: i.is_rule ?? false,
+    sourcePath: i.body_file,
+  }))
+
+  const pluginMeta: PluginMeta = {
+    name: ir.meta.name,
+    description: ir.meta.description,
+    version: ir.meta.version,
+    author: ir.meta.author,
+    homepage: ir.meta.homepage,
+    repository: ir.meta.repository,
+    license: ir.meta.license,
+    keywords: ir.meta.keywords,
+    interface: ir.interface ? {
+      displayName: ir.interface.display_name,
+      shortDescription: ir.interface.short_description,
+      longDescription: ir.interface.long_description,
+      developerName: ir.interface.developer_name,
+      category: ir.interface.category,
+      capabilities: ir.interface.capabilities,
+      websiteURL: ir.interface.website_url,
+      brandColor: ir.interface.brand_color,
+      logo: ir.interface.logo,
+      screenshots: ir.interface.screenshots,
+    } : undefined,
+  }
+
+  return {
+    skills,
+    agents,
+    instructions,
+    mcp: servers.length > 0 ? { servers, sourcePath: '' } : null,
+    commands,
+    hooks,
+    pluginMeta,
+    resources: ir.resources.map(r => ({ relativePath: r.relative_path, content: '' })),
+    sourceProvider: (ir.meta.source_client as 'claude-code' | 'codex' | 'gemini' | 'opencode' | 'kiro') || 'claude-code',
+    rootDir: '',
   }
 }

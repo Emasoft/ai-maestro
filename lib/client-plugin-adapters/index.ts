@@ -23,9 +23,11 @@ export async function getAdapter(clientType: ClientType): Promise<ClientPluginAd
     case 'gemini':
     case 'opencode':
     case 'kiro':
+    case 'aider':
       return (await import('./element-adapter')).createElementAdapter(clientType)
 
     default:
+      // 'unknown' and any future clients without adapters
       return null
   }
 }

@@ -8,7 +8,7 @@
  * Tracking manifest: <agentDir>/.<client>/installed-plugins/<plugin-name>.json
  */
 
-import { mkdir, writeFile, readFile, unlink, readdir } from 'fs/promises'
+import { mkdir, writeFile, readFile, unlink, readdir, rm } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
 import { homedir } from 'os'
@@ -110,6 +110,24 @@ export function createElementAdapter(clientType: ClientType): ClientPluginAdapte
 
       // Remove tracking manifest
       await unlink(mPath)
+
+      // Clean up empty parent directories (bottom-up)
+      const dirsToCheck = new Set<string>()
+      for (const relPath of removedPaths) {
+        let dir = path.dirname(relPath)
+        while (dir && dir !== '.' && dir !== '/') {
+          dirsToCheck.add(dir)
+          dir = path.dirname(dir)
+        }
+      }
+      const sortedDirs = Array.from(dirsToCheck).sort((a, b) => b.length - a.length)
+      for (const dir of sortedDirs) {
+        const fullDir = path.join(resolved, dir)
+        try {
+          const entries = await readdir(fullDir)
+          if (entries.length === 0) await rm(fullDir)
+        } catch { /* dir already gone or not empty */ }
+      }
 
       return { success: true, removedPaths }
     },

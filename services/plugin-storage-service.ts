@@ -33,16 +33,14 @@ const CUSTOM_PLUGINS_DIR = path.join(homedir(), 'agents', 'custom-plugins')
 const ABSTRACT_DIR = path.join(CUSTOM_PLUGINS_DIR, '.abstract')
 
 // ═══════════════════════════════════════════════════════════════
-// YAML serialization (simple, no dependency)
+// IR serialization (JSON format — upgrade to YAML when js-yaml is added)
 // ═══════════════════════════════════════════════════════════════
 
-function serializeYaml(ir: UniversalPluginIR): string {
-  // Use JSON as intermediate — the YAML is for human readability
-  // but we can use a simple key-value serializer for now
+function serializeIR(ir: UniversalPluginIR): string {
   return JSON.stringify(ir, null, 2)
 }
 
-function deserializeYaml(content: string): UniversalPluginIR {
+function deserializeIR(content: string): UniversalPluginIR {
   return JSON.parse(content) as UniversalPluginIR
 }
 
@@ -91,7 +89,7 @@ export async function convertAndStorePlugin(
   // Write the universal IR manifest
   await writeFile(
     path.join(abstractDir, 'plugin-universal-ir.yaml'),
-    serializeYaml(universalIR),
+    serializeIR(universalIR),
     'utf-8'
   )
 
@@ -116,11 +114,14 @@ export async function getUniversalIR(pluginName: string): Promise<UniversalPlugi
   if (!existsSync(irPath)) return null
 
   const content = await readFile(irPath, 'utf-8')
-  return deserializeYaml(content)
+  return deserializeIR(content)
 }
 
 /**
  * Re-emit from abstract to a specific target client.
+ * Uses two strategies:
+ * 1. Parse the abstract dir (Claude-like layout) with the Claude parser
+ * 2. Fallback: load universal IR + reverse-convert to ProjectIR
  * Returns the path where the emitted plugin was stored, or null on failure.
  */
 export async function emitForClient(
@@ -130,23 +131,32 @@ export async function emitForClient(
   const targetProviderId = clientTypeToProviderId(targetClient)
   if (!targetProviderId) return null
 
-  // Find the abstract source — use the stored .abstract/<name>/ dir
   const abstractDir = path.join(ABSTRACT_DIR, pluginName)
   if (!existsSync(abstractDir)) return null
 
-  // Parse the abstract dir as if it were a Claude plugin (provider-neutral .md files)
-  // The abstract format uses the same structure as Claude plugins
-  const { getParser } = await import('@/lib/converter/parsers')
   const { getEmitter } = await import('@/lib/converter/emitters')
-
-  const parser = await getParser('claude-code')
-  if (!parser) return null
-
-  const project = await parser.parse(abstractDir)
-
-  // Emit in target format
   const emitter = await getEmitter(targetProviderId)
   if (!emitter) return null
+
+  let project: ProjectIR
+
+  // Strategy 1: Parse the provider-neutral files directly (Claude-like layout)
+  const { getParser } = await import('@/lib/converter/parsers')
+  const parser = await getParser('claude-code')
+  if (parser) {
+    try {
+      project = await parser.parse(abstractDir)
+    } catch {
+      // Strategy 2: Load universal IR and reverse-convert
+      const ir = await getUniversalIR(pluginName)
+      if (!ir) return null
+      const { universalIRToProjectIR } = await import('@/lib/converter/universal-ir')
+      project = universalIRToProjectIR(ir)
+      project.rootDir = abstractDir
+    }
+  } else {
+    return null
+  }
 
   const files: ConvertedFile[] = emitter.emit(project)
 
@@ -346,6 +356,34 @@ async function writeProviderNeutralFiles(abstractDir: string, project: ProjectIR
     await writeFile(
       path.join(abstractDir, '.mcp.json'),
       JSON.stringify({ mcpServers: mcpConfig }, null, 2),
+      'utf-8'
+    )
+  }
+
+  // Hooks
+  if (project.hooks.length > 0) {
+    const hooksDir = path.join(abstractDir, 'hooks')
+    await mkdir(hooksDir, { recursive: true })
+    // Write in Claude hooks.json format (provider-neutral — all adapters can parse this)
+    const hooksConfig: Record<string, unknown[]> = {}
+    for (const hook of project.hooks) {
+      if (!hooksConfig[hook.event]) hooksConfig[hook.event] = []
+      const entry: Record<string, unknown> = { type: hook.type }
+      if (hook.command) entry.command = hook.command
+      if (hook.url) entry.url = hook.url
+      if (hook.prompt) entry.prompt = hook.prompt
+      if (hook.model) entry.model = hook.model
+      if (hook.matcher) entry.matcher = hook.matcher
+      if (hook.timeout) entry.timeout = hook.timeout
+      if (hook.async) entry.async = hook.async
+      hooksConfig[hook.event].push({
+        matcher: hook.matcher,
+        hooks: [entry],
+      })
+    }
+    await writeFile(
+      path.join(hooksDir, 'hooks.json'),
+      JSON.stringify({ hooks: hooksConfig }, null, 2),
       'utf-8'
     )
   }

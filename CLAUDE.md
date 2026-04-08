@@ -848,6 +848,19 @@ Role-plugins define an agent's job specialization. They contain a `.agent.toml` 
 | `ai-maestro-integrator-agent` | `amia-` | INTEGRATOR |
 | `ai-maestro-architect-agent` | `amaa-` | ARCHITECT |
 
+**Fourfold Identity Rule:** The canonical identity of a role-plugin is the `name` field in `.claude-plugin/plugin.json` (what Claude Code displays). All 4 must match:
+
+1. **`plugin.json` `name`** = canonical identity (e.g., `pedro` or `ai-maestro-programmer-agent`)
+2. **Folder name** = must equal plugin.json name
+3. **`<name>.agent.toml`** must exist at plugin root AND `[agent].name` inside = plugin.json name
+4. **`agents/<name>-main-agent.md`** must exist AND frontmatter `name:` = `<name>-main-agent`
+
+If ANY of the 4 don't match → invalid role-plugin, rejected. Naming conventions:
+- Predefined: `ai-maestro-<agent-name>` (in remote GitHub marketplace)
+- Custom: `<agent-name>` — user-chosen, kebab-case (in local marketplace)
+
+**Client determination:** The client a role-plugin belongs to is determined ONLY by the `compatible-clients` field in `.agent.toml`, NOT by the plugin name. The server reads `.agent.toml` to discover target clients.
+
 **N:1 compatibility model:** Role-plugins declare which titles they're compatible with via `compatible-titles` in `.agent.toml`. Multiple plugins can serve the same title. Plugins also declare `compatible-clients` (e.g., `["claude-code"]`, `["claude-code", "codex"]`). The UI shows:
 - **1 compatible plugin** → fixed label (no choice needed)
 - **2+ compatible plugins** → dropdown to choose between them
@@ -880,21 +893,35 @@ Normal plugins are general-purpose tools (skills, MCP servers, hooks, etc.) inst
 
 **Normal plugins are NEVER put in `~/agents/role-plugins/`.** They are managed entirely by Claude CLI's standard plugin system (`~/.claude/plugins/cache/`, `settings.json`, `settings.local.json`).
 
+**Role-plugin conversion rules:**
+- When converting a role-plugin from one client to another, the converter:
+  - PRESERVES the original plugin name (no suffix)
+  - CHANGES `compatible-clients` in `.agent.toml` to the target client
+  - Enforces fourfold identity with the same name
+  - Stores in `~/agents/role-plugins/` (same location)
+  - NEVER overwrites an existing folder — conversion fails if folder exists
+- When converting an ordinary (non-role) plugin, the converter:
+  - ADDS `-<client>` suffix to the name (e.g., `my-formatter-codex`)
+  - Stores in `~/agents/custom-plugins/<client>/<name>-<client>/`
+  - Registers in `ai-maestro-local-custom-marketplace`
+
 ### Title → Role-Plugin Auto-Assignment
 
 When a governance title is assigned via the UI (Title Assignment Dialog), the ChangeTitle pipeline (Gates 15-16) automatically:
 1. Finds compatible plugins for the new title + agent's client (`getCompatiblePluginsForTitle()`)
 2. If the current plugin is already compatible → keeps it
 3. If not → installs the first compatible plugin (uninstalls the old one)
-4. If no native plugin for this client → marks for auto-conversion (TODO)
+4. If no native plugin for this client → auto-converts from Claude source via adapter system (`convertAndStorePlugin` + `emitForClient` + client adapter)
 
 ### Marketplace Names (Single Source of Truth)
 
 | Constant | Value | Purpose |
 |----------|-------|---------|
 | `MARKETPLACE_NAME` / `GITHUB_MARKETPLACE_NAME` | `ai-maestro-plugins` | GitHub marketplace for predefined role-plugins |
-| `LOCAL_MARKETPLACE_NAME` | `ai-maestro-local-roles-marketplace` | Local directory marketplace for Haephestos-created plugins |
+| `LOCAL_MARKETPLACE_NAME` | `ai-maestro-local-roles-marketplace` | Local directory marketplace for role-plugins (custom + converted) |
 | `LOCAL_MARKETPLACE_DIR_NAME` | `role-plugins` | Directory name under `~/agents/` |
+| `CUSTOM_MARKETPLACE_NAME` | `ai-maestro-local-custom-marketplace` | Local marketplace for converted ordinary plugins |
+| `CUSTOM_MARKETPLACE_DIR_NAME` | `custom-plugins` | Directory name under `~/agents/` |
 
 Defined in `lib/ecosystem-constants.ts` (TypeScript) and `scripts/ecosystem-config.sh` (shell). `getLocalMarketplacePath()` returns the resolved absolute path.
 

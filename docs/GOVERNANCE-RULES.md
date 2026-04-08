@@ -202,6 +202,11 @@ Full spec: `docs_dev/2026-04-03-communication-graph.md`
 | R11.4 | When an agent joins a team, ChangeTeam calls ChangeTitle('member') which auto-installs the programmer plugin | Explicit |
 | R11.5 | When an agent leaves a team, ChangeTeam calls ChangeTitle('autonomous') which removes the role-plugin | Explicit |
 | R11.6 | The N:1 compatibility model allows multiple plugins to serve one title — the UI shows a dropdown when 2+ plugins are compatible | Explicit |
+| R11.7 | Role-plugins are identified by the **fourfold identity rule**: (1) `plugin.json` `name` is the canonical identity, (2) folder name must equal it, (3) `<name>.agent.toml` must exist with `[agent].name` matching, (4) `agents/<name>-main-agent.md` must exist with frontmatter `name: <name>-main-agent`. All 4 must match or the plugin is rejected | Explicit |
+| R11.8 | The target client of a role-plugin is determined ONLY by the `compatible-clients` field in `.agent.toml`, never by the plugin name | Explicit |
+| R11.9 | When converting a role-plugin to another client format, the converter preserves the original name, updates `compatible-clients` in `.agent.toml` to the target client, enforces fourfold identity, and stores in `~/agents/role-plugins/`. The converter NEVER overwrites an existing role-plugin folder | Explicit |
+| R11.10 | Ordinary (non-role) plugins get a `-<client>` suffix when converted (e.g., `my-plugin-codex`) and are stored in `~/agents/custom-plugins/<client>/` with the `ai-maestro-local-custom-marketplace` | Explicit |
+| R11.11 | The `ai-maestro-local-roles-marketplace` contains ALL local role-plugins regardless of their target client. The `ai-maestro-local-custom-marketplace` contains converted ordinary plugins | Explicit |
 
 **Title → Default Plugin mapping:**
 

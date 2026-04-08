@@ -13,7 +13,7 @@
  */
 
 import path from 'path'
-import type { Parser, ProjectIR, SkillIR, AgentIR, InstructionIR, MCPIR, MCPServerDef, CommandIR, HookIR } from '../types'
+import type { Parser, ProjectIR, SkillIR, AgentIR, InstructionIR, MCPIR, MCPServerDef, CommandIR, HookIR, PluginMeta, AppIR } from '../types'
 import { parseSkillsDir, parseArgumentHint, recoverDollarArgs, asStringOrNull } from './shared'
 import { readFileOr, listDirs, listFiles } from '../utils/fs'
 import { parseToml } from '../utils/toml'
@@ -183,6 +183,47 @@ async function scanHooks(rootDir: string): Promise<HookIR[]> {
   return hooks
 }
 
+/** Scan .codex-plugin/plugin.json for plugin metadata */
+async function scanPluginMeta(rootDir: string): Promise<PluginMeta | undefined> {
+  const metaPath = path.join(rootDir, '.codex-plugin', 'plugin.json')
+  const content = await readFileOr(metaPath)
+  if (!content) return undefined
+  try {
+    const data = JSON.parse(content)
+    return {
+      name: data.name,
+      description: data.description,
+      version: data.version,
+      author: data.author,
+      homepage: data.homepage,
+      repository: data.repository,
+      license: data.license,
+      keywords: data.keywords,
+      interface: data.interface,
+    }
+  } catch { return undefined }
+}
+
+/** Scan .app.json for Codex app/connector configurations */
+async function scanApps(rootDir: string): Promise<AppIR[]> {
+  const appPath = path.join(rootDir, '.app.json')
+  const content = await readFileOr(appPath)
+  if (!content) return []
+  try {
+    const data = JSON.parse(content)
+    // .app.json can be an object with named app configs
+    if (typeof data === 'object' && data !== null) {
+      return Object.entries(data).map(([name, config]) => ({
+        name,
+        configFile: '.app.json',
+        config: config as Record<string, unknown>,
+        sourcePath: appPath,
+      }))
+    }
+    return []
+  } catch { return [] }
+}
+
 const codexParser: Parser = {
   providerId: 'codex',
 
@@ -208,11 +249,13 @@ const codexParser: Parser = {
 
     const agentsDir = path.join(dir, '.codex', 'agents')
 
-    const [agents, instructions, mcp, hooks] = await Promise.all([
+    const [agents, instructions, mcp, hooks, pluginMeta, apps] = await Promise.all([
       parseTomlAgents(agentsDir),
       scanInstructions(dir),
       scanMCP(dir),
       scanHooks(dir),
+      scanPluginMeta(dir),
+      scanApps(dir),
     ])
 
     return {
@@ -222,6 +265,8 @@ const codexParser: Parser = {
       mcp,
       commands: [], // Codex doesn't have slash commands
       hooks,
+      pluginMeta,
+      apps,
       sourceProvider: 'codex',
       rootDir: dir,
     }

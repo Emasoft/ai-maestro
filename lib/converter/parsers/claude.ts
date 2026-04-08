@@ -8,10 +8,11 @@
 import path from 'path'
 import type {
   Parser, ProjectIR, SkillIR, AgentIR, InstructionIR,
-  MCPIR, MCPServerDef, CommandIR, HookIR
+  MCPIR, MCPServerDef, CommandIR, HookIR,
+  PluginMeta, LSPIR, LspServerDef, OutputStyleIR, ExecutableIR
 } from '../types'
 import { parseSkillsDir, normalizeArgs, parseMarkdownAgentsDir, asStringOrNull, asRecordOrNull, asPathsOrNull } from './shared'
-import { readFileOr } from '../utils/fs'
+import { readFileOr, listDir } from '../utils/fs'
 
 /** Map Claude frontmatter + body into SkillIR */
 function mapSkillToIR(
@@ -174,7 +175,89 @@ async function scanHooks(rootDir: string): Promise<HookIR[]> {
   return hooks
 }
 
-/** Claude Code parser — all 6 element types */
+/** Scan .claude-plugin/plugin.json for plugin metadata */
+async function scanPluginMeta(rootDir: string): Promise<PluginMeta | undefined> {
+  const metaPath = path.join(rootDir, '.claude-plugin', 'plugin.json')
+  const content = await readFileOr(metaPath)
+  if (!content) return undefined
+  try {
+    const data = JSON.parse(content)
+    return {
+      name: data.name,
+      description: data.description,
+      version: data.version,
+      author: data.author,
+      homepage: data.homepage,
+      repository: data.repository,
+      license: data.license,
+      keywords: data.keywords,
+      category: data.category,
+      interface: data.interface,
+      userConfig: data.userConfig,
+      channels: data.channels,
+    }
+  } catch { return undefined }
+}
+
+/** Scan .lsp.json for LSP server definitions */
+async function scanLSP(rootDir: string): Promise<LSPIR | null> {
+  const lspPath = path.join(rootDir, '.lsp.json')
+  const content = await readFileOr(lspPath)
+  if (!content) return null
+  try {
+    const data = JSON.parse(content) as Record<string, Record<string, unknown>>
+    const servers: LspServerDef[] = Object.entries(data).map(([name, config]) => ({
+      name,
+      command: config.command as string,
+      args: config.args as string[] | undefined,
+      transport: config.transport as 'stdio' | 'socket' | undefined,
+      env: config.env as Record<string, string> | undefined,
+      initializationOptions: config.initializationOptions as Record<string, unknown> | undefined,
+      settings: config.settings as Record<string, unknown> | undefined,
+      extensionToLanguage: (config.extensionToLanguage || {}) as Record<string, string>,
+      workspaceFolder: config.workspaceFolder as string | undefined,
+      startupTimeout: config.startupTimeout as number | undefined,
+      shutdownTimeout: config.shutdownTimeout as number | undefined,
+      restartOnCrash: config.restartOnCrash as boolean | undefined,
+      maxRestarts: config.maxRestarts as number | undefined,
+    }))
+    return { servers, sourcePath: lspPath }
+  } catch { return null }
+}
+
+/** Scan output-styles/*.md for output style definitions */
+async function scanOutputStyles(rootDir: string): Promise<OutputStyleIR[]> {
+  const stylesDir = path.join(rootDir, 'output-styles')
+  const entries = await listDir(stylesDir)
+  const styles: OutputStyleIR[] = []
+  for (const entry of entries) {
+    if (!entry.endsWith('.md')) continue
+    const fullPath = path.join(stylesDir, entry)
+    const content = await readFileOr(fullPath)
+    if (content) {
+      styles.push({ name: entry.replace('.md', ''), content, sourcePath: fullPath })
+    }
+  }
+  return styles
+}
+
+/** Scan bin/ for executable files bundled with the plugin */
+async function scanExecutables(rootDir: string): Promise<ExecutableIR[]> {
+  const binDir = path.join(rootDir, 'bin')
+  const entries = await listDir(binDir)
+  const executables: ExecutableIR[] = []
+  for (const entry of entries) {
+    if (entry.startsWith('.')) continue
+    const fullPath = path.join(binDir, entry)
+    const content = await readFileOr(fullPath)
+    if (content) {
+      executables.push({ name: entry, relativePath: `bin/${entry}`, content, sourcePath: fullPath })
+    }
+  }
+  return executables
+}
+
+/** Claude Code parser — all 6 element types + plugin metadata, LSP, output styles, executables */
 const claudeParser: Parser = {
   providerId: 'claude-code',
 
@@ -191,13 +274,17 @@ const claudeParser: Parser = {
       ? path.join(dir, 'agents')
       : path.join(dir, '.claude', 'agents')
 
-    const [skills, agents, instructions, mcp, commands, hooks] = await Promise.all([
+    const [skills, agents, instructions, mcp, commands, hooks, pluginMeta, lsp, outputStyles, executables] = await Promise.all([
       parseSkillsDir(skillsDir, mapSkillToIR),
       parseMarkdownAgentsDir(agentsDir),
       scanInstructions(dir),
       scanMCP(dir),
       isPluginLayout ? scanCommandsFlat(dir) : scanCommands(dir),
       scanHooks(dir),
+      scanPluginMeta(dir),
+      scanLSP(dir),
+      scanOutputStyles(dir),
+      scanExecutables(dir),
     ])
 
     return {
@@ -207,6 +294,10 @@ const claudeParser: Parser = {
       mcp,
       commands,
       hooks,
+      pluginMeta,
+      lsp,
+      outputStyles,
+      executables,
       sourceProvider: 'claude-code',
       rootDir: dir,
     }

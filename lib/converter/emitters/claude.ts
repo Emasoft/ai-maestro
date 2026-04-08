@@ -142,6 +142,43 @@ const claudeEmitter: Emitter = {
       files.push({ path: '.claude-plugin/plugin.json', content: JSON.stringify(manifest, null, 2), type: 'manifest' as const, warnings: [] })
     }
 
+    // LSP server configurations
+    if (project.lsp && project.lsp.servers.length > 0) {
+      const lspConfig: Record<string, unknown> = {}
+      for (const s of project.lsp.servers) {
+        const entry: Record<string, unknown> = {
+          command: s.command,
+          extensionToLanguage: s.extensionToLanguage,
+        }
+        if (s.args) entry.args = s.args
+        if (s.transport) entry.transport = s.transport
+        if (s.env) entry.env = s.env
+        if (s.initializationOptions) entry.initializationOptions = s.initializationOptions
+        if (s.settings) entry.settings = s.settings
+        if (s.workspaceFolder) entry.workspaceFolder = s.workspaceFolder
+        if (s.startupTimeout) entry.startupTimeout = s.startupTimeout
+        if (s.shutdownTimeout) entry.shutdownTimeout = s.shutdownTimeout
+        if (s.restartOnCrash !== undefined) entry.restartOnCrash = s.restartOnCrash
+        if (s.maxRestarts) entry.maxRestarts = s.maxRestarts
+        lspConfig[s.name] = entry
+      }
+      files.push({ path: '.lsp.json', content: JSON.stringify(lspConfig, null, 2), type: 'resource' as const, warnings: [] })
+    }
+
+    // Output styles
+    if (project.outputStyles) {
+      for (const style of project.outputStyles) {
+        files.push({ path: `output-styles/${style.name}.md`, content: style.content, type: 'resource' as const, warnings: [] })
+      }
+    }
+
+    // Executables (bin/)
+    if (project.executables) {
+      for (const exe of project.executables) {
+        files.push({ path: exe.relativePath, content: exe.content, type: 'resource' as const, warnings: [] })
+      }
+    }
+
     return files
   },
 }

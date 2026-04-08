@@ -233,6 +233,15 @@ const codexEmitter: Emitter = {
       files.push({ path: '.codex-plugin/plugin.json', content: JSON.stringify(manifest, null, 2), type: 'manifest' as const, warnings: [] })
     }
 
+    // ═══ Apps (.app.json) ═══
+    if (project.apps && project.apps.length > 0) {
+      const appConfig: Record<string, unknown> = {}
+      for (const app of project.apps) {
+        appConfig[app.name] = app.config
+      }
+      files.push({ path: '.app.json', content: JSON.stringify(appConfig, null, 2), type: 'resource' as const, warnings: [] })
+    }
+
     // Attach global warnings to the first file (or create a warnings file)
     if (warnings.hasWarnings()) {
       const w = warnings.getWarnings()

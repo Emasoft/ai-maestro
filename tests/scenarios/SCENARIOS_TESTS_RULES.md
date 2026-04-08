@@ -1,6 +1,28 @@
 # Scenario Tests Rules
 
-All UI scenario tests in AI Maestro MUST follow these rules. No exceptions.
+## Purpose
+
+The ultimate aim of UI scenario tests is NOT just to verify that features work. The real value is the **11th-HOUR analysis** (Rule 11): after each scenario run, a deep investigation produces **concrete improvement proposals** — bug fixes, API redesigns, governance rule changes, workflow optimizations, and new scenarios. These proposals are the primary deliverable. The test steps are the instrument; the improvements are the product.
+
+Every scenario run should produce a `scenario_proposed-improvements_<NNN>_<datetime>.md` report with actionable proposals. These proposals are then reviewed, prioritized, and implemented before the next scenario batch. Over time, this creates a virtuous cycle: tests find issues, issues get fixed, fixes get verified by re-running the same scenarios.
+
+All UI scenario tests in AI Maestro MUST follow these 11 rules. No exceptions.
+
+---
+
+## Table of Contents
+
+1. [Rule 1: CLEAN-AFTER-YOURSELF](#rule-1-clean-after-yourself) — Revert system to pre-test state
+2. [Rule 2: 0-IMPACT](#rule-2-0-impact) — Never use existing user resources
+3. [Rule 3: STATE-WIPE](#rule-3-state-wipe) — Backup and restore config files
+4. [Rule 4: FIX-AS-YOU-GO](#rule-4-fix-as-you-go) — Fix bugs immediately during test
+5. [Rule 5: TRACK-AND-REPORT](#rule-5-track-and-report) — Record every step and bug
+6. [Rule 6: STICK-TO-UI](#rule-6-stick-to-ui) — All actions through the browser
+7. [Rule 7: SAFE-SETUP](#rule-7-safe-setup) — Commit, build, verify before test
+8. [Rule 8: CHROME-TOOL](#rule-8-chrome-tool) — Use Chrome DevTools Protocol (CDP)
+9. [Rule 9: REPORT-FORMAT](#rule-9-report-format) — Structured markdown report
+10. [Rule 10: PHOTOSTORY](#rule-10-photostory) — Screenshot at every critical step
+11. [Rule 11: 11th-HOUR](#rule-11-11th-hour) — Post-scenario deep analysis and improvement proposals
 
 ---
 

@@ -27,8 +27,8 @@ export default function SidebarViewSwitcher({ activeView, onViewChange }: Sideba
             onClick={() => onViewChange(key)}
             className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
               isActive
-                ? 'bg-gray-700 text-white shadow-sm'
-                : 'text-gray-500 hover:text-gray-300'
+                ? 'bg-indigo-600/30 text-indigo-200 shadow-sm shadow-indigo-500/20 ring-1 ring-indigo-500/40'
+                : 'text-gray-500 hover:text-gray-300 hover:bg-gray-700/40'
             }`}
           >
             <Icon className="w-3.5 h-3.5" />

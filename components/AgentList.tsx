@@ -261,8 +261,16 @@ export default function AgentList({
   }, [])
   useEffect(() => { fetchTeams() }, [agents, fetchTeams])
 
-  // State for team accordion panels — all collapsed by default
+  // State for team accordion panels — all expanded by default
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set())
+  // Auto-expand all teams when team data loads
+  useEffect(() => {
+    if (teams.length > 0) {
+      const allTeamNames = new Set(teams.map(t => t.name))
+      allTeamNames.add('NO-TEAM')
+      setExpandedTeams(allTeamNames)
+    }
+  }, [teams])
 
   // Filter agents by selected host, status tab, and search query
   const filteredAgents = useMemo(() => {
@@ -910,10 +918,10 @@ export default function AgentList({
                 onClick={() => setStatusFilter(tab.key)}
                 className={`flex-1 text-[10px] font-bold uppercase tracking-wider transition-all rounded-t-lg ${
                   isActive
-                    ? `py-2 px-2 -mb-px border border-b-0 shadow-[0_-2px_6px_rgba(0,0,0,0.3)] ${
-                        tab.color === 'emerald' ? 'text-emerald-300 border-emerald-500/40 bg-gray-900'
-                        : tab.color === 'amber' ? 'text-amber-300 border-amber-500/40 bg-gray-900'
-                        : 'text-blue-300 border-blue-500/40 bg-gray-900'
+                    ? `py-2 px-2 -mb-px border border-b-0 shadow-[0_-2px_8px_rgba(0,0,0,0.4)] ${
+                        tab.color === 'emerald' ? 'text-emerald-200 border-emerald-400/50 bg-emerald-950/40 shadow-emerald-500/10'
+                        : tab.color === 'amber' ? 'text-amber-200 border-amber-400/50 bg-amber-950/40 shadow-amber-500/10'
+                        : 'text-blue-200 border-blue-400/50 bg-blue-950/40 shadow-blue-500/10'
                       }`
                     : 'py-1.5 px-2 mb-0 text-gray-500 hover:text-gray-400 bg-gray-800/40 border border-b-0 border-transparent hover:bg-gray-800/60'
                 }`}

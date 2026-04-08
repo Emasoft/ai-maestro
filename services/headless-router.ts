@@ -2384,7 +2384,6 @@ const routes: Route[] = [
     const delResult = await DeleteTeam(params.id, {
       authContext: { agentId: auth.agentId, isSystemOwner: !auth.agentId, governanceTitle: auth.governanceTitle, teamId: auth.teamId },
       password: body?.password,
-      deleteAgents: body?.deleteAgents === true,
     })
     sendServiceResult(res, delResult.success
       ? { data: { success: true }, status: 200 }

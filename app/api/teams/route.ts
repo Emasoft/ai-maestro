@@ -34,9 +34,13 @@ export async function POST(request: NextRequest) {
   }
 
   // Governance password required for team creation when called by an agent.
-  // System-owner (Phase 1: no auth headers → web UI / localhost) is exempt.
+  // Two exemptions:
+  //   1. System-owner (web UI with session cookie) — already authenticated via login.
+  //   2. MANAGER agent (AID/session-secret auth) — team creation is a core MANAGER duty.
+  // All other agents must provide the governance password.
   const isSystemOwner = !auth.agentId && !auth.error
-  if (!isSystemOwner) {
+  const isManager = auth.governanceTitle?.toUpperCase() === 'MANAGER'
+  if (!isSystemOwner && !isManager) {
     const { verifyPassword } = await import('@/lib/governance')
     const password = body.governancePassword as string | undefined
     if (!password) {

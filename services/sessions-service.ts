@@ -702,7 +702,7 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
     // Set at session creation, immutable — the agent cannot change it via `cd`.
     await runtime.setEnvironment(actualSessionName, 'AGENT_WORK_DIR', cwd)
 
-    // MAESTRO_AUTH: server-issued session secret for API authentication.
+    // AID_AUTH: server-issued AID session secret for agent API authentication.
     // The server spawns the agent, so it IS the identity authority for local agents.
     // The secret is set as a tmux env var (scoped to this session's process tree).
     // No Ed25519 ceremony needed — the server trusts itself.
@@ -710,13 +710,13 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
       try {
         const { generateSessionSecret } = await import('@/lib/session-secret')
         const { secret, secretHash } = generateSessionSecret()
-        await runtime.setEnvironment(actualSessionName, 'MAESTRO_AUTH', secret)
+        await runtime.setEnvironment(actualSessionName, 'AID_AUTH', secret)
         // Store the hash in agent registry for validation
         const { updateAgent } = await import('@/lib/agent-registry')
         await updateAgent(registeredAgentId, {
           metadata: { sessionSecretHash: secretHash }
         } as any)
-        console.log(`[Sessions] Set MAESTRO_AUTH for agent ${agentName} (session secret)`)
+        console.log(`[Sessions] Set AID_AUTH for agent ${agentName} (AID session secret)`)
       } catch (secretErr) {
         console.warn(`[Sessions] Could not set session secret for ${agentName}:`, secretErr)
       }

@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { Sparkles, Star, Cpu, Terminal, Zap, Heart, Code, Folder, GitBranch, FolderOpen, Play, MessageSquare, Server } from 'lucide-react'
+import { Sparkles, Star, Cpu, Terminal, Zap, Heart, Code, Folder, GitBranch, FolderOpen, Play, MessageSquare, Server, Users, Moon } from 'lucide-react'
 
 interface CreateAgentAnimationProps {
   phase: 'naming' | 'preparing' | 'creating' | 'ready' | 'error'
@@ -10,6 +10,7 @@ interface CreateAgentAnimationProps {
   avatarUrl?: string   // Preview avatar URL based on agent name
   progress?: number
   showNextSteps?: boolean  // Show next steps guide in ready phase
+  teamName?: string | null  // If set, agent belongs to this team (shows team-specific next steps)
 }
 
 // Generate a preview avatar URL from agent name (same logic as AgentBadge)
@@ -82,6 +83,7 @@ export default function CreateAgentAnimation({
   avatarUrl,
   progress = 0,
   showNextSteps = false,
+  teamName = null,
 }: CreateAgentAnimationProps) {
   const config = PHASE_CONFIG[phase]
   const messageIndex = Math.floor((progress / 100) * config.messages.length)
@@ -109,7 +111,7 @@ export default function CreateAgentAnimation({
           {phase === 'naming' && <NamingAnimation key="naming" agentName={agentName} />}
           {phase === 'preparing' && <PreparingAnimation key="preparing" />}
           {phase === 'creating' && <CreatingAnimation key="creating" avatarUrl={avatarUrl} />}
-          {phase === 'ready' && <ReadyAnimation key="ready" agentName={agentName} agentAlias={agentAlias} avatarUrl={avatarUrl} showNextSteps={showNextSteps} />}
+          {phase === 'ready' && <ReadyAnimation key="ready" agentName={agentName} agentAlias={agentAlias} avatarUrl={avatarUrl} showNextSteps={showNextSteps} teamName={teamName} />}
           {phase === 'error' && <ErrorAnimation key="error" />}
         </AnimatePresence>
       </div>
@@ -418,8 +420,9 @@ function CreatingAnimation({ avatarUrl }: { avatarUrl?: string }) {
 }
 
 // Ready Animation - Agent comes to life!
-function ReadyAnimation({ agentName, agentAlias, avatarUrl, showNextSteps }: { agentName: string; agentAlias?: string; avatarUrl?: string; showNextSteps?: boolean }) {
-  const nextSteps = [
+function ReadyAnimation({ agentName, agentAlias, avatarUrl, showNextSteps, teamName }: { agentName: string; agentAlias?: string; avatarUrl?: string; showNextSteps?: boolean; teamName?: string | null }) {
+  // Team agents get different next steps: they start hibernated and are managed by the team
+  const autonomousNextSteps = [
     {
       icon: FolderOpen,
       title: 'Agent Folder Created',
@@ -445,6 +448,35 @@ function ReadyAnimation({ agentName, agentAlias, avatarUrl, showNextSteps }: { a
       borderColor: 'border-purple-500/30',
     },
   ]
+
+  const teamNextSteps = [
+    {
+      icon: Users,
+      title: `Registered in Team`,
+      description: `Your agent is registered in team '${teamName}'.`,
+      color: 'text-blue-400',
+      bgColor: 'bg-blue-500/10',
+      borderColor: 'border-blue-500/30',
+    },
+    {
+      icon: Moon,
+      title: 'Starts Hibernated',
+      description: 'The MANAGER, you, or the Chief-of-Staff can wake it from the dashboard.',
+      color: 'text-amber-400',
+      bgColor: 'bg-amber-500/10',
+      borderColor: 'border-amber-500/30',
+    },
+    {
+      icon: MessageSquare,
+      title: 'Team Communication',
+      description: 'Once awake, the agent can send and receive team messages.',
+      color: 'text-purple-400',
+      bgColor: 'bg-purple-500/10',
+      borderColor: 'border-purple-500/30',
+    },
+  ]
+
+  const nextSteps = teamName ? teamNextSteps : autonomousNextSteps
 
   return (
     <motion.div

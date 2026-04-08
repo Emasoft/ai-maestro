@@ -132,7 +132,7 @@ author: AI Maestro Team
 - **Verify:** MANAGER badge, `ai-maestro-assistant-manager-agent`. Screenshot: SCEN-009/S008-manager-assigned.png
 
 #### S009: Verify agent auth token was generated
-- **Action:** Check `GET /api/agents/<managerId>` for auth-related fields. Verify the agent's tmux session has MAESTRO_AUTH env var set.
+- **Action:** Check `GET /api/agents/<managerId>` for auth-related fields. Verify the agent's tmux session has AID_AUTH env var set.
 - **Goal:** Agent has mst_* session secret for API authentication
 - **Creates:** nothing
 - **Modifies:** nothing

@@ -496,6 +496,7 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
                   avatarUrl={selectedAvatar || getPreviewAvatarUrl(personaName)}
                   progress={animationProgress}
                   showNextSteps={showLetsGo}
+                  teamName={selectedTeamId ? (teams.find(t => t.id === selectedTeamId)?.name ?? selectedTeamId) : null}
                 />
                 {showLetsGo && (
                   <div className="mt-6 flex justify-center">

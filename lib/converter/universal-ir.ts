@@ -334,7 +334,7 @@ export function projectIRToUniversal(project: ProjectIR, targetPlatforms: string
     license: project.pluginMeta?.license,
     keywords: project.pluginMeta?.keywords,
     platforms: targetPlatforms,
-    source_client: project.sourceProvider,
+    source_client: project.sourceProvider === 'claude-code' ? 'claude' : project.sourceProvider,
     converted_at: new Date().toISOString(),
   }
 

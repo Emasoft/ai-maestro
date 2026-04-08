@@ -382,18 +382,19 @@ export async function autoAssignRolePluginForTitle(
     // Non-Claude: convert and install via adapter
     const { convertAndStorePlugin, emitForClient } = await import('@/services/plugin-storage-service')
     const { getAdapter } = await import('@/lib/client-plugin-adapters')
+    const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
+    const targetProviderId = clientTypeToProviderId(clientType)
+    if (!targetProviderId) throw new Error(`No converter provider for client type: ${clientType}`)
     await convertAndStorePlugin(requiredPlugin, 'claude', [clientType as 'codex' | 'gemini' | 'opencode' | 'kiro'])
     const emittedDir = await emitForClient(requiredPlugin, clientType as 'codex' | 'gemini' | 'opencode' | 'kiro')
-    if (emittedDir) {
-      const adapter = await getAdapter(clientType)
-      if (adapter) {
-        await adapter.install(
-          { name: requiredPlugin, clientType, storageDir: emittedDir, providerId: 'claude-code' },
-          agentDir,
-          { scope: 'local' }
-        )
-      }
-    }
+    if (!emittedDir) throw new Error(`Failed to emit plugin "${requiredPlugin}" for ${clientType}`)
+    const adapter = await getAdapter(clientType)
+    if (!adapter) throw new Error(`No plugin adapter for client type: ${clientType}`)
+    await adapter.install(
+      { name: requiredPlugin, clientType, storageDir: emittedDir, providerId: targetProviderId },
+      agentDir,
+      { scope: 'local' }
+    )
   } else {
     // Claude: install directly (existing behavior)
     await installPluginLocally(requiredPlugin, agentDir, marketplace)
@@ -1035,13 +1036,16 @@ export async function ChangeTitle(
           // Non-Claude client: convert plugin to target format and install via adapter
           const { convertAndStorePlugin, emitForClient } = await import('@/services/plugin-storage-service')
           const { getAdapter } = await import('@/lib/client-plugin-adapters')
-          await convertAndStorePlugin(targetPluginName, 'claude', [agentClientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro'])
-          const emittedDir = await emitForClient(targetPluginName, agentClientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro')
-          if (emittedDir) {
-            const adapter = await getAdapter(agentClientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro')
+          const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
+          const targetClientType = agentClientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro'
+          const targetPid = clientTypeToProviderId(targetClientType)
+          await convertAndStorePlugin(targetPluginName, 'claude', [targetClientType])
+          const emittedDir = await emitForClient(targetPluginName, targetClientType)
+          if (emittedDir && targetPid) {
+            const adapter = await getAdapter(targetClientType)
             if (adapter) {
               const installResult = await adapter.install(
-                { name: targetPluginName, clientType: agentClientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro', storageDir: emittedDir, providerId: 'claude-code' },
+                { name: targetPluginName, clientType: targetClientType, storageDir: emittedDir, providerId: targetPid },
                 agentDir,
                 { scope: 'local' }
               )
@@ -1051,6 +1055,8 @@ export async function ChangeTitle(
               } else {
                 ops.push(`G16: WARN — Adapter install failed: ${installResult.error}`)
               }
+            } else {
+              ops.push(`G16: WARN — No adapter for ${agentClientType}`)
             }
           } else {
             ops.push(`G16: WARN — Failed to emit plugin "${targetPluginName}" for ${agentClientType}`)

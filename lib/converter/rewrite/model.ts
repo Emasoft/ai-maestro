@@ -9,16 +9,20 @@
 import type { Provider, AgentIR } from '../types'
 import { WarningCollector } from '../utils/warnings'
 
-/** Claude → Codex model mapping */
+/**
+ * Claude → Codex model mapping
+ * Codex models (2026-04): gpt-5.4, gpt-5.4-mini, gpt-5.3-codex, gpt-5.2
+ * Source: https://developers.openai.com/codex/models
+ */
 const CLAUDE_TO_CODEX: Record<string, string> = {
   'sonnet': 'gpt-5.4',
   'claude-sonnet-4-6': 'gpt-5.4',
   'claude-sonnet-4': 'gpt-5.4',
-  'haiku': 'gpt-4-turbo',
-  'claude-haiku-4-5': 'gpt-4-turbo',
-  'opus': 'gpt-5-pro',
-  'claude-opus-4-6': 'gpt-5-pro',
-  'claude-opus-4': 'gpt-5-pro',
+  'haiku': 'gpt-5.4-mini',
+  'claude-haiku-4-5': 'gpt-5.4-mini',
+  'opus': 'gpt-5.3-codex',
+  'claude-opus-4-6': 'gpt-5.3-codex',
+  'claude-opus-4': 'gpt-5.3-codex',
 }
 
 /** Claude → Gemini model mapping */
@@ -33,11 +37,16 @@ const CLAUDE_TO_GEMINI: Record<string, string> = {
   'claude-opus-4': 'gemini-2-pro',
 }
 
-/** Codex → Claude reverse mapping */
+/**
+ * Codex → Claude reverse mapping
+ * Source: https://developers.openai.com/codex/models
+ */
 const CODEX_TO_CLAUDE: Record<string, string> = {
   'gpt-5.4': 'claude-sonnet-4-6',
-  'gpt-5-pro': 'claude-opus-4-6',
-  'gpt-4-turbo': 'claude-haiku-4-5',
+  'gpt-5.4-mini': 'claude-haiku-4-5',
+  'gpt-5.3-codex': 'claude-opus-4-6',
+  'gpt-5.3-codex-spark': 'claude-opus-4-6',
+  'gpt-5.2': 'claude-sonnet-4',
   'o3': 'claude-opus-4-6',
   'o3-mini': 'claude-sonnet-4-6',
 }

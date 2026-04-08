@@ -3,6 +3,8 @@
  * Ported from crucible emitters/shared.js + agents/emitters/shared.js.
  */
 
+import { existsSync, readFileSync, statSync, readdirSync } from 'fs'
+import path from 'path'
 import type {
   ConvertedFile, SkillIR, AgentIR, ConversionProvenance, ProviderId,
   MCPServerDef, PluginResourceFile, PlatformPaths
@@ -203,9 +205,6 @@ export function transformMCPServerPaths(server: MCPServerDef): MCPServerDef {
 // ═══════════════════════════════════════════════════════════════
 // Plugin Resource File Scanning
 // ═══════════════════════════════════════════════════════════════
-
-import { existsSync, readFileSync, statSync, readdirSync } from 'fs'
-import path from 'path'
 
 /**
  * Scan MCP server definitions for files referenced via ${CLAUDE_PLUGIN_ROOT}.

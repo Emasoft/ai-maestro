@@ -1377,6 +1377,50 @@ The skill/plugin conversion feature is based on code from these two open-source 
 
 The best features from both should be combined into `services/cross-client-skill-service.ts`. Prior analysis: `docs_dev/2026-03-31-crucible-integration-analysis.md`.
 
+Additionally, **https://github.com/REPOZY/Hookbridge** — Universal hook compiler from YAML to Claude Code and Codex native formats. Handles the hook format differences (26 Claude events vs 5 Codex events, 4 hook types vs 1). Provides loss reports and shim mechanism for approximated features. Our `UniversalPluginIR` extends this pattern to all component types.
+
+### Model Mapping Reference (2026-04)
+
+Cross-client model conversion is in `lib/converter/rewrite/model.ts`.
+
+**Claude → Codex** (source: https://developers.openai.com/codex/models):
+
+| Claude Model | Codex Model | Notes |
+|-------------|-------------|-------|
+| sonnet / claude-sonnet-4-6 | `gpt-5.4` | Flagship frontier model |
+| haiku / claude-haiku-4-5 | `gpt-5.4-mini` | Fast, efficient for subagents |
+| opus / claude-opus-4-6 | `gpt-5.3-codex` | Industry-leading coding model |
+
+**Codex → Claude** (reverse):
+
+| Codex Model | Claude Model |
+|-------------|-------------|
+| `gpt-5.4` | claude-sonnet-4-6 |
+| `gpt-5.4-mini` | claude-haiku-4-5 |
+| `gpt-5.3-codex` | claude-opus-4-6 |
+| `gpt-5.3-codex-spark` | claude-opus-4-6 |
+| `gpt-5.2` | claude-sonnet-4 |
+| `o3` | claude-opus-4-6 |
+| `o3-mini` | claude-sonnet-4-6 |
+
+**Claude → Gemini**:
+
+| Claude Model | Gemini Model |
+|-------------|-------------|
+| sonnet | gemini-2-flash |
+| haiku | gemini-3-flash |
+| opus | gemini-2-pro |
+
+### Universal Plugin IR Architecture
+
+Converted plugins use a universal intermediate representation stored at `~/agents/custom-plugins/.abstract/<name>/plugin-universal-ir.yaml`. This extends the Hookbridge pattern to all 16 component types (hooks, skills, agents, commands, MCP, LSP, output-styles, instructions, executables, apps, user-config, channels, resources, extensions, settings, interface).
+
+Key files:
+- `lib/converter/universal-ir.ts` — UniversalPluginIR types + bidirectional converters (ProjectIR ↔ UniversalPluginIR)
+- `services/plugin-storage-service.ts` — `convertAndStorePlugin()`, `emitForClient()`, `getUniversalIR()`
+- `lib/client-plugin-adapters/` — Per-client adapters (claude, codex, element-based for gemini/opencode/kiro)
+- `lib/converter/emitters/shared.ts` — `transformPluginRootPaths()`, `scanMCPResourceFiles()`, `PLATFORM_PATHS`
+
 ## Roadmap Context
 
 **Phase 1 (Current):** Auto-discovery, localhost-only, read-only agent interaction

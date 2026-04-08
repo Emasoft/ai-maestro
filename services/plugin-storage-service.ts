@@ -521,35 +521,49 @@ compatible-clients = [${clients.map(c => `"${c}"`).join(', ')}]
  * 3. agents/<name>-main-agent.md exists with matching frontmatter
  * 4. .claude-plugin/plugin.json name matches
  */
+/**
+ * Enforce fourfold identity for a stored role-plugin.
+ * All 4 must match the folder name (the canonical identity):
+ *   1. Folder name = pluginName (caller controls this)
+ *   2. .claude-plugin/plugin.json name = pluginName
+ *   3. <pluginName>.agent.toml [agent].name = pluginName
+ *   4. agents/<pluginName>-main-agent.md frontmatter name = <pluginName>-main-agent
+ */
 async function ensureFourfoldIdentity(pluginDir: string, pluginName: string): Promise<void> {
-  // 1. Folder name is already correct (caller controls it)
+  // Check 1: Folder name — already correct (caller sets it)
 
-  // 2. .agent.toml — already written by writeConvertedAgentProfile
+  // Check 2: Plugin manifest name
+  const manifestDir = path.join(pluginDir, '.claude-plugin')
+  await mkdir(manifestDir, { recursive: true })
+  const manifestPath = path.join(manifestDir, 'plugin.json')
+  if (existsSync(manifestPath)) {
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf-8'))
+    if (manifest.name !== pluginName) {
+      manifest.name = pluginName
+      await writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
+    }
+  } else {
+    // Create minimal manifest if missing
+    await writeFile(manifestPath, JSON.stringify({ name: pluginName, version: '1.0.0' }, null, 2), 'utf-8')
+  }
 
-  // 3. Main agent — rename if needed
+  // Check 3: .agent.toml — already written by writeConvertedAgentProfile with correct name
+
+  // Check 4: Main agent file — rename to match plugin name if needed
   const mainAgentName = `${pluginName}-main-agent`
   const agentsDir = path.join(pluginDir, 'agents')
   if (existsSync(agentsDir)) {
     const agentFiles = await readdir(agentsDir)
     const mainAgent = agentFiles.find(f => f.endsWith('-main-agent.md'))
     if (mainAgent && mainAgent !== `${mainAgentName}.md`) {
-      // Read, update frontmatter name, write with new filename
       const oldPath = path.join(agentsDir, mainAgent)
       let content = await readFile(oldPath, 'utf-8')
       content = content.replace(/^name:\s*.+$/m, `name: ${mainAgentName}`)
       await writeFile(path.join(agentsDir, `${mainAgentName}.md`), content, 'utf-8')
-      // Don't delete old file — let it coexist (safer)
-    }
-  }
-
-  // 4. Plugin manifest — update name
-  const manifestDir = path.join(pluginDir, '.claude-plugin')
-  if (existsSync(manifestDir)) {
-    const manifestPath = path.join(manifestDir, 'plugin.json')
-    if (existsSync(manifestPath)) {
-      const manifest = JSON.parse(await readFile(manifestPath, 'utf-8'))
-      manifest.name = pluginName
-      await writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
+    } else if (!mainAgent) {
+      // No main agent exists yet — this is expected for freshly emitted plugins
+      // The emitter should have created one; if not, warn but don't fail
+      console.warn(`[fourfold] No *-main-agent.md found in ${agentsDir} — plugin may be incomplete`)
     }
   }
 }

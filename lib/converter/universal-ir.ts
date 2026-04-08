@@ -38,6 +38,18 @@ export interface UniversalMeta {
   source_client?: string
   /** ISO timestamp of conversion */
   converted_at?: string
+
+  // ── Role-Plugin Identity (fourfold match) ──
+  /** Whether this is a role-plugin (has .agent.toml + main-agent) */
+  is_role_plugin?: boolean
+  /** Main agent name (ending in -main-agent) */
+  main_agent_name?: string
+  /** Profile file path (*.agent.toml) */
+  profile_path?: string
+  /** Governance titles this role-plugin is compatible with */
+  compatible_titles?: string[]
+  /** AI clients this role-plugin works with */
+  compatible_clients?: string[]
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -336,6 +348,17 @@ export function projectIRToUniversal(project: ProjectIR, targetPlatforms: string
     platforms: targetPlatforms,
     source_client: project.sourceProvider === 'claude-code' ? 'claude' : project.sourceProvider,
     converted_at: new Date().toISOString(),
+
+    // Role-plugin detection (fourfold identity)
+    is_role_plugin: !!project.agentProfile,
+    main_agent_name: project.agentProfile
+      ? `${project.agentProfile.agentName}-main-agent`
+      : project.agents.find(a => a.name.endsWith('-main-agent'))?.name,
+    profile_path: project.agentProfile
+      ? `${project.agentProfile.agentName}.agent.toml`
+      : undefined,
+    compatible_titles: project.agentProfile?.compatibleTitles,
+    compatible_clients: project.agentProfile?.compatibleClients,
   }
 
   const skills: UniversalSkillEntry[] = project.skills.map(s => ({

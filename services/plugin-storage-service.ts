@@ -28,9 +28,15 @@ import { clientTypeToProviderId } from '@/lib/client-capabilities'
 import type { UniversalPluginIR } from '@/lib/converter/universal-ir'
 import { projectIRToUniversal } from '@/lib/converter/universal-ir'
 import type { ProjectIR, ConvertedFile } from '@/lib/converter/types'
+import {
+  CUSTOM_MARKETPLACE_NAME,
+  getLocalMarketplacePath,
+} from '@/lib/ecosystem-constants'
 
 const CUSTOM_PLUGINS_DIR = path.join(homedir(), 'agents', 'custom-plugins')
 const ABSTRACT_DIR = path.join(CUSTOM_PLUGINS_DIR, '.abstract')
+const ROLE_PLUGINS_DIR = getLocalMarketplacePath()
+// getCustomMarketplacePath() returns ~/agents/custom-plugins/ (same as CUSTOM_PLUGINS_DIR)
 
 // ═══════════════════════════════════════════════════════════════
 // IR serialization (JSON format — upgrade to YAML when js-yaml is added)
@@ -96,11 +102,45 @@ export async function convertAndStorePlugin(
   // Write provider-neutral .md files
   await writeProviderNeutralFiles(abstractDir, project)
 
-  // 4. Emit for each target client
+  // 4. Emit for each target client — route by plugin type
+  const isRolePlugin = universalIR.meta.is_role_plugin === true
   const emittedDirs: Record<string, string> = {}
+
   for (const targetClient of targetClients) {
-    const targetDir = await emitForClient(sourceName, targetClient)
-    if (targetDir) emittedDirs[targetClient] = targetDir
+    if (isRolePlugin) {
+      // Role-plugin: emit to ~/agents/role-plugins/<name>-<client>/
+      const suffix = targetClient === sourceClient ? '' : `-${targetClient}`
+      const rolePluginName = `${sourceName}${suffix}`
+      const targetDir = path.join(ROLE_PLUGINS_DIR, rolePluginName)
+
+      // NEVER overwrite existing role-plugin folder
+      if (existsSync(targetDir)) {
+        console.warn(`[plugin-storage] Role-plugin folder already exists: ${targetDir} — skipping`)
+        continue
+      }
+
+      const emitted = await emitPluginToDir(sourceName, targetClient, targetDir)
+      if (emitted) {
+        // Write updated .agent.toml with new compatible-clients
+        await writeConvertedAgentProfile(targetDir, universalIR, rolePluginName, targetClient)
+        // Ensure fourfold identity
+        await ensureFourfoldIdentity(targetDir, rolePluginName)
+        // Register with local roles marketplace
+        const { ensureMarketplace, updateMarketplaceManifest } = await import('@/services/role-plugin-service')
+        await ensureMarketplace()
+        await updateMarketplaceManifest(rolePluginName, universalIR.meta.description || '', universalIR.meta.version)
+        emittedDirs[targetClient] = targetDir
+      }
+    } else {
+      // Ordinary plugin: emit to ~/agents/custom-plugins/<client>/<name>/
+      const targetDir = await emitForClient(sourceName, targetClient)
+      if (targetDir) {
+        // Register with custom marketplace
+        await ensureCustomMarketplace()
+        await updateCustomMarketplaceManifest(sourceName, universalIR.meta.description || '', universalIR.meta.version)
+        emittedDirs[targetClient] = targetDir
+      }
+    }
   }
 
   return { abstractDir, emittedDirs }
@@ -411,4 +451,161 @@ async function writeProviderNeutralFiles(abstractDir: string, project: ProjectIR
       'utf-8'
     )
   }
+
+  // Agent profile (.agent.toml) for role-plugins
+  if (project.agentProfile) {
+    const tomlFileName = `${project.agentProfile.agentName}.agent.toml`
+    await writeFile(path.join(abstractDir, tomlFileName), project.agentProfile.tomlContent, 'utf-8')
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Role-plugin conversion helpers
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Emit a plugin to a specific directory (used for role-plugins that go to ~/agents/role-plugins/).
+ */
+async function emitPluginToDir(
+  pluginName: string, targetClient: ClientType, targetDir: string
+): Promise<boolean> {
+  const targetProviderId = clientTypeToProviderId(targetClient)
+  if (!targetProviderId) return false
+
+  const abstractDir = path.join(ABSTRACT_DIR, pluginName)
+  if (!existsSync(abstractDir)) return false
+
+  const { getParser } = await import('@/lib/converter/parsers')
+  const { getEmitter } = await import('@/lib/converter/emitters')
+  const parser = await getParser('claude-code')
+  if (!parser) return false
+  const project = await parser.parse(abstractDir)
+  const emitter = await getEmitter(targetProviderId)
+  if (!emitter) return false
+  const files: ConvertedFile[] = emitter.emit(project)
+
+  await mkdir(targetDir, { recursive: true })
+  for (const file of files) {
+    const fullPath = path.join(targetDir, file.path)
+    await mkdir(path.dirname(fullPath), { recursive: true })
+    await writeFile(fullPath, file.content, 'utf-8')
+  }
+  return true
+}
+
+/**
+ * Write a converted .agent.toml with updated compatible-clients for the target client.
+ */
+async function writeConvertedAgentProfile(
+  pluginDir: string, ir: UniversalPluginIR, newPluginName: string, targetClient: ClientType
+): Promise<void> {
+  const originalToml = ir.extensions?.['claude-code']
+  const titles = ir.meta.compatible_titles || (originalToml as Record<string, unknown>)?.compatible_titles as string[] || []
+  const clients = [targetClient]
+
+  const tomlContent = `[agent]
+name = "${newPluginName}"
+compatible-titles = [${titles.map(t => `"${t}"`).join(', ')}]
+compatible-clients = [${clients.map(c => `"${c}"`).join(', ')}]
+`
+  await writeFile(path.join(pluginDir, `${newPluginName}.agent.toml`), tomlContent, 'utf-8')
+}
+
+/**
+ * Ensure fourfold identity for a stored role-plugin:
+ * 1. Folder name == plugin name
+ * 2. <name>.agent.toml exists with matching [agent].name
+ * 3. agents/<name>-main-agent.md exists with matching frontmatter
+ * 4. .claude-plugin/plugin.json name matches
+ */
+async function ensureFourfoldIdentity(pluginDir: string, pluginName: string): Promise<void> {
+  // 1. Folder name is already correct (caller controls it)
+
+  // 2. .agent.toml — already written by writeConvertedAgentProfile
+
+  // 3. Main agent — rename if needed
+  const mainAgentName = `${pluginName}-main-agent`
+  const agentsDir = path.join(pluginDir, 'agents')
+  if (existsSync(agentsDir)) {
+    const agentFiles = await readdir(agentsDir)
+    const mainAgent = agentFiles.find(f => f.endsWith('-main-agent.md'))
+    if (mainAgent && mainAgent !== `${mainAgentName}.md`) {
+      // Read, update frontmatter name, write with new filename
+      const oldPath = path.join(agentsDir, mainAgent)
+      let content = await readFile(oldPath, 'utf-8')
+      content = content.replace(/^name:\s*.+$/m, `name: ${mainAgentName}`)
+      await writeFile(path.join(agentsDir, `${mainAgentName}.md`), content, 'utf-8')
+      // Don't delete old file — let it coexist (safer)
+    }
+  }
+
+  // 4. Plugin manifest — update name
+  const manifestDir = path.join(pluginDir, '.claude-plugin')
+  if (existsSync(manifestDir)) {
+    const manifestPath = path.join(manifestDir, 'plugin.json')
+    if (existsSync(manifestPath)) {
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf-8'))
+      manifest.name = pluginName
+      await writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Custom marketplace management
+// ═══════════════════════════════════════════════════════════════
+
+const CUSTOM_META_DIR = path.join(CUSTOM_PLUGINS_DIR, '.claude-plugin')
+const CUSTOM_MARKETPLACE_JSON = path.join(CUSTOM_META_DIR, 'marketplace.json')
+const SETTINGS_LOCAL = path.join(homedir(), '.claude', 'settings.local.json')
+
+async function loadJsonSafe(filePath: string): Promise<Record<string, unknown>> {
+  try { return JSON.parse(await readFile(filePath, 'utf-8')) } catch { return {} }
+}
+
+async function saveJsonSafe(filePath: string, data: unknown): Promise<void> {
+  await writeFile(filePath, JSON.stringify(data, null, 2) + '\n', 'utf-8')
+}
+
+/**
+ * Ensure custom-plugins marketplace exists and is registered globally.
+ */
+async function ensureCustomMarketplace(): Promise<void> {
+  await mkdir(CUSTOM_META_DIR, { recursive: true })
+
+  if (!existsSync(CUSTOM_MARKETPLACE_JSON)) {
+    const manifest = {
+      name: CUSTOM_MARKETPLACE_NAME,
+      version: '1.0.0',
+      owner: { name: 'local' },
+      metadata: { description: 'Local converted plugin marketplace managed by AI Maestro' },
+      plugins: [],
+    }
+    await writeFile(CUSTOM_MARKETPLACE_JSON, JSON.stringify(manifest, null, 2) + '\n')
+  }
+
+  // Register in global settings
+  const settings = await loadJsonSafe(SETTINGS_LOCAL) as Record<string, Record<string, unknown>>
+  const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
+  const existing = ekm[CUSTOM_MARKETPLACE_NAME] as Record<string, Record<string, string>> | undefined
+  if (existing?.source?.path === CUSTOM_PLUGINS_DIR) return
+
+  ekm[CUSTOM_MARKETPLACE_NAME] = { source: { source: 'directory', path: CUSTOM_PLUGINS_DIR } }
+  settings.extraKnownMarketplaces = ekm
+  await mkdir(path.dirname(SETTINGS_LOCAL), { recursive: true })
+  await saveJsonSafe(SETTINGS_LOCAL, settings)
+}
+
+/**
+ * Register a converted plugin in the custom marketplace manifest.
+ */
+async function updateCustomMarketplaceManifest(
+  pluginName: string, description: string, version: string
+): Promise<void> {
+  const manifest = await loadJsonSafe(CUSTOM_MARKETPLACE_JSON) as Record<string, unknown>
+  const plugins = (manifest.plugins || []) as Array<Record<string, string>>
+  const filtered = plugins.filter(p => p.name !== pluginName)
+  filtered.push({ name: pluginName, description, version, source: path.join(CUSTOM_PLUGINS_DIR, pluginName) })
+  manifest.plugins = filtered
+  await writeFile(CUSTOM_MARKETPLACE_JSON, JSON.stringify(manifest, null, 2) + '\n')
 }

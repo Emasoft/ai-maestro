@@ -390,6 +390,17 @@ export interface ProjectIR {
   userConfig?: Record<string, { description: string; sensitive?: boolean }>
   /** Message channels bound to MCP servers (Claude) */
   channels?: Array<{ server: string; userConfig?: Record<string, { description: string; sensitive?: boolean }> }>
+  /** Agent profile (.agent.toml) if present — role-plugin marker (fourfold identity) */
+  agentProfile?: {
+    /** Raw TOML content */
+    tomlContent: string
+    /** [agent].name from TOML */
+    agentName: string
+    /** compatible-titles field */
+    compatibleTitles: string[]
+    /** compatible-clients field */
+    compatibleClients: string[]
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

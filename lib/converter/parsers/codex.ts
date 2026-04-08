@@ -224,6 +224,36 @@ async function scanApps(rootDir: string): Promise<AppIR[]> {
   } catch { return [] }
 }
 
+/** Scan for .agent.toml profile (role-plugin marker) */
+async function scanAgentProfile(rootDir: string): Promise<ProjectIR['agentProfile']> {
+  const { existsSync, readdirSync } = await import('fs')
+  if (!existsSync(rootDir)) return undefined
+  const entries = readdirSync(rootDir)
+  const tomlFile = entries.find((e: string) => e.endsWith('.agent.toml'))
+  if (!tomlFile) return undefined
+
+  const tomlPath = path.join(rootDir, tomlFile)
+  const content = await readFileOr(tomlPath)
+  if (!content) return undefined
+
+  const nameMatch = content.match(/^\s*name\s*=\s*"([^"]+)"/m)
+  const agentName = nameMatch?.[1] || tomlFile.replace('.agent.toml', '')
+
+  const titlesMatch = content.match(/^\s*compatible-titles\s*=\s*\[([^\]]*)\]/m)
+    || content.match(/^\s*compatible-titles\s*=\s*"([^"]*)"/m)
+  const titles = titlesMatch?.[1]
+    ? titlesMatch[1].replace(/["\s]/g, '').split(',').filter(Boolean)
+    : []
+
+  const clientsMatch = content.match(/^\s*compatible-clients\s*=\s*\[([^\]]*)\]/m)
+    || content.match(/^\s*compatible-clients\s*=\s*"([^"]*)"/m)
+  const clients = clientsMatch?.[1]
+    ? clientsMatch[1].replace(/["\s]/g, '').split(',').filter(Boolean)
+    : []
+
+  return { tomlContent: content, agentName, compatibleTitles: titles, compatibleClients: clients }
+}
+
 const codexParser: Parser = {
   providerId: 'codex',
 
@@ -249,13 +279,14 @@ const codexParser: Parser = {
 
     const agentsDir = path.join(dir, '.codex', 'agents')
 
-    const [agents, instructions, mcp, hooks, pluginMeta, apps] = await Promise.all([
+    const [agents, instructions, mcp, hooks, pluginMeta, apps, agentProfile] = await Promise.all([
       parseTomlAgents(agentsDir),
       scanInstructions(dir),
       scanMCP(dir),
       scanHooks(dir),
       scanPluginMeta(dir),
       scanApps(dir),
+      scanAgentProfile(dir),
     ])
 
     return {
@@ -267,6 +298,7 @@ const codexParser: Parser = {
       hooks,
       pluginMeta,
       apps,
+      agentProfile,
       sourceProvider: 'codex',
       rootDir: dir,
     }

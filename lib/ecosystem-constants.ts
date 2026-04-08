@@ -20,6 +20,23 @@ export const LOCAL_MARKETPLACE_NAME = 'ai-maestro-local-roles-marketplace'
 /** Local marketplace directory name (under ~/agents/) */
 export const LOCAL_MARKETPLACE_DIR_NAME = 'role-plugins'
 
+/** Local marketplace for converted custom (non-role) plugins */
+export const CUSTOM_MARKETPLACE_NAME = 'ai-maestro-local-custom-marketplace'
+
+/** Custom marketplace directory name (under ~/agents/) */
+export const CUSTOM_MARKETPLACE_DIR_NAME = 'custom-plugins'
+
+/**
+ * Resolve the custom marketplace root path: ~/agents/custom-plugins/
+ * Converted plugins at ~/agents/custom-plugins/<client>/<plugin-name>/
+ * Marketplace metadata at ~/agents/custom-plugins/.claude-plugin/
+ */
+export function getCustomMarketplacePath(): string {
+  const { homedir } = require('os') as typeof import('os')
+  const { join } = require('path') as typeof import('path')
+  return join(homedir(), 'agents', CUSTOM_MARKETPLACE_DIR_NAME)
+}
+
 /**
  * Resolve the local marketplace root path: ~/agents/role-plugins/
  * Plugins live directly at ~/agents/role-plugins/<plugin-name>/

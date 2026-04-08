@@ -257,6 +257,40 @@ async function scanExecutables(rootDir: string): Promise<ExecutableIR[]> {
   return executables
 }
 
+/** Scan for .agent.toml profile (role-plugin marker) */
+async function scanAgentProfile(rootDir: string): Promise<ProjectIR['agentProfile']> {
+  const { existsSync, readdirSync } = await import('fs')
+  // Find *.agent.toml in root
+  if (!existsSync(rootDir)) return undefined
+  const entries = readdirSync(rootDir)
+  const tomlFile = entries.find(e => e.endsWith('.agent.toml'))
+  if (!tomlFile) return undefined
+
+  const tomlPath = path.join(rootDir, tomlFile)
+  const content = await readFileOr(tomlPath)
+  if (!content) return undefined
+
+  // Extract [agent].name
+  const nameMatch = content.match(/^\s*name\s*=\s*"([^"]+)"/m)
+  const agentName = nameMatch?.[1] || tomlFile.replace('.agent.toml', '')
+
+  // Extract compatible-titles
+  const titlesMatch = content.match(/^\s*compatible-titles\s*=\s*\[([^\]]*)\]/m)
+    || content.match(/^\s*compatible-titles\s*=\s*"([^"]*)"/m)
+  const titles = titlesMatch?.[1]
+    ? titlesMatch[1].replace(/["\s]/g, '').split(',').filter(Boolean)
+    : []
+
+  // Extract compatible-clients
+  const clientsMatch = content.match(/^\s*compatible-clients\s*=\s*\[([^\]]*)\]/m)
+    || content.match(/^\s*compatible-clients\s*=\s*"([^"]*)"/m)
+  const clients = clientsMatch?.[1]
+    ? clientsMatch[1].replace(/["\s]/g, '').split(',').filter(Boolean)
+    : []
+
+  return { tomlContent: content, agentName, compatibleTitles: titles, compatibleClients: clients }
+}
+
 /** Claude Code parser — all 6 element types + plugin metadata, LSP, output styles, executables */
 const claudeParser: Parser = {
   providerId: 'claude-code',
@@ -274,7 +308,7 @@ const claudeParser: Parser = {
       ? path.join(dir, 'agents')
       : path.join(dir, '.claude', 'agents')
 
-    const [skills, agents, instructions, mcp, commands, hooks, pluginMeta, lsp, outputStyles, executables] = await Promise.all([
+    const [skills, agents, instructions, mcp, commands, hooks, pluginMeta, lsp, outputStyles, executables, agentProfile] = await Promise.all([
       parseSkillsDir(skillsDir, mapSkillToIR),
       parseMarkdownAgentsDir(agentsDir),
       scanInstructions(dir),
@@ -285,6 +319,7 @@ const claudeParser: Parser = {
       scanLSP(dir),
       scanOutputStyles(dir),
       scanExecutables(dir),
+      scanAgentProfile(dir),
     ])
 
     return {
@@ -298,6 +333,7 @@ const claudeParser: Parser = {
       lsp,
       outputStyles,
       executables,
+      agentProfile,
       sourceProvider: 'claude-code',
       rootDir: dir,
     }

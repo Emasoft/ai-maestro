@@ -520,10 +520,12 @@ In a scenario test, you are **impersonating the user**. You sit in front of the 
 Agents are live Claude Code instances running in tmux sessions. They can read your messages and act on them. When a scenario requires an agent to perform an action:
 
 1. **Select the agent** in the sidebar (click its name)
-2. **Use the Prompt Builder** at the bottom of the dashboard to type instructions
-3. **Click Send** to deliver the instruction to the agent's terminal
+2. **Type into the terminal** — click the terminal area to focus it, then type. Use arrow keys to navigate menus, Enter to confirm choices, and type text to give instructions.
+3. **Or use the Prompt Builder** — the text area at the bottom of the dashboard. Type your instruction and click Send. The Prompt Builder is recommended for longer messages but is not mandatory.
 4. **Read the terminal output** to see what the agent is doing and whether it succeeded
-5. **Respond to the agent** if it asks questions or needs clarification
+5. **Respond to the agent** if it asks questions or needs clarification — type your answer directly into the terminal or use the Prompt Builder
+
+You interact with agents the same way a human user would: typing instructions, accepting plans, approving tool use, pasting URLs or information, navigating CLI menus with arrow keys, and pressing Enter to confirm.
 
 If an agent refuses to do its job, pushes back, or sits idle — **talk to it**. Give it clearer instructions. Push it to act. Don't let agents slack. You are the manager of the test.
 
@@ -550,11 +552,11 @@ Rule 6 forbids **actions** outside the UI. But **read-only operations** to monit
 
 What remains forbidden:
 - Calling API endpoints with `curl` to **perform actions** (create, delete, modify)
-- Running `tmux send-keys` to type into agent terminals (use the Prompt Builder)
+- Running `tmux send-keys` to bypass the dashboard terminal (type via CDP instead)
 - Editing config files directly (use the UI)
 - Killing sessions with `tmux kill-session` (use the UI hibernate/delete)
 
-The distinction is: **read = monitoring (allowed), write = action (forbidden, use UI)**.
+The distinction is: **read = monitoring (allowed), write/action = must go through the browser UI**.
 
 ---
 

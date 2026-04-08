@@ -33,7 +33,8 @@ export async function readPluginMeta(pluginDir: string): Promise<PluginMeta | nu
       keywords: data.keywords,
       category: data.category,
     }
-  } catch {
+  } catch (error) {
+    console.error(`[converter/plugin] Failed to parse plugin.json in ${pluginDir}:`, error instanceof Error ? error.message : error)
     return null
   }
 }
@@ -74,7 +75,8 @@ export async function scanMarketplace(rootDir: string): Promise<Array<{ meta: Pl
     }
 
     return results
-  } catch {
+  } catch (error) {
+    console.error(`[converter/plugin] Failed to parse marketplace.json in ${rootDir}:`, error instanceof Error ? error.message : error)
     return []
   }
 }
@@ -105,7 +107,7 @@ export async function isMarketplace(dir: string): Promise<boolean> {
  * @param meta - Original plugin metadata
  */
 export function generateLocalMarketplace(
-  targetProvider: ProviderId,
+  _targetProvider: ProviderId,
   pluginName: string,
   pluginDir: string,
   meta?: PluginMeta
@@ -167,7 +169,12 @@ export async function scanPluginCache(): Promise<Array<{ meta: PluginMeta; plugi
         }
       }
     }
-  } catch { /* cache doesn't exist */ }
+  } catch (error: any) {
+    if (error?.code !== 'ENOENT') {
+      console.error(`[converter/plugin] Failed to scan plugin cache:`, error?.message)
+      throw error
+    }
+  }
 
   return results
 }

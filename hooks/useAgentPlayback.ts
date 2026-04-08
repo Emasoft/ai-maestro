@@ -42,6 +42,8 @@ export function useAgentPlayback(
   const isMountedRef = useRef(true)
   // Ref to track currentMessageIndex without stale closures in setInterval
   const currentIndexRef = useRef(0)
+  // Ref to always hold the latest updatePlaybackState so setInterval never calls a stale version
+  const updatePlaybackStateRef = useRef<(action: PlaybackControl) => Promise<void>>(async () => {})
 
   // Keep currentIndexRef in sync so setInterval callbacks always see the latest value
   useEffect(() => {
@@ -150,6 +152,11 @@ export function useAgentPlayback(
       setError(err instanceof Error ? err : new Error('Failed to update playback state'))
     }
   }, [agentId, sessionId, state])
+
+  // Keep updatePlaybackStateRef in sync so setInterval callbacks never call a stale version
+  useEffect(() => {
+    updatePlaybackStateRef.current = updatePlaybackState
+  }, [updatePlaybackState])
 
   /**
    * Start playback
@@ -263,6 +270,8 @@ export function useAgentPlayback(
    * Uses currentIndexRef to avoid stale closure — setInterval would otherwise
    * capture an outdated snapshot of state.currentMessageIndex and revert
    * the playback position every 5s (SF-060 fix).
+   * Also uses updatePlaybackStateRef so the interval never calls a stale
+   * version of updatePlaybackState (which depends on `state`).
    */
   const enableAutoSave = useCallback(() => {
     if (autoSaveTimerRef.current) {
@@ -270,13 +279,13 @@ export function useAgentPlayback(
     }
 
     autoSaveTimerRef.current = setInterval(() => {
-      // Read from ref to get the latest currentMessageIndex without stale closure
-      updatePlaybackState({ action: 'seek', value: currentIndexRef.current })
+      // Read from refs to get the latest values without stale closures
+      updatePlaybackStateRef.current({ action: 'seek', value: currentIndexRef.current })
     }, 5000)
 
     setAutoSaveEnabled(true)
     console.log('[useAgentPlayback] Auto-save enabled')
-  }, [updatePlaybackState])
+  }, []) // No deps — reads everything from refs
 
   /**
    * Disable auto-save
@@ -322,13 +331,24 @@ export function useAgentPlayback(
   }, [loadPlaybackState])
 
   /**
-   * Enable auto-save when playback starts
+   * Enable auto-save when playback starts.
+   * Returns a cleanup that clears the interval so a new effect invocation
+   * (or unmount) never leaks the previous timer.
    */
   useEffect(() => {
     if (state?.isPlaying && autoSaveEnabled) {
       enableAutoSave()
     } else if (!state?.isPlaying) {
       disableAutoSave()
+    }
+
+    // Cleanup: clear any interval this effect iteration created.
+    // On re-run the effect will re-create the correct timer if needed.
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearInterval(autoSaveTimerRef.current)
+        autoSaveTimerRef.current = undefined
+      }
     }
   }, [state?.isPlaying, autoSaveEnabled, enableAutoSave, disableAutoSave])
 

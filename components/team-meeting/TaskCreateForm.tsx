@@ -21,11 +21,13 @@ export default function TaskCreateForm({ agents, existingTasks, onCreateTask }: 
   const [priority, setPriority] = useState<number>(0)
   const [labels, setLabels] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Core submission logic extracted so it can be called from both the form
   // onSubmit handler and the keyboard shortcut handler without any unsafe casts.
   const submitTask = async () => {
     if (!subject.trim() || submitting) return
+    setError(null)
     setSubmitting(true)
     try {
       await onCreateTask({
@@ -43,6 +45,10 @@ export default function TaskCreateForm({ agents, existingTasks, onCreateTask }: 
       setPriority(0)
       setLabels('')
       setExpanded(false)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create task'
+      setError(message)
+      console.error('[TaskCreateForm] create failed:', err)
     } finally {
       setSubmitting(false)
     }
@@ -148,6 +154,11 @@ export default function TaskCreateForm({ agents, existingTasks, onCreateTask }: 
             onChange={setBlockedBy}
           />
         </div>
+      )}
+
+      {/* Error message */}
+      {error && (
+        <p className="text-xs text-red-400 px-1">{error}</p>
       )}
 
       {/* Submit button */}

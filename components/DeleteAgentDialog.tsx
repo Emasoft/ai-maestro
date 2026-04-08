@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AlertTriangle, Download, Trash2, X, Zap } from 'lucide-react'
 
@@ -30,7 +30,9 @@ export default function DeleteAgentDialog({
   const [phase, setPhase] = useState<'confirm' | 'deleting' | 'done'>('confirm')
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleteFolder, setDeleteFolder] = useState(false)
+  const autoCloseTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const displayName = agentDisplayName || agentAlias
 
@@ -39,6 +41,7 @@ export default function DeleteAgentDialog({
 
     setPhase('deleting')
     setDeleting(true)
+    setDeleteError(null)
 
     try {
       // Call the API directly with deleteFolder param
@@ -54,27 +57,46 @@ export default function DeleteAgentDialog({
       // Also call onConfirm for parent-level UI cleanup (close panel, refresh list)
       await onConfirm()
       setPhase('done')
-      // Auto-close after showing success
-      setTimeout(() => {
+      // Auto-close after showing success (tracked for cleanup on unmount)
+      if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current)
+      autoCloseTimerRef.current = setTimeout(() => {
+        autoCloseTimerRef.current = null
         onClose()
         // Reset state
         setPhase('confirm')
         setConfirmText('')
         setDeleting(false)
+        setDeleteError(null)
       }, 1500)
     } catch (error) {
       console.error('Failed to delete agent:', error)
+      setDeleteError(error instanceof Error ? error.message : 'Delete failed')
       setDeleting(false)
       setPhase('confirm')
     }
   }
 
+  // Cleanup auto-close timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current)
+        autoCloseTimerRef.current = null
+      }
+    }
+  }, [])
+
   const handleClose = () => {
     if (deleting) return
+    if (autoCloseTimerRef.current) {
+      clearTimeout(autoCloseTimerRef.current)
+      autoCloseTimerRef.current = null
+    }
     onClose()
     setPhase('confirm')
     setConfirmText('')
     setExportError(null)
+    setDeleteError(null)
     setDeleteFolder(false)
   }
 
@@ -225,6 +247,13 @@ export default function DeleteAgentDialog({
                     <p className="text-xs text-red-400 mt-2">Export failed: {exportError}</p>
                   )}
                 </div>
+
+                {deleteError && (
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                    <p className="text-sm text-red-400 font-medium">Delete failed</p>
+                    <p className="text-xs text-red-300/80 mt-1">{deleteError}</p>
+                  </div>
+                )}
 
                 <div className="pt-2">
                   <label className="block text-sm font-medium text-gray-300 mb-2">

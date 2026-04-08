@@ -88,6 +88,7 @@ export default function AgentCardView({
 }: AgentCardViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>('terminal')
   const [containerReady, setContainerReady] = useState(false)
+  const containerReadyRef = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Wait for container to have valid dimensions before rendering terminal
@@ -96,9 +97,11 @@ export default function AgentCardView({
     let observerDisconnected = false
 
     const checkDimensions = () => {
+      if (containerReadyRef.current) return true
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect()
         if (rect.width > 0 && rect.height > 0) {
+          containerReadyRef.current = true
           setContainerReady(true)
           return true
         }
@@ -109,9 +112,10 @@ export default function AgentCardView({
     // Use ResizeObserver for reliable dimension detection
     if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
       const observer = new ResizeObserver((entries) => {
-        if (observerDisconnected) return
+        if (observerDisconnected || containerReadyRef.current) return
         for (const entry of entries) {
           if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+            containerReadyRef.current = true
             setContainerReady(true)
             observer.disconnect()
             observerDisconnected = true

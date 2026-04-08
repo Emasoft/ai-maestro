@@ -47,7 +47,7 @@ export default function TeamInstructionsSection({ instructions: initialInstructi
           </p>
         </div>
         <button
-          onClick={handleSave}
+          onClick={() => { handleSave().catch(console.error) }}
           disabled={!dirty || saving}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >

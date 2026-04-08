@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { SearchQuery, SearchResult, HighlightedSearchResult } from '@/types/search'
+import type { SearchResult, HighlightedSearchResult } from '@/types/search'
 
 /**
  * Debounce delay for search queries (in milliseconds)
@@ -64,7 +64,7 @@ export function useAgentSearch(agentId: string) {
       const response = await fetch(`/api/agents/${agentId}/search?${queryParams.toString()}`)
 
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
       }
 

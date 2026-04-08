@@ -15,8 +15,11 @@ export async function ensureDir(dirPath: string): Promise<void> {
 export async function readFileOr(filePath: string): Promise<string | null> {
   try {
     return await fs.readFile(filePath, 'utf-8')
-  } catch {
-    return null
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') return null
+    // File exists but is corrupted or unreadable — caller must know
+    console.error(`[converter/fs] readFileOr failed for ${filePath}:`, error?.message)
+    throw error
   }
 }
 
@@ -24,8 +27,10 @@ export async function readFileOr(filePath: string): Promise<string | null> {
 export async function listDir(dirPath: string): Promise<string[]> {
   try {
     return await fs.readdir(dirPath)
-  } catch {
-    return []
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') return []
+    console.error(`[converter/fs] listDir failed for ${dirPath}:`, error?.message)
+    throw error
   }
 }
 
@@ -34,8 +39,10 @@ export async function listDirs(dirPath: string): Promise<string[]> {
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true })
     return entries.filter(e => e.isDirectory()).map(e => e.name)
-  } catch {
-    return []
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') return []
+    console.error(`[converter/fs] listDirs failed for ${dirPath}:`, error?.message)
+    throw error
   }
 }
 
@@ -44,8 +51,10 @@ export async function listFiles(dirPath: string): Promise<string[]> {
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true })
     return entries.filter(e => e.isFile()).map(e => e.name)
-  } catch {
-    return []
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') return []
+    console.error(`[converter/fs] listFiles failed for ${dirPath}:`, error?.message)
+    throw error
   }
 }
 
@@ -70,8 +79,11 @@ export async function listFilesRecursive(dirPath: string, relativeTo?: string): 
         results.push(path.relative(root, fullPath))
       }
     }
-  } catch {
-    // Directory doesn't exist or not readable
+  } catch (error: any) {
+    if (error?.code !== 'ENOENT') {
+      console.error(`[converter/fs] listFilesRecursive failed for ${dirPath}:`, error?.message)
+      throw error
+    }
   }
 
   return results

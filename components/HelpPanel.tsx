@@ -67,6 +67,8 @@ export default function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
   const [agentStatus, setAgentStatus] = useState<'idle' | 'starting' | 'online' | 'error'>('idle')
   const [agentError, setAgentError] = useState<string | null>(null)
   const agentCreatingRef = useRef(false)
+  // Track the readiness poll interval so it can be cleaned up on unmount
+  const pollReadyRef = useRef<NodeJS.Timeout | null>(null)
 
   // Create assistant agent when panel opens with assistant tab
   const createAssistant = useCallback(async () => {
@@ -85,6 +87,11 @@ export default function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
         if (data.status === 'online') {
           setAgentStatus('online')
         } else {
+          // Clear any existing poll before starting a new one
+          if (pollReadyRef.current) {
+            clearInterval(pollReadyRef.current)
+            pollReadyRef.current = null
+          }
           // Poll until the agent's chat API responds (claude is initialized)
           let attempts = 0
           const pollReady = setInterval(async () => {
@@ -95,13 +102,16 @@ export default function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
               if (chatData.success) {
                 setAgentStatus('online')
                 clearInterval(pollReady)
+                pollReadyRef.current = null
               }
             } catch { /* keep trying */ }
             if (attempts > 30) { // ~30s timeout
               clearInterval(pollReady)
+              pollReadyRef.current = null
               setAgentStatus('online') // Let user try anyway
             }
           }, 1000)
+          pollReadyRef.current = pollReady
         }
       } else {
         setAgentStatus('error')
@@ -143,6 +153,16 @@ export default function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
       createAssistant()
     }
   }, [activeTab, isOpen, agentId, agentStatus, createAssistant])
+
+  // Cleanup poll interval on unmount to prevent leaked timers
+  useEffect(() => {
+    return () => {
+      if (pollReadyRef.current) {
+        clearInterval(pollReadyRef.current)
+        pollReadyRef.current = null
+      }
+    }
+  }, [])
 
   // Reset browse state when panel closes
   useEffect(() => {

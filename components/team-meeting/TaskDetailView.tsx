@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Trash2, Archive, Circle, PlayCircle, Eye, CheckCircle2, Lock } from 'lucide-react'
+import { X, Trash2 } from 'lucide-react'
 import type { Agent } from '@/types/agent'
 import type { TaskWithDeps, TaskStatus } from '@/types/task'
 import type { KanbanColumnConfig } from '@/types/team'
@@ -27,6 +27,7 @@ export default function TaskDetailView({ task, agents, allTasks, kanbanColumns, 
   const [labels, setLabels] = useState<string[]>(task.labels || [])
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const columns = kanbanColumns || DEFAULT_KANBAN_COLUMNS
 
@@ -41,6 +42,8 @@ export default function TaskDetailView({ task, agents, allTasks, kanbanColumns, 
   }, [task.id, task.subject, task.description, task.assigneeAgentId, task.blockedBy, task.priority, task.labels])
 
   const handleSave = async () => {
+    if (!subject.trim()) return
+    setError(null)
     setSaving(true)
     try {
       await onUpdate(task.id, {
@@ -51,6 +54,10 @@ export default function TaskDetailView({ task, agents, allTasks, kanbanColumns, 
         priority,
         labels,
       })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save task'
+      setError(message)
+      console.error('[TaskDetailView] save failed:', err)
     } finally {
       setSaving(false)
     }
@@ -58,7 +65,14 @@ export default function TaskDetailView({ task, agents, allTasks, kanbanColumns, 
 
   const handleStatusChange = async (status: TaskStatus) => {
     if (task.isBlocked && status !== 'pending' && status !== 'backlog') return
-    await onUpdate(task.id, { status })
+    setError(null)
+    try {
+      await onUpdate(task.id, { status })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update status'
+      setError(message)
+      console.error('[TaskDetailView] status change failed:', err)
+    }
   }
 
   const handleDelete = async () => {
@@ -66,8 +80,16 @@ export default function TaskDetailView({ task, agents, allTasks, kanbanColumns, 
       setConfirmDelete(true)
       return
     }
-    await onDelete(task.id)
-    onClose()
+    setError(null)
+    try {
+      await onDelete(task.id)
+      onClose()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete task'
+      setError(message)
+      setConfirmDelete(false)
+      console.error('[TaskDetailView] delete failed:', err)
+    }
   }
 
   const hasChanges = subject !== task.subject
@@ -89,6 +111,16 @@ export default function TaskDetailView({ task, agents, allTasks, kanbanColumns, 
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+        {/* Error banner */}
+        {error && (
+          <div className="flex items-center justify-between px-2 py-1.5 bg-red-900/30 border border-red-800/50 rounded text-xs text-red-400">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="ml-2 text-red-500 hover:text-red-300">
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
         {/* Status buttons */}
         <div className="flex flex-wrap gap-1">
           {columns.map(col => (

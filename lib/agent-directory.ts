@@ -93,13 +93,11 @@ function loadDirectory(): AgentDirectory {
     directoryCache = JSON.parse(data)
     cacheTimestamp = Date.now()
     return directoryCache!
-  } catch (error) {
-    console.error('[Agent Directory] Failed to load directory:', error)
-    return {
-      version: 0,
-      lastSync: new Date().toISOString(),
-      entries: {}
-    }
+  } catch (err: unknown) {
+    // File existence is already checked above, so reaching here means
+    // either a read permission error or JSON corruption — both must surface.
+    console.error('[Agent Directory] Failed to load directory:', err)
+    throw err
   }
 }
 
@@ -318,6 +316,7 @@ export async function syncWithPeers(timeout: number = 5000): Promise<{
 
       result.synced.push(host.id)
     } catch (error) {
+      console.error(`[Agent Directory] Sync with peer ${host.id} failed:`, error)
       result.failed.push(host.id)
     }
   }

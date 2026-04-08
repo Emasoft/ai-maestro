@@ -12,7 +12,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Zap, Info, RefreshCw } from 'lucide-react'
+import { Zap, RefreshCw } from 'lucide-react'
 import ClientTabBar from './ClientTabBar'
 import ConvertButton from './ConvertButton'
 import { InstallConfirmDialog, ConflictErrorDialog, ConversionErrorDialog } from './ConversionDialogs'
@@ -107,7 +107,9 @@ export default function SkillsSection({
           const data = await res.json()
           newCounts[client] = data.skills?.length || 0
         }
-      } catch { /* */ }
+      } catch (err) {
+        console.error(`[SkillsSection] Failed to fetch skill count for client "${client}":`, err)
+      }
     }))
     setCounts(newCounts)
   }, [])

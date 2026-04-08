@@ -64,7 +64,9 @@ async function scanMCP(rootDir: string): Promise<MCPIR | null> {
       }
     })
     if (servers.length > 0) return { servers, sourcePath: configPath }
-  } catch { /* */ }
+  } catch (err) {
+    console.error(`opencode: failed to parse MCP config ${configPath}:`, err)
+  }
   return null
 }
 
@@ -80,7 +82,11 @@ async function scanCommands(rootDir: string): Promise<CommandIR[]> {
       const content = await readFileOr(filePath)
       if (content) commands.push({ name: entry.replace(/\.md$/, ''), content, sourcePath: filePath })
     }
-  } catch { /* */ }
+  } catch (err: unknown) {
+    if (!(err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT')) {
+      throw err // Only swallow missing directory, rethrow corruption/permission errors
+    }
+  }
   return commands
 }
 

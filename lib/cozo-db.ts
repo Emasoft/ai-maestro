@@ -272,8 +272,13 @@ export class AgentDatabase {
         oldestMessage,
         newestMessage
       }
-    } catch {
-      // Tables might not exist yet - return defaults silently
+    } catch (error: any) {
+      // Tables not yet created (e.g. fresh database) — return defaults
+      // But log unexpected errors so corruption is not silent
+      const msg = error?.message || String(error)
+      if (!msg.includes('not found') && !msg.includes('does not exist')) {
+        console.error(`[CozoDB] getMemoryStats unexpected error:`, msg)
+      }
       return {
         totalMessages: 0,
         totalConversations: 0,

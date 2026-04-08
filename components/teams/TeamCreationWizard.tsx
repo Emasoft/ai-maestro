@@ -187,7 +187,7 @@ export default function TeamCreationWizard({
     fetch('/api/github/auth')
       .then(r => r.ok ? r.json() : { authenticated: false, hasProjectScope: false })
       .then(d => setGhAuth(d))
-      .catch(() => setGhAuth({ authenticated: false, hasProjectScope: false }))
+      .catch((err) => { console.error('Failed to fetch GitHub auth:', err); setGhAuth({ authenticated: false, hasProjectScope: false }) })
       .finally(() => setGhAuthLoading(false))
   }, [step, ghAuth])
 
@@ -198,7 +198,7 @@ export default function TeamCreationWizard({
     fetch('/api/github/orgs')
       .then(r => r.ok ? r.json() : { orgs: [] })
       .then(d => setOrgs(d.orgs || []))
-      .catch(() => setOrgs([]))
+      .catch((err) => { console.error('Failed to fetch GitHub orgs:', err); setOrgs([]) })
       .finally(() => setOrgsLoading(false))
   }, [ghAuth])
 
@@ -209,7 +209,7 @@ export default function TeamCreationWizard({
     fetch(`/api/github/repos?owner=${encodeURIComponent(data.selectedOrg)}`)
       .then(r => r.ok ? r.json() : { repos: [] })
       .then(d => setRepos(d.repos || []))
-      .catch(() => setRepos([]))
+      .catch((err) => { console.error('Failed to fetch GitHub repos:', err); setRepos([]) })
       .finally(() => setReposLoading(false))
   }, [data.selectedOrg])
 
@@ -227,7 +227,7 @@ export default function TeamCreationWizard({
           label: s.label,
         })))
       })
-      .catch(() => setAgents([]))
+      .catch((err) => { console.error('Failed to fetch agents:', err); setAgents([]) })
       .finally(() => setAgentsLoading(false))
   }, [step])
 
@@ -246,7 +246,8 @@ export default function TeamCreationWizard({
       } else {
         setData(d => ({ ...d, linkedProjectValid: false, linkedProjectInfo: null }))
       }
-    } catch {
+    } catch (err) {
+      console.error('Failed to validate project URL:', err)
       setData(d => ({ ...d, linkedProjectValid: false, linkedProjectInfo: null }))
     } finally {
       setProjectValidating(false)

@@ -36,10 +36,12 @@ export default function AMPAddressesSection({
         const data = await response.json()
         setAddresses(data.addresses || [])
       } else {
-        const err = await response.json()
-        setError(err.error || 'Failed to load AMP addresses')
+        let msg = `Failed to load AMP addresses (HTTP ${response.status})`
+        try { const err = await response.json(); msg = err.error || msg } catch { /* non-JSON body */ }
+        setError(msg)
       }
-    } catch {
+    } catch (err) {
+      console.error('[AMPAddressesSection] fetchAddresses failed:', err)
       setError('Failed to connect to server')
     } finally {
       setLoading(false)
@@ -67,10 +69,12 @@ export default function AMPAddressesSection({
         const data = await response.json()
         setAddresses(data.addresses || [])
       } else {
-        const err = await response.json()
-        setError(err.error || 'Failed to remove AMP address')
+        let msg = `Failed to remove AMP address (HTTP ${response.status})`
+        try { const err = await response.json(); msg = err.error || msg } catch { /* non-JSON body */ }
+        setError(msg)
       }
-    } catch {
+    } catch (err) {
+      console.error('[AMPAddressesSection] handleRemoveAddress failed:', err)
       setError('Failed to connect to server')
     } finally {
       setSaving(false)
@@ -96,10 +100,12 @@ export default function AMPAddressesSection({
         const data = await response.json()
         setAddresses(data.addresses || [])
       } else {
-        const err = await response.json()
-        setError(err.error || 'Failed to update AMP address')
+        let msg = `Failed to update AMP address (HTTP ${response.status})`
+        try { const err = await response.json(); msg = err.error || msg } catch { /* non-JSON body */ }
+        setError(msg)
       }
-    } catch {
+    } catch (err) {
+      console.error('[AMPAddressesSection] handleSetPrimary failed:', err)
       setError('Failed to connect to server')
     } finally {
       setSaving(false)

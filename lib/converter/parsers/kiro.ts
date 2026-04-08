@@ -111,7 +111,9 @@ async function parseKiroAgents(dir: string): Promise<AgentIR[]> {
         fileName: baseName,
         sourcePath: filePath,
       })
-    } catch { /* invalid JSON */ }
+    } catch (err) {
+      console.error(`kiro: failed to parse agent JSON ${filePath}:`, err)
+    }
   }
 
   return agents
@@ -129,7 +131,11 @@ async function scanSteering(rootDir: string): Promise<InstructionIR[]> {
       const content = await readFileOr(filePath)
       if (content) instructions.push({ fileName: entry, content, isRule: false, sourcePath: filePath })
     }
-  } catch { /* */ }
+  } catch (err: unknown) {
+    if (!(err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT')) {
+      throw err // Only swallow missing directory, rethrow corruption/permission errors
+    }
+  }
   return instructions
 }
 
@@ -146,7 +152,9 @@ async function scanMCP(rootDir: string): Promise<MCPIR | null> {
       return { name, command: c.command as string | undefined, args: c.args as string[] | undefined, env: c.env as Record<string, string> | undefined, url: c.url as string | undefined }
     })
     if (servers.length > 0) return { servers, sourcePath: mcpPath }
-  } catch { /* */ }
+  } catch (err) {
+    console.error(`kiro: failed to parse MCP config ${mcpPath}:`, err)
+  }
   return null
 }
 
@@ -175,7 +183,9 @@ async function scanHooks(rootDir: string): Promise<HookIR[]> {
         type: String(then.type ?? 'shell'),
         command: then.command as string | undefined,
       })
-    } catch { /* invalid JSON */ }
+    } catch (err) {
+      console.error(`kiro: failed to parse hook JSON ${filePath}:`, err)
+    }
   }
 
   return hooks

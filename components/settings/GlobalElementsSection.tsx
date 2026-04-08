@@ -223,7 +223,7 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
         fetch(`/api/settings/element-content?path=${encodeURIComponent(targetEl.path)}`)
           .then(r => r.ok ? r.json() : null)
           .then(data => { if (data?.content) setElementContent(prev => ({ ...prev, [targetKey]: data.content })) })
-          .catch(() => {})
+          .catch((err) => { console.error('Failed to load element content:', err) })
           .finally(() => setLoadingContent(null))
       }
       // Double rAF: first lets React commit the render (expandedElement change), second scrolls to the now-visible element
@@ -757,7 +757,7 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
                         .then(data => {
                           if (data?.content) setElementContent(prev => ({ ...prev, [elKey]: data.content }))
                         })
-                        .catch(() => {})
+                        .catch((err) => { console.error('Failed to load element content:', err) })
                         .finally(() => setLoadingContent(null))
                     }
                   }}
@@ -818,7 +818,7 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
                                   body: JSON.stringify({ action: 'remove-element', elementName: el.name, elementType: el.type, elementPath: el.path }),
                                 })
                                 if (res.ok) fetchElements()
-                              } catch { /* ignore */ }
+                              } catch (err) { console.error('Failed to remove element:', err) }
                               setConfirmRemove(null)
                             },
                           })
@@ -861,7 +861,7 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
                                 fetch(`/api/settings/element-content?path=${encodeURIComponent(scriptPath)}`)
                                   .then(r => r.ok ? r.json() : null)
                                   .then(data => { if (data?.content) setScriptViewer({ name: scriptPath.split('/').pop() || 'script', content: data.content }) })
-                                  .catch(() => {})
+                                  .catch((err) => { console.error('Failed to load script source:', err) })
                                   .finally(() => setLoadingScript(false))
                               }}
                               disabled={loadingScript}
@@ -888,7 +888,7 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
                                 })
                                   .then(r => r.ok ? r.json() : null)
                                   .then(data => { if (data?.tools) setMcpTools(prev => ({ ...prev, [elKey]: { tools: data.tools, serverInfo: data.serverInfo } })) })
-                                  .catch(() => {})
+                                  .catch((err) => { console.error('Failed to discover MCP tools:', err) })
                                   .finally(() => setLoadingMcpTools(null))
                               }}
                               disabled={loadingMcpTools === elKey}

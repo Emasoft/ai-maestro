@@ -29,6 +29,7 @@ export default function MeetingChatPanel({ agents, messages, onSendToAgent, onBr
   const [recipient, setRecipient] = useState<string>('all')
   const [inputText, setInputText] = useState('')
   const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll on new messages
@@ -41,6 +42,7 @@ export default function MeetingChatPanel({ agents, messages, onSendToAgent, onBr
     if (!text || sending) return
 
     setSending(true)
+    setSendError(null)
     try {
       if (recipient === 'all') {
         await onBroadcastToAll(text)
@@ -48,6 +50,10 @@ export default function MeetingChatPanel({ agents, messages, onSendToAgent, onBr
         await onSendToAgent(recipient, text)
       }
       setInputText('')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to send message'
+      setSendError(message)
+      console.error('[MeetingChatPanel] send failed:', err)
     } finally {
       setSending(false)
     }
@@ -133,6 +139,13 @@ export default function MeetingChatPanel({ agents, messages, onSendToAgent, onBr
         ))}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Send error banner */}
+      {sendError && (
+        <div className="px-3 py-1.5 bg-red-900/30 border-t border-red-800/50">
+          <p className="text-[11px] text-red-400">{sendError}</p>
+        </div>
+      )}
 
       {/* Compose area */}
       <div className="px-3 py-2 border-t border-gray-800">

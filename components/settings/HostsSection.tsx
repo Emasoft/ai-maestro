@@ -158,7 +158,8 @@ export default function HostsSection() {
       } else {
         setHealthStatus(prev => ({ ...prev, [host.id]: 'offline' }))
       }
-    } catch {
+    } catch (err) {
+      console.error(`Health check failed for ${host.id}:`, err)
       setHealthStatus(prev => ({ ...prev, [host.id]: 'offline' }))
     }
   }

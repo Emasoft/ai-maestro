@@ -43,9 +43,12 @@ export function discoverAgentDatabases(): string[] {
     }
 
     return agentIds
-  } catch (error) {
-    console.error('[AgentStartup] Error discovering agents:', error)
-    return []
+  } catch (err: unknown) {
+    // Only return empty for missing directory; rethrow corruption/permission errors
+    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return []
+    }
+    throw err
   }
 }
 

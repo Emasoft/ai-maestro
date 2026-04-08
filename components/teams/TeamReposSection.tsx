@@ -48,10 +48,14 @@ export default function TeamReposSection({ teamId, githubProject }: TeamReposSec
     fetchRepos()
   }, [fetchRepos])
 
-  const handleCopy = (text: string, idx: number) => {
-    navigator.clipboard.writeText(text)
-    setCopiedIdx(idx)
-    setTimeout(() => setCopiedIdx(null), 2000)
+  const handleCopy = async (text: string, idx: number) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedIdx(idx)
+      setTimeout(() => setCopiedIdx(null), 2000)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to copy to clipboard')
+    }
   }
 
   // No GitHub project linked — show placeholder

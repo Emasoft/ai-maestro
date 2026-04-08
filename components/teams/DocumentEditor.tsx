@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Save, X, Pin } from 'lucide-react'
 
 interface DocumentEditorProps {
@@ -17,11 +17,17 @@ export default function DocumentEditor({ initialTitle = '', initialContent = '',
   const [pinned, setPinned] = useState(initialPinned)
   const [saving, setSaving] = useState(false)
 
+  // Mirror callback props in refs to avoid stale closures
+  const onSaveRef = useRef(onSave)
+  useEffect(() => { onSaveRef.current = onSave }, [onSave])
+  const onCancelRef = useRef(onCancel)
+  useEffect(() => { onCancelRef.current = onCancel }, [onCancel])
+
   const handleSave = async () => {
     if (!title.trim()) return
     setSaving(true)
     try {
-      await onSave({ title: title.trim(), content, pinned })
+      await onSaveRef.current({ title: title.trim(), content, pinned })
     } finally {
       setSaving(false)
     }
@@ -55,7 +61,7 @@ export default function DocumentEditor({ initialTitle = '', initialContent = '',
           {saving ? 'Saving...' : 'Save'}
         </button>
         <button
-          onClick={onCancel}
+          onClick={() => onCancelRef.current()}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
         >
           <X className="w-3.5 h-3.5" />

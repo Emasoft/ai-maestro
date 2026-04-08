@@ -7,12 +7,21 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getBuildStatus } from '@/services/plugin-builder-service'
+import { isValidUuid } from '@/lib/validation'
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const { id } = params
+
+  // Reject malformed build IDs before hitting the service layer
+  if (!id || !isValidUuid(id)) {
+    return NextResponse.json(
+      { error: 'Invalid build ID' },
+      { status: 400 }
+    )
+  }
 
   try {
     const result = await getBuildStatus(id)

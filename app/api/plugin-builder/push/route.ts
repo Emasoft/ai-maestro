@@ -16,8 +16,6 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json()
   } catch (error) {
-    // Errors here come from pushToGitHub, not from request parsing — use 500
-    console.error('Error pushing to GitHub:', error)
     // Differentiate JSON parsing failures from other unexpected errors
     if (error instanceof SyntaxError) {
       return NextResponse.json(
@@ -82,18 +80,26 @@ export async function POST(request: NextRequest) {
     ...(body.branch !== undefined && { branch: body.branch as string }),
   }
 
-  const result = await pushToGitHub(config)
+  try {
+    const result = await pushToGitHub(config)
 
-  if (result.error) {
-    // Guard: ensure result.status is a valid HTTP status code before forwarding it
-    const statusCode =
-      typeof result.status === 'number' && result.status >= 100 && result.status < 600
-        ? result.status
-        : 500
+    if (result.error) {
+      // Guard: ensure result.status is a valid HTTP status code before forwarding it
+      const statusCode =
+        typeof result.status === 'number' && result.status >= 100 && result.status < 600
+          ? result.status
+          : 500
+      return NextResponse.json(
+        { error: result.error },
+        { status: statusCode }
+      )
+    }
+    return NextResponse.json(result.data)
+  } catch (error) {
+    console.error('Error in POST /api/plugin-builder/push:', error)
     return NextResponse.json(
-      { error: result.error },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
-  return NextResponse.json(result.data)
 }

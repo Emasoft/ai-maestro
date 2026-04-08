@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(result.data, { status: result.status })
   } catch (err) {
+    console.error('[hosts/exchange-peers] Unhandled error:', err)
     return NextResponse.json({ error: `Internal server error: ${(err as Error).message}` }, { status: 500 })
   }
 }

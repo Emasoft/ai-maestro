@@ -70,6 +70,8 @@ export default function ChatView({ agent, isActive = false }: ChatViewProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  // Track pending timeouts for cleanup on unmount
+  const pendingTimersRef = useRef<Set<NodeJS.Timeout>>(new Set())
 
   // Track if we've done initial load
   const hasLoadedRef = useRef(false)
@@ -131,6 +133,14 @@ export default function ChatView({ agent, isActive = false }: ChatViewProps) {
       setIsLoading(false)
     }
   }, [agent?.id, agent?.hostUrl, messages.length, messages, pendingMessages.length])
+
+  // Cleanup all pending timers on unmount
+  useEffect(() => {
+    return () => {
+      pendingTimersRef.current.forEach(t => clearTimeout(t))
+      pendingTimersRef.current.clear()
+    }
+  }, [])
 
   // Only fetch when this agent is active (prevents API flood with 40+ agents)
   useEffect(() => {
@@ -199,12 +209,18 @@ export default function ChatView({ agent, isActive = false }: ChatViewProps) {
 
       // Clear pending message after a delay (it was sent successfully)
       // The hookState should change, indicating the message was processed
-      setTimeout(() => {
+      const clearTimer = setTimeout(() => {
         setPendingMessages(prev => prev.filter(p => p.timestamp !== pendingMsg.timestamp))
+        pendingTimersRef.current.delete(clearTimer)
       }, 3000)
+      pendingTimersRef.current.add(clearTimer)
 
       // Fetch updated messages after a short delay
-      setTimeout(() => fetchMessages(false), 500)
+      const fetchTimer = setTimeout(() => {
+        fetchMessages(false)
+        pendingTimersRef.current.delete(fetchTimer)
+      }, 500)
+      pendingTimersRef.current.add(fetchTimer)
     } catch (err) {
       console.error('[ChatView] Error sending message:', err)
       setError(err instanceof Error ? err.message : 'Failed to send message')
@@ -240,7 +256,11 @@ export default function ChatView({ agent, isActive = false }: ChatViewProps) {
     try {
       await navigator.clipboard.writeText(text)
       setCopiedIndex(index)
-      setTimeout(() => setCopiedIndex(null), 2000)
+      const copyTimer = setTimeout(() => {
+        setCopiedIndex(null)
+        pendingTimersRef.current.delete(copyTimer)
+      }, 2000)
+      pendingTimersRef.current.add(copyTimer)
     } catch (err) {
       console.error('Failed to copy:', err)
     }

@@ -149,8 +149,8 @@ author: AI Maestro Team
 
 ## Phase 3: Assign MANAGER (Claude Code)
 
-#### S011: Create and assign MANAGER `scen-codex-manager`
-- **Action:** Create agent via wizard (Claude Code, `scen-codex-manager`, AUTONOMOUS), then assign MANAGER title with password `mYkri1-xoxrap-gogtan`
+#### S011: Create and assign MANAGER `scen006-manager`
+- **Action:** Create agent via wizard (Claude Code, `scen006-manager`, AUTONOMOUS), then assign MANAGER title with password `mYkri1-xoxrap-gogtan`
 - **Goal:** MANAGER active with plugin
 - **Creates:** Agent, plugin
 - **Modifies:** Governance state, agent registry
@@ -167,8 +167,8 @@ author: AI Maestro Team
 
 ## Phase 4: Create Team with Auto-COS
 
-#### S013: Create team `scen-codex-governance-team`
-- **Action:** Teams tab, Create Team, name `scen-codex-governance-team`, submit
+#### S013: Create team `scen006-governance-team`
+- **Action:** Teams tab, Create Team, name `scen006-governance-team`, submit
 - **Goal:** Team created with auto-COS
 - **Creates:** Team + auto-COS agent
 - **Modifies:** Registries
@@ -203,8 +203,8 @@ author: AI Maestro Team
 
 ## Phase 6: Add Codex Agent -- Cross-Client Plugin Conversion
 
-#### S017: Create Codex agent `scen-codex-team-member`
-- **Action:** Wizard: Codex client, name `scen-codex-team-member`, select team, MEMBER title, finish
+#### S017: Create Codex agent `scen006-codex-member`
+- **Action:** Wizard: Codex client, name `scen006-codex-member`, select team, MEMBER title, finish
 - **Goal:** Agent created as MEMBER with Codex-converted plugin
 - **Creates:** Agent with `program: 'codex'`
 - **Modifies:** Agent registry, team agentIds
@@ -258,7 +258,7 @@ author: AI Maestro Team
 ## Phase 9: Title Requires Team (Gate 9) -- Client-Agnostic
 
 #### S023: Open Title Assignment Dialog for teamless Codex agent
-- **Action:** Click title badge on `scen-codex-team-member`
+- **Action:** Click title badge on `scen006-codex-member`
 - **Goal:** Only AUTONOMOUS and MANAGER shown (no team -> no team titles)
 - **Creates:** nothing
 - **Modifies:** nothing
@@ -276,7 +276,7 @@ author: AI Maestro Team
 ## Phase 10: Delete Team via DeleteTeam Pipeline
 
 #### S025: Delete team with governance password
-- **Action:** Teams tab -> delete `scen-codex-governance-team` -> Delete -> password `mYkri1-xoxrap-gogtan` -> "Keep Agents"
+- **Action:** Teams tab -> delete `scen006-governance-team` -> Delete -> password `mYkri1-xoxrap-gogtan` -> "Keep Agents"
 - **Goal:** Team deleted via 8-gate pipeline, agents revert
 - **Creates:** nothing
 - **Modifies:** Team removed, titles -> AUTONOMOUS, plugins removed
@@ -303,19 +303,19 @@ author: AI Maestro Team
 >
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
-#### S027: Remove MANAGER title from `scen-codex-manager`
+#### S027: Remove MANAGER title from `scen006-manager`
 - **Action:** Title dialog -> AUTONOMOUS -> password `mYkri1-xoxrap-gogtan`
 - **Goal:** No MANAGER
 - **Removes:** MANAGER title
 - **Verify:** `hasManager: false`. Screenshot: SCEN-006/S027-no-manager.png
 
-#### S028: Delete `scen-codex-manager`
+#### S028: Delete `scen006-manager`
 - **Action:** Danger Zone -> Delete Agent -> confirm
 - **Goal:** Agent removed
 - **Removes:** Agent
 - **Verify:** Agent gone. Screenshot: SCEN-006/S028-manager-deleted.png
 
-#### S029: Delete `scen-codex-team-member`
+#### S029: Delete `scen006-codex-member`
 - **Action:** Danger Zone -> Delete Agent -> confirm
 - **Goal:** Agent removed
 - **Removes:** Agent

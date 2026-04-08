@@ -70,8 +70,12 @@ export default function DeleteAgentDialog({
       }, 1500)
     } catch (error) {
       console.error('Failed to delete agent:', error)
-      setDeleteError(error instanceof Error ? error.message : 'Delete failed')
+      const errorMsg = error instanceof Error ? error.message : 'Delete failed'
+      setDeleteError(errorMsg)
       setDeleting(false)
+      // Reset confirmText so user must re-type before retrying —
+      // this forces attention back to the form where the error is visible
+      setConfirmText('')
       setPhase('confirm')
     }
   }
@@ -177,6 +181,21 @@ export default function DeleteAgentDialog({
 
               {/* Content */}
               <div className="p-6 space-y-4">
+                {/* API error banner — shown at the top so it's impossible to miss */}
+                {deleteError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-red-500/15 border-2 border-red-500/50 rounded-lg p-4 flex items-start gap-3"
+                  >
+                    <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm text-red-300 font-semibold">Delete failed</p>
+                      <p className="text-sm text-red-200/90 mt-1">{deleteError}</p>
+                    </div>
+                  </motion.div>
+                )}
+
                 <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
                   <p className="text-sm text-gray-300 mb-3">
                     You are about to permanently delete:
@@ -247,13 +266,6 @@ export default function DeleteAgentDialog({
                     <p className="text-xs text-red-400 mt-2">Export failed: {exportError}</p>
                   )}
                 </div>
-
-                {deleteError && (
-                  <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-                    <p className="text-sm text-red-400 font-medium">Delete failed</p>
-                    <p className="text-xs text-red-300/80 mt-1">{deleteError}</p>
-                  </div>
-                )}
 
                 <div className="pt-2">
                   <label className="block text-sm font-medium text-gray-300 mb-2">

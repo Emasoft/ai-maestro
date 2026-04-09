@@ -141,9 +141,11 @@ export default function PluginsTab({ config, onSwitchTab, onRefresh }: PluginsTa
                   {totalElements}
                 </span>
               )}
-              {/* Role/Uninstall actions */}
+              {/* Role/Core/Uninstall actions */}
               {isRole ? (
                 <span className="text-[9px] text-emerald-400/70 px-1.5 flex-shrink-0">role</span>
+              ) : p.name === 'ai-maestro-plugin' ? (
+                <span className="text-[9px] text-blue-400/70 px-1.5 flex-shrink-0" title="Core plugin — cannot be uninstalled (R17)">core</span>
               ) : p.isConflictingRolePlugin ? (
                 <div
                   onClick={(e) => { e.stopPropagation(); setConfirmUninstall(p) }}

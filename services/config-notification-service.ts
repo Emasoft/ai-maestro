@@ -68,32 +68,24 @@ export async function notifyConfigRequestOutcome(
 }
 
 /**
- * Send an AMP message notification.
- * Uses the internal message queue rather than shelling out to amp-send.sh.
+ * Send an AMP message notification via the unified SendMessage AIO pipeline.
  */
 async function sendAmpNotification(
   toSessionName: string,
   subject: string,
   message: string
 ): Promise<void> {
-  // Use the internal messaging API
-  const res = await fetch('http://localhost:23000/api/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      to: toSessionName,
-      subject,
-      priority: 'high',
-      content: {
-        type: 'notification',
-        message,
-      }
-    })
+  const { SendMessage } = await import('@/services/send-message-service')
+  const result = await SendMessage({
+    from: 'system',
+    to: toSessionName,
+    subject,
+    content: { type: 'notification', message },
+    priority: 'high',
+    skipGraphCheck: true, // System notifications bypass R6 graph
   })
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    throw new Error(data.error || `HTTP ${res.status}`)
+  if (!result.success) {
+    throw new Error(result.error || 'SendMessage failed')
   }
 }
 

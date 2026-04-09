@@ -1,8 +1,10 @@
 ---
-version: "3.2.0"
-date: 2026-04-06
+version: "3.4.0"
+date: 2026-04-09
 branch: feature/team-governance
 changelog:
+  - "3.4.0: R17 expanded with protection (R17.B), auto-update (R17.C), trust auto-accept (R17.D); R9 clarified AUTONOMOUS vs team agent behavior"
+  - "3.3.0: Added R17 (Mandatory Core Plugin Installation)"
   - "3.2.0: Added R16 (Password Never Shared with Agents)"
   - "3.1.0: Added R13 (Role Boundaries), R14 (Team Resilience), R15 (Written Orders & GitHub Trail)"
   - "3.0.0: Added R12 (Minimum Team Composition), PHOTOSTORY scenario rule, moved to docs/ for git tracking"
@@ -158,21 +160,45 @@ Full spec: `docs_dev/2026-04-03-communication-graph.md`
 
 ## R9. Manager Requirement
 
+The MANAGER is the host-wide governance authority. Without a MANAGER, teams cannot function — but AUTONOMOUS agents operate normally. The key distinction:
+
+- **AUTONOMOUS agents**: Always fully operational. Can be created, woken, hibernated, and used regardless of whether a MANAGER exists. They appear in the dashboard at all times.
+- **Team agents** (any agent in a team's `agentIds[]`): Require a MANAGER on the host. When no MANAGER exists, team agents are forcefully hibernated and cannot be woken until a MANAGER is assigned.
+
+**All agents always appear in the dashboard sidebar** (ACTIVE/ALL/HIBER tabs) regardless of MANAGER status. The MANAGER gate only controls whether team agents can be **woken** — it never hides agents from the UI or removes them from the registry.
+
+### Manager Blocking Protocol
+
+When no MANAGER exists (at startup or after MANAGER removal), this cascade executes:
+
+1. All teams are marked `blocked: true` in `teams.json`
+2. All agents belonging to blocked teams have their tmux sessions killed (forcefully hibernated)
+3. The wake API rejects wake requests for team agents with HTTP 403: "Cannot wake team agent: no MANAGER exists"
+4. AUTONOMOUS agents are **completely unaffected** — they keep running, can be woken, hibernated, created, and deleted normally
+5. Team CRUD operations (add/remove agents, create/delete teams) are rejected with HTTP 400
+
+When a MANAGER is assigned (via title change), the reverse cascade runs:
+
+1. All teams are marked `blocked: false`
+2. Agents remain hibernated — the MANAGER or user must wake them manually
+3. All team operations are re-enabled
+
 | ID | Rule | Source |
 |----|------|--------|
 | R9.1 | A MANAGER agent **MUST** exist on the host before any team can be created | Explicit |
 | R9.2 | If no MANAGER exists, all existing teams are **blocked** (`team.blocked = true`) | Explicit |
 | R9.3 | When teams are blocked, no agents can be added to or removed from them | Explicit |
 | R9.4 | When teams are blocked, all agents belonging to those teams are **forcefully hibernated** (tmux sessions killed) | Explicit |
-| R9.5 | AUTONOMOUS agents (not in any team) are **unaffected** by team blocking — they can remain active | Explicit |
+| R9.5 | **AUTONOMOUS agents are completely unaffected by team blocking** — they can be created, woken, hibernated, deleted, and used normally even when no MANAGER exists. The MANAGER gate applies exclusively to team agents | Explicit |
 | R9.6 | When a MANAGER is assigned (title change), all teams are **unblocked** (`team.blocked = false`) | Explicit |
 | R9.7 | Unblocking does **NOT** auto-wake agents — agents remain hibernated until manually woken by the user or the MANAGER | Explicit |
 | R9.8 | If a MANAGER is deleted or their title is removed, the blocking cascade triggers immediately (same as startup without MANAGER) | Explicit |
 | R9.9 | At server startup, if no MANAGER is detected, team blocking + agent hibernation runs as a startup task | Explicit |
 | R9.10 | When attempting to delete the MANAGER agent, the Delete Agent dialog MUST show a clear warning: "This agent holds the MANAGER title. Removing it will block all team operations." The system auto-demotes the MANAGER to AUTONOMOUS before proceeding with deletion | Explicit |
 | R9.11 | The MANAGER agent may create teams via the API using AID authentication. The governance password is NOT required for MANAGER-initiated team creation — the server validates the MANAGER's AID session secret (mst_* token) and grants team-creation privileges based on the MANAGER governance title | Explicit |
+| R9.12 | **All agents always appear in the dashboard** (sidebar ACTIVE/ALL/HIBER tabs) regardless of MANAGER status. The MANAGER gate controls wake permissions, not visibility. The registry is the source of truth for the agent list — it is never filtered by governance state | Explicit |
 
-**Rationale:** Without a MANAGER, no governance authority exists to oversee teams. Blocking prevents unsupervised team operations and ensures the system is in a safe state until governance is restored.
+**Rationale:** Without a MANAGER, no governance authority exists to oversee teams. Blocking prevents unsupervised team operations and ensures the system is in a safe state until governance is restored. AUTONOMOUS agents are independent by definition — they have no team, no COS, and no governance chain that requires a MANAGER. Restricting them would break the fundamental principle that AUTONOMOUS agents operate outside the team governance model.
 
 ---
 
@@ -322,6 +348,82 @@ Full spec: `docs_dev/2026-04-03-communication-graph.md`
 
 ---
 
+## R17. Mandatory Core Plugin Installation (CRITICAL)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R17.1 | Every agent registered in an AI Maestro host **MUST** have the `ai-maestro-plugin` installed with `--scope local` in its working directory. This is a non-negotiable prerequisite for the agent to participate in the AI Maestro ecosystem | Explicit |
+| R17.2 | The installation command is: `claude plugin install ai-maestro-plugin@ai-maestro-plugins --scope local` executed from inside the agent's working directory (`~/agents/<name>/`) | Explicit |
+| R17.3 | This installation **MUST** happen at agent registration time — whether the agent is created via the Agent Creation Wizard, imported from an existing tmux session, or created programmatically by the MANAGER or any other agent | Explicit |
+| R17.4 | The `ai-maestro-plugin` provides the foundational skills (agent-messaging, agent-identity, team-governance, team-kanban, etc.), AMP slash commands, and hooks (session tracking, message notifications) that every agent needs to operate within AI Maestro | Explicit |
+| R17.5 | An agent **without** the `ai-maestro-plugin` installed locally is **non-functional** within the AI Maestro ecosystem — it cannot receive messages, participate in governance, use AMP commands, or receive session notifications | Explicit |
+| R17.6 | The `CreateAgent` pipeline (element-management-service) **MUST** include a gate that installs `ai-maestro-plugin@ai-maestro-plugins --scope local` in the agent's working directory as part of agent provisioning | Explicit |
+| R17.7 | The `RegisterAgentFromSession` flow (importing existing tmux sessions) **MUST** install the plugin with local scope before the agent is considered fully registered | Explicit |
+| R17.8 | The `--scope local` flag is mandatory because the plugin must be installed in the agent's own project directory (`settings.local.json`), not in the user's global settings. Each agent is an independent Claude Code instance with its own local configuration | Explicit |
+| R17.9 | If the plugin installation fails (marketplace not registered, network error, plugin not found), the agent registration **MUST** still succeed but the agent **MUST** be flagged with `corePluginMissing: true` in the registry. The dashboard MUST show a warning badge on such agents | Explicit |
+| R17.10 | The MANAGER and CHIEF-OF-STAFF **SHOULD** periodically verify that all agents in their scope have the core plugin installed. If an agent is missing it, the COS or MANAGER should trigger a reinstallation | Explicit |
+| R17.11 | For **non-Claude clients** (Codex, OpenCode, Gemini, Kiro, etc.), the `ai-maestro-plugin` **MUST** be converted to the target client's native format before installation. The conversion uses AI Maestro's cross-client conversion pipeline: (1) generate the Universal Plugin IR from the Claude source plugin, (2) emit the client-specific plugin via the appropriate client adapter. The converted plugin is stored in `~/agents/custom-plugins/<client>/ai-maestro-plugin-<client>/` and registered in the `ai-maestro-local-custom-marketplace` | Explicit |
+| R17.12 | The `CreateAgent` and `RegisterAgentFromSession` pipelines **MUST** detect the agent's client type (from `compatible-clients` in `.agent.toml` or the agent registry) and automatically perform the conversion if the client is not `claude-code`. The agent receives the converted plugin, not the Claude original | Explicit |
+| R17.13 | The converted plugin **MUST** preserve all skills, commands, hooks, and AMP functionality that the target client supports. Features that cannot be mapped (e.g., Claude-specific hook events with no Codex equivalent) are documented in the conversion loss report but do not block the installation | Explicit |
+
+### R17.B — Core Plugin Protection (Cannot Be Removed or Disabled)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R17.14 | The `ai-maestro-plugin` **CANNOT be uninstalled** from any agent, neither via the AI Maestro UI nor via the AI Maestro API. The `ChangePlugin` pipeline MUST reject uninstall requests for this plugin with an error citing R17 | Explicit |
+| R17.15 | The `ai-maestro-plugin` **CANNOT be disabled** from any agent, neither via the AI Maestro UI nor via the AI Maestro API. The `ChangePlugin` pipeline MUST reject disable requests for this plugin. If the server finds the plugin set to `false` (disabled) in an agent's `settings.local.json`, it MUST forcefully re-enable it by writing `true` back | Explicit |
+| R17.16 | The dashboard UI **MUST NOT show an uninstall button** (X icon) on the `ai-maestro-plugin` in the Config tab's Plugins section. Instead, it MUST show a **"core"** label indicating the plugin is a protected system component | Explicit |
+| R17.17 | The `ai-maestro-plugin` **MUST NOT be installed at user scope** (`--scope user`). It MUST only exist at local scope in each agent's working directory. If the AI Maestro server detects the plugin enabled at user scope (`~/.claude/settings.local.json`), it MUST disable it at user scope on startup. User-scope installation would make the plugin load in ALL Claude Code projects on the host, not just AI Maestro agents | Explicit |
+| R17.18 | At server startup, the AI Maestro server **MUST audit all agents** for core plugin compliance: (1) flag agents where the plugin is missing as `corePluginMissing: true`, (2) re-enable the plugin if found disabled, (3) disable user-scope installation if detected. Actual installation of missing plugins is deferred to agent wake time to avoid blocking startup | Explicit |
+
+### R17.C — Core Plugin Auto-Update
+
+| ID | Rule | Source |
+|----|------|--------|
+| R17.19 | When AI Maestro is updated (version bump via `bump-version.sh`), the update script **MUST** also update the `ai-maestro-plugin` from the `Emasoft/ai-maestro-plugins` marketplace. If the marketplace is not registered, the script MUST register it first | Explicit |
+| R17.20 | The AI Maestro server **MUST ensure** that the `Emasoft/ai-maestro-plugins` marketplace is registered on every startup. If it was removed or never installed, the server re-registers it automatically | Explicit |
+| R17.21 | The `wakeAgent` function **MUST check** for core plugin presence before launching the program. If missing, it attempts installation. If the installation fails, the agent is flagged with `corePluginMissing: true` but the wake proceeds — the agent will function with reduced capabilities until the plugin is installed | Explicit |
+
+### R17.D — Directory Trust Auto-Accept
+
+| ID | Rule | Source |
+|----|------|--------|
+| R17.22 | When Claude Code starts in a new agent directory for the first time, it shows a directory trust prompt ("Do you trust the files in this folder?"). The AI Maestro server **MUST automatically accept** this prompt by sending `Enter` to the tmux session (the "Yes, I trust this folder" option is pre-selected). This runs in the background after program launch, polling the pane for up to 8 seconds | Explicit |
+| R17.23 | The trust auto-accept **MUST NOT block** the wake API response. It runs asynchronously after the tmux session and program are launched | Explicit |
+
+**Rationale — Why This Is a Governance Rule, Not Just a Requirement:**
+
+The `ai-maestro-plugin` is the **load-bearing infrastructure** of the entire AI Maestro system. Its hooks are the ONLY mechanism through which the server detects agent state transitions (active, idle, waiting for input, permission prompt, exited). Without these hooks, the following **cascading failure** occurs:
+
+1. **Agent state detection fails** — the server cannot tell if an agent is active, idle, waiting for user input, or has exited the client. The 5-state activity model (Exited, Permission, Waiting, Active, Idle) goes completely dark.
+2. **Session control commands fail** — without knowing agent state, the server cannot determine when it is safe to send `/exit`, restart commands, or approve permission prompts. The Stop, Restart, and Approve buttons become non-functional.
+3. **Plugin and title changes fail** — changing a governance title or role-plugin requires restarting Claude Code (exit + relaunch) so the new plugin is loaded. If the restart command fails (because state detection is broken), the ChangeTitle and ChangePlugin pipelines stall permanently.
+4. **Team operations fail** — since ChangeTitle is broken, agents cannot be assigned to teams, COS cannot be appointed, and the minimum team composition (R12) cannot be enforced.
+5. **AMP messaging fails** — the plugin provides the session tracking hook that enables push notifications and the message notification banner. Without it, agents cannot receive messages, and the entire inter-agent communication system is down.
+6. **Auto-continue fails** — the keep-alive mechanism that prevents idle agents from timing out depends on detecting the idle state via hooks.
+7. **Governance becomes unenforceable** — the governance skills (team-governance, agent-messaging, agent-identity) that agents use to understand and follow governance rules are bundled in this plugin. Without them, agents have no knowledge of R1–R16.
+
+In short: removing the `ai-maestro-plugin` from a single agent doesn't just break that agent — it breaks every operation that touches that agent, and since governance operations (title changes, team membership, transfers) are transitive, a single broken agent can stall operations across the entire host.
+
+This is why R17 is a **governance rule with system-wide enforcement**, not a soft recommendation. The server MUST proactively detect and repair violations (re-enable disabled plugins, reinstall missing plugins, flag non-compliant agents) rather than waiting for the user to notice and fix them manually.
+
+**Implementation:**
+
+```bash
+# Claude Code agents — direct install:
+cd ~/agents/<agent-name>/
+claude plugin install ai-maestro-plugin@ai-maestro-plugins --scope local
+
+# Non-Claude agents (e.g., Codex) — convert first, then install:
+# 1. The CreateAgent pipeline calls convertAndStorePlugin() with source=ai-maestro-plugin
+# 2. This generates ~/agents/custom-plugins/codex/ai-maestro-plugin-codex/
+# 3. The converted plugin is installed in the agent's working directory
+```
+
+This writes the plugin reference to `~/agents/<agent-name>/.claude/settings.local.json` (or the equivalent config file for the target client) under `enabledPlugins`, ensuring the agent loads it on every session start.
+
+---
+
 ## Invariants (Must Never Be Violated)
 
 These are hard invariants that the system must maintain at all times:
@@ -339,6 +441,9 @@ These are hard invariants that the system must maintain at all times:
 11. **Team-resilience invariant**: Deleted core title agents must be immediately recreated by COS (or MANAGER for COS)
 12. **Written-orders invariant**: All inter-agent commands and reports must be written .md files with GitHub issue attachments (MANAGER exempt)
 13. **Password-secrecy invariant**: The governance password must never be transmitted to, stored by, or used by any agent — only the human user may enter it
+14. **Core-plugin-presence invariant**: Every agent registered in the AI Maestro host must have `ai-maestro-plugin@ai-maestro-plugins` installed with `--scope local` in its working directory
+15. **Core-plugin-protection invariant**: The `ai-maestro-plugin` cannot be uninstalled, disabled, or moved to user scope on any agent — it is a permanent, enabled, local-scope fixture
+16. **Core-plugin-currency invariant**: The `ai-maestro-plugin` must be updated from the marketplace whenever AI Maestro itself is updated
 
 ---
 

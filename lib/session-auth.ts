@@ -5,8 +5,9 @@
  * User logs in with governance password → gets httpOnly session cookie.
  * Closes SF-058: "no auth headers = system-owner" bypass.
  *
- * Sessions are in-memory (Map). Server restart invalidates all sessions.
- * This is acceptable for Phase 1 — the user simply re-enters the password.
+ * Sessions are in-memory (Map). `pm2 restart` invalidates all sessions (security measure).
+ * `pm2 start` after `pm2 stop` also starts fresh — this is by design.
+ * Sessions expire on explicit logout or after 7 days (safety measure).
  *
  * Cookie: aim_session=<token>, HttpOnly, SameSite=Strict, Path=/
  */
@@ -30,11 +31,11 @@ interface SessionRecord {
 
 export const SESSION_COOKIE_NAME = 'aim_session'
 const SESSION_TOKEN_BYTES = 32
-const SESSION_LIFETIME_MS = 24 * 60 * 60 * 1000 // 24 hours
+const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000 // 7 days — expires on logout or after this
 const MAX_SESSIONS = 50 // Prevent memory leak — oldest evicted
 
 // ============================================================================
-// In-Memory Store
+// In-Memory Store (cleared on server restart — security measure)
 // ============================================================================
 
 const sessions = new Map<string, SessionRecord>()

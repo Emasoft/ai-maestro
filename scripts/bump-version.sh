@@ -212,7 +212,17 @@ echo ""
 echo -e "${GREEN}Applied $FILES_UPDATED replacements across files${NC}"
 echo ""
 
+# R17: Update ai-maestro-plugin from marketplace for all agents
+echo "Updating ai-maestro-plugin from marketplace..."
+# Ensure marketplace is registered
+claude plugin marketplace add Emasoft/ai-maestro-plugins 2>/dev/null || true
+# Update the plugin (pulls latest version)
+claude plugin update ai-maestro-plugin@ai-maestro-plugins 2>/dev/null && \
+  echo -e "  ${GREEN}✓${NC} ai-maestro-plugin updated from marketplace" || \
+  echo -e "  ${YELLOW}⚠${NC} ai-maestro-plugin update skipped (marketplace or plugin not available)"
+
 # Show what changed
+echo ""
 echo "Changes:"
 git diff --stat 2>/dev/null || true
 echo ""

@@ -258,6 +258,9 @@ export interface Agent {
   // AMP Registration Status (Phase 2: AMP Protocol)
   ampRegistered?: boolean        // True if agent was registered via AMP protocol
 
+  // Core Plugin Status (R17 — Governance)
+  corePluginMissing?: boolean    // True if ai-maestro-plugin failed to install at creation/import time
+
   // Soft-delete: when set, agent is marked as deleted but data is preserved for restore
   deletedAt?: string             // ISO timestamp when soft-deleted, undefined = active
 }
@@ -535,6 +538,8 @@ export interface UpdateAgentRequest {
   documentation?: Partial<AgentDocumentation>
   metadata?: AgentMetadata
   preferences?: Partial<AgentPreferences>
+  // Core Plugin Status (R17)
+  corePluginMissing?: boolean    // True if ai-maestro-plugin failed to install
   // DEPRECATED: for backward compatibility
   /** @deprecated Use 'name' instead. */
   alias?: string

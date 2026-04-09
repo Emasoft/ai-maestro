@@ -207,44 +207,29 @@ export interface SendMessageParams {
 export async function sendMessage(params: SendMessageParams): Promise<ServiceResult<any>> {
   const { from, to, subject, content } = params
 
-  // Validate required fields
-  if (!from || !to || !subject || !content) {
-    return { error: 'Missing required fields: from, to, subject, content', status: 400 }
+  // Delegate to the unified SendMessage AIO pipeline
+  const { SendMessage } = await import('@/services/send-message-service')
+  const result = await SendMessage({
+    from: from || '',
+    to: to || '',
+    subject: subject || '',
+    content: content ? { type: content.type, message: content.message, context: content.context } : { type: 'notification', message: '' },
+    priority: params.priority,
+    inReplyTo: params.inReplyTo,
+    // User/UI messages skip graph check (R6.6: user is exempt)
+    skipGraphCheck: true,
+  })
+
+  if (!result.success) {
+    return { error: result.error || 'Failed to send message', status: 400 }
   }
 
-  // Validate content structure
-  if (!content.type || !content.message) {
-    return { error: 'Content must have type and message fields', status: 400 }
-  }
-
-  try {
-    const result = await sendFromUI({
-      from,
-      to,
-      subject,
-      content,
-      priority: params.priority,
-      inReplyTo: params.inReplyTo,
-      fromHost: params.fromHost,
-      toHost: params.toHost,
-      fromAlias: params.fromAlias,
-      toAlias: params.toAlias,
-      fromLabel: params.fromLabel,
-      toLabel: params.toLabel,
-      fromVerified: params.fromVerified,
-    })
-
-    return {
-      data: {
-        message: result.message,
-        notified: result.notified,
-      },
-      status: 201,
-    }
-  } catch (error) {
-    console.error('Error sending message:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Failed to send message'
-    return { error: errorMessage, status: 500 }
+  return {
+    data: {
+      message: { id: result.messageId },
+      notified: result.notified,
+    },
+    status: 201,
   }
 }
 

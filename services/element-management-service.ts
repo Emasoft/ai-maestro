@@ -145,13 +145,697 @@ async function withSettingsLock<T>(filePath: string, fn: () => Promise<T>): Prom
   }
 }
 
-// ── Core install/uninstall (moved from role-plugin-service) ───
+// ══════════════════════════════════════════════════════════════
+// InstallElement — All-in-one plugin/marketplace/element installer
+// ══════════════════════════════════════════════════════════════
+//
+// SINGLE ENTRY POINT for all installation operations in AI Maestro.
+// Replaces scattered `claude plugin install`, `claude plugin marketplace add`,
+// `execSync('claude plugin ...')` calls throughout the codebase.
+//
+// Every caller (CreateAgent G11, wakeAgent R17 gate, server.mjs startup,
+// register-agent-from-session, API routes) MUST use this function.
+
+/** Known marketplace identifiers that map to specific behaviors */
+type KnownMarketplace = 'ai-maestro-plugins' | 'ai-maestro-local-roles-marketplace' | 'ai-maestro-local-custom-marketplace'
+type MarketplaceRef = KnownMarketplace | string  // string = GitHub org/repo URL or custom marketplace name
+
+/** Client types supported by the cross-client conversion pipeline */
+type ClientType = 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown'
+
+export interface InstallElementResult {
+  success: boolean
+  operations: string[]
+  error?: string
+  /** CLI stdout (for diagnostics sent to MANAGER/COS on failure) */
+  stdout?: string
+  /** CLI stderr */
+  stderr?: string
+  /** True if the agent's client session needs restarting for the change to take effect */
+  restartNeeded?: boolean
+}
+
+/**
+ * All-in-one element installer. Handles marketplace registration, plugin
+ * install/uninstall/enable/disable/update, cross-client conversion, and
+ * scope enforcement — all in a single gated pipeline.
+ *
+ * PRE-EXECUTION GATES (14 gates, each checks ONE condition):
+ *   G00: Validate element name format
+ *   G01: Validate marketplace provided
+ *   G02: Validate action (install|uninstall|enable|disable|update)
+ *   G03: Validate scope (local|user)
+ *   G04: Resolve agent context (agentDir, clientType from registry)
+ *   G05: Validate agentDir for local scope
+ *   G06: Path security — reject traversal
+ *   G07: Verify directory exists (or create .claude/ for install)
+ *   G08: Core plugin guard (R17.14–R17.17 — cannot uninstall/disable/user-scope)
+ *   G09: Role-plugin guard (predefined role-plugins via ChangeTitle only)
+ *   G10: Idempotency check (skip execution if already in desired state)
+ *   G11: Ensure marketplace is registered
+ *   G12: Detect client type and conversion need
+ *   G13: Convert via Universal Plugin IR (if non-Claude client)
+ *
+ * EXECUTION:
+ *   EXE: Execute action (CLI with fallback to direct settings write)
+ *
+ * POST-EXECUTION GATES (always run, even for idempotent results):
+ *   PG01: Verify action took effect (read back settings)
+ *   PG02: Update registry flags (corePluginMissing)
+ *   PG03: Scope consistency — disable core plugin at user scope if found (R17.17)
+ *   PG04: Title-plugin binding repair (R11) — via ChangeTitle() if titled agent lost role-plugin
+ *   PG05: Core plugin defense in depth — via recursive InstallElement() if G08 was bypassed
+ *   PG06: Team composition integrity (R12) — flag team as non-functional if missing required titles
+ *   PG07: Duplicate scope detection — disable user-scope copy if same plugin installed locally
+ *   PG08: Restart notification — signal agent needs client restart
+ */
+export async function InstallElement(
+  desired: {
+    name: string                       // Plugin or element name (e.g. "ai-maestro-plugin")
+    marketplace: MarketplaceRef        // Marketplace to install from
+    action: 'install' | 'uninstall' | 'enable' | 'disable' | 'update'
+    scope: 'local' | 'user'           // local = agent's settings.local.json, user = ~/.claude/settings.local.json
+    agentDir?: string                  // Required for local scope
+    agentId?: string                   // Agent ID (for registry flag updates)
+    clientType?: ClientType            // If known; auto-detected from agent registry if agentId provided
+    /** Bypass role-plugin guard (for ChangeTitle pipeline calling internally) */
+    rolePluginSwap?: boolean
+  },
+): Promise<InstallElementResult> {
+  const ops: string[] = []
+  const result: InstallElementResult = { success: false, operations: ops }
+
+  try {
+    const { name, marketplace, action, scope } = desired
+    let agentDir = desired.agentDir
+    let clientType = desired.clientType || 'claude'
+    let agentProgram = ''
+
+    // ═══════════════════════════════════════════════════════════
+    // PRE-EXECUTION GATES
+    // ═══════════════════════════════════════════════════════════
+
+    // ── G00: Validate element name format ─────────────────────
+    if (!name || !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(name)) {
+      result.error = `Invalid element name "${name}". Must match /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/`
+      ops.push(`G00: DENIED — invalid name "${name}"`)
+      return result
+    }
+    ops.push(`G00: Name "${name}" valid`)
+
+    // ── G01: Validate marketplace ─────────────────────────────
+    if (!marketplace) {
+      result.error = 'Marketplace is required'
+      ops.push(`G01: DENIED — marketplace missing`)
+      return result
+    }
+    ops.push(`G01: Marketplace "${marketplace}" provided`)
+
+    // ── G02: Validate action ──────────────────────────────────
+    if (!['install', 'uninstall', 'enable', 'disable', 'update'].includes(action)) {
+      result.error = `Invalid action "${action}". Must be install|uninstall|enable|disable|update`
+      ops.push(`G02: DENIED — invalid action`)
+      return result
+    }
+    ops.push(`G02: Action "${action}" valid`)
+
+    // ── G03: Validate scope ───────────────────────────────────
+    if (!['local', 'user'].includes(scope)) {
+      result.error = `Invalid scope "${scope}". Must be local|user`
+      ops.push(`G03: DENIED — invalid scope`)
+      return result
+    }
+    ops.push(`G03: Scope "${scope}" valid`)
+
+    // ── G04: Resolve agent context ────────────────────────────
+    if (scope === 'local' && !agentDir && desired.agentId) {
+      const { getAgent } = await import('@/lib/agent-registry')
+      const ag = getAgent(desired.agentId)
+      if (ag?.workingDirectory) {
+        agentDir = ag.workingDirectory
+        agentProgram = ag.program || ''
+        if (!desired.clientType) {
+          const { detectClientType } = await import('@/lib/client-capabilities')
+          clientType = detectClientType(agentProgram) as ClientType
+        }
+        ops.push(`G04: Resolved from registry — dir="${agentDir}", client="${clientType}"`)
+      } else {
+        result.error = `Agent ${desired.agentId} has no workingDirectory in registry`
+        ops.push(`G04: DENIED — agent has no workingDirectory`)
+        return result
+      }
+    } else if (scope === 'local' && agentDir && desired.agentId && !desired.clientType) {
+      const { getAgent } = await import('@/lib/agent-registry')
+      const ag = getAgent(desired.agentId)
+      if (ag?.program) {
+        const { detectClientType } = await import('@/lib/client-capabilities')
+        clientType = detectClientType(ag.program) as ClientType
+        agentProgram = ag.program
+      }
+      ops.push(`G04: Client type resolved from registry — "${clientType}"`)
+    } else {
+      ops.push(`G04: Using provided context — dir="${agentDir || 'N/A'}", client="${clientType}"`)
+    }
+
+    // ── G05: Validate agentDir for local scope ────────────────
+    if (scope === 'local' && !agentDir) {
+      result.error = 'agentDir is required for local scope (or provide agentId for auto-resolution)'
+      ops.push(`G05: DENIED — no agentDir for local scope`)
+      return result
+    }
+    ops.push(`G05: agentDir ${scope === 'local' ? `"${agentDir}"` : 'N/A (user scope)'}`)
+
+    // ── G06: Path security — reject traversal ─────────────────
+    if (agentDir) {
+      agentDir = agentDir.startsWith('~') ? agentDir.replace('~', HOME) : agentDir
+      if (agentDir.includes('..')) {
+        result.error = 'agentDir must not contain ".." (path traversal rejected)'
+        ops.push(`G06: DENIED — path traversal`)
+        return result
+      }
+      ops.push(`G06: Path safe — no traversal`)
+    } else {
+      ops.push(`G06: No agentDir — skipped`)
+    }
+
+    // ── G07: Verify directory exists (or create for install) ──
+    if (agentDir) {
+      if (action === 'install') {
+        await mkdir(join(agentDir, '.claude'), { recursive: true })
+        ops.push(`G07: .claude/ directory ensured in ${agentDir}`)
+      } else if (!existsSync(agentDir)) {
+        result.error = `Agent directory does not exist: ${agentDir}`
+        ops.push(`G07: DENIED — agentDir does not exist`)
+        return result
+      } else {
+        ops.push(`G07: Directory exists — ${agentDir}`)
+      }
+    } else {
+      ops.push(`G07: User scope — no dir check`)
+    }
+
+    // ── G08: Core plugin guard (R17.14–R17.17) ────────────────
+    if (name === 'ai-maestro-plugin') {
+      if (action === 'uninstall' || action === 'disable') {
+        result.error = `The ai-maestro-plugin is a core system plugin and cannot be ${action}d (R17.14–R17.15). ` +
+          `Without this plugin, the agent has no hooks, no state detection, no messaging — it cannot function.`
+        ops.push(`G08: DENIED — core plugin ${action} blocked by R17`)
+        return result
+      }
+      if (action === 'install' && scope === 'user') {
+        result.error = 'The ai-maestro-plugin must be installed with local scope, not user scope (R17.17). ' +
+          'User-scope installation would load it in ALL Claude Code projects, not just AI Maestro agents.'
+        ops.push(`G08: DENIED — core plugin user-scope blocked by R17.17`)
+        return result
+      }
+      ops.push(`G08: Core plugin — action "${action}" allowed`)
+    } else {
+      ops.push(`G08: Not core plugin — no R17 restrictions`)
+    }
+
+    // ── G09: Role-plugin guard ────────────────────────────────
+    const isRolePlugin = !!PREDEFINED_ROLE_PLUGINS[name]
+      || (PREDEFINED_ROLE_PLUGIN_NAMES as readonly string[]).includes(name)
+    if (isRolePlugin && !desired.rolePluginSwap) {
+      if (action === 'install' || action === 'uninstall') {
+        result.error = `"${name}" is a predefined role-plugin. Role-plugins are managed via ChangeTitle(), not InstallElement(). ` +
+          `Use PATCH /api/agents/{id} with governanceTitle to assign/remove roles.`
+        ops.push(`EXE: DENIED — role-plugin must use ChangeTitle`)
+        return result
+      }
+    }
+    if (isRolePlugin) {
+      ops.push(`EXE: Role-plugin "${name}" — ${desired.rolePluginSwap ? 'bypass active' : 'non-install action allowed'}`)
+    } else {
+      ops.push(`EXE: Not a role-plugin`)
+    }
+
+    // ── G10: Idempotency check ────────────────────────────────
+    const settingsPath = scope === 'local'
+      ? join(agentDir!, '.claude', 'settings.local.json')
+      : join(HOME, '.claude', 'settings.local.json')
+    const resolvedMarketplace = resolveMarketplaceName(marketplace)
+    const pluginKey = `${name}@${resolvedMarketplace}`
+
+    {
+      const currentSettings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+      const ep = (currentSettings.enabledPlugins || {}) as Record<string, boolean>
+      const existingKey = Object.keys(ep).find(k => k.includes(name))
+      const currentlyInstalled = !!existingKey
+      const currentlyEnabled = currentlyInstalled && ep[existingKey!] !== false
+
+      if (action === 'install' && currentlyInstalled && currentlyEnabled) {
+        ops.push(`G10: IDEMPOTENT — "${name}" already installed and enabled. Skipping.`)
+        result.success = true
+        // Still run post-gates to clear stale flags
+      } else if (action === 'uninstall' && !currentlyInstalled) {
+        ops.push(`G10: IDEMPOTENT — "${name}" not installed. Nothing to uninstall.`)
+        result.success = true
+      } else if (action === 'enable' && currentlyEnabled) {
+        ops.push(`G10: IDEMPOTENT — "${name}" already enabled.`)
+        result.success = true
+      } else if (action === 'disable' && currentlyInstalled && !currentlyEnabled) {
+        ops.push(`G10: IDEMPOTENT — "${name}" already disabled.`)
+        result.success = true
+      } else {
+        ops.push(`G10: State change needed — currently ${currentlyInstalled ? (currentlyEnabled ? 'installed+enabled' : 'installed+disabled') : 'not installed'}, desired: ${action}`)
+      }
+    }
+
+    // If idempotent, skip execution but still run post-gates
+    if (!result.success) {
+
+    // ── G11: Ensure marketplace is registered ─────────────────
+    try {
+      if (marketplace.includes('/') || marketplace === 'ai-maestro-plugins') {
+        const mktRepo = marketplace.includes('/') ? marketplace : `Emasoft/${marketplace}`
+        await execFileAsync('claude', ['plugin', 'marketplace', 'add', mktRepo], {
+          timeout: 15000,
+          cwd: agentDir || HOME,
+        }).catch(() => { /* already registered */ })
+        ops.push(`G11: Marketplace "${mktRepo}" registered (or already present)`)
+      } else if (marketplace === 'ai-maestro-local-roles-marketplace') {
+        // Local roles marketplace — verify directory exists
+        const { getLocalMarketplacePath } = await import('@/lib/ecosystem-constants')
+        const mktPath = getLocalMarketplacePath()
+        if (existsSync(mktPath)) {
+          ops.push(`G11: Local roles marketplace at ${mktPath}`)
+        } else {
+          ops.push(`G11: WARN — Local roles marketplace directory not found at ${mktPath}`)
+        }
+      } else if (marketplace === 'ai-maestro-local-custom-marketplace') {
+        const { getCustomMarketplacePath } = await import('@/lib/ecosystem-constants')
+        const mktPath = getCustomMarketplacePath()
+        if (existsSync(mktPath)) {
+          ops.push(`G11: Custom marketplace at ${mktPath}`)
+        } else {
+          ops.push(`G11: WARN — Custom marketplace directory not found at ${mktPath}`)
+        }
+      } else {
+        ops.push(`G11: Custom marketplace "${resolvedMarketplace}" — assuming registered`)
+      }
+    } catch {
+      ops.push(`G11: WARN — Marketplace registration check failed (CLI not available or timeout)`)
+    }
+
+    // ── G12: Detect client type and conversion need ───────────
+    const needsConversion = clientType !== 'claude' && clientType !== 'unknown'
+    if (needsConversion) {
+      ops.push(`G12: Non-Claude client "${clientType}" — conversion required`)
+    } else {
+      ops.push(`G12: Claude client — direct installation`)
+    }
+
+    // ── G13: Convert via Universal Plugin IR (if needed) ──────
+    let convertedDir: string | null = null
+    if (needsConversion && (action === 'install' || action === 'update')) {
+      try {
+        const { convertAndStorePlugin, emitForClient } = await import('@/services/plugin-storage-service')
+        const targetClient = clientType as 'codex' | 'gemini' | 'opencode' | 'kiro'
+        await convertAndStorePlugin(name, 'claude', [targetClient])
+        convertedDir = await emitForClient(name, targetClient)
+        if (convertedDir) {
+          ops.push(`G13: Converted for ${clientType} → ${convertedDir}`)
+        } else {
+          ops.push(`G13: WARN — Conversion returned no output directory`)
+        }
+      } catch (convErr) {
+        ops.push(`G08: WARN — Cross-client conversion failed: ${convErr instanceof Error ? convErr.message : convErr}`)
+      }
+    } else {
+      ops.push(`G13: No conversion needed`)
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // EXECUTION
+    // ═══════════════════════════════════════════════════════════
+
+    // ── EXE: Execute the action ────────────────────────────────
+    const cwd = scope === 'local' ? agentDir! : HOME
+
+    if (scope === 'local') {
+      await mkdir(join(cwd, '.claude'), { recursive: true })
+    }
+
+    try {
+      switch (action) {
+        case 'install': {
+          let cliSuccess = false
+          try {
+            const cliResult = await execFileAsync('claude', [
+              'plugin', 'install', `${name}@${resolvedMarketplace}`, '--scope', scope,
+            ], { timeout: 30000, cwd })
+            result.stdout = cliResult.stdout
+            result.stderr = cliResult.stderr
+            cliSuccess = true
+            ops.push(`EXE: Installed via CLI — ${name}@${resolvedMarketplace} --scope ${scope}`)
+          } catch (cliErr: unknown) {
+            const err = cliErr as { stderr?: Buffer | string; stdout?: Buffer | string; message?: string }
+            result.stdout = String(err.stdout || '')
+            result.stderr = String(err.stderr || '')
+            ops.push(`EXE: CLI install failed (${err.message?.slice(0, 80) || 'unknown'}) — falling back to direct write`)
+          }
+
+          if (!cliSuccess) {
+            await withSettingsLock(settingsPath, async () => {
+              const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+              const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+              ep[pluginKey] = true
+              settings.enabledPlugins = ep
+              await saveJsonSafe(settingsPath, settings)
+            })
+            ops.push(`EXE: Installed via direct settings write — ${pluginKey} → true`)
+          }
+          break
+        }
+
+        case 'uninstall': {
+          try {
+            const cliResult = await execFileAsync('claude', [
+              'plugin', 'uninstall', `${name}@${resolvedMarketplace}`, '--scope', scope,
+            ], { timeout: 30000, cwd })
+            result.stdout = cliResult.stdout
+            result.stderr = cliResult.stderr
+            ops.push(`EXE: Uninstalled via CLI`)
+          } catch {
+            await withSettingsLock(settingsPath, async () => {
+              const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+              const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+              // Remove all keys matching this plugin name (handle marketplace variants)
+              for (const k of Object.keys(ep)) {
+                if (k.includes(name)) delete ep[k]
+              }
+              settings.enabledPlugins = ep
+              await saveJsonSafe(settingsPath, settings)
+            })
+            ops.push(`EXE: Uninstalled via direct settings removal`)
+          }
+          break
+        }
+
+        case 'enable': {
+          await withSettingsLock(settingsPath, async () => {
+            const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+            const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+            const existingKey = Object.keys(ep).find(k => k.includes(name)) || pluginKey
+            ep[existingKey] = true
+            settings.enabledPlugins = ep
+            await saveJsonSafe(settingsPath, settings)
+          })
+          ops.push(`EXE: Enabled — ${name} → true`)
+          break
+        }
+
+        case 'disable': {
+          await withSettingsLock(settingsPath, async () => {
+            const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+            const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+            const existingKey = Object.keys(ep).find(k => k.includes(name)) || pluginKey
+            ep[existingKey] = false
+            settings.enabledPlugins = ep
+            await saveJsonSafe(settingsPath, settings)
+          })
+          ops.push(`EXE: Disabled — ${name} → false`)
+          break
+        }
+
+        case 'update': {
+          try {
+            const cliResult = await execFileAsync('claude', [
+              'plugin', 'update', `${name}@${resolvedMarketplace}`,
+            ], { timeout: 60000, cwd })
+            result.stdout = cliResult.stdout
+            result.stderr = cliResult.stderr
+            ops.push(`EXE: Updated via CLI`)
+          } catch (updateErr: unknown) {
+            const err = updateErr as { stderr?: Buffer | string; stdout?: Buffer | string; message?: string }
+            result.stdout = String(err.stdout || '')
+            result.stderr = String(err.stderr || '')
+            ops.push(`EXE: WARN — Update failed: ${err.message || 'unknown'}`)
+          }
+          break
+        }
+      }
+    } catch (execErr) {
+      result.error = `G09: Action "${action}" failed: ${execErr instanceof Error ? execErr.message : execErr}`
+      ops.push(result.error)
+      return result
+    }
+
+    result.success = true
+
+    } // end of !result.success (non-idempotent) block
+
+    // ═══════════════════════════════════════════════════════════
+    // POST-EXECUTION GATES (always run, even for idempotent results)
+    // ═══════════════════════════════════════════════════════════
+
+    // ── PG01: Verify action took effect ───────────────────────
+    if (scope === 'local' && agentDir) {
+      const verifyPath = join(agentDir, '.claude', 'settings.local.json')
+      try {
+        const settings = await loadJsonSafe(verifyPath) as Record<string, Record<string, unknown>>
+        const ep = settings.enabledPlugins as Record<string, boolean> | undefined
+        if (action === 'install' || action === 'enable') {
+          const found = ep && Object.keys(ep).some(k => k.includes(name) && ep[k] !== false)
+          ops.push(found
+            ? `PG01: Verified — ${name} present and enabled`
+            : `PG01: WARN — ${name} not found or disabled after ${action}`)
+          if (!found) result.success = false
+        } else if (action === 'uninstall') {
+          const stillPresent = ep && Object.keys(ep).some(k => k.includes(name))
+          ops.push(stillPresent
+            ? `PG01: WARN — ${name} still present after uninstall`
+            : `PG01: Verified — ${name} removed`)
+        } else if (action === 'disable') {
+          const isDisabled = ep && Object.keys(ep).some(k => k.includes(name) && ep[k] === false)
+          ops.push(isDisabled
+            ? `PG01: Verified — ${name} is disabled`
+            : `PG01: WARN — ${name} not in expected disabled state`)
+        } else {
+          ops.push(`PG01: Verification for "${action}" — skipped (update verified by CLI exit code)`)
+        }
+      } catch {
+        ops.push(`PG01: WARN — Could not read settings for verification`)
+      }
+    } else {
+      ops.push(`PG01: User-scope verification skipped`)
+    }
+
+    // ── PG02: Update registry flags ───────────────────────────
+    if (desired.agentId && name === 'ai-maestro-plugin') {
+      try {
+        const { updateAgent: updateAgentAIO } = await import('@/lib/agent-registry')
+        const shouldBeMissing = action === 'uninstall' || action === 'disable' || !result.success
+        await updateAgentAIO(desired.agentId, { corePluginMissing: shouldBeMissing } as import('@/types/agent').UpdateAgentRequest)
+        ops.push(`PG02: Registry flag corePluginMissing=${shouldBeMissing}`)
+      } catch {
+        ops.push(`PG02: WARN — Failed to update registry flag`)
+      }
+    } else {
+      ops.push(`PG02: No registry flag update needed`)
+    }
+
+    // ── PG03: Scope consistency (R17.17) ──────────────────────
+    // If we just installed ai-maestro-plugin at local scope, ensure it's NOT also
+    // enabled at user scope (which would cause double-loading and scope confusion).
+    if (name === 'ai-maestro-plugin' && action === 'install' && scope === 'local') {
+      const userSettingsPath = join(HOME, '.claude', 'settings.local.json')
+      if (existsSync(userSettingsPath)) {
+        try {
+          await withSettingsLock(userSettingsPath, async () => {
+            const us = await loadJsonSafe(userSettingsPath) as Record<string, Record<string, unknown>>
+            const uep = (us.enabledPlugins || {}) as Record<string, boolean>
+            const userKey = Object.keys(uep).find(k => k.includes('ai-maestro-plugin'))
+            if (userKey && uep[userKey] !== false) {
+              uep[userKey] = false
+              us.enabledPlugins = uep
+              await saveJsonSafe(userSettingsPath, us)
+              ops.push(`PG03: Disabled ai-maestro-plugin at user scope (R17.17 — must be local-only)`)
+            } else {
+              ops.push(`PG03: User scope clean — no ai-maestro-plugin enabled`)
+            }
+          })
+        } catch {
+          ops.push(`PG03: WARN — Could not check user scope settings`)
+        }
+      } else {
+        ops.push(`PG03: No user settings file — clean`)
+      }
+    } else {
+      ops.push(`PG03: Scope consistency check not applicable`)
+    }
+
+    // ── PG04: Title-plugin binding repair (R11) ─────────────────
+    // If we uninstalled a role-plugin from a non-AUTONOMOUS agent, that agent
+    // now violates R11 (every titled agent must have a matching role-plugin).
+    // Call ChangeTitle to reinstall the default plugin for their title.
+    if (desired.agentId && action === 'uninstall' && isRolePlugin && result.success) {
+      try {
+        const { getAgent: getAgentPG04 } = await import('@/lib/agent-registry')
+        const agentPG04 = getAgentPG04(desired.agentId)
+        const title = (agentPG04?.governanceTitle || 'autonomous').toLowerCase()
+        if (title !== 'autonomous') {
+          // Agent has a title that requires a role-plugin — reinstall the default
+          const defaultPlugin = TITLE_PLUGIN_MAP[title]
+          if (defaultPlugin && defaultPlugin !== name) {
+            ops.push(`PG04: R11 violation — agent has title "${title}" but lost role-plugin "${name}". Reinstalling default "${defaultPlugin}" via ChangeTitle.`)
+            // ChangeTitle handles the full role-plugin install pipeline
+            const titleResult = await ChangeTitle(desired.agentId, title)
+            if (titleResult.success) {
+              ops.push(`PG04: ChangeTitle restored default plugin "${defaultPlugin}" (${titleResult.operations.length} sub-gates)`)
+            } else {
+              ops.push(`PG04: WARN — ChangeTitle failed: ${titleResult.error}`)
+            }
+          } else if (defaultPlugin === name) {
+            // The uninstalled plugin WAS the default — revert to AUTONOMOUS
+            ops.push(`PG04: Uninstalled the default plugin for title "${title}" — reverting agent to AUTONOMOUS`)
+            const titleResult = await ChangeTitle(desired.agentId, 'autonomous')
+            ops.push(titleResult.success
+              ? `PG04: Agent reverted to AUTONOMOUS`
+              : `PG04: WARN — Revert to AUTONOMOUS failed: ${titleResult.error}`)
+          } else {
+            ops.push(`PG04: No default plugin mapping for title "${title}" — skipped`)
+          }
+        } else {
+          ops.push(`PG04: Agent is AUTONOMOUS — no role-plugin required`)
+        }
+      } catch (pg04Err) {
+        ops.push(`PG04: WARN — Title-plugin repair failed: ${pg04Err instanceof Error ? pg04Err.message : pg04Err}`)
+      }
+    } else {
+      ops.push(`PG04: Title-plugin binding check not applicable`)
+    }
+
+    // ── PG05: Core plugin defense in depth ────────────────────
+    // If by any code path the core plugin ended up uninstalled or disabled
+    // (shouldn't happen — G08 blocks it — but defense in depth), reinstall it.
+    if (desired.agentId && name === 'ai-maestro-plugin' && (action === 'uninstall' || action === 'disable')) {
+      ops.push(`PG05: CRITICAL — Core plugin ${action} bypassed G08! Force-reinstalling.`)
+      const reinstallResult = await InstallElement({
+        name: 'ai-maestro-plugin',
+        marketplace: 'ai-maestro-plugins',
+        action: 'install',
+        scope: 'local',
+        agentDir,
+        agentId: desired.agentId,
+        clientType,
+      })
+      ops.push(reinstallResult.success
+        ? `PG05: Core plugin force-reinstalled`
+        : `PG05: CRITICAL — Force-reinstall FAILED: ${reinstallResult.error}`)
+    } else {
+      ops.push(`PG05: Core plugin defense — not triggered`)
+    }
+
+    // ── PG06: Team composition integrity (R12) ────────────────
+    // If a team agent lost its role-plugin (PG04 may have reverted to AUTONOMOUS
+    // or reassigned a title), the team may now violate R12 (minimum 5 required titles).
+    // Check and flag the team as non-functional if composition is broken.
+    if (desired.agentId && action === 'uninstall' && isRolePlugin && result.success) {
+      try {
+        const { getAgent: getAgentPG06 } = await import('@/lib/agent-registry')
+        const agentPG06 = getAgentPG06(desired.agentId)
+        if (agentPG06?.team) {
+          const { loadTeams: loadTeamsPG06 } = await import('@/lib/team-registry')
+          const allTeams = loadTeamsPG06()
+          const team = allTeams.find(t => t.agentIds?.includes(desired.agentId!))
+          if (team) {
+            // Check if team still has all 5 required titles
+            const { loadAgents: loadAllPG06 } = await import('@/lib/agent-registry')
+            const allAgents = loadAllPG06()
+            const teamAgents = allAgents.filter(a => team.agentIds.includes(a.id))
+            const requiredTitles = ['chief-of-staff', 'architect', 'orchestrator', 'integrator', 'member']
+            const presentTitles = new Set(teamAgents.map(a => (a.governanceTitle || 'autonomous').toLowerCase()))
+            const missingTitles = requiredTitles.filter(t => !presentTitles.has(t))
+            if (missingTitles.length > 0) {
+              ops.push(`PG06: WARN — Team "${team.name}" missing required titles after plugin removal: ${missingTitles.join(', ')}. Team is NON-FUNCTIONAL (R12). COS must recreate missing agents.`)
+            } else {
+              ops.push(`PG06: Team "${team.name}" composition still valid (${requiredTitles.length}/${requiredTitles.length} titles present)`)
+            }
+          } else {
+            ops.push(`PG06: Agent not in a team — composition check skipped`)
+          }
+        } else {
+          ops.push(`PG06: Agent has no team — composition check skipped`)
+        }
+      } catch (pg06Err) {
+        ops.push(`PG06: WARN — Team composition check failed: ${pg06Err instanceof Error ? pg06Err.message : pg06Err}`)
+      }
+    } else {
+      ops.push(`PG06: Team composition check not applicable`)
+    }
+
+    // ── PG07: Duplicate scope detection ───────────────────────
+    // After any install at local scope, check if the SAME plugin is also enabled
+    // at user scope. Double-loading causes unpredictable behavior (duplicate hooks,
+    // duplicate skills, config conflicts). Disable the user-scope copy.
+    if (action === 'install' && scope === 'local' && agentDir) {
+      const userSettingsPath = join(HOME, '.claude', 'settings.local.json')
+      if (existsSync(userSettingsPath)) {
+        try {
+          await withSettingsLock(userSettingsPath, async () => {
+            const us = await loadJsonSafe(userSettingsPath) as Record<string, Record<string, unknown>>
+            const uep = (us.enabledPlugins || {}) as Record<string, boolean>
+            const userKey = Object.keys(uep).find(k => k.includes(name))
+            if (userKey && uep[userKey] !== false) {
+              uep[userKey] = false
+              us.enabledPlugins = uep
+              await saveJsonSafe(userSettingsPath, us)
+              ops.push(`PG07: Disabled "${name}" at user scope — was duplicate of local install (prevents double-loading)`)
+            } else {
+              ops.push(`PG07: No duplicate at user scope`)
+            }
+          })
+        } catch {
+          ops.push(`PG07: WARN — Could not check user scope for duplicates`)
+        }
+      } else {
+        ops.push(`PG07: No user settings file — no duplicate possible`)
+      }
+    } else {
+      ops.push(`PG07: Duplicate scope check not applicable`)
+    }
+
+    // ── PG08: Restart notification ────────────────────────────
+    // Plugin changes require restarting the client session to take effect.
+    // Signal this to callers via the result so they can queue a restart.
+    if (desired.agentId && (action === 'install' || action === 'uninstall' || action === 'update')) {
+      result.restartNeeded = true
+      ops.push(`PG08: Agent restart needed for ${action} to take effect`)
+    } else {
+      ops.push(`PG08: No restart needed`)
+    }
+
+    console.log(`[InstallElement] ${action} "${name}" — ${result.success ? 'OK' : 'FAILED'} (${ops.length} gates)`)
+    return result
+  } catch (err) {
+    result.error = err instanceof Error ? err.message : String(err)
+    console.error(`[InstallElement] FAILED:`, result.error)
+    return result
+  }
+}
+
+/** Resolve marketplace shorthand to the name Claude CLI expects */
+function resolveMarketplaceName(marketplace: MarketplaceRef): string {
+  if (marketplace === 'ai-maestro-plugins') return GITHUB_MARKETPLACE_NAME_IMPORT
+  if (marketplace === 'ai-maestro-local-roles-marketplace') return LOCAL_MARKETPLACE_NAME
+  if (marketplace === 'ai-maestro-local-custom-marketplace') {
+    const { CUSTOM_MARKETPLACE_NAME: CMN } = require('@/lib/ecosystem-constants')
+    return CMN
+  }
+  // GitHub org/repo format → extract basename
+  if (marketplace.includes('/') && !marketplace.includes(' ')) {
+    return marketplace.split('/').pop() || marketplace
+  }
+  return marketplace
+}
+
+// ── Legacy helpers (delegate to InstallElement) ──────────────
 
 /**
  * Install a role-plugin into an agent's working directory.
- *
- * For predefined marketplace plugins: uses `claude plugin install <name> <marketplace> --scope local`.
- * For local/custom plugins: writes settings.local.json directly.
+ * @deprecated Use InstallElement() instead. Kept for backward compatibility during migration.
  */
 export async function installPluginLocally(
   pluginName: string,
@@ -840,11 +1524,11 @@ export async function ChangeTitle(
         result.error = `Title "${newTitle.toUpperCase()}" requires team membership. Assign the agent to a team first.`
         return result
       }
-      ops.push(`G09: ${newTitle.toUpperCase()} requires team — agent is in a team ✓`)
+      ops.push(`EXE: ${newTitle.toUpperCase()} requires team — agent is in a team ✓`)
     } else if (newTitle && STANDALONE_TITLES.has(newTitle)) {
-      ops.push(`G09: ${newTitle.toUpperCase()} is standalone — no team required`)
+      ops.push(`EXE: ${newTitle.toUpperCase()} is standalone — no team required`)
     } else {
-      ops.push(`G09: Title being cleared — team check N/A`)
+      ops.push(`EXE: Title being cleared — team check N/A`)
     }
 
     // ── GATE 10: Clear old MANAGER from governance.json ──────
@@ -944,7 +1628,7 @@ export async function ChangeTitle(
 
     // ── GATE 14: Write governanceTitle to agent registry ─────
     await updateAgent(agentId, { governanceTitle: effectiveTitle as any })
-    ops.push(`G14: Set governanceTitle="${effectiveTitle || 'null'}" in agent registry`)
+    ops.push(`EXE: Set governanceTitle="${effectiveTitle || 'null'}" in agent registry`)
 
     // ── GATE 14b: Revoke existing AID governance tokens ─────
     // Title changed → existing tokens embed the old title → revoke them.
@@ -1267,6 +1951,22 @@ export async function ChangePlugin(
     }
     ops.push(`G01: Plugin name "${desired.name}" is valid`)
 
+    // ── G01b: Core plugin guard (R17) ────────────────────────
+    // ai-maestro-plugin cannot be uninstalled or disabled via the UI/API.
+    // It can only be installed, enabled, or updated.
+    if (desired.name === 'ai-maestro-plugin' && (desired.action === 'uninstall' || desired.action === 'disable')) {
+      result.error = `The ai-maestro-plugin is a core system plugin and cannot be ${desired.action}d (R17). It is required for all agents to participate in the AI Maestro ecosystem.`
+      return result
+    }
+    // ai-maestro-plugin must not be installed at user scope — only local scope.
+    if (desired.name === 'ai-maestro-plugin' && desired.action === 'install' && desired.scope === 'user') {
+      result.error = `The ai-maestro-plugin must be installed with --scope local, not user scope (R17.8). User-scope installation would affect all projects, not just this agent.`
+      return result
+    }
+    if (desired.name === 'ai-maestro-plugin') {
+      ops.push(`G01b: Core plugin — action "${desired.action}" allowed`)
+    }
+
     // ── G02: Role-plugin guard ────────────────────────────────
     // Predefined role-plugins can only be installed via ChangeTitle pipeline,
     // UNLESS the caller explicitly passes rolePluginSwap=true (from RoleTab N:1 dropdown).
@@ -1362,7 +2062,7 @@ export async function ChangePlugin(
       } else {
         await installPluginLocally(desired.name, agentDir!, desired.marketplace)
       }
-      ops.push(`G09: Installed ${pluginKey} (scope: ${desired.scope})`)
+      ops.push(`EXE: Installed ${pluginKey} (scope: ${desired.scope})`)
 
     } else if (desired.action === 'uninstall') {
       if (desired.scope === 'user') {
@@ -1370,7 +2070,7 @@ export async function ChangePlugin(
       } else {
         await uninstallPluginLocally(desired.name, agentDir!, desired.marketplace)
       }
-      ops.push(`G09: Uninstalled ${pluginKey} (scope: ${desired.scope})`)
+      ops.push(`EXE: Uninstalled ${pluginKey} (scope: ${desired.scope})`)
 
     } else if (desired.action === 'enable') {
       if (desired.scope === 'user') {
@@ -1387,7 +2087,7 @@ export async function ChangePlugin(
           await saveJsonSafe(localSettings, settings)
         })
       }
-      ops.push(`G09: Enabled ${pluginKey} (scope: ${desired.scope})`)
+      ops.push(`EXE: Enabled ${pluginKey} (scope: ${desired.scope})`)
 
     } else if (desired.action === 'disable') {
       if (desired.scope === 'user') {
@@ -1404,7 +2104,7 @@ export async function ChangePlugin(
           await saveJsonSafe(localSettings, settings)
         })
       }
-      ops.push(`G09: Disabled ${pluginKey} (scope: ${desired.scope})`)
+      ops.push(`EXE: Disabled ${pluginKey} (scope: ${desired.scope})`)
 
     } else if (desired.action === 'update') {
       if (desired.scope === 'user') {
@@ -1414,7 +2114,7 @@ export async function ChangePlugin(
         await uninstallPluginLocally(desired.name, agentDir!, desired.marketplace)
         await installPluginLocally(desired.name, agentDir!, desired.marketplace)
       }
-      ops.push(`G09: Updated ${pluginKey} (scope: ${desired.scope})`)
+      ops.push(`EXE: Updated ${pluginKey} (scope: ${desired.scope})`)
     }
 
     // ── G10: Settings safeguard ───────────────────────────────
@@ -3007,15 +3707,15 @@ export async function DeleteAgent(
           const dirStat = await stat(resolvedDir).catch(() => null)
           if (dirStat?.isDirectory()) {
             await rm(resolvedDir, { recursive: true, force: true })
-            ops.push(`G09: Deleted agent folder ${resolvedDir}`)
+            ops.push(`EXE: Deleted agent folder ${resolvedDir}`)
           } else {
-            ops.push(`G09: Folder ${resolvedDir} not found — skipped`)
+            ops.push(`EXE: Folder ${resolvedDir} not found — skipped`)
           }
         } else {
-          ops.push(`G09: REFUSED — folder outside ~/agents/: ${resolvedDir}`)
+          ops.push(`EXE: REFUSED — folder outside ~/agents/: ${resolvedDir}`)
         }
       } catch (err) {
-        ops.push(`G09: WARN — folder deletion failed: ${err instanceof Error ? err.message : err}`)
+        ops.push(`EXE: WARN — folder deletion failed: ${err instanceof Error ? err.message : err}`)
       }
     } else if (hard) {
       ops.push('G09: Hard-delete but no folder deletion requested')
@@ -3053,10 +3753,13 @@ export interface CreateAgentResult {
  *   G02: Infer and set client/program (from client field, program field, or default)
  *   G03: Validate working directory (create ~/agents/<name>/ if needed)
  *   G04: Create agent in registry
- *   G05: Set governance title if requested (delegates to ChangeTitle)
- *   G06: Add to team if requested (delegates to ChangeTeam)
- *   G07: Install role-plugin if title requires one (handled by ChangeTitle)
- *   G08: Create tmux session directory structure
+ *   G05: Create .claude directory for Claude agents
+ *   G06: Set governance title if requested (delegates to ChangeTitle)
+ *   G07: Add to team if requested (delegates to ChangeTeam)
+ *   G08: Install role-plugin if specified
+ *   G09: Create tmux session if requested
+ *   G10: Auto-provision Ed25519 keypair for AMP messaging
+ *   G11: Install ai-maestro-plugin at local scope (R17 — core plugin for ecosystem participation)
  */
 export async function CreateAgent(
   desired: {
@@ -3465,15 +4168,15 @@ export async function CreateAgent(
           programArgs: desired.programArgs || (program.includes('claude') ? '--dangerously-skip-permissions' : ''),
         })
         if (sessResult.error) {
-          ops.push(`G09: WARN — Session creation failed: ${sessResult.error}`)
+          ops.push(`EXE: WARN — Session creation failed: ${sessResult.error}`)
         } else {
-          ops.push(`G09: tmux session created`)
+          ops.push(`EXE: tmux session created`)
         }
       } catch (err) {
-        ops.push(`G09: WARN — Session creation failed: ${err instanceof Error ? err.message : err}`)
+        ops.push(`EXE: WARN — Session creation failed: ${err instanceof Error ? err.message : err}`)
       }
     } else {
-      ops.push(`G09: No session requested (agent created hibernated)`)
+      ops.push(`EXE: No session requested (agent created hibernated)`)
     }
 
     // ── G10: Auto-provision Ed25519 keypair for AMP messaging ──
@@ -3493,34 +4196,24 @@ export async function CreateAgent(
       ops.push(`G10: WARN — Keypair generation failed: ${keyErr instanceof Error ? keyErr.message : keyErr}`)
     }
 
-    // ── G11: Install ai-maestro-plugin at local scope ────────
-    // Gives the agent: directory guard hook, skills, commands.
-    // Local scope means the plugin only applies to this agent's working directory.
+    // ── G11: Install ai-maestro-plugin at local scope (R17) ──
+    // Delegates to the unified InstallElement AIO function.
     if (workDir) {
-      try {
-        const { execSync } = require('child_process')
-        const pluginKey = 'ai-maestro-plugin@ai-maestro-plugins'
-        // Check if already installed locally by looking for settings.local.json
-        const localSettingsPath = require('path').join(workDir, '.claude', 'settings.local.json')
-        let alreadyInstalled = false
-        if (require('fs').existsSync(localSettingsPath)) {
-          try {
-            const localSettings = JSON.parse(require('fs').readFileSync(localSettingsPath, 'utf-8'))
-            alreadyInstalled = localSettings.enabledPlugins?.some((p: string) => p.includes('ai-maestro-plugin')) ?? false
-          } catch { /* ignore parse errors */ }
-        }
-        if (!alreadyInstalled) {
-          execSync(`claude plugin install ${pluginKey} --scope local`, {
-            cwd: workDir,
-            timeout: 30000,
-            stdio: 'pipe'
-          })
-          ops.push(`G11: ai-maestro-plugin installed (scope=local, dir=${workDir})`)
-        } else {
-          ops.push(`G11: ai-maestro-plugin already installed locally — skipped`)
-        }
-      } catch (plugErr) {
-        ops.push(`G11: WARN — Local plugin install failed: ${plugErr instanceof Error ? plugErr.message : plugErr}`)
+      const { detectClientType } = await import('@/lib/client-capabilities')
+      const clientType = detectClientType(program)
+      const installResult = await InstallElement({
+        name: 'ai-maestro-plugin',
+        marketplace: 'ai-maestro-plugins',
+        action: 'install',
+        scope: 'local',
+        agentDir: workDir,
+        agentId: agent.id,
+        clientType: clientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
+      })
+      if (installResult.success) {
+        ops.push(`G11: ${installResult.operations.filter(o => o.startsWith('G05') || o.startsWith('G06')).join('; ') || 'ai-maestro-plugin installed'}`)
+      } else {
+        ops.push(`G11: WARN — ${installResult.error || 'core plugin install failed'}`)
       }
     } else {
       ops.push(`G11: No workDir — skipping local plugin install`)

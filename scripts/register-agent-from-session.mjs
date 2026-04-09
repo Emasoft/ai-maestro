@@ -258,6 +258,29 @@ async function registerSession(sessionName, interactive = true, options = {}) {
     console.log(`   Old Session: ${sessionName}`)
     console.log(`   New Session: ${newSessionName}`)
 
+    // R17: Install ai-maestro-plugin with --scope local
+    console.log(`\n🔌 Installing ai-maestro-plugin (scope=local)...`)
+    try {
+      execSync(`claude plugin install ai-maestro-plugin@ai-maestro-plugins --scope local`, {
+        cwd: workingDir,
+        timeout: 30000,
+        stdio: 'pipe'
+      })
+      console.log(`   ✅ ai-maestro-plugin installed locally`)
+    } catch (plugErr) {
+      console.warn(`   ⚠️  ai-maestro-plugin install failed: ${plugErr.message}`)
+      console.warn(`   Agent will be flagged as corePluginMissing. Retry with:`)
+      console.warn(`   cd ${workingDir} && claude plugin install ai-maestro-plugin@ai-maestro-plugins --scope local`)
+      // Flag the agent via API
+      try {
+        await fetch(`${API_BASE}/api/agents/${agent.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ corePluginMissing: true })
+        })
+      } catch { /* non-fatal */ }
+    }
+
     return agent
   } catch (error) {
     console.error(`❌ Failed to register agent: ${error.message}`)

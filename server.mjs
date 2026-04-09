@@ -1357,6 +1357,164 @@ async function startServer(handleRequest) {
       console.error('[Startup] Manager gate check failed:', error)
     }
 
+    // R17: Comprehensive core plugin enforcement on startup.
+    // 1. Flag agents missing ai-maestro-plugin (install deferred to wake time)
+    // 2. Re-enable ai-maestro-plugin if found disabled in any agent
+    // 3. Disable ai-maestro-plugin at user scope if found (must be local-only)
+    // 4. Ensure marketplace is registered
+    try {
+      const { loadAgents, updateAgent: updateAgentR17 } = await import('./lib/agent-registry.ts')
+      const { existsSync, readFileSync, writeFileSync } = await import('fs')
+      const { join: joinPath } = await import('path')
+      const HOME = process.env.HOME || '/tmp'
+      const allAgents = loadAgents()
+      let flagged = 0
+      let reEnabled = 0
+
+      for (const ag of allAgents) {
+        if (!ag.workingDirectory || ag.deletedAt) continue
+        const localSettingsPath = joinPath(ag.workingDirectory, '.claude', 'settings.local.json')
+
+        if (existsSync(localSettingsPath)) {
+          try {
+            const ls = JSON.parse(readFileSync(localSettingsPath, 'utf-8'))
+            const plugins = ls.enabledPlugins || {}
+            const pluginKey = Object.keys(plugins).find(k => k.includes('ai-maestro-plugin'))
+
+            if (!pluginKey) {
+              // Plugin not present at all — flag as missing
+              if (!ag.corePluginMissing) {
+                await updateAgentR17(ag.id, { corePluginMissing: true })
+                flagged++
+              }
+            } else if (plugins[pluginKey] === false) {
+              // Plugin present but DISABLED — forcefully re-enable (R17: cannot be disabled)
+              plugins[pluginKey] = true
+              ls.enabledPlugins = plugins
+              writeFileSync(localSettingsPath, JSON.stringify(ls, null, 2), 'utf-8')
+              reEnabled++
+              // Clear corePluginMissing flag since it's now enabled
+              if (ag.corePluginMissing) {
+                await updateAgentR17(ag.id, { corePluginMissing: false })
+              }
+            } else {
+              // Plugin present and enabled — clear flag if set
+              if (ag.corePluginMissing) {
+                await updateAgentR17(ag.id, { corePluginMissing: false })
+              }
+            }
+          } catch { /* ignore parse errors */ }
+        } else {
+          // No settings.local.json — flag as missing
+          if (!ag.corePluginMissing) {
+            await updateAgentR17(ag.id, { corePluginMissing: true })
+            flagged++
+          }
+        }
+      }
+
+      // R17: Disable ai-maestro-plugin at user scope if found.
+      // User-scope installation would make it load in ALL Claude projects, not just agents.
+      // It must be local-scope only.
+      const userSettingsPath = joinPath(HOME, '.claude', 'settings.local.json')
+      if (existsSync(userSettingsPath)) {
+        try {
+          const us = JSON.parse(readFileSync(userSettingsPath, 'utf-8'))
+          const userPlugins = us.enabledPlugins || {}
+          const userPluginKey = Object.keys(userPlugins).find(k => k.includes('ai-maestro-plugin'))
+          if (userPluginKey && userPlugins[userPluginKey] !== false) {
+            userPlugins[userPluginKey] = false
+            us.enabledPlugins = userPlugins
+            writeFileSync(userSettingsPath, JSON.stringify(us, null, 2), 'utf-8')
+            console.log(`[Startup] R17: Disabled ai-maestro-plugin at user scope (must be local-scope only)`)
+          }
+        } catch { /* ignore */ }
+      }
+
+      // R17: Ensure marketplace is registered
+      try {
+        const { execSync: execSyncMkt } = await import('child_process')
+        execSyncMkt('claude plugin marketplace add Emasoft/ai-maestro-plugins 2>/dev/null || true', {
+          timeout: 15000, stdio: 'pipe'
+        })
+      } catch { /* marketplace may already exist */ }
+
+      if (flagged > 0 || reEnabled > 0) {
+        console.log(`[Startup] R17: ${flagged} agent(s) flagged as corePluginMissing, ${reEnabled} re-enabled`)
+      }
+    } catch (error) {
+      console.error('[Startup] R17 audit failed:', error)
+    }
+
+    // R17: Periodic enforcement — re-check and repair every 5 minutes.
+    // Catches plugins that were disabled or removed while the server was running
+    // (e.g., by manual file edits, CLI commands outside AI Maestro, or bugs).
+    // If missing: immediately reinstalls. If disabled: immediately re-enables.
+    setInterval(async () => {
+      try {
+        const { loadAgents, updateAgent: updateAgentR17p } = await import('./lib/agent-registry.ts')
+        const { existsSync, readFileSync, writeFileSync } = await import('fs')
+        const { join: joinPath } = await import('path')
+        const { execSync: execSyncR17p } = await import('child_process')
+        const allAgents = loadAgents()
+        let repaired = 0
+
+        for (const ag of allAgents) {
+          if (!ag.workingDirectory || ag.deletedAt) continue
+          const localSettingsPath = joinPath(ag.workingDirectory, '.claude', 'settings.local.json')
+
+          if (!existsSync(localSettingsPath)) {
+            // No settings file — attempt install (agent may not have been launched yet)
+            try {
+              execSyncR17p(`claude plugin install ai-maestro-plugin@ai-maestro-plugins --scope local`, {
+                cwd: ag.workingDirectory, timeout: 30000, stdio: 'pipe'
+              })
+              if (ag.corePluginMissing) await updateAgentR17p(ag.id, { corePluginMissing: false })
+              repaired++
+            } catch {
+              if (!ag.corePluginMissing) await updateAgentR17p(ag.id, { corePluginMissing: true })
+            }
+            continue
+          }
+
+          try {
+            const ls = JSON.parse(readFileSync(localSettingsPath, 'utf-8'))
+            const plugins = ls.enabledPlugins || {}
+            const pluginKey = Object.keys(plugins).find(k => k.includes('ai-maestro-plugin'))
+
+            if (!pluginKey) {
+              // Missing — reinstall
+              try {
+                execSyncR17p(`claude plugin install ai-maestro-plugin@ai-maestro-plugins --scope local`, {
+                  cwd: ag.workingDirectory, timeout: 30000, stdio: 'pipe'
+                })
+                if (ag.corePluginMissing) await updateAgentR17p(ag.id, { corePluginMissing: false })
+                repaired++
+              } catch {
+                if (!ag.corePluginMissing) await updateAgentR17p(ag.id, { corePluginMissing: true })
+              }
+            } else if (plugins[pluginKey] === false) {
+              // Disabled — re-enable
+              plugins[pluginKey] = true
+              ls.enabledPlugins = plugins
+              writeFileSync(localSettingsPath, JSON.stringify(ls, null, 2), 'utf-8')
+              if (ag.corePluginMissing) await updateAgentR17p(ag.id, { corePluginMissing: false })
+              repaired++
+            } else if (ag.corePluginMissing) {
+              // Plugin is fine but flag was stale — clear it
+              await updateAgentR17p(ag.id, { corePluginMissing: false })
+            }
+          } catch { /* ignore parse errors */ }
+        }
+
+        if (repaired > 0) {
+          console.log(`[R17] Periodic enforcement: repaired ${repaired} agent(s)`)
+        }
+      } catch (err) {
+        console.error('[R17] Periodic enforcement failed:', err.message)
+      }
+    }, 5 * 60 * 1000) // Every 5 minutes
+
     // Kill any orphaned creation-helper sessions on startup.
     // These zombie sessions can consume tokens indefinitely if not cleaned up.
     try {

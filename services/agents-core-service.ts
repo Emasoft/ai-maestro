@@ -1453,6 +1453,71 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
       }
     }
 
+    // ── R17 GATE: Ensure ai-maestro-plugin is installed BEFORE creating tmux session.
+    // Without the plugin, the agent has no hooks → no state detection → AI Maestro is blind.
+    // An agent without ai-maestro-plugin cannot exist in a functional state (R17.5).
+    // This gate runs BEFORE session creation so the plugin is ready when the client starts.
+    // Delegates to the unified InstallElement AIO function.
+    {
+      const { detectClientType } = await import('@/lib/client-capabilities')
+      const clientType = detectClientType(agent.program || '')
+      const { InstallElement } = await import('@/services/element-management-service')
+
+      // Check if plugin is already installed and enabled
+      const { existsSync: existsR17, readFileSync: readR17, mkdirSync: mkdirR17 } = await import('fs')
+      const { join: joinR17 } = await import('path')
+      mkdirR17(joinR17(workingDirectory, '.claude'), { recursive: true })
+      const localSettingsPath = joinR17(workingDirectory, '.claude', 'settings.local.json')
+      let hasPlugin = false
+      if (existsR17(localSettingsPath)) {
+        try {
+          const ls = JSON.parse(readR17(localSettingsPath, 'utf-8'))
+          const plugins = ls.enabledPlugins || {}
+          const pluginKey = Object.keys(plugins).find((k: string) => k.includes('ai-maestro-plugin'))
+          hasPlugin = !!pluginKey && plugins[pluginKey] !== false
+        } catch { /* corrupt — treat as missing */ }
+      }
+
+      if (!hasPlugin) {
+        console.log(`[Wake] R17: ai-maestro-plugin missing or disabled for "${agentName}" — installing before wake...`)
+        const installResult = await InstallElement({
+          name: 'ai-maestro-plugin',
+          marketplace: 'ai-maestro-plugins',
+          action: 'install',
+          scope: 'local',
+          agentDir: workingDirectory,
+          agentId,
+          clientType: clientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
+        })
+
+        if (!installResult.success) {
+          // Reject the wake — agent cannot function without the plugin.
+          return {
+            error: `Cannot wake agent "${agentName}": ai-maestro-plugin installation failed (R17).\n\n` +
+              `Without this plugin, the agent has no hooks, no state detection, and no messaging — it cannot function.\n\n` +
+              `Installation details:\n` +
+              `  Agent: ${agentName} (${agentId})\n` +
+              `  Client: ${clientType}\n` +
+              `  Working directory: ${workingDirectory}\n` +
+              `  Marketplace: Emasoft/ai-maestro-plugins\n\n` +
+              `InstallElement operations:\n${installResult.operations.map(o => `  ${o}`).join('\n')}\n\n` +
+              (installResult.stdout ? `CLI stdout:\n${installResult.stdout.slice(0, 500)}\n\n` : '') +
+              (installResult.stderr ? `CLI stderr:\n${installResult.stderr.slice(0, 500)}\n\n` : '') +
+              `To fix manually:\n` +
+              `  cd ${workingDirectory}\n` +
+              `  claude plugin marketplace add Emasoft/ai-maestro-plugins\n` +
+              `  claude plugin install ai-maestro-plugin@ai-maestro-plugins --scope local`,
+            status: 503,
+          }
+        }
+        console.log(`[Wake] R17: ai-maestro-plugin installed for "${agentName}" (${installResult.operations.length} gates)`)
+      } else if (agent.corePluginMissing) {
+        // Plugin is present — clear stale flag
+        const { updateAgent: updateAgentR17Clear } = await import('@/lib/agent-registry')
+        await updateAgentR17Clear(agentId, { corePluginMissing: false } as import('@/types/agent').UpdateAgentRequest)
+      }
+    }
+
     // Create new tmux session
     try {
       await runtime.createSession(sessionName, workingDirectory)
@@ -1517,6 +1582,46 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
           console.error(`[Wake] Failed to start program:`, error)
         }
       }
+    }
+
+    // R17-TRUST: Auto-accept Claude Code's directory trust prompt on first launch.
+    // This prompt is the ONLY thing that executes BEFORE plugins load and hooks start.
+    // Without accepting it, the agent is a zombie — invisible to AI Maestro.
+    //
+    // Only runs when: (1) program is being started, (2) agent has never been launched
+    // before (launchCount === 0). After first launch, Claude remembers the directory
+    // and never asks again. This avoids false-positive matching on "trust"/"folder"
+    // in normal conversation output.
+    const isFirstLaunch = !agent.launchCount || agent.launchCount === 0
+    if (startProgram && isFirstLaunch) {
+      const autoAcceptTrust = async () => {
+        // Wait for Claude to start and render the trust prompt
+        await new Promise(resolve => setTimeout(resolve, 2500))
+        const maxAttempts = 8
+        for (let i = 0; i < maxAttempts; i++) {
+          try {
+            const { execSync: execSyncCapture } = await import('child_process')
+            const pane = execSyncCapture(
+              `tmux capture-pane -t "${sessionName}" -p -S -25`,
+              { encoding: 'utf-8', timeout: 3000 }
+            )
+            // Claude's trust prompt has this exact pattern:
+            //   "Yes, I trust this folder" with ❯ selector
+            if (pane.includes('Yes, I trust this folder') || pane.includes('trust this folder')) {
+              await runtime.sendKeys(sessionName, '', { enter: true })
+              console.log(`[Wake] R17-TRUST: Auto-accepted directory trust prompt for "${agentName}" (first launch)`)
+              return
+            }
+            // If Claude's main prompt is visible, trust was not asked (dir already trusted)
+            if (pane.includes('╭─')) {
+              return
+            }
+          } catch { /* pane capture failed — session still starting */ }
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+      }
+      // Run in background — don't block the wake response (R17.23)
+      autoAcceptTrust().catch(() => {})
     }
 
     // Update agent status in registry

@@ -240,28 +240,27 @@ export async function sendMessage(
   agentId: string,
   body: { to: string; subject: string; content: Message['content']; priority?: Message['priority']; inReplyTo?: string }
 ): Promise<ServiceResult<any>> {
-  try {
-    const { to, subject, content, priority, inReplyTo } = body
+  const { to, subject, content, priority, inReplyTo } = body
 
-    if (!to || !subject || !content) {
-      return { error: 'Missing required fields: to, subject, content', status: 400 }
-    }
+  // Delegate to the unified SendMessage AIO pipeline
+  const { SendMessage } = await import('@/services/send-message-service')
+  const result = await SendMessage({
+    from: agentId,
+    to: to || '',
+    subject: subject || '',
+    content: content ? { type: content.type, message: content.message, context: content.context } : { type: 'notification', message: '' },
+    priority,
+    inReplyTo,
+    senderAgentId: agentId,
+    // Agent-to-agent messages DO check the R6 graph
+    skipGraphCheck: false,
+  })
 
-    const result = await sendFromUI({
-      from: agentId,
-      to,
-      subject,
-      content,
-      priority,
-      inReplyTo,
-    })
-
-    return { data: { message: result.message, notified: result.notified }, status: 201 }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to send message'
-    console.error('Failed to send message:', error)
-    return { error: message, status: 500 }
+  if (!result.success) {
+    return { error: result.error || 'Failed to send message', status: 400 }
   }
+
+  return { data: { message: { id: result.messageId }, notified: result.notified }, status: 201 }
 }
 
 // ===========================================================================

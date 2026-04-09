@@ -34,6 +34,26 @@ export default function LoginGate({ children }: LoginGateProps) {
 
   useEffect(() => { checkSession() }, [checkSession])
 
+  // Detect mid-session expiration: if the server restarts while the page is open,
+  // the in-memory session store is cleared but LoginGate stays in 'authenticated' state.
+  // API calls silently fail with 401, showing 0 agents. This periodic check forces
+  // re-login when the session becomes invalid.
+  useEffect(() => {
+    if (status !== 'authenticated') return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/auth/session')
+        if (!res.ok) {
+          setStatus('login')
+        }
+      } catch {
+        // Network error while authenticated — don't force logout,
+        // could be a transient issue. Let the user retry.
+      }
+    }, 30000) // Check every 30 seconds
+    return () => clearInterval(interval)
+  }, [status])
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)

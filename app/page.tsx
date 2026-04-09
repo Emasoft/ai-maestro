@@ -468,22 +468,21 @@ export default function DashboardPage() {
 
   const handleStartSession = async (agent: Agent) => {
     try {
-      // Use agent name as session name (new schema)
-      const sessionName = agent.name || agent.alias || `${(agent.tags || []).join('-')}-unnamed`.replace(/^-/, '')
-      const workingDirectory = agent.workingDirectory || agent.sessions?.[0]?.workingDirectory || agent.preferences?.defaultWorkingDirectory
-
-      const response = await fetch('/api/sessions/create', {
+      // Use wakeAgent API — this ensures the R17 gate runs (installs ai-maestro-plugin
+      // if missing, blocks wake if install fails, handles trust auto-accept).
+      // NEVER call /api/sessions/create directly — it bypasses the R17 enforcement chain.
+      const response = await fetch(`/api/agents/${agent.id}/wake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: sessionName,
-          workingDirectory,
+          startProgram: true,
+          program: agent.program || undefined,
         }),
       })
 
       if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.error || 'Failed to create session')
+        throw new Error(data.error || 'Failed to wake agent')
       }
 
       refreshAgents()

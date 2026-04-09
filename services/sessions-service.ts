@@ -627,6 +627,34 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
     return { error: `Working directory cannot be / or $HOME root. Use ~/agents/<name>/ instead.`, status: 400, data: undefined }
   }
 
+  // R17 defense-in-depth: ensure ai-maestro-plugin is installed before session creation.
+  // This catches callers that bypass wakeAgent (e.g., POST /api/sessions/create).
+  // The plugin must be in settings.local.json BEFORE the client launches so hooks load on first run.
+  if (resolvedCwd) {
+    try {
+      const { InstallElement } = await import('@/services/element-management-service')
+      const { detectClientType } = await import('@/lib/client-capabilities')
+      const clientType = detectClientType(program || '')
+      const installResult = await InstallElement({
+        name: 'ai-maestro-plugin',
+        marketplace: 'ai-maestro-plugins',
+        action: 'install',
+        scope: 'local',
+        agentDir: resolvedCwd,
+        agentId: agentId || undefined,
+        clientType: clientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
+      })
+      if (!installResult.success) {
+        console.warn(`[Sessions] R17: Core plugin install failed for "${name}": ${installResult.error}`)
+        // Don't block session creation — the plugin may install on next wake via R17 gate.
+        // But log the full operations for diagnostics.
+        console.warn(`[Sessions] R17 operations: ${installResult.operations.join(' | ')}`)
+      }
+    } catch (r17Err) {
+      console.warn(`[Sessions] R17 defense-in-depth failed:`, r17Err instanceof Error ? r17Err.message : r17Err)
+    }
+  }
+
   await runtime.createSession(actualSessionName, cwd)
 
   // Register agent

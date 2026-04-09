@@ -1605,11 +1605,20 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
               `tmux capture-pane -t "${sessionName}" -p -S -25`,
               { encoding: 'utf-8', timeout: 3000 }
             )
-            // Claude's trust prompt has this exact pattern:
-            //   "Yes, I trust this folder" with ❯ selector
-            if (pane.includes('Yes, I trust this folder') || pane.includes('trust this folder')) {
+            // Fuzzy trust prompt detection (P004): match multiple patterns
+            // in case Claude changes the wording in future versions.
+            const paneLower = pane.toLowerCase()
+            const hasTrustWord = paneLower.includes('trust')
+            const hasFolderWord = paneLower.includes('folder') || paneLower.includes('directory') || paneLower.includes('workspace')
+            const hasSelector = pane.includes('❯') || pane.includes('>')
+            const hasExactMatch = pane.includes('Yes, I trust this folder') || pane.includes('trust this folder')
+            if (hasExactMatch || (hasTrustWord && hasFolderWord && hasSelector)) {
               await runtime.sendKeys(sessionName, '', { enter: true })
-              console.log(`[Wake] R17-TRUST: Auto-accepted directory trust prompt for "${agentName}" (first launch)`)
+              const matchType = hasExactMatch ? 'exact' : 'fuzzy'
+              console.log(`[Wake] R17-TRUST: Auto-accepted directory trust prompt for "${agentName}" (first launch, ${matchType} match)`)
+              if (!hasExactMatch) {
+                console.warn(`[Wake] R17-TRUST: Fuzzy match used — Claude may have changed trust prompt wording. Check pane content.`)
+              }
               return
             }
             // If Claude's main prompt is visible, trust was not asked (dir already trusted)

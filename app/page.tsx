@@ -481,8 +481,11 @@ export default function DashboardPage() {
       })
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to wake agent')
+        const data = await response.json().catch(() => ({}))
+        // P007: Include HTTP status + full error body + stack trace for diagnostics
+        const errorText = data.error || 'Failed to wake agent'
+        const statusLine = `HTTP ${response.status} ${response.statusText}`
+        throw new Error(`${statusLine}\n\n${errorText}`)
       }
 
       refreshAgents()
@@ -492,9 +495,14 @@ export default function DashboardPage() {
         setActiveAgentId(agent.id)
       }, 500)
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to start session')
+      const msg = error instanceof Error ? error.message : 'Failed to start session'
+      const stack = error instanceof Error && error.stack ? `\n\nStack trace:\n${error.stack}` : ''
+      setWakeError(`${msg}${stack}`)
     }
   }
+
+  // P007: Expandable error modal for R17 wake failures (replaces alert())
+  const [wakeError, setWakeError] = useState<string | null>(null)
 
   const [wakingAgentId, setWakingAgentId] = useState<string | null>(null)
   const [wakeDialogAgent, setWakeDialogAgent] = useState<Agent | null>(null)
@@ -1102,6 +1110,42 @@ export default function DashboardPage() {
             })()}
           </main>
         </div>
+
+        {/* P007: Wake Error Modal — expandable/collapsable for R17 failures */}
+        {wakeError && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+            <div className="bg-gray-900 border border-red-500/40 rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl">
+              <h3 className="text-red-400 font-bold text-sm mb-2">Agent Wake Failed</h3>
+              <p className="text-gray-300 text-xs mb-3">
+                {wakeError.split('\n')[0]}
+              </p>
+              {wakeError.includes('\n') && (
+                <details className="mb-3">
+                  <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-300">
+                    Technical details
+                  </summary>
+                  <pre className="mt-2 text-[10px] text-gray-400 bg-gray-950 rounded-lg p-3 overflow-auto max-h-48 font-mono whitespace-pre-wrap">
+                    {wakeError}
+                  </pre>
+                </details>
+              )}
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => { navigator.clipboard.writeText(wakeError); }}
+                  className="px-3 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition-colors"
+                >
+                  Copy
+                </button>
+                <button
+                  onClick={() => setWakeError(null)}
+                  className="px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <footer className="border-t border-gray-800 bg-gray-950 px-4 py-2 flex-shrink-0">

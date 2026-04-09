@@ -4,11 +4,11 @@ import { useState } from 'react'
 import { LogIn, Square, Trash2, Users } from 'lucide-react'
 import { formatDistanceToNow } from '@/lib/utils'
 import type { Meeting } from '@/types/team'
-import type { UnifiedAgent } from '@/types/agent'
+import type { Agent } from '@/types/agent'
 
 interface MeetingCardProps {
   meeting: Meeting
-  agents: UnifiedAgent[]
+  agents: Agent[]
   onJoin: (meeting: Meeting) => void
   onEnd: (meeting: Meeting) => void
   onDelete: (meeting: Meeting) => void
@@ -18,9 +18,11 @@ export default function MeetingCard({ meeting, agents, onJoin, onEnd, onDelete }
   const [confirmDelete, setConfirmDelete] = useState(false)
   const isActive = meeting.status === 'active'
 
-  const memberAgents = meeting.agentIds
+  const agentIds = meeting.agentIds ?? []
+
+  const memberAgents = agentIds
     .map(id => agents.find(a => a.id === id))
-    .filter(Boolean) as UnifiedAgent[]
+    .filter(Boolean) as Agent[]
 
   const timeAgo = isActive
     ? `Started ${formatDistanceToNow(meeting.startedAt)}`
@@ -56,7 +58,7 @@ export default function MeetingCard({ meeting, agents, onJoin, onEnd, onDelete }
 
             <span className="flex items-center gap-0.5 text-xs text-gray-500 flex-shrink-0">
               <Users className="w-3 h-3" />
-              {meeting.agentIds.length}
+              {agentIds.length}
             </span>
           </div>
 

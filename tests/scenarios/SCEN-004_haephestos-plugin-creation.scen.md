@@ -3,16 +3,17 @@ number: 4
 name: Haephestos Role-Plugin Creation Pipeline
 version: "2.0"
 description: >
-  Tests the full Haephestos 8-step role-plugin creation pipeline through the UI:
-  LoginGate authentication, waking Haephestos, uploading description files,
-  generating TOML via PSS, verifying the TOML preview panel shows
-  compatible-titles/clients badges, building the plugin, validating with CPV,
-  publishing to the local marketplace, and verifying cleanup (session killed,
-  workspace deleted, plugin appears in the role-plugin list). Also verifies the
-  mp4 animation loops while on the Haephestos page and stops when switching away.
-  Adds RBAC probe (no-self-modification for Haephestos), directory guard hook
-  verification, and cemetery verification after cleanup.
-  Validates governance rules R11, R13.
+  The user logs in, opens the sidebar, and selects Haephestos from the HELPERS
+  section. They wake the agent, then upload a role description file and a project
+  type file through the raw materials panel. They instruct Haephestos to generate
+  a TOML profile and watch it appear in the preview panel with compatible-titles
+  and compatible-clients badges. After approving the profile in the terminal, they
+  observe the build, validate, and publish pipeline run to completion. Finally,
+  they verify the new plugin appears in the local marketplace and can be selected
+  when creating a new agent through the wizard.
+client: claude
+interhosts: false
+device: desktop
 subsystems:
   - creation-helper (Haephestos session lifecycle, persona, permissions)
   - role-plugins (plugin generation, marketplace registration, quad-identity)

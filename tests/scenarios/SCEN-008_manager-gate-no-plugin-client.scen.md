@@ -3,15 +3,16 @@ number: 8
 name: Manager Gate Team Lifecycle (No-Plugin Client)
 version: "2.0"
 description: >
-  Tests the MANAGER-gated team lifecycle when agents use clients that have NO
-  plugin support (Gemini CLI). Adds LoginGate authentication, RBAC probes
-  (no-self-modification, wrong-role denial), COS immutability probe (R4.7),
-  DeleteTeam 8-gate pipeline with governance password, and cemetery verification.
-  Validates that governance titles work correctly for no-plugin clients: title
-  changes succeed but plugin installation is gracefully skipped. Mixed-client
-  team with MANAGER and auto-COS as Claude Code (with plugins) while Gemini CLI
-  agent joins, receives titles, and leaves without plugin operations.
-  Validates governance rules R4, R9, R10, R11, R16, ChangeTitle Gates 3/15/16.
+  The user logs in, creates a Claude agent as MANAGER, and creates a team. They
+  add a Gemini CLI agent (which has no plugin support) and verify no plugin is
+  installed for it. They change the Gemini agent's title to ORCHESTRATOR and
+  confirm the title takes effect but no plugin appears. They compare this with
+  the COS agent, which does have a plugin installed. They remove the Gemini
+  agent from the team, delete the team with the governance password, and clean
+  up all test agents.
+client: [claude, gemini]
+interhosts: false
+device: desktop
 subsystems:
   - governance
   - teams

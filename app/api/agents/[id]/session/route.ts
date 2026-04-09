@@ -27,7 +27,7 @@ export async function POST(
     const result = await linkAgentSession(id, body)
 
     if (result.error) {
-      return NextResponse.json({ error: result.error }, { status: result.status })
+      return NextResponse.json({ error: result.error }, { status: result.status || 500 })
     }
     return NextResponse.json(result.data)
   } catch (error) {
@@ -63,7 +63,7 @@ export async function PATCH(
     if (result.error && result.status !== 409) {
       return NextResponse.json(
         { success: false, error: result.error },
-        { status: result.status }
+        { status: result.status || 500 }
       )
     }
 
@@ -100,7 +100,7 @@ export async function GET(
     if (result.error) {
       return NextResponse.json(
         { success: false, error: result.error },
-        { status: result.status }
+        { status: result.status || 500 }
       )
     }
     return NextResponse.json(result.data)
@@ -131,7 +131,7 @@ export async function DELETE(
     })
 
     if (result.error) {
-      return NextResponse.json({ error: result.error }, { status: result.status })
+      return NextResponse.json({ error: result.error }, { status: result.status || 500 })
     }
     return NextResponse.json(result.data)
   } catch (error) {

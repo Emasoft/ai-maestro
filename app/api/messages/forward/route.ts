@@ -14,6 +14,9 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
+  if (!body.to || !body.message) {
+    return NextResponse.json({ error: 'to and message are required' }, { status: 400 })
+  }
   try {
     const result = await forwardMessage(body)
     if (result.error) {

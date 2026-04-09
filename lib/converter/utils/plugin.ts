@@ -53,9 +53,15 @@ export async function scanMarketplace(rootDir: string): Promise<Array<{ meta: Pl
     const plugins = data.plugins || []
     const results: Array<{ meta: PluginMeta; pluginDir: string }> = []
 
+    const resolvedRoot = path.resolve(rootDir) + path.sep
     for (const p of plugins) {
       const source = p.source || p.path || `./${p.name}`
       const pluginDir = path.resolve(rootDir, source)
+      // Prevent path traversal: pluginDir must stay inside rootDir
+      if (!pluginDir.startsWith(resolvedRoot) && pluginDir !== path.resolve(rootDir)) {
+        console.error(`[converter/plugin] Path traversal blocked: "${source}" escapes root "${rootDir}"`)
+        continue
+      }
       results.push({
         meta: {
           name: p.name,

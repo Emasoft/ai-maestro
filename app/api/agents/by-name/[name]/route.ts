@@ -7,7 +7,7 @@ import { lookupAgentByName } from '@/services/agents-core-service'
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { name: string } }
+  { params }: { params: Promise<{ name: string }> }
 ) {
   try {
     const { name } = await params

@@ -17,6 +17,7 @@ export function useCompanionWebSocket({ agentId, onSpeech }: UseCompanionWebSock
   onSpeechRef.current = onSpeech
 
   const wsRef = useRef<WebSocket | null>(null)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const send = useCallback((data: Record<string, unknown>) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -62,12 +63,13 @@ export function useCompanionWebSocket({ agentId, onSpeech }: UseCompanionWebSock
         }
       }
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         wsRef.current = null
-        if (mounted && retryCount < maxRetries) {
+        // Only reconnect on abnormal closes — skip graceful disconnects (1000 normal, 1001 going away)
+        if (mounted && retryCount < maxRetries && event.code !== 1000 && event.code !== 1001) {
           const delay = retryDelays[retryCount] || retryDelays[retryDelays.length - 1]
           retryCount++
-          setTimeout(connect, delay)
+          reconnectTimerRef.current = setTimeout(connect, delay)
         }
       }
 
@@ -80,6 +82,10 @@ export function useCompanionWebSocket({ agentId, onSpeech }: UseCompanionWebSock
 
     return () => {
       mounted = false
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
       if (ws) {
         ws.close()
         ws = null

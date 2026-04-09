@@ -14,7 +14,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const result = getDomainById(id)
+    const result = await getDomainById(id)
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
@@ -40,7 +40,7 @@ export async function PATCH(
     try { body = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-    const result = updateDomainById(id, body)
+    const result = await updateDomainById(id, body)
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
@@ -62,7 +62,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    const result = deleteDomainById(id)
+    const result = await deleteDomainById(id)
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })

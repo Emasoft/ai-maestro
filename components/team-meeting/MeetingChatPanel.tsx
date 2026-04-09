@@ -35,7 +35,7 @@ export default function MeetingChatPanel({ agents, messages, onSendToAgent, onBr
   // Auto-scroll on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length])
+  }, [messages.length, recipient])
 
   const handleSend = async () => {
     const text = inputText.trim()
@@ -90,7 +90,7 @@ export default function MeetingChatPanel({ agents, messages, onSendToAgent, onBr
           All
         </button>
         {agents.map(agent => {
-          const name = agent.label || agent.name || agent.alias || agent.id.slice(0, 8)
+          const name = agent.label || agent.name || agent.id.slice(0, 8)
           return (
             <button
               key={agent.id}

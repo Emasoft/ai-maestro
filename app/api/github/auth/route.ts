@@ -22,6 +22,10 @@ export async function POST(request: NextRequest) {
     if (!username) {
       return NextResponse.json({ error: 'username is required' }, { status: 400 })
     }
+    // Defense-in-depth: validate username format before passing to shell command
+    if (!/^[a-zA-Z0-9-]+$/.test(username)) {
+      return NextResponse.json({ error: 'Invalid username — only alphanumeric and hyphens allowed' }, { status: 400 })
+    }
     switchIdentity(username)
     return NextResponse.json({ success: true, activeUser: username })
   } catch (error) {

@@ -47,7 +47,7 @@ export async function notifyConfigRequestOutcome(
   // Send AMP message to requesting agent if they have a session
   if (requestingAgent?.sessions && requestingAgent.sessions.length > 0) {
     try {
-      const sessionName = requestingAgent.name || requestingAgent.alias
+      const sessionName = requestingAgent.name
       if (sessionName) {
         await sendAmpNotification(sessionName, subject, body)
         console.log(`${LOG_PREFIX} Sent ${outcome} notification to ${requesterName} (${sessionName})`)

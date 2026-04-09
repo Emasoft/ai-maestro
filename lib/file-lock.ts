@@ -64,7 +64,13 @@ export function acquireLock(name: string, timeoutMs: number = DEFAULT_LOCK_TIMEO
 
     const waiter = () => {
       if (timedOut) {
-        // Timeout already fired -- release the lock we just received
+        // Timeout already fired and rejected the promise.  releaseLock()
+        // transferred lock ownership to this waiter by calling it, but since
+        // the promise was already rejected, no caller will ever invoke the
+        // release function.  We MUST release here to avoid a permanent lock.
+        // This is NOT a double-release: it is the sole release for this
+        // ownership transfer.  The timeout handler only removed this waiter
+        // from the queue and rejected -- it did not release the lock itself.
         releaseLock(name)
         return
       }

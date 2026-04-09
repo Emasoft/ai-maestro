@@ -114,6 +114,10 @@ export async function DELETE(
       return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
     const projectPath = request.nextUrl.searchParams.get('project') || ''
+    // SF-MF-023: Path traversal guard — reject '..' in project path
+    if (projectPath.includes('..')) {
+      return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
+    }
 
     const result = await deleteCodeGraph(agentId, projectPath)
 

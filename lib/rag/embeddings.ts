@@ -77,8 +77,18 @@ function l2Normalize(vec: Float32Array): Float32Array {
  * @returns Array of L2-normalized Float32Array vectors (384-d each)
  */
 export async function embedTexts(texts: string[]): Promise<Float32Array[]> {
-  // Filter out empty or invalid texts
-  const validTexts = texts.filter(t => t && typeof t === 'string' && t.trim().length > 0);
+  // Track which indices have valid text so we can preserve 1:1 alignment
+  // between the input array and the output array.  Invalid positions get
+  // a zero-vector so callers never see a shifted index.
+  const validIndices: number[] = [];
+  const validTexts: string[] = [];
+  for (let i = 0; i < texts.length; i++) {
+    const t = texts[i];
+    if (t && typeof t === 'string' && t.trim().length > 0) {
+      validIndices.push(i);
+      validTexts.push(t);
+    }
+  }
 
   if (validTexts.length === 0) {
     throw new Error('[Embeddings] No valid texts to embed');
@@ -112,7 +122,20 @@ export async function embedTexts(texts: string[]): Promise<Float32Array[]> {
       const vec = Float32Array.from(row);
       results.push(l2Normalize(vec));
     }
-    return results;
+    // Re-expand to match original input length if filtering occurred
+    if (validTexts.length === texts.length) {
+      return results;
+    }
+    const dim = results[0]?.length ?? 384;
+    const aligned: Float32Array[] = new Array(texts.length);
+    const zv = new Float32Array(dim);
+    for (let k = 0; k < texts.length; k++) {
+      aligned[k] = zv;
+    }
+    for (let k = 0; k < validIndices.length; k++) {
+      aligned[validIndices[k]] = results[k];
+    }
+    return aligned;
   }
 
   // Fallback to data/dims access
@@ -151,14 +174,28 @@ export async function embedTexts(texts: string[]): Promise<Float32Array[]> {
     results.push(l2Normalize(vec));
   }
 
-  // Validate: embedding count must match input count to prevent silent data corruption downstream
+  // Validate: embedding count must match valid text count
   if (results.length !== validTexts.length) {
     throw new Error(
       `[Embeddings] Count mismatch: got ${results.length} embeddings for ${validTexts.length} texts`
     );
   }
 
-  return results;
+  // Re-expand into an array aligned with the original `texts` input.
+  // Invalid/empty positions get a zero-vector so callers keep 1:1 mapping.
+  if (validTexts.length === texts.length) {
+    return results; // No filtering happened — fast path
+  }
+  const alignDim = results[0]?.length ?? 384;
+  const aligned: Float32Array[] = new Array(texts.length);
+  const zeroVec = new Float32Array(alignDim); // all zeros
+  for (let i = 0; i < texts.length; i++) {
+    aligned[i] = zeroVec;
+  }
+  for (let j = 0; j < validIndices.length; j++) {
+    aligned[validIndices[j]] = results[j];
+  }
+  return aligned;
 }
 
 /**

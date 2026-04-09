@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="${sanitized}"`,
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(sanitized)}`,
       'Content-Length': String(buffer.length),
     },
   })

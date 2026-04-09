@@ -8,7 +8,7 @@ import {
   ChevronDown, ChevronRight, Trash2,
   Cloud, Monitor, Wifi, WifiOff, Folder, Download, Send,
   GitBranch, FolderGit2, RefreshCw, AlertTriangle,
-  FolderTree, X, Terminal, Crown, Shield
+  FolderTree, X, Terminal, Shield
 } from 'lucide-react'
 import Image from 'next/image'
 import type { Agent, AgentDocumentation, Repository } from '@/types/agent'
@@ -227,7 +227,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
     updateField('tags', agent.tags?.filter(t => t !== tag) || [])
   }
 
-  const displayName = agent.label || agent.name || agent.alias || 'Unnamed Agent'
+  const displayName = agent.label || agent.name || 'Unnamed Agent'
   const isAvatarUrl = agent.avatar && (agent.avatar.startsWith('http://') || agent.avatar.startsWith('https://') || agent.avatar.startsWith('/'))
 
   return (
@@ -365,7 +365,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
                 <div className="flex-1 space-y-3">
                   <EditableField
                     label="Agent ID"
-                    value={agent.name || agent.alias || ''}
+                    value={agent.name || ''}
                     onChange={(value) => updateField('name', value)}
                     icon={<User className="w-4 h-4" />}
                   />
@@ -374,7 +374,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
                     value={agent.label || ''}
                     onChange={(value) => updateField('label', value)}
                     icon={<Tag className="w-4 h-4" />}
-                    placeholder={agent.name || agent.alias || 'Same as agent ID'}
+                    placeholder={agent.name || 'Same as agent ID'}
                   />
                 </div>
               </div>
@@ -892,7 +892,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
       {showTransferDialog && (
         <TransferAgentDialog
           agentId={agent.id}
-          agentAlias={agent.name || agent.alias || ''}
+          agentAlias={agent.name || ''}
           agentDisplayName={displayName}
           currentHostId={agent.hostId}
           onClose={() => setShowTransferDialog(false)}
@@ -911,7 +911,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
         isOpen={showExportDialog}
         onClose={() => setShowExportDialog(false)}
         agentId={agent.id}
-        agentAlias={agent.name || agent.alias || ''}
+        agentAlias={agent.name || ''}
         agentDisplayName={displayName}
         hostUrl={hostUrl}
       />
@@ -926,7 +926,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
           onClose?.()
         }}
         agentId={agent.id}
-        agentAlias={agent.name || agent.alias || ''}
+        agentAlias={agent.name || ''}
         agentDisplayName={displayName}
       />
 

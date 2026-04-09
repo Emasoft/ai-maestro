@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     const token = extractSessionFromCookie(cookieHeader)
 
     if (token) {
-      invalidateSession(token)
+      await invalidateSession(token)
     }
 
     const response = NextResponse.json({ success: true })

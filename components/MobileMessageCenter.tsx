@@ -365,9 +365,9 @@ export default function MobileMessageCenter({ sessionName, agentId, allAgents, h
     const searchTerm = composeTo.toLowerCase()
     const filtered = allAgents.filter(agent => {
       if (agent.id === agentId) return false
-      const aliasMatch = agent.alias.toLowerCase().includes(searchTerm)
+      const aliasMatch = agent.name.toLowerCase().includes(searchTerm)
       const hostMatch = agent.hostId?.toLowerCase().includes(searchTerm)
-      const fullMatch = `${agent.alias}@${agent.hostId || 'unknown-host'}`.toLowerCase().includes(searchTerm)
+      const fullMatch = `${agent.name}@${agent.hostId || 'unknown-host'}`.toLowerCase().includes(searchTerm)
       return aliasMatch || hostMatch || fullMatch
     })
 
@@ -406,7 +406,7 @@ export default function MobileMessageCenter({ sessionName, agentId, allAgents, h
   const formatAgentDisplay = (agent: AgentRecipient) => {
     const hostId = agent.hostId || 'unknown-host'
     return {
-      primary: agent.alias,
+      primary: agent.name,
       secondary: `@${hostId}`,
       hasHost: !!agent.hostId
     }
@@ -442,9 +442,8 @@ export default function MobileMessageCenter({ sessionName, agentId, allAgents, h
     if (!toValue) return false
     const matchesAgent = allAgents.some(agent =>
       agent.name.toLowerCase() === toValue.toLowerCase() ||
-      agent.alias.toLowerCase() === toValue.toLowerCase() ||
-      `${agent.name}@${agent.hostId || 'unknown-host'}`.toLowerCase() === toValue.toLowerCase() ||
-      `${agent.alias}@${agent.hostId || 'unknown-host'}`.toLowerCase() === toValue.toLowerCase()
+      agent.name.toLowerCase() === toValue.toLowerCase() ||
+      `${agent.name}@${agent.hostId || 'unknown-host'}`.toLowerCase() === toValue.toLowerCase()
     )
     return !matchesAgent && toValue.length > 0
   }

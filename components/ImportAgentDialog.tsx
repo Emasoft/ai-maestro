@@ -216,7 +216,7 @@ export default function ImportAgentDialog({
                   <h2 className="text-lg font-semibold text-gray-100">Import Agent</h2>
                   <p className="text-sm text-gray-400">
                     {phase === 'ready' && result?.agent
-                      ? result.agent.alias
+                      ? result.agent.name
                       : selectedFile?.name || 'Upload an agent package'}
                   </p>
                 </div>
@@ -247,7 +247,7 @@ export default function ImportAgentDialog({
                   <SetupAnimation key="setup" />
                 )}
                 {phase === 'ready' && (
-                  <ReadyAnimation key="ready" agentName={result?.agent?.alias} />
+                  <ReadyAnimation key="ready" agentName={result?.agent?.name} />
                 )}
                 {phase === 'error' && (
                   <ErrorAnimation key="error" />

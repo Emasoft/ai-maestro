@@ -3,14 +3,15 @@ number: 7
 name: Manager Gate Team Lifecycle (Mixed Clients)
 version: "2.0"
 description: >
-  Tests the MANAGER-gated team lifecycle when a team contains agents from
-  DIFFERENT AI clients (Claude Code + Codex). Adds LoginGate authentication,
-  RBAC probes (no-self-modification, wrong-role lifecycle denial), COS
-  immutability probe (R4.7), kanban task creation, DeleteTeam 8-gate pipeline
-  with governance password, and cemetery verification after agent deletion.
-  Verifies cross-client plugin format conversion, title changes per client,
-  and team deletion handling for mixed plugin/no-plugin agents.
-  Validates governance rules R4, R9, R10, R11, R16, cross-client conversion.
+  The user logs in, creates a Claude agent as MANAGER, and creates a team. They
+  add both a Claude agent and a Codex agent as MEMBERs. They swap titles --
+  ORCHESTRATOR for the Claude agent, ARCHITECT for the Codex agent -- and verify
+  each receives the correct client-specific plugin format (native for Claude,
+  converted for Codex). They open the kanban board and create a task. Finally,
+  they delete the team with the governance password and clean up all test agents.
+client: [claude, codex]
+interhosts: false
+device: desktop
 subsystems:
   - governance
   - teams

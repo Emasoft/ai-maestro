@@ -199,7 +199,7 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
     if (step !== 'role-plugin') return
     if (plugins.length > 0) return  // Already loaded by checkPluginChoices
     setPluginsLoading(true)
-    fetch(`/api/agents/role-plugins?title=${selectedTitle.toUpperCase()}&client=${selectedClient}`)
+    fetch(`/api/agents/role-plugins?title=${encodeURIComponent(selectedTitle.toUpperCase())}&client=${encodeURIComponent(selectedClient)}`)
       .then(r => r.ok ? r.json() : { plugins: [] })
       .then(data => setPlugins(Array.isArray(data.plugins) ? data.plugins : []))
       .catch(() => setPlugins([]))
@@ -286,7 +286,7 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
       return 'skip'
     }
     try {
-      const res = await fetch(`/api/agents/role-plugins?title=${title.toUpperCase()}&client=${client}`)
+      const res = await fetch(`/api/agents/role-plugins?title=${encodeURIComponent(title.toUpperCase())}&client=${encodeURIComponent(client)}`)
       if (!res.ok) { setSelectedPlugin(null); setPlugins([]); return 'show-step' }
       const data = await res.json()
       const compatiblePlugins: RolePlugin[] = Array.isArray(data.plugins) ? data.plugins : []
@@ -1181,7 +1181,7 @@ function TitlePickerWidget({
       .then(data => {
         if (data?.managerId) {
           // Fetch manager agent name
-          fetch(`/api/agents/${data.managerId}`)
+          fetch(`/api/agents/${encodeURIComponent(data.managerId)}`)
             .then(r => r.ok ? r.json() : null)
             .then(agentData => {
               if (agentData?.agent) {

@@ -116,7 +116,7 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
       setMarketplaces(data.marketplaces || [])
       setOrphanPlugins(data.orphanPlugins || [])
       setTotals(data.totals || { marketplaces: 0, withPlugins: 0, totalPlugins: 0, installedPlugins: 0, enabledPlugins: 0 })
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[MarketplaceManager] fetchMarketplaces failed:', err) }
     finally { setLoading(false) }
   }, [])
 
@@ -142,7 +142,7 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
         const errorText = await res.text()
         console.error(`Action '${action}' failed for '${key}':`, errorText)
       }
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[MarketplaceManager] executeAction failed:', err) }
     finally { setActionInProgress(null) }
   }
 
@@ -163,7 +163,7 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
       // Refresh all data from the server so that per-marketplace enabledCount and
       // the global totals.enabledPlugins summary are both kept in sync.
       await fetchMarketplaces()
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[MarketplaceManager] handleToggle failed:', err) }
     finally { setActionInProgress(null) }
   }
 
@@ -215,7 +215,8 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
         console.error(`Check updates for marketplace '${mktName}' failed:`, errorText)
         setUpdateChecks(prev => ({ ...prev, [mktName]: { checking: false, remoteVersion: null, marketplaceOutdated: false, pluginUpdates: {}, pluginMetadata: {} } }))
       }
-    } catch {
+    } catch (err) {
+      console.error('[MarketplaceManager] checkUpdates failed:', err)
       setUpdateChecks(prev => ({ ...prev, [mktName]: { checking: false, remoteVersion: null, marketplaceOutdated: false, pluginUpdates: {}, pluginMetadata: {} } }))
     }
   }, []) // stable: reads updateChecks via ref; all state updates use functional form
@@ -261,7 +262,7 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
         const errorText = await res.text()
         console.error('Add marketplace failed:', errorText)
       }
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[MarketplaceManager] handleAddMarketplace failed:', err) }
     finally { setAddingMkt(false) }
   }
 
@@ -613,7 +614,7 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
                                       } else if (data.error) {
                                         setErrorPopup({ name: plugin.name, errors: [data.error] })
                                       }
-                                    } catch { /* ignore */ }
+                                    } catch (err) { console.error('[MarketplaceManager] security check failed:', err) }
                                     // Only clear the specific ':sec' action this handler set,
                                     // so a concurrently-running install/uninstall action is not
                                     // prematurely reset by the security-check finally block.

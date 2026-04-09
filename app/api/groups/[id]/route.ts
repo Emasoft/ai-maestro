@@ -6,12 +6,20 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params
-  const result = getGroupById(id)
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+  try {
+    const { id } = await params
+    const result = getGroupById(id)
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data)
+  } catch (error) {
+    console.error('Failed to get group:', error)
+    return NextResponse.json(
+      { error: `Failed to get group: ${(error as Error).message}` },
+      { status: 500 }
+    )
   }
-  return NextResponse.json(result.data)
 }
 
 // PUT /api/groups/[id] - Update a group
@@ -33,6 +41,17 @@ export async function PUT(
 
     const { name, description, subscriberIds } = body
 
+    // Validate optional fields have correct types
+    if (name !== undefined && typeof name !== 'string') {
+      return NextResponse.json({ error: 'name must be a string' }, { status: 400 })
+    }
+    if (description !== undefined && typeof description !== 'string') {
+      return NextResponse.json({ error: 'description must be a string' }, { status: 400 })
+    }
+    if (subscriberIds !== undefined && (!Array.isArray(subscriberIds) || !subscriberIds.every((id: unknown) => typeof id === 'string'))) {
+      return NextResponse.json({ error: 'subscriberIds must be an array of strings' }, { status: 400 })
+    }
+
     const result = await updateGroupById(id, { name, description, subscriberIds })
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
@@ -41,7 +60,7 @@ export async function PUT(
   } catch (error) {
     console.error('Failed to update group:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: `Failed to update group: ${(error as Error).message}` },
       { status: 500 }
     )
   }
@@ -63,7 +82,7 @@ export async function DELETE(
   } catch (error) {
     console.error('Failed to delete group:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: `Failed to delete group: ${(error as Error).message}` },
       { status: 500 }
     )
   }

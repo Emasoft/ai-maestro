@@ -9,6 +9,11 @@ export async function POST(
 ) {
   const { id } = await params
 
+  // Validate group ID format (alphanumeric, hyphens, underscores only)
+  if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+    return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
+  }
+
   let body: unknown
   try {
     body = await request.json()
@@ -31,6 +36,11 @@ export async function POST(
     return NextResponse.json({ error: 'priority must be a string' }, { status: 400 })
   }
 
+  // Validate priority enum if provided
+  if (priority && !['low', 'normal', 'high', 'urgent'].includes(priority as string)) {
+    return NextResponse.json({ error: 'Invalid priority' }, { status: 400 })
+  }
+
   try {
     const result = await notifyGroupSubscribers(id, message, priority)
     if (result.error) {
@@ -40,7 +50,7 @@ export async function POST(
   } catch (err) {
     console.error(`[Groups Notify] Failed to notify group ${id}:`, err)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Internal server error' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

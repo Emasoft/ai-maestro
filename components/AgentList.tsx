@@ -1,30 +1,18 @@
 'use client'
 
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import type { UnifiedAgent } from '@/types/agent'
-import { formatDistanceToNow } from '@/lib/utils'
+import type { Agent } from '@/types/agent'
 import {
   ChevronRight,
-  Folder,
-  FolderOpen,
-  Layers,
   Terminal,
   Plus,
   RefreshCw,
   Edit2,
   Trash2,
-  Package,
-  Code2,
   Mail,
-  RotateCcw,
-  Cloud,
   Server,
   Settings,
   Network,
-  Play,
-  Circle,
-  Wifi,
   WifiOff,
   User,
   Upload,
@@ -36,9 +24,7 @@ import {
   X,
   Brain,
   CheckCircle,
-  Box,
   ChevronDown,
-  AlertTriangle,
   XCircle,
   Users,
   Lock,
@@ -70,11 +56,11 @@ interface UnregisteredSessionUI {
 }
 
 interface AgentListProps {
-  agents: UnifiedAgent[]
+  agents: Agent[]
   unregisteredSessions?: UnregisteredSessionUI[]
   activeAgentId: string | null
-  onAgentSelect: (agent: UnifiedAgent) => void
-  onShowAgentProfile: (agent: UnifiedAgent) => void
+  onAgentSelect: (agent: Agent) => void
+  onShowAgentProfile: (agent: Agent) => void
   onImportAgent?: () => void  // Opens import dialog
   loading?: boolean
   error?: Error | null
@@ -168,7 +154,6 @@ const COLOR_PALETTE = [
   },
 ]
 
-const DEFAULT_ICON = Layers
 
 export default function AgentList({
   agents,
@@ -185,11 +170,9 @@ export default function AgentList({
   sidebarWidth = 320,
   hostErrors = {},
 }: AgentListProps) {
-  const router = useRouter()
   const [showWizardModal, setShowWizardModal] = useState(false)
   const [showCreateDropdown, setShowCreateDropdown] = useState(false)
   const createDropdownRef = useRef<HTMLDivElement>(null)
-  const [actionLoading, setActionLoading] = useState(false)
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
   const [viewMode, setViewMode] = useState<'normal' | 'compact'>(() => {
     if (typeof window === 'undefined') return 'compact'
@@ -204,11 +187,10 @@ export default function AgentList({
   const prevSidebarWidthRef = useRef(sidebarWidth)
   const [hibernatingAgents, setHibernatingAgents] = useState<Set<string>>(new Set())
   const [wakingAgents, setWakingAgents] = useState<Set<string>>(new Set())
-  const [wakeDialogAgent, setWakeDialogAgent] = useState<UnifiedAgent | null>(null)
+  const [wakeDialogAgent, setWakeDialogAgent] = useState<Agent | null>(null)
 
   // Drag-and-drop state
-  const [draggedAgent, setDraggedAgent] = useState<UnifiedAgent | null>(null)
-  const [dropTarget, setDropTarget] = useState<string | null>(null) // Format: "level1" or "level1-level2"
+  const [draggedAgent, setDraggedAgent] = useState<Agent | null>(null)
 
   // Host management
   const [staleHostPopup, setStaleHostPopup] = useState<{ id: string; name: string; error: string } | null>(null)
@@ -303,7 +285,7 @@ export default function AgentList({
 
   // Group agents by closed team membership
   const teamGroupedAgents = useMemo(() => {
-    const groups: Record<string, { teamName: string; agents: UnifiedAgent[] }> = {}
+    const groups: Record<string, { teamName: string; agents: Agent[] }> = {}
     // Build a set of agent IDs that belong to closed teams
     const agentTeamMap = new Map<string, string>() // agentId → teamName
     for (const team of teams) {
@@ -446,12 +428,7 @@ export default function AgentList({
     return COLOR_PALETTE[colorIndex]
   }
 
-  const countAgentsInCategory = (teamName: string) => {
-    // Use teamGroupedAgents directly — groupedAgents intermediate wrapper was dead code
-    return teamGroupedAgents[teamName]?.agents.length ?? 0
-  }
-
-  const handleAgentClick = (agent: UnifiedAgent) => {
+  const handleAgentClick = (agent: Agent) => {
     // Check if this is a hibernated agent (offline but has session config)
     // Use sessions[0] (array form) consistently — agent.session (singular) is legacy
     const sessionStatus = agent.sessions?.[0]?.status
@@ -467,7 +444,7 @@ export default function AgentList({
     }
   }
 
-  const handleHibernate = async (agent: UnifiedAgent, e?: React.MouseEvent) => {
+  const handleHibernate = async (agent: Agent, e?: React.MouseEvent) => {
     // stopPropagation prevents the parent agent-select click from also firing.
     // Event is optional to support programmatic calls that have no DOM event.
     e?.stopPropagation()
@@ -502,7 +479,7 @@ export default function AgentList({
     }
   }
 
-  const handleWake = (agent: UnifiedAgent, e?: React.MouseEvent) => {
+  const handleWake = (agent: Agent, e?: React.MouseEvent) => {
     e?.stopPropagation()
     if (wakingAgents.has(agent.id)) return
     // Open the dialog to select which CLI to use
@@ -544,7 +521,7 @@ export default function AgentList({
   }
 
   // Drag and drop handlers
-  const handleDragStart = (e: React.DragEvent, agent: UnifiedAgent) => {
+  const handleDragStart = (e: React.DragEvent, agent: Agent) => {
     setDraggedAgent(agent)
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', agent.id)
@@ -556,94 +533,8 @@ export default function AgentList({
 
   const handleDragEnd = (e: React.DragEvent) => {
     setDraggedAgent(null)
-    setDropTarget(null)
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = '1'
-    }
-  }
-
-  const handleDragOver = (e: React.DragEvent, target: string) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    if (dropTarget !== target) {
-      setDropTarget(target)
-    }
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    // Only clear drop target if we're leaving the actual element
-    // (not just moving to a child element)
-    const relatedTarget = e.relatedTarget as HTMLElement
-    if (!e.currentTarget.contains(relatedTarget)) {
-      setDropTarget(null)
-    }
-  }
-
-  const handleDrop = async (e: React.DragEvent, level1: string, level2?: string) => {
-    e.preventDefault()
-    setDropTarget(null)
-
-    if (!draggedAgent) return
-
-    // Calculate new tags
-    const newTags = level2 && level2 !== 'default' ? [level1, level2] : [level1]
-
-    // Check if tags actually changed
-    const currentTags = draggedAgent.tags || []
-    const currentLevel1 = currentTags[0] || 'ungrouped'
-    const currentLevel2 = currentTags[1] || 'default'
-
-    if (currentLevel1 === level1 && currentLevel2 === (level2 || 'default')) {
-      setDraggedAgent(null)
-      return // No change
-    }
-
-    try {
-      // Use agent's hostUrl for remote agents
-      const baseUrl = draggedAgent.hostUrl || ''
-      const response = await fetch(`${baseUrl}/api/agents/${draggedAgent.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tags: newTags }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to move agent')
-      }
-
-      // Refresh the agent list to show updated position
-      onRefresh?.()
-    } catch (error) {
-      console.error('Failed to move agent:', error)
-      alert(error instanceof Error ? error.message : 'Failed to move agent')
-    } finally {
-      setDraggedAgent(null)
-    }
-  }
-
-  const handleCreateAgent = async (name: string, _workingDirectory?: string, hostId?: string, label?: string, avatar?: string, programArgs?: string): Promise<boolean> => {
-    setActionLoading(true)
-
-    try {
-      // Use CreateAgent AIO — workingDirectory auto-created as ~/agents/<name>/
-      const response = await fetch('/api/agents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, label, avatar, programArgs, createSession: true }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to create agent')
-      }
-
-      return true // Success - modal will handle showing celebration
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to create session')
-      return false
-    } finally {
-      setActionLoading(false)
     }
   }
 
@@ -1044,7 +935,7 @@ export default function AgentList({
                                         const aOnline = a.sessions?.[0]?.status === 'online' ? 2 : (a.sessions?.length ? 1 : 0)
                                         const bOnline = b.sessions?.[0]?.status === 'online' ? 2 : (b.sessions?.length ? 1 : 0)
                                         if (aOnline !== bOnline) return bOnline - aOnline
-                                        return (a.label || a.name || a.alias || '').toLowerCase().localeCompare((b.label || b.name || b.alias || '').toLowerCase())
+                                        return (a.label || a.name || '').toLowerCase().localeCompare((b.label || b.name || '').toLowerCase())
                                       })
                                       .map((agent) => {
                                         const session = agent.sessions?.[0]
@@ -1162,7 +1053,7 @@ export default function AgentList({
                                     const aOnline = aSession?.status === 'online' ? 2 : (a.sessions?.length ? 1 : 0)
                                     const bOnline = bSession?.status === 'online' ? 2 : (b.sessions?.length ? 1 : 0)
                                     if (aOnline !== bOnline) return bOnline - aOnline
-                                    return (a.label || a.name || a.alias || '').toLowerCase().localeCompare((b.label || b.name || b.alias || '').toLowerCase())
+                                    return (a.label || a.name || '').toLowerCase().localeCompare((b.label || b.name || '').toLowerCase())
                                   })
                                   .map((agent) => {
                                   const isActive = activeAgentId === agent.id
@@ -1236,7 +1127,7 @@ export default function AgentList({
                                                     color: isActive ? colors.activeText : 'rgb(229, 231, 235)',
                                                   }}
                                                 >
-                                                  {agent.label || agent.name || agent.alias}
+                                                  {agent.label || agent.name}
                                                 </span>
 
                                                 {/* Cached indicator */}
@@ -1512,7 +1403,7 @@ export default function AgentList({
         onClose={() => setWakeDialogAgent(null)}
         onConfirm={handleWakeConfirm}
         agentName={wakeDialogAgent?.name || wakeDialogAgent?.id || ''}
-        agentAlias={wakeDialogAgent?.alias}
+        agentAlias={wakeDialogAgent?.name}
       />
 
       {/* Stale/unreachable host popup */}
@@ -1646,88 +1537,5 @@ function AgentStatusIndicator({
   )
 }
 
-// Host Selector Component - beautiful list with search for large networks
-function HostSelector({
-  hosts,
-  selectedHostId,
-  onSelect,
-}: {
-  hosts: Array<{ id: string; name: string; url?: string; isSelf?: boolean }>
-  selectedHostId: string
-  onSelect: (hostId: string) => void
-}) {
-  const [searchQuery, setSearchQuery] = useState('')
-
-  // Filter hosts by search query
-  const filteredHosts = hosts.filter(host =>
-    host.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    host.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    host.url?.toLowerCase().includes(searchQuery.toLowerCase())
-  )
-
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-300 mb-2">
-        Host
-      </label>
-
-      {/* Search input - only show if more than 2 hosts */}
-      {hosts.length > 2 && (
-        <div className="relative mb-2">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search hosts..."
-            className="w-full pl-9 pr-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-          />
-        </div>
-      )}
-
-      {/* Host list - scrollable */}
-      <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-        {filteredHosts.length === 0 ? (
-          <div className="p-3 text-center text-gray-500 text-sm">
-            No hosts found
-          </div>
-        ) : (
-          filteredHosts.map(host => (
-            <button
-              key={host.id}
-              type="button"
-              onClick={() => onSelect(host.id)}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all ${
-                selectedHostId === host.id
-                  ? 'bg-blue-500/20 border-blue-500/50 text-blue-300'
-                  : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-600'
-              }`}
-            >
-              <Server className="w-5 h-5 flex-shrink-0" />
-              <div className="flex-1 text-left min-w-0">
-                <div className="font-medium truncate">
-                  {host.name}
-                  {host.isSelf && (
-                    <span className="ml-2 text-xs text-gray-500">(this machine)</span>
-                  )}
-                </div>
-                {host.url && (
-                  <div className="text-xs text-gray-500 truncate">{host.url}</div>
-                )}
-              </div>
-              {selectedHostId === host.id && (
-                <CheckCircle className="w-5 h-5 text-blue-400 flex-shrink-0" />
-              )}
-            </button>
-          ))
-        )}
-      </div>
-
-      <p className="text-xs text-gray-500 mt-2">
-        Choose which machine to create this agent on
-      </p>
-    </div>
-  )
-}
 
 

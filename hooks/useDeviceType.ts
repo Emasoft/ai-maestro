@@ -21,9 +21,9 @@ function getQueryOverrides(): { forceTouch: boolean; forceMobile: boolean } {
 function detectTouch(): boolean {
   if (typeof window === 'undefined') return false
   // Primary check: CSS media query for coarse pointer (touch screens)
-  if (window.matchMedia?.('(pointer: coarse)').matches) return true
+  if (window.matchMedia?.('(pointer: coarse)')?.matches) return true
   // iPadOS with Magic Keyboard: primary pointer is fine, but touch is still available
-  if (window.matchMedia?.('(any-pointer: coarse)').matches) return true
+  if (window.matchMedia?.('(any-pointer: coarse)')?.matches) return true
   // Fallback: touch event support
   if ('ontouchstart' in window) return true
   // Fallback: navigator check

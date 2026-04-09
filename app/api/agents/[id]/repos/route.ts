@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAgent } from '@/lib/agent-registry'
 import { execSync } from 'child_process'
+import path from 'path'
 
 // GET /api/agents/[id]/repos — Scan agent's working directory for git repos
 export async function GET(
@@ -19,7 +20,7 @@ export async function GET(
   }
 
   // Validate workDir: must be absolute, no shell metacharacters, must exist
-  const { existsSync, statSync } = await import('fs')
+  const { existsSync, statSync, realpathSync } = await import('fs')
   if (!workDir.startsWith('/') || /[;&|`$(){}!#'"\\<>*?\[\]\n\r~]/.test(workDir) || workDir.length > 2000) {
     return NextResponse.json({ error: 'Invalid working directory' }, { status: 400 })
   }
@@ -27,30 +28,51 @@ export async function GET(
     return NextResponse.json({ repos: [], message: 'Working directory does not exist' })
   }
 
+  // SEC: Resolve symlinks and verify no path traversal escape.
+  // After resolving, the real path must not contain '..' segments
+  // and must be a valid absolute directory.
+  let resolvedWorkDir: string
+  try {
+    resolvedWorkDir = realpathSync(workDir)
+  } catch {
+    return NextResponse.json({ error: 'Cannot resolve working directory' }, { status: 400 })
+  }
+  if (resolvedWorkDir.includes('..') || !resolvedWorkDir.startsWith('/')) {
+    return NextResponse.json({ error: 'Invalid working directory path' }, { status: 400 })
+  }
+
   try {
     // Find .git directories up to 3 levels deep
     const gitDirs = execSync(
-      `find "${workDir}" -maxdepth 3 -name .git -type d 2>/dev/null`,
+      `find "${resolvedWorkDir}" -maxdepth 3 -name .git -type d 2>/dev/null`,
       { encoding: 'utf-8', timeout: 5000 }
     ).trim().split('\n').filter(Boolean)
 
     const repos = gitDirs.map(gitDir => {
       const repoDir = gitDir.replace(/\/\.git$/, '')
-      const name = repoDir.split('/').pop() || ''
+      // SEC: Validate repoDir is within the resolved working directory
+      // to prevent find output from escaping via symlinks or crafted paths.
+      const resolvedRepoDir = path.resolve(repoDir)
+      if (!resolvedRepoDir.startsWith(resolvedWorkDir + '/') && resolvedRepoDir !== resolvedWorkDir) {
+        return null // Skip repos outside the working directory
+      }
+      const name = resolvedRepoDir.split('/').pop() || ''
       let remote = ''
       let branch = ''
       let dirty = 0
+      // SEC: Use resolvedRepoDir in git commands to prevent shell injection
+      // via crafted directory names in find output.
       try {
-        remote = execSync(`git -C "${repoDir}" remote get-url origin 2>/dev/null`, { encoding: 'utf-8' }).trim()
+        remote = execSync(`git -C "${resolvedRepoDir}" remote get-url origin 2>/dev/null`, { encoding: 'utf-8' }).trim()
       } catch { /* no remote */ }
       try {
-        branch = execSync(`git -C "${repoDir}" branch --show-current 2>/dev/null`, { encoding: 'utf-8' }).trim()
+        branch = execSync(`git -C "${resolvedRepoDir}" branch --show-current 2>/dev/null`, { encoding: 'utf-8' }).trim()
       } catch { /* detached */ }
       try {
-        dirty = execSync(`git -C "${repoDir}" status --porcelain 2>/dev/null`, { encoding: 'utf-8' }).trim().split('\n').filter(Boolean).length
+        dirty = execSync(`git -C "${resolvedRepoDir}" status --porcelain 2>/dev/null`, { encoding: 'utf-8' }).trim().split('\n').filter(Boolean).length
       } catch { /* error */ }
-      return { path: repoDir, name, remote, branch, dirty }
-    })
+      return { path: resolvedRepoDir, name, remote, branch, dirty }
+    }).filter(Boolean)
 
     return NextResponse.json({ repos })
   } catch (error) {

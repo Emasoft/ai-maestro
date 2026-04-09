@@ -40,7 +40,7 @@ export default function DependencyPicker({ tasks, selectedIds, onChange, exclude
               key={t.id}
               className="inline-flex items-center gap-1 text-[10px] bg-gray-800 text-gray-400 rounded px-1.5 py-0.5"
             >
-              {t.subject.length > 25 ? t.subject.slice(0, 25) + '...' : t.subject}
+              {(t.subject?.length ?? 0) > 25 ? t.subject.slice(0, 25) + '...' : t.subject ?? 'Untitled'}
               <button
                 type="button"
                 onClick={() => handleRemove(t.id)}
@@ -63,7 +63,7 @@ export default function DependencyPicker({ tasks, selectedIds, onChange, exclude
           <option value="">Add dependency...</option>
           {availableTasks.map(t => (
             <option key={t.id} value={t.id}>
-              {t.subject.length > 40 ? t.subject.slice(0, 40) + '...' : t.subject}
+              {(t.subject?.length ?? 0) > 40 ? t.subject.slice(0, 40) + '...' : t.subject ?? 'Untitled'}
             </option>
           ))}
         </select>

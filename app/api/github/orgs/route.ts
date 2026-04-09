@@ -4,7 +4,7 @@ import { listOrgs } from '@/lib/github-cli'
 // GET /api/github/orgs — List organizations
 export async function GET() {
   try {
-    const orgs = listOrgs()
+    const orgs = await listOrgs()
     return NextResponse.json({ orgs })
   } catch (error) {
     return NextResponse.json(

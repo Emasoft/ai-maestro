@@ -19,10 +19,9 @@ export default function AgentPicker({ agents, selectedAgentIds, onToggleAgent }:
     return agents.filter(a => {
       const label = (a.label || '').toLowerCase()
       const name = (a.name || '').toLowerCase()
-      const alias = (a.alias || '').toLowerCase()
       const tags = (a.tags || []).join(' ').toLowerCase()
       const host = (a.hostId || '').toLowerCase()
-      return label.includes(q) || name.includes(q) || alias.includes(q) || tags.includes(q) || host.includes(q)
+      return label.includes(q) || name.includes(q) || tags.includes(q) || host.includes(q)
     })
   }, [agents, searchQuery])
 
@@ -46,7 +45,7 @@ export default function AgentPicker({ agents, selectedAgentIds, onToggleAgent }:
         {filteredAgents.map(agent => {
           const isOnline = agent.session?.status === 'online'
           const isSelected = selectedAgentIds.includes(agent.id)
-          const displayName = agent.label || agent.name || agent.alias || agent.id.slice(0, 8)
+          const displayName = agent.label || agent.name || agent.id.slice(0, 8)
 
           return (
             <div

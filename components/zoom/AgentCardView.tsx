@@ -154,7 +154,7 @@ export default function AgentCardView({
     { id: 'memory', label: 'Memory', icon: <Brain className="w-4 h-4" /> },
   ]
 
-  const displayName = agent.label || agent.name || agent.alias || 'Unnamed Agent'
+  const displayName = agent.label || agent.name || 'Unnamed Agent'
 
   // Hibernated state view
   if (isHibernated) {
@@ -255,8 +255,8 @@ export default function AgentCardView({
             agentId={agent.id}
             allAgents={allAgents.map(a => ({
               id: a.id,
-              name: a.name || a.alias || a.id,
-              alias: a.label || a.name || a.alias || a.id,
+              name: a.name || a.id,
+              alias: a.label || a.name || a.id,
               tmuxSessionName: a.session?.tmuxSessionName,
               hostId: a.hostId
             }))}

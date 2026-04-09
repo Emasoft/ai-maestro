@@ -41,7 +41,7 @@ export default function SelectedAgentsBar({
             <span className="text-sm text-gray-500">Select agents to start a meeting</span>
           ) : (
             selectedAgents.map(agent => {
-              const displayName = agent.label || agent.name || agent.alias || ''
+              const displayName = agent.label || agent.name || ''
               return (
                 <div
                   key={agent.id}
@@ -98,7 +98,7 @@ export default function SelectedAgentsBar({
         <div className="flex items-center gap-1.5">
           <button
             onClick={onSaveTeam}
-            disabled={selectedAgentIds.length === 0}
+            disabled={selectedAgents.length === 0}
             className="text-xs px-2.5 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Save
@@ -114,7 +114,7 @@ export default function SelectedAgentsBar({
         {/* Start Meeting button */}
         <button
           onClick={onStartMeeting}
-          disabled={selectedAgentIds.length === 0}
+          disabled={selectedAgents.length === 0}
           className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Phone className="w-3.5 h-3.5" />

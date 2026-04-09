@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { existsSync, readFileSync } from 'fs'
-import { execSync, execFileSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import path from 'path'
 import os from 'os'
 
@@ -128,26 +128,28 @@ function diagnoseMemoryTools(): ToolStatus {
 
 function diagnoseTailscaleServe(): ToolStatus {
   try {
-    // Check if tailscale is installed
-    execSync('command -v tailscale', { encoding: 'utf8', timeout: 3000 })
+    // Check if tailscale is installed — use execFileSync to avoid shell injection
+    execFileSync('which', ['tailscale'], { encoding: 'utf8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'] })
   } catch {
     return 'missing' // tailscale not installed
   }
   try {
     // Check if tailscale is running
-    execSync('tailscale status', { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] })
-  } catch {
+    execFileSync('tailscale', ['status'], { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] })
+  } catch (err) {
+    console.error('[host-tools] tailscale status check failed:', err instanceof Error ? err.message : String(err))
     return 'error' // tailscale not running
   }
   try {
     // Check serve status
-    const status = execSync('tailscale serve status --json', { encoding: 'utf8', timeout: 5000 })
+    const status = execFileSync('tailscale', ['serve', 'status', '--json'], { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] })
     const config = JSON.parse(status)
     // Check for HTTP/Web serve mode (correct) or TCP mode (outdated)
     if (config.Web && Object.keys(config.Web).length > 0) return 'installed'
     if (config.TCP && Object.keys(config.TCP).length > 0) return 'outdated' // TCP mode, needs upgrade to HTTP
     return 'missing' // no serve config
-  } catch {
+  } catch (err) {
+    console.error('[host-tools] tailscale serve status check failed:', err instanceof Error ? err.message : String(err))
     return 'missing'
   }
 }

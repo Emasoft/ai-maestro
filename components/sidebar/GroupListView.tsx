@@ -4,11 +4,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, UsersRound, X } from 'lucide-react'
 import type { Group } from '@/types/group'
-import type { UnifiedAgent } from '@/types/agent'
+import type { Agent } from '@/types/agent'
 import GroupCard from './GroupCard'
 
 interface GroupListViewProps {
-  agents: UnifiedAgent[]
+  agents: Agent[]
   searchQuery: string
 }
 
@@ -22,10 +22,11 @@ export default function GroupListView({ agents, searchQuery }: GroupListViewProp
   const fetchGroups = useCallback(async () => {
     try {
       const res = await fetch('/api/groups')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setGroups(data.groups || [])
-    } catch {
-      // silent
+    } catch (err) {
+      console.error('[GroupListView] fetchGroups failed:', err)
     } finally {
       setLoading(false)
     }
@@ -49,10 +50,11 @@ export default function GroupListView({ agents, searchQuery }: GroupListViewProp
 
   const handleDelete = async (group: Group) => {
     try {
-      await fetch(`/api/groups/${group.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/groups/${group.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setGroups(prev => prev.filter(g => g.id !== group.id))
-    } catch {
-      // silent
+    } catch (err) {
+      console.error('[GroupListView] handleDelete failed:', err)
     }
   }
 
@@ -65,6 +67,7 @@ export default function GroupListView({ agents, searchQuery }: GroupListViewProp
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, description, subscriberIds }),
         })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = await res.json()
         if (data.group) {
           setGroups(prev => prev.map(g => g.id === groupId ? data.group : g))
@@ -76,6 +79,7 @@ export default function GroupListView({ agents, searchQuery }: GroupListViewProp
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, description, subscriberIds }),
         })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = await res.json()
         if (data.group) {
           setGroups(prev => [...prev, data.group])
@@ -83,8 +87,8 @@ export default function GroupListView({ agents, searchQuery }: GroupListViewProp
       }
       setShowCreate(false)
       setEditingGroup(null)
-    } catch {
-      // silent
+    } catch (err) {
+      console.error('[GroupListView] handleSave failed:', err)
     }
   }
 
@@ -157,7 +161,7 @@ function GroupFormModal({
   onClose,
 }: {
   group: Group | null
-  agents: UnifiedAgent[]
+  agents: Agent[]
   onSave: (name: string, description: string, subscriberIds: string[], groupId?: string) => void
   onClose: () => void
 }) {

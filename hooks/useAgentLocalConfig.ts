@@ -17,6 +17,7 @@ export function useAgentLocalConfig(agentId: string | null) {
 
   const fetchConfig = useCallback(async () => {
     if (!agentId) return
+    setLoading(true)
     try {
       const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/local-config`)
       if (!res.ok) {
@@ -34,6 +35,8 @@ export function useAgentLocalConfig(agentId: string | null) {
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch local config')
+    } finally {
+      setLoading(false)
     }
   }, [agentId])
 
@@ -45,8 +48,10 @@ export function useAgentLocalConfig(agentId: string | null) {
       return
     }
 
-    setLoading(true)
-    fetchConfig().finally(() => setLoading(false))
+    // Reset diff-tracking ref so the new agent's config is always applied,
+    // even if its JSON happens to match the previous agent's last snapshot.
+    prevJsonRef.current = ''
+    fetchConfig()
 
     const interval = setInterval(fetchConfig, POLL_INTERVAL_MS)
 

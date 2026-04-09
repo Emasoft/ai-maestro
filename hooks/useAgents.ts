@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import type { Agent, AgentsApiResponse, AgentStats, AgentHostInfo } from '@/types/agent'
+import type { Agent, AgentsApiResponse } from '@/types/agent'
 import type { UnregisteredSession } from '@/services/agents-core-service'
 import type { Host } from '@/types/host'
 import { useHosts } from './useHosts'
@@ -55,11 +55,14 @@ async function fetchHostAgents(host: Host): Promise<HostFetchResult> {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeout)
 
-    const response = await fetch(`${baseUrl}/api/agents`, {
-      signal: controller.signal
-    })
-
-    clearTimeout(timeoutId)
+    let response: Response
+    try {
+      response = await fetch(`${baseUrl}/api/agents`, {
+        signal: controller.signal
+      })
+    } finally {
+      clearTimeout(timeoutId)
+    }
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
@@ -174,8 +177,8 @@ function aggregateResults(results: HostFetchResult[]): {
     if (a.session?.status !== 'online' && b.session?.status === 'online') return 1
 
     // Then alphabetically by name (case-insensitive)
-    const nameA = (a.name || a.alias || '').toLowerCase()
-    const nameB = (b.name || b.alias || '').toLowerCase()
+    const nameA = (a.name || '').toLowerCase()
+    const nameB = (b.name || '').toLowerCase()
     return nameA.localeCompare(nameB)
   })
 
@@ -215,14 +218,19 @@ export function useAgents() {
   const [error, setError] = useState<Error | null>(null)
   const [hostErrors, setHostErrors] = useState<Record<string, Error>>({})
   const hasLoadedOnce = useRef(false)
+  const requestIdRef = useRef(0)
 
   const loadAgents = useCallback(async () => {
     if (hosts.length === 0) {
       return
     }
 
+    const myRequestId = ++requestIdRef.current
+
     try {
+      setLoading(true)
       setError(null)
+      setHostErrors({})
 
       const localHosts = hosts.filter(h => h.isSelf || isLocalhostUrl(h.url))
       const remoteHosts = hosts.filter(h => !h.isSelf && !isLocalhostUrl(h.url))
@@ -235,6 +243,8 @@ export function useAgents() {
       // On first load only, show local agents right away so UI doesn't wait for remotes.
       // On subsequent refreshes, skip this to avoid replacing the full list with just local agents.
       if (remoteHosts.length > 0 && !hasLoadedOnce.current) {
+        // Guard: a newer request superseded this one — abandon stale update
+        if (requestIdRef.current !== myRequestId) return
         const { agents: localAgents, unregisteredSessions: localUnreg, stats: localStats, hostErrors: localErrors } = aggregateResults(localResults)
         setAgents(localAgents)
         setUnregisteredSessions(localUnreg)
@@ -251,6 +261,9 @@ export function useAgents() {
       // Merge all results
       const allResults = [...localResults, ...remoteResults]
       const { agents: allAgents, unregisteredSessions: allUnreg, stats: aggregatedStats, hostErrors: errors } = aggregateResults(allResults)
+
+      // Guard: a newer request superseded this one — abandon stale update
+      if (requestIdRef.current !== myRequestId) return
 
       setAgents(allAgents)
       setUnregisteredSessions(allUnreg)
@@ -334,8 +347,8 @@ export function useAgents() {
       groups[group] = [...groups[group]].sort((a, b) => {
         if (a.session?.status === 'online' && b.session?.status !== 'online') return -1
         if (a.session?.status !== 'online' && b.session?.status === 'online') return 1
-        const nameA = a.name || a.alias || ''
-        const nameB = b.name || b.alias || ''
+        const nameA = a.name || ''
+        const nameB = b.name || ''
         return nameA.localeCompare(nameB)
       })
     }

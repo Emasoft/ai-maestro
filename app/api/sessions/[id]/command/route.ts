@@ -28,6 +28,10 @@ export async function POST(
   logDeprecation()
   try {
     const { id: sessionName } = await params
+    // SF-MF-023: Validate session name format (tmux naming rules)
+    if (!/^[a-zA-Z0-9_@.-]+$/.test(sessionName)) {
+      return NextResponse.json({ error: 'Invalid session name' }, { status: 400 })
+    }
 
     // Auth + RBAC: sending commands to a session is a sensitive operation
     const auth = authenticateFromRequest(request)
@@ -37,7 +41,10 @@ export async function POST(
     // Resolve agent ID from session name for RBAC target
     const { getAgentBySession } = await import('@/lib/agent-registry')
     const targetAgent = getAgentBySession(sessionName)
-    const authz = authorize(auth, 'send-command', targetAgent?.id)
+    if (!targetAgent) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    }
+    const authz = authorize(auth, 'send-command', targetAgent.id)
     if (!authz.allowed) {
       return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
@@ -102,6 +109,10 @@ export async function GET(
     }
 
     const { id: sessionName } = await params
+    // SF-MF-023: Validate session name format (tmux naming rules)
+    if (!/^[a-zA-Z0-9_@.-]+$/.test(sessionName)) {
+      return NextResponse.json({ error: 'Invalid session name' }, { status: 400 })
+    }
     // SF-018: Wrap checkIdleStatus in try-catch with proper error response
     let data
     try {

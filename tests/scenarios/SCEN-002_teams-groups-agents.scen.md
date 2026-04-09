@@ -3,15 +3,16 @@ number: 2
 name: Teams, Groups, and Agent Title Lifecycle
 version: "2.0"
 description: >
-  Tests the full team lifecycle through the UI: LoginGate authentication,
-  creating a team with test agents, verifying title auto-assignment on team
-  join (MEMBER), COS assignment, ORCHESTRATOR title assignment with role-plugin
-  auto-install, COS immutability probe (R4.7 -- cannot remove COS from agentIds),
-  removing an agent from a team (title reverts to AUTONOMOUS, plugin uninstalled),
-  re-adding and re-assigning ORCHESTRATOR, singleton constraint enforcement,
-  RBAC probes (no-self-modification, wrong-role denial), kanban task creation
-  and drag, DeleteTeam pipeline with governance password, and cemetery verification.
-  Covers governance rules R1-R4, R9-R11, R16 and the recent auth/RBAC changes.
+  The user logs in, creates two test agents, then creates a team containing
+  both. They verify that joining a team auto-assigns the MEMBER title. They
+  promote one agent to COS and another to ORCHESTRATOR, checking that
+  role-plugins install automatically. They try to remove the COS (blocked
+  by R4.7), remove an agent from the team (title reverts to AUTONOMOUS),
+  re-add it, open the kanban board and drag a task, then delete the team
+  with the governance password and confirm cemetery entries.
+client: claude
+interhosts: false
+device: desktop
 subsystems:
   - governance (title transitions, singleton constraints, RBAC)
   - role-plugins (auto-install, auto-uninstall, plugin swap)

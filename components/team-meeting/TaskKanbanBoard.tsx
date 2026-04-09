@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   X, Archive, Circle, PlayCircle, Eye, CheckCircle2, SearchCheck, UserCheck,
   GitMerge, Ban, Clock, TestTube, FileQuestion, Search, ArrowUp, ArrowDown,
-  MoreVertical, Palette, ChevronDown, ChevronRight, Plus, ShieldAlert,
+  MoreVertical, Palette, ChevronRight, Plus, ShieldAlert,
   ExternalLink, GitBranch,
 } from 'lucide-react'
 import type { Agent } from '@/types/agent'
@@ -85,11 +85,11 @@ export default function TaskKanbanBoard({
     if (!task.assigneeAgentId) return undefined
     const agentId = task.assigneeAgentId
     const agent = agents.find(a =>
-      a.id === agentId || a.name === agentId || a.alias === agentId ||
+      a.id === agentId || a.name === agentId ||
       (a.label && a.label.toLowerCase() === agentId.toLowerCase())
     )
     if (!agent) return undefined
-    const sessionName = agent.name || agent.alias
+    const sessionName = agent.name
     if (!sessionName) return undefined
     const activity = getSessionActivity(sessionName)
     const isOnline = agent.sessions?.some(s => s.status === 'online') ?? false
@@ -299,8 +299,6 @@ export default function TaskKanbanBoard({
             const colColor = getColColor(col.id)
             const rawTasks = tasksByStatus[col.id] || []
             const processed = getProcessedTasks(col.id, rawTasks)
-            const isDragOverRef = { current: false }
-
             return (
               <EnhancedColumn
                 key={col.id}

@@ -3593,7 +3593,7 @@ export async function DeleteAgent(
     try {
       const { getRuntime } = await import('@/lib/agent-runtime')
       const runtime = getRuntime()
-      const sessionName = agent.name || agent.alias
+      const sessionName = agent.name
       if (sessionName) {
         try {
           await runtime.killSession(sessionName as string)

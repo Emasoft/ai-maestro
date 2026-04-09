@@ -55,13 +55,21 @@ function generateAndStoreKeyPair(): { publicKeyHex: string; privateKeyHex: strin
   const privateTmp = `${PRIVATE_KEY_PATH}.tmp.${process.pid}`
   const publicTmp = `${PUBLIC_KEY_PATH}.tmp.${process.pid}`
 
-  // Private key: owner-only read/write (0o600)
-  fs.writeFileSync(privateTmp, privateKeyHex, { mode: 0o600 })
-  fs.renameSync(privateTmp, PRIVATE_KEY_PATH)
+  try {
+    // Private key: owner-only read/write (0o600)
+    fs.writeFileSync(privateTmp, privateKeyHex, { mode: 0o600 })
+    fs.renameSync(privateTmp, PRIVATE_KEY_PATH)
 
-  // Public key: owner-only read/write (0o600) since it lives in a restricted dir
-  fs.writeFileSync(publicTmp, publicKeyHex, { mode: 0o600 })
-  fs.renameSync(publicTmp, PUBLIC_KEY_PATH)
+    // Public key: owner-only read/write (0o600) since it lives in a restricted dir
+    fs.writeFileSync(publicTmp, publicKeyHex, { mode: 0o600 })
+    fs.renameSync(publicTmp, PUBLIC_KEY_PATH)
+  } catch (error) {
+    // Clean up any leftover temp files on failure
+    try { fs.unlinkSync(privateTmp) } catch { /* ignore */ }
+    try { fs.unlinkSync(publicTmp) } catch { /* ignore */ }
+    const errMsg = error instanceof Error ? error.message : String(error)
+    throw new Error(`[host-keys] Failed to write keypair to disk: ${errMsg}`)
+  }
 
   console.log('[host-keys] Generated new Ed25519 host keypair')
 
@@ -142,17 +150,24 @@ export function getHostPublicKeyHex(): string {
 export function signHostAttestation(data: string): string {
   const { privateKeyHex } = getOrCreateHostKeyPair()
 
-  // Reconstruct the private key object from DER hex
-  const privateKeyDer = Buffer.from(privateKeyHex, 'hex')
-  const privateKey = crypto.createPrivateKey({
-    key: privateKeyDer,
-    format: 'der',
-    type: 'pkcs8',
-  })
+  try {
+    // Reconstruct the private key object from DER hex
+    const privateKeyDer = Buffer.from(privateKeyHex, 'hex')
+    const privateKey = crypto.createPrivateKey({
+      key: privateKeyDer,
+      format: 'der',
+      type: 'pkcs8',
+    })
 
-  // Ed25519 uses null algorithm (hash is built into the signing process)
-  const signature = crypto.sign(null, Buffer.from(data), privateKey)
-  return signature.toString('base64')
+    // Ed25519 uses null algorithm (hash is built into the signing process)
+    const signature = crypto.sign(null, Buffer.from(data), privateKey)
+    return signature.toString('base64')
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error)
+    // Wrap raw crypto exceptions with a descriptive message instead of letting
+    // opaque errors (ERR_OSSL_*, ERR_CRYPTO_*) crash the server unhandled
+    throw new Error(`[host-keys] Failed to sign attestation: ${errMsg}`)
+  }
 }
 
 /**

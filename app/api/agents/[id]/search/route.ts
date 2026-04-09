@@ -115,9 +115,12 @@ export async function POST(
       return NextResponse.json({ success: false, error: '"conversationFiles" must contain only string paths' }, { status: 400 })
     }
 
+    // SF-062: Validate batchSize to prevent unreasonable values
+    const batchSize = typeof body.batchSize === 'number' && body.batchSize >= 1 && body.batchSize <= 100 ? body.batchSize : 10
+
     const result = await ingestConversations(agentId, {
       conversationFiles: body.conversationFiles,
-      batchSize: body.batchSize,
+      batchSize,
     })
 
     if (result.error) {

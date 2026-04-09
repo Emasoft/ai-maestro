@@ -16,11 +16,11 @@ export async function POST(request: NextRequest) {
     }
     const { sessionName, status, hookStatus, notificationType } = body
 
-    // Validate sessionName format: only alphanumeric, hyphens, and underscores allowed
-    // (tmux session names are restricted to this charset)
-    if (sessionName && (typeof sessionName !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(sessionName))) {
+    // Validate sessionName format: only alphanumeric, hyphens, underscores, @, and dots allowed
+    // (tmux session names are restricted to this charset per CLAUDE.md)
+    if (sessionName && (typeof sessionName !== 'string' || !/^[a-zA-Z0-9_@.-]+$/.test(sessionName))) {
       return NextResponse.json(
-        { success: false, error: 'Invalid sessionName format — only alphanumeric, hyphens, and underscores allowed' },
+        { success: false, error: 'Invalid sessionName format — only alphanumeric, hyphens, underscores, @, and dots allowed' },
         { status: 400 }
       )
     }
@@ -31,6 +31,22 @@ export async function POST(request: NextRequest) {
     if (status && !VALID_STATUSES.includes(status)) {
       return NextResponse.json(
         { success: false, error: `Invalid status '${status}'. Must be one of: ${VALID_STATUSES.join(', ')}` },
+        { status: 400 }
+      )
+    }
+
+    // Validate hookStatus type — must be string if provided
+    if (hookStatus !== undefined && typeof hookStatus !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'Invalid hookStatus — must be a string' },
+        { status: 400 }
+      )
+    }
+
+    // Validate notificationType type — must be string if provided
+    if (notificationType !== undefined && typeof notificationType !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'Invalid notificationType — must be a string' },
         { status: 400 }
       )
     }

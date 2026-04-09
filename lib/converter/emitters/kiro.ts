@@ -133,7 +133,9 @@ const kiroEmitter: Emitter = {
     // Hooks → .kiro/hooks/<name>.kiro.hook (per-hook JSON files per Kiro spec)
     // Schema: { name, description, version, when: { event, matcher? }, then: { type, command? } }
     for (const hook of project.hooks) {
-      const hookName = `${hook.event}${hook.matcher ? `-${hook.matcher.replace(/[^a-zA-Z0-9]/g, '-')}` : ''}`
+      // Sanitize hook.event and hook.matcher for safe file path — prevent path traversal
+      const safeEvent = hook.event.replace(/[^a-zA-Z0-9_-]/g, '-')
+      const hookName = `${safeEvent}${hook.matcher ? `-${hook.matcher.replace(/[^a-zA-Z0-9]/g, '-')}` : ''}`
       const hookJson: Record<string, unknown> = {
         name: hookName,
         description: `Hook for ${hook.event}${hook.matcher ? ` (${hook.matcher})` : ''}`,
@@ -159,10 +161,13 @@ const kiroEmitter: Emitter = {
     // Commands → skills (Kiro has no native commands)
     for (const cmd of project.commands) {
       warnings.lossyElement('commands', cmd.name, 'Kiro does not support slash commands — converted to skill')
+      // Sanitize command name for safe file path — prevent path traversal
+      const safeDirName = cmd.name.replace(/[^a-zA-Z0-9_-]/g, '-')
+      if (!safeDirName) continue // skip commands with entirely unsafe names
       // Sanitize command name for YAML: quote if it contains special chars
       const safeName = /[:#\[\]{}&*!|>'"`,@]/.test(cmd.name) ? `"${cmd.name.replace(/"/g, '\\"')}"` : cmd.name
       files.push({
-        path: `.kiro/skills/${cmd.name}/SKILL.md`,
+        path: `.kiro/skills/${safeDirName}/SKILL.md`,
         content: `---\nname: ${safeName}\ndescription: "Converted from command /${safeName}"\n---\n\n${cmd.content}`,
         type: 'commands',
         warnings: [`Command "/${cmd.name}" converted to skill`],
@@ -176,7 +181,10 @@ const kiroEmitter: Emitter = {
       }
     }
 
-    if (warnings.hasWarnings() && files.length > 0) files[0].warnings.push(...warnings.getWarnings())
+    if (warnings.hasWarnings() && files.length > 0) {
+      files[0].warnings ??= []
+      files[0].warnings.push(...warnings.getWarnings())
+    }
     return files
   },
 }

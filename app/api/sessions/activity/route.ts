@@ -12,7 +12,7 @@ export async function GET() {
   } catch (error) {
     console.error('Failed to fetch activity:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch activity', activity: {} },
+      { error: 'Failed to fetch activity' },
       { status: 500 }
     )
   }

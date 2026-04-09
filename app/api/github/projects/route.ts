@@ -13,6 +13,12 @@ export async function GET(request: NextRequest) {
 
     const validateUrl = request.nextUrl.searchParams.get('validate')
     if (validateUrl) {
+      // Defense-in-depth: validate URL format before passing to shell-backed function
+      try {
+        new URL(validateUrl)
+      } catch {
+        return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 })
+      }
       const result = validateProjectUrl(validateUrl)
       return NextResponse.json(result)
     }
@@ -20,6 +26,10 @@ export async function GET(request: NextRequest) {
     const owner = request.nextUrl.searchParams.get('owner')
     if (!owner) {
       return NextResponse.json({ error: 'owner query parameter is required' }, { status: 400 })
+    }
+    // Defense-in-depth: validate owner format before passing to shell-backed function
+    if (!/^[a-zA-Z0-9-]+$/.test(owner)) {
+      return NextResponse.json({ error: 'Invalid owner — only alphanumeric and hyphens allowed' }, { status: 400 })
     }
     const projects = listProjects(owner)
     return NextResponse.json({ projects })
@@ -43,6 +53,10 @@ export async function POST(request: NextRequest) {
     const { owner, title } = await request.json()
     if (!owner || !title) {
       return NextResponse.json({ error: 'owner and title are required' }, { status: 400 })
+    }
+    // Defense-in-depth: validate owner format before passing to shell-backed function
+    if (!/^[a-zA-Z0-9-]+$/.test(owner)) {
+      return NextResponse.json({ error: 'Invalid owner — only alphanumeric and hyphens allowed' }, { status: 400 })
     }
     const project = createProject(owner, title)
     return NextResponse.json({ project })

@@ -30,10 +30,11 @@ export default function MeetingLobby({ onNewMeeting }: MeetingLobbyProps) {
   const fetchMeetings = useCallback(async () => {
     try {
       const res = await fetch('/api/meetings')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setMeetings(data.meetings || [])
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('[MeetingLobby] fetchMeetings error:', err)
     } finally {
       setLoading(false)
     }
@@ -55,10 +56,11 @@ export default function MeetingLobby({ onNewMeeting }: MeetingLobbyProps) {
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     try {
-      await fetch(`/api/meetings/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/meetings/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setMeetings(prev => prev.filter(m => m.id !== id))
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('[MeetingLobby] handleDelete error:', err)
     }
   }
 
@@ -123,7 +125,7 @@ export default function MeetingLobby({ onNewMeeting }: MeetingLobbyProps) {
 
                       {/* Agent avatars */}
                       <div className="flex items-center gap-1 mb-3">
-                        {meeting.agentIds.slice(0, 5).map((_, i) => (
+                        {(meeting.agentIds ?? []).slice(0, 5).map((_, i) => (
                           <div
                             key={i}
                             className="w-6 h-6 rounded-full bg-gray-700 border border-gray-600 flex items-center justify-center text-[10px] text-gray-400"
@@ -131,9 +133,9 @@ export default function MeetingLobby({ onNewMeeting }: MeetingLobbyProps) {
                             A
                           </div>
                         ))}
-                        {meeting.agentIds.length > 5 && (
+                        {(meeting.agentIds ?? []).length > 5 && (
                           <span className="text-[10px] text-gray-500 ml-1">
-                            +{meeting.agentIds.length - 5}
+                            +{(meeting.agentIds ?? []).length - 5}
                           </span>
                         )}
                       </div>
@@ -144,7 +146,7 @@ export default function MeetingLobby({ onNewMeeting }: MeetingLobbyProps) {
                           Started {formatTimeAgo(meeting.startedAt)}
                         </div>
                         <span className="text-xs text-gray-500">
-                          {meeting.agentIds.length} agent{meeting.agentIds.length !== 1 ? 's' : ''}
+                          {(meeting.agentIds ?? []).length} agent{(meeting.agentIds ?? []).length !== 1 ? 's' : ''}
                         </span>
                       </div>
                     </div>

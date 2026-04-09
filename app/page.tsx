@@ -109,8 +109,6 @@ export default function DashboardPage() {
   const [showImportDialog, setShowImportDialog] = useState(false)
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [subconsciousRefreshTrigger, setSubconsciousRefreshTrigger] = useState(0)
-  const [showSearchPanel, setShowSearchPanel] = useState(false)
-  const [showExportDialog, setShowExportDialog] = useState(false)
   const [showProfilePanel, setShowProfilePanel] = useState(() => {
     if (typeof window === 'undefined') return false
     return localStorage.getItem('aimaestro-profile-panel') === 'true'
@@ -253,13 +251,7 @@ export default function DashboardPage() {
         return
       }
 
-      // Ctrl/Cmd + E - Export
-      if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
-        e.preventDefault()
-        if (activeAgentId) {
-          setShowExportDialog(true)
-        }
-      }
+      // Ctrl/Cmd + E - Export (reserved for future use)
     }
 
     document.addEventListener('keydown', handleKeyDown)
@@ -909,7 +901,7 @@ export default function DashboardPage() {
                             <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-800 flex items-center justify-center">
                               <User className="w-10 h-10 text-gray-500" />
                             </div>
-                            <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name || agent.alias}</p>
+                            <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name}</p>
                             <p className="text-sm mb-4 text-gray-500">This agent is offline</p>
                             <div className="flex items-center justify-center gap-3">
                               <button
@@ -935,7 +927,7 @@ export default function DashboardPage() {
                             <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-yellow-900/30 flex items-center justify-center">
                               <Moon className="w-10 h-10 text-yellow-500" />
                             </div>
-                            <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name || agent.alias}</p>
+                            <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name}</p>
                             <p className="text-sm mb-4 text-gray-500">This agent is hibernating</p>
                             <button
                               onClick={() => handleWakeAgent(agent)}
@@ -973,7 +965,7 @@ export default function DashboardPage() {
                             <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-yellow-900/30 flex items-center justify-center">
                               <Moon className="w-10 h-10 text-yellow-500" />
                             </div>
-                            <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name || agent.alias}</p>
+                            <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name}</p>
                             <p className="text-sm mb-4 text-gray-500">Wake this agent to use the chat interface</p>
                             {isOffline ? (
                               <button
@@ -1015,8 +1007,8 @@ export default function DashboardPage() {
                           agentId={agent.id}
                           allAgents={onlineAgents.map(a => ({
                             id: a.id,
-                            name: a.name || a.alias || a.id,  // Technical name for lookups
-                            alias: a.label || a.name || a.alias || a.id,  // Display name for UI
+                            name: a.name || a.id,  // Technical name for lookups
+                            alias: a.label || a.name || a.id,  // Display name for UI
                             tmuxSessionName: a.session?.tmuxSessionName,
                             hostId: a.hostId
                           }))}
@@ -1028,7 +1020,7 @@ export default function DashboardPage() {
                       <WorkTree
                         sessionName={session.id}
                         agentId={agent.id}
-                        agentAlias={agent.alias}
+                        agentAlias={agent.label || agent.name}
                         hostId={agent.hostId}
                         isActive={true}
                       />
@@ -1058,7 +1050,6 @@ export default function DashboardPage() {
                       <div className="flex-1 overflow-auto p-4">
                         <AgentSearch
                           agentId={agent.id}
-                          agentName={agent.label || agent.name || agent.alias}
                           className="max-w-4xl mx-auto"
                         />
                       </div>
@@ -1067,7 +1058,7 @@ export default function DashboardPage() {
                         <AgentPlayback
                           agentId={agent.id}
                           sessionId={session.id}
-                          agentName={agent.label || agent.name || agent.alias}
+                          agentName={agent.label || agent.name}
                           className="max-w-4xl mx-auto"
                         />
                       </div>
@@ -1075,7 +1066,7 @@ export default function DashboardPage() {
                       <div className="flex-1 overflow-auto p-4">
                         <TranscriptExport
                           agentId={agent.id}
-                          agentName={agent.label || agent.name || agent.alias}
+                          agentName={agent.label || agent.name}
                           className="max-w-4xl mx-auto"
                         />
                       </div>
@@ -1086,9 +1077,9 @@ export default function DashboardPage() {
                     {showProfilePanel && (
                       <AgentProfilePanel
                         agentId={agent.id}
-                        agentName={agent.label || agent.name || agent.alias}
+                        agentName={agent.label || agent.name}
                         agentInfo={{
-                          name: agent.label || agent.name || agent.alias,
+                          name: agent.label || agent.name,
                           // Prefer explicit governanceTitle (architect/integrator/orchestrator) over raw role field
                           // BUG: agent.role stays 'member' when governanceTitle is set — useGovernance derives the correct title
                           title: (agent.governanceTitle || agent.role) as AgentRole | undefined,
@@ -1193,7 +1184,7 @@ export default function DashboardPage() {
           onClose={() => setWakeDialogAgent(null)}
           onConfirm={handleWakeConfirm}
           agentName={wakeDialogAgent?.name || wakeDialogAgent?.id || ''}
-          agentAlias={wakeDialogAgent?.alias}
+          agentAlias={wakeDialogAgent?.label || wakeDialogAgent?.name}
         />
 
         {/* Help Panel */}

@@ -27,6 +27,13 @@ export async function POST(request: Request) {
     }
     const { organization, setBy } = body
 
+    if (!organization || typeof organization !== 'string') {
+      return NextResponse.json({ error: 'organization is required and must be a string' }, { status: 400 })
+    }
+    if (setBy !== undefined && typeof setBy !== 'string') {
+      return NextResponse.json({ error: 'setBy must be a string if provided' }, { status: 400 })
+    }
+
     const result = setOrganizationName({ organization, setBy })
     // SF-011 fix: Use explicit error check instead of ?? which can swallow errors
     if (result.error) {
@@ -36,7 +43,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('[Organization API] Error:', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+      { error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }
     )
   }

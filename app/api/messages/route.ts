@@ -10,23 +10,28 @@ export async function GET(request: NextRequest) {
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
-  const { searchParams } = new URL(request.url)
-  const result = await getMessages({
-    agent: searchParams.get('agent'),
-    id: searchParams.get('id'),
-    action: searchParams.get('action'),
-    box: searchParams.get('box') || 'inbox',
-    limit: searchParams.get('limit'),
-    status: searchParams.get('status'),
-    priority: searchParams.get('priority'),
-    from: searchParams.get('from'),
-    to: searchParams.get('to'),
-  })
-  // NT-002: Use standard if (result.error) pattern instead of ?? which hides errors when data is {}
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+  try {
+    const { searchParams } = new URL(request.url)
+    const result = await getMessages({
+      agent: searchParams.get('agent'),
+      id: searchParams.get('id'),
+      action: searchParams.get('action'),
+      box: searchParams.get('box') || 'inbox',
+      limit: searchParams.get('limit'),
+      status: searchParams.get('status'),
+      priority: searchParams.get('priority'),
+      from: searchParams.get('from'),
+      to: searchParams.get('to'),
+    })
+    // NT-002: Use standard if (result.error) pattern instead of ?? which hides errors when data is {}
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data, { status: result.status })
+  } catch (error) {
+    console.error('GET /api/messages failed:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-  return NextResponse.json(result.data, { status: result.status })
 }
 
 /**
@@ -58,11 +63,16 @@ export async function POST(request: NextRequest) {
     body.fromVerified = true
   }
 
-  const result = await sendMessage(body)
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+  try {
+    const result = await sendMessage(body)
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data, { status: result.status })
+  } catch (error) {
+    console.error('POST /api/messages failed:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-  return NextResponse.json(result.data, { status: result.status })
 }
 
 /**
@@ -75,17 +85,25 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
 
-  const { searchParams } = new URL(request.url)
-  const result = await updateMessage(
-    searchParams.get('agent'),
-    searchParams.get('id'),
-    searchParams.get('action'),
-  )
-  // NT-002: Use standard if (result.error) pattern
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+  try {
+    const { searchParams } = new URL(request.url)
+    const agent = searchParams.get('agent')
+    const id = searchParams.get('id')
+    const action = searchParams.get('action')
+    // Validate required query params are non-empty strings
+    if (!agent || !id || !action) {
+      return NextResponse.json({ error: 'Missing required query params: agent, id, action' }, { status: 400 })
+    }
+    const result = await updateMessage(agent, id, action)
+    // NT-002: Use standard if (result.error) pattern
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data, { status: result.status })
+  } catch (error) {
+    console.error('PATCH /api/messages failed:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-  return NextResponse.json(result.data, { status: result.status })
 }
 
 /**
@@ -98,14 +116,22 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
 
-  const { searchParams } = new URL(request.url)
-  const result = await removeMessage(
-    searchParams.get('agent'),
-    searchParams.get('id'),
-  )
-  // NT-002: Use standard if (result.error) pattern
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+  try {
+    const { searchParams } = new URL(request.url)
+    const agent = searchParams.get('agent')
+    const id = searchParams.get('id')
+    // Validate required query params are non-empty strings
+    if (!agent || !id) {
+      return NextResponse.json({ error: 'Missing required query params: agent, id' }, { status: 400 })
+    }
+    const result = await removeMessage(agent, id)
+    // NT-002: Use standard if (result.error) pattern
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data, { status: result.status })
+  } catch (error) {
+    console.error('DELETE /api/messages failed:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-  return NextResponse.json(result.data, { status: result.status })
 }

@@ -660,11 +660,11 @@ export async function buildPlugin(config: unknown): Promise<ServiceResult<Plugin
     // Mark dispatched before firing so the catch block won't double-decrement
     buildDispatched = true
 
-    // Run build asynchronously — runBuild's own finally block owns the activeOps decrement.
-    // Do NOT attach a .finally() here: runBuild already decrements activeOps in its finally
-    // block unconditionally (success, failure, or eviction). A second decrement here would
+    // Run build asynchronously — runBuild's own finally block calls release() to free the slot.
+    // Do NOT attach a .finally() here: runBuild already calls release() in its finally
+    // block unconditionally (success, failure, or eviction). A second release here would
     // cause activeOps to go negative and break the concurrency guard.
-    runBuild(buildId, buildDir, manifest).catch(err => {
+    runBuild(buildId, buildDir, manifest, release).catch(err => {
       console.error(`Build ${buildId} failed:`, err)
       // Ensure status is updated even on unexpected errors that escape runBuild's catch block
       const r = buildResults.get(buildId)
@@ -732,26 +732,14 @@ export async function scanRepo(url: string, ref: string = 'main'): Promise<Servi
   const refErr = validateGitRef(ref)
   if (refErr) return { error: refErr, status: 400 }
 
-  // Atomically check-and-increment inside the mutex (same pattern as buildPlugin)
-  let didIncrement = false
-  await new Promise<void>(resolve => {
-    activeOpsLock = activeOpsLock.then(() => {
-      if (activeOps < MAX_CONCURRENT_OPS) {
-        activeOps++
-        didIncrement = true
-      }
-      resolve()
-    })
-  })
-
-  if (!didIncrement) {
-    return { error: 'Too many concurrent operations. Please wait and try again.', status: 429 }
-  }
+  // acquireSlot() handles the atomic check-and-increment of activeOps and queues
+  // callers when MAX_CONCURRENT_OPS is reached.  The manual activeOpsLock block
+  // that was here before was a duplicate increment — acquireSlot already does it.
+  const release = await acquireSlot()
 
   // Use mkdtemp for a secure unique directory — prevents race conditions and symlink attacks
   const scanDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-maestro-scan-'))
 
-  const release = await acquireSlot()
   try {
     // Shallow clone (use -- to prevent ref from being parsed as a flag)
     await execPromise('git', ['clone', '--depth', '1', '--branch', ref, '--', url, scanDir], {
@@ -824,26 +812,13 @@ export async function pushToGitHub(config: PluginPushConfig): Promise<ServiceRes
   const refErr = validateGitRef(branch)
   if (refErr) return { error: refErr, status: 400 }
 
-  // Atomically check-and-increment inside the mutex (same pattern as buildPlugin)
-  let didIncrement = false
-  await new Promise<void>(resolve => {
-    activeOpsLock = activeOpsLock.then(() => {
-      if (activeOps < MAX_CONCURRENT_OPS) {
-        activeOps++
-        didIncrement = true
-      }
-      resolve()
-    })
-  })
-
-  if (!didIncrement) {
-    return { error: 'Too many concurrent operations. Please wait and try again.', status: 429 }
-  }
+  // acquireSlot() handles the atomic check-and-increment of activeOps and queues
+  // callers when MAX_CONCURRENT_OPS is reached.  The manual activeOpsLock block
+  // that was here before was a duplicate increment — acquireSlot already does it.
+  const release = await acquireSlot()
 
   // Use mkdtemp for a secure unique directory — prevents race conditions and symlink attacks
   const pushDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ai-maestro-push-'))
-
-  const release = await acquireSlot()
 
   // Build clone URL. If a token is provided, embed it for auth so private forks can be read.
     // Using URL parsing avoids string-replace pitfalls (e.g. double-auth when forkUrl already
@@ -944,9 +919,13 @@ export async function pushToGitHub(config: PluginPushConfig): Promise<ServiceRes
  * Run build-plugin.sh in the build directory and capture output.
  * Uses atomic replacement of the map entry to avoid torn reads.
  */
-async function runBuild(buildId: string, buildDir: string, manifest: PluginManifest): Promise<void> {
-  // Early guard: if the entry was evicted before we even start, abort immediately
-  if (!buildResults.get(buildId)) return
+async function runBuild(buildId: string, buildDir: string, manifest: PluginManifest, release: () => void): Promise<void> {
+  // Early guard: if the entry was evicted before we even start, abort immediately.
+  // Must release the concurrency slot before returning to avoid a slot leak.
+  if (!buildResults.get(buildId)) {
+    release()
+    return
+  }
 
   // Outer try/catch/finally: catch ensures any unexpected error is reflected in
   // the build status; finally decrements activeOps exactly once when the build
@@ -1038,9 +1017,11 @@ async function runBuild(buildId: string, buildDir: string, manifest: PluginManif
       stats: undefined,
     })
   } finally {
-    // Decrement here — runBuild is fire-and-forget from buildPlugin, so the slot
-    // must be freed only when the actual build work completes (success or failure).
-    activeOps = Math.max(0, activeOps - 1)
+    // Release the concurrency slot — runBuild is fire-and-forget from buildPlugin,
+    // so the slot must be freed only when the actual build work completes (success
+    // or failure).  Calling release() (from acquireSlot) correctly decrements
+    // activeOps and wakes the next queued operation, if any.
+    release()
   }
 }
 

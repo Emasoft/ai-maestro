@@ -223,6 +223,10 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
           return
         }
         const data = await res.json()
+        if (!data?.meeting) {
+          if (!cancelled) setNotFound(true)
+          return
+        }
         const meeting: Meeting = data.meeting
         if (cancelled) return
 
@@ -383,7 +387,7 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ activeAgentId: state.activeAgentId }),
-    }).catch(() => {})
+    }).catch((err) => console.error('[MeetingRoom] Persist activeAgentId failed:', err))
   }, [state.activeAgentId])
 
   // Persist agentIds changes
@@ -393,7 +397,7 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ agentIds: state.selectedAgentIds }),
-    }).catch(() => {})
+    }).catch((err) => console.error('[MeetingRoom] Persist agentIds failed:', err))
   }, [state.selectedAgentIds, state.phase])
 
   // Persist sidebarMode changes
@@ -403,7 +407,7 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sidebarMode: state.sidebarMode }),
-    }).catch(() => {})
+    }).catch((err) => console.error('[MeetingRoom] Persist sidebarMode failed:', err))
   }, [state.sidebarMode, state.phase])
 
   // Heartbeat: update lastActiveAt every 30s
@@ -414,7 +418,7 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lastActiveAt: new Date().toISOString() }),
-      }).catch(() => {})
+      }).catch((err) => console.error('[MeetingRoom] Persist heartbeat failed:', err))
     }, 30000)
     return () => clearInterval(interval)
   }, [state.phase])
@@ -449,10 +453,10 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
             })
               .then(r => r.json())
               .then(data => { if (mounted) setTeamId(data.team?.id || null) })
-              .catch(() => {})
+              .catch((err) => console.error('[MeetingRoom] Team create failed:', err))
           }
         })
-        .catch(() => {})
+        .catch((err) => console.error('[MeetingRoom] Team fetch failed:', err))
         .finally(() => { creatingTeamRef.current = false })
       return () => { mounted = false }
     }
@@ -630,7 +634,7 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name }),
-                  }).catch(() => {})
+                  }).catch((err) => console.error('[MeetingRoom] Persist name failed:', err))
                 }
               }}
               onAddAgent={() => setShowAgentPickerInMeeting(true)}

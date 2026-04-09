@@ -9,6 +9,88 @@ import type { SearchResult, HighlightedSearchResult } from '@/types/search'
 const SEARCH_DEBOUNCE_MS = 300
 
 /**
+ * Extract search terms from query for highlighting.
+ * Removes common stop words and punctuation.
+ * Pure helper — hoisted outside the hook to avoid recreation on every render.
+ */
+function extractSearchTerms(queryText: string): string[] {
+  const words = queryText
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .filter(word => word.length > 2)
+
+  const stopWords = new Set([
+    'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of',
+    'with', 'by', 'from', 'up', 'about', 'into', 'through', 'during',
+    'before', 'after', 'above', 'below', 'between', 'under', 'again'
+  ])
+
+  return words.filter(word => !stopWords.has(word))
+}
+
+/**
+ * Escape HTML entities to prevent XSS when injecting text into
+ * highlighted HTML strings. Must be applied to every raw text
+ * segment before concatenation with <mark> tags.
+ * Pure helper — hoisted outside the hook to avoid recreation on every render.
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/**
+ * Add highlighting to search results.
+ * Uses optional chaining on result.text to guard against malformed API responses.
+ * Pure helper — hoisted outside the hook to avoid recreation on every render.
+ */
+function highlightResults(
+  searchResults: SearchResult[],
+  highlightTerms: string[]
+): HighlightedSearchResult[] {
+  return searchResults.map((result) => {
+    const text = result?.text ?? ''
+    const highlightRanges: Array<{ start: number; end: number }> = []
+
+    for (const term of highlightTerms) {
+      const lowerText = text.toLowerCase()
+      const lowerTerm = term.toLowerCase()
+      let position = lowerText.indexOf(lowerTerm)
+
+      while (position !== -1) {
+        highlightRanges.push({ start: position, end: position + term.length })
+        position = lowerText.indexOf(lowerTerm, position + term.length)
+      }
+    }
+
+    highlightRanges.sort((a, b) => a.start - b.start)
+
+    let highlightedText = ''
+    let lastIndex = 0
+
+    for (const range of highlightRanges) {
+      // Escape non-highlighted text to prevent XSS injection
+      highlightedText += escapeHtml(text.substring(lastIndex, range.start))
+      highlightedText += `<mark>${escapeHtml(text.substring(range.start, range.end))}</mark>`
+      lastIndex = range.end
+    }
+
+    // Escape trailing text as well
+    highlightedText += escapeHtml(text.substring(lastIndex))
+
+    return {
+      ...result,
+      highlightedText,
+      highlightRanges
+    }
+  })
+}
+
+/**
  * Interface for search results with highlighting
  */
 export interface SearchResults {
@@ -40,16 +122,37 @@ export function useAgentSearch(agentId: string) {
   // Ref to track if component is mounted (for async operations)
   const isMountedRef = useRef(true)
 
+  // AbortController ref to cancel in-flight fetches when a newer query arrives,
+  // preventing stale results from overwriting fresher ones.
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Properly track mount/unmount lifecycle so isMountedRef guards in
+  // performSearch actually prevent state updates after unmount.
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      // Abort any in-flight fetch on unmount
+      abortControllerRef.current?.abort()
+    }
+  }, [])
+
   /**
    * Perform search with the current debounced query
    */
   const performSearch = useCallback(async (searchQuery: string) => {
+    // Abort previous in-flight request so stale results never land
+    abortControllerRef.current?.abort()
+
     if (!searchQuery.trim()) {
       setResults(null)
       setLoading(false)
       setError(null)
       return
     }
+
+    const controller = new AbortController()
+    abortControllerRef.current = controller
 
     setLoading(true)
     setError(null)
@@ -61,7 +164,10 @@ export function useAgentSearch(agentId: string) {
         q: searchQuery
       })
 
-      const response = await fetch(`/api/agents/${agentId}/search?${queryParams.toString()}`)
+      const response = await fetch(
+        `/api/agents/${agentId}/search?${queryParams.toString()}`,
+        { signal: controller.signal }
+      )
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -70,9 +176,14 @@ export function useAgentSearch(agentId: string) {
 
       const data = await response.json()
 
+      // Runtime validation: ensure the response has the expected shape
+      if (!data || !Array.isArray(data.results)) {
+        throw new Error('Invalid search response')
+      }
+
       if (!isMountedRef.current) return
 
-      const searchResults: HighlightedSearchResult[] = data.results || []
+      const searchResults: HighlightedSearchResult[] = data.results
       const searchTerms = extractSearchTerms(searchQuery)
       const highlightedResults = highlightResults(searchResults, searchTerms)
 
@@ -86,6 +197,9 @@ export function useAgentSearch(agentId: string) {
 
       console.log(`[useAgentSearch] Found ${data.count} results for query "${searchQuery}"`)
     } catch (err) {
+      // Silently ignore aborted requests — a newer query superseded this one
+      if (err instanceof DOMException && err.name === 'AbortError') return
+
       if (!isMountedRef.current) return
 
       console.error('[useAgentSearch] Search failed:', err)
@@ -142,69 +256,6 @@ export function useAgentSearch(agentId: string) {
       performSearch(debouncedQuery)
     }
   }, [debouncedQuery, performSearch])
-
-  /**
-   * Extract search terms from query for highlighting
-   * Removes common stop words and punctuation
-   */
-  function extractSearchTerms(queryText: string): string[] {
-    const words = queryText
-      .toLowerCase()
-      .replace(/[^\w\s]/g, '')
-      .split(/\s+/)
-      .filter(word => word.length > 2)
-
-    const stopWords = new Set([
-      'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of',
-      'with', 'by', 'from', 'up', 'about', 'into', 'through', 'during',
-      'before', 'after', 'above', 'below', 'between', 'under', 'again'
-    ])
-
-    return words.filter(word => !stopWords.has(word))
-  }
-
-  /**
-   * Add highlighting to search results
-   */
-  function highlightResults(
-    searchResults: SearchResult[],
-    highlightTerms: string[]
-  ): HighlightedSearchResult[] {
-    return searchResults.map((result) => {
-      const text = result.text
-      const highlightRanges: Array<{ start: number; end: number }> = []
-
-      for (const term of highlightTerms) {
-        const lowerText = text.toLowerCase()
-        const lowerTerm = term.toLowerCase()
-        let position = lowerText.indexOf(lowerTerm)
-
-        while (position !== -1) {
-          highlightRanges.push({ start: position, end: position + term.length })
-          position = lowerText.indexOf(lowerTerm, position + term.length)
-        }
-      }
-
-      highlightRanges.sort((a, b) => a.start - b.start)
-
-      let highlightedText = ''
-      let lastIndex = 0
-
-      for (const range of highlightRanges) {
-        highlightedText += text.substring(lastIndex, range.start)
-        highlightedText += `<mark>${text.substring(range.start, range.end)}</mark>`
-        lastIndex = range.end
-      }
-
-      highlightedText += text.substring(lastIndex)
-
-      return {
-        ...result,
-        highlightedText,
-        highlightRanges
-      }
-    })
-  }
 
   return {
     // State

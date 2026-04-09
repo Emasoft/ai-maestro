@@ -32,9 +32,13 @@ import { authorize } from '@/lib/authorization'
 
 export const dynamic = 'force-dynamic'
 
-function execCommand(cmd: string): string {
-  const { execSync } = require('child_process')
-  return execSync(cmd, { timeout: 5000, encoding: 'utf8' }).trim()
+/**
+ * Execute a command with args array (no shell) to prevent injection.
+ * CC-GOV-001: Never pass user-derived values through shell interpolation.
+ */
+function execCommandArgs(bin: string, args: string[]): string {
+  const { execFileSync } = require('child_process')
+  return (execFileSync(bin, args, { timeout: 5000, encoding: 'utf8' }) as string).trim()
 }
 
 function sleep(ms: number): Promise<void> {
@@ -44,7 +48,7 @@ function sleep(ms: number): Promise<void> {
 /** Query tmux for the process currently running in the session's pane. */
 function getPaneCommand(sessionName: string): string | null {
   try {
-    return execCommand(`tmux display-message -p -t "${sessionName}" '#{pane_current_command}'`) || null
+    return execCommandArgs('tmux', ['display-message', '-p', '-t', sessionName, '#{pane_current_command}']) || null
   } catch {
     return null
   }
@@ -123,15 +127,18 @@ export async function POST(
     if (lower.includes('codex')) return 'codex'
     if (lower.includes('aider')) return 'aider'
     if (lower.includes('gemini')) return 'gemini'
+    // CC-GOV-002: Warn when falling back to default — may indicate unexpected input
+    console.warn(`[Sessions Restart] resolveBin: unrecognized program "${p}", falling back to "claude"`)
     return 'claude'
   }
 
   try {
     // Step 1: Ctrl+C clears partial input, /exit as literal text exits Claude Code
     // Note: Ctrl+D does NOT exit Claude Code. Only /exit works.
-    execCommand(`tmux send-keys -t "${sessionName}" C-c`)
-    execCommand(`tmux send-keys -t "${sessionName}" -l '/exit'`)
-    execCommand(`tmux send-keys -t "${sessionName}" Enter`)
+    // CC-GOV-001: Use execCommandArgs (no shell) for all tmux interactions
+    execCommandArgs('tmux', ['send-keys', '-t', sessionName, 'C-c'])
+    execCommandArgs('tmux', ['send-keys', '-t', sessionName, '-l', '/exit'])
+    execCommandArgs('tmux', ['send-keys', '-t', sessionName, 'Enter'])
 
     // Step 2: Poll tmux pane command every 500ms until it becomes a shell
     // (meaning the AI program exited and the shell prompt is back)
@@ -173,7 +180,10 @@ export async function POST(
       }
     }
     const cmd = `${bin} ${finalArgs}`.trim()
-    execCommand(`tmux send-keys -t "${sessionName}" '${cmd.replace(/'/g, "'\\''")}' Enter`)
+    // CC-GOV-001: Use execCommandArgs (no shell) — tmux send-keys with -l sends
+    // the command as literal text, then a separate Enter key press launches it.
+    execCommandArgs('tmux', ['send-keys', '-t', sessionName, '-l', cmd])
+    execCommandArgs('tmux', ['send-keys', '-t', sessionName, 'Enter'])
 
     return NextResponse.json({ success: true, sessionName, command: cmd })
   } catch (error: unknown) {

@@ -19,7 +19,8 @@ export async function POST(
     const { id } = await params
     const sessionName = decodeURIComponent(id)
 
-    if (!sessionName || /[;&|`$]/.test(sessionName)) {
+    // CC-GOV-001: Positive allowlist — only safe tmux session name characters
+    if (!sessionName || !/^[a-zA-Z0-9_@.-]+$/.test(sessionName)) {
       return NextResponse.json({ error: 'Invalid session name' }, { status: 400 })
     }
 

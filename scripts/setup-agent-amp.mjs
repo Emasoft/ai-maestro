@@ -18,7 +18,7 @@
  *   node scripts/setup-agent-amp.mjs --dry-run
  */
 
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import { createHash } from 'crypto'
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -33,6 +33,17 @@ const OLD_MESSAGES_DIR = path.join(HOME, '.aimaestro', 'messages')
 const AGENT_REGISTRY = path.join(HOME, '.aimaestro', 'agents', 'registry.json')
 const API_KEYS_FILE = path.join(HOME, '.aimaestro', 'amp-api-keys.json')
 const DRY_RUN = process.argv.includes('--dry-run')
+
+/**
+ * Validate a tmux session name to prevent command injection.
+ * tmux session names are limited to: ^[a-zA-Z0-9_@.-]+$
+ */
+function validateSessionName(name) {
+  if (!/^[a-zA-Z0-9_@.-]+$/.test(name)) {
+    throw new Error(`Invalid session name: ${name} — must match /^[a-zA-Z0-9_@.-]+$/`)
+  }
+  return name
+}
 
 function hashApiKey(apiKey) {
   return 'sha256:' + createHash('sha256').update(apiKey).digest('hex')
@@ -197,23 +208,22 @@ async function migrateSharedAMPInbox(agentIdToName, nameToAgentId) {
       // Resolve recipient name to UUID for directory
       const recipientUUID = nameToAgentId[recipientAgent]
       if (!recipientUUID) {
-        skipped++ // Cannot migrate without UUID
+        console.warn(`[AMP-SETUP] Skipping message: unresolved recipient "${recipientAgent}" not found in registry`)
+        skipped++
         continue
       }
 
       const destDir = path.join(AMP_AGENTS_DIR, recipientUUID, 'messages', 'inbox', senderDir)
       const destFile = path.join(destDir, fileName)
 
-      // Check if already migrated
-      try {
-        await fs.access(destFile)
-        skipped++
-        continue
-      } catch { /* doesn't exist, proceed */ }
-
       if (!DRY_RUN) {
         await fs.mkdir(destDir, { recursive: true })
-        await fs.writeFile(destFile, JSON.stringify(messageToWrite, null, 2))
+        try {
+          await fs.writeFile(destFile, JSON.stringify(messageToWrite, null, 2), { flag: 'wx' })
+        } catch (wxErr) {
+          if (wxErr.code === 'EEXIST') { skipped++; continue }
+          throw wxErr
+        }
       }
 
       migrated++
@@ -246,11 +256,14 @@ async function migrateSharedAMPInbox(agentIdToName, nameToAgentId) {
         const destDir = path.join(AMP_AGENTS_DIR, senderUUID, 'messages', 'sent', recipientDir)
         const destFile = path.join(destDir, path.basename(filePath))
 
-        try { await fs.access(destFile); continue } catch { /* proceed */ }
-
         if (!DRY_RUN) {
           await fs.mkdir(destDir, { recursive: true })
-          await fs.copyFile(filePath, destFile)
+          try {
+            await fs.writeFile(destFile, await fs.readFile(filePath), { flag: 'wx' })
+          } catch (wxErr) {
+            if (wxErr.code === 'EEXIST') continue
+            throw wxErr
+          }
         }
         migrated++
       } catch { errors++ }
@@ -307,8 +320,6 @@ async function migrateOldMessages(agentIdToName, nameToAgentId) {
           const destDir = path.join(AMP_AGENTS_DIR, agentId, 'messages', 'inbox', senderDir)
           const destFile = path.join(destDir, `${msgId}.json`)
 
-          try { await fs.access(destFile); skipped++; continue } catch { /* proceed */ }
-
           // Convert to AMP envelope format
           const ampMessage = {
             envelope: {
@@ -344,7 +355,12 @@ async function migrateOldMessages(agentIdToName, nameToAgentId) {
 
           if (!DRY_RUN) {
             await fs.mkdir(destDir, { recursive: true })
-            await fs.writeFile(destFile, JSON.stringify(ampMessage, null, 2))
+            try {
+              await fs.writeFile(destFile, JSON.stringify(ampMessage, null, 2), { flag: 'wx' })
+            } catch (wxErr) {
+              if (wxErr.code === 'EEXIST') { skipped++; continue }
+              throw wxErr
+            }
           }
           migrated++
         } catch (err) {
@@ -379,8 +395,6 @@ async function migrateOldMessages(agentIdToName, nameToAgentId) {
           const destDir = path.join(AMP_AGENTS_DIR, agentId, 'messages', 'sent', recipientDir)
           const destFile = path.join(destDir, `${msgId}.json`)
 
-          try { await fs.access(destFile); continue } catch { /* proceed */ }
-
           const ampMessage = {
             envelope: {
               version: 'amp/0.1',
@@ -408,7 +422,12 @@ async function migrateOldMessages(agentIdToName, nameToAgentId) {
 
           if (!DRY_RUN) {
             await fs.mkdir(destDir, { recursive: true })
-            await fs.writeFile(destFile, JSON.stringify(ampMessage, null, 2))
+            try {
+              await fs.writeFile(destFile, JSON.stringify(ampMessage, null, 2), { flag: 'wx' })
+            } catch (wxErr) {
+              if (wxErr.code === 'EEXIST') continue
+              throw wxErr
+            }
           }
           migrated++
         } catch { errors++ }
@@ -475,20 +494,27 @@ async function main() {
       await fs.mkdir(path.join(agentHome, 'keys'), { recursive: true })
       await fs.mkdir(path.join(agentHome, 'registrations'), { recursive: true })
 
-      // Copy config with agent identity
+      // Copy config with agent identity (atomic: wx flag prevents overwrite race)
       if (machineConfig) {
         const configPath = path.join(agentHome, 'config.json')
-        try { await fs.access(configPath) } catch {
-          const agentConfig = { ...machineConfig, agent: { ...machineConfig.agent, name: agentName, id: agentId } }
-          await fs.writeFile(configPath, JSON.stringify(agentConfig, null, 2))
+        const agentConfig = { ...machineConfig, agent: { ...machineConfig.agent, name: agentName, id: agentId } }
+        try {
+          await fs.writeFile(configPath, JSON.stringify(agentConfig, null, 2), { flag: 'wx' })
+        } catch (wxErr) {
+          if (wxErr.code !== 'EEXIST') throw wxErr
+          // Already exists, skip
         }
       }
 
-      // Copy keys
+      // TODO: Generate unique per-agent keys instead of sharing machine-level keys
+      // Copy keys (atomic: wx flag prevents overwrite race)
       if (machineKeys.private && machineKeys.public) {
-        try { await fs.access(path.join(agentHome, 'keys', 'private.pem')) } catch {
-          await fs.writeFile(path.join(agentHome, 'keys', 'private.pem'), machineKeys.private)
-          await fs.writeFile(path.join(agentHome, 'keys', 'public.pem'), machineKeys.public)
+        try {
+          await fs.writeFile(path.join(agentHome, 'keys', 'private.pem'), machineKeys.private, { flag: 'wx' })
+          await fs.writeFile(path.join(agentHome, 'keys', 'public.pem'), machineKeys.public, { flag: 'wx' })
+        } catch (wxErr) {
+          if (wxErr.code !== 'EEXIST') throw wxErr
+          // Already exists, skip
         }
       }
     }
@@ -518,7 +544,7 @@ async function main() {
 
   let tmuxCount = 0
   try {
-    const res = await fetch('http://localhost:23000/api/sessions')
+    const res = await fetch('http://localhost:23000/api/sessions', { signal: AbortSignal.timeout(10000) })
     const data = await res.json()
     const sessions = data.sessions || []
 
@@ -535,11 +561,17 @@ async function main() {
 
       if (!DRY_RUN) {
         try {
-          execSync(`tmux set-environment -t "${tmuxSession}" AMP_DIR "${agentHome}" 2>/dev/null`)
+          // Validate session name to prevent command injection (session.id comes from API response)
+          validateSessionName(tmuxSession)
+          execFileSync('tmux', ['set-environment', '-t', tmuxSession, 'AMP_DIR', agentHome], { stdio: 'pipe' })
           console.log(`  ${agentName} (${agentUUID}): AMP_DIR set`)
           tmuxCount++
-        } catch {
-          console.log(`  ${agentName}: tmux session not found`)
+        } catch (err) {
+          if (err.message?.includes('Invalid session name')) {
+            console.log(`  ${agentName}: rejected — ${err.message}`)
+          } else {
+            console.log(`  ${agentName}: tmux session not found`)
+          }
         }
       } else {
         console.log(`  ${agentName}: would set AMP_DIR=${agentHome}`)
@@ -568,7 +600,7 @@ async function main() {
     // Determine the API base URL (try the running server, fall back to localhost)
     let apiBaseUrl = 'http://localhost:23000/api/v1'
     try {
-      const healthRes = await fetch(`${apiBaseUrl}/health`)
+      const healthRes = await fetch(`${apiBaseUrl}/health`, { signal: AbortSignal.timeout(10000) })
       if (!healthRes.ok) throw new Error('unhealthy')
     } catch {
       console.log('  AI Maestro API not available — skipping key re-registration')
@@ -610,7 +642,8 @@ async function main() {
               tenant: configOrg,
               public_key: publicKey,
               key_algorithm: 'Ed25519'
-            })
+            }),
+            signal: AbortSignal.timeout(10000)
           })
 
           if (res.ok) {
@@ -681,7 +714,8 @@ async function main() {
             tenant: configOrg,
             public_key: publicKey,
             key_algorithm: 'Ed25519'
-          })
+          }),
+          signal: AbortSignal.timeout(10000)
         })
 
         if (res.ok) {

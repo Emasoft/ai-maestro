@@ -15,7 +15,7 @@ export async function GET(_request: NextRequest) {
   try {
     const result = getDirectory()
     if (result.error) {
-      return NextResponse.json({ success: false, error: result.error }, { status: result.status })
+      return NextResponse.json({ success: false, error: result.error }, { status: result.status || 500 })
     }
     return NextResponse.json(result.data)
   } catch (error) {

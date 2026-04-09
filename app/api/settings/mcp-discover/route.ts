@@ -98,41 +98,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Either configPath or serverConfig is required' }, { status: 400 })
   }
 
-  // Build command arguments
+  // Build command arguments as an array for execFileSync (no shell interpolation)
   const safeName = shellSafe(serverName)
-  const args: string[] = [
-    `"${SCRIPT_PATH}"`,
-    `"${tmpFile}"`,
-    `"${safeName}"`,
+  const execArgs: string[] = [
+    'run',
+    SCRIPT_PATH,
+    tmpFile,
+    safeName,
   ]
 
   // Output format
   const fmt = format || (raw ? 'text' : 'json')
-  args.push(`--format ${shellSafe(fmt)}`)
+  execArgs.push('--format', shellSafe(fmt))
 
-  if (raw) args.push('--dangerously-output-the-raw-response')
+  if (raw) execArgs.push('--dangerously-output-the-raw-response')
 
   // Timeout
-  args.push(`--timeout ${Math.min(timeout || 25, 60)}`)
-  args.push('--no-prompt-key')
+  execArgs.push('--timeout', String(Math.min(timeout || 25, 60)))
+  execArgs.push('--no-prompt-key')
 
   // Method execution
   if (method) {
-    args.push(`--method ${shellSafe(method)}`)
-    if (toolName) args.push(`--tool-name ${shellSafe(toolName)}`)
+    execArgs.push('--method', shellSafe(method))
+    if (toolName) execArgs.push('--tool-name', shellSafe(toolName))
     if (toolArgs) {
       for (const [k, v] of Object.entries(toolArgs)) {
-        args.push(`--tool-arg ${shellSafe(k)}=${shellSafe(String(v))}`)
+        execArgs.push('--tool-arg', `${shellSafe(k)}=${shellSafe(String(v))}`)
       }
     }
   }
 
   try {
-    const { execSync } = await import('child_process')
-    const cmd = `uv run ${args.join(' ')} 2>/dev/null`
-    const output = execSync(cmd, {
+    const { execFileSync } = await import('child_process')
+    // execFileSync bypasses the shell, preventing command injection via interpolated args
+    const output = execFileSync('uv', execArgs, {
       timeout: (Math.min(timeout || 25, 60) + 5) * 1000,
       maxBuffer: 2 * 1024 * 1024,
+      stdio: ['pipe', 'pipe', 'ignore'],
       env: { ...process.env, ...(configPath ? { CLAUDE_PLUGIN_ROOT: dirname(resolve(configPath)) } : {}) },
     }).toString()
 

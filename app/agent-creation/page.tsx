@@ -1,7 +1,4 @@
-'use client'
-
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { redirect } from 'next/navigation'
 
 /**
  * /agent-creation now redirects to the main dashboard.
@@ -9,9 +6,5 @@ import { useRouter } from 'next/navigation'
  * The URL ?agent=haephestos tells the dashboard to select the Haephestos agent.
  */
 export default function AgentCreationRedirect() {
-  const router = useRouter()
-  useEffect(() => {
-    router.replace('/?agent=haephestos')
-  }, [router])
-  return null
+  redirect('/?agent=haephestos')
 }

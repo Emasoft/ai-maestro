@@ -22,7 +22,7 @@ export async function POST() {
     // Kill the tmux session directly — this is the most critical action
     // to stop token consumption. The deleteCreationHelper service may
     // do additional cleanup but killing tmux stops Claude immediately.
-    await execFileAsync('tmux', ['kill-session', '-t', SESSION_NAME]).catch(() => {})
+    await execFileAsync('tmux', ['kill-session', '-t', SESSION_NAME]).catch(err => console.error('[creation-helper] tmux kill failed:', err))
 
     // Also run the full service cleanup
     const result = await deleteCreationHelper()

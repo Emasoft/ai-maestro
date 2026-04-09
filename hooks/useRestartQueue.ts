@@ -44,6 +44,10 @@ export function useRestartQueue() {
   const [queue, setQueue] = useState<Map<string, RestartRequest>>(new Map())
   const { getSessionActivity } = useSessionActivity()
   const activeRestartsRef = useRef<Set<string>>(new Set())
+  // Guard against setState after unmount — fetch callbacks in the queue-processing
+  // effect can resolve after the component tree removes the hook consumer
+  const isMountedRef = useRef(true)
+  useEffect(() => { return () => { isMountedRef.current = false } }, [])
   // SF-044: Store getSessionActivity in a ref so the queue-processing effect doesn't re-run
   // on every WebSocket event (getSessionActivity changes identity whenever the activity map updates)
   const getSessionActivityRef = useRef(getSessionActivity)
@@ -113,18 +117,29 @@ export function useRestartQueue() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ program: req.program, programArgs: req.programArgs }),
+            // Abort after 30s to prevent hanging requests from permanently blocking
+            // this session in activeRestartsRef (server unresponsive scenario)
+            signal: AbortSignal.timeout(30_000),
           })
             .then(res => {
-              if (!res.ok) console.error(`[useRestartQueue] Restart failed for ${sessionName}:`, res.status)
+              if (res.ok) {
+                // Only remove from queue on success — failed requests stay queued
+                // so the next poll cycle retries when the agent is still at idle_prompt
+                if (isMountedRef.current) {
+                  setQueue(prev => {
+                    const next = new Map(prev)
+                    next.delete(sessionName)
+                    return next
+                  })
+                }
+              } else {
+                console.error(`[useRestartQueue] Restart failed for ${sessionName}: HTTP ${res.status}`)
+              }
             })
             .catch(err => console.error(`[useRestartQueue] Restart error for ${sessionName}:`, err))
             .finally(() => {
+              // Always unblock so future poll cycles can retry
               activeRestartsRef.current.delete(sessionName)
-              setQueue(prev => {
-                const next = new Map(prev)
-                next.delete(sessionName)
-                return next
-              })
             })
         }
       }

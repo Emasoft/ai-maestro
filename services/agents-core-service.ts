@@ -430,8 +430,8 @@ export async function listAgents(): Promise<ServiceResult<{
     const processedAgentNames = new Set<string>()
 
     for (const agent of agents) {
-      // Use agent.id as last-resort fallback so agents without name/alias are never silently dropped
-      const agentName = agent.name || agent.alias || agent.id
+      // Use agent.id as last-resort fallback so agents without a name are never silently dropped
+      const agentName = agent.name || agent.id
       if (!agentName) continue
 
       const normalizedAgentName = agentName.toLowerCase()
@@ -560,8 +560,8 @@ export async function listAgents(): Promise<ServiceResult<{
     resultAgents.sort((a, b) => {
       if (a.session?.status === 'online' && b.session?.status !== 'online') return -1
       if (a.session?.status !== 'online' && b.session?.status === 'online') return 1
-      const nameA = a.name || a.alias || ''
-      const nameB = b.name || b.alias || ''
+      const nameA = a.name || ''
+      const nameB = b.name || ''
       return nameA.toLowerCase().localeCompare(nameB.toLowerCase())
     })
 
@@ -884,7 +884,7 @@ export async function registerAgent(body: RegisterAgentParams): Promise<ServiceR
         message: `Agent ${agentId} registered successfully`,
         agentId,
         agent: agentConfig,
-        registryAgent: registryAgent ? { id: registryAgent.id, name: registryAgent.name || registryAgent.alias || '' } : null,
+        registryAgent: registryAgent ? { id: registryAgent.id, name: registryAgent.name || '' } : null,
       },
       status: 200,
     }
@@ -930,7 +930,7 @@ export function lookupAgentByName(name: string): ServiceResult<{
         exists: true,
         agent: {
           id: agent.id,
-          name: agent.name || agent.alias || '',
+          name: agent.name || '',
           hostId: agent.hostId || selfHostId,
           ampRegistered: agent.ampRegistered,
         },
@@ -1049,7 +1049,7 @@ export async function getUnifiedAgents(params: UnifiedAgentsParams): Promise<Ser
     }
 
     for (const agent of result.agents) {
-      const agentName = agent.name || agent.alias || agent.id
+      const agentName = agent.name || agent.id
       const qualifiedName = `${agentName}@${result.host.id}`
 
       unifiedAgents.push({
@@ -1123,7 +1123,7 @@ export async function getAgentSessionStatus(agentId: string): Promise<ServiceRes
       return { error: 'Agent not found', status: 404 }
     }
 
-    const agentNameForSession = agent.name || agent.alias
+    const agentNameForSession = agent.name
     if (!agentNameForSession) {
       return {
         data: {
@@ -1232,7 +1232,7 @@ export async function sendAgentSessionCommand(
       return { error: 'Agent not found', status: 404 }
     }
 
-    const agentNameForSession = agent.name || agent.alias
+    const agentNameForSession = agent.name
     if (!agentNameForSession) {
       return { error: 'Agent has no name configured', status: 400 }
     }
@@ -1306,7 +1306,7 @@ export async function unlinkOrDeleteAgentSession(
       return { error: 'Agent not found', status: 404 }
     }
 
-    const agentName = agent.name || agent.alias
+    const agentName = agent.name
     if (!agentName) {
       return { error: 'Agent has no name configured', status: 400 }
     }
@@ -1422,7 +1422,7 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
       return { error: 'Agent not found', status: 404 }
     }
 
-    const agentName = agent.name || agent.alias
+    const agentName = agent.name
     if (!agentName) {
       return { error: 'Agent has no name configured', status: 400 }
     }
@@ -1700,7 +1700,7 @@ export async function hibernateAgent(agentId: string, params: HibernateAgentPara
       return { error: 'Agent not found', status: 404 }
     }
 
-    const agentName = agent.name || agent.alias
+    const agentName = agent.name
     if (!agentName) {
       return { error: 'Agent has no name configured', status: 400 }
     }

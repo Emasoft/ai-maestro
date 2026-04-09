@@ -30,6 +30,10 @@ export async function POST(
     try {
       const body = await request.json()
       if (typeof body.sessionIndex === 'number') {
+        // SF-061: Bounds check sessionIndex to prevent out-of-range values
+        if (body.sessionIndex < 0 || body.sessionIndex > 99) {
+          return NextResponse.json({ error: 'Invalid sessionIndex' }, { status: 400 })
+        }
         sessionIndex = body.sessionIndex
       }
     } catch {

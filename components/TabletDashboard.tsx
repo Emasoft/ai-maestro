@@ -50,7 +50,7 @@ export default function TabletDashboard({
   const activeAgent = agents.find((a) => a.id === activeAgentId)
 
   const getAgentDisplayName = (agent: Agent) => {
-    return agent.label || agent.name || agent.alias || agent.id
+    return agent.label || agent.name || agent.id
   }
 
   const getAgentHostDisplay = () => {
@@ -256,8 +256,8 @@ export default function TabletDashboard({
                   agentId={activeAgent.id}
                   allAgents={onlineAgents.map(a => ({
                     id: a.id,
-                    name: a.name || a.alias || a.id,
-                    alias: a.label || a.name || a.alias || a.id,
+                    name: a.name || a.id,
+                    alias: a.label || a.name || a.id,
                     tmuxSessionName: a.session?.tmuxSessionName,
                     hostId: a.hostId
                   }))}

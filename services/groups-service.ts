@@ -237,7 +237,7 @@ export async function notifyGroupSubscribers(
           return { agentId, success: false, reason: 'Agent not found' }
         }
 
-        const agentName = agent.name || agent.alias || 'unknown'
+        const agentName = agent.name || 'unknown'
         try {
           const result = await notifyAgent({
             agentId: agent.id,

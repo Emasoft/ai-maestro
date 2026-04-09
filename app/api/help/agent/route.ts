@@ -11,7 +11,7 @@ import {
   createAssistantAgent,
   getAssistantStatus,
 } from '@/services/help-service'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { getAgentByName } from '@/lib/agent-registry'
 import { DeleteAgent } from '@/services/element-management-service'
 
@@ -51,7 +51,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: true })
     }
     const delResult = await DeleteAgent(assistant.id, {
-      authContext: { isSystemOwner: true },
+      authContext: buildAuthContext(auth),
     })
     if (!delResult.success) {
       return NextResponse.json(

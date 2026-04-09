@@ -26,6 +26,10 @@ function shellSafe(input: string): string {
   if (sanitized !== input) {
     throw new Error(`Unsafe shell input rejected: "${input.substring(0, 50)}"`)
   }
+  // Prevent path traversal even though individual chars are allowed
+  if (sanitized.includes('..')) {
+    throw new Error('Path traversal detected')
+  }
   return sanitized
 }
 
@@ -122,7 +126,7 @@ async function countElements(pluginDir: string): Promise<PluginStatus['elementCo
       for (const e of entries) {
         if (existsSync(join(skillsDir, e, 'SKILL.md'))) counts.skills++
       }
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[marketplaces] skills count', err) }
   }
 
   const agentsDir = join(pluginDir, 'agents')
@@ -130,7 +134,7 @@ async function countElements(pluginDir: string): Promise<PluginStatus['elementCo
     try {
       const entries = await readdir(agentsDir)
       counts.agents = entries.filter(e => e.endsWith('.md')).length
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[marketplaces] agents count', err) }
   }
 
   const commandsDir = join(pluginDir, 'commands')
@@ -138,7 +142,7 @@ async function countElements(pluginDir: string): Promise<PluginStatus['elementCo
     try {
       const entries = await readdir(commandsDir)
       counts.commands = entries.filter(e => e.endsWith('.md')).length
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[marketplaces] commands count', err) }
   }
 
   const rulesDir = join(pluginDir, 'rules')
@@ -146,7 +150,7 @@ async function countElements(pluginDir: string): Promise<PluginStatus['elementCo
     try {
       const entries = await readdir(rulesDir)
       counts.rules = entries.filter(e => e.endsWith('.md')).length
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[marketplaces] rules count', err) }
   }
 
   if (existsSync(join(pluginDir, 'hooks'))) counts.hooks = 1
@@ -196,7 +200,7 @@ function detectPluginErrors(pluginDir: string, pluginName: string): string[] {
           }
         }
       }
-    } catch { /* ignore parse errors */ }
+    } catch (err) { console.error('[marketplaces] LSP parse', err) }
   }
 
   // Check MCP server executables
@@ -218,7 +222,7 @@ function detectPluginErrors(pluginDir: string, pluginName: string): string[] {
           }
         }
       }
-    } catch { /* ignore parse errors */ }
+    } catch (err) { console.error('[marketplaces] MCP parse', err) }
   }
 
   // Check hook scripts exist
@@ -238,7 +242,7 @@ function detectPluginErrors(pluginDir: string, pluginName: string): string[] {
           }
         }
       }
-    } catch { /* ignore parse errors */ }
+    } catch (err) { console.error('[marketplaces] hooks parse', err) }
   }
 
   return errors
@@ -312,7 +316,7 @@ export async function GET() {
               const { execSync } = await import('child_process')
               const gitUrl = execSync(`git -C "${mktPath}" remote get-url origin 2>/dev/null`, { timeout: 3000 }).toString().trim()
               if (gitUrl) sourceUrl = gitUrl.replace(/\.git$/, '').replace(/^git@github\.com:/, 'https://github.com/')
-            } catch { /* no git remote — leave null */ }
+            } catch (err) { console.error('[marketplaces] git remote', err) }
           }
 
           // Extract description from top-level or metadata sub-object
@@ -467,7 +471,7 @@ export async function GET() {
                 const cloneVer = (cloneManifest?.version as string) || null
                 await buildPluginEntry(entry, cloneVer, null, null)
               }
-            } catch { /* ignore */ }
+            } catch (err) { console.error('[marketplaces] scan clone dir', err) }
           }
 
           // Source 3: Scan cache for installed plugins not found in sources 1-2
@@ -480,7 +484,7 @@ export async function GET() {
                 try { if (!(await stat(join(mktCacheDir, entry))).isDirectory()) continue } catch { continue }
                 await buildPluginEntry(entry, null, null, null)
               }
-            } catch { /* ignore */ }
+            } catch (err) { console.error('[marketplaces] scan cache dir', err) }
           }
 
           info.pluginCount = info.plugins.length
@@ -492,7 +496,7 @@ export async function GET() {
           })
           marketplaces.set(mktName, info)
         }
-      } catch { /* ignore */ }
+      } catch (err) { console.error('[marketplaces] marketplace scan', err) }
     }
 
     // Detect orphan plugins — enabled but not found in any marketplace
@@ -702,7 +706,7 @@ async function resolveCliMarketplaceName(dirName: string): Promise<string> {
       try {
         const manifest = JSON.parse(await readFile(p, 'utf-8'))
         if (manifest.name) return String(manifest.name)
-      } catch { /* continue */ }
+      } catch (err) { console.error('[marketplaces] resolve CLI name', err) }
     }
   }
   // Fallback: ask Claude CLI
@@ -720,7 +724,7 @@ async function resolveCliMarketplaceName(dirName: string): Promise<string> {
         }
       }
     }
-  } catch { /* fallback */ }
+  } catch (err) { console.error('[marketplaces] CLI marketplace list fallback', err) }
   return dirName // last resort: use directory name as-is
 }
 
@@ -732,7 +736,7 @@ async function handleEnable(pluginName: string, marketplaceName: string, pluginK
     try {
       execSync(`claude plugin enable "${shellSafe(key)}" --scope user 2>&1`, { timeout: 15000 })
       return NextResponse.json({ success: true, action: 'enable', pluginKey })
-    } catch { /* try next */ }
+    } catch (err) { console.error('[marketplaces] enable attempt', err) }
   }
   return NextResponse.json({ error: `Enable failed: plugin not found with any key format` }, { status: 500 })
 }
@@ -745,7 +749,7 @@ async function handleDisable(pluginName: string, marketplaceName: string, plugin
     try {
       execSync(`claude plugin disable "${shellSafe(key)}" --scope user 2>&1`, { timeout: 15000 })
       return NextResponse.json({ success: true, action: 'disable', pluginKey })
-    } catch { /* try next */ }
+    } catch (err) { console.error('[marketplaces] disable attempt', err) }
   }
   return NextResponse.json({ error: `Disable failed: plugin not found with any key format` }, { status: 500 })
 }
@@ -836,7 +840,7 @@ async function handleUninstall(pluginName: string, marketplaceName: string, plug
       execSync(`claude plugin uninstall "${shellSafe(key)}" --scope user 2>&1`, { timeout: 15000 })
       cliSucceeded = true
       break
-    } catch { /* try next key format */ }
+    } catch (err) { console.error('[marketplaces] uninstall attempt', err) }
   }
 
   // If CLI couldn't uninstall, this is a stale installation (installed via file copy, not CLI).
@@ -876,8 +880,9 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
     const { execSync } = await import('child_process')
     const cliName = await resolveCliMarketplaceName(marketplaceName)
     execSync(`claude plugin marketplace remove "${shellSafe(cliName)}" 2>&1`, { timeout: 15000 })
-  } catch {
+  } catch (err) {
     // CLI removal may fail if not registered — continue with file cleanup
+    console.error('[marketplaces] CLI marketplace remove', err)
   }
 
   // Remove clone dir
@@ -966,7 +971,7 @@ async function handleCheckUpdates(marketplaceName?: string, force?: boolean) {
           remoteData = await res.json() as Record<string, unknown>
           break
         }
-      } catch { /* try next */ }
+      } catch (err) { console.error('[marketplaces] fetch remote version', err) }
     }
     if (remoteData) break
   }
@@ -1010,7 +1015,7 @@ async function handleCheckUpdates(marketplaceName?: string, force?: boolean) {
         const ver = await getLatestVersion(join(mktCacheDir, plugName))
         if (ver) localPlugins[plugName] = ver
       }
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[marketplaces] local plugin versions', err) }
   }
 
   // Build comparison results
@@ -1063,7 +1068,7 @@ async function handleCheckUpdates(marketplaceName?: string, force?: boolean) {
           }
           return
         }
-      } catch { /* try next branch */ }
+      } catch (err) { console.error('[marketplaces] fetch plugin metadata', err) }
     }
     // Fallback: use whatever marketplace.json had
     if (pluginMktMeta[name]) {
@@ -1252,7 +1257,7 @@ async function handleSecurityCheck(pluginKey?: string) {
         const candidate = join(cpvCacheBase, latestVer, 'scripts', 'validate_security.py')
         if (existsSync(candidate)) scriptPath = candidate
       }
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[marketplaces] CPV script lookup', err) }
   }
 
   if (!scriptPath) {
@@ -1260,12 +1265,12 @@ async function handleSecurityCheck(pluginKey?: string) {
   }
 
   // Run the security check — report goes to a temp file, terminal gets severity counts
-  const { execSync } = await import('child_process')
+  const { execFileSync } = await import('child_process')
   const reportPath = join(os.tmpdir(), `security-report-${pluginName}-${Date.now()}.md`)
 
   try {
-    const output = execSync(
-      `uv run "${scriptPath}" "${pluginDir}" --report "${reportPath}"`,
+    const output = execFileSync(
+      'uv', ['run', scriptPath, pluginDir, '--report', reportPath],
       { timeout: 60000, stdio: 'pipe', cwd: join(cpvCacheBase, '..', '..', '..') }
     ).toString('utf8')
 

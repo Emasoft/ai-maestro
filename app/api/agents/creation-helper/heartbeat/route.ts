@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 
 export async function POST() {
   try {
-    heartbeatCreationHelper()
+    await heartbeatCreationHelper()
   } catch (error) {
     console.error('[heartbeat] heartbeatCreationHelper failed:', error)
     return NextResponse.json(

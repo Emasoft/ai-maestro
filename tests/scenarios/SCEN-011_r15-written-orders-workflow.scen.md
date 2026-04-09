@@ -3,15 +3,16 @@ number: 11
 name: R15 Written Orders Workflow
 version: "2.0"
 description: >
-  Tests R15 (Written Orders & GitHub Trail). Adds LoginGate authentication,
-  RBAC probes (no-self-modification, agent auth verification), COS immutability
-  probe (R4.7), kanban task creation for the team, DeleteTeam 8-gate pipeline
-  with governance password, and cemetery verification. Creates a MANAGER and a
-  full team, then sends a task to the MANAGER. Verifies that the MANAGER
-  produces written .md files from templates, and that inter-agent commands use
-  GitHub issue URLs instead of inline AMP content. Validates the paper trail
-  requirement and R16 (password never shared with agents).
-  Validates governance rules R4, R9, R12, R15, R16.
+  The user logs in, creates a MANAGER agent with a full team (COS, ARCHITECT,
+  ORCHESTRATOR, INTEGRATOR, MEMBER). They open the kanban board and create a
+  task. Then they launch the MANAGER's terminal session and send it a project
+  task. They observe the MANAGER delegate work to team agents via written .md
+  files (template-based orders) rather than inline messages. They verify the
+  MANAGER never shares the governance password with any agent and that all
+  delegation produces a paper trail. Finally, they delete the team and clean up.
+client: claude
+interhosts: false
+device: desktop
 subsystems:
   - governance
   - teams

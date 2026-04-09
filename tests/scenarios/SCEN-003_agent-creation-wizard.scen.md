@@ -3,16 +3,17 @@ number: 3
 name: Agent Creation Wizard with Title and Role-Plugin
 version: "2.0"
 description: >
-  Tests the agent creation wizard end-to-end: LoginGate authentication,
-  creating agents with specific governance titles (INTEGRATOR, MEMBER) and
-  verifying that role-plugins are auto-enforced for locked titles and
-  user-selectable for MEMBER. Creates a test team first, then creates two
-  agents via the wizard -- one INTEGRATOR (locked plugin) and one MEMBER
-  (with the default programmer plugin or a custom plugin if available).
-  Validates wizard flow, plugin auto-enforcement, profile panel display,
-  Config tab correctness, RBAC probes (no-self-modification), cemetery
-  verification after deletion, and the DeleteAgent 10-gate pipeline.
+  The user logs in, creates a test team, then opens the agent creation
+  wizard twice. First they create an INTEGRATOR agent — the wizard locks
+  the role-plugin with no dropdown choice. Then they create a MEMBER agent
+  — the wizard shows a dropdown if multiple plugins are compatible. After
+  each creation, they check the profile panel for correct title and the
+  Config tab for the installed plugin. They delete both agents through
+  the Danger Zone and confirm cemetery entries.
   Covers governance rules R4.4, R11, R12, R16.
+client: claude
+interhosts: false
+device: desktop
 subsystems:
   - governance (title assignment via wizard, RBAC)
   - role-plugins (auto-enforcement for locked titles, custom plugin selection)

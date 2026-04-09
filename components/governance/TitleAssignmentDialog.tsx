@@ -158,8 +158,8 @@ export default function TitleAssignmentDialog({
       .then(data => {
         const map = new Map<string, string>()
         for (const s of (data.sessions || [])) {
-          if (s.agentId && (s.label || s.name || s.alias)) {
-            map.set(s.agentId, s.label || s.name || s.alias)
+          if (s.agentId && (s.label || s.name)) {
+            map.set(s.agentId, s.label || s.name)
           }
         }
         setAgentNameMap(map)

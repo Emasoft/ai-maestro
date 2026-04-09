@@ -51,9 +51,9 @@ export async function GET(req: NextRequest) {
     if (!serverName) {
       return NextResponse.json({ error: 'server parameter required for mcp-tools action' }, { status: 400 })
     }
-    // Sanitize server name
+    // Sanitize server name — strip unsafe chars and block path traversal
     const safeName = serverName.replace(/[^a-zA-Z0-9._@:+-]/g, '')
-    if (!safeName) {
+    if (!safeName || safeName.includes('..')) {
       return NextResponse.json({ error: 'Invalid server name' }, { status: 400 })
     }
     const scriptPath = join(PROJECT_ROOT, 'scripts_dev', 'mcp_discovery.py')
@@ -61,7 +61,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'MCP discovery script not found' }, { status: 500 })
     }
     try {
-      const { execSync } = await import('child_process')
       const { dirname, join: pathJoin } = await import('path')
       const { writeFileSync, unlinkSync } = await import('fs')
       const pluginRoot = dirname(resolved)
@@ -75,9 +74,11 @@ export async function GET(req: NextRequest) {
 
       let output: string
       try {
-        output = execSync(
-          `uv run "${scriptPath}" "${tmpMcpJson}" "${safeName}" --json 2>/dev/null`,
-          { timeout: 30000, maxBuffer: 1024 * 1024, env: { ...process.env, CLAUDE_PLUGIN_ROOT: pluginRoot } }
+        const { execFileSync } = await import('child_process')
+        output = execFileSync(
+          'uv',
+          ['run', scriptPath, tmpMcpJson, safeName, '--json'],
+          { timeout: 30000, maxBuffer: 1024 * 1024, stdio: ['pipe', 'pipe', 'ignore'], env: { ...process.env, CLAUDE_PLUGIN_ROOT: pluginRoot } }
         ).toString()
       } finally {
         try { unlinkSync(tmpMcpJson) } catch { /* ignore */ }

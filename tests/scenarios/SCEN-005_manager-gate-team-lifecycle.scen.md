@@ -3,17 +3,17 @@ number: 5
 name: Manager Gate Team Lifecycle
 version: "2.0"
 description: >
-  Tests the MANAGER-gated team lifecycle end-to-end: LoginGate authentication,
-  verifying that teams cannot be created without a MANAGER (R9), assigning
-  MANAGER and observing team unblocking (R9.6), creating a team with auto-COS
-  (R1.3), adding agents with auto-MEMBER title and plugin install (R10, R11),
-  removing agents and title reversion, title-requires-team gate (Gate 9),
-  team deletion via DeleteTeam 8-gate pipeline with governance password,
-  MANAGER removal blocking cascade (R9.8), RBAC probes (no-self-modification,
-  wrong-role agent lifecycle denial), COS immutability probe (R4.7),
-  kanban task CRUD, cemetery verification after agent deletion,
-  and agent auth (mst_* session secrets).
-  Validates governance rules R1, R4, R9, R10, R11, R16.
+  The user logs in and tries to create a team, but sees it blocked because no
+  MANAGER exists on the host. They create a new agent, assign it the MANAGER
+  title with the governance password, and confirm that teams are now unblocked.
+  They create a team (a COS is auto-assigned), add several agents who receive
+  MEMBER titles and plugins automatically, and try to remove the COS (blocked).
+  They open the kanban board, create a task, then delete the team with the
+  governance password. Finally, they remove the MANAGER title and verify the
+  blocking cascade re-engages.
+client: claude
+interhosts: false
+device: desktop
 subsystems:
   - governance
   - teams

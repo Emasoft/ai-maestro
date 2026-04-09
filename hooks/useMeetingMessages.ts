@@ -37,6 +37,11 @@ export function useMeetingMessages({
   const seenCountRef = useRef(0)
   // Track pending setTimeout handles so they can be cancelled on unmount
   const pendingTimeoutsRef = useRef<Set<NodeJS.Timeout>>(new Set())
+  // Track messages length for markAsRead without causing re-creation
+  const messagesLengthRef = useRef(0)
+
+  // Keep messagesLengthRef in sync so markAsRead can read it without deps
+  useEffect(() => { messagesLengthRef.current = messages.length }, [messages.length])
 
   // Stabilize participantIds — only change when the sorted list actually changes
   const participantKey = useMemo(() => [...participantIds].sort().join(','), [participantIds])
@@ -69,14 +74,23 @@ export function useMeetingMessages({
       }))
 
       if (lastFetchRef.current && newMessages.length > 0) {
-        // Incremental: append new messages, replace optimistic ones
+        // Incremental: append new messages, remove only matched optimistic ones
         setMessages(prev => {
           const existingIds = new Set(prev.filter(m => !m.id.startsWith('optimistic-')).map(m => m.id))
           const toAdd = newMessages.filter(m => !existingIds.has(m.id))
           if (toAdd.length === 0) return prev
-          // Remove optimistic messages that now have real counterparts
-          const withoutOptimistic = prev.filter(m => !m.id.startsWith('optimistic-'))
-          return [...withoutOptimistic, ...toAdd]
+          // Build a set of fingerprints from incoming real messages to match
+          // against optimistic messages (subject + preview + recipient).
+          // Only optimistic messages with a matching real counterpart are removed.
+          const realFingerprints = new Set(
+            newMessages.map(m => `${m.subject}|${m.preview}|${m.to}`)
+          )
+          const withoutMatched = prev.filter(m => {
+            if (!m.id.startsWith('optimistic-')) return true
+            const fp = `${m.subject}|${m.preview}|${m.to}`
+            return !realFingerprints.has(fp)
+          })
+          return [...withoutMatched, ...toAdd]
         })
       } else if (!lastFetchRef.current) {
         // Initial fetch: replace all (including any optimistic)
@@ -88,8 +102,8 @@ export function useMeetingMessages({
         const latest = newMessages[newMessages.length - 1]
         lastFetchRef.current = latest.timestamp
       }
-    } catch {
-      // Silently fail on poll errors
+    } catch (err) {
+      console.error('[useMeetingMessages] Fetch failed:', err)
     }
   }, [meetingId, isActive, participantKey])
 
@@ -117,10 +131,17 @@ export function useMeetingMessages({
     }
   }, [meetingId, isActive, fetchMessages])
 
-  // Show a message optimistically before server confirms
-  const addOptimistic = useCallback((text: string, toAgent?: string) => {
+  // Remove optimistic message by ID (used for rollback on failure)
+  const removeOptimistic = useCallback((optimisticId: string) => {
+    setMessages(prev => prev.filter(m => m.id !== optimisticId))
+  }, [])
+
+  // Show a message optimistically before server confirms.
+  // Returns the optimistic ID so callers can roll back on failure.
+  const addOptimistic = useCallback((text: string, toAgent?: string): string => {
+    const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const optimistic: MeetingMessage = {
-      id: `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: optimisticId,
       from: 'maestro',
       fromAlias: 'Maestro',
       to: toAgent || 'all',
@@ -135,14 +156,15 @@ export function useMeetingMessages({
       displayFrom: 'Maestro',
     }
     setMessages(prev => [...prev, optimistic])
+    return optimisticId
   }, [meetingId])
 
   const sendToAgent = useCallback(async (agentId: string, message: string) => {
     if (!meetingId) return
     const pIds = stableParticipantIds.current
-    addOptimistic(message, agentId)
+    const optimisticId = addOptimistic(message, agentId)
     try {
-      await fetch('/api/messages', {
+      const res = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -164,21 +186,30 @@ export function useMeetingMessages({
           },
         }),
       })
+      if (!res.ok) {
+        // Server rejected — roll back the optimistic message
+        console.error('Failed to send message: server returned', res.status)
+        removeOptimistic(optimisticId)
+        return
+      }
     } catch (err) {
+      // Network error — roll back the optimistic message
       console.error('Failed to send message:', err)
+      removeOptimistic(optimisticId)
+      return
     }
     // Refresh after a short delay to let file I/O settle
     const t = setTimeout(() => { pendingTimeoutsRef.current.delete(t); fetchMessages() }, 300)
     pendingTimeoutsRef.current.add(t)
-  }, [meetingId, teamName, participantKey, fetchMessages, addOptimistic])
+  }, [meetingId, teamName, participantKey, fetchMessages, addOptimistic, removeOptimistic])
 
   const broadcastToAll = useCallback(async (message: string) => {
     if (!meetingId) return
     const pIds = stableParticipantIds.current
     // Show one optimistic message for the broadcast (not N copies)
-    addOptimistic(message)
+    const optimisticId = addOptimistic(message)
     // Send individual messages to each participant
-    await Promise.all(
+    const results = await Promise.all(
       pIds.map(agentId =>
         fetch('/api/messages', {
           method: 'POST',
@@ -201,17 +232,24 @@ export function useMeetingMessages({
               },
             },
           }),
-        }).catch(err => console.error(`Failed to send to ${agentId}:`, err))
+        })
+          .then(res => res.ok)
+          .catch(err => { console.error(`Failed to send to ${agentId}:`, err); return false })
       )
     )
+    // If ALL sends failed, roll back the optimistic message
+    if (results.every(ok => !ok)) {
+      removeOptimistic(optimisticId)
+      return
+    }
     // Refresh after a short delay to let file I/O settle
     const t = setTimeout(() => { pendingTimeoutsRef.current.delete(t); fetchMessages() }, 300)
     pendingTimeoutsRef.current.add(t)
-  }, [meetingId, teamName, participantKey, fetchMessages, addOptimistic])
+  }, [meetingId, teamName, participantKey, fetchMessages, addOptimistic, removeOptimistic])
 
   const markAsRead = useCallback(() => {
-    seenCountRef.current = messages.length
-  }, [messages.length])
+    seenCountRef.current = messagesLengthRef.current
+  }, [])
 
   const unreadCount = Math.max(0, messages.length - seenCountRef.current)
 

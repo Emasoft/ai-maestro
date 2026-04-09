@@ -106,6 +106,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ descriptions: {}, error: 'Failed to parse PSS binary output' }, { status: 500 })
     }
 
+    // Guard against non-array PSS output (e.g. object or primitive)
+    if (!Array.isArray(results)) {
+      console.error('PSS binary returned non-array JSON:', typeof results, stdout.slice(0, 200))
+      return NextResponse.json({ descriptions: {}, error: 'PSS binary returned unexpected format (expected array)' }, { status: 500 })
+    }
+
     // Build lookup map
     const descriptions: Record<string, { description: string; type: string; plugin: string | null }> = {}
     for (const item of results) {

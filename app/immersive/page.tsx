@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useAgents } from '@/hooks/useAgents'
-import type { UnifiedAgent } from '@/types/agent'
+import type { Agent } from '@/types/agent'
 
 // Import xterm CSS
 import '@xterm/xterm/css/xterm.css'
@@ -244,8 +244,8 @@ export default function ImmersivePage() {
   }, [onlineAgents, activeAgentId])
 
   // Get display name for an agent
-  const getAgentDisplayName = (agent: UnifiedAgent) => {
-    return agent.label || agent.name || agent.alias || agent.id
+  const getAgentDisplayName = (agent: Agent) => {
+    return agent.label || agent.name || agent.id
   }
 
   return (

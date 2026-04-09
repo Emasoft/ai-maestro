@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Team } from '@/types/team'
 
 interface UseTeamResult {
@@ -15,6 +15,11 @@ export function useTeam(teamId: string | null): UseTeamResult {
   const [team, setTeam] = useState<Team | null>(null)
   const [loading, setLoading] = useState(!!teamId)  // Start true only when teamId is provided, preventing "Team not found" flash
   const [error, setError] = useState<string | null>(null)
+  // BUG-2 fix: Track mount status to avoid React state updates after unmount
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    return () => { isMountedRef.current = false }
+  }, [])
 
   // MF-005: Accept optional AbortSignal to cancel stale fetches on unmount/teamId change
   const fetchTeam = useCallback(async (signal?: AbortSignal) => {
@@ -45,7 +50,10 @@ export function useTeam(teamId: string | null): UseTeamResult {
     const controller = new AbortController()
     setLoading(true)
     fetchTeam(controller.signal).finally(() => {
-      if (!controller.signal.aborted) setLoading(false)
+      // Always clear loading — skipping on abort traps UI in permanent loading state.
+      // The abort guard in fetchTeam's .then() already prevents stale data updates;
+      // loading=false is always safe and needed to unblock the UI.
+      setLoading(false)
     })
     return () => controller.abort()
   }, [teamId, fetchTeam])
@@ -79,10 +87,24 @@ export function useTeam(teamId: string | null): UseTeamResult {
       const data = await res.json()
       setTeam(data.team)
     } catch (err) {
-      await fetchTeam()  // Revert optimistic update on network error too
+      // BUG-1 fix: If fetchTeam() throws its own error, the original err would be masked
+      // and throw err would never execute. Swallow fetchTeam errors to guarantee propagation.
+      await fetchTeam().catch(() => {})  // Revert optimistic update; ignore revert failures
       throw err
     }
   }, [teamId, fetchTeam])
+
+  // CC-005: refreshTeam wraps fetchTeam with loading state for consistent UX
+  // Stable reference via useCallback — inline closures in the return object create new
+  // references every render, breaking React.memo on consumers of this hook
+  const refreshTeam = useCallback(async () => {
+    if (isMountedRef.current) setLoading(true)
+    try {
+      await fetchTeam()
+    } finally {
+      if (isMountedRef.current) setLoading(false)
+    }
+  }, [fetchTeam])
 
   return {
     team,
@@ -90,13 +112,8 @@ export function useTeam(teamId: string | null): UseTeamResult {
     error,
     updateTeam,
     // CC-005: refreshTeam wraps fetchTeam with loading state for consistent UX
-    refreshTeam: async () => {
-      setLoading(true)
-      try {
-        await fetchTeam()
-      } finally {
-        setLoading(false)
-      }
-    },
+    // BUG-2 fix: Guard setLoading with isMountedRef to prevent React warnings on unmounted component
+    // Wrapped in useCallback to provide a stable reference — inline closures break React.memo consumers
+    refreshTeam,
   }
 }

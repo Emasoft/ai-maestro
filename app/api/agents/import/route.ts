@@ -20,6 +20,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
+    // Reject oversized uploads to prevent DoS (max 10 MB)
+    if (file.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ error: 'File too large (max 10MB)' }, { status: 413 })
+    }
+
     let options: AgentImportOptions = {}
     if (optionsStr) {
       try { options = JSON.parse(optionsStr) } catch {
@@ -31,10 +36,9 @@ export async function POST(request: Request) {
 
     const result = await importAgent(buffer, options)
     if (result.error) {
-      // NT-014 fix: Remove unique || 500 fallback, consistent with other routes
-      return NextResponse.json({ error: result.error }, { status: result.status })
+      return NextResponse.json({ error: result.error }, { status: result.status || 500 })
     }
-    return NextResponse.json(result.data, { status: result.status })
+    return NextResponse.json(result.data, { status: result.status || 200 })
   } catch (error) {
     console.error('Failed to import agent:', error)
     return NextResponse.json(

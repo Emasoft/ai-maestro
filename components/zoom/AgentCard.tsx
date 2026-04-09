@@ -42,7 +42,7 @@ export default function AgentCard({
   const [isShuttingDown, setIsShuttingDown] = useState(false)
   const [showEmailPopup, setShowEmailPopup] = useState(false)
 
-  const displayName = agent.label || agent.name || agent.alias || 'Unnamed Agent'
+  const displayName = agent.label || agent.name || 'Unnamed Agent'
   const initials = displayName
     .split(/[\s-_]+/)
     .map(word => word[0])

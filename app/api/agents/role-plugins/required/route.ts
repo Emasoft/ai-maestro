@@ -14,6 +14,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'title parameter required' }, { status: 400 })
   }
 
-  const required = getRequiredPluginForTitle(title)
-  return NextResponse.json({ title, requiredPlugin: required })
+  try {
+    const required = await getRequiredPluginForTitle(title)
+    return NextResponse.json({ title, requiredPlugin: required })
+  } catch (error) {
+    console.error('[role-plugins/required] GET error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }

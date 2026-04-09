@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation'
 import { Plus, Video, ChevronRight, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import type { Meeting } from '@/types/team'
-import type { UnifiedAgent } from '@/types/agent'
+import type { Agent } from '@/types/agent'
 import MeetingCard from './MeetingCard'
 
 interface MeetingListViewProps {
-  agents: UnifiedAgent[]
+  agents: Agent[]
   searchQuery: string
 }
 
@@ -22,10 +22,11 @@ export default function MeetingListView({ agents, searchQuery }: MeetingListView
   const fetchMeetings = useCallback(async () => {
     try {
       const res = await fetch('/api/meetings')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setMeetings(data.meetings || [])
-    } catch {
-      // silent
+    } catch (err) {
+      console.error('[MeetingListView] fetchMeetings error:', err)
     } finally {
       setLoading(false)
     }
@@ -38,8 +39,9 @@ export default function MeetingListView({ agents, searchQuery }: MeetingListView
     return () => clearInterval(interval)
   }, [fetchMeetings])
 
-  const filtered = searchQuery.trim()
-    ? meetings.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const query = searchQuery.trim().toLowerCase()
+  const filtered = query
+    ? meetings.filter(m => m.name.toLowerCase().includes(query))
     : meetings
 
   const activeMeetings = filtered.filter(m => m.status === 'active')
@@ -51,25 +53,27 @@ export default function MeetingListView({ agents, searchQuery }: MeetingListView
 
   const handleEnd = async (meeting: Meeting) => {
     try {
-      await fetch(`/api/meetings/${meeting.id}`, {
+      const res = await fetch(`/api/meetings/${meeting.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'ended', endedAt: new Date().toISOString() }),
       })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setMeetings(prev => prev.map(m =>
         m.id === meeting.id ? { ...m, status: 'ended' as const, endedAt: new Date().toISOString() } : m
       ))
-    } catch {
-      // silent
+    } catch (err) {
+      console.error('[MeetingListView] handleEnd error:', err)
     }
   }
 
   const handleDelete = async (meeting: Meeting) => {
     try {
-      await fetch(`/api/meetings/${meeting.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/meetings/${meeting.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setMeetings(prev => prev.filter(m => m.id !== meeting.id))
-    } catch {
-      // silent
+    } catch (err) {
+      console.error('[MeetingListView] handleDelete error:', err)
     }
   }
 

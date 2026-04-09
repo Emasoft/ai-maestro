@@ -15,7 +15,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Zap, RefreshCw } from 'lucide-react'
 import ClientTabBar from './ClientTabBar'
 import ConvertButton from './ConvertButton'
-import { InstallConfirmDialog, ConflictErrorDialog, ConversionErrorDialog } from './ConversionDialogs'
+import { ConflictErrorDialog, ConversionErrorDialog } from './ConversionDialogs'
 import type { ProviderId } from '@/lib/converter/types'
 
 interface SkillInfo {
@@ -47,8 +47,6 @@ export default function SkillsSection({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Install dialog state
-  const [installDialog, setInstallDialog] = useState<{ skill: SkillInfo; destPath: string } | null>(null)
   const [conflictDialog, setConflictDialog] = useState<{ name: string; existingPath: string; sourcePath: string } | null>(null)
   const [errorDialog, setErrorDialog] = useState<{ name: string; error: string; sourcePath: string } | null>(null)
   const [notification, setNotification] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
@@ -134,41 +132,6 @@ export default function SkillsSection({
     onConverted?.(targetClient, elementName)
   }
 
-  const handleInstallClick = (skill: SkillInfo) => {
-    // TODO: resolve actual paths from API
-    setInstallDialog({
-      skill,
-      destPath: `~/.claude/skills/${skill.name}/SKILL.md`,
-    })
-  }
-
-  const handleInstallConfirm = async () => {
-    if (!installDialog) return
-    const { skill } = installDialog
-    setInstallDialog(null)
-
-    try {
-      const res = await fetch('/api/settings/global-elements/install-skill', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: skill.name, targetClient: activeClient }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        if (data.error?.includes('conflict') || data.error?.includes('already exists')) {
-          setConflictDialog({ name: skill.name, existingPath: data.error, sourcePath: skill.path || 'unknown' })
-        } else {
-          setErrorDialog({ name: skill.name, error: data.error, sourcePath: skill.path || 'unknown' })
-        }
-        return
-      }
-      showNotification(`Installed "${skill.name}" for ${activeClient}`, 'success')
-      fetchSkills(activeClient)
-      fetchCounts()
-    } catch (err) {
-      setErrorDialog({ name: skill.name, error: err instanceof Error ? err.message : 'Unknown', sourcePath: skill.path || '' })
-    }
-  }
 
   return (
     <div className="p-6 max-w-6xl">
@@ -250,17 +213,6 @@ export default function SkillsSection({
       )}
 
       {/* Dialogs */}
-      {installDialog && (
-        <InstallConfirmDialog
-          name={installDialog.skill.name}
-          sourcePath={installDialog.skill.path || 'plugin cache'}
-          destPath={installDialog.destPath}
-          client={activeClient}
-          scope="user"
-          onConfirm={handleInstallConfirm}
-          onCancel={() => setInstallDialog(null)}
-        />
-      )}
       {conflictDialog && (
         <ConflictErrorDialog
           name={conflictDialog.name}

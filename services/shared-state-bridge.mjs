@@ -54,14 +54,17 @@ export function broadcastStatusUpdate(sessionName, status, hookStatus, notificat
 
   // SF-039: Clean up dead/closed WebSocket subscribers during broadcast
   // to prevent memory leaks from accumulated stale connections.
+  // Snapshot the Set to guarantee stable traversal — another async handler
+  // (e.g. a WebSocket 'close' event) could mutate statusSubscribers mid-iteration.
   const dead = []
-  statusSubscribers.forEach(ws => {
+  const snapshot = [...statusSubscribers]
+  for (const ws of snapshot) {
     if (ws.readyState === 1) { // WebSocket.OPEN
-      ws.send(message)
+      try { ws.send(message) } catch { dead.push(ws) }
     } else {
       dead.push(ws)
     }
-  })
+  }
   for (const ws of dead) {
     statusSubscribers.delete(ws)
   }
@@ -86,14 +89,33 @@ export function broadcastGovernanceUpdate(agentId, newTitle) {
   })
 
   const dead = []
-  statusSubscribers.forEach(ws => {
+  const snapshot = [...statusSubscribers]
+  for (const ws of snapshot) {
     if (ws.readyState === 1) { // WebSocket.OPEN
-      ws.send(message)
+      try { ws.send(message) } catch { dead.push(ws) }
     } else {
       dead.push(ws)
     }
-  })
+  }
   for (const ws of dead) {
     statusSubscribers.delete(ws)
   }
 }
+
+// ---------------------------------------------------------------------------
+// SF-039b: Proactive dead WebSocket cleanup every 30s
+// During idle periods without broadcasts, closed WebSockets added by the
+// subscription handler would leak memory indefinitely. This interval
+// ensures stale connections are pruned even when no broadcasts occur.
+// ---------------------------------------------------------------------------
+setInterval(() => {
+  for (const ws of [...statusSubscribers]) {
+    if (ws.readyState !== 1) statusSubscribers.delete(ws)  // 1 = WebSocket.OPEN
+  }
+  for (const [agentId, clients] of companionClients) {
+    for (const ws of [...clients]) {
+      if (ws.readyState !== 1) clients.delete(ws)
+    }
+    if (clients.size === 0) companionClients.delete(agentId)
+  }
+}, 30_000)

@@ -26,19 +26,16 @@ export default function RingingAnimation({
   onAgentJoinedRef.current = onAgentJoined
   onAllJoinedRef.current = onAllJoined
 
-  // Capture agent IDs once on mount, shuffled for random join order
-  const agentIdsRef = useRef(() => {
+  useEffect(() => {
+    if (agents.length === 0) return
+
+    // Shuffle agent IDs for random join order (Fisher-Yates)
     const ids = agents.map(a => a.id)
-    // Fisher-Yates shuffle
     for (let i = ids.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
       ;[ids[i], ids[j]] = [ids[j], ids[i]]
     }
-    return ids
-  })
 
-  useEffect(() => {
-    const ids = agentIdsRef.current()
     const timers: ReturnType<typeof setTimeout>[] = []
 
     // Stagger agent joins with random delay variance
@@ -56,7 +53,7 @@ export default function RingingAnimation({
     }, totalTime))
 
     return () => timers.forEach(t => clearTimeout(t))
-  }, []) // Empty deps — runs once on mount, never re-runs
+  }, [agents]) // Re-run when agents prop changes
 
   return (
     <motion.div
@@ -87,7 +84,7 @@ export default function RingingAnimation({
         <div className="flex flex-wrap items-center justify-center gap-10 max-w-3xl">
           {agents.map((agent, index) => {
             const hasJoined = joinedAgentIds.includes(agent.id)
-            const displayName = agent.label || agent.name || agent.alias || ''
+            const displayName = agent.label || agent.name || ''
 
             return (
               <motion.div

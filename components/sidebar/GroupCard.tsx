@@ -4,11 +4,11 @@ import { useState } from 'react'
 import { Play, Pencil, Trash2, UsersRound } from 'lucide-react'
 import { formatDistanceToNow } from '@/lib/utils'
 import type { Group } from '@/types/group'
-import type { UnifiedAgent } from '@/types/agent'
+import type { Agent } from '@/types/agent'
 
 interface GroupCardProps {
   group: Group
-  agents: UnifiedAgent[]
+  agents: Agent[]
   onStartMeeting: (group: Group) => void
   onEdit: (group: Group) => void
   onDelete: (group: Group) => void
@@ -23,9 +23,9 @@ export default function GroupCard({ group, agents, onStartMeeting, onEdit, onDel
   const shown = subscriberAgents.slice(0, maxAvatars)
   const overflow = subscriberAgents.length - maxAvatars
 
-  const getInitials = (agent: UnifiedAgent | undefined) => {
+  const getInitials = (agent: Agent | undefined) => {
     if (!agent) return '?'
-    const name = agent.label || agent.name || agent.alias || '?'
+    const name = agent.label || agent.name || '?'
     return name.slice(0, 2).toUpperCase()
   }
 

@@ -17,7 +17,8 @@ export async function POST(request: NextRequest) {
   }
   const result = await triggerMeshSync()
   if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+    console.error('[hosts/sync POST] Sync error:', result.error)
+    return NextResponse.json({ error: 'Sync failed' }, { status: result.status })
   }
   return NextResponse.json(result.data, { status: result.status })
 }
@@ -34,7 +35,8 @@ export async function GET(request: NextRequest) {
   }
   const result = await getMeshStatus()
   if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+    console.error('[hosts/sync GET] Status error:', result.error)
+    return NextResponse.json({ error: 'Sync failed' }, { status: result.status })
   }
   return NextResponse.json(result.data, { status: result.status })
 }

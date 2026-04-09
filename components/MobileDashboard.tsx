@@ -67,7 +67,7 @@ export default function MobileDashboard({
 
   // Get display name for an agent
   const getAgentDisplayName = (agent: Agent) => {
-    return agent.label || agent.name || agent.alias || agent.id
+    return agent.label || agent.name || agent.id
   }
 
   // Format display as agent@host
@@ -220,8 +220,8 @@ export default function MobileDashboard({
                   agentId={agent.id}
                   allAgents={onlineAgents.map(a => ({
                     id: a.id,
-                    name: a.name || a.alias || a.id,  // Technical name for lookups
-                    alias: a.label || a.name || a.alias || a.id,  // Display name for UI
+                    name: a.name || a.id,  // Technical name for lookups
+                    alias: a.label || a.name || a.id,  // Display name for UI
                     tmuxSessionName: a.session?.tmuxSessionName,
                     hostId: a.hostId
                   }))}

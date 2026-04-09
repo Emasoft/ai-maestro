@@ -11,7 +11,7 @@
 import { NextResponse } from 'next/server'
 import { readFile, readdir, stat } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import os from 'os'
 import semver from 'semver'
 
@@ -434,25 +434,35 @@ export async function GET() {
         } catch { /* ignore */ }
       }
 
+      // Path traversal guard: ensure resolved path stays under versionDir
+      const resolvedVersionDir = resolve(versionDir)
+      const safePath = (customPath: string): string | null => {
+        const resolved = resolve(versionDir, customPath)
+        if (!resolved.startsWith(resolvedVersionDir)) return null
+        return resolved
+      }
+
       // Scan for elements — use custom paths if declared, otherwise defaults
       const skillScanDirs = customSkillPaths.length > 0
-        ? customSkillPaths.map(p => join(versionDir, p))
+        ? customSkillPaths.map(safePath).filter((p): p is string => p !== null)
         : [join(versionDir, 'skills')]
       const agentScanDirs = customAgentPaths.length > 0
-        ? customAgentPaths.map(p => join(versionDir, p))
+        ? customAgentPaths.map(safePath).filter((p): p is string => p !== null)
         : [join(versionDir, 'agents')]
       const commandScanDirs = customCommandPaths.length > 0
-        ? customCommandPaths.map(p => join(versionDir, p))
+        ? customCommandPaths.map(safePath).filter((p): p is string => p !== null)
         : [join(versionDir, 'commands')]
       const ruleScanDirs = customRulePaths.length > 0
-        ? customRulePaths.map(p => join(versionDir, p))
+        ? customRulePaths.map(safePath).filter((p): p is string => p !== null)
         : [join(versionDir, 'rules')]
 
       // Scan all directories (custom + defaults) and merge results
       // Custom paths may point directly to a skill dir (with SKILL.md) or to a parent dir containing skill subdirs
       const skillResults: ElementInfo[][] = []
       for (const d of skillScanDirs) {
-        const fullPath = existsSync(d) ? d : join(versionDir, d)
+        const fullPath = existsSync(d) ? d : resolve(versionDir, d)
+        // Path traversal guard: skip paths that escape the plugin version directory
+        if (!fullPath.startsWith(resolvedVersionDir)) continue
         if (!existsSync(fullPath)) continue
         // If path itself contains SKILL.md, it's a direct skill reference
         if (existsSync(join(fullPath, 'SKILL.md'))) {

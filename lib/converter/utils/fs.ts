@@ -105,17 +105,44 @@ export async function writeFile(filePath: string, content: string): Promise<void
   await fs.writeFile(filePath, content, 'utf-8')
 }
 
-/** Recursively copy a directory tree */
+/** Recursively copy a directory tree.
+ *  Throws on unexpected errors; returns silently when src does not exist (ENOENT)
+ *  so callers that copy optional directories don't need to pre-check. */
 export async function copyDir(src: string, dest: string): Promise<void> {
   await ensureDir(dest)
-  const entries = await fs.readdir(src, { withFileTypes: true })
+
+  let entries: import('fs').Dirent[]
+  try {
+    entries = await fs.readdir(src, { withFileTypes: true })
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code
+    // Source directory missing — nothing to copy
+    if (code === 'ENOENT') return
+    // Permission denied — surface a clear message
+    if (code === 'EACCES') {
+      throw new Error(`copyDir: permission denied reading source directory: ${src}`)
+    }
+    throw err
+  }
+
   for (const entry of entries) {
     const srcPath = path.join(src, entry.name)
     const destPath = path.join(dest, entry.name)
     if (entry.isDirectory()) {
       await copyDir(srcPath, destPath)
     } else {
-      await fs.copyFile(srcPath, destPath)
+      try {
+        await fs.copyFile(srcPath, destPath)
+      } catch (err: unknown) {
+        const code = (err as NodeJS.ErrnoException).code
+        // File removed between readdir and copyFile — skip it
+        if (code === 'ENOENT') continue
+        // Permission denied — surface a clear message
+        if (code === 'EACCES') {
+          throw new Error(`copyDir: permission denied copying ${srcPath} → ${destPath}`)
+        }
+        throw err
+      }
     }
   }
 }

@@ -8,23 +8,31 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: groupId } = await params
-
-  let body
   try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
-  }
+    const { id: groupId } = await params
 
-  const { agentId } = body
-  if (!agentId || typeof agentId !== 'string') {
-    return NextResponse.json({ error: 'agentId is required and must be a string' }, { status: 400 })
-  }
+    let body
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
 
-  const result = await subscribeAgent(groupId, agentId)
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: result.status })
+    const { agentId } = body
+    if (!agentId || typeof agentId !== 'string') {
+      return NextResponse.json({ error: 'agentId is required and must be a string' }, { status: 400 })
+    }
+
+    const result = await subscribeAgent(groupId, agentId)
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data)
+  } catch (error) {
+    console.error('Failed to subscribe agent to group:', error)
+    return NextResponse.json(
+      { error: `Failed to subscribe agent: ${(error as Error).message}` },
+      { status: 500 }
+    )
   }
-  return NextResponse.json(result.data)
 }

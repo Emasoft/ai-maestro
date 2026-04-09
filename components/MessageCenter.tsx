@@ -451,10 +451,10 @@ export default function MessageCenter({ sessionName, agentId, allAgents, hostUrl
     // Filter out current agent and match by alias or host
     const filtered = allAgents.filter(agent => {
       if (agent.id === agentId) return false
-      const aliasMatch = agent.alias.toLowerCase().includes(searchTerm)
+      const nameMatch = agent.name.toLowerCase().includes(searchTerm)
       const hostMatch = agent.hostId?.toLowerCase().includes(searchTerm)
-      const fullMatch = `${agent.alias}@${agent.hostId || 'unknown-host'}`.toLowerCase().includes(searchTerm)
-      return aliasMatch || hostMatch || fullMatch
+      const fullMatch = `${agent.name}@${agent.hostId || 'unknown-host'}`.toLowerCase().includes(searchTerm)
+      return nameMatch || hostMatch || fullMatch
     })
 
     setFilteredAgents(filtered)
@@ -510,7 +510,7 @@ export default function MessageCenter({ sessionName, agentId, allAgents, hostUrl
   const selectAgent = (agent: AgentRecipient) => {
     // Block selection of unreachable agents per governance policy
     if (reachableAgentIds !== null && !reachableAgentIds.includes(agent.id)) {
-      setGovernanceError(`Cannot message ${agent.alias} — agent is in a closed team you cannot reach`)
+      setGovernanceError(`Cannot message ${agent.name} — agent is in a closed team you cannot reach`)
       return
     }
     // Use technical name for messaging, include host for cross-host compatibility
@@ -525,7 +525,7 @@ export default function MessageCenter({ sessionName, agentId, allAgents, hostUrl
   const formatAgentDisplay = (agent: AgentRecipient) => {
     const hostId = agent.hostId || 'unknown-host'
     return {
-      primary: agent.alias,
+      primary: agent.name,
       secondary: `@${hostId}`,
       hasHost: !!agent.hostId
     }
@@ -562,9 +562,8 @@ export default function MessageCenter({ sessionName, agentId, allAgents, hostUrl
     // If it matches any agent in the list, it's not external
     const matchesAgent = allAgents.some(agent =>
       agent.name.toLowerCase() === toValue.toLowerCase() ||
-      agent.alias.toLowerCase() === toValue.toLowerCase() ||
-      `${agent.name}@${agent.hostId || 'unknown-host'}`.toLowerCase() === toValue.toLowerCase() ||
-      `${agent.alias}@${agent.hostId || 'unknown-host'}`.toLowerCase() === toValue.toLowerCase()
+      agent.name.toLowerCase() === toValue.toLowerCase() ||
+      `${agent.name}@${agent.hostId || 'unknown-host'}`.toLowerCase() === toValue.toLowerCase()
     )
     return !matchesAgent && toValue.length > 0
   }

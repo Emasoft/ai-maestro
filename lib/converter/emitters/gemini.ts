@@ -109,7 +109,10 @@ const geminiEmitter: Emitter = {
       }
     }
 
-    if (warnings.hasWarnings() && files.length > 0) files[0].warnings.push(...warnings.getWarnings())
+    if (warnings.hasWarnings() && files.length > 0) {
+      files[0].warnings ??= []
+      files[0].warnings.push(...warnings.getWarnings())
+    }
     return files
   },
 }

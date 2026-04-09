@@ -2331,7 +2331,7 @@ const routes: Route[] = [
         console.warn('[governance] Failed ChangeTitle for COS:', err instanceof Error ? err.message : err)
       }
 
-      sendJson(res, 200, { success: true, team: updated, chiefOfStaffName: agent.name || agent.alias })
+      sendJson(res, 200, { success: true, team: updated, chiefOfStaffName: agent.name })
     } catch (error) {
       // TeamValidationException carries the correct HTTP status code from business rule validation
       if (error instanceof TeamValidationException) {

@@ -35,6 +35,8 @@ export default function MeetingSidebar({
   const [wakingAgents, setWakingAgents] = useState<Set<string>>(new Set())
   const [hibernatingAgents, setHibernatingAgents] = useState<Set<string>>(new Set())
   const [wakeDialogAgent, setWakeDialogAgent] = useState<Agent | null>(null)
+  const [hibernateError, setHibernateError] = useState<string | null>(null)
+  const [wakeError, setWakeError] = useState<string | null>(null)
 
   const handleHibernate = async (agent: Agent, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -53,8 +55,8 @@ export default function MeetingSidebar({
         throw new Error(data.error || 'Failed to hibernate agent')
       }
     } catch (error) {
-      console.error('Failed to hibernate agent:', error)
-      alert(error instanceof Error ? error.message : 'Failed to hibernate agent')
+      console.error('[MeetingSidebar] Failed to hibernate agent:', error)
+      setHibernateError(error instanceof Error ? error.message : 'Failed to hibernate agent')
     } finally {
       setHibernatingAgents(prev => {
         const next = new Set(prev)
@@ -90,8 +92,8 @@ export default function MeetingSidebar({
 
       setWakeDialogAgent(null)
     } catch (error) {
-      console.error('Failed to wake agent:', error)
-      alert(error instanceof Error ? error.message : 'Failed to wake agent')
+      console.error('[MeetingSidebar] Failed to wake agent:', error)
+      setWakeError(error instanceof Error ? error.message : 'Failed to wake agent')
     } finally {
       setWakingAgents(prev => {
         const next = new Set(prev)
@@ -104,7 +106,7 @@ export default function MeetingSidebar({
   const handlePopOut = (agent: Agent, e: React.MouseEvent) => {
     e.stopPropagation()
     const url = `/zoom/agent?id=${encodeURIComponent(agent.id)}`
-    window.open(url, `agent-${agent.id}`, 'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no')
+    window.open(url, `agent-${agent.id}`, 'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no,noopener,noreferrer')
   }
 
   return (
@@ -138,7 +140,7 @@ export default function MeetingSidebar({
       }`}>
         {agents.map(agent => {
           const isActive = agent.id === activeAgentId
-          const displayName = agent.label || agent.name || agent.alias || agent.id.slice(0, 8)
+          const displayName = agent.label || agent.name || agent.id.slice(0, 8)
           const isOnline = agent.session?.status === 'online'
           const agentTasks = tasksByAgent[agent.id] || []
           const activeTaskCount = agentTasks.filter(t => t.status !== 'completed').length
@@ -313,7 +315,7 @@ export default function MeetingSidebar({
                   {displayName}
                 </span>
                 <span className="text-[10px] text-gray-500 truncate block">
-                  {agent.name || agent.alias}
+                  {agent.name}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -372,13 +374,31 @@ export default function MeetingSidebar({
         })}
       </div>
 
+      {/* Error banners for hibernate/wake failures */}
+      {hibernateError && (
+        <div className="px-2 py-1.5 bg-red-900/30 border-t border-red-800/50 flex items-center justify-between">
+          <p className="text-[11px] text-red-400 truncate">{hibernateError}</p>
+          <button onClick={() => setHibernateError(null)} className="text-red-400 hover:text-red-300 ml-1 flex-shrink-0">
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+      {wakeError && (
+        <div className="px-2 py-1.5 bg-red-900/30 border-t border-red-800/50 flex items-center justify-between">
+          <p className="text-[11px] text-red-400 truncate">{wakeError}</p>
+          <button onClick={() => setWakeError(null)} className="text-red-400 hover:text-red-300 ml-1 flex-shrink-0">
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
       {/* Wake Agent Dialog */}
       <WakeAgentDialog
         isOpen={wakeDialogAgent !== null}
         onClose={() => setWakeDialogAgent(null)}
         onConfirm={handleWakeConfirm}
         agentName={wakeDialogAgent?.name || wakeDialogAgent?.id || ''}
-        agentAlias={wakeDialogAgent?.label || wakeDialogAgent?.alias}
+        agentAlias={wakeDialogAgent?.label || wakeDialogAgent?.name}
       />
     </div>
   )

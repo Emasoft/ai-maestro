@@ -244,7 +244,7 @@ async function fetchLocalSessions(hostId: string): Promise<Session[]> {
           const agentData = JSON.parse(fs.readFileSync(path.join(agentsDir, file), 'utf8'))
           const hasSession = agentData.sessions && agentData.sessions.length > 0
           if (agentData.deployment?.type === 'cloud' && hasSession) {
-            const agentName = agentData.name || agentData.alias
+            const agentName = agentData.name
             if (agentName && !sessions.find(s => s.name === agentName)) {
               const activityTimestamp = sessionActivity.get(agentName)
               let status: 'active' | 'idle' | 'disconnected' = 'disconnected'
@@ -487,7 +487,7 @@ export async function getActivity(): Promise<Record<string, SessionActivityInfo>
   const sessionToWorkingDir = new Map<string, string>()
 
   for (const agent of agents) {
-    const sessionName = agent.name || agent.alias
+    const sessionName = agent.name
     const workingDir = agent.workingDirectory ||
                        agent.sessions?.[0]?.workingDirectory ||
                        agent.preferences?.defaultWorkingDirectory

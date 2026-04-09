@@ -37,6 +37,10 @@ export function useWebSocket({
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectAttemptsRef = useRef(0)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>()
+  // BUG-FIX: Track whether ws.onerror fired before ws.onclose.
+  // Without this, onclose always overwrites status to 'disconnected',
+  // masking the 'error' status set by onerror from the UI.
+  const lastErrorRef = useRef<Error | null>(null)
 
   // CRITICAL: Store callbacks in refs so WebSocket handlers always call the latest version.
   // Without this, the WebSocket's onmessage closure captures a stale onMessage callback
@@ -95,7 +99,10 @@ export function useWebSocket({
     // MF-025: Close any WebSocket still in CONNECTING state before creating a new one.
     // Without this, calling connect() while a previous WS is mid-handshake orphans the
     // old instance — it stays alive, fires handlers, but wsRef no longer points to it.
+    // BUG-FIX: Null out onclose BEFORE close() to prevent the old instance's onclose from
+    // firing asynchronously and triggering duplicate reconnection logic.
     if (wsRef.current?.readyState === WebSocket.CONNECTING) {
+      wsRef.current.onclose = null
       wsRef.current.close()
       wsRef.current = null
     }
@@ -110,6 +117,7 @@ export function useWebSocket({
         setIsConnected(true)
         setStatus('connected')
         setConnectionError(null)
+        lastErrorRef.current = null
         reconnectAttemptsRef.current = 0
         onOpenRef.current?.()
       }
@@ -148,14 +156,21 @@ export function useWebSocket({
 
       ws.onerror = (error) => {
         console.error('WebSocket error:', error)
-        setConnectionError(new Error('WebSocket connection error'))
+        const err = new Error(`WebSocket error: ${(error as Event).type || 'unknown'}`)
+        lastErrorRef.current = err
+        setConnectionError(err)
         setStatus('error')
         onErrorRef.current?.(error)
       }
 
       ws.onclose = (event) => {
         setIsConnected(false)
-        setStatus('disconnected')
+        // BUG-FIX: If onerror fired just before onclose, preserve 'error' status
+        // so the UI can distinguish connection errors from clean disconnects.
+        if (!lastErrorRef.current) {
+          setStatus('disconnected')
+        }
+        lastErrorRef.current = null
         onCloseRef.current?.()
 
         // Close code 4000 = permanent failure, don't retry (e.g., remote host unreachable after retries)
@@ -199,6 +214,11 @@ export function useWebSocket({
     reconnectAttemptsRef.current = 0
 
     if (wsRef.current) {
+      // BUG-FIX: Null out onclose BEFORE close() so the asynchronous onclose handler
+      // cannot fire after disconnect() returns. Without this, close() triggers onclose
+      // which schedules a reconnection setTimeout that nobody clears — causing a new
+      // WebSocket to open after the component has unmounted.
+      wsRef.current.onclose = null
       wsRef.current.close()
       wsRef.current = null
     }

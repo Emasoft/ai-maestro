@@ -4,11 +4,11 @@ import { useState } from 'react'
 import { Play, Pencil, Trash2 } from 'lucide-react'
 import { formatDistanceToNow } from '@/lib/utils'
 import type { Team } from '@/types/team'
-import type { UnifiedAgent } from '@/types/agent'
+import type { Agent } from '@/types/agent'
 
 interface TeamCardProps {
   team: Team
-  agents: UnifiedAgent[]
+  agents: Agent[]
   onStartMeeting: (team: Team) => void
   onEdit: (team: Team) => void
   onDelete: (team: Team) => void
@@ -23,9 +23,9 @@ export default function TeamCard({ team, agents, onStartMeeting, onEdit, onDelet
   const shown = memberAgents.slice(0, maxAvatars)
   const overflow = memberAgents.length - maxAvatars
 
-  const getInitials = (agent: UnifiedAgent | undefined) => {
+  const getInitials = (agent: Agent | undefined) => {
     if (!agent) return '?'
-    const name = agent.label || agent.name || agent.alias || '?'
+    const name = agent.label || agent.name || '?'
     return name.slice(0, 2).toUpperCase()
   }
 

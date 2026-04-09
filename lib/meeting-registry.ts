@@ -39,7 +39,7 @@ function pruneOldEnded(meetings: Meeting[]): Meeting[] {
  * Pruning is done inside saveMeetings() instead, so it happens atomically
  * with every write under the lock.
  */
-export function loadMeetings(): Meeting[] {
+export function loadMeetings(): Meeting[] | null {
   try {
     ensureTeamsDir()
     if (!fs.existsSync(MEETINGS_FILE)) {
@@ -49,8 +49,11 @@ export function loadMeetings(): Meeting[] {
     const parsed: MeetingsFile = JSON.parse(data)
     return Array.isArray(parsed.meetings) ? parsed.meetings : []
   } catch (error) {
+    // Return null on read/parse errors so callers can distinguish "no file"
+    // (empty array) from "corrupt/unreadable file" (null) and avoid
+    // overwriting the file with an empty array — which would cause data loss.
     console.error('Failed to load meetings:', error)
-    return []
+    return null
   }
 }
 
@@ -74,6 +77,7 @@ export function saveMeetings(meetings: Meeting[]): boolean {
 
 export function getMeeting(id: string): Meeting | null {
   const meetings = loadMeetings()
+  if (!meetings) return null
   return meetings.find(m => m.id === id) || null
 }
 
@@ -86,6 +90,9 @@ export async function createMeeting(data: {
 }): Promise<Meeting> {
   return withLock('meetings', () => {
   const meetings = loadMeetings()
+  if (!meetings) {
+    throw new Error('Failed to load meetings file — refusing to create meeting to avoid data loss')
+  }
   const now = new Date().toISOString()
 
   const meeting: Meeting = {
@@ -103,7 +110,9 @@ export async function createMeeting(data: {
   }
 
   meetings.push(meeting)
-  saveMeetings(meetings)
+  if (!saveMeetings(meetings)) {
+    throw new Error('Failed to save meetings file')
+  }
   return meeting
   }) // end withLock('meetings')
 }
@@ -114,6 +123,9 @@ export async function updateMeeting(
 ): Promise<Meeting | null> {
   return withLock('meetings', () => {
   const meetings = loadMeetings()
+  if (!meetings) {
+    throw new Error('Failed to load meetings file — refusing to update meeting to avoid data loss')
+  }
   const index = meetings.findIndex(m => m.id === id)
   if (index === -1) return null
 
@@ -127,7 +139,9 @@ export async function updateMeeting(
     ...cleanUpdates,
   }
 
-  saveMeetings(meetings)
+  if (!saveMeetings(meetings)) {
+    throw new Error('Failed to save meetings file')
+  }
   return meetings[index]
   }) // end withLock('meetings')
 }
@@ -135,9 +149,14 @@ export async function updateMeeting(
 export async function deleteMeeting(id: string): Promise<boolean> {
   return withLock('meetings', () => {
   const meetings = loadMeetings()
+  if (!meetings) {
+    throw new Error('Failed to load meetings file — refusing to delete meeting to avoid data loss')
+  }
   const filtered = meetings.filter(m => m.id !== id)
   if (filtered.length === meetings.length) return false
-  saveMeetings(filtered)
+  if (!saveMeetings(filtered)) {
+    throw new Error('Failed to save meetings file')
+  }
   return true
   }) // end withLock('meetings')
 }

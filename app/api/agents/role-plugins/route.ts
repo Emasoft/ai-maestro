@@ -65,6 +65,11 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'name query parameter is required' }, { status: 400 })
   }
 
+  // Guard: reject path traversal and shell metacharacters in plugin name
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+    return NextResponse.json({ error: 'Invalid plugin name — only alphanumeric, hyphens, and underscores allowed' }, { status: 400 })
+  }
+
   // Guard: prevent deletion of default marketplace role plugins
   if (Object.keys(PREDEFINED_ROLE_PLUGINS).includes(name)) {
     return NextResponse.json({ error: 'Cannot delete default marketplace role plugins' }, { status: 403 })

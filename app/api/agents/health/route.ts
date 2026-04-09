@@ -28,16 +28,22 @@ export async function POST(request: Request) {
       }
       // SF-013 fix: Block private/internal IPs to prevent SSRF probing
       const hostname = parsed.hostname.toLowerCase()
+      // SEC: Block all private, loopback, link-local, and reserved IP ranges.
+      // Covers 127.0.0.0/8, 0.0.0.0/8, 10.0.0.0/8, 172.16-31.x.x, 192.168.x.x,
+      // 169.254.x.x, fc00::/7 (fc + fd prefixes), fe80::/10, ::1, and
+      // special hostnames (.local, .internal, localhost).
       const isPrivateHost =
         hostname === 'localhost' ||
-        hostname === '127.0.0.1' ||
+        hostname === '[::1]' ||
         hostname === '::1' ||
+        hostname.startsWith('127.') ||
+        hostname.startsWith('0.') ||
         hostname === '0.0.0.0' ||
         hostname.startsWith('10.') ||
         hostname.startsWith('192.168.') ||
         hostname.startsWith('169.254.') ||
-        hostname.startsWith('fc00:') ||
-        /^fd[0-9a-f]{2}:/.test(hostname) ||
+        hostname.startsWith('fc') ||
+        hostname.startsWith('fd') ||
         hostname.startsWith('fe80:') ||
         /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
         hostname.endsWith('.local') ||

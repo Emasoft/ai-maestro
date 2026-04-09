@@ -7,7 +7,7 @@
  * are indexed — normal plugins are excluded (too many to scan).
  *
  * Query parameters:
- *   ?filter=<regex>     — Filter by agent name or plugin name (case-insensitive)
+ *   ?filter=<string>    — Filter by agent name or plugin name (case-insensitive substring match)
  *   ?plugin=<name>      — Find all agents that have a specific role-plugin installed
  *   ?scope=local|user   — Filter by install scope (default: both)
  *   ?agentId=<uuid>     — Show role-plugins for a specific agent only
@@ -101,17 +101,8 @@ export async function GET(req: NextRequest) {
     const scopeParam = req.nextUrl.searchParams.get('scope') as 'local' | 'user' | null
     const agentIdParam = req.nextUrl.searchParams.get('agentId')
 
-    let filterRegex: RegExp | null = null
-    if (filterParam) {
-      try {
-        filterRegex = new RegExp(filterParam, 'i')
-      } catch {
-        return NextResponse.json(
-          { error: `Invalid regex filter: "${filterParam}"` },
-          { status: 400 },
-        )
-      }
-    }
+    // Use safe case-insensitive string match instead of user-controlled regex (ReDoS prevention)
+    const filterLower = filterParam ? filterParam.toLowerCase() : null
 
     // 1. Scan user-scope settings for role-plugins (should be empty — flag if found)
     const userSettingsPath = join(HOME, '.claude', 'settings.json')
@@ -183,10 +174,10 @@ export async function GET(req: NextRequest) {
         warnings,
       }
 
-      // Apply filters
-      if (filterRegex) {
-        const searchStr = `${agent.name} ${agent.label || ''} ${rolePlugin?.name || ''}`
-        if (!filterRegex.test(searchStr)) continue
+      // Apply filters — safe string match (no user-controlled regex)
+      if (filterLower) {
+        const searchStr = `${agent.name} ${agent.label || ''} ${rolePlugin?.name || ''}`.toLowerCase()
+        if (!searchStr.includes(filterLower)) continue
       }
       if (pluginParam && rolePlugin?.name !== pluginParam) continue
       if (scopeParam && rolePlugin?.scope !== scopeParam) continue

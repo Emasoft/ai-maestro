@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { scanRepo } from '@/services/plugin-builder-service'
+import { validateExternalUrl } from '@/lib/url-validation'
 
 export async function POST(request: NextRequest) {
   // SF-004: Separate JSON parsing from service call so service errors
@@ -31,6 +32,15 @@ export async function POST(request: NextRequest) {
   if (!body.url || typeof body.url !== 'string') {
     return NextResponse.json(
       { error: 'Repository URL is required' },
+      { status: 400 }
+    )
+  }
+
+  // SSRF protection: reject non-HTTPS, localhost, and private IP targets
+  const urlError = validateExternalUrl(body.url)
+  if (urlError) {
+    return NextResponse.json(
+      { error: `Invalid repository URL: ${urlError}` },
       { status: 400 }
     )
   }

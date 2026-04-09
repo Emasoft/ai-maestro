@@ -12,7 +12,8 @@ export async function GET() {
     const result = await listRestorableSessions()
     return NextResponse.json(result)
   } catch (error) {
-    console.error('Failed to load restorable sessions:', error)
+    const errMsg = error instanceof Error ? error.message : String(error)
+    console.error('Failed to load restorable sessions:', errMsg)
     return NextResponse.json({ error: 'Failed to load restorable sessions' }, { status: 500 })
   }
 }
@@ -29,6 +30,14 @@ export async function POST(request: Request) {
     }
     const { sessionId, all } = body
 
+    // Validate types: sessionId must be string if provided, all must be boolean if provided
+    if (sessionId !== undefined && typeof sessionId !== 'string') {
+      return NextResponse.json({ error: 'Invalid sessionId — must be a string' }, { status: 400 })
+    }
+    if (all !== undefined && typeof all !== 'boolean') {
+      return NextResponse.json({ error: 'Invalid all — must be a boolean' }, { status: 400 })
+    }
+
     const result = await restoreSessions({ sessionId, all })
 
     if (result.error) {
@@ -37,7 +46,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, ...result.data }, { status: result.status })
   } catch (error) {
-    console.error('Failed to restore sessions:', error)
+    const errMsg = error instanceof Error ? error.message : String(error)
+    console.error('Failed to restore sessions:', errMsg)
     return NextResponse.json({ error: 'Failed to restore sessions' }, { status: 500 })
   }
 }
@@ -59,7 +69,8 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
-    console.error('Failed to delete persisted session:', error)
+    const errMsg = error instanceof Error ? error.message : String(error)
+    console.error('Failed to delete persisted session:', errMsg)
     return NextResponse.json({ error: 'Failed to delete session' }, { status: 500 })
   }
 }

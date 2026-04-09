@@ -3,15 +3,16 @@ number: 6
 name: Manager Gate Team Lifecycle (Codex Client)
 version: "3.0"
 description: >
-  Variant of SCEN-005 that uses Codex as the AI client for team member agents.
-  Tests the MANAGER-gated team lifecycle with LoginGate authentication, cross-client
-  plugin conversion, RBAC probes (no-self-modification, wrong-role denial),
-  COS immutability (R4.7), cemetery verification, and the DeleteTeam 8-gate
-  pipeline with governance password. The MANAGER agent remains Claude Code
-  (host-level), and the auto-COS agent is created by the server with
-  program='claude' (default). Team member agents are created with Codex client
-  and receive converted plugins. Validates governance rules R4, R9, R10, R11,
-  R16 plus cross-client conversion for Codex targets.
+  The user logs in, confirms no MANAGER exists, then creates a Claude agent and
+  assigns it the MANAGER title. They create a team, then add a new agent using
+  the Codex client. They open the Codex agent's Config tab and verify the plugin
+  was automatically converted to Codex format. They check that the Codex MEMBER
+  cannot change its own title (RBAC), confirm the COS title cannot be reassigned,
+  and finally delete the team with the governance password and clean up all test
+  agents.
+client: [claude, codex]
+interhosts: false
+device: desktop
 subsystems:
   - governance
   - teams

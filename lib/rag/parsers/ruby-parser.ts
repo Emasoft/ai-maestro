@@ -99,7 +99,9 @@ export function parseRubyFile(filePath: string, content: string, projectPath: st
   const classes: ParsedClass[] = []
   const imports: ParsedImport[] = []
 
-  // Track current class/module context
+  // Track current class/module context with a stack so nested class/module
+  // definitions correctly restore the outer context when `end` is reached.
+  const classStack: { name: string; indent: number }[] = []
   let currentClass: string | null = null
   const lines = content.split('\n')
   let inClass = false
@@ -134,6 +136,10 @@ export function parseRubyFile(filePath: string, content: string, projectPath: st
     // Check for class definition
     const classMatch = /^(\s*)class\s+([A-Z][a-zA-Z0-9_]*)\s*(?:<\s*([A-Z][a-zA-Z0-9_:]*))?/.exec(line)
     if (classMatch) {
+      // Push outer context before overwriting
+      if (inClass && currentClass !== null) {
+        classStack.push({ name: currentClass, indent: classIndent })
+      }
       currentClass = classMatch[2]
       inClass = true
       classIndent = classMatch[1].length
@@ -164,6 +170,10 @@ export function parseRubyFile(filePath: string, content: string, projectPath: st
     // Check for module definition
     const moduleMatch = /^(\s*)module\s+([A-Z][a-zA-Z0-9_]*)/.exec(line)
     if (moduleMatch) {
+      // Push outer context before overwriting
+      if (inClass && currentClass !== null) {
+        classStack.push({ name: currentClass, indent: classIndent })
+      }
       currentClass = moduleMatch[2]
       inClass = true
       classIndent = moduleMatch[1].length
@@ -217,10 +227,17 @@ export function parseRubyFile(filePath: string, content: string, projectPath: st
       }
     }
 
-    // Check for end of class/module
+    // Check for end of class/module — pop the stack to restore outer context
     if (inClass && /^\s*end\s*$/.test(line) && indent <= classIndent) {
-      inClass = false
-      currentClass = null
+      const outer = classStack.pop()
+      if (outer) {
+        currentClass = outer.name
+        classIndent = outer.indent
+        // inClass stays true — we're still inside the outer class/module
+      } else {
+        inClass = false
+        currentClass = null
+      }
     }
 
     // Check for method definition

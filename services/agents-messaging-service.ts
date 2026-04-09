@@ -127,7 +127,7 @@ async function federatedEmailLookup(
         localIndex = {
           [matchingAddr.address.toLowerCase()]: {
             agentId: agent.id,
-            agentName: agent.name || agent.alias || 'unknown',
+            agentName: agent.name || 'unknown',
             hostId: agent.hostId || selfHostId,
             hostUrl: selfUrl,
             displayName: matchingAddr.displayName,
@@ -377,7 +377,7 @@ export function listAMPAddresses(agentId: string): ServiceResult<any> {
     const addresses = getAgentAMPAddresses(agentId)
 
     return {
-      data: { agentId: agent.id, agentName: agent.name || agent.alias, addresses },
+      data: { agentId: agent.id, agentName: agent.name, addresses },
       status: 200
     }
   } catch (error) {
@@ -414,7 +414,7 @@ export async function addAMPAddressToAgent(
     const addresses = getAgentAMPAddresses(agentId)
 
     return {
-      data: { agentId: agent.id, agentName: agent.name || agent.alias, addresses },
+      data: { agentId: agent.id, agentName: agent.name, addresses },
       status: 201
     }
   } catch (error) {
@@ -452,7 +452,7 @@ export function getAMPAddress(agentId: string, address: string): ServiceResult<a
     }
 
     return {
-      data: { agentId: agent.id, agentName: agent.name || agent.alias, address: found },
+      data: { agentId: agent.id, agentName: agent.name, address: found },
       status: 200
     }
   } catch (error) {
@@ -478,7 +478,7 @@ export async function updateAMPAddressOnAgent(
     const addresses = getAgentAMPAddresses(agentId)
 
     return {
-      data: { agentId: agent.id, agentName: agent.name || agent.alias, addresses },
+      data: { agentId: agent.id, agentName: agent.name, addresses },
       status: 200
     }
   } catch (error) {
@@ -499,7 +499,7 @@ export async function removeAMPAddressFromAgent(agentId: string, address: string
     const addresses = getAgentAMPAddresses(agentId)
 
     return {
-      data: { agentId: agent.id, agentName: agent.name || agent.alias, addresses },
+      data: { agentId: agent.id, agentName: agent.name, addresses },
       status: 200
     }
   } catch (error) {
@@ -526,7 +526,7 @@ export function listEmailAddresses(agentId: string): ServiceResult<any> {
     const addresses = getAgentEmailAddresses(agentId)
 
     return {
-      data: { agentId: agent.id, agentName: agent.name || agent.alias, addresses },
+      data: { agentId: agent.id, agentName: agent.name, addresses },
       status: 200
     }
   } catch (error) {
@@ -557,7 +557,7 @@ export async function addEmailAddressToAgent(
     const normalizedAddress = body.address.toLowerCase().trim()
     emitEmailChanged(
       agent.id,
-      agent.name || agent.alias || 'unknown',
+      agent.name || 'unknown',
       agent.hostId || 'local',
       [normalizedAddress],
       [],
@@ -565,7 +565,7 @@ export async function addEmailAddressToAgent(
     ).catch(err => console.error('[Webhook] Failed to emit email change:', err))
 
     return {
-      data: { agentId: agent.id, agentName: agent.name || agent.alias, addresses },
+      data: { agentId: agent.id, agentName: agent.name, addresses },
       status: 201
     }
   } catch (error) {
@@ -608,7 +608,7 @@ export function getEmailAddressDetail(agentId: string, address: string): Service
     }
 
     return {
-      data: { agentId: agent.id, agentName: agent.name || agent.alias, address: found },
+      data: { agentId: agent.id, agentName: agent.name, address: found },
       status: 200
     }
   } catch (error) {
@@ -634,7 +634,7 @@ export async function updateEmailAddressOnAgent(
     const addresses = getAgentEmailAddresses(agentId)
 
     return {
-      data: { agentId: agent.id, agentName: agent.name || agent.alias, addresses },
+      data: { agentId: agent.id, agentName: agent.name, addresses },
       status: 200
     }
   } catch (error) {
@@ -658,7 +658,7 @@ export async function removeEmailAddressFromAgent(agentId: string, address: stri
     // Emit webhook event (fire and forget)
     emitEmailChanged(
       agent.id,
-      agent.name || agent.alias || 'unknown',
+      agent.name || 'unknown',
       agent.hostId || 'local',
       [],
       [normalizedEmail],
@@ -666,7 +666,7 @@ export async function removeEmailAddressFromAgent(agentId: string, address: stri
     ).catch(err => console.error('[Webhook] Failed to emit email change:', err))
 
     return {
-      data: { agentId: agent.id, agentName: agent.name || agent.alias, addresses },
+      data: { agentId: agent.id, agentName: agent.name, addresses },
       status: 200
     }
   } catch (error) {
@@ -724,7 +724,7 @@ export async function queryEmailIndex(
       const result: EmailIndexResponse = {
         [matchingAddr.address.toLowerCase()]: {
           agentId: agent.id,
-          agentName: agent.name || agent.alias || 'unknown',
+          agentName: agent.name || 'unknown',
           hostId: agent.hostId || 'local',
           hostUrl: getPublicUrl(),
           displayName: matchingAddr.displayName,
@@ -750,7 +750,7 @@ export async function queryEmailIndex(
       for (const addr of addresses) {
         result[addr.address.toLowerCase()] = {
           agentId: agent.id,
-          agentName: agent.name || agent.alias || 'unknown',
+          agentName: agent.name || 'unknown',
           hostId: agent.hostId || 'local',
           hostUrl,
           displayName: addr.displayName,

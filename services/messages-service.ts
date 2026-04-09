@@ -94,10 +94,10 @@ export async function getMessages(params: GetMessagesParams): Promise<ServiceRes
 
     const results = matches.map(agent => ({
       agentId: agent.id,
-      alias: agent.alias || agent.name,
+      alias: agent.name,
       name: agent.name,
       label: agent.label,
-      displayName: agent.label || agent.alias || agent.name,
+      displayName: agent.label || agent.name,
       hostId: selfHostId,
       hostUrl: selfHost?.url || `http://localhost:23000`,
     }))
@@ -452,7 +452,11 @@ export async function getMeetingMessages(
 // ---------------------------------------------------------------------------
 
 export function listMeetings(statusFilter?: string | null): ServiceResult<{ meetings: any[] }> {
-  let meetings = loadMeetings()
+  const loaded = loadMeetings()
+  if (!loaded) {
+    return { error: 'Failed to load meetings file', status: 500 }
+  }
+  let meetings = loaded
   if (statusFilter) {
     meetings = meetings.filter(m => m.status === statusFilter)
   }

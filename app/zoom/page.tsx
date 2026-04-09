@@ -91,13 +91,11 @@ export default function ZoomPage() {
     return selectableAgents.filter(agent => {
       const name = (agent.name || '').toLowerCase()
       const label = (agent.label || '').toLowerCase()
-      const alias = (agent.alias || '').toLowerCase()
       const tags = (agent.tags || []).join(' ').toLowerCase()
       const hostId = (agent.hostId || '').toLowerCase()
 
       return name.includes(query) ||
              label.includes(query) ||
-             alias.includes(query) ||
              tags.includes(query) ||
              hostId.includes(query)
     })
@@ -148,7 +146,7 @@ export default function ZoomPage() {
   }
 
   const displayName = selectedAgent
-    ? selectedAgent.label || selectedAgent.name || selectedAgent.alias || 'Agent'
+    ? selectedAgent.label || selectedAgent.name || 'Agent'
     : ''
 
   const isAvatarUrl = selectedAgent?.avatar &&

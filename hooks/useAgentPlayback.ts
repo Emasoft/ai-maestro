@@ -64,8 +64,18 @@ export function useAgentPlayback(
       const response = await fetch(`/api/agents/${agentId}/playback${queryParams}`)
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+        // Use .text() to safely extract the error — response may not be valid JSON
+        // (e.g. HTML error pages, plain-text 502 from proxy). Parsing as JSON would
+        // throw a secondary SyntaxError that obscures the real HTTP error.
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`
+        try {
+          const errorText = await response.text()
+          const errorData = JSON.parse(errorText)
+          if (errorData.error) errorMessage = errorData.error
+        } catch {
+          // Ignore parse failure — use the default HTTP error message
+        }
+        throw new Error(errorMessage)
       }
 
       const data = await response.json()
@@ -74,7 +84,11 @@ export function useAgentPlayback(
 
       if (data.success && data.playbackState) {
         setState(data.playbackState)
-        console.log(`[useAgentPlayback] Loaded state: playing=${data.playbackState.isPlaying}, position=${data.playbackState.currentMessageIndex}`)
+        // Populate messages from API response so getCurrentMessage/getMessageRange work
+        if (Array.isArray(data.messages)) {
+          setMessages(data.messages)
+        }
+        console.log(`[useAgentPlayback] Loaded state: playing=${data.playbackState.isPlaying}, position=${data.playbackState.currentMessageIndex}, messages=${Array.isArray(data.messages) ? data.messages.length : 0}`)
       } else {
         // Initialize default state if none exists
         setState({
@@ -134,8 +148,18 @@ export function useAgentPlayback(
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+        // Use .text() to safely extract the error — response may not be valid JSON
+        // (e.g. HTML error pages, plain-text 502 from proxy). Parsing as JSON would
+        // throw a secondary SyntaxError that obscures the real HTTP error.
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`
+        try {
+          const errorText = await response.text()
+          const errorData = JSON.parse(errorText)
+          if (errorData.error) errorMessage = errorData.error
+        } catch {
+          // Ignore parse failure — use the default HTTP error message
+        }
+        throw new Error(errorMessage)
       }
 
       const data = await response.json()
@@ -144,6 +168,10 @@ export function useAgentPlayback(
 
       if (data.success && data.playbackState) {
         setState(data.playbackState)
+        // Update messages if the control response includes a refreshed messages array
+        if (Array.isArray(data.messages)) {
+          setMessages(data.messages)
+        }
       }
     } catch (err) {
       if (!isMountedRef.current) return
@@ -266,35 +294,17 @@ export function useAgentPlayback(
   }, [state, messages])
 
   /**
-   * Enable auto-save of playback state
-   * Uses currentIndexRef to avoid stale closure — setInterval would otherwise
-   * capture an outdated snapshot of state.currentMessageIndex and revert
-   * the playback position every 5s (SF-060 fix).
-   * Also uses updatePlaybackStateRef so the interval never calls a stale
-   * version of updatePlaybackState (which depends on `state`).
+   * Enable auto-save (sets the flag; the useEffect manages the actual timer).
    */
   const enableAutoSave = useCallback(() => {
-    if (autoSaveTimerRef.current) {
-      clearInterval(autoSaveTimerRef.current)
-    }
-
-    autoSaveTimerRef.current = setInterval(() => {
-      // Read from refs to get the latest values without stale closures
-      updatePlaybackStateRef.current({ action: 'seek', value: currentIndexRef.current })
-    }, 5000)
-
     setAutoSaveEnabled(true)
     console.log('[useAgentPlayback] Auto-save enabled')
-  }, []) // No deps — reads everything from refs
+  }, [])
 
   /**
-   * Disable auto-save
+   * Disable auto-save (sets the flag; the useEffect clears the timer).
    */
   const disableAutoSave = useCallback(() => {
-    if (autoSaveTimerRef.current) {
-      clearInterval(autoSaveTimerRef.current)
-      autoSaveTimerRef.current = undefined
-    }
     setAutoSaveEnabled(false)
     console.log('[useAgentPlayback] Auto-save disabled')
   }, [])
@@ -303,12 +313,8 @@ export function useAgentPlayback(
    * Toggle auto-save
    */
   const toggleAutoSave = useCallback(() => {
-    if (autoSaveEnabled) {
-      disableAutoSave()
-    } else {
-      enableAutoSave()
-    }
-  }, [autoSaveEnabled, enableAutoSave, disableAutoSave])
+    setAutoSaveEnabled(prev => !prev)
+  }, [])
 
   /**
    * Cleanup on unmount
@@ -331,26 +337,29 @@ export function useAgentPlayback(
   }, [loadPlaybackState])
 
   /**
-   * Enable auto-save when playback starts.
-   * Returns a cleanup that clears the interval so a new effect invocation
-   * (or unmount) never leaks the previous timer.
+   * Manage auto-save interval as a single useEffect tied to isPlaying + autoSaveEnabled.
+   * This is the ONLY place the interval is created or destroyed, preventing leaked
+   * timers from rapid enable/disable calls (SF-060 fix).
+   * Uses currentIndexRef and updatePlaybackStateRef to avoid stale closures —
+   * setInterval would otherwise capture outdated snapshots.
    */
   useEffect(() => {
     if (state?.isPlaying && autoSaveEnabled) {
-      enableAutoSave()
-    } else if (!state?.isPlaying) {
-      disableAutoSave()
+      autoSaveTimerRef.current = setInterval(() => {
+        // Read from refs to get the latest values without stale closures
+        updatePlaybackStateRef.current({ action: 'seek', value: currentIndexRef.current })
+      }, 5000)
     }
 
-    // Cleanup: clear any interval this effect iteration created.
-    // On re-run the effect will re-create the correct timer if needed.
+    // Cleanup: always clear any interval this effect iteration created.
+    // On re-run the effect will re-create the correct timer if deps warrant it.
     return () => {
       if (autoSaveTimerRef.current) {
         clearInterval(autoSaveTimerRef.current)
         autoSaveTimerRef.current = undefined
       }
     }
-  }, [state?.isPlaying, autoSaveEnabled, enableAutoSave, disableAutoSave])
+  }, [state?.isPlaying, autoSaveEnabled])
 
   return {
     // State

@@ -408,12 +408,13 @@ function extractConversationMetadata(jsonlPath: string, projectPath: string): {
 // ============================================================================
 function countFileLines(filePath: string): number {
   const buffer = Buffer.alloc(64 * 1024) // 64KB read buffer
-  const fd = fs.openSync(filePath, 'r')
+  let fd: number | undefined
   let count = 0
   let bytesRead: number
   let leftover = ''
 
   try {
+    fd = fs.openSync(filePath, 'r')
     while ((bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null)) > 0) {
       const chunk = leftover + buffer.toString('utf-8', 0, bytesRead)
       const lines = chunk.split('\n')
@@ -424,7 +425,7 @@ function countFileLines(filePath: string): number {
     }
     if (leftover.trim()) count++
   } finally {
-    fs.closeSync(fd)
+    if (fd !== undefined) fs.closeSync(fd)
   }
   return count
 }
@@ -470,13 +471,22 @@ export async function runIndexDelta(
     console.log(`[Delta Index] Processing agent ${agentId.substring(0, 8)} (dryRun: ${dryRun})`)
 
     const agent = await agentRegistry.getAgent(agentId)
+    if (!agent) {
+      return {
+        success: false,
+        agent_id: agentId,
+        message: `Agent ${agentId} not found in registry`,
+        new_conversations_discovered: 0,
+        total_messages_processed: 0,
+      }
+    }
     const agentDb = await agent.getDatabase()
 
     // SYNC WORKING DIRECTORY
     let liveTmuxWd: string | null = null
     let registryAgent = getRegistryAgent(agentId) || getAgentBySession(agentId)
     if (registryAgent) {
-      const agentName = registryAgent.name || registryAgent.alias
+      const agentName = registryAgent.name
       const sessionName = agentName ? computeSessionName(agentName, 0) : undefined
       const storedWd = registryAgent.workingDirectory ||
                        registryAgent.sessions?.[0]?.workingDirectory

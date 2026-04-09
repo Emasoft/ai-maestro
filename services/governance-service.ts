@@ -112,7 +112,7 @@ export async function setManagerRole(params: {
     return { error: titleResult.error || 'Failed to assign manager title', status: 500 }
   }
 
-  return { data: { success: true, managerId: agentId, managerName: agent.name || agent.alias }, status: 200 }
+  return { data: { success: true, managerId: agentId, managerName: agent.name }, status: 200 }
 }
 
 // ---------------------------------------------------------------------------

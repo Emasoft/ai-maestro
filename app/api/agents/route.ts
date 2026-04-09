@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     // CC-P2-009: Check for search errors before returning results
     if (query) {
-      const result = searchAgentsByQuery(query)
+      const result = await searchAgentsByQuery(query)
       if (result.error) {
         return NextResponse.json({ error: result.error }, { status: result.status })
       }

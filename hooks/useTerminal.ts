@@ -42,6 +42,13 @@ export function useTerminal(options: UseTerminalOptions = {}) {
   }, [options])
 
   const initializeTerminal = useCallback(async (container: HTMLElement) => {
+    // Clear any orphaned safety-refit timers from a previous initialization that
+    // was not cleaned up (e.g., calling initializeTerminal again without running
+    // the previous cleanup function). Without this, old timeouts fire against a
+    // stale terminal reference, causing layout calls on a disposed instance.
+    safetyRefitTimersRef.current.forEach(t => clearTimeout(t))
+    safetyRefitTimersRef.current = []
+
     // Clean up existing terminal
     if (terminalRef.current) {
       terminalRef.current.dispose()
@@ -55,6 +62,7 @@ export function useTerminal(options: UseTerminalOptions = {}) {
       container.removeChild(container.firstChild)
     }
 
+    try {
     // Dynamic imports for browser-only code
     const { Terminal } = await import('@xterm/xterm')
     const { FitAddon } = await import('@xterm/addon-fit')
@@ -162,7 +170,13 @@ export function useTerminal(options: UseTerminalOptions = {}) {
           try { webglAddon.dispose() } catch { /* ignore */ }
           webglAddonRef.current = null
           if (terminalRef.current) {
-            terminalRef.current.refresh(0, terminalRef.current.rows - 1)
+            // Wrap in try/catch: terminal may be disposed between the null-check
+            // and the refresh() call (e.g., during rapid cleanup), which would throw.
+            try {
+              terminalRef.current.refresh(0, terminalRef.current.rows - 1)
+            } catch {
+              // Terminal was disposed after our null-check; nothing to refresh.
+            }
           }
         })
 
@@ -293,8 +307,8 @@ export function useTerminal(options: UseTerminalOptions = {}) {
               // Use bracketed paste mode so multi-line content is handled correctly by the shell
               const PASTE_START = '\x1b[200~'
               const PASTE_END = '\x1b[201~'
-              // Normalize line endings: convert \r\n and \n to \r (what PTY expects)
-              const normalized = text.replace(/\r\n?/g, '\n').replace(/\n/g, '\r')
+              // Normalize line endings: canonicalize \r\n and bare \r to \n (Unix PTY expects \n)
+              const normalized = text.replace(/(\r\n|\r)/g, '\n')
               sendDataRef.current(PASTE_START + normalized + PASTE_END)
             }
           }).catch((err) => {
@@ -351,6 +365,14 @@ export function useTerminal(options: UseTerminalOptions = {}) {
         try { webglAddonRef.current.dispose() } catch { /* ignore */ }
         webglAddonRef.current = null
       }
+    }
+    } catch (err) {
+      // If dynamic import, terminal.open(), or any initialization step fails,
+      // ensure the hook is left in a clean state rather than partially initialized.
+      console.error(`[Terminal] Initialization failed for session ${optionsRef.current.sessionId}:`, err)
+      terminalRef.current = null
+      fitAddonRef.current = null
+      setTerminalInstance(null)
     }
   }, [])
 

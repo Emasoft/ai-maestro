@@ -41,7 +41,7 @@ function ZoomAgentContent() {
     : false
 
   const displayName = agent
-    ? agent.label || agent.name || agent.alias || 'Agent'
+    ? agent.label || agent.name || 'Agent'
     : 'Agent'
 
   const isAvatarUrl = agent?.avatar &&

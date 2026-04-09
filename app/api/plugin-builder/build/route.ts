@@ -164,8 +164,8 @@ export async function POST(request: NextRequest) {
 
     if (result.error) {
       return NextResponse.json(
-        { error: 'Invalid request body' },
-        { status: 400 }
+        { error: result.error || 'Build failed' },
+        { status: result.status || 500 }
       )
     }
     return NextResponse.json(result.data, { status: result.status })

@@ -48,7 +48,7 @@ export default function KanbanColumn({ config, tasks, onDrop, onSelectTask, onQu
     let result = tasks
     if (filter) {
       const q = filter.toLowerCase()
-      result = result.filter(t => t.subject.toLowerCase().includes(q))
+      result = result.filter(t => (t.subject ?? '').toLowerCase().includes(q))
     }
     if (sortDir !== 'none') {
       result = [...result].sort((a, b) => {
@@ -103,7 +103,7 @@ export default function KanbanColumn({ config, tasks, onDrop, onSelectTask, onQu
         <Icon className="w-3.5 h-3.5 text-gray-400" />
         <span className="text-xs font-medium text-gray-300">{config.label}</span>
         <span className="text-[10px] text-gray-600 bg-gray-800/80 rounded-full px-1.5 min-w-[18px] text-center">
-          {tasks.length}
+          {visibleTasks.length}
         </span>
         <div className="flex-1" />
 

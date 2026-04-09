@@ -19,8 +19,8 @@ import HaephestosLeftPanel from '@/components/HaephestosLeftPanel'
 import { TerminalProvider } from '@/contexts/TerminalContext'
 import { useDeviceType } from '@/hooks/useDeviceType'
 import { agentToSession } from '@/lib/agent-utils'
-import { Hammer, FileText, Eye, ScrollText, Volume2, VolumeX, LogOut } from 'lucide-react'
-import type { UnifiedAgent } from '@/types/agent'
+import { Hammer, FileText, Eye, ScrollText, Volume2, VolumeX } from 'lucide-react'
+import type { Agent } from '@/types/agent'
 
 const TOML_DRAFT_PATH = '~/agents/haephestos/toml/'
 
@@ -55,7 +55,7 @@ interface SlottedFile {
 }
 
 interface HaephestosEmbeddedViewProps {
-  agent: UnifiedAgent
+  agent: Agent
   /** Called when a new agent is created — dashboard should switch to it (which auto-hibernates haephestos) */
   onAgentCreated?: (agentId: string) => void
 }

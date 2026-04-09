@@ -18,6 +18,10 @@ export function useDocuments(teamId: string | null): UseDocumentsResult {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  // Guard against setState after unmount — prevents React warnings when async
+  // fetches resolve after the component using this hook has been removed from the tree
+  const isMountedRef = useRef(true)
+  useEffect(() => { return () => { isMountedRef.current = false } }, [])
 
   // MF-005: Accept optional AbortSignal to cancel stale fetches on unmount/teamId change
   const fetchDocuments = useCallback(async (signal?: AbortSignal) => {
@@ -25,14 +29,15 @@ export function useDocuments(teamId: string | null): UseDocumentsResult {
     try {
       const res = await fetch(`/api/teams/${teamId}/documents`, { signal })
       if (!res.ok) throw new Error('Failed to fetch documents')
-      // Guard against setting state after abort
-      if (signal?.aborted) return
+      // Guard against setting state after abort or unmount
+      if (signal?.aborted || !isMountedRef.current) return
       const data = await res.json()
       setDocuments(data.documents || [])
       setError(null)
     } catch (err) {
       // Silently ignore AbortError — expected when component unmounts or teamId changes
       if (err instanceof DOMException && err.name === 'AbortError') return
+      if (!isMountedRef.current) return
       setError(err instanceof Error ? err.message : 'Failed to fetch documents')
     }
   }, [teamId])
@@ -49,7 +54,7 @@ export function useDocuments(teamId: string | null): UseDocumentsResult {
     const controller = new AbortController()
     setLoading(true)
     fetchDocuments(controller.signal).finally(() => {
-      if (!controller.signal.aborted) setLoading(false)
+      if (!controller.signal.aborted && isMountedRef.current) setLoading(false)
     })
     return () => controller.abort()
   }, [teamId, fetchDocuments])
@@ -90,7 +95,8 @@ export function useDocuments(teamId: string | null): UseDocumentsResult {
       body: JSON.stringify(updates),
     })
     if (!res.ok) {
-      await fetchDocuments() // Revert optimistic update
+      // Revert optimistic update — swallow revert errors to preserve the mutation error
+      await fetchDocuments().catch(() => {})
       throw new Error('Failed to update document')
     }
     await fetchDocuments()
@@ -102,7 +108,8 @@ export function useDocuments(teamId: string | null): UseDocumentsResult {
     setDocuments(prev => prev.filter(d => d.id !== docId))
     const res = await fetch(`/api/teams/${teamId}/documents/${docId}`, { method: 'DELETE' })
     if (!res.ok) {
-      await fetchDocuments() // Revert
+      // Revert optimistic update — swallow revert errors to preserve the mutation error
+      await fetchDocuments().catch(() => {})
       throw new Error('Failed to delete document')
     }
   }, [teamId, fetchDocuments])

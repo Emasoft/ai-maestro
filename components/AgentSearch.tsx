@@ -1,29 +1,38 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, type ReactNode } from 'react'
 import { Search, Filter, X, ChevronDown, ChevronUp, AlertCircle, FileText, MessageSquare, Zap } from 'lucide-react'
 import { useAgentSearch } from '@/hooks/useAgentSearch'
 import type { HighlightedSearchResult } from '@/types/search'
 
+/**
+ * Reverse the HTML entity escaping applied by the useAgentSearch hook's
+ * escapeHtml(). Since we render via React text nodes (which auto-escape),
+ * we must undo the hook's escaping to avoid double-encoded characters.
+ */
+function unescapeHtml(str: string): string {
+  return str
+    .replace(/&quot;/g, '"')
+    .replace(/&gt;/g, '>')
+    .replace(/&lt;/g, '<')
+    .replace(/&amp;/g, '&')
+}
+
 interface AgentSearchProps {
   agentId: string
-  agentName?: string
   onResultClick?: (result: HighlightedSearchResult) => void
   className?: string
 }
 
-type FilterMode = 'all' | 'messages' | 'code' | 'conversations'
-
-export default function AgentSearch({ agentId, agentName, onResultClick, className = '' }: AgentSearchProps) {
+export default function AgentSearch({ agentId, onResultClick, className = '' }: AgentSearchProps) {
   const [query, setLocalQuery] = useState('')
   const [showFilters, setShowFilters] = useState(false)
-  const [filterMode, setFilterMode] = useState<FilterMode>('all')
   const [resultsPerPage, setResultsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   
   const searchInputRef = useRef<HTMLInputElement>(null)
   
-  const { results, loading, error, setQuery: setHookQuery, clearSearch } = useAgentSearch(agentId)
+  const { results, loading, error, setQuery: setHookQuery } = useAgentSearch(agentId)
   
   // Calculate pagination
   const totalPages = results ? Math.ceil(results.total / resultsPerPage) : 0
@@ -76,6 +85,29 @@ export default function AgentSearch({ agentId, agentName, onResultClick, classNa
     return <FileText className="w-4 h-4 text-green-400" />
   }
   
+  /**
+   * Parse highlighted text (containing <mark> tags from the hook) into
+   * safe React elements. This avoids dangerouslySetInnerHTML entirely.
+   * The hook escapes all HTML entities in non-mark segments, but we
+   * do NOT trust that invariant — we render all text as React text nodes
+   * which are inherently safe against XSS.
+   */
+  const renderHighlightedText = (highlightedText: string): ReactNode[] => {
+    // Split on <mark>...</mark> boundaries, capturing the marked content
+    const parts = highlightedText.split(/(<mark>.*?<\/mark>)/g)
+    return parts.map((part, i) => {
+      const markMatch = part.match(/^<mark>(.*)<\/mark>$/)
+      if (markMatch) {
+        // Unescape HTML entities that the hook applied, since React
+        // text nodes handle escaping automatically
+        const raw = unescapeHtml(markMatch[1])
+        return <mark key={i} className="bg-yellow-300/30 text-yellow-200 rounded px-0.5">{raw}</mark>
+      }
+      // Plain text segment — unescape hook-applied HTML entities
+      return <span key={i}>{unescapeHtml(part)}</span>
+    })
+  }
+
   // Get result type badge
   const getResultTypeBadge = (result: HighlightedSearchResult) => {
     const role = result.role
@@ -108,10 +140,9 @@ export default function AgentSearch({ agentId, agentName, onResultClick, classNa
           {new Date(result.ts * 1000).toLocaleString()}
         </span>
       </div>
-      <div
-        className="text-sm text-gray-200 mb-2 line-clamp-3"
-        dangerouslySetInnerHTML={{ __html: result.highlightedText }}
-      />
+      <div className="text-sm text-gray-200 mb-2 line-clamp-3">
+        {renderHighlightedText(result.highlightedText)}
+      </div>
       <div className="text-xs text-gray-500">
         {result.conversation_file}
       </div>
@@ -162,23 +193,10 @@ export default function AgentSearch({ agentId, agentName, onResultClick, classNa
           </div>
           
           <div className="space-y-3">
-            {/* Filter Mode */}
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">
-                Search In
-              </label>
-              <select
-                value={filterMode}
-                onChange={(e) => setFilterMode(e.target.value as FilterMode)}
-                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Content</option>
-                <option value="messages">Messages Only</option>
-                <option value="code">Code Blocks</option>
-                <option value="conversations">Conversations</option>
-              </select>
-            </div>
-            
+            {/* TODO: Add "Search In" filter (all/messages/code/conversations) once
+                useAgentSearch supports a filterMode parameter and the backend
+                /api/agents/{id}/search endpoint accepts messageTypes filtering. */}
+
             {/* Results Per Page */}
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1">

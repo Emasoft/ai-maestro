@@ -134,7 +134,7 @@ function CompanionContent() {
 
   // Display name helpers
   const displayName = activeAgent
-    ? activeAgent.label || activeAgent.name || activeAgent.alias || 'Agent'
+    ? activeAgent.label || activeAgent.name || 'Agent'
     : 'Agent'
 
   const isAvatarUrl = activeAgent?.avatar &&
@@ -372,7 +372,7 @@ function CompanionContent() {
   }, [activeAgent, displayName])
 
   const getAgentDisplayName = (agent: Agent) => {
-    return agent.label || agent.name || agent.alias || agent.id
+    return agent.label || agent.name || agent.id
   }
 
   // Call duration timer

@@ -91,7 +91,7 @@ export default function KanbanCard({ task, onSelect, isSelected, agentStatus }: 
       draggable={!task.isBlocked}
       onDragStart={handleDragStart}
       onClick={() => onSelect(task)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(task) }}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(task) } }}
       tabIndex={0}
       role="button"
       title={task.description ? task.description.slice(0, 200) + (task.description.length > 200 ? '...' : '') : undefined}

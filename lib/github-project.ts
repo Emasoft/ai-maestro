@@ -592,19 +592,24 @@ export async function createTask(
       issueLabels.push(`blocked-by:${ref}`)
     }
   }
-  // Shell-safe: use single-quote escaping for all user-provided values
-  const sq = (s: string) => `'${s.replace(/'/g, "'\\''")}'`
-  const labelArgs = issueLabels.map(l => `--label ${sq(l)}`).join(' ')
-  const assigneeArg = data.assigneeLogin ? `--assignee ${sq(data.assigneeLogin)}` : ''
-  const bodyArg = data.description ? `--body ${sq(data.description)}` : ''
+  // Use spawnSync with argument arrays to avoid shell injection risks
+  const createArgs = [
+    'issue', 'create',
+    '-R', `${cfg.owner}/${cfg.repo}`,
+    '--title', data.subject,
+    '--json', 'number,url,nodeId',
+  ]
+  if (data.description) createArgs.push('--body', data.description)
+  for (const l of issueLabels) createArgs.push('--label', l)
+  if (data.assigneeLogin) createArgs.push('--assignee', data.assigneeLogin)
 
-  const issueJson = execSync(
-    `gh issue create -R ${sq(`${cfg.owner}/${cfg.repo}`)} ` +
-    `--title ${sq(data.subject)} ` +
-    `${bodyArg} ${labelArgs} ${assigneeArg} --json number,url,nodeId`,
-    { encoding: 'utf-8', timeout: 15000 },
-  )
-  const issue = JSON.parse(issueJson) as { number: number; url: string; nodeId: string }
+  const createResult = spawnSync('gh', createArgs, {
+    encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'],
+  })
+  if (createResult.status !== 0) {
+    throw new Error(`gh issue create failed: ${createResult.stderr || createResult.error}`)
+  }
+  const issue = JSON.parse(createResult.stdout) as { number: number; url: string; nodeId: string }
 
   // 2. Add issue to project
   const addQuery = `
@@ -740,21 +745,20 @@ export async function updateTask(
   }
 
   // Update issue fields (title, body, labels, assignees) via gh CLI
-  // Shell-safe: use single-quote escaping for all user-provided values
-  const sq = (s: string) => `'${s.replace(/'/g, "'\\''")}'`
-  const repo = sq(`${cfg.owner}/${cfg.repo}`)
+  // Use spawnSync with argument arrays to avoid shell injection risks
+  const repo = `${cfg.owner}/${cfg.repo}`
 
   if (issueNumber) {
-    const editArgs: string[] = []
-    if (updates.subject) editArgs.push(`--title ${sq(updates.subject)}`)
-    if (updates.description) editArgs.push(`--body ${sq(updates.description)}`)
+    const editArgs = ['issue', 'edit', String(issueNumber), '-R', repo]
+    if (updates.subject) editArgs.push('--title', updates.subject)
+    if (updates.description) editArgs.push('--body', updates.description)
 
-    if (editArgs.length > 0) {
+    if (editArgs.length > 5) {
       try {
-        execSync(
-          `gh issue edit ${issueNumber} -R ${repo} ${editArgs.join(' ')}`,
-          { encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'] },
-        )
+        const r = spawnSync('gh', editArgs, {
+          encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        if (r.status !== 0) console.error(`Failed to update issue #${issueNumber}: ${r.stderr}`)
       } catch (e) {
         console.error(`Failed to update issue #${issueNumber}:`, e)
       }
@@ -762,28 +766,28 @@ export async function updateTask(
 
     // Remove stale prefix labels before adding new ones to prevent accumulation
     // (e.g. changing taskType from "bug" to "feature" should remove old "type:bug")
-    const removeLabels: string[] = []
-    if (updates.taskType) removeLabels.push('type:')
-    if (updates.blockedBy !== undefined) removeLabels.push('blocked-by:', 'depends:')
-    if (updates.previousStatus) removeLabels.push('status:blocked-from:')
+    const removePrefixes: string[] = []
+    if (updates.taskType) removePrefixes.push('type:')
+    if (updates.blockedBy !== undefined) removePrefixes.push('blocked-by:', 'depends:')
+    if (updates.previousStatus) removePrefixes.push('status:blocked-from:')
 
-    if (removeLabels.length > 0) {
+    if (removePrefixes.length > 0) {
       // Fetch current labels and remove stale prefix matches
       try {
-        const labelsJson = execSync(
-          `gh issue view ${issueNumber} -R ${repo} --json labels --jq '.labels[].name'`,
-          { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] },
-        )
-        const currentLabels = labelsJson.trim().split('\n').filter(Boolean)
+        const viewResult = spawnSync('gh', [
+          'issue', 'view', String(issueNumber), '-R', repo,
+          '--json', 'labels', '--jq', '.labels[].name',
+        ], { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] })
+        const currentLabels = (viewResult.stdout || '').trim().split('\n').filter(Boolean)
         const toRemove = currentLabels.filter(l =>
-          removeLabels.some(prefix => l.toLowerCase().startsWith(prefix))
+          removePrefixes.some(prefix => l.toLowerCase().startsWith(prefix))
         )
         if (toRemove.length > 0) {
-          const rmFlags = toRemove.map(l => `--remove-label ${sq(l)}`).join(' ')
-          execSync(
-            `gh issue edit ${issueNumber} -R ${repo} ${rmFlags}`,
-            { encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'] },
-          )
+          const rmArgs = ['issue', 'edit', String(issueNumber), '-R', repo]
+          for (const l of toRemove) rmArgs.push('--remove-label', l)
+          spawnSync('gh', rmArgs, {
+            encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'],
+          })
         }
       } catch {
         // Non-fatal: stale label removal is best-effort
@@ -799,12 +803,12 @@ export async function updateTask(
     if (updates.previousStatus) addLabels.push(`status:blocked-from:${updates.previousStatus}`)
 
     if (addLabels.length > 0) {
-      const labelFlags = addLabels.map(l => `--add-label ${sq(l)}`).join(' ')
+      const addArgs = ['issue', 'edit', String(issueNumber), '-R', repo]
+      for (const l of addLabels) addArgs.push('--add-label', l)
       try {
-        execSync(
-          `gh issue edit ${issueNumber} -R ${repo} ${labelFlags}`,
-          { encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'] },
-        )
+        spawnSync('gh', addArgs, {
+          encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'],
+        })
       } catch (e) {
         console.error(`Failed to add labels to issue #${issueNumber}:`, e)
       }
@@ -812,12 +816,12 @@ export async function updateTask(
 
     // Apply user-specified labels
     if (updates.labels?.length) {
-      const labelFlags = updates.labels.map(l => `--add-label ${sq(l)}`).join(' ')
+      const userLabelArgs = ['issue', 'edit', String(issueNumber), '-R', repo]
+      for (const l of updates.labels) userLabelArgs.push('--add-label', l)
       try {
-        execSync(
-          `gh issue edit ${issueNumber} -R ${repo} ${labelFlags}`,
-          { encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'] },
-        )
+        spawnSync('gh', userLabelArgs, {
+          encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'],
+        })
       } catch (e) {
         console.error(`Failed to update labels on issue #${issueNumber}:`, e)
       }
@@ -865,12 +869,12 @@ export async function deleteTask(
 
   // Optionally close the issue
   if (closeIssue && issueNumber) {
-    const sqd = (s: string) => `'${s.replace(/'/g, "'\\''")}'`
     try {
-      execSync(
-        `gh issue close ${issueNumber} -R ${sqd(`${cfg.owner}/${cfg.repo}`)} --comment 'Removed from project kanban'`,
-        { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] },
-      )
+      spawnSync('gh', [
+        'issue', 'close', String(issueNumber),
+        '-R', `${cfg.owner}/${cfg.repo}`,
+        '--comment', 'Removed from project kanban',
+      ], { encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] })
     } catch {
       // Non-fatal: item removed from project even if close fails
     }

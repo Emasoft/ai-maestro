@@ -60,6 +60,11 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
+    // Validate required email field
+    if (!body.email || typeof body.email !== 'string') {
+      return NextResponse.json({ error: 'email is required' }, { status: 400 })
+    }
+
     const result = await addEmailAddressToAgent(id, body)
 
     if (result.error) {

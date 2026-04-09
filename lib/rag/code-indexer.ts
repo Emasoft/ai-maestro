@@ -476,8 +476,8 @@ function escapeString(str: string): string {
  * Example: from 'lib/rag/embeddings.ts' import './keywords' → 'lib/rag/keywords.ts'
  */
 function resolveRelativeImport(fromPath: string, importPath: string): string {
-  const fromDir = fromPath.substring(0, fromPath.lastIndexOf('/'))
-  const resolved = importPath.replace(/^\.\//, `${fromDir}/`).replace(/^\.\.\//, '')
+  // Use path.resolve to correctly handle any depth of ../ traversal
+  const resolved = path.resolve(path.dirname(fromPath), importPath)
 
   // Add .ts extension if missing
   if (!resolved.endsWith('.ts') && !resolved.endsWith('.tsx') &&

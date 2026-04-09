@@ -22,6 +22,13 @@ import {
   setOnStatusUpdateCallback
 } from './services/shared-state-bridge.mjs'
 
+// Guard against concurrent PTY spawns for the same session name.
+// When two WebSocket clients connect simultaneously for the same session,
+// both can pass the `!sessionState` check before either registers in
+// terminalSessions. This Set tracks session names with an in-progress
+// PTY spawn so the second caller waits instead of spawning a duplicate.
+const ptySpawnLocks = new Set()
+
 // =============================================================================
 // GLOBAL ERROR HANDLERS - Must be first to catch all errors
 // =============================================================================
@@ -251,6 +258,14 @@ function cleanupSession(sessionName, sessionState, reason = 'unknown', ptyAlread
     sessionState.clients.clear()
   }
 
+  // Release cerebellum terminal buffer to prevent memory leaks.
+  // Null the reference rather than awaiting — cleanupSession may be called
+  // from synchronous contexts (e.g. graceful shutdown forEach).
+  if (sessionState.terminalBuffer) {
+    sessionState.terminalBuffer.listeners?.clear?.()
+    sessionState.terminalBuffer = null
+  }
+
   // Remove from terminal sessions map
   terminalSessions.delete(sessionName)
 
@@ -420,8 +435,10 @@ function startAutoContinueTimer(sessionName, delayMs) {
       if (!agent?.preferences?.autoContinue) return // preference was toggled off
 
       // SAFETY: require --dangerously-skip-permissions to avoid permission prompt interference
-      const args = agent.programArgs || ''
-      if (!args.includes('--dangerously-skip-permissions')) {
+      // Split into array and check exact match to prevent partial-match bypasses
+      // (e.g. '--not-dangerously-skip-permissions' must NOT pass)
+      const argsArray = (agent.programArgs || '').split(/\s+/).filter(Boolean)
+      if (!argsArray.includes('--dangerously-skip-permissions')) {
         console.log(`[AutoContinue] ${sessionName}: skipped — missing --dangerously-skip-permissions`)
         return
       }
@@ -1017,8 +1034,22 @@ async function startServer(handleRequest) {
     let sessionState = terminalSessions.get(sessionName)
 
     if (!sessionState) {
+      // Atomic guard: if another WebSocket connection is already spawning a PTY
+      // for this session, wait briefly and reuse the result instead of spawning
+      // a duplicate PTY process.
+      if (ptySpawnLocks.has(sessionName)) {
+        await new Promise(r => setTimeout(r, 500))
+        sessionState = terminalSessions.get(sessionName)
+        if (!sessionState) {
+          ws.close(1013, 'PTY spawn in progress by another connection')
+          return
+        }
+        // Fall through to "Add client to session" below
+      } else {
+      ptySpawnLocks.add(sessionName)
       let ptyProcess
 
+      try {
       // Spawn PTY with tmux attach, with retry logic for transient failures.
       // Race condition: when a previous PTY cleanup just ran (30s grace period expired),
       // tmux may still be detaching. Retrying after a short delay resolves this.
@@ -1205,6 +1236,10 @@ async function startServer(handleRequest) {
         cleanupSession(sessionName, sessionState, `pty_exit_${exitCode || signal}`, true)
       })
       }
+      } finally {
+        ptySpawnLocks.delete(sessionName)
+      }
+      } // end of else (not locked)
     }
 
     // Add client to session

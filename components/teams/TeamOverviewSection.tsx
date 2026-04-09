@@ -37,7 +37,7 @@ export default function TeamOverviewSection({ team, agents, agentsLoading, agent
   const cosDisplay = useMemo(() => {
     const cosAgent = agents.find(a => a.id === team.chiefOfStaffId)
     return cosAgent
-      ? (cosAgent.label || cosAgent.name || cosAgent.alias || team.chiefOfStaffId)
+      ? (cosAgent.label || cosAgent.name || team.chiefOfStaffId)
       : (team.chiefOfStaffId ? `Unknown (${team.chiefOfStaffId.slice(0, 8)}...)` : null)
   }, [agents, team.chiefOfStaffId])
 
@@ -257,9 +257,9 @@ export default function TeamOverviewSection({ team, agents, agentsLoading, agent
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-700 transition-colors text-left"
                 >
                   <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-[10px] text-gray-300 flex-shrink-0">
-                    {(agent.label || agent.name || agent.alias || '?')[0].toUpperCase()}
+                    {(agent.label || agent.name || '?')[0].toUpperCase()}
                   </div>
-                  <span className="text-sm text-gray-300 truncate">{agent.label || agent.name || agent.alias || agent.id.slice(0, 8)}</span>
+                  <span className="text-sm text-gray-300 truncate">{agent.label || agent.name || agent.id.slice(0, 8)}</span>
                 </button>
               ))
             )}
@@ -282,10 +282,10 @@ export default function TeamOverviewSection({ team, agents, agentsLoading, agent
                 className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800/50 transition-colors group"
               >
                 <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs text-gray-300 flex-shrink-0">
-                  {(agent.label || agent.name || agent.alias || '?')[0].toUpperCase()}
+                  {(agent.label || agent.name || '?')[0].toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-200 truncate">{agent.label || agent.name || agent.alias || agent.id.slice(0, 8)}</p>
+                  <p className="text-sm text-gray-200 truncate">{agent.label || agent.name || agent.id.slice(0, 8)}</p>
                   <p className="text-xs text-gray-500 truncate">{agent.session?.status === 'online' ? 'Online' : 'Offline'}</p>
                 </div>
                 <button

@@ -3,15 +3,16 @@ number: 9
 name: Manager-Driven Team Creation (JSONL Viewer)
 version: "2.0"
 description: >
-  End-to-end governance workflow test. Adds LoginGate authentication at start.
-  Creates a MANAGER agent, sends it a project task (build a JSONL viewer for
-  macOS in Swift), and verifies it follows governance protocols: creates a team,
-  auto-COS is assigned, team members are created with appropriate titles, kanban
-  tasks are set up. Each MANAGER action is verified via UI and API. Adds RBAC
-  probes (no-self-modification, agent auth verification), COS immutability
-  probe (R4.7), cemetery verification after cleanup with DeleteTeam 8-gate
-  pipeline, and stress-tests MANAGER removal/re-assignment blocking cascade.
-  Tests governance rules R4, R9, R10, R11, R12, R16, communication graph.
+  The user logs in, creates a MANAGER agent, and launches its Claude session.
+  They type a project task into the terminal ("build a JSONL viewer in Swift for
+  macOS") and watch the MANAGER work autonomously: it creates a team, a COS is
+  auto-assigned, team members are recruited with appropriate titles, and kanban
+  tasks are populated. The user verifies each step through the sidebar and team
+  dashboard, confirms the resulting 5-agent team, and checks that the MANAGER
+  itself stays outside the team. Finally, they delete everything and clean up.
+client: claude
+interhosts: false
+device: desktop
 subsystems:
   - governance
   - teams

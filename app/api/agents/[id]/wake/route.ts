@@ -1,3 +1,4 @@
+import path from 'path'
 import { NextRequest, NextResponse } from 'next/server'
 import { wakeAgent } from '@/services/agents-core-service'
 import { isValidUuid } from '@/lib/validation'
@@ -36,11 +37,16 @@ export async function POST(
         startProgram = false
       }
       if (typeof body.sessionIndex === 'number') {
+        // SF-061: Bounds check sessionIndex to prevent out-of-range values
+        if (body.sessionIndex < 0 || body.sessionIndex > 99) {
+          return NextResponse.json({ error: 'Invalid sessionIndex' }, { status: 400 })
+        }
         sessionIndex = body.sessionIndex
       }
       if (typeof body.program === 'string') {
         // SF-010: Do not lowercase program name -- case-sensitive filesystems need exact case
-        program = body.program
+        // SF-064: Sanitize program name to prevent path traversal (strip directory components)
+        program = path.basename(String(body.program))
       }
     } catch {
       // No body or invalid JSON — use defaults (CC-P1-611: removed debug logging)

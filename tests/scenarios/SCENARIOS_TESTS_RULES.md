@@ -205,6 +205,61 @@ Scenario tests use **Chrome DevTools Protocol (CDP)** via the `mcp__chrome-devto
 ### CDP tool reconnection:
 At the start of **each phase**, verify CDP tools are loaded by taking a snapshot. If tools fail (e.g., "No such tool available"), reload via `ToolSearch` with `select:mcp__plugin_chromedev-tools_cdt__take_snapshot,...`. Tool schemas can expire during long scenario runs.
 
+### Device emulation (for `device: tablet` and `device: smartphone` scenarios):
+
+When the scenario frontmatter specifies `device: tablet` or `device: smartphone`, the browser must be configured to emulate that device **before any UI interaction**. Add this as Step S003b in Phase 0 (after server verification, before navigating to dashboard).
+
+**How to activate device emulation:**
+
+Use `mcp__chrome-devtools__emulate` with a device preset:
+
+```
+# Smartphone (iPhone 14 — 390×844, 3x scale, touch enabled)
+emulate({ device: "iPhone 14" })
+
+# Tablet (iPad Air — 820×1180, 2x scale, touch enabled)
+emulate({ device: "iPad Air" })
+
+# Or manual parameters:
+emulate({ width: 390, height: 844, deviceScaleFactor: 3, mobile: true })
+```
+
+**What this does:**
+- Resizes the viewport to the target device dimensions
+- Enables `mobile: true` which activates CSS media queries (`max-width`, `pointer: coarse`)
+- Enables touch emulation — Chrome automatically translates all mouse clicks from CDP into `touchstart`/`touchend` events
+- AI Maestro's `useDeviceType` hook detects the change and renders touch-friendly components (MobileDashboard, TabletDashboard, TouchScrollbar, MobileKeyToolbar, GlobalTouchScrollbars)
+
+**What continues working normally:**
+- `click` — Chrome converts to touch tap
+- `fill` — text input works the same
+- `take_snapshot` — accessibility tree reflects the touch components
+- `take_screenshot` — captures the mobile/tablet layout
+- `wait_for` — unchanged
+- `select_page` — unchanged
+
+**What cannot be tested via CDP:**
+- Multi-finger gestures (pinch-to-zoom, two-finger swipe)
+- Long-press with timing precision (> 500ms hold)
+- Native mobile browser chrome (address bar, safe area insets, pull-to-refresh)
+- Hardware back button
+
+**Reverting to desktop (for cleanup phase):**
+
+```
+emulate({ width: 1280, height: 800, deviceScaleFactor: 1, mobile: false })
+```
+
+Always revert in the CLEANUP phase so subsequent scenarios start with desktop viewport.
+
+**Device presets reference:**
+
+| `device` value | Viewport | Scale | Touch | Component set |
+|---------------|----------|-------|-------|---------------|
+| `desktop` | 1280×800 | 1x | no | Standard (AgentList, TerminalView, AgentProfile) |
+| `tablet` | 1024×768 | 2x | yes | TabletDashboard, TouchScrollbar |
+| `smartphone` | 390×844 | 3x | yes | MobileDashboard, MobileKeyToolbar, MobileChatView, MobileMessageCenter, GlobalTouchScrollbars |
+
 ### Reading agent terminal history:
 Claude Code uses the xterm alternate screen buffer — `tmux capture-pane` only captures the visible pane (not scrollback from Claude's session). To read what an agent actually did:
 
@@ -316,8 +371,17 @@ All fields are **required** unless marked (optional).
 number: <unique integer>            # Matches filename SCEN-<NNN>. Never reused.
 name: <human-readable scenario name> # Short title, no quotes needed
 version: "1.0"                      # Semver string. Bump on breaking step changes.
-description: >                      # Multi-line. Must answer: what is tested, why,
-  <What this scenario tests>        # and what governance rules are validated.
+description: >                      # Multi-line. Tell the user's story: what they
+  <What the user does step by step> # do, what they see, what gets verified.
+client: claude                      # AI client(s) under test. One of:
+                                    # "claude", "codex", "gemini", or a list
+                                    # for multi-client scenarios: [claude, codex]
+interhosts: false                   # true if agents from remote hosts participate.
+                                    # Requires Tailscale + hosts.json with peers.
+device: desktop                     # Browser viewport: "desktop", "tablet", or
+                                    # "smartphone". Controls window size and which
+                                    # component set is tested (standard vs touch).
+                                    # desktop=1280x800, tablet=1024x768, smartphone=390x844
 subsystems:                         # Backend services/modules exercised.
   - governance                      # Pick from: governance, teams, agent-registry,
   - role-plugins                    # element-management-service, agent-messaging,
@@ -349,6 +413,8 @@ governance_password: "<password>"   # The actual password value, in quotes.
                                     # verbatim — never write just "password".
 commit: <git-hash or TBD>          # Hash at time of writing. Updated after first run.
 author: <who wrote the scenario>    # (optional) Person or team name.
+# NOTE: `client` goes between `description` and `subsystems` (see above).
+# For multi-client scenarios use YAML list: client: [claude, codex]
 ---
 ```
 
@@ -359,7 +425,10 @@ author: <who wrote the scenario>    # (optional) Person or team name.
 | `number` | integer | yes | Must match `SCEN-<NNN>` in filename. Unique, never reused. |
 | `name` | string | yes | Short, descriptive. Used in report headers. |
 | `version` | string | yes | Always quoted (`"1.0"`). Bump on step changes. |
-| `description` | multiline | yes | Use `>` folded scalar. Explain what and why. |
+| `description` | multiline | yes | Use `>` folded scalar. Tell the user's story. |
+| `client` | string or list | yes | AI client(s) under test: `claude`, `codex`, `gemini`, or `[claude, codex]`. |
+| `interhosts` | boolean | yes | `true` if scenario involves agents on remote hosts (Tailscale mesh). |
+| `device` | string | yes | Browser viewport: `desktop` (1280x800), `tablet` (1024x768), or `smartphone` (390x844). Determines which component set is tested (standard vs touch-friendly). |
 | `subsystems` | list | yes | Backend modules exercised. At least 1. |
 | `ui_sections` | list | yes | UI areas touched. Use `->` arrow notation. |
 | `data_produced` | list | yes | Every artifact created. Include lifecycle note. |

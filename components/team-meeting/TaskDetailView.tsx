@@ -177,7 +177,7 @@ export default function TaskDetailView({ task, agents, allTasks, kanbanColumns, 
             <option value="">Unassigned</option>
             {agents.map(a => (
               <option key={a.id} value={a.id}>
-                {a.label || a.name || a.alias || a.id.slice(0, 8)}
+                {a.label || a.name || a.id.slice(0, 8)}
               </option>
             ))}
           </select>

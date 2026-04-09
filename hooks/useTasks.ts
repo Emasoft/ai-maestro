@@ -67,41 +67,52 @@ export function useTasks(teamId: string | null): UseTasksResult {
 
   const createTask = useCallback(async (data: { subject: string; description?: string; assigneeAgentId?: string; blockedBy?: string[]; priority?: number; status?: string; labels?: string[]; taskType?: string; externalRef?: string }) => {
     if (!teamId) return
-    const res = await fetch(`/api/teams/${teamId}/tasks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
-    if (!res.ok) throw new Error('Failed to create task')
-    await fetchTasks()
+    try {
+      const res = await fetch(`/api/teams/${teamId}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error('Failed to create task')
+      await fetchTasks()
+    } catch (err) {
+      await fetchTasks() // Revert optimistic state on network error
+      throw err
+    }
   }, [teamId, fetchTasks])
 
   const updateTask = useCallback(async (taskId: string, updates: { subject?: string; description?: string; status?: TaskStatus; assigneeAgentId?: string | null; blockedBy?: string[]; priority?: number; labels?: string[]; taskType?: string; externalRef?: string; externalProjectRef?: string; previousStatus?: string; acceptanceCriteria?: string[]; handoffDoc?: string; prUrl?: string; reviewResult?: string }) => {
     if (!teamId) return { unblocked: [] as TaskWithDeps[] }
+    // Filter out undefined values to avoid overwriting existing task fields during optimistic merge
+    const cleanUpdates = Object.fromEntries(Object.entries(updates).filter(([, v]) => v !== undefined))
     // Optimistic update
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t))
-    const res = await fetch(`/api/teams/${teamId}/tasks/${taskId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    })
-    if (!res.ok) {
-      await fetchTasks() // Revert optimistic update
-      throw new Error('Failed to update task')
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...cleanUpdates, updatedAt: new Date().toISOString() } : t))
+    try {
+      const res = await fetch(`/api/teams/${teamId}/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      if (!res.ok) throw new Error('Failed to update task')
+      const data = await res.json()
+      await fetchTasks() // Refresh to get resolved deps
+      return { unblocked: data.unblocked || [] }
+    } catch (err) {
+      await fetchTasks() // Revert optimistic state on any error (network or HTTP)
+      throw err
     }
-    const data = await res.json()
-    await fetchTasks() // Refresh to get resolved deps
-    return { unblocked: data.unblocked || [] }
   }, [teamId, fetchTasks])
 
   const deleteTask = useCallback(async (taskId: string) => {
     if (!teamId) return
     // Optimistic update
     setTasks(prev => prev.filter(t => t.id !== taskId))
-    const res = await fetch(`/api/teams/${teamId}/tasks/${taskId}`, { method: 'DELETE' })
-    if (!res.ok) {
-      await fetchTasks() // Revert
-      throw new Error('Failed to delete task')
+    try {
+      const res = await fetch(`/api/teams/${teamId}/tasks/${taskId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to delete task')
+    } catch (err) {
+      await fetchTasks() // Revert optimistic state on any error (network or HTTP)
+      throw err
     }
   }, [teamId, fetchTasks])
 

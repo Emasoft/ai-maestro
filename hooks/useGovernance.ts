@@ -96,14 +96,17 @@ export function useGovernance(agentId: string | null): GovernanceState {
   // Derive memberTeam: the single team this agent belongs to (0 or 1 team per governance simplification)
   const memberTeam = useMemo(() => {
     if (!agentId) return null
-    return allTeams.find((t) => t.agentIds.includes(agentId)) ?? null
+    return allTeams.find((t) => t.agentIds?.includes(agentId) ?? false) ?? null
   }, [agentId, allTeams])
 
   const refresh = useCallback((signal?: AbortSignal) => {
+    // Early exit if signal is already aborted — avoids setLoading(true) flicker
+    // when a stale refresh fires after unmount or rapid agentId change
+    if (signal?.aborted) return
     // Fetch governance state and teams in parallel
     setLoading(true)
     Promise.all([
-      fetch('/api/governance', { signal }).then((r) => {
+      fetch(`/api/governance?agentId=${encodeURIComponent(agentId || '')}`, { signal }).then((r) => {
         if (!r.ok) throw new Error('Request failed')
         return r.json()
       }).catch((err) => {
@@ -180,10 +183,10 @@ export function useGovernance(agentId: string | null): GovernanceState {
         setAgentStoredTitle(null)
       })
       .finally(() => {
-        // CC-001: Prevent setting state on aborted/stale requests (e.g. unmount or rapid agentId change)
-        // The abort() in the useEffect cleanup is called before isMountedRef.current = false,
-        // so signal?.aborted already covers the unmount case — no redundant isMountedRef check needed.
-        if (signal?.aborted) return
+        // BUG-FIX: setLoading(false) must run unconditionally — skipping it on abort
+        // traps the UI in a permanent loading state when a request is cancelled
+        // (e.g. rapid agentId change or unmount). The isMountedRef guard in .then()
+        // already prevents stale state updates; loading=false is always safe.
         setLoading(false)
       })
   // CC-009: agentId is needed to fetch the correct agent's governanceTitle.
@@ -323,9 +326,11 @@ export function useGovernance(agentId: string | null): GovernanceState {
         const team: Team = teamData.team
 
         // Add agent if not already present
-        const updatedAgentIds = team.agentIds.includes(targetAgentId)
-          ? team.agentIds
-          : [...team.agentIds, targetAgentId]
+        // Defensive: agentIds may be null/undefined if team data is incomplete from API
+        const currentIds = team.agentIds ?? []
+        const updatedAgentIds = currentIds.includes(targetAgentId)
+          ? currentIds
+          : [...currentIds, targetAgentId]
 
         // Server enforces team membership rules; no client-side allTeams check needed
 
@@ -378,7 +383,8 @@ export function useGovernance(agentId: string | null): GovernanceState {
           return { success: false, error: 'Cannot remove the Chief-of-Staff from team members — remove the COS role first' }
         }
 
-        const updatedAgentIds = team.agentIds.filter((id: string) => id !== targetAgentId)
+        // Defensive: agentIds may be null/undefined if team data is incomplete from API
+        const updatedAgentIds = (team.agentIds ?? []).filter((id: string) => id !== targetAgentId)
 
         const res = await fetch(`/api/teams/${teamId}`, {
           method: 'PUT',
@@ -390,11 +396,15 @@ export function useGovernance(agentId: string | null): GovernanceState {
           return { success: false, error: errData.error || 'Failed to remove agent from team' }
         }
         // Phase 3: Revert to AUTONOMOUS role + uninstall team plugin when agent leaves
-        await fetch(`/api/agents/${targetAgentId}`, {
+        const patchRes = await fetch(`/api/agents/${targetAgentId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role: 'autonomous', governanceTitle: null }),
         })
+        if (!patchRes.ok) {
+          const patchErr = await patchRes.json().catch(() => ({ error: `HTTP ${patchRes.status}` }))
+          throw new Error(patchErr.error || `Failed to revert agent title (HTTP ${patchRes.status})`)
+        }
         // Uninstall current role-plugin (MEMBER plugins are not valid for AUTONOMOUS)
         const agentRes = await fetch(`/api/agents/${targetAgentId}`)
         if (agentRes.ok) {

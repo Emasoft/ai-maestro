@@ -177,7 +177,7 @@ export async function getConversationMessages(
   let promptType: 'permission' | 'input' | null = null
   const hasOnlineSession = agent.sessions?.some((s: any) => s.status === 'online')
   if (hasOnlineSession) {
-    const sessionName = agent.name || agent.alias
+    const sessionName = agent.name
     if (sessionName) {
       try {
         const runtime = getRuntime()
@@ -267,7 +267,7 @@ export async function sendChatMessage(
     return { error: 'Agent not found', status: 404 }
   }
 
-  const sessionName = agent.name || agent.alias
+  const sessionName = agent.name
   if (!sessionName) {
     return { error: 'Agent has no session name', status: 400 }
   }

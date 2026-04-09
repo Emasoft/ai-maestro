@@ -48,13 +48,14 @@ export async function POST(
   }
 
   try {
-    const { execSync } = require('child_process')
+    const { execFileSync } = require('child_process')
     // Ctrl+C clears any partial input, then /exit as literal text exits Claude Code
     // Note: Ctrl+D does NOT exit Claude Code. Only /exit works.
     // The -l flag sends literal text (not key names), Enter is a key name so sent separately.
-    execSync(`tmux send-keys -t "${sessionName}" C-c`, { timeout: 5000 })
-    execSync(`tmux send-keys -t "${sessionName}" -l '/exit'`, { timeout: 5000 })
-    execSync(`tmux send-keys -t "${sessionName}" Enter`, { timeout: 5000 })
+    // CC-GOV-001: Use execFileSync (no shell) to prevent injection even with validated names.
+    execFileSync('tmux', ['send-keys', '-t', sessionName, 'C-c'], { timeout: 5000, stdio: 'ignore' })
+    execFileSync('tmux', ['send-keys', '-t', sessionName, '-l', '/exit'], { timeout: 5000, stdio: 'ignore' })
+    execFileSync('tmux', ['send-keys', '-t', sessionName, 'Enter'], { timeout: 5000, stdio: 'ignore' })
     return NextResponse.json({ success: true, sessionName })
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error'

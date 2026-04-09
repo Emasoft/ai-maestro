@@ -6,9 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { readFile, writeFile, readdir, mkdir } from 'fs/promises'
+import { readFile, readdir } from 'fs/promises'
 import { existsSync, realpathSync } from 'fs'
-import { join, resolve, sep, dirname } from 'path'
+import { join, resolve, sep } from 'path'
 import os from 'os'
 
 export const dynamic = 'force-dynamic'
@@ -18,24 +18,6 @@ const SETTINGS_PATH = join(HOME, '.claude', 'settings.json')
 // Allowed characters in marketplace and plugin names — rejects path traversal segments
 const SAFE_PATH_COMPONENT = /^[a-zA-Z0-9._-]+$/
 
-// In-memory mutex: serialize all settings reads/writes within a single process
-// to prevent lost-update race conditions on concurrent POST requests.
-let settingsLock: Promise<void> = Promise.resolve()
-
-/**
- * Compare two version strings numerically segment by segment (e.g. "1.10.0" > "1.9.0").
- * Returns negative if a < b, positive if a > b, 0 if equal.
- */
-function compareVersions(a: string, b: string): number {
-  const aParts = a.split('.').map(n => parseInt(n, 10) || 0)
-  const bParts = b.split('.').map(n => parseInt(n, 10) || 0)
-  const len = Math.max(aParts.length, bParts.length)
-  for (let i = 0; i < len; i++) {
-    const diff = (aParts[i] ?? 0) - (bParts[i] ?? 0)
-    if (diff !== 0) return diff
-  }
-  return 0
-}
 
 interface PluginEntry {
   key: string           // "pluginName@marketplace"
@@ -62,16 +44,12 @@ async function readSettings(): Promise<Record<string, unknown>> {
   // handles corrupted/invalid JSON gracefully by returning an empty object
   try {
     return JSON.parse(await readFile(SETTINGS_PATH, 'utf-8'))
-  } catch {
+  } catch (err) {
+    console.error('[global-plugins] Failed to read settings.json:', err)
     return {}
   }
 }
 
-async function writeSettings(settings: Record<string, unknown>): Promise<void> {
-  // Ensure the directory exists before writing (e.g. on first run)
-  await mkdir(dirname(SETTINGS_PATH), { recursive: true })
-  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
-}
 
 export async function GET() {
   try {
@@ -107,7 +85,7 @@ export async function GET() {
     // Precompute the real (symlink-resolved) cache base path once, outside the loop,
     // so that symlink traversal attacks via marketplace/pluginName are correctly detected.
     const cacheBase = join(HOME, '.claude', 'plugins', 'cache')
-    const realCacheBase = (() => { try { return realpathSync(cacheBase) } catch { return resolve(cacheBase) } })()
+    const realCacheBase = (() => { try { return realpathSync(cacheBase) } catch (err) { console.error('[global-plugins] Failed to resolve cache base path:', err); return resolve(cacheBase) } })()
 
     // Group by marketplace
     const grouped: Record<string, GroupedPlugins> = {}
@@ -137,7 +115,8 @@ export async function GET() {
       try {
         const realCacheDir = realpathSync(cacheDir)
         isSafe = realCacheDir.startsWith(realCacheBase + sep)
-      } catch {
+      } catch (err) {
+        console.error(`[global-plugins] Failed to resolve cache dir for ${entry.pluginName}@${entry.marketplace}:`, err)
         isSafe = false
       }
       if (isSafe && existsSync(cacheDir)) {

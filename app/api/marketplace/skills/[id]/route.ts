@@ -20,13 +20,19 @@ export async function GET(
   if (!id || id.length > 200 || /[\x00-\x1f]/.test(id)) {
     return NextResponse.json({ error: 'Invalid skill ID format' }, { status: 400 })
   }
-  const result = await getMarketplaceSkillById(id)
 
-  if (result.error) {
-    return NextResponse.json(
-      { error: result.error },
-      { status: result.status }
-    )
+  try {
+    const result = await getMarketplaceSkillById(id)
+
+    if (result.error) {
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status || 500 }
+      )
+    }
+    return NextResponse.json(result.data)
+  } catch (error) {
+    console.error('[MarketplaceSkill] GET error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-  return NextResponse.json(result.data)
 }

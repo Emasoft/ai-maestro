@@ -118,6 +118,9 @@ export async function introspectDatabase(
 
   // Get database name
   const dbResult = await pool.query('SELECT current_database() as dbname')
+  if (!dbResult.rows.length) {
+    throw new Error('Failed to fetch database name: current_database() returned no rows')
+  }
   const database = dbResult.rows[0].dbname
 
   // Get schemas

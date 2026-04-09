@@ -123,6 +123,9 @@ export async function hybridSearch(
   const queryTerms = extractTerms(query)
   console.log(`[Search] Extracted ${queryTerms.length} terms from query`)
 
+  // Empty query terms means no meaningful search can be performed
+  if (queryTerms.length === 0) return []
+
   // Search for each term and collect results with frequency scoring
   const termResults = new Map<string, number>() // msg_id -> count of matching terms
 
@@ -153,7 +156,21 @@ export async function hybridSearch(
   console.log(`[Search] Running semantic search...`)
 
   // Generate query embedding
-  const [queryEmbedding] = await embedTexts([query])
+  const embeddings = await embedTexts([query])
+  const queryEmbedding = embeddings[0]
+  if (!queryEmbedding) {
+    console.log(`[Search] Failed to generate query embedding — returning lexical results only`)
+    // Fall back to lexical-only results
+    return lexicalResults.slice(0, opts.limit).map(r => ({
+      msg_id: r.id,
+      score: r.score,
+      conversation_file: '',
+      role: '',
+      ts: 0,
+      text: '',
+      matchType: 'lexical' as const,
+    }))
+  }
 
   // Get all message vectors from CozoDB
   const allVectors = await getMessageVectors(agentDb)

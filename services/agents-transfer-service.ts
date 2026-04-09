@@ -311,7 +311,7 @@ export async function exportAgentZip(agentIdOrName: string): Promise<ServiceResu
     return { error: 'Agent not found', status: 404 }
   }
 
-  const agentName = agent.name || agent.alias
+  const agentName = agent.name
   if (!agentName) {
     return { error: 'Agent has no name configured', status: 400 }
   }
@@ -565,7 +565,7 @@ export function createTranscriptExportJob(
   const exportJob = {
     id: jobId,
     agentId: agent.id,
-    agentName: agent.name || agent.alias,
+    agentName: agent.name,
     sessionId,
     format,
     status: 'pending',
@@ -642,7 +642,7 @@ export async function importAgent(
       fs.readFileSync(registryPath, 'utf-8')
     )
 
-    const importedAgentName = importedAgent.name || importedAgent.alias
+    const importedAgentName = importedAgent.name
     if (!importedAgentName) {
       return { error: 'Invalid agent export: agent has no name', status: 400 }
     }
@@ -1056,7 +1056,7 @@ export async function transferAgent(
   // Step 2: Send to target host
   const formData = new FormData()
   const blob = new Blob([exportBuffer], { type: 'application/zip' })
-  formData.append('file', blob, `${agent.alias || agent.id}.zip`)
+  formData.append('file', blob, `${agent.name || agent.id}.zip`)
 
   const importOptions: Record<string, unknown> = {}
   if (newAlias) {
@@ -1094,7 +1094,7 @@ export async function transferAgent(
         fs.rmSync(agentDir, { recursive: true })
       }
 
-      const sessionName = agent.name || agent.alias
+      const sessionName = agent.name
       if (sessionName) {
         const inboxDir = path.join(MESSAGES_DIR, 'inbox', sessionName)
         const sentDir = path.join(MESSAGES_DIR, 'sent', sessionName)

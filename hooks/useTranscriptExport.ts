@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import type { ExportType, ExportJob, ExportJobStatus, ExportOptions } from '@/types/export'
 
 /**
@@ -27,9 +27,18 @@ export function useTranscriptExport(agentId: string) {
   const [error, setError] = useState<Error | null>(null)
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
 
+  // Mirror activeJobId in a ref so polling callbacks read the latest value
+  // without stale closure issues
+  const activeJobIdRef = useRef<string | null>(null)
+
   // Refs for polling timers and tracking
   const pollTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
   const isMountedRef = useRef(true)
+
+  // Keep the ref in sync with state so polling closures always see the latest value
+  useEffect(() => {
+    activeJobIdRef.current = activeJobId
+  }, [activeJobId])
 
   /**
    * Load existing export jobs for the agent
@@ -155,13 +164,31 @@ export function useTranscriptExport(agentId: string) {
         if (data.job.status === 'completed' || data.job.status === 'failed') {
           clearInterval(pollInterval)
           delete pollTimersRef.current[jobId]
-          setActiveJobId(null)
+          // Only clear activeJobId if this finishing job is actually the active one.
+          // Reading from the ref avoids stale closure — activeJobIdRef always has
+          // the latest value, unlike the captured state variable.
+          if (activeJobIdRef.current === jobId) {
+            setActiveJobId(null)
+          }
           console.log(`[useTranscriptExport] Job ${jobId} finished with status ${data.job.status}`)
         }
       } catch (err) {
         console.error(`[useTranscriptExport] Failed to poll job ${jobId}:`, err)
         clearInterval(pollInterval)
         delete pollTimersRef.current[jobId]
+
+        // Update job status to 'failed' so the UI reflects the polling failure
+        // instead of leaving the job stuck in 'processing' forever
+        if (isMountedRef.current) {
+          const pollError = err instanceof Error ? err : new Error(`Polling failed for job ${jobId}`)
+          setJobs(prev => prev.map(job =>
+            job.id === jobId
+              ? { ...job, status: 'failed' as const, error: pollError.message }
+              : job
+          ))
+          setError(pollError)
+          setActiveJobId(prev => prev === jobId ? null : prev)
+        }
       }
     }, EXPORT_POLL_INTERVAL_MS)
 
@@ -195,9 +222,8 @@ export function useTranscriptExport(agentId: string) {
       // Remove job from list
       setJobs(prev => prev.filter(job => job.id !== jobId))
 
-      if (activeJobId === jobId) {
-        setActiveJobId(null)
-      }
+      // Use functional update to avoid stale closure over activeJobId
+      setActiveJobId(prev => prev === jobId ? null : prev)
 
       console.log(`[useTranscriptExport] Cancelled job ${jobId}`)
     } catch (err) {
@@ -206,7 +232,7 @@ export function useTranscriptExport(agentId: string) {
       console.error('[useTranscriptExport] Failed to cancel job:', err)
       setError(err instanceof Error ? err : new Error('Failed to cancel export job'))
     }
-  }, [activeJobId])
+  }, [])
 
   /**
    * Clear completed or failed jobs
@@ -218,27 +244,32 @@ export function useTranscriptExport(agentId: string) {
   }, [])
 
   /**
-   * Get job by ID
+   * Active jobs (pending or processing) — derived from jobs state.
+   * Using useMemo instead of useCallback because these are computed values,
+   * not callbacks. useCallback on synchronous state getters creates new
+   * function identities on every jobs change without providing memoization
+   * benefit when the results are consumed immediately in render.
    */
-  const getJob = useCallback((jobId: string): ExportJob | undefined => {
-    return jobs.find(job => job.id === jobId)
-  }, [jobs])
-
-  /**
-   * Get jobs by status
-   */
-  const getJobsByStatus = useCallback((status: ExportJobStatus): ExportJob[] => {
-    return jobs.filter(job => job.status === status)
-  }, [jobs])
-
-  /**
-   * Get active jobs (pending or processing)
-   */
-  const getActiveJobs = useCallback((): ExportJob[] => {
-    return jobs.filter(job => 
+  const activeJobs = useMemo((): ExportJob[] => {
+    return jobs.filter(job =>
       job.status === 'pending' || job.status === 'processing'
     )
   }, [jobs])
+
+  /**
+   * Get job by ID — plain function, no memoization needed since callers
+   * use it imperatively (not as a dependency or prop)
+   */
+  const getJob = (jobId: string): ExportJob | undefined => {
+    return jobs.find(job => job.id === jobId)
+  }
+
+  /**
+   * Get jobs by status — plain function for imperative use
+   */
+  const getJobsByStatus = (status: ExportJobStatus): ExportJob[] => {
+    return jobs.filter(job => job.status === status)
+  }
 
   /**
    * Cleanup polling timers on agentId change or unmount.
@@ -273,15 +304,14 @@ export function useTranscriptExport(agentId: string) {
     error,
     activeJobId,
 
-    // Computed
-    activeJobs: getActiveJobs(),
+    // Computed (memoized)
+    activeJobs,
 
     // Actions
     exportTranscript,
     cancelJob,
     clearCompletedJobs,
     getJob,
-    getJobsByStatus,
-    getActiveJobs
+    getJobsByStatus
   }
 }

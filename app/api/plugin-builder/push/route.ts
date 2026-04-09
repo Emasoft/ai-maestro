@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { pushToGitHub } from '@/services/plugin-builder-service'
 import type { PluginPushConfig } from '@/types/plugin-builder'
+import { validateExternalUrl } from '@/lib/url-validation'
 
 export async function POST(request: NextRequest) {
   // SF-004: Separate JSON parsing from service call so service errors
@@ -34,6 +35,15 @@ export async function POST(request: NextRequest) {
   if (!body.forkUrl || typeof body.forkUrl !== 'string') {
     return NextResponse.json(
       { error: 'Fork URL is required' },
+      { status: 400 }
+    )
+  }
+
+  // SSRF protection: reject non-HTTPS, localhost, and private IP targets
+  const forkUrlError = validateExternalUrl(body.forkUrl)
+  if (forkUrlError) {
+    return NextResponse.json(
+      { error: `Invalid fork URL: ${forkUrlError}` },
       { status: 400 }
     )
   }

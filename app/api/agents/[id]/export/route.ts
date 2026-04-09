@@ -28,7 +28,7 @@ export async function GET(
 
     const { buffer, filename, agentId, agentName } = result.data
 
-    return new Response(new Uint8Array(buffer), {
+    return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
@@ -43,7 +43,7 @@ export async function GET(
   } catch (error) {
     console.error('Failed to export agent:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to export agent' },
+      { error: 'Failed to export agent' },
       { status: 500 }
     )
   }
@@ -71,7 +71,7 @@ export async function POST(
   } catch (error) {
     console.error('Failed to create transcript export job:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create transcript export job' },
+      { error: 'Failed to create transcript export job' },
       { status: 500 }
     )
   }

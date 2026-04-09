@@ -3,14 +3,15 @@ number: 1
 name: Title Change Lifecycle
 version: "2.0"
 description: >
-  Tests the full governance title change lifecycle through the UI:
-  login gate authentication, creating a test agent, assigning titles
-  (ORCHESTRATOR, ARCHITECT), verifying role-plugin auto-install/swap/removal,
-  verifying singleton constraints (disabled options in dialog), RBAC probes
-  (no self-modification, wrong-role denial), cemetery verification after
-  agent deletion, and reverting to AUTONOMOUS.
-  Validates the ChangeTitle 23-gate pipeline, LoginGate, RBAC authorize(),
-  no-self-modification rule, and DeleteAgent 10-gate pipeline end-to-end.
+  The user logs in, creates a test agent, then assigns it the ORCHESTRATOR
+  title via the Title Assignment Dialog — confirming the role-plugin installs
+  automatically. They swap the title to ARCHITECT and verify the old plugin
+  is replaced. They check that MANAGER is grayed out (singleton), attempt
+  self-modification via API (blocked), revert the agent to AUTONOMOUS,
+  delete it through the Danger Zone, and confirm the cemetery entry.
+client: claude
+interhosts: false
+device: desktop
 subsystems:
   - governance (ChangeTitle pipeline, LoginGate, RBAC)
   - role-plugins (auto-install, auto-uninstall, singleton enforcement)

@@ -70,6 +70,8 @@ export function useSessionActivity() {
       }
     } catch (err) {
       console.error('[useSessionActivity] Poll failed:', err)
+      setError(err instanceof Error ? err : new Error('Fetch failed'))
+      setLoading(false)
     }
   }, [])
 
@@ -101,6 +103,8 @@ export function useSessionActivity() {
         console.log('[useSessionActivity] WebSocket connected')
         setConnected(true)
         setError(null)
+        // Ensure loading is cleared even if no initial_status message arrives
+        setLoading(false)
         // Reset retry counter on successful connection
         reconnectAttemptRef.current = 0
         // Stop aggressive polling — WebSocket handles real-time updates
@@ -112,18 +116,33 @@ export function useSessionActivity() {
           const data = JSON.parse(event.data)
 
           if (data.type === 'initial_status') {
-            // Initial status from server
-            setActivity(data.activity || {})
+            // Initial status from server — validate activity is a plain object
+            const activityPayload = data.activity
+            if (activityPayload && typeof activityPayload === 'object' && !Array.isArray(activityPayload)) {
+              setActivity(activityPayload)
+            } else {
+              setActivity({})
+            }
             setLoading(false)
-          } else if (data.type === 'status_update') {
-            // Real-time status update
+          } else if (
+            data.type === 'status_update' &&
+            typeof data.sessionName === 'string' &&
+            data.sessionName &&
+            // Reject __proto__ / constructor / prototype keys to prevent prototype pollution
+            !['__proto__', 'constructor', 'prototype'].includes(data.sessionName)
+          ) {
+            // Validate status is one of the allowed values
+            const validStatuses: readonly string[] = ['active', 'idle', 'waiting']
+            const status: SessionActivityStatus = validStatuses.includes(data.status) ? data.status : 'idle'
+
+            // Real-time status update — only extract known fields
             setActivity(prev => ({
               ...prev,
               [data.sessionName]: {
-                lastActivity: data.timestamp,
-                status: data.status,
-                hookStatus: data.hookStatus,
-                notificationType: data.notificationType
+                lastActivity: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString(),
+                status,
+                hookStatus: typeof data.hookStatus === 'string' ? data.hookStatus : undefined,
+                notificationType: typeof data.notificationType === 'string' ? data.notificationType : undefined,
               }
             }))
           }

@@ -3,16 +3,17 @@ number: 13
 name: R17 Core Plugin Enforcement (Codex Client)
 version: "1.0"
 description: >
-  Tests the R17 governance rule: every agent MUST have the ai-maestro-plugin
-  installed at local scope. Validates: (1) automatic installation at agent creation,
-  (2) plugin appears in Config tab as "core" (no uninstall button), (3) the server
-  rejects API uninstall/disable requests, (4) the server re-enables a forcefully
-  disabled plugin on next startup, (5) the trust prompt is auto-accepted on first
-  launch, (6) corePluginMissing flag is set/cleared correctly.
-  This scenario exercises the full R17 enforcement chain for a NON-CLAUDE client:
-  CreateAgent G11 with cross-client conversion (InstallElement G13 variant gate),
-  wakeAgent R17 gate, startup audit, ChangePlugin G01b guard, and PluginsTab UI.
-  Tests R17.11-R17.13 (Codex-specific conversion via Universal Plugin IR).
+  The user logs in and creates a new Codex agent through the wizard. They open
+  the agent's Config tab and see the ai-maestro-plugin (converted to Codex
+  format) marked as "core" with no uninstall button. They attempt to uninstall
+  it via API call (rejected). They manually disable the plugin in settings,
+  restart the server, and confirm it was re-enabled automatically. They remove
+  the plugin file from disk, wake the agent, and verify the plugin reinstalls
+  with cross-client conversion. Same flow as SCEN-012 but for a Codex client.
+  They clean up the test agent when done.
+client: codex
+interhosts: false
+device: desktop
 subsystems:
   - governance (R17 core plugin enforcement)
   - element-management-service (CreateAgent G11, ChangePlugin G01b)

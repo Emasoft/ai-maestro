@@ -32,7 +32,7 @@ export default function MeetingTerminalArea({ agents, activeAgentId }: MeetingTe
       <div className="flex-1 relative">
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center text-gray-500">
-            <p className="text-lg mb-1">{activeAgent.label || activeAgent.name || activeAgent.alias}</p>
+            <p className="text-lg mb-1">{activeAgent.label || activeAgent.name}</p>
             <p className="text-sm">No active terminal session</p>
           </div>
         </div>

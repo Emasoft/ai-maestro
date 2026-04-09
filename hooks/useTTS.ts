@@ -34,7 +34,9 @@ function loadConfig(agentId: string): TTSConfig {
 function saveConfig(agentId: string, config: TTSConfig) {
   if (typeof window === 'undefined' || !agentId) return
   try {
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}${agentId}`, JSON.stringify(config))
+    // Never persist API keys to localStorage — they stay in React state only
+    const { openaiApiKey, elevenLabsApiKey, ...safeConfig } = config
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}${agentId}`, JSON.stringify(safeConfig))
   } catch { /* ignore */ }
 }
 
@@ -98,6 +100,8 @@ export function useTTS(options: UseTTSOptions): UseTTSReturn {
         setAvailableVoices(voices)
         voicesRef.current = voices
       }
+    }).catch(err => {
+      console.error('[TTS] Failed to load voices:', err)
     })
 
     // Capture provider in local var so cleanup stops the correct instance,
@@ -144,18 +148,27 @@ export function useTTS(options: UseTTSOptions): UseTTSReturn {
     speakingRef.current = true
     setIsSpeaking(true)
 
-    provider
-      .speak({
-        text,
-        voice: selectedVoice,
-        rate: currentConfig.rate,
-        pitch: currentConfig.pitch,
-        volume: currentConfig.volume,
-      })
-      .finally(() => {
-        speakingRef.current = false
-        if (isMountedRef.current) setIsSpeaking(false)
-      })
+    try {
+      provider
+        .speak({
+          text,
+          voice: selectedVoice,
+          rate: currentConfig.rate,
+          pitch: currentConfig.pitch,
+          volume: currentConfig.volume,
+        })
+        .catch(err => {
+          console.error('[TTS] Speech failed:', err)
+        })
+        .finally(() => {
+          speakingRef.current = false
+          if (isMountedRef.current) setIsSpeaking(false)
+        })
+    } catch (err) {
+      console.error('[TTS] Speech threw synchronously:', err)
+      speakingRef.current = false
+      if (isMountedRef.current) setIsSpeaking(false)
+    }
   }, [])
 
   const stop = useCallback(() => {

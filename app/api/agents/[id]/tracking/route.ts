@@ -46,8 +46,11 @@ export async function POST(
       body = {}
     }
 
+    // SF-063: Safe boolean coercion instead of unsafe 'as boolean' assertion
+    const addSampleData = typeof body.addSampleData === 'boolean' ? body.addSampleData : undefined
+
     const result = await initializeTracking(agentId, {
-      addSampleData: body.addSampleData as boolean | undefined,
+      addSampleData,
     })
 
     if (result.error) {

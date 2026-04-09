@@ -3,15 +3,16 @@ number: 10
 name: R12 Partial Team Detection
 version: "2.0"
 description: >
-  Tests R12 (Minimum Team Composition) enforcement. Adds LoginGate authentication,
-  RBAC probes (no-self-modification, wrong-role agent deletion denial),
-  COS immutability probe (R4.7), kanban task creation on the complete team,
-  DeleteTeam 8-gate pipeline with governance password, and cemetery verification
-  after agent deletion. Creates a team with only 3 agents (COS + ARCHITECT +
-  MEMBER), deliberately missing ORCHESTRATOR and INTEGRATOR. Verifies the system
-  detects the non-functional team. Completes the team, then tests R14 (Team
-  Resilience) by deleting one of the 5 required agents and verifying detection.
-  Validates governance rules R4, R12, R14, R16.
+  The user logs in, creates a MANAGER, and creates a team. They add only an
+  ARCHITECT and a MEMBER (plus the auto-assigned COS), leaving the team
+  deliberately incomplete -- missing an ORCHESTRATOR and INTEGRATOR. They check
+  that the team dashboard shows a "partial" warning. Then they add an
+  ORCHESTRATOR and an INTEGRATOR to complete the minimum composition. The warning
+  disappears. They open the kanban board, create a task, and drag it through
+  columns to Completed. Finally, they delete the team and clean up.
+client: claude
+interhosts: false
+device: desktop
 subsystems:
   - governance
   - teams

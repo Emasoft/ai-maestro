@@ -1,14 +1,14 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, UsersRound, X } from 'lucide-react'
 import type { Team } from '@/types/team'
-import type { UnifiedAgent } from '@/types/agent'
+import type { Agent } from '@/types/agent'
 import TeamCard from './TeamCard'
 
 interface TeamListViewProps {
-  agents: UnifiedAgent[]
+  agents: Agent[]
   searchQuery: string
 }
 
@@ -20,21 +20,31 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
   const [showCreate, setShowCreate] = useState(false)
   const [editingTeam, setEditingTeam] = useState<Team | null>(null)
 
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => { mountedRef.current = false }
+  }, [])
+
   const fetchTeams = useCallback(async () => {
     try {
       setFetchError(null)
       const res = await fetch('/api/teams')
+      if (!mountedRef.current) return
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        if (!mountedRef.current) return
         setFetchError(data.error || `Failed to load teams (${res.status})`)
         return
       }
       const data = await res.json()
+      if (!mountedRef.current) return
       setTeams(data.teams || [])
     } catch {
+      if (!mountedRef.current) return
       setFetchError('Network error loading teams')
     } finally {
-      setLoading(false)
+      if (mountedRef.current) setLoading(false)
     }
   }, [])
 
@@ -68,7 +78,7 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: deletePassword }),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
       if (!res.ok) {
         setDeleteError(data.error || 'Failed to delete team')
         return
@@ -91,7 +101,7 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, description, agentIds }),
         })
-        const data = await res.json()
+        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
         if (!res.ok) return data.error || 'Failed to update team'
         if (data.team) {
           setTeams(prev => prev.map(t => t.id === teamId ? data.team : t))
@@ -102,7 +112,7 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, description, agentIds }),
         })
-        const data = await res.json()
+        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
         if (!res.ok) return data.error || 'Failed to create team'
         if (data.team) {
           setTeams(prev => [...prev, data.team])
@@ -185,7 +195,7 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
 
       {/* Delete team confirmation modal with password */}
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setDeleteTarget(null)}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => { setDeleteTarget(null); setDeletePassword(''); setDeleteError(null) }}>
           <div className="bg-gray-900 rounded-xl w-full max-w-sm shadow-2xl border border-gray-700 p-5" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-red-400 mb-3">Delete Team</h3>
             <p className="text-xs text-gray-300 mb-4">
@@ -214,7 +224,7 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
 
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => setDeleteTarget(null)}
+                onClick={() => { setDeleteTarget(null); setDeletePassword(''); setDeleteError(null) }}
                 className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg hover:bg-gray-800 transition-colors"
               >
                 Cancel
@@ -241,7 +251,7 @@ function TeamFormModal({
   onClose,
 }: {
   team: Team | null
-  agents: UnifiedAgent[]
+  agents: Agent[]
   onSave: (name: string, description: string, agentIds: string[], teamId?: string) => Promise<string | null>
   onClose: () => void
 }) {

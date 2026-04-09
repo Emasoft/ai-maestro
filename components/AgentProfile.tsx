@@ -2,20 +2,19 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  X, User, Building2, Briefcase, Code2, Cpu, Tag,
+  X, User, Briefcase, Code2, Cpu, Tag,
   Activity, MessageSquare, CheckCircle, Clock, Zap, Square,
   DollarSign, Database, BookOpen, Link2, Edit2,
   ChevronDown, ChevronRight, Plus, Trash2, TrendingUp, TrendingDown,
   Cloud, Monitor, Server, Play, Wifi, WifiOff, Folder, Download, Send, RotateCcw,
-  GitBranch, FolderGit2, RefreshCw, ExternalLink, AlertTriangle, Brain,
-  FolderTree, Terminal, Crown, Shield, Webhook, ScrollText, Users, Puzzle, Palette,
+  GitBranch, FolderGit2, RefreshCw, AlertTriangle, Brain,
+  Terminal, Shield, Webhook, ScrollText, Users, Puzzle, Palette,
   ToggleLeft, ToggleRight, Loader2
 } from 'lucide-react'
-import type { Agent, AgentDocumentation, AgentSessionStatus, Repository } from '@/types/agent'
+import type { Agent, AgentDocumentation, LiveAgentSessionStatus, Repository } from '@/types/agent'
 import TransferAgentDialog from './TransferAgentDialog'
 import ExportAgentDialog from './ExportAgentDialog'
 import DeleteAgentDialog from './DeleteAgentDialog'
-import MemoryViewer from './MemoryViewer'
 import SkillsSection from './SkillsSection'
 // AgentSkillEditor (marketplace skills) moved to Settings → Global Elements
 import AvatarPicker from './AvatarPicker'
@@ -33,7 +32,7 @@ interface AgentProfileProps {
   isOpen: boolean
   onClose: () => void
   agentId: string
-  sessionStatus?: AgentSessionStatus  // Session status from unified API
+  sessionStatus?: LiveAgentSessionStatus  // Session status from unified API
   onStartSession?: () => void         // Callback to start a session for offline agents
   onDeleteAgent?: (agentId: string) => Promise<void>  // Callback to delete agent
   scrollToDangerZone?: boolean        // Whether to auto-scroll to danger zone
@@ -75,7 +74,6 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
   onDataChangedRef.current = onDataChanged
   const [agent, setAgent] = useState<Agent | null>(null)
   const [loading, setLoading] = useState(true)
-  const [editingField, setEditingField] = useState<string | null>(null)
 
   // Restart queue: deferred restart after title changes that install/uninstall plugins
   const { queueRestart } = useRestartQueue()
@@ -659,7 +657,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                         <div>
                           <EditableField
                             label="Agent ID"
-                            value={agent.name || agent.alias || ''}
+                            value={agent.name || ''}
                             onChange={(value) => updateField('name', value)}
                             icon={<User className="w-4 h-4" />}
                             flashActive={flashFields.has('name')}
@@ -675,7 +673,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                             value={agent.label || ''}
                             onChange={(value) => updateField('label', value)}
                             icon={<Tag className="w-4 h-4" />}
-                            placeholder={agent.name || agent.alias || 'Same as agent ID'}
+                            placeholder={agent.name || 'Same as agent ID'}
                             flashActive={flashFields.has('label')}
                           />
                           <p className="text-xs text-gray-500 mt-1">
@@ -1492,7 +1490,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
       {showTransferDialog && agent && (
         <TransferAgentDialog
           agentId={agent.id}
-          agentAlias={agent.name || agent.alias || ''}
+          agentAlias={agent.name || ''}
           agentDisplayName={agent.label}
           currentHostId={agent.hostId}
           onClose={() => setShowTransferDialog(false)}
@@ -1513,7 +1511,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
           isOpen={showExportDialog}
           onClose={() => setShowExportDialog(false)}
           agentId={agent.id}
-          agentAlias={agent.name || agent.alias || ''}
+          agentAlias={agent.name || ''}
           agentDisplayName={agent.label}
           hostUrl={hostUrl}
         />
@@ -1530,7 +1528,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
             }
           }}
           agentId={agent.id}
-          agentAlias={agent.name || agent.alias || ''}
+          agentAlias={agent.name || ''}
           agentDisplayName={agent.label}
           workingDirectory={agent.workingDirectory || agent.preferences?.defaultWorkingDirectory}
           hostUrl={hostUrl}

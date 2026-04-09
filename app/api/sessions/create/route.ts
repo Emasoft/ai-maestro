@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
+import os from 'os'
 import path from 'path'
 import { createSession } from '@/services/sessions-service'
+
+// Max length for string fields to prevent DoS via oversized payloads
+const MAX_STRING_LENGTH = 500
 
 interface CreateSessionRequestBody {
   name: string
@@ -25,12 +29,41 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Session name is required and must match ^[a-zA-Z0-9_-]+$' }, { status: 400 })
     }
 
+    // Length limits on string fields to prevent DoS via oversized payloads
+    const stringFields: Array<[keyof CreateSessionRequestBody, string]> = [
+      ['name', 'name'], ['label', 'label'], ['programArgs', 'programArgs'],
+      ['workingDirectory', 'workingDirectory'], ['agentId', 'agentId'],
+      ['hostId', 'hostId'], ['avatar', 'avatar'], ['program', 'program'],
+    ]
+    for (const [field, label] of stringFields) {
+      const val = body[field]
+      if (typeof val === 'string' && val.length > MAX_STRING_LENGTH) {
+        return NextResponse.json(
+          { error: `${label} exceeds maximum length of ${MAX_STRING_LENGTH} characters` },
+          { status: 400 },
+        )
+      }
+    }
+
     // SF-004: Validate workingDirectory is an absolute path (or ~/... for home-relative) to prevent path traversal
     // Check typeof first so that non-string values (number, object, null) are rejected before calling string methods
     if (body.workingDirectory !== undefined) {
       if (typeof body.workingDirectory !== 'string' || (!body.workingDirectory.startsWith('~') && !path.isAbsolute(body.workingDirectory))) {
         return NextResponse.json({ error: 'workingDirectory must be an absolute path or start with ~' }, { status: 400 })
       }
+      // Resolve ~ to actual home directory so path.resolve can normalize it
+      let resolvedDir = body.workingDirectory
+      if (resolvedDir.startsWith('~')) {
+        resolvedDir = path.join(os.homedir(), resolvedDir.slice(1))
+      }
+      // Normalize to resolve any ../ segments, then reject if traversal was attempted
+      // (i.e., the raw input contained '..' components before normalization)
+      const normalized = path.resolve(resolvedDir)
+      if (body.workingDirectory.includes('..')) {
+        return NextResponse.json({ error: 'workingDirectory must not contain path traversal (..)' }, { status: 400 })
+      }
+      // Use the resolved absolute path going forward
+      body.workingDirectory = normalized
     }
 
     // Validate that all optional string fields are actually strings when provided,

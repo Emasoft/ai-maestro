@@ -14,6 +14,7 @@ import {
   Mail,
   Box,
   Lock,
+  AlertTriangle,
 } from 'lucide-react'
 import { Agent } from '@/types/agent'
 import { SessionActivityStatus } from '@/hooks/useSessionActivity'
@@ -222,6 +223,25 @@ export default function AgentBadge({
           <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-600/50" title={`${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`}>
             <Mail className="w-3 h-3 text-slate-200" />
             <span className="text-[10px] font-bold text-slate-200">{unreadCount}</span>
+          </div>
+        )}
+
+        {/* Health warnings — R17 core plugin + P002 AMP identity.
+            Badge is visible only when at least one health check is failing.
+            Single amber triangle, tooltip lists all active issues. */}
+        {(agent.corePluginMissing || agent.ampIdentityMissing) && (
+          <div
+            className="flex items-center justify-center p-1 rounded-full bg-amber-900/60 ring-1 ring-amber-500/60"
+            title={[
+              agent.corePluginMissing
+                ? 'ai-maestro-plugin is missing (R17) — agent has no hooks, no state detection, no messaging. Wake the agent or use the Config tab to reinstall.'
+                : null,
+              agent.ampIdentityMissing
+                ? 'AMP identity not initialized (P002) — agent cannot send or receive messages. POST /api/agents/{id}/amp-init to reinitialize.'
+                : null,
+            ].filter(Boolean).join('\n\n')}
+          >
+            <AlertTriangle className="w-3 h-3 text-amber-400" />
           </div>
         )}
 

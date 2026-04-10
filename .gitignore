@@ -186,3 +186,16 @@ public/avatars/*_enhanced.png
 # Nested plugin repos (not submodules — standalone clones for dev)
 plugins/amp-messaging
 .infographic/
+
+# LLM Externalizer analysis reports (intermediate artifacts — regeneratable)
+llm_externalizer_output/
+
+# Scenario test outputs (per-run artifacts, not source)
+tests/scenarios/reports/
+tests/scenarios/screenshots/
+tests/scenarios/state-backups/
+state-backups/
+playwright-report/
+
+# Dev workspace for throwaway files
+tests_dev/

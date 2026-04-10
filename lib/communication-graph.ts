@@ -24,13 +24,14 @@ import type { AgentRole } from '@/types/agent'
  * agent-to-agent communication only.
  */
 const COMMUNICATION_GRAPH: Record<AgentRole, ReadonlySet<AgentRole>> = {
-  'manager':        new Set<AgentRole>(['manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member', 'autonomous']),
-  'chief-of-staff': new Set<AgentRole>(['manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member', 'autonomous']),
+  'manager':        new Set<AgentRole>(['manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member', 'autonomous', 'maintainer']),
+  'chief-of-staff': new Set<AgentRole>(['manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member', 'autonomous', 'maintainer']),
   'orchestrator':   new Set<AgentRole>(['chief-of-staff', 'architect', 'integrator', 'member']),
   'architect':      new Set<AgentRole>(['chief-of-staff', 'orchestrator']),
   'integrator':     new Set<AgentRole>(['chief-of-staff', 'orchestrator']),
   'member':         new Set<AgentRole>(['chief-of-staff', 'orchestrator']),
-  'autonomous':     new Set<AgentRole>(['manager', 'chief-of-staff', 'autonomous']),
+  'autonomous':     new Set<AgentRole>(['manager', 'chief-of-staff', 'autonomous', 'maintainer']),
+  'maintainer':     new Set<AgentRole>(['manager', 'chief-of-staff', 'autonomous', 'maintainer']),
 }
 
 /** All valid agent roles for the communication graph. */
@@ -81,6 +82,16 @@ const ROUTING_SUGGESTIONS: Record<string, string> = {
   'autonomous->member':       'Contact chief-of-staff or manager instead',
   // ORCHESTRATOR → ORCHESTRATOR (cross-team): go through COS
   'orchestrator->orchestrator': 'Route through chief-of-staff for cross-team coordination',
+  // Workers → MAINTAINER: go through COS or MANAGER
+  'orchestrator->maintainer': 'Route through chief-of-staff or manager',
+  'architect->maintainer':    'Route through chief-of-staff or manager',
+  'integrator->maintainer':   'Route through chief-of-staff or manager',
+  'member->maintainer':       'Route through chief-of-staff or manager',
+  // MAINTAINER → team workers: contact COS or MANAGER
+  'maintainer->orchestrator': 'Contact chief-of-staff or manager instead',
+  'maintainer->architect':    'Contact chief-of-staff or manager instead',
+  'maintainer->integrator':   'Contact chief-of-staff or manager instead',
+  'maintainer->member':       'Contact chief-of-staff or manager instead',
 }
 
 export interface MessageRouteValidation {

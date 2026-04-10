@@ -96,6 +96,7 @@ export const ROLE_PLUGIN_ARCHITECT = 'ai-maestro-architect-agent'
 export const ROLE_PLUGIN_INTEGRATOR = 'ai-maestro-integrator-agent'
 export const ROLE_PLUGIN_ORCHESTRATOR = 'ai-maestro-orchestrator-agent'
 export const ROLE_PLUGIN_PROGRAMMER = 'ai-maestro-programmer-agent'
+export const ROLE_PLUGIN_MAINTAINER = 'ai-maestro-maintainer-agent'
 
 /** All predefined role-plugin names */
 export const PREDEFINED_ROLE_PLUGIN_NAMES = [
@@ -105,6 +106,7 @@ export const PREDEFINED_ROLE_PLUGIN_NAMES = [
   ROLE_PLUGIN_ARCHITECT,
   ROLE_PLUGIN_COS,
   ROLE_PLUGIN_MANAGER,
+  ROLE_PLUGIN_MAINTAINER,
 ] as const
 
 /** Map from role-plugin name to its main agent filename */
@@ -115,6 +117,7 @@ export const ROLE_PLUGIN_MAIN_AGENTS: Record<string, string> = {
   [ROLE_PLUGIN_INTEGRATOR]: 'ai-maestro-integrator-agent-main-agent',
   [ROLE_PLUGIN_ORCHESTRATOR]: 'ai-maestro-orchestrator-agent-main-agent',
   [ROLE_PLUGIN_PROGRAMMER]: 'ai-maestro-programmer-agent-main-agent',
+  [ROLE_PLUGIN_MAINTAINER]: 'ai-maestro-maintainer-agent-main-agent',
 }
 
 /** Map from governance title to its required role-plugin */
@@ -125,6 +128,7 @@ export const TITLE_PLUGIN_MAP: Record<string, string> = {
   'INTEGRATOR': ROLE_PLUGIN_INTEGRATOR,
   'ORCHESTRATOR': ROLE_PLUGIN_ORCHESTRATOR,
   'MEMBER': ROLE_PLUGIN_PROGRAMMER,
+  'MAINTAINER': ROLE_PLUGIN_MAINTAINER,
 }
 
 /** Map from role-plugin name to compatible governance titles */
@@ -135,6 +139,7 @@ export const PLUGIN_COMPATIBLE_TITLES: Record<string, string[]> = {
   [ROLE_PLUGIN_ORCHESTRATOR]: ['ORCHESTRATOR'],
   [ROLE_PLUGIN_INTEGRATOR]: ['INTEGRATOR'],
   [ROLE_PLUGIN_PROGRAMMER]: ['MEMBER'],
+  [ROLE_PLUGIN_MAINTAINER]: ['MAINTAINER'],
 }
 
 // ── Repo URLs ───────────────────────────────────────────────

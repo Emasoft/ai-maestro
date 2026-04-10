@@ -49,6 +49,7 @@ const TITLE_COLORS: Record<AgentRole, string> = {
   integrator: 'border-cyan-500/60 bg-cyan-500/10 text-cyan-400',
   member: 'border-gray-500/60 bg-gray-500/10 text-gray-400',
   autonomous: 'border-gray-500/60 bg-gray-500/10 text-gray-400',
+  maintainer: 'border-emerald-500/60 bg-emerald-500/10 text-emerald-400',
 }
 
 // Plugin compatibility is now determined dynamically by scanning .agent.toml compatible-titles

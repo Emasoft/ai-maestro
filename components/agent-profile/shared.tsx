@@ -23,7 +23,7 @@ export interface TabDef {
 
 export interface AgentInfo {
   name?: string
-  title?: 'manager' | 'chief-of-staff' | 'architect' | 'orchestrator' | 'integrator' | 'member' | 'autonomous'
+  title?: 'manager' | 'chief-of-staff' | 'architect' | 'orchestrator' | 'integrator' | 'member' | 'autonomous' | 'maintainer'
   program?: string
   model?: string
   programArgs?: string

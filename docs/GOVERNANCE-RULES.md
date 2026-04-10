@@ -53,7 +53,7 @@ AI Maestro implements a team governance model with seven titles (MANAGER, CHIEF-
 
 | ID | Rule | Source |
 |----|------|--------|
-| R3.1 | Seven governance titles exist: **MANAGER** (global singleton), **CHIEF-OF-STAFF** (per team), **ORCHESTRATOR** (per team), **ARCHITECT**, **INTEGRATOR**, **MEMBER** (default team title), **AUTONOMOUS** (no team) | Explicit |
+| R3.1 | Eight governance titles exist: **MANAGER** (global singleton), **CHIEF-OF-STAFF** (per team), **ORCHESTRATOR** (per team), **ARCHITECT**, **INTEGRATOR**, **MEMBER** (default team title), **AUTONOMOUS** (no team), **MAINTAINER** (no team, bound to a GitHub repo) | Explicit |
 | R3.2 | Only ONE agent can be MANAGER at any given time (singleton constraint) | Explicit |
 | R3.3 | COS is a per-team title — each team has exactly one COS | Explicit |
 | R3.4 | An agent can be COS of only **ONE** team at any time | Explicit |
@@ -74,7 +74,7 @@ AI Maestro implements a team governance model with seven titles (MANAGER, CHIEF-
 |----|------|--------|
 | R4.1 | Non-MANAGER agents can be in at most **ONE team** at any given time (single-team membership) | Explicit |
 | R4.2 | Any agent can subscribe to **unlimited groups** simultaneously (groups have no governance) | Explicit |
-| R4.3 | **MANAGER** is not in any team — MANAGER operates at the host level | Explicit |
+| R4.3 | **MANAGER** and **MAINTAINER** are not in any team — both operate at the host level | Explicit |
 | R4.4 | When an agent joins a team, it is auto-assigned the **MEMBER** title and the programmer plugin | Explicit |
 | R4.5 | An agent cannot be added to a team they are already a member of (no duplicate membership in `agentIds`) | Explicit |
 | R4.6 | COS **must** be a member of the team they lead (present in `agentIds[]`) — they manage the team staff and the message filter relies on `agentIds` for same-team communication | Implicit (logical necessity) |
@@ -451,6 +451,26 @@ The conversion infrastructure already exists (`convertAndStorePlugin`, `emitForC
 
 ---
 
+## R19. MAINTAINER Title
+
+| ID | Rule | Source |
+|----|------|--------|
+| R19.1 | MAINTAINER is a no-team governance title assigned to agents responsible for maintaining an external software project (typically a GitHub repository). Like AUTONOMOUS, a MAINTAINER is NOT a member of any team — it operates independently at the host level | Explicit |
+| R19.2 | Every MAINTAINER agent MUST have a non-empty `githubRepo` attribute in the form `owner/repo`. The attribute is **immutable** once set — to change the repo, assign the MAINTAINER title to a different agent | Explicit |
+| R19.3 | One MAINTAINER per repository on a given host. Assigning MAINTAINER to an agent when another active (non-deleted) MAINTAINER already owns the same `githubRepo` MUST be rejected with a uniqueness error | Explicit |
+| R19.4 | A MAINTAINER's core workflow is: (a) subscribe to GitHub `issues.opened` events via a webhook, (b) verify/triage each issue, (c) if valid, clone the repo to `~/agents/<name>/workspace/`, create a branch, edit files, run tests, commit, (d) bump the version and push to origin | Explicit |
+| R19.5 | Webhook payloads MUST be HMAC-SHA256 verified using the `X-Hub-Signature-256` header and the per-agent secret. Unsigned or incorrectly signed requests MUST be rejected with HTTP 403 before any side effect | Explicit |
+| R19.6 | The webhook secret is SENSITIVE. It MUST be stored server-side only in `~/.aimaestro/maintainer-secrets.json` with mode `0o600` and parent dir `0o700`. The secret MUST NEVER be sent to the MAINTAINER agent in plaintext — the agent verifies signatures by calling `POST /api/maintainer/verify-signature` which performs the HMAC check server-side and returns only a boolean verdict | Explicit |
+| R19.7 | Each MAINTAINER agent listens on a dedicated `webhookPort` assigned at title creation time. The listener binds to `127.0.0.1` by default. External reachability is the user's responsibility (Tailscale funnel, Cloudflare tunnel, reverse proxy). Setup instructions MUST be shown in the wizard | Explicit |
+| R19.8 | A MAINTAINER must NOT run destructive git operations on the repository beyond what the publish pipeline authorizes: force-push, history rewrite, tag deletion, branch deletion. All destructive operations require explicit MANAGER approval via an `approval-request` AMP message | Explicit |
+| R19.9 | Before publishing any fix, a MAINTAINER MUST: (1) confirm the test suite passes, (2) confirm a version bump is actually required (not a doc-only change), (3) confirm R18 plugin continuity is satisfied for any bundled plugins in the target repo, (4) honor the repo's `pre-push` git hook if one exists | Explicit |
+| R19.10 | MAINTAINERs can message: MANAGER, COS, AUTONOMOUS, other MAINTAINERs. They can be messaged by: MANAGER, COS, AUTONOMOUS, other MAINTAINERs, and the user. Team workers (architect/integrator/member/orchestrator) cannot contact MAINTAINERs directly — route through COS or MANAGER | Explicit |
+| R19.11 | The MAINTAINER title is bound to the `ai-maestro-maintainer-agent` role-plugin (R11 binding). Per R17, the `ai-maestro-plugin` core plugin is also required | Explicit |
+| R19.12 | A MAINTAINER agent can be hibernated safely — its webhook listener goes down, and GitHub's delivery retry will re-deliver missed issues when the MAINTAINER is woken. The webhook secret is unchanged by hibernation. If the MAINTAINER is permanently deleted, the user MUST manually delete or disable the corresponding webhook in the GitHub repo settings, otherwise dead deliveries will accumulate. The UI MUST surface this warning at title removal and at agent deletion | Explicit |
+| R19.13 | A MAINTAINER agent's webhook listener is a subprocess of the Claude Code session. It MUST be terminated on `SessionEnd` / `SessionStop` / hibernation to prevent zombie listeners. The role-plugin's hook handles this | Explicit |
+
+---
+
 ## Invariants (Must Never Be Violated)
 
 These are hard invariants that the system must maintain at all times:
@@ -472,6 +492,7 @@ These are hard invariants that the system must maintain at all times:
 15. **Core-plugin-protection invariant**: The `ai-maestro-plugin` cannot be uninstalled, disabled, or moved to user scope on any agent — it is a permanent, enabled, local-scope fixture
 16. **Core-plugin-currency invariant**: The `ai-maestro-plugin` must be updated from the marketplace whenever AI Maestro itself is updated
 17. **Plugin-continuity invariant**: When an agent's client changes, every plugin that was installed for the old client must be re-emitted and re-installed in a format compatible with the new client — no agent may ever be left without its plugins as a side effect of `ChangeClient`
+18. **MAINTAINER-repo-uniqueness invariant**: At any time, at most one active (non-deleted) agent has a given `githubRepo` value. Two MAINTAINERs cannot maintain the same repository on the same host
 
 ---
 

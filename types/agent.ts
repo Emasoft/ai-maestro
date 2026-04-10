@@ -269,6 +269,11 @@ export interface Agent {
   // the flag on success.
   ampIdentityMissing?: boolean
 
+  // MAINTAINER title properties (R19)
+  // Required when governanceTitle === 'maintainer'. Immutable once set.
+  githubRepo?: string             // Format: 'owner/repo'. One MAINTAINER per repo per host.
+  webhookPort?: number            // Local listener port (1024-65535). Binds 127.0.0.1 only.
+
   // Soft-delete: when set, agent is marked as deleted but data is preserved for restore
   deletedAt?: string             // ISO timestamp when soft-deleted, undefined = active
 }
@@ -468,9 +473,9 @@ export type AgentStatus = 'active' | 'idle' | 'offline' | 'deleted'
  * Kept as "AgentRole" type name for backward compatibility with existing API/DB schema.
  * The semantic meaning is "title" — a future migration may rename this.
  */
-export type AgentRole = 'manager' | 'chief-of-staff' | 'architect' | 'orchestrator' | 'integrator' | 'member' | 'autonomous'
+export type AgentRole = 'manager' | 'chief-of-staff' | 'architect' | 'orchestrator' | 'integrator' | 'member' | 'autonomous' | 'maintainer'
 
-export const VALID_GOVERNANCE_TITLES: readonly AgentRole[] = ['manager', 'chief-of-staff', 'architect', 'orchestrator', 'integrator', 'member', 'autonomous'] as const
+export const VALID_GOVERNANCE_TITLES: readonly AgentRole[] = ['manager', 'chief-of-staff', 'architect', 'orchestrator', 'integrator', 'member', 'autonomous', 'maintainer'] as const
 
 /**
  * Simplified agent for listings
@@ -519,6 +524,9 @@ export interface CreateAgentRequest {
   team?: string
   documentation?: AgentDocumentation
   metadata?: AgentMetadata
+  // MAINTAINER title properties (R19)
+  githubRepo?: string             // Required when role === 'maintainer'. Format: 'owner/repo'.
+  webhookPort?: number            // Required when role === 'maintainer'. Local port (1024-65535).
   // DEPRECATED: for backward compatibility
   /** @deprecated Use 'name' instead. */
   alias?: string
@@ -550,6 +558,9 @@ export interface UpdateAgentRequest {
   corePluginMissing?: boolean    // True if ai-maestro-plugin failed to install
   // AMP Identity Status (P002)
   ampIdentityMissing?: boolean   // True if amp-init.sh failed during CreateAgent G12
+  // MAINTAINER title properties (R19) — set via ChangeTitle, immutable after
+  githubRepo?: string             // Format: 'owner/repo'. One MAINTAINER per repo per host.
+  webhookPort?: number            // Local listener port (1024-65535). Binds 127.0.0.1 only.
   // DEPRECATED: for backward compatibility
   /** @deprecated Use 'name' instead. */
   alias?: string

@@ -1351,10 +1351,12 @@ export interface ChangeTitleResult {
   uninstalledPlugin: string | null
   restartNeeded: boolean
   error?: string
+  // MAINTAINER only: raw webhook secret (shown to user ONCE on title assignment)
+  webhookSecret?: string
 }
 
 const VALID_TITLES: ReadonlySet<string> = new Set([
-  'manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member', 'autonomous',
+  'manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member', 'autonomous', 'maintainer',
 ])
 
 // Titles that require team membership
@@ -1364,7 +1366,7 @@ const TEAM_TITLES: ReadonlySet<string> = new Set([
 
 // Titles that are standalone (no team required)
 const STANDALONE_TITLES: ReadonlySet<string> = new Set([
-  'manager', 'autonomous',
+  'manager', 'autonomous', 'maintainer',
 ])
 
 // Singleton titles (only one agent can hold this on the host/team)
@@ -1530,6 +1532,76 @@ export async function ChangeTitle(
       ops.push(`EXE: ${newTitle.toUpperCase()} is standalone — no team required`)
     } else {
       ops.push(`EXE: Title being cleared — team check N/A`)
+    }
+
+    // ── GATE 9a: MAINTAINER validation (R19.2, R19.3, R19.7) ─
+    // When assigning MAINTAINER: require githubRepo + webhookPort, check
+    // repo uniqueness, mint webhook secret. When removing MAINTAINER:
+    // delete the secret and warn about manual webhook cleanup.
+    if (newTitle === 'maintainer') {
+      // R19.2: githubRepo required and must match owner/repo format
+      const githubRepo = (options as Record<string, unknown>)?.githubRepo as string | undefined
+      if (!githubRepo || typeof githubRepo !== 'string') {
+        result.error = 'MAINTAINER requires a githubRepo attribute (format: "owner/repo")'
+        return result
+      }
+      if (!/^[\w.-]+\/[\w.-]+$/.test(githubRepo)) {
+        result.error = `Invalid githubRepo format: "${githubRepo}". Must be "owner/repo" (e.g. "Emasoft/my-project")`
+        return result
+      }
+      // R19.7: webhookPort required and must be valid
+      const webhookPort = (options as Record<string, unknown>)?.webhookPort as number | undefined
+      if (!webhookPort || typeof webhookPort !== 'number' || webhookPort < 1024 || webhookPort > 65535) {
+        result.error = `MAINTAINER requires a webhookPort between 1024 and 65535 (got: ${webhookPort})`
+        return result
+      }
+      // R19.3: One MAINTAINER per repo on this host
+      // listAgents returns AgentSummary but registry has all fields at runtime
+      const { listAgents } = await import('@/lib/agent-registry')
+      const allAgents = listAgents() as unknown as Array<{ id: string; name: string; governanceTitle?: string; githubRepo?: string; webhookPort?: number; deletedAt?: string }>
+      const existingMaintainer = allAgents.find(a =>
+        a.id !== agentId &&
+        a.governanceTitle === 'maintainer' &&
+        a.githubRepo === githubRepo &&
+        !a.deletedAt
+      )
+      if (existingMaintainer) {
+        result.error = `Repository "${githubRepo}" is already maintained by "${existingMaintainer.name}". One MAINTAINER per repo per host (R19.3).`
+        return result
+      }
+      // R19.7: Check port not in use by another MAINTAINER
+      const portConflict = allAgents.find(a =>
+        a.id !== agentId &&
+        a.governanceTitle === 'maintainer' &&
+        a.webhookPort === webhookPort &&
+        !a.deletedAt
+      )
+      if (portConflict) {
+        result.error = `Port ${webhookPort} is already in use by MAINTAINER "${portConflict.name}". Choose a different port.`
+        return result
+      }
+      // R19.6: Mint webhook secret (stored server-side, shown to user ONCE)
+      const { mintMaintainerSecret } = await import('@/lib/maintainer-secrets')
+      const rawSecret = mintMaintainerSecret(agentId)
+      result.webhookSecret = rawSecret
+      // Store githubRepo + webhookPort on agent
+      await updateAgent(agentId, { githubRepo, webhookPort } as Record<string, unknown>)
+      ops.push(`G9a: MAINTAINER validated — repo="${githubRepo}", port=${webhookPort}, secret minted`)
+    } else {
+      ops.push(`G9a: Not MAINTAINER — maintainer validation skipped`)
+    }
+
+    // ── GATE 9b: Clear old MAINTAINER secret on title removal ─
+    if (oldTitle === 'maintainer' && newTitle !== 'maintainer') {
+      try {
+        const { deleteMaintainerSecret } = await import('@/lib/maintainer-secrets')
+        deleteMaintainerSecret(agentId)
+        ops.push(`G9b: Deleted MAINTAINER webhook secret — user must disable the GitHub webhook manually`)
+      } catch (err) {
+        ops.push(`G9b: WARN — Failed to delete maintainer secret: ${err instanceof Error ? err.message : err}`)
+      }
+    } else {
+      ops.push(`G9b: Not removing MAINTAINER — secret cleanup skipped`)
     }
 
     // ── GATE 10: Clear old MANAGER from governance.json ──────
@@ -4251,7 +4323,7 @@ export async function CreateAgent(
     const { mkdir, stat } = await import('fs/promises')
     // Team titles (member, cos, orchestrator, etc.) are forced to ~/agents/<name>/
     // Non-team titles (autonomous, manager) can choose their own folder
-    const NON_TEAM_TITLES = new Set(['autonomous', 'manager', ''])
+    const NON_TEAM_TITLES = new Set(['autonomous', 'manager', 'maintainer', ''])
     const isTeamTitle = desired.governanceTitle && !NON_TEAM_TITLES.has(desired.governanceTitle)
     let workDir: string
 

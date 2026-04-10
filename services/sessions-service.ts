@@ -336,7 +336,10 @@ async function fetchLocalSessions(hostId: string): Promise<Session[]> {
               // Validate session name (same rules as session creation)
               if (!/^[a-zA-Z0-9_-]+$/.test(sessionName)) continue
 
-              // Auto-register agent if not already registered
+              // R-AUTOREG: Do NOT auto-register. Unknown tmux sessions are surfaced
+              // as orphan sessions only — the user must explicitly revive/import
+              // them before any plugin is installed or agent record is created.
+              // See docs/GOVERNANCE-RULES.md R17.18 (revised).
               let agentId: string | undefined
               let resolvedWorkingDirectory = ''
               const existingAgent = getAgentByName(sessionName)
@@ -344,42 +347,14 @@ async function fetchLocalSessions(hostId: string): Promise<Session[]> {
                 agentId = existingAgent.id
                 resolvedWorkingDirectory = existingAgent.workingDirectory || ''
               } else {
+                // Best-effort CWD read for display only — no registration side effect.
                 try {
-                  // Query working directory only for new agents
-                  try {
-                    const { stdout: cwdOut } = await execFileAsync(
-                      'tmux', ['-S', socketPath, 'display-message', '-t', sessionName, '-p', '#{pane_current_path}'],
-                      { timeout: 3000 }
-                    )
-                    resolvedWorkingDirectory = cwdOut.trim()
-                  } catch { /* fallback to empty */ }
-
-                  const { tags } = parseNameForDisplay(sessionName)
-                  const agent = await createAgent({
-                    name: sessionName,
-                    program: 'openclaw',
-                    taskDescription: `OpenClaw agent ${sessionName}`,
-                    tags,
-                    owner: os.userInfo().username,
-                    createSession: true,
-                    workingDirectory: resolvedWorkingDirectory || undefined,
-                  })
-                  agentId = agent.id
-                  console.log(`[Sessions] Auto-registered OpenClaw agent: ${sessionName} (${agent.id})`)
-
-                  // Initialize AMP only on first registration (non-fatal)
-                  try {
-                    await initAgentAMPHome(sessionName, agent.id)
-                    const ampDir = getAgentAMPDir(sessionName, agent.id)
-                    await execFileAsync('tmux', ['-S', socketPath, 'set-environment', '-t', sessionName, 'AMP_DIR', ampDir], { timeout: 3000 })
-                    await execFileAsync('tmux', ['-S', socketPath, 'set-environment', '-t', sessionName, 'AIM_AGENT_NAME', sessionName], { timeout: 3000 })
-                    await execFileAsync('tmux', ['-S', socketPath, 'set-environment', '-t', sessionName, 'AIM_AGENT_ID', agent.id], { timeout: 3000 })
-                  } catch (ampError) {
-                    console.warn(`[Sessions] Could not set up AMP for OpenClaw agent ${sessionName}:`, ampError)
-                  }
-                } catch (regError) {
-                  console.warn(`[Sessions] Could not register OpenClaw agent ${sessionName}:`, regError)
-                }
+                  const { stdout: cwdOut } = await execFileAsync(
+                    'tmux', ['-S', socketPath, 'display-message', '-t', sessionName, '-p', '#{pane_current_path}'],
+                    { timeout: 3000 }
+                  )
+                  resolvedWorkingDirectory = cwdOut.trim()
+                } catch { /* fallback to empty */ }
               }
 
               sessions.push({

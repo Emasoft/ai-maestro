@@ -67,6 +67,25 @@ export interface AMPEnvelope {
 
   /** Ed25519 signature (null for local messages) */
   signature: string | null;
+
+  /**
+   * Host guarantor fingerprint (P004).
+   *
+   * When the sender's own Ed25519 signature cannot be verified (missing key
+   * file, stale key, clock skew, key rotation edge case) but the sender is
+   * in the local registry, the server re-signs the canonical payload with
+   * its host key and records the host id here. The `signature` field then
+   * contains the host-key signature, and the recipient knows to verify it
+   * against the host's public key rather than the agent's.
+   *
+   * - Absent: normal agent-signed path (signature verified against agent key)
+   * - Present: host-guaranteed path (signature verified against host key)
+   *
+   * Local recipients trust the guarantor claim implicitly (same host).
+   * Cross-host recipients must fetch the guarantor host's public key and
+   * verify independently — they NEVER trust a foreign guarantor blindly.
+   */
+  guarantor_host_id?: string;
 }
 
 /**

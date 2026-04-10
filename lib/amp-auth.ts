@@ -482,3 +482,104 @@ export function authenticateRequest(authHeader: string | null): AMPAuthResult {
     address: record.address
   }
 }
+
+// ============================================================================
+// Host Guarantor (P004)
+// ============================================================================
+//
+// When a LOCAL agent's own Ed25519 signature fails verification (missing key
+// file, stale key, clock skew, key rotation edge case), the server can vouch
+// for the message by re-signing the canonical payload with its host key. The
+// resulting envelope carries `guarantor_host_id` and a host-key signature in
+// place of the agent signature.
+//
+// Security invariants:
+//   1. Guarantor fallback is only allowed when the sender is in THIS host's
+//      registry (cross-host impersonation is impossible — we'd have to ask
+//      the other host to sign, and that host would refuse unless the agent
+//      is actually theirs).
+//   2. The host key is never shared; only the server can mint guarantor
+//      signatures.
+//   3. The recipient side can always distinguish guarantor-signed messages
+//      (`guarantor_host_id` present) from direct agent signatures and may
+//      choose to reject the former.
+//   4. Cross-host delivery MUST NOT auto-accept a foreign guarantor claim —
+//      the recipient host must fetch the claimed guarantor host's public key
+//      and verify the signature against it.
+
+/**
+ * Check whether the server can guarantor-sign on behalf of a local agent.
+ *
+ * Returns true only if:
+ *   - the sender exists in this host's agent registry, AND
+ *   - the sender's hostId matches this host (they are local), AND
+ *   - the host keypair is available on disk and usable.
+ *
+ * Does NOT perform any signing — that's `guarantorSignCanonical`.
+ */
+export async function canGuarantorSign(senderAgentId: string): Promise<boolean> {
+  try {
+    const { getAgent } = await import('@/lib/agent-registry')
+    const agent = getAgent(senderAgentId)
+    if (!agent) return false
+
+    // Sender must be on this host — we never vouch for agents on other hosts.
+    const { getSelfHostId } = await import('@/lib/hosts-config')
+    const selfHostId = getSelfHostId()
+    if (agent.hostId && selfHostId && agent.hostId.toLowerCase() !== selfHostId.toLowerCase()) {
+      return false
+    }
+
+    // Host key must be available (getOrCreateHostKeyPair throws on failure).
+    const { getHostPublicKeyHex } = await import('@/lib/host-keys')
+    const pub = getHostPublicKeyHex()
+    return typeof pub === 'string' && pub.length > 0
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Sign a canonical payload string with the host key and return the base64
+ * Ed25519 signature. Throws if the host key is unavailable.
+ *
+ * The caller is responsible for constructing the canonical string using the
+ * same format as agent signatures — see `signatureData` construction in
+ * `services/amp-service.ts` (from|to|subject|priority|in_reply_to|payloadHash).
+ */
+export async function guarantorSignCanonical(canonicalPayload: string): Promise<string> {
+  const { signHostAttestation } = await import('@/lib/host-keys')
+  return signHostAttestation(canonicalPayload)
+}
+
+/**
+ * Verify a host-guarantor signature against a canonical payload.
+ *
+ * @param canonicalPayload The canonical payload that was signed (same format
+ *                         the sender side produces).
+ * @param signatureBase64  The host-key signature to verify.
+ * @param hostPublicKeyHex The DER-SPKI hex public key of the claimed guarantor
+ *                         host. For local verification, pass this host's own
+ *                         public key. For cross-host, fetch from the peer
+ *                         host's /api/v1/host-key endpoint.
+ */
+export async function verifyHostGuarantorSignature(
+  canonicalPayload: string,
+  signatureBase64: string,
+  hostPublicKeyHex: string,
+): Promise<boolean> {
+  try {
+    const { verifyHostAttestation } = await import('@/lib/host-keys')
+    return verifyHostAttestation(canonicalPayload, signatureBase64, hostPublicKeyHex)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Convenience: return this host's id for stamping into `guarantor_host_id`.
+ */
+export async function getLocalHostIdForGuarantor(): Promise<string> {
+  const { getSelfHostId } = await import('@/lib/hosts-config')
+  return getSelfHostId()
+}

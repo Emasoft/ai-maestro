@@ -158,6 +158,21 @@ export interface AMPEnvelope {
 
   /** Thread ID for conversation tracking (ID of first message in thread) */
   thread_id: string
+
+  /**
+   * Host guarantor fingerprint (P004).
+   *
+   * Set when the sender's own agent Ed25519 signature could not be verified
+   * (missing/stale key file, clock skew) but the sender is in the LOCAL
+   * host's registry. The server re-signs the canonical payload with its
+   * host key; the `signature` field then contains the host-key signature,
+   * and this field records which host vouched. Absent on normal
+   * agent-signed messages.
+   *
+   * Cross-host recipients must NOT trust a foreign guarantor blindly —
+   * they must fetch the claimed host's public key and verify explicitly.
+   */
+  guarantor_host_id?: string
 }
 
 /**

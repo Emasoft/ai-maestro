@@ -916,27 +916,56 @@ export async function routeMessage(
     const senderKeyPair = isMeshForwarded ? null : loadKeyPair(auth.agentId!)
 
     if (body.signature) {
+      const payloadHash = crypto
+        .createHash('sha256')
+        .update(JSON.stringify(body.payload))
+        .digest('base64')
+
+      const signatureData = [
+        envelope.from, envelope.to, envelope.subject,
+        body.priority || 'normal', body.in_reply_to || '', payloadHash
+      ].join('|')
+
       if (senderKeyPair?.publicHex) {
-        const payloadHash = crypto
-          .createHash('sha256')
-          .update(JSON.stringify(body.payload))
-          .digest('base64')
-
-        const signatureData = [
-          envelope.from, envelope.to, envelope.subject,
-          body.priority || 'normal', body.in_reply_to || '', payloadHash
-        ].join('|')
-
         const isValid = verifySignature(signatureData, body.signature, senderKeyPair.publicHex)
-        if (!isValid) {
-          // Reject messages with cryptographically invalid signatures (key present but sig doesn't match)
-          return {
-            data: { error: 'forbidden', message: 'Message signature verification failed' } as AMPError,
-            status: 403
+        if (isValid) {
+          console.log(`[AMP Route] Verified signature from ${envelope.from}`)
+          envelope.signature = body.signature
+        } else {
+          // P004: Agent signature failed — try the host guarantor fallback for
+          // LOCAL senders. This covers key propagation edge cases, clock skew,
+          // and stale keypair files. Cross-host senders never get a guarantor —
+          // they must produce a valid signature themselves.
+          if (isMeshForwarded) {
+            return {
+              data: { error: 'forbidden', message: 'Message signature verification failed' } as AMPError,
+              status: 403
+            }
+          }
+          const { canGuarantorSign, guarantorSignCanonical, getLocalHostIdForGuarantor } =
+            await import('@/lib/amp-auth')
+          const eligible = auth.agentId ? await canGuarantorSign(auth.agentId) : false
+          if (!eligible) {
+            return {
+              data: { error: 'forbidden', message: 'Message signature verification failed' } as AMPError,
+              status: 403
+            }
+          }
+          try {
+            const hostSignature = await guarantorSignCanonical(signatureData)
+            envelope.signature = hostSignature
+            envelope.guarantor_host_id = await getLocalHostIdForGuarantor()
+            console.warn(
+              `[AMP Route] Agent signature failed for ${envelope.from}; guarantor-signed by host "${envelope.guarantor_host_id}"`,
+            )
+          } catch (gErr) {
+            console.error('[AMP Route] Host guarantor signing failed:', gErr)
+            return {
+              data: { error: 'forbidden', message: 'Message signature verification failed' } as AMPError,
+              status: 403
+            }
           }
         }
-        console.log(`[AMP Route] Verified signature from ${envelope.from}`)
-        envelope.signature = body.signature
       } else {
         // MF-03: No public key available to verify — do not propagate unverified signature
         console.warn(`[AMP Route] Signature provided but no public key to verify for ${envelope.from}, discarding signature`)

@@ -792,6 +792,15 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
     }
   }
 
+  // R17-TRUST (BUG-003): Auto-accept trust prompt for wizard-created agents.
+  // This must run AFTER the program launches. It's non-blocking and never throws.
+  // Only needed for first-launch agents (launchCount === 0 or missing).
+  const isFirstLaunch = !registeredAgent?.launchCount || registeredAgent.launchCount === 0
+  if (selectedProgram !== 'none' && selectedProgram !== 'terminal' && isFirstLaunch) {
+    const { handleTrustAutoAccept } = await import('@/services/agents-core-service')
+    handleTrustAutoAccept(actualSessionName, agentName).catch(() => {})
+  }
+
   return { data: { success: true, name: actualSessionName, agentId: registeredAgent?.id }, status: 200 }
 }
 

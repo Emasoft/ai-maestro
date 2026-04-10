@@ -280,17 +280,119 @@ export async function initAgentAMPHome(agentName: string, agentId?: string): Pro
   }
 
   // Copy machine-level keys if agent doesn't have them yet
+  let hasKeys = false
   try {
     await fs.access(path.join(agentKeys, 'private.pem'))
+    hasKeys = true
   } catch {
+    // Try machine-level keys first
     const machineKeys = path.join(AMP_DIR, 'keys')
     try {
       const privateKey = await fs.readFile(path.join(machineKeys, 'private.pem'))
       const publicKey = await fs.readFile(path.join(machineKeys, 'public.pem'))
-      await fs.writeFile(path.join(agentKeys, 'private.pem'), privateKey)
-      await fs.writeFile(path.join(agentKeys, 'public.pem'), publicKey)
+      await fs.writeFile(path.join(agentKeys, 'private.pem'), privateKey, { mode: 0o600 })
+      await fs.writeFile(path.join(agentKeys, 'public.pem'), publicKey, { mode: 0o644 })
+      hasKeys = true
     } catch {
-      // No machine keys — agent will need to run amp-init
+      // No machine keys — try server-side keys from ~/.aimaestro/agents/{id}/keys/
+      if (agentId) {
+        const serverKeysDir = path.join(os.homedir(), '.aimaestro', 'agents', agentId, 'keys')
+        try {
+          const privateKey = await fs.readFile(path.join(serverKeysDir, 'private.pem'))
+          const publicKey = await fs.readFile(path.join(serverKeysDir, 'public.pem'))
+          await fs.writeFile(path.join(agentKeys, 'private.pem'), privateKey, { mode: 0o600 })
+          await fs.writeFile(path.join(agentKeys, 'public.pem'), publicKey, { mode: 0o644 })
+          hasKeys = true
+          console.log(`[AMP Inbox Writer] Copied server-side keys for agent ${agentName}`)
+        } catch {
+          // No server-side keys either
+        }
+      }
+    }
+
+    // BUG-004 fix: If no keys exist anywhere, generate fresh Ed25519 keys.
+    // Without keys, amp-send.sh fails with "AMP not initialized" and agents
+    // cannot participate in inter-agent messaging.
+    if (!hasKeys) {
+      try {
+        const { generateKeyPairSync } = await import('crypto')
+        const { privateKey, publicKey } = generateKeyPairSync('ed25519', {
+          publicKeyEncoding: { type: 'spki', format: 'pem' },
+          privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+        })
+        await fs.writeFile(path.join(agentKeys, 'private.pem'), privateKey, { mode: 0o600 })
+        await fs.writeFile(path.join(agentKeys, 'public.pem'), publicKey, { mode: 0o644 })
+        hasKeys = true
+        console.log(`[AMP Inbox Writer] Generated fresh Ed25519 keys for agent ${agentName}`)
+
+        // Also save to server-side storage so amp-keys.ts can find them
+        if (agentId) {
+          const serverKeysDir = path.join(os.homedir(), '.aimaestro', 'agents', agentId, 'keys')
+          try {
+            await fs.mkdir(serverKeysDir, { recursive: true })
+            await fs.writeFile(path.join(serverKeysDir, 'private.pem'), privateKey, { mode: 0o600 })
+            await fs.writeFile(path.join(serverKeysDir, 'public.pem'), publicKey, { mode: 0o644 })
+          } catch {
+            // Non-fatal: server-side keys are optional for CLI-side messaging
+          }
+        }
+      } catch (keyGenErr) {
+        console.warn(`[AMP Inbox Writer] Failed to generate keys for ${agentName}:`, keyGenErr)
+      }
+    }
+  }
+
+  // BUG-004 fix: Ensure config.json has address, fingerprint, and tenant.
+  // Without these fields, amp-send.sh cannot construct sender addresses or
+  // sign messages, causing 403 errors on inter-agent messaging.
+  if (hasKeys) {
+    try {
+      const configStr = await fs.readFile(agentConfig, 'utf-8')
+      const config = JSON.parse(configStr)
+      const agentSection = config.agent || {}
+      const needsUpdate = !agentSection.address || !agentSection.fingerprint || !agentSection.tenant
+
+      if (needsUpdate) {
+        // Compute fingerprint from public key
+        const { createHash, createPublicKey } = await import('crypto')
+        const pubPem = await fs.readFile(path.join(agentKeys, 'public.pem'), 'utf-8')
+        const pubKeyObj = createPublicKey(pubPem)
+        const derBuf = pubKeyObj.export({ type: 'spki', format: 'der' })
+        const fingerprint = 'SHA256:' + createHash('sha256').update(derBuf).digest('base64')
+
+        // Resolve tenant from hosts config or fallback to 'default'
+        let tenant = agentSection.tenant || 'default'
+        try {
+          const { getOrganization } = require('@/lib/hosts-config')
+          const org = getOrganization()
+          if (org) tenant = org
+        } catch {
+          // hosts-config not available — use default
+        }
+
+        // Build address: <name>@<tenant>.aimaestro.local
+        const address = `${agentName}@${tenant}.aimaestro.local`
+
+        config.agent = {
+          ...agentSection,
+          name: agentName,
+          tenant,
+          address,
+          fingerprint,
+          ...(agentId ? { id: agentId } : {}),
+          createdAt: agentSection.createdAt || new Date().toISOString(),
+        }
+        config.version = config.version || '1.1'
+        config.provider = config.provider || {
+          domain: 'aimaestro.local',
+          maestro_url: 'http://localhost:23000',
+        }
+
+        await fs.writeFile(agentConfig, JSON.stringify(config, null, 2))
+        console.log(`[AMP Inbox Writer] Updated config for ${agentName}: address=${address}`)
+      }
+    } catch (configErr) {
+      console.warn(`[AMP Inbox Writer] Failed to update config for ${agentName}:`, configErr)
     }
   }
 

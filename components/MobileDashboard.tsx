@@ -7,7 +7,9 @@ import MobileMessageCenter from './MobileMessageCenter'
 import MobileWorkTree from './MobileWorkTree'
 import MobileHostsList from './MobileHostsList'
 import MobileConversationDetail from './MobileConversationDetail'
-import { Terminal, Mail, RefreshCw, Activity, Server, MessageSquare, Phone } from 'lucide-react'
+import { Terminal, Mail, RefreshCw, Activity, Server, MessageSquare, Phone, PlusCircle, User, ChevronDown } from 'lucide-react'
+import AgentCreationWizard from './AgentCreationWizard'
+import AgentProfilePanel from './AgentProfilePanel'
 import { agentToSession } from '@/lib/agent-utils'
 import type { Agent } from '@/types/agent'
 import { useHosts } from '@/hooks/useHosts'
@@ -35,6 +37,9 @@ export default function MobileDashboard({
     projectPath: string
   } | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<{ [agentId: string]: boolean }>({})
+  const [showCreationWizard, setShowCreationWizard] = useState(false)
+  const [showProfilePanel, setShowProfilePanel] = useState(false)
+  const [showAgentDrawer, setShowAgentDrawer] = useState(false)
 
   // Filter to only online agents for terminal tabs
   const onlineAgents = useMemo(
@@ -101,8 +106,12 @@ export default function MobileDashboard({
       {/* Top Bar */}
       <header className="flex-shrink-0 border-b border-gray-800 bg-gray-950">
         <div className="flex items-center px-4 py-3">
-          {/* Current Agent Display with Connection Status */}
-          <div className="flex items-center gap-2 min-w-0 flex-1">
+          {/* Current Agent Display — tap name to open agent drawer, tap profile icon for profile panel */}
+          <button
+            onClick={() => setShowAgentDrawer(true)}
+            className="flex items-center gap-2 min-w-0 flex-1 text-left"
+            aria-label="Select agent"
+          >
             {/* Connection indicator - green/red dot */}
             <div
               className={`w-2 h-2 rounded-full flex-shrink-0 ${
@@ -113,9 +122,30 @@ export default function MobileDashboard({
             <span className="text-sm font-medium text-white truncate">
               {getAgentHostDisplay()}
             </span>
-          </div>
+            <ChevronDown className="w-3 h-3 text-gray-500 flex-shrink-0" />
+          </button>
 
-          {/* Refresh Button - Centered */}
+          {/* Profile Button — opens agent profile panel */}
+          {activeAgent && (
+            <button
+              onClick={() => setShowProfilePanel(true)}
+              className="p-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 transition-colors flex-shrink-0 flex items-center justify-center mr-1"
+              aria-label="Agent profile"
+            >
+              <User className="w-5 h-5 text-blue-400" />
+            </button>
+          )}
+
+          {/* Create Agent Button */}
+          <button
+            onClick={() => setShowCreationWizard(true)}
+            className="p-2 rounded-lg bg-green-600/20 hover:bg-green-600/30 transition-colors flex-shrink-0 flex items-center justify-center mr-1"
+            aria-label="Create agent"
+          >
+            <PlusCircle className="w-5 h-5 text-green-400" />
+          </button>
+
+          {/* Refresh Button */}
           <button
             onClick={onRefresh}
             disabled={loading}
@@ -141,9 +171,16 @@ export default function MobileDashboard({
           <div className="flex flex-col items-center justify-center h-full px-6 text-center bg-gray-900">
             <Terminal className="w-16 h-16 text-gray-600 mb-4" />
             <p className="text-lg font-medium text-gray-300 mb-2">No Online Agents</p>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 mb-4">
               Start an agent&apos;s tmux session to connect
             </p>
+            <button
+              onClick={() => setShowCreationWizard(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-xl text-sm font-medium transition-colors"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Create Agent
+            </button>
           </div>
         )}
 
@@ -332,6 +369,79 @@ export default function MobileDashboard({
           projectPath={selectedConversation.projectPath}
           onClose={handleConversationClose}
         />
+      )}
+
+      {/* Agent Drawer — slide-up list of ALL agents (not just online) */}
+      {showAgentDrawer && (
+        <div className="fixed inset-0 z-40 flex flex-col justify-end" onClick={() => setShowAgentDrawer(false)}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div
+            className="relative bg-gray-900 border-t border-gray-700 rounded-t-2xl max-h-[70vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-gray-900 px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+              <span className="text-sm font-medium text-white">All Agents ({agents.length})</span>
+              <button onClick={() => setShowAgentDrawer(false)} className="text-gray-400 text-sm">Done</button>
+            </div>
+            {agents.length === 0 ? (
+              <div className="px-4 py-8 text-center text-gray-500 text-sm">No agents registered</div>
+            ) : (
+              <div className="divide-y divide-gray-800">
+                {agents.map(agent => {
+                  const isOnline = agent.session?.status === 'online'
+                  const displayName = agent.label || agent.name || agent.id
+                  return (
+                    <button
+                      key={agent.id}
+                      onClick={() => { handleAgentSelect(agent.id); setShowAgentDrawer(false) }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                        agent.id === activeAgentId ? 'bg-blue-600/10' : 'hover:bg-gray-800'
+                      }`}
+                    >
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isOnline ? 'bg-green-500' : 'bg-gray-500'}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm text-white truncate">{displayName}</div>
+                        <div className="text-xs text-gray-500">{agent.governanceTitle || 'AUTONOMOUS'} • {isOnline ? 'online' : 'offline'}</div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Agent Profile Panel (full-screen overlay) */}
+      {showProfilePanel && activeAgent && (
+        <div className="fixed inset-0 z-50 bg-gray-900 overflow-y-auto">
+          <div className="sticky top-0 bg-gray-950 border-b border-gray-800 px-4 py-3 flex items-center justify-between z-10">
+            <span className="text-sm font-medium text-white">Agent Profile</span>
+            <button
+              onClick={() => setShowProfilePanel(false)}
+              className="text-blue-400 text-sm font-medium"
+            >
+              Done
+            </button>
+          </div>
+          <AgentProfilePanel
+            agentId={activeAgent.id}
+            onClose={() => setShowProfilePanel(false)}
+          />
+        </div>
+      )}
+
+      {/* Agent Creation Wizard (full-screen overlay) */}
+      {showCreationWizard && (
+        <div className="fixed inset-0 z-50 bg-gray-900 overflow-y-auto">
+          <AgentCreationWizard
+            onClose={() => setShowCreationWizard(false)}
+            onComplete={() => {
+              setShowCreationWizard(false)
+              onRefresh()
+            }}
+          />
+        </div>
       )}
 
       {/* Footer */}

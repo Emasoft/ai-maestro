@@ -65,6 +65,7 @@ import { getRuntime } from '@/lib/agent-runtime'
 import { isManager, isChiefOfStaffAnywhere } from '@/lib/governance'
 import { isValidUuid } from '@/lib/validation'
 import { loadTeams } from '@/lib/team-registry'
+import { statePath } from '@/lib/ecosystem-constants'
 import type { Host } from '@/types/host'
 
 // ---------------------------------------------------------------------------
@@ -886,7 +887,7 @@ export async function registerAgent(body: RegisterAgentParams): Promise<ServiceR
     }
 
     // Ensure agents directory exists
-    const agentsDir = path.join(os.homedir(), '.aimaestro', 'agents')
+    const agentsDir = statePath('agents')
     if (!fs.existsSync(agentsDir)) {
       fs.mkdirSync(agentsDir, { recursive: true })
     }

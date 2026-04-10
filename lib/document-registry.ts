@@ -7,13 +7,13 @@
 
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { v4 as uuidv4 } from 'uuid'
 import { withLock } from '@/lib/file-lock'
 import { isValidUuid } from '@/lib/validation'
 import type { TeamDocument, TeamDocumentsFile } from '@/types/document'
+import { statePath } from '@/lib/ecosystem-constants'
 
-const TEAMS_DIR = path.join(os.homedir(), '.aimaestro', 'teams')
+const TEAMS_DIR = statePath('teams')
 
 function ensureTeamsDir() {
   if (!fs.existsSync(TEAMS_DIR)) {

@@ -19,12 +19,13 @@ import { execFileSync } from 'child_process'
 import type { Agent, Repository } from '@/types/agent'
 import type { AgentExportManifest, AgentImportOptions, AgentImportResult, PortableRepository, RepositoryImportResult } from '@/types/portable'
 import { ServiceResult } from '@/types/service'
+import { getStateDir } from '@/lib/ecosystem-constants'
 // ServiceResult imported directly from canonical source
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const VERSION_FILE = path.join(process.cwd(), 'version.json')
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const AGENTS_DIR = path.join(AIMAESTRO_DIR, 'agents')
 const MESSAGES_DIR = path.join(AIMAESTRO_DIR, 'messages')
 

@@ -13,8 +13,8 @@
 import { createHash, randomBytes, verify, createPublicKey, timingSafeEqual } from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { withLock } from '@/lib/file-lock'
+import { statePath } from '@/lib/ecosystem-constants'
 
 // ============================================================================
 // Types
@@ -55,7 +55,7 @@ const TOKEN_PREFIX = 'aim_tk_'
 const TOKEN_RANDOM_BYTES = 32 // 64 hex chars
 const TOKEN_LIFETIME_SECONDS = 3600 // 1 hour
 const PROOF_TIMESTAMP_WINDOW_SECONDS = 300 // 5 minutes anti-replay
-const TOKENS_DIR = path.join(os.homedir(), '.aimaestro', 'governance-tokens')
+const TOKENS_DIR = statePath('governance-tokens')
 
 // In-memory token cache (avoids disk reads on every auth request)
 const TOKEN_CACHE_TTL_MS = 30_000

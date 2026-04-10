@@ -7,9 +7,9 @@
 
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const SETTINGS_FILE = path.join(AIMAESTRO_DIR, 'system-settings.json')
 
 export interface SystemSettings {

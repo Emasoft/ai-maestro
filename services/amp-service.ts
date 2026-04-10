@@ -44,6 +44,7 @@ import { deliverViaWebSocket } from '@/lib/amp-websocket'
 import { resolveAgentIdentifier } from '@/lib/messageQueue'
 import { getSelfHostId, getSelfHost, getHostById, isSelf, getOrganization } from '@/lib/hosts-config-server.mjs'
 import { AMP_PROTOCOL_VERSION, getAMPProviderDomain } from '@/lib/types/amp'
+import { statePath } from '@/lib/ecosystem-constants'
 import type {
   AMPHealthResponse,
   AMPInfoResponse,
@@ -159,7 +160,7 @@ function lazyCleanup() {
 
 // ── Federation replay protection (file-based) ─────────────────────────────
 
-const FEDERATION_DIR = path.join(os.homedir(), '.aimaestro', 'federation', 'delivered')
+const FEDERATION_DIR = statePath('federation', 'delivered')
 let lastFederationCleanup = 0
 const FEDERATION_CLEANUP_INTERVAL = 3600_000  // 1 hour
 const FEDERATION_MAX_AGE = 86400_000  // 24 hours

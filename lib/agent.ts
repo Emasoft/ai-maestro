@@ -25,6 +25,7 @@ import { VoiceSubsystem } from './cerebellum/voice-subsystem'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
 // Get this host's API base URL from configuration
 // NEVER returns localhost - getSelfHost() already handles IP detection
@@ -755,7 +756,7 @@ class AgentSubconscious {
    */
   private writeStatusFile(): void {
     try {
-      const statusDir = path.join(os.homedir(), '.aimaestro', 'agents', this.agentId)
+      const statusDir = statePath('agents', this.agentId)
       const statusPath = path.join(statusDir, 'status.json')
 
       // Ensure directory exists

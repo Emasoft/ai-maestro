@@ -12,9 +12,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
-const CEMETERY_DIR = path.join(os.homedir(), '.aimaestro', 'cemetery')
+const CEMETERY_DIR = statePath('cemetery')
 
 interface CemeteryEntry {
   filename: string

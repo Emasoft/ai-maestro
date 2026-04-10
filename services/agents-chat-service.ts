@@ -12,6 +12,7 @@ import * as fsp from 'fs/promises'
 import * as path from 'path'
 import * as crypto from 'crypto'
 import os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
 // SF-047: Maximum conversation file size to prevent OOM (50 MB)
 const MAX_CONVERSATION_FILE_SIZE = 50 * 1024 * 1024
@@ -150,7 +151,7 @@ export async function getConversationMessages(
   // Read hook state file
   let hookState: any = null
   if (workingDir) {
-    const stateDir = path.join(os.homedir(), '.aimaestro', 'chat-state')
+    const stateDir = statePath('chat-state')
     const cwdHash = hashCwd(workingDir)
     const stateFile = path.join(stateDir, `${cwdHash}.json`)
 

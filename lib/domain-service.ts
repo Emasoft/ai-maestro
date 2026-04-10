@@ -1,10 +1,10 @@
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { v4 as uuidv4 } from 'uuid'
 import type { EmailDomain, CreateDomainRequest } from '@/types/agent'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const DOMAINS_FILE = path.join(AIMAESTRO_DIR, 'domains.json')
 
 // ============================================================================

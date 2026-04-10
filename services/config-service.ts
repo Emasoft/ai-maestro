@@ -32,6 +32,7 @@ import {
 } from '@/lib/hosts-config'
 import { escapeForCozo } from '@/lib/cozo-utils'
 import { getSystemSettings } from '@/lib/system-settings'
+import { statePath } from '@/lib/ecosystem-constants'
 import type {
   MemoryRunResult,
   MessageCheckResult,
@@ -196,7 +197,7 @@ interface ExportJob {
  * Reads static files instead of loading agents into memory.
  */
 function readAgentStatusFile(agentId: string): AgentStatus {
-  const statusPath = path.join(os.homedir(), '.aimaestro', 'agents', agentId, 'status.json')
+  const statusPath = statePath('agents', agentId, 'status.json')
 
   const defaultStatus: AgentStatus = {
     agentId,

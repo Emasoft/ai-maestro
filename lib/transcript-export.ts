@@ -11,7 +11,7 @@
 import { AgentDatabase } from './cozo-db'
 import * as fs from 'fs'
 import * as path from 'path'
-import * as os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
 /**
  * Export format types
@@ -396,7 +396,7 @@ function generateDefaultExportPath(
   const extension = format === 'json' ? 'json' : format === 'markdown' ? 'md' : format === 'csv' ? 'csv' : 'txt'
 
   // Store in ~/.aimaestro/exports/
-  const exportsDir = path.join(os.homedir(), '.aimaestro', 'exports')
+  const exportsDir = statePath('exports')
 
   const filename = `${sessionId}-${timestamp}.${extension}`
   return path.join(exportsDir, filename)

@@ -14,9 +14,9 @@
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
-const HOST_KEYS_DIR = path.join(os.homedir(), '.aimaestro', 'host-keys')
+const HOST_KEYS_DIR = statePath('host-keys')
 const PRIVATE_KEY_PATH = path.join(HOST_KEYS_DIR, 'private.hex')
 const PUBLIC_KEY_PATH = path.join(HOST_KEYS_DIR, 'public.hex')
 

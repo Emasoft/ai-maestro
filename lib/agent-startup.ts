@@ -10,10 +10,10 @@
 
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { agentRegistry } from './agent'
+import { statePath } from '@/lib/ecosystem-constants'
 
-const AGENTS_DIR = path.join(os.homedir(), '.aimaestro', 'agents')
+const AGENTS_DIR = statePath('agents')
 
 /**
  * Discover all agent database directories

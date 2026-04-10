@@ -18,7 +18,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import crypto from 'crypto'
 import path from 'path'
-import os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
 // ============================================================================
 // Mocks — only external I/O (filesystem)
@@ -49,7 +49,7 @@ vi.mock('fs', () => ({
 }))
 
 // Derived paths matching the module's constants
-const HOST_KEYS_DIR = path.join(os.homedir(), '.aimaestro', 'host-keys')
+const HOST_KEYS_DIR = statePath('host-keys')
 const PRIVATE_KEY_PATH = path.join(HOST_KEYS_DIR, 'private.hex')
 const PUBLIC_KEY_PATH = path.join(HOST_KEYS_DIR, 'public.hex')
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import path from 'path'
-import os from 'os'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
 // ============================================================================
 // Mocks
@@ -59,7 +59,7 @@ import type { TransferRequest, TransfersFile } from '@/types/governance'
 // Test helpers
 // ============================================================================
 
-const AI_MAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AI_MAESTRO_DIR = getStateDir()
 const TRANSFERS_FILE = path.join(AI_MAESTRO_DIR, 'governance-transfers.json')
 
 function seedTransfers(requests: TransferRequest[]): void {

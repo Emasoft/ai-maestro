@@ -23,15 +23,16 @@ import { createHash } from 'crypto'
 import { promises as fs } from 'fs'
 import path from 'path'
 import os from 'os'
+import { statePath } from '../lib/ecosystem-constants.mjs'
 
 const HOME = os.homedir()
 const AMP_DIR = path.join(HOME, '.agent-messaging')
 const AMP_AGENTS_DIR = path.join(AMP_DIR, 'agents')
 const AMP_SHARED_INBOX = path.join(AMP_DIR, 'messages', 'inbox')
 const AMP_SHARED_SENT = path.join(AMP_DIR, 'messages', 'sent')
-const OLD_MESSAGES_DIR = path.join(HOME, '.aimaestro', 'messages')
-const AGENT_REGISTRY = path.join(HOME, '.aimaestro', 'agents', 'registry.json')
-const API_KEYS_FILE = path.join(HOME, '.aimaestro', 'amp-api-keys.json')
+const OLD_MESSAGES_DIR = statePath('messages')
+const AGENT_REGISTRY = statePath('agents', 'registry.json')
+const API_KEYS_FILE = statePath('amp-api-keys.json')
 const DRY_RUN = process.argv.includes('--dry-run')
 
 /**
@@ -49,7 +50,7 @@ function hashApiKey(apiKey) {
   return 'sha256:' + createHash('sha256').update(apiKey).digest('hex')
 }
 
-const HOSTS_CONFIG = path.join(HOME, '.aimaestro', 'hosts.json')
+const HOSTS_CONFIG = statePath('hosts.json')
 
 async function getOrganizationFromConfig() {
   try {

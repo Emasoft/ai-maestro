@@ -18,6 +18,7 @@ import path from 'path'
 import os from 'os'
 import { createHash } from 'crypto'
 import type { AMPAgentIdentity, AMPExternalRegistration } from '@/types/agent'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
 // Import host identification for mesh routing
 // The hostId becomes the "tenant" in AMP addresses for mesh routing
@@ -36,7 +37,7 @@ function getSelfHostIdForAMP(): string {
   }
 }
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const AGENTS_DIR = path.join(AIMAESTRO_DIR, 'agents')
 
 // ============================================================================

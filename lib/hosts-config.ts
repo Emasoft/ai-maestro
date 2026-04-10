@@ -19,6 +19,7 @@ import os from 'os'
 // The shared lock has 30s timeout (vs the old 5s), consistent naming, and is visible
 // to other modules that also use file-lock.ts to prevent cross-module races.
 import { withLock as sharedWithLock } from '@/lib/file-lock'
+import { statePath } from '@/lib/ecosystem-constants'
 
 /**
  * Execute a function with 'hosts' lock protection.
@@ -182,7 +183,7 @@ function getDefaultSelfHost(): Host {
 
 const HOSTS_ENV_VAR = 'AIMAESTRO_HOSTS'
 // Use user's home directory for hosts.json - shared across all projects
-const HOSTS_CONFIG_PATH = path.join(os.homedir(), '.aimaestro', 'hosts.json')
+const HOSTS_CONFIG_PATH = statePath('hosts.json')
 
 let cachedHosts: Host[] | null = null
 // SF-026: Track file mtime so the cache is invalidated when hosts.json is edited externally

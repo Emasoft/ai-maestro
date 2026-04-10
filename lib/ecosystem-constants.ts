@@ -2,9 +2,33 @@
  * AI Maestro Ecosystem Constants
  *
  * Single source of truth for all marketplace URLs, plugin names, repo URLs,
- * and ecosystem identifiers. If the project owner changes repos or orgs,
- * only this file needs updating.
+ * filesystem paths, and ecosystem identifiers. If the project owner changes
+ * repos, orgs, or directory names, only this file needs updating.
+ *
+ * IMPORTANT: No other file in the codebase may hardcode `.aimaestro`, marketplace
+ * repo strings, or role-plugin names. Always import from this module.
  */
+
+import { homedir } from 'os'
+import { join } from 'path'
+
+// ── State Directory ─────────────────────────────────────────
+
+/**
+ * Name of the AI Maestro state directory (under $HOME).
+ * This is the SOLE source of truth — never hardcode the literal string.
+ */
+export const STATE_DIR_NAME = '.aimaestro'
+
+/** Absolute path to ~/.aimaestro */
+export function getStateDir(): string {
+  return join(homedir(), STATE_DIR_NAME)
+}
+
+/** Path helper for a sub-path inside the state dir (e.g. statePath('agents', 'registry.json')) */
+export function statePath(...segments: string[]): string {
+  return join(getStateDir(), ...segments)
+}
 
 // ── Marketplace ──────────────────────────────────────────────
 

@@ -7,7 +7,6 @@
 
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import bcrypt from 'bcryptjs'
 import { loadTeams, getTeam } from './team-registry'
 import { withLock } from '@/lib/file-lock'
@@ -16,8 +15,9 @@ import { DEFAULT_GOVERNANCE_CONFIG } from '@/types/governance'
 import { broadcastGovernanceSync } from '@/lib/governance-sync'
 import type { Team } from '@/types/team'
 import { getAgent } from '@/lib/agent-registry'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const GOVERNANCE_FILE = path.join(AIMAESTRO_DIR, 'governance.json')
 
 const BCRYPT_SALT_ROUNDS = 12

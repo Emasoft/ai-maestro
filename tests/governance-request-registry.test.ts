@@ -22,7 +22,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import path from 'path'
-import os from 'os'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
 // ============================================================================
 // Predictable UUID tracking
@@ -123,7 +123,7 @@ import type {
 // Test helpers
 // ============================================================================
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const REQUESTS_FILE = path.join(AIMAESTRO_DIR, 'governance-requests.json')
 
 /** Build a valid GovernanceRequestsFile with optional request list */

@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { withLock } from '@/lib/file-lock'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
 export interface PersistedSession {
   id: string
@@ -12,7 +12,7 @@ export interface PersistedSession {
   agentId?: string  // Link to agent (optional for backward compatibility)
 }
 
-const PERSISTENCE_DIR = path.join(os.homedir(), '.ai-maestro')
+const PERSISTENCE_DIR = getStateDir()
 const SESSIONS_FILE = path.join(PERSISTENCE_DIR, 'sessions.json')
 
 /**

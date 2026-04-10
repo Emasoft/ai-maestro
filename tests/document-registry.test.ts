@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import path from 'path'
-import os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
 // ============================================================================
 // Mocks
@@ -73,7 +73,7 @@ import type { TeamDocument } from '@/types/document'
 // Test helpers
 // ============================================================================
 
-const TEAMS_DIR = path.join(os.homedir(), '.aimaestro', 'teams')
+const TEAMS_DIR = statePath('teams')
 
 // Valid UUID constants for test team IDs (docsFilePath requires strict UUID format)
 const TEAM_1 = '00000000-0000-4000-8000-000000000001'

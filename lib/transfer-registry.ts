@@ -7,13 +7,13 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, renameSync } from 'fs'
-import os from 'os'
 import path from 'path'
 import { randomUUID } from 'crypto'
 import type { TransferRequest, TransfersFile } from '@/types/governance'
 import { withLock } from '@/lib/file-lock'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const TRANSFERS_FILE = path.join(AIMAESTRO_DIR, 'governance-transfers.json')
 
 function ensureDir(): void {

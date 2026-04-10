@@ -115,7 +115,7 @@ import {
   incrementAgentMetric,
 } from '@/lib/agent-registry'
 import path from 'path'
-import os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 import type { Agent, CreateAgentRequest } from '@/types/agent'
 
 // ============================================================================
@@ -165,7 +165,7 @@ describe('loadAgents', () => {
 
   it('returns an empty array when registry file contains invalid JSON', () => {
     // Manually seed a file with bad JSON
-    const dir = path.join(os.homedir(), '.aimaestro', 'agents')
+    const dir = statePath('agents')
     const file = path.join(dir, 'registry.json')
     dirStore.add(dir)
     fileStore[file] = '{{not json}}'
@@ -176,7 +176,7 @@ describe('loadAgents', () => {
   })
 
   it('returns an empty array when registry file contains a non-array', () => {
-    const file = path.join(os.homedir(), '.aimaestro', 'agents', 'registry.json')
+    const file = statePath('agents', 'registry.json')
     dirStore.add(path.dirname(file))
     fileStore[file] = JSON.stringify({ notAnArray: true })
     fileMtimes[file] = ++mtimeCounter

@@ -255,6 +255,7 @@ import {
 
 import { handleGovernanceSyncMessage, buildLocalGovernanceSnapshot } from '@/lib/governance-sync'
 import { getHosts, getSelfHostId } from '@/lib/hosts-config'
+import { statePath } from '@/lib/ecosystem-constants'
 import { verifyHostAttestation } from '@/lib/host-keys'
 // Imports for chief-of-staff endpoint (mirrors app/api/teams/[id]/chief-of-staff/route.ts)
 import { verifyPassword, loadGovernance, getManagerId, isChiefOfStaffAnywhere } from '@/lib/governance'
@@ -3061,8 +3062,7 @@ const routes: Route[] = [
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const fs = await import('fs')
     const path = await import('path')
-    const os = await import('os')
-    const cemeteryDir = path.join(os.homedir(), '.aimaestro', 'cemetery')
+    const cemeteryDir = statePath('cemetery')
     if (!fs.existsSync(cemeteryDir)) { sendJson(res, 200, { archives: [], count: 0 }); return }
     const files = fs.readdirSync(cemeteryDir).filter((f: string) => f.endsWith('.zip')).sort().reverse()
     const archives = files.map((filename: string) => {
@@ -3086,10 +3086,9 @@ const routes: Route[] = [
     if (!body?.filename) { sendJson(res, 400, { error: 'filename required' }); return }
     const fs = await import('fs')
     const path = await import('path')
-    const os = await import('os')
     const sanitized = path.basename(body.filename)
     if (sanitized !== body.filename || !sanitized.endsWith('.zip')) { sendJson(res, 400, { error: 'Invalid filename' }); return }
-    const archivePath = path.join(os.homedir(), '.aimaestro', 'cemetery', sanitized)
+    const archivePath = statePath('cemetery', sanitized)
     if (!fs.existsSync(archivePath)) { sendJson(res, 404, { error: 'Archive not found' }); return }
     const zipBuffer = fs.readFileSync(archivePath)
     const nameMatch = sanitized.match(/^(.+?)-export-/)
@@ -3114,10 +3113,9 @@ const routes: Route[] = [
     if (!body?.filename) { sendJson(res, 400, { error: 'filename required' }); return }
     const fs = await import('fs')
     const path = await import('path')
-    const os = await import('os')
     const sanitized = path.basename(body.filename)
     if (sanitized !== body.filename || !sanitized.endsWith('.zip')) { sendJson(res, 400, { error: 'Invalid filename' }); return }
-    const archivePath = path.join(os.homedir(), '.aimaestro', 'cemetery', sanitized)
+    const archivePath = statePath('cemetery', sanitized)
     if (!fs.existsSync(archivePath)) { sendJson(res, 404, { error: 'Archive not found' }); return }
     fs.unlinkSync(archivePath)
     sendJson(res, 200, { success: true, purged: sanitized })
@@ -3129,10 +3127,9 @@ const routes: Route[] = [
     if (!filename) { sendJson(res, 400, { error: 'file parameter required' }); return }
     const fs = await import('fs')
     const path = await import('path')
-    const os = await import('os')
     const sanitized = path.basename(filename)
     if (sanitized !== filename || !sanitized.endsWith('.zip')) { sendJson(res, 400, { error: 'Invalid filename' }); return }
-    const cemeteryDir = path.join(os.homedir(), '.aimaestro', 'cemetery')
+    const cemeteryDir = statePath('cemetery')
     const archivePath = path.join(cemeteryDir, sanitized)
     if (!fs.existsSync(archivePath)) { sendJson(res, 404, { error: 'Archive not found' }); return }
     const realPath = fs.realpathSync(archivePath)

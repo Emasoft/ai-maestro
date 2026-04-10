@@ -11,6 +11,7 @@ import os from 'os'
 import fs from 'fs'
 import path from 'path'
 import { getHostById, isSelf } from './lib/hosts-config-server.mjs'
+import { statePath } from './lib/ecosystem-constants.mjs'
 import { hostHints } from './lib/host-hints-server.mjs'
 import { getOrCreateBuffer } from './lib/cerebellum/session-bridge.mjs'
 import {
@@ -359,7 +360,7 @@ function getAgentIdForSession(sessionName) {
     const agentId = atIndex > 0 ? sessionName.substring(0, atIndex) : sessionName
 
     // Verify the agent database directory exists
-    const agentDbPath = path.join(os.homedir(), '.aimaestro', 'agents', agentId)
+    const agentDbPath = statePath('agents', agentId)
     if (fs.existsSync(agentDbPath) && fs.statSync(agentDbPath).isDirectory()) {
       return agentId
     }
@@ -444,7 +445,7 @@ function startAutoContinueTimer(sessionName, delayMs) {
       }
 
       // Re-check the hook state before sending
-      const stateDir = path.join(os.homedir(), '.aimaestro', 'chat-state')
+      const stateDir = statePath('chat-state')
       const crypto = await import('crypto')
       const cwdHash = crypto.createHash('md5').update(agent.workingDirectory || '').digest('hex').substring(0, 16)
       const stateFile = path.join(stateDir, `${cwdHash}.json`)

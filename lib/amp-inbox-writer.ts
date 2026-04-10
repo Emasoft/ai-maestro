@@ -18,6 +18,7 @@ import { promises as fs } from 'fs'
 import * as fsSync from 'fs'
 import path from 'path'
 import os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 import type { AMPEnvelope, AMPPayload } from '@/lib/types/amp'
 import { withLock } from '@/lib/file-lock'
 
@@ -296,7 +297,7 @@ export async function initAgentAMPHome(agentName: string, agentId?: string): Pro
     } catch {
       // No machine keys — try server-side keys from ~/.aimaestro/agents/{id}/keys/
       if (agentId) {
-        const serverKeysDir = path.join(os.homedir(), '.aimaestro', 'agents', agentId, 'keys')
+        const serverKeysDir = statePath('agents', agentId, 'keys')
         try {
           const privateKey = await fs.readFile(path.join(serverKeysDir, 'private.pem'))
           const publicKey = await fs.readFile(path.join(serverKeysDir, 'public.pem'))
@@ -327,7 +328,7 @@ export async function initAgentAMPHome(agentName: string, agentId?: string): Pro
 
         // Also save to server-side storage so amp-keys.ts can find them
         if (agentId) {
-          const serverKeysDir = path.join(os.homedir(), '.aimaestro', 'agents', agentId, 'keys')
+          const serverKeysDir = statePath('agents', agentId, 'keys')
           try {
             await fs.mkdir(serverKeysDir, { recursive: true })
             await fs.writeFile(path.join(serverKeysDir, 'private.pem'), privateKey, { mode: 0o600 })

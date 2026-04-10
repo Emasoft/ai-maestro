@@ -7,8 +7,7 @@
 
 import { createAgentDatabase } from './cozo-db'
 import * as fs from 'fs'
-import * as path from 'path'
-import * as os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
 interface AgentRegistryEntry {
   id: string
@@ -21,7 +20,7 @@ interface AgentRegistryEntry {
  * Get all registered agents from the registry
  */
 function getRegisteredAgents(): AgentRegistryEntry[] {
-  const registryPath = path.join(os.homedir(), '.aimaestro', 'agents', 'registry.json')
+  const registryPath = statePath('agents', 'registry.json')
 
   if (!fs.existsSync(registryPath)) {
     console.log('[DB-SYNC] No agent registry found, skipping database sync')
@@ -51,7 +50,7 @@ function getRegisteredAgents(): AgentRegistryEntry[] {
  * Check if an agent has a database
  */
 function agentHasDatabase(agentId: string): boolean {
-  const dbPath = path.join(os.homedir(), '.aimaestro', 'agents', agentId, 'agent.db')
+  const dbPath = statePath('agents', agentId, 'agent.db')
   return fs.existsSync(dbPath)
 }
 

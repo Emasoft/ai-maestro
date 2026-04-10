@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import path from 'path'
-import os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
 // ============================================================================
 // Mocks
@@ -70,7 +70,7 @@ import type { Task } from '@/types/task'
 // Test helpers
 // ============================================================================
 
-const TEAMS_DIR = path.join(os.homedir(), '.aimaestro', 'teams')
+const TEAMS_DIR = statePath('teams')
 
 // Valid UUID-format team IDs (tasksFilePath validates UUID pattern)
 const TEAM_1 = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'

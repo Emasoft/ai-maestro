@@ -16,7 +16,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import path from 'path'
-import os from 'os'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
 // ============================================================================
 // In-memory filesystem mock (same pattern as governance-request-registry.test.ts)
@@ -93,7 +93,7 @@ import type { GovernanceRequest } from '@/types/governance-request'
 // Test helpers
 // ============================================================================
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const TRUST_FILE = path.join(AIMAESTRO_DIR, 'manager-trust.json')
 
 /** Build a valid ManagerTrustFile with optional trust list */

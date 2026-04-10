@@ -10,13 +10,13 @@
 
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import type { AMPApiKeyRecord, AMPKeyRotationResponse, AMPErrorCode } from './types/amp'
 // SF-004: File locking for read-modify-write operations
 import { withLock } from '@/lib/file-lock'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const API_KEYS_FILE = path.join(AIMAESTRO_DIR, 'amp-api-keys.json')
 
 // Key format constants

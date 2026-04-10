@@ -7,15 +7,15 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, unlinkSync, renameSync } from 'fs'
-import os from 'os'
 import path from 'path'
 import type { GovernancePeerState, PeerTeamSummary } from '@/types/governance'
 import { isManager, getManagerId } from '@/lib/governance'
 import { loadTeams } from '@/lib/team-registry'
 // SF-024: File lock for serializing peer governance writes per host
 import { withLock } from '@/lib/file-lock'
+import { statePath } from '@/lib/ecosystem-constants'
 
-const PEERS_DIR = path.join(os.homedir(), '.aimaestro', 'governance-peers')
+const PEERS_DIR = statePath('governance-peers')
 
 // Peer state older than DEFAULT_TTL seconds is considered stale and filtered out
 const DEFAULT_TTL = 300 // 5 minutes

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import path from 'path'
-import os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
 // ============================================================================
 // Mocks
@@ -62,7 +62,7 @@ import type { Team } from '@/types/team'
 // Test helpers
 // ============================================================================
 
-const TEAMS_DIR = path.join(os.homedir(), '.aimaestro', 'teams')
+const TEAMS_DIR = statePath('teams')
 const TEAMS_FILE = path.join(TEAMS_DIR, 'teams.json')
 
 // Counter for generating unique IDs in the makeTeam helper (e.g. "team-1", "team-2").

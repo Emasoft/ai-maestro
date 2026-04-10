@@ -11,10 +11,10 @@
  */
 
 import { join } from 'path'
-import { homedir } from 'os'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { getStateDir, statePath } from '@/lib/ecosystem-constants'
 
-const HISTORY_PATH = join(homedir(), '.aimaestro', 'session-history.json')
+const HISTORY_PATH = statePath('session-history.json')
 
 export interface SessionHistoryEntry {
   agentId: string
@@ -48,7 +48,7 @@ function loadHistory(): SessionHistoryFile {
 }
 
 function saveHistory(history: SessionHistoryFile): void {
-  const dir = join(homedir(), '.aimaestro')
+  const dir = getStateDir()
   mkdirSync(dir, { recursive: true })
   writeFileSync(HISTORY_PATH, JSON.stringify(history, null, 2) + '\n', 'utf-8')
 }

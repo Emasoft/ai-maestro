@@ -10,8 +10,8 @@
 
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { withLock } from '@/lib/file-lock'
+import { getStateDir } from '@/lib/ecosystem-constants'
 import type { GovernanceRequest } from '@/types/governance-request'
 
 // ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@ export interface ManagerTrustFile {
 // Constants
 // ---------------------------------------------------------------------------
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const TRUST_FILE = path.join(AIMAESTRO_DIR, 'manager-trust.json')
 
 const DEFAULT_TRUST_FILE: ManagerTrustFile = {

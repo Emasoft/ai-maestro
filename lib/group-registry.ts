@@ -7,11 +7,11 @@
 
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { v4 as uuidv4 } from 'uuid'
 import type { Group, GroupsFile } from '@/types/group'
 // TeamsFile type not used — migration reads raw JSON to handle legacy 'open' type values
 import { withLock } from '@/lib/file-lock'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
 // --- Group Name Validation Constants ---
 const GROUP_NAME_MIN_LENGTH = 2
@@ -39,7 +39,7 @@ function sanitizeGroupName(raw: string): string {
 }
 
 // --- Storage Paths ---
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const TEAMS_DIR = path.join(AIMAESTRO_DIR, 'teams')
 const GROUPS_FILE = path.join(TEAMS_DIR, 'groups.json')
 const TEAMS_FILE = path.join(TEAMS_DIR, 'teams.json')

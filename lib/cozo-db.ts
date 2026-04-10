@@ -11,7 +11,7 @@
 import { CozoDb } from 'cozo-node'
 import * as path from 'path'
 import * as fs from 'fs'
-import * as os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
 export interface AgentDatabaseConfig {
   agentId: string
@@ -31,7 +31,7 @@ export class AgentDatabase {
     this.agentId = config.agentId
 
     // Database location: ~/.aimaestro/agents/{agentId}/agent.db
-    const aiMaestroDir = path.join(os.homedir(), '.aimaestro', 'agents', config.agentId)
+    const aiMaestroDir = statePath('agents', config.agentId)
     this.dbPath = path.join(aiMaestroDir, 'agent.db')
 
     // Ensure directory exists

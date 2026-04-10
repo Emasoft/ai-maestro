@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import path from 'path'
-import os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
 // ============================================================================
 // Mocks
@@ -89,7 +88,7 @@ import { DEFAULT_GOVERNANCE_CONFIG } from '@/types/governance'
 // Test helpers
 // ============================================================================
 
-const GOVERNANCE_FILE = path.join(os.homedir(), '.aimaestro', 'governance.json')
+const GOVERNANCE_FILE = statePath('governance.json')
 
 function seedGovernance(overrides: Partial<GovernanceConfig> = {}): void {
   const config: GovernanceConfig = { ...DEFAULT_GOVERNANCE_CONFIG, ...overrides }

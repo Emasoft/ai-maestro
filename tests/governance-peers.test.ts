@@ -19,7 +19,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import path from 'path'
-import os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
 // ============================================================================
 // In-memory filesystem mock
@@ -127,7 +127,7 @@ import type { GovernancePeerState, PeerTeamSummary } from '@/types/governance'
 // Test helpers
 // ============================================================================
 
-const PEERS_DIR = path.join(os.homedir(), '.aimaestro', 'governance-peers')
+const PEERS_DIR = statePath('governance-peers')
 
 /** Build a valid GovernancePeerState with sensible defaults and optional overrides */
 function makePeerState(overrides: Partial<GovernancePeerState> = {}): GovernancePeerState {

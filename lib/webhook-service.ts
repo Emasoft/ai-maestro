@@ -1,6 +1,5 @@
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import crypto from 'crypto'
 import { v4 as uuidv4 } from 'uuid'
 import type {
@@ -10,8 +9,9 @@ import type {
   WebhookEmailChangedPayload,
   WebhookAgentPayload,
 } from '@/types/agent'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const WEBHOOKS_FILE = path.join(AIMAESTRO_DIR, 'webhooks.json')
 
 // ============================================================================

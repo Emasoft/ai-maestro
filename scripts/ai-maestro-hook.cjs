@@ -26,6 +26,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
+const { statePath } = require('../lib/ecosystem-constants.cjs');
 
 // Read stdin as JSON
 async function readStdin() {
@@ -97,7 +98,7 @@ async function broadcastStatusUpdate(cwd, state) {
 
 // Write state to file
 function writeState(cwd, state) {
-    const stateDir = path.join(os.homedir(), '.aimaestro', 'chat-state');
+    const stateDir = statePath('chat-state');
     fs.mkdirSync(stateDir, { recursive: true });
 
     const cwdHash = hashCwd(cwd);
@@ -127,7 +128,7 @@ function writeState(cwd, state) {
 
 // Log to debug file
 function debugLog(data) {
-    const debugFile = path.join(os.homedir(), '.aimaestro', 'chat-state', 'hook-debug.log');
+    const debugFile = statePath('chat-state', 'hook-debug.log');
     const timestamp = new Date().toISOString();
     const line = `[${timestamp}] ${JSON.stringify(data)}\n`;
     fs.appendFileSync(debugFile, line);
@@ -250,7 +251,7 @@ async function checkUnreadMessages(cwd) {
 // Read current subagent count from state file (for SubagentStart/Stop tracking)
 function getSubagentCount(cwd) {
     try {
-        const stateDir = path.join(os.homedir(), '.aimaestro', 'chat-state');
+        const stateDir = statePath('chat-state');
         const cwdHash = hashCwd(cwd);
         const stateFile = path.join(stateDir, `${cwdHash}.json`);
         const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
@@ -365,7 +366,7 @@ async function main() {
                 }
             } else if (notificationType === 'permission_prompt') {
                 // For permission prompts, preserve existing tool info if we have it
-                const stateDir = path.join(os.homedir(), '.aimaestro', 'chat-state');
+                const stateDir = statePath('chat-state');
                 const cwdHash = hashCwd(cwd);
                 const stateFile = path.join(stateDir, `${cwdHash}.json`);
 

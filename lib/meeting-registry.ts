@@ -7,12 +7,12 @@
 
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { v4 as uuidv4 } from 'uuid'
 import type { Meeting, MeetingsFile, SidebarMode } from '@/types/team'
 import { withLock } from '@/lib/file-lock'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const TEAMS_DIR = path.join(AIMAESTRO_DIR, 'teams')
 const MEETINGS_FILE = path.join(TEAMS_DIR, 'meetings.json')
 

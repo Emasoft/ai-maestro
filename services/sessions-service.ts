@@ -36,6 +36,7 @@ import { initAgentAMPHome, getAgentAMPDir } from '@/lib/amp-inbox-writer'
 import { sessionActivity, broadcastStatusUpdate } from '@/services/shared-state'
 import { getRuntime } from '@/lib/agent-runtime'
 import crypto from 'crypto'
+import { statePath } from '@/lib/ecosystem-constants'
 
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
@@ -154,7 +155,7 @@ function hashCwd(cwd: string): string {
 function getHookState(workingDir: string): { status: string; notificationType?: string } | null {
   if (!workingDir) return null
 
-  const stateDir = path.join(os.homedir(), '.aimaestro', 'chat-state')
+  const stateDir = statePath('chat-state')
   const cwdHash = hashCwd(workingDir)
   const stateFile = path.join(stateDir, `${cwdHash}.json`)
 
@@ -237,7 +238,7 @@ async function fetchLocalSessions(hostId: string): Promise<Session[]> {
 
     // Discover cloud agents from registry
     try {
-      const agentsDir = path.join(os.homedir(), '.aimaestro', 'agents')
+      const agentsDir = statePath('agents')
       if (fs.existsSync(agentsDir)) {
         const agentFiles = fs.readdirSync(agentsDir).filter(f => f.endsWith('.json'))
         for (const file of agentFiles) {
@@ -847,7 +848,7 @@ export async function renameSession(oldName: string, newName: string): Promise<S
   }
 
   // Check if cloud agent
-  const agentsDir = path.join(os.homedir(), '.aimaestro', 'agents')
+  const agentsDir = statePath('agents')
   const oldAgentFilePath = path.join(agentsDir, `${oldName}.json`)
   const newAgentFilePath = path.join(agentsDir, `${newName}.json`)
   const isCloudAgent = fs.existsSync(oldAgentFilePath)

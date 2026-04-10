@@ -7,9 +7,9 @@
 
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import crypto from 'crypto'
 import { withLock } from '@/lib/file-lock'
+import { getStateDir } from '@/lib/ecosystem-constants'
 import type {
   GovernanceRequest,
   GovernanceRequestsFile,
@@ -21,7 +21,7 @@ import type {
 import { DEFAULT_GOVERNANCE_REQUESTS_FILE } from '@/types/governance-request'
 import type { AgentRole } from '@/types/agent'
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const REQUESTS_FILE = path.join(AIMAESTRO_DIR, 'governance-requests.json')
 
 /** Ensure ~/.aimaestro directory exists */

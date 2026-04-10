@@ -13,11 +13,11 @@
 
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { getSelfHostId, getPeerHosts } from './hosts-config'
 import { loadAgents, normalizeHostId } from './agent-registry'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const DIRECTORY_FILE = path.join(AIMAESTRO_DIR, 'agent-directory.json')
 
 // Cache TTL in milliseconds (5 minutes)

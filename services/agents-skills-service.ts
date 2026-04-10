@@ -21,6 +21,7 @@ import { isValidUuid } from '@/lib/validation'
 import type { ConfigOperationType, ConfigScope } from '@/types/governance-request'
 import fs from 'fs/promises'
 import path from 'path'
+import { statePath } from '@/lib/ecosystem-constants'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -266,8 +267,7 @@ export async function getSkillSettings(agentId: string): Promise<ServiceResult<R
     return { error: 'Agent not found', status: 404 }
   }
 
-  const homeDir = process.env.HOME || process.env.USERPROFILE || ''
-  const settingsPath = path.join(homeDir, '.aimaestro', 'agents', agentId, 'skill-settings.json')
+  const settingsPath = statePath('agents', agentId, 'skill-settings.json')
 
   try {
     const content = await fs.readFile(settingsPath, 'utf-8')
@@ -304,8 +304,7 @@ export async function saveSkillSettings(
   const govCheck = checkConfigGovernance(agentId, requestingAgentId, 'bulk-config')
   if (govCheck) return govCheck as ServiceResult<Record<string, unknown>>
 
-  const homeDir = process.env.HOME || process.env.USERPROFILE || ''
-  const settingsPath = path.join(homeDir, '.aimaestro', 'agents', agentId, 'skill-settings.json')
+  const settingsPath = statePath('agents', agentId, 'skill-settings.json')
 
   await fs.mkdir(path.dirname(settingsPath), { recursive: true })
   await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8')

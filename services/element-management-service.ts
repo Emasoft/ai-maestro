@@ -24,6 +24,7 @@
 import type { AgentRole } from '@/types/agent'
 import { join } from 'path'
 import { homedir } from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 import { mkdir, writeFile, readFile, rm, copyFile, readdir, stat } from 'fs/promises'
 import { existsSync } from 'fs'
 import { execFile } from 'child_process'
@@ -3771,7 +3772,7 @@ export async function DeleteTeam(
     try {
       const { existsSync, unlinkSync } = await import('fs')
       const path = await import('path')
-      const TEAMS_DIR = path.join(HOME, '.aimaestro', 'teams')
+      const TEAMS_DIR = statePath('teams')
       const safeId = teamId.replace(/[^a-f0-9-]/gi, '')
       const taskFile = path.join(TEAMS_DIR, `tasks-${safeId}.json`)
       const docsFile = path.join(TEAMS_DIR, `docs-${safeId}.json`)
@@ -3892,7 +3893,7 @@ export async function DeleteAgent(
         const { exportAgentZip } = await import('@/services/agents-transfer-service')
         const zipResult = await exportAgentZip(agentId)
         if (zipResult.data) {
-          const cemeteryDir = join(HOME, '.aimaestro', 'cemetery')
+          const cemeteryDir = statePath('cemetery')
           const { mkdirSync, writeFileSync } = await import('fs')
           mkdirSync(cemeteryDir, { recursive: true, mode: 0o700 })
           const archFile = join(cemeteryDir, zipResult.data.filename)

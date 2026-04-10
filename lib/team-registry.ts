@@ -7,12 +7,12 @@
 
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { v4 as uuidv4 } from 'uuid'
 import type { Team, TeamsFile } from '@/types/team'
 import type { TeamType } from '@/types/governance'
 import { withLock } from '@/lib/file-lock'
 import { broadcastGovernanceSync } from '@/lib/governance-sync'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
 // --- Team Name Validation Constants ---
 // Mirrors agent name rigor from app/api/v1/register/route.ts but allows spaces/display chars
@@ -179,7 +179,7 @@ export function validateTeamMutation(
 // Module-level flag: ensures migration save runs at most once per process lifetime
 let migrationDone = false
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const TEAMS_DIR = path.join(AIMAESTRO_DIR, 'teams')
 const TEAMS_FILE = path.join(TEAMS_DIR, 'teams.json')
 

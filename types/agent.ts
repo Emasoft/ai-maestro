@@ -272,7 +272,6 @@ export interface Agent {
   // MAINTAINER title properties (R19)
   // Required when governanceTitle === 'maintainer'. Immutable once set.
   githubRepo?: string             // Format: 'owner/repo'. One MAINTAINER per repo per host.
-  webhookPort?: number            // Local listener port (1024-65535). Binds 127.0.0.1 only.
 
   // Soft-delete: when set, agent is marked as deleted but data is preserved for restore
   deletedAt?: string             // ISO timestamp when soft-deleted, undefined = active
@@ -526,7 +525,6 @@ export interface CreateAgentRequest {
   metadata?: AgentMetadata
   // MAINTAINER title properties (R19)
   githubRepo?: string             // Required when role === 'maintainer'. Format: 'owner/repo'.
-  webhookPort?: number            // Required when role === 'maintainer'. Local port (1024-65535).
   // DEPRECATED: for backward compatibility
   /** @deprecated Use 'name' instead. */
   alias?: string
@@ -560,7 +558,6 @@ export interface UpdateAgentRequest {
   ampIdentityMissing?: boolean   // True if amp-init.sh failed during CreateAgent G12
   // MAINTAINER title properties (R19) — set via ChangeTitle, immutable after
   githubRepo?: string             // Format: 'owner/repo'. One MAINTAINER per repo per host.
-  webhookPort?: number            // Local listener port (1024-65535). Binds 127.0.0.1 only.
   // DEPRECATED: for backward compatibility
   /** @deprecated Use 'name' instead. */
   alias?: string

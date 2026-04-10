@@ -778,8 +778,25 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
 
     // Re-read agent after all Change* calls to include updated fields in response
     if (anyChangeExecuted) {
+      // Broadcast agent data update to all /status WebSocket subscribers
+      // so every UI component refreshes instantly (sidebar, profile, zoom, etc.)
+      const changedFields = Object.entries(changeableFields)
+        .filter(([, v]) => v !== undefined)
+        .map(([k]) => k)
+      if (changedFields.length > 0) {
+        const { broadcastAgentUpdate } = await import('@/services/shared-state')
+        broadcastAgentUpdate(id, changedFields)
+      }
+
       const freshAgent = getAgent(id)
       if (freshAgent) return { data: { agent: freshAgent }, status: 200 }
+    }
+
+    // Also broadcast for simple field updates (tags, label, etc.)
+    const simpleChangedFields = Object.keys(cleanBody).filter(k => (cleanBody as Record<string, unknown>)[k] !== undefined)
+    if (simpleChangedFields.length > 0 && !anyChangeExecuted) {
+      const { broadcastAgentUpdate } = await import('@/services/shared-state')
+      broadcastAgentUpdate(id, simpleChangedFields)
     }
 
     return { data: { agent }, status: 200 }
@@ -1372,6 +1389,52 @@ export async function unlinkOrDeleteAgentSession(
 }
 
 // ---------------------------------------------------------------------------
+// R17-TRUST: Auto-accept Claude Code's directory trust prompt.
+// Extracted from wakeAgent so it can also be called from createSession (BUG-003).
+//
+// This prompt is the ONLY thing that executes BEFORE plugins load and hooks start.
+// Without accepting it, the agent is a zombie — invisible to AI Maestro.
+// The function is non-blocking and never throws — it logs warnings on failure.
+// ---------------------------------------------------------------------------
+
+export async function handleTrustAutoAccept(sessionName: string, agentName: string): Promise<void> {
+  const runtime = getRuntime()
+  // Wait for Claude to start and render the trust prompt
+  await new Promise(resolve => setTimeout(resolve, 2500))
+  const maxAttempts = 8
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const { execSync: execSyncCapture } = await import('child_process')
+      const pane = execSyncCapture(
+        `tmux capture-pane -t "${sessionName}" -p -S -25`,
+        { encoding: 'utf-8', timeout: 3000 }
+      )
+      // Fuzzy trust prompt detection (P004): match multiple patterns
+      // in case Claude changes the wording in future versions.
+      const paneLower = pane.toLowerCase()
+      const hasTrustWord = paneLower.includes('trust')
+      const hasFolderWord = paneLower.includes('folder') || paneLower.includes('directory') || paneLower.includes('workspace')
+      const hasSelector = pane.includes('❯') || pane.includes('>')
+      const hasExactMatch = pane.includes('Yes, I trust this folder') || pane.includes('trust this folder')
+      if (hasExactMatch || (hasTrustWord && hasFolderWord && hasSelector)) {
+        await runtime.sendKeys(sessionName, '', { enter: true })
+        const matchType = hasExactMatch ? 'exact' : 'fuzzy'
+        console.log(`[R17-TRUST] Auto-accepted directory trust prompt for "${agentName}" (${matchType} match)`)
+        if (!hasExactMatch) {
+          console.warn(`[R17-TRUST] Fuzzy match used — Claude may have changed trust prompt wording. Check pane content.`)
+        }
+        return
+      }
+      // If Claude's main prompt is visible, trust was not asked (dir already trusted)
+      if (pane.includes('╭─')) {
+        return
+      }
+    } catch { /* pane capture failed — session still starting */ }
+    await new Promise(resolve => setTimeout(resolve, 1000))
+  }
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/agents/[id]/wake -- wake a hibernated agent
 // ---------------------------------------------------------------------------
 
@@ -1584,53 +1647,11 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
       }
     }
 
-    // R17-TRUST: Auto-accept Claude Code's directory trust prompt on first launch.
-    // This prompt is the ONLY thing that executes BEFORE plugins load and hooks start.
-    // Without accepting it, the agent is a zombie — invisible to AI Maestro.
-    //
-    // Only runs when: (1) program is being started, (2) agent has never been launched
-    // before (launchCount === 0). After first launch, Claude remembers the directory
-    // and never asks again. This avoids false-positive matching on "trust"/"folder"
-    // in normal conversation output.
+    // R17-TRUST: Auto-accept trust prompt on first launch (BUG-003 fix: extracted to handleTrustAutoAccept)
     const isFirstLaunch = !agent.launchCount || agent.launchCount === 0
     if (startProgram && isFirstLaunch) {
-      const autoAcceptTrust = async () => {
-        // Wait for Claude to start and render the trust prompt
-        await new Promise(resolve => setTimeout(resolve, 2500))
-        const maxAttempts = 8
-        for (let i = 0; i < maxAttempts; i++) {
-          try {
-            const { execSync: execSyncCapture } = await import('child_process')
-            const pane = execSyncCapture(
-              `tmux capture-pane -t "${sessionName}" -p -S -25`,
-              { encoding: 'utf-8', timeout: 3000 }
-            )
-            // Fuzzy trust prompt detection (P004): match multiple patterns
-            // in case Claude changes the wording in future versions.
-            const paneLower = pane.toLowerCase()
-            const hasTrustWord = paneLower.includes('trust')
-            const hasFolderWord = paneLower.includes('folder') || paneLower.includes('directory') || paneLower.includes('workspace')
-            const hasSelector = pane.includes('❯') || pane.includes('>')
-            const hasExactMatch = pane.includes('Yes, I trust this folder') || pane.includes('trust this folder')
-            if (hasExactMatch || (hasTrustWord && hasFolderWord && hasSelector)) {
-              await runtime.sendKeys(sessionName, '', { enter: true })
-              const matchType = hasExactMatch ? 'exact' : 'fuzzy'
-              console.log(`[Wake] R17-TRUST: Auto-accepted directory trust prompt for "${agentName}" (first launch, ${matchType} match)`)
-              if (!hasExactMatch) {
-                console.warn(`[Wake] R17-TRUST: Fuzzy match used — Claude may have changed trust prompt wording. Check pane content.`)
-              }
-              return
-            }
-            // If Claude's main prompt is visible, trust was not asked (dir already trusted)
-            if (pane.includes('╭─')) {
-              return
-            }
-          } catch { /* pane capture failed — session still starting */ }
-          await new Promise(resolve => setTimeout(resolve, 1000))
-        }
-      }
       // Run in background — don't block the wake response (R17.23)
-      autoAcceptTrust().catch(() => {})
+      handleTrustAutoAccept(sessionName, agentName).catch(() => {})
     }
 
     // Update agent status in registry

@@ -151,8 +151,8 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
               return next
             })
           }, 600)
-          // Refresh sidebar agent list after successful save
-          onDataChangedRef.current?.()
+          // NOTE: Sidebar refresh happens automatically via broadcastAgentUpdate →
+          // /status WebSocket → useAgents listener. No prop-drilling needed.
         } else {
           console.error(`Auto-save failed for ${field}:`, response.statusText)
         }

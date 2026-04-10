@@ -295,7 +295,7 @@ export function useAgents() {
     }
   }, [hostsLoading, hosts.length, loadAgents])
 
-  // Auto-refresh
+  // Auto-refresh via polling
   useEffect(() => {
     if (hostsLoading || hosts.length === 0) {
       return
@@ -306,6 +306,28 @@ export function useAgents() {
     }, REFRESH_INTERVAL)
 
     return () => clearInterval(interval)
+  }, [hostsLoading, hosts.length, loadAgents])
+
+  // Instant refresh via /status WebSocket — listens for agent_data_update
+  // broadcasts from Change* AIO functions (avatar, name, title, etc.)
+  useEffect(() => {
+    if (hostsLoading || hosts.length === 0) return
+
+    let ws: WebSocket | null = null
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      ws = new WebSocket(`${protocol}//${window.location.host}/status`)
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.type === 'agent_data_update') {
+            loadAgents()
+          }
+        } catch { /* ignore parse errors */ }
+      }
+    } catch { /* WebSocket not available */ }
+
+    return () => { ws?.close() }
   }, [hostsLoading, hosts.length, loadAgents])
 
   // Computed: agents that are currently online (have active session)

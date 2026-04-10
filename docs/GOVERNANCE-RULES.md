@@ -424,6 +424,32 @@ This writes the plugin reference to `~/agents/<agent-name>/.claude/settings.loca
 
 ---
 
+## R18. Plugin Continuity on Client Change (CRITICAL)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R18.1 | When an agent's AI client changes (via `ChangeClient`), the agent **MUST NEVER** be left without its previously installed plugins. Every plugin that was installed for the old client **MUST** be re-emitted in a format compatible with the new client | Explicit |
+| R18.2 | The `ChangeClient` pipeline **MUST** enumerate all plugins currently installed in the agent's working directory (role-plugin + normal plugins, enabled and disabled) BEFORE uninstalling anything. This snapshot is the set of plugins that MUST be preserved | Explicit |
+| R18.3 | For each plugin in the snapshot, `ChangeClient` **MUST** ensure a version compatible with the new client exists, using the following resolution order: **(a)** if a native version already exists in `~/agents/custom-plugins/<new-client>/<name>/` or the client's cache, use it; **(b)** else if a Universal Plugin IR exists in `~/agents/custom-plugins/.abstract/<name>/`, call `emitForClient(name, newClient)` to generate the new-client version from the IR; **(c)** else call `convertAndStorePlugin(name, oldClient, [newClient])` which parses the existing plugin, builds the Universal IR automatically, and then emits for the new client | Explicit |
+| R18.3b | **Asymmetric conversion rule (CRITICAL):** Claude is the richest plugin format. Any conversion X→Claude is lossy (features not expressible in the reduced source format cannot be invented). When the target client is `claude`, `ChangeClient` **MUST** use the canonical Claude source (checked first in `~/.claude/plugins/cache/<marketplace>/<name>/<version>/`, then in `~/agents/role-plugins/<name>/` for role-plugins). If no canonical Claude source exists, `ChangeClient` **MUST refuse to perform a lossy X→Claude conversion** and abort with a clear error instructing the user to restore the Claude plugin cache | Explicit |
+| R18.3c | **R18.3b implies:** a Universal IR built from a non-Claude source (e.g., from a prior Claude→Codex conversion) **MUST NOT** be reverse-emitted to Claude — doing so would silently lose features that the original Claude plugin had. The only legitimate path back to Claude is the canonical cache or a fresh install from the marketplace | Explicit |
+| R18.3d | **General "prefer native" rule (CRITICAL):** `ChangeClient` **MUST NEVER** convert or emit a plugin if a native version already exists for the target client. The resolution order is strict: **(1)** client-native plugin cache (`~/.claude/plugins/cache/`, `~/.codex/plugins/cache/`, `~/.gemini/plugins/`, `~/.opencode/plugins/`, `~/.kiro/plugins/`), **(2)** local role-plugins marketplace (`~/agents/role-plugins/<name>/`) if the plugin's `.agent.toml` `compatible-clients` field includes the target client, **(3)** previously emitted custom-plugins (`~/agents/custom-plugins/<client>/<name>/` or `<name>-<client>/`), **(4)** emit from existing Universal IR only if no native version was found, **(5)** fresh conversion as absolute last resort. Skipping a native source in favor of conversion would silently degrade the plugin (conversion is lossy in every direction except claude→claude). Native sources — from GitHub marketplaces, from Haephestos-generated role-plugins, or from user installs — are always authoritative and must be used as-is | Explicit |
+| R18.4 | Only AFTER all compatible versions are confirmed to exist may `ChangeClient` uninstall the old-client versions and install the new-client versions. If ANY plugin fails to convert, the entire `ChangeClient` operation **MUST abort** before touching the agent directory — no partial state is allowed | Explicit |
+| R18.5 | The `ai-maestro-plugin` core plugin is subject to R18 in addition to R17: when the client changes, its converted version for the new client **MUST** be installed using the same conversion pipeline. R17's core plugin requirement is satisfied by the converted version | Explicit |
+| R18.6 | Role-plugins (plugins with a quad-match `.agent.toml`) follow the same conversion pipeline as normal plugins, but the converted output preserves the original plugin name (no `-<client>` suffix) and is stored in `~/agents/role-plugins/<name>/`. The `.agent.toml`'s `compatible-clients` field is updated to include the new client | Explicit |
+| R18.7 | The `ChangeClient` pipeline **MUST** set `restartNeeded = true` on success, because the client binary (claude / codex / gemini / etc.) must be relaunched for the new-client plugins to be loaded | Explicit |
+| R18.8 | If a feature of the old plugin cannot be mapped to the new client (e.g., a Claude-specific hook event with no Codex equivalent), the conversion emits a loss report but the operation **MUST** still proceed. A plugin with reduced features is acceptable — an agent with no plugins is not | Explicit |
+| R18.9 | The `ChangeClient` pipeline **MUST NOT** uninstall the role-plugin by calling `syncRolePlugin`, because `syncRolePlugin` uses the title-to-plugin map which assumes Claude. Instead, `ChangeClient` handles the role-plugin conversion explicitly as part of R18.3 | Explicit |
+| R18.10 | After `ChangeClient` completes successfully, the agent's governance title (if any) **MUST NOT** change. The title → role-plugin binding (R11) remains satisfied by the converted role-plugin | Explicit |
+
+**Rationale — Why This Is a Governance Rule:**
+
+An agent's identity and capabilities are inseparable from its installed plugins. The governance title binding (R11), the mandatory core plugin (R17), and every skill or hook the agent relies on are all expressed through plugins. If `ChangeClient` removed plugins without re-installing them in the new client's format, the agent would lose its role (ARCHITECT becomes a plain shell), its governance capabilities (no team messaging, no title badge), and the core infrastructure (R17.5: "non-functional within the AI Maestro ecosystem"). This would violate the Title-plugin invariant, the Core-plugin-presence invariant, and — for titled agents — leave the team with a broken slot that the COS would have to recreate from scratch via R14.
+
+The conversion infrastructure already exists (`convertAndStorePlugin`, `emitForClient`, the Universal Plugin IR pipeline, per-client adapters). R18 makes its use on client change **mandatory**, not optional.
+
+---
+
 ## Invariants (Must Never Be Violated)
 
 These are hard invariants that the system must maintain at all times:
@@ -444,6 +470,7 @@ These are hard invariants that the system must maintain at all times:
 14. **Core-plugin-presence invariant**: Every agent registered in the AI Maestro host must have `ai-maestro-plugin@ai-maestro-plugins` installed with `--scope local` in its working directory
 15. **Core-plugin-protection invariant**: The `ai-maestro-plugin` cannot be uninstalled, disabled, or moved to user scope on any agent — it is a permanent, enabled, local-scope fixture
 16. **Core-plugin-currency invariant**: The `ai-maestro-plugin` must be updated from the marketplace whenever AI Maestro itself is updated
+17. **Plugin-continuity invariant**: When an agent's client changes, every plugin that was installed for the old client must be re-emitted and re-installed in a format compatible with the new client — no agent may ever be left without its plugins as a side effect of `ChangeClient`
 
 ---
 

@@ -160,6 +160,37 @@ export function broadcastGovernanceUpdate(
 }
 
 // ---------------------------------------------------------------------------
+// Broadcast an agent data update to all /status WebSocket subscribers.
+// Fired by Change* AIO functions (avatar, name, folder, etc.) so that
+// ALL connected UI components refresh instantly without waiting for polling.
+// ---------------------------------------------------------------------------
+
+export function broadcastAgentUpdate(
+  agentId: string,
+  fields: string[],
+): void {
+  const message = JSON.stringify({
+    type: 'agent_data_update',
+    agentId,
+    fields,
+    timestamp: new Date().toISOString()
+  })
+
+  const dead: WebSocket[] = []
+  const snapshot = [...statusSubscribers]
+  for (const ws of snapshot) {
+    if (ws.readyState === WS_OPEN) {
+      try { ws.send(message) } catch { dead.push(ws) }
+    } else {
+      dead.push(ws)
+    }
+  }
+  for (const ws of dead) {
+    statusSubscribers.delete(ws)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // SF-039b: Proactive dead WebSocket cleanup every 30s
 // During idle periods without broadcasts, closed WebSockets added by the
 // subscription handler would leak memory indefinitely. This interval

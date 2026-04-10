@@ -3094,7 +3094,17 @@ export async function ChangeAvatar(
     if (g0err) { result.error = g0err; return result }
 
     // ── G01: Validate file exists ─────────────────────────────
-    const resolved = avatarPath.startsWith('~') ? avatarPath.replace('~', HOME) : avatarPath
+    // Avatar paths can be: web-relative (/avatars/women_01.jpg → public/avatars/...),
+    // home-relative (~/path), or absolute (/Users/.../path)
+    let resolved: string
+    if (avatarPath.startsWith('/avatars/')) {
+      // Web-relative URL served from public/ directory
+      resolved = join(process.cwd(), 'public', avatarPath)
+    } else if (avatarPath.startsWith('~')) {
+      resolved = avatarPath.replace('~', HOME)
+    } else {
+      resolved = avatarPath
+    }
     if (!existsSync(resolved)) {
       result.error = `Avatar file "${resolved}" not found`
       return result
@@ -3190,9 +3200,30 @@ export async function ChangeCLIArgs(
 
 // ══════════════════════════════════════════════════════════════
 // ChangeClient — Switch an agent's AI client (program)
+//
+// R18 (Plugin Continuity on Client Change) — CRITICAL
+// ----------------------------------------------------
+// Changing an agent's client is NEVER a simple field update. Every plugin
+// installed for the old client MUST be re-emitted in the new client's format
+// BEFORE any uninstall happens. If ANY plugin cannot be converted, the entire
+// operation aborts — no partial state is allowed. See docs/GOVERNANCE-RULES.md
+// R18.1-R18.10 and CLAUDE.md "ChangeClient — Plugin Continuity (R18)".
 // ══════════════════════════════════════════════════════════════
 
 const VALID_CLIENTS = new Set(['claude', 'codex', 'gemini', 'opencode', 'kiro'])
+
+type ChangeClientTarget = 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro'
+
+interface PluginConversionPlan {
+  pluginName: string
+  /** Marketplace name (e.g. "ai-maestro-plugins") — needed to build plugin keys for uninstall */
+  marketplace?: string
+  isRolePlugin: boolean
+  sourceDir: string | null
+  targetDir: string
+  /** How we will obtain the new-client version */
+  strategy: 'native-exists' | 'emit-from-ir' | 'convert-from-source'
+}
 
 export async function ChangeClient(
   agentId: string,
@@ -3208,7 +3239,7 @@ export async function ChangeClient(
     if (g0err) { result.error = g0err; return result }
 
     // ── G01: Validate client value ─────────────────────────────
-    const normalized = newClient.toLowerCase().trim()
+    const normalized = newClient.toLowerCase().trim() as ChangeClientTarget
     if (!VALID_CLIENTS.has(normalized)) {
       result.error = `Invalid client "${newClient}". Valid: ${[...VALID_CLIENTS].join(', ')}`
       return result
@@ -3225,7 +3256,7 @@ export async function ChangeClient(
     ops.push(`G02: Agent "${agent.name}" found`)
 
     // ── G03: No-op check ───────────────────────────────────────
-    const oldProgram = (agent.program || 'claude').toLowerCase()
+    const oldProgram = ((agent.program || 'claude').toLowerCase()) as ChangeClientTarget
     if (oldProgram === normalized) {
       result.success = true
       ops.push(`G03: Client already "${normalized}" — no-op`)
@@ -3233,20 +3264,339 @@ export async function ChangeClient(
     }
     ops.push(`G03: Client change needed: "${oldProgram}" → "${normalized}"`)
 
-    // ── G04: Write to registry ─────────────────────────────────
+    // ── G04: Resolve agent working directory ────────────────────
+    const agentDir = agent.workingDirectory || agent.sessions?.[0]?.workingDirectory
+    if (!agentDir) {
+      result.error = `Agent "${agent.name}" has no working directory — cannot reinstall plugins`
+      return result
+    }
+    ops.push(`G04: Agent working directory "${agentDir}"`)
+
+    // ── G05: Snapshot ALL currently installed plugins (R18.2) ────
+    // Plugin names must be captured BEFORE any uninstall. Includes:
+    //   - the role-plugin (if any)
+    //   - all normal plugins (enabled AND disabled — we preserve both)
+    const { scanAgentLocalConfig } = await import('@/services/agent-local-config-service')
+    const scanResult = scanAgentLocalConfig(agentId)
+    if (scanResult.error || !scanResult.data) {
+      result.error = `Failed to scan agent config: ${scanResult.error || 'unknown'}`
+      return result
+    }
+    const snapshot = scanResult.data
+    // Preserve marketplace per plugin name — needed to build plugin keys for
+    // the old adapter's uninstall call (Claude uses "name@marketplace" keys).
+    const snapshotPlugins = new Map<string, { marketplace?: string; isRolePlugin: boolean }>()
+    if (snapshot.rolePlugin?.name) {
+      snapshotPlugins.set(snapshot.rolePlugin.name, {
+        marketplace: snapshot.rolePlugin.marketplace,
+        isRolePlugin: true,
+      })
+    }
+    for (const p of snapshot.plugins || []) {
+      if (!snapshotPlugins.has(p.name)) {
+        snapshotPlugins.set(p.name, { marketplace: p.marketplace, isRolePlugin: false })
+      }
+    }
+
+    // R17 safety net: the ai-maestro-plugin core plugin is mandatory on every
+    // agent. If scanAgentLocalConfig couldn't see it (e.g., agent is currently
+    // on a non-Claude client and its plugin lives outside .claude/), add it
+    // manually to guarantee R17 is satisfied after the client change.
+    const CORE_PLUGIN_NAME = 'ai-maestro-plugin'
+    if (!snapshotPlugins.has(CORE_PLUGIN_NAME)) {
+      snapshotPlugins.set(CORE_PLUGIN_NAME, {
+        marketplace: 'ai-maestro-plugins',
+        isRolePlugin: false,
+      })
+      ops.push(`G05b: Added ${CORE_PLUGIN_NAME} to snapshot (R17 safety net — was missing from .claude/ scan)`)
+    }
+
+    ops.push(`G05: Snapshot — ${snapshotPlugins.size} plugin(s): ${[...snapshotPlugins.keys()].join(', ') || 'none'}`)
+
+    // ── G06: Build conversion plan for every plugin (R18.3) ─────
+    // MUST succeed for ALL plugins before we touch the agent directory.
+    const { convertAndStorePlugin, emitForClient, getUniversalIR } =
+      await import('@/services/plugin-storage-service')
+
+    const homeDir = process.env.HOME || ''
+    const plans: PluginConversionPlan[] = []
+
+    // R18.3d priority resolver — always prefer native sources over conversion.
+    // Conversion is lossy in every direction (Claude has the richest format but
+    // non-Claude clients also have features Claude lacks). Native plugins are
+    // authoritative; we must use them as-is whenever they exist.
+    const { findNativePluginForClient } = await import('@/services/plugin-storage-service')
+
+    // Check if a role-plugin in ~/agents/role-plugins/<name>/ is compatible
+    // with the target client by reading compatible-clients from .agent.toml.
+    const isRolePluginCompatibleWithClient = (pluginName: string, client: ChangeClientTarget): boolean => {
+      const profilePath = join(homeDir, 'agents', 'role-plugins', pluginName, `${pluginName}.agent.toml`)
+      if (!existsSync(profilePath)) return false
+      try {
+        const { readFileSync } = require('fs') as typeof import('fs')
+        const content = readFileSync(profilePath, 'utf-8') as string
+        // Match compatible-clients = ["claude-code", "codex", ...]
+        const m = content.match(/compatible-clients\s*=\s*\[([^\]]*)\]/m)
+        if (!m) return false
+        const list = m[1].split(',').map(s => s.trim().replace(/^["']|["']$/g, '').toLowerCase())
+        // Normalize claude/claude-code
+        const normalizedClient = client === 'claude' ? 'claude-code' : client
+        return list.includes(normalizedClient) || list.includes(client)
+      } catch {
+        return false
+      }
+    }
+
+    // Find the richest available source for a plugin targeting `client`.
+    // Returns { dir, strategy } or null if nothing found.
+    const findBestSource = async (
+      pluginName: string,
+      client: ChangeClientTarget,
+      isRolePlugin: boolean,
+    ): Promise<{ dir: string; strategy: 'native-exists' | 'emit-from-ir' } | null> => {
+      // (1) Client-native plugin cache (~/.{client}/plugins/cache/, etc.)
+      const nativeDir = await findNativePluginForClient(pluginName, client)
+      if (nativeDir) return { dir: nativeDir, strategy: 'native-exists' }
+
+      // (2) Local role-plugins marketplace — only if compatible-clients matches
+      if (isRolePlugin && isRolePluginCompatibleWithClient(pluginName, client)) {
+        const rolePluginDir = join(homeDir, 'agents', 'role-plugins', pluginName)
+        if (existsSync(rolePluginDir)) return { dir: rolePluginDir, strategy: 'native-exists' }
+      }
+
+      // (3) Previously emitted custom-plugins
+      const suffixed = join(homeDir, 'agents', 'custom-plugins', client, `${pluginName}-${client}`)
+      if (existsSync(suffixed)) return { dir: suffixed, strategy: 'native-exists' }
+      const unsuffixed = join(homeDir, 'agents', 'custom-plugins', client, pluginName)
+      if (existsSync(unsuffixed)) return { dir: unsuffixed, strategy: 'native-exists' }
+
+      // (4) Universal IR emit — only if IR exists
+      const ir = await getUniversalIR(pluginName)
+      if (ir) {
+        try {
+          const emitted = await emitForClient(pluginName, client)
+          if (emitted) return { dir: emitted, strategy: 'emit-from-ir' }
+        } catch (err) {
+          console.warn(`[ChangeClient] emitForClient failed for "${pluginName}" → ${client}:`, err)
+        }
+      }
+
+      return null
+    }
+
+    for (const [name, meta] of snapshotPlugins) {
+      const { marketplace, isRolePlugin } = meta
+
+      // Priority search: try (1)-(4) in R18.3d order.
+      const found = await findBestSource(name, normalized, isRolePlugin)
+      if (found) {
+        plans.push({
+          pluginName: name,
+          marketplace,
+          isRolePlugin,
+          sourceDir: found.dir,
+          targetDir: found.dir,
+          strategy: found.strategy,
+        })
+        continue
+      }
+
+      // (5) Last resort: fresh conversion. Forbidden when target is Claude
+      // (R18.3b — X→Claude conversion is lossy and cannot invent lost features).
+      if (normalized === 'claude') {
+        result.error = `R18.3b violation: no canonical Claude source found for plugin "${name}". X→Claude conversion is lossy and forbidden. Restore the plugin in ~/.claude/plugins/cache/ or reinstall it from the marketplace, then retry.`
+        console.error(`[ChangeClient] ${result.error}`)
+        return result
+      }
+
+      // Non-Claude targets: convert from source as absolute last resort.
+      // Prefer Claude as conversion source when available (richest format).
+      try {
+        const claudeCanonical = await findNativePluginForClient(name, 'claude')
+        const conversionSource: ChangeClientTarget = claudeCanonical ? 'claude' : oldProgram
+        await convertAndStorePlugin(name, conversionSource, [normalized])
+        const emitted = await emitForClient(name, normalized)
+        if (emitted) {
+          plans.push({ pluginName: name, marketplace, isRolePlugin, sourceDir: emitted, targetDir: emitted, strategy: 'convert-from-source' })
+          continue
+        }
+      } catch (err) {
+        result.error = `R18 violation: cannot convert plugin "${name}" to ${normalized}: ${err instanceof Error ? err.message : String(err)}. Aborting before any uninstall.`
+        console.error(`[ChangeClient] ${result.error}`)
+        return result
+      }
+
+      // No strategy worked — abort to prevent leaving the agent without plugins
+      result.error = `R18 violation: no conversion strategy succeeded for plugin "${name}" (old=${oldProgram}, new=${normalized}). Aborting before any uninstall.`
+      console.error(`[ChangeClient] ${result.error}`)
+      return result
+    }
+    ops.push(`G06: ${plans.length} plugin conversion plan(s) ready (strategies: ${plans.map(p => p.strategy).join(', ')})`)
+
+    // ── G07: Uninstall old-client plugins from agent dir (R18.4) ─
+    // Now that we know every plugin has a converted version waiting, it is
+    // safe to remove the old-client versions.
+    const { getAdapter } = await import('@/lib/client-plugin-adapters')
+    const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
+    const oldAdapter = await getAdapter(oldProgram)
+    const oldProviderId = clientTypeToProviderId(oldProgram)
+    if (oldAdapter && oldProviderId) {
+      for (const plan of plans) {
+        try {
+          await oldAdapter.uninstall(
+            {
+              name: plan.pluginName,
+              clientType: oldProgram,
+              storageDir: plan.sourceDir || '',
+              providerId: oldProviderId,
+              // Claude adapter builds the plugin key from name + sourcePlugin (hack:
+              // sourcePlugin is used as marketplace name in buildPluginKey).
+              sourcePlugin: plan.marketplace,
+            },
+            agentDir,
+            { scope: 'local' }
+          )
+        } catch (err) {
+          console.warn(`[ChangeClient] Best-effort uninstall failed for "${plan.pluginName}":`, err)
+        }
+      }
+
+      // Belt-and-braces: strip the old-client plugin entries from .claude/settings.local.json
+      // even if the CLI uninstall silently skipped them (which can happen for local-scope
+      // plugins on offline clients). Without this, the agent ends up with both the old
+      // Claude plugin key and the new Codex plugin elements, violating R18.4.
+      if (oldProgram === 'claude') {
+        try {
+          const settingsPath = join(agentDir, '.claude', 'settings.local.json')
+          if (existsSync(settingsPath)) {
+            const { readFileSync, writeFileSync } = await import('fs')
+            const raw = readFileSync(settingsPath, 'utf-8')
+            const settings = JSON.parse(raw) as Record<string, unknown>
+            const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+            let changed = false
+            for (const plan of plans) {
+              const key = plan.marketplace ? `${plan.pluginName}@${plan.marketplace}` : plan.pluginName
+              if (key in ep) {
+                delete ep[key]
+                changed = true
+              }
+              if (plan.pluginName in ep) {
+                delete ep[plan.pluginName]
+                changed = true
+              }
+            }
+            if (changed) {
+              settings.enabledPlugins = ep
+              writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
+            }
+          }
+        } catch (err) {
+          console.warn('[ChangeClient] Settings strip fallback failed:', err)
+        }
+      }
+
+      ops.push(`G07: Uninstalled ${plans.length} old-client plugin(s) from agent dir`)
+    } else {
+      ops.push(`G07: No adapter/provider for old client "${oldProgram}" — skipped uninstall (best-effort)`)
+    }
+
+    // ── G08: Install new-client plugins into agent dir (R18.4) ──
+    // Converted / emitted plugins live in the local custom marketplace
+    // (~/agents/custom-plugins/ with a marketplace.json manifest). For Claude
+    // targets the adapter needs to know this marketplace name to build the
+    // correct plugin key. Role-plugins use the local roles marketplace instead.
+    const { CUSTOM_MARKETPLACE_NAME } = await import('@/lib/ecosystem-constants')
+    const newAdapter = await getAdapter(normalized)
+    const newProviderId = clientTypeToProviderId(normalized)
+    if (!newAdapter || !newProviderId) {
+      result.error = `No adapter/provider for new client "${normalized}" — cannot install converted plugins`
+      return result
+    }
+    for (const plan of plans) {
+      // Which marketplace does the converted plugin belong to?
+      //   - Role-plugin → LOCAL_MARKETPLACE_NAME ("ai-maestro-local-roles-marketplace")
+      //   - Normal plugin converted from source → CUSTOM_MARKETPLACE_NAME ("ai-maestro-local-custom-marketplace")
+      //   - Native (pre-existing) plugin → keep the original marketplace if we know it
+      let installMarketplace: string | undefined
+      if (plan.isRolePlugin) {
+        installMarketplace = LOCAL_MARKETPLACE_NAME
+      } else if (plan.strategy === 'native-exists') {
+        installMarketplace = plan.marketplace
+      } else {
+        installMarketplace = CUSTOM_MARKETPLACE_NAME
+      }
+
+      try {
+        await newAdapter.install(
+          {
+            name: plan.pluginName,
+            clientType: normalized,
+            storageDir: plan.targetDir,
+            providerId: newProviderId,
+            // Claude adapter builds the plugin key via sourcePlugin as marketplace (see buildPluginKey).
+            sourcePlugin: installMarketplace,
+          },
+          agentDir,
+          { scope: 'local', marketplace: installMarketplace }
+        )
+      } catch (err) {
+        result.error = `Failed to install converted plugin "${plan.pluginName}" for ${normalized}: ${err instanceof Error ? err.message : String(err)}`
+        console.error(`[ChangeClient] ${result.error}`)
+        return result
+      }
+    }
+
+    // Belt-and-braces: for Claude targets, verify the plugin key is actually
+    // present in .claude/settings.local.json and write it back if not. The
+    // claude plugin CLI can fail silently when invoked from a server child
+    // process due to PATH / env differences, leaving the install as a no-op.
+    if (normalized === 'claude') {
+      try {
+        const settingsPath = join(agentDir, '.claude', 'settings.local.json')
+        const { readFileSync, writeFileSync, mkdirSync } = await import('fs')
+        mkdirSync(join(agentDir, '.claude'), { recursive: true })
+        let settings: Record<string, unknown> = {}
+        if (existsSync(settingsPath)) {
+          try { settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) } catch { /* keep empty */ }
+        }
+        const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+        let changed = false
+        for (const plan of plans) {
+          const mkt = plan.isRolePlugin
+            ? LOCAL_MARKETPLACE_NAME
+            : (plan.strategy === 'native-exists' ? (plan.marketplace || 'ai-maestro-plugins') : CUSTOM_MARKETPLACE_NAME)
+          const key = `${plan.pluginName}@${mkt}`
+          if (ep[key] !== true) {
+            ep[key] = true
+            changed = true
+          }
+        }
+        if (changed) {
+          settings.enabledPlugins = ep
+          writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8')
+          ops.push(`G08b: Settings write-back — ensured ${plans.length} plugin key(s) in .claude/settings.local.json`)
+        }
+      } catch (err) {
+        console.warn('[ChangeClient] Claude settings write-back fallback failed:', err)
+      }
+    }
+
+    ops.push(`G08: Installed ${plans.length} new-client plugin(s) into agent dir`)
+
+    // ── G09: Write new program to registry ─────────────────────
     const updated = await updateAgent(agentId, { program: normalized })
     if (!updated) {
       result.error = `Failed to update program in registry`
       return result
     }
-    ops.push(`G04: Updated program in registry`)
+    ops.push(`G09: Updated program in registry`)
 
-    // ── G05: Restart needed ────────────────────────────────────
+    // ── G10: Restart needed (R18.7) ────────────────────────────
     result.restartNeeded = true
-    ops.push(`G05: Restart needed (client changed)`)
+    ops.push(`G10: Restart needed (client + plugins changed)`)
 
     result.success = true
-    console.log(`[ChangeClient] Agent ${agentId} "${agent.name}": client "${oldProgram}" → "${normalized}" (${ops.length} gates)`)
+    console.log(`[ChangeClient] Agent ${agentId} "${agent.name}": client "${oldProgram}" → "${normalized}" (${ops.length} gates, ${plans.length} plugins converted)`)
     return result
   } catch (err) {
     result.error = err instanceof Error ? err.message : String(err)

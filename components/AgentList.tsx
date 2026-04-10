@@ -212,6 +212,8 @@ export default function AgentList({
     return saved !== 'false'
   })
 
+  const [deadSessionsExpanded, setDeadSessionsExpanded] = useState(false)
+
   // Search state
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -1270,10 +1272,14 @@ export default function AgentList({
       {unregisteredSessions.length > 0 && (
         <div className="flex-shrink-0 border-t border-red-900/30 bg-red-950/20">
           <div className="px-3 py-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-red-400/70 mb-1.5">
+            <button
+              onClick={() => setDeadSessionsExpanded(!deadSessionsExpanded)}
+              className="flex items-center gap-1.5 w-full text-[10px] font-bold uppercase tracking-wider text-red-400/70 mb-1.5 hover:text-red-300 transition-colors"
+            >
+              <ChevronRight className={`w-3 h-3 transition-transform ${deadSessionsExpanded ? 'rotate-90' : ''}`} />
               Dead Sessions ({unregisteredSessions.length})
-            </div>
-            {unregisteredSessions.map((session) => {
+            </button>
+            {deadSessionsExpanded && unregisteredSessions.map((session) => {
               const displayName = session.originalAgentName || session.tmuxSessionName
               const label = session.originalAgentLabel || displayName
               return (

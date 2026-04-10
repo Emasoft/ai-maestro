@@ -265,6 +265,20 @@ export async function removeConvertedPlugin(pluginName: string): Promise<void> {
 // ═══════════════════════════════════════════════════════════════
 
 /**
+ * Public variant of findSourcePluginDir — used by ChangeClient (R18.3d) to
+ * check whether a native (non-converted) version of a plugin already exists
+ * for a given client. Native sources are authoritative (no information loss),
+ * so they must always be preferred over conversion. Returns the absolute path
+ * to the latest version directory, or null if no native source exists.
+ */
+export async function findNativePluginForClient(
+  pluginName: string,
+  targetClient: ClientType,
+): Promise<string | null> {
+  return findSourcePluginDir(pluginName, targetClient)
+}
+
+/**
  * Find the source plugin directory on disk.
  * Searches Claude plugin cache, local marketplace, etc.
  */

@@ -4570,6 +4570,49 @@ export async function CreateAgent(
       ops.push(`G11: No workDir — skipping local plugin install`)
     }
 
+    // ── G12: Auto-initialize AMP identity (P002 / R-AMP) ─────
+    // Runs amp-init.sh --force --name <name> to set up the per-agent AMP home
+    // (~/.agent-messaging/agents/<name>/) with keys and config. This is what
+    // enables inter-agent messaging immediately after creation — without it,
+    // the agent cannot send or receive AMP messages until a manual init step.
+    // Non-fatal: if it fails, the agent is flagged with ampIdentityMissing and
+    // the dashboard shows a warning badge; users can reinitialize via the API.
+    try {
+      const { execFile } = await import('child_process')
+      const { promisify: promisifyG12 } = await import('util')
+      const execFileAsyncG12 = promisifyG12(execFile)
+      const ampInitPath = join(HOME, '.local', 'bin', 'amp-init.sh')
+      const { existsSync: existsAmpInit } = await import('fs')
+      if (!existsAmpInit(ampInitPath)) {
+        ops.push(`G12: WARN — amp-init.sh not found at ${ampInitPath}; agent flagged ampIdentityMissing`)
+        try {
+          const { updateAgent: markMissing } = await import('@/lib/agent-registry')
+          await markMissing(agent.id, { ampIdentityMissing: true } as import('@/types/agent').UpdateAgentRequest)
+        } catch { /* best effort */ }
+      } else {
+        const tenant = process.env.AIMAESTRO_ORG || 'default'
+        const args = ['--force', '--name', name, '--tenant', tenant]
+        const ampEnvDir = join(HOME, '.agent-messaging', 'agents', name)
+        try {
+          await execFileAsyncG12(ampInitPath, args, {
+            timeout: 30000,
+            cwd: workDir,
+            env: { ...process.env, AMP_DIR: ampEnvDir },
+          })
+          ops.push(`G12: AMP identity initialized (${name}@${tenant}.local)`)
+        } catch (ampErr) {
+          const msg = ampErr instanceof Error ? ampErr.message : String(ampErr)
+          ops.push(`G12: WARN — amp-init failed: ${msg.slice(0, 200)}; agent flagged ampIdentityMissing`)
+          try {
+            const { updateAgent: markMissing2 } = await import('@/lib/agent-registry')
+            await markMissing2(agent.id, { ampIdentityMissing: true } as import('@/types/agent').UpdateAgentRequest)
+          } catch { /* best effort */ }
+        }
+      }
+    } catch (g12Err) {
+      ops.push(`G12: WARN — unexpected error: ${g12Err instanceof Error ? g12Err.message : g12Err}`)
+    }
+
     result.success = true
     console.log(`[CreateAgent] "${name}" created (id=${agent.id}, program=${program}, ${ops.length} gates)`)
     return result

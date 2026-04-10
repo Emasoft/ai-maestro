@@ -261,6 +261,14 @@ export interface Agent {
   // Core Plugin Status (R17 — Governance)
   corePluginMissing?: boolean    // True if ai-maestro-plugin failed to install at creation/import time
 
+  // AMP Identity Status (P002 — CreateAgent G12)
+  // True if `amp-init.sh --force --name <name>` failed during CreateAgent G12
+  // (script missing, non-zero exit, or unexpected error). Agent is usable but
+  // cannot send or receive AMP messages until amp-init is re-run successfully.
+  // The dashboard shows a warning badge; POST /api/agents/{id}/amp-init clears
+  // the flag on success.
+  ampIdentityMissing?: boolean
+
   // Soft-delete: when set, agent is marked as deleted but data is preserved for restore
   deletedAt?: string             // ISO timestamp when soft-deleted, undefined = active
 }
@@ -540,6 +548,8 @@ export interface UpdateAgentRequest {
   preferences?: Partial<AgentPreferences>
   // Core Plugin Status (R17)
   corePluginMissing?: boolean    // True if ai-maestro-plugin failed to install
+  // AMP Identity Status (P002)
+  ampIdentityMissing?: boolean   // True if amp-init.sh failed during CreateAgent G12
   // DEPRECATED: for backward compatibility
   /** @deprecated Use 'name' instead. */
   alias?: string

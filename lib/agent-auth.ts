@@ -176,12 +176,11 @@ export function authenticateFromRequest(request: { headers: { get(name: string):
 /**
  * Authorization context passed to Change* functions in element-management-service.
  *
- * Phase 1 (current): Optional parameter. When omitted, the caller is treated as
- * system-owner (full access). The dispatch layer (updateAgentById) already enforces
- * governance roles before calling Change* functions, so this is a belt-and-suspenders
- * layer for direct callers and for future Phase 2 mandatory enforcement.
- *
- * Phase 2 (SF-058): Will become required. All callers must provide auth context.
+ * MANDATORY: Every Change* / Delete* call must provide an AuthContext — the
+ * `!authContext` bypass was closed in gate0Auth (BYPASS-1). Direct callers
+ * build one via buildAuthContext(authenticateFromRequest(request)) or, for
+ * internal system flows (server startup, cron, tests), via
+ * buildSystemAuthContext(reason).
  */
 export interface AuthContext {
   /** Verified agent ID, or undefined for system owner / web UI */

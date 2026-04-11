@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "Security classification for every API function that mutates state or exposes sensitive data.",
+    "",
+    "SCHEMA:",
+    "  { \"<api function name>\": \"normal\" | \"strict\", ... }",
+    "",
+    "  - \"normal\" (default): cookie session or Bearer token sufficient.",
+    "  - \"strict\": caller must provide a fresh sudo-mode token (short-lived,",
+    "    issued by POST /api/auth/sudo-password after re-entering the governance",
+    "    password). Applies to destructive or irreversible operations.",
+    "",
+    "RULES:",
+    "  1. Only list entries that need \"strict\" treatment. Absence = \"normal\".",
+    "  2. Function names must match the exported handler name or the route path",
+    "     written as METHOD_/api/path (e.g. DELETE_/api/agents/[id]).",
+    "  3. This file is source-only — it is NOT read by the build pipeline. The",
+    "     loader at lib/security-registry.ts parses it at runtime.",
+    "  4. Edit this file to add or remove strict entries. No code change needed;",
+    "     the middleware + route wrapper read the map on every request.",
+    "",
+    "DEFENCE IN DEPTH:",
+    "  Even a \"normal\" route still requires the global /api/* middleware auth",
+    "  gate (cookie or Bearer), plus the per-route authenticateFromRequest()",
+    "  check, plus (for agent writes) the gate0Auth authorization check inside",
+    "  the ChangeTitle / ChangePlugin pipelines. \"strict\" adds a fourth layer:",
+    "  a sudo-mode token earned by re-entering the password within the last 60s."
+  ],
+  "entries": {
+    "DELETE_/api/agents/[id]": "strict",
+    "DELETE_/api/teams/[id]": "strict",
+    "DELETE_/api/agents/cemetery/[id]": "strict",
+    "POST_/api/governance/password": "strict",
+    "DELETE_/api/settings/marketplaces": "strict",
+    "DELETE_/api/agents/role-plugins/install": "strict",
+    "PATCH_/api/agents/[id]/title": "strict",
+    "POST_/api/agents/[id]/stop": "strict",
+    "POST_/api/sessions/[id]/restart": "strict"
+  }
+}

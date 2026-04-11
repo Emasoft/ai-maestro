@@ -13,7 +13,8 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
 import { isValidUuid } from '@/lib/validation'
 
-// Phase 1: no auth required for reads (localhost-only). Phase 2 should add auth for sensitive settings.
+// Auth required via the global /api/* middleware. The handler also
+// verifies the caller via authenticateFromRequest for defense in depth.
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -3,6 +3,7 @@ import { getAgentById, updateAgentById } from '@/services/agents-core-service'
 import type { UpdateAgentRequest } from '@/types/agent'
 import { isValidUuid } from '@/lib/validation'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
+import { requireSudoToken } from '@/lib/sudo-guard'
 
 /**
  * GET /api/agents/[id]
@@ -86,6 +87,12 @@ export async function DELETE(
     if (!isValidUuid(id)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
+
+    // Sudo mode required — agent deletion is classified "strict" in
+    // security-registry.json. The caller must have re-entered the
+    // governance password within the last 60s and present X-Sudo-Token.
+    const sudoErr = requireSudoToken(request, 'DELETE', '/api/agents/[id]')
+    if (sudoErr) return sudoErr
 
     // Identity auth only — DeleteAgent has its own Gate 0 for authorization
     const auth = authenticateFromRequest(request)

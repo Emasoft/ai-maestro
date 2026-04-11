@@ -9,11 +9,13 @@ import { loadAgents } from '@/lib/agent-registry'
 // NT-041: Force dynamic — reads runtime filesystem state (teams + agents registry files)
 export const dynamic = 'force-dynamic'
 
-// Phase 1: localhost-only, no auth required. TODO: add ACL for Phase 2 remote access
+// Auth required via global /api/* middleware. Returns names only — no
+// secret fields — so any authenticated caller can use it for collision
+// checking.
 export async function GET() {
   try {
     const teams = loadTeams()
-    // loadAgents() called per request; acceptable for Phase 1 traffic levels
+    // loadAgents() is called per request; fine at typical dashboard traffic.
     const agents = loadAgents()
     // NT-007: Response shape: { teamNames: string[], agentNames: string[] }
     // Used by Create Team dialog for client-side name collision checking

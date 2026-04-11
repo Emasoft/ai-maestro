@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTeamById, updateTeamById } from '@/services/teams-service'
 import { getTeam } from '@/lib/team-registry'
 import { authenticateFromRequest } from '@/lib/agent-auth'
+import { requireSudoToken } from '@/lib/sudo-guard'
 import { isValidUuid } from '@/lib/validation'
 
 // GET /api/teams/[id] - Get a single team
@@ -113,6 +114,9 @@ export async function DELETE(
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: 'Invalid team ID format' }, { status: 400 })
   }
+  // Sudo mode — DELETE /api/teams/[id] is classified "strict"
+  const sudoErr = requireSudoToken(request, 'DELETE', '/api/teams/[id]')
+  if (sudoErr) return sudoErr
   const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })

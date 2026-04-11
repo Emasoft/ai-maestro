@@ -6,7 +6,8 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
 export const dynamic = 'force-dynamic'
 
 // GET /api/teams - List all teams
-// Phase 1: No ACL on team list -- localhost only. TODO Phase 2: Add auth/ACL for remote access.
+// Auth required via global /api/* middleware. Returns only team metadata
+// that any authenticated caller on this host is allowed to see.
 // CC-P1-309: Add standard result.error check for consistency with other routes
 export async function GET() {
   const result = listAllTeams()

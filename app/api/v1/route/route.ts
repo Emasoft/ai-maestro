@@ -44,6 +44,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<AMPRouteR
     })
   } catch (error) {
     // CC-P4-002: Top-level catch for unhandled service throws (consistent with agents/route.ts pattern)
+    console.error('[AMP Route] Unhandled error in route endpoint:', error)
+    if (error instanceof Error && error.stack) {
+      console.error('[AMP Route] Stack:', error.stack)
+    }
     return NextResponse.json(
       { error: 'internal_error', message: error instanceof Error ? error.message : 'Internal server error' } as AMPError,
       { status: 500 }

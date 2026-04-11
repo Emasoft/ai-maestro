@@ -959,6 +959,17 @@ cd <plugin-name>
 # 3. Publish using the unified publish pipeline (quality gate + version bump)
 uv run python scripts/publish.py --patch
 #    This runs: test → lint → validate → consistency-check → bump → commit → push
+#    publish.py is STRICT (no skip flags, no env-var bypass). A pre-push git
+#    hook refuses any push that isn't invoked from publish.py itself.
+#
+#    If CPV strict validation fails with MINOR/MAJOR/CRITICAL issues, spawn
+#    the `claude-plugins-validation:plugin-fixer` agent — it reads the
+#    validation report and applies fixes one by one from a deep knowledge
+#    base in skills/fix-validation/references/. Example:
+#      Agent(subagent_type="claude-plugins-validation:plugin-fixer",
+#            prompt="Fix the CPV strict validation issues in <plugin-path>")
+#    Then re-run publish.py. Do NOT hand-patch SKILL.md files by guessing
+#    the CPV rules — the fixer agent knows them all.
 
 # 4. The GitHub workflow in the plugin repo automatically triggers
 #    Emasoft/ai-maestro-plugins marketplace to update its metadata

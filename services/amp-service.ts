@@ -972,7 +972,18 @@ export async function routeMessage(
         envelope.signature = ''
       }
     } else {
-      // MF-01: Reject unsigned messages from non-local (mesh-forwarded/federated) senders
+      // Mandatory signature policy (R19-sec, Apr 2026):
+      // Every envelope MUST carry a valid Ed25519 signature. Unsigned messages
+      // are never accepted from mesh-forwarded senders (MF-01) AND are no longer
+      // accepted from local senders either — the previous "local pass-through"
+      // made the API key a single-factor secret.
+      //
+      // For LOCAL senders that failed to sign (e.g. missing keypair, key
+      // rotation race), the ai-maestro server acts as a GUARANTOR: because it
+      // created the agent and controls its tmux session, it can vouch for the
+      // sender and produce a host-signed envelope. This mirrors the P004
+      // guarantor fallback used when an agent's own signature fails
+      // verification — applied here to the missing-signature case.
       if (isMeshForwarded) {
         console.log(`[AMP Route] No signature provided by mesh-forwarded sender ${envelope.from}, rejecting`)
         return {
@@ -980,7 +991,38 @@ export async function routeMessage(
           status: 403
         }
       }
-      console.log(`[AMP Route] No signature provided by local sender ${envelope.from}`)
+      console.warn(`[AMP Route] No signature provided by local sender ${envelope.from} — attempting host guarantor fallback`)
+      const { canGuarantorSign, guarantorSignCanonical, getLocalHostIdForGuarantor } =
+        await import('@/lib/amp-auth')
+      const eligible = auth.agentId ? await canGuarantorSign(auth.agentId) : false
+      if (!eligible) {
+        return {
+          data: { error: 'forbidden', message: 'Unsigned messages require an ai-maestro-created agent for host guarantor; this sender is ineligible' } as AMPError,
+          status: 403
+        }
+      }
+      try {
+        const payloadHash = crypto
+          .createHash('sha256')
+          .update(JSON.stringify(body.payload))
+          .digest('base64')
+        const signatureData = [
+          envelope.from, envelope.to, envelope.subject,
+          body.priority || 'normal', body.in_reply_to || '', payloadHash,
+        ].join('|')
+        const hostSignature = await guarantorSignCanonical(signatureData)
+        envelope.signature = hostSignature
+        envelope.guarantor_host_id = await getLocalHostIdForGuarantor()
+        console.warn(
+          `[AMP Route] Unsigned local sender ${envelope.from} — guarantor-signed by host "${envelope.guarantor_host_id}"`,
+        )
+      } catch (gErr) {
+        console.error('[AMP Route] Host guarantor signing failed for unsigned local sender:', gErr)
+        return {
+          data: { error: 'forbidden', message: 'Host guarantor signing failed' } as AMPError,
+          status: 403
+        }
+      }
     }
 
     // ── Provider Scope Check ───────────────────────────────────────────

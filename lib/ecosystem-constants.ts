@@ -38,38 +38,129 @@ export const MARKETPLACE_REPO = 'Emasoft/ai-maestro-plugins'
 /** Marketplace name as resolved by Claude CLI (directory basename) */
 export const MARKETPLACE_NAME = 'ai-maestro-plugins'
 
-/** Local marketplace for custom Haephestos-generated role-plugins */
-export const LOCAL_MARKETPLACE_NAME = 'ai-maestro-local-roles-marketplace'
+// ═════════════════════════════════════════════════════════════
+// Container model (R20, v3.6.0+)
+//
+// ~/agents/role-plugins/   and   ~/agents/custom-plugins/    are CONTAINERS,
+// NOT marketplaces. Each container holds one `marketplace-<client>/`
+// subfolder per client format (marketplace-claude, marketplace-codex,
+// marketplace-openrouter, …) plus a shared `.abstract/` universal IR hub.
+//
+// The container folder itself is NEVER registered with any client CLI.
+// Only the individual marketplace-<client>/ subfolders are.
+// ═════════════════════════════════════════════════════════════
 
-/** Local marketplace directory name (under ~/agents/) */
-export const LOCAL_MARKETPLACE_DIR_NAME = 'role-plugins'
+/** Role-plugins CONTAINER directory name (under ~/agents/) */
+export const ROLE_PLUGINS_CONTAINER_DIR_NAME = 'role-plugins'
 
-/** Local marketplace for converted custom (non-role) plugins */
-export const CUSTOM_MARKETPLACE_NAME = 'ai-maestro-local-custom-marketplace'
+/** Custom-plugins CONTAINER directory name (under ~/agents/) */
+export const CUSTOM_PLUGINS_CONTAINER_DIR_NAME = 'custom-plugins'
 
-/** Custom marketplace directory name (under ~/agents/) */
-export const CUSTOM_MARKETPLACE_DIR_NAME = 'custom-plugins'
+/** Shared IR hub folder name inside every container */
+export const ABSTRACT_IR_DIR_NAME = '.abstract'
+
+/** Marketplace subfolder prefix — actual folder is `marketplace-<client>` */
+export const MARKETPLACE_DIR_PREFIX = 'marketplace-'
 
 /**
- * Resolve the custom marketplace root path: ~/agents/custom-plugins/
- * Converted plugins at ~/agents/custom-plugins/<client>/<plugin-name>/
- * Marketplace metadata at ~/agents/custom-plugins/.claude-plugin/
+ * Build the per-client marketplace folder name: `marketplace-<client>`.
+ * Example: `marketplaceDirName('codex')` → `"marketplace-codex"`.
  */
-export function getCustomMarketplacePath(): string {
-  const { homedir } = require('os') as typeof import('os')
-  const { join } = require('path') as typeof import('path')
-  return join(homedir(), 'agents', CUSTOM_MARKETPLACE_DIR_NAME)
+export function marketplaceDirName(client: string): string {
+  return `${MARKETPLACE_DIR_PREFIX}${client}`
 }
 
 /**
- * Resolve the local marketplace root path: ~/agents/role-plugins/
- * Plugins live directly at ~/agents/role-plugins/<plugin-name>/
- * Marketplace metadata at ~/agents/role-plugins/.claude-plugin/
+ * Marketplace NAME as registered with the target client's CLI. Kept stable
+ * across refactors so existing CLIs don't lose their marketplace reference.
  */
-export function getLocalMarketplacePath(): string {
+export const LOCAL_MARKETPLACE_NAME = 'ai-maestro-local-roles-marketplace'
+export const CUSTOM_MARKETPLACE_NAME = 'ai-maestro-local-custom-marketplace'
+
+/**
+ * @deprecated Per R20.1 (v3.6.0), role-plugins/ is a container not a
+ * marketplace. Kept as an alias for backwards-compat of old imports. Use
+ * ROLE_PLUGINS_CONTAINER_DIR_NAME for the container, and
+ * marketplaceDirName(client) for each per-client marketplace inside it.
+ */
+export const LOCAL_MARKETPLACE_DIR_NAME = ROLE_PLUGINS_CONTAINER_DIR_NAME
+/** @deprecated same reason — use CUSTOM_PLUGINS_CONTAINER_DIR_NAME */
+export const CUSTOM_MARKETPLACE_DIR_NAME = CUSTOM_PLUGINS_CONTAINER_DIR_NAME
+
+// ── Container path helpers ──────────────────────────────────
+
+/**
+ * Resolve the custom-plugins CONTAINER root path: ~/agents/custom-plugins/
+ *
+ * Inside this container (R20.1 v3.6.0):
+ *   ~/agents/custom-plugins/.abstract/<name>/       — shared IR hub (R20.8)
+ *   ~/agents/custom-plugins/marketplace-claude/     — Claude marketplace
+ *   ~/agents/custom-plugins/marketplace-codex/      — Codex marketplace
+ *   ~/agents/custom-plugins/marketplace-<client>/   — future clients
+ */
+export function getCustomPluginsContainerPath(): string {
   const { homedir } = require('os') as typeof import('os')
   const { join } = require('path') as typeof import('path')
-  return join(homedir(), 'agents', LOCAL_MARKETPLACE_DIR_NAME)
+  return join(homedir(), 'agents', CUSTOM_PLUGINS_CONTAINER_DIR_NAME)
+}
+
+/**
+ * Resolve the role-plugins CONTAINER root path: ~/agents/role-plugins/
+ * Same structure as getCustomPluginsContainerPath — but holds role-plugins.
+ */
+export function getRolePluginsContainerPath(): string {
+  const { homedir } = require('os') as typeof import('os')
+  const { join } = require('path') as typeof import('path')
+  return join(homedir(), 'agents', ROLE_PLUGINS_CONTAINER_DIR_NAME)
+}
+
+/**
+ * Resolve a per-client marketplace folder inside the custom-plugins container.
+ * Example: `getCustomMarketplacePathForClient('codex')`
+ *   → `~/agents/custom-plugins/marketplace-codex/`
+ */
+export function getCustomMarketplacePathForClient(client: string): string {
+  const { join } = require('path') as typeof import('path')
+  return join(getCustomPluginsContainerPath(), marketplaceDirName(client))
+}
+
+/**
+ * Resolve a per-client marketplace folder inside the role-plugins container.
+ */
+export function getRoleMarketplacePathForClient(client: string): string {
+  const { join } = require('path') as typeof import('path')
+  return join(getRolePluginsContainerPath(), marketplaceDirName(client))
+}
+
+/** Shared .abstract/ IR hub inside the custom-plugins container */
+export function getCustomAbstractDir(): string {
+  const { join } = require('path') as typeof import('path')
+  return join(getCustomPluginsContainerPath(), ABSTRACT_IR_DIR_NAME)
+}
+
+/** Shared .abstract/ IR hub inside the role-plugins container */
+export function getRoleAbstractDir(): string {
+  const { join } = require('path') as typeof import('path')
+  return join(getRolePluginsContainerPath(), ABSTRACT_IR_DIR_NAME)
+}
+
+/**
+ * @deprecated Per R20.1 v3.6.0 there is no single "custom marketplace path" —
+ * the folder returned is now a CONTAINER that holds multiple marketplaces.
+ * Use getCustomPluginsContainerPath() for the container or
+ * getCustomMarketplacePathForClient(client) for a per-client marketplace.
+ * Kept as an alias so legacy imports keep compiling.
+ */
+export function getCustomMarketplacePath(): string {
+  return getCustomPluginsContainerPath()
+}
+
+/**
+ * @deprecated Per R20.1 v3.6.0, role-plugins/ is a container. Use
+ * getRolePluginsContainerPath() or getRoleMarketplacePathForClient(client).
+ */
+export function getLocalMarketplacePath(): string {
+  return getRolePluginsContainerPath()
 }
 
 // ── User-Scope Plugins (from ai-maestro marketplace) ────────

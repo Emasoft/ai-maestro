@@ -1,22 +1,36 @@
 /**
- * Plugin Storage Service — Manages ~/agents/custom-plugins/
+ * Plugin Storage Service — Manages ~/agents/custom-plugins/ and ~/agents/role-plugins/
  *
- * Handles conversion from source plugins to universal IR format,
- * storage of abstract + client-specific emitted formats, and
- * re-emission to new target clients on demand.
+ * Handles conversion from source plugins to universal IR format, storage of
+ * abstract + client-specific emitted formats, and re-emission to new target
+ * clients on demand.
  *
- * Storage layout:
- *   ~/agents/custom-plugins/
- *     .abstract/<plugin-name>/
+ * Container model (R20.1 v3.6.0):
+ *
+ *   ~/agents/custom-plugins/                   ← CONTAINER, not marketplace
+ *     .abstract/<plugin-name>/                 ← shared IR hub (R20.8, R20.22)
  *       plugin-universal-ir.yaml
  *       skills/<name>/SKILL.md
  *       agents/<name>.md
- *       commands/<name>.md
  *       ...
- *     claude/<plugin-name>/
- *     codex/<plugin-name>/
- *     gemini/<plugin-name>/
- *     ...
+ *     marketplace-claude/                      ← Claude-schema marketplace
+ *       .claude-plugin/marketplace.json
+ *       <plugin-name>/
+ *     marketplace-codex/                       ← Codex-schema marketplace
+ *       marketplace.json
+ *       <plugin-name>/
+ *     marketplace-<client>/                    ← future per-client marketplaces
+ *
+ *   ~/agents/role-plugins/                     ← CONTAINER, not marketplace
+ *     .abstract/<plugin-name>/                 ← shared IR hub (R20.9)
+ *     marketplace-claude/                      ← Claude-schema role-plugin marketplace
+ *       .claude-plugin/marketplace.json
+ *       plugins/<role-plugin-name>/
+ *     marketplace-<client>/
+ *
+ * The container folders themselves are NEVER registered with any client CLI —
+ * only the individual marketplace-<client>/ subfolders are. Per-client
+ * manifest emission lives in lib/converter/marketplace-emitters.ts.
  */
 
 import { homedir } from 'os'
@@ -30,13 +44,18 @@ import { projectIRToUniversal } from '@/lib/converter/universal-ir'
 import type { ProjectIR, ConvertedFile } from '@/lib/converter/types'
 import {
   CUSTOM_MARKETPLACE_NAME,
-  getLocalMarketplacePath,
+  getCustomPluginsContainerPath,
+  getCustomAbstractDir,
+  getCustomMarketplacePathForClient,
+  getRoleMarketplacePathForClient,
 } from '@/lib/ecosystem-constants'
+import { writeMarketplaceManifest, type MarketplacePluginEntry } from '@/lib/converter/marketplace-emitters'
 
-const CUSTOM_PLUGINS_DIR = path.join(homedir(), 'agents', 'custom-plugins')
-const ABSTRACT_DIR = path.join(CUSTOM_PLUGINS_DIR, '.abstract')
-const ROLE_PLUGINS_DIR = getLocalMarketplacePath()
-// getCustomMarketplacePath() returns ~/agents/custom-plugins/ (same as CUSTOM_PLUGINS_DIR)
+// Container roots
+const CUSTOM_PLUGINS_DIR = getCustomPluginsContainerPath()
+
+// Shared IR hub (container-level, NOT per-client)
+const ABSTRACT_DIR = getCustomAbstractDir()
 
 // ═══════════════════════════════════════════════════════════════
 // IR serialization (JSON format — upgrade to YAML when js-yaml is added)
@@ -108,10 +127,11 @@ export async function convertAndStorePlugin(
 
   for (const targetClient of targetClients) {
     if (isRolePlugin) {
-      // Role-plugin: emit to ~/agents/role-plugins/<name>/
-      // Name stays the same — client is determined by compatible-clients in .agent.toml, NOT by name
+      // Role-plugin: emit to ~/agents/role-plugins/marketplace-<client>/plugins/<name>/
+      // (R20.1 v3.6.0: per-client marketplace inside the role-plugins container)
       const rolePluginName = sourceName
-      const targetDir = path.join(ROLE_PLUGINS_DIR, rolePluginName)
+      const roleMarketplaceDir = getRoleMarketplacePathForClient(targetClient)
+      const targetDir = path.join(roleMarketplaceDir, 'plugins', rolePluginName)
 
       // NEVER overwrite existing role-plugin folder
       if (existsSync(targetDir)) {
@@ -125,26 +145,30 @@ export async function convertAndStorePlugin(
         await writeConvertedAgentProfile(targetDir, universalIR, rolePluginName, targetClient)
         // Ensure fourfold identity
         await ensureFourfoldIdentity(targetDir, rolePluginName)
-        // Register with local roles marketplace
-        const { ensureMarketplace, updateMarketplaceManifest } = await import('@/services/role-plugin-service')
-        await ensureMarketplace()
-        await updateMarketplaceManifest(rolePluginName, universalIR.meta.description || '', universalIR.meta.version)
+        // Register with the local roles marketplace (claude-only, legacy path)
+        if (targetClient === 'claude') {
+          const { ensureMarketplace, updateMarketplaceManifest } = await import('@/services/role-plugin-service')
+          await ensureMarketplace()
+          await updateMarketplaceManifest(rolePluginName, universalIR.meta.description || '', universalIR.meta.version)
+        }
         emittedDirs[targetClient] = targetDir
       }
     } else {
-      // Ordinary plugin: emit to ~/agents/custom-plugins/<client>/<name>-<client>/
-      // Name gets -<client> suffix for ordinary plugins
+      // Ordinary plugin: emit to ~/agents/custom-plugins/marketplace-<client>/<suffixedName>/
+      // Per-client marketplace folder inside the custom-plugins container.
+      // Name gets -<client> suffix so the plugin.json name matches its folder.
       const suffixedName = `${sourceName}-${targetClient}`
-      const targetDir = path.join(CUSTOM_PLUGINS_DIR, targetClient, suffixedName)
+      const customMarketplaceDir = getCustomMarketplacePathForClient(targetClient)
+      const targetDir = path.join(customMarketplaceDir, suffixedName)
       await mkdir(targetDir, { recursive: true })
       const emitted = await emitPluginToDir(sourceName, targetClient, targetDir)
       if (emitted) {
-        await ensureCustomMarketplace()
-        await updateCustomMarketplaceManifest(
+        await ensureCustomClientMarketplace(targetClient)
+        await updateCustomClientMarketplaceManifest(
+          targetClient,
           suffixedName,
           universalIR.meta.description || '',
-          universalIR.meta.version,
-          targetClient
+          universalIR.meta.version
         )
         emittedDirs[targetClient] = targetDir
       }
@@ -208,8 +232,10 @@ export async function emitForClient(
 
   const files: ConvertedFile[] = emitter.emit(project)
 
-  // Write to ~/agents/custom-plugins/<client>/<name>/
-  const targetDir = path.join(CUSTOM_PLUGINS_DIR, targetClient, pluginName)
+  // Write to ~/agents/custom-plugins/marketplace-<client>/<name>/
+  // (container + per-client marketplace subfolder, R20.1 v3.6.0)
+  const customMarketplaceDir = getCustomMarketplacePathForClient(targetClient)
+  const targetDir = path.join(customMarketplaceDir, pluginName)
   await mkdir(targetDir, { recursive: true })
 
   for (const file of files) {
@@ -244,22 +270,38 @@ export async function listConvertedPlugins(): Promise<{ name: string; platforms:
 
 /**
  * Remove a converted plugin (abstract + all emitted formats).
+ *
+ * Walks every `marketplace-<client>/` subfolder inside the custom-plugins
+ * container and removes any matching plugin folder. Also removes the
+ * shared IR hub entry at the container level.
  */
 export async function removeConvertedPlugin(pluginName: string): Promise<void> {
-  // Remove abstract
+  // Remove abstract (container-level IR hub)
   const abstractDir = path.join(ABSTRACT_DIR, pluginName)
   if (existsSync(abstractDir)) {
     await rm(abstractDir, { recursive: true })
   }
 
-  // Remove all emitted client dirs
+  // Remove all emitted per-client marketplace entries
   if (existsSync(CUSTOM_PLUGINS_DIR)) {
-    const clients = await readdir(CUSTOM_PLUGINS_DIR, { withFileTypes: true })
-    for (const client of clients) {
-      if (!client.isDirectory() || client.name.startsWith('.')) continue
-      const clientPluginDir = path.join(CUSTOM_PLUGINS_DIR, client.name, pluginName)
-      if (existsSync(clientPluginDir)) {
-        await rm(clientPluginDir, { recursive: true })
+    const entries = await readdir(CUSTOM_PLUGINS_DIR, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      // Only walk marketplace-<client>/ subfolders; skip .abstract and any
+      // other non-marketplace folder (incl. legacy unsuffixed layout).
+      if (!entry.name.startsWith('marketplace-')) continue
+      const marketplaceDir = path.join(CUSTOM_PLUGINS_DIR, entry.name)
+      // Try plain <name> and <name>-<client> (the suffixed variant emitted
+      // by convertAndStorePlugin). Both may exist historically.
+      const client = entry.name.slice('marketplace-'.length)
+      const candidates = [
+        path.join(marketplaceDir, pluginName),
+        path.join(marketplaceDir, `${pluginName}-${client}`),
+      ]
+      for (const candidate of candidates) {
+        if (existsSync(candidate)) {
+          await rm(candidate, { recursive: true })
+        }
       }
     }
   }
@@ -589,11 +631,16 @@ async function ensureFourfoldIdentity(pluginDir: string, pluginName: string): Pr
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Custom marketplace management
+// Per-client marketplace management (R20.1 v3.6.0)
+//
+// Each per-client marketplace lives at
+//   <container>/marketplace-<client>/
+// and has its own manifest in its client's schema (Claude uses
+// .claude-plugin/marketplace.json with string source; Codex uses
+// marketplace.json at root with object source). The per-client manifest
+// writer lives in lib/converter/marketplace-emitters.ts.
 // ═══════════════════════════════════════════════════════════════
 
-const CUSTOM_META_DIR = path.join(CUSTOM_PLUGINS_DIR, '.claude-plugin')
-const CUSTOM_MARKETPLACE_JSON = path.join(CUSTOM_META_DIR, 'marketplace.json')
 const SETTINGS_LOCAL = path.join(homedir(), '.claude', 'settings.local.json')
 
 async function loadJsonSafe(filePath: string): Promise<Record<string, unknown>> {
@@ -605,56 +652,114 @@ async function saveJsonSafe(filePath: string, data: unknown): Promise<void> {
 }
 
 /**
- * Ensure custom-plugins marketplace exists and is registered globally.
+ * Load the current set of plugin entries from a per-client marketplace
+ * manifest. Returns an empty array when the manifest doesn't exist yet.
  */
-async function ensureCustomMarketplace(): Promise<void> {
-  await mkdir(CUSTOM_META_DIR, { recursive: true })
+async function readCustomClientMarketplacePlugins(
+  targetClient: string
+): Promise<MarketplacePluginEntry[]> {
+  const marketplaceDir = getCustomMarketplacePathForClient(targetClient)
+  // Try both Claude and Codex manifest locations; other clients can be added
+  // when their spec is implemented in marketplace-emitters.ts.
+  const claudePath = path.join(marketplaceDir, '.claude-plugin', 'marketplace.json')
+  const codexPath = path.join(marketplaceDir, 'marketplace.json')
+  const manifestPath = existsSync(claudePath) ? claudePath : existsSync(codexPath) ? codexPath : null
+  if (!manifestPath) return []
 
-  if (!existsSync(CUSTOM_MARKETPLACE_JSON)) {
-    const manifest = {
-      name: CUSTOM_MARKETPLACE_NAME,
-      version: '1.0.0',
-      owner: { name: 'local' },
-      metadata: { description: 'Local converted plugin marketplace managed by AI Maestro' },
-      plugins: [],
+  const raw = await loadJsonSafe(manifestPath)
+  const plugins = (raw.plugins || []) as unknown[]
+  const out: MarketplacePluginEntry[] = []
+  for (const p of plugins) {
+    if (!p || typeof p !== 'object') continue
+    const plug = p as Record<string, unknown>
+    // Extract path whether source is a string (Claude) or object (Codex)
+    let relativePath = ''
+    const src = plug.source
+    if (typeof src === 'string') relativePath = src
+    else if (src && typeof src === 'object' && typeof (src as Record<string, unknown>).path === 'string') {
+      relativePath = (src as Record<string, string>).path
     }
-    await writeFile(CUSTOM_MARKETPLACE_JSON, JSON.stringify(manifest, null, 2) + '\n')
+    out.push({
+      name: String(plug.name ?? ''),
+      description: String(plug.description ?? ''),
+      version: String(plug.version ?? '0.0.0'),
+      relativePath,
+      category: typeof plug.category === 'string' ? plug.category : undefined,
+    })
   }
-
-  // Register in global settings
-  const settings = await loadJsonSafe(SETTINGS_LOCAL) as Record<string, Record<string, unknown>>
-  const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
-  const existing = ekm[CUSTOM_MARKETPLACE_NAME] as Record<string, Record<string, string>> | undefined
-  if (existing?.source?.path === CUSTOM_PLUGINS_DIR) return
-
-  ekm[CUSTOM_MARKETPLACE_NAME] = { source: { source: 'directory', path: CUSTOM_PLUGINS_DIR } }
-  settings.extraKnownMarketplaces = ekm
-  await mkdir(path.dirname(SETTINGS_LOCAL), { recursive: true })
-  await saveJsonSafe(SETTINGS_LOCAL, settings)
+  return out
 }
 
 /**
- * Register a converted plugin in the custom marketplace manifest.
+ * Ensure the per-client marketplace folder exists and its manifest is
+ * registered with the target client's CLI.
  *
- * IMPORTANT: Claude CLI requires the `source` field to be a path RELATIVE to
- * the marketplace ROOT (the directory containing .claude-plugin/), NOT
- * relative to marketplace.json itself. Absolute paths are rejected with
- * "Invalid schema". Since marketplace root is <CUSTOM_PLUGINS_DIR> and
- * plugins live at <CUSTOM_PLUGINS_DIR>/<client>/<suffixedName>, the correct
- * relative path is `./<client>/<suffixedName>`.
+ * Only `claude` is registered automatically here because the Codex CLI
+ * `plugin marketplace add` is still rolling out. Other clients are left
+ * as pure folder scaffolding until their CLI lands.
  */
-async function updateCustomMarketplaceManifest(
-  pluginName: string, description: string, version: string, targetClient: string
+async function ensureCustomClientMarketplace(targetClient: string): Promise<void> {
+  const marketplaceDir = getCustomMarketplacePathForClient(targetClient)
+  await mkdir(marketplaceDir, { recursive: true })
+
+  // Seed an empty manifest for this client if one doesn't exist yet.
+  const existingPlugins = await readCustomClientMarketplacePlugins(targetClient)
+  if (existingPlugins.length === 0) {
+    await writeMarketplaceManifest(
+      marketplaceDir,
+      targetClient,
+      `${CUSTOM_MARKETPLACE_NAME}-${targetClient}`,
+      []
+    )
+  }
+
+  // Register with Claude CLI only (the other clients' CLIs don't support
+  // `plugin marketplace add` yet). This tracks the `source.path` in Claude's
+  // settings.local.json so the marketplace survives CLI restarts.
+  if (targetClient === 'claude') {
+    const settings = await loadJsonSafe(SETTINGS_LOCAL) as Record<string, Record<string, unknown>>
+    const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
+    const marketplaceName = `${CUSTOM_MARKETPLACE_NAME}-${targetClient}`
+    const existing = ekm[marketplaceName] as Record<string, Record<string, string>> | undefined
+    if (existing?.source?.path === marketplaceDir) return
+
+    ekm[marketplaceName] = { source: { source: 'directory', path: marketplaceDir } }
+    settings.extraKnownMarketplaces = ekm
+    await mkdir(path.dirname(SETTINGS_LOCAL), { recursive: true })
+    await saveJsonSafe(SETTINGS_LOCAL, settings)
+  }
+}
+
+/**
+ * Register (or update) a converted plugin inside a per-client marketplace
+ * manifest. Delegates the actual schema emission to marketplace-emitters.ts
+ * so each client's spec (Claude string source vs Codex object source with
+ * policy/category/interface) is handled in one place.
+ *
+ * The relative path is `./<suffixedName>` because plugins live directly
+ * inside `<container>/marketplace-<client>/<suffixedName>/` — no further
+ * subfolder. This matches the marketplace-root semantics described in
+ * R20.18.
+ */
+async function updateCustomClientMarketplaceManifest(
+  targetClient: string,
+  pluginName: string,
+  description: string,
+  version: string
 ): Promise<void> {
-  const manifest = await loadJsonSafe(CUSTOM_MARKETPLACE_JSON) as Record<string, unknown>
-  const plugins = (manifest.plugins || []) as Array<Record<string, string>>
-  const filtered = plugins.filter(p => p.name !== pluginName)
+  const marketplaceDir = getCustomMarketplacePathForClient(targetClient)
+  const existing = await readCustomClientMarketplacePlugins(targetClient)
+  const filtered = existing.filter(p => p.name !== pluginName)
   filtered.push({
     name: pluginName,
     description,
     version,
-    source: `./${targetClient}/${pluginName}`,
+    relativePath: `./${pluginName}`,
   })
-  manifest.plugins = filtered
-  await writeFile(CUSTOM_MARKETPLACE_JSON, JSON.stringify(manifest, null, 2) + '\n')
+  await writeMarketplaceManifest(
+    marketplaceDir,
+    targetClient,
+    `${CUSTOM_MARKETPLACE_NAME}-${targetClient}`,
+    filtered
+  )
 }

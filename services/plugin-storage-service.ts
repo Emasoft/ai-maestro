@@ -140,7 +140,12 @@ export async function convertAndStorePlugin(
       const emitted = await emitPluginToDir(sourceName, targetClient, targetDir)
       if (emitted) {
         await ensureCustomMarketplace()
-        await updateCustomMarketplaceManifest(suffixedName, universalIR.meta.description || '', universalIR.meta.version)
+        await updateCustomMarketplaceManifest(
+          suffixedName,
+          universalIR.meta.description || '',
+          universalIR.meta.version,
+          targetClient
+        )
         emittedDirs[targetClient] = targetDir
       }
     }
@@ -630,14 +635,26 @@ async function ensureCustomMarketplace(): Promise<void> {
 
 /**
  * Register a converted plugin in the custom marketplace manifest.
+ *
+ * IMPORTANT: Claude CLI requires the `source` field to be a path RELATIVE to
+ * the marketplace ROOT (the directory containing .claude-plugin/), NOT
+ * relative to marketplace.json itself. Absolute paths are rejected with
+ * "Invalid schema". Since marketplace root is <CUSTOM_PLUGINS_DIR> and
+ * plugins live at <CUSTOM_PLUGINS_DIR>/<client>/<suffixedName>, the correct
+ * relative path is `./<client>/<suffixedName>`.
  */
 async function updateCustomMarketplaceManifest(
-  pluginName: string, description: string, version: string
+  pluginName: string, description: string, version: string, targetClient: string
 ): Promise<void> {
   const manifest = await loadJsonSafe(CUSTOM_MARKETPLACE_JSON) as Record<string, unknown>
   const plugins = (manifest.plugins || []) as Array<Record<string, string>>
   const filtered = plugins.filter(p => p.name !== pluginName)
-  filtered.push({ name: pluginName, description, version, source: path.join(CUSTOM_PLUGINS_DIR, pluginName) })
+  filtered.push({
+    name: pluginName,
+    description,
+    version,
+    source: `./${targetClient}/${pluginName}`,
+  })
   manifest.plugins = filtered
   await writeFile(CUSTOM_MARKETPLACE_JSON, JSON.stringify(manifest, null, 2) + '\n')
 }

@@ -45,7 +45,9 @@ import type { ProjectIR, ConvertedFile } from '@/lib/converter/types'
 import {
   CUSTOM_MARKETPLACE_NAME,
   getCustomPluginsContainerPath,
+  getRolePluginsContainerPath,
   getCustomAbstractDir,
+  getRoleAbstractDir,
   getCustomMarketplacePathForClient,
   getRoleMarketplacePathForClient,
 } from '@/lib/ecosystem-constants'
@@ -53,9 +55,40 @@ import { writeMarketplaceManifest, type MarketplacePluginEntry } from '@/lib/con
 
 // Container roots
 const CUSTOM_PLUGINS_DIR = getCustomPluginsContainerPath()
+const ROLE_PLUGINS_DIR = getRolePluginsContainerPath()
 
-// Shared IR hub (container-level, NOT per-client)
-const ABSTRACT_DIR = getCustomAbstractDir()
+// Shared IR hubs — one per container (R20.8 + R20.9 v3.6.0)
+//
+//   CUSTOM_ABSTRACT_DIR — ordinary plugin IR
+//     ~/agents/custom-plugins/.abstract/<name>/plugin-universal-ir.yaml
+//   ROLE_ABSTRACT_DIR — role-plugin IR (isolated namespace)
+//     ~/agents/role-plugins/.abstract/<name>/plugin-universal-ir.yaml
+const CUSTOM_ABSTRACT_DIR = getCustomAbstractDir()
+const ROLE_ABSTRACT_DIR = getRoleAbstractDir()
+
+/**
+ * Resolve the correct IR hub for a plugin based on whether it is a
+ * role-plugin. Used by both the writer (convertAndStorePlugin) and the
+ * reader (getUniversalIR / emitForClient). When the caller doesn't know
+ * the type yet, pass `null` to get the search order: role first, then
+ * custom.
+ */
+function abstractDirForPluginType(isRolePlugin: boolean): string {
+  return isRolePlugin ? ROLE_ABSTRACT_DIR : CUSTOM_ABSTRACT_DIR
+}
+
+/**
+ * Locate an existing IR directory for a plugin by name. Role-plugin hub
+ * is checked first (narrower namespace), then the ordinary-plugin hub.
+ * Returns null if no IR exists.
+ */
+function findAbstractDirByName(pluginName: string): string | null {
+  const roleCandidate = path.join(ROLE_ABSTRACT_DIR, pluginName)
+  if (existsSync(roleCandidate)) return roleCandidate
+  const customCandidate = path.join(CUSTOM_ABSTRACT_DIR, pluginName)
+  if (existsSync(customCandidate)) return customCandidate
+  return null
+}
 
 // ═══════════════════════════════════════════════════════════════
 // IR serialization (JSON format — upgrade to YAML when js-yaml is added)
@@ -107,8 +140,13 @@ export async function convertAndStorePlugin(
   universalIR.meta.source_plugin = sourceName
   universalIR.meta.source_client = sourceClient
 
-  // 3. Store abstract format
-  const abstractDir = path.join(ABSTRACT_DIR, sourceName)
+  // 3. Store abstract format — picks the correct container-level IR hub
+  // based on whether this is a role-plugin (R20.8 + R20.9 v3.6.0). Role
+  // plugins go to ~/agents/role-plugins/.abstract/; ordinary plugins go
+  // to ~/agents/custom-plugins/.abstract/.
+  const isRolePlugin = universalIR.meta.is_role_plugin === true
+  const abstractBaseDir = abstractDirForPluginType(isRolePlugin)
+  const abstractDir = path.join(abstractBaseDir, sourceName)
   await mkdir(abstractDir, { recursive: true })
 
   // Write the universal IR manifest
@@ -122,7 +160,6 @@ export async function convertAndStorePlugin(
   await writeProviderNeutralFiles(abstractDir, project)
 
   // 4. Emit for each target client — route by plugin type
-  const isRolePlugin = universalIR.meta.is_role_plugin === true
   const emittedDirs: Record<string, string> = {}
 
   for (const targetClient of targetClients) {
@@ -179,10 +216,14 @@ export async function convertAndStorePlugin(
 }
 
 /**
- * Get stored universal IR for a plugin.
+ * Get stored universal IR for a plugin. Searches both the role-plugin hub
+ * and the ordinary-plugin hub (role first, custom second). Returns null
+ * if no IR exists in either location.
  */
 export async function getUniversalIR(pluginName: string): Promise<UniversalPluginIR | null> {
-  const irPath = path.join(ABSTRACT_DIR, pluginName, 'plugin-universal-ir.yaml')
+  const abstractDir = findAbstractDirByName(pluginName)
+  if (!abstractDir) return null
+  const irPath = path.join(abstractDir, 'plugin-universal-ir.yaml')
   if (!existsSync(irPath)) return null
 
   const content = await readFile(irPath, 'utf-8')
@@ -203,8 +244,12 @@ export async function emitForClient(
   const targetProviderId = clientTypeToProviderId(targetClient)
   if (!targetProviderId) return null
 
-  const abstractDir = path.join(ABSTRACT_DIR, pluginName)
-  if (!existsSync(abstractDir)) return null
+  // Look in BOTH hubs — the same plugin name could be either a role-plugin
+  // (role-plugins/.abstract/) or an ordinary plugin (custom-plugins/.abstract/).
+  // findAbstractDirByName checks role first so role-plugins win on collision.
+  const abstractDir = findAbstractDirByName(pluginName)
+  if (!abstractDir) return null
+  const isRolePlugin = abstractDir.startsWith(ROLE_ABSTRACT_DIR)
 
   const { getEmitter } = await import('@/lib/converter/emitters')
   const emitter = await getEmitter(targetProviderId)
@@ -232,10 +277,12 @@ export async function emitForClient(
 
   const files: ConvertedFile[] = emitter.emit(project)
 
-  // Write to ~/agents/custom-plugins/marketplace-<client>/<name>/
-  // (container + per-client marketplace subfolder, R20.1 v3.6.0)
-  const customMarketplaceDir = getCustomMarketplacePathForClient(targetClient)
-  const targetDir = path.join(customMarketplaceDir, pluginName)
+  // Pick the destination container+marketplace based on plugin type.
+  // Role-plugin →   ~/agents/role-plugins/marketplace-<client>/plugins/<name>/
+  // Ordinary plugin → ~/agents/custom-plugins/marketplace-<client>/<name>/
+  const targetDir = isRolePlugin
+    ? path.join(getRoleMarketplacePathForClient(targetClient), 'plugins', pluginName)
+    : path.join(getCustomMarketplacePathForClient(targetClient), pluginName)
   await mkdir(targetDir, { recursive: true })
 
   for (const file of files) {
@@ -248,21 +295,27 @@ export async function emitForClient(
 }
 
 /**
- * List all converted plugins.
+ * List all converted plugins across BOTH hubs. Role-plugin names take
+ * precedence on collision — same-name entries in custom-plugins/.abstract
+ * are skipped because role-plugin IR lookup already catches them (R20.9).
  */
 export async function listConvertedPlugins(): Promise<{ name: string; platforms: string[] }[]> {
-  if (!existsSync(ABSTRACT_DIR)) return []
-
-  const entries = await readdir(ABSTRACT_DIR, { withFileTypes: true })
   const result: { name: string; platforms: string[] }[] = []
+  const seen = new Set<string>()
 
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name.startsWith('.')) continue
-    const ir = await getUniversalIR(entry.name)
-    result.push({
-      name: entry.name,
-      platforms: ir?.meta.platforms || [],
-    })
+  for (const hub of [ROLE_ABSTRACT_DIR, CUSTOM_ABSTRACT_DIR]) {
+    if (!existsSync(hub)) continue
+    const entries = await readdir(hub, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue
+      if (seen.has(entry.name)) continue
+      const ir = await getUniversalIR(entry.name)
+      result.push({
+        name: entry.name,
+        platforms: ir?.meta.platforms || [],
+      })
+      seen.add(entry.name)
+    }
   }
 
   return result
@@ -276,27 +329,31 @@ export async function listConvertedPlugins(): Promise<{ name: string; platforms:
  * shared IR hub entry at the container level.
  */
 export async function removeConvertedPlugin(pluginName: string): Promise<void> {
-  // Remove abstract (container-level IR hub)
-  const abstractDir = path.join(ABSTRACT_DIR, pluginName)
-  if (existsSync(abstractDir)) {
-    await rm(abstractDir, { recursive: true })
+  // Remove abstract (container-level IR hub) — from BOTH hubs
+  for (const hub of [ROLE_ABSTRACT_DIR, CUSTOM_ABSTRACT_DIR]) {
+    const dir = path.join(hub, pluginName)
+    if (existsSync(dir)) {
+      await rm(dir, { recursive: true })
+    }
   }
 
-  // Remove all emitted per-client marketplace entries
-  if (existsSync(CUSTOM_PLUGINS_DIR)) {
-    const entries = await readdir(CUSTOM_PLUGINS_DIR, { withFileTypes: true })
+  // Remove emitted per-client marketplace entries from BOTH containers.
+  // Role-plugins live under marketplace-<client>/plugins/<name>/, ordinary
+  // plugins live under marketplace-<client>/<name>/ — both shapes are
+  // checked so we don't leave orphans on either container.
+  for (const container of [CUSTOM_PLUGINS_DIR, ROLE_PLUGINS_DIR]) {
+    if (!existsSync(container)) continue
+    const entries = await readdir(container, { withFileTypes: true })
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
-      // Only walk marketplace-<client>/ subfolders; skip .abstract and any
-      // other non-marketplace folder (incl. legacy unsuffixed layout).
       if (!entry.name.startsWith('marketplace-')) continue
-      const marketplaceDir = path.join(CUSTOM_PLUGINS_DIR, entry.name)
-      // Try plain <name> and <name>-<client> (the suffixed variant emitted
-      // by convertAndStorePlugin). Both may exist historically.
+      const marketplaceDir = path.join(container, entry.name)
       const client = entry.name.slice('marketplace-'.length)
       const candidates = [
-        path.join(marketplaceDir, pluginName),
-        path.join(marketplaceDir, `${pluginName}-${client}`),
+        path.join(marketplaceDir, pluginName),                          // ordinary plugin
+        path.join(marketplaceDir, `${pluginName}-${client}`),           // ordinary plugin, suffixed
+        path.join(marketplaceDir, 'plugins', pluginName),               // role-plugin layout
+        path.join(marketplaceDir, 'plugins', `${pluginName}-${client}`),// role-plugin suffixed (unused but safe)
       ]
       for (const candidate of candidates) {
         if (existsSync(candidate)) {
@@ -536,8 +593,10 @@ async function emitPluginToDir(
   const targetProviderId = clientTypeToProviderId(targetClient)
   if (!targetProviderId) return false
 
-  const abstractDir = path.join(ABSTRACT_DIR, pluginName)
-  if (!existsSync(abstractDir)) return false
+  // Resolve the IR from whichever hub contains this plugin. role-plugins/.abstract
+  // is checked first (narrower namespace) per findAbstractDirByName semantics.
+  const abstractDir = findAbstractDirByName(pluginName)
+  if (!abstractDir) return false
 
   const { getParser } = await import('@/lib/converter/parsers')
   const { getEmitter } = await import('@/lib/converter/emitters')

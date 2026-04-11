@@ -47,21 +47,31 @@ export function authenticateAgent(
 ): AgentAuthResult {
   // Case 1: No Bearer token — check for browser session cookie
   if (authHeader === null && agentIdHeader === null) {
-    // If no governance password is configured, allow open access.
-    // Otherwise the user is locked out with no way to reach Settings to set it.
-    try {
-      const { loadGovernance } = require('./governance')
-      if (!loadGovernance().passwordHash) {
-        return {} // Open access — system owner
-      }
-    } catch { /* governance module not available — enforce auth */ }
-
+    // BYPASS-2 CLOSED (SEC-PHASE-6): the previous behavior here returned
+    // open access whenever no governance password was configured. That
+    // backdoor is gone — first-run callers MUST go through the OS-
+    // notification setup flow at POST /api/auth/setup-init followed by
+    // POST /api/auth/setup-verify. The middleware whitelists those two
+    // endpoints (plus /api/v1/health and /api/v1/info) so the unbootstrapped
+    // browser can reach them.
     const sessionToken = extractSessionFromCookie(cookieHeader ?? null)
     if (sessionToken && validateSession(sessionToken)) {
       // Valid session cookie → system owner (web UI user)
       return {}
     }
-    // SF-058 CLOSED: no credentials at all → reject
+
+    // Distinguish "first run, please bootstrap" from "ordinary unauth"
+    // so the browser can steer the user to the right screen.
+    try {
+      const { loadGovernance } = require('./governance')
+      if (!loadGovernance().passwordHash) {
+        return {
+          error: 'first_run_required: Governance password is not configured. Call POST /api/auth/setup-init to begin the OS-notification verified bootstrap.',
+          status: 401,
+        }
+      }
+    } catch { /* governance module not available — fall through to ordinary unauth */ }
+
     return {
       error: 'Authentication required. Log in at /api/auth/login or provide a Bearer token.',
       status: 401

@@ -36,8 +36,8 @@ const WHITELIST: ReadonlyArray<RegExp> = [
   /^\/api\/auth\/login(\/|$)/,
   /^\/api\/auth\/logout(\/|$)/,
   /^\/api\/auth\/session(\/|$)/,  // GET returns current session state (may be unauthenticated)
-  /^\/api\/auth\/setup-password(\/|$)/,  // one-shot first-run setup (SEC-PHASE-6)
-  /^\/api\/auth\/setup-verify(\/|$)/,    // one-shot OS notification verify (SEC-PHASE-6)
+  /^\/api\/auth\/setup-init(\/|$)/,    // first-run bootstrap step 1 — dispatch OS notification (SEC-PHASE-6)
+  /^\/api\/auth\/setup-verify(\/|$)/,  // first-run bootstrap step 2 — verify code + persist password (SEC-PHASE-6)
   // Public health + capability reporting (no secrets leaked, safe to probe)
   /^\/api\/v1\/health(\/|$)/,
   /^\/api\/v1\/info(\/|$)/,

@@ -37,14 +37,37 @@ const MAX_SESSIONS = 50 // Prevent memory leak — oldest evicted
 // ============================================================================
 // In-Memory Store (cleared on server restart — security measure)
 // ============================================================================
+//
+// HMR note: Next.js dev-mode hot module replacement re-evaluates this file
+// on every save, which would reset `sessions` to an empty Map and force the
+// user to log in again after every file edit. To survive HMR we attach the
+// Map to `globalThis` — the global is preserved across module re-evaluations
+// in the same Node process. On actual server restart (pm2 restart), the
+// Node process is killed and `globalThis` is wiped, so the original
+// "sessions cleared on restart" security posture is preserved.
 
-const sessions = new Map<string, SessionRecord>()
+interface SessionGlobals {
+  __aiMaestroSessionsMap?: Map<string, SessionRecord>
+  __aiMaestroSessionMutex?: Promise<void>
+}
+const g = globalThis as unknown as SessionGlobals
+
+const sessions: Map<string, SessionRecord> =
+  g.__aiMaestroSessionsMap ?? new Map<string, SessionRecord>()
+if (!g.__aiMaestroSessionsMap) g.__aiMaestroSessionsMap = sessions
 
 // In-memory mutex: serializes createSession to prevent concurrent calls from
 // exceeding MAX_SESSIONS. Works as a Promise chain — each call awaits the
 // previous one before proceeding. This is necessary because eviction check +
 // insert is a non-atomic read-then-write on the shared Map.
-let sessionMutex: Promise<void> = Promise.resolve()
+let sessionMutex: Promise<void> = g.__aiMaestroSessionMutex ?? Promise.resolve()
+// Keep the mutex global-linked so HMR doesn't create a fresh chain
+// underneath an in-flight createSession.
+Object.defineProperty(g, '__aiMaestroSessionMutex', {
+  get: () => sessionMutex,
+  set: (v: Promise<void>) => { sessionMutex = v },
+  configurable: true,
+})
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')

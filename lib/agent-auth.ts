@@ -207,6 +207,36 @@ export function buildAuthContext(authResult: AgentAuthResult): AuthContext {
   }
 }
 
+/**
+ * Build a system-owner AuthContext for internal callers that run outside
+ * any HTTP request (server startup, scheduled tasks, cron jobs, migrations,
+ * tests, CLI utilities). This replaces the legacy "undefined authContext =
+ * authorized" bypass in gate0Auth — internal callers must now explicitly
+ * state that they are acting as the host operator.
+ *
+ * The system-owner context goes through the same authorize() pipeline as
+ * user/agent contexts, so every action still needs to match an allowed
+ * permission for the system-owner role. There is no silent pass-through.
+ *
+ * SECURITY: callers must not accept `reason` from untrusted input. The
+ * parameter is purely for audit logging so server logs show which internal
+ * subsystem claimed the context.
+ *
+ * @param reason Short description logged for audit (e.g. "server-startup",
+ *               "scheduled-health-check", "cemetery-gc").
+ */
+export function buildSystemAuthContext(reason: string): AuthContext {
+  if (!reason || typeof reason !== 'string') {
+    throw new Error('buildSystemAuthContext: reason is required for audit logging')
+  }
+  return {
+    agentId: undefined,
+    isSystemOwner: true,
+    governanceTitle: 'system',
+    teamId: null,
+  }
+}
+
 // ============================================================================
 // Session Secret Helpers (local agent identity)
 // ============================================================================

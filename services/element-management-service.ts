@@ -62,13 +62,16 @@ const MARKETPLACE_NAME = LOCAL_MARKETPLACE_NAME
 async function gate0Auth(
   action: import('@/lib/authorization').AuthAction,
   agentId: string,
-  authContext: AuthContext | undefined,
+  authContext: AuthContext,
   ops: string[]
 ): Promise<string | null> {
-  if (!authContext) {
-    ops.push('G00: No auth context — internal call (authorized)')
-    return null
-  }
+  // Security invariant (Apr 2026): authContext is MANDATORY for every call.
+  // There is no "internal call" bypass anymore — internal callers (server
+  // startup, scheduled tasks, tests) MUST construct a SystemAuthContext via
+  // lib/agent-auth.ts::buildSystemAuthContext() which goes through the same
+  // authorization pipeline as user/agent contexts. Previously, a missing
+  // authContext was silently treated as "authorized" which allowed any route
+  // that forgot to pass it to bypass all security checks.
   if (authContext.isSystemOwner) {
     ops.push('G00: System-owner — authorized')
     return null
@@ -1394,7 +1397,11 @@ export async function ChangeTitle(
 
   try {
     // ── GATE 0: Authorization (change-title: MANAGER/COS only, never self) ──
-    const g0err = await gate0Auth('change-title', agentId, options?.authContext, ops)
+    if (!options?.authContext) {
+      result.error = 'authContext is mandatory for ChangeTitle (security invariant)'
+      return result
+    }
+    const g0err = await gate0Auth('change-title', agentId, options.authContext, ops)
     if (g0err) { result.error = g0err; return result }
 
     // ── GATE 1: Validate title value ─────────────────────────
@@ -2974,6 +2981,10 @@ export async function ChangeName(
 
   try {
     // ── G00: Authorization (modify-agent: self/MANAGER/COS) ──
+    if (!authContext) {
+      result.error = 'authContext is mandatory for ChangeName (security invariant)'
+      return result
+    }
     const g0err = await gate0Auth('modify-agent', agentId, authContext, ops)
     if (g0err) { result.error = g0err; return result }
 
@@ -3047,6 +3058,10 @@ export async function ChangeFolder(
 
   try {
     // ── G00: Authorization (modify-agent: self/MANAGER/COS) ──
+    if (!authContext) {
+      result.error = 'authContext is mandatory for ChangeFolder (security invariant)'
+      return result
+    }
     const g0err = await gate0Auth('modify-agent', agentId, authContext, ops)
     if (g0err) { result.error = g0err; return result }
 
@@ -3125,6 +3140,10 @@ export async function ChangeAvatar(
 
   try {
     // ── G00: Authorization (modify-agent: self/MANAGER/COS) ──
+    if (!authContext) {
+      result.error = 'authContext is mandatory for ChangeAvatar (security invariant)'
+      return result
+    }
     const g0err = await gate0Auth('modify-agent', agentId, authContext, ops)
     if (g0err) { result.error = g0err; return result }
 
@@ -3183,6 +3202,10 @@ export async function ChangeCLIArgs(
 
   try {
     // ── G00: Authorization (modify-agent: self/MANAGER/COS) ──
+    if (!authContext) {
+      result.error = 'authContext is mandatory for ChangeCLIArgs (security invariant)'
+      return result
+    }
     const g0err = await gate0Auth('modify-agent', agentId, authContext, ops)
     if (g0err) { result.error = g0err; return result }
 
@@ -3270,6 +3293,10 @@ export async function ChangeClient(
 
   try {
     // ── G00: Authorization (modify-agent: self/MANAGER/COS) ──
+    if (!authContext) {
+      result.error = 'authContext is mandatory for ChangeClient (security invariant)'
+      return result
+    }
     const g0err = await gate0Auth('modify-agent', agentId, authContext, ops)
     if (g0err) { result.error = g0err; return result }
 
@@ -3681,7 +3708,11 @@ export async function DeleteTeam(
     // ── G00: Authorization ─────────────────────────────────────
     // Team deletion is a destructive operation requiring governance password.
     // Only system-owner (web UI) or MANAGER can delete teams.
-    const g0err = await gate0Auth('manage-team', teamId, options?.authContext, ops)
+    if (!options?.authContext) {
+      result.error = 'authContext is mandatory for DeleteTeam (security invariant)'
+      return result
+    }
+    const g0err = await gate0Auth('manage-team', teamId, options.authContext, ops)
     if (g0err) { result.error = g0err; return result }
 
     // G00b: Governance password verification + rate limiting
@@ -3876,7 +3907,11 @@ export async function DeleteAgent(
     // Delete is a privileged operation: only system-owner and MANAGER.
     // COS cannot delete agents (they request MANAGER to do it).
     // No agent can delete itself via API (use /exit to stop, MANAGER deletes).
-    const g0err = await gate0Auth('delete-agent', agentId, options?.authContext, ops)
+    if (!options?.authContext) {
+      result.error = 'authContext is mandatory for DeleteAgent (security invariant)'
+      return result
+    }
+    const g0err = await gate0Auth('delete-agent', agentId, options.authContext, ops)
     if (g0err) { result.error = g0err; return result }
 
     // ── G01: Validate agent exists ─────────────────────────────

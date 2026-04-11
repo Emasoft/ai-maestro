@@ -228,8 +228,8 @@ export default function ZoomPage() {
           </div>
         </header>
 
-        {/* Main Content */}
-        <main className="flex-1 p-6 overflow-auto">
+        {/* Main Content — min-h-0 + overflow-y-auto guarantees wheel/trackpad scroll */}
+        <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-6">
           <div className="max-w-7xl mx-auto">
             {/* Loading State */}
             {loading && agents.length === 0 && (

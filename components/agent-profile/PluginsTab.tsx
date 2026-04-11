@@ -17,7 +17,7 @@ import {
   Puzzle,
 } from 'lucide-react'
 import type { AgentLocalConfig, LocalPlugin } from '@/types/agent-local-config'
-import { EmptyState, type TabId } from './shared'
+import { EmptyState, FilterInput, type TabId } from './shared'
 
 /** Element type counts for a plugin */
 function pluginElementCounts(p: LocalPlugin) {
@@ -58,6 +58,16 @@ export default function PluginsTab({ config, onSwitchTab, onRefresh }: PluginsTa
   const [confirmUninstall, setConfirmUninstall] = useState<LocalPlugin | null>(null)
   const [uninstalling, setUninstalling] = useState(false)
   const [expandedPlugin, setExpandedPlugin] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+
+  const filteredPlugins = query.trim()
+    ? config.plugins.filter((p) => {
+        const q = query.trim().toLowerCase()
+        return [p.name, p.description, p.author, p.version, p.marketplace, p.key]
+          .filter((v): v is string => typeof v === 'string')
+          .some(v => v.toLowerCase().includes(q))
+      })
+    : config.plugins
 
   const handleUninstall = async (plugin: LocalPlugin) => {
     setUninstalling(true)
@@ -97,8 +107,17 @@ export default function PluginsTab({ config, onSwitchTab, onRefresh }: PluginsTa
   }
 
   return (
-    <div className="space-y-1.5">
-      {config.plugins.map((p) => {
+    <div>
+      <FilterInput
+        value={query}
+        onChange={setQuery}
+        placeholder={`Filter ${config.plugins.length} plugin${config.plugins.length === 1 ? '' : 's'}…`}
+      />
+      {filteredPlugins.length === 0 && (
+        <p className="text-[10px] text-gray-600 italic px-2 py-1">No matches</p>
+      )}
+      <div className="space-y-1.5">
+      {filteredPlugins.map((p) => {
         const isRole = p.name === config.rolePlugin?.name
         const isExpanded = expandedPlugin === p.name
         const counts = pluginElementCounts(p)
@@ -246,6 +265,7 @@ export default function PluginsTab({ config, onSwitchTab, onRefresh }: PluginsTa
           </div>
         )
       })}
+      </div>
 
       {/* Uninstall confirmation dialog */}
       {confirmUninstall && (

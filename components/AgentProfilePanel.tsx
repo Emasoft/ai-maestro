@@ -11,6 +11,7 @@ import {
   Terminal,
   Server,
   Palette,
+  Store,
   Loader2,
   AlertCircle,
   FolderOpen,
@@ -60,6 +61,7 @@ const TABS: TabDef[] = [
   { id: 'mcps', label: 'MCP Servers', icon: Server, colorClass: 'text-purple-400', countKey: 'mcpServers' },
   { id: 'outputStyles', label: 'Output Styles', icon: Palette, colorClass: 'text-pink-400', countKey: 'outputStyles' },
   { id: 'plugins', label: 'Plugins', icon: Puzzle, colorClass: 'text-blue-400', countKey: 'plugins' },
+  { id: 'marketplaces', label: 'Marketplaces', icon: Store, colorClass: 'text-violet-400' },
 ]
 
 // Accordion section order for Config tab (Plugins is always LAST)

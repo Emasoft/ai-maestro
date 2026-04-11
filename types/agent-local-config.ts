@@ -22,9 +22,19 @@ export interface LocalAgent {
 }
 
 export interface LocalHook {
+  /** Auto-generated kebab slug: <event>-<matcher>-<hookType>-<cmd40> */
   name: string
   path: string
+  /** Claude Code hook event (PreToolUse, PostToolUse, Notification, Stop, SessionStart, etc.) */
   eventType?: string
+  /** Optional regex used by Claude Code to decide when the hook fires */
+  matcher?: string
+  /** Hook type — almost always 'command' */
+  hookType?: string
+  /** Full raw command (before truncation) */
+  command?: string
+  /** Optional timeout in seconds */
+  timeout?: number
   sourcePlugin?: string
 }
 

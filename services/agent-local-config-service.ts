@@ -133,7 +133,9 @@ function scanClaudeDirectory(claudeDir: string, workDir: string): AgentLocalConf
     for (const h of scanHooks(pluginDir)) {
       const tagged = { ...h, sourcePlugin: pluginName }
       pe.hooks.push(tagged)
-      const key = `${h.name}:${h.eventType || ''}`
+      // Slug already includes event+matcher+type+command fingerprint; adding
+      // the plugin name keeps same-slug-different-plugin entries distinct.
+      const key = `${pluginName}::${h.name}`
       if (!seenHooks.has(key)) { hooks.push(tagged); seenHooks.add(key) }
     }
     for (const r of scanRules(pluginDir)) {
@@ -228,28 +230,103 @@ function scanAgents(claudeDir: string): LocalAgent[] {
   return results
 }
 
+/**
+ * Build a human-readable kebab slug from the hook's discriminating fields so
+ * that every hook has a stable, greppable identifier even though Claude Code
+ * doesn't give hooks a `name` field.
+ *
+ * Example: PreToolUse + matcher "Bash" + type "command" + command "echo hi"
+ *   → "pre-tool-use-bash-command-echo-hi"
+ */
+function hookSlug(eventType: string, matcher: string | undefined, hookType: string | undefined, command: string | undefined): string {
+  const slugify = (s: string) => s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60)
+  const parts: string[] = []
+  if (eventType) parts.push(slugify(eventType.replace(/([a-z])([A-Z])/g, '$1-$2')))
+  if (matcher) parts.push(slugify(matcher).slice(0, 20))
+  if (hookType) parts.push(slugify(hookType))
+  if (command) parts.push(slugify(command).slice(0, 40))
+  const slug = parts.filter(Boolean).join('-')
+  return slug || 'unnamed-hook'
+}
+
+/**
+ * Walk the nested Claude Code hooks.json structure:
+ *
+ *   { "description": "...",
+ *     "hooks": {
+ *       "<EventName>": [
+ *         { "matcher": "<regex>", "hooks": [ { "type": "command", "command": "...", "timeout": 5 } ] }
+ *       ]
+ *     }
+ *   }
+ *
+ * Also supports the older flat shape `{ "<EventName>": [...] }` at the top
+ * level (no wrapping "hooks" key) and the legacy standalone-file shape where
+ * each file in hooks/ is a script.
+ */
 function scanHooks(claudeDir: string): LocalHook[] {
   const hooksDir = path.join(claudeDir, 'hooks')
   if (!fs.existsSync(hooksDir)) return []
 
-  const hooksJson = readJsonSafe(path.join(hooksDir, 'hooks.json'))
+  const hooksJsonPath = path.join(hooksDir, 'hooks.json')
+  const hooksJson = readJsonSafe(hooksJsonPath) as Record<string, unknown> | null
+
   if (hooksJson && typeof hooksJson === 'object') {
+    // The spec shape uses top-level { "hooks": { <event>: [...] } }; fall
+    // back to treating the whole file as the events map for legacy plugins.
+    const eventsMap = (hooksJson.hooks && typeof hooksJson.hooks === 'object')
+      ? hooksJson.hooks as Record<string, unknown>
+      : hooksJson
+
     const results: LocalHook[] = []
-    for (const [eventType, hooks] of Object.entries(hooksJson)) {
-      if (!Array.isArray(hooks)) continue
-      for (const hook of hooks) {
-        const name = typeof hook === 'string' ? hook : (hook?.command || hook?.name || 'unnamed')
-        results.push({ name: String(name), path: path.join(hooksDir, 'hooks.json'), eventType })
+    for (const [eventType, rawEntries] of Object.entries(eventsMap)) {
+      if (eventType === 'description') continue
+      if (!Array.isArray(rawEntries)) continue
+
+      for (const entry of rawEntries) {
+        if (!entry || typeof entry !== 'object') continue
+        const matcherStr = typeof (entry as Record<string, unknown>).matcher === 'string'
+          ? (entry as Record<string, unknown>).matcher as string
+          : undefined
+        const innerHooks = (entry as Record<string, unknown>).hooks
+        if (!Array.isArray(innerHooks)) continue
+
+        for (const h of innerHooks) {
+          if (!h || typeof h !== 'object') continue
+          const hookType = typeof (h as Record<string, unknown>).type === 'string'
+            ? (h as Record<string, unknown>).type as string
+            : 'command'
+          const command = typeof (h as Record<string, unknown>).command === 'string'
+            ? (h as Record<string, unknown>).command as string
+            : undefined
+          const timeout = typeof (h as Record<string, unknown>).timeout === 'number'
+            ? (h as Record<string, unknown>).timeout as number
+            : undefined
+          results.push({
+            name: hookSlug(eventType, matcherStr, hookType, command),
+            path: hooksJsonPath,
+            eventType,
+            matcher: matcherStr,
+            hookType,
+            command,
+            timeout,
+          })
+        }
       }
     }
     return results
   }
 
+  // Legacy: standalone script files inside hooks/
   const results: LocalHook[] = []
   for (const entry of safeReaddir(hooksDir)) {
     const filePath = path.join(hooksDir, entry)
     if (fs.statSync(filePath).isDirectory()) continue
-    results.push({ name: entry, path: filePath })
+    results.push({ name: entry, path: filePath, hookType: 'command' })
   }
   return results
 }

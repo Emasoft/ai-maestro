@@ -11,7 +11,7 @@ import type { AgentLocalConfig } from '@/types/agent-local-config'
 // Tab definitions
 // ---------------------------------------------------------------------------
 
-export type TabId = 'role' | 'plugins' | 'skills' | 'agents' | 'hooks' | 'rules' | 'commands' | 'mcps' | 'outputStyles'
+export type TabId = 'role' | 'plugins' | 'marketplaces' | 'skills' | 'agents' | 'hooks' | 'rules' | 'commands' | 'mcps' | 'outputStyles'
 
 export interface TabDef {
   id: TabId
@@ -352,19 +352,89 @@ export function EmptyState({ text, hint }: { text: string; hint?: string }) {
   )
 }
 
+/**
+ * Reusable filter-as-you-type input. Lifts value/setValue to parent so each
+ * ListTab owns its own filter state (doesn't share across tabs).
+ */
+export function FilterInput({
+  value,
+  onChange,
+  placeholder = 'Filter…',
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
+  return (
+    <div className="relative mb-2">
+      <svg
+        className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500 pointer-events-none"
+        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+      >
+        <circle cx="11" cy="11" r="7" strokeWidth="2" />
+        <path d="m21 21-4.3-4.3" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full pl-7 pr-7 py-1 text-[11px] bg-gray-900/60 border border-gray-800/60 rounded text-gray-200 placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30"
+      />
+      {value && (
+        <button
+          onClick={() => onChange('')}
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-[10px]"
+          title="Clear filter"
+          type="button"
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function ListTab<T>({
   items,
   emptyText,
   emptyHint,
   renderItem,
+  filterBy,
+  filterPlaceholder,
 }: {
   items: T[]
   emptyText: string
   emptyHint?: string
   renderItem: (item: T) => React.ReactNode
+  /** Return one or more strings extracted from the item. If provided, shows a filter input. */
+  filterBy?: (item: T) => (string | undefined | null)[]
+  filterPlaceholder?: string
 }) {
+  const [query, setQuery] = useState('')
   if (items.length === 0) {
     return <EmptyState text={emptyText} hint={emptyHint} />
   }
-  return <div className="space-y-1.5">{items.map(renderItem)}</div>
+  const filtered = filterBy && query.trim()
+    ? items.filter((it) => {
+        const haystack = filterBy(it).filter(Boolean).join(' ').toLowerCase()
+        return haystack.includes(query.trim().toLowerCase())
+      })
+    : items
+  return (
+    <div>
+      {filterBy && (
+        <FilterInput
+          value={query}
+          onChange={setQuery}
+          placeholder={filterPlaceholder || `Filter ${items.length} item${items.length === 1 ? '' : 's'}…`}
+        />
+      )}
+      {filtered.length === 0 ? (
+        <p className="text-[10px] text-gray-600 italic px-2 py-1">No matches</p>
+      ) : (
+        <div className="space-y-1.5">{filtered.map(renderItem)}</div>
+      )}
+    </div>
+  )
 }

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Server, Loader2 } from 'lucide-react'
 import type { AgentLocalConfig } from '@/types/agent-local-config'
-import { ExpandableElementCard, EmptyState } from './shared'
+import { ExpandableElementCard, EmptyState, FilterInput } from './shared'
 
 interface McpTabProps {
   config: AgentLocalConfig
@@ -14,6 +14,16 @@ interface McpTabProps {
 export default function McpTab({ config, agentId, onRefresh }: McpTabProps) {
   const [mcpTools, setMcpTools] = useState<Record<string, { tools: { name: string; description: string }[]; serverInfo?: { name: string; version: string } }>>({})
   const [loadingTools, setLoadingTools] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+
+  const filteredServers = query.trim()
+    ? config.mcpServers.filter((m) => {
+        const q = query.trim().toLowerCase()
+        return [m.name, m.command, m.sourcePlugin, m.args?.join(' ')]
+          .filter((v): v is string => typeof v === 'string')
+          .some(v => v.toLowerCase().includes(q))
+      })
+    : config.mcpServers
 
   const discoverTools = async (serverName: string, serverConfig?: Record<string, unknown>) => {
     setLoadingTools(serverName)
@@ -40,8 +50,17 @@ export default function McpTab({ config, agentId, onRefresh }: McpTabProps) {
   }
 
   return (
-    <div className="space-y-1.5">
-      {config.mcpServers.map((mcp) => {
+    <div>
+      <FilterInput
+        value={query}
+        onChange={setQuery}
+        placeholder={`Filter ${config.mcpServers.length} MCP server${config.mcpServers.length === 1 ? '' : 's'}…`}
+      />
+      {filteredServers.length === 0 && (
+        <p className="text-[10px] text-gray-600 italic px-2 py-1">No matches</p>
+      )}
+      <div className="space-y-1.5">
+      {filteredServers.map((mcp) => {
         const cmdLine = mcp.command ? `${mcp.command} ${mcp.args?.join(' ') || ''}`.trim() : undefined
         const toolsData = mcpTools[mcp.name]
 
@@ -95,6 +114,7 @@ export default function McpTab({ config, agentId, onRefresh }: McpTabProps) {
           </ExpandableElementCard>
         )
       })}
+      </div>
     </div>
   )
 }

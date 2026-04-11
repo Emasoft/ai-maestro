@@ -86,11 +86,13 @@ export default function SettingsSidebar({ activeSection, onSectionChange }: Sett
   ]
 
   return (
-    <div className="w-64 border-r border-gray-800 bg-gray-900/50 p-4 flex flex-col">
-      <h2 className="text-lg font-semibold text-white mb-1 px-2">Settings</h2>
-      <p className="text-xs text-gray-400 mb-6 px-2">Configure AI Maestro</p>
+    <div className="w-64 border-r border-gray-800 bg-gray-900/50 flex flex-col min-h-0">
+      <div className="p-4 pb-2 flex-shrink-0">
+        <h2 className="text-lg font-semibold text-white mb-1 px-2">Settings</h2>
+        <p className="text-xs text-gray-400 px-2">Configure AI Maestro</p>
+      </div>
 
-      <nav className="space-y-1">
+      <nav className="flex-1 min-h-0 overflow-y-auto space-y-1 px-4 pb-4">
         {sections.map((section) => {
           const Icon = section.icon
           const isActive = activeSection === section.id

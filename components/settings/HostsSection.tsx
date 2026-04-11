@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Server, Plus, Trash2, Edit2, CheckCircle, X, AlertCircle, Loader2, ArrowUpCircle, Package, Users, Wifi, RefreshCw, Link2, Building2, User, Smartphone, Copy, Check } from 'lucide-react'
+import { Server, Plus, Trash2, Edit2, CheckCircle, X, AlertCircle, Loader2, ArrowUpCircle, Package, Users, Wifi, RefreshCw, Link2, Building2, User, Smartphone, Copy, Check, LogOut, Image as ImageIcon } from 'lucide-react'
 import type { Host } from '@/types/host'
 import localVersion from '@/version.json'
 import GovernancePasswordDialog from '@/components/governance/GovernancePasswordDialog'
 import HostToolsSection from './HostToolsSection'
+import AvatarPicker from '@/components/AvatarPicker'
 
 interface OrganizationInfo {
   organization: string | null
@@ -55,9 +56,15 @@ export default function HostsSection() {
 
   // Governance state for local host user + password section
   const [governanceUserName, setGovernanceUserName] = useState<string | null>(null)
+  const [governanceUserAvatar, setGovernanceUserAvatar] = useState<string | null>(null)
   const [governanceHasPassword, setGovernanceHasPassword] = useState(false)
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [passwordDialogMode, setPasswordDialogMode] = useState<'setup' | 'confirm'>('setup')
+  const [editingUserName, setEditingUserName] = useState(false)
+  const [userNameDraft, setUserNameDraft] = useState('')
+  const [savingUserName, setSavingUserName] = useState(false)
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
 
   // Form state
   const [formData, setFormData] = useState<Partial<Host>>({
@@ -83,10 +90,69 @@ export default function HostsSection() {
       if (response.ok) {
         const data = await response.json()
         setGovernanceUserName(data.userName ?? null)
+        setGovernanceUserAvatar(data.userAvatar ?? null)
         setGovernanceHasPassword(!!data.hasPassword)
       }
     } catch (err) {
       console.error('Failed to fetch governance:', err)
+    }
+  }
+
+  const saveUserName = async () => {
+    const trimmed = userNameDraft.trim()
+    if (!trimmed || trimmed === governanceUserName) {
+      setEditingUserName(false)
+      return
+    }
+    setSavingUserName(true)
+    try {
+      const res = await fetch('/api/governance/user', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userName: trimmed }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setGovernanceUserName(data.userName ?? trimmed)
+        setEditingUserName(false)
+      } else {
+        const err = await res.json().catch(() => ({ error: 'Save failed' }))
+        console.error('[HostsSection] saveUserName failed:', err.error)
+      }
+    } catch (err) {
+      console.error('[HostsSection] saveUserName error:', err)
+    } finally {
+      setSavingUserName(false)
+    }
+  }
+
+  const saveUserAvatar = async (avatarUrl: string) => {
+    try {
+      const res = await fetch('/api/governance/user', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAvatar: avatarUrl }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setGovernanceUserAvatar(data.userAvatar ?? avatarUrl)
+      }
+    } catch (err) {
+      console.error('[HostsSection] saveUserAvatar error:', err)
+    } finally {
+      setShowAvatarPicker(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+      // Hard redirect to login page to clear client state
+      window.location.href = '/'
+    } catch (err) {
+      console.error('[HostsSection] logout error:', err)
+      setLoggingOut(false)
     }
   }
 
@@ -560,36 +626,121 @@ export default function HostsSection() {
                   {/* User sub-section — only for the local host */}
                   {host.isSelf && (
                     <div className="mt-3 p-3 bg-gray-900/60 border border-gray-700/60 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        <User className="w-3.5 h-3.5 text-gray-400" />
-                        <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">User</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm text-gray-200 font-mono">
-                          {governanceUserName ?? '…'}
-                        </span>
+                      <div className="flex items-center justify-between gap-2 mb-3">
                         <div className="flex items-center gap-2">
-                          {governanceHasPassword ? (
-                            <>
-                              <span className="text-xs text-gray-500">Password: ●●●●●●</span>
-                              <button
-                                onClick={() => { setPasswordDialogMode('confirm'); setShowPasswordDialog(true) }}
-                                className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
-                              >
-                                Change
-                              </button>
-                            </>
+                          <User className="w-3.5 h-3.5 text-gray-400" />
+                          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">User</span>
+                        </div>
+                        <button
+                          onClick={handleLogout}
+                          disabled={loggingOut}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-red-700/30 hover:bg-red-700/50 text-red-300 rounded transition-colors disabled:opacity-50"
+                          title="End session and return to login"
+                        >
+                          {loggingOut ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogOut className="w-3 h-3" />}
+                          Logout
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        {/* Avatar */}
+                        <button
+                          onClick={() => setShowAvatarPicker(true)}
+                          className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-800 border-2 border-gray-700 hover:border-emerald-500/60 transition-colors flex-shrink-0 group"
+                          title="Change avatar"
+                        >
+                          {governanceUserAvatar ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={governanceUserAvatar}
+                              alt="User avatar"
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
-                            <>
-                              <span className="text-xs text-gray-500">Password: Not set</span>
-                              <button
-                                onClick={() => { setPasswordDialogMode('setup'); setShowPasswordDialog(true) }}
-                                className="px-2 py-1 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded transition-colors"
-                              >
-                                Set Password
-                              </button>
-                            </>
+                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-700 to-gray-800">
+                              <User className="w-5 h-5 text-gray-400" />
+                            </div>
                           )}
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/50 transition-opacity">
+                            <ImageIcon className="w-4 h-4 text-white" />
+                          </div>
+                        </button>
+
+                        {/* Name + password */}
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          {editingUserName ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                value={userNameDraft}
+                                onChange={(e) => setUserNameDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveUserName()
+                                  if (e.key === 'Escape') setEditingUserName(false)
+                                }}
+                                autoFocus
+                                disabled={savingUserName}
+                                className="flex-1 px-2 py-1 text-sm bg-gray-800 border border-gray-700 rounded text-gray-200 focus:outline-none focus:border-emerald-500"
+                                maxLength={64}
+                              />
+                              <button
+                                onClick={saveUserName}
+                                disabled={savingUserName}
+                                className="p-1 text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
+                                title="Save"
+                              >
+                                {savingUserName ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                              </button>
+                              <button
+                                onClick={() => setEditingUserName(false)}
+                                disabled={savingUserName}
+                                className="p-1 text-gray-400 hover:text-gray-300 disabled:opacity-50"
+                                title="Cancel"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-200 font-mono truncate">
+                                {governanceUserName ?? '…'}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  setUserNameDraft(governanceUserName ?? '')
+                                  setEditingUserName(true)
+                                }}
+                                className="p-0.5 text-gray-500 hover:text-gray-300"
+                                title="Edit name"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2">
+                            {governanceHasPassword ? (
+                              <>
+                                <span className="text-xs text-gray-500">Password: ●●●●●●</span>
+                                <button
+                                  onClick={() => { setPasswordDialogMode('confirm'); setShowPasswordDialog(true) }}
+                                  className="px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+                                >
+                                  Change
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-xs text-gray-500">Password: Not set</span>
+                                <button
+                                  onClick={() => { setPasswordDialogMode('setup'); setShowPasswordDialog(true) }}
+                                  className="px-2 py-0.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded transition-colors"
+                                >
+                                  Set Password
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -716,6 +867,15 @@ export default function HostsSection() {
           // Re-fetch governance so the UI reflects the updated state (userName + hasPassword)
           await fetchGovernance()
         }}
+      />
+
+      {/* Avatar picker for the local user */}
+      <AvatarPicker
+        isOpen={showAvatarPicker}
+        onClose={() => setShowAvatarPicker(false)}
+        onSelect={saveUserAvatar}
+        currentAvatar={governanceUserAvatar ?? undefined}
+        usedAvatars={[]}
       />
     </div>
   )

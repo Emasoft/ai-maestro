@@ -272,3 +272,22 @@ export async function setUserName(name: string): Promise<void> {
     saveGovernance(config)
   })
 }
+
+/** Get the local user's avatar identifier, or undefined if none set */
+export function getUserAvatar(): string | undefined {
+  const config = loadGovernance()
+  return config.userAvatar
+}
+
+/** Persist a new user avatar to governance config */
+export async function setUserAvatar(avatar: string | null): Promise<void> {
+  return withLock('governance', async () => {
+    const config = loadGovernance()
+    if (avatar === null || avatar === '') {
+      delete config.userAvatar
+    } else {
+      config.userAvatar = avatar
+    }
+    saveGovernance(config)
+  })
+}

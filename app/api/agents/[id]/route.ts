@@ -61,6 +61,17 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
+    // #116: Title changes are irreversible governance promotions/demotions —
+    // classified "strict" in security-registry.json. PATCH is a dispatcher
+    // that routes many fields through updateAgentById; the registry entry
+    // PATCH_/api/agents/[id]/title is a logical classification, not a real
+    // sub-route, so we inspect the body and require sudo only when title
+    // is being changed. All other PATCH fields stay at "normal" auth.
+    if (body && typeof (body as { title?: unknown }).title === 'string') {
+      const sudoErr = requireSudoToken(request, 'PATCH', '/api/agents/[id]/title')
+      if (sudoErr) return sudoErr
+    }
+
     // Pass full auth context — each Change* function decides its own authorization
     const result = await updateAgentById(id, body, auth.agentId || null, buildAuthContext(auth))
     if (result.error) {

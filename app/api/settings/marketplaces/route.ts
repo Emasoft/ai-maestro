@@ -14,6 +14,7 @@ import os from 'os'
 import semver from 'semver'
 import { LOCAL_MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
 import { enforceSystemOwner } from '@/lib/route-auth'
+import { requireSudoToken } from '@/lib/sudo-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -563,6 +564,19 @@ export async function POST(req: NextRequest) {
 
     if (!action) {
       return NextResponse.json({ error: 'action is required' }, { status: 400 })
+    }
+
+    // #116: Destructive actions require sudo mode — classified "strict" in
+    // security-registry.json. The HTTP method on the wire is POST, but the
+    // logical operation is a DELETE, so we look up the DELETE entry.
+    const destructiveActions = new Set([
+      'delete-marketplace',
+      'uninstall',
+      'remove-element',
+    ])
+    if (destructiveActions.has(action)) {
+      const sudoErr = requireSudoToken(req, 'DELETE', '/api/settings/marketplaces')
+      if (sudoErr) return sudoErr
     }
 
     // Marketplace-level actions

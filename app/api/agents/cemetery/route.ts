@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateFromRequest } from '@/lib/agent-auth'
+import { requireSudoToken } from '@/lib/sudo-guard'
 import fs from 'fs'
 import path from 'path'
 import { statePath } from '@/lib/ecosystem-constants'
@@ -180,6 +181,11 @@ export async function POST(request: NextRequest) {
  * Body: { filename: string }
  */
 export async function DELETE(request: NextRequest) {
+  // #116: Cemetery purge is destructive and irreversible — classified "strict"
+  // in security-registry.json. Caller must present a fresh X-Sudo-Token.
+  const sudoErr = requireSudoToken(request, 'DELETE', '/api/agents/cemetery')
+  if (sudoErr) return sudoErr
+
   const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })

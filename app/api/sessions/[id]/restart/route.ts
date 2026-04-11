@@ -29,6 +29,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAgentBySession } from '@/lib/agent-registry'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
+import { requireSudoToken } from '@/lib/sudo-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,6 +63,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // #116: Restart tears down + relaunches the AI process — classified
+  // "strict" in security-registry.json.
+  const sudoErr = requireSudoToken(request, 'POST', '/api/sessions/[id]/restart')
+  if (sudoErr) return sudoErr
+
   const { id: sessionName } = await params
 
   // CC-GOV-001: Validate session name to prevent shell injection via tmux send-keys

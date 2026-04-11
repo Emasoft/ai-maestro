@@ -11,6 +11,7 @@ import {
 } from '@/services/role-plugin-service'
 import { ChangePlugin } from '@/services/element-management-service'
 import { requireAuth } from '@/lib/route-auth'
+import { requireSudoToken } from '@/lib/sudo-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,6 +66,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  // #116: Uninstalling a role-plugin is destructive — classified "strict"
+  // in security-registry.json. Require a fresh sudo token.
+  const sudoErr = requireSudoToken(req, 'DELETE', '/api/agents/role-plugins/install')
+  if (sudoErr) return sudoErr
+
   // Authenticate before any side effect
   const auth = requireAuth(req)
   if (!auth.ok) return auth.error

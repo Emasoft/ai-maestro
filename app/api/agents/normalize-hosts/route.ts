@@ -10,7 +10,8 @@
  * Thin wrapper — business logic in services/agents-directory-service.ts
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { enforceSystemOwner } from '@/lib/route-auth'
 import { diagnoseHosts, normalizeHosts } from '@/services/agents-directory-service'
 
 export async function GET() {
@@ -27,7 +28,11 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  // #114: System-owner only — blocks agent tokens.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     const result = await normalizeHosts()
     if (result.error) {

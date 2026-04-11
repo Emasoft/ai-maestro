@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { enforceAuth } from '@/lib/route-auth'
 import { broadcastActivityUpdate } from '@/services/sessions-service'
 
 // Disable caching
@@ -9,6 +10,10 @@ export const dynamic = 'force-dynamic'
  * Called by Claude Code hook to broadcast status updates in real-time
  */
 export async function POST(request: NextRequest) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     let body
     try { body = await request.json() } catch {

@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { queryDocs, indexDocs, clearDocs } from '@/services/agents-docs-service'
 import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 export async function GET(
   request: NextRequest,
@@ -51,6 +52,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // #114: Authenticate before indexing docs (touches agent DB).
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id: agentId } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
@@ -87,6 +92,10 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // #114: Authenticate before clearing docs.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id: agentId } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)

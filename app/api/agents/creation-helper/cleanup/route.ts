@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { enforceAuth } from '@/lib/route-auth'
 import { rm, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
@@ -18,7 +19,11 @@ const SESSION_NAME = '_aim-creation-helper'
  * - ~/agents/haephestos/ (working dir — draft TOML, uploads, all session files)
  * - ~/.claude/projects/-Users-...-agents-haephestos/ (Claude conversation cache)
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   const home = process.env.HOME
   if (!home) {
     return NextResponse.json({ cleaned: false, reason: 'HOME not set' })

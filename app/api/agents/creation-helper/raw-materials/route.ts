@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { enforceAuth } from '@/lib/route-auth'
 import { writeFile, readFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { homedir } from 'os'
@@ -20,6 +21,10 @@ const STATE_DIR = join(homedir(), 'agents', 'haephestos')
 const STATE_FILE = join(STATE_DIR, 'raw-materials-state.json')
 
 export async function POST(req: NextRequest) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(req)
+  if (authErr) return authErr
+
   try {
     const body = await req.json()
     const state = {

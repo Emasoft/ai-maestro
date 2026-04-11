@@ -5,6 +5,7 @@ import {
   removeEmailAddressFromAgent,
 } from '@/services/agents-messaging-service'
 import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 // SF-047: Basic format validation for email address parameter
 // Allows local-part@domain or simple names (alphanumeric, dots, hyphens, underscores)
@@ -50,6 +51,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string; address: string } }
 ) {
+  // #114: Authenticate before mutating agent address book.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id, address } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
@@ -83,9 +88,13 @@ export async function PATCH(
  * Remove an email address from an agent
  */
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string; address: string } }
 ) {
+  // #114: Authenticate before removing an agent address.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id, address } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)

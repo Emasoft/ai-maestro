@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { enforceAuth } from '@/lib/route-auth'
 import { join } from 'path'
 import { copyFile, access, mkdir, writeFile } from 'fs/promises'
 
@@ -90,7 +91,11 @@ async function ensureHaephestosPermissions(home: string): Promise<void> {
  * Ensures the haephestos-creation-helper agent persona is installed
  * in ~/.claude/agents/ so `claude --agent haephestos-creation-helper` works.
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   const home = process.env.HOME
   if (!home) {
     return NextResponse.json({ installed: false, reason: 'HOME not set' }, { status: 500 })

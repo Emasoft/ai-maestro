@@ -6,7 +6,8 @@
  * This prevents zombie Haephestos sessions from running indefinitely.
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { enforceAuth } from '@/lib/route-auth'
 import { deleteCreationHelper } from '@/services/creation-helper-service'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -17,7 +18,11 @@ export const dynamic = 'force-dynamic'
 
 const SESSION_NAME = '_aim-creation-helper'
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     // Kill the tmux session directly — this is the most critical action
     // to stop token consumption. The deleteCreationHelper service may

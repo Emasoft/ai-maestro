@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getConversationMessages, sendChatMessage } from '@/services/agents-chat-service'
 import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 export async function GET(
   request: NextRequest,
@@ -44,6 +45,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // #114: Authenticate before any chat dispatch.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id: agentId } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)

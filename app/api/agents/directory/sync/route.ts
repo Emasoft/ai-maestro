@@ -8,9 +8,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { enforceSystemOwner } from '@/lib/route-auth'
 import { syncDirectory } from '@/services/agents-directory-service'
 
-export async function POST(_request: NextRequest) {
+export async function POST(request: NextRequest) {
+  // #114: System-owner only — blocks agent tokens.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     const result = await syncDirectory()
     if (result.error) {

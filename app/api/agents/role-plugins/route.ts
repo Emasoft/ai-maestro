@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { enforceAuth } from '@/lib/route-auth'
 import {
   generatePluginFromToml,
   listRolePlugins,
@@ -30,6 +31,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(req)
+  if (authErr) return authErr
+
   try {
     let body: { tomlContent?: string; agentDescription?: string }
     try {
@@ -60,6 +65,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(req)
+  if (authErr) return authErr
+
   const name = req.nextUrl.searchParams.get('name')
   if (!name) {
     return NextResponse.json({ error: 'name query parameter is required' }, { status: 400 })

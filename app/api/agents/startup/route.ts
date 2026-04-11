@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { enforceSystemOwner } from '@/lib/route-auth'
 import { initializeStartup, getStartupInfo } from '@/services/agents-core-service'
 
 export const dynamic = 'force-dynamic'
@@ -7,7 +8,11 @@ export const dynamic = 'force-dynamic'
  * POST /api/agents/startup
  * Initialize all registered agents on server boot
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
+  // #114: System-owner only — blocks agent tokens.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     const result = await initializeStartup()
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { enforceSystemOwner } from '@/lib/route-auth'
 import { getAuthStatus, switchIdentity, hasProjectScope } from '@/lib/github-cli'
 
 // GET /api/github/auth — Get GitHub auth status
@@ -17,6 +18,10 @@ export async function GET() {
 
 // POST /api/github/auth — Switch GitHub identity
 export async function POST(request: NextRequest) {
+  // #114: System-owner only — blocks agent tokens.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     const { username } = await request.json()
     if (!username) {

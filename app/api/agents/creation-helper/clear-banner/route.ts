@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { enforceAuth } from '@/lib/route-auth'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 
@@ -12,7 +13,11 @@ const SESSION_NAME = '_aim-creation-helper'
  * banner off the visible viewport. The banner is part of Claude Code's TUI
  * and can only be scrolled away by generating conversation output.
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     // Send a minimal greeting — Haephestos will respond with a short welcome,
     // which generates enough output to push the startup banner off-screen.

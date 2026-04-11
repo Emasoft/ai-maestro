@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { enforceAuth } from '@/lib/route-auth'
 import { getExportJobStatus, deleteExportJob } from '@/services/config-service'
 
 // Force dynamic -- reads runtime job state
@@ -36,9 +37,13 @@ export async function GET(
  * Cancel or delete an export job.
  */
 export async function DELETE(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }
 ) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { jobId } = await params
 

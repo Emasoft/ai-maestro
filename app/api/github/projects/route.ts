@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { enforceSystemOwner } from '@/lib/route-auth'
 import { listProjects, createProject, validateProjectUrl, hasProjectScope } from '@/lib/github-cli'
 
 // GET /api/github/projects — List projects or validate a project URL
@@ -43,6 +44,10 @@ export async function GET(request: NextRequest) {
 
 // POST /api/github/projects — Create a new project
 export async function POST(request: NextRequest) {
+  // #114: System-owner only — blocks agent tokens.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     if (!hasProjectScope()) {
       return NextResponse.json(

@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { enforceAuth } from '@/lib/route-auth'
 import { listRestorableSessions, restoreSessions, deletePersistedSession } from '@/services/sessions-service'
 
 /**
@@ -22,7 +23,11 @@ export async function GET() {
  * POST /api/sessions/restore
  * Restores one or all persisted sessions
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     let body
     try { body = await request.json() } catch {
@@ -56,7 +61,11 @@ export async function POST(request: Request) {
  * DELETE /api/sessions/restore?sessionId=<id>
  * Permanently deletes a persisted session from storage
  */
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { searchParams } = new URL(request.url)
     const sessionId = searchParams.get('sessionId')

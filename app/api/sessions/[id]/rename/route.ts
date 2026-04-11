@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { enforceAuth } from '@/lib/route-auth'
 import { renameSession } from '@/services/sessions-service'
 
 export const dynamic = 'force-dynamic'
@@ -18,9 +19,13 @@ function logDeprecation() {
 }
 
 export async function PATCH(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   logDeprecation()
   try {
     let jsonBody

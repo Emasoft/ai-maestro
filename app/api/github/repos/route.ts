@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { enforceSystemOwner } from '@/lib/route-auth'
 import { listRepos, createRepo, listOrgs } from '@/lib/github-cli'
 
 // GET /api/github/repos — List repos (optionally for an owner)
@@ -17,6 +18,10 @@ export async function GET(request: NextRequest) {
 
 // POST /api/github/repos — Create a new repo
 export async function POST(request: NextRequest) {
+  // #114: System-owner only — blocks agent tokens.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     const body = await request.json()
     const { name, org, isPrivate, description, addReadme } = body

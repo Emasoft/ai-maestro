@@ -1,8 +1,9 @@
 ---
-version: "3.5.0"
+version: "3.6.0"
 date: 2026-04-11
 branch: feature/team-governance
 changelog:
+  - "3.6.0: R20 revised — custom-plugins/ and role-plugins/ are CONTAINERS, not marketplaces. Each container holds one marketplace-<client>/ subfolder per client format (marketplace-claude/, marketplace-codex/, marketplace-openrouter/, ...). Each client-marketplace has its own schema per that client's spec. The .abstract/ IR hub lives at the container level and feeds all per-client marketplaces."
   - "3.5.0: Added R20 (Marketplace Governance) — three default marketplaces, source path format (./<plugin>), .abstract IR storage, core-plugin auto-update, converted-plugin re-emission on source update"
   - "3.4.0: R17 expanded with protection (R17.B), auto-update (R17.C), trust auto-accept (R17.D); R9 clarified AUTONOMOUS vs team agent behavior"
   - "3.3.0: Added R17 (Mandatory Core Plugin Installation)"
@@ -480,37 +481,57 @@ The conversion infrastructure already exists (`convertAndStorePlugin`, `emitForC
 
 ## R20. Marketplace Governance
 
-These rules describe the three default plugin marketplaces AI Maestro ships
-with, how plugins are required per title, how converted plugins are stored,
-and how updates propagate. A **marketplace is a folder** containing
-`.claude-plugin/marketplace.json` at its root. Plugins live as subfolders
-inside the marketplace. Claude CLI is the authoritative installer — AI Maestro
-shells out to `claude plugin marketplace add|update|remove` and
-`claude plugin install|uninstall|enable|disable` rather than re-implementing
-these operations.
+These rules describe how AI Maestro organizes plugin marketplaces and their
+contents. The key architectural distinction is between **containers** and
+**marketplaces**:
+
+- A **container** is a folder grouping multiple related marketplaces plus the
+  shared universal IR hub (`.abstract/`). The two default containers are
+  `~/agents/role-plugins/` and `~/agents/custom-plugins/`.
+- A **marketplace** is a folder that follows a specific client's marketplace
+  spec (manifest schema, source-path format, etc.) and is registered with
+  that client's CLI. One container MAY hold many marketplaces — one per
+  client format (Claude, Codex, OpenRouter, Gemini, …). Each is named
+  `marketplace-<client>/` inside its container.
+
+Each client's marketplace has its OWN manifest schema per that client's spec:
+
+- **Claude Code** — manifest at `<marketplace>/.claude-plugin/marketplace.json`;
+  `source` is a string like `"./my-plugin"`; registered via
+  `claude plugin marketplace add <dir>`.
+- **Codex** — manifest at `<marketplace>/marketplace.json` (root, no
+  `.claude-plugin/` wrapper); `source` is an object
+  `{ "source": "local", "path": "./my-plugin" }` plus required
+  `policy.installation` + `policy.authentication` + `category` + `interface`
+  fields. Registered via the Codex equivalent of Claude's `marketplace add`.
+
+AI Maestro shells out to each client's CLI for install/uninstall/enable/disable
+rather than re-implementing these operations.
 
 | ID | Rule | Source |
 |----|------|--------|
-| R20.1 | AI Maestro ships with three default pre-defined marketplaces for internal use: (a) **DEFAULT PLUGINS** (online) at `github:Emasoft/ai-maestro-plugins`; (b) **ROLE PLUGINS** (offline) at `~/agents/role-plugins/`; (c) **CUSTOM PLUGINS** (offline) at `~/agents/custom-plugins/`. Each offline marketplace is a directory registered via `claude plugin marketplace add <dir>`; its manifest lives at `<dir>/.claude-plugin/marketplace.json`. | Explicit |
+| R20.1 | AI Maestro ships with one online marketplace (**DEFAULT PLUGINS**: `github:Emasoft/ai-maestro-plugins`) and two offline **containers** for converted and custom plugins: (a) **ROLE PLUGINS CONTAINER** at `~/agents/role-plugins/`; (b) **CUSTOM PLUGINS CONTAINER** at `~/agents/custom-plugins/`. Each container holds one `marketplace-<client>/` subfolder per client format (e.g. `marketplace-claude/`, `marketplace-codex/`, `marketplace-openrouter/`) AND the shared `.abstract/` universal IR hub (R20.8-R20.9). Each per-client marketplace is registered separately with its own client CLI. | Explicit |
 | R20.2 | Every agent MUST have the **CORE PLUGIN** — `ai-maestro-plugin@ai-maestro-plugins` — installed at `--scope local` (or the per-client equivalent) in its working directory. This mirrors R17 and is the core-plugin-presence invariant. | Explicit |
 | R20.3 | On every UI interaction and every agent-initiated API call, the server MUST verify R20.2 is respected. Agents missing the core plugin MUST be forced to hibernate until they comply. This mirrors the enforcement loop described in R17 / core-plugin-presence invariant. | Explicit |
 | R20.4 | Each agent MUST have installed at `--scope local` the default role-plugin for its governance title, OR any role-plugin whose `compatible-titles` (in its `.agent.toml`) includes that title. Defaults: **AUTONOMOUS** → `none` (or any compatible role-plugin); **MANAGER** → `ai-maestro-assistant-manager-agent@ai-maestro-plugins`; **MAINTAINER** → `ai-maestro-maintainer-agent@ai-maestro-plugins`; **CHIEF-OF-STAFF** → `ai-maestro-chief-of-staff@ai-maestro-plugins`; **ORCHESTRATOR** → `ai-maestro-orchestrator-agent@ai-maestro-plugins`; **ARCHITECT** → `ai-maestro-architect-agent@ai-maestro-plugins`; **INTEGRATOR** → `ai-maestro-integrator-agent@ai-maestro-plugins`; **MEMBER** → `ai-maestro-programmer-agent@ai-maestro-plugins`. | Explicit |
 | R20.5 | The default role-plugin for a title MUST be installed automatically when the title is granted to an agent, unless the user (or a privileged caller) explicitly picks a different compatible role-plugin at assignment time. See ChangeTitle Gate 15. | Explicit |
-| R20.6 | Agents whose client differs from Claude MUST have the converted version of the default role-plugin for their title installed automatically. If a native version exists in any of the three marketplaces (highest priority to lowest: client-native cache → role-plugins marketplace → custom-plugins marketplace), it MUST be preferred over conversion. | Explicit |
-| R20.7 | Agents changing their client (`ChangeClient`) MUST have the converted version of their current role-plugin installed for the new client — unless a compatible native role-plugin for the new client already exists in any of the three marketplaces, in which case the native version MUST be used. See R18 for the full plugin-continuity pipeline. | Explicit |
-| R20.8 | The **abstract universal intermediate representation** of a converted *ordinary* plugin MUST be stored at `~/agents/custom-plugins/.abstract/<plugin-name>/plugin-universal-ir.yaml`. This is the IR hub used by `emitForClient` to re-emit the plugin for any target client without going back to the original source. | Explicit |
-| R20.9 | The **abstract universal intermediate representation** of a converted *role-plugin* MUST be stored at `~/agents/role-plugins/.abstract/<plugin-name>/plugin-universal-ir.yaml`, paralleling R20.8 but isolated so role-plugin IR never bleeds into the ordinary-plugin namespace. | Explicit |
-| R20.10 | AI Maestro MUST detect any update to the CORE plugin and apply it immediately with the exact command `claude plugin update ai-maestro-plugin@ai-maestro-plugins` (for Claude clients). For agents on other clients, the server MUST re-convert the new Claude version into every target client format and re-install it at `--scope local` in each affected agent's working directory. This enforces the **core-plugin-currency invariant**. | Explicit |
-| R20.11 | AI Maestro MUST check for updates on every non-core plugin from the DEFAULT, ROLE, and CUSTOM marketplaces. When a marketplace reports a newer version, the server MUST notify the affected agents (via AMP or UI badge) and expose an idempotent API command that the agent (or user) can invoke to update the plugin. | Explicit |
-| R20.12 | Plugins emitted from the abstract IR as conversions of an original plugin MUST detect when the original plugin is updated and re-emit the converted version with the new version number. The re-emitted plugin MUST be registered in its marketplace manifest so that R20.11 picks up the update and propagates it to the agents that have it installed. | Explicit |
+| R20.6 | Agents whose client differs from Claude MUST have the converted version of the default role-plugin for their title installed automatically from the `marketplace-<client>/` folder of the appropriate container. If a native version exists in any registered marketplace (priority: client-native plugin cache → `marketplace-<client>/` inside the role-plugins container → `marketplace-<client>/` inside the custom-plugins container), it MUST be preferred over re-conversion. | Explicit |
+| R20.7 | Agents changing their client (`ChangeClient`) MUST have every currently-installed plugin re-emitted into the target client's format and installed from the target container's `marketplace-<client>/` folder — unless a compatible native version for the new client already exists in any registered marketplace, in which case the native version MUST be used. See R18 for the full plugin-continuity pipeline. | Explicit |
+| R20.8 | The **universal intermediate representation** of a converted *ordinary* plugin MUST be stored at `~/agents/custom-plugins/.abstract/<plugin-name>/plugin-universal-ir.yaml`. This is the IR hub used by `emitForClient` to re-emit the plugin for any target client without going back to the original source. `.abstract/` lives at the CONTAINER level, shared across every `marketplace-<client>/` folder inside that container. | Explicit |
+| R20.9 | The **universal intermediate representation** of a converted *role-plugin* MUST be stored at `~/agents/role-plugins/.abstract/<plugin-name>/plugin-universal-ir.yaml`, paralleling R20.8 but isolated so role-plugin IR never bleeds into the ordinary-plugin namespace. Same container-level shared-hub semantics. | Explicit |
+| R20.10 | AI Maestro MUST detect any update to the CORE plugin and apply it immediately with the exact command `claude plugin update ai-maestro-plugin@ai-maestro-plugins` (for Claude clients). For agents on other clients, the server MUST re-convert the new Claude version into every target client format and re-install it at `--scope local` in each affected agent's working directory, updating the corresponding `marketplace-<client>/` entry in the custom-plugins container. This enforces the **core-plugin-currency invariant**. | Explicit |
+| R20.11 | AI Maestro MUST check for updates on every non-core plugin from the DEFAULT marketplace AND from every `marketplace-<client>/` inside the role-plugins and custom-plugins containers. When any marketplace reports a newer version, the server MUST notify the affected agents (via AMP or UI badge) and expose an idempotent API command that the agent (or user) can invoke to update the plugin. | Explicit |
+| R20.12 | Plugins emitted from the universal IR as conversions of an original plugin MUST detect when the original plugin is updated and re-emit the converted version into every `marketplace-<client>/` that currently contains an emitted copy, bumping the version number. The re-emitted plugin MUST be registered in each target marketplace manifest (using that client's schema) so that R20.11 picks up the update and propagates it to the agents that have it installed. | Explicit |
 | R20.13 | Agent names and agent UUIDs MUST be unique host-wide. Name collisions MUST be resolved at creation time (wizard rejects; API returns 409). Cross-host uniqueness is handled by agent-host address format (`<name>@<host>`). | Explicit |
 | R20.14 | Each AI Maestro host MUST maintain a registry of agent identities and UUIDs that any other AI Maestro host on the Tailscale mesh can consult freely (read-only). This supports cross-host AMP routing and mesh-level identity lookups without any secret exposure. | Explicit |
 | R20.15 | To exercise any privileged action that its title allows, an agent MUST prove its identity with an AID-signed token (see R14, AID identity rules) and present it to the AI Maestro API it wants to call. The server rejects any privileged call lacking a valid AID token — the token type (Bearer `aim_tk_*`, session secret `mst_*`, or AMP key `amp_live_sk_*`) determines the auth path but identity verification is non-negotiable. | Explicit |
 | R20.16 | The identity authority for a given agent is either an AMP third-party provider OR the AI Maestro server that spawned the agent session. Agents registered against a local AI Maestro host get their identity certified by that host; agents federated from external providers get their identity certified by the remote provider. See the AMP messaging rules for the full delegation chain. | Explicit |
-| R20.17 | Role-plugins MUST be identified by their profile file `<plugin-name>.agent.toml` at the plugin root AND by passing the **fourfold-identity validation check**: (1) `plugin.json` `name` equals the plugin folder name; (2) the folder contains `<name>.agent.toml`; (3) `[agent].name` inside the TOML equals `<name>`; (4) `agents/<name>-main-agent.md` exists with frontmatter `name: <name>-main-agent`. Files failing any of these four checks are NOT role-plugins and MUST NOT be treated as such by any Change* pipeline. | Explicit |
-| R20.18 | Plugin source paths inside a directory-marketplace manifest (R20.1b and R20.1c) MUST start with `./` and MUST be resolved relative to the **marketplace root** (the folder passed to `claude plugin marketplace add`), NOT relative to `.claude-plugin/marketplace.json` itself. Absolute paths and `../` traversal are rejected by Claude CLI with "Invalid schema". The generator in `services/plugin-storage-service.ts::updateCustomMarketplaceManifest` emits paths in the form `./<client>/<plugin-name>` to honor this rule. | Explicit |
+| R20.17 | Role-plugins MUST be identified by their profile file `<plugin-name>.agent.toml` at the plugin root AND by passing the **fourfold-identity validation check**: (1) `plugin.json` (or the per-client equivalent) `name` equals the plugin folder name; (2) the folder contains `<name>.agent.toml`; (3) `[agent].name` inside the TOML equals `<name>`; (4) `agents/<name>-main-agent.md` (or the per-client equivalent) exists with frontmatter `name: <name>-main-agent`. The per-client "equivalent files" are defined in each client's marketplace spec (e.g. Codex uses `.codex-plugin/plugin.toml` instead of `.claude-plugin/plugin.json`, and agents/main-agent markdown is normalized by the converter). Files failing any of these four checks are NOT role-plugins and MUST NOT be treated as such by any Change* pipeline. | Explicit |
+| R20.18 | Every per-client marketplace MUST conform to its client's published marketplace spec — the AI Maestro converter is forbidden from inventing fields or bending a schema. Concretely: (a) **Claude** marketplaces MUST put the manifest at `<marketplace>/.claude-plugin/marketplace.json` and use `source: "./<name>"` as a plain string; (b) **Codex** marketplaces MUST put the manifest at `<marketplace>/marketplace.json` (root, no subfolder) and use `source: { "source": "local", "path": "./<name>" }` as an object plus the mandatory `policy`, `category`, and top-level `interface` fields from the Codex spec; (c) Every relative `source.path` or `source` string MUST start with `./` and MUST resolve to a plugin folder located inside the same `marketplace-<client>/` root — no `../` traversal, no absolute paths, no cross-client path leakage. When a new client (OpenRouter, Gemini, Kiro, …) publishes its marketplace spec, the generator MUST be extended with a dedicated emitter for that schema rather than reusing an existing client's code. | Explicit |
 | R20.19 | An agent MAY have additional optional plugins installed at `--scope local` beyond the required CORE (R20.2) and TITLE role-plugin (R20.4), selected from any registered marketplace via the Agent Profile → Config → Marketplaces view. Optional plugins are NOT subject to the auto-reinstall enforcement loop of R20.3 — only CORE and TITLE role-plugin are mandatory. | Explicit |
 | R20.20 | Scope isolation: plugins installed at `--scope user` via Settings → Plugins Explorer MUST NOT appear in any agent's local plugin list, and plugins installed at `--scope local` via Agent Profile → Config MUST NOT appear in the user-scope listing. Enable/disable state is per-scope and completely independent. SCEN-021 verifies this invariant end-to-end. | Explicit |
+| R20.21 | The converter + validator pipeline MUST treat `marketplace-<client>/` folders as per-client marketplaces, each registered separately with its target client's CLI. When the server registers or refreshes marketplaces at startup, it MUST iterate over every `marketplace-<client>/` inside both containers and call the matching client's `<cli> plugin marketplace add|update` — never assume a single container-wide marketplace, and never mix two clients' plugins inside the same marketplace folder. | Explicit |
+| R20.22 | The universal IR hubs (`.abstract/` at container level, R20.8 + R20.9) are shared across ALL per-client marketplaces within their container. Re-emitting a plugin for a new client MUST read the IR from the container's `.abstract/<name>/plugin-universal-ir.yaml` and write the emitted plugin into the correct `marketplace-<client>/<name>/` subfolder of the same container. The IR MUST NOT be duplicated into per-client subdirectories. | Explicit |
 
 ---
 
@@ -536,9 +557,10 @@ These are hard invariants that the system must maintain at all times:
 16. **Core-plugin-currency invariant**: The `ai-maestro-plugin` must be updated from the marketplace whenever AI Maestro itself is updated
 17. **Plugin-continuity invariant**: When an agent's client changes, every plugin that was installed for the old client must be re-emitted and re-installed in a format compatible with the new client — no agent may ever be left without its plugins as a side effect of `ChangeClient`
 18. **MAINTAINER-repo-uniqueness invariant**: At any time, at most one active (non-deleted) agent has a given `githubRepo` value. Two MAINTAINERs cannot maintain the same repository on the same host
-19. **Marketplace-source-path invariant** (R20.18): every `source` field in a directory marketplace's `marketplace.json` starts with `./` and resolves to an existing folder relative to the marketplace root
-20. **IR-storage-location invariant** (R20.8 + R20.9): converted-plugin universal IR lives at `~/agents/custom-plugins/.abstract/<name>/` and converted-role-plugin IR lives at `~/agents/role-plugins/.abstract/<name>/` — never swapped
+19. **Marketplace-source-path invariant** (R20.18): every `source` field in a per-client marketplace manifest starts with `./`, resolves to an existing folder inside the same `marketplace-<client>/` root, and conforms to that client's marketplace spec (Claude string `"./x"` vs Codex object `{source:"local", path:"./x"}`)
+20. **IR-storage-location invariant** (R20.8 + R20.9 + R20.22): converted-plugin universal IR lives at the CONTAINER level — `~/agents/custom-plugins/.abstract/<name>/` for ordinary plugins and `~/agents/role-plugins/.abstract/<name>/` for role-plugins — NEVER inside any `marketplace-<client>/` subfolder and NEVER duplicated per client
 21. **Scope-isolation invariant** (R20.20): user-scope and local-scope plugin lists are disjoint — no plugin install at one scope ever appears in the listing or affects the enable-state of the other scope
+22. **Container-marketplace separation invariant** (R20.1 + R20.21): `~/agents/role-plugins/` and `~/agents/custom-plugins/` are CONTAINERS, not marketplaces. A container holds zero or more `marketplace-<client>/` subfolders plus the shared `.abstract/` IR hub. The container folder itself is NEVER registered with any client CLI as a marketplace — only the individual `marketplace-<client>/` subfolders are
 
 ---
 

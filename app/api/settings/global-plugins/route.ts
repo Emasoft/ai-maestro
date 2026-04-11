@@ -10,6 +10,7 @@ import { readFile, readdir } from 'fs/promises'
 import { existsSync, realpathSync } from 'fs'
 import { join, resolve, sep } from 'path'
 import os from 'os'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -201,6 +202,12 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // Toggling a user-scope plugin affects every agent on the host, so
+  // this is system-owner only. Per-agent local-scope plugin toggles go
+  // through /api/agents/[id] + ChangePlugin pipeline instead.
+  const authErr = enforceSystemOwner(req)
+  if (authErr) return authErr
+
   try {
     const body = await req.json()
     const { key, enabled } = body as { key?: string; enabled?: boolean }

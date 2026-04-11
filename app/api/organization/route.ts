@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getOrganization, setOrganizationName } from '@/services/config-service'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 /**
  * GET /api/organization
@@ -19,7 +20,11 @@ export async function GET() {
  * Set the organization name. Can only be done once.
  * Body: { organization: string, setBy?: string }
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // One-time org naming is host-level config → system owner only.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     let body
     try { body = await request.json() } catch {

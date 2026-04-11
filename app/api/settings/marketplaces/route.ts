@@ -13,6 +13,7 @@ import { join } from 'path'
 import os from 'os'
 import semver from 'semver'
 import { LOCAL_MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -549,6 +550,13 @@ export async function GET() {
  * Body: { action: string, pluginKey?: string, url?: string }
  */
 export async function POST(req: NextRequest) {
+  // Marketplace mutations affect ALL agents on the host, so they are
+  // restricted to the system owner (the human logged into the web UI).
+  // Agents with AID tokens cannot add/remove marketplaces — they use
+  // per-agent `--scope local` install flows instead (R20.20).
+  const authErr = enforceSystemOwner(req)
+  if (authErr) return authErr
+
   try {
     const body = await req.json()
     const { action, pluginKey, url } = body as { action?: string; pluginKey?: string; url?: string }

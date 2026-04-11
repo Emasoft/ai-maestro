@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSystemConfig } from '@/services/config-service'
 import { updateSystemSettings, type SystemSettings } from '@/lib/system-settings'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 export async function GET() {
   try {
@@ -16,6 +17,10 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  // System-level settings affect every agent on the host.
+  const authErr = enforceSystemOwner(req)
+  if (authErr) return authErr
+
   try {
     const body = await req.json()
     const patch: Partial<SystemSettings> = {}

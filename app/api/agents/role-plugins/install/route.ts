@@ -10,10 +10,16 @@ import {
   PREDEFINED_ROLE_PLUGINS,
 } from '@/services/role-plugin-service'
 import { ChangePlugin } from '@/services/element-management-service'
+import { requireAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
+  // Authenticate before any side effect — ChangePlugin Gate 0 will further
+  // authorize the call against the agent's title + governance rules.
+  const auth = requireAuth(req)
+  if ('error' in auth) return auth.error
+
   try {
     let body: { pluginName?: string; agentDir?: string; marketplaceName?: string; rolePluginSwap?: boolean }
     try {
@@ -46,7 +52,7 @@ export async function POST(req: NextRequest) {
       scope: 'local',
       agentDir: body.agentDir,
       rolePluginSwap: body.rolePluginSwap || false,
-    })
+    }, auth.context)
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
@@ -59,6 +65,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  // Authenticate before any side effect
+  const auth = requireAuth(req)
+  if ('error' in auth) return auth.error
+
   try {
     let body: { pluginName?: string; agentDir?: string; marketplaceName?: string }
     try {
@@ -89,7 +99,7 @@ export async function DELETE(req: NextRequest) {
       action: 'uninstall',
       scope: 'local',
       agentDir: body.agentDir,
-    })
+    }, auth.context)
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }

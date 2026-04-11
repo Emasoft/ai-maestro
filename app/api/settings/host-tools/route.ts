@@ -11,6 +11,7 @@ import { existsSync, readFileSync } from 'fs'
 import { execFileSync } from 'child_process'
 import path from 'path'
 import os from 'os'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -280,6 +281,11 @@ export async function GET() {
 // --- POST: Run a tool's install script ---
 
 export async function POST(request: NextRequest) {
+  // Running install scripts can modify system-level configuration
+  // (tmux, statusline, hooks, etc.). System-owner only.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   let body: { toolId: string }
   try {
     body = await request.json()

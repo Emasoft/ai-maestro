@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getDomainById, updateDomainById, deleteDomainById } from '@/services/domains-service'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 // Force dynamic -- reads runtime filesystem state
 export const dynamic = 'force-dynamic'
@@ -31,9 +32,12 @@ export async function GET(
  * Update a domain (description or isDefault)
  */
 export async function PATCH(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
     let body
@@ -57,9 +61,12 @@ export async function PATCH(
  * Delete a domain
  */
 export async function DELETE(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
     const result = await deleteDomainById(id)

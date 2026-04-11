@@ -28,6 +28,7 @@ import { readFile, realpath } from 'fs/promises'
 import { existsSync, writeFileSync, unlinkSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import os from 'os'
+import { enforceAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +42,12 @@ function shellSafe(input: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  // MCP discovery spawns a Python subprocess that reads the caller-
+  // supplied configPath. Any authenticated caller may discover tools;
+  // agents legitimately need this for the mcp-discovery skill.
+  const authErr = enforceAuth(req)
+  if (authErr) return authErr
+
   const body = await req.json()
   const { configPath, serverName, format, raw, method, toolName, toolArgs, timeout } = body as {
     configPath?: string

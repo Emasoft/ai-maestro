@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { registerAgent } from '@/services/agents-core-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -7,7 +8,10 @@ export const dynamic = 'force-dynamic'
  * POST /api/agents/register
  * Register an agent from session name or cloud config.
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     let body
     try { body = await request.json() } catch {

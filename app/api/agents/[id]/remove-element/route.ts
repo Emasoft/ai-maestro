@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isValidUuid } from '@/lib/validation'
 import { getAgent } from '@/lib/agent-registry'
+import { requireAuth } from '@/lib/route-auth'
 import {
   ChangeSkill,
   ChangeAgentDef,
@@ -28,6 +29,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Authenticate before any mutation. The Change* pipelines run their
+  // own Gate 0 authorization on the resolved authContext.
+  const auth = requireAuth(request)
+  if (!auth.ok) return auth.error
+
   try {
     const { id } = await params
     if (!isValidUuid(id)) {

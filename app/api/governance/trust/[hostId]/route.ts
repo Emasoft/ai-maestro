@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { removeTrust } from '@/services/governance-service'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 // NT-030: Ensure Next.js does not cache this route
 export const dynamic = 'force-dynamic'
@@ -18,6 +19,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ hostId: string }> }
 ) {
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     const { hostId } = await params
     // SF-027: Validate hostId as a safe hostname format before passing to service

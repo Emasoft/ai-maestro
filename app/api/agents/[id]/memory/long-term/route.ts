@@ -6,6 +6,7 @@ import {
 } from '@/services/agents-memory-service'
 import type { MemoryCategory } from '@/lib/cozo-schema-memory'
 import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 // SF-020: Allowed MemoryCategory values for runtime validation
 const VALID_CATEGORIES: readonly string[] = ['fact', 'decision', 'preference', 'pattern', 'insight', 'reasoning']
@@ -85,6 +86,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id: agentId } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
@@ -120,6 +124,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id: agentId } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)

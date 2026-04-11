@@ -9,8 +9,14 @@ import type { NextRequest } from 'next/server'
 import { pushToGitHub } from '@/services/plugin-builder-service'
 import type { PluginPushConfig } from '@/types/plugin-builder'
 import { validateExternalUrl } from '@/lib/url-validation'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 export async function POST(request: NextRequest) {
+  // Pushing to GitHub is system-owner only — agents cannot
+  // push content on behalf of the user without explicit consent.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   // SF-004: Separate JSON parsing from service call so service errors
   // are not misattributed as "Invalid request body" (400)
   let body: Record<string, unknown>

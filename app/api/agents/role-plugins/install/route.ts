@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   // Authenticate before any side effect — ChangePlugin Gate 0 will further
   // authorize the call against the agent's title + governance rules.
   const auth = requireAuth(req)
-  if ('error' in auth) return auth.error
+  if (!auth.ok) return auth.error
 
   try {
     let body: { pluginName?: string; agentDir?: string; marketplaceName?: string; rolePluginSwap?: boolean }
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   // Authenticate before any side effect
   const auth = requireAuth(req)
-  if ('error' in auth) return auth.error
+  if (!auth.ok) return auth.error
 
   try {
     let body: { pluginName?: string; agentDir?: string; marketplaceName?: string }

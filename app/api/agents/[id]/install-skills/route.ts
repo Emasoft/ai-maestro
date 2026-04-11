@@ -11,13 +11,17 @@ import { getAgent } from '@/lib/agent-registry'
 import { detectClientType } from '@/lib/client-capabilities'
 import { convertSkill, listClientSkills } from '@/services/cross-client-skill-service'
 import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   const { id } = await params
 
   if (!isValidUuid(id)) {

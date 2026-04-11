@@ -13,10 +13,16 @@ import { findSkillSource, convertElements } from '@/services/cross-client-conver
 import { copyDir, ensureDir } from '@/lib/converter/utils/fs'
 import path from 'path'
 import os from 'os'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
+  // Installing a skill at user scope affects every agent on the host,
+  // so this is system-owner only.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   const body = await request.json().catch(() => null)
   if (!body) return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
 

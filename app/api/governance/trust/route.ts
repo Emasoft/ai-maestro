@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { listTrustedManagers, addTrust } from '@/services/governance-service'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +32,11 @@ export async function GET() {
 
 /** POST: Add a trusted manager (requires governance password) */
 export async function POST(request: NextRequest) {
+  // Trust changes affect cross-host governance and MUST be the
+  // logged-in user's decision alone — agents cannot extend trust.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     let body
     try { body = await request.json() } catch {

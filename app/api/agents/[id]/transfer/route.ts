@@ -9,11 +9,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { transferAgent } from '@/services/agents-transfer-service'
 import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)

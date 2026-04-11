@@ -3,6 +3,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { existsSync } from 'fs'
 import { injectAiMaestroSkills } from '@/services/role-plugin-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 const PLUGINS_DIR = join(homedir(), 'agents', 'role-plugins', 'plugins')
 
@@ -12,6 +13,9 @@ const PLUGINS_DIR = join(homedir(), 'agents', 'role-plugins', 'plugins')
  * Body: { pluginName: string }
  */
 export async function POST(request: NextRequest) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { pluginName } = await request.json()
     if (!pluginName || typeof pluginName !== 'string') {

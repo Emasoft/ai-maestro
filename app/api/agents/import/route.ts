@@ -6,11 +6,15 @@
  * Thin wrapper — business logic in services/agents-transfer-service.ts
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { importAgent } from '@/services/agents-transfer-service'
 import type { AgentImportOptions } from '@/types/portable'
+import { enforceAuth } from '@/lib/route-auth'
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File | null

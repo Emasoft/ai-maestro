@@ -19,6 +19,7 @@ import { cp, rm, mkdir } from 'fs/promises'
 import { ensureMarketplace, updateMarketplaceManifest } from '@/services/role-plugin-service'
 import { getLocalMarketplacePath, LOCAL_MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
 import { withLock } from '@/lib/file-lock'
+import { enforceAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +81,13 @@ function extractPluginJsonField(pluginDir: string, field: string): string | null
 }
 
 export async function POST(req: NextRequest) {
+  // Publishing a Haephestos-built plugin copies it into the local
+  // role-plugins marketplace and registers it with the Claude CLI —
+  // destructive mutation of the local marketplace. Authenticated callers
+  // only; agents may publish their own builds via their AID token.
+  const authErr = enforceAuth(req)
+  if (authErr) return authErr
+
   try {
     let body: { pluginDir?: string }
     try { body = await req.json() } catch {

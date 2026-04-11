@@ -37,8 +37,8 @@ import {
 } from './agent-auth'
 
 export type RequireAuthResult =
-  | { context: AuthContext; agentId?: string; error?: never }
-  | { context?: never; error: NextResponse }
+  | { ok: true; context: AuthContext; agentId?: string }
+  | { ok: false; error: NextResponse }
 
 /**
  * Verify the request's credentials. On success returns the resolved
@@ -48,11 +48,17 @@ export type RequireAuthResult =
  * The handler remains in charge of authorization (whether this caller
  * can perform this specific action) — this function only verifies
  * authentication (whether this caller IS who they claim to be).
+ *
+ * USAGE:
+ *   const auth = requireAuth(request)
+ *   if (!auth.ok) return auth.error
+ *   const ctx = auth.context
  */
 export function requireAuth(request: NextRequest): RequireAuthResult {
   const result = authenticateFromRequest(request)
   if (result.error) {
     return {
+      ok: false,
       error: NextResponse.json(
         { error: result.error },
         { status: result.status ?? 401 }
@@ -60,6 +66,7 @@ export function requireAuth(request: NextRequest): RequireAuthResult {
     }
   }
   return {
+    ok: true,
     context: buildAuthContext(result),
     agentId: result.agentId,
   }

@@ -8,8 +8,12 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { scanRepo } from '@/services/plugin-builder-service'
 import { validateExternalUrl } from '@/lib/url-validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 export async function POST(request: NextRequest) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   // SF-004: Separate JSON parsing from service call so service errors
   // are not misattributed as "Invalid request body" (400)
   let body: Record<string, unknown>

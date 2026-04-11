@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { parseConversationFile } from '@/services/config-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 /**
  * POST /api/conversations/parse
  * Parse a JSONL conversation file and return messages with metadata.
  */
 export async function POST(request: NextRequest) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     let body
     try { body = await request.json() } catch {

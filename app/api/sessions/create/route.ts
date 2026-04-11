@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import os from 'os'
 import path from 'path'
 import { createSession } from '@/services/sessions-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 // Max length for string fields to prevent DoS via oversized payloads
 const MAX_STRING_LENGTH = 500
@@ -17,7 +18,10 @@ interface CreateSessionRequestBody {
   program?: string
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     let body: CreateSessionRequestBody
     try { body = await request.json() } catch {

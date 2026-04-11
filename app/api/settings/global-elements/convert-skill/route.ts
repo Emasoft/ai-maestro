@@ -15,10 +15,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { convertElements, getConversionCapabilities } from '@/services/cross-client-conversion-service'
 import { PROVIDER_IDS } from '@/lib/converter/registry'
 import type { ProviderId, ElementType } from '@/lib/converter/types'
+import { enforceAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   const body = await request.json().catch(() => null)
   if (!body) return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
 

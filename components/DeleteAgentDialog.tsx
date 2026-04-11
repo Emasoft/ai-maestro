@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AlertTriangle, Download, Trash2, X, Zap } from 'lucide-react'
+import { useSudo } from '@/contexts/SudoContext'
+import { sudoFetch } from '@/lib/sudo-fetch'
 
 interface DeleteAgentDialogProps {
   isOpen: boolean
@@ -25,6 +27,7 @@ export default function DeleteAgentDialog({
   workingDirectory,
   hostUrl,
 }: DeleteAgentDialogProps) {
+  const { requestSudoToken } = useSudo()
   const [deleting, setDeleting] = useState(false)
   const [confirmText, setConfirmText] = useState('')
   const [phase, setPhase] = useState<'confirm' | 'deleting' | 'done'>('confirm')
@@ -44,12 +47,22 @@ export default function DeleteAgentDialog({
     setDeleteError(null)
 
     try {
-      // Call the API directly with deleteFolder param
+      // Call the API with deleteFolder param. DELETE /api/agents/[id] is
+      // classified "strict" in security-registry.json, so the request
+      // will come back 403 sudo_required on the first try; sudoFetch
+      // transparently prompts the user for the governance password and
+      // retries with the X-Sudo-Token header.
       const baseUrl = hostUrl || ''
       const params = new URLSearchParams()
       if (deleteFolder) params.set('deleteFolder', 'true')
       const qs = params.toString() ? `?${params.toString()}` : ''
-      const res = await fetch(`${baseUrl}/api/agents/${agentId}${qs}`, { method: 'DELETE' })
+      const res = await sudoFetch(
+        `${baseUrl}/api/agents/${agentId}${qs}`,
+        { method: 'DELETE' },
+        (reason) => requestSudoToken(
+          `Delete agent "${displayName}"${deleteFolder ? ' and its working directory' : ''}. ${reason}`
+        )
+      )
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error || `Delete failed (${res.status})`)

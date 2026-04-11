@@ -200,11 +200,15 @@ commit: TBD
 
 ## Phase 5: CLEANUP
 
-### S017: Uninstall the test plugin
-- **Action:** Click Uninstall on the test plugin. Confirm the dialog.
+### S017: Uninstall the test plugin (Rule 12 sudo password)
+- **Action:** Click Uninstall on the test plugin. When the sudo password
+  modal appears (Rule 12 — DELETE /api/agents/role-plugins/install is
+  classified strict), enter governance password `mYkri1-xoxrap-gogtan`
+  and click Confirm. Then confirm the uninstall dialog.
 - **Goal:** Plugin removed from user settings + cache cleaned.
 - **Removes:** The installed plugin
-- **Verify:** Plugin no longer appears in the Plugins subtab list.
+- **Verify:** Plugin no longer appears in the Plugins subtab list. The
+  sudo modal appeared exactly once before the uninstall proceeded.
 
 ### S018: Remove the test marketplace
 - **Action:** Switch to Marketplaces subtab. Click Remove on the

@@ -172,27 +172,31 @@ commit: TBD
 
 ## Phase 5: CLEANUP
 
-### S017: Uninstall local-scope plugin from scen021-alpha
+### S017: Uninstall local-scope plugin from scen021-alpha (Rule 12 sudo)
 - **Action:** Alpha → Config → Plugins → click X on the local plugin.
-  Confirm.
+  Confirm dialog. When the sudo password modal appears, enter governance
+  password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Removes:** local-scope install
-- **Verify:** Plugin no longer listed.
+- **Verify:** Plugin no longer listed; sudo modal appeared once.
 
-### S018: Uninstall user-scope plugin from Settings
+### S018: Uninstall user-scope plugin from Settings (Rule 12 sudo)
 - **Action:** Settings → Plugins → Uninstall the user-scope plugin.
+  When the sudo password modal appears, enter governance password and
+  Confirm.
 - **Removes:** user-scope install
-- **Verify:** Plugin no longer in the user list.
+- **Verify:** Plugin no longer in the user list; sudo modal appeared.
 
-### S019: Delete scen021-alpha
+### S019: Delete scen021-alpha (Rule 12 sudo)
 - **Action:** Profile → Advanced → Delete Agent (check folder checkbox,
-  type name).
+  type name). When the sudo password modal appears, enter governance
+  password `mYkri1-xoxrap-gogtan` and Confirm.
 - **Removes:** Agent alpha + folder + session
-- **Verify:** Not in sidebar.
+- **Verify:** Not in sidebar; sudo modal appeared.
 
-### S020: Delete scen021-beta
-- **Action:** Same flow.
+### S020: Delete scen021-beta (Rule 12 sudo)
+- **Action:** Same flow as S019 (enter sudo password when prompted).
 - **Removes:** Agent beta
-- **Verify:** Not in sidebar.
+- **Verify:** Not in sidebar; sudo modal appeared.
 
 ### S021: Purge cemetery entries for both agents
 - **Action:** Settings → Cemetery → purge each row.

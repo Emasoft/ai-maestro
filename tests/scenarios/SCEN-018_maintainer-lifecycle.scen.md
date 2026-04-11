@@ -233,16 +233,18 @@ commit: TBD
 
 ## Phase 7: CLEANUP
 
-### S019: Delete scen018-maint-alpha
+### S019: Delete scen018-maint-alpha (Rule 12 sudo)
 - **Action:** Profile → Advanced → Danger Zone → Delete Agent with
-  folder cleanup.
+  folder cleanup. When the sudo password modal appears (DELETE
+  /api/agents/[id] is strict), enter governance password
+  `mYkri1-xoxrap-gogtan` and Confirm.
 - **Removes:** Agent + folder + session
-- **Verify:** Not in sidebar.
+- **Verify:** Not in sidebar; sudo modal appeared once.
 
-### S020: Delete scen018-maint-beta
-- **Action:** Same flow.
+### S020: Delete scen018-maint-beta (Rule 12 sudo)
+- **Action:** Same flow as S019 (enter sudo password when prompted).
 - **Removes:** Agent
-- **Verify:** Not in sidebar.
+- **Verify:** Not in sidebar; sudo modal appeared.
 
 ### S021: Purge cemetery entries
 - **Action:** Settings → Cemetery → purge both.

@@ -3,6 +3,7 @@ import { Space_Grotesk } from 'next/font/google'
 import './globals.css'
 import { GlobalTouchScrollbars } from '@/components/GlobalTouchScrollbars'
 import LoginGate from '@/components/LoginGate'
+import { SudoProvider } from '@/contexts/SudoContext'
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] })
 
@@ -34,7 +35,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={spaceGrotesk.className}>
         <GlobalTouchScrollbars />
-        <LoginGate>{children}</LoginGate>
+        <SudoProvider>
+          <LoginGate>{children}</LoginGate>
+        </SudoProvider>
       </body>
     </html>
   )

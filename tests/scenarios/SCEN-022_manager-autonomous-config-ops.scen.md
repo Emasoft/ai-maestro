@@ -161,14 +161,22 @@ commit: TBD
   subcommand with --delete-folder. Confirm to me when done.
   ```
 - **Goal:** MANAGER calls DELETE /api/agents/<id>?deleteFolder=true.
-  Note: DELETE is classified "strict" — the MANAGER must already have a
-  valid sudo token OR the endpoint must be classified normal for AID
-  callers (the registry entry may need refinement here — record any
-  issue in the report for SEC-PHASE-5 follow-up).
-- **Removes:** test agent + folder + session + cemetery entry (if
-  hard delete)
-- **Verify:** `GET /api/agents` no longer lists scen022-autobot; folder
-  removed.
+  **Expected to FAIL on current behavior:** DELETE /api/agents/[id] is
+  classified "strict" in security-registry.json (Rule 12), which means
+  the caller must present an X-Sudo-Token earned by re-entering the
+  governance password via POST /api/auth/sudo-password. Agents CANNOT
+  obtain sudo tokens (sudo-mode is system-owner only) — so the MANAGER's
+  direct DELETE call returns 403 sudo_required. When this happens:
+    1. Record the failure in the scenario report as the EXPECTED result
+       of Rule 12 enforcement (agents cannot bypass sudo-mode).
+    2. Fall back to the user performing the delete manually via the UI
+       in the S013 cleanup step — OR promote the issue as a governance
+       design question: "should DELETE /api/agents/[id] be normal for
+       AID callers if the caller is MANAGER?" (currently: no).
+- **Removes:** intentionally blocked — the MANAGER is not allowed to
+  perform sudo-gated deletes.
+- **Verify:** 403 response captured in MANAGER terminal log with
+  `sudo_required`. `GET /api/agents` still lists scen022-autobot.
 
 ### S012: Verify cemetery handling
 - **Action:** If the delete was soft, navigate to Settings → Cemetery and

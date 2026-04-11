@@ -18,6 +18,8 @@ import {
 } from 'lucide-react'
 import type { AgentLocalConfig, LocalPlugin } from '@/types/agent-local-config'
 import { EmptyState, FilterInput, type TabId } from './shared'
+import { useSudo } from '@/contexts/SudoContext'
+import { sudoFetch } from '@/lib/sudo-fetch'
 
 /** Element type counts for a plugin */
 function pluginElementCounts(p: LocalPlugin) {
@@ -55,6 +57,7 @@ interface PluginsTabProps {
 
 export default function PluginsTab({ config, onSwitchTab, onRefresh }: PluginsTabProps) {
   const router = useRouter()
+  const { requestSudoToken } = useSudo()
   const [confirmUninstall, setConfirmUninstall] = useState<LocalPlugin | null>(null)
   const [uninstalling, setUninstalling] = useState(false)
   const [expandedPlugin, setExpandedPlugin] = useState<string | null>(null)
@@ -74,15 +77,23 @@ export default function PluginsTab({ config, onSwitchTab, onRefresh }: PluginsTa
     try {
       // Extract marketplace from plugin key ("name@marketplace") for correct removal
       const marketplaceName = plugin.key?.includes('@') ? plugin.key.split('@').slice(1).join('@') : undefined
-      const res = await fetch('/api/agents/role-plugins/install', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pluginName: plugin.name,
-          agentDir: config.workingDirectory,
-          ...(marketplaceName !== undefined && { marketplaceName }),
-        }),
-      })
+      // DELETE /api/agents/role-plugins/install is classified "strict" in
+      // the security registry. sudoFetch transparently prompts the user
+      // for the governance password and retries with X-Sudo-Token on the
+      // first 403 response.
+      const res = await sudoFetch(
+        '/api/agents/role-plugins/install',
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pluginName: plugin.name,
+            agentDir: config.workingDirectory,
+            ...(marketplaceName !== undefined && { marketplaceName }),
+          }),
+        },
+        (reason) => requestSudoToken(`Uninstall plugin "${plugin.name}". ${reason}`)
+      )
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Uninstall failed' }))
         console.error('[PluginsTab] Uninstall failed:', err.error)

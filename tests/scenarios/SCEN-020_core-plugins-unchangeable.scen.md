@@ -147,13 +147,15 @@ commit: TBD
 
 ## Phase 4: CLEANUP
 
-### S014: Delete the test agent
-- **Action:** Profile → Advanced → Danger Zone → Delete Agent. Enter
-  sudo password. Check "Also delete agent folder". Type agent name. Click
-  Delete Forever.
+### S014: Delete the test agent (Rule 12 sudo password)
+- **Action:** Profile → Advanced → Danger Zone → Delete Agent. Check
+  "Also delete agent folder". Type agent name. Click Delete Forever.
+  When the sudo password modal appears (DELETE /api/agents/[id] is
+  strict), enter governance password `mYkri1-xoxrap-gogtan` and click
+  Confirm.
 - **Removes:** The test agent + its folder + tmux session
 - **Verify:** Agent no longer in sidebar; registry, folder, session all
-  gone.
+  gone. The sudo modal appeared before the delete proceeded.
 
 ### S015: Purge cemetery entry
 - **Action:** Settings → Cemetery tab → Purge row for `scen020-member-test`.

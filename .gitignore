@@ -8,14 +8,12 @@ coverage
 *.lcov
 .nyc_output
 
-# Next.js
+# Next.js build output — root-level only, so we don't accidentally
+# match app/api/plugin-builder/build/ or other nested build/ directories
 .next
 out
-build
-dist
-
-# Production
 /build
+dist
 
 # Misc
 *.pem

@@ -10,7 +10,9 @@ import HelpSection from '@/components/settings/HelpSection'
 import AboutSection from '@/components/settings/AboutSection'
 import OnboardingSection from '@/components/settings/OnboardingSection'
 import ExperimentsSection from '@/components/settings/ExperimentsSection'
-import MarketplaceSection from '@/components/settings/MarketplaceSection'
+// MarketplaceSection removed: the 'marketplace' tab now renders SkillsSection
+// (renamed in the UI). The marketplace LIST (registered marketplaces + plugins)
+// lives inside GlobalElementsSection → 'Marketplaces' subtab.
 import SkillsSection from '@/components/settings/SkillsSection'
 import AgentsSection from '@/components/settings/AgentsSection'
 import CommandsSection from '@/components/settings/CommandsSection'

@@ -185,18 +185,11 @@ const TOOLS: ToolDef[] = [
     confirmMessage: 'This will configure tailscale serve to proxy VPN traffic to the AI Maestro dashboard. Requires Tailscale to be installed and running. Any existing tailscale serve config for port 23000 will be replaced.',
     diagnose: diagnoseTailscaleServe,
   },
-  {
-    id: 'hooks',
-    name: 'Claude Code Hooks',
-    description: 'Session tracking, activity status, and message notifications. Installed automatically via the ai-maestro-plugin (user scope). To update, run: claude plugin update ai-maestro-plugin@ai-maestro-plugins',
-    // No install script — hooks are provisioned by the plugin itself.
-    // Left empty intentionally; the UI should show this as an informational
-    // tool, not a runnable one.
-    script: '',
-    runArgs: [],
-    confirmMessage: 'Hooks are installed automatically as part of ai-maestro-plugin. There is nothing to run manually here.',
-    diagnose: diagnoseHooks,
-  },
+  // NOTE: 'hooks' entry removed. Hooks are NOT a host-level tool — they are
+  // installed automatically as part of the ai-maestro-plugin (user scope) via
+  // the plugin marketplace. Their status belongs in the Marketplaces / Plugins
+  // Explorer section, not in the Hosts section. The diagnoseHooks function
+  // is kept for reference but is no longer wired to any tool entry.
   {
     id: 'tmux',
     name: 'tmux Configuration',

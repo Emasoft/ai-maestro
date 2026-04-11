@@ -39,9 +39,11 @@ const SETTINGS_LOCAL_PATH = join(HOME, '.claude', 'settings.local.json')
 const CACHE_DIR = join(HOME, '.claude', 'plugins', 'cache')
 const MARKETPLACES_DIR = join(HOME, '.claude', 'plugins', 'marketplaces')
 
-// Exclude local role-plugin marketplaces from listing (current name + legacy name).
-// These are internal-only marketplaces used by Haephestos-generated plugins.
-const EXCLUDED_MARKETPLACES = [LOCAL_MARKETPLACE_NAME, 'ai-maestro-local-roles-marketplace']
+// Previously excluded local role-plugin marketplaces. The user asked for them
+// to be visible in the Settings → Marketplaces tab (2026-04-11), alongside
+// the GitHub ai-maestro-plugins marketplace. Kept the constant for future use
+// but empty so nothing is filtered out anymore.
+const EXCLUDED_MARKETPLACES: string[] = []
 
 interface PluginStatus {
   name: string

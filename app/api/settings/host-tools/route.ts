@@ -53,6 +53,43 @@ function binExists(name: string): boolean {
 /** Check if hooks are installed in settings.json and point to the comprehensive script.
  *  Reads the file once to avoid TOCTOU races between string checks and JSON parse. */
 function diagnoseHooks(): ToolStatus {
+  // As of ai-maestro-plugin v2.x (Apr 2026), the hooks live inside the
+  // plugin cache, NOT in ~/.claude/settings.json at user scope. Claude
+  // Code loads them at runtime from the enabled plugin's hooks/hooks.json.
+  //
+  // This diagnostic checks, in order of preference:
+  //   1. Is ai-maestro-plugin present in ~/.claude/plugins/cache/ai-maestro-plugins/?
+  //      If yes, inspect its latest version's hooks/hooks.json.
+  //   2. Is the plugin enabled in ~/.claude/settings.json (plugins field)?
+  //   3. LEGACY: is the old user-scope hook entry still in settings.json?
+
+  const pluginCacheDir = path.join(HOME, '.claude', 'plugins', 'cache', 'ai-maestro-plugins', 'ai-maestro-plugin')
+  if (fileExists(pluginCacheDir)) {
+    // Find the latest version dir
+    let latestVersion: string | null = null
+    try {
+      const { readdirSync } = require('fs') as typeof import('fs')
+      const versions = readdirSync(pluginCacheDir).filter((v: string) => /^\d+\.\d+\.\d+$/.test(v)).sort()
+      latestVersion = versions[versions.length - 1] || null
+    } catch { /* fall through */ }
+
+    if (latestVersion) {
+      const hooksJsonPath = path.join(pluginCacheDir, latestVersion, 'hooks', 'hooks.json')
+      if (fileExists(hooksJsonPath)) {
+        try {
+          const content = readFileSync(hooksJsonPath, 'utf8')
+          const data = JSON.parse(content)
+          const eventCount = Object.keys(data.hooks || {}).length
+          if (eventCount >= 3) return 'installed'
+          return 'outdated'
+        } catch {
+          return 'error'
+        }
+      }
+    }
+  }
+
+  // LEGACY fallback: old user-scope installation
   const settingsPath = path.join(HOME, '.claude', 'settings.json')
   if (!fileExists(settingsPath)) return 'missing'
 
@@ -62,24 +99,8 @@ function diagnoseHooks(): ToolStatus {
   } catch {
     return 'error'
   }
-
-  if (!content.includes('ai-maestro-hook')) return 'missing'
-  // Check if it points to the comprehensive version (scripts/ai-maestro-hook.cjs)
-  // vs the old version (scripts/claude-hooks/ai-maestro-hook.cjs)
-  const hasNew = content.includes('scripts/ai-maestro-hook.cjs')
-  const hasOld = content.includes('scripts/claude-hooks/ai-maestro-hook.cjs')
-  if (hasOld && !hasNew) return 'outdated'
-  // Check event count — comprehensive version handles 9 events
-  try {
-    const settings = JSON.parse(content)
-    const hookEvents = Object.keys(settings.hooks || {}).filter(
-      e => settings.hooks[e]?.some?.((cfg: { hooks?: { command?: string }[] }) =>
-        cfg.hooks?.some(h => h.command?.includes('ai-maestro-hook'))
-      )
-    )
-    if (hookEvents.length < 5) return 'outdated'
-  } catch { /* parse error — treat as installed since the string checks passed */ }
-  return 'installed'
+  if (content.includes('ai-maestro-hook')) return 'installed'
+  return 'missing'
 }
 
 function diagnoseTmux(): ToolStatus {
@@ -167,10 +188,13 @@ const TOOLS: ToolDef[] = [
   {
     id: 'hooks',
     name: 'Claude Code Hooks',
-    description: 'Session tracking, activity status, and message notifications. Required for the dashboard to show agent state.',
-    script: 'scripts/claude-hooks/install-hooks.sh',
-    runArgs: ['-y', '--force'],
-    confirmMessage: 'This will install/update AI Maestro hooks in ~/.claude/settings.json. Existing AI Maestro hooks will be replaced. Other hooks are preserved.',
+    description: 'Session tracking, activity status, and message notifications. Installed automatically via the ai-maestro-plugin (user scope). To update, run: claude plugin update ai-maestro-plugin@ai-maestro-plugins',
+    // No install script — hooks are provisioned by the plugin itself.
+    // Left empty intentionally; the UI should show this as an informational
+    // tool, not a runnable one.
+    script: '',
+    runArgs: [],
+    confirmMessage: 'Hooks are installed automatically as part of ai-maestro-plugin. There is nothing to run manually here.',
     diagnose: diagnoseHooks,
   },
   {

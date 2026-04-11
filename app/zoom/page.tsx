@@ -46,6 +46,9 @@ export default function ZoomPage() {
   const [flippingCardId, setFlippingCardId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
+  // Default to online-only — user asked for this explicitly. Toggle to "all"
+  // shows hibernated agents too (they appear dimmed in the card).
+  const [showAll, setShowAll] = useState(false)
 
   // Fetch unread message counts for all agents
   useEffect(() => {
@@ -77,10 +80,17 @@ export default function ZoomPage() {
     }
   }, [agents])
 
-  // Compute selectable agents: online + hibernated (offline with session config)
+  // Compute selectable agents based on the showAll toggle:
+  //  - showAll=false (default): only ONLINE agents (with a live tmux session)
+  //  - showAll=true: online + hibernated (offline with session config)
   const selectableAgents = useMemo(
-    () => agents.filter(a => a.session?.status === 'online' || (a.sessions && a.sessions.length > 0)),
-    [agents]
+    () => agents.filter(a => {
+      const isOnline = a.session?.status === 'online'
+      if (!showAll) return isOnline
+      const hasSessionConfig = !!(a.sessions && a.sessions.length > 0)
+      return isOnline || hasSessionConfig
+    }),
+    [agents, showAll]
   )
 
   // Filter agents by search query
@@ -161,7 +171,7 @@ export default function ZoomPage() {
 
   return (
     <TerminalProvider>
-      <div className="min-h-screen bg-gray-900 flex flex-col">
+      <div className="h-screen bg-gray-900 flex flex-col">
         {/* Header */}
         <header className="border-b border-gray-800 bg-gray-950 px-4 py-3 flex-shrink-0 z-10">
           <div className="flex items-center justify-between max-w-7xl mx-auto">
@@ -177,6 +187,33 @@ export default function ZoomPage() {
               <h1 className="text-lg font-semibold text-white">Zoom View</h1>
             </div>
             <div className="flex items-center gap-3">
+              {/* Online / All filter toggle (default: Online) */}
+              <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1" role="group" aria-label="Agent visibility filter">
+                <button
+                  onClick={() => setShowAll(false)}
+                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                    !showAll
+                      ? 'bg-violet-600 text-white'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                  aria-pressed={!showAll}
+                  title="Show only online agents"
+                >
+                  Online
+                </button>
+                <button
+                  onClick={() => setShowAll(true)}
+                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                    showAll
+                      ? 'bg-violet-600 text-white'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                  aria-pressed={showAll}
+                  title="Show online + hibernated agents"
+                >
+                  All
+                </button>
+              </div>
               <span className="text-sm text-gray-400">
                 {selectableAgents.length} agent{selectableAgents.length !== 1 ? 's' : ''}
               </span>

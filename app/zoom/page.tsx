@@ -40,6 +40,51 @@ function hasValidTerminalSession(agent: Agent): boolean {
   return !!agent.session?.tmuxSessionName
 }
 
+/**
+ * Compact user tile for the zoom screen. Always "online" (the user is either
+ * here or logged out). Clicking navigates back to the dashboard with the
+ * human-user card selected.
+ */
+function HumanZoomTile() {
+  const [userName, setUserName] = useState<string | null>(null)
+  const [userAvatar, setUserAvatar] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/governance')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return
+        setUserName(data.userName ?? null)
+        setUserAvatar(data.userAvatar ?? null)
+      })
+      .catch(() => {})
+  }, [])
+
+  return (
+    <Link
+      href="/?human=self"
+      className="flex items-center gap-4 p-4 rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-900/20 to-cyan-900/10 hover:from-emerald-900/30 hover:to-cyan-900/20 transition-all group"
+      title="Open your chat view"
+    >
+      <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-800 border-2 border-emerald-500/50 flex-shrink-0 group-hover:border-emerald-400">
+        {userAvatar ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={userAvatar} alt="You" className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-600/40 to-cyan-600/40">
+            <Mail className="w-6 h-6 text-emerald-300" />
+          </div>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-lg font-semibold text-gray-100 truncate">{userName ?? '…'}</p>
+        <p className="text-xs text-emerald-400/80">You · chat only · always online</p>
+      </div>
+      <ExternalLink className="w-5 h-5 text-emerald-400/60 group-hover:text-emerald-400 flex-shrink-0" />
+    </Link>
+  )
+}
+
 export default function ZoomPage() {
   const { agents, loading, error, refreshAgents, onlineAgents } = useAgents()
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
@@ -308,6 +353,13 @@ export default function ZoomPage() {
                     Try a different search term
                   </p>
                 </div>
+              </div>
+            )}
+
+            {/* Human user tile — always visible, always "online" */}
+            {(!searchQuery.trim() || 'you'.includes(searchQuery.toLowerCase())) && (
+              <div className="mb-6">
+                <HumanZoomTile />
               </div>
             )}
 

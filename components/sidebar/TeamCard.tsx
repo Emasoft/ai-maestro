@@ -1,20 +1,22 @@
 'use client'
 
 import { useState } from 'react'
-import { Play, Pencil, Trash2 } from 'lucide-react'
-import { formatDistanceToNow } from '@/lib/utils'
+import { Pencil, Trash2 } from 'lucide-react'
 import type { Team } from '@/types/team'
 import type { Agent } from '@/types/agent'
 
 interface TeamCardProps {
   team: Team
   agents: Agent[]
-  onStartMeeting: (team: Team) => void
+  /** @deprecated Team meetings are removed — agents coordinate via AMP + kanban.
+   *  Prop kept for call-site compatibility; ignored by the component. */
+  onStartMeeting?: (team: Team) => void
   onEdit: (team: Team) => void
   onDelete: (team: Team) => void
 }
 
-export default function TeamCard({ team, agents, onStartMeeting, onEdit, onDelete }: TeamCardProps) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export default function TeamCard({ team, agents, onStartMeeting: _onStartMeeting, onEdit, onDelete }: TeamCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const memberAgents = team.agentIds
@@ -66,22 +68,15 @@ export default function TeamCard({ team, agents, onStartMeeting, onEdit, onDelet
             )}
           </div>
 
-          {team.lastMeetingAt && (
-            <span className="text-[10px] text-gray-600 mt-1 block">
-              Last meeting {formatDistanceToNow(team.lastMeetingAt)}
-            </span>
-          )}
+          {/*
+            Team meetings are removed (R20 — humans coordinate agents via AMP
+            and kanban; agents don't attend "meetings"). We no longer render
+            the Last meeting timestamp or the Start Meeting button.
+          */}
         </div>
 
         {/* Hover actions */}
         <div className="hidden group-hover:flex items-center gap-1 flex-shrink-0">
-          <button
-            onClick={(e) => { e.stopPropagation(); onStartMeeting(team) }}
-            className="p-1 rounded hover:bg-green-500/20 text-gray-400 hover:text-green-400 transition-all"
-            title="Start meeting"
-          >
-            <Play className="w-3.5 h-3.5" />
-          </button>
           <button
             onClick={(e) => { e.stopPropagation(); onEdit(team) }}
             className="p-1 rounded hover:bg-blue-500/20 text-gray-400 hover:text-blue-400 transition-all"

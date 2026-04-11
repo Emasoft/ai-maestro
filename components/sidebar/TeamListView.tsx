@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+// (useRouter removed — team meetings are no longer launched from the sidebar)
 import { Plus, UsersRound, X } from 'lucide-react'
 import type { Team } from '@/types/team'
 import type { Agent } from '@/types/agent'
@@ -13,7 +13,6 @@ interface TeamListViewProps {
 }
 
 export default function TeamListView({ agents, searchQuery }: TeamListViewProps) {
-  const router = useRouter()
   const [teams, setTeams] = useState<Team[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
@@ -59,9 +58,9 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
       )
     : teams
 
-  const handleStartMeeting = (team: Team) => {
-    router.push(`/team-meeting?meeting=new&team=${team.id}`)
-  }
+  // Team meetings are removed (R20): agents coordinate via AMP 1:1 + kanban.
+  // Kept as a no-op for forward compatibility while TeamCard ignores the prop.
+  const handleStartMeeting = (_team: Team) => { /* disabled */ }
 
   const [deleteTarget, setDeleteTarget] = useState<Team | null>(null)
   const [deletePassword, setDeletePassword] = useState('')

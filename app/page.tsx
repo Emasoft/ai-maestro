@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import AgentList from '@/components/AgentList'
+import { HUMAN_SELF_ID } from '@/components/sidebar/HumanUserCard'
+import HumanUserPanel from '@/components/HumanUserPanel'
 import HaephestosEmbeddedView from '@/components/HaephestosEmbeddedView'
 import TerminalView from '@/components/TerminalView'
 import ChatView from '@/components/ChatView'
@@ -202,6 +204,14 @@ export default function DashboardPage() {
     const params = new URLSearchParams(window.location.search)
     const agentParam = params.get('agent')
     const sessionParam = params.get('session')
+    const humanParam = params.get('human')
+
+    if (humanParam === 'self') {
+      setActiveAgentId(HUMAN_SELF_ID)
+      window.history.replaceState({}, '', window.location.pathname)
+      urlParamProcessedRef.current = true
+      return
+    }
 
     if (agentParam) {
       setActiveAgentId(decodeURIComponent(agentParam))
@@ -651,6 +661,7 @@ export default function DashboardPage() {
                 unregisteredSessions={unregisteredSessions}
                 activeAgentId={activeAgentId}
                 onAgentSelect={handleAgentSelect}
+                onHumanSelect={() => setActiveAgentId(HUMAN_SELF_ID)}
                 onShowAgentProfile={handleShowAgentProfile}
                 onImportAgent={() => setShowImportDialog(true)}
                 loading={agentsLoading}
@@ -678,6 +689,13 @@ export default function DashboardPage() {
 
           {/* Main Content */}
           <main className="flex-1 flex flex-col relative overflow-hidden isolate">
+            {/* Human user chat view — absolute overlay when the local user card is selected */}
+            {activeAgentId === HUMAN_SELF_ID && (
+              <div className="absolute inset-0 z-20 flex flex-col">
+                <HumanUserPanel allAgents={agents} />
+              </div>
+            )}
+
             {/* Empty State - shown when no agents */}
             {agents.length === 0 && !agentsLoading && (
               <div className="flex-1 flex items-center justify-center text-gray-400">

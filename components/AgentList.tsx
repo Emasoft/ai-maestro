@@ -40,6 +40,7 @@ import SidebarViewSwitcher, { type SidebarView } from './sidebar/SidebarViewSwit
 import TeamListView from './sidebar/TeamListView'
 import GroupListView from './sidebar/GroupListView'
 import MeetingListView from './sidebar/MeetingListView'
+import HumanUserCard, { HUMAN_SELF_ID } from './sidebar/HumanUserCard'
 
 interface UnregisteredSessionUI {
   tmuxSessionName: string
@@ -60,6 +61,9 @@ interface AgentListProps {
   unregisteredSessions?: UnregisteredSessionUI[]
   activeAgentId: string | null
   onAgentSelect: (agent: Agent) => void
+  /** Called when the local human user card is clicked. Parent should swap
+   *  the main content area to HumanUserPanel. */
+  onHumanSelect?: () => void
   onShowAgentProfile: (agent: Agent) => void
   onImportAgent?: () => void  // Opens import dialog
   loading?: boolean
@@ -160,6 +164,7 @@ export default function AgentList({
   unregisteredSessions = [],
   activeAgentId,
   onAgentSelect,
+  onHumanSelect,
   onShowAgentProfile,
   onImportAgent,
   loading,
@@ -759,6 +764,16 @@ export default function AgentList({
             </div>
           )}
         </div>
+
+        {/* Human user (local user) — always visible, chat-only */}
+        {onHumanSelect && (
+          <div className="mt-2 -mx-4 border-y border-sidebar-border/60 bg-gray-900/30">
+            <HumanUserCard
+              isSelected={activeAgentId === HUMAN_SELF_ID}
+              onSelect={onHumanSelect}
+            />
+          </div>
+        )}
 
         {/* View Switcher */}
         <SidebarViewSwitcher activeView={sidebarView} onViewChange={setSidebarView} />

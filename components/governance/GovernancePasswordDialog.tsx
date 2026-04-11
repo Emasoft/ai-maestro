@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Lock, X } from 'lucide-react'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface GovernancePasswordDialogProps {
   isOpen: boolean
@@ -20,6 +22,7 @@ export default function GovernancePasswordDialog({
   onPasswordConfirmed,
   initialUserName,
 }: GovernancePasswordDialogProps) {
+  const { requestSudoToken } = useSudo()
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [userName, setUserName] = useState('')
@@ -82,11 +85,15 @@ export default function GovernancePasswordDialog({
         // Set the governance password (and optional userName) via API
         const body: Record<string, string> = { password }
         if (userName.trim()) body.userName = userName.trim()
-        const res = await fetch('/api/governance/password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        })
+        const res = await sudoFetch(
+          '/api/governance/password',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          },
+          (reason) => requestSudoToken(reason),
+        )
         if (!res.ok) {
           // NT-011: Parse JSON safely and extract .error field for structured error messages
           const resBody = await res.json().catch(() => null)

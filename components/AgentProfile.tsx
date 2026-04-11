@@ -27,6 +27,8 @@ import TitleBadge from '@/components/governance/TitleBadge'
 import TitleAssignmentDialog from '@/components/governance/TitleAssignmentDialog'
 import TeamMembershipSection from '@/components/governance/TeamMembershipSection'
 import GroupSubscriptionSection from '@/components/governance/GroupSubscriptionSection'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface AgentProfileProps {
   isOpen: boolean
@@ -67,6 +69,7 @@ function PluginToggle({ agentId, pluginKey, enabled, onToggled }: { agentId: str
 }
 
 export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, onStartSession, onDeleteAgent, scrollToDangerZone, hostUrl, embedded, renderMode = 'full', renderAfterHeader, renderAfterGovernanceTitle, onDataChanged }: AgentProfileProps) {
+  const { requestSudoToken } = useSudo()
   // Base URL for API calls - empty for local, full URL for remote hosts
   const baseUrl = hostUrl || ''
   // Stable ref for onDataChanged to avoid recreating autoSave on every parent re-render
@@ -387,7 +390,11 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
     if (!isSafeToCommand || !sessionName) return
     // Use the Stop API (Ctrl+C + Ctrl+D) instead of sending /exit as text
     try {
-      await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(sessionName)}/stop`, { method: 'POST' })
+      await sudoFetch(
+        `${baseUrl}/api/sessions/${encodeURIComponent(sessionName)}/stop`,
+        { method: 'POST' },
+        (reason) => requestSudoToken(reason),
+      )
     } catch (error) {
       console.error('Failed to stop session:', error)
     }
@@ -426,14 +433,18 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
     if (!isSafeToCommand || restarting || !sessionName) return
     setRestarting(true)
     try {
-      const res = await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(sessionName)}/restart`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          program: agent?.program || 'claude',
-          programArgs: agent?.programArgs || '',
-        }),
-      })
+      const res = await sudoFetch(
+        `${baseUrl}/api/sessions/${encodeURIComponent(sessionName)}/restart`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            program: agent?.program || 'claude',
+            programArgs: agent?.programArgs || '',
+          }),
+        },
+        (reason) => requestSudoToken(reason),
+      )
       if (!res.ok) console.error('Restart failed:', await res.text())
     } catch (err) {
       console.error('Restart failed:', err)

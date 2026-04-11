@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Archive, RotateCcw, Trash2, RefreshCw, Download } from 'lucide-react'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface CemeteryEntry {
   filename: string
@@ -12,6 +14,7 @@ interface CemeteryEntry {
 }
 
 export default function CemeterySection() {
+  const { requestSudoToken } = useSudo()
   const [archives, setArchives] = useState<CemeteryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -74,11 +77,15 @@ export default function CemeterySection() {
     setActionInProgress(filename)
     setStatusMessage(null)
     try {
-      const res = await fetch('/api/agents/cemetery', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename }),
-      })
+      const res = await sudoFetch(
+        '/api/agents/cemetery',
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename }),
+        },
+        (reason) => requestSudoToken(reason),
+      )
       const data = await res.json()
       if (!res.ok) {
         setStatusMessage({ text: `Failed to purge: ${data.error || 'Unknown error'}`, type: 'error' })

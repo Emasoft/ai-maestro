@@ -8,6 +8,8 @@ import {
   ScrollText, Palette, Construction,
 } from 'lucide-react'
 import MarketplaceManager from './MarketplaceManager'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface PluginInfo {
   name: string
@@ -99,6 +101,7 @@ const ELEMENT_SECTIONS: { key: keyof ElementTotals; label: string; icon: typeof 
  * Three tabs: Plugins (toggle + info), Elements (active elements), Marketplaces (full management).
  */
 export default function GlobalElementsSection({ initialSubtab, initialMarketplace }: { initialSubtab?: 'plugins' | 'elements' | 'marketplaces' | null; initialMarketplace?: string | null } = {}) {
+  const { requestSudoToken } = useSudo()
   const [activeTab, setActiveTab] = useState<'plugins' | 'elements' | 'marketplaces'>(initialSubtab || 'elements')
   // Scroll position per tab — restore when switching back
   const scrollPositions = useRef<Record<string, number>>({ plugins: 0, elements: 0, marketplaces: 0 })
@@ -298,11 +301,15 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
     try {
       // Server handles undo snapshots — call the API directly, then refresh undo status
       const action = currentEnabled ? 'disable' : 'enable'
-      const res = await fetch('/api/settings/marketplaces', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, pluginKey: key }),
-      })
+      const res = await sudoFetch(
+        '/api/settings/marketplaces',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, pluginKey: key }),
+        },
+        (reason) => requestSudoToken(reason),
+      )
       if (res.ok) {
         // Optimistic UI update — API confirmed success
         setGroups(prev => prev.map(g => ({
@@ -812,11 +819,15 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
                             path: el.path,
                             onConfirm: async () => {
                               try {
-                                const res = await fetch('/api/settings/marketplaces', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ action: 'remove-element', elementName: el.name, elementType: el.type, elementPath: el.path }),
-                                })
+                                const res = await sudoFetch(
+                                  '/api/settings/marketplaces',
+                                  {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'remove-element', elementName: el.name, elementType: el.type, elementPath: el.path }),
+                                  },
+                                  (reason) => requestSudoToken(reason),
+                                )
                                 if (res.ok) fetchElements()
                               } catch (err) { console.error('Failed to remove element:', err) }
                               setConfirmRemove(null)

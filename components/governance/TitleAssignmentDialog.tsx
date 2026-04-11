@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { User, Shield, Crown, Megaphone, X, AlertTriangle, Compass, GitMerge, Bot } from 'lucide-react'
 import GovernancePasswordDialog from './GovernancePasswordDialog'
 import type { GovernanceState, GovernanceTitle } from '@/hooks/useGovernance'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface TitleAssignmentDialogProps {
   isOpen: boolean
@@ -104,6 +106,7 @@ export default function TitleAssignmentDialog({
   onTitleChanged,
   onRestartNeeded,
 }: TitleAssignmentDialogProps) {
+  const { requestSudoToken } = useSudo()
   const [selectedTitle, setSelectedTitle] = useState<GovernanceTitle>(currentTitle)
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([])
   const [phase, setPhase] = useState<Phase>('select')
@@ -241,21 +244,29 @@ export default function TitleAssignmentDialog({
     try {
       // Helper: clear a simple governanceTitle (architect/integrator) via PATCH
       const clearGovernanceTitle = async () => {
-        const res = await fetch(`/api/agents/${agentId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ governanceTitle: null }),
-        })
+        const res = await sudoFetch(
+          `/api/agents/${agentId}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ governanceTitle: null }),
+          },
+          (reason) => requestSudoToken(reason),
+        )
         if (!res.ok) throw new Error('Failed to clear governance title')
       }
 
       // Helper: set a simple governanceTitle (architect/integrator) via PATCH
       const setGovernanceTitle = async (t: GovernanceTitle) => {
-        const res = await fetch(`/api/agents/${agentId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ governanceTitle: t }),
-        })
+        const res = await sudoFetch(
+          `/api/agents/${agentId}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ governanceTitle: t }),
+          },
+          (reason) => requestSudoToken(reason),
+        )
         if (!res.ok) throw new Error(`Failed to assign ${t} title`)
       }
 
@@ -298,11 +309,15 @@ export default function TitleAssignmentDialog({
           }
         }
         // Set autonomous title explicitly via PATCH
-        const res = await fetch(`/api/agents/${agentId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ governanceTitle: null, role: 'autonomous' }),
-        })
+        const res = await sudoFetch(
+          `/api/agents/${agentId}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ governanceTitle: null, role: 'autonomous' }),
+          },
+          (reason) => requestSudoToken(reason),
+        )
         if (!res.ok) throw new Error('Failed to set autonomous title')
       } else if (selectedTitle === 'member') {
         // Demote to member: remove current governance role

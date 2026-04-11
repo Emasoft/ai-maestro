@@ -31,6 +31,8 @@ import FolderBrowser from './agent-profile/FolderBrowser'
 import RolePluginModal from './agent-profile/RolePluginModal'
 import { detectClientType, getClientCapabilities, isTabSupported, clientTypeLabel } from '@/lib/client-capabilities'
 import { TITLE_PLUGIN_MAP as ECOSYSTEM_TITLE_MAP, ROLE_PLUGIN_PROGRAMMER } from '@/lib/ecosystem-constants'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 // Lazy-load AgentProfile — only mounted when Overview tab is active
 const AgentProfile = dynamic(() => import('@/components/AgentProfile'), { ssr: false })
@@ -104,6 +106,7 @@ export default function AgentProfilePanel({
   scrollToDangerZone,
   hostUrl,
 }: AgentProfilePanelProps) {
+  const { requestSudoToken } = useSudo()
   const { config, error, loading, refetch: rawRefetch } = useAgentLocalConfig(agentId)
   const onAgentDataChangedRef = useRef(onAgentDataChanged)
   onAgentDataChangedRef.current = onAgentDataChanged
@@ -195,11 +198,15 @@ export default function AgentProfilePanel({
 
       // 1. Uninstall old plugin if one exists
       if (currentPlugin) {
-        await fetch('/api/agents/role-plugins/install', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pluginName: currentPlugin, agentDir }),
-        })
+        await sudoFetch(
+          '/api/agents/role-plugins/install',
+          {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pluginName: currentPlugin, agentDir }),
+          },
+          (reason) => requestSudoToken(reason),
+        )
       }
 
       // 2. Install new plugin (explicit scope: 'local' for defense-in-depth)

@@ -7,6 +7,8 @@ import type { GovernanceTitle } from '@/hooks/useGovernance'
 import { SectionLabel } from './shared'
 import RolePluginModal from './RolePluginModal'
 import { LOCAL_MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface CompatiblePlugin {
   name: string
@@ -31,6 +33,7 @@ export default function RoleTab({
   onBrowse?: (path: string) => void
   onRefresh?: () => void
 }) {
+  const { requestSudoToken } = useSudo()
   const [showModal, setShowModal] = useState(false)
   const [switching, setSwitching] = useState(false)
   const [compatiblePlugins, setCompatiblePlugins] = useState<CompatiblePlugin[]>([])
@@ -64,11 +67,15 @@ export default function RoleTab({
     try {
       // Uninstall current
       if (config.rolePlugin) {
-        const uninstallRes = await fetch('/api/agents/role-plugins/install', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pluginName: config.rolePlugin.name, agentDir: config.workingDirectory }),
-        })
+        const uninstallRes = await sudoFetch(
+          '/api/agents/role-plugins/install',
+          {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pluginName: config.rolePlugin.name, agentDir: config.workingDirectory }),
+          },
+          (reason) => requestSudoToken(reason),
+        )
         if (!uninstallRes.ok) return
       }
       // Install new (rolePluginSwap bypasses the ChangePlugin guard for N:1 role-plugin swaps)

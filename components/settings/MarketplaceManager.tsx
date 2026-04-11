@@ -9,6 +9,8 @@ import {
   Trash2, RefreshCw, Search, Download,
   AlertTriangle, Shield, Plus, Copy, X,
 } from 'lucide-react'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface PluginStatus {
   name: string
@@ -63,6 +65,7 @@ interface MarketplaceManagerProps {
 }
 
 export default function MarketplaceManager({ expandMarketplace, onNavigateComplete, onGoToPlugin }: MarketplaceManagerProps = {}) {
+  const { requestSudoToken } = useSudo()
   const [marketplaces, setMarketplaces] = useState<MarketplaceInfo[]>([])
   const [totals, setTotals] = useState<Totals>({ marketplaces: 0, withPlugins: 0, totalPlugins: 0, installedPlugins: 0, enabledPlugins: 0 })
   const [loading, setLoading] = useState(true)
@@ -127,11 +130,15 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
     setActionInProgress(key)
     setConfirmAction(null)
     try {
-      const res = await fetch('/api/settings/marketplaces', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, ...payload }),
-      })
+      const res = await sudoFetch(
+        '/api/settings/marketplaces',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, ...payload }),
+        },
+        (reason) => requestSudoToken(reason),
+      )
       if (res.ok) {
         // Invalidate version check cache for updated marketplace
         if (action === 'update-marketplace' && payload.marketplaceName) {
@@ -149,11 +156,15 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
   const handleToggle = async (key: string, currentEnabled: boolean) => {
     setActionInProgress(key)
     try {
-      const res = await fetch('/api/settings/marketplaces', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: currentEnabled ? 'disable' : 'enable', pluginKey: key }),
-      })
+      const res = await sudoFetch(
+        '/api/settings/marketplaces',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: currentEnabled ? 'disable' : 'enable', pluginKey: key }),
+        },
+        (reason) => requestSudoToken(reason),
+      )
       // Only proceed if server accepted the request
       if (!res.ok) {
         const errorText = await res.text()
@@ -178,11 +189,15 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
     if (!force && updateChecksRef.current[mktName]) return // already checked or checking (unless forced)
     setUpdateChecks(prev => ({ ...prev, [mktName]: { checking: true, remoteVersion: null, marketplaceOutdated: false, pluginUpdates: {}, pluginMetadata: {} } }))
     try {
-      const res = await fetch('/api/settings/marketplaces', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'check-updates', marketplaceName: mktName, force }),
-      })
+      const res = await sudoFetch(
+        '/api/settings/marketplaces',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'check-updates', marketplaceName: mktName, force }),
+        },
+        (reason) => requestSudoToken(reason),
+      )
       if (res.ok) {
         const data = await res.json()
         // Key by plugin.key (not plugin.name) to avoid collisions when two plugins share
@@ -250,11 +265,15 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
     if (!addUrl.trim()) return
     setAddingMkt(true)
     try {
-      const res = await fetch('/api/settings/marketplaces', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'add-marketplace', url: addUrl.trim() }),
-      })
+      const res = await sudoFetch(
+        '/api/settings/marketplaces',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'add-marketplace', url: addUrl.trim() }),
+        },
+        (reason) => requestSudoToken(reason),
+      )
       if (res.ok) {
         setAddUrl('')
         await fetchMarketplaces()
@@ -596,11 +615,15 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
                                     e.stopPropagation()
                                     setActionInProgress(plugin.key + ':sec')
                                     try {
-                                      const res = await fetch('/api/settings/marketplaces', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ action: 'security-check', pluginKey: plugin.key }),
-                                      })
+                                      const res = await sudoFetch(
+                                        '/api/settings/marketplaces',
+                                        {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ action: 'security-check', pluginKey: plugin.key }),
+                                        },
+                                        (reason) => requestSudoToken(reason),
+                                      )
                                       // Check res.ok before parsing JSON — a non-2xx response may
                                       // return plain text, causing res.json() to throw silently.
                                       if (!res.ok) {

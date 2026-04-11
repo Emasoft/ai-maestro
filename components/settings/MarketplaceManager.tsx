@@ -234,7 +234,7 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
       console.error('[MarketplaceManager] checkUpdates failed:', err)
       setUpdateChecks(prev => ({ ...prev, [mktName]: { checking: false, remoteVersion: null, marketplaceOutdated: false, pluginUpdates: {}, pluginMetadata: {} } }))
     }
-  }, []) // stable: reads updateChecks via ref; all state updates use functional form
+  }, [requestSudoToken]) // requestSudoToken from useSudo is stable; reads updateChecks via ref; all state updates use functional form
 
   // Auto-expand marketplace when navigated from another tab.
   // Placed after checkUpdates declaration so the stable memoized reference is available.

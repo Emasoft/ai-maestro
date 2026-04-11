@@ -15,8 +15,10 @@ interface TeamCardProps {
   onDelete: (team: Team) => void
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export default function TeamCard({ team, agents, onStartMeeting: _onStartMeeting, onEdit, onDelete }: TeamCardProps) {
+  // _onStartMeeting is intentionally ignored — team meetings were removed in
+  // favor of AMP + kanban, but the prop is kept for call-site compatibility.
+  void _onStartMeeting
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const memberAgents = team.agentIds

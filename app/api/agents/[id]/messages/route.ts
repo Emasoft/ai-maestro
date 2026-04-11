@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listMessages, sendMessage } from '@/services/agents-messaging-service'
 import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 /**
  * GET /api/agents/[id]/messages
@@ -44,6 +45,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // AMP send-message mutation — authenticate before any dispatch.
+  // Agents use their AID bearer token; the web UI uses the session cookie.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
     if (!isValidUuid(id)) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTracking, initializeTracking } from '@/services/agents-memory-service'
 import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 /**
  * GET /api/agents/:id/tracking
@@ -35,6 +36,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id: agentId } = await params
     if (!isValidUuid(agentId)) {

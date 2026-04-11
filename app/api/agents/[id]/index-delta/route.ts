@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runDeltaIndex } from '@/services/agents-memory-service'
 import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 /**
  * POST /api/agents/:id/index-delta
@@ -14,6 +15,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id: agentId } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { notifyGroupSubscribers } from '@/services/groups-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 // POST /api/groups/[id]/notify - Notify all group subscribers
 // Body: { message: string, priority?: string }
@@ -7,6 +8,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   const { id } = await params
 
   // Validate group ID format (alphanumeric, hyphens, underscores only)

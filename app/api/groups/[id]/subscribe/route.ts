@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { subscribeAgent } from '@/services/groups-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 // POST /api/groups/[id]/subscribe - Subscribe an agent to a group
 // Body: { agentId: string }
-// No governance/authentication checks -- groups are open
+// Authentication required (governance-free per R20).
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id: groupId } = await params
 

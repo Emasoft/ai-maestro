@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { unsubscribeAgent } from '@/services/groups-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 // POST /api/groups/[id]/unsubscribe - Unsubscribe an agent from a group
 // Body: { agentId: string }
-// No governance/authentication checks -- groups are open
+// Authentication required (governance-free per R20).
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   const { id: groupId } = await params
 
   let body

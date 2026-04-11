@@ -6,6 +6,7 @@ import {
   unlinkOrDeleteAgentSession,
 } from '@/services/agents-core-service'
 import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 /**
  * POST /api/agents/[id]/session
@@ -15,6 +16,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
     if (!isValidUuid(id)) {
@@ -44,6 +48,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
     if (!isValidUuid(id)) {
@@ -118,6 +125,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
     if (!isValidUuid(id)) {

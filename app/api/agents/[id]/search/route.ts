@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { searchConversations, ingestConversations } from '@/services/agents-memory-service'
 import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 // Allowed role values for runtime validation
 const VALID_ROLES: readonly string[] = ['user', 'assistant', 'system']
@@ -97,6 +98,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id: agentId } = await params
     if (!isValidUuid(agentId)) {

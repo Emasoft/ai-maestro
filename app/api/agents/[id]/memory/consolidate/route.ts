@@ -5,6 +5,7 @@ import {
   manageConsolidation,
 } from '@/services/agents-memory-service'
 import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 // NT-001 fix: Reusable helper to parse integer query params with NaN safety
 function parseIntParam(searchParams: URLSearchParams, key: string): number | undefined {
@@ -52,6 +53,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id: agentId } = await params
     if (!isValidUuid(agentId)) {
@@ -91,6 +95,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id: agentId } = await params
     if (!isValidUuid(agentId)) {

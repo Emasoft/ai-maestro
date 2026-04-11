@@ -23,7 +23,7 @@ import { createHash } from 'crypto'
 import { promises as fs } from 'fs'
 import path from 'path'
 import os from 'os'
-import { statePath } from '../lib/ecosystem-constants.mjs'
+import { statePath } from '../lib/ecosystem-state-paths.mjs'
 
 const HOME = os.homedir()
 const AMP_DIR = path.join(HOME, '.agent-messaging')

@@ -26,7 +26,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const { statePath } = require('../lib/ecosystem-constants.cjs');
+const { statePath } = require('../lib/ecosystem-state-paths.cjs');
 
 // Read stdin as JSON
 async function readStdin() {

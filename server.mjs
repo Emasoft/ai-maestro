@@ -11,7 +11,7 @@ import os from 'os'
 import fs from 'fs'
 import path from 'path'
 import { getHostById, isSelf } from './lib/hosts-config-server.mjs'
-import { statePath } from './lib/ecosystem-constants.mjs'
+import { statePath } from './lib/ecosystem-state-paths.mjs'
 import { hostHints } from './lib/host-hints-server.mjs'
 import { getOrCreateBuffer } from './lib/cerebellum/session-bridge.mjs'
 import {

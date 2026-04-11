@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyPassword } from '@/lib/governance'
 import { createNewTeam } from '@/services/teams-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +29,9 @@ interface CreateWithProjectRequest {
 
 // POST /api/teams/create-with-project
 export async function POST(request: NextRequest) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const body: CreateWithProjectRequest = await request.json()
 

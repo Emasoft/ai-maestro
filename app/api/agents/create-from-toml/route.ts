@@ -9,10 +9,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createPersona } from '@/services/role-plugin-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
+  const authErr = enforceAuth(req)
+  if (authErr) return authErr
+
   try {
     let body: { tomlContent?: string; personaName?: string; agentDescription?: string }
     try {

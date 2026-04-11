@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { deleteSession } from '@/services/sessions-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,9 +19,12 @@ function logDeprecation() {
 }
 
 export async function DELETE(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   logDeprecation()
   try {
     const { id: sessionName } = params

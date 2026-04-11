@@ -6,6 +6,7 @@ import { isChiefOfStaffAnywhere } from '@/lib/governance'
 // NT-007: Use recordAttempt (the canonical name) instead of deprecated recordFailure alias
 import { checkRateLimit, recordAttempt, resetRateLimit } from '@/lib/rate-limit'
 import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 // NT-008 fix: Force dynamic rendering for consistency with other POST-only routes
 export const dynamic = 'force-dynamic'
@@ -14,6 +15,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Authentication first — the handler then re-verifies the governance
+  // password for the COS assignment, which is its own layer.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
     if (!isValidUuid(id)) {

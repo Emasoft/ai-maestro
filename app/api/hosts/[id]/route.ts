@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { updateExistingHost, deleteExistingHost } from '@/services/hosts-service'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
     if (!HOSTNAME_RE.test(id)) {
@@ -42,9 +46,12 @@ export async function PUT(
  * Delete a host from the configuration.
  */
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
     if (!HOSTNAME_RE.test(id)) {

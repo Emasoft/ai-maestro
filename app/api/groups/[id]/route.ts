@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGroupById, updateGroupById, deleteGroupById } from '@/services/groups-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 // GET /api/groups/[id] - Get a single group
 export async function GET(
@@ -24,11 +25,15 @@ export async function GET(
 
 // PUT /api/groups/[id] - Update a group
 // Accepts { name?, description?, subscriberIds? }
-// No governance/authentication checks -- groups are open
+// Authentication required (middleware + enforceAuth). Group updates are
+// open to any authenticated caller — governance-free per R20.
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
 
@@ -67,11 +72,14 @@ export async function PUT(
 }
 
 // DELETE /api/groups/[id] - Delete a group
-// No governance/authentication checks -- groups are open
+// Authentication required — governance-free per R20.
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
     const result = await deleteGroupById(id)

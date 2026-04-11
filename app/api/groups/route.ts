@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listAllGroups, createNewGroup } from '@/services/groups-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 // Force dynamic -- reads runtime filesystem state (group registry)
 export const dynamic = 'force-dynamic'
@@ -22,8 +23,12 @@ export async function GET() {
 }
 
 // POST /api/groups - Create a new group
-// No governance/authentication checks -- groups are open
+// Authentication required (middleware + enforceAuth). Group creation is
+// open to any authenticated caller — governance-free per R20.
 export async function POST(request: NextRequest) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     let body
     try {

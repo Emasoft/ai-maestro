@@ -6,12 +6,16 @@
  * Thin wrapper — business logic in services/agents-docker-service.ts
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createDockerAgent } from '@/services/agents-docker-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     // CC-P2-008: Guard against malformed JSON body
     let body

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listHosts, addNewHost } from '@/services/hosts-service'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 // Force this route to be dynamic (not statically generated at build time)
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,11 @@ export async function GET() {
  * Add a new host to the configuration with bidirectional sync.
  */
 export async function POST(request: NextRequest) {
+  // Host registration is system-owner only — mesh topology must not
+  // be modifiable by agents.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   const syncEnabled = request.nextUrl.searchParams.get('sync') !== 'false'
 
   let host

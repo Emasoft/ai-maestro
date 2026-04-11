@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { setManagerRole } from '@/services/governance-service'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 // NT-023 (P8): Ensure Next.js does not cache this route
 export const dynamic = 'force-dynamic'
@@ -8,6 +9,11 @@ export const dynamic = 'force-dynamic'
 // lib/governance + lib/rate-limit logic. The service handles password verification,
 // rate limiting, agent lookup, role-plugin auto-assignment, and manager set/remove.
 export async function POST(request: NextRequest) {
+  // Manager assignment is a system-owner-only operation — agents with
+  // AID tokens cannot mint themselves into the MANAGER role.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     let body
     try { body = await request.json() } catch {

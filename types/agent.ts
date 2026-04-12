@@ -214,7 +214,7 @@ export interface Agent {
 
   // Ownership, Role & Team
   owner?: string                // Owner name or email
-  role?: AgentRole              // Messaging role: 'manager' | 'chief-of-staff' | 'architect' | 'orchestrator' | 'integrator' | 'member' | 'autonomous' (default: 'autonomous')
+  role?: AgentRole              // Messaging role: 'manager' | 'chief-of-staff' | 'architect' | 'orchestrator' | 'integrator' | 'member' | 'autonomous' | 'maintainer' (default: 'autonomous')
   governanceTitle?: AgentRole | null   // Explicit governance title (null = cleared/unset)
   team?: string                 // Team name (e.g., "Backend Team", "23blocks")
 

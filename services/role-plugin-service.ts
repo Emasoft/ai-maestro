@@ -75,7 +75,7 @@ export const GITHUB_MARKETPLACE_NAME = GITHUB_MARKETPLACE_NAME_IMPORT
 const GITHUB_MARKETPLACE_DIR = join(HOME, '.claude', 'plugins', 'marketplaces', GITHUB_MARKETPLACE_NAME)
 const GITHUB_MARKETPLACE_MANIFEST = join(GITHUB_MARKETPLACE_DIR, '.claude-plugin', 'marketplace.json')
 
-// The names of the 6 predefined role plugins. Re-exported from ecosystem-constants.
+// The names of the 7 predefined role plugins. Re-exported from ecosystem-constants.
 // These are NOT installed at user scope — they are installed on-demand with --scope local.
 export const DEFAULT_ROLE_PLUGIN_NAMES: string[] = [...PREDEFINED_ROLE_PLUGIN_NAMES]
 
@@ -727,6 +727,7 @@ export async function listRolePlugins(): Promise<RolePlugin[]> {
     'ai-maestro-orchestrator-agent': 'ORCHESTRATOR — task distribution, kanban, coordination',
     'ai-maestro-integrator-agent': 'INTEGRATOR — quality gates, PR review, merging, releases',
     'ai-maestro-programmer-agent': 'PROGRAMMER — general-purpose implementer, writes code',
+    'ai-maestro-maintainer-agent': 'MAINTAINER — single-repo maintenance, issue triage, webhook-driven bugfixes',
   }
   for (const [name, info] of Object.entries(PREDEFINED_ROLE_PLUGINS)) {
     pluginsByName.set(name, {
@@ -739,7 +740,7 @@ export async function listRolePlugins(): Promise<RolePlugin[]> {
       source: 'marketplace',
       marketplace: info.marketplace,
       compatibleTitles: PREDEFINED_COMPATIBLE_TITLES[name],
-      compatibleClients: ['claude-code'], // All 6 predefined role-plugins are Claude Code exclusive
+      compatibleClients: ['claude-code'], // All 7 predefined role-plugins are Claude Code exclusive
     })
   }
 
@@ -855,7 +856,7 @@ export async function deleteRolePlugin(pluginName: string): Promise<void> {
 // ── Unified persona creation ─────────────────────────────
 
 /**
- * The 6 predefined AI Maestro role plugins.
+ * The 7 predefined AI Maestro role plugins.
  * Built from ecosystem-constants (ROLE_PLUGIN_MAIN_AGENTS + GITHUB_MARKETPLACE_NAME).
  * These are available in the marketplace but are NOT auto-installed.
  * They are installed ON-DEMAND when a user selects one from the dropdown via installPluginLocally().

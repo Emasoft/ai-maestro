@@ -153,6 +153,7 @@ export async function GET(req: NextRequest) {
                orchestrator: 'ai-maestro-orchestrator-agent',
                architect: 'ai-maestro-architect-agent',
                integrator: 'ai-maestro-integrator-agent',
+               maintainer: 'ai-maestro-maintainer-agent',
             } as Record<string, string>)[agent.governanceTitle] || ''
           ]
         : null

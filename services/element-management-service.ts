@@ -97,7 +97,7 @@ export const GITHUB_MARKETPLACE_NAME = GITHUB_MARKETPLACE_NAME_IMPORT
 
 // ── Predefined role plugins (from ecosystem-constants) ────────
 
-/** The 6 predefined AI Maestro role plugins keyed by name */
+/** The 7 predefined AI Maestro role plugins keyed by name */
 export const PREDEFINED_ROLE_PLUGINS: Record<string, { marketplace: string; mainAgent: string }> =
   Object.fromEntries(
     PREDEFINED_ROLE_PLUGIN_NAMES.map(name => [

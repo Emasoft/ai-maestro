@@ -48,8 +48,8 @@ Each **agent** has four distinct attributes. Understanding their differences is 
 |-----------|--------|---------|----------|
 | **AGENT-ID** | `<group>-<type>-<name>` kebab | Unique identifier across the system | `tooling-developer-bot1`, `backend-tester-tommy`, `graphics-2dartist-iconmaker`, `core-developer-reactui5` |
 | **PERSONA** | Capitalized kebab | The agent's personal name, tied to a specific Claude Code tmux session | `Sammy`, `Peter-Parker`, `Lucy-In-The-Sky`, `Jack-The-Bot`, `Frank-Potter` |
-| **TITLE** | ALL-CAPS kebab | Governance level — defines the scope of authority | `MANAGER`, `CHIEF-OF-STAFF`, `ARCHITECT`, `ORCHESTRATOR`, `INTEGRATOR`, `MEMBER` |
-| **ROLE** | lowercase kebab | The job specialization — associated with a Role Plugin containing all the skills needed | `chief-of-staff`, `architect-agent`, `orchestrator-agent`, `programmer-agent`, `assistant-manager-agent` |
+| **TITLE** | ALL-CAPS kebab | Governance level — defines the scope of authority | `MANAGER`, `CHIEF-OF-STAFF`, `ARCHITECT`, `ORCHESTRATOR`, `INTEGRATOR`, `MEMBER`, `MAINTAINER` |
+| **ROLE** | lowercase kebab | The job specialization — associated with a Role Plugin containing all the skills needed | `chief-of-staff`, `architect-agent`, `orchestrator-agent`, `programmer-agent`, `assistant-manager-agent`, `maintainer-agent` |
 
 *(Examples above show display-format capitalization; internally stored as lowercase)*
 
@@ -63,7 +63,7 @@ The display name of the agent instance. Associated with a specific Claude Code t
 
 ### TITLE
 
-The governance title determines what an agent is authorized to do within the AI Maestro governance system. There are exactly seven titles:
+The governance title determines what an agent is authorized to do within the AI Maestro governance system. There are exactly eight titles:
 
 - **AUTONOMOUS** — Default title. Agent operates independently, not assigned to any team.
 - **MANAGER** — Global singleton. Manages agents and approves GovernanceRequests. Cannot create/delete teams or assign COS (those are USER-only operations requiring governance password). Only one per host.
@@ -72,6 +72,7 @@ The governance title determines what an agent is authorized to do within the AI 
 - **ORCHESTRATOR** — Primary kanban manager for a team. Coordinates task assignment and pipeline flow.
 - **INTEGRATOR** — System integrator. Responsible for cross-service wiring and deployment coordination.
 - **MEMBER** — Standard team member with no special governance privileges.
+- **MAINTAINER** — Host-level repo maintainer (not in any team). Bound to a single `owner/repo` GitHub repository. Polls issues every 5 minutes via `gh issue list`, auto-triages bugs, and only accepts feature requests from the locally-authenticated `gh` user. See R19 in [GOVERNANCE-RULES.md](./docs/GOVERNANCE-RULES.md).
 
 Changing a title requires the governance password.
 
@@ -85,6 +86,7 @@ Role Plugins are installed with `--scope local` in the agent's project folder. S
 
 - `assistant-manager-agent` — requires `MANAGER` title
 - `chief-of-staff` — requires `CHIEF-OF-STAFF` title
+- `maintainer-agent` — requires `MAINTAINER` title
 - All other Role Plugins — available to any title (typically `MEMBER`)
 
 An agent can change its Role Plugin at any time through the Profile panel — the old plugin is uninstalled, the new one installed, and Claude Code is gracefully restarted in the same tmux session (preserving chat history).
@@ -234,7 +236,7 @@ A visual, browser-based tool for composing custom Claude Code plugins without to
 AI Maestro uses three categories of plugins:
 
 - **3 user-scope plugins** (installed globally per user): `ai-maestro`, `agent-messaging`, `agent-identity` — from the `Emasoft/ai-maestro-plugins` marketplace
-- **6 local-scope role-plugins** (installed on-demand per agent): `architect-agent`, `orchestrator-agent`, `programmer-agent`, `chief-of-staff`, `assistant-manager-agent`, `tester-agent` — from the local roles marketplace
+- **7 local-scope role-plugins** (installed on-demand per agent): `architect-agent`, `orchestrator-agent`, `integrator-agent`, `programmer-agent`, `chief-of-staff`, `assistant-manager-agent`, `maintainer-agent` — from the local roles marketplace
 - **External dependencies** from the `Emasoft/emasoft-plugins` marketplace: `claude-plugins-validation`, `perfect-skill-suggester`, `code-auditor-agent`, `llm-externalizer-plugin`
 
 ---

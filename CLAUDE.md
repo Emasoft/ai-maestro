@@ -847,6 +847,7 @@ Role-plugins define an agent's job specialization. They contain a `.agent.toml` 
 | `ai-maestro-orchestrator-agent` | `amoa-` | ORCHESTRATOR |
 | `ai-maestro-integrator-agent` | `amia-` | INTEGRATOR |
 | `ai-maestro-architect-agent` | `amaa-` | ARCHITECT |
+| `ai-maestro-maintainer-agent` | `amma-` | MAINTAINER |
 
 **Fourfold Identity Rule:** The canonical identity of a role-plugin is the `name` field in `.claude-plugin/plugin.json` (what Claude Code displays). All 4 must match:
 
@@ -979,7 +980,7 @@ uv run python scripts/publish.py --patch
 claude plugin update <plugin-name>@ai-maestro-plugins
 ```
 
-**The 6 role-plugin repos (each independent, NOT forked):**
+**The 7 role-plugin repos (each independent, NOT forked):**
 
 | Plugin | Repo |
 |--------|------|
@@ -989,6 +990,7 @@ claude plugin update <plugin-name>@ai-maestro-plugins
 | `ai-maestro-orchestrator-agent` | `Emasoft/ai-maestro-orchestrator-agent` |
 | `ai-maestro-integrator-agent` | `Emasoft/ai-maestro-integrator-agent` |
 | `ai-maestro-programmer-agent` | `Emasoft/ai-maestro-programmer-agent` |
+| `ai-maestro-maintainer-agent` | `Emasoft/ai-maestro-maintainer-agent` |
 
 **What NOT to do:**
 - Do NOT edit `~/.claude/plugins/cache/<marketplace>/<plugin>/` — changes are lost on update
@@ -1075,11 +1077,11 @@ The main AI Maestro Claude Code plugin (v2.2.0+). Contains **only** skills, comm
 
 ### 3. `Emasoft/ai-maestro-plugins` — Marketplace (fork of 23blocks-OS)
 
-Fork of `23blocks-OS/ai-maestro-plugins`. Lists the 6 predefined role-plugins in `.claude-plugin/marketplace.json`. The fork is 13 commits behind upstream (as of 2026-03-31) but this is a **non-issue** — the upstream additions (AID v0.2.0, AMP v0.1.3 fixes, case normalization) are already present in the main repo with equivalent or improved versions.
+Fork of `23blocks-OS/ai-maestro-plugins`. Lists the 7 predefined role-plugins in `.claude-plugin/marketplace.json` (the 7th, `ai-maestro-maintainer-agent`, was added on 2026-04-11 after the fork diverged from upstream). The fork is 13 commits behind upstream (as of 2026-03-31) but this is a **non-issue** — the upstream additions (AID v0.2.0, AMP v0.1.3 fixes, case normalization) are already present in the main repo with equivalent or improved versions.
 
 **Do NOT merge upstream into this fork** — the main repo is the canonical source for AMP/AID scripts.
 
-### 4. Role-Plugin Repos (6 repos, NOT forks)
+### 4. Role-Plugin Repos (7 repos, NOT forks)
 
 Each is an independent Emasoft-owned repo (not forked from 23blocks-OS):
 
@@ -1091,6 +1093,7 @@ Each is an independent Emasoft-owned repo (not forked from 23blocks-OS):
 | `Emasoft/ai-maestro-integrator-agent` | `["INTEGRATOR"]` | 2026-03-29 |
 | `Emasoft/ai-maestro-orchestrator-agent` | `["ORCHESTRATOR"]` | 2026-03-29 |
 | `Emasoft/ai-maestro-programmer-agent` | `["MEMBER"]` | 2026-03-29 |
+| `Emasoft/ai-maestro-maintainer-agent` | `["MAINTAINER"]` | 2026-04-11 |
 
 All have `compatible-titles` and `compatible-clients` fields in their `.agent.toml`. No upstream sync needed.
 

@@ -159,16 +159,17 @@ export default function AgentProfilePanel({
   }, [agentId])
 
   // Toggle autoContinue via PATCH
+  // SCEN-016 BUG-001: PATCH /api/agents/[id] is a strict route → sudoFetch.
   const toggleAutoContinue = useCallback(async () => {
     if (!agentId || autoContinueLoading) return
     setAutoContinueLoading(true)
     try {
       const newValue = !autoContinue
-      const res = await fetch(`/api/agents/${agentId}`, {
+      const res = await sudoFetch(`/api/agents/${agentId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ preferences: { autoContinue: newValue } })
-      })
+      }, requestSudoToken)
       if (res.ok) {
         setAutoContinue(newValue)
         onAgentDataChangedRef.current?.()
@@ -178,7 +179,7 @@ export default function AgentProfilePanel({
     } finally {
       setAutoContinueLoading(false)
     }
-  }, [agentId, autoContinue, autoContinueLoading])
+  }, [agentId, autoContinue, autoContinueLoading, requestSudoToken])
 
   // Switch role plugin: uninstall old → install new → restart agent session
   const handleSwitchPlugin = useCallback(async (newPluginName: string) => {
@@ -225,11 +226,12 @@ export default function AgentProfilePanel({
       const sessionName = sessionStatus?.tmuxSessionName
       const effectiveAgentName = agentName || agentId
       const newArgs = `--agent ${mainAgentName} --name ${effectiveAgentName}`
-      const registryRes = await fetch(`/api/agents/${encodeURIComponent(agentId)}`, {
+      // SCEN-016 BUG-001: PATCH /api/agents/[id] is a strict route → sudoFetch.
+      const registryRes = await sudoFetch(`/api/agents/${encodeURIComponent(agentId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ programArgs: newArgs }),
-      })
+      }, requestSudoToken)
       if (!registryRes.ok) {
         const err = await registryRes.json().catch(() => ({ error: 'Registry update failed' }))
         throw new Error(err.error || 'Failed to update agent registry')
@@ -247,7 +249,7 @@ export default function AgentProfilePanel({
     } finally {
       setSwitchingPlugin(false)
     }
-  }, [config, agentId, agentName, switchingPlugin, sessionStatus, queueRestart, agentInfo, refetch])
+  }, [config, agentId, agentName, switchingPlugin, sessionStatus, queueRestart, agentInfo, refetch, requestSudoToken])
 
   // Callback for child components (RoleTab, PluginsTab) to enqueue restart after element changes
   const handleElementChanged = useCallback(async () => {

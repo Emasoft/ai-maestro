@@ -23,6 +23,8 @@ import { useGovernance } from '@/hooks/useGovernance'
 import TitleBadge from '@/components/governance/TitleBadge'
 import TitleAssignmentDialog from '@/components/governance/TitleAssignmentDialog'
 import TeamMembershipSection from '@/components/governance/TeamMembershipSection'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface AgentProfileTabProps {
   agent: Agent
@@ -31,6 +33,7 @@ interface AgentProfileTabProps {
 }
 
 export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose }: AgentProfileTabProps) {
+  const { requestSudoToken } = useSudo()
   const baseUrl = hostUrl || ''
   const [agent, setAgent] = useState<Agent>(initialAgent)
   const [saving, setSaving] = useState(false)
@@ -157,7 +160,9 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
 
     setSaving(true)
     try {
-      const response = await fetch(`${baseUrl}/api/agents/${agent.id}`, {
+      // SCEN-016 BUG-001: strict-route PATCH must route through sudoFetch so a
+      // 403 sudo_required response triggers the governance password modal.
+      const response = await sudoFetch(`${baseUrl}/api/agents/${agent.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -166,6 +171,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
           avatar: agent.avatar,
           owner: agent.owner,
           team: agent.team,
+          program: agent.program,
           model: agent.model,
           taskDescription: agent.taskDescription,
           programArgs: agent.programArgs,
@@ -173,7 +179,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
           documentation: agent.documentation,
           metadata: agent.metadata
         })
-      })
+      }, requestSudoToken)
 
       if (response.ok) {
         setHasChanges(false)

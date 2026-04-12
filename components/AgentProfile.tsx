@@ -132,6 +132,8 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
   const dangerZoneRef = useRef<HTMLElement>(null)
 
   // Debounced auto-save: PATCHes the specific field to the API after 300ms of inactivity per field
+  // SCEN-016 BUG-001: strict-route PATCHes (e.g. program change → ChangeClient R18 pipeline)
+  // must go through sudoFetch so the 403 sudo_required retry loop opens the password modal.
   const autoSave = useCallback((field: string, value: any) => {
     // Clear any existing timer for THIS field only — other fields' timers are unaffected
     if (debounceTimersRef.current[field]) {
@@ -139,11 +141,11 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
     }
     debounceTimersRef.current[field] = setTimeout(async () => {
       try {
-        const response = await fetch(`${baseUrl}/api/agents/${agentId}`, {
+        const response = await sudoFetch(`${baseUrl}/api/agents/${agentId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ [field]: value })
-        })
+        }, requestSudoToken)
         if (response.ok) {
           // Brief green flash on the field label to confirm auto-save succeeded
           setFlashFields(prev => new Set(prev).add(field))
@@ -164,7 +166,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
       }
       delete debounceTimersRef.current[field]
     }, 300)
-  }, [baseUrl, agentId])
+  }, [baseUrl, agentId, requestSudoToken])
 
   // Cleanup debounce timers on unmount
   useEffect(() => {

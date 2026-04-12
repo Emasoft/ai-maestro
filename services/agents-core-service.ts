@@ -627,7 +627,19 @@ export function getAgentById(id: string): ServiceResult<{ agent: Agent }> {
 // PATCH /api/agents/[id] -- update agent
 // ---------------------------------------------------------------------------
 
-export async function updateAgentById(id: string, body: UpdateAgentRequest, requestingAgentId?: string | null, authContext?: AuthContext): Promise<ServiceResult<{ agent: Agent }>> {
+export async function updateAgentById(id: string, body: UpdateAgentRequest, requestingAgentId?: string | null, authContext?: AuthContext): Promise<ServiceResult<{ agent: Agent; restartNeeded?: boolean; warnings?: string[] }>> {
+  // Side-channel data collected from Change* pipelines that needs to reach
+  // the PATCH response body (e.g. ChangeClient's restartNeeded flag, which
+  // the UI useRestartQueue hook reads to auto-enqueue the agent for restart).
+  //
+  // BUG-003 fix: before this commit, ChangeClient's failures AND its
+  // restartNeeded return value were both silently swallowed by a
+  // try/catch { console.warn } block — the PATCH returned 200 OK even when
+  // ChangeClient aborted mid-flight, causing the UI to show a green check
+  // for a client change that never happened. Now ChangeClient failures are
+  // promoted to returned errors, and its restartNeeded flag is propagated
+  // into the PATCH response body.
+  const sideChannel: { restartNeeded?: boolean; warnings?: string[] } = {}
   try {
     // Check if agent exists and is not soft-deleted
     const existing = getAgent(id, true) // include deleted to distinguish 404 vs 410
@@ -765,15 +777,45 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
     }
 
     // ChangeClient — AI client (program) change
+    //
+    // BUG-003 fix: ChangeClient failures MUST NOT be silently swallowed.
+    // A client change is a destructive, non-atomic operation (R18: uninstalls
+    // every plugin in the old client's format and re-emits them in the new
+    // client's format). If it fails or aborts, the agent's on-disk plugin
+    // state is in an indeterminate state and the UI MUST know about it.
+    //
+    // Status code choice:
+    //   409 Conflict  — Change* pipeline aborted (clientResult.success=false).
+    //                   R18 aborts are conflicts between the desired state
+    //                   and the current state of the plugin ecosystem
+    //                   (e.g. "cannot go X→Claude lossy", "no native source
+    //                   found for target client"). They are NOT 400 bad
+    //                   requests — the input is valid, the environment
+    //                   refuses to fulfill it.
+    //   500 Internal  — ChangeClient threw an unexpected exception (bug).
+    //
+    // Side-channel propagation: the restartNeeded flag from ChangeClient
+    // is stored in sideChannel so the PATCH response body can forward it
+    // to the client-side useRestartQueue hook.
     if (changeableFields.program && changeableFields.program !== (existing.program || 'claude')) {
       try {
         const { ChangeClient } = await import('@/services/element-management-service')
         const ac5 = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }
         const clientResult = await ChangeClient(id, changeableFields.program, ac5)
-        if (!clientResult.success) console.warn('[agents] ChangeClient failed:', clientResult.error)
+        if (!clientResult.success) {
+          return { error: clientResult.error || 'Client change failed', status: 409 }
+        }
+        sideChannel.restartNeeded = clientResult.restartNeeded
+        // ChangeResult does not yet carry a warnings array (P0.2 follow-up);
+        // we emit an empty array so the response shape is stable and any
+        // client that reads `warnings` never sees undefined.
+        sideChannel.warnings = []
         anyChangeExecuted = true
       } catch (err) {
-        console.warn('[agents] Failed ChangeClient on PATCH:', err instanceof Error ? err.message : err)
+        return {
+          error: err instanceof Error ? err.message : 'Client change crashed',
+          status: 500,
+        }
       }
     }
 
@@ -790,7 +832,16 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
       }
 
       const freshAgent = getAgent(id)
-      if (freshAgent) return { data: { agent: freshAgent }, status: 200 }
+      if (freshAgent) {
+        return {
+          data: {
+            agent: freshAgent,
+            ...(sideChannel.restartNeeded !== undefined && { restartNeeded: sideChannel.restartNeeded }),
+            ...(sideChannel.warnings !== undefined && { warnings: sideChannel.warnings }),
+          },
+          status: 200,
+        }
+      }
     }
 
     // Also broadcast for simple field updates (tags, label, etc.)
@@ -800,7 +851,14 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
       broadcastAgentUpdate(id, simpleChangedFields)
     }
 
-    return { data: { agent }, status: 200 }
+    return {
+      data: {
+        agent,
+        ...(sideChannel.restartNeeded !== undefined && { restartNeeded: sideChannel.restartNeeded }),
+        ...(sideChannel.warnings !== undefined && { warnings: sideChannel.warnings }),
+      },
+      status: 200,
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update agent'
     console.error('Failed to update agent:', error)

@@ -103,6 +103,18 @@ export async function PATCH(
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
+    // BUG-003 fix: flatten side-channel data (restartNeeded, warnings) from
+    // Change* pipelines into the JSON response body so the client-side
+    // useRestartQueue hook can react to a successful client change and the
+    // UI can surface non-fatal warnings. Existing `agent` shape is preserved
+    // — this only ADDS optional top-level fields.
+    //
+    // Shape contract:
+    //   { agent: Agent, restartNeeded?: boolean, warnings?: string[] }
+    //
+    // `restartNeeded` / `warnings` are only present when a Change* pipeline
+    // actually emitted them (currently only ChangeClient). For simple-field
+    // PATCHes (name, model, tags, ...) the response body is just `{ agent }`.
     return NextResponse.json(result.data)
   } catch (error) {
     console.error('[Agents PATCH] Error:', error)

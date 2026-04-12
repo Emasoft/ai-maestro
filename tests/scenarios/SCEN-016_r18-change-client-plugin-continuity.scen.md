@@ -223,12 +223,12 @@ author: AI Maestro Team
 - **Modifies:** nothing
 - **Verify:** Restart indicator present. Screenshot: SCEN-016/S022-restart-needed.png
 
-#### S023: R18.4 Abort-before-uninstall — negative test
-- **Action:** Reset the agent's client back to Claude via a second PATCH, verify it succeeds. Then temporarily rename/hide the source ai-maestro-plugin directory (e.g. move it aside with `mv`). Attempt to change client to Gemini. The ChangeClient call **MUST** fail with an R18 error message AND the agent's program **MUST** still be "claude" AND the Claude ai-maestro-plugin **MUST** still be installed in the agent dir.
-- **Goal:** Prove that the pipeline aborts BEFORE any uninstall when conversion is impossible
-- **Creates:** nothing permanent (directory restored at end of step)
-- **Modifies:** briefly moves source plugin directory (restored before step ends)
-- **Verify:** PATCH returns error with "R18 violation" in message. Registry still shows `program: claude`. Agent `.claude/settings.local.json` still has ai-maestro-plugin. Screenshot: SCEN-016/S023-abort-verified.png
+#### S023: R18.4 Abort-before-uninstall — DEFERRED to unit test
+- **Action:** This negative test (verifying that ChangeClient aborts BEFORE any uninstall when the plugin source is missing) was originally written to `mv` the source plugin directory aside. That violates Rule 6 STICK-TO-UI because the dashboard has no "hide a plugin from disk" button. The correct home for this assertion is a unit test of services/element-management-service.ts ChangeClient with scanAgentLocalConfig and resolveConversionSource mocked. Skip this step in the UI scenario.
+- **Goal:** nothing to verify in the UI — this path is not user-reachable.
+- **Creates:** nothing
+- **Modifies:** nothing
+- **Verify:** N/A (deferred). Track as TRDD: write tests/services/element-management-service.ChangeClient.test.ts with the R18.4 mock scenario.
 
 ---
 

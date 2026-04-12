@@ -4,6 +4,7 @@ import './globals.css'
 import { GlobalTouchScrollbars } from '@/components/GlobalTouchScrollbars'
 import LoginGate from '@/components/LoginGate'
 import { SudoProvider } from '@/contexts/SudoContext'
+import { HelpPanelProvider } from '@/contexts/HelpPanelContext'
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] })
 
@@ -36,7 +37,9 @@ export default function RootLayout({
       <body className={spaceGrotesk.className}>
         <GlobalTouchScrollbars />
         <SudoProvider>
-          <LoginGate>{children}</LoginGate>
+          <HelpPanelProvider>
+            <LoginGate>{children}</LoginGate>
+          </HelpPanelProvider>
         </SudoProvider>
       </body>
     </html>

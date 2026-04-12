@@ -22,6 +22,7 @@ import TranscriptExport from '@/components/TranscriptExport'
 import AgentPlayback from '@/components/AgentPlayback'
 import { useAgents } from '@/hooks/useAgents'
 import { TerminalProvider } from '@/contexts/TerminalContext'
+import { useHelpPanel } from '@/contexts/HelpPanelContext'
 import { Terminal, Mail, User, GitBranch, MessageSquare, Share2, FileText, Moon, Power, Loader2, Brain, Plus, Search, Download, Play, ExternalLink } from 'lucide-react'
 import { agentToSession } from '@/lib/agent-utils'
 import type { Agent, AgentRole } from '@/types/agent'
@@ -41,11 +42,9 @@ const OrganizationSetup = dynamic(
   { ssr: false }
 )
 
-// Only shown when help button is clicked
-const HelpPanel = dynamic(
-  () => import('@/components/HelpPanel'),
-  { ssr: false }
-)
+// Help Panel is owned by HelpPanelProvider (see contexts/HelpPanelContext.tsx):
+// the provider is mounted once in app/layout.tsx and renders the panel itself,
+// so page.tsx only needs `useHelpPanel()` to open it.
 
 // Only shown when import button is clicked
 const ImportAgentDialog = dynamic(
@@ -109,7 +108,9 @@ export default function DashboardPage() {
   const [showOrganizationSetup, setShowOrganizationSetup] = useState(false)
   const [organizationChecked, setOrganizationChecked] = useState(false)
   const [showImportDialog, setShowImportDialog] = useState(false)
-  const [isHelpOpen, setIsHelpOpen] = useState(false)
+  // Help panel state lives in HelpPanelContext (mounted in app/layout.tsx).
+  // We only need `open` here to wire up the header button.
+  const { open: openHelp } = useHelpPanel()
   const [subconsciousRefreshTrigger, setSubconsciousRefreshTrigger] = useState(0)
   const [showProfilePanel, setShowProfilePanel] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -638,7 +639,7 @@ export default function DashboardPage() {
           onToggleSidebar={toggleSidebar}
           sidebarCollapsed={sidebarCollapsed}
           activeAgentId={activeAgentId}
-          onOpenHelp={() => setIsHelpOpen(true)}
+          onOpenHelp={openHelp}
         />
 
         {/* Migration Banner */}
@@ -1205,11 +1206,7 @@ export default function DashboardPage() {
           agentAlias={wakeDialogAgent?.label || wakeDialogAgent?.name}
         />
 
-        {/* Help Panel */}
-        <HelpPanel
-          isOpen={isHelpOpen}
-          onClose={() => setIsHelpOpen(false)}
-        />
+        {/* Help Panel is rendered globally by HelpPanelProvider in app/layout.tsx */}
       </div>
     </TerminalProvider>
   )

@@ -109,31 +109,31 @@ author: AI Maestro Team
 
 #### S007: Open Create Agent wizard
 - **Action:** Click "Create new agent" button in sidebar
-- **Goal:** Wizard opens at step 1
+- **Goal:** Wizard opens at step 1 (client picker)
 - **Creates:** nothing
 - **Modifies:** nothing (modal state only)
-- **Verify:** Wizard visible, step 1 showing. Screenshot: SCEN-016/S007-wizard-open.png
+- **Verify:** Wizard visible, client picker showing (cards for Claude / Codex / Gemini / OpenCode / Kiro). Screenshot: SCEN-016/S007-wizard-open.png
 
-#### S008: Fill wizard step 1 — agent name
-- **Action:** Enter name `scen016-r18-test`, click Next
-- **Goal:** Step 2 reached
+#### S008: Wizard step 1 — client selection (Claude)
+- **Action:** Click the "Claude" client card. The wizard auto-advances to step 2.
+- **Goal:** Claude selected, wizard on step 2 (persona name + avatar)
 - **Creates:** nothing (wizard state)
 - **Modifies:** nothing
-- **Verify:** Wizard advances to step 2. Screenshot: SCEN-016/S008-name-entered.png
+- **Verify:** Step 2 visible with "Persona Name" text input and avatar grid. Screenshot: SCEN-016/S008-claude-selected.png
 
-#### S009: Fill wizard step 2 — client selection (Claude)
-- **Action:** Select "Claude" client, click Next
-- **Goal:** Claude selected, step 3 reached
-- **Creates:** nothing
+#### S009: Wizard step 2 — persona name + avatar
+- **Action:** Type `scen016-r18-test` into the Persona Name input. Click the first avatar in the grid (or leave the preview avatar), then click the Next button (chevron).
+- **Goal:** Persona name accepted, avatar picked, wizard advances to step 3 (team)
+- **Creates:** nothing (wizard state)
 - **Modifies:** nothing
-- **Verify:** Claude selected, wizard advances. Screenshot: SCEN-016/S009-claude-selected.png
+- **Verify:** Step 3 visible (team picker). Screenshot: SCEN-016/S009-name-avatar.png
 
 #### S010: Fill wizard steps 3-6 with defaults
-- **Action:** Click Next through steps 3 (working dir), 4 (governance title: AUTONOMOUS), 5 (role-plugin: none), 6 (optional config), accepting defaults
-- **Goal:** Reach step 7 (confirm)
+- **Action:** Step 3 (team): leave unselected for AUTONOMOUS, click Next. Step 4 (title): pick AUTONOMOUS, click Next. Step 5 (folder): accept default `~/agents/scen016-r18-test/`, click Next. Step 6 (role-plugin): pick "none", click Next.
+- **Goal:** Reach step 7 (summary / confirm)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Step 7 confirmation page shown. Screenshot: SCEN-016/S010-confirm-page.png
+- **Verify:** Summary page shown listing Claude / scen016-r18-test / AUTONOMOUS / no role-plugin. Screenshot: SCEN-016/S010-confirm-page.png
 
 #### S011: Complete wizard — create agent
 - **Action:** Click "Create Agent" button

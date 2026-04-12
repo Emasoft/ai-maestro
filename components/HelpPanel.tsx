@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { tutorials, categoryLabels, categoryOrder, type Tutorial } from '@/lib/tutorialData'
 import MobileChatView from './MobileChatView'
+import { useHelpPanel } from '@/contexts/HelpPanelContext'
 
 // Map icon names to components
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -50,14 +51,20 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Smartphone,
 }
 
-interface HelpPanelProps {
-  isOpen: boolean
-  onClose: () => void
-}
-
 type HelpTab = 'assistant' | 'browse'
 
-export default function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
+// NOTE: this component intentionally takes NO props. State (`isOpen`) and the
+// close action are read from `HelpPanelContext` so that the function
+// signature has zero destructured function-typed props. The Next.js
+// TypeScript plugin's rule 71007 (`INVALID_CLIENT_ENTRY_PROP`) scans every
+// `'use client'` file for destructured function props and flags them as
+// non-serializable, regardless of whether the actual parent is a Server
+// Component. By moving `onClose` off the interface into context, we remove
+// the trigger without using any suppression directive. See
+// `docs_dev/2026-04-12-kraken-help-panel-fix.md` and
+// `contexts/HelpPanelContext.tsx` for the full rationale.
+export default function HelpPanel() {
+  const { isOpen, close } = useHelpPanel()
   const [activeTab, setActiveTab] = useState<HelpTab>('assistant')
   const [selectedTutorial, setSelectedTutorial] = useState<Tutorial | null>(null)
   const [currentStep, setCurrentStep] = useState(0)
@@ -182,13 +189,13 @@ export default function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
         if (selectedTutorial) {
           setSelectedTutorial(null)
         } else {
-          onClose()
+          close()
         }
       }
     }
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
-  }, [isOpen, selectedTutorial, onClose])
+  }, [isOpen, selectedTutorial, close])
 
   const handleBack = () => {
     setSelectedTutorial(null)
@@ -231,11 +238,14 @@ export default function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
               </div>
             )}
             <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-gray-800/50 text-gray-500 hover:text-gray-300 transition-colors"
+              type="button"
+              onClick={close}
+              className="p-1.5 rounded-lg hover:bg-gray-800/50 text-gray-500 hover:text-gray-300 transition-colors relative z-10"
+              style={{ pointerEvents: 'auto' }}
               aria-label="Close help panel"
+              data-testid="help-panel-close-button"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4 pointer-events-none" />
             </button>
           </div>
 

@@ -45,9 +45,22 @@ export function requireSudoToken(
   }
 
   const reason = result.reason
+  // Clean, user-facing copy that the sudo modal displays verbatim.
+  // Keep these short and free of API plumbing — the modal body already
+  // explains the 60s TTL and "cannot be replayed" invariant separately.
   const message =
     reason === 'missing'
-      ? 'Sudo mode required. POST /api/auth/sudo-password with your governance password to get a token, then retry with X-Sudo-Token header.'
+      ? 'Confirm with your governance password to continue.'
+      : reason === 'expired'
+        ? 'Your confirmation expired. Please re-enter your governance password.'
+        : 'That confirmation could not be used. Please enter your governance password again.'
+
+  // Developer-facing hint that explains the exact API contract. Separate
+  // from `message` so the modal never leaks API plumbing into end-user UX
+  // (Issue A from SCEN-016 smoke test, 2026-04-12).
+  const devHint =
+    reason === 'missing'
+      ? 'POST /api/auth/sudo-password with the governance password to obtain a token, then retry with X-Sudo-Token header.'
       : reason === 'expired'
         ? 'Sudo token expired (60s TTL). Request a fresh one.'
         : 'Sudo token invalid or already used (tokens are one-shot).'
@@ -57,6 +70,7 @@ export function requireSudoToken(
       error: 'sudo_required',
       reason,
       message,
+      devHint,
       route: `${method} ${pathTemplate}`,
     },
     { status: 403 }

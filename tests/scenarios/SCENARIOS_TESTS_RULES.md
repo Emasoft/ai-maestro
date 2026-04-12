@@ -23,7 +23,8 @@ All UI scenario tests in AI Maestro MUST follow these 11 rules. No exceptions.
 9. [Rule 9: REPORT-FORMAT](#rule-9-report-format) — Structured markdown report
 10. [Rule 10: PHOTOSTORY](#rule-10-photostory) — Screenshot at every critical step
 11. [Rule 11: 11th-HOUR](#rule-11-11th-hour) — Post-scenario deep analysis and improvement proposals
-12. [How-To: Running a Scenario](#how-to-running-a-scenario) — Practical guidance for the test executor
+12. [Rule 12: SUDO-MODE](#rule-12-sudo-mode) — Password re-entry for destructive operations
+13. [How-To: Running a Scenario](#how-to-running-a-scenario) — Practical guidance for the test executor
 
 ---
 
@@ -569,6 +570,94 @@ tests/scenarios/reports/scenario_proposed-improvements_<NNN>_<datetime>.md
 ```
 
 The file must reference the scenario report it is based on. Each proposal must include: problem description, root cause analysis, proposed solution with specific files/changes, and priority (P0-P3).
+
+---
+
+## Rule 12: SUDO-MODE
+
+AI Maestro implements a **sudo-mode** layer (SEC-PHASE-3..5, v3.5.0+). Every
+API route classified `strict` in `security-registry.json` rejects requests
+that don't carry a fresh `X-Sudo-Token` earned by re-entering the governance
+password within the last 60 seconds. The token is one-shot — it's consumed
+on the first request that uses it.
+
+### What this means for scenarios
+
+Whenever a scenario step performs a destructive operation (delete agent,
+delete team, uninstall plugin, change title, stop session, restart session,
+change password, etc.), the **UI will pop a sudo password modal** the first
+time you click the destructive button within a 60-second window. The modal
+is implemented by `contexts/SudoContext.tsx` and handled transparently by
+`lib/sudo-fetch.ts`. Every `fetch(...)` call that targets a strict route
+MUST be routed through `sudoFetch` so the retry loop works.
+
+### Scenarios MUST include the sudo step
+
+Any step that hits a strict operation MUST also include a
+**password re-entry sub-step** in its action list:
+
+> **Action:** Click "Delete Agent" in the Danger Zone. When the sudo
+> password modal appears, enter the governance password
+> `mYkri1-xoxrap-gogtan` and click Confirm. Then type the agent name
+> in the confirmation field and click Delete Forever.
+
+If the scenario does NOT show the sudo modal appearing, that is a BUG
+(Rule 4: fix it immediately) — either the caller is not using sudoFetch,
+or the route is not classified as strict when it should be.
+
+### List of routes classified strict
+
+Canonical source: `security-registry.json` at the project root. At
+v3.6.0 the strict routes are:
+
+| Route | Used by scenarios |
+|-------|-------------------|
+| `DELETE /api/agents/[id]` | Every scenario's cleanup phase |
+| `DELETE /api/teams/[id]` | SCEN-001, SCEN-002, SCEN-005, SCEN-009, SCEN-010, SCEN-014 |
+| `DELETE /api/agents/cemetery/[id]` | Cleanup phase of every scenario that deletes an agent |
+| `POST /api/governance/password` | SCEN-001 governance password setup |
+| `DELETE /api/settings/marketplaces` | SCEN-019 cleanup |
+| `DELETE /api/agents/role-plugins/install` | SCEN-019, SCEN-020, SCEN-021 cleanup |
+| `PATCH /api/agents/[id]/title` | SCEN-001 title lifecycle |
+| `POST /api/agents/[id]/stop` | SCEN-011 stop session tests |
+| `POST /api/sessions/[id]/restart` | Element restart queue tests |
+
+When a NEW strict route is added to `security-registry.json`, update
+this table AND every scenario that touches that route.
+
+### Sudo modal recognition pattern for Chrome DevTools MCP
+
+```
+take_snapshot          → find modal with text "Confirm with password"
+click (password input) → focus
+fill (password input)  → type governance password
+click "Confirm" button → submit
+wait_for               → modal disappears
+```
+
+The modal has `role="dialog"` and `aria-modal="true"` so it is reliably
+locatable via accessibility tree.
+
+### 60-second window caveat
+
+If a scenario performs multiple strict operations in a row, only the
+FIRST one triggers the modal — subsequent operations within 60 seconds
+of the previous sudo-token acquisition re-prompt because sudo tokens are
+**one-shot**. Each strict operation needs its own fresh token. If you
+batch 10 deletes in a cleanup phase, expect to see 10 modals. This is
+by design (sudo-mode rejects replayed tokens) and the scenario should
+plan for it accordingly.
+
+### Team delete uses an inline password — no modal
+
+`DELETE /api/teams/[id]` is the one exception: the existing Delete Team
+dialog already collects the governance password inline before any
+destructive action (because team deletion pre-dates sudo-mode and uses
+the password in the request body for the governance-service layer). The
+client code in `components/sidebar/TeamListView.tsx` exchanges that
+inline password for a sudo token BEFORE the DELETE call, so the sudo
+modal does NOT appear on top of the team delete dialog. The inline
+dialog IS the sudo check.
 
 ---
 

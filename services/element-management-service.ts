@@ -4214,9 +4214,13 @@ export async function CreateAgent(
     ops.push(`G01: Name "${name}" is valid`)
 
     // ── G01b: Check name uniqueness in registry ──────────────
+    // BUG-FIX (SCEN-016): must filter tombstones (soft-deleted entries with
+    // deletedAt set). Use getAgentByName() which already does that — don't
+    // call loadAgents().find() directly, that sees tombstones and blocks
+    // the wizard from reusing a name of a previously-deleted agent.
     {
-      const { loadAgents: loadAll } = await import('@/lib/agent-registry')
-      const existingByName = loadAll().find(a => a.name === name)
+      const { getAgentByName } = await import('@/lib/agent-registry')
+      const existingByName = getAgentByName(name)
       if (existingByName) {
         result.error = `Agent with name "${name}" already exists (id=${existingByName.id}). Choose a different name.`
         return result
@@ -4348,8 +4352,12 @@ export async function CreateAgent(
         const dirStat = await stat(autoDir)
         if (dirStat.isDirectory()) {
           // Check if an agent with this name already exists in registry
+          // BUG-FIX (SCEN-016): filter tombstones. A soft-deleted agent's folder
+          // must be reusable by a new agent with the same name. Without the
+          // filter, any scenario that deletes an agent then recreates one with
+          // the same name is permanently blocked by the dead registry entry.
           const { loadAgents } = await import('@/lib/agent-registry')
-          const existing = loadAgents().find(a => a.name === name)
+          const existing = loadAgents().find(a => !a.deletedAt && a.name === name)
           if (existing) {
             result.error = `Agent folder ~/agents/${name}/ already exists and belongs to agent "${existing.label || existing.name}" (${existing.id}). Choose a different name.`
             return result
@@ -4426,9 +4434,13 @@ export async function CreateAgent(
     // G03-OVERLAP: No two agents may share the same directory, or be parent/child of each other.
     // E.g. if agent A uses ~/agents/foo/, agent B cannot use ~/agents/foo/ OR ~/agents/foo/bar/
     // OR ~/agents/ (parent). This prevents agents from interfering with each other's files.
+    // BUG-FIX (SCEN-016): filter tombstones (soft-deleted entries with deletedAt set).
+    // Without this filter, a previously-deleted agent's working directory would
+    // block new agents from reusing the same folder — even though the deleted agent's
+    // registry entry should be invisible to new operations.
     {
       const { loadAgents: loadAllAgents } = await import('@/lib/agent-registry')
-      const allAgents = loadAllAgents()
+      const allAgents = loadAllAgents().filter(a => !a.deletedAt)
       const candidatePath = normalizedWorkDir + sep
       for (const existingAgent of allAgents) {
         const rawExisting = (existingAgent.workingDirectory || '').trim()

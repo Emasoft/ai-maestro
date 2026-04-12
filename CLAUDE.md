@@ -1369,19 +1369,19 @@ Two test scripts exist for validating the Agent Messaging Protocol:
 
 Browser-based UI scenario tests that verify end-to-end workflows through Chrome DevTools Protocol (CDP).
 
-**Rules & Format:** `tests/scenarios/SCENARIOS_TESTS_RULES.md` — 9 mandatory rules including CLEAN-AFTER-YOURSELF (cleanup), 0-IMPACT (don't touch user data), STATE-WIPE (backup/restore configs), FIX-AS-YOU-GO (fix bugs immediately during test), STICK-TO-UI (never bypass the browser).
+**Rules & Format:** `tests/scenarios/SCENARIOS_TESTS_RULES.md` — 12 mandatory rules: SAFE-SETUP, 0-IMPACT, STATE-WIPE, FIX-AS-YOU-GO, TRACK-AND-REPORT, STICK-TO-UI, CHROME-TOOL CDP, REPORT-FORMAT, PHOTOSTORY, 11th-HOUR analysis, SUDO-MODE.
+
+> **Canonical vs loaded copy:** the rules file is git-tracked at `tests/scenarios/SCENARIOS_TESTS_RULES.md`. The Claude Code harness also auto-loads `.claude/rules/SCENARIOS_TESTS_RULES.md` on every session start, but that path is a **symlink** to the tracked file so the two CAN NOT drift. When updating the rules, edit only the tracked file; the symlink picks up changes automatically.
 
 **Scenarios:**
 
-| # | File | Steps | Tests |
-|---|------|-------|-------|
-| SCEN-001 | `tests/scenarios/SCEN-001_title-change-lifecycle.scen.md` | 33 | ChangeTitle pipeline, plugin swap, singleton enforcement |
-| SCEN-002 | `tests/scenarios/SCEN-002_teams-groups-agents.scen.md` | 53 | Team CRUD, title auto-assignment, COS, orchestrator |
-| SCEN-003 | `tests/scenarios/SCEN-003_agent-creation-wizard.scen.md` | 40 | Agent wizard with INTEGRATOR, MEMBER, plugin enforcement |
+Currently 21 scenarios live in `tests/scenarios/SCEN-NNN_*.scen.md` (SCEN-001 through SCEN-022 with SCEN-017 unused). They are git-tracked. Reports and screenshots are gitignored (session-local test artifacts).
 
-**Running a scenario:** Say "run scenario 1" (or 2 or 3). The scenario file is read and executed step-by-step via Chrome CDP. Reports are saved to `tests/scenarios/reports/`, screenshots to `tests/scenarios/screenshots/SCEN-NNN/`.
+**Running a scenario — ALWAYS use the `run-scenario-test` skill.** Do NOT drive scenarios from the main conversation. The skill is installed at `~/.claude/skills/run-scenario-test/` and uses `context: fork`, `model: opus`, `agent: general-purpose` so a full ~150-step UI walkthrough runs in an isolated subagent context and returns only a 2-line summary to the orchestrator. Trigger phrases: "run scenario 16", "execute SCEN-018", "run the maintainer scenario", "rerun 1 and 19". For parallel runs of multiple scenarios, the orchestrator triggers the skill multiple times in the same turn — one forked agent per scenario.
 
-**Prerequisites:** AI Maestro server running, Chrome browser open with DevTools accessible, governance password set.
+The forked agent reads the scenario file, follows `SCENARIOS_TESTS_RULES.md`, drives the dashboard via Chrome DevTools MCP, applies Rule 4 fix-as-you-go for any bug it finds, writes its report to `tests/scenarios/reports/`, writes the 11th-HOUR proposals to `tests/scenarios/reports/scenario_proposed-improvements_<NNN>_<timestamp>.md`, and returns the 2-line summary.
+
+**Prerequisites:** AI Maestro server running, Chrome browser open with DevTools accessible, governance password set. Any per-scenario prereqs (`which codex`, fake GitHub repos, etc.) are listed in the scenario's frontmatter.
 
 ### Element Management Service
 

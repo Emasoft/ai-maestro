@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listAgents, searchAgentsByQuery } from '@/services/agents-core-service'
 import { CreateAgent } from '@/services/element-management-service'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 
 // Force this route to be dynamic (not statically generated at build time)
 export const dynamic = 'force-dynamic'
@@ -81,6 +81,10 @@ export async function POST(request: NextRequest) {
       tags: body.tags as string[] | undefined,
       model: body.model as string | undefined,
       taskDescription: body.taskDescription as string | undefined,
+      // R19.2: MAINTAINER requires githubRepo in "owner/repo" format (Gate 9a)
+      githubRepo: body.githubRepo as string | undefined,
+      // SEC-PHASE-1: authContext is mandatory for Change* pipelines invoked by CreateAgent
+      authContext: buildAuthContext(auth),
     })
 
     if (!result.success) {

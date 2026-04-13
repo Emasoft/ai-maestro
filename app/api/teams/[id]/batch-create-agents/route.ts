@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 
 /**
  * POST /api/teams/[id]/batch-create-agents
@@ -75,6 +75,8 @@ export async function POST(
         programArgs: agentSpec.programArgs,
         teamId,
         governanceTitle: agentSpec.governanceTitle || 'member',
+        // SEC-PHASE-1: authContext is mandatory for Change* pipelines invoked by CreateAgent
+        authContext: buildAuthContext(auth),
       })
 
       if (result.success && result.agentId) {

@@ -1,52 +1,52 @@
 # tests/scenarios/agents/ — spec docs for scenario-driving agents
 
-This folder contains human-readable architecture specs for the agents the AI Maestro scenario harness uses. **The executable Claude Code definitions live elsewhere.**
+This folder contains historical architecture notes for the agents the AI Maestro scenario harness uses. **The executable definitions now ship as a Claude Code plugin.**
 
-| What | Spec doc (here) | Executable definition | Frontmatter type | Why |
-|------|-----------------|----------------------|-------------------|-----|
-| **Scenario batch runner** | `scenario-batch-runner.md` | `.claude/skills/run-scenarios-batch/SKILL.md` | Skill | Needs slash-command invocation with `$ARGUMENTS` → `/run-scenarios-batch 16-20`. `context: fork` gives it its own context without a worktree. |
-| **Improvement implementer** | (TBD — add when needed) | `.claude/agents/scenario-improvement-implementer.md` | Subagent | Needs `isolation: worktree` — a direct subagent frontmatter field. Invoked by the main Claude via the Agent tool (no slash command needed). |
+## Canonical source: `scenarios-autorunner` plugin
 
-## Architecture decisions (from Claude Code docs study)
+As of 2026-04-13, the scenario runner + conductor + improvement implementer are distributed as a universal Claude Code plugin:
 
-- **Skills** (`.claude/skills/<name>/SKILL.md`) support `context: fork` to run in an isolated context, `$ARGUMENTS` substitution, slash-command invocation, and pre-approved tools. **Skills do NOT directly support `isolation: worktree`** — they can only get worktree indirectly by setting `context: fork` + `agent: <subagent-with-isolation>`.
+- **Repo:** https://github.com/Emasoft/scenarios-autorunner
+- **Marketplace:** `Emasoft/emasoft-plugins`
+- **Install:**
+  ```bash
+  claude plugin marketplace add Emasoft/emasoft-plugins
+  claude plugin install scenarios-autorunner@emasoft-plugins
+  ```
 
-- **Subagents** (`.claude/agents/<name>.md`) always run in their own context window. They support `isolation: worktree` as a direct frontmatter field, plus `tools`/`disallowedTools`, `permissionMode`, `memory`, `hooks`, `skills`. Subagents are invoked via the Agent tool with `subagent_type`, @-mention, or automatic delegation — no slash command.
+The plugin ships 5 skills (`run-scenarios-batch`, `create-scenario`, `edit-scenario`, `improve-scenario`, `implement-scenarios-proposals`), 2 subagents (`scenario-runner` with `memory: project`, `scenario-improvement-implementer` with `isolation: worktree` + `memory: project`), 2 hooks (`Stop` auto-continue, `StopFailure` rate-limit breadcrumb), a genericized `SCENARIOS_TESTS_RULES.md`, and an `init-scenarios-folder.sh` scaffolder.
 
-- **Why the runner is a skill and the implementer is a subagent:** the runner needs `/run-scenarios-batch <range>` ergonomic + no worktree (it only reads scenarios and drives Chrome). The implementer needs worktree isolation (it modifies source code) and is triggered by the main Claude programmatically, not by the user typing a command.
+The ai-maestro copy of `tests/scenarios/SCENARIOS_TESTS_RULES.md` is the project-level override that takes precedence when both the plugin-bundled and project-level rules files exist. Any ai-maestro-specific sections (manager-gated team governance, AMP messaging, device-emulation component names) stay in the project-level copy. The plugin's bundled copy is universal.
 
-## Bash-script escape hatch
+## Invocation from the main Claude Code session
 
-Both the runner and the implementer call pre-approved bash scripts at `tests/scenarios/scripts/*.sh` for fixture setup, cleanup, and state manipulation. Those scripts are listed in `~/.claude/settings.json` `permissions.allow` so Claude Code does not inspect them or prompt — they run as child processes that can write to `~/.claude/`, call `gh`, manipulate tmux state, etc., without further approval.
-
-This means:
-1. The Claude-Code–side work (driving Chrome, writing reports, parsing scenario files) happens inside one forked agent
-2. The dirty privileged work (creating fake GitHub repos, installing plugins, killing tmux, restoring settings backups) happens in bash subprocesses that Claude Code does not audit
-3. No `claude -p` subprocess invocations — everything inherits the parent session's Pro Max subscription
-
-## Invocation
-
-**Run a batch of scenarios** (from the main Claude Code session):
-```
-/run-scenarios-batch 16-20
+```text
+/run-scenarios-batch 16-20                    # via the plugin's skill (preferred)
+/run-scenarios-batch 16-20 --improve          # run + auto-implement P0 in worktree
+"Create a new scenario for <feature>"         # triggers create-scenario skill
+"Edit SCEN-018 to add a cleanup step"         # triggers edit-scenario skill
+"Improve SCEN-016"                            # triggers improve-scenario skill
+"Implement proposals from scenario 18"        # triggers implement-scenarios-proposals
 ```
 
-Or via the Skill tool directly:
-```
-Skill(skill: "run-scenarios-batch", args: "16-20")
-```
+Sub-agents are spawned via the Agent tool (not `claude -p`), inheriting the parent Pro Max subscription. Per-scenario setup/cleanup scripts at `tests/scenarios/scripts/setup-SCEN-NNN.sh` + `cleanup-SCEN-NNN.sh` are still called by the plugin's conductor via the optional `tests/scenarios/scenarios-autorunner.config.json` config file — see the plugin's `references/SCENARIOS_TESTS_RULES.md` for details.
 
-**Implement improvements** (after a batch run):
-```
-Agent(
-  description: "Implement P0 improvements from last batch",
-  subagent_type: "scenario-improvement-implementer",
-  prompt: "Process improvements from timestamp 20260413_134400..."
-)
-```
+## Per-project fixture scripts (ai-maestro specific)
+
+The ai-maestro project provides its own set of per-scenario bash scripts at `tests/scenarios/scripts/`:
+
+| Script | Purpose |
+|--------|---------|
+| `fixture-helpers.sh` | Shared functions (fixture_github_repo, fixture_delete_agents_by_prefix, fixture_kill_tmux_by_prefix, fixture_snapshot_aim_state) |
+| `kill-orphans.sh` | One-shot cleanup of stale `scen*` tmux sessions and registry entries |
+| `setup-SCEN-NNN.sh` | Per-scenario fixture provisioning (one per scenario that needs fixtures) |
+| `cleanup-SCEN-NNN.sh` | Per-scenario cleanup safety net |
+
+These are pre-approved in `~/.claude/settings.json` `permissions.allow` so the scenario runner can invoke them without interactive approval. The scripts themselves are AI-Maestro-specific (they call the AI Maestro API, manipulate tmux, etc.) and stay in the ai-maestro repo. The plugin's skills call them via `${CLAUDE_PROJECT_DIR}/tests/scenarios/scripts/setup-SCEN-<padded-id>.sh` if the file exists.
 
 ## Related documents
 
-- `tests/scenarios/SCENARIOS_TESTS_RULES.md` — the 12 rules every scenario run must follow
-- `tests/scenarios/scripts/README.md` — bash-script architecture and per-scenario setup/cleanup pattern
-- `scripts_dev/overnight-harness-v1-claude-p-WRONG/DO-NOT-USE.md` — the prior wrong approach (kept for historical reference per RULE 0.2)
+- `tests/scenarios/SCENARIOS_TESTS_RULES.md` — the project-specific rules (extends the plugin's bundled rules)
+- `tests/scenarios/scripts/README.md` — fixture script architecture and per-scenario pattern
+- `docs_dev/2026-04-13-*.md` — session notes from when the plugin was split out from the ai-maestro monorepo
+- https://github.com/Emasoft/scenarios-autorunner — plugin source

@@ -72,11 +72,18 @@ export function useGovernance(agentId: string | null): GovernanceState {
       (t) => t.orchestratorId === agentId
     )
     if (isOrchestrator) return 'orchestrator'
-    // Check explicit title stored on the agent (architect, integrator, orchestrator)
+    // Check explicit title stored on the agent (architect, integrator, orchestrator, maintainer)
     // Note: orchestrator is ALSO checked via team.orchestratorId above — this fallback
-    // catches cases where governanceTitle was set but team.orchestratorId wasn't updated yet
-    if (agentStoredTitle && ['architect', 'integrator', 'orchestrator'].includes(agentStoredTitle)) {
-      return agentStoredTitle as GovernanceTitle
+    // catches cases where governanceTitle was set but team.orchestratorId wasn't updated yet.
+    // MAINTAINER (R19) is team-independent — a maintainer can exist without being in any team,
+    // so it is ONLY resolved via the stored title. Without this, R19 agents incorrectly
+    // appear as AUTONOMOUS in the Profile panel (BUG-003 found during SCEN-018 execution).
+    // Normalize to lowercase because the registry stores lowercase but some UIs upper-case.
+    if (agentStoredTitle) {
+      const normalized = agentStoredTitle.toLowerCase()
+      if (['architect', 'integrator', 'orchestrator', 'maintainer'].includes(normalized)) {
+        return normalized as GovernanceTitle
+      }
     }
     // 'member' applies to agents in a team without a specific elevated title
     const isInAnyTeam = allTeams.some(

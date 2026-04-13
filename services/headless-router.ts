@@ -914,6 +914,10 @@ const routes: Route[] = [
       tags: body.tags as string[] | undefined,
       model: body.model as string | undefined,
       taskDescription: body.taskDescription as string | undefined,
+      // R19.2: MAINTAINER requires githubRepo in "owner/repo" format (Gate 9a)
+      githubRepo: body.githubRepo as string | undefined,
+      // SEC-PHASE-1: authContext is mandatory for Change* pipelines invoked by CreateAgent
+      authContext: buildAuthContext(auth),
     })
     if (!createResult.success) {
       sendJson(res, 400, { error: createResult.error })

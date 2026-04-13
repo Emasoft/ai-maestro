@@ -1386,6 +1386,8 @@ export async function ChangeTitle(
     teamIds?: string[]
     skipPluginSync?: boolean
     skipRestart?: boolean
+    /** R19.2: MAINTAINER requires githubRepo in "owner/repo" format (Gate 9a) */
+    githubRepo?: string
   },
 ): Promise<ChangeTitleResult> {
   const ops: string[] = []
@@ -1549,7 +1551,7 @@ export async function ChangeTitle(
     // Polling-based design (no webhook, no port, no secret).
     if (newTitle === 'maintainer') {
       // R19.2: githubRepo required and must match owner/repo format
-      const githubRepo = (options as Record<string, unknown>)?.githubRepo as string | undefined
+      const githubRepo = options?.githubRepo
       if (!githubRepo || typeof githubRepo !== 'string') {
         result.error = 'MAINTAINER requires a githubRepo attribute (format: "owner/repo")'
         return result
@@ -1559,8 +1561,11 @@ export async function ChangeTitle(
         return result
       }
       // R19.3: One MAINTAINER per repo on this host
-      const { listAgents } = await import('@/lib/agent-registry')
-      const allAgents = listAgents() as unknown as Array<{ id: string; name: string; governanceTitle?: string; githubRepo?: string; deletedAt?: string }>
+      // BUG-FIX (SCEN-018 BUG-R19.3-UNIQUENESS-001): use loadAgents() (full Agent objects)
+      // instead of listAgents() (AgentSummary strips governanceTitle/githubRepo fields,
+      // making the uniqueness check always pass silently).
+      const { loadAgents } = await import('@/lib/agent-registry')
+      const allAgents = loadAgents()
       const existingMaintainer = allAgents.find(a =>
         a.id !== agentId &&
         a.governanceTitle === 'maintainer' &&
@@ -4204,6 +4209,14 @@ export async function CreateAgent(
     tags?: string[]
     model?: string
     taskDescription?: string
+    /** R19.2: MAINTAINER requires githubRepo in "owner/repo" format (forwarded to ChangeTitle Gate 9a) */
+    githubRepo?: string
+    /**
+     * Mandatory auth context (SEC-PHASE-1). Forwarded to ChangeTitle / ChangeTeam.
+     * HTTP callers build this via buildAuthContext(authenticateFromRequest(request)).
+     * Internal callers build this via buildSystemAuthContext('create-agent-<reason>').
+     */
+    authContext: AuthContext
   },
 ): Promise<CreateAgentResult> {
   const ops: string[] = []
@@ -4498,14 +4511,29 @@ export async function CreateAgent(
     }
 
     // ── G06: Set governance title if requested ───────────────
+    // BUG-002 FIX: On failure, ROLL BACK the agent and ABORT. Silently creating
+    // an AUTONOMOUS agent when MAINTAINER was requested violates the user's
+    // intent and was the root cause of SCEN-018 S005 failing with no error.
     if (desired.governanceTitle && desired.governanceTitle !== 'autonomous') {
-      const titleResult = await ChangeTitle(agent.id, desired.governanceTitle)
+      const titleResult = await ChangeTitle(agent.id, desired.governanceTitle, {
+        authContext: desired.authContext,
+        githubRepo: desired.githubRepo,
+      })
       if (!titleResult.success) {
-        ops.push(`G06: WARN — ChangeTitle to ${desired.governanceTitle} failed: ${titleResult.error}`)
-      } else {
-        ops.push(`G06: Title set to ${desired.governanceTitle.toUpperCase()} (${titleResult.operations.length} sub-gates)`)
-        result.restartNeeded = result.restartNeeded || titleResult.restartNeeded
+        // Roll back: delete the half-created agent so the caller can retry cleanly
+        try {
+          const { deleteAgent } = await import('@/lib/agent-registry')
+          await deleteAgent(agent.id)
+          ops.push(`G06: FAIL — ChangeTitle failed: ${titleResult.error}. Rolled back agent.`)
+        } catch (rollbackErr) {
+          ops.push(`G06: FAIL — ChangeTitle failed: ${titleResult.error}. ROLLBACK ALSO FAILED: ${rollbackErr instanceof Error ? rollbackErr.message : rollbackErr}`)
+        }
+        result.error = `Title assignment failed: ${titleResult.error}`
+        result.agentId = null
+        return result
       }
+      ops.push(`G06: Title set to ${desired.governanceTitle.toUpperCase()} (${titleResult.operations.length} sub-gates)`)
+      result.restartNeeded = result.restartNeeded || titleResult.restartNeeded
     } else {
       ops.push(`G06: No title requested (AUTONOMOUS)`)
     }
@@ -4525,13 +4553,25 @@ export async function CreateAgent(
       // This fixes BUG-022: POST /api/agents with teamId + governanceTitle would
       // silently ignore the requested title because ChangeTeam overwrites it.
       if (desired.governanceTitle && desired.governanceTitle !== 'member' && desired.governanceTitle !== 'autonomous') {
-        const retitleResult = await ChangeTitle(agent.id, desired.governanceTitle)
+        const retitleResult = await ChangeTitle(agent.id, desired.governanceTitle, {
+          authContext: desired.authContext,
+          githubRepo: desired.githubRepo,
+        })
         if (!retitleResult.success) {
-          ops.push(`G07b: WARN — Re-apply title ${desired.governanceTitle} after team join failed: ${retitleResult.error}`)
-        } else {
-          ops.push(`G07b: Title corrected to ${desired.governanceTitle.toUpperCase()} after team join`)
-          result.restartNeeded = result.restartNeeded || retitleResult.restartNeeded
+          // Roll back: delete the half-created agent (same reasoning as G06)
+          try {
+            const { deleteAgent } = await import('@/lib/agent-registry')
+            await deleteAgent(agent.id)
+            ops.push(`G07b: FAIL — Re-apply title ${desired.governanceTitle} after team join failed: ${retitleResult.error}. Rolled back agent.`)
+          } catch (rollbackErr) {
+            ops.push(`G07b: FAIL — Re-apply title ${desired.governanceTitle} after team join failed: ${retitleResult.error}. ROLLBACK ALSO FAILED: ${rollbackErr instanceof Error ? rollbackErr.message : rollbackErr}`)
+          }
+          result.error = `Title assignment after team join failed: ${retitleResult.error}`
+          result.agentId = null
+          return result
         }
+        ops.push(`G07b: Title corrected to ${desired.governanceTitle.toUpperCase()} after team join`)
+        result.restartNeeded = result.restartNeeded || retitleResult.restartNeeded
       }
     } else {
       ops.push(`G07: No team requested`)

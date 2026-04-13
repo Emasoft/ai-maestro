@@ -717,38 +717,56 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Resolve the Claude CLI marketplace name for a given directory name.
- * Claude CLI registers marketplaces by the name in marketplace.json, which may differ from the directory name.
- * E.g. directory "kriscard-claude-plugins" → CLI name "kriscard"
+ * Resolve the Claude CLI marketplace name for a given directory/registration name.
+ *
+ * SOURCE OF TRUTH: ~/.claude/plugins/known_marketplaces.json — this is the file
+ * the Claude CLI actually consults when resolving `name@marketplace` references.
+ * Its keys ARE the CLI marketplace names. If `dirName` is present as a key, return
+ * it unchanged; that is the name the CLI recognizes.
+ *
+ * WHY NOT READ marketplace.json FIRST:
+ * Reading the `name` field from a directory's `marketplace.json` is unreliable
+ * because a stale/orphan directory (from a previous registration with a different
+ * name or upstream repo rename) can contain a manifest whose internal `name` is
+ * completely unrelated to how the CLI knows the marketplace. That breaks
+ * `install <plugin>@<name>` commands because the CLI can't find it.
+ * See BUG-MKTNAME-001 (SCEN-019 report 2026-04-13).
+ *
+ * FALLBACK ORDER:
+ *   1. Lookup dirName in known_marketplaces.json keys → return dirName as-is
+ *   2. Scan known_marketplaces.json for any entry whose installLocation basename
+ *      matches dirName → return that entry's key (the CLI name)
+ *   3. Read manifest name from disk (only if nothing is registered with CLI)
+ *   4. Fall back to dirName
  */
 async function resolveCliMarketplaceName(dirName: string): Promise<string> {
+  const knownPath = join(HOME, '.claude', 'plugins', 'known_marketplaces.json')
+  if (existsSync(knownPath)) {
+    try {
+      const known = JSON.parse(await readFile(knownPath, 'utf-8')) as Record<string, { installLocation?: string }>
+      // Step 1: direct key match — dirName IS the CLI name
+      if (known[dirName]) return dirName
+      // Step 2: reverse lookup by installLocation basename
+      for (const [cliName, entry] of Object.entries(known)) {
+        const loc = entry?.installLocation
+        if (loc && loc.split('/').pop() === dirName) return cliName
+      }
+    } catch (err) {
+      console.error('[marketplaces] resolve CLI name — known_marketplaces.json parse error', err)
+    }
+  }
+  // Step 3: fall back to reading manifest (unreliable but better than nothing)
   const mktDir = join(MARKETPLACES_DIR, dirName)
-  // Try reading the declared name from marketplace.json
   for (const p of [join(mktDir, '.claude-plugin', 'marketplace.json'), join(mktDir, 'marketplace.json')]) {
     if (existsSync(p)) {
       try {
         const manifest = JSON.parse(await readFile(p, 'utf-8'))
         if (manifest.name) return String(manifest.name)
-      } catch (err) { console.error('[marketplaces] resolve CLI name', err) }
+      } catch (err) { console.error('[marketplaces] resolve CLI name — manifest read', err) }
     }
   }
-  // Fallback: ask Claude CLI
-  try {
-    const { execSync } = await import('child_process')
-    const output = execSync('claude plugin marketplace list 2>&1', { timeout: 10000 }).toString()
-    // Look for a line referencing our directory path
-    const lines = output.split('\n')
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes(dirName)) {
-        // The marketplace name is on the previous "❯" line
-        for (let j = i; j >= 0; j--) {
-          const m = lines[j].match(/❯\s+(.+)/)
-          if (m) return m[1].trim()
-        }
-      }
-    }
-  } catch (err) { console.error('[marketplaces] CLI marketplace list fallback', err) }
-  return dirName // last resort: use directory name as-is
+  // Step 4: last resort — use directory name as-is
+  return dirName
 }
 
 /** Enable plugin via Claude CLI — tries multiple key formats */

@@ -150,12 +150,14 @@ commit: TBD
 
 ## Phase 3: Install a plugin at user scope
 
-### S012: Pick a lightweight plugin
-- **Action:** Scroll to a small documentation-only plugin (e.g. a README
-  plugin). Click its "Install" button.
+### S012: Install the `github` plugin
+- **Action:** Find the `github` plugin card in the expanded marketplace card.
+  Click its "Install" button. The marketplace as of 2026-04 exposes 3 plugins:
+  `git`, `github`, `gws`. We pick `github` because it is the smallest and has
+  no external runtime dependency (unlike `gws` which needs a Go workspace).
 - **Goal:** Plugin installs at user scope via Claude CLI.
-- **Creates:** Plugin cache under `~/.claude/plugins/cache/claude-plugins/<name>/`
-- **Modifies:** `~/.claude/settings.json` `plugins` field
+- **Creates:** Plugin cache under `~/.claude/plugins/cache/cblecker-claude-plugins/github/`
+- **Modifies:** `~/.claude/settings.json` `plugins` field (adds `github@claude-plugins` key)
 - **Verify:** Plugin card shows an "Installed" badge and the Install button
   is replaced with Uninstall + Disable.
 

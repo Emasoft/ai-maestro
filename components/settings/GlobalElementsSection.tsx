@@ -274,6 +274,16 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
   useEffect(() => { fetchPlugins() }, [fetchPlugins])
   useEffect(() => { fetchElements() }, [fetchElements])
 
+  // Re-fetch when switching tabs so newly-installed plugins appear without a full page reload.
+  // Without this, installing a plugin from the Marketplaces subtab and then clicking Plugins
+  // shows stale React state (BUG-001 found in SCEN-019). The API already has the fresh data;
+  // only the cached React state is stale.
+  useEffect(() => {
+    if (activeTab === 'plugins') fetchPlugins()
+    if (activeTab === 'elements') { fetchPlugins(); fetchElements() }
+    if (activeTab === 'marketplaces') fetchPlugins()
+  }, [activeTab, fetchPlugins, fetchElements])
+
   // Auto-expand marketplaces that have enabled plugins
   useEffect(() => {
     const withEnabled = new Set<string>()

@@ -31,7 +31,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { User, Shield, Crown, Megaphone, X, AlertTriangle, Compass, GitMerge, Bot } from 'lucide-react'
+import { User, Shield, Crown, Megaphone, X, AlertTriangle, Compass, GitMerge, Bot, Wrench } from 'lucide-react'
 import GovernancePasswordDialog from './GovernancePasswordDialog'
 import type { GovernanceState, GovernanceTitle } from '@/hooks/useGovernance'
 import { sudoFetch } from '@/lib/sudo-fetch'
@@ -123,6 +123,15 @@ const TITLE_OPTIONS: {
     selectedBg: 'bg-red-500/10',
     selectedText: 'text-red-300',
   },
+  {
+    title: 'maintainer',
+    label: 'MAINTAINER',
+    icon: Wrench,
+    description: 'Polls a single GitHub repo, triages issues, fixes autonomously',
+    selectedBorder: 'border-emerald-500',
+    selectedBg: 'bg-emerald-500/10',
+    selectedText: 'text-emerald-300',
+  },
 ]
 
 export default function TitleAssignmentDialog({
@@ -140,6 +149,8 @@ export default function TitleAssignmentDialog({
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([])
   const [phase, setPhase] = useState<Phase>('select')
   const [error, setError] = useState<string | null>(null)
+  // R19.2: githubRepo input is required only when selectedTitle === 'maintainer'
+  const [githubRepo, setGithubRepo] = useState<string>('')
 
   // Stable representation of COS team IDs — avoids re-running the effect when the cosTeams
   // array reference changes but contains the same teams (NIT-3: unstable object in deps)
@@ -158,6 +169,7 @@ export default function TitleAssignmentDialog({
       )
       setPhase('select')
       setError(null)
+      setGithubRepo('')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, currentTitle, cosTeamIds])
@@ -168,6 +180,7 @@ export default function TitleAssignmentDialog({
     setSelectedTeamIds([])
     setError(null)
     setPhase('select')
+    setGithubRepo('')
     onClose()
   }, [onClose])
 
@@ -218,7 +231,7 @@ export default function TitleAssignmentDialog({
   // user guessing why CHIEF-OF-STAFF / ORCHESTRATOR / ARCHITECT / INTEGRATOR
   // / MEMBER were missing from the dialog.
   const teamTitles: GovernanceTitle[] = ['member', 'chief-of-staff', 'orchestrator', 'architect', 'integrator']
-  const standaloneTitles: GovernanceTitle[] = ['autonomous', 'manager']
+  const standaloneTitles: GovernanceTitle[] = ['autonomous', 'manager', 'maintainer']
 
   // Compute which titles are disabled and why
   const titleDisabledReason: Record<string, string | null> = {}
@@ -245,6 +258,21 @@ export default function TitleAssignmentDialog({
   // as a stable alias so downstream render code doesn't need to change.
   const visibleTitleOptions = TITLE_OPTIONS
 
+  // R19.2: Validate githubRepo format client-side. Must match the same regex
+  // used by services/element-management-service.ts Gate 9a: ^[\w.-]+\/[\w.-]+$.
+  // Returns null when valid, or an error string describing the problem.
+  const validateGithubRepo = (value: string): string | null => {
+    const trimmed = value.trim()
+    if (!trimmed) return 'githubRepo is required for MAINTAINER title'
+    if (!/^[\w.-]+\/[\w.-]+$/.test(trimmed)) {
+      return 'Invalid format. Must be "owner/repo" (e.g. "Emasoft/my-project")'
+    }
+    return null
+  }
+  // Show inline error only after the user has typed something — avoids flashing
+  // an error the instant the MAINTAINER option is clicked but before any input.
+  const githubRepoError = githubRepo.trim().length > 0 ? validateGithubRepo(githubRepo) : null
+
   // Determine if confirm button should be disabled
   const isConfirmDisabled = (() => {
     // No change from current role and no team selection difference
@@ -258,6 +286,8 @@ export default function TitleAssignmentDialog({
     }
     // COS requires at least one team selected
     if (selectedTitle === 'chief-of-staff' && selectedTeamIds.length === 0) return true
+    // R19.2: MAINTAINER requires a valid githubRepo value before confirm is enabled
+    if (selectedTitle === 'maintainer' && validateGithubRepo(githubRepo) !== null) return true
     return false
   })()
 
@@ -491,6 +521,53 @@ export default function TitleAssignmentDialog({
         }
         // Set governanceTitle — ChangeTitle pipeline handles plugin install
         await setGovernanceTitle('chief-of-staff')
+      } else if (selectedTitle === 'maintainer') {
+        // Transitioning TO maintainer: clear any prior governance state,
+        // then PATCH with both governanceTitle AND githubRepo (R19.2).
+        // Gate 9a in the ChangeTitle pipeline validates format and uniqueness.
+        if (currentTitle === 'manager') {
+          const result = await governance.assignManager(null, password)
+          if (!result.success) throw new Error(result.error || 'Failed to remove manager role')
+        } else if (currentTitle === 'chief-of-staff') {
+          const removalResults = await Promise.allSettled(
+            governance.cosTeams.map(async (team) => {
+              const result = await governance.assignCOS(team.id, null, password)
+              if (!result.success) throw new Error(result.error || `Failed for ${team.name}`)
+            })
+          )
+          const failures = removalResults
+            .map((r, i) => r.status === 'rejected' ? governance.cosTeams[i].name : null)
+            .filter(Boolean)
+          if (failures.length > 0) {
+            throw new Error(`Failed to remove COS from: ${failures.join(', ')}`)
+          }
+        } else if (currentTitle === 'architect' || currentTitle === 'integrator' || currentTitle === 'orchestrator') {
+          // Clear old simple governance title before assigning maintainer
+          await clearGovernanceTitle()
+          if (currentTitle === 'orchestrator') {
+            await updateTeamOrchestratorId(null)
+          }
+        }
+        // PATCH with governanceTitle + githubRepo. The backend ChangeTitle pipeline
+        // Gate 9a enforces R19.2 (format) and R19.3 (uniqueness). Client-side
+        // validation in isConfirmDisabled means we only reach here with a valid
+        // owner/repo string, but the backend gate is still the authoritative check.
+        const res = await sudoFetch(
+          `/api/agents/${agentId}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              governanceTitle: 'maintainer',
+              githubRepo: githubRepo.trim(),
+            }),
+          },
+          (reason) => requestSudoToken(reason),
+        )
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || 'Failed to assign maintainer title')
+        }
       }
 
       // Success: notify parent and close
@@ -608,6 +685,29 @@ export default function TitleAssignmentDialog({
                   </div>
                 )
               })}
+
+              {/* MAINTAINER GitHub repo input: shown when maintainer is selected (R19.2) */}
+              {selectedTitle === 'maintainer' && (
+                <div className="mt-3 ml-2 space-y-2">
+                  <label className="block text-xs font-medium text-gray-300">
+                    GitHub Repository
+                  </label>
+                  <input
+                    type="text"
+                    value={githubRepo}
+                    onChange={(e) => setGithubRepo(e.target.value)}
+                    placeholder="owner/repo"
+                    autoFocus
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-100 font-mono text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                  {githubRepoError && (
+                    <p className="text-xs text-red-400">{githubRepoError}</p>
+                  )}
+                  <p className="text-xs text-gray-500">
+                    One MAINTAINER per repository per host (R19.3). The agent will poll this repo for new issues and fix them autonomously.
+                  </p>
+                </div>
+              )}
 
               {/* COS team checkboxes: shown when chief-of-staff is selected */}
               {selectedTitle === 'chief-of-staff' && (

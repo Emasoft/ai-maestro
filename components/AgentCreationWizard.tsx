@@ -12,14 +12,14 @@ import type { RolePlugin } from '@/services/role-plugin-service'
 
 // --- Types ---
 
-type WizardStep = 'client' | 'avatar' | 'team' | 'title' | 'folder' | 'role-plugin' | 'summary' | 'creating' | 'done'
+type WizardStep = 'client' | 'avatar' | 'team' | 'title' | 'github-repo' | 'folder' | 'role-plugin' | 'summary' | 'creating' | 'done'
 
 interface ChatMessage {
   id: string
   role: 'robot' | 'user'
   text: string
   step: WizardStep
-  widget?: 'client-picker' | 'avatar-picker' | 'team-picker' | 'title-picker' | 'folder-picker' | 'role-plugin-picker' | 'summary'
+  widget?: 'client-picker' | 'avatar-picker' | 'team-picker' | 'title-picker' | 'github-repo-picker' | 'folder-picker' | 'role-plugin-picker' | 'summary'
   widgetData?: Record<string, unknown>
 }
 
@@ -34,10 +34,11 @@ const TEAM_TITLES: Array<{ value: AgentRole; label: string; description: string 
   { value: 'integrator', label: 'INTEGRATOR', description: 'Handles integrations and APIs' },
 ]
 
-// Titles available when an agent has no team (autonomous)
-const AUTONOMOUS_TITLES: Array<{ value: AgentRole; label: string; description: string }> = [
+// Titles available when an agent has no team (standalone)
+const STANDALONE_TITLES: Array<{ value: AgentRole; label: string; description: string }> = [
   { value: 'autonomous', label: 'AUTONOMOUS', description: 'Independent agent, no team assigned' },
   { value: 'manager', label: 'MANAGER', description: 'Oversees the entire multi-agent system (singleton)' },
+  { value: 'maintainer', label: 'MAINTAINER', description: 'Polls a single GitHub repo, triages issues, fixes autonomously' },
 ]
 
 // Title colors matching TitleBadge conventions
@@ -72,6 +73,10 @@ const STEP_ORDER_AUTONOMOUS_PLUGINS: WizardStep[] = ['client', 'avatar', 'team',
 const STEP_ORDER_AUTONOMOUS_NO_PLUGINS: WizardStep[] = ['client', 'avatar', 'team', 'title', 'folder', 'summary']
 const STEP_ORDER_TEAM_PLUGINS: WizardStep[] = ['client', 'avatar', 'team', 'title', 'role-plugin', 'summary']
 const STEP_ORDER_TEAM_NO_PLUGINS: WizardStep[] = ['client', 'avatar', 'team', 'title', 'summary']
+// MAINTAINER step order — no folder step (CreateAgent enforces ~/agents/<name>/),
+// no role-plugin step (MAINTAINER title binds to ai-maestro-maintainer-agent automatically).
+// The extra 'github-repo' step captures the required R19.2 githubRepo attribute.
+const STEP_ORDER_MAINTAINER: WizardStep[] = ['client', 'avatar', 'team', 'title', 'github-repo', 'summary']
 
 let msgCounter = 0
 function makeMsg(
@@ -94,6 +99,8 @@ function robotQuestion(step: WizardStep): ChatMessage {
       return makeMsg('robot', 'Should this agent belong to a team?', step, 'team-picker')
     case 'title':
       return makeMsg('robot', 'What governance title should this agent hold?', step, 'title-picker')
+    case 'github-repo':
+      return makeMsg('robot', 'Which GitHub repository should this MAINTAINER watch? Enter in owner/repo format.', step, 'github-repo-picker')
     case 'folder':
       return makeMsg('robot', 'Where should this agent work? Choose a project folder or let me create one.', step, 'folder-picker')
     case 'role-plugin':
@@ -131,13 +138,17 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
   const [selectedPlugin, setSelectedPlugin] = useState<RolePlugin | null>(null)
   const [selectedFolder, setSelectedFolder] = useState<string>('')  // empty = auto ~/agents/<name>/
   const [folderInput, setFolderInput] = useState('')  // text input for custom folder path
+  const [githubRepo, setGithubRepo] = useState<string>('')  // R19.2: required when title === 'maintainer'
 
-  // Dynamic step order: plugin support (client) + non-team agents (AUTONOMOUS/MANAGER) get folder step
+  // Dynamic step order: plugin support (client) + non-team agents (AUTONOMOUS/MANAGER/MAINTAINER) get their own flows
   const clientSupportsPlugins = selectedClient === 'claude' || selectedClient === 'codex'
-  const isAutonomous = !selectedTeamId && (selectedTitle === 'autonomous' || selectedTitle === 'manager')
-  const STEP_ORDER = isAutonomous
-    ? (clientSupportsPlugins ? STEP_ORDER_AUTONOMOUS_PLUGINS : STEP_ORDER_AUTONOMOUS_NO_PLUGINS)
-    : (clientSupportsPlugins ? STEP_ORDER_TEAM_PLUGINS : STEP_ORDER_TEAM_NO_PLUGINS)
+  const isMaintainer = !selectedTeamId && selectedTitle === 'maintainer'
+  const isAutonomous = !selectedTeamId && (selectedTitle === 'autonomous' || selectedTitle === 'manager' || selectedTitle === 'maintainer')
+  const STEP_ORDER = isMaintainer
+    ? STEP_ORDER_MAINTAINER
+    : isAutonomous
+      ? (clientSupportsPlugins ? STEP_ORDER_AUTONOMOUS_PLUGINS : STEP_ORDER_AUTONOMOUS_NO_PLUGINS)
+      : (clientSupportsPlugins ? STEP_ORDER_TEAM_PLUGINS : STEP_ORDER_TEAM_NO_PLUGINS)
 
   // Teams & plugins data
   const [teams, setTeams] = useState<Team[]>([])
@@ -313,9 +324,13 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
 
   const handleTitleSelect = useCallback(async (title: AgentRole) => {
     setSelectedTitle(title)
-    const isNonTeamTitle = title === 'autonomous' || title === 'manager'
+    const isFolderTitle = title === 'autonomous' || title === 'manager'
 
-    if (isNonTeamTitle) {
+    if (title === 'maintainer') {
+      // MAINTAINER: R19.2 requires githubRepo → go straight to the github-repo step.
+      // The title binds the role-plugin automatically and CreateAgent enforces ~/agents/<name>/.
+      advance(title.toUpperCase(), 'github-repo')
+    } else if (isFolderTitle) {
       // AUTONOMOUS or MANAGER: go to folder selection step first
       advance(title.toUpperCase(), 'folder')
     } else {
@@ -329,6 +344,12 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
       }
     }
   }, [advance, selectedClient, checkPluginChoices])
+
+  // MAINTAINER: advance from github-repo step to summary, capturing the repo
+  const handleGithubRepoSelect = useCallback((repo: string) => {
+    setGithubRepo(repo)
+    advance(repo, 'summary')
+  }, [advance])
 
   const handleFolderSelect = useCallback(async (folder: string) => {
     setSelectedFolder(folder)
@@ -384,6 +405,8 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
           workingDirectory: selectedFolder || undefined,
           // allowExternalFolder: true ONLY when user explicitly browsed for an existing folder
           allowExternalFolder: selectedFolder ? true : undefined,
+          // R19.2: MAINTAINER requires githubRepo in "owner/repo" format (Gate 9a)
+          githubRepo: selectedTitle === 'maintainer' ? githubRepo : undefined,
         }),
       })
       if (!response.ok) {
@@ -398,7 +421,7 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
       // BUG-019 fix: Do NOT set isCreating=false here — the error display is inside the
       // isCreating branch. The "Go Back" button in the error UI handles the reset.
     }
-  }, [personaName, selectedAvatar, selectedTitle, selectedTeamId, selectedPlugin, selectedClient, selectedFolder])
+  }, [personaName, selectedAvatar, selectedTitle, selectedTeamId, selectedPlugin, selectedClient, selectedFolder, githubRepo])
 
   // Animation timer sequence
   // SF-061 fix: creationSuccess removed from deps to prevent cleanup/restart of
@@ -561,13 +584,16 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
                       onFolderSelect={handleFolderSelect}
                       folderInput={folderInput}
                       setFolderInput={setFolderInput}
+                      // GitHub repo step props (MAINTAINER only — R19.2)
+                      githubRepo={githubRepo}
+                      onGithubRepoSelect={handleGithubRepoSelect}
                       // Role-plugin step props
                       plugins={plugins}
                       pluginsLoading={pluginsLoading}
                       selectedTitle={selectedTitle}
                       onPluginSelect={handlePluginSelect}
                       // Summary props
-                      state={{ personaName, selectedTeamId, selectedTitle, selectedPlugin, selectedAvatar, selectedFolder, teams }}
+                      state={{ personaName, selectedTeamId, selectedTitle, selectedPlugin, selectedAvatar, selectedFolder, githubRepo, teams }}
                       onCreate={handleCreate}
                     />
                   ))}
@@ -646,6 +672,9 @@ interface ChatBubbleProps {
   onFolderSelect: (folder: string) => void
   folderInput: string
   setFolderInput: (val: string) => void
+  // GitHub repo step (MAINTAINER only — R19.2)
+  githubRepo: string
+  onGithubRepoSelect: (repo: string) => void
   // Role-plugin step
   plugins: RolePlugin[]
   pluginsLoading: boolean
@@ -659,6 +688,7 @@ interface ChatBubbleProps {
     selectedPlugin: RolePlugin | null
     selectedAvatar: string
     selectedFolder: string
+    githubRepo: string
     teams: Team[]
   }
   onCreate: () => void
@@ -689,6 +719,8 @@ function ChatBubble({
   onFolderSelect,
   folderInput,
   setFolderInput,
+  githubRepo,
+  onGithubRepoSelect,
   plugins,
   pluginsLoading,
   selectedTitle,
@@ -777,6 +809,13 @@ function ChatBubble({
               <TitlePickerWidget
                 selectedTeamId={selectedTeamId}
                 onSelect={onTitleSelect}
+              />
+            )}
+
+            {message.widget === 'github-repo-picker' && (
+              <GithubRepoPickerWidget
+                value={githubRepo}
+                onConfirm={onGithubRepoSelect}
               />
             )}
 
@@ -1010,6 +1049,59 @@ function TeamPickerWidget({
   )
 }
 
+// Step: GitHub repo input — shown only when MAINTAINER title is selected (R19.2)
+// Validates the "owner/repo" format client-side using the same regex Gate 9a uses.
+// Uniqueness (R19.3 — one MAINTAINER per repo per host) is enforced by the backend.
+function GithubRepoPickerWidget({
+  value,
+  onConfirm,
+}: {
+  value: string
+  onConfirm: (repo: string) => void
+}) {
+  // Same regex as services/element-management-service.ts Gate 9a
+  const REPO_REGEX = /^[\w.-]+\/[\w.-]+$/
+  const [input, setInput] = useState(value)
+  const trimmed = input.trim()
+  const isValid = REPO_REGEX.test(trimmed)
+  const showError = trimmed.length > 0 && !isValid
+
+  return (
+    <div className="space-y-2 w-full max-w-md">
+      <label className="block text-xs font-medium text-gray-300">
+        GitHub Repository
+      </label>
+      <input
+        type="text"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && isValid) onConfirm(trimmed)
+        }}
+        placeholder="Emasoft/my-project"
+        autoFocus
+        className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-100 font-mono text-sm focus:border-emerald-500 focus:outline-none"
+      />
+      {showError && (
+        <p className="text-xs text-red-400">
+          Invalid format. Must be &quot;owner/repo&quot; (e.g. &quot;Emasoft/my-project&quot;).
+        </p>
+      )}
+      <p className="text-xs text-gray-500">
+        One MAINTAINER per repository per host (R19.3). The agent will poll this repo for new issues and fix them autonomously.
+      </p>
+      <button
+        onClick={() => onConfirm(trimmed)}
+        disabled={!isValid}
+        className="w-full px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
+      >
+        <Check className="w-3.5 h-3.5" />
+        Confirm
+      </button>
+    </div>
+  )
+}
+
 // Step 3: Title picker — context-filtered by team assignment
 interface FolderEntry {
   name: string
@@ -1172,7 +1264,7 @@ function TitlePickerWidget({
   selectedTeamId: string | null
   onSelect: (title: AgentRole) => void
 }) {
-  const titles = selectedTeamId ? TEAM_TITLES : AUTONOMOUS_TITLES
+  const titles = selectedTeamId ? TEAM_TITLES : STANDALONE_TITLES
 
   // Check MANAGER singleton: fetch current manager to disable option if taken
   const [managerInfo, setManagerInfo] = useState<{ id: string; name: string } | null>(null)
@@ -1353,6 +1445,7 @@ function SummaryCard({
     selectedPlugin: RolePlugin | null
     selectedAvatar: string
     selectedFolder: string
+    githubRepo: string
     teams: Team[]
   }
   onCreate: () => void
@@ -1361,6 +1454,7 @@ function SummaryCard({
   const pluginDisplay = state.selectedPlugin ? state.selectedPlugin.name : 'None'
   const agentName = state.personaName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '')
   const folderDisplay = state.selectedFolder || `~/agents/${agentName}/`
+  const isMaintainerSummary = state.selectedTitle === 'maintainer'
 
   return (
     <div className="rounded-xl bg-gray-800/60 border border-gray-700 p-4 space-y-2.5">
@@ -1394,6 +1488,9 @@ function SummaryCard({
       <SummaryRow label="Team" value={team ? team.name : 'Autonomous (no team)'} />
       <SummaryRow label="Folder" value={folderDisplay} />
       <SummaryRow label="Role Plugin" value={pluginDisplay} />
+      {isMaintainerSummary && (
+        <SummaryRow label="GitHub Repo" value={state.githubRepo || '(missing)'} />
+      )}
 
       <button
         onClick={onCreate}

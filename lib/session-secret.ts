@@ -7,9 +7,10 @@
  * the server generates a secret at session launch and sets it as a tmux
  * env var ($AID_AUTH). The agent reads it and sends it with API requests.
  *
- * Token format: mst_<64 hex chars>  (kept for backwards compatibility)
- * Env var: AID_AUTH (was MAESTRO_AUTH — renamed to clarify this is
- *          Agent Identity auth, not dashboard user auth)
+ * Token format: mst_<64 hex chars>
+ * Env var: AID_AUTH — Agent Identity auth session secret, not dashboard
+ *          user auth. This is the AID (Agent Identity) credential the
+ *          agent uses to authenticate itself to the API.
  * Storage: SHA-256 hash in agent registry metadata.sessionSecretHash
  * Scope: per-session, dies when session is killed/restarted
  *

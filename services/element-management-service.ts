@@ -3783,14 +3783,21 @@ export async function DeleteTeam(
     const _teamSnapshot = JSON.parse(JSON.stringify(team)) // archived for future recovery
     ops.push(`G02: Team state archived (COS=${team.chiefOfStaffId || 'none'}, ORCH=${team.orchestratorId || 'none'})`)
 
-    // ── G03: Revert all team agents to AUTONOMOUS ──────────────
-    // Collect all unique agents: agentIds + COS + Orchestrator
+    // ── G03: Revert all team agents to AUTONOMOUS + hibernate ──
+    // Collect all unique agents: agentIds + COS + Orchestrator.
+    // Team deletion strips role-plugins (via ChangeTitle → AUTONOMOUS) and
+    // then hibernates each agent so the running session is stopped. Running
+    // a stale role-plugin after its files have been removed is an inconsistent
+    // state; forcing hibernation guarantees the agent restarts cleanly next
+    // time it is woken. Agents are NEVER deleted by team deletion — the ONLY
+    // path to delete an agent is Profile → Advanced → Danger Zone.
     const agentsToRevert = [...new Set([
       ...team.agentIds,
       ...(team.chiefOfStaffId ? [team.chiefOfStaffId] : []),
       ...(team.orchestratorId && !team.agentIds.includes(team.orchestratorId) ? [team.orchestratorId] : []),
     ])]
     if (agentsToRevert.length > 0) {
+      const { hibernateAgent } = await import('@/services/agents-core-service')
       for (const agentId of agentsToRevert) {
         try {
           const titleResult = await ChangeTitle(agentId, 'autonomous')
@@ -3801,6 +3808,29 @@ export async function DeleteTeam(
           }
         } catch (err) {
           ops.push(`G03: WARN — ChangeTitle exception for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
+        }
+        // Hibernate the agent via the canonical hibernateAgent pipeline
+        // (same code path used by POST /api/agents/[id]/hibernate). This
+        // kills the tmux session, updates the registry session status to
+        // offline, and cleans up any stale activity entry. Running with a
+        // stale role-plugin after ChangeTitle stripped it would be an
+        // inconsistent state; hibernation forces a clean restart on next
+        // wake. We pass authContext so the internal authorization gate
+        // treats this as an already-authorized team-delete call.
+        try {
+          const hibResult = await hibernateAgent(agentId, {
+            sessionIndex: 0,
+            authContext: options.authContext,
+          })
+          if (hibResult.data?.success) {
+            ops.push(`G03: Hibernated ${agentId.substring(0, 8)}`)
+          } else if (hibResult.error) {
+            // Session-not-found, already-offline, etc. are not fatal —
+            // log as a warning but continue the pipeline.
+            ops.push(`G03: ${agentId.substring(0, 8)} hibernate note: ${hibResult.error}`)
+          }
+        } catch (err) {
+          ops.push(`G03: WARN — hibernate exception for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
         }
       }
     } else {

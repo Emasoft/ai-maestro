@@ -449,6 +449,10 @@ function ReadyAnimation({ agentName, agentAlias, avatarUrl, showNextSteps, teamN
     },
   ]
 
+  // Team agents show the spec text split across two cards (Rule: SPARK-5 / ISSUE-007).
+  // The first card covers "Your agent is registered in team '<name>'.", the second covers
+  // "It starts hibernated — the MANAGER, you, or the Chief-of-Staff can wake it from the dashboard."
+  // The card titles act as visual headings; descriptions carry the literal spec sentence.
   const teamNextSteps = [
     {
       icon: Users,
@@ -461,18 +465,10 @@ function ReadyAnimation({ agentName, agentAlias, avatarUrl, showNextSteps, teamN
     {
       icon: Moon,
       title: 'Starts Hibernated',
-      description: 'The MANAGER, you, or the Chief-of-Staff can wake it from the dashboard.',
+      description: 'It starts hibernated — the MANAGER, you, or the Chief-of-Staff can wake it from the dashboard.',
       color: 'text-amber-400',
       bgColor: 'bg-amber-500/10',
       borderColor: 'border-amber-500/30',
-    },
-    {
-      icon: MessageSquare,
-      title: 'Team Communication',
-      description: 'Once awake, the agent can send and receive team messages.',
-      color: 'text-purple-400',
-      bgColor: 'bg-purple-500/10',
-      borderColor: 'border-purple-500/30',
     },
   ]
 

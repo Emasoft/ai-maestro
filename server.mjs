@@ -1398,11 +1398,14 @@ async function startServer(handleRequest) {
     // this host, not just AI Maestro agents. It must be local-scope only. This is
     // the ONLY startup plugin mutation — per-agent compliance is enforced by the
     // AIO Change* pipelines (InstallElement, Wake R17 gate), not by startup scans.
+    // Note: user-scope state lives in ~/.claude/settings.json (NOT settings.local.json).
+    // settings.local.json is a project-only override; writing it at the user-home level
+    // is a silent no-op that Claude CLI never reads (see BUG-POLLUTION-001).
     try {
       const { existsSync, readFileSync, writeFileSync } = await import('fs')
       const { join: joinPath } = await import('path')
       const HOME = process.env.HOME || '/tmp'
-      const userSettingsPath = joinPath(HOME, '.claude', 'settings.local.json')
+      const userSettingsPath = joinPath(HOME, '.claude', 'settings.json')
       if (existsSync(userSettingsPath)) {
         try {
           const us = JSON.parse(readFileSync(userSettingsPath, 'utf-8'))

@@ -700,7 +700,11 @@ async function ensureFourfoldIdentity(pluginDir: string, pluginName: string): Pr
 // writer lives in lib/converter/marketplace-emitters.ts.
 // ═══════════════════════════════════════════════════════════════
 
-const SETTINGS_LOCAL = path.join(homedir(), '.claude', 'settings.local.json')
+// User-global Claude Code settings — Claude CLI writes plugin/marketplace
+// state to ~/.claude/settings.json at user scope, NOT settings.local.json.
+// settings.local.json is a project-only override; it should never exist at
+// the user-home level. Writing there is silent pollution (see BUG-POLLUTION-001).
+const USER_GLOBAL_SETTINGS = path.join(homedir(), '.claude', 'settings.json')
 
 async function loadJsonSafe(filePath: string): Promise<Record<string, unknown>> {
   try { return JSON.parse(await readFile(filePath, 'utf-8')) } catch { return {} }
@@ -774,9 +778,9 @@ async function ensureCustomClientMarketplace(targetClient: string): Promise<void
 
   // Register with Claude CLI only (the other clients' CLIs don't support
   // `plugin marketplace add` yet). This tracks the `source.path` in Claude's
-  // settings.local.json so the marketplace survives CLI restarts.
+  // user-global settings.json so the marketplace survives CLI restarts.
   if (targetClient === 'claude') {
-    const settings = await loadJsonSafe(SETTINGS_LOCAL) as Record<string, Record<string, unknown>>
+    const settings = await loadJsonSafe(USER_GLOBAL_SETTINGS) as Record<string, Record<string, unknown>>
     const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
     const marketplaceName = `${CUSTOM_MARKETPLACE_NAME}-${targetClient}`
     const existing = ekm[marketplaceName] as Record<string, Record<string, string>> | undefined
@@ -784,8 +788,8 @@ async function ensureCustomClientMarketplace(targetClient: string): Promise<void
 
     ekm[marketplaceName] = { source: { source: 'directory', path: marketplaceDir } }
     settings.extraKnownMarketplaces = ekm
-    await mkdir(path.dirname(SETTINGS_LOCAL), { recursive: true })
-    await saveJsonSafe(SETTINGS_LOCAL, settings)
+    await mkdir(path.dirname(USER_GLOBAL_SETTINGS), { recursive: true })
+    await saveJsonSafe(USER_GLOBAL_SETTINGS, settings)
   }
 }
 

@@ -36,8 +36,11 @@ function shellSafe(input: string): string {
 }
 
 const HOME = os.homedir()
+// User-global Claude Code settings. Claude CLI persists enabledPlugins and
+// extraKnownMarketplaces here at user scope. ~/.claude/settings.local.json
+// is NOT a valid user-level file — it only exists inside project directories.
+// See BUG-POLLUTION-001.
 const SETTINGS_PATH = join(HOME, '.claude', 'settings.json')
-const SETTINGS_LOCAL_PATH = join(HOME, '.claude', 'settings.local.json')
 const CACHE_DIR = join(HOME, '.claude', 'plugins', 'cache')
 const MARKETPLACES_DIR = join(HOME, '.claude', 'plugins', 'marketplaces')
 
@@ -278,13 +281,9 @@ function repoToUrl(repo: string): string {
 export async function GET() {
   try {
     const settings = await readJsonSafe(SETTINGS_PATH) || {}
-    const settingsLocal = await readJsonSafe(SETTINGS_LOCAL_PATH) || {}
 
-    // enabledPlugins from settings (user-scope)
-    const enabledPlugins = {
-      ...(settingsLocal as Record<string, unknown>).enabledPlugins as Record<string, boolean> | undefined || {},
-      ...(settings as Record<string, unknown>).enabledPlugins as Record<string, boolean> | undefined || {},
-    }
+    // enabledPlugins from settings.json (user-scope — the only valid user-level source)
+    const enabledPlugins = (settings as Record<string, unknown>).enabledPlugins as Record<string, boolean> | undefined || {}
 
     const extraKnown = (settings?.extraKnownMarketplaces as Record<string, unknown> | undefined) || {}
 

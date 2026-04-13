@@ -48,7 +48,10 @@ const HOME = homedir()
 const ROLE_PLUGINS_DIR = join(HOME, 'agents', LOCAL_MARKETPLACE_DIR_NAME)
 const PLUGINS_DIR = join(ROLE_PLUGINS_DIR, 'plugins')
 const CLAUDE_DIR = join(HOME, '.claude')
-const SETTINGS_LOCAL = join(CLAUDE_DIR, 'settings.local.json')
+// User-global Claude Code settings. NOT settings.local.json (which is a
+// project-only override). Claude CLI stores user-scope enabledPlugins and
+// extraKnownMarketplaces in ~/.claude/settings.json — see BUG-POLLUTION-001.
+const USER_GLOBAL_SETTINGS = join(CLAUDE_DIR, 'settings.json')
 const INSTALLED_FILE = join(CLAUDE_DIR, 'plugins', 'installed_plugins.json')
 
 // Local marketplace name — for custom Haephestos-generated role-plugins
@@ -375,9 +378,11 @@ export async function InstallElement(
     }
 
     // ── G10: Idempotency check ────────────────────────────────
+    // Local scope → project-level settings.local.json. User scope → ~/.claude/settings.json
+    // (NOT settings.local.json — see BUG-POLLUTION-001).
     const settingsPath = scope === 'local'
       ? join(agentDir!, '.claude', 'settings.local.json')
-      : join(HOME, '.claude', 'settings.local.json')
+      : USER_GLOBAL_SETTINGS
     const resolvedMarketplace = resolveMarketplaceName(marketplace)
     const pluginKey = `${name}@${resolvedMarketplace}`
 
@@ -644,7 +649,7 @@ export async function InstallElement(
     // If we just installed ai-maestro-plugin at local scope, ensure it's NOT also
     // enabled at user scope (which would cause double-loading and scope confusion).
     if (name === 'ai-maestro-plugin' && action === 'install' && scope === 'local') {
-      const userSettingsPath = join(HOME, '.claude', 'settings.local.json')
+      const userSettingsPath = USER_GLOBAL_SETTINGS
       if (existsSync(userSettingsPath)) {
         try {
           await withSettingsLock(userSettingsPath, async () => {
@@ -775,7 +780,7 @@ export async function InstallElement(
     // at user scope. Double-loading causes unpredictable behavior (duplicate hooks,
     // duplicate skills, config conflicts). Disable the user-scope copy.
     if (action === 'install' && scope === 'local' && agentDir) {
-      const userSettingsPath = join(HOME, '.claude', 'settings.local.json')
+      const userSettingsPath = USER_GLOBAL_SETTINGS
       if (existsSync(userSettingsPath)) {
         try {
           await withSettingsLock(userSettingsPath, async () => {

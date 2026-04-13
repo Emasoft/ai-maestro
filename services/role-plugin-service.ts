@@ -65,7 +65,11 @@ const MARKETPLACE_META_DIR = join(ROLE_PLUGINS_DIR, '.claude-plugin')
 const MARKETPLACE_JSON = join(MARKETPLACE_META_DIR, 'marketplace.json')
 const PLUGINS_DIR = ROLE_PLUGINS_DIR  // Plugins live directly under ~/agents/role-plugins/<name>/
 const CLAUDE_DIR = join(HOME, '.claude')
-const SETTINGS_LOCAL = join(CLAUDE_DIR, 'settings.local.json')
+// User-global Claude Code settings. NOT settings.local.json — that file only
+// exists inside a project directory. At the user-home level, Claude Code uses
+// settings.json. Writing to ~/.claude/settings.local.json creates a phantom
+// file that Claude CLI never reads (see BUG-POLLUTION-001).
+const USER_GLOBAL_SETTINGS = join(CLAUDE_DIR, 'settings.json')
 const INSTALLED_FILE = join(CLAUDE_DIR, 'plugins', 'installed_plugins.json')
 
 // GitHub marketplace for predefined role plugins (from ecosystem-constants)
@@ -652,7 +656,7 @@ export async function ensureMarketplace(): Promise<void> {
 }
 
 async function registerMarketplaceGlobally(): Promise<void> {
-  const settings = await loadJsonSafe(SETTINGS_LOCAL) as Record<string, Record<string, unknown>>
+  const settings = await loadJsonSafe(USER_GLOBAL_SETTINGS) as Record<string, Record<string, unknown>>
   const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
 
   // The canonical entry with the correct absolute path
@@ -671,7 +675,7 @@ async function registerMarketplaceGlobally(): Promise<void> {
 
   ekm[LOCAL_MARKETPLACE_NAME] = canonicalEntry
   settings.extraKnownMarketplaces = ekm
-  await saveJsonSafe(SETTINGS_LOCAL, settings)
+  await saveJsonSafe(USER_GLOBAL_SETTINGS, settings)
 }
 
 export async function updateMarketplaceManifest(
@@ -844,12 +848,12 @@ export async function deleteRolePlugin(pluginName: string): Promise<void> {
 
   // Remove from global enabledPlugins
   const pluginKey = `${pluginName}@${LOCAL_MARKETPLACE_NAME}`
-  if (existsSync(SETTINGS_LOCAL)) {
-    const settings = await loadJsonSafe(SETTINGS_LOCAL) as Record<string, Record<string, unknown>>
+  if (existsSync(USER_GLOBAL_SETTINGS)) {
+    const settings = await loadJsonSafe(USER_GLOBAL_SETTINGS) as Record<string, Record<string, unknown>>
     const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
     delete ep[pluginKey]
     settings.enabledPlugins = ep
-    await saveJsonSafe(SETTINGS_LOCAL, settings)
+    await saveJsonSafe(USER_GLOBAL_SETTINGS, settings)
   }
 }
 
@@ -980,7 +984,7 @@ async function migrateDefaultPluginSettings(): Promise<void> {
 
   // Step 1b: Remove deprecated local marketplace names from global settings
   try {
-    const settings = await loadJsonSafe(SETTINGS_LOCAL) as Record<string, Record<string, unknown>>
+    const settings = await loadJsonSafe(USER_GLOBAL_SETTINGS) as Record<string, Record<string, unknown>>
     const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
     const deprecatedNames = ['ai-maestro-local-agents-marketplace', 'ai-maestro-local-marketplace', 'role-plugins']
     let cleaned = false
@@ -989,7 +993,7 @@ async function migrateDefaultPluginSettings(): Promise<void> {
     }
     if (cleaned) {
       settings.extraKnownMarketplaces = ekm
-      await saveJsonSafe(SETTINGS_LOCAL, settings)
+      await saveJsonSafe(USER_GLOBAL_SETTINGS, settings)
       console.log('[role-plugins] Cleaned deprecated marketplace names from global settings')
     }
   } catch { /* ignore */ }

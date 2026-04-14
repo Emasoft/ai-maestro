@@ -508,13 +508,25 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
             {isCreating ? (
               <div className="flex-1 flex flex-col items-center justify-center p-6">
                 <div className="text-center mb-2">
-                  <h3 className="text-lg font-semibold text-gray-100">
-                    {animationPhase === 'ready' ? 'Your Agent is Ready!' : 'Creating Your Agent'}
+                  {/* P0-018-003: gate celebration on success. creationError (truthy) is
+                      the single source of failure truth — it's set atomically with
+                      setAnimationPhase('error') at line 419-420 and is immune to the
+                      animation timer race that can flip animationPhase back to 'ready'. */}
+                  <h3 className={`text-lg font-semibold ${creationError ? 'text-red-400' : 'text-gray-100'}`}>
+                    {creationError
+                      ? 'Could Not Create Agent'
+                      : animationPhase === 'ready'
+                        ? 'Your Agent is Ready!'
+                        : 'Creating Your Agent'}
                   </h3>
-                  {animationPhase !== 'ready' && <p className="text-sm text-gray-400">{personaName}</p>}
+                  {animationPhase !== 'ready' && !creationError && <p className="text-sm text-gray-400">{personaName}</p>}
                 </div>
                 <CreateAgentAnimation
-                  phase={animationPhase}
+                  // P0-018-003: when creationError is set, force the animation into
+                  // its 'error' phase so the celebratory ReadyAnimation (avatar +
+                  // confetti) can't render even if the background timer race still
+                  // flips animationPhase to 'ready' after the error handler fired.
+                  phase={creationError ? 'error' : animationPhase}
                   agentName={personaName.toLowerCase().replace(/\s+/g, '-')}
                   agentAlias={personaName}
                   avatarUrl={selectedAvatar || getPreviewAvatarUrl(personaName)}

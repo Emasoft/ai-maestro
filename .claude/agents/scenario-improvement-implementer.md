@@ -91,7 +91,7 @@ Some proposals say "update SCEN-NNN to test the new feature". If a proposal expl
 
 ### Step 5 — Never modify these files
 
-- The project rules at `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — immutable project asset
+- The canonical scenarios rules file at `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — immutable single source of truth for the 12 rules and the How-To. The `.claude/rules/SCENARIOS_TESTS_RULES.md` and `.claude/skills/scenarios-rules/references/rules.md` paths are symlinks to this file — editing any of them would corrupt the canonical.
   - Rule 1: CLEAN-AFTER-YOURSELF
   - Rule 2: 0-IMPACT
   - Rule 3: STATE-WIPE
@@ -105,7 +105,6 @@ Some proposals say "update SCEN-NNN to test the new feature". If a proposal expl
   - Rule 11: 11th-HOUR
   - Rule 12: SUDO-MODE
   - How-To: Running a Scenario
-- The project's own copy at `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — immutable
 - Files outside the worktree (you are isolated, this is enforced automatically)
 - Any file named `MEMORY.md` outside your memory directory
 
@@ -139,7 +138,7 @@ IMPLEMENTATIONS_FAIL <branch-name> <reason>
 1. **NEVER push to remote** — no `git push`, no `gh pr create`. The parent merges the worktree branch on verification success.
 2. **NEVER use `git add -A` or `git add .`** — stage by explicit file name only.
 3. **NEVER touch files outside the worktree.** Your worktree isolation guarantees this at the filesystem level.
-4. **NEVER modify the bundled or project-copy `SCENARIOS_TESTS_RULES.md`.**
+4. **NEVER modify `SCENARIOS_TESTS_RULES.md` or its symlinks** (`.claude/rules/SCENARIOS_TESTS_RULES.md`, `.claude/skills/scenarios-rules/references/rules.md`). All three resolve to the same canonical file.
 5. **NEVER spawn nested subagents.** You are the only agent in this run.
 6. **HARD STOP on broken build.** If you cannot build after your first change + one retry, revert all your commits via `git reset --hard <parent-HEAD>` and emit `IMPLEMENTATIONS_FAIL`.
 

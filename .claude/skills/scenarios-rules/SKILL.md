@@ -14,7 +14,7 @@ disable-model-invocation: true
 
 Project-scoped scenario rules for ai-maestro. Every scenario runner and improvement implementer MUST follow them. Preloaded into subagents via the `skills:` frontmatter field, so the rules are always in context before the runner opens the scenario file.
 
-The condensed TOC-indexed version lives at [references/rules.md](references/rules.md). The canonical full text is tracked in git at `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md`.
+Single source of truth: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` (git-tracked canonical 806-line text). The skill's [references/rules.md](references/rules.md) is a **symlink** to that file so the two can NEVER drift. Update only the canonical path.
 
 ## Prerequisites
 
@@ -80,7 +80,7 @@ Incorrect: screenshots/SCEN-009/baseline.png — no timestamp, wrong format, cro
 
 ## Resources
 
-- [references/rules.md](references/rules.md) — condensed reference. Sections:
+- [references/rules.md](references/rules.md) — **symlink** to the canonical tracked file `tests/scenarios/SCENARIOS_TESTS_RULES.md`. Full 806-line text with frontmatter format, device emulation presets, phase templates, directory structure, scenario file format, and the non-negotiable cleanup order. Contains all 12 rules:
   - Rule 1: CLEAN-AFTER-YOURSELF
   - Rule 2: 0-IMPACT
   - Rule 3: STATE-WIPE
@@ -93,4 +93,4 @@ Incorrect: screenshots/SCEN-009/baseline.png — no timestamp, wrong format, cro
   - Rule 10: PHOTOSTORY
   - Rule 11: 11th-HOUR
   - Rule 12: SUDO-MODE
-- Plugin-level `references/SCENARIOS_TESTS_RULES.md` — full 595-line canonical text with frontmatter format, device emulation presets, phase templates, directory structure, and the non-negotiable cleanup order
+- `${CLAUDE_PROJECT_DIR}/.claude/rules/SCENARIOS_TESTS_RULES.md` — another symlink to the same canonical file, auto-loaded by the Claude Code harness on session start.

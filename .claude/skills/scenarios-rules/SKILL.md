@@ -50,7 +50,7 @@ Copy this checklist and track your progress:
 9. **REPORT-FORMAT** — Follow the structured markdown template with frontmatter, steps, bugs, verification.
 10. **PHOTOSTORY** — Every step screenshot in timestamped dir+filename, JPEG 97%, never compress mid-session.
 11. **11th-HOUR** — Deep analysis + improvement proposals. This is the primary deliverable.
-12. **STEP-UP-AUTH** — Destructive ops trigger sudo modal. Enter password and confirm.
+12. **SUDO-MODE** — Destructive ops trigger sudo password modal. Enter the governance password and confirm.
 
 ## Output
 
@@ -92,5 +92,5 @@ Incorrect: screenshots/SCEN-009/baseline.png — no timestamp, wrong format, cro
   - Rule 9: REPORT-FORMAT
   - Rule 10: PHOTOSTORY
   - Rule 11: 11th-HOUR
-  - Rule 12: STEP-UP-AUTH
+  - Rule 12: SUDO-MODE
 - Plugin-level `references/SCENARIOS_TESTS_RULES.md` — full 595-line canonical text with frontmatter format, device emulation presets, phase templates, directory structure, and the non-negotiable cleanup order

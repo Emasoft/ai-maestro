@@ -13,7 +13,7 @@
 - [Rule 9: REPORT-FORMAT](#rule-9-report-format)
 - [Rule 10: PHOTOSTORY](#rule-10-photostory)
 - [Rule 11: 11th-HOUR](#rule-11-11th-hour)
-- [Rule 12: STEP-UP-AUTH](#rule-12-step-up-auth)
+- [Rule 12: SUDO-MODE](#rule-12-sudo-mode)
 
 ## Rule 1: CLEAN-AFTER-YOURSELF
 
@@ -98,7 +98,7 @@ Save to the proposals file with each proposal including problem description, roo
 
 This is the PRIMARY DELIVERABLE of every scenario run. The test steps are the instrument; the improvements are the product.
 
-## Rule 12: STEP-UP-AUTH
+## Rule 12: SUDO-MODE
 
 Destructive operations trigger a sudo password modal that must be entered and confirmed. The modal is locatable via role dialog and aria-modal true. Each strict operation needs its own sudo token since tokens are one-shot.
 

@@ -103,7 +103,7 @@ Some proposals say "update SCEN-NNN to test the new feature". If a proposal expl
   - Rule 9: REPORT-FORMAT
   - Rule 10: PHOTOSTORY
   - Rule 11: 11th-HOUR
-  - Rule 12: STEP-UP-AUTH
+  - Rule 12: SUDO-MODE
   - How-To: Running a Scenario
 - The project's own copy at `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — immutable
 - Files outside the worktree (you are isolated, this is enforced automatically)

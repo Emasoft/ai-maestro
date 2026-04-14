@@ -59,7 +59,7 @@ You already have Bash, Read, Write, Edit, Grep, Glob, TodoWrite from subagent de
    - Rule 9: REPORT-FORMAT
    - Rule 10: PHOTOSTORY
    - Rule 11: 11th-HOUR
-   - Rule 12: STEP-UP-AUTH
+   - Rule 12: SUDO-MODE
    - How-To: Running a Scenario
 2. Read the scenario .md file at `tests/scenarios/SCEN-NNN_*.scen.md`. Its frontmatter lists prerequisites, required tools, expected data, phases, and cleanup steps. The frontmatter is authoritative.
 3. Read your own `MEMORY.md` for relevant prior-run context.

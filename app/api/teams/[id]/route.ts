@@ -67,8 +67,15 @@ export async function PUT(
     }
 
     // Auto-title transitions: delegate to ChangeTeam for membership changes
+    // P0-001 (2026-04-14): ChangeTeam now requires authContext (positional
+    // arg 3). It propagates to ChangeTitle internally. Before this fix the
+    // PATCH /api/teams/{id} route silently failed to title newly added
+    // agents (BUG-002 root cause) because ChangeTeam accepted an unused
+    // `_authContext` and called ChangeTitle with no auth.
     if (safeBody.agentIds !== undefined) {
       const { ChangeTeam } = await import('@/services/element-management-service')
+      const { buildAuthContext } = await import('@/lib/agent-auth')
+      const changeTeamAuth = buildAuthContext(auth)
       const newAgentIds: string[] = result.data?.team?.agentIds ?? []
       const oldSet = new Set<string>(oldAgentIds)
       const newSet = new Set<string>(newAgentIds)
@@ -76,7 +83,7 @@ export async function PUT(
       for (const agentId of newAgentIds) {
         if (!oldSet.has(agentId)) {
           try {
-            await ChangeTeam(agentId, { teamId: id, role: 'member' })
+            await ChangeTeam(agentId, { teamId: id, role: 'member' }, changeTeamAuth)
           } catch (err: unknown) {
             console.error(`[team PUT] ChangeTeam(add) failed for agent ${agentId}:`, err)
           }
@@ -86,7 +93,7 @@ export async function PUT(
       for (const agentId of oldAgentIds) {
         if (!newSet.has(agentId)) {
           try {
-            await ChangeTeam(agentId, { teamId: null })
+            await ChangeTeam(agentId, { teamId: null }, changeTeamAuth)
           } catch (err: unknown) {
             console.error(`[team PUT] ChangeTeam(remove) failed for agent ${agentId}:`, err)
           }

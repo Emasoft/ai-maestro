@@ -262,10 +262,11 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
     const systemOwnerAuthContext = { isSystemOwner: true as const }
 
     // Assign COS title + role-plugin via ChangeTitle pipeline.
+    // P0-001 (2026-04-14): authContext is now positional arg 3 on ChangeTitle.
     if (cosId) {
       try {
         const { ChangeTitle } = await import('@/services/element-management-service')
-        await ChangeTitle(cosId, 'chief-of-staff', { authContext: systemOwnerAuthContext })
+        await ChangeTitle(cosId, 'chief-of-staff', systemOwnerAuthContext)
       } catch (err) {
         console.warn('[teams] Failed ChangeTitle for COS:', err instanceof Error ? err.message : err)
       }
@@ -280,7 +281,7 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
     for (const id of agentIdsToTitle) {
       try {
         const { ChangeTitle } = await import('@/services/element-management-service')
-        await ChangeTitle(id, 'member', { authContext: systemOwnerAuthContext })
+        await ChangeTitle(id, 'member', systemOwnerAuthContext)
       } catch (err) {
         console.warn(`[teams] Failed ChangeTitle to MEMBER for agent ${id}:`, err instanceof Error ? err.message : err)
       }
@@ -291,7 +292,7 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
       try {
         await updateTeam(team.id, { orchestratorId: params.orchestratorId }, managerId)
         const { ChangeTitle } = await import('@/services/element-management-service')
-        await ChangeTitle(params.orchestratorId, 'orchestrator', { authContext: systemOwnerAuthContext })
+        await ChangeTitle(params.orchestratorId, 'orchestrator', systemOwnerAuthContext)
       } catch (err) {
         console.warn('[teams] Failed to set orchestrator:', err instanceof Error ? err.message : err)
       }
@@ -392,6 +393,7 @@ export async function updateTeamById(id: string, params: UpdateTeamParams): Prom
     const systemOwnerAuthContextForUpdate = { isSystemOwner: true as const }
 
     // Strip titles from removed agents (team-bound titles are meaningless outside teams)
+    // P0-001 (2026-04-14): authContext is now positional arg 3 on ChangeTitle.
     if (newAgentIds !== undefined) {
       const removedAgentIds = oldAgentIds.filter(aid => !newAgentIds.includes(aid))
       if (removedAgentIds.length > 0) {
@@ -399,7 +401,7 @@ export async function updateTeamById(id: string, params: UpdateTeamParams): Prom
         for (const removedId of removedAgentIds) {
           try {
             // Reverts to AUTONOMOUS, uninstalls role-plugin
-            await ChangeTitle(removedId, null, { authContext: systemOwnerAuthContextForUpdate })
+            await ChangeTitle(removedId, null, systemOwnerAuthContextForUpdate)
           } catch (err) {
             console.warn(`[teams] Failed to strip title from removed agent ${removedId}:`, err instanceof Error ? err.message : err)
           }
@@ -416,7 +418,7 @@ export async function updateTeamById(id: string, params: UpdateTeamParams): Prom
             const agent = getAgent(addedId)
             // Only auto-title if agent doesn't already have a team-specific title
             if (!agent?.governanceTitle || agent.governanceTitle === 'autonomous') {
-              await ChangeTitle(addedId, 'member', { authContext: systemOwnerAuthContextForUpdate })
+              await ChangeTitle(addedId, 'member', systemOwnerAuthContextForUpdate)
             }
           } catch (err) {
             console.warn(`[teams] Failed to auto-title added agent ${addedId}:`, err instanceof Error ? err.message : err)
@@ -508,11 +510,12 @@ export async function deleteTeamById(id: string, requestingAgentId?: string, pas
     // ChangeTitle Gate 0 doesn't silently reject the revert. deleteTeamById
     // itself is marked @deprecated, but the fix is kept for safety while
     // the DeleteTeam pipeline is still being adopted.
+    // P0-001 (2026-04-14): authContext is now positional arg 3 on ChangeTitle.
     const systemOwnerAuthContextForDelete = { isSystemOwner: true as const }
     const { ChangeTitle } = await import('@/services/element-management-service')
     for (const agentId of uniqueAgents) {
       try {
-        await ChangeTitle(agentId, 'autonomous', { authContext: systemOwnerAuthContextForDelete })
+        await ChangeTitle(agentId, 'autonomous', systemOwnerAuthContextForDelete)
       } catch (err) {
         console.warn(`[deleteTeamById] ChangeTitle to AUTONOMOUS failed for ${agentId}:`, err instanceof Error ? err.message : err)
       }

@@ -2296,10 +2296,11 @@ const routes: Route[] = [
 
         // ChangeTitle handles: registry + role-plugin cleanup (only if no longer COS anywhere)
         // SCEN-001 fix (2026-04-13): Gate 0 requires authContext.
+        // P0-001 (2026-04-14): authContext is now positional arg 3.
         if (oldCosId && !isChiefOfStaffAnywhere(oldCosId)) {
           try {
             const { ChangeTitle } = await import('@/services/element-management-service')
-            await ChangeTitle(oldCosId, null, { authContext: { isSystemOwner: true as const } })
+            await ChangeTitle(oldCosId, null, { isSystemOwner: true as const })
           } catch (err) {
             console.warn('[governance] Failed ChangeTitle on COS removal:', err instanceof Error ? err.message : err)
           }
@@ -2331,9 +2332,10 @@ const routes: Route[] = [
 
       // ChangeTitle handles: registry write + role-plugin sync
       // SCEN-001 fix (2026-04-13): Gate 0 requires authContext.
+      // P0-001 (2026-04-14): authContext is now positional arg 3.
       try {
         const { ChangeTitle } = await import('@/services/element-management-service')
-        await ChangeTitle(cosAgentId, 'chief-of-staff', { authContext: { isSystemOwner: true as const } })
+        await ChangeTitle(cosAgentId, 'chief-of-staff', { isSystemOwner: true as const })
       } catch (err) {
         console.warn('[governance] Failed ChangeTitle for COS:', err instanceof Error ? err.message : err)
       }

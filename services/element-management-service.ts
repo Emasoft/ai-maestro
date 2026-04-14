@@ -696,13 +696,22 @@ export async function InstallElement(
         const { getAgent: getAgentPG04 } = await import('@/lib/agent-registry')
         const agentPG04 = getAgentPG04(desired.agentId)
         const title = (agentPG04?.governanceTitle || 'autonomous').toLowerCase()
+        // P0-001: ChangeTitle now requires a non-optional authContext. PG04 is
+        // an internal self-repair triggered by an InstallElement uninstall.
+        // InstallElement does not receive an authContext parameter, so we
+        // construct a system-owner context with a descriptive audit reason.
+        // This is SAFE: InstallElement is only invoked from already-authorized
+        // code paths (ChangePlugin, ChangeTitle), and PG04 is a defensive
+        // housekeeping step that maintains R11 invariants.
+        const { buildSystemAuthContext } = await import('@/lib/agent-auth')
+        const pg04AuthContext: AuthContext = buildSystemAuthContext('pg04-title-plugin-repair')
         if (title !== 'autonomous') {
           // Agent has a title that requires a role-plugin — reinstall the default
           const defaultPlugin = TITLE_PLUGIN_MAP[title]
           if (defaultPlugin && defaultPlugin !== name) {
             ops.push(`PG04: R11 violation — agent has title "${title}" but lost role-plugin "${name}". Reinstalling default "${defaultPlugin}" via ChangeTitle.`)
             // ChangeTitle handles the full role-plugin install pipeline
-            const titleResult = await ChangeTitle(desired.agentId, title)
+            const titleResult = await ChangeTitle(desired.agentId, title, pg04AuthContext)
             if (titleResult.success) {
               ops.push(`PG04: ChangeTitle restored default plugin "${defaultPlugin}" (${titleResult.operations.length} sub-gates)`)
             } else {
@@ -711,7 +720,7 @@ export async function InstallElement(
           } else if (defaultPlugin === name) {
             // The uninstalled plugin WAS the default — revert to AUTONOMOUS
             ops.push(`PG04: Uninstalled the default plugin for title "${title}" — reverting agent to AUTONOMOUS`)
-            const titleResult = await ChangeTitle(desired.agentId, 'autonomous')
+            const titleResult = await ChangeTitle(desired.agentId, 'autonomous', pg04AuthContext)
             ops.push(titleResult.success
               ? `PG04: Agent reverted to AUTONOMOUS`
               : `PG04: WARN — Revert to AUTONOMOUS failed: ${titleResult.error}`)
@@ -1390,11 +1399,27 @@ const STANDALONE_TITLES: ReadonlySet<string> = new Set([
 // Singleton titles (only one agent can hold this on the host/team)
 const SINGLETON_TEAM_TITLES: ReadonlySet<string> = new Set(['chief-of-staff', 'orchestrator'])
 
+/**
+ * Change the governance title of an agent.
+ *
+ * SECURITY INVARIANT (P0-001, SCEN-001): `authContext` is REQUIRED as a
+ * positional argument — never optional, never inside an options bag. This
+ * is a compile-time guarantee: TypeScript rejects any call site that forgets
+ * to pass it. If someone bypasses the type system (`any`, `as unknown`, etc.)
+ * the runtime Gate 0 check throws hard instead of returning a soft error that
+ * could be swallowed by a caller's try/catch.
+ *
+ * Why this matters: BUG-002 during SCEN-001 was caused by internal callers
+ * (notably `ChangeTeam`'s auto-title logic) calling ChangeTitle without
+ * authContext. The old soft-return made the failure look like a console.warn
+ * instead of a propagated error, leaving agents in an inconsistent state
+ * (added to team.agentIds but never titled).
+ */
 export async function ChangeTitle(
   agentId: string,
   newTitle: string | null,
+  authContext: AuthContext,
   options?: {
-    authContext?: AuthContext,
     teamIds?: string[]
     skipPluginSync?: boolean
     skipRestart?: boolean
@@ -1414,13 +1439,23 @@ export async function ChangeTitle(
     restartNeeded: false,
   }
 
+  // ── GATE 0 (pre-try, hard throw): Belt-and-braces runtime check ──
+  // Even though TypeScript makes authContext required, some call sites use
+  // `any` / dynamic imports / untyped wrappers. If ChangeTitle is ever called
+  // with `undefined as any`, throw LOUDLY instead of soft-failing into a
+  // try/catch that the caller silently drops. This closes BUG-002 at runtime.
+  if (!authContext) {
+    throw new Error(
+      '[ChangeTitle] FATAL: authContext is required (P0-001). ' +
+      'This is a programmer error — every ChangeTitle caller must provide ' +
+      'an AuthContext. Internal callers should use buildSystemAuthContext(reason). ' +
+      'See services/element-management-service.ts:ChangeTitle for the signature.'
+    )
+  }
+
   try {
     // ── GATE 0: Authorization (change-title: MANAGER/COS only, never self) ──
-    if (!options?.authContext) {
-      result.error = 'authContext is mandatory for ChangeTitle (security invariant)'
-      return result
-    }
-    const g0err = await gate0Auth('change-title', agentId, options.authContext, ops)
+    const g0err = await gate0Auth('change-title', agentId, authContext, ops)
     if (g0err) { result.error = g0err; return result }
 
     // ── GATE 1: Validate title value ─────────────────────────
@@ -2868,10 +2903,24 @@ export async function ChangeTeam(
     teamId: string | null  // null = remove from all teams
     role?: string           // 'member' | 'chief-of-staff' | 'orchestrator' | 'architect' | 'integrator'
   },
-  _authContext?: AuthContext,
+  authContext: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
+
+  // P0-001 (SCEN-001 BUG-002): ChangeTeam must propagate authContext to its
+  // downstream ChangeTitle calls. Previously, authContext was accepted but
+  // ignored (prefixed `_authContext`), causing auto-title to silently fail
+  // with "authContext is mandatory" and leaving agents titleless in the team
+  // registry. Making authContext required here matches ChangeTitle's contract
+  // and forces every ChangeTeam caller to provide it.
+  if (!authContext) {
+    throw new Error(
+      '[ChangeTeam] FATAL: authContext is required (P0-001). ' +
+      'ChangeTeam propagates this to ChangeTitle, and ChangeTitle rejects ' +
+      'missing authContext at Gate 0. Every caller must provide an AuthContext.'
+    )
+  }
 
   try {
     // ── G01: Validate agent exists ────────────────────────────
@@ -2941,7 +2990,12 @@ export async function ChangeTeam(
       ops.push(`G04c: Removed agent from team "${currentTeam.name}" agentIds`)
 
       // G04d: Revert title to AUTONOMOUS
-      const titleResult = await ChangeTitle(agentId, 'autonomous')
+      // P0-001: Forward authContext so ChangeTitle Gate 0 doesn't reject the
+      // downstream title transition. Before this fix, ChangeTitle returned
+      // "authContext is mandatory for ChangeTitle (security invariant)" and
+      // the registry was left inconsistent (agent removed from team.agentIds
+      // but title never reverted).
+      const titleResult = await ChangeTitle(agentId, 'autonomous', authContext)
       if (!titleResult.success) {
         ops.push(`G04d: WARN — ChangeTitle to AUTONOMOUS failed: ${titleResult.error}`)
       } else {
@@ -2980,8 +3034,13 @@ export async function ChangeTeam(
     }
 
     // G07: Set title
+    // P0-001: Forward authContext — this was THE original BUG-002 site.
+    // Before the fix, ChangeTitle was called with no authContext on the add-
+    // to-team auto-title path, so the team got the agentId but the agent was
+    // never promoted to MEMBER. The UI then showed "unassigned title" while
+    // teams.json claimed the agent was in the team.
     const effectiveRole = desired.role || 'member'
-    const titleResult = await ChangeTitle(agentId, effectiveRole)
+    const titleResult = await ChangeTitle(agentId, effectiveRole, authContext)
     if (!titleResult.success) {
       ops.push(`G07: WARN — ChangeTitle to ${effectiveRole} failed: ${titleResult.error}`)
     } else {
@@ -3828,14 +3887,13 @@ export async function DeleteTeam(
       for (const agentId of agentsToRevert) {
         try {
           // BUG-002 fix (SCEN-005): ChangeTitle requires authContext as a security
-          // invariant. Without it the call returns "authContext is mandatory" and
-          // the COS/Member never reverts to AUTONOMOUS — the team gets deleted but
+          // invariant. Without it the call throws "authContext is required (P0-001)"
+          // and the COS/Member never reverts to AUTONOMOUS — the team gets deleted but
           // its former agents retain their titles AND their role-plugins. Pass
-          // through the DeleteTeam authContext so ChangeTitle treats this revert
-          // as an already-authorized governance operation.
-          const titleResult = await ChangeTitle(agentId, 'autonomous', {
-            authContext: options.authContext,
-          })
+          // through the DeleteTeam authContext (now positional arg 3 per P0-001)
+          // so ChangeTitle treats this revert as an already-authorized governance
+          // operation. G00 above already asserted options.authContext is non-null.
+          const titleResult = await ChangeTitle(agentId, 'autonomous', options!.authContext!)
           if (titleResult.success) {
             ops.push(`G03: Agent ${agentId.substring(0, 8)} → AUTONOMOUS`)
           } else {
@@ -4012,8 +4070,9 @@ export async function DeleteAgent(
       const { isManager: checkManager } = await import('@/lib/governance')
       if (checkManager(agentId)) {
         ops.push('G02: Agent is MANAGER — auto-demoting to AUTONOMOUS before deletion')
-        const titleResult = await ChangeTitle(agentId, 'autonomous', {
-          authContext: options?.authContext,
+        // P0-001: authContext is now positional arg 3. G00 above already
+        // asserted it is non-null, so the non-null assertion is safe here.
+        const titleResult = await ChangeTitle(agentId, 'autonomous', options!.authContext!, {
           skipRestart: true,  // No point restarting — we're about to delete
         })
         if (!titleResult.success) {
@@ -4593,8 +4652,8 @@ export async function CreateAgent(
       TEAM_REQUIRED_TITLES_G06.has(desired.governanceTitle)
 
     if (desired.governanceTitle && desired.governanceTitle !== 'autonomous' && !titleNeedsTeamFirst) {
-      const titleResult = await ChangeTitle(agent.id, desired.governanceTitle, {
-        authContext: desired.authContext,
+      // P0-001: authContext is now positional arg 3 on ChangeTitle.
+      const titleResult = await ChangeTitle(agent.id, desired.governanceTitle, desired.authContext, {
         githubRepo: desired.githubRepo,
       })
       if (!titleResult.success) {
@@ -4620,7 +4679,9 @@ export async function CreateAgent(
 
     // ── G07: Add to team if requested ────────────────────────
     if (desired.teamId) {
-      const teamResult = await ChangeTeam(agent.id, { teamId: desired.teamId })
+      // P0-001: ChangeTeam now requires authContext (positional arg 3). It
+      // propagates to the downstream ChangeTitle call inside ChangeTeam.
+      const teamResult = await ChangeTeam(agent.id, { teamId: desired.teamId }, desired.authContext)
       if (!teamResult.success) {
         ops.push(`G07: WARN — ChangeTeam failed: ${teamResult.error}`)
       } else {
@@ -4628,15 +4689,16 @@ export async function CreateAgent(
         result.restartNeeded = result.restartNeeded || teamResult.restartNeeded
       }
 
-      // G07b: ChangeTeam tries to auto-assign "member" title, but that internal
-      // ChangeTitle call lacks authContext and FAILS silently at Gate 0.
-      // ALWAYS re-apply the requested title after team join (including 'member')
-      // to guarantee governanceTitle is persisted to the registry.
+      // G07b: ChangeTeam auto-assigns 'member' title when an agent is added
+      // to a team. P0-001 fixed the silent authContext bug, so ChangeTeam now
+      // successfully applies 'member'. We still re-apply the requested title
+      // here because the wizard may request a non-member title (architect,
+      // integrator, etc.) that ChangeTeam wouldn't assign on its own.
       // This fixes SCEN-020 BUG-001 (registry missing governanceTitle after wizard
       // creation) and BUG-022 (non-member titles being ignored).
       if (desired.governanceTitle && desired.governanceTitle !== 'autonomous') {
-        const retitleResult = await ChangeTitle(agent.id, desired.governanceTitle, {
-          authContext: desired.authContext,
+        // P0-001: authContext is now positional arg 3.
+        const retitleResult = await ChangeTitle(agent.id, desired.governanceTitle, desired.authContext, {
           githubRepo: desired.githubRepo,
         })
         if (!retitleResult.success) {

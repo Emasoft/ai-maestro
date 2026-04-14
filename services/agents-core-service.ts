@@ -715,8 +715,9 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
     if (oldTitle !== newTitle) {
       try {
         const { ChangeTitle } = await import('@/services/element-management-service')
+        // P0-001 (2026-04-14): authContext is now positional arg 3 on ChangeTitle.
         const ac = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }
-        const titleResult = await ChangeTitle(id, newTitle, { authContext: ac })
+        const titleResult = await ChangeTitle(id, newTitle, ac)
         if (!titleResult.success) console.warn('[agents] ChangeTitle failed:', titleResult.error)
         anyChangeExecuted = true
       } catch (err) {

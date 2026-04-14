@@ -519,12 +519,36 @@ Steps are numbered sequentially across all phases: S001, S002, ... S028. Never r
 
 **Every step MUST have a screenshot saved** as proof of completion. If a scenario has 40 steps, there must be 40 screenshots — no exceptions.
 
-**Naming convention:**
+**Naming convention (timestamped — both directory and file):**
+
+At the very start of each scenario run, the runner MUST generate a single run identifier in ISO 8601 basic format:
+
 ```
-tests/scenarios/screenshots/SCEN-<NNN>/S<NNN>-<short-description>.png
+RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)
+# example: RUN_ID=20260414T143000Z
 ```
 
-Example: `SCEN-009/S014-task-sent.png`, `SCEN-009/S033-manager-removed.png`
+Every screenshot for that run is then saved under a **timestamped per-run subdirectory** AND the file itself **also carries the same timestamp**, so both the dir and the file are unambiguous even if someone moves or copies them:
+
+```
+tests/scenarios/screenshots/SCEN-<NNN>_<RUN_ID>/S<NNN>_<RUN_ID>_<short-desc>.jpg
+```
+
+Examples (for a scenario run started at 2026-04-14T14:30:00Z):
+
+```
+tests/scenarios/screenshots/SCEN-009_20260414T143000Z/S014_20260414T143000Z_task-sent.jpg
+tests/scenarios/screenshots/SCEN-009_20260414T143000Z/S033_20260414T143000Z_manager-removed.jpg
+```
+
+**Format: JPEG 97%** — not PNG. UI screenshots compress well as JPEG 97% with no visible quality loss, and saves ~50 MB per 22-scenario batch vs PNG. If your browser automation MCP only produces PNG, convert each file immediately after capture using `sips -s format jpeg -s formatOptions 97 <file>.png --out <file>.jpg && rm <file>.png`, or call `tests/scenarios/scripts/compress-screenshots.sh` at the end of your run to batch-convert. The canonical on-disk format is `.jpg`.
+
+**Why both dir AND filename carry the timestamp:**
+
+- The directory ensures each run has its own isolated namespace — no overwrite, no mixing, no cruft from old runs
+- The filename carries the same timestamp as a safety net for when someone moves, copies, or extracts a single file outside its dir (the file still self-identifies)
+- Sorting by filename puts all steps of a given run next to each other chronologically
+- Multiple runs of the same scenario are trivially comparable (diff their run dirs)
 
 **When to capture:**
 - **After** the step's action is completed and the expected result is visible
@@ -534,7 +558,7 @@ Example: `SCEN-009/S014-task-sent.png`, `SCEN-009/S033-manager-removed.png`
 
 **The screenshot is part of the step's verification.** A step without a screenshot is considered incomplete. The report's step table must include the screenshot filename for every row.
 
-**Why:** Screenshots create an unambiguous audit trail. When reviewing scenario results weeks later, screenshots prove what actually happened at each step, preventing false PASS claims.
+**Why:** Screenshots create an unambiguous audit trail. When reviewing scenario results weeks later, screenshots prove what actually happened at each step, preventing false PASS claims AND preventing cross-run contamination when the same scenario is run multiple times.
 
 ---
 

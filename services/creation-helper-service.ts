@@ -76,7 +76,17 @@ let creationHelperPromise: Promise<ServiceResult<{
 // If no heartbeat is received for WATCHDOG_TIMEOUT_MS, the session is killed.
 // This prevents zombie sessions from running indefinitely if the browser
 // tab closes without triggering beforeunload cleanup.
-const WATCHDOG_TIMEOUT_MS = 2 * 60 * 1000 // 2 minutes
+//
+// WT-004#1: Timeout increased from 2min to 30min. Interactive role-plugin
+// creation can involve long user pauses — reading Claude's suggestions,
+// filling multi-step forms, reviewing TOML preview, approving plans — any
+// of which can legitimately exceed 2min without heartbeats (e.g. a tab in
+// the background, a user stepping away to check something). 30min matches
+// the typical Claude Code idle timeout and balances resource cleanup with
+// user tolerance. Five zombie-safeguard layers still protect us from true
+// leaks: beforeunload+sendBeacon, visibilitychange (client-side suspend),
+// this server watchdog, startup cleanup, and tightened tmux permissions.
+const WATCHDOG_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
 let lastHeartbeat: number = 0
 let watchdogTimer: ReturnType<typeof setInterval> | null = null
 

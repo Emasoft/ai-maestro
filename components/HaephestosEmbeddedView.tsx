@@ -104,14 +104,90 @@ export default function HaephestosEmbeddedView({ agent, onAgentCreated }: Haephe
     finally { setWaking(false) }
   }, [])
 
-  // Heartbeat: keep the server-side watchdog alive (only when online)
+  // Heartbeat: keep the server-side watchdog alive (only when online).
+  //
+  // WT-004#1: three improvements over the naive setInterval+fetch version:
+  //   1. visibilitychange suspend — when the tab is hidden, stop sending
+  //      heartbeats (saves battery and connections). Resume + send
+  //      immediately when the tab becomes visible again. Safe because the
+  //      server-side watchdog is now 30min (far longer than any typical
+  //      tab-switch break).
+  //   2. retry with exponential backoff — a single 1s network hiccup must
+  //      NOT cause a missed heartbeat (which could escalate toward a false
+  //      kill). Retry up to 3 times with backoff 1s/2s/4s. Only if all 3
+  //      fail do we log an error and move on; the next interval tick will
+  //      try again.
+  //   3. cleanup: interval AND visibilitychange listener both torn down
+  //      on unmount (or when the agent goes offline).
   useEffect(() => {
     if (!isOnline) return
-    const heartbeatInterval = setInterval(() => {
-      fetch('/api/agents/creation-helper/heartbeat', { method: 'POST' }).catch(() => {})
-    }, 30_000)
-    fetch('/api/agents/creation-helper/heartbeat', { method: 'POST' }).catch(() => {})
-    return () => clearInterval(heartbeatInterval)
+
+    let cancelled = false
+    let heartbeatInterval: ReturnType<typeof setInterval> | null = null
+
+    const sendHeartbeatWithRetry = async () => {
+      // Three-attempt retry with exponential backoff: 1s, 2s, 4s.
+      // This is retry-BETWEEN-attempts, not retry-AFTER-failure — the next
+      // 30s interval tick will make a fresh attempt regardless.
+      const backoffs = [1000, 2000, 4000]
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (cancelled) return
+        try {
+          const res = await fetch('/api/agents/creation-helper/heartbeat', { method: 'POST' })
+          if (res.ok) return
+        } catch { /* network error, fall through to retry */ }
+        // Don't sleep after the final attempt — just give up and let the
+        // next interval tick handle it.
+        if (attempt < 2) {
+          await new Promise(resolve => setTimeout(resolve, backoffs[attempt]))
+        }
+      }
+      // All 3 attempts failed — log once so this is visible in devtools but
+      // don't crash the UI. The next interval tick may succeed.
+      console.warn('[Haephestos] Heartbeat failed after 3 attempts (1s/2s/4s backoff); will retry on next interval')
+    }
+
+    const startInterval = () => {
+      if (heartbeatInterval) return
+      heartbeatInterval = setInterval(() => { void sendHeartbeatWithRetry() }, 30_000)
+    }
+
+    const stopInterval = () => {
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval)
+        heartbeatInterval = null
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Tab is hidden: pause the interval. Server watchdog is 30min so
+        // we have plenty of headroom before a missing heartbeat matters.
+        stopInterval()
+      } else {
+        // Tab is visible again: send one immediately + resume the interval.
+        void sendHeartbeatWithRetry()
+        startInterval()
+      }
+    }
+
+    // Initial heartbeat + start the interval. If the tab starts hidden
+    // (unusual for this flow but possible via background-tab open),
+    // visibilitychange will pause it below.
+    void sendHeartbeatWithRetry()
+    startInterval()
+
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      stopInterval()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      cancelled = true
+      stopInterval()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [isOnline])
 
   // Sync raw materials state to disk so Haephestos can read it

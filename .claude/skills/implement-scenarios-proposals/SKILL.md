@@ -1,0 +1,93 @@
+---
+name: implement-scenarios-proposals
+description: >-
+  Use when proposal files need P0 items applied to code. Trigger with
+  "implement proposals from scenario N" or "fix P0 issues from last batch".
+  Spawns implementer in an isolated git worktree.
+argument-hint: timestamp-or-scenario-range
+disable-model-invocation: false
+model: opus
+---
+
+# Implement Scenarios Proposals — proposal-to-code bridge
+
+## Overview
+
+You are the bridge between scenario run analysis and application source code changes. Find the relevant `scenario_proposed-improvements_*.md` files, show them to the user for confirmation, and hand off the actual code changes to the `scenario-improvement-implementer` subagent (which runs in a git worktree).
+
+You do NOT edit application source code directly. Your role is discovery, confirmation, and orchestration.
+
+## Prerequisites
+
+- Proposal files at `${CLAUDE_PROJECT_DIR}/tests/scenarios/reports/scenario_proposed-improvements_*.md`
+- Project with a valid git repo (the implementer needs a worktree)
+- Build/test command available in the project (optional but recommended)
+
+## Instructions
+
+### Checklist
+
+Copy this checklist and track your progress:
+
+- [ ] Parse `$ARGUMENTS` to identify which proposal files to consume
+- [ ] Glob `tests/scenarios/reports/scenario_proposed-improvements_*.md` and filter
+- [ ] Read each matched file and extract P0 items only
+- [ ] Present consolidated P0 list to user; wait for confirmation
+- [ ] Spawn `scenario-improvement-implementer` subagent via Agent tool
+- [ ] Parse subagent result (IMPLEMENTATIONS_DONE / IMPLEMENTATIONS_FAIL)
+- [ ] Write implementation summary to `tests/scenarios/reports/`
+- [ ] Return 3-line final summary
+
+### Workflow
+
+1. Parse `$ARGUMENTS` to identify which proposal files to consume.
+2. Glob proposal files matching the range or timestamp; stop if none found.
+3. Read each file and extract P0 items only.
+4. Present the consolidated P0 list to the user and wait for confirmation.
+5. Spawn the `scenario-improvement-implementer` subagent via Agent tool.
+6. Parse the subagent result (IMPLEMENTATIONS_DONE or IMPLEMENTATIONS_FAIL).
+7. Write the implementation summary to `tests/scenarios/reports/`.
+8. Return a 3-line final summary.
+
+### Rules reference
+
+1. **Plugin-bundled:** `references/SCENARIOS_TESTS_RULES.md` at the plugin root
+2. **Project override (preferred if present):** `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md`
+
+See [Detailed Procedure](references/p0-implementation-patterns.md) for the full 7-step flow, argument format table (range, comma list, timestamp, "last batch"), and implementer subagent spawn template.
+
+## Output
+
+```
+PROPOSALS_IMPLEMENTED <P0-count> items | Result: <DONE|FAIL>
+Branch: <branch-name or "none">
+Summary: <absolute-path-to-summary-report>
+```
+
+## Error Handling
+
+| Error | Action |
+|-------|--------|
+| No matching proposal files | Tell user to run scenarios first; stop |
+| User declines confirmation | Stop; do not spawn subagent |
+| IMPLEMENTATIONS_FAIL | Log reason in batch report; tell user to inspect worktree or re-run proposals |
+| Build fails in worktree | Implementer reports FAIL; worktree is auto-cleaned |
+
+## Examples
+
+```
+/implement-scenarios-proposals 18
+/implement-scenarios-proposals 16-20
+/implement-scenarios-proposals last batch
+```
+
+## Resources
+
+- [Detailed Procedure](references/p0-implementation-patterns.md) — full 7-step flow including argument parsing, proposal extraction, subagent spawn template, and summary format
+  - Step 1 — Discover proposal files
+  - Step 2 — Read every proposal file and extract P0 items
+  - Step 3 — Confirm with the user
+  - Step 4 — Spawn the implementer subagent
+  - Step 5 — Parse the implementer's result
+  - Step 6 — Never merge automatically
+  - Step 7 — Write the implementation summary

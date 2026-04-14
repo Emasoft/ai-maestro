@@ -229,6 +229,24 @@ Add a sanity check to `setup-overnight-batch.sh`: verify the dev-browser daemon 
 - Multi-browser testing (Firefox, Safari) — dev-browser is Playwright-based so this is trivial later but not needed now
 - Claude Code plugin packaging format changes — stay within the current `.claude-plugin/plugin.json` + `.mcp.json` conventions (the daemon runs outside the MCP boundary)
 
+## 9a. MANDATORY CONSTRAINT: Cleanup must go through the UI (Rule 6)
+
+**Added 2026-04-14 after the v1.2 batch's master cleanup was caught violating Rule 6.**
+
+The v1.2 plugin's `fixture_delete_agents_by_prefix` function in `fixture-helpers.sh` attempted to delete test agents via direct `/api/agents` DELETE calls. After SEC-PHASE-1c auth hardening, those calls are correctly rejected by the sudo-mode gate — which means **the cleanup script's API bypass was an accidental security hole that never actually worked in production**. The 2026-04-14 batch left 63 orphan scen* agents in the registry because of this.
+
+Rule 6 STICK-TO-UI is NOT just for scenario test steps. It applies to EVERY operation the scenarios-autorunner plugin performs against the system under test, including cleanup. The v2 rewrite MUST:
+
+1. **Remove all direct `/api/*` DELETE calls** from `fixture-helpers.sh` and any other plugin script. The only HTTP calls allowed in fixture scripts are to external systems (GitHub for fixture repos, etc.), never to the system-under-test's API.
+
+2. **All test artifact cleanup happens via UI**: the master cleanup spawns a dedicated `scenarios-autorunner:cleanup-runner` subagent (new agent type in v2) that drives the dashboard through the same UI flow a real user would use: navigate to each test agent → Profile → Advanced → Danger Zone → Delete Agent → enter sudo password → confirm. This subagent uses dev-browser + aim-helpers.js + the same `aimDeleteAgent` helper the scenarios use.
+
+3. **The dashboard's "bulk delete" or "select all scen*" functionality is a candidate for implementation** if manual per-agent UI deletion is too slow. If implemented, the cleanup-runner uses the bulk delete flow instead of iterating. But bulk delete ALSO goes through the UI and the same sudo authentication, never directly.
+
+4. **Document the ban on direct API cleanup in `references/SCENARIOS_TESTS_RULES.md` Rule 6 itself** so future contributors don't reintroduce the pattern. Add a concrete example of what NOT to do (the old `fixture_delete_agents_by_prefix`) and what TO do (spawn a cleanup-runner).
+
+The failure mode here is important: a cleanup script bypassing UI auth would have been a latent security vulnerability — if an attacker could write to `tests/scenarios/scripts/` (e.g., via a malicious PR), they could have scripted arbitrary agent deletion without the sudo gate. The auth failure in v1.2 was actually the security system working correctly. The cleanup "failure" in v1.2 was a surface symptom of a deeper architecture violation that had been latent since the cleanup script was first written.
+
 ## 10. References
 
 - [`SawyerHood/dev-browser`](https://github.com/SawyerHood/dev-browser) — the upstream tool

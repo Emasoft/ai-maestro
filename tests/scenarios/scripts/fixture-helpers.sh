@@ -204,39 +204,23 @@ fixture_kill_tmux_by_prefix() {
     done
 }
 
-# ── Agent registry orphan cleanup ────────────────────────────
-# Usage: fixture_delete_agents_by_prefix <prefix>
-#   Queries /api/agents and deletes every agent whose name starts
-#   with <prefix>. Uses the agent-lifecycle API directly — this
-#   bypasses Rule 6 because scenarios are run against a freshly
-#   cleaned state, not as part of an active scenario.
+# ── Agent registry orphan cleanup (DO NOT USE — architecture violation) ──
+# This function is RETAINED as a tombstone to document the architectural
+# rule it violated. It previously called the agent-delete API directly,
+# bypassing the sudo-mode authentication gate. That is exactly the rogue-
+# script-bypassing-auth vector SEC-PHASE-1c was designed to prevent.
+# Rule 6 STICK-TO-UI applies to cleanup scripts as much as to scenarios:
+# the proper way to delete test agents is to drive the dashboard UI via
+# a browser automation MCP (CDT or dev-browser), using the same sudo
+# modal + confirm flow that real users follow.
+#
+# The v2 plugin rewrite (TRDD-f79f6047) mandates UI-driven cleanup.
+# Until then, orphan scen* agents must be cleaned manually via the UI
+# or via a dedicated UI-cleanup subagent spawned by the orchestrator.
 fixture_delete_agents_by_prefix() {
     local prefix="${1:?fixture_delete_agents_by_prefix: missing prefix}"
-    need curl
-    need jq
-
-    local url="http://localhost:23000/api/agents"
-    local agents_json
-    agents_json=$(curl -s "$url" 2>/dev/null) || {
-        log "WARN: could not fetch $url — is the server up?"
-        return 0
-    }
-
-    # Get list of matching agent IDs
-    local ids
-    ids=$(printf '%s' "$agents_json" | jq -r --arg prefix "$prefix" '.agents[] | select(.name | startswith($prefix)) | .id')
-
-    if [ -z "$ids" ]; then
-        log "no agents matching prefix '$prefix'"
-        return 0
-    fi
-
-    while IFS= read -r id; do
-        [ -z "$id" ] && continue
-        log "deleting agent $id (prefix $prefix)"
-        # Mark deleteFolder=true so the ~/agents/<name>/ dir is removed
-        curl -s -X DELETE "$url/$id?deleteFolder=true" >/dev/null 2>&1 || true
-    done <<< "$ids"
+    log "NOOP: fixture_delete_agents_by_prefix is architecturally deprecated (Rule 6 STICK-TO-UI violation). Prefix '$prefix' agents must be cleaned via UI."
+    return 0
 }
 
 # ── Ai Maestro state snapshot ────────────────────────────────

@@ -15,6 +15,7 @@ import semver from 'semver'
 import { LOCAL_MARKETPLACE_NAME, MAIN_PLUGIN_NAME, MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
 import { enforceSystemOwner } from '@/lib/route-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
+import { ChangeMarketplace } from '@/services/element-management-service'
 
 /**
  * R17 core plugin guard — rejects destructive actions targeting the
@@ -997,7 +998,21 @@ async function handleUninstall(pluginName: string, marketplaceName: string, plug
   return NextResponse.json({ success: true, action: 'uninstall', pluginKey, staleCleanup: !cliSucceeded })
 }
 
-/** Remove marketplace: delete clone dir + remove from settings + clean cached plugins */
+/**
+ * Remove a marketplace and purge all traces of it from disk and settings.
+ *
+ * WT-017#1 (P0 fix): the Claude CLI removal + cached-plugin cleanup +
+ * extraKnownMarketplaces cleanup is now routed through ChangeMarketplace
+ * (the centralized Change* pipeline), one call per name candidate. The
+ * dual-name iteration (UI display name vs CLI-registered name) and the
+ * enabledPlugins cleanup are still layered on top of the pipeline because
+ * they are specific to this route's UI→CLI mapping (SCEN-019 BUG-002).
+ *
+ * The post-pipeline enabledPlugins cleanup is required because
+ * ChangeMarketplace.remove only sanitizes extraKnownMarketplaces — it does
+ * NOT touch enabledPlugins keys that reference the removed marketplace,
+ * which would leave orphan entries in settings.json.
+ */
 async function handleDeleteMarketplace(marketplaceName?: string) {
   if (!marketplaceName) {
     return NextResponse.json({ error: 'marketplaceName is required' }, { status: 400 })
@@ -1011,18 +1026,26 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
   const cliName = await resolveCliMarketplaceName(marketplaceName)
   const nameCandidates = Array.from(new Set([marketplaceName, cliName]))
 
-  // Remove via Claude CLI first (one attempt per candidate)
+  // Route each name candidate through ChangeMarketplace — the centralized
+  // gateway for marketplace removal. This replaces the raw execSync call and
+  // enforces the Plugin Abstraction Principle. CLI-failure tolerance is
+  // preserved: if the CLI removal fails for one candidate (e.g., it was never
+  // registered under that exact name), we still try the next candidate AND
+  // continue with the belt-and-braces filesystem/settings cleanup below.
   for (const name of nameCandidates) {
-    try {
-      const { execSync } = await import('child_process')
-      execSync(`claude plugin marketplace remove "${shellSafe(name)}" 2>&1`, { timeout: 15000 })
-    } catch (err) {
-      // CLI removal may fail if not registered — continue with file cleanup
-      console.error('[marketplaces] CLI marketplace remove', name, err)
+    const result = await ChangeMarketplace({
+      action: 'remove',
+      name,
+    })
+    if (!result.success) {
+      console.error('[marketplaces] ChangeMarketplace remove failed', name, result.error)
     }
   }
 
-  // Remove clone dirs + cached plugins under BOTH name candidates
+  // Remove clone dirs under BOTH name candidates (belt-and-braces —
+  // ChangeMarketplace.remove already cleans up the cache dir for each
+  // successfully-removed candidate, but the clone dir in MARKETPLACES_DIR
+  // is separate and is not touched by the pipeline).
   for (const name of nameCandidates) {
     const cloneDir = join(MARKETPLACES_DIR, name)
     const mktCacheDir = join(CACHE_DIR, name)
@@ -1034,7 +1057,10 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
     }
   }
 
-  // Remove from extraKnownMarketplaces in settings (try ALL name variants)
+  // Belt-and-braces sweep of settings.json for any residual state the
+  // pipeline did not touch (enabledPlugins + any UI-name variants that
+  // ChangeMarketplace.remove may have missed because it only removes the
+  // single `name` it was called with).
   const settings = await readJsonSafe(SETTINGS_PATH) || {}
   const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
   for (const name of nameCandidates) {
@@ -1042,7 +1068,9 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
   }
   settings.extraKnownMarketplaces = ekm
 
-  // Remove any enabledPlugins entries for this marketplace under ALL name variants
+  // Remove any enabledPlugins entries for this marketplace under ALL name variants.
+  // ChangeMarketplace.remove does not sanitize enabledPlugins — this is the only
+  // place in the codebase that scrubs orphan keys, so it must stay here.
   const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
   for (const key of Object.keys(ep)) {
     for (const name of nameCandidates) {
@@ -1058,18 +1086,29 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
   return NextResponse.json({ success: true, action: 'delete-marketplace', marketplaceName })
 }
 
-/** Update marketplace by pulling latest from git remote */
+/**
+ * Update marketplace by pulling latest from git remote.
+ *
+ * WT-017#1 (P0 fix): routed through ChangeMarketplace instead of calling
+ * `claude plugin marketplace update` directly. The CLI-name resolution still
+ * happens here because it is specific to this route's UI→CLI mapping and
+ * not part of ChangeMarketplace's responsibility.
+ */
 async function handleUpdateMarketplace(marketplaceName?: string) {
   if (!marketplaceName) {
     return NextResponse.json({ error: 'marketplaceName is required' }, { status: 400 })
   }
-  const { execSync } = await import('child_process')
-  try {
-    const cliName = await resolveCliMarketplaceName(marketplaceName)
-    execSync(`claude plugin marketplace update "${shellSafe(cliName)}" 2>&1`, { timeout: 60000, stdio: 'pipe' })
-  } catch (err) {
-    return NextResponse.json({ error: `Failed to update marketplace: ${String(err).substring(0, 500)}` }, { status: 500 })
+
+  const cliName = await resolveCliMarketplaceName(marketplaceName)
+  const result = await ChangeMarketplace({
+    action: 'update',
+    name: cliName,
+  })
+
+  if (!result.success) {
+    return NextResponse.json({ error: `Failed to update marketplace: ${(result.error ?? '').substring(0, 500)}` }, { status: 500 })
   }
+
   UPDATE_CHECK_CACHE.delete(marketplaceName!)
   return NextResponse.json({ success: true, action: 'update-marketplace', marketplaceName })
 }
@@ -1248,7 +1287,21 @@ async function handleCheckUpdates(marketplaceName?: string, force?: boolean) {
   return NextResponse.json(result)
 }
 
-/** Clone a GitHub marketplace repo */
+/**
+ * Clone a GitHub marketplace repo.
+ *
+ * WT-017#1 (P0 fix): this handler used to call `claude plugin marketplace add`
+ * directly via execSync, violating the Plugin Abstraction Principle documented
+ * in CLAUDE.md ("All plugin/element/marketplace mutations MUST go through the
+ * element-management-service pipelines. No other code may directly run
+ * `claude plugin` CLI commands."). It is now routed through ChangeMarketplace
+ * which provides gate-based validation, centralized CLI invocation, and a
+ * single audit point for marketplace lifecycle operations.
+ *
+ * The post-CLI settings.json cleanup (extraKnownMarketplaces) is still done
+ * here because it is layered on top of the pipeline and is not part of
+ * ChangeMarketplace's add-path responsibility.
+ */
 async function handleAddMarketplace(url?: string) {
   if (!url) {
     return NextResponse.json({ error: 'url is required' }, { status: 400 })
@@ -1262,25 +1315,27 @@ async function handleAddMarketplace(url?: string) {
   const repo = match[1].replace(/\.git$/, '')
   const marketplaceName = repo.split('/')[1] // Use repo name as marketplace name
 
-  // Let Claude CLI handle the cloning and registration — it manages its own clone directory
-  const { execSync } = await import('child_process')
-  try {
-    const output = execSync(`claude plugin marketplace add "${shellSafe(repo)}" --scope user 2>&1`, {
-      timeout: 120000,
-      stdio: 'pipe',
-    }).toString()
-    // CLI outputs the registered name, e.g. "Successfully added marketplace: kriscard"
-    console.log(`Marketplace add output: ${output}`)
-  } catch (err) {
-    const errStr = String(err)
-    // If the marketplace already exists, that's fine
+  // Route the CLI invocation through ChangeMarketplace — the centralized
+  // gateway for marketplace mutations. This replaces the raw execSync call
+  // and enforces the Plugin Abstraction Principle.
+  const result = await ChangeMarketplace({
+    action: 'add',
+    name: marketplaceName,
+    source: { repo },
+  })
+
+  if (!result.success) {
+    const errStr = result.error || 'Unknown ChangeMarketplace failure'
+    // Preserve the "already exists" → 409 contract the UI relies on.
     if (errStr.includes('already') || errStr.includes('exists')) {
       return NextResponse.json({ error: `Marketplace "${marketplaceName}" already exists` }, { status: 409 })
     }
     return NextResponse.json({ error: `Failed to add marketplace: ${errStr.substring(0, 500)}` }, { status: 500 })
   }
 
-  // Add to extraKnownMarketplaces
+  // Add to extraKnownMarketplaces so the UI can look up the source repo later.
+  // ChangeMarketplace does not touch extraKnownMarketplaces on the add path;
+  // this post-step is required for update-checks and other GET code paths.
   const settings = await readJsonSafe(SETTINGS_PATH) || {}
   const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
   ekm[marketplaceName] = { source: { source: 'github', repo } }

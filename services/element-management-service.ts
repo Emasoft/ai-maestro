@@ -1723,6 +1723,123 @@ export async function ChangeTitle(
       ops.push(`G14b: WARN — Token revocation skipped (aid-token module error)`)
     }
 
+    // ── GATE 14c: Uninstall role-plugin bound to the OLD title ─────────
+    // Before G15 computes the target plugin, explicitly uninstall any
+    // role-plugin that is incompatible with the NEW title. This is the
+    // symmetric counterpart to G16's plugin install and closes the
+    // "AUTONOMOUS agent still carries its orchestrator plugin" hole
+    // exposed by SCEN-002 P0-002:
+    //
+    //   1. DeleteTeam reverts all team agents to AUTONOMOUS.
+    //   2. Without G14c, G15's `uninstallAllRolePlugins()` sweeps with
+    //      the GitHub marketplace name only, and silently no-ops for any
+    //      plugin whose marketplace key does not match. The agent then
+    //      has governanceTitle=null while still carrying its old plugin.
+    //   3. G14c detects the plugin via its FULL settings.local.json key
+    //      (`name@marketplace`) and routes it through ChangePlugin with
+    //      `rolePluginSwap: true`, giving us the full uninstall pipeline
+    //      (CLI uninstall + settings.local.json safeguard + final state
+    //      verification) regardless of which marketplace it came from.
+    //
+    // G14c only runs when:
+    //   - oldTitle is set and differs from the new effectiveTitle
+    //   - agent has a working directory
+    //   - client supports role-plugins
+    //   - the agent actually has a role-plugin installed
+    //   - that plugin is NOT compatible with the new title
+    //
+    // Compatibility is checked via getCompatiblePluginsForTitle(). If the
+    // plugin IS compatible (e.g. MANAGER → ARCHITECT swap keeps a plugin
+    // that happens to be compatible with both), G14c is a no-op and G15
+    // handles the rest.
+    if (!options?.skipPluginSync && agentDir && clientSupportsRolePlugins && oldTitle && oldTitle !== effectiveTitle) {
+      try {
+        const localSettingsPath = join(
+          agentDir.startsWith('~') ? agentDir.replace('~', HOME) : agentDir,
+          '.claude',
+          'settings.local.json',
+        )
+        if (existsSync(localSettingsPath)) {
+          const settings = await loadJsonSafe(localSettingsPath) as Record<string, Record<string, unknown>>
+          const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+          // Collect ALL role-plugin keys currently enabled so we can uninstall
+          // each one (an agent should only ever carry one, but if two sneaked
+          // in — e.g. via a race condition — we clean both to avoid the G17
+          // mismatch warning later).
+          const roleEntries: Array<{ name: string; marketplace: string }> = []
+          for (const fullKey of Object.keys(ep)) {
+            if (!ep[fullKey]) continue
+            const atIdx = fullKey.indexOf('@')
+            if (atIdx < 0) continue
+            const plugName = fullKey.substring(0, atIdx)
+            const plugMarket = fullKey.substring(atIdx + 1)
+            // Recognize a plugin as a role-plugin if it is predefined OR
+            // appears in the TITLE_PLUGIN_MAP (covers the 7 canonical names).
+            const isRole =
+              (PREDEFINED_ROLE_PLUGIN_NAMES as readonly string[]).includes(plugName) ||
+              Object.values(TITLE_PLUGIN_MAP).includes(plugName)
+            if (!isRole) continue
+            // If the plugin is compatible with the NEW title, keep it —
+            // G15 will preserve it. Otherwise schedule for uninstall.
+            if (effectiveTitle) {
+              try {
+                const compatible = await getCompatiblePluginsForTitle(effectiveTitle, agentClientType)
+                if (compatible.some(p => p.name === plugName)) {
+                  continue // plugin is compatible with new title → keep it
+                }
+              } catch {
+                // If compatibility check fails, err on the safe side and
+                // include the plugin in the uninstall list. Better to
+                // uninstall + reinstall than leave a stale plugin that
+                // grants governance-scoped permissions the new title must not have.
+              }
+            }
+            roleEntries.push({ name: plugName, marketplace: plugMarket })
+          }
+
+          if (roleEntries.length === 0) {
+            ops.push(`G14c: No role-plugin bound to old title "${oldTitle}" to uninstall`)
+          } else {
+            for (const entry of roleEntries) {
+              try {
+                const cpResult = await ChangePlugin(
+                  agentId,
+                  {
+                    name: entry.name,
+                    marketplace: entry.marketplace,
+                    action: 'uninstall',
+                    scope: 'local',
+                    agentDir,
+                    rolePluginSwap: true, // bypass role-plugin guard — this IS the governance pipeline
+                  },
+                  options.authContext,
+                )
+                if (cpResult.success) {
+                  ops.push(`G14c: Uninstalled "${entry.name}@${entry.marketplace}" (bound to old title "${oldTitle}")`)
+                } else {
+                  ops.push(`G14c: WARN — ChangePlugin uninstall failed for "${entry.name}": ${cpResult.error || 'unknown'}`)
+                }
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err)
+                ops.push(`G14c: WARN — ChangePlugin exception for "${entry.name}": ${msg}`)
+              }
+            }
+          }
+        } else {
+          ops.push(`G14c: No settings.local.json — nothing to uninstall`)
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        ops.push(`G14c: WARN — settings scan failed: ${msg}`)
+      }
+    } else if (options?.skipPluginSync) {
+      ops.push(`G14c: Skipped (skipPluginSync=true)`)
+    } else if (!oldTitle || oldTitle === effectiveTitle) {
+      ops.push(`G14c: Skipped (no old title change to revert)`)
+    } else {
+      ops.push(`G14c: Skipped (no agentDir or client has no role-plugin support)`)
+    }
+
     // ── GATE 15: Determine plugin swap (N:1 compatible-plugins model) ──
     // Find what plugin the agent currently has installed, and what plugin
     // is compatible with the NEW title + client combo.

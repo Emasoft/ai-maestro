@@ -38,7 +38,16 @@ export interface AgentRuntime {
   cancelCopyMode(name: string): Promise<void>
 
   // Lifecycle
-  createSession(name: string, cwd: string): Promise<void>
+  //
+  // env (optional): key/value pairs passed to `tmux new-session -e KEY=VAL ...`
+  // so they are already set in the session environment BEFORE the first pane's
+  // login shell (and anything it spawns, e.g. `claude`) starts. Using the
+  // `-e` flag is the ONLY way to guarantee these vars are visible to the
+  // already-running process in the initial pane; calling `setEnvironment`
+  // AFTER session creation only affects future panes. Keys must match
+  // `^[A-Z_][A-Z0-9_]*$` (standard env-var naming) — anything else is
+  // rejected as a defense against injection from caller-controlled strings.
+  createSession(name: string, cwd: string, env?: Record<string, string>): Promise<void>
   killSession(name: string): Promise<void>
   renameSession(oldName: string, newName: string): Promise<void>
 
@@ -170,9 +179,32 @@ export class TmuxRuntime implements AgentRuntime {
 
   // -- Lifecycle -----------------------------------------------------------
 
-  async createSession(name: string, cwd: string): Promise<void> {
-    // Use execFileAsync (no shell) to prevent shell injection via name/cwd
-    await execFileAsync('tmux', ['new-session', '-d', '-s', name, '-c', cwd])
+  async createSession(name: string, cwd: string, env?: Record<string, string>): Promise<void> {
+    // Use execFileAsync (no shell) to prevent shell injection via name/cwd.
+    //
+    // WT-014#1 + WT-022#1: env vars MUST be passed via `tmux new-session -e KEY=VAL`
+    // so they are baked into the session environment BEFORE the first pane's
+    // login shell (and anything it launches, e.g. `claude`) starts. Setting the
+    // same vars via `tmux set-environment` AFTER session creation is a race: the
+    // first pane's process tree is already running and inherits nothing from
+    // future set-environment calls. AGENT_WORK_DIR (directory-guard sandbox
+    // boundary) and AID_AUTH (agent HTTP API session secret) must be atomic.
+    const args = ['new-session', '-d', '-s', name, '-c', cwd]
+    if (env) {
+      for (const [key, value] of Object.entries(env)) {
+        // Defense against injection from caller-controlled strings: reject any
+        // key that isn't a strict POSIX environment-variable identifier. This
+        // also blocks accidental CR/LF/`=` that would confuse tmux's KEY=VAL
+        // parsing. Values are NOT sanitized here — execFile (no shell) passes
+        // them as a single argv item to tmux, which in turn stores them as
+        // opaque bytes in the session environment.
+        if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
+          throw new Error(`[agent-runtime] Invalid env var name: ${key}`)
+        }
+        args.push('-e', `${key}=${value}`)
+      }
+    }
+    await execFileAsync('tmux', args)
   }
 
   async killSession(name: string): Promise<void> {

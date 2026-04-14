@@ -631,9 +631,24 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
     }
   }
 
-  await runtime.createSession(actualSessionName, cwd)
-
-  // Register agent
+  // ──────────────────────────────────────────────────────────────────────────
+  // PRE-CREATE: build the environment bag for `tmux new-session -e KEY=VAL`.
+  //
+  // Why this happens BEFORE runtime.createSession (WT-014#1 + WT-022#1):
+  //   - AGENT_WORK_DIR is the trusted sandbox boundary read by the directory-
+  //     guard hook. If it is not present the moment `claude` starts, every
+  //     read/write is blocked with "no sandbox configured".
+  //   - AID_AUTH is the session secret the agent uses to authenticate with
+  //     the AI Maestro HTTP API. If it is not present the moment `claude`
+  //     starts, every API call from the agent returns 401.
+  //
+  // `tmux set-environment` (below, kept as a belt-and-braces for future panes)
+  // only updates the session-level env bag — the initial pane's process tree
+  // is already running and inherits nothing from it. The only way to have
+  // the vars present for the already-launching `claude` is to bake them into
+  // `tmux new-session -e KEY=VAL`, which REQUIRES registering the agent and
+  // computing these values BEFORE createSession rather than after.
+  // ──────────────────────────────────────────────────────────────────────────
   const agentName = normalizedName
   let registeredAgent = getAgentByName(agentName)
 
@@ -657,6 +672,71 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
       console.warn(`[Sessions] Could not register agent ${agentName}:`, createError)
     }
   }
+
+  const registeredAgentId = registeredAgent?.id
+
+  // Build the initial env bag for `tmux new-session -e`. Keys without a
+  // resolvable value (e.g. AIM_AGENT_ID when agent registration failed) are
+  // simply omitted — the caller proceeds with a best-effort session rather
+  // than failing. AGENT_WORK_DIR is ALWAYS set because cwd is known by now.
+  const initialEnv: Record<string, string> = {
+    AGENT_WORK_DIR: cwd,
+    AIM_AGENT_NAME: agentName,
+  }
+
+  // AMP init is fast (just mkdir -p) and needs to run before we can compute
+  // AMP_DIR. If it fails, we log and fall back to a session with no AMP_DIR
+  // — AMP is not strictly required for a session to function.
+  let ampDir: string | undefined
+  try {
+    await initAgentAMPHome(agentName, registeredAgentId)
+    ampDir = getAgentAMPDir(agentName, registeredAgentId)
+    initialEnv.AMP_DIR = ampDir
+  } catch (ampErr) {
+    console.warn(`[Sessions] Could not init AMP home for ${agentName}:`, ampErr)
+  }
+
+  if (registeredAgentId) {
+    initialEnv.AIM_AGENT_ID = registeredAgentId
+  }
+
+  // AID_AUTH: server-issued AID session secret for agent API authentication.
+  // The server spawns the agent, so it IS the identity authority for local
+  // agents. The secret must be present before `claude` starts (WT-022#1);
+  // the hash is stored in the registry for validation on incoming requests.
+  // If secret generation or persistence fails, the session proceeds without
+  // AID_AUTH (logged) — this matches the previous fail-open behavior.
+  let aidAuthSet = false
+  if (registeredAgentId) {
+    try {
+      const { generateSessionSecret } = await import('@/lib/session-secret')
+      const { secret, secretHash } = generateSessionSecret()
+      const { updateAgent } = await import('@/lib/agent-registry')
+      await updateAgent(registeredAgentId, {
+        metadata: { sessionSecretHash: secretHash }
+      } as any)
+      initialEnv.AID_AUTH = secret
+      aidAuthSet = true
+      console.log(`[Sessions] Set AID_AUTH for agent ${agentName} (AID session secret)`)
+    } catch (secretErr) {
+      console.warn(`[Sessions] Could not set session secret for ${agentName}:`, secretErr)
+    }
+  }
+
+  // Atomic session creation: env vars are visible to the first pane's
+  // process tree (and therefore to `claude` when it launches below).
+  await runtime.createSession(actualSessionName, cwd, initialEnv)
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // POST-CREATE: session-agent linking, persistence, and belt-and-braces env.
+  //
+  // The setEnvironment calls here duplicate what we just did atomically via
+  // `-e`, but they are intentional: they update the session-level environment
+  // bag that tmux hands to *future* panes (e.g. if the user opens a second
+  // pane in the same session via tmux binding). Without these, opening a new
+  // pane would lose AMP_DIR/AGENT_WORK_DIR/AID_AUTH. Keeping them is cheap
+  // (one `tmux set-environment` per key) and protects the future-pane path.
+  // ──────────────────────────────────────────────────────────────────────────
 
   // Record session-agent pairing in persistent history (survives agent deletion)
   if (registeredAgent) {
@@ -692,49 +772,26 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
     ...(registeredAgent && { agentId: registeredAgent.id })
   })
 
-  // Initialize AMP
-  const registeredAgentId = registeredAgent?.id
+  // Belt-and-braces: refresh session-level env for any future pane opened in
+  // this session. These duplicate the `-e` values above and are best-effort.
   try {
-    await initAgentAMPHome(agentName, registeredAgentId)
-    const ampDir = getAgentAMPDir(agentName, registeredAgentId)
-    await runtime.setEnvironment(actualSessionName, 'AMP_DIR', ampDir)
+    if (ampDir) {
+      await runtime.setEnvironment(actualSessionName, 'AMP_DIR', ampDir)
+    }
     await runtime.setEnvironment(actualSessionName, 'AIM_AGENT_NAME', agentName)
     if (registeredAgentId) {
       await runtime.setEnvironment(actualSessionName, 'AIM_AGENT_ID', registeredAgentId)
     }
-    // AGENT_WORK_DIR is the trusted sandbox boundary for the directory guard hook.
-    // Set at session creation, immutable — the agent cannot change it via `cd`.
     await runtime.setEnvironment(actualSessionName, 'AGENT_WORK_DIR', cwd)
-
-    // AID_AUTH: server-issued AID session secret for agent API authentication.
-    // The server spawns the agent, so it IS the identity authority for local agents.
-    // The secret is set as a tmux env var (scoped to this session's process tree).
-    // No Ed25519 ceremony needed — the server trusts itself.
-    if (registeredAgentId) {
-      try {
-        const { generateSessionSecret } = await import('@/lib/session-secret')
-        const { secret, secretHash } = generateSessionSecret()
-        await runtime.setEnvironment(actualSessionName, 'AID_AUTH', secret)
-        // Store the hash in agent registry for validation
-        const { updateAgent } = await import('@/lib/agent-registry')
-        await updateAgent(registeredAgentId, {
-          metadata: { sessionSecretHash: secretHash }
-        } as any)
-        console.log(`[Sessions] Set AID_AUTH for agent ${agentName} (AID session secret)`)
-      } catch (secretErr) {
-        console.warn(`[Sessions] Could not set session secret for ${agentName}:`, secretErr)
-      }
+    if (aidAuthSet && initialEnv.AID_AUTH) {
+      await runtime.setEnvironment(actualSessionName, 'AID_AUTH', initialEnv.AID_AUTH)
     }
-
     await runtime.unsetEnvironment(actualSessionName, 'CLAUDECODE')
-    // Removed redundant sendKeys export command -- tmux set-environment (above)
-    // already sets AMP_DIR, AIM_AGENT_NAME, and AIM_AGENT_ID in the session environment.
-    // The previous sendKeys approach interpolated unsanitized values into a shell command string,
-    // creating a shell injection vector. tmux set-environment is safe because it does not
-    // invoke a shell.
-    console.log(`[Sessions] Set AMP_DIR=${ampDir} for agent ${agentName}`)
+    if (ampDir) {
+      console.log(`[Sessions] Set AMP_DIR=${ampDir} for agent ${agentName}`)
+    }
   } catch (ampError) {
-    console.warn(`[Sessions] Could not set up AMP for ${agentName}:`, ampError)
+    console.warn(`[Sessions] Could not refresh session env for ${agentName}:`, ampError)
   }
 
   // Launch program

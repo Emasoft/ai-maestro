@@ -170,8 +170,16 @@ docs/BACKLOG-AGENTS-MARKETPLACE.md
 # Agent-specific avatar files (only library files should be committed)
 public/avatars/*_enhanced.png
 
-# Claude Code local data (chat history, cache, plugins, settings)
-.claude/
+# Claude Code local data — ignore specific session/cache subdirs only
+# so project-scoped rules / agents / scripts can still be committed.
+.claude/.DS_Store
+.claude/cache/
+.claude/chat_history/
+.claude/agent-memory/
+.claude/projects/
+.claude/todos/
+.claude/settings.local.json
+.claude/worktrees/
 
 # External backup files
 *.externbak

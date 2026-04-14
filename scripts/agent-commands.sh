@@ -212,8 +212,11 @@ cmd_show() {
     # Fetch full agent data by resolved ID
     local api_base
     api_base=$(get_api_base)
+    # SCEN-022 BUG-001 fix (P0): inject AID_AUTH for agent callers
+    local -a auth_args=()
+    _build_auth_args auth_args
     local response
-    response=$(curl -s --max-time 30 "${api_base}/api/agents/${agent_id}" 2>/dev/null)
+    response=$(curl -s --max-time 30 "${auth_args[@]}" "${api_base}/api/agents/${agent_id}" 2>/dev/null)
 
     if [[ -z "$response" ]]; then
         print_error "Failed to fetch agent data"
@@ -493,9 +496,12 @@ HELP
     api_base=$(get_api_base)
 
     print_info "Creating agent..."
+    # SCEN-022 BUG-001 fix (P0): inject AID_AUTH for agent callers
+    local -a auth_args=()
+    _build_auth_args auth_args
     local response
     # MEDIUM-010: Add timeout to curl
-    response=$(curl -s --max-time 30 -X POST "${api_base}/api/agents" \
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]}" "${api_base}/api/agents" \
         -H "Content-Type: application/json" \
         -d "$payload")
 
@@ -590,9 +596,12 @@ HELP
     api_base=$(get_api_base)
 
     print_info "Deleting agent '$agent_name'..."
+    # SCEN-022 BUG-001 fix (P0): inject AID_AUTH for agent callers
+    local -a auth_args=()
+    _build_auth_args auth_args
     local response
     # MEDIUM-010: Add timeout to curl
-    response=$(curl -s --max-time 30 -X DELETE "${api_base}/api/agents/${agent_id}")
+    response=$(curl -s --max-time 30 -X DELETE "${auth_args[@]}" "${api_base}/api/agents/${agent_id}")
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
@@ -689,9 +698,13 @@ HELP
     local api_base
     api_base=$(get_api_base)
 
+    # SCEN-022 BUG-001 fix (P0): inject AID_AUTH for agent callers
+    local -a auth_args=()
+    _build_auth_args auth_args
+
     local response
     # MEDIUM-010: Add timeout to curl
-    response=$(curl -s --max-time 30 -X PATCH "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
+    response=$(curl -s --max-time 30 -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
         -H "Content-Type: application/json" \
         -d "$payload")
 
@@ -772,12 +785,16 @@ HELP
     local api_base
     api_base=$(get_api_base)
 
+    # SCEN-022 BUG-001 fix (P0): inject AID_AUTH for agent callers
+    local -a auth_args=()
+    _build_auth_args auth_args
+
     local payload
     payload=$(jq -n --arg name "$new_name" '{name: $name}')
 
     local response
     # MEDIUM-010: Add timeout to curl
-    response=$(curl -s --max-time 30 -X PATCH "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
+    response=$(curl -s --max-time 30 -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
         -H "Content-Type: application/json" \
         -d "$payload")
 
@@ -820,7 +837,7 @@ HELP
                 # HIGH-002: Use jq for JSON construction to avoid injection
                 local dir_payload
                 dir_payload=$(jq -n --arg d "$new_dir" '{workingDirectory: $d}')
-                curl -s --max-time 30 -X PATCH "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
+                curl -s --max-time 30 -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
                     -H "Content-Type: application/json" \
                     -d "$dir_payload" >/dev/null
                 print_info "Renamed folder: $old_dir -> $new_dir"
@@ -972,9 +989,13 @@ HELP
     local api_base
     api_base=$(get_api_base)
 
+    # SCEN-022 BUG-001 fix (P0): inject AID_AUTH for agent callers
+    local -a auth_args=()
+    _build_auth_args auth_args
+
     print_info "Importing agent..."
     local response
-    response=$(curl -s --max-time 30 -X POST "${api_base}/api/agents" \
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]}" "${api_base}/api/agents" \
         -H "Content-Type: application/json" \
         -d "$agent_data")
 

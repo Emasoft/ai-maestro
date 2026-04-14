@@ -273,12 +273,17 @@ export async function sendChatMessage(
     return { error: 'Agent has no session name', status: 400 }
   }
 
-  const hasOnlineSession = agent.sessions?.some(s => s.status === 'online')
-  if (!hasOnlineSession) {
+  // SCEN-014-FIX BUG-014-01: registry.sessions[] may be stale/empty because
+  // agent creation doesn't always populate it. The source of truth for
+  // "is the session alive" is the live tmux runtime. Check there directly
+  // instead of trusting the registry snapshot (which the list endpoint
+  // hydrates on the fly but getAgent() does not).
+  const runtime = getRuntime()
+  const sessionIsLive = await runtime.sessionExists(sessionName)
+  if (!sessionIsLive) {
     return { error: 'Agent session is not online', status: 400 }
   }
 
-  const runtime = getRuntime()
   await runtime.sendKeys(sessionName, message, { literal: true, enter: true })
 
   console.log('[Chat Service] Message sent successfully')

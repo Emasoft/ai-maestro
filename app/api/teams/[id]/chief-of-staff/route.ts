@@ -90,10 +90,13 @@ export async function POST(
       }
 
       // ChangeTitle handles: registry + role-plugin cleanup (only if no longer COS anywhere)
+      // SCEN-001 fix (2026-04-13): Gate 0 requires authContext; this route
+      // has already verified the governance password, so it is safe to
+      // invoke ChangeTitle with a system-owner authContext.
       if (oldCosId && !isChiefOfStaffAnywhere(oldCosId)) {
         try {
           const { ChangeTitle } = await import('@/services/element-management-service')
-          await ChangeTitle(oldCosId, null)
+          await ChangeTitle(oldCosId, null, { authContext: { isSystemOwner: true as const } })
         } catch (err) {
           console.warn('[governance] Failed ChangeTitle on COS removal:', err instanceof Error ? err.message : err)
         }
@@ -120,9 +123,10 @@ export async function POST(
 
     // ChangeTitle handles: registry write + role-plugin sync
     // (COS team assignment was already done by updateTeam above)
+    // SCEN-001 fix (2026-04-13): Gate 0 requires authContext.
     try {
       const { ChangeTitle } = await import('@/services/element-management-service')
-      await ChangeTitle(cosAgentId, 'chief-of-staff')
+      await ChangeTitle(cosAgentId, 'chief-of-staff', { authContext: { isSystemOwner: true as const } })
     } catch (err) {
       console.warn('[governance] Failed ChangeTitle for COS:', err instanceof Error ? err.message : err)
     }

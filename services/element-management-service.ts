@@ -326,8 +326,20 @@ export async function InstallElement(
     }
 
     // ── G07: Verify directory exists (or create for install) ──
+    //
+    // CLIENT CAPABILITY GATE (SCEN-008): For non-Claude clients without
+    // plugin support (gemini, opencode, aider), refuse to create .claude/
+    // — these clients cannot read claude plugin config and the orphan dir
+    // would leak claude-specific state into a non-claude agent folder.
     if (agentDir) {
       if (action === 'install') {
+        const { getClientCapabilities } = await import('@/lib/client-capabilities')
+        const instCaps = getClientCapabilities(agentProgram || clientType)
+        if (!instCaps.plugins) {
+          result.error = `Client "${clientType}" has no plugin support — refusing to install "${name}". InstallElement is Claude-compatible only (writes .claude/settings.local.json).`
+          ops.push(`G07: DENIED — client "${clientType}" rejects plugin install`)
+          return result
+        }
         await mkdir(join(agentDir, '.claude'), { recursive: true })
         ops.push(`G07: .claude/ directory ensured in ${agentDir}`)
       } else if (!existsSync(agentDir)) {
@@ -1432,12 +1444,18 @@ export async function ChangeTitle(
     // N:1 model: multiple plugins can serve one title. Check if ANY compatible
     // plugin exists for this title + agent's client combo.
     // If no native match exists, mark for auto-conversion at Gate 16.
+    //
+    // CLIENT CAPABILITY GATE (SCEN-008): For clients that have NO role-plugin
+    // support at all (e.g. gemini, opencode, aider), skip plugin installation
+    // entirely. The title still applies, but no plugin is installed because
+    // these clients cannot load Claude Code role-plugins.
     const titleRequiresPlugin = newTitle ? !!getRequiredPluginForTitle(newTitle) : false
     let agentClientType = 'claude' // default
     let needsPluginConversion = false
+    let clientSupportsRolePlugins = true
     if (titleRequiresPlugin) {
       try {
-        const { detectClientType } = await import('@/lib/client-capabilities')
+        const { detectClientType, getClientCapabilities } = await import('@/lib/client-capabilities')
         agentClientType = detectClientType(agent.program || '')
 
         // Self-healing: if program is empty/unknown, infer from agent state
@@ -1457,18 +1475,26 @@ export async function ChangeTitle(
           }
         }
 
-        // Check if compatible plugins exist for this title + client
-        const compatiblePlugins = await getCompatiblePluginsForTitle(newTitle!, agentClientType)
-        if (compatiblePlugins.length > 0) {
-          ops.push(`G03: ${compatiblePlugins.length} compatible plugin(s) for ${newTitle?.toUpperCase()}+${agentClientType}`)
+        // Check if the client even supports role-plugins. Gemini, opencode, aider
+        // do NOT support them. Skip the conversion + install path entirely.
+        const caps = getClientCapabilities(agent.program || agentClientType)
+        clientSupportsRolePlugins = !!caps.rolePlugins
+        if (!clientSupportsRolePlugins) {
+          ops.push(`G03: Client "${agentClientType}" has no role-plugin support — skipping plugin install (title only)`)
         } else {
-          // No plugins for this client — check if plugins exist for OTHER clients (auto-convert)
-          const anyPlugins = await getCompatiblePluginsForTitle(newTitle!)
-          if (anyPlugins.length > 0) {
-            needsPluginConversion = true
-            ops.push(`G03: No native ${agentClientType} plugin for ${newTitle?.toUpperCase()} — will auto-convert from ${anyPlugins[0].name}`)
+          // Check if compatible plugins exist for this title + client
+          const compatiblePlugins = await getCompatiblePluginsForTitle(newTitle!, agentClientType)
+          if (compatiblePlugins.length > 0) {
+            ops.push(`G03: ${compatiblePlugins.length} compatible plugin(s) for ${newTitle?.toUpperCase()}+${agentClientType}`)
           } else {
-            ops.push(`G03: No compatible plugins found for ${newTitle?.toUpperCase()} at all — proceeding without plugin`)
+            // No plugins for this client — check if plugins exist for OTHER clients (auto-convert)
+            const anyPlugins = await getCompatiblePluginsForTitle(newTitle!)
+            if (anyPlugins.length > 0) {
+              needsPluginConversion = true
+              ops.push(`G03: No native ${agentClientType} plugin for ${newTitle?.toUpperCase()} — will auto-convert from ${anyPlugins[0].name}`)
+            } else {
+              ops.push(`G03: No compatible plugins found for ${newTitle?.toUpperCase()} at all — proceeding without plugin`)
+            }
           }
         }
       } catch {
@@ -1704,7 +1730,7 @@ export async function ChangeTitle(
     let targetPluginName: string | null = null
     let targetMarketplace: string = GITHUB_MARKETPLACE_NAME
 
-    if (!options?.skipPluginSync && agentDir) {
+    if (!options?.skipPluginSync && agentDir && clientSupportsRolePlugins) {
       // Detect currently installed role-plugin from settings.local.json
       try {
         const localSettingsPath = join(agentDir.startsWith('~') ? agentDir.replace('~', HOME) : agentDir, '.claude', 'settings.local.json')
@@ -1766,7 +1792,7 @@ export async function ChangeTitle(
     }
 
     // ── GATE 16: Install new role-plugin ─────────────────────
-    if (!options?.skipPluginSync && targetPluginName && agentDir && targetPluginName !== currentPluginName) {
+    if (!options?.skipPluginSync && clientSupportsRolePlugins && targetPluginName && agentDir && targetPluginName !== currentPluginName) {
       try {
         if (needsPluginConversion) {
           // Non-Claude client: convert plugin to target format and install via adapter
@@ -1816,7 +1842,7 @@ export async function ChangeTitle(
     }
 
     // ── GATE 17: Verify plugin state consistency ─────────────
-    if (!options?.skipPluginSync && agentDir) {
+    if (!options?.skipPluginSync && clientSupportsRolePlugins && agentDir) {
       try {
         const localSettings = join(agentDir.startsWith('~') ? agentDir.replace('~', HOME) : agentDir, '.claude', 'settings.local.json')
         if (existsSync(localSettings)) {
@@ -2007,7 +2033,8 @@ export async function ChangePlugin(
     // ai-maestro-plugin cannot be uninstalled or disabled via the UI/API.
     // It can only be installed, enabled, or updated.
     if (desired.name === 'ai-maestro-plugin' && (desired.action === 'uninstall' || desired.action === 'disable')) {
-      result.error = `The ai-maestro-plugin is a core system plugin and cannot be ${desired.action}d (R17). It is required for all agents to participate in the AI Maestro ecosystem.`
+      const pastTense = desired.action === 'uninstall' ? 'uninstalled' : 'disabled'
+      result.error = `The ai-maestro-plugin is a core system plugin and cannot be ${pastTense} (R17). It is required for all agents to participate in the AI Maestro ecosystem.`
       return result
     }
     // ai-maestro-plugin must not be installed at user scope — only local scope.
@@ -3800,7 +3827,15 @@ export async function DeleteTeam(
       const { hibernateAgent } = await import('@/services/agents-core-service')
       for (const agentId of agentsToRevert) {
         try {
-          const titleResult = await ChangeTitle(agentId, 'autonomous')
+          // BUG-002 fix (SCEN-005): ChangeTitle requires authContext as a security
+          // invariant. Without it the call returns "authContext is mandatory" and
+          // the COS/Member never reverts to AUTONOMOUS — the team gets deleted but
+          // its former agents retain their titles AND their role-plugins. Pass
+          // through the DeleteTeam authContext so ChangeTitle treats this revert
+          // as an already-authorized governance operation.
+          const titleResult = await ChangeTitle(agentId, 'autonomous', {
+            authContext: options.authContext,
+          })
           if (titleResult.success) {
             ops.push(`G03: Agent ${agentId.substring(0, 8)} → AUTONOMOUS`)
           } else {
@@ -4544,7 +4579,20 @@ export async function CreateAgent(
     // BUG-002 FIX: On failure, ROLL BACK the agent and ABORT. Silently creating
     // an AUTONOMOUS agent when MAINTAINER was requested violates the user's
     // intent and was the root cause of SCEN-018 S005 failing with no error.
-    if (desired.governanceTitle && desired.governanceTitle !== 'autonomous') {
+    //
+    // SCEN-003 FIX: When a teamId is provided AND the title is a team-required
+    // title (member, chief-of-staff, orchestrator, architect, integrator),
+    // SKIP the title assignment here — ChangeTitle's Gate 9 would reject it
+    // because the agent isn't in the team yet. The team join happens in G07,
+    // then G07b applies the requested title after the agent is in the team.
+    // Only standalone titles (manager, autonomous, maintainer) and
+    // no-teamId-provided cases proceed at G06.
+    const TEAM_REQUIRED_TITLES_G06 = new Set(['member', 'chief-of-staff', 'orchestrator', 'architect', 'integrator'])
+    const titleNeedsTeamFirst = desired.governanceTitle &&
+      desired.teamId &&
+      TEAM_REQUIRED_TITLES_G06.has(desired.governanceTitle)
+
+    if (desired.governanceTitle && desired.governanceTitle !== 'autonomous' && !titleNeedsTeamFirst) {
       const titleResult = await ChangeTitle(agent.id, desired.governanceTitle, {
         authContext: desired.authContext,
         githubRepo: desired.githubRepo,
@@ -4564,6 +4612,8 @@ export async function CreateAgent(
       }
       ops.push(`G06: Title set to ${desired.governanceTitle.toUpperCase()} (${titleResult.operations.length} sub-gates)`)
       result.restartNeeded = result.restartNeeded || titleResult.restartNeeded
+    } else if (titleNeedsTeamFirst) {
+      ops.push(`G06: DEFER — Title ${desired.governanceTitle?.toUpperCase()} requires team membership; will be applied at G07b after team join`)
     } else {
       ops.push(`G06: No title requested (AUTONOMOUS)`)
     }
@@ -4578,11 +4628,13 @@ export async function CreateAgent(
         result.restartNeeded = result.restartNeeded || teamResult.restartNeeded
       }
 
-      // G07b: ChangeTeam auto-assigns "member" title. If a different governanceTitle
-      // was requested, re-apply it now (after the team join completes).
-      // This fixes BUG-022: POST /api/agents with teamId + governanceTitle would
-      // silently ignore the requested title because ChangeTeam overwrites it.
-      if (desired.governanceTitle && desired.governanceTitle !== 'member' && desired.governanceTitle !== 'autonomous') {
+      // G07b: ChangeTeam tries to auto-assign "member" title, but that internal
+      // ChangeTitle call lacks authContext and FAILS silently at Gate 0.
+      // ALWAYS re-apply the requested title after team join (including 'member')
+      // to guarantee governanceTitle is persisted to the registry.
+      // This fixes SCEN-020 BUG-001 (registry missing governanceTitle after wizard
+      // creation) and BUG-022 (non-member titles being ignored).
+      if (desired.governanceTitle && desired.governanceTitle !== 'autonomous') {
         const retitleResult = await ChangeTitle(agent.id, desired.governanceTitle, {
           authContext: desired.authContext,
           githubRepo: desired.githubRepo,
@@ -4600,7 +4652,7 @@ export async function CreateAgent(
           result.agentId = null
           return result
         }
-        ops.push(`G07b: Title corrected to ${desired.governanceTitle.toUpperCase()} after team join`)
+        ops.push(`G07b: Title confirmed as ${desired.governanceTitle.toUpperCase()} after team join`)
         result.restartNeeded = result.restartNeeded || retitleResult.restartNeeded
       }
     } else {
@@ -4705,22 +4757,33 @@ export async function CreateAgent(
 
     // ── G11: Install ai-maestro-plugin at local scope (R17) ──
     // Delegates to the unified InstallElement AIO function.
+    //
+    // CLIENT CAPABILITY GATE (SCEN-008): For clients that have NO plugin
+    // support at all (e.g. gemini, opencode, aider), skip the core plugin
+    // install. Writing .claude/settings.local.json for these clients would
+    // create an orphan config file their CLI can't read. The agent still
+    // participates in the mesh through other channels.
     if (workDir) {
-      const { detectClientType } = await import('@/lib/client-capabilities')
+      const { detectClientType, getClientCapabilities } = await import('@/lib/client-capabilities')
       const clientType = detectClientType(program)
-      const installResult = await InstallElement({
-        name: 'ai-maestro-plugin',
-        marketplace: 'ai-maestro-plugins',
-        action: 'install',
-        scope: 'local',
-        agentDir: workDir,
-        agentId: agent.id,
-        clientType: clientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
-      })
-      if (installResult.success) {
-        ops.push(`G11: ${installResult.operations.filter(o => o.startsWith('G05') || o.startsWith('G06')).join('; ') || 'ai-maestro-plugin installed'}`)
+      const caps = getClientCapabilities(program)
+      if (!caps.plugins) {
+        ops.push(`G11: Client "${clientType}" has no plugin support — skipping ai-maestro-plugin install`)
       } else {
-        ops.push(`G11: WARN — ${installResult.error || 'core plugin install failed'}`)
+        const installResult = await InstallElement({
+          name: 'ai-maestro-plugin',
+          marketplace: 'ai-maestro-plugins',
+          action: 'install',
+          scope: 'local',
+          agentDir: workDir,
+          agentId: agent.id,
+          clientType: clientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
+        })
+        if (installResult.success) {
+          ops.push(`G11: ${installResult.operations.filter(o => o.startsWith('G05') || o.startsWith('G06')).join('; ') || 'ai-maestro-plugin installed'}`)
+        } else {
+          ops.push(`G11: WARN — ${installResult.error || 'core plugin install failed'}`)
+        }
       }
     } else {
       ops.push(`G11: No workDir — skipping local plugin install`)
@@ -4748,14 +4811,35 @@ export async function CreateAgent(
       } else {
         const tenant = process.env.AIMAESTRO_ORG || 'default'
         const args = ['--force', '--name', name, '--tenant', tenant]
-        const ampEnvDir = join(HOME, '.agent-messaging', 'agents', name)
+        // BUG-015-01 fix: provision the AMP home at the UUID-keyed path so
+        // the server's UUID-based delivery lookup (`resolveAgentAMPHome` in
+        // lib/amp-inbox-writer.ts) finds the freshly-initialized keys and
+        // config instead of silently creating an empty stale UUID dir from
+        // the machine-level ai-maestro defaults.
+        const ampEnvDir = join(HOME, '.agent-messaging', 'agents', agent.id)
         try {
           await execFileAsyncG12(ampInitPath, args, {
             timeout: 30000,
             cwd: workDir,
             env: { ...process.env, AMP_DIR: ampEnvDir },
           })
-          ops.push(`G12: AMP identity initialized (${name}@${tenant}.local)`)
+          // Also register name→UUID in the AMP index so CLI name-based lookups
+          // (`amp-send bob`, `amp-inbox` from outside the agent) resolve to the
+          // same UUID-keyed home.
+          try {
+            const { promises: fsG12 } = await import('fs')
+            const indexPath = join(HOME, '.agent-messaging', 'agents', '.index.json')
+            let indexData: Record<string, string> = {}
+            try {
+              const raw = await fsG12.readFile(indexPath, 'utf-8')
+              indexData = JSON.parse(raw) as Record<string, string>
+            } catch { /* index file doesn't exist yet — create it */ }
+            indexData[name] = agent.id
+            await fsG12.writeFile(indexPath, JSON.stringify(indexData, null, 2))
+          } catch (indexErr) {
+            ops.push(`G12: WARN — failed to update .index.json: ${indexErr instanceof Error ? indexErr.message : indexErr}`)
+          }
+          ops.push(`G12: AMP identity initialized (${name}@${tenant}.local) at ${ampEnvDir}`)
         } catch (ampErr) {
           const msg = ampErr instanceof Error ? ampErr.message : String(ampErr)
           ops.push(`G12: WARN — amp-init failed: ${msg.slice(0, 200)}; agent flagged ampIdentityMissing`)

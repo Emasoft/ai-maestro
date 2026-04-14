@@ -11,6 +11,7 @@ coverage
 # Next.js build output — root-level only, so we don't accidentally
 # match app/api/plugin-builder/build/ or other nested build/ directories
 .next
+.next.broken-*
 out
 /build
 dist
@@ -192,6 +193,7 @@ llm_externalizer_output/
 tests/scenarios/reports/
 tests/scenarios/screenshots/
 tests/scenarios/state-backups/
+tests/scenarios/state/
 state-backups/
 playwright-report/
 

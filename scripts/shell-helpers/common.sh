@@ -21,8 +21,13 @@ _init_self_host() {
     fi
 
     # Try identity API first (most reliable)
+    # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate
+    local -a _id_auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        _id_auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
     local identity
-    identity=$(curl -s --max-time 5 "http://127.0.0.1:23000/api/hosts/identity" 2>/dev/null)
+    identity=$(curl -s --max-time 5 "${_id_auth_args[@]}" "http://127.0.0.1:23000/api/hosts/identity" 2>/dev/null)
     if [ -n "$identity" ]; then
         _SELF_HOST_ID=$(echo "$identity" | jq -r '.host.id // empty' 2>/dev/null)
         _SELF_HOST_URL=$(echo "$identity" | jq -r '.host.url // empty' 2>/dev/null)

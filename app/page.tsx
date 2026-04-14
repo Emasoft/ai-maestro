@@ -313,22 +313,44 @@ export default function DashboardPage() {
   }, [hasOnlineAgents, activeAgentId, firstOnlineAgentId])
 
   // Handle ?agent=haephestos query param (redirected from /agent-creation)
+  // If the Haephestos agent does not yet exist in the registry, register it
+  // first via /api/agents/creation-helper/session (BUG-001 SCEN-004 fix). The
+  // session endpoint returns the new agentId; we set it as active immediately
+  // so HaephestosEmbeddedView mounts even before the next polling refresh.
   useEffect(() => {
     if (haephestosQueryHandled.current) return
     if (agents.length === 0) return
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     const agentParam = params.get('agent')
-    if (agentParam === 'haephestos') {
-      haephestosQueryHandled.current = true
-      const haephestos = agents.find(a => a.name === '_aim-creation-helper')
-      if (haephestos) {
-        setActiveAgentId(haephestos.id)
-      }
-      // Clean up URL (remove query param) without navigation
+    if (agentParam !== 'haephestos') return
+
+    haephestosQueryHandled.current = true
+    const haephestos = agents.find(a => a.name === '_aim-creation-helper')
+    if (haephestos) {
+      setActiveAgentId(haephestos.id)
       window.history.replaceState({}, '', '/')
+      return
     }
-  }, [agents])
+
+    // Agent missing — bootstrap via creation-helper session API.
+    // The HaephestosEmbeddedView wake button will then transition it online.
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/agents/creation-helper/session', { method: 'POST' })
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled || !data?.agentId) return
+        setActiveAgentId(data.agentId)
+        refreshAgents()
+        window.history.replaceState({}, '', '/')
+      } catch {
+        /* ignore — wake button can be retried manually */
+      }
+    })()
+    return () => { cancelled = true }
+  }, [agents, refreshAgents])
 
   // Initialize agent memories for all agents on load
   useEffect(() => {

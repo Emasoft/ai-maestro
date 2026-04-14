@@ -81,12 +81,21 @@ export async function setManagerRole(params: {
   }
   resetRateLimit('governance-manager-auth')
 
+  // SCEN-001 fix (2026-04-13): setManagerRole is only callable by the
+  // system owner (enforced at the POST /api/governance/manager route via
+  // enforceSystemOwner). Since password verification has just succeeded
+  // above, it is safe to pass a system-owner authContext to ChangeTitle.
+  // Without this, ChangeTitle Gate 0 rejects with "authContext is
+  // mandatory for ChangeTitle (security invariant)" and the UI shows
+  // "Title change failed" even though the caller is authenticated.
+  const systemOwnerAuthContext = { isSystemOwner: true as const }
+
   // agentId === null means "remove manager"
   if (agentId === null) {
     const oldManagerId = config.managerId
     if (oldManagerId) {
       const { ChangeTitle } = await import('@/services/element-management-service')
-      const titleResult = await ChangeTitle(oldManagerId, null)
+      const titleResult = await ChangeTitle(oldManagerId, null, { authContext: systemOwnerAuthContext })
       if (!titleResult.success) {
         console.warn('[governance] ChangeTitle failed on manager removal:', titleResult.error)
       }
@@ -107,7 +116,7 @@ export async function setManagerRole(params: {
 
   // ChangeTitle handles: governance.json, agent registry, role-plugin sync
   const { ChangeTitle } = await import('@/services/element-management-service')
-  const titleResult = await ChangeTitle(agentId, 'manager')
+  const titleResult = await ChangeTitle(agentId, 'manager', { authContext: systemOwnerAuthContext })
   if (!titleResult.success) {
     return { error: titleResult.error || 'Failed to assign manager title', status: 500 }
   }

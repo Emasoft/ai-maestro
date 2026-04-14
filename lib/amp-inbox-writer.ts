@@ -431,12 +431,31 @@ export async function writeToAMPInbox(
       return null
     }
 
+    // BUG-015-01 fix: ensure the per-agent AMP home is migrated/initialized
+    // before writing the inbox file. Without this, when the CLI creates the
+    // name-keyed dir first (via G12 amp-init.sh) and the server later receives
+    // a message for that agent by UUID, `resolveAgentAMPHome(name, uuid)` would
+    // return an empty UUID-keyed path and silently create a fresh (incorrect)
+    // inbox there, so messages never reach the CLI's view of the inbox.
+    // `initAgentAMPHome` runs `autoMigrateToUUID` which renames name → UUID.
+    await initAgentAMPHome(agentName, recipientAgentId)
+
     const agentHome = resolveAgentAMPHome(agentName, recipientAgentId)
     const agentInboxDir = path.join(agentHome, 'messages', 'inbox')
     const senderDir = sanitizeAddressForPath(envelope.from)
     const inboxSenderDir = path.join(agentInboxDir, senderDir)
 
     await fs.mkdir(inboxSenderDir, { recursive: true })
+
+    // BUG-015-02 fix: preserve the attachments array on the payload so the
+    // recipient sees the same metadata the sender stamped. The previous code
+    // dropped .attachments silently, so `amp-download.sh` saw zero attachments.
+    const payloadWithAttachments = payload as AMPPayload & {
+      attachments?: Array<Record<string, unknown>>
+    }
+    const attachments = Array.isArray(payloadWithAttachments.attachments)
+      ? payloadWithAttachments.attachments
+      : []
 
     const ampMessage = {
       envelope: {
@@ -455,7 +474,8 @@ export async function writeToAMPInbox(
       payload: {
         type: payload.type,
         message: payload.message,
-        context: payload.context || null
+        context: payload.context || null,
+        ...(attachments.length > 0 ? { attachments } : {})
       },
       metadata: {
         status: 'unread',
@@ -472,6 +492,48 @@ export async function writeToAMPInbox(
 
     const filePath = path.join(inboxSenderDir, `${envelope.id}.json`)
     await fs.writeFile(filePath, JSON.stringify(ampMessage, null, 2))
+
+    // BUG-015-02 fix: copy attachment blobs from the sender's attachments dir
+    // to the recipient's attachments dir. Without this, the recipient has the
+    // metadata but no file, and `amp-download.sh` silently fails with
+    // "No download URL or API credentials available" (spec-wise it falls
+    // through to the HTTP path which 404s because we don't implement the
+    // `/api/v1/attachments/*` routes).
+    //
+    // Only runs for local delivery with attachments that have no external
+    // URL — URL-backed attachments are downloaded on demand, not copied.
+    if (attachments.length > 0) {
+      const senderName = extractAgentName(envelope.from)
+      if (senderName) {
+        try {
+          const senderHome = resolveAgentAMPHome(senderName)
+          const senderAttachmentsDir = path.join(senderHome, 'attachments')
+          const recipientAttachmentsDir = path.join(agentHome, 'attachments')
+          await fs.mkdir(recipientAttachmentsDir, { recursive: true })
+          for (const att of attachments) {
+            const attId = typeof att.id === 'string' ? att.id : ''
+            const filename = typeof att.filename === 'string' ? att.filename : ''
+            const hasUrl = typeof att.url === 'string' && att.url.length > 0
+            if (!attId || !filename || hasUrl) continue
+            const srcDir = path.join(senderAttachmentsDir, attId)
+            const srcFile = path.join(srcDir, filename)
+            const dstDir = path.join(recipientAttachmentsDir, attId)
+            const dstFile = path.join(dstDir, filename)
+            try {
+              await fs.access(srcFile)
+            } catch {
+              console.warn(`[AMP Inbox Writer] Attachment source missing: ${srcFile}`)
+              continue
+            }
+            await fs.mkdir(dstDir, { recursive: true })
+            await fs.copyFile(srcFile, dstFile)
+            await fs.chmod(dstFile, 0o600)
+          }
+        } catch (attErr) {
+          console.warn(`[AMP Inbox Writer] Attachment copy failed for ${envelope.id}:`, attErr)
+        }
+      }
+    }
 
     console.log(`[AMP Inbox Writer] Wrote ${envelope.id} to ${agentName}'s inbox`)
     return filePath
@@ -497,12 +559,24 @@ export async function writeToAMPSent(
       return null
     }
 
+    // BUG-015-01 fix: same auto-migration as writeToAMPInbox — ensure the
+    // UUID-keyed home is materialized from the name-keyed one when needed.
+    await initAgentAMPHome(agentName, senderAgentId)
+
     const agentHome = resolveAgentAMPHome(agentName, senderAgentId)
     const agentSentDir = path.join(agentHome, 'messages', 'sent')
     const recipientDir = sanitizeAddressForPath(envelope.to)
     const sentRecipientDir = path.join(agentSentDir, recipientDir)
 
     await fs.mkdir(sentRecipientDir, { recursive: true })
+
+    // BUG-015-02 fix: preserve attachments on the sent copy as well.
+    const payloadWithAttachmentsSent = payload as AMPPayload & {
+      attachments?: Array<Record<string, unknown>>
+    }
+    const attachmentsSent = Array.isArray(payloadWithAttachmentsSent.attachments)
+      ? payloadWithAttachmentsSent.attachments
+      : []
 
     const ampMessage = {
       envelope: {
@@ -521,7 +595,8 @@ export async function writeToAMPSent(
       payload: {
         type: payload.type,
         message: payload.message,
-        context: payload.context || null
+        context: payload.context || null,
+        ...(attachmentsSent.length > 0 ? { attachments: attachmentsSent } : {})
       },
       local: {
         sent_at: new Date().toISOString()

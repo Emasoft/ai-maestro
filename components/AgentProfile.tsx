@@ -717,6 +717,25 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                       />
                     </div>
 
+                    {/* GitHub Repo — shown only for MAINTAINER agents (R19). Immutable once set. */}
+                    {governance.agentTitle === 'maintainer' && agent.githubRepo && (
+                      <div className="flex items-center justify-between py-1" data-testid="profile-github-repo">
+                        <div className="flex items-center gap-2 text-sm text-gray-400">
+                          <GitBranch className="w-4 h-4" />
+                          <span>GitHub Repo</span>
+                        </div>
+                        <a
+                          href={`https://github.com/${agent.githubRepo}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-mono text-emerald-400 hover:text-emerald-300 hover:underline"
+                          title="MAINTAINER is bound to this repository (immutable)"
+                        >
+                          {agent.githubRepo}
+                        </a>
+                      </div>
+                    )}
+
                     {/* Role Plugin selector (injected by AgentProfilePanel) */}
                     {renderAfterGovernanceTitle?.()}
 

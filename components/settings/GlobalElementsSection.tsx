@@ -10,6 +10,7 @@ import {
 import MarketplaceManager from './MarketplaceManager'
 import { sudoFetch } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
+import { MAIN_PLUGIN_NAME } from '@/lib/ecosystem-constants'
 
 interface PluginInfo {
   name: string
@@ -557,8 +558,12 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
                   {plugin.name}
                 </span>
                 <span className="text-[9px] text-gray-600 tabular-nums flex-shrink-0">{plugin.version ? `v${plugin.version}` : '-'}</span>
-                {/* Toggle switch — ai-maestro is a core plugin and cannot be disabled */}
-                {plugin.name !== 'ai-maestro' ? (
+                {/* Toggle switch — ai-maestro-plugin is the R17 core plugin and cannot be
+                    enabled/disabled at user scope. It MUST live in each agent's local scope
+                    (R17.17). SCEN-017 found this guard was comparing to the wrong name
+                    ('ai-maestro' instead of MAIN_PLUGIN_NAME) which let the UI expose a
+                    destructive toggle that bypassed ChangePlugin Gate 7. */}
+                {plugin.name !== MAIN_PLUGIN_NAME ? (
                   <button
                     onClick={(e) => { e.stopPropagation(); togglePlugin(plugin.key, plugin.enabled) }}
                     disabled={isToggling}

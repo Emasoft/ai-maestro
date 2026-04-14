@@ -803,17 +803,34 @@ export async function listRolePlugins(): Promise<RolePlugin[]> {
 /**
  * Return role-plugins filtered by compatible-titles and optionally compatible-clients.
  * Both comparisons are case-insensitive.
+ *
+ * Client name normalization: callers may pass the short form (`claude`, `codex`)
+ * OR the canonical form used in TOML files (`claude-code`, `codex`). We normalize
+ * the short forms to the canonical TOML form before comparing, so the wizard
+ * (which uses short form `claude`) matches predefined plugins (which declare
+ * `compatible-clients = ["claude-code"]`). Without this normalization the filter
+ * silently excludes ALL predefined plugins for any team title.
  */
 export async function getPluginsForTitle(title: string, clientType?: string): Promise<RolePlugin[]> {
   const all = await listRolePlugins()
   const upperTitle = title.toUpperCase()
-  const lowerClient = clientType?.toLowerCase()
+  // Normalize short → canonical form used in .agent.toml compatible-clients.
+  const CLIENT_ALIAS_MAP: Record<string, string> = {
+    'claude': 'claude-code',
+    'claude-code': 'claude-code',
+    'codex': 'codex',
+    'gemini': 'gemini',
+    'opencode': 'opencode',
+    'kiro': 'kiro',
+  }
+  const rawClient = clientType?.toLowerCase()
+  const canonicalClient = rawClient ? (CLIENT_ALIAS_MAP[rawClient] ?? rawClient) : undefined
   return all.filter(p => {
     // Must match compatible-titles
     if (!p.compatibleTitles?.includes(upperTitle)) return false
     // If client filter specified, must also match compatible-clients (or have none = any client)
-    if (lowerClient && p.compatibleClients && p.compatibleClients.length > 0) {
-      if (!p.compatibleClients.includes(lowerClient)) return false
+    if (canonicalClient && p.compatibleClients && p.compatibleClients.length > 0) {
+      if (!p.compatibleClients.includes(canonicalClient)) return false
     }
     return true
   })

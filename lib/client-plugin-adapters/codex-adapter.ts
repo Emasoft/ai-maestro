@@ -1,18 +1,24 @@
 /**
  * Codex Plugin Adapter — Native plugin support for OpenAI Codex.
  *
- * Codex has a plugin system similar to Claude Code:
- * - Plugins stored in ~/.codex/plugins/cache/
- * - State tracked in ~/.codex/config.toml
- * - Skills in skills/<name>/SKILL.md format
- * - Plugin manifest at .codex-plugin/plugin.json
+ * Codex plugin files live directly INSIDE the agent's working directory:
+ *   <agentDir>/.codex-plugin/plugin.json       (manifest)
+ *   <agentDir>/.agents/skills/<name>/SKILL.md  (skill content)
+ *   <agentDir>/.codex/installed-plugins/<name>.json  (install manifest — for clean uninstall)
  *
- * For now, this adapter copies the converted plugin into the Codex
- * plugin directory and registers it in config. When Codex gains a
- * CLI for plugin management, this adapter should delegate to it.
+ * The adapter delegates the file copy + tracking-manifest work to the element
+ * adapter and passes the agent directory as the target. Do NOT install to
+ * `~/.codex/plugins/cache/` — that is the user-global codex cache which is
+ * unrelated to ai-maestro agent-local plugin installs and causes R18.1 /
+ * scanAgentLocalConfig to miss the install.
+ *
+ * Previously this adapter wrote to ~/.codex/plugins/cache/ai-maestro-converted/
+ * (ignoring targetDir), which on ChangeClient claude→codex left the agent's
+ * .claude/ dir empty and scanAgentLocalConfig returned zero plugins.
+ * Fixed in SCEN-016 debugging session.
  */
 
-import { mkdir, rm } from 'fs/promises'
+import { rm } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
 import { homedir } from 'os'
@@ -22,41 +28,59 @@ import type {
 } from './types'
 
 const HOME = homedir()
-const CODEX_PLUGINS_DIR = path.join(HOME, '.codex', 'plugins', 'cache')
+
+function resolveAgentDir(targetDir: string): string {
+  return targetDir.startsWith('~') ? targetDir.replace('~', HOME) : targetDir
+}
 
 const codexAdapter: ClientPluginAdapter = {
   clientType: 'codex',
   supportsEnableDisable: false,
 
-  async install(plugin: StoredPlugin, _targetDir: string, _options?: PluginAdapterOptions): Promise<PluginInstallResult> {
+  async install(plugin: StoredPlugin, targetDir: string, options?: PluginAdapterOptions): Promise<PluginInstallResult> {
     const storageDir = plugin.storageDir
     if (!existsSync(storageDir)) {
       return { success: false, installedPaths: [], error: `Stored plugin not found: ${storageDir}` }
     }
 
-    // Copy the converted plugin to Codex plugin cache
-    const destDir = path.join(CODEX_PLUGINS_DIR, 'ai-maestro-converted', plugin.name, plugin.version || 'local')
-    await mkdir(destDir, { recursive: true })
-
-    // Recursive copy
+    // Delegate to the element adapter. `targetDir` IS the agent working directory.
+    // The element adapter will recursively copy plugin files into targetDir and
+    // write a tracking manifest at targetDir/.codex/installed-plugins/<name>.json.
     const { createElementAdapter } = await import('./element-adapter')
     const elementAdapter = createElementAdapter('codex')
-    // Reuse element adapter's install to copy files, but to the Codex cache location
     const result = await elementAdapter.install(
       { ...plugin, storageDir },
-      destDir,
-      _options
+      targetDir,
+      options
     )
-
     if (!result.success) return result
-
     return { success: true, installedPaths: result.installedPaths }
   },
 
-  async uninstall(plugin: StoredPlugin, _targetDir: string): Promise<PluginUninstallResult> {
-    const pluginDir = path.join(CODEX_PLUGINS_DIR, 'ai-maestro-converted', plugin.name)
-    if (existsSync(pluginDir)) {
-      await rm(pluginDir, { recursive: true })
+  async uninstall(plugin: StoredPlugin, targetDir: string, options?: PluginAdapterOptions): Promise<PluginUninstallResult> {
+    // Prefer the element adapter's manifest-driven uninstall — it knows exactly
+    // which files were installed and cleans them up. Fall back to bulk removal
+    // if the manifest is missing (e.g. legacy install from the pre-fix adapter).
+    const { createElementAdapter } = await import('./element-adapter')
+    const elementAdapter = createElementAdapter('codex')
+    const elementResult = await elementAdapter.uninstall(plugin, targetDir, options)
+    if (elementResult.success) return elementResult
+
+    // Legacy cleanup: pre-fix installs lived in ~/.codex/plugins/cache/ai-maestro-converted/
+    const legacyDir = path.join(HOME, '.codex', 'plugins', 'cache', 'ai-maestro-converted', plugin.name)
+    if (existsSync(legacyDir)) {
+      try { await rm(legacyDir, { recursive: true }) } catch { /* best effort */ }
+    }
+
+    // And wipe any partial .codex-plugin / .agents / .codex dirs that the
+    // element adapter couldn't clean up due to the missing manifest.
+    const agentDir = resolveAgentDir(targetDir)
+    const candidates = ['.codex-plugin', '.agents', '.codex/installed-plugins']
+    for (const rel of candidates) {
+      const abs = path.join(agentDir, rel)
+      if (existsSync(abs)) {
+        try { await rm(abs, { recursive: true }) } catch { /* best effort */ }
+      }
     }
     return { success: true }
   },
@@ -70,12 +94,11 @@ const codexAdapter: ClientPluginAdapter = {
     return { success: true }
   },
 
-  async detectState(pluginName: string, _targetDir: string): Promise<PluginInstallState> {
-    const pluginDir = path.join(CODEX_PLUGINS_DIR, 'ai-maestro-converted', pluginName)
-    if (existsSync(pluginDir)) {
-      return { installed: true, enabled: true, method: 'settings-write' }
-    }
-    return { installed: false, enabled: false, method: 'settings-write' }
+  async detectState(pluginName: string, targetDir: string): Promise<PluginInstallState> {
+    // Prefer the element adapter's manifest-driven detection.
+    const { createElementAdapter } = await import('./element-adapter')
+    const elementAdapter = createElementAdapter('codex')
+    return elementAdapter.detectState(pluginName, targetDir)
   },
 }
 

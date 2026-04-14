@@ -81,7 +81,9 @@ export default function MarketplacesTab({ workingDirectory, installedPluginNames
   const filtered = query.trim()
     ? marketplaces.filter((m) => {
         const q = query.trim().toLowerCase()
-        return m.name.toLowerCase().includes(q) || m.source.toLowerCase().includes(q)
+        const name = (m.name || '').toLowerCase()
+        const source = (m.source || '').toLowerCase()
+        return name.includes(q) || source.includes(q)
       })
     : marketplaces
 

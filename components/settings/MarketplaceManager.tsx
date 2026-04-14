@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { sudoFetch } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
+import { MAIN_PLUGIN_NAME, MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
 
 interface PluginStatus {
   name: string
@@ -455,14 +456,20 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
                   {actionInProgress === mkt.name ? <Loader2 className="w-3 h-3 text-blue-400 animate-spin" /> : <RefreshCw className="w-3 h-3 text-gray-500 hover:text-blue-400" />}
                 </button>
 
-                {/* Delete marketplace */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); setConfirmAction({ action: 'delete-marketplace', target: mkt.name, label: `Delete marketplace "${mkt.name}"? This will uninstall all its plugins and remove the marketplace.` }) }}
-                  disabled={isActioning}
-                  className="p-0.5 rounded hover:bg-red-500/20 transition-colors" title="Delete marketplace"
-                >
-                  <Trash2 className="w-3 h-3 text-gray-600 hover:text-red-400" />
-                </button>
+                {/* Delete marketplace — protect the ai-maestro-plugins marketplace
+                    because it hosts the R17 core plugin. Cascade delete would uninstall
+                    the core plugin, which must never happen through the UI. SCEN-017 */}
+                {mkt.name === MARKETPLACE_NAME ? (
+                  <span className="text-[9px] text-amber-400/70 px-1.5 py-0.5 rounded border border-amber-400/30 bg-amber-400/5 flex-shrink-0" title={`Protected — hosts the core ${MAIN_PLUGIN_NAME} (R17)`}>core</span>
+                ) : (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmAction({ action: 'delete-marketplace', target: mkt.name, label: `Delete marketplace "${mkt.name}"? This will uninstall all its plugins and remove the marketplace.` }) }}
+                    disabled={isActioning}
+                    className="p-0.5 rounded hover:bg-red-500/20 transition-colors" title="Delete marketplace"
+                  >
+                    <Trash2 className="w-3 h-3 text-gray-600 hover:text-red-400" />
+                  </button>
+                )}
               </div>
 
               {/* Marketplace metadata — always shown when expanded */}
@@ -568,34 +575,41 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
                             {/* Action buttons — mini style */}
                             <div className="flex items-center gap-1 flex-shrink-0">
                               {plugin.installed ? (
-                                <>
-                                  {/* Enable/disable toggle */}
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleToggle(plugin.key, plugin.enabled) }}
-                                    disabled={isPluginActioning}
-                                    className="flex-shrink-0" title={plugin.enabled ? 'Disable plugin' : 'Enable plugin'}
-                                  >
-                                    {isPluginActioning ? <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
-                                      : plugin.enabled ? <ToggleRight className="w-5 h-5 text-emerald-400" />
-                                      : <ToggleLeft className="w-5 h-5 text-gray-600" />}
-                                  </button>
-                                  {/* Update */}
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setConfirmAction({ action: 'update', target: plugin.key, label: `Update "${plugin.name}"? This will re-copy from the marketplace.` }) }}
-                                    disabled={isPluginActioning}
-                                    className="p-0.5 rounded hover:bg-blue-500/20 transition-colors" title="Update"
-                                  >
-                                    <RefreshCw className="w-3 h-3 text-gray-500 hover:text-blue-400" />
-                                  </button>
-                                  {/* Uninstall */}
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setConfirmAction({ action: 'uninstall', target: plugin.key, label: `Uninstall "${plugin.name}"?` }) }}
-                                    disabled={isPluginActioning}
-                                    className="p-0.5 rounded hover:bg-red-500/20 transition-colors" title="Uninstall"
-                                  >
-                                    <Trash2 className="w-3 h-3 text-gray-500 hover:text-red-400" />
-                                  </button>
-                                </>
+                                plugin.name === MAIN_PLUGIN_NAME ? (
+                                  /* R17 core plugin — show badge instead of destructive controls.
+                                     SCEN-017 found that MarketplaceManager had zero core-plugin
+                                     gating and exposed Toggle/Update/Uninstall on the core row. */
+                                  <span className="text-[9px] text-amber-400/70 px-1.5 py-0.5 rounded border border-amber-400/30 bg-amber-400/5" title="Core plugin — protected by R17 (cannot disable, update, or uninstall from Settings)">core</span>
+                                ) : (
+                                  <>
+                                    {/* Enable/disable toggle */}
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleToggle(plugin.key, plugin.enabled) }}
+                                      disabled={isPluginActioning}
+                                      className="flex-shrink-0" title={plugin.enabled ? 'Disable plugin' : 'Enable plugin'}
+                                    >
+                                      {isPluginActioning ? <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
+                                        : plugin.enabled ? <ToggleRight className="w-5 h-5 text-emerald-400" />
+                                        : <ToggleLeft className="w-5 h-5 text-gray-600" />}
+                                    </button>
+                                    {/* Update */}
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setConfirmAction({ action: 'update', target: plugin.key, label: `Update "${plugin.name}"? This will re-copy from the marketplace.` }) }}
+                                      disabled={isPluginActioning}
+                                      className="p-0.5 rounded hover:bg-blue-500/20 transition-colors" title="Update"
+                                    >
+                                      <RefreshCw className="w-3 h-3 text-gray-500 hover:text-blue-400" />
+                                    </button>
+                                    {/* Uninstall */}
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setConfirmAction({ action: 'uninstall', target: plugin.key, label: `Uninstall "${plugin.name}"?` }) }}
+                                      disabled={isPluginActioning}
+                                      className="p-0.5 rounded hover:bg-red-500/20 transition-colors" title="Uninstall"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-gray-500 hover:text-red-400" />
+                                    </button>
+                                  </>
+                                )
                               ) : (
                                 /* Install button for uninstalled plugins */
                                 <button

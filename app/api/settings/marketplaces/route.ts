@@ -12,9 +12,83 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 import os from 'os'
 import semver from 'semver'
-import { LOCAL_MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
+import { LOCAL_MARKETPLACE_NAME, MAIN_PLUGIN_NAME, MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
 import { enforceSystemOwner } from '@/lib/route-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
+
+/**
+ * R17 core plugin guard — rejects destructive actions targeting the
+ * ai-maestro-plugin core plugin or a cascade on its parent marketplace.
+ *
+ * SCEN-017 found that /api/settings/marketplaces POST handlers
+ * (handleDisable, handleUninstall, handleEnable at user scope, and
+ * handleDeleteMarketplace) called Claude CLI directly without going through
+ * the ChangePlugin pipeline — which meant the R17 Gate 7 core plugin guard
+ * was completely bypassed.
+ *
+ * Rules enforced (all on the USER scope; the marketplaces POST route only
+ * ever operates on user-scope plugins — local scope is handled via the
+ * per-agent /api/agents/[id] PATCH route which goes through ChangePlugin):
+ *
+ *   - uninstall → blocked (R17.14: core plugin must never be uninstalled)
+ *   - enable    → blocked (R17.17: core plugin must be LOCAL-only, enabling
+ *                 at user scope is forbidden)
+ *   - install   → blocked (R17.17: same reason)
+ *   - disable   → ALLOWED (disabling at user scope restores R17.17 compliance;
+ *                 the plugin remains present in each agent's local scope)
+ *   - delete-marketplace on ai-maestro-plugins → blocked (cascade would
+ *                 uninstall the core plugin, violating R17.14)
+ *
+ * Note that this guard only runs for Settings → Plugins Explorer actions
+ * (which target the user scope). Local-scope operations on individual
+ * agents go through ChangePlugin Gate 8 which has its own core-plugin
+ * enforcement.
+ *
+ * This function is the final backstop: even if a client bypasses every UI
+ * guard, the backend refuses the operation with a structured error.
+ */
+function guardCoreActionR17(
+  action: string,
+  pluginKey: string | null | undefined,
+  marketplaceName: string | null | undefined,
+): NextResponse | null {
+  // Parse plugin name from pluginKey (format: "name@marketplace")
+  let pluginName: string | null = null
+  if (pluginKey) {
+    const atIdx = pluginKey.lastIndexOf('@')
+    pluginName = atIdx > 0 ? pluginKey.substring(0, atIdx) : pluginKey
+  }
+
+  // Direct plugin-level operations on the core plugin
+  if (pluginName === MAIN_PLUGIN_NAME) {
+    if (action === 'uninstall') {
+      return NextResponse.json(
+        { error: `The ${MAIN_PLUGIN_NAME} is a core system plugin and cannot be uninstalled (R17.14). It is required for all agents to participate in the AI Maestro ecosystem. Use the per-agent Profile → Config tab if you need to inspect it; the Settings UI cannot remove it.` },
+        { status: 403 },
+      )
+    }
+    if (action === 'enable' || action === 'install') {
+      return NextResponse.json(
+        { error: `The ${MAIN_PLUGIN_NAME} must be installed with --scope local, not user scope (R17.17). User-scope install/enable would affect all projects, not just one agent. Use the per-agent wake/create flows which automatically install it locally.` },
+        { status: 403 },
+      )
+    }
+    // `disable` is intentionally ALLOWED because disabling the core plugin at
+    // user scope is the mechanism for RESTORING R17.17 compliance after an
+    // earlier bug or operator error left it enabled at user scope. The plugin
+    // remains installed locally on every agent.
+  }
+
+  // Cascade marketplace delete that would wipe the core plugin
+  if (action === 'delete-marketplace' && marketplaceName === MARKETPLACE_NAME) {
+    return NextResponse.json(
+      { error: `The ${MARKETPLACE_NAME} marketplace hosts the core ${MAIN_PLUGIN_NAME} and cannot be deleted (R17). Deleting it would cascade into uninstalling the core plugin, which is blocked by R17.14. Remove individual non-core plugins through their per-plugin action instead.` },
+      { status: 403 },
+    )
+  }
+
+  return null
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -578,6 +652,13 @@ export async function POST(req: NextRequest) {
       if (sudoErr) return sudoErr
     }
 
+    // R17 core plugin guard (SCEN-017). This backstop runs BEFORE the action
+    // handlers, which call Claude CLI directly and bypass ChangePlugin's Gate 7.
+    // The guard refuses any operation that would disable/uninstall the core plugin
+    // or cascade-delete the marketplace that hosts it.
+    const r17Err = guardCoreActionR17(action, pluginKey ?? null, body.marketplaceName ?? null)
+    if (r17Err) return r17Err
+
     // Marketplace-level actions
     if (action === 'delete-marketplace') {
       return await handleDeleteMarketplace(body.marketplaceName)
@@ -884,25 +965,34 @@ async function handleUninstall(pluginName: string, marketplaceName: string, plug
     } catch (err) { console.error('[marketplaces] uninstall attempt', err) }
   }
 
-  // If CLI couldn't uninstall, this is a stale installation (installed via file copy, not CLI).
-  // Clean up manually: remove cache, remove from settings.
-  if (!cliSucceeded) {
-    // Remove all cache entries for this plugin across all marketplace name variants
-    for (const mktName of [marketplaceName, cliMkt]) {
-      const cacheDir = join(CACHE_DIR, mktName, pluginName)
-      if (existsSync(cacheDir)) {
-        await rm(cacheDir, { recursive: true, force: true })
-      }
+  // SCEN-019 BUG-001 FIX: claude CLI `plugin uninstall` only removes the
+  // settings.json entry — it does NOT delete the plugin cache directory.
+  // If we trust the CLI's success code, the cache dir stays on disk and the
+  // backend's next GET scan still sees the plugin as `installed: true`,
+  // creating a zombie state the user can't get out of via the UI.
+  //
+  // The fix is to ALWAYS remove the cache dir + the settings entries after
+  // uninstall, regardless of whether the CLI call succeeded. The manual
+  // cleanup is idempotent (rm -rf + delete key) so it's safe to run
+  // unconditionally.
+  //
+  // Why we must do this here: `claude plugin uninstall` is not an AI Maestro
+  // operation — it's an upstream Claude CLI command. We cannot fix the CLI.
+  // So we compensate at the API layer.
+  for (const mktName of [marketplaceName, cliMkt]) {
+    const cacheDir = join(CACHE_DIR, mktName, pluginName)
+    if (existsSync(cacheDir)) {
+      await rm(cacheDir, { recursive: true, force: true })
     }
-    // Remove all settings entries for this plugin (both key formats)
-    const settings = await readJsonSafe(SETTINGS_PATH) || {}
-    const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-    for (const key of uniqueKeys) {
-      delete ep[key]
-    }
-    settings.enabledPlugins = ep
-    await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
   }
+  // Remove all settings entries for this plugin (both key formats)
+  const settings = await readJsonSafe(SETTINGS_PATH) || {}
+  const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+  for (const key of uniqueKeys) {
+    delete ep[key]
+  }
+  settings.enabledPlugins = ep
+  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
 
   return NextResponse.json({ success: true, action: 'uninstall', pluginKey, staleCleanup: !cliSucceeded })
 }
@@ -913,40 +1003,53 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
     return NextResponse.json({ error: 'marketplaceName is required' }, { status: 400 })
   }
 
-  const cloneDir = join(MARKETPLACES_DIR, marketplaceName)
-  const mktCacheDir = join(CACHE_DIR, marketplaceName)
+  // SCEN-019 BUG-002: The UI passes a "display name" (e.g., the repo slug
+  // `cblecker-claude-plugins`) but Claude CLI stores marketplaces under their
+  // `.claude-plugin/marketplace.json` `name` field (e.g., `claude-plugins`).
+  // We need to clean up under BOTH names — the UI name AND the CLI name — so
+  // neither the cache dir nor the settings.json entry is orphaned.
+  const cliName = await resolveCliMarketplaceName(marketplaceName)
+  const nameCandidates = Array.from(new Set([marketplaceName, cliName]))
 
-  // Remove via Claude CLI first
-  try {
-    const { execSync } = await import('child_process')
-    const cliName = await resolveCliMarketplaceName(marketplaceName)
-    execSync(`claude plugin marketplace remove "${shellSafe(cliName)}" 2>&1`, { timeout: 15000 })
-  } catch (err) {
-    // CLI removal may fail if not registered — continue with file cleanup
-    console.error('[marketplaces] CLI marketplace remove', err)
+  // Remove via Claude CLI first (one attempt per candidate)
+  for (const name of nameCandidates) {
+    try {
+      const { execSync } = await import('child_process')
+      execSync(`claude plugin marketplace remove "${shellSafe(name)}" 2>&1`, { timeout: 15000 })
+    } catch (err) {
+      // CLI removal may fail if not registered — continue with file cleanup
+      console.error('[marketplaces] CLI marketplace remove', name, err)
+    }
   }
 
-  // Remove clone dir
-  if (existsSync(cloneDir)) {
-    await rm(cloneDir, { recursive: true, force: true })
+  // Remove clone dirs + cached plugins under BOTH name candidates
+  for (const name of nameCandidates) {
+    const cloneDir = join(MARKETPLACES_DIR, name)
+    const mktCacheDir = join(CACHE_DIR, name)
+    if (existsSync(cloneDir)) {
+      await rm(cloneDir, { recursive: true, force: true })
+    }
+    if (existsSync(mktCacheDir)) {
+      await rm(mktCacheDir, { recursive: true, force: true })
+    }
   }
 
-  // Remove cached plugins for this marketplace
-  if (existsSync(mktCacheDir)) {
-    await rm(mktCacheDir, { recursive: true, force: true })
-  }
-
-  // Remove from extraKnownMarketplaces in settings
+  // Remove from extraKnownMarketplaces in settings (try ALL name variants)
   const settings = await readJsonSafe(SETTINGS_PATH) || {}
   const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
-  delete ekm[marketplaceName]
+  for (const name of nameCandidates) {
+    delete ekm[name]
+  }
   settings.extraKnownMarketplaces = ekm
 
-  // Remove any enabledPlugins entries for this marketplace
+  // Remove any enabledPlugins entries for this marketplace under ALL name variants
   const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
   for (const key of Object.keys(ep)) {
-    if (key.endsWith(`@${marketplaceName}`)) {
-      delete ep[key]
+    for (const name of nameCandidates) {
+      if (key.endsWith(`@${name}`)) {
+        delete ep[key]
+        break
+      }
     }
   }
   settings.enabledPlugins = ep

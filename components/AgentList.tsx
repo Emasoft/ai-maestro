@@ -270,10 +270,12 @@ export default function AgentList({
     if (statusFilter === 'active') {
       result = result.filter(a => a.sessions?.[0]?.status === 'online')
     } else if (statusFilter === 'hiber') {
-      // An agent is hibernated when it has at least one session entry but none are online.
-      // This aligns with the isHibernated definition used in the rendering logic:
-      // !isOnline && agent.sessions && agent.sessions.length > 0
-      result = result.filter(a => a.sessions && a.sessions.length > 0 && a.sessions[0]?.status !== 'online')
+      // HIBER tab includes:
+      //  - agents with sessions but currently offline (classic hibernated)
+      //  - agents that were just created and never had a tmux session (sessions empty/missing)
+      // Without the second case, brand-new auto-COS agents and freshly created agents
+      // disappear from both ACTIVE and HIBER until their first session is started.
+      result = result.filter(a => a.sessions?.[0]?.status !== 'online')
     }
 
     // Apply search filter (name, label, or host)
@@ -814,8 +816,9 @@ export default function AgentList({
           {([
             { key: 'active' as const, label: 'ACTIVE', count: agents.filter(a => a.sessions?.[0]?.status === 'online').length, color: 'emerald' },
             { key: 'all' as const, label: 'ALL', count: agents.length, color: 'blue' },
-            // Exclude agents with no sessions — only count agents with a session that is not online
-            { key: 'hiber' as const, label: 'HIBER', count: agents.filter(a => a.sessions && a.sessions.length > 0 && a.sessions[0]?.status !== 'online').length, color: 'amber' },
+            // HIBER counts every agent that is not online — includes brand-new agents
+            // (sessions empty) so they remain visible until their first wake.
+            { key: 'hiber' as const, label: 'HIBER', count: agents.filter(a => a.sessions?.[0]?.status !== 'online').length, color: 'amber' },
           ]).map(tab => {
             const isActive = statusFilter === tab.key
             return (

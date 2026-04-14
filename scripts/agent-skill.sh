@@ -92,8 +92,12 @@ cmd_skill_list() {
     local api_base
     api_base=$(get_api_base)
 
+    # SCEN-022 BUG-001 fix (P0): inject AID_AUTH for agent callers
+    local -a auth_args=()
+    _build_auth_args auth_args
+
     local response
-    response=$(curl -s --max-time 30 "${api_base}/api/agents/${RESOLVED_AGENT_ID}/skills")
+    response=$(curl -s --max-time 30 "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/skills")
 
     echo "$response" | jq -r '.skills[] | "  - \(.id // .name) (\(.type // "unknown"))"' 2>/dev/null || \
         echo "  (no skills)"
@@ -136,8 +140,12 @@ cmd_skill_add() {
             '{type: $type, ids: [$id]}')
     fi
 
+    # SCEN-022 BUG-001 fix (P0): inject AID_AUTH for agent callers
+    local -a auth_args=()
+    _build_auth_args auth_args
+
     local response
-    response=$(curl -s --max-time 30 -X POST "${api_base}/api/agents/${RESOLVED_AGENT_ID}/skills" \
+    response=$(curl -s --max-time 30 -X POST "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/skills" \
         -H "Content-Type: application/json" \
         -d "$payload")
 
@@ -173,12 +181,16 @@ cmd_skill_remove() {
     local api_base
     api_base=$(get_api_base)
 
+    # SCEN-022 BUG-001 fix (P0): inject AID_AUTH for agent callers
+    local -a auth_args=()
+    _build_auth_args auth_args
+
     # URL-encode skill_id to prevent injection
     local encoded_skill_id
     encoded_skill_id=$(printf '%s' "$skill_id" | jq -sRr @uri 2>/dev/null) || encoded_skill_id="$skill_id"
 
     local response
-    response=$(curl -s --max-time 30 -X DELETE "${api_base}/api/agents/${RESOLVED_AGENT_ID}/skills/${encoded_skill_id}")
+    response=$(curl -s --max-time 30 -X DELETE "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/skills/${encoded_skill_id}")
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')

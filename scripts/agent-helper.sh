@@ -127,6 +127,11 @@ _validate_api_base() {
 # Make API request with proper error handling
 # Args: url [description]
 # Returns: response body on stdout, 0 on success, 1 on failure
+#
+# SCEN-022 BUG-001 fix (P0): pass AID_AUTH as Authorization header so agent
+# callers (MANAGER, CHIEF-OF-STAFF, etc.) can authenticate. Without this,
+# every aimaestro-agent.sh read/write fails with HTTP 401 when the server
+# enforces auth (SF-058 strict mode). Reference pattern: agent-core.sh:407.
 _api_request() {
     local url="$1"
     local desc="${2:-API request}"
@@ -139,7 +144,13 @@ _api_request() {
         return 1
     }
 
-    http_code=$(curl -s -w '%{http_code}' -o "$tmp_body" --max-time 10 "$url" 2>/dev/null)
+    # Build AID auth header if available
+    local -a auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+
+    http_code=$(curl -s -w '%{http_code}' -o "$tmp_body" --max-time 10 "${auth_args[@]}" "$url" 2>/dev/null)
     local curl_exit=$?
     response=$(<"$tmp_body")
     rm -f "$tmp_body"
@@ -155,6 +166,24 @@ _api_request() {
     fi
 
     echo "$response"
+}
+
+# SCEN-022 BUG-001 fix (P0): Shared helper for modules that need inline curl
+# with auth. Usage pattern:
+#
+#   local -a auth_args=()
+#   _build_auth_args auth_args
+#   curl -s "${auth_args[@]}" ...
+#
+# All modules (agent-commands.sh, agent-session.sh, agent-skill.sh,
+# agent-plugin.sh) call this so every single API call from the agent CLI
+# carries the AID_AUTH bearer token when available.
+_build_auth_args() {
+    local -n _out_array="$1"
+    _out_array=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        _out_array=(-H "Authorization: Bearer $AID_AUTH")
+    fi
 }
 
 # ============================================================================
@@ -617,8 +646,13 @@ resolve_agent() {
             fi
             return 1
         fi
+        # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate
+        local -a _resolve_auth_args=()
+        if [ -n "${AID_AUTH:-}" ]; then
+            _resolve_auth_args=(-H "Authorization: Bearer $AID_AUTH")
+        fi
         local response
-        response=$(curl -s --max-time 10 "${target_api}/api/messages?action=resolve&agent=${agent_part}" 2>/dev/null)
+        response=$(curl -s --max-time 10 "${_resolve_auth_args[@]}" "${target_api}/api/messages?action=resolve&agent=${agent_part}" 2>/dev/null)
         if [[ -z "$response" ]]; then
             print_error "Cannot connect to AI Maestro at ${target_api}"
             return 1
@@ -748,8 +782,13 @@ resolve_agent() {
             echo "" >&2
         fi
         # List agents on localhost so the caller can retry with the correct name
+        # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate
+        local -a _list_auth_args=()
+        if [ -n "${AID_AUTH:-}" ]; then
+            _list_auth_args=(-H "Authorization: Bearer $AID_AUTH")
+        fi
         local agent_list
-        agent_list=$(curl -s --max-time 3 "http://localhost:23000/api/agents" 2>/dev/null \
+        agent_list=$(curl -s --max-time 3 "${_list_auth_args[@]}" "http://localhost:23000/api/agents" 2>/dev/null \
             | jq -r '.agents[].name // empty' 2>/dev/null | sort -u)
         if [[ -n "$agent_list" ]]; then
             echo "Agents on localhost:" >&2
@@ -832,9 +871,15 @@ check_api_running() {
     local api_base
     _validate_api_base api_base || return 1
 
+    # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers get 200 instead of 401
+    local -a _chk_auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        _chk_auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+
     # LOW-4: Use 2>/dev/null instead of 2>&1 to prevent curl errors polluting http_code
     local http_code
-    http_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${api_base}/api/sessions" 2>/dev/null)
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${_chk_auth_args[@]}" "${api_base}/api/sessions" 2>/dev/null)
 
     # LOW-4: Explicit check for empty or connection-failed (000) http_code
     if [[ -z "$http_code" ]] || [[ "$http_code" == "000" ]]; then

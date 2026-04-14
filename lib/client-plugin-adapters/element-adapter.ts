@@ -165,7 +165,22 @@ export function createElementAdapter(clientType: ClientType): ClientPluginAdapte
 }
 
 /**
+ * Junk / VCS paths we never copy when installing a plugin. Non-Claude client
+ * plugins legitimately use dot-prefixed top-level directories (`.codex-plugin`,
+ * `.agents`, `.gemini`, `.kiro`) so we cannot skip ALL hidden entries — only
+ * noise that would corrupt a clean install.
+ */
+const SKIP_NAMES = new Set(['.git', '.DS_Store', '.svn', '.hg', '.idea', '.vscode'])
+
+/**
  * Recursively copy files from src to dest, tracking installed paths.
+ *
+ * Historically this function skipped every entry beginning with `.` — which
+ * silently produced empty plugin installs for Codex/Gemini/Kiro because those
+ * clients keep all their plugin content under `.codex-plugin/`, `.agents/`,
+ * `.gemini/`, `.kiro/`. Found during SCEN-016 R18 plugin-continuity tests:
+ * element-adapter was copying zero files on a claude→codex client change,
+ * leaving the agent with no core plugin after the switch.
  */
 async function copyDir(
   src: string, dest: string, relPrefix: string,
@@ -175,7 +190,9 @@ async function copyDir(
 
   const entries = await readdir(src, { withFileTypes: true })
   for (const entry of entries) {
-    if (entry.name.startsWith('.')) continue // skip hidden files/dirs
+    // Only skip VCS / editor junk. Dot-prefixed directories like `.codex-plugin`
+    // or `.agents` ARE the plugin body for non-Claude clients.
+    if (SKIP_NAMES.has(entry.name)) continue
 
     const srcPath = path.join(src, entry.name)
     const relPath = relPrefix ? `${relPrefix}/${entry.name}` : entry.name

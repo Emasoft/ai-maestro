@@ -253,11 +253,19 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
       }
     }
 
+    // SCEN-001 fix (2026-04-13): Gate 0 of ChangeTitle now requires an
+    // authContext. teams-service is only called from authenticated API
+    // routes (the webapp session is a system-owner in Phase 1), so it is
+    // safe to pass a system-owner authContext here. Without it, every
+    // auto-title step is silently rejected (caught as a `console.warn`),
+    // leaving newly-added team members as AUTONOMOUS in the registry.
+    const systemOwnerAuthContext = { isSystemOwner: true as const }
+
     // Assign COS title + role-plugin via ChangeTitle pipeline.
     if (cosId) {
       try {
         const { ChangeTitle } = await import('@/services/element-management-service')
-        await ChangeTitle(cosId, 'chief-of-staff')
+        await ChangeTitle(cosId, 'chief-of-staff', { authContext: systemOwnerAuthContext })
       } catch (err) {
         console.warn('[teams] Failed ChangeTitle for COS:', err instanceof Error ? err.message : err)
       }
@@ -272,7 +280,7 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
     for (const id of agentIdsToTitle) {
       try {
         const { ChangeTitle } = await import('@/services/element-management-service')
-        await ChangeTitle(id, 'member')
+        await ChangeTitle(id, 'member', { authContext: systemOwnerAuthContext })
       } catch (err) {
         console.warn(`[teams] Failed ChangeTitle to MEMBER for agent ${id}:`, err instanceof Error ? err.message : err)
       }
@@ -283,7 +291,7 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
       try {
         await updateTeam(team.id, { orchestratorId: params.orchestratorId }, managerId)
         const { ChangeTitle } = await import('@/services/element-management-service')
-        await ChangeTitle(params.orchestratorId, 'orchestrator')
+        await ChangeTitle(params.orchestratorId, 'orchestrator', { authContext: systemOwnerAuthContext })
       } catch (err) {
         console.warn('[teams] Failed to set orchestrator:', err instanceof Error ? err.message : err)
       }
@@ -377,6 +385,12 @@ export async function updateTeamById(id: string, params: UpdateTeamParams): Prom
       return { error: 'Team not found', status: 404 }
     }
 
+    // SCEN-001 fix (2026-04-13): pass system-owner authContext, same
+    // rationale as the createTeam branch above — teams-service is always
+    // invoked from an authenticated API route, and without this the
+    // auto-title steps silently no-op.
+    const systemOwnerAuthContextForUpdate = { isSystemOwner: true as const }
+
     // Strip titles from removed agents (team-bound titles are meaningless outside teams)
     if (newAgentIds !== undefined) {
       const removedAgentIds = oldAgentIds.filter(aid => !newAgentIds.includes(aid))
@@ -384,7 +398,8 @@ export async function updateTeamById(id: string, params: UpdateTeamParams): Prom
         const { ChangeTitle } = await import('@/services/element-management-service')
         for (const removedId of removedAgentIds) {
           try {
-            await ChangeTitle(removedId, null)  // Reverts to AUTONOMOUS, uninstalls role-plugin
+            // Reverts to AUTONOMOUS, uninstalls role-plugin
+            await ChangeTitle(removedId, null, { authContext: systemOwnerAuthContextForUpdate })
           } catch (err) {
             console.warn(`[teams] Failed to strip title from removed agent ${removedId}:`, err instanceof Error ? err.message : err)
           }
@@ -401,7 +416,7 @@ export async function updateTeamById(id: string, params: UpdateTeamParams): Prom
             const agent = getAgent(addedId)
             // Only auto-title if agent doesn't already have a team-specific title
             if (!agent?.governanceTitle || agent.governanceTitle === 'autonomous') {
-              await ChangeTitle(addedId, 'member')
+              await ChangeTitle(addedId, 'member', { authContext: systemOwnerAuthContextForUpdate })
             }
           } catch (err) {
             console.warn(`[teams] Failed to auto-title added agent ${addedId}:`, err instanceof Error ? err.message : err)
@@ -489,10 +504,15 @@ export async function deleteTeamById(id: string, requestingAgentId?: string, pas
   ]
   const uniqueAgents = [...new Set(agentsToRevert)]
   if (uniqueAgents.length > 0) {
+    // SCEN-001 fix (2026-04-13): pass system-owner authContext so
+    // ChangeTitle Gate 0 doesn't silently reject the revert. deleteTeamById
+    // itself is marked @deprecated, but the fix is kept for safety while
+    // the DeleteTeam pipeline is still being adopted.
+    const systemOwnerAuthContextForDelete = { isSystemOwner: true as const }
     const { ChangeTitle } = await import('@/services/element-management-service')
     for (const agentId of uniqueAgents) {
       try {
-        await ChangeTitle(agentId, 'autonomous')
+        await ChangeTitle(agentId, 'autonomous', { authContext: systemOwnerAuthContextForDelete })
       } catch (err) {
         console.warn(`[deleteTeamById] ChangeTitle to AUTONOMOUS failed for ${agentId}:`, err instanceof Error ? err.message : err)
       }

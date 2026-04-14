@@ -51,8 +51,7 @@ Copy this checklist and track your progress:
 
 ### Rules reference
 
-1. **Plugin-bundled:** `references/SCENARIOS_TESTS_RULES.md` at the plugin root
-2. **Project override (preferred if present):** `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md`
+Canonical rules file: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — tracked in git, single source of truth for the 12 rules.
 
 See [Detailed Procedure](references/p0-implementation-patterns.md) for the full 7-step flow, argument format table (range, comma list, timestamp, "last batch"), and implementer subagent spawn template.
 

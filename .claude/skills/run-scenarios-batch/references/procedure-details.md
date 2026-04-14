@@ -25,7 +25,7 @@ Skip IDs whose `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCEN-NNN_*.scen.md` file i
 
 ## Step 2 — Optional preflight
 
-Check for a project config file at `${CLAUDE_PROJECT_DIR}/tests/scenarios/scenarios-autorunner.config.json`. If it exists, parse the following optional fields:
+Check for a project config file at `${CLAUDE_PROJECT_DIR}/tests/scenarios/scenarios.config.json`. If it exists, parse the following optional fields:
 
 - `preflight_command` — a shell command to run once before the batch (e.g. restart a dev server, reset fixtures)
 - `base_url` — the URL used for health checks (e.g. `http://localhost:3000`)
@@ -108,4 +108,4 @@ Where `P` = pass count, `F` = fail count, `X` = partial count.
 3. **NEVER use `git add -A` or `git add .`** — stage files by explicit name.
 4. **NEVER push to remote** — the user pushes, not the conductor.
 5. **NEVER merge the implementer's worktree branch** — leave that for the user.
-6. **NEVER hardcode project paths** — always use `${CLAUDE_PROJECT_DIR}` and `${CLAUDE_PLUGIN_ROOT}`.
+6. **NEVER hardcode project paths** — always use `${CLAUDE_PROJECT_DIR}`.

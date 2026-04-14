@@ -47,7 +47,7 @@ You already have Bash, Read, Write, Edit, Grep, Glob, TodoWrite from subagent de
 
 ## Phase A — Read the inputs
 
-1. Read the bundled rules at [SCENARIOS_TESTS_RULES.md](../references/SCENARIOS_TESTS_RULES.md) end-to-end. If the project also ships its own copy at `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md`, read that too — when the two disagree, the project copy wins. Rules 1-12 are non-negotiable. Rule 6 STICK-TO-UI is the hardest — every mutation goes through the browser automation MCP, never via shell or direct API call.
+1. Read the project rules at `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` end-to-end. This is the canonical 12-rule spec for ai-maestro scenarios — it is the single source of truth, tracked in git alongside the scenario files themselves. Rules 1-12 are non-negotiable. Rule 6 STICK-TO-UI is the hardest — every mutation goes through the browser automation MCP, never via shell or direct API call.
    - Rule 1: CLEAN-AFTER-YOURSELF
    - Rule 2: 0-IMPACT
    - Rule 3: STATE-WIPE
@@ -63,7 +63,7 @@ You already have Bash, Read, Write, Edit, Grep, Glob, TodoWrite from subagent de
    - How-To: Running a Scenario
 2. Read the scenario .md file at `tests/scenarios/SCEN-NNN_*.scen.md`. Its frontmatter lists prerequisites, required tools, expected data, phases, and cleanup steps. The frontmatter is authoritative.
 3. Read your own `MEMORY.md` for relevant prior-run context.
-4. Verify prerequisites via Bash: the scenario's `prerequisites` list is testable (e.g., `which <cli>`, `curl -s -f <app-health-endpoint-as-configured>`, etc.). The health endpoint, port, and auth method come from the scenario frontmatter or from `tests/scenarios/scenarios-autorunner.config.json` if present — never hardcoded.
+4. Verify prerequisites via Bash: the scenario's `prerequisites` list is testable (e.g., `which <cli>`, `curl -s -f <app-health-endpoint-as-configured>`, etc.). The health endpoint, port, and auth method come from the scenario frontmatter or from `tests/scenarios/scenarios.config.json` if present — never hardcoded.
 
 ## Phase B — SAFE-SETUP (Rule 7)
 
@@ -90,7 +90,7 @@ When a step fails:
 1. STOP — don't continue to the next step
 2. Diagnose: read source files, tail server logs via the project's log command (whatever the project uses), take a fresh `take_snapshot`
 3. Check `MEMORY.md` for prior fixes to the same pattern
-4. Edit the source code with the Edit tool. Run the project's type-check command if one is configured (e.g., `npx tsc --noEmit`, `mypy`, `cargo check`). The project's type-check command is read from `tests/scenarios/scenarios-autorunner.config.json` (`typeCheckCommand` field) or auto-detected from project markers (`package.json` → npm/yarn, `Cargo.toml` → cargo, `go.mod` → go, `pyproject.toml` → python).
+4. Edit the source code with the Edit tool. Run the project's type-check command if one is configured (e.g., `npx tsc --noEmit`, `mypy`, `cargo check`). The project's type-check command is read from `tests/scenarios/scenarios.config.json` (`typeCheckCommand` field) or auto-detected from project markers (`package.json` → npm/yarn, `Cargo.toml` → cargo, `go.mod` → go, `pyproject.toml` → python).
 5. Run the project's build command (e.g., `yarn build`, `npm run build`, `cargo build`, `go build`), then restart the app (the restart command also comes from the config file or falls back to the project's conventional command). Wait for the server to come up.
 6. Retry the failed step. Loop diagnose→fix→retry until pass (no attempt cap)
 7. Record the fix in the report: file:line, root cause, verifying step ID

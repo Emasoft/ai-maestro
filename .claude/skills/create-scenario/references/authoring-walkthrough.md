@@ -13,15 +13,9 @@
 
 ## Step 1 — Ensure the scenarios folder exists
 
-Check for `${CLAUDE_PROJECT_DIR}/tests/scenarios/`. If it does not exist, run the bundled initializer:
+Check for `${CLAUDE_PROJECT_DIR}/tests/scenarios/`. The ai-maestro project already has this folder set up (`tests/scenarios/SCEN-*.scen.md`, `tests/scenarios/SCENARIOS_TESTS_RULES.md`, `tests/scenarios/NEXT_SCEN_NUMBER`, etc.), so this step is normally a no-op. If any required subdirectory is missing, create it with `mkdir -p` via Bash.
 
-```
-${CLAUDE_PLUGIN_ROOT}/scripts/init-scenarios-folder.sh ${CLAUDE_PROJECT_DIR}
-```
-
-This creates `tests/scenarios/`, `tests/scenarios/reports/`, `tests/scenarios/screenshots/`, `tests/scenarios/state-backups/`, `tests/scenarios/state/`, and seeds `tests/scenarios/NEXT_SCEN_NUMBER` with `1`. If the initializer script is missing, create the directories manually via Bash `mkdir -p`.
-
-If `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` is missing, copy the bundled rules file (`references/SCENARIOS_TESTS_RULES.md` at the plugin root) into the project and inform the user.
+If `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` is missing, that is a project setup bug — stop and tell the user. Do NOT try to generate the rules file from the skill; the canonical version is tracked in git.
 
 ## Step 2 — Assign the next scenario number
 

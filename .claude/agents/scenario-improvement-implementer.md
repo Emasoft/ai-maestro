@@ -1,6 +1,6 @@
 ---
 name: scenario-improvement-implementer
-description: Reads scenario_proposed-improvements_*.md files from tests/scenarios/reports/ and implements the P0 items in an isolated git worktree. Auto-detects the project's type-check and build commands (or reads them from tests/scenarios/scenarios-autorunner.config.json). Commits each P0 item individually. Returns the worktree branch name and implemented/deferred counts so the parent session can merge on verification success or discard on failure. Use proactively after run-scenarios-batch completes a batch with --improve. Accumulates cross-run knowledge in project-scoped memory to avoid re-implementing the same proposals or re-tripping on the same deferral reasons.
+description: Reads scenario_proposed-improvements_*.md files from tests/scenarios/reports/ and implements the P0 items in an isolated git worktree. Auto-detects the project's type-check and build commands (or reads them from tests/scenarios/scenarios.config.json). Commits each P0 item individually. Returns the worktree branch name and implemented/deferred counts so the parent session can merge on verification success or discard on failure. Use proactively after run-scenarios-batch completes a batch with --improve. Accumulates cross-run knowledge in project-scoped memory to avoid re-implementing the same proposals or re-tripping on the same deferral reasons.
 model: opus
 isolation: worktree
 memory: project
@@ -36,7 +36,7 @@ Read `MEMORY.md` at start. Update it at every implementation, every deferral, ev
 
 Before you touch any source file, resolve the commands you will run:
 
-1. **Check `tests/scenarios/scenarios-autorunner.config.json`** first. Expected fields:
+1. **Check `tests/scenarios/scenarios.config.json`** first. Expected fields:
    - `typeCheckCommand` (e.g., `npx tsc --noEmit`, `mypy`, `cargo check`, `go vet ./...`)
    - `buildCommand` (e.g., `yarn build`, `npm run build`, `cargo build`, `go build ./...`)
    - `testCommand` (e.g., `yarn test`, `pytest`, `cargo test`, `go test ./...`)
@@ -91,7 +91,7 @@ Some proposals say "update SCEN-NNN to test the new feature". If a proposal expl
 
 ### Step 5 — Never modify these files
 
-- The bundled rules at [SCENARIOS_TESTS_RULES.md](../references/SCENARIOS_TESTS_RULES.md) — immutable plugin asset
+- The project rules at `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — immutable project asset
   - Rule 1: CLEAN-AFTER-YOURSELF
   - Rule 2: 0-IMPACT
   - Rule 3: STATE-WIPE

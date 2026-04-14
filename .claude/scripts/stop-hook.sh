@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop hook — scenarios-autorunner auto-continue guard.
+# Stop hook — scenarios auto-continue guard (project-scoped).
 #
 # When a `run-scenarios-batch` conductor session is mid-batch and Claude tries
 # to stop, this hook checks the batch state file and, if the batch is still
@@ -7,7 +7,6 @@
 # with a pointer to the next action.
 #
 # State file location: ${CLAUDE_PROJECT_DIR}/tests/scenarios/state/batch-state.json
-# Fallback: $HOME/.scenarios-autorunner/batch-state.json (if no project state)
 #
 # State file schema:
 #   {
@@ -28,11 +27,9 @@
 
 set -euo pipefail
 
-# Locate state file
+# Locate state file — project-scoped, no HOME fallback
 if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "${CLAUDE_PROJECT_DIR}/tests/scenarios/state/batch-state.json" ]; then
   STATE_FILE="${CLAUDE_PROJECT_DIR}/tests/scenarios/state/batch-state.json"
-elif [ -f "${HOME}/.scenarios-autorunner/batch-state.json" ]; then
-  STATE_FILE="${HOME}/.scenarios-autorunner/batch-state.json"
 else
   # No state file → no batch in progress → let Claude stop normally
   exit 0
@@ -50,7 +47,7 @@ MAX_ITER=$(jq -r '.max_iterations // 200' "$STATE_FILE" 2>/dev/null || echo 200)
 # Safety: never loop forever
 if [ "$ITER" -ge "$MAX_ITER" ]; then
   cat >&2 <<EOF
-[scenarios-autorunner] Stop hook: iteration count ($ITER) reached cap ($MAX_ITER).
+[scenarios] Stop hook: iteration count ($ITER) reached cap ($MAX_ITER).
 Letting Claude stop to prevent an infinite loop. Batch state file:
   $STATE_FILE
 Inspect the state file and reset iteration_count if you want to continue.

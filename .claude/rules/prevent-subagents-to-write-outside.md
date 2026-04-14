@@ -26,11 +26,32 @@ This is the 10th time (at least) I've forgotten that subagents need an explicit 
 
 ## The enforcement pattern
 
-### Option A — Plugin-level hook (preferred)
+### Option A — Project-scoped subagent shadow (preferred)
 
-For plugins that define subagents (e.g. `scenarios-autorunner`), add a `PreToolUse` hook to the subagent frontmatter that validates every Write/Edit/MultiEdit/NotebookEdit/Bash call against the allowed roots.
+**Important:** plugin-shipped subagents cannot have a `hooks` field in
+their frontmatter — this is a Claude Code security restriction
+documented in the plugins-reference:
 
-Example frontmatter (v0.1.4+):
+> Plugin agents support [...] For security reasons, `hooks`,
+> `mcpServers`, and `permissionMode` are not supported for
+> plugin-shipped agents.
+
+Empirically verified 2026-04-14: a plugin-shipped agent's `hooks:`
+field is silently ignored at runtime.
+
+The only way to wire a `PreToolUse` hook on a code-modifying subagent
+is to place the subagent definition in a **project-scoped**
+`.claude/agents/<name>.md` file (or a user-scoped `~/.claude/agents/`)
+and reference a guard script that lives in the project.
+
+For ai-maestro this means:
+
+1. Agent lives at `.claude/agents/scenario-improvement-implementer.md`
+   (not in a plugin)
+2. Script lives at `.claude/scripts/subagent-write-guard.sh`
+3. Frontmatter points at the script via `${CLAUDE_PROJECT_DIR}`
+
+Example frontmatter:
 
 ```yaml
 ---
@@ -42,11 +63,18 @@ hooks:
     - matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash"
       hooks:
         - type: command
-          command: "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent-write-guard.sh"
+          command: "${CLAUDE_PROJECT_DIR}/.claude/scripts/subagent-write-guard.sh"
 ---
 ```
 
-The hook script (`hooks/scripts/subagent-write-guard.sh`) is shipped in `scenarios-autorunner` v0.1.4+. Reference implementation:
+**Critical:** spawn the subagent via its **bare name** (no plugin
+namespace). If you spawn a plugin-namespaced agent (e.g.
+`some-plugin:scenario-runner`), Claude Code resolves it to the
+plugin's version, not the project shadow, and the hook won't fire.
+Bare-name spawning resolves to the project-scoped agent, which has
+the hooks field honored.
+
+The hook script at `.claude/scripts/subagent-write-guard.sh` does:
 
 - `$CLAUDE_PROJECT_DIR` is resolved at subagent startup to either the main tree (for runners) or the worktree path (for worktree-isolated agents)
 - `Write|Edit|MultiEdit|NotebookEdit` → check `tool_input.file_path` against allowlist
@@ -137,4 +165,4 @@ This applies to `Bash` tool calls only — the `Write` tool is not affected beca
 
 | Date | Incident | Fix |
 |------|----------|-----|
-| 2026-04-14 | Overnight batch implementer escaped worktree, corrupted parent tree | scenarios-autorunner v0.1.4 write-guard hook + this rule |
+| 2026-04-14 | Overnight batch implementer escaped worktree, corrupted parent tree | Project-scoped write-guard at .claude/scripts/subagent-write-guard.sh + this rule + migration from scenarios-autorunner plugin into .claude/ |

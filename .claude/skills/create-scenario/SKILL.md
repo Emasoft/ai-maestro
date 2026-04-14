@@ -50,8 +50,7 @@ Copy this checklist and track your progress:
 
 ### Rules reference
 
-1. **Plugin-bundled:** `references/SCENARIOS_TESTS_RULES.md` at the plugin root
-2. **Project override (preferred if present):** `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md`
+Canonical rules file: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — tracked in git, single source of truth for the 12 rules.
 
 See [Authoring Walkthrough](references/authoring-walkthrough.md) for the full interview question list (12 fields), step format template, frontmatter template, and rule enforcement checklist.
 
@@ -90,4 +89,4 @@ Next number: <NEXT_N + 1>
   - Step 6 — Enforce the rules while drafting
   - Step 7 — Save the scenario file
   - Step 8 — Bump NEXT_SCEN_NUMBER
-- `references/SCENARIOS_TESTS_RULES.md` at the plugin root — canonical 12-rule spec
+- `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — canonical 12-rule spec (tracked in git)

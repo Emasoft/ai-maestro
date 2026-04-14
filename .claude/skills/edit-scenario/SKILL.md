@@ -46,8 +46,7 @@ Copy this checklist and track your progress:
 
 ### Rules reference
 
-1. **Plugin-bundled:** `references/SCENARIOS_TESTS_RULES.md` at the plugin root
-2. **Project override (preferred if present):** `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md`
+Canonical rules file: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — tracked in git, single source of truth for the 12 rules.
 
 See [Edit Procedure](references/edit-procedure.md) for the full edit-type table (6 types), Rule 6 forbidden token list, and step-by-step procedure.
 
@@ -85,4 +84,4 @@ File: <absolute-path-to-.scen.md>
   - Step 4 — Apply the edit
   - Step 5 — Re-validate rule compliance
   - Step 6 — Bump the version
-- `references/SCENARIOS_TESTS_RULES.md` at the plugin root — canonical 12-rule spec
+- `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — canonical 12-rule spec (tracked in git)

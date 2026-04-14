@@ -12,9 +12,9 @@ disable-model-invocation: true
 
 ## Overview
 
-Universal scenario rules bundled with scenarios-autorunner. Every scenario runner and improvement implementer MUST follow them. Preloaded into subagents via the `skills:` frontmatter field, so the rules are always in context before the runner opens the scenario file.
+Project-scoped scenario rules for ai-maestro. Every scenario runner and improvement implementer MUST follow them. Preloaded into subagents via the `skills:` frontmatter field, so the rules are always in context before the runner opens the scenario file.
 
-The canonical text is split into [references/rules.md](references/rules.md) (this skill's condensed TOC-indexed reference) and the plugin-level `references/SCENARIOS_TESTS_RULES.md` (full 595-line file).
+The condensed TOC-indexed version lives at [references/rules.md](references/rules.md). The canonical full text is tracked in git at `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md`.
 
 ## Prerequisites
 

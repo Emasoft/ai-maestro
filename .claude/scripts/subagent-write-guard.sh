@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ────────────────────────────────────────────────────────────────────
-# subagent-write-guard.sh
+# subagent-write-guard.sh — project-scoped
 #
-# PreToolUse hook for the scenarios-autorunner subagents
+# PreToolUse hook for the scenarios project-scoped subagents
 # (scenario-runner and scenario-improvement-implementer).
 #
 # PURPOSE
@@ -10,14 +10,14 @@
 #     1. $CLAUDE_PROJECT_DIR — the project root (for runner) or the
 #        subagent's git worktree (for implementer, via isolation: worktree)
 #     2. The system scratch area — tmp and private tmp
-#        (used for cloning/fixing ai-maestro plugins)
+#        (used for cloning/fixing auxiliary plugins, tarballs, etc.)
 #   Reads are NOT restricted — subagents may read from anywhere.
 #
 # WHY
 #   The 2026-04-14 overnight run exposed a gap: when an improvement
-#   implementer's `git reset --hard` was blocked by the user's global
-#   git safety hook, the subagent escaped its worktree by `cd`-ing to
-#   the parent ai-maestro repo, checking out a new branch, and writing
+#   implementer's destructive git command was blocked by the user's
+#   global git safety hook, the subagent escaped its worktree by
+#   cd-ing to the parent repo, checking out a new branch, and writing
 #   files there. This corrupted the parent working tree. The core
 #   `isolation: worktree` feature provides filesystem isolation (each
 #   worktree is a separate git checkout) but NOT process sandboxing —
@@ -26,11 +26,11 @@
 #   This hook closes that gap by validating every Write/Edit/MultiEdit/
 #   NotebookEdit tool call against an allowlist of write roots, and by
 #   catching the most common Bash escape patterns (cd to absolute path
-#   outside the allowlist, git -C / rm / mv / cp / sed -i / file
+#   outside the allowlist, git -C / rm / mv / cp / sed in-place / file
 #   redirection targeting absolute paths outside the allowlist).
 #
 # INVOCATION
-#   Referenced from both agents' frontmatter:
+#   Referenced from both agents' frontmatter in .claude/agents/:
 #     ---
 #     name: scenario-runner
 #     hooks:
@@ -38,7 +38,7 @@
 #         - matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash"
 #           hooks:
 #             - type: command
-#               command: "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent-write-guard.sh"
+#               command: "${CLAUDE_PROJECT_DIR}/.claude/scripts/subagent-write-guard.sh"
 #     ---
 #
 # INPUT
@@ -125,7 +125,7 @@ is_allowed_path() {
 block() {
     local reason="$1"
     cat >&2 <<EOF
-BLOCKED by scenarios-autorunner write-guard
+BLOCKED by scenarios write-guard
   Tool:   $TOOL_NAME
   Reason: $reason
 

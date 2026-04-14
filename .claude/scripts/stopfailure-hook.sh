@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# StopFailure hook (matcher: rate_limit) — scenarios-autorunner recovery breadcrumb.
+# StopFailure hook (matcher: rate_limit) — scenarios rate-limit breadcrumb
+# (project-scoped).
 #
 # Fires when Claude hits a rate limit mid-response. This hook cannot block
 # (StopFailure is observational per docs) — it writes a recovery breadcrumb
@@ -7,8 +8,7 @@
 # batch from where the rate limit cut off.
 #
 # Breadcrumb location:
-#   ${CLAUDE_PROJECT_DIR}/tests/scenarios/state/rate-limit-breadcrumb.json (preferred)
-#   $HOME/.scenarios-autorunner/rate-limit-breadcrumb.json (fallback)
+#   ${CLAUDE_PROJECT_DIR}/tests/scenarios/state/rate-limit-breadcrumb.json
 #
 # Breadcrumb schema:
 #   {
@@ -20,12 +20,12 @@
 
 set -euo pipefail
 
-# Determine breadcrumb target (mirror stop-hook.sh logic)
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-  STATE_DIR="${CLAUDE_PROJECT_DIR}/tests/scenarios/state"
-else
-  STATE_DIR="${HOME}/.scenarios-autorunner"
+# Determine breadcrumb target — project-scoped only, no HOME fallback
+if [ -z "${CLAUDE_PROJECT_DIR:-}" ]; then
+  # Can't locate the project → nothing to record → fail open
+  exit 0
 fi
+STATE_DIR="${CLAUDE_PROJECT_DIR}/tests/scenarios/state"
 mkdir -p "$STATE_DIR"
 BREADCRUMB="$STATE_DIR/rate-limit-breadcrumb.json"
 BATCH_STATE="$STATE_DIR/batch-state.json"
@@ -44,6 +44,6 @@ cat > "$BREADCRUMB" <<EOF
 EOF
 
 # Also log to stderr for observability (StopFailure stderr goes to the Claude log)
-echo "[scenarios-autorunner] rate-limit breadcrumb written: $BREADCRUMB" >&2
+echo "[scenarios] rate-limit breadcrumb written: $BREADCRUMB" >&2
 
 exit 0

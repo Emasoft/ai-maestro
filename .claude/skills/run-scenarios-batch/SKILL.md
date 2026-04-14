@@ -20,7 +20,7 @@ You are the conductor for unattended UI scenario batches. Orchestration only —
 - A project with `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCEN-NNN_*.scen.md` files
 - Chrome browser open and accessible via CDP
 - AI Maestro server (or target app) running and healthy
-- Optional: `${CLAUDE_PROJECT_DIR}/tests/scenarios/scenarios-autorunner.config.json` for preflight config
+- Optional: `${CLAUDE_PROJECT_DIR}/tests/scenarios/scenarios.config.json` for preflight config
 
 ## Instructions
 
@@ -46,10 +46,7 @@ Copy this checklist and track your progress:
 
 ### Rules reference
 
-1. **Plugin-bundled (always present):** `references/SCENARIOS_TESTS_RULES.md` at the plugin root
-2. **Project override (optional):** `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md`
-
-If the project override exists, prefer it. Pass the resolved path into every subagent prompt.
+Canonical rules file: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — tracked in git, single source of truth for the 12 rules. Pass this path into every subagent prompt.
 
 ### Argument formats
 

@@ -53,8 +53,7 @@ Copy this checklist and track your progress:
 
 ### Rules reference
 
-1. **Plugin-bundled:** `references/SCENARIOS_TESTS_RULES.md` at the plugin root
-2. **Project override (preferred if present):** `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md`
+Canonical rules file: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — tracked in git, single source of truth for the 12 rules.
 
 See [Analysis Procedure](references/analysis-procedure.md) for the full pattern catalog (7 patterns), 5-step procedure, and report template. Do NOT propose a change without evidence from at least two runs or one catastrophic failure.
 
@@ -90,4 +89,4 @@ File: <absolute-path-to-analysis-report>
   - Step 3 — Identify patterns
   - Step 4 — Draft proposed changes
   - Step 5 — Write the analysis report
-- `references/SCENARIOS_TESTS_RULES.md` at the plugin root — canonical 12-rule spec
+- `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — canonical 12-rule spec (tracked in git)

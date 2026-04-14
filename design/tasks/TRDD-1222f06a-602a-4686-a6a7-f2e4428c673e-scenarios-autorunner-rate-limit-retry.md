@@ -112,20 +112,93 @@ exit 0
 
 ## 3. Recommended experiment plan
 
-**Step 1 — Baseline (option A, outer wrapper):** build it first because it's the cheapest and the fallback for everything else. This gives us a KNOWN-GOOD safety net even if B and C fail.
+**Updated 2026-04-14:** The rewrite TRDD-f79f6047 will ship Option A (outer wrapper loop) as the primary rate-limit resilience mechanism because it's the most robust and has no unknowns. But Option B (FileChanged bridge) is **still worth testing independently** because if it works, it's a strictly better pattern: it preserves in-session state rather than restarting the entire Claude Code process, keeping all live context, open MCP connections, and any dev-browser daemons alive through the rate-limit window. Option A restarts everything from disk state.
 
-**Step 2 — Option B (FileChanged bridge):** the user's preferred approach. Build the minimum viable version: 2 hooks + 1 nohup script + 1 trigger file. Test it in isolation by:
+The experiment order below is REVISED: all three options must be evaluated, not just "A as fallback for B".
 
-1. Starting a scenarios-autorunner batch.
-2. Synthetically triggering a rate_limit from a scripted SCEN-BENCH-RATELIMIT that does `curl -v https://api.anthropic.com/v1/messages -H 'X-Bench-Force-Ratelimit: 1'` (or similar mock).
-3. Verifying the `StopFailure` hook fires.
-4. Verifying the `nohup` process sleeps for 60s (shortened for the test).
-5. Verifying the trigger file is touched.
-6. Verifying `FileChanged` fires AND the session resumes.
+### Step 1 — Option A baseline (ships in v0.2.0)
 
-If all 6 steps pass → option B is the primary mechanism. Ship it as `scenarios-autorunner` v0.2.0.
+Build the outer wrapper loop first because it's the safety net and the explicit deliverable for the v2 plugin rewrite (TRDD-f79f6047 Section 4.5). Required for overnight batches shipping before the FileChanged experiment concludes.
 
-**Step 3 — Option C fallback:** only if option B turns out to not fire FileChanged on post-StopFailure idle. If so, test the piped-stdin path, and if THAT fails, fall back to option A.
+- `scripts/run-overnight.sh` — `while true; claude --continue; [[ $? -eq 0 ]] && break; sleep 300; done`
+- Test by deliberately killing Claude mid-batch and verifying the wrapper restarts it
+- Verify it survives a real rate_limit using a synthetic test (see Step 2.3 below)
+
+### Step 2 — Option B MANDATORY independent experiment (runs in parallel with Step 1, not after)
+
+The user explicitly wants this tested because it's the only pattern that keeps the main session alive through a rate-limit window. Cannot be skipped just because Option A ships first. Time-box: 2 days.
+
+**2.1 — Verify FileChanged hook event exists and fires on idle sessions**
+
+Create a minimal test hook in a throwaway plugin:
+
+```json
+{
+  "hooks": {
+    "FileChanged": [{
+      "matcher": ".*/rate-limit-wake-trigger\\.md$",
+      "hooks": [{ "type": "command", "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"FileChanged\",\"additionalContext\":\"External wake trigger: \"}}'"}]
+    }]
+  }
+}
+```
+
+Start a Claude Code session, let it become idle, then `touch tests/scenarios/state/rate-limit-wake-trigger.md` from another terminal. Observation goal: does Claude see the `additionalContext` and inject it as a new prompt?
+
+- **If YES:** FileChanged supports `additionalContext` return → primary mechanism candidate
+- **If NO:** confirm whether FileChanged supports ANY output that wakes the session, OR whether FileChanged only fires during an active turn (useless for our case)
+
+**2.2 — Verify StopFailure nohup bridge works**
+
+Add a `StopFailure` hook with matcher `rate_limit|authentication_failed` that spawns:
+
+```bash
+nohup bash -c 'sleep 30 && touch tests/scenarios/state/rate-limit-wake-trigger.md' &
+```
+
+Deliberately induce a 401 (e.g., invalidate the Claude Code auth token mid-turn) and verify:
+- StopFailure fires
+- The nohup process survives the turn end
+- After 30s, the trigger file is touched
+- FileChanged fires in response
+- Claude resumes with the injected context
+
+**2.3 — Synthetic rate_limit for testing**
+
+There's no official way to induce a rate_limit from the client side. Options:
+- Use a mock Anthropic server (requires setting `ANTHROPIC_API_URL` to a fake server that returns 429)
+- Use a valid but expired API key briefly
+- Actually hit the rate limit by sending many rapid requests (slow, unreliable)
+
+Recommended: build a tiny mock server in Python that returns `{"type":"error","error":{"type":"rate_limit_error","message":"..."}}` on every request. Point Claude Code at it via env var.
+
+**2.4 — Combined end-to-end**
+
+If 2.1, 2.2, and 2.3 all work individually, combine them into a full scenario:
+1. Start a scenarios-autorunner batch
+2. Mid-scenario, flip the mock server to rate-limit mode
+3. StopFailure fires, nohup spawns
+4. FileChanged fires 30s later
+5. Claude resumes the exact mid-scenario state
+6. The scenario continues and completes
+
+**Exit criteria:**
+- **Option B WORKS** → it becomes the primary mechanism in v0.3.0 (replacing Option A as the default). Option A stays as the hard fallback for when Claude Code itself crashes.
+- **Option B FAILS at step 2.1** (FileChanged doesn't wake idle sessions) → Option A is the permanent primary, Option B is documented as "tested, doesn't work in current Claude Code SDK"
+- **Option B FAILS at step 2.2** (nohup dies with parent) → try alternate detached process patterns (launchd, at, systemd-like)
+
+### Step 3 — Option C sanity check
+
+Run the Anthropic docs-assistant's `claude --continue` piped-stdin pattern as a quick one-liner test, NOT as a primary design:
+
+```bash
+echo "retry" | claude --session-id <id> --continue
+```
+
+- If it accepts piped stdin on subscription tier → document as a debugging aid
+- If it rejects → confirm the docs-assistant's caveat was correct, move on
+
+Time-box: 30 min. Not a serious candidate for primary mechanism.
 
 ## 4. Acceptance criteria
 

@@ -498,9 +498,73 @@ export async function InstallElement(
       await mkdir(join(cwd, '.claude'), { recursive: true })
     }
 
+    // WT-013#1: Dispatch install/uninstall through the client-plugin-adapter
+    // system when the agent's client is not Claude. Previously this block
+    // unconditionally invoked `claude plugin install`, which wrote to the
+    // Claude cache even for Codex/Gemini/OpenCode/Kiro agents (or no-oped
+    // entirely if the claude CLI wasn't installed). The adapter system
+    // (lib/client-plugin-adapters/) knows the per-client plugin layout and
+    // install mechanism, so we route non-Claude installs through it.
+    //
+    // Claude remains on the existing CLI+settings.local.json fallback path
+    // to preserve exact behavior for the default client. If clientType is
+    // unrecognized ('unknown' or anything else), defense-in-depth falls
+    // back to the Claude path with a warning (NOT abort — that would break
+    // existing agents whose program field might be empty or mis-detected).
+    const useAdapter = clientType !== 'claude' && clientType !== 'unknown'
+    let adapter: import('@/lib/client-plugin-adapters/types').ClientPluginAdapter | null = null
+    if (useAdapter) {
+      try {
+        const { getAdapter } = await import('@/lib/client-plugin-adapters')
+        adapter = await getAdapter(clientType as import('@/lib/client-capabilities').ClientType)
+        if (!adapter) {
+          ops.push(`EXE: WARN — no adapter registered for client "${clientType}", defaulting to claude path`)
+        } else {
+          ops.push(`EXE: Using ${clientType} adapter for ${action}`)
+        }
+      } catch (adapterErr) {
+        ops.push(`EXE: WARN — failed to load adapter for "${clientType}": ${adapterErr instanceof Error ? adapterErr.message : adapterErr}. Falling back to claude path.`)
+        adapter = null
+      }
+    } else if (clientType !== 'claude') {
+      ops.push(`EXE: WARN — unknown client "${clientType}", defaulting to claude`)
+    }
+
     try {
       switch (action) {
         case 'install': {
+          // ── Adapter dispatch (non-Claude clients) ──
+          if (adapter && (clientType === 'codex' || clientType === 'gemini' || clientType === 'opencode' || clientType === 'kiro')) {
+            // Build a StoredPlugin from the G13 conversion output. If G13
+            // failed to produce a directory, abort — we cannot ask the
+            // adapter to install a plugin that wasn't emitted for the
+            // target client.
+            if (!convertedDir) {
+              result.error = `EXE: No converted plugin directory for ${clientType} — G13 conversion did not emit output. Cannot install "${name}" via ${clientType} adapter.`
+              ops.push(result.error)
+              return result
+            }
+            const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
+            const providerId = clientTypeToProviderId(clientType as import('@/lib/client-capabilities').ClientType) as import('@/lib/converter/types').ProviderId
+            const storedPlugin: import('@/lib/client-plugin-adapters/types').StoredPlugin = {
+              name,
+              clientType: clientType as import('@/lib/client-capabilities').ClientType,
+              storageDir: convertedDir,
+              providerId,
+              sourcePlugin: name,
+              sourceClient: 'claude',
+            }
+            const adapterResult = await adapter.install(storedPlugin, cwd, { scope, marketplace: resolvedMarketplace })
+            if (!adapterResult.success) {
+              result.error = `EXE: ${clientType} adapter install failed: ${adapterResult.error || 'unknown error'}`
+              ops.push(result.error)
+              return result
+            }
+            ops.push(`EXE: Installed via ${clientType} adapter — ${name} → ${convertedDir}`)
+            break
+          }
+
+          // ── Claude path (default + fallback for unknown clients) ──
           let cliSuccess = false
           try {
             const cliResult = await execFileAsync('claude', [
@@ -531,6 +595,34 @@ export async function InstallElement(
         }
 
         case 'uninstall': {
+          // ── Adapter dispatch (non-Claude clients) ──
+          if (adapter && (clientType === 'codex' || clientType === 'gemini' || clientType === 'opencode' || clientType === 'kiro')) {
+            // For uninstall we construct a minimal StoredPlugin. The adapter
+            // locates the plugin via its tracking manifest or by name — the
+            // storageDir is only needed for install, not uninstall.
+            const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
+            const providerId = clientTypeToProviderId(clientType as import('@/lib/client-capabilities').ClientType) as import('@/lib/converter/types').ProviderId
+            const storedPlugin: import('@/lib/client-plugin-adapters/types').StoredPlugin = {
+              name,
+              clientType: clientType as import('@/lib/client-capabilities').ClientType,
+              storageDir: convertedDir || '',
+              providerId,
+              sourcePlugin: name,
+              sourceClient: 'claude',
+            }
+            const adapterResult = await adapter.uninstall(storedPlugin, cwd, { scope })
+            if (!adapterResult.success) {
+              // Uninstall is best-effort — log but don't abort. The settings
+              // fallback below will still try to clean up any settings-level
+              // references, which matters for Claude-compatible paths.
+              ops.push(`EXE: WARN — ${clientType} adapter uninstall failed: ${adapterResult.error || 'unknown'}`)
+            } else {
+              ops.push(`EXE: Uninstalled via ${clientType} adapter — ${name}`)
+            }
+            break
+          }
+
+          // ── Claude path (default + fallback for unknown clients) ──
           try {
             const cliResult = await execFileAsync('claude', [
               'plugin', 'uninstall', `${name}@${resolvedMarketplace}`, '--scope', scope,

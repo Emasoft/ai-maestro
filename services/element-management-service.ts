@@ -3825,24 +3825,65 @@ export async function DeleteTeam(
     ])]
     if (agentsToRevert.length > 0) {
       const { hibernateAgent } = await import('@/services/agents-core-service')
+      // WT-006/7#2 fix: MANAGER and MAINTAINER are STANDALONE titles (they
+      // live outside any team). If such an agent happens to be listed as a
+      // team member (e.g. because the host MANAGER was also added to the
+      // team's agentIds), DeleteTeam must NOT revert their title — only
+      // team-scoped titles (member, chief-of-staff, orchestrator, architect,
+      // integrator) should be reverted to AUTONOMOUS. Filter them out using
+      // STANDALONE_TITLES (which already includes 'autonomous' as a no-op).
+      // Hibernation still applies to every agent in the team regardless of
+      // title — stopping running sessions is correct on team deletion.
+      const { getAgent, updateAgent } = await import('@/lib/agent-registry')
+      const filteredAgentsToRevert: string[] = []
+      const skippedStandalone: string[] = []
+      for (const aid of agentsToRevert) {
+        const a = getAgent(aid)
+        const title = (a?.governanceTitle || 'autonomous').toLowerCase()
+        if (STANDALONE_TITLES.has(title)) {
+          skippedStandalone.push(aid)
+        } else {
+          filteredAgentsToRevert.push(aid)
+        }
+      }
+      if (skippedStandalone.length > 0) {
+        ops.push(`G03: Skipped ${skippedStandalone.length} standalone-title agent(s) (MANAGER/MAINTAINER/already-AUTONOMOUS): ${skippedStandalone.map(a => a.substring(0, 8)).join(', ')}`)
+      }
       for (const agentId of agentsToRevert) {
-        try {
-          // BUG-002 fix (SCEN-005): ChangeTitle requires authContext as a security
-          // invariant. Without it the call returns "authContext is mandatory" and
-          // the COS/Member never reverts to AUTONOMOUS — the team gets deleted but
-          // its former agents retain their titles AND their role-plugins. Pass
-          // through the DeleteTeam authContext so ChangeTitle treats this revert
-          // as an already-authorized governance operation.
-          const titleResult = await ChangeTitle(agentId, 'autonomous', {
-            authContext: options.authContext,
-          })
-          if (titleResult.success) {
-            ops.push(`G03: Agent ${agentId.substring(0, 8)} → AUTONOMOUS`)
-          } else {
-            ops.push(`G03: WARN — ChangeTitle failed for ${agentId.substring(0, 8)}: ${titleResult.error}`)
+        // Only revert team-scoped titles — standalone titles are skipped.
+        const shouldRevertTitle = filteredAgentsToRevert.includes(agentId)
+        if (shouldRevertTitle) {
+          try {
+            // BUG-002 fix (SCEN-005): ChangeTitle requires authContext as a security
+            // invariant. Without it the call returns "authContext is mandatory" and
+            // the COS/Member never reverts to AUTONOMOUS — the team gets deleted but
+            // its former agents retain their titles AND their role-plugins. Pass
+            // through the DeleteTeam authContext so ChangeTitle treats this revert
+            // as an already-authorized governance operation.
+            const titleResult = await ChangeTitle(agentId, 'autonomous', {
+              authContext: options.authContext,
+            })
+            if (titleResult.success) {
+              ops.push(`G03: Agent ${agentId.substring(0, 8)} → AUTONOMOUS`)
+              // WT-009#2 fix: After reverting to AUTONOMOUS, also clear the
+              // agent's `team` field in the registry. Otherwise a zombie
+              // `team: "<old-team-name>"` field remains after the team is
+              // gone, causing confusion in downstream code that reads it
+              // (same pattern as ChangeTeam PG01 at line 2953). Empty string
+              // is used because UpdateAgentRequest.team is typed `string`,
+              // not `string | null` — this matches the existing precedent.
+              try {
+                await updateAgent(agentId, { team: '' })
+                ops.push(`G03: Agent ${agentId.substring(0, 8)} team field cleared`)
+              } catch (err) {
+                ops.push(`G03: WARN — updateAgent team='' failed for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
+              }
+            } else {
+              ops.push(`G03: WARN — ChangeTitle failed for ${agentId.substring(0, 8)}: ${titleResult.error}`)
+            }
+          } catch (err) {
+            ops.push(`G03: WARN — ChangeTitle exception for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
           }
-        } catch (err) {
-          ops.push(`G03: WARN — ChangeTitle exception for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
         }
         // Hibernate the agent via the canonical hibernateAgent pipeline
         // (same code path used by POST /api/agents/[id]/hibernate). This

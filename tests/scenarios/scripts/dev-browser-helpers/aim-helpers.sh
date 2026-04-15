@@ -114,37 +114,102 @@ EOF
 # ----------------------------------------------------------------------------
 # aim_sudo_modal <governance_password>
 #
-# Detects the sudo-mode password modal (role=dialog aria-modal=true that
-# contains a password input), fills it, and clicks Confirm. Call this after
-# clicking a destructive button when the modal is expected. If no modal is
-# visible within 3 seconds, returns a no-op with ok:false.
+# Detects the sudo-mode password modal, fills it, and clicks Confirm.
+#
+# Detection is STRUCTURAL, not ARIA-based, because AI Maestro's sudo modal
+# and delete-confirm dialog are plain React portals without
+# `role="dialog" aria-modal="true"` attributes (SCEN-020 smoke test,
+# 2026-04-15 — see scenario_proposed-improvements_020 P1-PROTO-4 and
+# P1-BUG-3). We locate the modal by: a fixed/absolute-position element,
+# visible, tall enough to be a real modal (offsetHeight > 100), containing
+# an `input[type="password"]` AND a button whose trimmed text is exactly
+# "Confirm". Fallback: look for the literal heading "Confirm with password".
+#
+# Call this after clicking a destructive button when the modal is
+# expected. If no modal appears within 3 seconds, returns `ok: false`.
 # ----------------------------------------------------------------------------
 aim_sudo_modal() {
   local password="${1:?aim_sudo_modal: missing governance_password argument}"
   dev-browser --browser "${AIM_BROWSER}" --headless --timeout 30 <<EOF
 const page = await browser.getPage("dashboard");
-// Wait up to 3s for the sudo modal to appear
+
+// Wait up to 3s for a sudo modal to appear (structural detection).
 let appeared = false;
 for (let i = 0; i < 30; i++) {
   const visible = await page.evaluate(() => {
-    const dlgs = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]'));
-    return dlgs.some(d => d.querySelector('input[type="password"]'));
+    // Preferred structural match: fixed/absolute element with password input + Confirm button
+    const structural = Array.from(document.querySelectorAll('*')).some(el => {
+      const cs = window.getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+      if (cs.position !== 'fixed' && cs.position !== 'absolute') return false;
+      if (el.offsetHeight < 100) return false;
+      if (!el.querySelector('input[type="password"]')) return false;
+      return Array.from(el.querySelectorAll('button'))
+        .some(b => (b.textContent || '').trim() === 'Confirm');
+    });
+    if (structural) return true;
+    // Fallback: literal heading text
+    const text = document.body ? document.body.innerText : '';
+    return text.includes('Confirm with password');
   });
   if (visible) { appeared = true; break; }
   await new Promise(r => setTimeout(r, 100));
 }
+
 if (!appeared) {
   console.log(JSON.stringify({ ok: false, reason: "no sudo modal visible" }));
-  return;
+} else {
+  // The password input is in the visible modal. Fill and submit via
+  // the nearest enclosing fixed/absolute container so we don't fight
+  // any other password inputs that might exist on the page.
+  await page.evaluate((pwd) => {
+    const container = Array.from(document.querySelectorAll('*')).find(el => {
+      const cs = window.getComputedStyle(el);
+      return (cs.position === 'fixed' || cs.position === 'absolute')
+          && cs.display !== 'none' && cs.visibility !== 'hidden'
+          && el.offsetHeight >= 100
+          && el.querySelector('input[type="password"]')
+          && Array.from(el.querySelectorAll('button'))
+              .some(b => (b.textContent || '').trim() === 'Confirm');
+    });
+    if (!container) throw new Error('aim_sudo_modal: container went away between detect and fill');
+    const input = container.querySelector('input[type="password"]');
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, 'value'
+    ).set;
+    nativeSetter.call(input, pwd);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    const btn = Array.from(container.querySelectorAll('button'))
+      .find(b => (b.textContent || '').trim() === 'Confirm');
+    // React-safe click: dispatch full mouse sequence on the button's bounding center
+    const rect = btn.getBoundingClientRect();
+    const cx = rect.x + rect.width / 2;
+    const cy = rect.y + rect.height / 2;
+    ['mousedown', 'mouseup', 'click'].forEach(evName => {
+      btn.dispatchEvent(new MouseEvent(evName, {
+        bubbles: true, cancelable: true, view: window,
+        clientX: cx, clientY: cy, button: 0
+      }));
+    });
+  }, '${password}');
+
+  // Wait for the modal to dismiss
+  await new Promise(r => setTimeout(r, 1500));
+  const dismissed = await page.evaluate(() => {
+    const still = Array.from(document.querySelectorAll('*')).some(el => {
+      const cs = window.getComputedStyle(el);
+      return (cs.position === 'fixed' || cs.position === 'absolute')
+          && cs.display !== 'none' && cs.visibility !== 'hidden'
+          && el.offsetHeight >= 100
+          && el.querySelector('input[type="password"]')
+          && Array.from(el.querySelectorAll('button'))
+              .some(b => (b.textContent || '').trim() === 'Confirm');
+    });
+    return !still;
+  });
+  console.log(JSON.stringify({ ok: dismissed }));
 }
-await page.fill('[role="dialog"][aria-modal="true"] input[type="password"]', '${password}');
-await page.click('[role="dialog"][aria-modal="true"] button:has-text("Confirm")');
-await new Promise(r => setTimeout(r, 1500));
-const dismissed = await page.evaluate(() => {
-  const dlgs = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]'));
-  return !dlgs.some(d => d.querySelector('input[type="password"]'));
-});
-console.log(JSON.stringify({ ok: dismissed }));
 EOF
 }
 

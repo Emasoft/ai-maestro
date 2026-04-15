@@ -188,6 +188,7 @@ export const ROLE_PLUGIN_INTEGRATOR = 'ai-maestro-integrator-agent'
 export const ROLE_PLUGIN_ORCHESTRATOR = 'ai-maestro-orchestrator-agent'
 export const ROLE_PLUGIN_PROGRAMMER = 'ai-maestro-programmer-agent'
 export const ROLE_PLUGIN_MAINTAINER = 'ai-maestro-maintainer-agent'
+export const ROLE_PLUGIN_AUTONOMOUS = 'ai-maestro-autonomous-agent'
 
 /** All predefined role-plugin names */
 export const PREDEFINED_ROLE_PLUGIN_NAMES = [
@@ -198,6 +199,7 @@ export const PREDEFINED_ROLE_PLUGIN_NAMES = [
   ROLE_PLUGIN_COS,
   ROLE_PLUGIN_MANAGER,
   ROLE_PLUGIN_MAINTAINER,
+  ROLE_PLUGIN_AUTONOMOUS,
 ] as const
 
 /** Map from role-plugin name to its main agent filename */
@@ -209,9 +211,18 @@ export const ROLE_PLUGIN_MAIN_AGENTS: Record<string, string> = {
   [ROLE_PLUGIN_ORCHESTRATOR]: 'ai-maestro-orchestrator-agent-main-agent',
   [ROLE_PLUGIN_PROGRAMMER]: 'ai-maestro-programmer-agent-main-agent',
   [ROLE_PLUGIN_MAINTAINER]: 'ai-maestro-maintainer-agent-main-agent',
+  [ROLE_PLUGIN_AUTONOMOUS]: 'ai-maestro-autonomous-agent-main-agent',
 }
 
-/** Map from governance title to its required role-plugin */
+/** Map from governance title to its required role-plugin.
+ *
+ * R9.12: every agent MUST have a role-plugin. There is no "autonomous
+ * without a plugin" path — AUTONOMOUS maps to the mandatory
+ * `ai-maestro-autonomous-agent` role-plugin whose persona contains the
+ * governance rules every no-team agent must follow. The ChangeTitle /
+ * CreateAgent pipelines enforce this by rejecting any desired state that
+ * resolves to a missing plugin.
+ */
 export const TITLE_PLUGIN_MAP: Record<string, string> = {
   'MANAGER': ROLE_PLUGIN_MANAGER,
   'CHIEF-OF-STAFF': ROLE_PLUGIN_COS,
@@ -220,6 +231,7 @@ export const TITLE_PLUGIN_MAP: Record<string, string> = {
   'ORCHESTRATOR': ROLE_PLUGIN_ORCHESTRATOR,
   'MEMBER': ROLE_PLUGIN_PROGRAMMER,
   'MAINTAINER': ROLE_PLUGIN_MAINTAINER,
+  'AUTONOMOUS': ROLE_PLUGIN_AUTONOMOUS,
 }
 
 /** Map from role-plugin name to compatible governance titles */
@@ -231,6 +243,7 @@ export const PLUGIN_COMPATIBLE_TITLES: Record<string, string[]> = {
   [ROLE_PLUGIN_INTEGRATOR]: ['INTEGRATOR'],
   [ROLE_PLUGIN_PROGRAMMER]: ['MEMBER'],
   [ROLE_PLUGIN_MAINTAINER]: ['MAINTAINER'],
+  [ROLE_PLUGIN_AUTONOMOUS]: ['AUTONOMOUS'],
 }
 
 // ── Repo URLs ───────────────────────────────────────────────

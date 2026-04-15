@@ -30,6 +30,7 @@ ROLE_PLUGIN_INTEGRATOR="ai-maestro-integrator-agent"
 ROLE_PLUGIN_ORCHESTRATOR="ai-maestro-orchestrator-agent"
 ROLE_PLUGIN_PROGRAMMER="ai-maestro-programmer-agent"
 ROLE_PLUGIN_MAINTAINER="ai-maestro-maintainer-agent"
+ROLE_PLUGIN_AUTONOMOUS="ai-maestro-autonomous-agent"
 
 # ── Repo URLs ────────────────────────────────────────────────
 AI_MAESTRO_REPO="https://github.com/Emasoft/ai-maestro"

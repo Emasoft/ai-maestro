@@ -108,6 +108,8 @@ When a step fails due to a bug or unexpected behavior:
 
 Every fix attempt is logged in the report (Rule 5). The scenario is never abandoned — it either completes fully or runs out of context window.
 
+**This is Phase 1 of the two-phase protocol.** Rule 4 bug fixes are **IMMEDIATE** and land **in place on the current branch** — never in a worktree, never as a PR. They are committed during the overnight run alongside the scenario's report. The cron protocol (Rule 13) enforces this: Phase 1 only creates bug-fix commits on the current branch, never branches or PRs. Delayed work (improvements, redesigns, governance changes) goes into Rule 11, NOT here. If a change is too big for an in-place fix on the current branch, write it as a Rule 11 proposal instead and keep the scenario moving.
+
 ---
 
 ## Rule 5: TRACK-AND-REPORT
@@ -577,6 +579,8 @@ tests/scenarios/reports/scenario_proposed-improvements_<NNN>_<datetime>.md
 
 The file must reference the scenario report it is based on. Each proposal must include: problem description, root cause analysis, proposed solution with specific files/changes, and priority (P0-P3).
 
+**This is Phase 2 / Phase 3 of the two-phase protocol.** Rule 11 proposals are **DELAYED** — they wait for explicit user approval before ANY implementation. During the overnight run (Phase 1), the scenario runner MUST ONLY write these proposals to disk. It MUST NOT implement them, MUST NOT create worktrees for them, MUST NOT open PRs for them. At end-of-batch, proposals from every scenario are consolidated into a single `CONSOLIDATED_PROPOSALS_<batch_id>.md` file (Rule 13). The user reviews that file, marks approvals, and only then does the `scenario-improvement-implementer` agent run in Phase 3 — one worktree per approved proposal, against a now-bug-free codebase. This separation is what Rule 13 enforces and why the overnight cron NEVER auto-implements Rule 11 output.
+
 ---
 
 ## Rule 12: SUDO-MODE
@@ -669,19 +673,33 @@ dialog IS the sudo check.
 
 ## Rule 13: AUTONOMOUS-PROTOCOL
 
-This rule defines how a long unattended scenario batch is structured so it can run for 6-12 hours without human supervision and survive every API rate-limit window the user's Pro Max 20× subscription throws at it. **It supersedes the previous Option B (FileChanged + bot) design from TRDD-1222f06a, which was empirically disproven 2026-04-15.** The protocol below is the proven 3-component cron architecture documented in TRDD-1222f06a §9.
+This rule defines how a long unattended scenario batch is structured so it can run for 6-12 hours without human supervision and survive every API rate-limit window the user's Pro Max 20× subscription throws at it. The protocol below is the proven 3-component cron architecture documented in TRDD-1222f06a §9.
 
-### Background — the mental model
+### The two-phase workflow (IMPORTANT — read this first)
+
+An autonomous scenario batch has **three distinct phases**, and only Phase 1 runs in the overnight cron. The earlier (failed) overnight batch tried to collapse everything into one phase by making the runner create PRs for both bug fixes AND proposal implementations — the result was that the main branch drifted so far from the PR branches that merging was impossible without burning millions of tokens on conflict resolution. This rule makes the separation absolute.
+
+| Phase | When | What runs | What the agent is allowed to do | Output |
+|---|---|---|---|---|
+| **Phase 1 — Scenario execution** | Overnight, unattended | cron fires, spawns `run-scenario-test` skill per scenario | Edit source files to fix bugs **in place on the current branch** (Rule 4 FIX-AS-YOU-GO). Commit fixes per scenario. Save proposals as reports on disk. | Each scenario commits bug fixes on the current branch. Each scenario writes `SCEN-NNN_<ts>.report.md` + `scenario_proposed-improvements_<NNN>_<ts>.md`. Master cleanup writes `CONSOLIDATED_PROPOSALS_<batch_id>.md`. |
+| **Phase 2 — User approval** | When the user wakes up | Interactive — the user reads the consolidated proposals file | Review proposals, edit the file to mark which P0/P1/P2/P3 items are approved, reject, or deferred. | Annotated `CONSOLIDATED_PROPOSALS_<batch_id>.md` with approvals — or an explicit `APPROVED_PROPOSALS_<batch_id>.md` file listing approved proposal IDs. |
+| **Phase 3 — Proposal implementation** | After user approval, unattended but fast | The user invokes `/run-scenarios-batch --improve <range>` OR a dedicated implementer entry point. The `scenario-improvement-implementer` agent runs in `isolation: worktree` for each approved proposal. | Worktree-isolated edits for approved proposals only. Each P0 gets its own commit. Returns worktree branch name. | Each worktree branch becomes a draft PR (or the user merges the worktree back directly). Because Phase 1 already landed bug fixes on the current branch, the implementer sees a clean bug-free codebase and conflicts are minimal. |
+
+**The overnight cron does Phase 1 ONLY.** No worktrees. No PR creation. No fork pushes. No implementer spawning. The ONLY output of Phase 1 is bug-fix commits on the current branch + report files + the consolidated proposals file.
+
+**Why this separation exists:** the last overnight batch created ~20 worktree PRs while the main branch also accumulated ~40 bug-fix commits. Rebasing or merging each worktree PR against the drifted main branch was a ~2-hour per-PR nightmare. By deferring proposal implementation until AFTER the user approves and after the codebase is bug-free, Phase 3 becomes a fast series of clean PRs on a stable base.
+
+### Background — why the process stays alive
 
 Claude Code does NOT exit on rate-limit / API errors. Only the current TURN ends. The Node.js event loop, the in-memory cron scheduler, the shared dev-browser daemon, the Chromium pages — all keep running. When the rate-limit window clears (or the account switcher rotates to a fresh OAuth token), the next scheduled cron fire becomes a fresh API call that succeeds, and work resumes from where state.json left off.
 
-### The 3 components of an autonomous run
+### The 3 components of Phase 1
 
 1. **Passive account switcher** — at least 2 OAuth tokens stored in `~/.claude/account-switcher/`. When the active token hits a 429, the switcher rotates instantly. The switcher does NOT wake claude — it just makes the next API call use a fresh token.
 
 2. **Recurring durable cron** — created via `CronCreate` with `durable: true` at a 5-20 min interval. **The cron IS the wake-up mechanism.** Every fire becomes a fresh user turn. Fires that hit 429 cooldown queue and deliver in batch when the REPL goes back to idle. The cron persists in `.claude/scheduled_tasks.json` so it survives `claude --continue` restarts.
 
-3. **Idempotent state file + run-one-step prompt** — the state file at `tests/scenarios/state/autonomous-batch-state.json` tracks which scenarios are pending / in-progress / done / failed, plus the list of fix branches and PR URLs. The cron prompt is short and idempotent: "read state, run the next pending scenario via the run-scenario-test skill, update state, exit". Each cron fire executes ONE scenario (or one fix iteration). If the same fire is delivered twice (rate-limit queue artifact), the idempotent state read makes the second fire a no-op.
+3. **Idempotent state file + run-one-step prompt** — the state file at `tests/scenarios/state/autonomous-batch-state.json` tracks which scenarios are pending / in-progress / done / failed. The cron prompt is short and idempotent: "read state, run the next pending scenario via the run-scenario-test skill, update state, exit". Each cron fire executes ONE scenario. If the same fire is delivered twice (rate-limit queue artifact), the idempotent state read makes the second fire a no-op.
 
 ### The autonomous batch state file
 
@@ -692,6 +710,7 @@ Path: `tests/scenarios/state/autonomous-batch-state.json` (gitignored — runtim
   "batch_id": "auto-2026-04-15T12-00-00Z",
   "started_at": "2026-04-15T12:00:00Z",
   "completed_at": null,
+  "base_branch": "feature/team-governance",
   "scenario_list": ["SCEN-001", "SCEN-002", ..., "SCEN-022"],
   "current_index": 0,
   "phase": "master_setup | running | master_cleanup | consolidated | failed",
@@ -705,22 +724,25 @@ Path: `tests/scenarios/state/autonomous-batch-state.json` (gitignored — runtim
       "improvements_path": null,
       "bugs_found": 0,
       "bugs_fixed": 0,
-      "fix_branch": null,
-      "fix_commits": [],
-      "pr_url": null,
-      "pr_state": null,
+      "bug_fix_commit_shas": [],
+      "p0_proposals_count": 0,
+      "p1_proposals_count": 0,
+      "p2_proposals_count": 0,
+      "p3_proposals_count": 0,
       "screenshots_purged": false
     },
     ...
   },
-  "consolidated_pr_list_path": null,
+  "consolidated_proposals_path": null,
   "rate_limit_events": []
 }
 ```
 
-The runner mutates this file atomically (write to `.tmp`, then rename) at every transition.
+Note: there are NO fields for `fix_branch`, `pr_url`, `pr_state` — those belong to Phase 3 and are produced by the implementer, not by the overnight cron. The overnight cron only records `bug_fix_commit_shas` (the SHAs of the Rule 4 FIX-AS-YOU-GO commits on the current branch).
 
-### The cron fire prompt (verbatim — this IS the autonomous loop)
+The cron prompt mutates this file atomically (write to `.tmp`, then rename) at every transition.
+
+### The cron fire prompt (verbatim — this IS the Phase 1 autonomous loop)
 
 ```
 Read tests/scenarios/state/autonomous-batch-state.json.
@@ -728,154 +750,225 @@ Read tests/scenarios/state/autonomous-batch-state.json.
 If phase == "consolidated" or phase == "failed": Stop. Do nothing.
 
 If phase == "master_setup":
-  1. Run the master setup script (yarn build, dev-browser daemon start, login once).
+  1. Run the master setup script (git status clean, yarn build, pm2 restart,
+     first dev-browser call to auto-spawn the daemon + log in the "dashboard"
+     named page, take baseline screenshot). The daemon auto-spawns on the first
+     dev-browser call — there is no `daemon start` command.
   2. If setup fails, set phase="failed", write reason, stop.
-  3. Otherwise set phase="running", write state, fall through to "running" branch.
+  3. Otherwise set phase="running", write state. Stop. Next cron fire runs
+     the first scenario.
 
 If phase == "running":
-  1. Find the first scenario in scenario_list with status="pending".
-  2. If none, set phase="master_cleanup", fall through.
-  3. Otherwise mark that scenario in_progress, write state.
-  4. Spawn the run-scenario-test skill via the Skill tool with that scenario number.
-  5. When the skill returns, parse the verdict, update the scenario's entry in state.
-  6. If verdict is PASS and bugs were fixed, create a fix branch via git, push to fork, draft a PR via gh, record PR url.
-  7. If verdict is PASS and screenshots are purgeable per Rule 10, delete the per-run screenshot dir.
-  8. Stop. The next cron fire will pick up the next scenario.
+  1. Read the state file.
+  2. Find the first scenario in scenario_list with status="pending".
+  3. If none, set phase="master_cleanup", write state, stop. Next fire runs cleanup.
+  4. Otherwise mark that scenario in_progress, write state.
+  5. Spawn the run-scenario-test skill via the Skill tool with that scenario number.
+     The skill handles: Rule 8 dev-browser setup, scenario steps, Rule 4
+     FIX-AS-YOU-GO (editing source files IN PLACE on the current branch),
+     Rule 9 scenario report, Rule 11 proposals report, 2-line verdict return.
+  6. When the skill returns, parse the verdict and update the scenario's
+     entry in state.json with verdict, report_path, improvements_path,
+     counts of P0..P3 proposals extracted from the improvements file.
+  7. If the scenario edited any source files (bugs were fixed), stage and
+     commit those edits on the CURRENT branch with message
+     `fix(scen-NNN): <one-line summary from the report>`. Record the commit
+     SHA in state.scenarios.SCEN-NNN.bug_fix_commit_shas. Never push, never
+     create a branch, never use `git add -A`/`git add .`, stage by explicit
+     file name only.
+  8. Commit the scenario's report + improvements files in a SEPARATE commit
+     with message `docs(scen-NNN): add scenario report and proposals`.
+  9. If verdict==PASS and all bugs were fixed AND verified, delete the
+     per-run screenshot dir per Rule 10 auto-purge.
+  10. Stop. Next cron fire picks up the next pending scenario.
 
 If phase == "master_cleanup":
-  1. Run dev-browser daemon stop, master cleanup script, kill any orphan scen* tmux sessions.
-  2. Set phase="consolidated", write state.
-  3. Generate the consolidated PR list at tests/scenarios/reports/CONSOLIDATED_PRS_<batch_id>.md.
-  4. Stop.
+  1. Stop the dev-browser daemon with `dev-browser stop`.
+  2. Run the project's master cleanup script (kill scen* tmux sessions,
+     STATE-WIPE restore from backups per Rule 3).
+  3. Generate tests/scenarios/reports/CONSOLIDATED_PROPOSALS_<batch_id>.md
+     by reading all scenario_proposed-improvements_*.md files produced in
+     this batch and combining them per the format below.
+  4. Stage and commit the consolidated proposals file.
+  5. Set phase="consolidated", write state, stop.
+  6. Optionally delete the durable cron via CronDelete (the cron prompt
+     detects phase==consolidated and does nothing, so leaving it is safe).
 
-NEVER call any other skill or tool except as instructed above. NEVER attempt to drive the UI yourself — that is the run-scenario-test skill's job. NEVER run multiple scenarios in one fire — one fire = one scenario, period. NEVER push to the user's main branch — only push fix branches to the user's personal fork.
+NEVER call any other skill or tool except as instructed above. NEVER attempt
+to drive the UI yourself — that is the run-scenario-test skill's job. NEVER
+run multiple scenarios in one fire — one fire = one scenario, period. NEVER
+create worktrees. NEVER create branches. NEVER push to remote. NEVER draft
+or create PRs. NEVER spawn the scenario-improvement-implementer agent —
+that is Phase 3, which the user triggers manually after reviewing the
+consolidated proposals file.
 ```
 
 The cron prompt is intentionally rigid. Every cron fire is one atomic step in the state machine. Idempotent. Resumable. Inspectable.
 
 ### Master setup phase (one-time, per batch)
 
-1. `git status` baseline + `git commit` any uncommitted state
+1. `git status` must be clean — if not, abort with "working tree dirty, commit or stash first"
 2. Backup config files per Rule 3 STATE-WIPE
 3. `yarn build` once
 4. `pm2 restart ai-maestro` once
-5. `dev-browser daemon start` once
-6. `dev-browser <<EOF ... aim_login(...) ... EOF` once — login the dashboard, persist the cookie in the dev-browser's named "dashboard" page
-7. Take a baseline screenshot of the logged-in dashboard
-8. Set `phase="running"` in state.json
-9. Exit the cron fire — the next fire starts running scenarios
+5. First `dev-browser --browser ai-maestro-scenarios --headless --timeout 60 <<EOF ... EOF` call — this auto-spawns the daemon AND logs the dashboard in (via the aim_login helper from `tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh`). The named page `dashboard` in instance `ai-maestro-scenarios` now holds the login cookie for the rest of the batch.
+6. Take a baseline screenshot of the logged-in dashboard
+7. Set `phase="running"` in state.json
+8. Exit the cron fire — the next fire starts running scenarios
 
 This phase runs ONLY ONCE per batch. Per-scenario runners assume the daemon is up and the dashboard is logged in.
 
 ### Per-scenario runner (one cron fire = one scenario)
 
-The cron fire spawns the `run-scenario-test` skill with the next pending scenario. The skill:
-1. Loads the dev-browser:dev-browser skill (Rule 8 mandate)
-2. Reads the scenario .md file
-3. Connects to the existing dev-browser daemon (via `browser.getPage("dashboard")` which returns the master-setup logged-in page)
-4. Runs the scenario steps, applying FIX-AS-YOU-GO per Rule 4
-5. Writes its report + improvements files
-6. Returns the 2-line verdict + report path
+The cron fire spawns the `run-scenario-test` skill with the next pending scenario. The skill (and ultimately the `scenario-runner` agent it invokes) does Phases A-H from the runner agent definition: loads dev-browser, reads the scenario file, runs the steps, applies FIX-AS-YOU-GO for any bug found (editing source in place on the current branch), writes the scenario report, writes the proposals report, returns a 2-line verdict.
 
 The cron fire then:
-7. Updates the scenario's entry in state.json with the verdict
-8. If verdict==PASS and fixes were made, git commits each fix with a clear message, pushes to the user's fork, drafts a PR via `gh pr create --draft --base main --head <branch>`, records the PR URL in state.json
-9. If verdict==PASS and per-Rule-10 conditions are met, deletes the per-run screenshot directory
-10. Exits
+- Updates state.json with the scenario's verdict and report paths
+- `git add` the explicit modified source files
+- `git commit -m "fix(scen-NNN): <summary>"` — one commit for bug fixes per scenario, on the current branch
+- `git add tests/scenarios/reports/SCEN-NNN_<ts>.report.md tests/scenarios/reports/scenario_proposed-improvements_<NNN>_<ts>.md`
+- `git commit -m "docs(scen-NNN): add scenario report and proposals"` — separate commit for the reports
+- If verdict==PASS with all bugs verified fixed, delete the per-run screenshot dir per Rule 10 auto-purge
+- Exit the cron fire
+
+No branch creation. No worktree. No `git push`. No PR draft. All of that is Phase 3.
 
 ### Master cleanup phase (one-time, at end of batch)
 
-1. `dev-browser daemon stop` (cleanly shuts down Chromium)
+1. `dev-browser stop` (cleanly shuts down Chromium; note: no `daemon stop` subcommand — use `dev-browser stop`)
 2. Run the project's cleanup script (kill scen* tmux sessions, restore registry/teams)
 3. STATE-WIPE restore from backups
-4. Generate `tests/scenarios/reports/CONSOLIDATED_PRS_<batch_id>.md` with the format below
-5. Set `phase="consolidated"` in state.json — this is the terminal state, the cron will see it and stop firing
-6. Optionally delete the durable cron via CronDelete (the cron prompt detects `phase=="consolidated"` and does nothing, so leaving it is also safe)
+4. Generate `tests/scenarios/reports/CONSOLIDATED_PROPOSALS_<batch_id>.md` with the format below
+5. Commit the consolidated file
+6. Set `phase="consolidated"` in state.json — this is the terminal state, the cron will see it and stop firing
+7. Optionally delete the durable cron via CronDelete
 
-### CONSOLIDATED_PRS file format
+### CONSOLIDATED_PROPOSALS file format
+
+This is the ONE file the user reads when they wake up. Its purpose is to let the user approve / reject every proposal from the entire batch in a single reading session, with all the context they need to make the decision.
 
 ```markdown
-# Autonomous Batch <batch_id> — Consolidated PR List
+# Autonomous Batch <batch_id> — Consolidated Proposals
 
 **Started:** <iso-ts>
 **Completed:** <iso-ts>
+**Base branch:** <branch-name-batch-started-on>
 **Total scenarios:** <N>
 **Pass:** <N>  Fail:** <N>  Partial:** <N>  Stuck:** <N>
+**Bugs fixed in place (Phase 1):** <N>
+**Proposals pending approval (this file):** <N> P0, <N> P1, <N> P2, <N> P3
 **Rate-limit events survived:** <N>
 
-## PRs ready for review (sorted by scenario number)
+---
 
-| # | Scenario | Verdict | Fix branch | PR URL | Bugs fixed | Risk |
-|---|----------|---------|------------|--------|-----------|------|
-| 1 | SCEN-001 | PASS | fix/scen-001-... | https://github.com/.../pull/1234 | 2 | LOW |
-| 2 | SCEN-005 | PASS | fix/scen-005-... | https://github.com/.../pull/1235 | 1 | MED |
+## Phase 1 summary — bug fixes already committed
+
+These bug fixes were applied in-place to branch `<base_branch>` during the
+overnight run, per Rule 4 FIX-AS-YOU-GO. They are already on disk and in
+git history. No action required from you on these — they are the baseline
+the Phase 3 implementer will build on.
+
+| # | Scenario | Verdict | Bugs fixed | Fix commit SHAs |
+|---|----------|---------|-----------|-----------------|
+| 1 | SCEN-001 | PASS | 2 | abc1234, def5678 |
+| 2 | SCEN-005 | PASS | 1 | 9abcdef |
 ...
 
-## Scenarios with no fixes (no PR generated)
+## Phase 2 — your turn: approve proposals for Phase 3 implementation
 
-- SCEN-003 PASS — no bugs found
-- SCEN-019 PARTIAL — bug found but deferred to P0 proposal (see scenario_proposed-improvements_019_*.md)
+Below is every P0/P1/P2/P3 proposal from every scenario in this batch.
+**To approve a proposal, mark it with `[x]` in the checkbox next to it.**
+Save this file when you are done. Then run the Phase 3 command at the bottom.
 
-## Detailed fix index
+### P0 proposals (highest priority, will be implemented first)
 
-### fix/scen-001-... (PR #1234)
-- **Files**: components/X.tsx, lib/Y.ts
-- **Description**: <one-paragraph fix summary>
-- **Verification**: scenario re-ran step S012 successfully after the fix
-- **PR draft URL**: https://github.com/.../pull/1234
-- **Approve command**: `gh pr ready 1234 && gh pr merge 1234 --squash`
+#### SCEN-001: <proposal title>
+- [ ] **Approve**
+- **Scenario:** SCEN-001 — <scenario name>
+- **Source report:** `tests/scenarios/reports/scenario_proposed-improvements_001_<ts>.md`
+- **Problem:** <one paragraph>
+- **Root cause:** <one paragraph>
+- **Proposed fix:** <one paragraph — file paths, line ranges, what to change>
+- **Verification:** <how Phase 3 should verify the fix landed correctly>
+- **Estimated risk:** LOW | MED | HIGH
+- **Dependencies:** <none / depends on P0-<other>>
 
-### fix/scen-005-... (PR #1235)
+#### SCEN-005: <proposal title>
+- [ ] **Approve**
 ...
 
-## Failed / stuck scenarios
+### P1 proposals
+
+...
+
+### P2 proposals
+
+...
+
+### P3 proposals
+
+...
+
+## Phase 3 — implement approved proposals (runs after you save this file)
+
+After you have checked every `[x]` for the proposals you approve, run:
+
+```bash
+/run-scenarios-batch --improve <batch_id>
+```
+
+This spawns the `scenario-improvement-implementer` agent for each approved
+proposal. Each implementation runs in an ISOLATED git worktree (so the
+current branch is never touched during implementation), commits the change
+in the worktree, and returns the worktree branch name. The parent session
+(you, when the implementer returns) merges each successful worktree back
+into the current branch — or discards it on failure.
+
+Because Phase 1 already landed all bug fixes on the current branch, the
+implementer in Phase 3 sees a CLEAN bug-free codebase. Conflicts between
+worktrees should be minimal. Implementation is fast.
+
+## Failed / stuck scenarios (investigate manually)
 
 ### SCEN-018 FAIL
-- **Reason**: <one-line>
-- **Report**: tests/scenarios/reports/SCEN-018_<ts>.report.md
-- **Screenshots**: tests/scenarios/screenshots/SCEN-018_<RUN_ID>/ (kept because verdict != PASS)
+- **Reason:** <one-line>
+- **Report:** tests/scenarios/reports/SCEN-018_<ts>.report.md
+- **Screenshots:** tests/scenarios/screenshots/SCEN-018_<RUN_ID>/ (kept because verdict != PASS)
+- **Recommended action:** re-run manually after investigating, or delete the scenario if it's no longer relevant
 
 ## Rate-limit events during this batch
 
-| Time (UTC) | Token rotated to | Recovery delay (min) |
-|---|---|---|
-| 2026-04-15T14:23 | <account> | 8 |
+| Time (UTC) | Active account | Recovery delay | Cron fires queued |
+|---|---|---|---|
+| 2026-04-15T14:23 | emanuele | 8 min | 3 |
 ...
-
-## Next steps for the user
-
-1. Open each PR in the table above
-2. Review the fix and the verification report
-3. Approve with `gh pr ready <N> && gh pr merge <N> --squash` (or via the GitHub UI)
-4. After all approved fixes are merged, run `git pull origin main` to sync
 ```
 
-This file is what the user reads when they wake up. One file, all PR URLs, all approve commands ready to copy-paste. No hunting through reports or git logs.
+This file is what the user reads when they wake up. One file, every proposal in priority order, with approve checkboxes. No hunting through 22 separate proposal files.
 
-### Hard rules for autonomous batches
+### Hard rules for Phase 1 (the overnight cron)
 
-1. **One cron fire = one atomic state machine step.** Never run multiple scenarios in one fire. Never run setup AND a scenario in one fire. Cron fires must be short and idempotent.
+1. **One cron fire = one atomic state machine step.** Never run multiple scenarios in one fire. Never run setup AND a scenario in one fire.
 2. **Read state.json before EVERY action.** Never assume the previous fire left the system in a known state.
-3. **Write state.json AFTER every action atomically** (write to `.tmp`, then rename). Concurrent fires (during rate-limit recovery batch delivery) must not corrupt the file.
-4. **Never push to the user's main branch.** Only fix branches to the user's personal fork.
-5. **Never use `gh pr ready` or `gh pr merge` automatically.** Drafts only. The user approves.
-6. **Never delete a scenario's screenshots if the scenario didn't pass.** Rule 10 auto-purge applies only to verified-fixed PASS runs.
-7. **If the dev-browser daemon dies mid-batch**, the next cron fire detects it (via `dev-browser daemon status` or a trivial `getPage` call) and re-runs master setup from a "phase=master_setup" recovery state. The state machine has a "daemon-died" recovery branch.
-8. **The cron interval is 5-20 minutes.** Shorter wastes API calls during rate-limit recovery; longer adds wall-clock latency. Default: 13 minutes (off-minute schedule).
-9. **The cron is durable.** `CronCreate` MUST be called with `durable: true` so it survives `claude --continue`.
-10. **The cron's recurring task auto-expires after 7 days** (Claude Code default). For batches running longer than 6 days, schedule a refresh task at day 5 to re-create the cron.
+3. **Write state.json AFTER every action atomically** (write to `.tmp`, then rename).
+4. **Bug fixes go on the CURRENT BRANCH.** Never create a branch. Never create a worktree. Never push. Never draft a PR. Never create a PR.
+5. **One commit for bug fixes per scenario + one commit for reports per scenario.** Keeps git history readable: two commits per scenario.
+6. **Stage files by explicit name.** Never `git add -A`, never `git add .`.
+7. **Never auto-implement proposals.** The improvements file lists them; the cron never reads them except to count P0..P3 for state tracking. Implementation is Phase 3, triggered manually by the user.
+8. **Never delete a scenario's screenshots if the scenario didn't pass.** Rule 10 auto-purge applies only to verified-fixed PASS runs.
+9. **Never spawn the scenario-improvement-implementer agent from the cron.** That agent is invoked only in Phase 3, via the `run-scenarios-batch --improve` skill, by the user.
+10. **The cron is durable** (`CronCreate({ durable: true, ... })`). The cron interval is 5-20 minutes, off-minute schedule. Default: `1-59/13 * * * *` (every 13 min starting at minute 1).
 
-### Failure modes and recovery
+### Failure modes and Phase 1 recovery
 
 | Failure | Detection | Recovery |
 |---|---|---|
-| Rate limit hits mid-scenario | run-scenario-test returns `STUCK` or with an explicit rate-limit error | next cron fire's idempotent read sees the scenario still in_progress, retries it from S001 (or from the in-scenario MEMORY.md checkpoint if the runner was able to write one) |
-| dev-browser daemon crashes | `dev-browser daemon status` returns dead | cron sets phase=master_setup_recovery, next fire restarts daemon and resumes |
-| pm2 ai-maestro crashes | `curl /api/sessions` 5xx | cron sets phase=master_setup_recovery, next fire restarts pm2 |
-| State file corruption | JSON parse fails | cron writes corrupted state to state.json.corrupted-<ts>, sets phase=failed, alerts in next consolidated report |
-| All scenarios complete but cleanup failed | phase=master_cleanup persists across many fires | after 5 fires in master_cleanup without progress, set phase=consolidated_with_warnings |
-| GitHub fork rate limit | `gh pr create` returns 429 | log and continue, the fix is committed locally, the PR draft will be created on the next attempt |
-| User's both accounts hit weekly quota | every cron fire fails for hours | wait it out — when one weekly quota resets, the cron picks up exactly where it left off |
+| Rate limit hits mid-scenario | run-scenario-test returns STUCK or with an explicit rate-limit error | next cron fire's idempotent read sees the scenario still `in_progress`, retries it from S001 (or from the runner's MEMORY.md checkpoint if one was written) |
+| dev-browser daemon crashes | Master setup health probe fails on next cron fire | cron sets `phase=master_setup_recovery`, next fire re-runs master setup |
+| pm2 ai-maestro crashes | `curl /api/sessions` returns 5xx | cron sets `phase=master_setup_recovery`, next fire restarts pm2 then continues |
+| State file corruption | JSON parse fails | cron renames the corrupted file to `.corrupted-<ts>`, sets `phase=failed`, alerts in the consolidated report |
+| Scenario leaves the working tree dirty | `git status` after cleanup shows unstaged changes | cron commits them with `chore(scen-NNN): leftover working-tree changes` and continues — do NOT try to reconcile automatically |
+| User's both OAuth accounts hit weekly quota | every cron fire fails for hours | wait it out — when one weekly quota resets, the cron picks up exactly where it left off |
 
 ### One last hard rule
 

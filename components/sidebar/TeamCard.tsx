@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { Pencil, Trash2, AlertTriangle } from 'lucide-react'
 import type { Team } from '@/types/team'
 import type { Agent } from '@/types/agent'
+import { checkTeamComposition } from '@/lib/team-composition'
 
 interface TeamCardProps {
   team: Team
@@ -15,51 +16,25 @@ interface TeamCardProps {
   onDelete: (team: Team) => void
 }
 
-// Response shape of GET /api/teams/{id}/composition-check.
-// Captures only the fields used by the badge — other fields (agents list,
-// presentTitles, etc.) are ignored here to keep the cache small.
-interface R12Composition {
-  complete: boolean
-  missingTitles: string[]
-}
-
 export default function TeamCard({ team, agents, onStartMeeting: _onStartMeeting, onEdit, onDelete }: TeamCardProps) {
   // _onStartMeeting is intentionally ignored — team meetings were removed in
   // favor of AMP + kanban, but the prop is kept for call-site compatibility.
   void _onStartMeeting
   const [confirmDelete, setConfirmDelete] = useState(false)
 
-  // SCEN-010 P0-003: R12 composition warning badge.
-  // The composition-check API exists and works, but nothing surfaces its
-  // results to the user. Fetch it on mount / when team.agentIds change so
-  // the badge appears next to the team name whenever the team does not
-  // satisfy R12 (missing one of: chief-of-staff, architect, orchestrator,
-  // integrator, member). Tooltip lists the missing titles.
-  const [composition, setComposition] = useState<R12Composition | null>(null)
-  // Stringify agentIds so the effect only re-runs when team membership
-  // actually changes — not on every parent re-render.
-  const agentIdsKey = team.agentIds.join(',')
-  useEffect(() => {
-    const controller = new AbortController()
-    fetch(`/api/teams/${team.id}/composition-check`, { signal: controller.signal })
-      .then(r => (r.ok ? r.json() : null))
-      .then(data => {
-        if (!data) return
-        setComposition({
-          complete: Boolean(data.complete),
-          missingTitles: Array.isArray(data.missingTitles) ? data.missingTitles : [],
-        })
-      })
-      .catch(() => { /* aborted or failed — hide the badge by leaving composition null */ })
-    return () => controller.abort()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [team.id, agentIdsKey])
-
   const memberAgents = team.agentIds
     .map(id => agents.find(a => a.id === id))
   const maxAvatars = 5
   const shown = memberAgents.slice(0, maxAvatars)
   const overflow = memberAgents.length - maxAvatars
+
+  // WT-010#3 (SCEN-010 P0-003): R12 composition check — flag teams missing
+  // one or more required titles (chief-of-staff, architect, orchestrator,
+  // integrator, member) so the user can spot incomplete teams at a glance
+  // without opening each one. Pure local derivation (no network roundtrip),
+  // memoized against team + agents so renders are cheap. Server PG06 remains
+  // authoritative; this is a UI mirror.
+  const composition = useMemo(() => checkTeamComposition(team, agents), [team, agents])
 
   const getInitials = (agent: Agent | undefined) => {
     if (!agent) return '?'
@@ -74,18 +49,19 @@ export default function TeamCard({ team, agents, onStartMeeting: _onStartMeeting
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-200 truncate">{team.name}</span>
             <span className="text-xs text-gray-500 flex-shrink-0">{team.agentIds.length}</span>
-            {/* SCEN-010 P0-003: R12 warning badge — shown only when the
-              composition-check API says the team lacks one of the five
-              required titles. The native `title` attribute surfaces the
-              specific missing titles on hover. Wrapped in a span because
-              lucide-react's AlertTriangle does not accept a `title` prop. */}
-            {composition && !composition.complete && composition.missingTitles.length > 0 && (
+            {/* WT-010#3 (SCEN-010 P0-003): R12 composition warning badge.
+              Amber (not red) — a non-functional team is recoverable; it
+              needs attention, not alarm. The `title` attribute lists the
+              specific missing titles on hover. `aria-label` mirrors for
+              screen readers. */}
+            {!composition.complete && composition.missing.length > 0 && (
               <span
-                className="inline-flex flex-shrink-0"
-                aria-label={`Incomplete: missing ${composition.missingTitles.join(', ')}`}
-                title={`Incomplete team (R12): missing ${composition.missingTitles.join(', ')}`}
+                className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 flex-shrink-0"
+                aria-label={`Incomplete: missing ${composition.missing.join(', ')}`}
+                title={`Incomplete team (R12): missing ${composition.missing.join(', ')}`}
               >
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                <AlertTriangle className="w-2.5 h-2.5" />
+                R12
               </span>
             )}
           </div>

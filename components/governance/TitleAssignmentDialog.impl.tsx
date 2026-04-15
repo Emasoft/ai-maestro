@@ -43,6 +43,28 @@ interface TitleAssignmentDialogProps {
   agentId: string
   agentName: string
   currentTitle: GovernanceTitle
+  /**
+   * Raw registry `governanceTitle` value fetched directly from `GET /api/agents/{id}`.
+   *
+   * WT-010#2 (2026-04-15): `currentTitle` comes from `useGovernance.agentTitle`,
+   * which is a useMemo-derived *display* value that may diverge from the raw
+   * registry field (e.g. the registry says `member` but the agent is no longer
+   * in any team, so the derivation falls back to `autonomous`). When that
+   * happens, the "no change" check in `isConfirmDisabled` used to compare
+   * against the derived value and silently block legitimate title assignments
+   * that would have fixed the stale registry state.
+   *
+   * The fix: use `registryTitle` for the "no change" comparison. `currentTitle`
+   * is still used for the initial radio selection and for the branching inside
+   * `handleRoleChange` (which is about transition flow, not equality), so the
+   * UI visually matches the derived display while the enable/disable gate
+   * reflects the authoritative registry value.
+   *
+   * Optional for backward compatibility with any caller that has not yet
+   * been updated; when omitted the old behaviour (compare against
+   * `currentTitle`) is preserved.
+   */
+  registryTitle?: GovernanceTitle | null
   governance: GovernanceState
   onTitleChanged: () => void
   onRestartNeeded?: () => void
@@ -140,6 +162,7 @@ export default function TitleAssignmentDialog({
   agentId,
   agentName,
   currentTitle,
+  registryTitle,
   governance,
   onTitleChanged,
   onRestartNeeded,
@@ -273,10 +296,22 @@ export default function TitleAssignmentDialog({
   // an error the instant the MAINTAINER option is clicked but before any input.
   const githubRepoError = githubRepo.trim().length > 0 ? validateGithubRepo(githubRepo) : null
 
+  // WT-010#2 (2026-04-15): Compare against the RAW registry `governanceTitle`
+  // (not `currentTitle`) for the "no change" check. `currentTitle` comes from
+  // `useGovernance.agentTitle`, which is a derived display value that can
+  // silently diverge from the authoritative registry field (e.g. registry
+  // says `member` but no team membership → derivation returns `autonomous`).
+  // When that happens, comparing against the derived value would silently
+  // block legitimate title changes that would have re-aligned the registry
+  // with reality. Falls back to `currentTitle` when `registryTitle` is not
+  // provided, so the old behaviour is preserved for any caller that has not
+  // been updated yet.
+  const comparisonTitle: GovernanceTitle = registryTitle ?? currentTitle
+
   // Determine if confirm button should be disabled
   const isConfirmDisabled = (() => {
     // No change from current role and no team selection difference
-    if (selectedTitle === currentTitle) {
+    if (selectedTitle === comparisonTitle) {
       if (selectedTitle !== 'chief-of-staff') return true
       // For COS, check if team selection changed
       const currentCosTeamIds = governance.cosTeams.map((t) => t.id).sort()

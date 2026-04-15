@@ -1575,6 +1575,15 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
           agentId={agent.id}
           agentName={agent.label || agent.name || ''}
           currentTitle={governance.agentTitle}
+          // WT-010#2 (2026-04-15): Pass the RAW registry `governanceTitle` so the
+          // dialog's "no change" guard compares against the authoritative stored
+          // value rather than `useGovernance.agentTitle`, which is a derived
+          // display title that can silently diverge from the registry (e.g.
+          // registry says `member` but the agent is no longer in any team, so
+          // the derivation returns `autonomous`). Without this, clicking a
+          // title that matched the stale derived value would be mistaken for
+          // "no change" and the API call would never fire.
+          registryTitle={agent.governanceTitle ?? null}
           governance={governance}
           onTitleChanged={() => { governance.refresh(); onDataChangedRef.current?.() }}
           onRestartNeeded={() => {

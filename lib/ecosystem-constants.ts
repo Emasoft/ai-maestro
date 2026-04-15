@@ -216,12 +216,12 @@ export const ROLE_PLUGIN_MAIN_AGENTS: Record<string, string> = {
 
 /** Map from governance title to its required role-plugin.
  *
- * R9.12: every agent MUST have a role-plugin. There is no "autonomous
- * without a plugin" path — AUTONOMOUS maps to the mandatory
- * `ai-maestro-autonomous-agent` role-plugin whose persona contains the
- * governance rules every no-team agent must follow. The ChangeTitle /
- * CreateAgent pipelines enforce this by rejecting any desired state that
- * resolves to a missing plugin.
+ * R9.13 + R11.12 + Invariant 8: every agent MUST have a role-plugin. There
+ * is no "autonomous without a plugin" path — AUTONOMOUS maps to the
+ * mandatory `ai-maestro-autonomous-agent` role-plugin whose persona
+ * contains the governance rules every no-team agent must follow. The
+ * ChangeTitle / CreateAgent pipelines enforce this by rejecting any
+ * desired state that resolves to a missing plugin.
  */
 export const TITLE_PLUGIN_MAP: Record<string, string> = {
   'MANAGER': ROLE_PLUGIN_MANAGER,

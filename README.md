@@ -42,54 +42,63 @@ Within a week I was running 35 agents across terminals. They were productive, bu
 
 ## Understanding AI Maestro Terms
 
-Each **agent** has four distinct attributes. Understanding their differences is essential for working with AI Maestro.
+Every AI Maestro **agent** has exactly three orthogonal layers. Keeping them distinct is essential — they answer different questions and are managed by different pipelines.
 
-| Attribute | Format | Purpose | Examples |
-|-----------|--------|---------|----------|
-| **AGENT-ID** | `<group>-<type>-<name>` kebab | Unique identifier across the system | `tooling-developer-bot1`, `backend-tester-tommy`, `graphics-2dartist-iconmaker`, `core-developer-reactui5` |
-| **PERSONA** | Capitalized kebab | The agent's personal name, tied to a specific Claude Code tmux session | `Sammy`, `Peter-Parker`, `Lucy-In-The-Sky`, `Jack-The-Bot`, `Frank-Potter` |
-| **TITLE** | ALL-CAPS kebab | Governance level — defines the scope of authority | `MANAGER`, `CHIEF-OF-STAFF`, `ARCHITECT`, `ORCHESTRATOR`, `INTEGRATOR`, `MEMBER`, `MAINTAINER` |
-| **ROLE** | lowercase kebab | The job specialization — associated with a Role Plugin containing all the skills needed | `chief-of-staff`, `architect-agent`, `orchestrator-agent`, `programmer-agent`, `assistant-manager-agent`, `maintainer-agent` |
+| Layer | Answers | Format | Example |
+|---|---|---|---|
+| **TITLE** | *What is it allowed to do?* (permissions / governance class) | ALL-CAPS kebab | `MEMBER` |
+| **ROLE** | *What does it know how to do?* (behaviour — the role-plugin main agent loaded from a marketplace) | `<plugin>:<main-agent>@<marketplace>` | `ai-maestro-programmer-agent:programmer-main-agent@Emasoft/ai-maestro-plugins` |
+| **PERSONA** | *Which specific running instance is this?* (identity — name, AID, avatar, workdir) | `<name>, <aid>, <avatar>, <workdir>` | `peter-bot, <aid>, ~/avatars/peter.jpg, ~/agents/peter-bot/` |
 
-*(Examples above show display-format capitalization; internally stored as lowercase)*
+**TITLE** and **ROLE** are independent but constrained: a ROLE declares which TITLEs it is designed to serve via `compatible-titles` in its `.agent.toml`. Multiple ROLEs can satisfy the same TITLE (N:1 model), and one ROLE can be compatible with several TITLEs. **PERSONA** is the only layer with 1:1 cardinality to a running tmux session — TITLE and ROLE are swappable on a live PERSONA.
 
-### AGENT-ID
+An OOP analogy: **TITLE = access-control role**, **ROLE = class definition** (behaviour + skills + instructions), **PERSONA = instance** (state + identity).
 
-A 3-word combination that AI Maestro uses to uniquely identify each agent: `<group>-<type>-<name>`. The three segments have distinct meanings — group defines the domain, type defines the function, and name is the unique instance label.
+### TITLE — the governance class
 
-### PERSONA
+The title determines what an agent is authorized to do within the AI Maestro governance system. There are exactly eight titles:
 
-The display name of the agent instance. Associated with a specific Claude Code tmux session and a working directory at `~/agents/<persona-name>/`. Input is case-insensitive — the system normalizes all persona names to lowercase internally (so `Sammy` and `sammy` refer to the same persona in commands and messages). The UI displays persona names capitalized for readability. For non-Latin names without uppercase letters, the display falls back to simple kebab formatting.
-
-### TITLE
-
-The governance title determines what an agent is authorized to do within the AI Maestro governance system. There are exactly eight titles:
-
-- **AUTONOMOUS** — Default title. Agent operates independently, not assigned to any team.
-- **MANAGER** — Global singleton. Manages agents and approves GovernanceRequests. Cannot create/delete teams or assign COS (those are USER-only operations requiring governance password). Only one per host.
-- **CHIEF-OF-STAFF** — Leads ONE closed team. Scoped to own team only. All destructive operations require GovernanceRequest approval from MANAGER.
-- **ARCHITECT** — Senior technical authority within a team. Can propose and approve architecture decisions.
+- **AUTONOMOUS** — Not assigned to any team. Operates independently under a mandatory `ai-maestro-autonomous-agent` role-plugin whose persona enforces workspace isolation and forbids cross-agent mutation. Can freely message MANAGER, MAINTAINERs, and other AUTONOMOUS agents.
+- **MANAGER** — Global singleton (at most one per host). Manages agents and approves GovernanceRequests. Cannot create/delete teams or assign COS (those are USER-only operations requiring governance password).
+- **CHIEF-OF-STAFF** — Leads exactly one closed team. Scoped to own team only. Destructive operations require a GovernanceRequest approved by the MANAGER.
+- **ARCHITECT** — Senior technical authority within a team. Proposes and approves architecture decisions.
 - **ORCHESTRATOR** — Primary kanban manager for a team. Coordinates task assignment and pipeline flow.
 - **INTEGRATOR** — System integrator. Responsible for cross-service wiring and deployment coordination.
 - **MEMBER** — Standard team member with no special governance privileges.
 - **MAINTAINER** — Host-level repo maintainer (not in any team). Bound to a single `owner/repo` GitHub repository. Polls issues every 5 minutes via `gh issue list`, auto-triages bugs, and only accepts feature requests from the locally-authenticated `gh` user. See R19 in [GOVERNANCE-RULES.md](./docs/GOVERNANCE-RULES.md).
 
-Changing a title requires the governance password.
+Changing a TITLE requires the governance password. The **USER** (human operator) is the only one who can: create/delete teams, assign/remove COS, assign/remove MANAGER, switch team type open/closed.
 
-The **USER** (human operator) is the only one who can: create/delete teams, assign/remove COS, assign/remove MANAGER, switch team type open/closed. These operations require a governance password.
+### ROLE — the role-plugin main agent
 
-### ROLE
+The ROLE is the **role-plugin main agent** the PERSONA is currently running. It is referenced in fully-qualified form: `<plugin-name>:<main-agent-name>@<marketplace>`. The `@<marketplace>` suffix mirrors Claude Code's standard plugin syntax; the `:<main-agent>` segment selects which main-agent file inside the plugin to launch via `claude --agent <main-agent>`.
 
-The role defines what job the agent does — its specialization. Each role is backed by a **Role Plugin**, a Claude Code plugin that bundles all the skills, rules, hooks, commands, and configurations the agent needs to perform its job.
+A **role-plugin** is a Claude Code plugin that additionally contains:
+1. A `<name>.agent.toml` at the plugin root with two mandatory extra fields: `compatible-titles` and `compatible-clients`.
+2. A main-agent `.md` file whose persona carries the governance rules (inline, via `skills:` references, or via rule-file links).
 
-Role Plugins are installed with `--scope local` in the agent's project folder. Some Role Plugins have title requirements:
+Role-plugins are installed exactly like normal plugins — `claude plugin install <name> <marketplace> --scope local` after registering the marketplace via `claude plugin marketplace add <path-or-owner/repo>`. AI Maestro ships two default role-plugin marketplaces: the remote `Emasoft/ai-maestro-plugins` (GitHub) and the local `ai-maestro-local-roles-marketplace` (at `~/agents/role-plugins/marketplace/`). A role-plugin folder may live anywhere as long as it is listed in a marketplace manifest's `source` field.
 
-- `assistant-manager-agent` — requires `MANAGER` title
-- `chief-of-staff` — requires `CHIEF-OF-STAFF` title
-- `maintainer-agent` — requires `MAINTAINER` title
-- All other Role Plugins — available to any title (typically `MEMBER`)
+An agent can change its ROLE at any time through the Profile panel → Role tab — the old plugin is uninstalled, the new one is installed, and Claude Code is gracefully restarted in the same tmux session (preserving chat history). The Role tab shows a locked label when exactly one role-plugin is compatible with the current TITLE, and a dropdown when two or more are.
 
-An agent can change its Role Plugin at any time through the Profile panel — the old plugin is uninstalled, the new one installed, and Claude Code is gracefully restarted in the same tmux session (preserving chat history).
+### PERSONA — the running instance
+
+The PERSONA is the concrete agent: four attributes that together identify a specific running Claude Code tmux session.
+
+- **Name** — a unique kebab identifier (e.g. `peter-bot`, `sammy`, `frank-potter`). Input is case-insensitive; internally normalized to lowercase. The UI displays it capitalized for readability.
+- **AID** — the Agent Identity: an Ed25519 key pair used for AMP message signing and cross-host authentication. Provisioned once per PERSONA and stored in `~/.agent-messaging/agents/<name>/keys/`.
+- **Avatar** — image file displayed on the sidebar card.
+- **Workdir** — a project folder at `~/agents/<name>/` where Claude Code runs. All `--scope local` plugins live here, and this is the only location outside `/tmp` that the PERSONA may write to.
+
+PERSONA is the only layer with cardinality 1:1 to a tmux session. TITLE and ROLE can be swapped on a live PERSONA without losing identity, AID, avatar, or workdir.
+
+### Full agent example
+
+| Layer | Value |
+|---|---|
+| TITLE | `MEMBER` |
+| ROLE | `ai-maestro-programmer-agent:programmer-main-agent@Emasoft/ai-maestro-plugins` |
+| PERSONA | `peter-bot, <aid>, ~/avatars/peter.jpg, ~/agents/peter-bot/` |
 
 ---
 

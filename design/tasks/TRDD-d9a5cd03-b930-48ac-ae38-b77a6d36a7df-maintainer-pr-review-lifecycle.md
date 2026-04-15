@@ -1060,8 +1060,148 @@ contributor's.
 
 ---
 
-**END OF TRDD — awaiting user answers on the 4 still-open decisions
-from §11.9 (branch ruleset details confirmed minimal per §13.5,
-seeded flaw, overnight batch inclusion, timeline). Comm-graph (§12)
-and contributor-plugin correction (§13) are resolved; no further
-blockers for Step 2 plugin implementation.**
+---
+
+## 14. Two-layer enforcement model (user feedback 2026-04-15)
+
+> "so while the ruleset of a branch IS needed to manage and restrict
+> the PR of other users (not agents, humans on github, independent
+> from ai-maestro), it is completely useless with the ai-maestro
+> agents, because they are all the owner of the repo in the pov of
+> github. This is why we must enforce the rules via role-plugins and
+> governance approvals by the MANAGER. The instructions in the main
+> agent of each role-plugin are the sole limitations that the agents
+> will follow."
+
+This resolves every remaining design ambiguity in this TRDD.
+Codifying the two-layer model:
+
+### 14.1 Layer 1 — GitHub branch rulesets
+
+**Scope:** Defense against HUMAN external contributors (non-agents)
+who might open PRs on the repo.
+
+**Relevance to SCEN-018 v2:** irrelevant for the agent interactions.
+Still installed on the test repos as basic repo hygiene.
+
+**Minimal ruleset for both test repos:**
+
+```
+Require PR before merge   (blocks direct pushes to main)
+Block force-pushes        (blocks history rewriting)
+Block branch deletion     (blocks rogue branch removal)
+```
+
+NOT required:
+- `require N approving reviews` — useless because all agents = Emasoft
+- `require linear history` — not needed for a test repo
+- `require signatures` — adds GPG complexity with no benefit
+- `require conversation resolution` — nice-to-have, but not enforceable
+  when the reviewer and author are the same identity
+- `required status checks` — no CI in the test repos
+
+**Decision 3 (branch ruleset) — RESOLVED as the 3-rule minimal set above.**
+
+### 14.2 Layer 2 — Role-plugin main agent instructions + MANAGER AMP
+
+**Scope:** The ONLY real enforcement for AI Maestro agents.
+
+**How it works:**
+
+- Each role-plugin's main agent persona contains rules the agent will
+  follow voluntarily. There is no external mechanism preventing the
+  agent from violating them — the agent just won't, because it was
+  instructed not to.
+- MANAGER monitors agent terminals and messages via AMP. When MANAGER
+  sees an agent violating its rules (or slacking), MANAGER sends a
+  steering AMP or escalates to the user.
+- "Approval" means the MAINTAINER's plugin code chose to run
+  `gh pr merge`. The decision happens inside the plugin, not on
+  GitHub.
+
+**Implications for plugin personas (v2.0.0 work):**
+
+1. **MAINTAINER plugin `maintainer-review` skill** MUST contain strict
+   instructions:
+   - "Before invoking `gh pr merge`, you MUST have posted at least one
+     review comment on the PR with an explicit verdict"
+   - "If the PR is acceptable, post a 'LGTM — merging as \<maintainer-id\>' comment FIRST, then merge"
+   - "If the PR needs changes, post a review with CHANGES_REQUESTED
+     state, wait for a new push, and re-review"
+   - "Never merge a PR you have not reviewed in the current session"
+   - "Report every state transition (detected → reviewing → merged →
+     released) to MANAGER via AMP"
+
+2. **MAINTAINER plugin main agent** MUST include the "welcome
+   contributions" section from §11.4.
+
+3. **`ai-maestro-plugin` (base, R17 core)** — no changes needed. The
+   contributor uses only the base plugin. Its behavior is driven by
+   the scenario's user prompts, not by a persistent persona.
+
+4. **MANAGER plugin** (`ai-maestro-assistant-manager-agent`) — no
+   changes strictly required; the scenario-level user prompt at Phase 3
+   primes the MANAGER to monitor both MAINTAINERs and the contributor.
+   Optional: add a line to the MANAGER persona saying "when supervising
+   AUTONOMOUS agents outside your team (MAINTAINERs, AUTONOMOUS
+   contributors), acknowledge their AMP updates and intervene if they
+   violate their stated rules or make no progress for >10 minutes".
+
+### 14.3 Scenario assertions that validate Layer 2
+
+Since GitHub-level approval is unenforceable, the scenario's success
+criteria verify Layer 2 was followed:
+
+1. **Review-before-merge order**: `gh pr view N --json reviews,mergedAt`
+   shows at least one review comment before `mergedAt`, and
+   `reviews[i].submittedAt < mergedAt` for every review.
+2. **Merge actor**: the merge commit's author is the Emasoft identity
+   (trivially true), but the AMP ledger shows the MAINTAINER agent
+   sent a "merging PR #N" message within the minute before `mergedAt`.
+3. **Review-comments present**: the PR has at least 1 review comment,
+   and if Phase 7's seeded flaw is used, at least one CHANGES_REQUESTED
+   review comment before the final LGTM.
+4. **Contributor did not merge**: the contributor's AMP traffic
+   contains NO "merging" messages. The contributor's terminal log
+   contains NO `gh pr merge` invocation.
+5. **MANAGER oversight**: MANAGER sent acknowledgement or steering
+   messages for every major state transition in each MAINTAINER's
+   lifecycle. If the MANAGER was silent for >10 minutes while an
+   agent was working, that's a FAIL.
+
+### 14.4 Upgrade path — GitHub App (not needed now)
+
+If a user wants stronger-than-agent-level enforcement later, the
+plugin can be extended with a GitHub App token fallback (as in
+Option D from the earlier chat discussion). This is an additive
+change — the base workflow stays the same, the App token just lets
+the MAINTAINER post an ACTUAL approving review that satisfies
+GitHub's required-review-count rule (if configured). Does NOT
+require a second GitHub account — a personal GitHub App works.
+Deferred; not blocking v2.0.0.
+
+---
+
+## 15. Final decision summary (all 7 decisions resolved)
+
+| # | Topic | Resolution | Source |
+|---|---|---|---|
+| 1 | Agent roster | MANAGER + MAINTAINER alpha + MAINTAINER beta + AUTONOMOUS contributor, both MAINTAINERs active | §11.1, user 2026-04-15 |
+| 2 | `maintainer-fix` disposition | KEEP (Option A) — alpha uses it, beta uses new `maintainer-review` | §11.3, user 2026-04-15 |
+| 3 | Branch ruleset | Minimal: require PR, no force-push, no delete. NOT used for agent enforcement — only a human-contributor defense | §14.1, user 2026-04-15 |
+| 4 | Seeded flaw on beta's first PR | YES — contributor instructed to skip the regression test on round 1, so MAINTAINER beta's review loop fires once then approves on round 2 | §11.9 recommended, no objection |
+| 5 | SCEN-018 v2 vs new SCEN-023 | Rewrite SCEN-018 v2 | §11.9 recommended, no objection |
+| 6 | Overnight batch inclusion | Standalone first, include in batch only after 1 clean standalone pass | §11.9 recommended, no objection |
+| 7 | Timeline | 1.5-2 days, batch launch shifts accordingly | §11.9 recommended, no objection |
+
+**Plus new items resolved by §12-14:**
+
+- Communication graph: already correct (§12), no code change needed
+- Contributor role-plugin: **none** (base plugin only), NOT `ai-maestro-programmer-agent` (§13)
+- GitHub approval enforcement: via plugin-persona + MANAGER AMP + scenario assertions; NOT via GitHub rulesets (§14)
+
+---
+
+**END OF TRDD — all 7 decisions resolved. Ready to start Step 2
+(plugin v2.0.0 rewrite in /tmp/ai-maestro-maintainer-agent) on user
+confirmation.**

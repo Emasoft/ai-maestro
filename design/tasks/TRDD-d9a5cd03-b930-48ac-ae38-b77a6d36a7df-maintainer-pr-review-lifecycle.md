@@ -876,5 +876,111 @@ days of focused work.
 
 ---
 
-**END OF TRDD — awaiting user answers on the 5 questions above (§11.9)
-before implementation starts**
+## 12. Governance / comm-graph verification (user feedback 2026-04-15)
+
+> "Also the governance rules must be verified. The MANAGER, the
+> MAINTAINERS and the AUTONOMOUS agents, being outside of any team, can
+> freely message each others. no restrictions."
+
+### 12.1 Current graph state — no code change required
+
+`lib/communication-graph.ts` already models MANAGER, MAINTAINER, and
+AUTONOMOUS as a fully-connected clique with self-loops:
+
+```typescript
+'manager':        new Set([..., 'autonomous', 'maintainer']),
+'autonomous':     new Set(['manager', ..., 'autonomous', 'maintainer']),
+'maintainer':     new Set(['manager', ..., 'autonomous', 'maintainer']),
+```
+
+All 9 required edges are present:
+
+| Sender → Recipient | Allowed? |
+|---|---|
+| MANAGER → MANAGER | ✅ |
+| MANAGER → MAINTAINER | ✅ |
+| MANAGER → AUTONOMOUS | ✅ |
+| MAINTAINER → MANAGER | ✅ |
+| MAINTAINER → MAINTAINER | ✅ |
+| MAINTAINER → AUTONOMOUS | ✅ |
+| AUTONOMOUS → MANAGER | ✅ |
+| AUTONOMOUS → MAINTAINER | ✅ |
+| AUTONOMOUS → AUTONOMOUS | ✅ |
+
+The API enforcement layer (`validateMessageRoute` called from
+AMP routing) already gates all inbound messages against this graph
+per CLAUDE.md's three-layer enforcement doc.
+
+### 12.2 SCEN-018 v2 AMP verification — new Phase 2.5 and assertions
+
+Add a dedicated phase between "R19.3 uniqueness" and "Prime MANAGER"
+to verify every edge in the clique works end-to-end:
+
+```
+Phase 2.5: Governance comm-graph smoke checks (9 sends)
+
+Using the user's authenticated terminal, drive each agent's terminal
+to send ONE test AMP message per edge — 9 messages total — before the
+real work starts. For each message, verify it lands in the recipient's
+inbox (not rejected with 403).
+
+  - S0xx: scen018-manager → scen018-manager (self)
+  - S0xx: scen018-manager → scen018-maint-alpha
+  - S0xx: scen018-manager → scen018-contrib
+  - S0xx: scen018-maint-alpha → scen018-manager
+  - S0xx: scen018-maint-alpha → scen018-maint-beta
+  - S0xx: scen018-maint-alpha → scen018-contrib
+  - S0xx: scen018-contrib → scen018-manager
+  - S0xx: scen018-contrib → scen018-maint-alpha
+  - S0xx: scen018-contrib → scen018-contrib (self — if allowed)
+
+Each send uses amp-send.sh with a unique subject containing the edge
+name (e.g. "governance-smoke: manager->maintainer-alpha") so it's
+trivially verifiable in the recipient's inbox via amp-inbox.sh.
+
+After all 9, read each agent's inbox and verify the expected messages
+arrived. A missing message or a 403 rejection is a FAIL (the comm
+graph code is broken or the AMP routing is mis-wired).
+
+Cleanup: each recipient marks the smoke-check messages as read and
+deletes them before Phase 4 starts (so the real work's AMP traffic
+is easy to distinguish in the report).
+```
+
+### 12.3 Assertions during the real work phases
+
+Beyond Phase 2.5, the real-work phases (4-10) also implicitly
+verify the comm graph by having both MAINTAINERs send AMP status
+updates to MANAGER and AMP coordination messages to the contributor.
+These are already in the phase list from §11.7; just noting that
+each of those AMP sends is also a governance-graph assertion and
+should be recorded as such in the report.
+
+Specifically:
+
+  - Phase 6 detection → MAINTAINER sends "detected issue" to MANAGER
+    = MAINTAINER→MANAGER edge
+  - Phase 6 welcome → MAINTAINER beta sends "proceed with PR" to
+    contributor = MAINTAINER→AUTONOMOUS edge
+  - Phase 7 contributor work → contributor sends "PR ready for review"
+    to MAINTAINER beta = AUTONOMOUS→MAINTAINER edge
+  - Phase 7-9 MANAGER steering → MANAGER sends steering messages to
+    either agent = MANAGER→MAINTAINER or MANAGER→AUTONOMOUS edge
+  - Phase 11 aggregated report → MANAGER → user (out-of-graph, always
+    allowed)
+
+### 12.4 FAIL modes added
+
+  - Any of the 9 Phase 2.5 sends returns 403 from the API
+  - Any MAINTAINER → AUTONOMOUS message during the real work is
+    rejected by the server
+  - Any AUTONOMOUS → MAINTAINER message during the real work is
+    rejected by the server
+
+---
+
+**END OF TRDD — awaiting user answers on (a) the A/B branch-ruleset
+decision from §11.9 + the self-approve constraint, and (b) the 4 still-
+open decisions in §11.9 (branch ruleset details, seeded flaw, overnight
+batch inclusion, timeline). Comm-graph work (§12) is purely additive
+and needs no user decision.**

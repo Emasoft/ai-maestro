@@ -52,14 +52,19 @@ export default function MarketplacesTab({ workingDirectory, installedPluginNames
 
   useEffect(() => { fetchMarketplaces() }, [fetchMarketplaces])
 
-  const handleInstall = async (pluginName: string) => {
+  // WT-021#1: the caller MUST pass the marketplace name of the plugin being
+  // installed, not just the plugin name. Without it the install API falls
+  // back to `ai-maestro-local-roles-marketplace` regardless of which
+  // marketplace the UI displayed, which silently installs the wrong plugin
+  // when a non-default marketplace has a plugin with the same name.
+  const handleInstall = async (pluginName: string, marketplaceName: string) => {
     if (!workingDirectory || installing) return
     setInstalling(pluginName)
     try {
       const res = await fetch('/api/agents/role-plugins/install', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pluginName, agentDir: workingDirectory, scope: 'local' }),
+        body: JSON.stringify({ pluginName, marketplaceName, agentDir: workingDirectory, scope: 'local' }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Install failed' }))
@@ -175,7 +180,7 @@ export default function MarketplacesTab({ workingDirectory, installedPluginNames
                                 </span>
                               ) : (
                                 <button
-                                  onClick={() => handleInstall(p.name)}
+                                  onClick={() => handleInstall(p.name, mkt.name)}
                                   disabled={!workingDirectory || installing === p.name}
                                   className="flex items-center gap-1 text-[9px] text-blue-400 hover:text-blue-300 px-1.5 py-0.5 rounded disabled:opacity-50"
                                   title="Install to this agent (--scope local)"

@@ -102,6 +102,14 @@ is_allowed_path() {
     local candidate="$1"
     [ -z "$candidate" ] && return 1
 
+    # Safe POSIX device sinks — always allowed. These are null/debug sinks
+    # and writing to them is universally understood as "discard" or "route
+    # to the controlling terminal". Not real filesystem writes.
+    case "$candidate" in
+        /dev/null|/dev/stdout|/dev/stderr|/dev/tty) return 0 ;;
+        /dev/fd/*) return 0 ;;
+    esac
+
     local abs
     abs=$(normalize_path "$candidate")
 
@@ -119,6 +127,44 @@ is_allowed_path() {
     esac
 
     return 1
+}
+
+# Strip single-quoted heredoc bodies from a bash command before scanning.
+#
+# A heredoc body introduced with <<'DELIM', <<"DELIM", or <<DELIM is a
+# literal string passed on stdin to the command — it cannot contain
+# actual shell constructs, so scanning it for redirections or write-verb
+# paths causes false positives on:
+#   * JS regex literals like /foo|bar/i
+#   * JS fat-arrow functions like `.filter(el => ...)` (the `=>` gets
+#     mis-parsed as a `>` redirection to a path starting with `/`)
+#   * Absolute paths inside JS/Python string literals
+#
+# We only scan the SHELL portion of the command (everything outside
+# heredoc bodies). Legitimate redirections and write verbs live on the
+# shell line, not inside the heredoc body.
+strip_heredoc_bodies() {
+    local input="$1"
+    local output=""
+    local in_heredoc=false
+    local delim=""
+    local here_re='<<-?['"'"'"]?([A-Za-z_][A-Za-z0-9_]*)['"'"'"]?'
+    local line
+    while IFS= read -r line; do
+        if $in_heredoc; then
+            if [ "$line" = "$delim" ]; then
+                in_heredoc=false
+                output+="$line"$'\n'
+            fi
+            continue
+        fi
+        if [[ "$line" =~ $here_re ]]; then
+            delim="${BASH_REMATCH[1]}"
+            in_heredoc=true
+        fi
+        output+="$line"$'\n'
+    done <<< "$input"
+    printf '%s' "$output"
 }
 
 # Emit a block message and exit with code 2 (Claude sees the reason)
@@ -161,52 +207,107 @@ case "$TOOL_NAME" in
     Bash)
         CMD=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 
+        # Strip heredoc bodies before scanning. Heredoc bodies are literal
+        # strings (esp. for dev-browser <<'EOF' scripts) and may contain
+        # JS regex literals, fat-arrows, string-literal paths, etc. that
+        # false-positive on shell-syntax scans. Only scan the actual shell
+        # portion of the command.
+        CMD_SCAN=$(strip_heredoc_bodies "$CMD")
+
         # 1. `cd /absolute/path` — catches the primary escape vector
         #    (subagent 2 used this to reach the parent repo).
         #    Matches: `cd /foo`, `cd /foo && ...`, `cd /foo; ...`, `; cd /foo`
+        #    Only triggers on ABSOLUTE paths (starting with /) — relative
+        #    paths like `cd tests/scenarios` are implicitly under cwd and
+        #    allowed. The two-step extraction isolates the `cd` target
+        #    token first, then checks it only if it starts with /.
         while IFS= read -r cd_path; do
             [ -z "$cd_path" ] && continue
             is_allowed_path "$cd_path" || block "Bash 'cd' to forbidden dir: $cd_path"
         done < <(
-            echo "$CMD" \
+            echo "$CMD_SCAN" \
                 | grep -oE '(^|[[:space:]]|&&|\|\||;|\()[[:space:]]*cd[[:space:]]+[^[:space:]&|;()"'"'"']+' \
-                | grep -oE '/[^[:space:]&|;()"'"'"']+' \
+                | sed -E 's/^.*cd[[:space:]]+//' \
+                | grep -E '^/' \
                 || true
         )
 
         # 2. `git -C /path ...` — catches git commands that explicitly
-        #    target a repo outside the worktree.
+        #    target a repo outside the worktree. Same rule as (1): only
+        #    absolute paths are checked.
         while IFS= read -r git_path; do
             [ -z "$git_path" ] && continue
             is_allowed_path "$git_path" || block "Bash 'git -C' references forbidden dir: $git_path"
         done < <(
-            echo "$CMD" \
+            echo "$CMD_SCAN" \
                 | grep -oE 'git[[:space:]]+-C[[:space:]]+[^[:space:]&|;()"'"'"']+' \
-                | grep -oE '/[^[:space:]&|;()"'"'"']+' \
+                | sed -E 's/^git[[:space:]]+-C[[:space:]]+//' \
+                | grep -E '^/' \
                 || true
         )
 
-        # 3. File redirection `> /abs/path` or `>> /abs/path` to
-        #    absolute paths outside the allowlist.
+        # 3. File redirection `> /abs/path` or `>> /abs/path` to absolute
+        #    paths outside the allowlist. /dev/null and friends are
+        #    whitelisted inside is_allowed_path.
         while IFS= read -r redir_path; do
             [ -z "$redir_path" ] && continue
             is_allowed_path "$redir_path" || block "Bash redirection target: $redir_path"
         done < <(
-            echo "$CMD" \
+            echo "$CMD_SCAN" \
                 | grep -oE '[12]?>>?[[:space:]]*/[^[:space:]&|;()"'"'"']+' \
-                | grep -oE '/[^[:space:]&|;()"'"'"']+' \
+                | sed -E 's/^[12]?>>?[[:space:]]*//' \
+                | grep -E '^/' \
                 || true
         )
 
-        # 4. Write verbs (rm, mv, cp, mkdir, touch, sed -i, tee, chmod, chown, dd, install, ln).
-        #    If any such verb is present in the command, scan ALL absolute
-        #    paths mentioned anywhere in the command and reject any that
-        #    fall outside the allowlist. This is a deliberately liberal
-        #    check: false positives (a read-only `cat /some/path` in the
-        #    same pipeline) are tolerated because the subagent can easily
-        #    split the command. False negatives (missed escape) are not.
-        if echo "$CMD" | grep -qE '(^|[[:space:]]|&&|\|\||;|\()[[:space:]]*(rm|mv|cp|mkdir|touch|tee|chmod|chown|dd|install|ln)([[:space:]]|$)' \
-           || echo "$CMD" | grep -qE '(^|[[:space:]])sed[[:space:]]+-[a-zA-Z.]*i'; then
+        # 4a. cp/mv/ln/install — destination-only check.
+        #     These verbs have well-defined semantics: the LAST positional
+        #     argument is the destination (write target), all earlier
+        #     positional args are sources (read-only, allowed anywhere).
+        #     Scanning all paths would false-positive on commands like
+        #     `cp ~/.aimaestro/registry.json tests/scenarios/state-backups/x`
+        #     which reads from outside but writes inside the project.
+        if echo "$CMD_SCAN" | grep -qE '(^|[[:space:]]|&&|\|\||;|\()[[:space:]]*(cp|mv|ln|install)([[:space:]]|$)'; then
+            # Extract the cp/mv/ln/install invocation up to the next pipeline
+            # separator. Tokenize and find the last non-option argument.
+            cpmv_segment=$(echo "$CMD_SCAN" \
+                | grep -oE '(cp|mv|ln|install)[[:space:]]+[^&|;]+' \
+                | head -1 \
+                || true)
+            if [ -n "$cpmv_segment" ]; then
+                last_pos=""
+                # shellcheck disable=SC2086  # intentional word-splitting for tokens
+                set -- $cpmv_segment
+                while [ $# -gt 0 ]; do
+                    tok="$1"
+                    shift
+                    case "$tok" in
+                        cp|mv|ln|install) continue ;;
+                        -*) continue ;;
+                        *) last_pos="$tok" ;;
+                    esac
+                done
+                # Only validate if the destination is absolute or HOME-relative.
+                # Relative paths are relative to the agent's cwd (project root),
+                # so they are implicitly inside the allowed roots.
+                case "$last_pos" in
+                    /*|'~/'*|'~')
+                        is_allowed_path "$last_pos" || block "Bash cp/mv/ln/install destination outside allowed roots: $last_pos"
+                        ;;
+                esac
+            fi
+        fi
+
+        # 4b. rm/mkdir/touch/tee/chmod/chown/dd/sed-i — all-path scan.
+        #     These verbs either delete, create, or in-place modify files,
+        #     and the argument positions are not as predictable as cp-like
+        #     verbs. Liberal check: tokenize the command, filter tokens
+        #     that look like ABSOLUTE paths, and reject any outside the
+        #     allowlist. Tokenizing (vs. a substring regex) prevents false
+        #     positives on relative paths like `tests/scenarios/x` which
+        #     contain `/scenarios/x` as a substring.
+        if echo "$CMD_SCAN" | grep -qE '(^|[[:space:]]|&&|\|\||;|\()[[:space:]]*(rm|mkdir|touch|tee|chmod|chown|dd)([[:space:]]|$)' \
+           || echo "$CMD_SCAN" | grep -qE '(^|[[:space:]])sed[[:space:]]+-[a-zA-Z.]*i'; then
             while IFS= read -r abs_path; do
                 [ -z "$abs_path" ] && continue
                 # Skip obvious option-argument false positives like `--prefix=/usr`
@@ -215,8 +316,9 @@ case "$TOOL_NAME" in
                 esac
                 is_allowed_path "$abs_path" || block "Bash write op references forbidden path: $abs_path"
             done < <(
-                echo "$CMD" \
-                    | grep -oE '/[a-zA-Z0-9_./@+-]+' \
+                echo "$CMD_SCAN" \
+                    | tr -s '[:space:]' '\n' \
+                    | grep -E '^/' \
                     | sort -u \
                     || true
             )

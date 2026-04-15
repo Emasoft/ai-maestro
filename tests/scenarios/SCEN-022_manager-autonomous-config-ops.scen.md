@@ -78,17 +78,22 @@ commit: TBD
 ### S004: Send instruction to MANAGER via prompt builder
 - **Action:** In MANAGER's prompt builder, send:
   ```
-  Create a new AUTONOMOUS agent named "scen022-autobot" with role-plugin
-  "ai-maestro-programmer-agent", program "claude", working directory
-  "~/agents/scen022-autobot". Use the aimaestro-agent.sh CLI (NOT the
-  web UI). Report success to me via AMP when done.
+  Create a new AUTONOMOUS agent named "scen022-autobot" (title AUTONOMOUS
+  auto-resolves to the mandatory role-plugin `ai-maestro-autonomous-agent`
+  per R9.13), program "claude", working directory "~/agents/scen022-autobot".
+  Use the aimaestro-agent.sh CLI (NOT the web UI). Report success to me
+  via AMP when done.
   ```
 - **Goal:** MANAGER executes `aimaestro-agent.sh create --name
   scen022-autobot --title AUTONOMOUS --program claude ...`.
-- **Creates:** test agent in registry (by MANAGER, not user)
+- **Creates:** test agent in registry with `ai-maestro-autonomous-agent`
+  role-plugin installed at --scope local (by MANAGER, not user)
 - **Verify:** Watch MANAGER's terminal for the command invocation. After
   ~20s, check `GET /api/agents` and confirm scen022-autobot is present
-  with title `autonomous`.
+  with title `autonomous` AND its `role-plugin` field reports
+  `ai-maestro-autonomous-agent`. Also confirm via
+  `GET /api/agents/<id>/local-config` that the plugin is listed in
+  `enabledPlugins` at `--scope local`.
 
 ### S005: Verify the test agent appears in the sidebar
 - **Action:** Refresh sidebar or wait for useAgents polling.

@@ -70,7 +70,7 @@ matches real open-source maintenance workflows.
 |---|---|---|---|---|
 | `scen018-manager` | MANAGER | `ai-maestro-assistant-manager-agent` | — | Monitors + steers MAINTAINER and CONTRIBUTOR; final approval authority; aggregates status for the user |
 | `scen018-maint-alpha` | MAINTAINER | `ai-maestro-maintainer-agent` | `Emasoft/scen018-test-repo-alpha` | Reviews PRs against `alpha` |
-| `scen018-contrib-alpha` | AUTONOMOUS | `ai-maestro-programmer-agent` | — | Opens issues + creates fix PRs against `alpha`. Does NOT belong to any team. |
+| `scen018-contrib-alpha` | AUTONOMOUS | `ai-maestro-autonomous-agent` (mandatory per R9.13) | — | Opens issues + creates fix PRs against `alpha`. Does NOT belong to any team. |
 | (optional — defer) `scen018-maint-beta` | MAINTAINER | `ai-maestro-maintainer-agent` | `Emasoft/scen018-test-repo-beta` | Only kept for the R19.3 uniqueness test — does not run through the full lifecycle |
 
 MAINTAINER + CONTRIBUTOR are both AUTONOMOUS-class (no team, no COS).
@@ -229,7 +229,7 @@ Phase 0: SAFE-SETUP
 
 Phase 1: Create AUTONOMOUS contributor agent
   - S00x: wizard → scen018-contrib-alpha, client=claude,
-          title=AUTONOMOUS, role-plugin=ai-maestro-programmer-agent,
+          title=AUTONOMOUS, role-plugin=ai-maestro-autonomous-agent,
           no team, no githubRepo
   - Verify agent is online and has a terminal
 
@@ -997,7 +997,7 @@ Specifically:
 | Class | Titles | Plugins | GitHub workflow |
 |---|---|---|---|
 | **Team role-plugins** | MANAGER, CHIEF-OF-STAFF, ORCHESTRATOR, ARCHITECT, INTEGRATOR, MEMBER | `ai-maestro-assistant-manager-agent`, `ai-maestro-chief-of-staff`, `ai-maestro-orchestrator-agent`, `ai-maestro-architect-agent`, `ai-maestro-integrator-agent`, `ai-maestro-programmer-agent` | MEMBERs fork the repo. Only ORCHESTRATOR (and exceptionally COS) manages the original repo. Commits go through orchestrator-gated workflow. |
-| **No-team role-plugins** | MAINTAINER, AUTONOMOUS | `ai-maestro-maintainer-agent`, (AUTONOMOUS has no dedicated plugin — uses base `ai-maestro-plugin` only) | MAINTAINER: bound to a repo, directly manages it (with the gatekeeper role in v2.0.0). AUTONOMOUS: driven by direct user prompts, pushes branches to any repo the host `gh` user has write access to, opens same-repo PRs. No fork required. No ORCHESTRATOR in the loop. |
+| **No-team role-plugins** | MAINTAINER, AUTONOMOUS | `ai-maestro-maintainer-agent`, `ai-maestro-autonomous-agent` (v1.0.1, **R9.13 mandatory**) | MAINTAINER: bound to a repo, directly manages it (with the gatekeeper role in v2.0.0). AUTONOMOUS: driven by direct user prompts, pushes branches to any repo the host `gh` user has write access to, opens same-repo PRs. No fork required. No ORCHESTRATOR in the loop. Persona enforces workspace isolation and forbids `gh pr merge` without an explicit user instruction. |
 
 ### 13.2 Why `scen018-contrib` MUST NOT use `ai-maestro-programmer-agent`
 
@@ -1015,12 +1015,19 @@ Specifically:
 ### 13.3 What `scen018-contrib` DOES use
 
 - Title: AUTONOMOUS
-- Role-plugin: **none**
+- Role-plugin: **`ai-maestro-autonomous-agent` v1.0.1** (mandatory per R9.13
+  — see the Phase 8 plan added on 2026-04-15; the prior "none" plan is
+  invalidated).
 - Base plugin: `ai-maestro-plugin` (R17 core, required for every agent)
-- Behavior: driven entirely by user prompts during the scenario — the
-  scenario's Phase 4 and Phase 7 prompts tell the contributor exactly
-  what to do (open issue, clone repo, create branch, fix file, push,
-  open PR, respond to review, iterate).
+- Behavior: the role-plugin persona encodes the baseline governance
+  rules (writable-scope limited to the contributor's own workdir;
+  forbidden to mutate other agents' state or `~/.aimaestro/*`; never
+  `gh pr merge` without an explicit user instruction; respond to
+  MAINTAINER review comments; never self-merge). The scenario's Phase
+  4 / Phase 7 prompts layer the scenario-specific tasks on top (open
+  issue, clone repo, create branch, fix file, push, open PR, respond
+  to review, iterate) — but the "never self-merge" constraint is now
+  baked into the plugin itself, not just the prompt.
 - GitHub workflow: uses the host's `gh` auth (same identity as every
   other agent — Emasoft), pushes a branch directly to the ORIGINAL
   target repo (no fork — same-repo PR), opens a PR back to main.
@@ -1045,14 +1052,17 @@ user authenticated". Confirmed:
 ### 13.5 Contributor tool-allowlist (confirms Option B)
 
 Since the contributor shares the Emasoft identity, the ONLY thing
-preventing it from self-merging its own PR is its tool allowlist.
-The contributor runs inside a bare Claude Code session with
-`ai-maestro-plugin` as the only plugin (no role-plugin). That plugin
-does NOT expose `gh pr merge` as a permitted command — the user's
-prompts in Phase 4 and Phase 7 explicitly instruct the contributor to
-"open the PR and wait for MAINTAINER review; never merge". Any
-attempt by the contributor to invoke `gh pr merge` without explicit
-user permission would be a Rule 4 FIX-AS-YOU-GO bug in the plugin.
+preventing it from self-merging its own PR is the combination of (a)
+its tool allowlist and (b) the `ai-maestro-autonomous-agent` persona's
+explicit governance text. The persona (see
+`/tmp/ai-maestro-autonomous-agent/agents/ai-maestro-autonomous-agent-main-agent.md`)
+forbids `gh pr merge` unless the user gives an explicit PR number in
+the current turn, forbids cross-agent mutation, and forbids destructive
+git operations on shared branches. These rules now apply to every
+AUTONOMOUS agent host-wide, not just scen018-contrib. Any attempt to
+invoke `gh pr merge` against the persona is a Rule 4 FIX-AS-YOU-GO bug
+in the plugin. The scenario's Phase 4/7 prompts reinforce the rules at
+the task layer but no longer carry the sole responsibility for them.
 
 The scenario's assertions (§11.7 Phase 9) verify the merge commit's
 git metadata matches the MAINTAINER agent's terminal session, not the
@@ -1197,11 +1207,36 @@ Deferred; not blocking v2.0.0.
 **Plus new items resolved by §12-14:**
 
 - Communication graph: already correct (§12), no code change needed
-- Contributor role-plugin: **none** (base plugin only), NOT `ai-maestro-programmer-agent` (§13)
+- Contributor role-plugin: **`ai-maestro-autonomous-agent` v1.0.1** (mandatory under R9.13; previously proposed as "none" in this document but the Phase 8 plan resolved on 2026-04-15 made role-plugin mandatory for every agent, including AUTONOMOUS) — NOT `ai-maestro-programmer-agent` (§13)
 - GitHub approval enforcement: via plugin-persona + MANAGER AMP + scenario assertions; NOT via GitHub rulesets (§14)
 
 ---
 
-**END OF TRDD — all 7 decisions resolved. Ready to start Step 2
-(plugin v2.0.0 rewrite in /tmp/ai-maestro-maintainer-agent) on user
-confirmation.**
+## 16. R9.13 amendment (2026-04-15)
+
+This TRDD was authored before `ai-maestro-autonomous-agent` v1.0.1 was
+published and before R9.13 / R11.12 / Invariant 8 made role-plugins
+mandatory for every agent. Earlier sections (§3, §11.1, §13.3, §13.5)
+originally stated the scen018 contributor would use "base plugin only"
+or "none" as its role-plugin. That plan is superseded: the contributor
+now uses the new `ai-maestro-autonomous-agent` plugin.
+
+The scenario steps themselves do not change — the contributor still
+opens the issue, clones the repo, branches, fixes files, pushes, opens
+the PR, and iterates on review. The only difference is WHICH plugin
+supplies the persona-level restrictions that prevent self-merge,
+cross-agent mutation, or `rm -rf` outside the workdir.
+
+**Status:** TRDD updated. SCEN-018 v2 implementation is unblocked; the
+only changes required to the scenario file are (a) flipping the
+`scen018-contrib-alpha` Step 2 role-plugin value from "none" to
+`ai-maestro-autonomous-agent` and (b) adjusting the post-test
+assertions that verify the persona text is present. Everything else in
+this TRDD (branch ruleset, comm graph, maintainer plugin v2.0.0
+rewrite, etc.) is still correct.
+
+---
+
+**END OF TRDD — all 7 decisions resolved; §16 amendment added
+2026-04-15 post-R9.13. Ready to start Step 2 (plugin v2.0.0 rewrite in
+/tmp/ai-maestro-maintainer-agent) on user confirmation.**

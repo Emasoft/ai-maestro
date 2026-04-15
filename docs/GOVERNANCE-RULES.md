@@ -1,8 +1,9 @@
 ---
-version: "3.6.0"
-date: 2026-04-11
+version: "3.7.0"
+date: 2026-04-15
 branch: feature/team-governance
 changelog:
+  - "3.7.0: Added R9.13 (role-plugin mandatory for every agent, including AUTONOMOUS), R11.12 (role-plugin mandatory at every boundary), Invariant 8 rewritten. Added new §0 'Canonical source + copies' index and new §TERMINOLOGY (TITLE / ROLE / PERSONA three-layer model). AUTONOMOUS now resolves to the mandatory ai-maestro-autonomous-agent role-plugin."
   - "3.6.0: R20 revised — custom-plugins/ and role-plugins/ are CONTAINERS, not marketplaces. Each container holds one marketplace-<client>/ subfolder per client format (marketplace-claude/, marketplace-codex/, marketplace-openrouter/, ...). Each client-marketplace has its own schema per that client's spec. The .abstract/ IR hub lives at the container level and feeds all per-client marketplaces."
   - "3.5.0: Added R20 (Marketplace Governance) — three default marketplaces, source path format (./<plugin>), .abstract IR storage, core-plugin auto-update, converted-plugin re-emission on source update"
   - "3.4.0: R17 expanded with protection (R17.B), auto-update (R17.C), trust auto-accept (R17.D); R9 clarified AUTONOMOUS vs team agent behavior"
@@ -17,6 +18,202 @@ changelog:
 # Team Governance — Design Rules & Requirements
 
 **Source:** Extracted from user instructions, audit reports, and logical inference
+
+---
+
+## §0. Canonical source + copies (READ THIS BEFORE EDITING)
+
+**`docs/GOVERNANCE-RULES.md` is the canonical source of truth for every governance rule in the AI Maestro ecosystem.** Every time a rule is added, renamed, renumbered, rewritten, or deleted, **every file listed below** must be updated in the same commit. Leaving any entry stale produces drift — agents that still obey an old rule because their plugin persona was never refreshed, validation scripts that block legitimate operations because they still check an old gate, etc.
+
+The list is maintained here (not in a separate `GOVERNANCE-COPIES.md`) so it is impossible to read the rules without seeing the index. Update this list whenever a new copy is added.
+
+### 0.1 — Canonical source
+
+| Path | Role | Update strategy |
+|---|---|---|
+| `docs/GOVERNANCE-RULES.md` | **CANONICAL** — single source of truth | Edit first. Bump the `version:` field in YAML frontmatter. Append a changelog entry. |
+
+### 0.2 — Documentation mirrors (in this repo)
+
+These files paraphrase or link to the rules. Keep them in sync with the canonical file. Never let them contradict §1-§20 below.
+
+| Path | What it contains | Update strategy |
+|---|---|---|
+| `README.md` → "Understanding AI Maestro Terms" | TITLE / ROLE / PERSONA terminology + 8-title list | Edit whenever §TERMINOLOGY or §R3 changes |
+| `CLAUDE.md` → "Agent Terminology (TITLE / ROLE / PERSONA) — READ FIRST" | Same as README but for assistant sessions | Edit whenever §TERMINOLOGY changes |
+| `CLAUDE.md` → various rule mentions (R9, R17, R18, R19, R20) | Scattered cross-references | Search for rule IDs and update text |
+| `design/tasks/TRDD-*.md` | Task design docs that quote rules | Only edit the specific TRDD; rule IDs must match |
+| `tests/scenarios/SCENARIOS_TESTS_RULES.md` | Scenario test rules (separate from governance, but adjacent) | Edit only if a new scenario rule is added — do NOT copy governance rule text here |
+
+### 0.3 — Role-plugin main-agent personas (shipped as plugins in the marketplace)
+
+Every role-plugin's `agents/<name>-main-agent.md` embeds the subset of governance rules the agent in question must obey. **When a rule changes, every relevant plugin must be republished** (bumped version, new commit, marketplace manifest updated) so agents running the old version get the update via `claude plugin update`. Never edit the cache at `~/.claude/plugins/cache/` — always edit the plugin's own GitHub repo and republish via `scripts/publish.py`.
+
+| Role-plugin | Repo | Rules the persona embeds | Update trigger |
+|---|---|---|---|
+| `ai-maestro-assistant-manager-agent` | `Emasoft/ai-maestro-assistant-manager-agent` | R3 (MANAGER singleton), R9, R10, R15, R16, R20.2, comm graph | Any change to MANAGER privileges |
+| `ai-maestro-chief-of-staff` | `Emasoft/ai-maestro-chief-of-staff` | R3, R5 (COS per team), R9, R10, R12, R13, R15, comm graph | Any change to COS privileges or team-lifecycle rules |
+| `ai-maestro-architect-agent` | `Emasoft/ai-maestro-architect-agent` | R3, R6, R13 role-boundaries, comm graph | Any change to ARCHITECT boundaries |
+| `ai-maestro-orchestrator-agent` | `Emasoft/ai-maestro-orchestrator-agent` | R3, R6, R13, R15 written orders, comm graph | Any change to ORCHESTRATOR routing or kanban rules |
+| `ai-maestro-integrator-agent` | `Emasoft/ai-maestro-integrator-agent` | R3, R6, R13, comm graph | Any change to INTEGRATOR boundaries |
+| `ai-maestro-programmer-agent` | `Emasoft/ai-maestro-programmer-agent` | R3, R6, R13, R15, comm graph (MEMBER subset) | Any change to MEMBER boundaries |
+| `ai-maestro-maintainer-agent` | `Emasoft/ai-maestro-maintainer-agent` | R3, R9, R19 (MAINTAINER), R20.2, comm graph | Any change to MAINTAINER rules |
+| `ai-maestro-autonomous-agent` | `Emasoft/ai-maestro-autonomous-agent` | R3, R9.13, R11.3, R11.12, comm graph (AUTONOMOUS subset), workspace isolation | Any change to AUTONOMOUS boundaries |
+
+### 0.4 — Skills in `ai-maestro-plugin` (the core plugin — shipped to every agent)
+
+The core plugin embeds cross-cutting rules that every agent must know — not just the ones for its own title.
+
+| Skill path (inside `Emasoft/ai-maestro-plugin`) | Rules it teaches | Update trigger |
+|---|---|---|
+| `skills/team-governance/SKILL.md` | R1-R15 summary, title permissions matrix, COS lifecycle | Any change to R1-R15 |
+| `skills/agent-messaging/SKILL.md` | R6 (communication graph), AMP routing rules | Any change to R6 or the comm graph |
+| `skills/agent-identity/SKILL.md` | R14 (identity), R16 (password secrecy) | Any change to AID / password rules |
+| `skills/team-kanban/SKILL.md` | R15 (written orders), kanban workflow | Any change to R15 or kanban rules |
+
+### 0.5 — Enforcement code (TypeScript services)
+
+These files enforce the rules at runtime. When a rule changes, **update the gate logic here in the same commit** — not in a follow-up PR, otherwise the server and the docs disagree for however long the follow-up takes.
+
+| Path | What it enforces | Must be updated when |
+|---|---|---|
+| `services/element-management-service.ts` | `ChangeTitle` (23 gates), `ChangeTeam`, `ChangeClient`, `ChangePlugin`, `CreateAgent` | Any rule changes the conditions for title assignment, plugin install, or team membership |
+| `services/governance-service.ts` | Team governance, MANAGER/COS checks, password validation, governance-request lifecycle | R3, R4, R5, R9, R10, R16 changes |
+| `lib/communication-graph.ts` | R6 comm graph (directed adjacency matrix) | Any change to R6 |
+| `lib/ecosystem-constants.ts` | `TITLE_PLUGIN_MAP`, `ROLE_PLUGIN_*`, `PREDEFINED_ROLE_PLUGIN_NAMES`, `PLUGIN_COMPATIBLE_TITLES` | R11 / R20.4 default changes, new predefined role-plugin |
+| `lib/team-registry.ts` | `blockAllTeams`, `unblockAllTeams`, `isAgentInAnyTeam` | R9 cascade changes |
+| `lib/agent-auth.ts` | Auth bridge, MANAGER/COS gate checks | R9, R10 auth changes |
+| `lib/sudo-fetch.ts` + `security-registry.json` | Strict-route list, sudo-mode gate | Any new strict operation |
+| `server.mjs` (startup tasks) | MANAGER detection, team blocking on boot | R9 cascade |
+
+### 0.6 — API routes that re-implement rule checks
+
+| Path | What it checks | Must be updated when |
+|---|---|---|
+| `app/api/agents/route.ts` (POST/GET) | CreateAgent delegation; auth + title validation | R3, R9, R11 |
+| `app/api/agents/[id]/route.ts` (PATCH/DELETE) | Title change dispatcher, auth gate | R3, R9, R10, R11 |
+| `app/api/agents/[id]/wake/route.ts` | R10 wake permission matrix | R10 |
+| `app/api/agents/[id]/hibernate/route.ts` | R10 hibernate permission matrix | R10 |
+| `app/api/agents/[id]/title/route.ts` | Title change pipeline + governance password | R3, R9, R11 |
+| `app/api/teams/route.ts` + `app/api/teams/[id]/route.ts` | R1, R2, R3 team CRUD + block/unblock | R1, R2, R3, R9 |
+| `app/api/governance/password/route.ts` | R16 password handling | R16 |
+| `app/api/governance/requests/*` | R4 governance request lifecycle | R4 |
+
+### 0.7 — UI components that display or enforce rules
+
+| Path | What it shows/enforces | Update trigger |
+|---|---|---|
+| `components/agent-profile/RoleTab.tsx` | N:1 compatibility UI (locked label vs dropdown), R11 title-plugin binding | Any R11 change |
+| `components/AgentCreationWizard.tsx` | Title picker, role-plugin picker, R9/R11/R19 requirements | Any R9, R11, R19 change |
+| `components/TitleAssignmentDialog.tsx` | Governance password gate, title change flow | R3, R16 changes |
+| `components/sidebar/TeamListView.tsx` | Team delete dialog, R1/R9 blocking behavior | R1, R9 changes |
+
+### 0.8 — Scenario test specs (`tests/scenarios/SCEN-*.scen.md`)
+
+When a rule changes, any scenario that exercises the old behavior must be rewritten. Scenarios that test governance:
+
+| Scenario | Rules tested | Update trigger |
+|---|---|---|
+| `SCEN-001_title-change-lifecycle.scen.md` | R3, R9, R11 | R3, R9, R11 |
+| `SCEN-002_team-create-delete.scen.md` | R1, R2, R9 | R1, R2, R9 |
+| `SCEN-005_manager-gate-team-lifecycle.scen.md` | R3, R9 MANAGER gate cascade | R3, R9 |
+| `SCEN-010_cos-lifecycle.scen.md` | R5 COS immutability | R5 |
+| `SCEN-011_agent-session-control.scen.md` | R10 lifecycle governance | R10 |
+| `SCEN-018_maintainer-lifecycle.scen.md` | R19 MAINTAINER | R19 |
+| `SCEN-019_marketplace-install-uninstall.scen.md` | R20 marketplace | R20 |
+| `SCEN-020_core-plugins-unchangeable.scen.md` | R17 core plugin | R17 |
+| `SCEN-021_user-vs-local-scope.scen.md` | R20.20 scope isolation | R20.20 |
+| `SCEN-022_manager-autonomous-config-ops.scen.md` | R9, R9.13, R11 (MANAGER creates AUTONOMOUS) | R9, R11 |
+
+### 0.9 — Validation scripts and linters
+
+| Path | What it validates | Update trigger |
+|---|---|---|
+| `scripts/publish.py` (in each role-plugin repo) | Quad-match identity, `.agent.toml` schema, CPV strict | Role-plugin TOML schema changes |
+| `scripts/validate-governance.sh` (if present) | Runtime governance check | Any rule change affecting runtime enforcement |
+| `tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh` | UI helper functions used by scenarios | UI governance flow changes |
+
+### 0.10 — Update protocol
+
+When you change a rule:
+
+1. **Edit `docs/GOVERNANCE-RULES.md` first.** Bump the `version:` field. Append a changelog entry with the rule ID that changed.
+2. **Walk through §0.2 - §0.9 above.** For every entry that applies, read the referenced file and update the text/code/test so it matches the new rule.
+3. **Update this §0 index** if you added a new copy location.
+4. **Commit all affected files together** — not a separate PR per category. The canonical file and every mirror must be atomic.
+5. **Republish affected role-plugins** via `scripts/publish.py` in each plugin's own GitHub repo. The publish pipeline bumps the plugin version, updates the marketplace manifest, and triggers `claude plugin update` on running agents.
+6. **Run the affected SCEN-NNN scenarios** to verify the rule change is coherent end-to-end before claiming it works.
+
+If you catch yourself thinking "I'll fix the other copies later", STOP — that is how drift starts. Fix them now, or revert the canonical change and come back when you have the time to do it properly.
+
+---
+
+## §TERMINOLOGY. Three-layer agent model (TITLE / ROLE / PERSONA)
+
+Every AI Maestro agent has **three orthogonal layers**. Keeping them distinct is essential — they are mutated by different pipelines, displayed in different UI tabs, and governed by different rules.
+
+| Layer | Answers | Example |
+|---|---|---|
+| **TITLE** | *What is it allowed to do?* — the governance class (permissions) | `MEMBER` |
+| **ROLE** | *What does it know how to do?* — the role-plugin main agent loaded from a marketplace | `ai-maestro-programmer-agent:programmer-main-agent@Emasoft/ai-maestro-plugins` |
+| **PERSONA** | *Which specific running instance?* — identity (name, AID, avatar, workdir) | `peter-bot, <aid>, ~/avatars/peter.jpg, ~/agents/peter-bot/` |
+
+### §TERMINOLOGY.1 — TITLE (governance class)
+
+The TITLE determines what an agent is authorized to do within the governance system. The eight valid titles are listed in R3. TITLE is the access-control role, not the behaviour. Changing a TITLE runs the `ChangeTitle` pipeline (23 gates) and requires the governance password or MANAGER/COS authorization per R3 and R16. In the code: `agent.governanceTitle` (lowercase kebab).
+
+### §TERMINOLOGY.2 — ROLE (role-plugin main agent)
+
+The ROLE is the **role-plugin main agent** the PERSONA is currently running. It is referenced in fully-qualified form:
+
+```
+<plugin-name>:<main-agent-name>@<marketplace>
+```
+
+The `@<marketplace>` suffix mirrors Claude Code's standard plugin syntax (`plugin@marketplace`); the `:<main-agent>` segment selects which main-agent `.md` file inside the plugin is loaded by `claude --agent <main-agent>`. A role-plugin is **any normal Claude Code plugin** that additionally contains:
+
+1. A `<name>.agent.toml` file at the plugin root with two mandatory extra fields: `compatible-titles` (array of governance titles the plugin is designed for) and `compatible-clients` (array of CLI clients like `claude-code`, `codex`).
+2. A main-agent `.md` file whose persona text carries the governance rules that agent must follow — inline, via `skills:` references, or via rule-file links. This persona is the actual security boundary: every agent on a host shares a single `gh` CLI identity, so only the persona text restrains destructive actions.
+
+Storage location, install pipeline, `TITLE_PLUGIN_MAP` membership, and the Haephestos authoring tool are **NOT** defining properties of a role-plugin. Any plugin matching the two conditions above is a valid role-plugin regardless of where it lives or how it was authored. AI Maestro ships two default role-plugin marketplaces (`Emasoft/ai-maestro-plugins` remote, `ai-maestro-local-roles-marketplace` local at `~/agents/role-plugins/marketplace/`), but role-plugin folders can live anywhere as long as a registered marketplace manifest's `source` field points at them.
+
+Changing a ROLE runs `ChangePlugin` with the `rolePluginSwap` flag, or is triggered automatically by `ChangeTitle` Gates 15/16 when the new TITLE requires a different plugin. In the code: `agent.rolePlugin` + `config.rolePlugin.name`.
+
+### §TERMINOLOGY.3 — PERSONA (running instance)
+
+The PERSONA is the concrete running agent. Four attributes together identify a specific Claude Code tmux session:
+
+1. **Name** — a unique kebab identifier (e.g. `peter-bot`, `sammy`). Case-insensitive on input; lowercase internally; capitalized for display.
+2. **AID** — the Agent Identity Ed25519 key pair used for AMP signing and cross-host authentication. Provisioned once per PERSONA; stored at `~/.agent-messaging/agents/<name>/keys/`.
+3. **Avatar** — image file displayed on the sidebar card.
+4. **Workdir** — project folder at `~/agents/<name>/` where Claude Code runs. All `--scope local` plugins live here, and this is the only location outside `/tmp` where the PERSONA may write.
+
+PERSONA is the only layer with 1:1 cardinality to a running tmux session. TITLE and ROLE are swappable on a live PERSONA without destroying identity, AID, avatar, or workdir.
+
+In the code: `agent.name` + `agent.label` + `agent.aid` + `agent.workingDirectory` + `agent.avatarPath` together form the PERSONA.
+
+### §TERMINOLOGY.4 — Relationships and invariants
+
+- **TITLE and ROLE are orthogonal but constrained by `compatible-titles`.** `ChangeTitle` rejects assigning a ROLE whose `.agent.toml` does not include the new TITLE — the plugin was designed (skills, instructions, governance text) for those specific titles, and installing it in an incompatible title breaks that design contract.
+- **N:1 compatibility** — multiple ROLEs can satisfy one TITLE. The Agent Profile → Role tab shows a dropdown when ≥2 role-plugins declare the same title in their `compatible-titles`, and a locked label when exactly one does. One ROLE may also be compatible with multiple TITLEs.
+- **R9.13 mandatoriness** — every persisted agent MUST carry exactly one ROLE. CreateAgent / ChangeTitle HARD REJECT any desired state that would leave an agent with zero role-plugins.
+- **AUTONOMOUS resolves to `ai-maestro-autonomous-agent`** — no title is ever "no plugin". See R11.3 and R11.12.
+
+### §TERMINOLOGY.5 — Writing conventions
+
+- Use **TITLE** when discussing permissions, governance, the communication graph, or approval flows.
+- Use **ROLE** when discussing behaviour, skills, main-agent persona text, or available tools.
+- Use **PERSONA** when identifying a specific agent (the one in the sidebar card, at that workdir, with that AID).
+- Do not use "role" as a synonym for "title". The 2026-03-20 rename made `TitleBadge` / `TitleAssignmentDialog` authoritative in the codebase.
+- When the user says "change the agent's role", clarify whether they mean swap the role-plugin (ROLE) or re-assign the governance level (TITLE) — these are different pipelines.
+
+### §TERMINOLOGY.6 — OOP analogy
+
+If it helps communicating the model to a new contributor:
+
+- **TITLE** = access-control role (permission level)
+- **ROLE** = class definition (behaviour + skills + instructions)
+- **PERSONA** = instance (state + identity)
 
 ---
 

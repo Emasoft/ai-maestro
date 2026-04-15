@@ -1348,13 +1348,16 @@ function RolePluginPickerWidget({
     )
   }
 
-  // Determine if this is a locked/read-only scenario (0-1 compatible plugins for non-autonomous titles)
-  const isAutonomousTitle = selectedTitle === 'autonomous'
-  const choiceCount = isAutonomousTitle ? plugins.length + 1 : plugins.length
-  const isLocked = choiceCount <= 1
+  // R9.13: role-plugin is mandatory for every title (including AUTONOMOUS),
+  // so there is no "+1 no-plugin" bonus slot. isLocked fires whenever there
+  // is exactly one compatible plugin — the picker auto-selects it and shows
+  // a read-only confirm card.
+  const isLocked = plugins.length === 1
 
-  // Locked: show read-only card with the auto-assigned plugin (or "no plugin")
-  if (isLocked) {
+  // Locked: show read-only card with the auto-assigned plugin. Zero plugins
+  // is a backend error and shouldn't reach this component, but we render a
+  // defensive message so the user sees what's wrong.
+  if (isLocked || plugins.length === 0) {
     const autoPlugin = plugins.length === 1 ? plugins[0] : null
     return (
       <div className="space-y-2">
@@ -1363,12 +1366,12 @@ function RolePluginPickerWidget({
             <Lock className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
             <div>
               <div className="font-medium text-gray-200">
-                {autoPlugin ? autoPlugin.name : 'No plugin (bare agent)'}
+                {autoPlugin ? autoPlugin.name : 'No compatible plugin — cannot continue'}
               </div>
               <div className="text-xs text-gray-500">
                 {autoPlugin
-                  ? `Auto-assigned for ${selectedTitle.toUpperCase()} title`
-                  : `No compatible plugins for ${selectedTitle.toUpperCase()}`}
+                  ? `Auto-assigned for ${selectedTitle.toUpperCase()} title (R9.13: mandatory)`
+                  : `R9.13 violation — ${selectedTitle.toUpperCase()} must resolve to a role-plugin`}
               </div>
               {autoPlugin?.description && (
                 <div className="text-xs text-gray-500 mt-0.5">{autoPlugin.description}</div>
@@ -1378,7 +1381,8 @@ function RolePluginPickerWidget({
         </div>
         <button
           onClick={() => onSelect(autoPlugin)}
-          className="w-full px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
+          disabled={!autoPlugin}
+          className="w-full px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
         >
           <Check className="w-3.5 h-3.5" />
           Continue
@@ -1418,17 +1422,9 @@ function RolePluginPickerWidget({
           )}
         </button>
       ))}
-
-      {/* Always show "No plugin" option — agents don't require a role-plugin */}
-      {selectedTitle !== 'member' && (
-        <button
-          onClick={() => onSelect(null)}
-          className="w-full text-left px-3 py-2.5 rounded-lg bg-gray-800/80 border border-gray-600 hover:border-blue-500 hover:bg-gray-700 transition-all text-sm"
-        >
-          <div className="font-medium text-gray-200">No plugin (bare agent)</div>
-          <div className="text-xs text-gray-500">Start without a role plugin</div>
-        </button>
-      )}
+      {/* R9.13: No "bare agent" option — every title has a mandatory default
+          plugin. If multiple plugins are compatible the user picks one; if
+          only one is compatible the isLocked branch above auto-selects it. */}
     </div>
   )
 }

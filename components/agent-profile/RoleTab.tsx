@@ -38,9 +38,11 @@ export default function RoleTab({
   const [switching, setSwitching] = useState(false)
   const [compatiblePlugins, setCompatiblePlugins] = useState<CompatiblePlugin[]>([])
 
-  // Fetch compatible plugins for this agent's title + client
+  // Fetch compatible plugins for this agent's title + client. R9.13:
+  // AUTONOMOUS is a real title now and has its own mandatory role-plugin
+  // (ai-maestro-autonomous-agent), so it is queried like every other title.
   useEffect(() => {
-    if (!agentTitle || agentTitle === 'autonomous') {
+    if (!agentTitle) {
       setCompatiblePlugins([])
       return
     }
@@ -51,14 +53,18 @@ export default function RoleTab({
       .catch(() => setCompatiblePlugins([]))
   }, [agentTitle, agentClient])
 
-  // N:1 model: 1 compatible → fixed label; 2+ → dropdown; 0/MEMBER/AUTONOMOUS → free choice
+  // N:1 model: 1 compatible → fixed label; 2+ → dropdown; 0 → error state
+  // (no title has zero compatible plugins under R9.13, but we still render).
+  // MEMBER is the only title that gets a "free choice" feel because the
+  // MEMBER role-plugin pool is large (programmer, architect, integrator,
+  // orchestrator, etc. all declare compatible-titles=["MEMBER"]).
   const hasMultipleOptions = compatiblePlugins.length > 1
-  const isTitled = agentTitle && !['autonomous', 'member'].includes(agentTitle)
+  const isFreeChoice = agentTitle === 'member'
   // Titled agents: show Change only if 2+ compatible plugins exist
-  // MEMBER/AUTONOMOUS: always show Change (free choice from all plugins)
-  const canChange = isTitled ? hasMultipleOptions : true
-  // Show lock icon only when exactly 1 compatible plugin for a titled agent
-  const isSingleLocked = isTitled && compatiblePlugins.length === 1
+  // MEMBER: always show Change (free choice from all plugins)
+  const canChange = isFreeChoice ? true : hasMultipleOptions
+  // Show lock icon when exactly 1 compatible plugin for a non-MEMBER title
+  const isSingleLocked = !isFreeChoice && compatiblePlugins.length === 1
 
   const handleSwitchPlugin = async (pluginName: string) => {
     if (!config.workingDirectory) return

@@ -687,39 +687,36 @@ export async function InstallElement(
       ops.push(`PG03: Scope consistency check not applicable`)
     }
 
-    // ── PG04: Title-plugin binding repair (R11) ─────────────────
-    // If we uninstalled a role-plugin from a non-AUTONOMOUS agent, that agent
-    // now violates R11 (every titled agent must have a matching role-plugin).
-    // Call ChangeTitle to reinstall the default plugin for their title.
+    // ── PG04: Title-plugin binding repair (R11, R9.13) ─────────
+    // If we uninstalled a role-plugin from ANY agent (including AUTONOMOUS),
+    // that agent now violates R9.13 (role-plugin is mandatory for every
+    // agent). Call ChangeTitle to reinstall the default plugin for their
+    // title. AUTONOMOUS now maps to ai-maestro-autonomous-agent, so the
+    // repair path is identical to every other title.
     if (desired.agentId && action === 'uninstall' && isRolePlugin && result.success) {
       try {
         const { getAgent: getAgentPG04 } = await import('@/lib/agent-registry')
         const agentPG04 = getAgentPG04(desired.agentId)
         const title = (agentPG04?.governanceTitle || 'autonomous').toLowerCase()
-        if (title !== 'autonomous') {
-          // Agent has a title that requires a role-plugin — reinstall the default
-          const defaultPlugin = TITLE_PLUGIN_MAP[title]
-          if (defaultPlugin && defaultPlugin !== name) {
-            ops.push(`PG04: R11 violation — agent has title "${title}" but lost role-plugin "${name}". Reinstalling default "${defaultPlugin}" via ChangeTitle.`)
-            // ChangeTitle handles the full role-plugin install pipeline
-            const titleResult = await ChangeTitle(desired.agentId, title)
-            if (titleResult.success) {
-              ops.push(`PG04: ChangeTitle restored default plugin "${defaultPlugin}" (${titleResult.operations.length} sub-gates)`)
-            } else {
-              ops.push(`PG04: WARN — ChangeTitle failed: ${titleResult.error}`)
-            }
-          } else if (defaultPlugin === name) {
-            // The uninstalled plugin WAS the default — revert to AUTONOMOUS
-            ops.push(`PG04: Uninstalled the default plugin for title "${title}" — reverting agent to AUTONOMOUS`)
-            const titleResult = await ChangeTitle(desired.agentId, 'autonomous')
-            ops.push(titleResult.success
-              ? `PG04: Agent reverted to AUTONOMOUS`
-              : `PG04: WARN — Revert to AUTONOMOUS failed: ${titleResult.error}`)
+        const defaultPlugin = TITLE_PLUGIN_MAP[title]
+        if (defaultPlugin && defaultPlugin !== name) {
+          ops.push(`PG04: R9.13 violation — agent has title "${title}" but lost role-plugin "${name}". Reinstalling default "${defaultPlugin}" via ChangeTitle.`)
+          // ChangeTitle handles the full role-plugin install pipeline
+          const titleResult = await ChangeTitle(desired.agentId, title, {})
+          if (titleResult.success) {
+            ops.push(`PG04: ChangeTitle restored default plugin "${defaultPlugin}" (${titleResult.operations.length} sub-gates)`)
           } else {
-            ops.push(`PG04: No default plugin mapping for title "${title}" — skipped`)
+            ops.push(`PG04: WARN — ChangeTitle failed: ${titleResult.error}`)
           }
+        } else if (defaultPlugin === name) {
+          // The uninstalled plugin WAS the default — reinstall it in place
+          ops.push(`PG04: Uninstalled the default plugin for title "${title}" — reinstalling via ChangeTitle`)
+          const titleResult = await ChangeTitle(desired.agentId, title, {})
+          ops.push(titleResult.success
+            ? `PG04: Default plugin "${defaultPlugin}" reinstalled`
+            : `PG04: WARN — Reinstall failed: ${titleResult.error}`)
         } else {
-          ops.push(`PG04: Agent is AUTONOMOUS — no role-plugin required`)
+          ops.push(`PG04: No default plugin mapping for title "${title}" — skipped`)
         }
       } catch (pg04Err) {
         ops.push(`PG04: WARN — Title-plugin repair failed: ${pg04Err instanceof Error ? pg04Err.message : pg04Err}`)
@@ -1424,7 +1421,11 @@ export async function ChangeTitle(
     if (g0err) { result.error = g0err; return result }
 
     // ── GATE 1: Validate title value ─────────────────────────
-    const effectiveTitle = newTitle === 'autonomous' ? null : newTitle
+    // R9.13: 'autonomous' is a real title bound to `ai-maestro-autonomous-agent`.
+    // effectiveTitle is now just the normalized title — no autonomous→null
+    // collapse, which is how the legacy "no plugin for autonomous" path used
+    // to slip through Gates 15/16. See docs/GOVERNANCE-RULES.md R9.13 / R11.12.
+    const effectiveTitle = newTitle
     if (newTitle && !VALID_TITLES.has(newTitle)) {
       result.error = `Invalid title "${newTitle}". Valid: ${[...VALID_TITLES].join(', ')}`
       return result
@@ -1493,7 +1494,13 @@ export async function ChangeTitle(
               needsPluginConversion = true
               ops.push(`G03: No native ${agentClientType} plugin for ${newTitle?.toUpperCase()} — will auto-convert from ${anyPlugins[0].name}`)
             } else {
-              ops.push(`G03: No compatible plugins found for ${newTitle?.toUpperCase()} at all — proceeding without plugin`)
+              // R9.13: role-plugin is mandatory. If not even a fallback entry
+              // exists in TITLE_PLUGIN_MAP, the title has no governance persona
+              // and the operation MUST be rejected rather than leaving the agent
+              // without a plugin.
+              ops.push(`G03: DENIED — no compatible role-plugin found for title "${newTitle}" (R9.13: role-plugin is mandatory)`)
+              result.error = `role-plugin is mandatory — no compatible plugin found for title "${newTitle}" (R9.13)`
+              return result
             }
           }
         }
@@ -1773,7 +1780,12 @@ export async function ChangeTitle(
             ops.push(`G15: No native ${agentClientType} plugin — will install "${defaultPlugin}" (needs conversion)`)
           }
         } else {
-          ops.push(`G15: No compatible plugins found for ${effectiveTitle.toUpperCase()}`)
+          // R9.13 defence in depth: Gate 3 should already have rejected this
+          // path (unreachable for valid titles), but if somehow we reach here,
+          // HARD REJECT rather than proceed to Gate 16 with no plugin.
+          ops.push(`G15: DENIED — no compatible role-plugin for ${effectiveTitle.toUpperCase()} (R9.13: role-plugin is mandatory)`)
+          result.error = `role-plugin is mandatory — no compatible plugin for title "${effectiveTitle}" (R9.13 / Gate 15)`
+          return result
         }
       }
 
@@ -4592,7 +4604,12 @@ export async function CreateAgent(
       desired.teamId &&
       TEAM_REQUIRED_TITLES_G06.has(desired.governanceTitle)
 
-    if (desired.governanceTitle && desired.governanceTitle !== 'autonomous' && !titleNeedsTeamFirst) {
+    // R9.13: AUTONOMOUS is now a real title that resolves to
+    // ai-maestro-autonomous-agent. It MUST flow through ChangeTitle like any
+    // other title so Gates 15/16 install its mandatory role-plugin. The
+    // earlier `!== 'autonomous'` exclusion was the root cause of agents
+    // being left with no persona and full gh-user privileges.
+    if (desired.governanceTitle && !titleNeedsTeamFirst) {
       const titleResult = await ChangeTitle(agent.id, desired.governanceTitle, {
         authContext: desired.authContext,
         githubRepo: desired.githubRepo,
@@ -4615,7 +4632,27 @@ export async function CreateAgent(
     } else if (titleNeedsTeamFirst) {
       ops.push(`G06: DEFER — Title ${desired.governanceTitle?.toUpperCase()} requires team membership; will be applied at G07b after team join`)
     } else {
-      ops.push(`G06: No title requested (AUTONOMOUS)`)
+      // R9.13 fallback: every persisted agent MUST have a role-plugin. When
+      // the caller omits governanceTitle entirely, default to AUTONOMOUS so
+      // ChangeTitle installs ai-maestro-autonomous-agent — the minimum
+      // privilege tier with an explicit governance persona.
+      ops.push(`G06: No title requested — defaulting to AUTONOMOUS (R9.13 mandatory-plugin)`)
+      const titleResult = await ChangeTitle(agent.id, 'autonomous', {
+        authContext: desired.authContext,
+      })
+      if (!titleResult.success) {
+        try {
+          const { deleteAgent } = await import('@/lib/agent-registry')
+          await deleteAgent(agent.id)
+          ops.push(`G06: FAIL — default AUTONOMOUS assignment failed: ${titleResult.error}. Rolled back agent.`)
+        } catch (rollbackErr) {
+          ops.push(`G06: FAIL — default AUTONOMOUS assignment failed: ${titleResult.error}. ROLLBACK ALSO FAILED: ${rollbackErr instanceof Error ? rollbackErr.message : rollbackErr}`)
+        }
+        result.error = `Default AUTONOMOUS assignment failed: ${titleResult.error}`
+        result.agentId = null
+        return result
+      }
+      result.restartNeeded = result.restartNeeded || titleResult.restartNeeded
     }
 
     // ── G07: Add to team if requested ────────────────────────

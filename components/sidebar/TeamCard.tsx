@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { Pencil, Trash2 } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Pencil, Trash2, AlertTriangle } from 'lucide-react'
 import type { Team } from '@/types/team'
 import type { Agent } from '@/types/agent'
+import { checkTeamComposition } from '@/lib/team-composition'
 
 interface TeamCardProps {
   team: Team
@@ -27,6 +28,12 @@ export default function TeamCard({ team, agents, onStartMeeting: _onStartMeeting
   const shown = memberAgents.slice(0, maxAvatars)
   const overflow = memberAgents.length - maxAvatars
 
+  // WT-010#3 (SCEN-010 P0): R12 composition check — flag teams that
+  // are missing required titles so the user can spot incomplete teams
+  // at a glance without opening each one. Pure-function derivation;
+  // memoized against `agents` identity so renders are cheap.
+  const composition = useMemo(() => checkTeamComposition(team, agents), [team, agents])
+
   const getInitials = (agent: Agent | undefined) => {
     if (!agent) return '?'
     const name = agent.label || agent.name || '?'
@@ -40,6 +47,18 @@ export default function TeamCard({ team, agents, onStartMeeting: _onStartMeeting
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-200 truncate">{team.name}</span>
             <span className="text-xs text-gray-500 flex-shrink-0">{team.agentIds.length}</span>
+            {/* WT-010#3: R12 composition warning badge. Yellow/amber
+                (not red) because a non-functional team is still
+                recoverable — it needs attention, not alarm. */}
+            {!composition.complete && (
+              <span
+                className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 flex-shrink-0"
+                title={`R12: missing ${composition.missing.join(', ')}`}
+              >
+                <AlertTriangle className="w-2.5 h-2.5" />
+                R12
+              </span>
+            )}
           </div>
 
           {team.description && (

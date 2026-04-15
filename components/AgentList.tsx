@@ -28,6 +28,7 @@ import {
   XCircle,
   Users,
   Lock,
+  Wrench,
 } from 'lucide-react'
 import Link from 'next/link'
 import AgentCreationWizard from './AgentCreationWizard'
@@ -900,6 +901,31 @@ export default function AgentList({
         ) : viewMode === 'normal' ? (
           /* Normal View — Full card with avatar image, grouped by closed team */
           <div className="p-3 space-y-3">
+            {/* WT-004#3: permanent HELPERS section pinned to the top of the
+                sidebar. The Haephestos card is NOT a real agent — it's a
+                shortcut to the embedded role-plugin creation helper. Always
+                visible regardless of viewMode filter so users can always
+                find the forge. */}
+            <div className="rounded-lg overflow-hidden border border-purple-500/30 bg-purple-500/5">
+              <div className="px-3 py-1.5 text-[9px] font-semibold tracking-wider text-purple-400 uppercase border-b border-purple-500/20">
+                HELPERS
+              </div>
+              <button
+                type="button"
+                onClick={() => { window.location.href = '/?agent=haephestos' }}
+                className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-purple-500/10 transition-colors text-left"
+                title="Create a new role-plugin with Haephestos"
+              >
+                <div className="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500/40 flex items-center justify-center flex-shrink-0">
+                  <Wrench className="w-4 h-4 text-purple-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium text-gray-200 truncate">Haephestos</div>
+                  <div className="text-[10px] text-gray-500 truncate">Create a role-plugin</div>
+                </div>
+              </button>
+            </div>
+
             {Object.entries(teamGroupedAgents)
               .sort(([a], [b]) => {
                 // NO-TEAM always last

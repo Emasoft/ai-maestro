@@ -506,4 +506,375 @@ it manually.
 
 ---
 
-**END OF TRDD — awaiting user approval on the 7 decisions in §9**
+---
+
+## 11. User feedback 2026-04-15 — refined design (supersedes §3, §6, §9.1-2)
+
+> "the second maintainer is only to verify the ability of multiple
+> maintainers to handle simultaneous events in different github repos.
+> So in the first part of the scenario two issues must be opened by the
+> AUTONOMOUS agent, one in each repo, but one will report a bug and the
+> maintainer will fix it by itself, while the other is announce of a PR
+> to solve a shortcoming, so we can evaluate if the agent correctly let
+> the AUTONOMOUS agent contribute to the project instead of saying 'no,
+> I will take care of it'. The things of course must be approved by the
+> MANAGER, but both role-plugin main agents should be instructed to
+> welcome contributions instead of refusing them."
+
+This re-frames the scenario to exercise **two code paths in parallel**
+instead of one sequential path. Both MAINTAINERs are active throughout
+the run. The test has TWO independent success criteria (one per repo)
+and one shared criterion (MANAGER oversight).
+
+### 11.1 Revised agent roster
+
+| Agent | Title | Plugin | Repo | Role |
+|---|---|---|---|---|
+| `scen018-manager` | MANAGER | `ai-maestro-assistant-manager-agent` | — | Supervises both MAINTAINERs concurrently; receives AMP status from both; aggregates final report to user |
+| `scen018-maint-alpha` | MAINTAINER | `ai-maestro-maintainer-agent` | `Emasoft/scen018-test-repo-alpha` | **Direct-fix path** — handles a bug via `maintainer-fix` (clone → branch → fix → test → publish → close) |
+| `scen018-maint-beta` | MAINTAINER | `ai-maestro-maintainer-agent` | `Emasoft/scen018-test-repo-beta` | **PR-review path** — welcomes the contributor's proposal, waits for the PR, reviews it, requests changes, re-reviews, approves, merges, publishes release |
+| `scen018-contrib` | AUTONOMOUS | `ai-maestro-programmer-agent` | — | Opens issue on BOTH repos (one bug report, one PR proposal), then makes an actual PR against beta in response to MAINTAINER beta's welcome |
+
+Four agents total (vs. three in §3). Both MAINTAINERs stay online for
+the full lifecycle, not just for the R19.3 uniqueness test. R19.3 is
+still verified in a separate step (attempting to create a third
+MAINTAINER on alpha), but the beta MAINTAINER is no longer
+decoration — it's the PR-review path.
+
+### 11.2 Two parallel issues
+
+Phase 4 is now parallel:
+
+- **Alpha issue — BUG**: Contributor opens an issue on
+  `scen018-test-repo-alpha` describing a real bug in `src/buggy.py`
+  (e.g. `divide(-10, 2) returns 5 instead of -5`). The issue is a pure
+  bug report — no mention of the contributor wanting to fix it. This
+  is the signal for MAINTAINER alpha to run `maintainer-fix` and handle
+  it directly.
+
+- **Beta issue — PR PROPOSAL**: Contributor opens an issue on
+  `scen018-test-repo-beta` announcing: "I noticed
+  tests/test_other.py::test_multiply_negatives fails. I'd like to
+  submit a PR fixing it — may I proceed?" This is the signal for
+  MAINTAINER beta to WELCOME the contribution (not to handle it
+  itself), and to wait for the contributor's PR.
+
+Both issues are opened in the same phase (the contributor runs both
+`gh issue create` calls back-to-back). From that point, the two
+MAINTAINERs run independently on their own polling cycles.
+
+### 11.3 Two independent paths
+
+**Alpha (direct-fix path)**:
+1. Patrol detects issue → triage classifies as bug
+2. `maintainer-fix` runs: clone → fix branch → edit → test → commit → push → close
+3. MAINTAINER alpha reports completion to MANAGER via AMP
+4. MANAGER acknowledges via AMP
+
+This is the CURRENT MAINTAINER behavior (v1.0.2). No plugin changes
+required for this path beyond the persona's "welcome contributions"
+language (see §11.4).
+
+**Beta (PR-review path)**:
+1. Patrol detects issue → triage reads the PR proposal
+2. Triage classifies as "contribution proposal" — a NEW classification
+   between "bug" and "feature request"
+3. MAINTAINER beta comments on the issue: "Yes, please go ahead —
+   please reference this issue in your PR and follow our contribution
+   guide. I'll review your PR when it's open."
+4. Contributor (prompted by user/MANAGER) creates a fix branch, pushes,
+   opens the PR
+5. Patrol detects the new PR → dispatches `maintainer-review`
+6. MAINTAINER beta reviews the diff, enforces the branch ruleset,
+   posts inline comments, requests changes OR approves
+7. If CHANGES_REQUESTED: contributor iterates, pushes a new version,
+   MAINTAINER beta re-reviews
+8. When clean: MAINTAINER beta approves + merges + publishes release
+9. MAINTAINER beta reports completion to MANAGER via AMP
+10. MANAGER acknowledges via AMP
+
+The PR-review path is the NEW behavior (v2.0.0) and requires the new
+`maintainer-review` skill + updated `maintainer-patrol` with PR
+tracking.
+
+### 11.4 "Welcome contributions" persona language
+
+The MAINTAINER plugin's main agent persona currently frames the agent
+as a solo fixer ("keep your assigned repository healthy by triaging
+and fixing issues"). The user explicitly requires the opposite stance:
+
+> "both role-plugin main agents should be instructed to welcome
+> contributions instead of refusing them"
+
+Updated persona language (to be added under "Core Mission"):
+
+```
+## Working with contributors
+
+You are NOT alone. Other agents — MEMBERs on teams, AUTONOMOUS helpers,
+or human contributors — may offer to fix bugs in your repo. When
+someone offers help:
+
+  - ALWAYS accept genuine contribution offers. Respond on the issue
+    with "Yes please, go ahead — please reference this issue in your
+    PR and follow the contribution guide."
+  - NEVER say "no, I will take care of it" when a contributor offers
+    to submit a PR. Accept the contribution, then review it carefully
+    when the PR lands.
+  - Your job is to be a GATEKEEPER, not a lone wolf. A PR from a
+    contributor is a GIFT — review it honestly, but welcome it.
+  - If the contributor's PR is flawed, request changes politely with
+    specific inline comments. If the contributor fixes the issues,
+    re-review and approve. If they abandon the PR or cannot fix the
+    issues after 2-3 review rounds, escalate to MANAGER via AMP before
+    closing the PR.
+
+The only exception: if no contributor has offered help AND the issue
+is a verified bug, you may run `maintainer-fix` yourself to handle it
+directly. This is the fallback, not the default.
+```
+
+This language update needs to be part of the plugin v2.0.0 commit.
+
+### 11.5 "Contribution proposal" triage classification
+
+`maintainer-triage` currently has 2 pass-through classifications
+(bug, feature-request) and 2 reject classifications (invalid,
+duplicate). Add a THIRD pass-through:
+
+```
+## Contribution proposal
+
+Signal: the issue body says "I'd like to submit a PR", "I can fix this",
+"Would you accept a PR for …", or similar contributor-offering language.
+
+Action:
+  1. Check R19.6 — is the author authorized? Bug fixes from ANY user
+     are welcome (same as regular bug reports). Feature-adding PRs are
+     still gated to the authorized user.
+  2. If authorized OR the proposal is for a bug fix:
+     - Comment on the issue: "Yes please, go ahead — please reference
+       this issue in your PR and follow our contribution guide. I'll
+       review your PR when it's open."
+     - Label the issue with `contribution-accepted`
+     - Record in the ledger: "waiting for PR from <author>"
+     - Return control to patrol — do NOT dispatch maintainer-fix
+  3. If NOT authorized AND the proposal adds a feature:
+     - Comment on the issue: "Thank you for offering! Unfortunately
+       feature additions are reserved for the repo owner. Feel free
+       to submit a bug-fix PR instead."
+     - Return control to patrol
+```
+
+### 11.6 MANAGER oversight (refined)
+
+MANAGER is NOT in a team with the MAINTAINERs (they're AUTONOMOUS), so
+oversight is via AMP messaging. Flow:
+
+- At scenario start, MANAGER is prompted by the user: "Monitor
+  scen018-maint-alpha and scen018-maint-beta. Acknowledge their AMP
+  status updates. If either agent stops making progress for >10
+  minutes, send them a steering message."
+- Both MAINTAINERs send AMP updates to MANAGER at each major step:
+  - "detected new issue #N"
+  - "triage classified as [bug|contribution-proposal]"
+  - "starting [fix|review]"
+  - "completed [fix|review] — [merged|pushed commit]"
+  - "released vX.Y.Z"
+- MANAGER acknowledges each update via AMP reply
+- At the end of the run, MANAGER sends ONE aggregated message to the
+  USER's inbox summarizing both paths
+
+The scenario verifies:
+- At least 5 AMP messages from MAINTAINER alpha to MANAGER (issue
+  detected, triaged, fix started, fix completed, release published)
+- At least 7 AMP messages from MAINTAINER beta to MANAGER (issue
+  detected, triaged, proposal welcomed, PR detected, review posted,
+  PR merged, release published)
+- At least 2 acknowledgement messages from MANAGER to each MAINTAINER
+- 1 final aggregated report MANAGER → user
+
+### 11.7 Phase structure (revised for parallelism)
+
+```
+Phase 0: SAFE-SETUP (unchanged)
+
+Phase 1: Create the agents (all 4 in sequence)
+  - scen018-manager (if not already present)
+  - scen018-maint-alpha (MAINTAINER + repo alpha)
+  - scen018-maint-beta (MAINTAINER + repo beta)
+  - scen018-contrib (AUTONOMOUS + programmer plugin)
+
+Phase 2: R19.3 uniqueness test
+  - Attempt third MAINTAINER on alpha → rejected (unchanged)
+
+Phase 3: User primes MANAGER
+  - User sends AMP to scen018-manager: "Monitor scen018-maint-alpha
+    and scen018-maint-beta. Both are processing real contributions
+    concurrently. Acknowledge their status updates and intervene if
+    either one refuses a contribution, skips the review, or stops
+    making progress."
+  - Verify MANAGER acknowledged
+
+Phase 4: Contributor opens TWO parallel issues
+  - User switches to scen018-contrib terminal
+  - User sends prompt: "Open two GitHub issues:
+      1. On Emasoft/scen018-test-repo-alpha: title '[BUG] divide(-10, 2)
+         returns wrong result'. Body: 'src/buggy.py divide returns 5
+         for negatives instead of -5. Please fix.' (pure bug report)
+      2. On Emasoft/scen018-test-repo-beta: title '[PR PROPOSAL] fix
+         test_multiply_negatives'. Body: 'I noticed the failing test
+         in tests/test_other.py and I would like to submit a PR
+         fixing it. May I proceed?' (contribution proposal)
+      Open both back-to-back."
+  - Verify both issues visible via `gh issue list`
+
+Phase 5: Alpha direct-fix path
+  - Wait for patrol (60s tick) to detect alpha issue
+  - Wait for triage → bug classification
+  - Wait for maintainer-fix to complete (clone → fix → test → publish)
+  - Verify the failing test now passes on main
+  - Verify the issue is closed with a commit link
+  - Verify MAINTAINER alpha sent AMP updates to MANAGER
+  - Screenshot: GitHub issue view showing closed + commit
+
+Phase 6: Beta welcome path (runs IN PARALLEL with Phase 5)
+  - Wait for patrol to detect beta issue
+  - Wait for triage → contribution-proposal classification
+  - Verify MAINTAINER beta commented on the issue WELCOMING the
+    contribution (not refusing)
+  - Verify the issue has label `contribution-accepted`
+  - Verify the ledger records "waiting for PR from scen018-contrib"
+  - Verify MAINTAINER beta sent AMP updates to MANAGER
+  - Screenshot: the beta issue view with the welcome comment
+
+Phase 7: Contributor makes the actual PR
+  - Switch to scen018-contrib terminal
+  - User sends prompt: "MAINTAINER beta welcomed your contribution.
+    Please:
+      1. Clone Emasoft/scen018-test-repo-beta locally into the working
+         directory
+      2. Create a fix branch: fix/test-multiply-negatives
+      3. Fix the bug in src/other.py (find the multiply function
+         that breaks on negatives)
+      4. Add a regression test that covers negatives
+      5. Push the branch and open a PR referencing the proposal issue
+      Follow GitHub PR best practices."
+  - Wait for contributor to push
+  - Verify `gh pr list --repo beta` shows the PR
+
+Phase 8: MAINTAINER beta review cycle
+  - Wait for patrol to detect the new PR
+  - Wait for maintainer-review to run
+  - Verify a CHANGES_REQUESTED review is posted (if the first pass is
+    flawed — see decision 4 in §9, which is still open)
+  - OR verify an APPROVED review is posted (if clean first pass)
+  - If CHANGES_REQUESTED: loop to iterate up to 3 rounds max
+  - Verify each review posts inline comments + overall body
+
+Phase 9: Merge + release + close
+  - Wait for MAINTAINER beta to merge (only after APPROVED)
+  - Verify `gh pr view --json state` == MERGED
+  - Verify branch ruleset was enforced (no force, no bypass)
+  - Wait for release creation
+  - Verify `gh release list` has the new vX.Y.Z
+  - Verify beta issue is closed with a link to the release tag
+  - Verify MAINTAINER beta sent AMP updates to MANAGER for each step
+
+Phase 10: MANAGER aggregated report
+  - Open USER's inbox on the dashboard
+  - Verify MANAGER sent ONE aggregated message summarizing:
+    - Alpha: bug X detected → fix committed → released as vA.B.C
+    - Beta: contribution offer → welcomed → PR created → reviewed (N
+      rounds) → merged → released as vX.Y.Z
+    - MANAGER's overall verdict: "both MAINTAINERs handled their paths
+      correctly, no intervention needed" (or intervention details)
+
+Phase 11: CLEANUP (unchanged — delete all 4 agents, close issues,
+          delete branches, restore backups, post-test screenshot)
+
+Success criteria (revised):
+  - Alpha: bug fixed via maintainer-fix, issue closed, release published
+  - Beta: contribution proposal WELCOMED (not refused), PR merged by
+    MAINTAINER, release published, branch ruleset enforced
+  - Both MAINTAINERs sent the full AMP update sequence to MANAGER
+  - MANAGER acknowledged and sent a final aggregated user report
+  - No destructive git ops on either repo (R19.7)
+  - R19.3 rejected the duplicate MAINTAINER attempt
+  - R19.6 still enforced for unauthorized FEATURE proposals (bug
+    proposals welcome from anyone)
+  - Cleanup leaves host indistinguishable from pre-test state
+
+FAILURE MODES (any → scenario FAIL):
+  - MAINTAINER beta refuses the contribution ("no, I will take care
+    of it") — this is the primary thing being tested
+  - MAINTAINER beta runs maintainer-fix instead of waiting for the
+    contributor's PR
+  - MAINTAINER alpha waits for a contributor PR that never comes
+    (alpha's issue was a pure bug report, no contribution offer)
+  - MAINTAINER alpha forwards the issue to MAINTAINER beta or
+    vice-versa (wrong repo handling)
+  - Either MAINTAINER merges without enforcing the branch ruleset
+  - MANAGER fails to detect a slacking agent
+  - Alpha path takes >15 min, beta path takes >45 min
+```
+
+### 11.8 Decision updates (§9 items revised or answered)
+
+**Decision 1 — agent roster**: **RESOLVED** by §11.1. Four agents:
+MANAGER + 2 MAINTAINERs (both active) + 1 contributor.
+
+**Decision 2 — maintainer-fix disposition**: **RESOLVED as Option A**.
+Alpha's direct-fix path exercises `maintainer-fix`. Beta's PR-review
+path exercises `maintainer-review`. Both skills coexist.
+
+**Decision 5 — SCEN-018 v2 vs new SCEN-023**: **RESOLVED** — rewrite
+SCEN-018 v2. The refined design tests both paths, so v1's single-path
+test is now a strict subset.
+
+**Decision 3 — branch ruleset**: still pending. Recommend: PR required,
+1 approving review, dismiss stale on push, linear history, conversation
+resolution, no force-push, no delete. Skip "require signatures".
+
+**Decision 4 — seeded PR flaw**: still pending. With the refined
+design, only the BETA path runs through review. Should the contributor's
+first PR on beta be intentionally flawed (to exercise the review-loop),
+or should we trust the contributor agent's realistic variance and
+accept either outcome (clean first pass OR request-changes loop)?
+Recommend: seed a deliberate flaw (e.g., "skip writing the regression
+test initially") so the review loop is guaranteed to run at least once.
+
+**Decision 6 — overnight batch inclusion**: still pending. With parallel
+paths, the run time might actually be slightly LESS than 45-75 min
+(since alpha and beta run concurrently), maybe 35-60 min. Still large
+but more tractable. Recommend: include in batch ONLY after a
+standalone run passes.
+
+**Decision 7 — timeline**: still pending. Slightly more work than
+the §9 version because the plugin needs to handle TWO classification
+paths and the scenario has ~50 steps instead of ~40. Estimate 1.5-2
+days of focused work.
+
+### 11.9 Remaining questions
+
+1. **Decision 3 — branch ruleset contents** (see §5 for the full list)
+2. **Decision 4 — seeded flaw** on beta's first PR (recommend yes)
+3. **Decision 6 — overnight batch inclusion** (recommend standalone only)
+4. **Decision 7 — timeline** (estimated 1.5-2 days)
+5. **NEW: "welcome contributions" language scope** — the user wrote
+   "both role-plugin main agents should be instructed to welcome
+   contributions". I'm interpreting this as "update the MAINTAINER
+   plugin's main agent" (since both alpha and beta share the same
+   plugin). Should the `ai-maestro-programmer-agent` plugin ALSO get
+   language nudging the contributor to offer PRs when working on
+   external repos? Or is that overkill since the contributor is driven
+   by explicit user prompts in the scenario?
+6. **NEW: contribution-proposal triage class** — add it as a formal
+   classification in `maintainer-triage` (see §11.5), OR keep it
+   informal and rely on the main agent persona to recognize the
+   pattern? Recommend formal classification for robustness.
+
+---
+
+**END OF TRDD — awaiting user answers on the 5 questions above (§11.9)
+before implementation starts**

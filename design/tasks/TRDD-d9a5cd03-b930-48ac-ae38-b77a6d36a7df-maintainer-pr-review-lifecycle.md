@@ -533,7 +533,7 @@ and one shared criterion (MANAGER oversight).
 | `scen018-manager` | MANAGER | `ai-maestro-assistant-manager-agent` | — | Supervises both MAINTAINERs concurrently; receives AMP status from both; aggregates final report to user |
 | `scen018-maint-alpha` | MAINTAINER | `ai-maestro-maintainer-agent` | `Emasoft/scen018-test-repo-alpha` | **Direct-fix path** — handles a bug via `maintainer-fix` (clone → branch → fix → test → publish → close) |
 | `scen018-maint-beta` | MAINTAINER | `ai-maestro-maintainer-agent` | `Emasoft/scen018-test-repo-beta` | **PR-review path** — welcomes the contributor's proposal, waits for the PR, reviews it, requests changes, re-reviews, approves, merges, publishes release |
-| `scen018-contrib` | AUTONOMOUS | `ai-maestro-programmer-agent` | — | Opens issue on BOTH repos (one bug report, one PR proposal), then makes an actual PR against beta in response to MAINTAINER beta's welcome |
+| `scen018-contrib` | AUTONOMOUS | **base `ai-maestro-plugin` only** (no role-plugin) | — | Opens issue on BOTH repos (one bug report, one PR proposal), then makes an actual PR against beta in response to MAINTAINER beta's welcome. **NOT `ai-maestro-programmer-agent`** — that is a team role-plugin whose `compatible-titles` is restricted to MEMBER, and whose persona + skills are designed for team work under ORCHESTRATOR direction (programmers fork the repo and never manage the original; only the orchestrator and exceptionally the chief-of-staff manage the original repo in a team). An AUTONOMOUS contributor obeys completely different rules: it is driven by direct user prompts, pushes branches to the original repo via write access (no fork needed — same `gh` identity as Emasoft), and opens same-repo PRs. It has no persistent persona — behaviors are driven step-by-step by the scenario's user prompts, relying on Claude Code's native git+gh knowledge. |
 
 Four agents total (vs. three in §3). Both MAINTAINERs stay online for
 the full lifecycle, not just for the R19.3 uniqueness test. R19.3 is
@@ -979,8 +979,89 @@ Specifically:
 
 ---
 
-**END OF TRDD — awaiting user answers on (a) the A/B branch-ruleset
-decision from §11.9 + the self-approve constraint, and (b) the 4 still-
-open decisions in §11.9 (branch ruleset details, seeded flaw, overnight
-batch inclusion, timeline). Comm-graph work (§12) is purely additive
-and needs no user decision.**
+---
+
+## 13. Team-role vs no-team-role plugin distinction (user feedback 2026-04-15)
+
+> "remember to not mixup role-plugins for team titles, with role-plugins
+> for no-team titles. The programmer role-plugin is a team role-agent,
+> so it obeys to completely different rules. He can fork the repo, but
+> in a team only the orchestrator (and the chief of staff, exceptionally)
+> can manage the original repo. So the AUTONOMOUS agent is a very
+> different thing. But in both cases they appear to github only as the
+> same gh user authenticated (Emasoft in my case, but can be any github
+> user)."
+
+### 13.1 Two classes of role-plugins
+
+| Class | Titles | Plugins | GitHub workflow |
+|---|---|---|---|
+| **Team role-plugins** | MANAGER, CHIEF-OF-STAFF, ORCHESTRATOR, ARCHITECT, INTEGRATOR, MEMBER | `ai-maestro-assistant-manager-agent`, `ai-maestro-chief-of-staff`, `ai-maestro-orchestrator-agent`, `ai-maestro-architect-agent`, `ai-maestro-integrator-agent`, `ai-maestro-programmer-agent` | MEMBERs fork the repo. Only ORCHESTRATOR (and exceptionally COS) manages the original repo. Commits go through orchestrator-gated workflow. |
+| **No-team role-plugins** | MAINTAINER, AUTONOMOUS | `ai-maestro-maintainer-agent`, (AUTONOMOUS has no dedicated plugin — uses base `ai-maestro-plugin` only) | MAINTAINER: bound to a repo, directly manages it (with the gatekeeper role in v2.0.0). AUTONOMOUS: driven by direct user prompts, pushes branches to any repo the host `gh` user has write access to, opens same-repo PRs. No fork required. No ORCHESTRATOR in the loop. |
+
+### 13.2 Why `scen018-contrib` MUST NOT use `ai-maestro-programmer-agent`
+
+- `ai-maestro-programmer-agent` has `compatible-titles = ["MEMBER"]` in
+  its `.agent.toml`. ChangeTitle Gate 9/16 would reject assigning it
+  to an AUTONOMOUS agent.
+- Even if the compatibility was relaxed, the programmer persona
+  contains team-workflow language ("wait for ORCHESTRATOR to assign
+  you a task", "always fork the target repo", "push to your fork, not
+  the original") which contradicts the AUTONOMOUS contributor's
+  actual behavior in this scenario.
+- The programmer plugin bundles skills designed for in-team
+  coordination, not for direct external-repo contribution.
+
+### 13.3 What `scen018-contrib` DOES use
+
+- Title: AUTONOMOUS
+- Role-plugin: **none**
+- Base plugin: `ai-maestro-plugin` (R17 core, required for every agent)
+- Behavior: driven entirely by user prompts during the scenario — the
+  scenario's Phase 4 and Phase 7 prompts tell the contributor exactly
+  what to do (open issue, clone repo, create branch, fix file, push,
+  open PR, respond to review, iterate).
+- GitHub workflow: uses the host's `gh` auth (same identity as every
+  other agent — Emasoft), pushes a branch directly to the ORIGINAL
+  target repo (no fork — same-repo PR), opens a PR back to main.
+
+### 13.4 Identity model (clarified)
+
+Per the user: "in both cases they appear to github only as the same gh
+user authenticated". Confirmed:
+
+- Every agent on the host authenticates via a single shared `gh` CLI
+  identity (in this test: Emasoft).
+- From GitHub's point of view, there is ONE user performing every
+  action on both test repos: the contributor's PR author, the
+  MAINTAINER's review comments, MAINTAINER's merge commit, every
+  `git push`, every `gh` API call.
+- The role distinction (AUTONOMOUS contributor vs MAINTAINER reviewer)
+  exists only INSIDE AI Maestro — not inside GitHub.
+- This is why option B (workflow-enforced approval, §11.9/chat history)
+  is the right choice: GitHub can't distinguish the agents; only the
+  agent plugin code can.
+
+### 13.5 Contributor tool-allowlist (confirms Option B)
+
+Since the contributor shares the Emasoft identity, the ONLY thing
+preventing it from self-merging its own PR is its tool allowlist.
+The contributor runs inside a bare Claude Code session with
+`ai-maestro-plugin` as the only plugin (no role-plugin). That plugin
+does NOT expose `gh pr merge` as a permitted command — the user's
+prompts in Phase 4 and Phase 7 explicitly instruct the contributor to
+"open the PR and wait for MAINTAINER review; never merge". Any
+attempt by the contributor to invoke `gh pr merge` without explicit
+user permission would be a Rule 4 FIX-AS-YOU-GO bug in the plugin.
+
+The scenario's assertions (§11.7 Phase 9) verify the merge commit's
+git metadata matches the MAINTAINER agent's terminal session, not the
+contributor's.
+
+---
+
+**END OF TRDD — awaiting user answers on the 4 still-open decisions
+from §11.9 (branch ruleset details confirmed minimal per §13.5,
+seeded flaw, overnight batch inclusion, timeline). Comm-graph (§12)
+and contributor-plugin correction (§13) are resolved; no further
+blockers for Step 2 plugin implementation.**

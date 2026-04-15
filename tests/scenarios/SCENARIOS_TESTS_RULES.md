@@ -19,12 +19,13 @@ All UI scenario tests in AI Maestro MUST follow these 11 rules. No exceptions.
 5. [Rule 5: TRACK-AND-REPORT](#rule-5-track-and-report) — Record every step and bug
 6. [Rule 6: STICK-TO-UI](#rule-6-stick-to-ui) — All actions through the browser
 7. [Rule 7: SAFE-SETUP](#rule-7-safe-setup) — Commit, build, verify before test
-8. [Rule 8: CHROME-TOOL](#rule-8-chrome-tool) — Use Chrome DevTools Protocol (CDP)
+8. [Rule 8: DEV-BROWSER](#rule-8-dev-browser) — Use the `dev-browser` CLI (sandboxed JS) for ALL UI automation
 9. [Rule 9: REPORT-FORMAT](#rule-9-report-format) — Structured markdown report
-10. [Rule 10: PHOTOSTORY](#rule-10-photostory) — Screenshot at every critical step
+10. [Rule 10: PHOTOSTORY](#rule-10-photostory) — Screenshot at every critical step + auto-purge after fix verification
 11. [Rule 11: 11th-HOUR](#rule-11-11th-hour) — Post-scenario deep analysis and improvement proposals
 12. [Rule 12: SUDO-MODE](#rule-12-sudo-mode) — Password re-entry for destructive operations
-13. [How-To: Running a Scenario](#how-to-running-a-scenario) — Practical guidance for the test executor
+13. [Rule 13: AUTONOMOUS-PROTOCOL](#rule-13-autonomous-protocol) — How a long unattended overnight batch is structured
+14. [How-To: Running a Scenario](#how-to-running-a-scenario) — Practical guidance for the test executor
 
 ---
 
@@ -179,81 +180,134 @@ If running in a worktree, all scenario artifacts (screenshots, reports, backups)
 
 ---
 
-## Rule 8: CHROME-TOOL
+## Rule 8: DEV-BROWSER
 
-Scenario tests use **Chrome DevTools Protocol (CDP)** via the `mcp__chrome-devtools__*` MCP tools. These are preferred over Claude-in-Chrome because:
-- CDP works without the Chrome extension installed
-- CDP provides reliable element targeting via accessibility tree UIDs
-- CDP screenshots capture the actual rendered state
+**Scenario tests MUST use the `dev-browser` plugin and its inner `dev-browser:dev-browser` skill for ALL browser automation.** This replaces the previous chrome-devtools MCP requirement (deprecated 2026-04-15). The `chromedev-tools` MCP plugin is allowed only as an interactive debugging tool — production scenario runs use dev-browser exclusively.
 
-### Required tools:
-| Tool | Purpose |
-|------|---------|
-| `navigate_page` | Navigate to URLs |
-| `take_snapshot` | Get accessibility tree (element UIDs) |
-| `take_screenshot` | Visual capture for verification |
-| `click` | Click buttons, links, cards |
-| `fill` | Type into text inputs |
-| `wait_for` | Wait for text/state to appear |
-| `select_page` | Switch between browser tabs |
+### Mandatory entry point — load the skill FIRST
 
-### Best practices:
-- Always `take_snapshot` before interacting to get fresh UIDs
-- Always `take_screenshot` after critical state changes for the report
-- Use `wait_for` after actions that trigger async operations (API calls, plugin installs)
-- Use `bringToFront: false` on `select_page` to avoid desktop switching
-
-### CDP tool reconnection:
-At the start of **each phase**, verify CDP tools are loaded by taking a snapshot. If tools fail (e.g., "No such tool available"), reload via `ToolSearch` with `select:mcp__plugin_chromedev-tools_cdt__take_snapshot,...`. Tool schemas can expire during long scenario runs.
-
-### Device emulation (for `device: tablet` and `device: smartphone` scenarios):
-
-When the scenario frontmatter specifies `device: tablet` or `device: smartphone`, the browser must be configured to emulate that device **before any UI interaction**. Add this as Step S003b in Phase 0 (after server verification, before navigating to dashboard).
-
-**How to activate device emulation:**
-
-Use `mcp__chrome-devtools__emulate` with a device preset:
+At the very start of every scenario run, before any `dev-browser` CLI call, the runner MUST invoke the skill via the Skill tool:
 
 ```
-# Smartphone (iPhone 14 — 390×844, 3x scale, touch enabled)
-emulate({ device: "iPhone 14" })
-
-# Tablet (iPad Air — 820×1180, 2x scale, touch enabled)
-emulate({ device: "iPad Air" })
-
-# Or manual parameters:
-emulate({ width: 390, height: 844, deviceScaleFactor: 3, mobile: true })
+Skill(skill: "dev-browser:dev-browser")
 ```
 
-**What this does:**
-- Resizes the viewport to the target device dimensions
-- Enables `mobile: true` which activates CSS media queries (`max-width`, `pointer: coarse`)
-- Enables touch emulation — Chrome automatically translates all mouse clicks from CDP into `touchstart`/`touchend` events
-- AI Maestro's `useDeviceType` hook detects the change and renders touch-friendly components (MobileDashboard, TabletDashboard, TouchScrollbar, MobileKeyToolbar, GlobalTouchScrollbars)
+This loads the official skill content from the `dev-browser` plugin (delivered via the marketplace `dev-browser-marketplace`). The skill content points at the `dev-browser` CLI binary, so AFTER the skill is loaded the runner uses Bash to drive the CLI (see "How to invoke" below). Loading the skill via the Skill tool is mandatory because (a) it ensures the runner is using the canonical plugin API as resolved by Claude Code's plugin manager (the actual on-disk path is an internal implementation detail and may change between Claude Code versions or plugin updates — never reference it directly), and (b) it triggers any plugin-side initialization. **A scenario run that calls `dev-browser` from Bash without first invoking the skill is non-compliant — the runner must self-correct by invoking the skill, then re-doing the prior Bash call. Never hardcode any path under `~/.claude/plugins/cache/` — that directory is ephemeral and may be cleared at any time by a plugin reload.**
 
-**What continues working normally:**
-- `click` — Chrome converts to touch tap
-- `fill` — text input works the same
-- `take_snapshot` — accessibility tree reflects the touch components
-- `take_screenshot` — captures the mobile/tablet layout
-- `wait_for` — unchanged
-- `select_page` — unchanged
+### Why dev-browser
 
-**What cannot be tested via CDP:**
-- Multi-finger gestures (pinch-to-zoom, two-finger swipe)
-- Long-press with timing precision (> 500ms hold)
-- Native mobile browser chrome (address bar, safe area insets, pull-to-refresh)
-- Hardware back button
+| Concern | dev-browser | chrome-devtools MCP (deprecated) |
+|---------|-------------|----------------------------------|
+| Persistent state across scripts | YES — named pages stay alive between invocations | NO — each MCP call spawns a fresh page |
+| Shared Chromium across scenarios | YES — one daemon, many scripts | NO — every fork spawns a private Chromium |
+| Memory footprint per batch | ~300 MB | ~4 GB (45 orphan watchdog processes) |
+| Browser extension dependency | NO (Playwright-launched Chromium) | NO |
+| Sandbox safety | YES (QuickJS, no host access) | NO (raw CDP) |
+| Speed (22-scenario batch) | ~3m 53s, $0.88 | ~12m 54s, $2.81 |
+| Tool-loading cost | ZERO (CLI, no MCP schemas) | ~30k tokens of MCP schema per fork |
 
-**Reverting to desktop (for cleanup phase):**
+### How to invoke
 
+The runner uses Bash heredoc to pipe a JavaScript blob into `dev-browser`. The script runs in a QuickJS sandbox with a pre-connected `browser` global. Top-level `await` is supported.
+
+```bash
+dev-browser <<'EOF'
+const page = await browser.getPage("main");        // persistent named page
+await page.goto("http://localhost:23000/");
+const buf = await page.screenshot({ type: "jpeg", quality: 97 });
+await saveScreenshot(buf, "S001_baseline");        // saves to ~/.dev-browser/tmp/
+console.log(JSON.stringify({ url: page.url() }));
+EOF
 ```
-emulate({ width: 1280, height: 800, deviceScaleFactor: 1, mobile: false })
+
+### Sandbox API (the only globals available inside the script)
+
+| Symbol | Purpose |
+|---|---|
+| `browser.getPage(name)` | Get/create a named page. Persists across invocations. |
+| `browser.newPage()` | Anonymous page (cleaned up on script exit). |
+| `browser.listPages()` | List all open tabs `[{id, url, title, name}]`. |
+| `browser.closePage(name)` | Close a named page. |
+| `page.goto(url)` | Navigate. |
+| `page.click(selector)` | Click an element. |
+| `page.fill(selector, text)` | Type into an input. |
+| `page.waitForSelector(selector)` | Wait for element to appear. |
+| `page.evaluate(fn)` | Run JS in the page context. |
+| `page.screenshot({type, quality})` | Returns a Uint8Array buffer. Pass to `saveScreenshot()`. |
+| `page.title()` / `page.url()` | Read page metadata. |
+| `console.log/warn/error/info` | Routed to CLI stdout — the runner reads these for return values. |
+| `setTimeout / clearTimeout` | Timers. |
+| `saveScreenshot(buf, name)` | Persist a screenshot to `~/.dev-browser/tmp/<name>.jpg`. |
+| `writeFile(name, data)` / `readFile(name)` | Sandbox file I/O (within `~/.dev-browser/tmp/`). |
+
+**NOT available** (this is QuickJS, NOT Node.js): `require()`, `import()`, `process`, `fs`, `path`, `os`, `fetch`, `WebSocket`, `__dirname`, `__filename`. If you need any of these, do them OUTSIDE the heredoc via Bash.
+
+### Persistent named-page pattern (the magic)
+
+The KEY advantage over chrome-devtools MCP is that `browser.getPage("dashboard")` returns the SAME tab across multiple `dev-browser` invocations. The tab keeps its URL, cookies, login state, scroll position, etc. This means:
+
+```bash
+# Step 1: log in (once, in the master setup)
+dev-browser <<'EOF'
+const page = await browser.getPage("dashboard");
+await page.goto("http://localhost:23000/");
+await page.fill('input[type=password]', "<PASSWORD>");
+await page.click('button[type=submit]');
+await page.waitForSelector('[data-testid=agent-list]');
+EOF
+
+# Step 2..N: every subsequent dev-browser call reuses the SAME logged-in page
+dev-browser <<'EOF'
+const page = await browser.getPage("dashboard");  // same page, still logged in
+await page.click('[data-testid="create-agent-btn"]');
+EOF
 ```
 
-Always revert in the CLEANUP phase so subsequent scenarios start with desktop viewport.
+No re-login. No fresh cookies. No new Chromium. The runner relies on this for shared state across scenarios.
 
-**Device presets reference:**
+### Required helpers (`tests/scenarios/scripts/dev-browser-helpers/`)
+
+To avoid every scenario reimplementing the AI Maestro login flow, sudo modal handling, screenshot path generation, etc., the runner pre-loads helper functions from `tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh`. This file is sourced by the runner BEFORE every `dev-browser` heredoc and exports shell functions like `aim_login`, `aim_screenshot`, `aim_sudo_modal`, `aim_create_agent`, `aim_delete_agent`. Each helper wraps a `dev-browser <<'EOF' ... EOF` call. See the helpers directory for the canonical implementations and add new ones there as scenarios need them.
+
+### Snapshot-equivalent — DOM dump for assertions
+
+Without chrome-devtools' accessibility-tree snapshot, the runner uses `page.evaluate` to dump the relevant DOM state for inspection:
+
+```bash
+dev-browser <<'EOF'
+const page = await browser.getPage("dashboard");
+const buttons = await page.evaluate(() => {
+  return Array.from(document.querySelectorAll('button')).map(b => ({
+    text: b.textContent.trim(),
+    disabled: b.disabled,
+    visible: b.offsetParent !== null
+  }));
+});
+console.log(JSON.stringify(buttons));
+EOF
+```
+
+The runner parses the JSON output to drive subsequent decisions.
+
+### Device emulation (for `device: tablet` and `device: smartphone` scenarios)
+
+dev-browser's underlying Playwright supports viewport + touch emulation via `page.evaluate` calling Chromium's CDP method, OR (preferred) the runner spawns the daemon with the right viewport flags from the start:
+
+```bash
+# Smartphone test — start daemon with iPhone 14 viewport
+dev-browser daemon stop 2>/dev/null
+PLAYWRIGHT_VIEWPORT_WIDTH=390 PLAYWRIGHT_VIEWPORT_HEIGHT=844 \
+  PLAYWRIGHT_DEVICE_SCALE_FACTOR=3 PLAYWRIGHT_IS_MOBILE=1 \
+  dev-browser daemon start
+
+# Now every dev-browser call uses the mobile viewport
+dev-browser <<'EOF'
+const page = await browser.getPage("dashboard");
+await page.goto("http://localhost:23000/");
+EOF
+```
+
+**Always revert to desktop in the CLEANUP phase** by restarting the daemon without the env vars. Subsequent scenarios start with desktop viewport.
 
 | `device` value | Viewport | Scale | Touch | Component set |
 |---------------|----------|-------|-------|---------------|
@@ -261,7 +315,28 @@ Always revert in the CLEANUP phase so subsequent scenarios start with desktop vi
 | `tablet` | 1024×768 | 2x | yes | TabletDashboard, TouchScrollbar |
 | `smartphone` | 390×844 | 3x | yes | MobileDashboard, MobileKeyToolbar, MobileChatView, MobileMessageCenter, GlobalTouchScrollbars |
 
-### Reading agent terminal history:
+**Caveat (same as before):** multi-finger gestures, long-press with sub-second precision, native mobile browser chrome, and the hardware back button cannot be tested via dev-browser/Playwright — these are accepted limitations.
+
+### Daemon lifecycle (master setup/cleanup level, NOT per-scenario)
+
+In the autonomous overnight protocol (Rule 13), the master setup phase starts ONE dev-browser daemon for the whole batch, and the master cleanup phase stops it. Per-scenario subagents NEVER call `daemon start/stop` themselves — they assume a running daemon and just send scripts to it.
+
+```bash
+# master setup (run-scenarios-batch master phase)
+dev-browser daemon start
+
+# per-scenario runner (do NOT touch daemon lifecycle)
+dev-browser <<'EOF'
+const page = await browser.getPage("dashboard");
+...
+EOF
+
+# master cleanup
+dev-browser daemon stop
+```
+
+### Reading agent terminal history (unchanged)
+
 Claude Code uses the xterm alternate screen buffer — `tmux capture-pane` only captures the visible pane (not scrollback from Claude's session). To read what an agent actually did:
 
 1. Find the conversation log: `ls -lt ~/.claude/projects/-Users-<user>-agents-<name>/*.jsonl | head -1`
@@ -560,6 +635,26 @@ tests/scenarios/screenshots/SCEN-009_20260414T143000Z/S033_20260414T143000Z_mana
 
 **Why:** Screenshots create an unambiguous audit trail. When reviewing scenario results weeks later, screenshots prove what actually happened at each step, preventing false PASS claims AND preventing cross-run contamination when the same scenario is run multiple times.
 
+### Auto-purge after fix verification (added 2026-04-15)
+
+Screenshots are heavyweight (~50 MB per 22-scenario batch even at JPEG 97%). Once a scenario PASSES (its bugs are fixed AND verified by a re-run that landed on the same fixed code), its screenshots have served their purpose: the audit trail can be reconstructed from git history alone if needed. **In an autonomous overnight batch (Rule 13), the runner MUST auto-purge per-run screenshot directories after the scenario's fixes are confirmed verified.**
+
+**The exact rule:** at the END of every scenario run, the runner inspects the verdict. If the verdict is `PASS` AND every bug found during the run was fixed AND the fix was verified (the previously failing step now passes), the runner deletes its own per-run screenshot directory:
+
+```bash
+rm -rf "${CLAUDE_PROJECT_DIR}/tests/scenarios/screenshots/SCEN-${NNN}_${RUN_ID}"
+```
+
+**Exceptions where screenshots MUST be kept** (do NOT delete in any of these cases):
+- Verdict is `FAIL`, `PARTIAL`, or `STUCK` — the screenshots are evidence for the postmortem
+- The scenario found a bug it could NOT fix (deferred to a P0 proposal) — screenshots are evidence for the proposal
+- The verification re-run was NOT performed (single-pass run only) — keep until the next batch confirms
+- The scenario is a smoke test or baseline run with no bugs found — screenshots are baseline evidence and stay
+
+**The runner reports the deletion in its summary line** so the parent batch conductor can verify (the report's `screenshots_purged: true|false` field). The conductor logs total disk reclaimed at the end of the batch.
+
+**Why this is safe:** the per-run screenshot directory uses the timestamped naming convention from earlier in this rule (`SCEN-NNN_<RUN_ID>/...`). A purge of one run's directory cannot ever affect a different run's screenshots, even for the same scenario. The git-tracked report file (`tests/scenarios/reports/SCEN-NNN_<timestamp>.report.md`) survives the purge — it records every step, every bug, every fix, and the path to the (now-deleted) screenshots, so the audit trail is intact even if a future investigation needs to re-create the visual evidence (which can be done by re-running the scenario).
+
 ---
 
 ## Rule 11: 11th-HOUR
@@ -682,6 +777,222 @@ client code in `components/sidebar/TeamListView.tsx` exchanges that
 inline password for a sudo token BEFORE the DELETE call, so the sudo
 modal does NOT appear on top of the team delete dialog. The inline
 dialog IS the sudo check.
+
+---
+
+## Rule 13: AUTONOMOUS-PROTOCOL
+
+This rule defines how a long unattended scenario batch is structured so it can run for 6-12 hours without human supervision and survive every API rate-limit window the user's Pro Max 20× subscription throws at it. **It supersedes the previous Option B (FileChanged + bot) design from TRDD-1222f06a, which was empirically disproven 2026-04-15.** The protocol below is the proven 3-component cron architecture documented in TRDD-1222f06a §9.
+
+### Background — the mental model
+
+Claude Code does NOT exit on rate-limit / API errors. Only the current TURN ends. The Node.js event loop, the in-memory cron scheduler, the shared dev-browser daemon, the Chromium pages — all keep running. When the rate-limit window clears (or the account switcher rotates to a fresh OAuth token), the next scheduled cron fire becomes a fresh API call that succeeds, and work resumes from where state.json left off.
+
+### The 3 components of an autonomous run
+
+1. **Passive account switcher** — at least 2 OAuth tokens stored in `~/.claude/account-switcher/`. When the active token hits a 429, the switcher rotates instantly. The switcher does NOT wake claude — it just makes the next API call use a fresh token.
+
+2. **Recurring durable cron** — created via `CronCreate` with `durable: true` at a 5-20 min interval. **The cron IS the wake-up mechanism.** Every fire becomes a fresh user turn. Fires that hit 429 cooldown queue and deliver in batch when the REPL goes back to idle. The cron persists in `.claude/scheduled_tasks.json` so it survives `claude --continue` restarts.
+
+3. **Idempotent state file + run-one-step prompt** — the state file at `tests/scenarios/state/autonomous-batch-state.json` tracks which scenarios are pending / in-progress / done / failed, plus the list of fix branches and PR URLs. The cron prompt is short and idempotent: "read state, run the next pending scenario via the run-scenario-test skill, update state, exit". Each cron fire executes ONE scenario (or one fix iteration). If the same fire is delivered twice (rate-limit queue artifact), the idempotent state read makes the second fire a no-op.
+
+### The autonomous batch state file
+
+Path: `tests/scenarios/state/autonomous-batch-state.json` (gitignored — runtime artifact)
+
+```json
+{
+  "batch_id": "auto-2026-04-15T12-00-00Z",
+  "started_at": "2026-04-15T12:00:00Z",
+  "completed_at": null,
+  "scenario_list": ["SCEN-001", "SCEN-002", ..., "SCEN-022"],
+  "current_index": 0,
+  "phase": "master_setup | running | master_cleanup | consolidated | failed",
+  "scenarios": {
+    "SCEN-001": {
+      "status": "pending | in_progress | passed | failed | partial | stuck",
+      "started_at": null,
+      "completed_at": null,
+      "verdict": null,
+      "report_path": null,
+      "improvements_path": null,
+      "bugs_found": 0,
+      "bugs_fixed": 0,
+      "fix_branch": null,
+      "fix_commits": [],
+      "pr_url": null,
+      "pr_state": null,
+      "screenshots_purged": false
+    },
+    ...
+  },
+  "consolidated_pr_list_path": null,
+  "rate_limit_events": []
+}
+```
+
+The runner mutates this file atomically (write to `.tmp`, then rename) at every transition.
+
+### The cron fire prompt (verbatim — this IS the autonomous loop)
+
+```
+Read tests/scenarios/state/autonomous-batch-state.json.
+
+If phase == "consolidated" or phase == "failed": Stop. Do nothing.
+
+If phase == "master_setup":
+  1. Run the master setup script (yarn build, dev-browser daemon start, login once).
+  2. If setup fails, set phase="failed", write reason, stop.
+  3. Otherwise set phase="running", write state, fall through to "running" branch.
+
+If phase == "running":
+  1. Find the first scenario in scenario_list with status="pending".
+  2. If none, set phase="master_cleanup", fall through.
+  3. Otherwise mark that scenario in_progress, write state.
+  4. Spawn the run-scenario-test skill via the Skill tool with that scenario number.
+  5. When the skill returns, parse the verdict, update the scenario's entry in state.
+  6. If verdict is PASS and bugs were fixed, create a fix branch via git, push to fork, draft a PR via gh, record PR url.
+  7. If verdict is PASS and screenshots are purgeable per Rule 10, delete the per-run screenshot dir.
+  8. Stop. The next cron fire will pick up the next scenario.
+
+If phase == "master_cleanup":
+  1. Run dev-browser daemon stop, master cleanup script, kill any orphan scen* tmux sessions.
+  2. Set phase="consolidated", write state.
+  3. Generate the consolidated PR list at tests/scenarios/reports/CONSOLIDATED_PRS_<batch_id>.md.
+  4. Stop.
+
+NEVER call any other skill or tool except as instructed above. NEVER attempt to drive the UI yourself — that is the run-scenario-test skill's job. NEVER run multiple scenarios in one fire — one fire = one scenario, period. NEVER push to the user's main branch — only push fix branches to the user's personal fork.
+```
+
+The cron prompt is intentionally rigid. Every cron fire is one atomic step in the state machine. Idempotent. Resumable. Inspectable.
+
+### Master setup phase (one-time, per batch)
+
+1. `git status` baseline + `git commit` any uncommitted state
+2. Backup config files per Rule 3 STATE-WIPE
+3. `yarn build` once
+4. `pm2 restart ai-maestro` once
+5. `dev-browser daemon start` once
+6. `dev-browser <<EOF ... aim_login(...) ... EOF` once — login the dashboard, persist the cookie in the dev-browser's named "dashboard" page
+7. Take a baseline screenshot of the logged-in dashboard
+8. Set `phase="running"` in state.json
+9. Exit the cron fire — the next fire starts running scenarios
+
+This phase runs ONLY ONCE per batch. Per-scenario runners assume the daemon is up and the dashboard is logged in.
+
+### Per-scenario runner (one cron fire = one scenario)
+
+The cron fire spawns the `run-scenario-test` skill with the next pending scenario. The skill:
+1. Loads the dev-browser:dev-browser skill (Rule 8 mandate)
+2. Reads the scenario .md file
+3. Connects to the existing dev-browser daemon (via `browser.getPage("dashboard")` which returns the master-setup logged-in page)
+4. Runs the scenario steps, applying FIX-AS-YOU-GO per Rule 4
+5. Writes its report + improvements files
+6. Returns the 2-line verdict + report path
+
+The cron fire then:
+7. Updates the scenario's entry in state.json with the verdict
+8. If verdict==PASS and fixes were made, git commits each fix with a clear message, pushes to the user's fork, drafts a PR via `gh pr create --draft --base main --head <branch>`, records the PR URL in state.json
+9. If verdict==PASS and per-Rule-10 conditions are met, deletes the per-run screenshot directory
+10. Exits
+
+### Master cleanup phase (one-time, at end of batch)
+
+1. `dev-browser daemon stop` (cleanly shuts down Chromium)
+2. Run the project's cleanup script (kill scen* tmux sessions, restore registry/teams)
+3. STATE-WIPE restore from backups
+4. Generate `tests/scenarios/reports/CONSOLIDATED_PRS_<batch_id>.md` with the format below
+5. Set `phase="consolidated"` in state.json — this is the terminal state, the cron will see it and stop firing
+6. Optionally delete the durable cron via CronDelete (the cron prompt detects `phase=="consolidated"` and does nothing, so leaving it is also safe)
+
+### CONSOLIDATED_PRS file format
+
+```markdown
+# Autonomous Batch <batch_id> — Consolidated PR List
+
+**Started:** <iso-ts>
+**Completed:** <iso-ts>
+**Total scenarios:** <N>
+**Pass:** <N>  Fail:** <N>  Partial:** <N>  Stuck:** <N>
+**Rate-limit events survived:** <N>
+
+## PRs ready for review (sorted by scenario number)
+
+| # | Scenario | Verdict | Fix branch | PR URL | Bugs fixed | Risk |
+|---|----------|---------|------------|--------|-----------|------|
+| 1 | SCEN-001 | PASS | fix/scen-001-... | https://github.com/.../pull/1234 | 2 | LOW |
+| 2 | SCEN-005 | PASS | fix/scen-005-... | https://github.com/.../pull/1235 | 1 | MED |
+...
+
+## Scenarios with no fixes (no PR generated)
+
+- SCEN-003 PASS — no bugs found
+- SCEN-019 PARTIAL — bug found but deferred to P0 proposal (see scenario_proposed-improvements_019_*.md)
+
+## Detailed fix index
+
+### fix/scen-001-... (PR #1234)
+- **Files**: components/X.tsx, lib/Y.ts
+- **Description**: <one-paragraph fix summary>
+- **Verification**: scenario re-ran step S012 successfully after the fix
+- **PR draft URL**: https://github.com/.../pull/1234
+- **Approve command**: `gh pr ready 1234 && gh pr merge 1234 --squash`
+
+### fix/scen-005-... (PR #1235)
+...
+
+## Failed / stuck scenarios
+
+### SCEN-018 FAIL
+- **Reason**: <one-line>
+- **Report**: tests/scenarios/reports/SCEN-018_<ts>.report.md
+- **Screenshots**: tests/scenarios/screenshots/SCEN-018_<RUN_ID>/ (kept because verdict != PASS)
+
+## Rate-limit events during this batch
+
+| Time (UTC) | Token rotated to | Recovery delay (min) |
+|---|---|---|
+| 2026-04-15T14:23 | <account> | 8 |
+...
+
+## Next steps for the user
+
+1. Open each PR in the table above
+2. Review the fix and the verification report
+3. Approve with `gh pr ready <N> && gh pr merge <N> --squash` (or via the GitHub UI)
+4. After all approved fixes are merged, run `git pull origin main` to sync
+```
+
+This file is what the user reads when they wake up. One file, all PR URLs, all approve commands ready to copy-paste. No hunting through reports or git logs.
+
+### Hard rules for autonomous batches
+
+1. **One cron fire = one atomic state machine step.** Never run multiple scenarios in one fire. Never run setup AND a scenario in one fire. Cron fires must be short and idempotent.
+2. **Read state.json before EVERY action.** Never assume the previous fire left the system in a known state.
+3. **Write state.json AFTER every action atomically** (write to `.tmp`, then rename). Concurrent fires (during rate-limit recovery batch delivery) must not corrupt the file.
+4. **Never push to the user's main branch.** Only fix branches to the user's personal fork.
+5. **Never use `gh pr ready` or `gh pr merge` automatically.** Drafts only. The user approves.
+6. **Never delete a scenario's screenshots if the scenario didn't pass.** Rule 10 auto-purge applies only to verified-fixed PASS runs.
+7. **If the dev-browser daemon dies mid-batch**, the next cron fire detects it (via `dev-browser daemon status` or a trivial `getPage` call) and re-runs master setup from a "phase=master_setup" recovery state. The state machine has a "daemon-died" recovery branch.
+8. **The cron interval is 5-20 minutes.** Shorter wastes API calls during rate-limit recovery; longer adds wall-clock latency. Default: 13 minutes (off-minute schedule).
+9. **The cron is durable.** `CronCreate` MUST be called with `durable: true` so it survives `claude --continue`.
+10. **The cron's recurring task auto-expires after 7 days** (Claude Code default). For batches running longer than 6 days, schedule a refresh task at day 5 to re-create the cron.
+
+### Failure modes and recovery
+
+| Failure | Detection | Recovery |
+|---|---|---|
+| Rate limit hits mid-scenario | run-scenario-test returns `STUCK` or with an explicit rate-limit error | next cron fire's idempotent read sees the scenario still in_progress, retries it from S001 (or from the in-scenario MEMORY.md checkpoint if the runner was able to write one) |
+| dev-browser daemon crashes | `dev-browser daemon status` returns dead | cron sets phase=master_setup_recovery, next fire restarts daemon and resumes |
+| pm2 ai-maestro crashes | `curl /api/sessions` 5xx | cron sets phase=master_setup_recovery, next fire restarts pm2 |
+| State file corruption | JSON parse fails | cron writes corrupted state to state.json.corrupted-<ts>, sets phase=failed, alerts in next consolidated report |
+| All scenarios complete but cleanup failed | phase=master_cleanup persists across many fires | after 5 fires in master_cleanup without progress, set phase=consolidated_with_warnings |
+| GitHub fork rate limit | `gh pr create` returns 429 | log and continue, the fix is committed locally, the PR draft will be created on the next attempt |
+| User's both accounts hit weekly quota | every cron fire fails for hours | wait it out — when one weekly quota resets, the cron picks up exactly where it left off |
+
+### One last hard rule
+
+**Never include a `claude --print` or `claude -p` invocation in the cron prompt.** The cron prompt runs INSIDE an existing claude session. Shelling out to a NEW claude process from a cron fire would be the kind of recursive nightmare we're explicitly trying to avoid. The whole architecture works because the cron is in-process.
 
 ---
 

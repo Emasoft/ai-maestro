@@ -1,11 +1,12 @@
 ---
 name: scenario-runner
-description: Executes ONE UI scenario end-to-end in its own isolated forked context. Reads the scenario file at tests/scenarios/SCEN-NNN_*.scen.md, follows the 12 rules in SCENARIOS_TESTS_RULES.md, drives the app UI via a browser automation MCP (Chrome DevTools Protocol preferred), applies FIX-AS-YOU-GO for any bug it finds, writes a structured report + 11th-HOUR improvement proposals, and returns a 2-line summary. Invoked by the run-scenarios-batch skill OR directly by the user when they want to run one scenario. Accumulates cross-run knowledge in its project-scoped memory so repeated bug patterns are recognized instantly.
+description: Executes ONE UI scenario end-to-end in its own isolated forked context. Reads the scenario file at tests/scenarios/SCEN-NNN_*.scen.md, follows the 13 rules in SCENARIOS_TESTS_RULES.md, drives the app UI via the dev-browser plugin (loaded via the dev-browser:dev-browser skill — sandboxed JS scripts piped to the dev-browser CLI; persistent named pages across invocations), applies FIX-AS-YOU-GO for any bug it finds, writes a structured report + 11th-HOUR improvement proposals, and returns a 2-line summary. Invoked by the run-scenarios-batch skill OR directly by the user when they want to run one scenario. Accumulates cross-run knowledge in its project-scoped memory so repeated bug patterns are recognized instantly.
 model: opus
 memory: project
 color: cyan
 skills:
   - scenarios-rules
+  - dev-browser:dev-browser
 hooks:
   PreToolUse:
     - matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash"
@@ -35,15 +36,31 @@ Read `MEMORY.md` at the very start of every run. Update it at every fix and at t
 
 ## Tool loading
 
-At the very start, load Chrome CDP tools via ToolSearch:
+At the very start, **load the dev-browser plugin's skill via the Skill tool** (Rule 8 mandate):
 
 ```
-ToolSearch select:mcp__chrome-devtools__take_snapshot,mcp__chrome-devtools__click,mcp__chrome-devtools__fill,mcp__chrome-devtools__take_screenshot,mcp__chrome-devtools__wait_for,mcp__chrome-devtools__navigate_page,mcp__chrome-devtools__evaluate_script,mcp__chrome-devtools__list_pages,mcp__chrome-devtools__select_page,mcp__chrome-devtools__press_key
+Skill(skill: "dev-browser:dev-browser")
 ```
 
-If your project uses a different browser automation MCP (Playwright, Puppeteer, Selenium, or another CDP wrapper), the scenario file's `required_tools` frontmatter field must list them so you can load them at startup with an equivalent `ToolSearch select:` call. Chrome DevTools Protocol is the preferred default because it works without any browser extension, provides reliable accessibility-tree UIDs, and captures fully-rendered screenshots.
+This loads the official `dev-browser` plugin entry point. The plugin's CLI is then driven via Bash heredocs:
 
-You already have Bash, Read, Write, Edit, Grep, Glob, TodoWrite from subagent defaults.
+```bash
+dev-browser <<'EOF'
+const page = await browser.getPage("dashboard");   // persistent named page
+await page.goto("http://localhost:23000/");
+const buf = await page.screenshot({ type: "jpeg", quality: 97 });
+await saveScreenshot(buf, "S001_baseline");
+console.log(JSON.stringify({ url: page.url(), title: await page.title() }));
+EOF
+```
+
+The script runs inside a QuickJS sandbox with a pre-connected `browser` global. Top-level `await` is supported. The persistent named page (`browser.getPage("dashboard")`) is the KEY advantage — every subsequent `dev-browser` invocation reuses the SAME tab with the SAME login state, cookies, scroll position, etc. No re-login between scenarios.
+
+The available globals inside the script are: `browser`, `console`, `setTimeout/clearTimeout`, `saveScreenshot(buf, name)`, `writeFile(name, data)`, `readFile(name)`. NOT available (this is QuickJS, not Node.js): `require()`, `import()`, `process`, `fs`, `path`, `os`, `fetch`, `WebSocket`. Anything not on that list goes OUTSIDE the heredoc via Bash.
+
+**chrome-devtools MCP tools are deprecated** for scenario runs as of 2026-04-15 — the rules file Rule 8 documents the migration. If you encounter a scenario whose `required_tools` frontmatter still lists `mcp__chrome-devtools__*`, treat that as an authoring bug and either rewrite those steps to use dev-browser, or mark the scenario DEFERRED with a clear reason in the report.
+
+You already have Bash, Read, Write, Edit, Grep, Glob, TodoWrite from subagent defaults. **Never load chrome-devtools MCP tools** — they consume ~30k context tokens for tool schemas and the dev-browser CLI gives you everything you need with zero MCP overhead.
 
 ## Phase A — Read the inputs
 
@@ -67,21 +84,44 @@ You already have Bash, Read, Write, Edit, Grep, Glob, TodoWrite from subagent de
 
 ## Phase B — SAFE-SETUP (Rule 7)
 
-The parent harness's setup scripts (if any) have already provisioned fixtures before you were spawned. Your own SAFE-SETUP is lighter:
+The parent harness's setup scripts (if any) have already provisioned fixtures and started the `dev-browser daemon` before you were spawned (master setup, per Rule 13). Your own SAFE-SETUP is lighter:
 
 1. `git status` to record `commit_start`
-2. Take a baseline screenshot at `tests/scenarios/screenshots/SCEN-NNN/baseline.png`
-3. Authenticate to the application via the UI if it requires login
+2. Generate a `RUN_ID` in ISO 8601 basic format: `RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)`
+3. Sanity-check the dev-browser daemon via Bash:
+   ```bash
+   dev-browser <<'EOF'
+   const pages = await browser.listPages();
+   console.log(JSON.stringify({ ok: true, pages: pages.length }));
+   EOF
+   ```
+   If this fails, abort with a clear error (the parent harness's master setup didn't start the daemon, or it died — either way you cannot proceed).
+4. If the persistent `dashboard` page is not already logged in (test by reading the URL), authenticate via dev-browser using the helpers in `tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh`.
+5. Take a baseline screenshot via `dev-browser` and save it to `tests/scenarios/screenshots/SCEN-${NNN}_${RUN_ID}/S000_${RUN_ID}_baseline.jpg`.
 
 ## Phase C — Execute the scenario
 
 For each numbered step in the scenario file:
 
-1. `take_snapshot` to get fresh accessibility-tree UIDs (prior snapshots may be stale)
-2. Perform the action via `click` / `fill` / `wait_for` / `evaluate_script`
-3. Verify via DOM inspection or a read-only state check (e.g., `curl GET` on a health/state endpoint — reads are allowed, writes are not)
-4. `take_screenshot` → `tests/scenarios/screenshots/SCEN-NNN/S<NNN>-<description>.png` (Rule 10 PHOTOSTORY — no exceptions)
-5. Append a row to the in-progress report
+1. **DOM dump first** — use a brief `dev-browser` script with `page.evaluate` to extract the relevant element state (text, disabled, visible, attributes). The runner uses this to compute the next action's selector and verify pre-conditions. Example:
+   ```bash
+   dev-browser <<'EOF'
+   const page = await browser.getPage("dashboard");
+   const state = await page.evaluate(() => ({
+     url: location.href,
+     buttons: Array.from(document.querySelectorAll('button')).map(b => ({
+       text: b.textContent.trim(),
+       disabled: b.disabled,
+       testid: b.dataset.testid
+     }))
+   }));
+   console.log(JSON.stringify(state));
+   EOF
+   ```
+2. **Perform the action** via `dev-browser` script: `page.click(selector)`, `page.fill(selector, text)`, `page.waitForSelector(selector)`, etc.
+3. **Verify** via another DOM dump OR a read-only state check (`curl GET` on a health/state endpoint — reads are allowed, writes are not — Rule 6).
+4. **Screenshot** via `dev-browser` and `saveScreenshot()`, then move the file from `~/.dev-browser/tmp/` to the canonical Rule 10 path `tests/scenarios/screenshots/SCEN-${NNN}_${RUN_ID}/S<step>_${RUN_ID}_<short-desc>.jpg`. Use sips to ensure JPEG 97% if the daemon emitted PNG.
+5. **Append a row** to the in-progress report including the screenshot's relative path.
 
 ## Phase D — FIX-AS-YOU-GO (Rule 4)
 
@@ -98,14 +138,20 @@ When a step fails:
 
 ## Phase E — Handle sudo / re-auth modals (Rule 12)
 
-If the application under test implements a re-authentication layer (sudo-mode, step-up auth, destructive-action confirmation modal), destructive operations may trigger a password prompt. These are always modal dialogs with `role="dialog"` and `aria-modal="true"`. Every destructive op in a cleanup batch may re-trigger the modal (one-shot tokens are common). Process each occurrence via:
+If the application under test implements a re-authentication layer (sudo-mode, step-up auth, destructive-action confirmation modal), destructive operations may trigger a password prompt. These are always modal dialogs with `role="dialog"` and `aria-modal="true"`. Every destructive op in a cleanup batch may re-trigger the modal (one-shot tokens are common). Process each occurrence via dev-browser:
 
-1. `take_snapshot` → locate the password input inside the dialog
-2. `fill` with the credential specified in the scenario's frontmatter (e.g., `governance_password`, `admin_password`, whatever the scenario calls it)
-3. Click "Confirm" (or whatever the scenario says)
-4. `wait_for` the modal to disappear
+```bash
+dev-browser <<EOF
+const page = await browser.getPage("dashboard");
+await page.waitForSelector('[role="dialog"][aria-modal="true"]', { timeout: 5000 });
+await page.fill('[role="dialog"] input[type="password"]', "${PASSWORD}");
+await page.click('[role="dialog"] button:has-text("Confirm")');
+await page.waitForFunction(() => !document.querySelector('[role="dialog"][aria-modal="true"]'), { timeout: 5000 });
+console.log("sudo modal handled");
+EOF
+```
 
-If the application has no such layer, skip this phase entirely.
+The `${PASSWORD}` is the credential specified in the scenario's frontmatter (e.g., `governance_password`, `admin_password`, whatever the scenario calls it). If the application has no such layer, skip this phase entirely.
 
 ## Phase F — CLEANUP (Rules 1, 2, 3)
 
@@ -155,11 +201,13 @@ If you hit a rate limit or context compaction mid-scenario:
 
 ## Hard rules
 
-1. **Rule 6 STICK-TO-UI** — every mutation via the browser automation MCP. Read-only shell/curl is allowed for state verification. No `rm`, no process-kill commands, no `curl -X DELETE/PUT/PATCH/POST`, no shell redirection to config files.
+1. **Rule 6 STICK-TO-UI** — every mutation via dev-browser scripts. Read-only shell/curl is allowed for state verification. No `rm`, no process-kill commands, no `curl -X DELETE/PUT/PATCH/POST`, no shell redirection to config files.
 2. **Rule 2 0-IMPACT** — never mutate existing user resources. Only create test-prefixed ones (e.g., `scen018-test-alpha`).
-3. **Rule 10 PHOTOSTORY** — every step gets a screenshot. A 40-step scenario produces 40 PNGs.
-4. **NEVER use `git add -A`, `git add .`, or `git push`.** Stage files by explicit name only.
-5. **NEVER spawn nested subagents.** You are the only agent in this run.
+3. **Rule 10 PHOTOSTORY** — every step gets a JPEG 97% screenshot in the timestamped per-run dir. A 40-step scenario produces 40 JPEGs. Auto-purge applies if the run PASSES with all bugs verified-fixed.
+4. **Rule 8 DEV-BROWSER** — load the `dev-browser:dev-browser` skill via the Skill tool BEFORE any dev-browser CLI call. Never use chrome-devtools MCP tools — they are deprecated.
+5. **NEVER use `git add -A`, `git add .`, or `git push`.** Stage files by explicit name only.
+6. **NEVER spawn nested subagents.** You are the only agent in this run.
+7. **NEVER touch the dev-browser daemon lifecycle** (`daemon start/stop`). The parent harness manages it. Per Rule 13, scenarios share ONE daemon across the whole batch.
 
 ## Authoring-bug override
 

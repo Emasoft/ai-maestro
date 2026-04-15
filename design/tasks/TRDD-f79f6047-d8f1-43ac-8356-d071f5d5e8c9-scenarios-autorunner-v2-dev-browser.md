@@ -147,23 +147,33 @@ Our scenarios need several helpers that dev-browser doesn't provide out-of-the-b
 
 These helpers are pre-loaded into every `dev-browser exec` script so scenarios can just say `await aimLogin(PASSWORD)` instead of reimplementing the same login sequence.
 
-### 4.5 Rate-limit self-healing (TRDD-1222f06a integration)
+### 4.5 Rate-limit self-healing — supersedes TRDD-1222f06a Option B
 
-Per TRDD-1222f06a option A: add an outer wrapper script that restarts the orchestrator on exit code != 0. For v2, this becomes:
+**Updated 2026-04-15 after TRDD-1222f06a empirical findings (see §9 of that TRDD).** The original assumption — that Claude Code exits on rate-limit errors and needs an external wrapper to relaunch — is **WRONG**. Claude Code stays alive through rate-limit / API errors; only the current TURN ends. The Node.js event loop, the in-memory cron scheduler, and the dev-browser daemon all keep running. So the v2 architecture uses a 3-component in-process design instead of an outer wrapper:
+
+1. **Passive account switcher** — the user's existing `~/.claude/account-switcher/` rotates OAuth tokens instantly on 429 (no active retry, just storage + per-request token selection).
+2. **Recurring durable cron** — `CronCreate({cron: "1-59/13 * * * *", durable: true, prompt: <see Rule 13 in SCENARIOS_TESTS_RULES.md>})`. Each fire becomes a fresh user turn that drives ONE atomic step of the batch state machine (master setup, run next scenario, master cleanup, or consolidate). The cron persists in `.claude/scheduled_tasks.json` so it survives `claude --continue` restarts. **The cron IS the wake-up mechanism** — without it, the session sits in the rate-limit-options UI forever even after the switcher rotates to a fresh token.
+3. **Idempotent state file** — `tests/scenarios/state/autonomous-batch-state.json` tracks the exact state machine cursor. Each cron fire reads the file, performs ONE action, and writes the file atomically. Replays of the same fire (which can happen during rate-limit-recovery batch delivery) are idempotent — they detect "already done" and do nothing.
+
+**The outer wrapper (`scripts/run-overnight.sh` `while true; do claude --continue; done`) is OPTIONAL.** It only matters for non-rate-limit fatal crashes (system reboot, manual `/exit`, OOM kill). If you want belt-and-braces, the wrapper still works:
 
 ```bash
-# scripts/run-overnight.sh — the user runs this instead of typing /run-scenarios-batch
+# scripts/run-overnight.sh — optional belt-and-braces wrapper
+# Per TRDD-1222f06a §9, Claude Code stays alive through API errors so this
+# wrapper is needed ONLY for non-rate-limit fatal crashes.
 while true; do
-  claude --continue <<'EOF'
-Resume the overnight batch from tests/scenarios/state/overnight-progress.log
+  claude --continue --dangerously-skip-permissions <<'EOF'
+Resume the autonomous overnight batch. The state file is at tests/scenarios/state/autonomous-batch-state.json. The cron in .claude/scheduled_tasks.json drives the loop — just stay alive.
 EOF
-  [ $? -eq 0 ] && break
-  echo "Claude exited non-zero, sleeping 300s then retrying..."
-  sleep 300
+  EXIT_CODE=$?
+  # exit 0 = user pressed /exit (intentional stop); anything else = fatal crash
+  [ $EXIT_CODE -eq 0 ] && break
+  echo "Claude exited with code $EXIT_CODE, restarting in 60s..."
+  sleep 60
 done
 ```
 
-The outer loop survives any rate-limit-induced Claude Code exit. When Claude restarts, it reads the progress log, skips already-done scenarios, and continues.
+The full state machine and the cron prompt are documented in `tests/scenarios/SCENARIOS_TESTS_RULES.md` Rule 13: AUTONOMOUS-PROTOCOL. The v2 plugin's `setup-overnight-batch.sh` script is responsible for: (a) initializing the state file, (b) starting the dev-browser daemon, (c) creating the durable cron via `CronCreate`. The plugin's `cleanup-overnight-batch.sh` script handles the inverse: stop daemon, delete cron, generate consolidated PR list.
 
 ### 4.6 Screenshot convention enforcement
 

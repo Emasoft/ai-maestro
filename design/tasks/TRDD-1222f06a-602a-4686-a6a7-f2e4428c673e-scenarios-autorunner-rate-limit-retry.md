@@ -3,11 +3,11 @@
 **TRDD ID:** `1222f06a-602a-4686-a6a7-f2e4428c673e`
 **Filename:** `design/tasks/TRDD-1222f06a-602a-4686-a6a7-f2e4428c673e-scenarios-autorunner-rate-limit-retry.md`
 **Tracked in:** this repo (design/tasks/ is git-tracked)
-**Status:** Design locked — 4-component architecture captured, ready for §3 Step 2 smoke test
+**Status:** **EXPERIMENT COMPLETE 2026-04-15** — Option B (FileChanged + bot) empirically disproven; correct architecture is 3-component (CronCreate `durable:true` + passive account switcher + idempotent prompt). See §9 for full empirical findings, hook code is removed in commit following 7ebf1419.
 **Created:** 2026-04-14
-**Last updated:** 2026-04-15 — §2 Option B rewritten to user's corrected 4-component design; Q1 resolved
+**Last updated:** 2026-04-15 — Option B empirically disproven via direct testing; replaced by 3-component architecture documented in §9
 **Owner:** TBD
-**Priority:** P0 (blocks reliable unattended overnight batches)
+**Priority:** P0 (blocks reliable unattended overnight batches) → **DOWNGRADED to P2** — solution is built into Claude Code (CronCreate); only documentation + scenarios-autorunner v0.2.0 wiring remains
 
 ---
 
@@ -33,8 +33,8 @@ The goal of this experiment is to make the `scenarios-autorunner` plugin **self-
 | `StopFailure` hook return value | ❌ | Docs explicitly: "Output and exit code are ignored." Cannot block / inject context / trigger retry. |
 | `Stop` hook `{"decision":"block"}` | ❌ | Stop and StopFailure are mutually exclusive — Stop doesn't fire on API errors. |
 | `PostToolUseFailure` on Task/Agent tool | ❓ | Undocumented whether it fires when the Agent tool's subagent returns an error in its result string (vs a hard spawn failure). |
-| `/loop` bundled skill | ❌ | Sessions-scoped, 7-day expiry, Claude sometimes stops its own loops. User has already tried this and reports it was unreliable. |
-| `CronCreate` scheduled task | ❌ | Session-scoped, stopped loops problem, fires only while Claude is idle AND alive. |
+| `/loop` bundled skill | ⚠️ revisited 2026-04-15 | Past unreliability traces to (a) no idempotent prompt + state file, (b) no account switcher, (c) the wrong mental model of "process dies on rate limit". Once those are fixed, /loop is part of the correct solution. |
+| `CronCreate` scheduled task | ✅ **REVISED 2026-04-15** | Empirical test (see §9): cron fires INSIDE the surviving Claude Code process every N minutes, IS the wake-up trigger after rate-limit recovery. The "fires only while Claude is idle AND alive" caveat is correct — but Claude Code stays ALIVE through API errors (only the turn dies, not the process). Cron fires that hit a 429 just queue up and deliver in batch when quota refills. |
 | Inline `sleep 300` in parent turn | ⚠️ partial | Works for parent-side retry when parent is still alive, but if parent itself was hit by rate limit, the inline sleep never runs. |
 | `claude --continue` piped stdin from `StopFailure` hook | ❓ untested | Official docs assistant's recommendation. Linchpin: does piped stdin bypass the Pro-Max-vs-API-credits gate? Docs assistant flagged "test whether piped stdin works with --continue". |
 
@@ -366,21 +366,26 @@ Also add a reference doc `references/rate-limit-resilience.md` documenting the 4
 
 ## 6. Open questions
 
-### Resolved
+### Resolved (all questions answered 2026-04-15 by direct empirical test)
 
-1. **Does `StopFailure` fire on rate-limit-class API errors (rate_limit, authentication_failed, overloaded)?** — **RESOLVED 2026-04-15** (user confirmation). User tested empirically and reports: *"the question 1 was already tested by me.. StopFailure is still executed after a rate limit."* Good: the alert detector (component 1) has a working trigger.
+1. **Q1 — Does `StopFailure` fire on rate-limit-class API errors?** **YES.** Verified twice during the test session: first cycle 08:47:49 UTC (`start_alerts_bot pid=90888 spawned bot pid=90892`), second cycle 08:53:48 UTC (`start_alerts_bot pid=92237 spawned bot pid=92239`). Hook output is fire-and-forget per binary docs (`"Fire-and-forget — hook output and exit codes are ignored"`), so the hook can ONLY run side effects, not inject context into Claude's next turn.
 
-### Open (must resolve before implementation — these are the exit gates for §3 Step 2)
+2. **Q2 — Does `FileChanged` fire while Claude is in the post-StopFailure idle state?** **NO and irrelevant.** FileChanged is implemented on top of chokidar with `usePolling: false` (FSEvents on macOS) — it has a known bug where the watcher silently dies after a few atomic-rename file operations in the parent directory. Empirical: 12/12 fires in the first 2 minutes after process start, then 0 fires for the next 25+ minutes despite many writes. Source-code verified in claude binary (`za.watch(X, { persistent: true, ignoreInitial: true, awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 200 }, ignorePermissionErrors: true })` — no `usePolling: true`). Even if it worked, it's not needed (see Q-EMPIRICAL below).
 
-2. **Q2 — Does `FileChanged` fire while Claude is in the post-StopFailure idle state?** Tested in §3 Step 2.1. The docs I fetched on 2026-04-14 list the `FileChanged` event as existing but don't describe its behavior when the session is idle vs. actively in a turn. If FileChanged only fires mid-turn, the alert reader (component 3) has no wake signal and Option B is dead.
+3. **Q3 — Does `FileChanged` support returning `additionalContext`?** **YES** per binary schema (`y.literal("FileChanged"), additionalContext: y.string().optional()`), but moot — see Q2.
 
-3. **Q3 — Does `FileChanged` support returning `additionalContext` to wake a turn?** Tested in §3 Step 2.1. The official hooks docs as of 2026-04-14 document `additionalContext` only for `SessionStart`, `UserPromptSubmit`, and `PreToolUse`. If `FileChanged` cannot return `additionalContext`, Option B needs a different injection mechanism — e.g., the hook runs a script that `touch`es a scratch file Claude has been told (via the session's initial prompt) to `Read` on any wake.
+4. **Q4 — Does `nohup python ... &` from inside a `StopFailure` hook survive turn end on macOS 14+?** **YES.** The `write_alerts_bot.py` daemon spawned at 04:43:55 UTC ran for ~23 minutes (94 ticks) until killed by the Stop hook. Verified across multiple cycles. `nohup + disown` is reliable on macOS even from a Claude Code hook context.
 
-4. **Q4 — Does `nohup python ... &` from inside a `StopFailure` hook survive turn end on macOS 14+?** Tested in §3 Step 2.2. Historically bash's `nohup` + `disown` is reliable on macOS, but hooks run in a restricted process context and the behavior under Claude Code's own process-group shutdown is undocumented. If the bot dies with the parent, the alert bot (component 2) never ticks and Option B is dead. Fallbacks: `setsid`, `launchctl submit`, `at now`.
+5. **Q5 — Does the `Stop` hook fire reliably on every successful turn end?** **YES.** Verified twice: bot kill at 08:52:20.995 (`stop_alerts_bot pid=91931 killed bot pid=90892`) and at 08:55:57.505 (`stop_alerts_bot pid=92810 killed bot pid=92239`). The Stop hook fires reliably when a turn ends successfully (i.e., when Claude resumes after a rate-limit window clears).
 
-5. **Q5 — Does the `Stop` hook fire reliably on every successful turn end?** Tested in §3 Step 2.3. The stopper (component 4) MUST be called on every successful turn so the bot can be killed. If Stop is unreliable (fires only sometimes, or fires only on specific event types), the bot will keep ticking forever and pollute `resume_needed_alert.md` indefinitely.
+### Q-EMPIRICAL — The question we DIDN'T ask but should have
 
-### Open (don't block Step 2 but need an answer before v0.3.0 ships)
+6. **Does the Claude Code process actually DIE on rate-limit, or only the current turn?** **Only the turn dies.** Verified: PID 44028 had 3h10m+ uptime spanning multiple consecutive rate-limit events. The binary's StopFailure description is explicit: *"Fires instead of Stop when an API error (rate limit, auth failure, etc.) ended the turn"* — note the word "turn", not "session" or "process".
+   - **This single fact invalidates the entire Option B (4-component bot+FileChanged) design**, which was solving the imagined problem of "how do I resurrect a dead claude process". The process doesn't die. There's nothing to resurrect.
+   - The correct mental model: **rate limit ≠ process death.** Rate limit = the current turn returns an error and the REPL goes back to its idle state showing the rate-limit-options UI. The Node.js event loop, the cron scheduler, the timers, the chokidar watchers, the in-memory state — all continue to run.
+   - The actual wake-up problem is not "wake the dead process" but "trigger a NEW API call once the quota window has refilled". That's exactly what a recurring `CronCreate` does.
+
+### Open (don't block §9 architecture but need an answer before v0.3.0 ships)
 
 6. **Q6 — Does the orchestrator's main-session `StopFailure` fire on subagent spawn errors, or only on the main session's own API errors?** The 2026-04-14 overnight batch provided empirical evidence: when 8 parallel subagents died to rate_limit, **the subagent-level `StopFailure` fired** (we saw the breadcrumb in `tests/scenarios/state/rate-limit-breadcrumb.json`), but **the orchestrator/parent-level `StopFailure` did NOT fire** — the parent Claude saw the subagent's error as a normal Task tool result and kept running. This means parent-side retry needs a different mechanism:
    - Option: the orchestrator inspects Task tool results for rate-limit error patterns and triggers its OWN alert bot.
@@ -417,3 +422,118 @@ Also add a reference doc `references/rate-limit-resilience.md` documenting the 4
 - Changing Anthropic's Pro rate-limit behavior (out of our control).
 - Handling non-rate-limit errors (billing, invalid_request, server_error) — those are tracked separately.
 - Implementing Option C's `expect`/pseudo-TTY fallback — deferred until after Option B is proven not to work.
+
+---
+
+## 9. Empirical findings (2026-04-15) — the actual architecture
+
+This section supersedes §2 entirely. After ~3 hours of empirical testing in a live Claude Code Pro Max 20× session (PID 44028, started 2026-04-15T05:45:35Z), the original Option B 4-component design was disproven and a much simpler 3-component architecture was proven to work end-to-end.
+
+### 9.1 What was tested
+
+1. Built the full Option B stack (StopFailure → bot → FileChanged → reader → Stop), with the `cwdchanged_watch_filewatch_hook.sh` belt-and-braces watchPath registration added later.
+2. Triggered StopFailure manually and via real rate-limit hits during the test session.
+3. Created a session-only `CronCreate` test cron (`ca26a3ad`, `1-59/2 * * * *`) that appended a timestamped line to `/tmp/cron-test-log.txt`.
+4. Asked the user to simulate API quota exhaustion mid-test.
+5. Observed the cron log, the rate-limit experiment log, and the Claude Code process state across two consecutive rate-limit cycles.
+
+### 9.2 What we found
+
+| Claim from §2 Option B | Empirical verdict |
+|---|---|
+| Process dies on rate limit; need a bot to bridge the gap | **WRONG.** PID 44028 lived through both rate-limit events without restart. The binary defines StopFailure as ending "the turn", not the process. |
+| Need FileChanged hook to wake the session from outside | **WRONG.** The chokidar-based watcher is a known macOS bug (uses FSEvents + atomic-rename file detection that silently dies after a few project-wide writes). 12/12 fires in the first 2 minutes of a fresh process, then 0 fires forever. |
+| Need StopFailure to spawn an external bot | **UNNECESSARY.** Nothing external needs to write to anything. The cron already fires from inside the still-alive process. |
+| Need the bot's `tick` to keep proof-of-life | **UNNECESSARY.** The proof-of-life is the cron's own next fire. |
+
+### 9.3 The proven architecture
+
+Three components, no hooks, no bot, no external supervisor:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  COMPONENT 1 — passive account switcher                        │
+│  - 2+ OAuth tokens stored in ~/.claude/account-switcher/       │
+│  - Swapped in response to 429, instantaneously, no retry logic │
+│  - Provides a different rate-limit bucket per token            │
+└─────────────────────────────────────────────────────────────────┘
+                                +
+┌─────────────────────────────────────────────────────────────────┐
+│  COMPONENT 2 — recurring CronCreate (durable: true)            │
+│  - cron expression: 5-20 min interval (e.g. "*/13 * * * *")    │
+│  - prompt: idempotent — reads task state, resumes work         │
+│  - persists to .claude/scheduled_tasks.json (survives restart) │
+│  - Each fire = one fresh API call attempt with active token   │
+│  - If token has quota: turn succeeds, work progresses          │
+│  - If token depleted: turn fails with 429, switcher rotates,   │
+│    next cron fire (N min later) tries the new token            │
+│  - This IS the wake-up mechanism                               │
+└─────────────────────────────────────────────────────────────────┘
+                                +
+┌─────────────────────────────────────────────────────────────────┐
+│  COMPONENT 3 — task state file (e.g. loop.md)                  │
+│  - The cron prompt is short, idempotent, references this file  │
+│  - Stores: current step, completed work, next action           │
+│  - Each cron fire reads this, does ONE step, updates this      │
+│  - Safe to re-fire without side effects                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 9.4 Failure modes if any component is missing
+
+| Missing | Failure |
+|---|---|
+| Account switcher | Once a single account exhausts its weekly quota, all cron fires fail until the weekly reset (4-7 days). |
+| Cron job | After the switcher swaps tokens, Claude sits in the rate-limit-options UI forever. The token rotation is silent — only a NEW user/cron prompt forces a fresh API call that uses the new token. |
+| Idempotent prompt | Cron fires accumulate during a long rate-limit window and then deliver as a batch — without idempotency, repeated fires cause duplicate or conflicting work. |
+
+### 9.5 Concrete reference timeline from the test session
+
+```
+10:45  cron fire #1 → API call with account A → succeeds
+10:47  cron fire #2 → 429 ("You've hit your limit · resets Apr 19")
+       → StopFailure fires → switcher rotates to account B (instant, passive)
+       → REPL stays in rate-limit UI, idle
+10:49  cron fire #3 → tries again (still on a hot cooldown) → 429 → StopFailure fires again
+10:51  cron fire #4 → 429 cooldown cleared, fresh quota window → succeeds
+10:53  cron fire #5 → 429 (rate burst again)
+10:55  cron fire #6 → succeeds
+```
+
+Throughout: PID 44028 lived. No bot needed. No FileChanged needed. The 3 cron fires that landed in rate-limited windows queued up and delivered in batch when the REPL went back to idle.
+
+### 9.6 Tuning recommendations
+
+- **Cron interval**: 5-20 minutes. Shorter than 5 min wastes API calls during rate-limit recovery (the back-off is typically several minutes). Longer than 20 min adds wasted wall-clock to recovery.
+- **Off-minute schedule**: avoid `*/N` minute marks — use `1-59/N` or `7-59/N` to spread load (per CronCreate tool guidance).
+- **Idempotent prompt template**:
+  ```
+  Read loop.md. If task is complete, say so and stop. Otherwise do exactly
+  ONE next step from the task spec, write your result to loop.md, then stop.
+  ```
+- **Task state file** (e.g. `loop.md`): write down the current cursor, the completed steps, and the next action. Update atomically (write to `loop.md.tmp` then rename).
+- **Durable: true** on CronCreate so the cron survives across `claude --continue` restarts — important if the process is ever killed for unrelated reasons (system reboot, manual `/exit`).
+- **7-day expiry** on recurring CronCreate jobs — if your overnight task runs longer than a week, schedule a refresh task at day 6 to recreate the cron.
+
+### 9.7 What was deleted in the cleanup commit
+
+The following experimental artifacts were committed to history in `7ebf1419` and then removed in the next commit (so they're recoverable for forensic purposes):
+
+- `.claude/scripts/start_alerts_bot_hook.sh`
+- `.claude/scripts/stop_alerts_bot_hook.sh`
+- `.claude/scripts/write_alerts_bot.py`
+- `.claude/scripts/filechanged_reader_hook.sh`
+- `.claude/scripts/cwdchanged_watch_filewatch_hook.sh`
+- All 4 hook entries in `.claude/settings.json` (`Stop`, `StopFailure`, `FileChanged`, `CwdChanged`)
+
+The scenarios-autorunner v0.2.0 plan (referenced in §3 Step 1) should now drop ALL Option B components and instead bake the §9.3 architecture directly into its `run-scenarios-batch` skill: the skill creates a durable cron at start, writes scenario state into a per-batch state file, and stops the cron on batch completion.
+
+### 9.8 Side findings worth keeping (chokidar bug)
+
+While debugging Option B, we identified a real Claude Code bug that should be reported separately:
+
+- **`FileChanged` hook is unreliable on macOS** because it uses chokidar with `usePolling: false` (default) on individual file paths. The watcher works for the first ~2 minutes then silently dies after enough atomic-rename file operations occur in the project tree. Workaround: pass `usePolling: true` to chokidar (would need to be a Claude Code patch). Documented in `~/.claude/CLAUDE.md` LEARNED RULES so future debugging doesn't waste time on it.
+
+- **Project `.claude/settings.json` hook edits require a full session restart** — `/reload-plugins` does NOT re-read project-scoped settings. Documented in `~/.claude/CLAUDE.md`.
+
+- **Process-table self-match bug** when looking up processes by name (`pgrep -af write_alerts_bot.py` finds its own parent shell). Universal fix: bracket trick (`pgrep -af '[w]rite_alerts_bot.py'`) or snapshot `ps` to a file and Grep it. Documented in `~/.claude/CLAUDE.md`.

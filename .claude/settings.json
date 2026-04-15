@@ -1,24 +1,46 @@
 {
   "hooks": {
+    "CwdChanged": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/scripts/cwdchanged_watch_filewatch_hook.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/scripts/stop-hook.sh",
-            "timeout": 600
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/scripts/stop_alerts_bot_hook.sh",
+            "timeout": 10
           }
         ]
       }
     ],
     "StopFailure": [
       {
-        "matcher": "rate_limit",
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/scripts/stopfailure-hook.sh",
-            "timeout": 600
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/scripts/start_alerts_bot_hook.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "FileChanged": [
+      {
+        "matcher": "resume_needed_alert.md",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/scripts/filechanged_reader_hook.sh",
+            "timeout": 10
           }
         ]
       }

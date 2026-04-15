@@ -197,6 +197,14 @@ plugins/amp-messaging
 # LLM Externalizer analysis reports (intermediate artifacts — regeneratable)
 llm_externalizer_output/
 
+# TRDD-1222f06a rate-limit experiment leftovers (superseded by CronCreate
+# architecture — kept gitignored so any stale runtime artifact never lands
+# in a commit)
+resume_needed_alert.md
+
+# Claude Code CronCreate lock file — ephemeral runtime artifact
+.claude/scheduled_tasks.lock
+
 # Scenario test outputs (per-run artifacts, not source)
 tests/scenarios/reports/
 tests/scenarios/screenshots/

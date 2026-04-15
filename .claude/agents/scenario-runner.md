@@ -42,23 +42,11 @@ At the very start, **load the dev-browser plugin's skill via the Skill tool** (R
 Skill(skill: "dev-browser:dev-browser")
 ```
 
-This loads the official `dev-browser` plugin entry point. The plugin's CLI is then driven via Bash heredocs:
+The skill itself documents the dev-browser CLI API — `browser.getPage`, `page.snapshotForAI`, `saveScreenshot`, the QuickJS sandbox boundaries, the full Playwright Page API on returned pages, etc. This agent definition does NOT duplicate that — read the loaded skill content for everything API-related.
 
-```bash
-dev-browser <<'EOF'
-const page = await browser.getPage("dashboard");   // persistent named page
-await page.goto("http://localhost:23000/");
-const buf = await page.screenshot({ type: "jpeg", quality: 97 });
-await saveScreenshot(buf, "S001_baseline");
-console.log(JSON.stringify({ url: page.url(), title: await page.title() }));
-EOF
-```
+For AI Maestro scenarios, every `dev-browser` invocation MUST use the standard flags from Rule 8: `--browser ai-maestro-scenarios --headless --timeout 60`. The reusable AI Maestro helpers live at `tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh`.
 
-The script runs inside a QuickJS sandbox with a pre-connected `browser` global. Top-level `await` is supported. The persistent named page (`browser.getPage("dashboard")`) is the KEY advantage — every subsequent `dev-browser` invocation reuses the SAME tab with the SAME login state, cookies, scroll position, etc. No re-login between scenarios.
-
-The available globals inside the script are: `browser`, `console`, `setTimeout/clearTimeout`, `saveScreenshot(buf, name)`, `writeFile(name, data)`, `readFile(name)`. NOT available (this is QuickJS, not Node.js): `require()`, `import()`, `process`, `fs`, `path`, `os`, `fetch`, `WebSocket`. Anything not on that list goes OUTSIDE the heredoc via Bash.
-
-**chrome-devtools MCP tools are deprecated** for scenario runs as of 2026-04-15 — the rules file Rule 8 documents the migration. If you encounter a scenario whose `required_tools` frontmatter still lists `mcp__chrome-devtools__*`, treat that as an authoring bug and either rewrite those steps to use dev-browser, or mark the scenario DEFERRED with a clear reason in the report.
+**chrome-devtools MCP tools are deprecated** for scenario runs as of 2026-04-15. If you encounter a scenario whose `required_tools` frontmatter still lists `mcp__chrome-devtools__*`, treat that as an authoring bug and either rewrite those steps to use dev-browser, or mark the scenario DEFERRED with a clear reason in the report.
 
 You already have Bash, Read, Write, Edit, Grep, Glob, TodoWrite from subagent defaults. **Never load chrome-devtools MCP tools** — they consume ~30k context tokens for tool schemas and the dev-browser CLI gives you everything you need with zero MCP overhead.
 
@@ -84,44 +72,24 @@ You already have Bash, Read, Write, Edit, Grep, Glob, TodoWrite from subagent de
 
 ## Phase B — SAFE-SETUP (Rule 7)
 
-The parent harness's setup scripts (if any) have already provisioned fixtures and started the `dev-browser daemon` before you were spawned (master setup, per Rule 13). Your own SAFE-SETUP is lighter:
+The parent harness's master setup (per Rule 13) has already provisioned fixtures and the dev-browser daemon is already running with the persistent `dashboard` page logged in. Your per-scenario SAFE-SETUP is lighter:
 
 1. `git status` to record `commit_start`
 2. Generate a `RUN_ID` in ISO 8601 basic format: `RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)`
-3. Sanity-check the dev-browser daemon via Bash:
-   ```bash
-   dev-browser <<'EOF'
-   const pages = await browser.listPages();
-   console.log(JSON.stringify({ ok: true, pages: pages.length }));
-   EOF
-   ```
-   If this fails, abort with a clear error (the parent harness's master setup didn't start the daemon, or it died — either way you cannot proceed).
-4. If the persistent `dashboard` page is not already logged in (test by reading the URL), authenticate via dev-browser using the helpers in `tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh`.
-5. Take a baseline screenshot via `dev-browser` and save it to `tests/scenarios/screenshots/SCEN-${NNN}_${RUN_ID}/S000_${RUN_ID}_baseline.jpg`.
+3. Sanity-check the dev-browser daemon by listing pages and confirming the `dashboard` page is on `http://localhost:23000/`. If not, the master setup is broken — abort with a clear error rather than trying to fix it yourself.
+4. Take a baseline screenshot at `tests/scenarios/screenshots/SCEN-${NNN}_${RUN_ID}/S000_${RUN_ID}_baseline.jpg`.
 
 ## Phase C — Execute the scenario
 
 For each numbered step in the scenario file:
 
-1. **DOM dump first** — use a brief `dev-browser` script with `page.evaluate` to extract the relevant element state (text, disabled, visible, attributes). The runner uses this to compute the next action's selector and verify pre-conditions. Example:
-   ```bash
-   dev-browser <<'EOF'
-   const page = await browser.getPage("dashboard");
-   const state = await page.evaluate(() => ({
-     url: location.href,
-     buttons: Array.from(document.querySelectorAll('button')).map(b => ({
-       text: b.textContent.trim(),
-       disabled: b.disabled,
-       testid: b.dataset.testid
-     }))
-   }));
-   console.log(JSON.stringify(state));
-   EOF
-   ```
-2. **Perform the action** via `dev-browser` script: `page.click(selector)`, `page.fill(selector, text)`, `page.waitForSelector(selector)`, etc.
-3. **Verify** via another DOM dump OR a read-only state check (`curl GET` on a health/state endpoint — reads are allowed, writes are not — Rule 6).
-4. **Screenshot** via `dev-browser` and `saveScreenshot()`, then move the file from `~/.dev-browser/tmp/` to the canonical Rule 10 path `tests/scenarios/screenshots/SCEN-${NNN}_${RUN_ID}/S<step>_${RUN_ID}_<short-desc>.jpg`. Use sips to ensure JPEG 97% if the daemon emitted PNG.
+1. **Snapshot first** — use `page.snapshotForAI()` (per the loaded dev-browser skill) to discover elements. Use `track: "main"` for incremental snapshots after the first call.
+2. **Perform the action** via Playwright methods on the page (click, fill, waitForSelector, etc.).
+3. **Verify** via another snapshot OR a read-only state check (`curl GET` on a health/state endpoint — reads are allowed, writes are not — Rule 6).
+4. **Screenshot** via `page.screenshot()` + `saveScreenshot()`, then move the file from `~/.dev-browser/tmp/` to the canonical Rule 10 path `tests/scenarios/screenshots/SCEN-${NNN}_${RUN_ID}/S<step>_${RUN_ID}_<short-desc>.jpg`.
 5. **Append a row** to the in-progress report including the screenshot's relative path.
+
+For the API specifics (which methods to call, how to pass selectors, how to use `track`), refer to the dev-browser skill loaded at the start. This agent definition deliberately does NOT duplicate that documentation.
 
 ## Phase D — FIX-AS-YOU-GO (Rule 4)
 
@@ -138,20 +106,7 @@ When a step fails:
 
 ## Phase E — Handle sudo / re-auth modals (Rule 12)
 
-If the application under test implements a re-authentication layer (sudo-mode, step-up auth, destructive-action confirmation modal), destructive operations may trigger a password prompt. These are always modal dialogs with `role="dialog"` and `aria-modal="true"`. Every destructive op in a cleanup batch may re-trigger the modal (one-shot tokens are common). Process each occurrence via dev-browser:
-
-```bash
-dev-browser <<EOF
-const page = await browser.getPage("dashboard");
-await page.waitForSelector('[role="dialog"][aria-modal="true"]', { timeout: 5000 });
-await page.fill('[role="dialog"] input[type="password"]', "${PASSWORD}");
-await page.click('[role="dialog"] button:has-text("Confirm")');
-await page.waitForFunction(() => !document.querySelector('[role="dialog"][aria-modal="true"]'), { timeout: 5000 });
-console.log("sudo modal handled");
-EOF
-```
-
-The `${PASSWORD}` is the credential specified in the scenario's frontmatter (e.g., `governance_password`, `admin_password`, whatever the scenario calls it). If the application has no such layer, skip this phase entirely.
+AI Maestro implements a sudo-mode layer (Rule 12). Destructive operations may trigger a `role="dialog" aria-modal="true"` password modal, possibly multiple times in a cleanup batch (one-shot tokens). Process each occurrence by calling the `aim_sudo_modal` helper from `tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh`, passing the credential from the scenario's `governance_password` frontmatter field.
 
 ## Phase F — CLEANUP (Rules 1, 2, 3)
 

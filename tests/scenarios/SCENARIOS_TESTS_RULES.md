@@ -182,162 +182,49 @@ If running in a worktree, all scenario artifacts (screenshots, reports, backups)
 
 ## Rule 8: DEV-BROWSER
 
-**Scenario tests MUST use the `dev-browser` plugin and its inner `dev-browser:dev-browser` skill for ALL browser automation.** This replaces the previous chrome-devtools MCP requirement (deprecated 2026-04-15). The `chromedev-tools` MCP plugin is allowed only as an interactive debugging tool — production scenario runs use dev-browser exclusively.
+**Scenario tests MUST use the `dev-browser` plugin for ALL browser automation.** chrome-devtools MCP is deprecated for production scenario runs as of 2026-04-15.
 
-### Mandatory entry point — load the skill FIRST
+### Mandatory entry point — load the skill FIRST, then call the CLI
 
-At the very start of every scenario run, before any `dev-browser` CLI call, the runner MUST invoke the skill via the Skill tool:
+At the very start of every scenario run, the runner MUST invoke the dev-browser skill via the Skill tool:
 
 ```
 Skill(skill: "dev-browser:dev-browser")
 ```
 
-This loads the official skill content from the `dev-browser` plugin (delivered via the marketplace `dev-browser-marketplace`). The skill content points at the `dev-browser` CLI binary, so AFTER the skill is loaded the runner uses Bash to drive the CLI (see "How to invoke" below). Loading the skill via the Skill tool is mandatory because (a) it ensures the runner is using the canonical plugin API as resolved by Claude Code's plugin manager (the actual on-disk path is an internal implementation detail and may change between Claude Code versions or plugin updates — never reference it directly), and (b) it triggers any plugin-side initialization. **A scenario run that calls `dev-browser` from Bash without first invoking the skill is non-compliant — the runner must self-correct by invoking the skill, then re-doing the prior Bash call. Never hardcode any path under `~/.claude/plugins/cache/` — that directory is ephemeral and may be cleared at any time by a plugin reload.**
+The loaded skill provides the authoritative API documentation (`browser.getPage`, `page.snapshotForAI`, `saveScreenshot`, the QuickJS sandbox boundaries, etc.). **This rule does NOT duplicate that API documentation** — read the skill content for everything to do with how to write a `dev-browser` script. This rule covers ONLY the AI Maestro-specific conventions on top of the skill.
 
-### Why dev-browser
+Never hardcode any path under `~/.claude/plugins/cache/dev-browser-marketplace/` — that directory is ephemeral and may be cleared by a plugin reload at any time. Always go through the Skill tool.
 
-| Concern | dev-browser | chrome-devtools MCP (deprecated) |
-|---------|-------------|----------------------------------|
-| Persistent state across scripts | YES — named pages stay alive between invocations | NO — each MCP call spawns a fresh page |
-| Shared Chromium across scenarios | YES — one daemon, many scripts | NO — every fork spawns a private Chromium |
-| Memory footprint per batch | ~300 MB | ~4 GB (45 orphan watchdog processes) |
-| Browser extension dependency | NO (Playwright-launched Chromium) | NO |
-| Sandbox safety | YES (QuickJS, no host access) | NO (raw CDP) |
-| Speed (22-scenario batch) | ~3m 53s, $0.88 | ~12m 54s, $2.81 |
-| Tool-loading cost | ZERO (CLI, no MCP schemas) | ~30k tokens of MCP schema per fork |
+### AI Maestro conventions for every dev-browser invocation
 
-### How to invoke
-
-The runner uses Bash heredoc to pipe a JavaScript blob into `dev-browser`. The script runs in a QuickJS sandbox with a pre-connected `browser` global. Top-level `await` is supported.
+Every scenario `dev-browser` call MUST use these flags:
 
 ```bash
-dev-browser <<'EOF'
-const page = await browser.getPage("main");        // persistent named page
-await page.goto("http://localhost:23000/");
-const buf = await page.screenshot({ type: "jpeg", quality: 97 });
-await saveScreenshot(buf, "S001_baseline");        // saves to ~/.dev-browser/tmp/
-console.log(JSON.stringify({ url: page.url() }));
+dev-browser --browser ai-maestro-scenarios --headless --timeout 60 <<'EOF'
+... script ...
 EOF
 ```
 
-### Sandbox API (the only globals available inside the script)
-
-| Symbol | Purpose |
+| Flag | Why |
 |---|---|
-| `browser.getPage(name)` | Get/create a named page. Persists across invocations. |
-| `browser.newPage()` | Anonymous page (cleaned up on script exit). |
-| `browser.listPages()` | List all open tabs `[{id, url, title, name}]`. |
-| `browser.closePage(name)` | Close a named page. |
-| `page.goto(url)` | Navigate. |
-| `page.click(selector)` | Click an element. |
-| `page.fill(selector, text)` | Type into an input. |
-| `page.waitForSelector(selector)` | Wait for element to appear. |
-| `page.evaluate(fn)` | Run JS in the page context. |
-| `page.screenshot({type, quality})` | Returns a Uint8Array buffer. Pass to `saveScreenshot()`. |
-| `page.title()` / `page.url()` | Read page metadata. |
-| `console.log/warn/error/info` | Routed to CLI stdout — the runner reads these for return values. |
-| `setTimeout / clearTimeout` | Timers. |
-| `saveScreenshot(buf, name)` | Persist a screenshot to `~/.dev-browser/tmp/<name>.jpg`. |
-| `writeFile(name, data)` / `readFile(name)` | Sandbox file I/O (within `~/.dev-browser/tmp/`). |
+| `--browser ai-maestro-scenarios` | All scenarios in this project share ONE named Chromium instance, so the persistent `dashboard` page (logged in once at master setup) is reused by every scenario. Other dev-browser usage on the same machine uses a different `--browser` name and is fully isolated. |
+| `--headless` | Required for unattended overnight runs — no GUI, no window flashes, no memory penalty. Drop this flag only for interactive debugging. |
+| `--timeout 60` | Default 30 s is too short for some heavier dashboard pages (agent-creation wizard, kanban load). 60 s is the scenario default; bump per-script when a specific page needs longer. |
 
-**NOT available** (this is QuickJS, NOT Node.js): `require()`, `import()`, `process`, `fs`, `path`, `os`, `fetch`, `WebSocket`, `__dirname`, `__filename`. If you need any of these, do them OUTSIDE the heredoc via Bash.
+For `device: smartphone` / `device: tablet` scenarios, use `--browser ai-maestro-scenarios-smartphone` (or `-tablet`) instead, then call `page.setViewportSize({width, height})` once in master setup. The AI Maestro frontend uses width-based media queries, so width alone triggers the mobile component set.
 
-### Persistent named-page pattern (the magic)
+### Reusable AI Maestro helpers
 
-The KEY advantage over chrome-devtools MCP is that `browser.getPage("dashboard")` returns the SAME tab across multiple `dev-browser` invocations. The tab keeps its URL, cookies, login state, scroll position, etc. This means:
+To avoid every scenario reimplementing the login flow, sudo modal handling, etc., the runner sources `tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh` before every scenario. That file exports shell functions (`aim_login`, `aim_screenshot`, `aim_sudo_modal`, `aim_create_agent`, `aim_delete_agent`, …) that wrap their own `dev-browser <<'EOF' ... EOF` calls. Add new helpers there when a scenario needs a UI sequence that's likely to be reused.
 
-```bash
-# Step 1: log in (once, in the master setup)
-dev-browser <<'EOF'
-const page = await browser.getPage("dashboard");
-await page.goto("http://localhost:23000/");
-await page.fill('input[type=password]', "<PASSWORD>");
-await page.click('button[type=submit]');
-await page.waitForSelector('[data-testid=agent-list]');
-EOF
+### Daemon lifecycle is master-level, not per-scenario
 
-# Step 2..N: every subsequent dev-browser call reuses the SAME logged-in page
-dev-browser <<'EOF'
-const page = await browser.getPage("dashboard");  // same page, still logged in
-await page.click('[data-testid="create-agent-btn"]');
-EOF
-```
-
-No re-login. No fresh cookies. No new Chromium. The runner relies on this for shared state across scenarios.
-
-### Required helpers (`tests/scenarios/scripts/dev-browser-helpers/`)
-
-To avoid every scenario reimplementing the AI Maestro login flow, sudo modal handling, screenshot path generation, etc., the runner pre-loads helper functions from `tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh`. This file is sourced by the runner BEFORE every `dev-browser` heredoc and exports shell functions like `aim_login`, `aim_screenshot`, `aim_sudo_modal`, `aim_create_agent`, `aim_delete_agent`. Each helper wraps a `dev-browser <<'EOF' ... EOF` call. See the helpers directory for the canonical implementations and add new ones there as scenarios need them.
-
-### Snapshot-equivalent — DOM dump for assertions
-
-Without chrome-devtools' accessibility-tree snapshot, the runner uses `page.evaluate` to dump the relevant DOM state for inspection:
-
-```bash
-dev-browser <<'EOF'
-const page = await browser.getPage("dashboard");
-const buttons = await page.evaluate(() => {
-  return Array.from(document.querySelectorAll('button')).map(b => ({
-    text: b.textContent.trim(),
-    disabled: b.disabled,
-    visible: b.offsetParent !== null
-  }));
-});
-console.log(JSON.stringify(buttons));
-EOF
-```
-
-The runner parses the JSON output to drive subsequent decisions.
-
-### Device emulation (for `device: tablet` and `device: smartphone` scenarios)
-
-dev-browser's underlying Playwright supports viewport + touch emulation via `page.evaluate` calling Chromium's CDP method, OR (preferred) the runner spawns the daemon with the right viewport flags from the start:
-
-```bash
-# Smartphone test — start daemon with iPhone 14 viewport
-dev-browser daemon stop 2>/dev/null
-PLAYWRIGHT_VIEWPORT_WIDTH=390 PLAYWRIGHT_VIEWPORT_HEIGHT=844 \
-  PLAYWRIGHT_DEVICE_SCALE_FACTOR=3 PLAYWRIGHT_IS_MOBILE=1 \
-  dev-browser daemon start
-
-# Now every dev-browser call uses the mobile viewport
-dev-browser <<'EOF'
-const page = await browser.getPage("dashboard");
-await page.goto("http://localhost:23000/");
-EOF
-```
-
-**Always revert to desktop in the CLEANUP phase** by restarting the daemon without the env vars. Subsequent scenarios start with desktop viewport.
-
-| `device` value | Viewport | Scale | Touch | Component set |
-|---------------|----------|-------|-------|---------------|
-| `desktop` | 1280×800 | 1x | no | Standard (AgentList, TerminalView, AgentProfile) |
-| `tablet` | 1024×768 | 2x | yes | TabletDashboard, TouchScrollbar |
-| `smartphone` | 390×844 | 3x | yes | MobileDashboard, MobileKeyToolbar, MobileChatView, MobileMessageCenter, GlobalTouchScrollbars |
-
-**Caveat (same as before):** multi-finger gestures, long-press with sub-second precision, native mobile browser chrome, and the hardware back button cannot be tested via dev-browser/Playwright — these are accepted limitations.
-
-### Daemon lifecycle (master setup/cleanup level, NOT per-scenario)
-
-In the autonomous overnight protocol (Rule 13), the master setup phase starts ONE dev-browser daemon for the whole batch, and the master cleanup phase stops it. Per-scenario subagents NEVER call `daemon start/stop` themselves — they assume a running daemon and just send scripts to it.
-
-```bash
-# master setup (run-scenarios-batch master phase)
-dev-browser daemon start
-
-# per-scenario runner (do NOT touch daemon lifecycle)
-dev-browser <<'EOF'
-const page = await browser.getPage("dashboard");
-...
-EOF
-
-# master cleanup
-dev-browser daemon stop
-```
+Per-scenario runners NEVER stop the dev-browser daemon. The master setup phase (Rule 13) implicitly auto-spawns it on the first call, and the master cleanup phase shuts it down with `dev-browser stop`. Note: there is NO `daemon start/stop` subcommand — the daemon auto-spawns on first invocation. Use `dev-browser status` to check, `dev-browser stop` to shut down.
 
 ### Reading agent terminal history (unchanged)
 
-Claude Code uses the xterm alternate screen buffer — `tmux capture-pane` only captures the visible pane (not scrollback from Claude's session). To read what an agent actually did:
+Claude Code uses the xterm alternate screen buffer — `tmux capture-pane` only captures the visible pane. To read what a Claude Code agent actually did during a scenario:
 
 1. Find the conversation log: `ls -lt ~/.claude/projects/-Users-<user>-agents-<name>/*.jsonl | head -1`
 2. Analyze with LLM Externalizer: `code_task` with instructions to extract actions, errors, and outcomes

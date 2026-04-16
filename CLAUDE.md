@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Claude Code Dashboard** - A browser-based terminal dashboard for managing multiple Claude Code agents running in tmux on macOS. The application auto-discovers agents from tmux sessions and provides a unified web interface with real-time terminal streaming.
 
-**Current Phase:** Phase 1 - Local-only, auto-discovery, no authentication
+**Current Phase:** v0.29+ — localhost + Tailscale bind, Agent Identity (AID / WebAuthn), team governance, AMP messaging, role-plugin marketplace, cross-client conversion, kanban boards, element management
 **Tech Stack:** Next.js 14 (App Router), React 18, xterm.js, WebSocket, node-pty, Tailwind CSS, lucide-react
 **Platform:** macOS 12.0+, Node.js 20+, tmux 3.0+
 **Branding:** Space Grotesk font, titled "AI Maestro"
@@ -171,7 +171,7 @@ Every AI Maestro agent has exactly **three orthogonal layers**. Do NOT collapse 
 ```
 HTTP Requests → Next.js handlers (API routes, pages)
 WebSocket Upgrades → Custom WS server (terminal streaming)
-Both on port 3000
+Both on port 23000
 ```
 
 **Key constraint:** The server must handle:
@@ -249,16 +249,15 @@ Sessions are discovered from tmux and LINKED to agents:
 ```
 
 **Implementation details:**
-- Agents are ephemeral - they exist only while tmux is running
-- No persistent state between dashboard restarts
-- Agent metadata comes from tmux directly (creation time, working directory)
-- The dashboard does NOT create or manage agents (Phase 1 limitation)
+- Agent metadata is persisted in `~/.aimaestro/agents/registry.json` (file-based registry) and survives dashboard restarts
+- Tmux sessions are discovered and LINKED to registry agents — if a registry agent has no running session, it shows as hibernated
+- The dashboard CREATES, RENAMES, HIBERNATES, AND DELETES agents via `CreateAgent` / `ChangeName` / `hibernate` / `DeleteAgent` pipelines in `services/element-management-service.ts`
+- Session IDs must match tmux session names exactly (alphanumeric + hyphens/underscores only, plus `@` and `.` for `agentId@hostId` multi-host addressing)
 
 When implementing agent-related features:
-- Always assume agents can disappear between API calls
-- Never cache agent data longer than 5-10 seconds
-- Handle `tmux ls` returning empty results gracefully
-- Session IDs must match tmux session names exactly (alphanumeric + hyphens/underscores only)
+- Trust the registry as source of truth — it persists across restarts and across tmux crashes
+- Handle `tmux ls` returning empty results gracefully (agents may be hibernated)
+- Go through the `element-management-service` pipeline for any mutation (creation/deletion/rename/title change/plugin install) — never write directly to the registry
 
 ### 3. WebSocket-PTY Bridge
 
@@ -483,14 +482,15 @@ All WebSocket messages are JSON. Raw terminal output (ANSI codes) is wrapped in 
 
 **Session control buttons (AgentProfile.tsx):**
 - **Stop** (red): sends 3-command sequence: `C-c` (clear partial input) → `-l '/exit'` (literal text) → `Enter`. Enabled only at `idle_prompt`.
-- **Restart** (orange): calls `POST /api/sessions/{name}/restart` — sends same 3-command stop sequence, polls `tmux display-message` until shell detected (max 15s), waits 1s, relaunches with same program args + `--name` persona injection.
+- **Restart** (orange): calls `POST /api/sessions/[id]/restart` — sends same 3-command stop sequence, polls `tmux display-message` until shell detected (max 15s), waits 1s, relaunches with same program args + `--name` persona injection.
 - **Approve** (green): sends `y` to terminal. Visible only during `permission_prompt`.
 
 **Auto-restart queue (`useRestartQueue` hook):** After plugin/skill changes, agents are queued for restart. The queue polls agent activity every 1s (polling chosen over reactive deps to avoid effect churn from `getSessionActivity` identity changes — SF-044). When a queued agent reaches `idle_prompt`, it fires the restart API automatically.
 
 **API endpoints:**
-- `POST /api/sessions/{name}/stop` — sends `C-c` + `/exit` + `Enter` to tmux session
-- `POST /api/sessions/{name}/restart` — full restart cycle (exit → poll → wait → relaunch)
+- `POST /api/sessions/[id]/stop` — sends `C-c` + `/exit` + `Enter` to tmux session
+- `POST /api/sessions/[id]/restart` — full restart cycle (exit → poll → wait → relaunch)
+- `POST /api/sessions/[id]/kill` — immediate tmux kill for non-cooperative agents
 
 **Data flow:** Hook (`ai-maestro-hook.cjs`) → state file (`~/.aimaestro/chat-state/`) → WebSocket broadcast → `useSessionActivity` → `AgentBadge`/`AgentProfile`
 
@@ -525,15 +525,15 @@ Team agents cannot be woken when no MANAGER exists (even by the user — assign 
 - `server.mjs` — Startup manager check
 - `app/api/agents/[id]/wake/route.ts` — Auth + manager gate
 - `app/api/agents/[id]/hibernate/route.ts` — Auth + manager gate
-- `docs_dev/governance-design-rules.md` — Full governance rules (R9, R10, R11)
+- `docs/GOVERNANCE-RULES.md` — Full governance rules (R9, R10, R11, and the full R1-R20 set)
 
 ## File Structure Conventions
 
-**DO NOT create these directories** (they don't exist yet in Phase 1):
-- `tests/` - No test suite in Phase 1
-- `server/` - Server logic lives in root `server.mjs`
-- `public/` - No static assets currently needed
-- `styles/` - Styles in `app/globals.css` + Tailwind only
+**Directories already in use — follow existing patterns, do not duplicate:**
+- `tests/` — Vitest unit tests + `tests/scenarios/` UI scenario tests (24 scenarios)
+- `public/` — Static assets (avatars, favicons, logos)
+- `styles/` — `transfer-animations.css` and other global CSS additions; most styling stays in Tailwind utilities + `app/globals.css`
+- Do NOT create a `server/` directory — all server logic lives in root `server.mjs` (custom Next.js server)
 
 **Current structure:**
 ```
@@ -565,7 +565,8 @@ components/
 hooks/
   useWebSocket.ts       - WebSocket connection (reconnection, heartbeat)
   useTerminal.ts        - xterm.js lifecycle (init, fit, dispose)
-  useSessions.ts        - Session list fetching + auto-refresh
+  useAgents.ts          - Agent list fetching + auto-refresh from registry
+  useAgentLocalConfig.ts - Per-agent local config (plugins, skills, elements)
   useGovernance.ts      - Governance state (agentTitle, team membership, permissions)
   useTasks.ts           - Task CRUD with tasksByStatus, optimistic updates, 5s polling
   useMeetingMessages.ts - Meeting chat messages via AMP with 7s polling
@@ -864,7 +865,7 @@ Role-plugins define an agent's job specialization. They contain a `.agent.toml` 
 
 | Source | Location | Created by |
 |--------|----------|------------|
-| **Predefined** (6 defaults) | GitHub `Emasoft/ai-maestro-plugins` → cached to `~/.claude/plugins/cache/` | Emasoft (project owner) |
+| **Predefined** (8 defaults) | GitHub `Emasoft/ai-maestro-plugins` → cached to `~/.claude/plugins/cache/` | Emasoft (project owner) |
 | **Custom** | `~/agents/role-plugins/<name>/` | Haephestos (agent creation helper) |
 
 **Predefined role-plugins:**
@@ -878,6 +879,7 @@ Role-plugins define an agent's job specialization. They contain a `.agent.toml` 
 | `ai-maestro-integrator-agent` | `amia-` | INTEGRATOR |
 | `ai-maestro-architect-agent` | `amaa-` | ARCHITECT |
 | `ai-maestro-maintainer-agent` | `amma-` | MAINTAINER |
+| `ai-maestro-autonomous-agent` | `amaua-` | AUTONOMOUS |
 
 **Fourfold Identity Rule:** The canonical identity of a role-plugin is the `name` field in `.claude-plugin/plugin.json` (what Claude Code displays). All 4 must match:
 
@@ -932,8 +934,8 @@ Normal plugins are general-purpose tools (skills, MCP servers, hooks, etc.) inst
   - Stores in `~/agents/role-plugins/` (same location)
   - NEVER overwrites an existing folder — conversion fails if folder exists
 - When converting an ordinary (non-role) plugin, the converter:
-  - ADDS `-<client>` suffix to the name (e.g., `my-formatter-codex`)
-  - Stores in `~/agents/custom-plugins/<client>/<name>-<client>/`
+  - ADDS `-<client>` suffix to the name for non-Claude targets (e.g., `my-formatter-codex`); Claude-targeted customs keep their original name
+  - Stores under `~/agents/custom-plugins/<client>-custom-marketplace/<name>-<client>/` (per R20.28; use `custom-marketplace/` for Claude)
   - Registers in `ai-maestro-local-custom-marketplace`
 
 ### Title → Role-Plugin Auto-Assignment
@@ -956,7 +958,7 @@ When a governance title is assigned via the UI (Title Assignment Dialog), the Ch
 
 Defined in `lib/ecosystem-constants.ts` (TypeScript) and `scripts/ecosystem-config.sh` (shell). `getLocalMarketplacePath()` returns the resolved absolute path.
 
-**Deprecated marketplaces** (auto-removed by migration): `23blocks-OS/ai-maestro-plugins`, `ai-maestro-local-agents-marketplace`, `ai-maestro-local-marketplace`, `role-plugins`.
+**Deprecated marketplace names** (auto-removed by migration): `23blocks-OS/ai-maestro-plugins`, `ai-maestro-local-agents-marketplace`, `ai-maestro-local-marketplace`. Note: `role-plugins` is NOT a deprecated marketplace — it is the container directory name (`ROLE_PLUGINS_CONTAINER_DIR_NAME`) under `~/agents/` that holds the local role-plugin marketplace.
 
 ### Key Files
 
@@ -1076,9 +1078,11 @@ When the project owner changes repos or orgs, only these two files need updating
 
 **Key constants defined:**
 - `MARKETPLACE_REPO` / `MARKETPLACE_NAME` — GitHub marketplace org/repo
-- `MAIN_PLUGIN_NAME` — Main AI Maestro plugin
-- `ROLE_PLUGIN_*` — All 6 predefined role-plugin names
-- `TITLE_PLUGIN_MAP` — Governance title to required role-plugin mapping
+- `MAIN_PLUGIN_NAME` — Main AI Maestro plugin (`ai-maestro-plugin`)
+- `ROLE_PLUGIN_*` — All 8 predefined role-plugin names (MANAGER, COS, ARCHITECT, INTEGRATOR, ORCHESTRATOR, PROGRAMMER, MAINTAINER, AUTONOMOUS)
+- `PREDEFINED_ROLE_PLUGIN_NAMES` — The tuple of all 8 names used by consumer code
+- `PLUGIN_COMPATIBLE_TITLES` — Map from plugin name to list of compatible governance titles
+- `TITLE_PLUGIN_MAP` — Governance title to default role-plugin mapping
 - `AI_MAESTRO_REPO` / `MARKETPLACE_REPO_URL` — Repo URLs
 
 **Note:** The `Emasoft/ai-maestro-plugins` references in this CLAUDE.md are documentation values. The actual runtime values come from ecosystem-constants.
@@ -1107,23 +1111,24 @@ The main AI Maestro Claude Code plugin (v2.2.0+). Contains **only** skills, comm
 
 ### 3. `Emasoft/ai-maestro-plugins` — Marketplace (fork of 23blocks-OS)
 
-Fork of `23blocks-OS/ai-maestro-plugins`. Lists the 7 predefined role-plugins in `.claude-plugin/marketplace.json` (the 7th, `ai-maestro-maintainer-agent`, was added on 2026-04-11 after the fork diverged from upstream). The fork is 13 commits behind upstream (as of 2026-03-31) but this is a **non-issue** — the upstream additions (AID v0.2.0, AMP v0.1.3 fixes, case normalization) are already present in the main repo with equivalent or improved versions.
+Fork of `23blocks-OS/ai-maestro-plugins`. Lists the 8 predefined role-plugins in `.claude-plugin/marketplace.json` (the latest additions are `ai-maestro-maintainer-agent` on 2026-04-11 and `ai-maestro-autonomous-agent` for mandatory AUTONOMOUS role-plugin coverage per R9.13/R11.12).
 
-**Do NOT merge upstream into this fork** — the main repo is the canonical source for AMP/AID scripts.
+**Do NOT merge upstream into this fork** — the main repo is the canonical source for AMP/AID scripts, and any upstream changes would overwrite the fork's extensions (extra scripts, security fixes, and marketplace entries added after divergence).
 
-### 4. Role-Plugin Repos (7 repos, NOT forks)
+### 4. Role-Plugin Repos (8 repos, NOT forks)
 
 Each is an independent Emasoft-owned repo (not forked from 23blocks-OS):
 
-| Repo | compatible-titles | Last updated |
-|------|------------------|-------------|
-| `Emasoft/ai-maestro-architect-agent` | `["ARCHITECT"]` | 2026-03-29 |
-| `Emasoft/ai-maestro-assistant-manager-agent` | `["MANAGER"]` | 2026-03-29 |
-| `Emasoft/ai-maestro-chief-of-staff` | `["CHIEF-OF-STAFF"]` | 2026-03-29 |
-| `Emasoft/ai-maestro-integrator-agent` | `["INTEGRATOR"]` | 2026-03-29 |
-| `Emasoft/ai-maestro-orchestrator-agent` | `["ORCHESTRATOR"]` | 2026-03-29 |
-| `Emasoft/ai-maestro-programmer-agent` | `["MEMBER"]` | 2026-03-29 |
-| `Emasoft/ai-maestro-maintainer-agent` | `["MAINTAINER"]` | 2026-04-11 |
+| Repo | compatible-titles |
+|------|------------------|
+| `Emasoft/ai-maestro-architect-agent` | `["ARCHITECT"]` |
+| `Emasoft/ai-maestro-assistant-manager-agent` | `["MANAGER"]` |
+| `Emasoft/ai-maestro-chief-of-staff` | `["CHIEF-OF-STAFF"]` |
+| `Emasoft/ai-maestro-integrator-agent` | `["INTEGRATOR"]` |
+| `Emasoft/ai-maestro-orchestrator-agent` | `["ORCHESTRATOR"]` |
+| `Emasoft/ai-maestro-programmer-agent` | `["MEMBER"]` |
+| `Emasoft/ai-maestro-maintainer-agent` | `["MAINTAINER"]` |
+| `Emasoft/ai-maestro-autonomous-agent` | `["AUTONOMOUS"]` |
 
 All have `compatible-titles` and `compatible-clients` fields in their `.agent.toml`. No upstream sync needed.
 
@@ -1206,18 +1211,17 @@ Without Tailscale installed, the server falls back to `127.0.0.1`-only binding (
 
 **Tailscale is required for any remote access.** The `isAllowedSource()` function in `server.mjs` is the security gate. When modifying it, only allow Tailscale CGNAT (`100.64.0.0/10`) and Tailscale ULA (`fd7a:115c:a1e0::/48`) ranges — never allow LAN or public IPs.
 
-**Known limitations (deferred to Phase 2):**
-- **No human user authentication** — no login page, no session cookies (see `docs_dev/2026-04-02-maestro-auth-design.md`)
-- **No CORS/CSRF protection** — all same-origin by design
+**Known limitations and behaviour notes:**
+- **Human user authentication via governance password** — first-run setup via `POST /api/auth/setup-init` + `/setup-verify`; session cookies (`aim_session`) issued after login (see `lib/agent-auth.ts` and `docs_dev/2026-04-02-maestro-auth-design.md`). The old "SF-058 bypass" has been CLOSED — no auth headers AND no session cookie → request is rejected.
+- **No CORS/CSRF protection yet** — all same-origin by design; reverse-proxy or cross-origin deployments need additional middleware.
 - **MagicDNS does not work on iOS** — iPad/iPhone must use raw Tailscale IPv4 (e.g., `http://<tailscale-ip>:23000`), not `*.ts.net` hostnames. Run `tailscale ip -4` on the host to find the IP.
-- **Tailscale IPv6 not routable from same host** — macOS Tailscale app doesn't loopback IPv6; works from remote devices but untested on iPad
-- **`tailscale serve` is NOT used** — it breaks Next.js static file serving; direct bind with IP filter is used instead
-- **SF-058 bypass** — requests without auth headers get full system-owner access (`lib/agent-auth.ts:35-41`); Phase 2 will add mandatory auth
+- **Tailscale IPv6 not routable from same host** — macOS Tailscale app doesn't loopback IPv6; works from remote devices but untested on iPad.
+- **`tailscale serve` is NOT used** — it breaks Next.js static file serving; direct bind with IP filter is used instead.
 
 **Key files:**
-- `server.mjs:89-104` — Tailscale IP detection + `isAllowedSource()` filter
-- `server.mjs:1316-1323` — TCP connection filter on `::` bind
-- `lib/agent-auth.ts` — Agent auth bridge (Phase 1 bypass at line 35)
+- `server.mjs:92-122` — Tailscale IP detection + `isAllowedSource()` filter
+- `server.mjs:1383-1389` — TCP connection filter on `::` bind (inside `needsIpFilter` block)
+- `lib/agent-auth.ts` — Agent auth bridge (current non-auth bypass for local development; confirm against active code before relying on specific line numbers)
 - `docs_dev/2026-04-02-maestro-auth-design.md` — Full maestro auth design for Phase 2
 - `docs_dev/2026-04-02-remote-host-deep-audit.md` — Deep security audit of all remote access paths
 
@@ -1320,8 +1324,9 @@ Wrong order causes crashes or non-functional addons.
 All optional, with sensible defaults:
 
 ```bash
-PORT=3000                            # Server port
+PORT=23000                           # Server port (default 23000, set in PM2 config)
 NODE_ENV=development|production      # Next.js environment
+HOSTNAME=127.0.0.1                   # Bind address (default 127.0.0.1; auto-upgraded to :: when Tailscale detected)
 WS_RECONNECT_DELAY=3000              # WebSocket reconnect delay (ms)
 WS_MAX_RECONNECT_ATTEMPTS=5          # Max reconnection attempts
 TERMINAL_FONT_SIZE=14                # xterm.js font size
@@ -1408,7 +1413,7 @@ Browser-based UI scenario tests that verify end-to-end workflows through Chrome 
 
 **Scenarios:**
 
-Currently 21 scenarios live in `tests/scenarios/SCEN-NNN_*.scen.md` (SCEN-001 through SCEN-022 with SCEN-017 unused). They are git-tracked. Reports and screenshots are gitignored (session-local test artifacts).
+Currently 24 scenarios live in `tests/scenarios/SCEN-NNN_*.scen.md` (SCEN-001 through SCEN-024). They are git-tracked. Reports and screenshots are gitignored (session-local test artifacts).
 
 **Running a scenario — ALWAYS use the `run-scenario-test` skill.** Do NOT drive scenarios from the main conversation. The skill is installed at `~/.claude/skills/run-scenario-test/` and uses `context: fork`, `model: opus`, `agent: general-purpose` so a full ~150-step UI walkthrough runs in an isolated subagent context and returns only a 2-line summary to the orchestrator. Trigger phrases: "run scenario 16", "execute SCEN-018", "run the maintainer scenario", "rerun 1 and 19". For parallel runs of multiple scenarios, the orchestrator triggers the skill multiple times in the same turn — one forked agent per scenario.
 
@@ -1472,7 +1477,7 @@ Changing an agent's client (e.g. `claude` → `codex`) is **NEVER** a simple fie
 - **[docs/REQUIREMENTS.md](./docs/REQUIREMENTS.md)** - Installation prerequisites
 - **[docs/OPERATIONS-GUIDE.md](./docs/OPERATIONS-GUIDE.md)** - Agent management, troubleshooting
 - **[docs/CEREBELLUM.md](./docs/CEREBELLUM.md)** - Cerebellum subsystem architecture, voice pipeline, TTS providers
-- **[docs/GOVERNANCE-RULES.md](./docs/GOVERNANCE-RULES.md)** - Team governance rules R1-R15 (semver v3.1.0): titles, teams, messaging, composition, role boundaries, resilience, written orders
+- **[docs/GOVERNANCE-RULES.md](./docs/GOVERNANCE-RULES.md)** - Team governance rules R1-R20 (semver v3.7.0+): titles, teams, messaging, composition, role boundaries, resilience, written orders, core plugin enforcement, client conversion (R18), marketplace governance (R20)
 
 Refer to these when users ask about setup or usage.
 
@@ -1531,30 +1536,28 @@ Key files:
 
 ## Roadmap Context
 
-**Phase 1 (Current):** Auto-discovery, localhost-only, read-only agent interaction
-**Phase 2 (Planned):** Agent creation from UI, search, enhanced grouping
-**Phase 3 (Future):** Remote SSH sessions, authentication, collaboration
+**Shipped (v0.29+):** Agent auto-discovery + creation, team governance (R1-R20), Groups, role-plugin marketplace, AMP messaging, kanban boards, agent profile panel, settings page, cross-client conversion (Claude/Codex/Gemini/OpenCode/Kiro/GitHub Copilot), Tailscale remote access with IP filter, Agent Identity (AID / Ed25519 + WebAuthn), sudo-mode for strict routes, IBCT, element management pipelines (ChangeTitle, ChangePlugin, ChangeClient, ChangeTeam, etc.).
 
-**Already implemented beyond Phase 1:** Team governance, Groups (lightweight agent collections), role-plugin marketplace, AMP messaging, kanban boards, agent profile panel, settings page.
+**Planned:** Human user authentication (login page + session cookies), CORS/CSRF protection, remote SSH sessions, richer collaboration flows.
 
 When implementing features:
-- Check if they belong in current phase
-- Don't over-engineer for future phases
-- Document phase boundaries clearly
+- Check whether the capability already exists — most roadmap items have shipped; search `services/` and `app/api/` first.
+- Don't over-engineer for hypothetical future needs.
+- Document which release a feature shipped in (e.g. "v0.27.3+") so drift remains traceable.
 
 ## What NOT to Do
 
 - **Don't query tmux to get agent properties** - workingDirectory, etc. are STORED on the agent in the registry, not derived from tmux. See "Agent-First Architecture" section.
 - **Don't assume agents need sessions** - Agents are the core entity; sessions are optional. An agent can exist for querying repos/docs without a tmux session.
-- **Don't use sessions.json** - Sessions are auto-discovered from tmux
-- **Don't implement authentication** - Phase 1 is localhost-only
-- **Don't store terminal history** - xterm.js manages scrollback in-memory
-- **Don't use polling** - WebSocket only for terminal I/O
-- **Don't support remote SSH** - Phase 3 feature, not Phase 1
-- **Don't nest interactive elements** - Causes React hydration errors (use div with onClick instead)
-- **Don't hardcode category colors** - Use the hash-based dynamic color system
-- **Don't use display:none for hidden terminals** - Use visibility:hidden to maintain correct dimensions and enable selection (v0.3.0+)
-- **Don't add session.id to terminal initialization useEffect** - Terminals initialize once with empty dependency array in tab architecture (v0.3.0+)
+- **Don't write directly to the registry** - Go through `element-management-service.ts` pipelines (`CreateAgent`, `ChangeName`, `DeleteAgent`, etc.) so invariants and governance gates fire.
+- **Don't bypass agent auth / sudo-mode** - Strict routes require `X-Sudo-Token`; agent calls require AID proof-of-possession. Don't add "Phase 1 bypass" logic for new routes.
+- **Don't store terminal history** - xterm.js manages scrollback in-memory; persistent state belongs to tmux or the session activity stream.
+- **Don't use polling** - WebSocket only for terminal I/O and status updates (session activity, AMP push notifications).
+- **Don't add LAN IP access paths** - Network model is localhost + Tailscale only (`isAllowedSource()`). LAN/public IPs are dropped at TCP level.
+- **Don't nest interactive elements** - Causes React hydration errors (use div with onClick instead).
+- **Don't hardcode category colors** - Use the hash-based dynamic color system.
+- **Don't use display:none for hidden terminals** - Use visibility:hidden to maintain correct dimensions and enable selection (v0.3.0+).
+- **Don't add session.id to terminal initialization useEffect** - Terminals initialize once with empty dependency array in tab architecture (v0.3.0+).
 
 ## Key Files to Understand
 

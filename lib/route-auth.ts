@@ -37,14 +37,27 @@ import {
   type AuthContext,
 } from './agent-auth'
 import { isReadOnlyMode, getTamperDetails } from './ledger-startup'
+import { isLockedDown, recordAuthFailure, recordAuthSuccess } from './kill-switch'
 
-function checkReadOnly(method: string): NextResponse | null {
-  if (isReadOnlyMode() && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+function checkWriteBlock(method: string): NextResponse | null {
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return null
+
+  // Kill switch takes precedence — if locked down, reject ALL writes
+  if (isLockedDown()) {
+    return NextResponse.json(
+      { error: 'kill_switch_active', message: 'System is in emergency lockdown due to repeated authentication failures. Try again later or contact the system owner.' },
+      { status: 503 },
+    )
+  }
+
+  // Read-only mode (ledger tamper detection)
+  if (isReadOnlyMode()) {
     return NextResponse.json(
       { error: 'read_only_mode', message: 'Server is in read-only mode due to ledger tamper detection', details: getTamperDetails() },
       { status: 503 },
     )
   }
+
   return null
 }
 
@@ -67,11 +80,12 @@ export type RequireAuthResult =
  *   const ctx = auth.context
  */
 export function requireAuth(request: NextRequest): RequireAuthResult {
-  const roBlock = checkReadOnly(request.method)
-  if (roBlock) return { ok: false, error: roBlock }
+  const writeBlock = checkWriteBlock(request.method)
+  if (writeBlock) return { ok: false, error: writeBlock }
 
   const result = authenticateFromRequest(request)
   if (result.error) {
+    recordAuthFailure()
     return {
       ok: false,
       error: NextResponse.json(
@@ -80,6 +94,7 @@ export function requireAuth(request: NextRequest): RequireAuthResult {
       ),
     }
   }
+  recordAuthSuccess()
   return {
     ok: true,
     context: buildAuthContext(result),
@@ -93,11 +108,12 @@ export function requireAuth(request: NextRequest): RequireAuthResult {
  * where agents may present IBCT tokens for scope-verified delegation.
  */
 export async function requireAuthAsync(request: NextRequest): Promise<RequireAuthResult> {
-  const roBlock = checkReadOnly(request.method)
-  if (roBlock) return { ok: false, error: roBlock }
+  const writeBlock = checkWriteBlock(request.method)
+  if (writeBlock) return { ok: false, error: writeBlock }
 
   const result = await authenticateFromRequestAsync(request)
   if (result.error) {
+    recordAuthFailure()
     return {
       ok: false,
       error: NextResponse.json(
@@ -106,6 +122,7 @@ export async function requireAuthAsync(request: NextRequest): Promise<RequireAut
       ),
     }
   }
+  recordAuthSuccess()
   return {
     ok: true,
     context: buildAuthContext(result),
@@ -120,16 +137,18 @@ export async function requireAuthAsync(request: NextRequest): Promise<RequireAut
  * "any authenticated caller can call this".
  */
 export function enforceAuth(request: NextRequest): NextResponse | null {
-  const roBlock = checkReadOnly(request.method)
-  if (roBlock) return roBlock
+  const writeBlock = checkWriteBlock(request.method)
+  if (writeBlock) return writeBlock
 
   const result = authenticateFromRequest(request)
   if (result.error) {
+    recordAuthFailure()
     return NextResponse.json(
       { error: result.error },
       { status: result.status ?? 401 }
     )
   }
+  recordAuthSuccess()
   return null
 }
 
@@ -140,16 +159,18 @@ export function enforceAuth(request: NextRequest): NextResponse | null {
  * registration, domain-level settings, user profile edits.
  */
 export function enforceSystemOwner(request: NextRequest): NextResponse | null {
-  const roBlock = checkReadOnly(request.method)
-  if (roBlock) return roBlock
+  const writeBlock = checkWriteBlock(request.method)
+  if (writeBlock) return writeBlock
 
   const result = authenticateFromRequest(request)
   if (result.error) {
+    recordAuthFailure()
     return NextResponse.json(
       { error: result.error },
       { status: result.status ?? 401 }
     )
   }
+  recordAuthSuccess()
   const ctx = buildAuthContext(result)
   if (!ctx.isSystemOwner) {
     return NextResponse.json(

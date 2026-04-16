@@ -4323,6 +4323,33 @@ export async function CreateAgent(
       ops.push(`G01b: Name "${name}" is unique in registry`)
     }
 
+    // ── G01c: Enforce agent creation limits (from security config) ────
+    {
+      const { loadSecurityConfig } = await import('@/lib/security-config')
+      const { loadAgents } = await import('@/lib/agent-registry')
+      const cfg = loadSecurityConfig().agentCreation
+
+      // Max agents per host
+      const allAgents = loadAgents().filter(a => !a.deletedAt)
+      if (allAgents.length >= cfg.maxAgentsPerHost) {
+        result.error = `Agent creation denied: host has ${allAgents.length} agents (max ${cfg.maxAgentsPerHost}). Delete unused agents or increase the limit in Security Settings.`
+        return result
+      }
+
+      // Min interval between creations (anti-spam)
+      const now = Date.now()
+      const mostRecent = allAgents.reduce((latest, a) => {
+        const ts = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        return ts > latest ? ts : latest
+      }, 0)
+      if (mostRecent > 0 && (now - mostRecent) < cfg.minIntervalSeconds * 1000) {
+        const waitSec = Math.ceil((cfg.minIntervalSeconds * 1000 - (now - mostRecent)) / 1000)
+        result.error = `Agent creation rate limit: wait ${waitSec}s between creations (configurable in Security Settings).`
+        return result
+      }
+      ops.push(`G01c: Agent creation limits OK (${allAgents.length}/${cfg.maxAgentsPerHost}, interval OK)`)
+    }
+
     // ── G02: Infer client/program (smart, with deprecated client handling) ──
     // Supported clients ranked by capability (tiebreaker when counts are equal)
     // Order: plugin support, tool use, context window, ecosystem maturity

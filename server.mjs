@@ -100,7 +100,15 @@ try {
   const { execSync: execSyncBind } = await import('child_process')
   tailscaleIp = execSyncBind('tailscale ip -4', { encoding: 'utf8', timeout: 3000 }).trim()
   if (!/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(tailscaleIp)) tailscaleIp = null // Only Tailscale CGNAT (100.64.0.0/10)
-} catch { /* tailscale not installed or not running */ }
+} catch (err) {
+  // Log the failure so operators can distinguish "not installed" from "misconfigured"
+  const msg = err?.message || String(err)
+  if (msg.includes('ENOENT') || msg.includes('not found')) {
+    console.log('[SECURITY] Tailscale CLI not found — binding to localhost only')
+  } else {
+    console.warn(`[SECURITY] Tailscale detection failed: ${msg.slice(0, 120)} — binding to localhost only`)
+  }
+}
 
 // IP filter: when bound to 0.0.0.0, only allow localhost + Tailscale IPs
 // This prevents LAN exposure while allowing VPN access
@@ -1349,11 +1357,29 @@ async function startServer(handleRequest) {
   // so both Tailscale IPv4 (100.x) and IPv6 (fd7a:...) addresses work.
   // Non-allowed IPs are rejected at the TCP level by the connection filter.
   const isLocalOnly = hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1'
-  const bindAddress = (tailscaleIp && isLocalOnly) ? '::' : hostname
-  const needsIpFilter = tailscaleIp && (bindAddress === '::' || bindAddress === '0.0.0.0')
 
-  // IP filter: drop LAN/internet connections at the TCP level (before any HTTP processing)
-  // Activates for ANY non-localhost bind when Tailscale is detected — prevents HOSTNAME env bypass
+  // SECURITY FAILSAFE: if HOSTNAME is set to a non-localhost address (0.0.0.0, ::, or a LAN IP)
+  // but Tailscale is NOT available, refuse to bind on that address — fall back to 127.0.0.1.
+  // This prevents accidental LAN exposure when Tailscale is misconfigured or uninstalled.
+  let bindAddress
+  if (tailscaleIp && isLocalOnly) {
+    // Tailscale detected + localhost HOSTNAME → bind dual-stack with IP filter
+    bindAddress = '::'
+  } else if (!isLocalOnly && !tailscaleIp) {
+    // Non-localhost HOSTNAME but no Tailscale → REFUSE, fall back to localhost
+    console.warn(`[SECURITY] ⚠ HOSTNAME="${hostname}" requested non-localhost bind but Tailscale is not available`)
+    console.warn('[SECURITY] ⚠ Falling back to 127.0.0.1 to prevent LAN exposure without VPN protection')
+    bindAddress = '127.0.0.1'
+  } else {
+    bindAddress = hostname
+  }
+
+  // IP filter: ALWAYS active on any non-localhost bind, regardless of how we got there.
+  // The previous code only activated when tailscaleIp was truthy — a HOSTNAME=0.0.0.0 with
+  // a broken Tailscale detection would have no filter. Now the filter activates purely on
+  // the bind address, and isAllowedSource is the single authority on what passes.
+  const needsIpFilter = bindAddress === '::' || bindAddress === '0.0.0.0'
+
   if (needsIpFilter) {
     server.on('connection', (socket) => {
       if (!isAllowedSource(socket.remoteAddress)) {

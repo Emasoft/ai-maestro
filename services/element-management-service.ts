@@ -2060,13 +2060,20 @@ export async function ChangeTitle(
     }
 
     // ── GATE 22: Verify final state in registry ──────────────
+    // CRITICAL (SCEN-007 P0-003, SCEN-020 BUG-001): This gate MUST hard-fail
+    // if the registry write did not actually persist. Previously this was a
+    // silent WARN, which let callers claim success while governanceTitle stayed
+    // null in ~/.aimaestro/agents/registry.json. The UI masked the bug via a
+    // fallback `governanceTitle ?? (team ? 'member' : 'autonomous')` — users
+    // only noticed when hitting the API directly. Fail fast instead.
     const verifyAgent = getAgent(agentId)
     const finalTitle = verifyAgent?.governanceTitle || null
     if (finalTitle !== effectiveTitle) {
-      ops.push(`G22: WARN — Final registry title "${finalTitle}" != expected "${effectiveTitle}"`)
-    } else {
-      ops.push(`G22: Final registry title verified: "${finalTitle || 'null'}"`)
+      ops.push(`G22: FAIL — Final registry title "${finalTitle}" != expected "${effectiveTitle}" (persistence lost)`)
+      result.error = `Title persistence check failed: registry has "${finalTitle}" but expected "${effectiveTitle}"`
+      return result
     }
+    ops.push(`G22: Final registry title verified: "${finalTitle || 'null'}"`)
 
     // ── GATE 23: Verify governance.json consistency ──────────
     if (newTitle === 'manager') {
@@ -2999,7 +3006,7 @@ export async function ChangeTeam(
     teamId: string | null  // null = remove from all teams
     role?: string           // 'member' | 'chief-of-staff' | 'orchestrator' | 'architect' | 'integrator'
   },
-  _authContext?: AuthContext,
+  authContext?: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
@@ -3072,7 +3079,10 @@ export async function ChangeTeam(
       ops.push(`G04c: Removed agent from team "${currentTeam.name}" agentIds`)
 
       // G04d: Revert title to AUTONOMOUS
-      const titleResult = await ChangeTitle(agentId, 'autonomous')
+      // CRITICAL (SCEN-010/020 P0): Pass authContext so ChangeTitle Gate 0 doesn't
+      // hard-reject with "authContext is mandatory". Without this, the title write
+      // silently fails and the registry governanceTitle becomes stale/null.
+      const titleResult = await ChangeTitle(agentId, 'autonomous', { authContext })
       if (!titleResult.success) {
         ops.push(`G04d: WARN — ChangeTitle to AUTONOMOUS failed: ${titleResult.error}`)
       } else {
@@ -3111,8 +3121,17 @@ export async function ChangeTeam(
     }
 
     // G07: Set title
-    const effectiveRole = desired.role || 'member'
-    const titleResult = await ChangeTitle(agentId, effectiveRole)
+    // CRITICAL (SCEN-007/010/020 P0): The effective role MUST be a canonical kebab
+    // string from VALID_TITLES (e.g., 'member', 'chief-of-staff'), never a display
+    // label like "MEMBER" or "Chief of Staff". desired.role is already kebab by
+    // contract; we also normalize defensively by lower-casing to prevent UI
+    // regressions from writing a display value into the registry.
+    const effectiveRole = (desired.role || 'member').toLowerCase()
+    // CRITICAL: Pass authContext so ChangeTitle Gate 0 doesn't hard-reject with
+    // "authContext is mandatory". Without this, ChangeTeam would silently fail
+    // to assign the title — leaving agent in team but governanceTitle=null.
+    // This is the root cause of SCEN-020 BUG-001 / SCEN-007 P0-003.
+    const titleResult = await ChangeTitle(agentId, effectiveRole, { authContext })
     if (!titleResult.success) {
       ops.push(`G07: WARN — ChangeTitle to ${effectiveRole} failed: ${titleResult.error}`)
     } else {
@@ -4822,7 +4841,11 @@ export async function CreateAgent(
 
     // ── G07: Add to team if requested ────────────────────────
     if (desired.teamId) {
-      const teamResult = await ChangeTeam(agent.id, { teamId: desired.teamId })
+      // CRITICAL (SCEN-007/010/020 P0): Pass authContext so the internal
+      // ChangeTitle call inside ChangeTeam can satisfy Gate 0 (authContext
+      // is mandatory). Without this, ChangeTeam would auto-assign 'member'
+      // silently failing — leaving governanceTitle=null in the registry.
+      const teamResult = await ChangeTeam(agent.id, { teamId: desired.teamId }, desired.authContext)
       if (!teamResult.success) {
         ops.push(`G07: WARN — ChangeTeam failed: ${teamResult.error}`)
       } else {

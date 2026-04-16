@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getTeamById, updateTeamById } from '@/services/teams-service'
 import { getTeam } from '@/lib/team-registry'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { isValidUuid } from '@/lib/validation'
 
@@ -90,6 +90,12 @@ export async function PUT(
     // Auto-title transitions: delegate to ChangeTeam for membership changes
     if (safeBody.agentIds !== undefined) {
       const { ChangeTeam } = await import('@/services/element-management-service')
+      // CRITICAL (SCEN-007/010/020 P0): Build authContext from the authenticated
+      // request so ChangeTeam can propagate it to its internal ChangeTitle calls.
+      // Without this, ChangeTitle.Gate0 rejects with "authContext is mandatory"
+      // and the governanceTitle silently fails to persist — leaving the registry
+      // with null governanceTitle for every agent added to a team via this route.
+      const teamAuthContext = buildAuthContext(auth)
       const newAgentIds: string[] = result.data?.team?.agentIds ?? []
       const oldSet = new Set<string>(oldAgentIds)
       const newSet = new Set<string>(newAgentIds)
@@ -97,7 +103,7 @@ export async function PUT(
       for (const agentId of newAgentIds) {
         if (!oldSet.has(agentId)) {
           try {
-            await ChangeTeam(agentId, { teamId: id, role: 'member' })
+            await ChangeTeam(agentId, { teamId: id, role: 'member' }, teamAuthContext)
           } catch (err: unknown) {
             console.error(`[team PUT] ChangeTeam(add) failed for agent ${agentId}:`, err)
           }
@@ -107,7 +113,7 @@ export async function PUT(
       for (const agentId of oldAgentIds) {
         if (!newSet.has(agentId)) {
           try {
-            await ChangeTeam(agentId, { teamId: null })
+            await ChangeTeam(agentId, { teamId: null }, teamAuthContext)
           } catch (err: unknown) {
             console.error(`[team PUT] ChangeTeam(remove) failed for agent ${agentId}:`, err)
           }

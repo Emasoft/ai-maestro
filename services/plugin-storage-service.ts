@@ -171,10 +171,9 @@ export async function convertAndStorePlugin(
       const roleMarketplaceDir = getRoleMarketplacePathForClient(targetClient)
       const targetDir = path.join(roleMarketplaceDir, rolePluginName)
 
-      // NEVER overwrite existing role-plugin folder
+      // R20.26: same-named plugin in target marketplace → overwrite (update in place)
       if (existsSync(targetDir)) {
-        console.warn(`[plugin-storage] Role-plugin folder already exists: ${targetDir} — conversion refused (never overwrite)`)
-        continue
+        console.log(`[plugin-storage] Overwriting existing role-plugin: ${targetDir} (R20.26 update-in-place)`)
       }
 
       const emitted = await emitPluginToDir(sourceName, targetClient, targetDir)

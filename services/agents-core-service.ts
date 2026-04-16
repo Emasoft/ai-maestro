@@ -1640,9 +1640,46 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
       }
     }
 
-    // Create new tmux session
+    // PRE-CREATE: build the env bag for `tmux new-session -e KEY=VAL`.
+    //
+    // WT-014#1 + WT-022#1 follow-up (was explicitly out of scope in dcd8c870).
+    // The previous wake path did:
+    //   1. runtime.createSession(name, cwd)                  ← empty env
+    //   2. setupAMPForSession → runtime.setEnvironment(...)  ← race: pane already running
+    //   3. sendKeys: "export AMP_DIR=...; <cmd>"              ← shell-export race
+    //
+    // That's the same env-injection race that dcd8c870 fixed in
+    // sessions-service::createSession. Variables set via `tmux set-environment`
+    // only reach FUTURE panes, not the already-running initial pane. The
+    // `export` line inside send-keys depends on the shell being ready and can
+    // be clobbered if the user attaches mid-boot or the login hooks are slow.
+    // The ONLY atomic path is `tmux new-session -e KEY=VAL`, which requires
+    // computing the env BEFORE createSession.
+    //
+    // AGENT_WORK_DIR    — used by the directory-guard hook (sandbox boundary)
+    // AIM_AGENT_NAME/ID — used by AMP messaging + state-tracking hooks
+    // AMP_DIR           — set if initAgentAMPHome succeeds (non-fatal otherwise)
+    const initialEnv: Record<string, string> = {
+      AGENT_WORK_DIR: workingDirectory,
+      AIM_AGENT_NAME: agentName,
+      AIM_AGENT_ID: agentId,
+    }
+
+    // AMP init runs pre-create so AMP_DIR lands in the initial pane's env.
+    // If it fails we log and continue with no AMP_DIR — AMP isn't strictly
+    // required for session creation.
+    let ampDir = ''
     try {
-      await runtime.createSession(sessionName, workingDirectory)
+      await initAgentAMPHome(agentName, agentId)
+      ampDir = getAgentAMPDir(agentName, agentId) || ''
+      if (ampDir) initialEnv.AMP_DIR = ampDir
+    } catch (ampErr) {
+      console.warn(`[Wake] Could not init AMP home for ${agentName}:`, ampErr)
+    }
+
+    // Create new tmux session with atomic env injection
+    try {
+      await runtime.createSession(sessionName, workingDirectory, initialEnv)
     } catch (error) {
       console.error(`[Wake] Failed to create tmux session:`, error)
       return { error: 'Failed to create tmux session', status: 500 }
@@ -1657,8 +1694,10 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
       agentId,
     })
 
-    // Set up AMP
-    const ampDir = await setupAMPForSession(sessionName, agentName, agentId)
+    // Belt-and-braces: setEnvironment on the tmux session so any FUTURE pane
+    // opened via tmux keybinding also sees the vars. The initial pane already
+    // has them via the -e injection above.
+    await setupAMPForSession(sessionName, agentName, agentId).catch(() => {})
 
     // Start the AI program if requested
     if (startProgram) {
@@ -1666,13 +1705,11 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
       console.log(`[Wake] Final program selection: "${program}" (override: ${programOverride}, agent.program: ${agent.program})`)
 
       if (program === 'none' || program === 'terminal') {
-        // Export env vars for terminal-only mode
-        // CC-P1-514: Escape single quotes in values to prevent shell injection
-        const safeAmpDir = ampDir?.replace(/'/g, "'\\''") || ''
-        const safeAgentName = agentName.replace(/'/g, "'\\''")
-        const safeAgentId = agentId.replace(/'/g, "'\\''")
+        // Terminal-only mode: env is already baked in via tmux -e (initialEnv
+        // above). No shell-export needed. Just unset CLAUDECODE so the shell
+        // knows it's not running under Claude Code.
         try {
-          await runtime.sendKeys(sessionName, `export AMP_DIR='${safeAmpDir}' AIM_AGENT_NAME='${safeAgentName}' AIM_AGENT_ID='${safeAgentId}'; unset CLAUDECODE`, { enter: true })
+          await runtime.sendKeys(sessionName, `unset CLAUDECODE`, { enter: true })
         } catch { /* non-fatal */ }
         console.log(`[Wake] Terminal only mode - no AI program started`)
       } else {
@@ -1690,16 +1727,11 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
         // Small delay to let the session initialize
         await new Promise(resolve => setTimeout(resolve, 300))
 
-        // Single send-keys: export env vars, unset CLAUDECODE, then launch program
-        // CC-P1-514: Escape single quotes in values to prevent shell injection
+        // Env vars (AMP_DIR, AIM_AGENT_NAME, AIM_AGENT_ID, AGENT_WORK_DIR) are
+        // already in the initial pane's env via tmux -e. Just unset
+        // CLAUDECODE + launch the program.
         try {
-          const safeAmpDir2 = ampDir?.replace(/'/g, "'\\''") || ''
-          const safeAgentName2 = agentName.replace(/'/g, "'\\''")
-          const safeAgentId2 = agentId.replace(/'/g, "'\\''")
-          const envExport = ampDir
-            ? `export AMP_DIR='${safeAmpDir2}' AIM_AGENT_NAME='${safeAgentName2}' AIM_AGENT_ID='${safeAgentId2}'; `
-            : ''
-          await runtime.sendKeys(sessionName, `${envExport}unset CLAUDECODE; ${fullCommand}`, { enter: true })
+          await runtime.sendKeys(sessionName, `unset CLAUDECODE; ${fullCommand}`, { enter: true })
         } catch (error) {
           console.error(`[Wake] Failed to start program:`, error)
         }

@@ -14,6 +14,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createSession, buildSessionCookie } from '@/lib/session-auth'
 import { checkAndRecordAttempt, resetRateLimit } from '@/lib/rate-limit'
+import { recordAuthFailure, recordAuthSuccess, isLockedDown } from '@/lib/kill-switch'
 
 const LoginSchema = z.object({
   password: z.string().min(1).max(256),
@@ -27,6 +28,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Password required' }, { status: 400 })
     }
     const { password } = parsed.data
+
+    // Kill switch: reject login attempts during lockdown
+    if (isLockedDown()) {
+      return NextResponse.json(
+        { error: 'System is in emergency lockdown. Try again later.' },
+        { status: 503 }
+      )
+    }
 
     // CC-GOV-014: Rate-limit login attempts
     const rateCheck = checkAndRecordAttempt('auth-login')
@@ -44,11 +53,13 @@ export async function POST(request: Request) {
     // verifyPassword returns false for both "no password set" and "wrong password".
     // This is intentional — we don't reveal whether a password exists.
     if (!valid) {
+      recordAuthFailure()
       return NextResponse.json({ error: 'Invalid password' }, { status: 401 })
     }
 
-    // Reset rate limit on successful login
+    // Reset rate limit and kill switch counter on successful login
     resetRateLimit('auth-login')
+    recordAuthSuccess()
 
     // Unlock encrypted security config with the plaintext password
     const { unlockSecurityConfig } = await import('@/lib/security-config')

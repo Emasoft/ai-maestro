@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { issueSudoToken } from '@/lib/sudo-auth'
+import { recordAuthFailure, recordAuthSuccess, isLockedDown } from '@/lib/kill-switch'
 
 const SudoSchema = z.object({
   password: z.string().min(1).max(256),
@@ -27,6 +28,14 @@ const SudoSchema = z.object({
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
+  // Kill switch: reject sudo attempts during lockdown
+  if (isLockedDown()) {
+    return NextResponse.json(
+      { error: 'System is in emergency lockdown. Try again later.' },
+      { status: 503 }
+    )
+  }
+
   const { checkAndRecordAttempt } = await import('@/lib/rate-limit')
   const rateCheck = checkAndRecordAttempt('sudo-password', 5)
   if (!rateCheck.allowed) {
@@ -58,6 +67,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const { token, expiresAt } = await issueSudoToken(password, subject)
+    recordAuthSuccess()
     return NextResponse.json({ token, expiresAt })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -68,6 +78,7 @@ export async function POST(request: NextRequest) {
       )
     }
     if (msg === 'sudo_mode_bad_password') {
+      recordAuthFailure()
       return NextResponse.json(
         { error: 'invalid password' },
         { status: 403 }

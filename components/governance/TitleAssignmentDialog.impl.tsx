@@ -152,6 +152,18 @@ export default function TitleAssignmentDialog({
   // R19.2: githubRepo input is required only when selectedTitle === 'maintainer'
   const [githubRepo, setGithubRepo] = useState<string>('')
 
+  // SCEN-010 BUG-003 fix: `currentTitle` is the DERIVED display title from
+  // useGovernance (e.g. an agent stored as "autonomous" but in a team is
+  // DISPLAYED as "member"). The no-op comparison must check the REGISTRY
+  // canonical value — otherwise the Confirm button stays disabled when the
+  // user picks the displayed title, even though the stored value would
+  // actually be changed by the action. `storedTitle` holds the raw value
+  // from GET /api/agents/{id}.agent.governanceTitle and is used only by
+  // the isConfirmDisabled check. Falls back to `currentTitle` while the
+  // fetch is in flight so the dialog is never accidentally enabled for a
+  // truly noop click during the first few hundred ms.
+  const [storedTitle, setStoredTitle] = useState<GovernanceTitle | null>(null)
+
   // Stable representation of COS team IDs — avoids re-running the effect when the cosTeams
   // array reference changes but contains the same teams (NIT-3: unstable object in deps)
   const cosTeamIds = JSON.stringify(governance.cosTeams?.map(t => t.id))
@@ -170,9 +182,38 @@ export default function TitleAssignmentDialog({
       setPhase('select')
       setError(null)
       setGithubRepo('')
+      setStoredTitle(null)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, currentTitle, cosTeamIds])
+
+  // SCEN-010 BUG-003 fix: fetch the agent's raw stored governanceTitle so the
+  // no-op Confirm check compares against the REGISTRY value (canonical kebab)
+  // rather than the derived display title. This unblocks the case where the
+  // UI displays MEMBER (because the agent is in a team) but the registry
+  // actually stores "autonomous" — the Confirm button must be enabled when
+  // the user picks MEMBER so the underlying value can be corrected.
+  // IMPORTANT: GET /api/agents/{id} returns { agent: { governanceTitle: ... } }
+  // — the field is nested under .agent (see CLAUDE.md "Agent API Response
+  // Nesting"). Reading it directly off the response gives undefined.
+  useEffect(() => {
+    if (!isOpen || !agentId) return
+    const controller = new AbortController()
+    fetch(`/api/agents/${agentId}`, { signal: controller.signal })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        const raw = data?.agent?.governanceTitle
+        if (typeof raw === 'string' && raw.length > 0) {
+          setStoredTitle(raw.toLowerCase() as GovernanceTitle)
+        } else {
+          // No stored title → treat as autonomous so the no-op check reflects
+          // what the server would persist if nothing changed.
+          setStoredTitle('autonomous')
+        }
+      })
+      .catch(() => { /* fetch aborted or failed — keep storedTitle null so we fall back to currentTitle */ })
+    return () => controller.abort()
+  }, [isOpen, agentId])
 
   // CC-009: Defensive close handler — resets internal state before calling parent onClose,
   // so stale state never persists even if parent does not toggle isOpen immediately.
@@ -275,8 +316,21 @@ export default function TitleAssignmentDialog({
 
   // Determine if confirm button should be disabled
   const isConfirmDisabled = (() => {
-    // No change from current role and no team selection difference
-    if (selectedTitle === currentTitle) {
+    // SCEN-010 BUG-003 fix: compare against the REGISTRY canonical value
+    // (`storedTitle`, fetched from GET /api/agents/{id}.agent.governanceTitle)
+    // rather than the derived display title (`currentTitle`, from
+    // useGovernance). The derived display title can report MEMBER for an
+    // agent whose stored governanceTitle is "autonomous" (any agent in a
+    // team defaults to MEMBER in the display), so comparing against
+    // `currentTitle` would wrongly disable Confirm when the user picks the
+    // displayed title — even though clicking Confirm WOULD change the
+    // stored value from "autonomous" to "member" (what R12 composition
+    // check actually reads). While `storedTitle` is still being fetched
+    // (null), fall back to `currentTitle` so the dialog is never
+    // accidentally enabled for a truly no-op click during the request.
+    const baseline = storedTitle ?? currentTitle
+    // No change from current title and no team selection difference
+    if (selectedTitle === baseline) {
       if (selectedTitle !== 'chief-of-staff') return true
       // For COS, check if team selection changed
       const currentCosTeamIds = governance.cosTeams.map((t) => t.id).sort()

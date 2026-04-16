@@ -114,14 +114,18 @@ export function saveGovernance(config: GovernanceConfig): void {
   }
 }
 
-/** Set governance password (Argon2id, memory-hard) */
+/** Set governance password (Argon2id, memory-hard). Re-encrypts security config with new password. */
 export async function setPassword(plaintext: string): Promise<void> {
   const { hashPassword } = await import('@/lib/argon2')
+  const { reEncryptWithNewPassword, isUnlocked } = await import('@/lib/security-config')
   return withLock('governance', async () => {
     const config = loadGovernance()
     config.passwordHash = await hashPassword(plaintext)
     config.passwordSetAt = new Date().toISOString()
     saveGovernance(config)
+    if (isUnlocked()) {
+      reEncryptWithNewPassword(plaintext)
+    }
   })
 }
 

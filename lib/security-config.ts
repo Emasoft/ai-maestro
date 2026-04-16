@@ -67,43 +67,75 @@ const DEFAULTS: SecurityConfig = {
 }
 
 let _cached: SecurityConfig | null = null
-let _encryptionKey: Buffer | null = null
+let _cachedPassword: string | null = null
 
 function deriveKey(password: string, salt: Buffer): Buffer {
   return Buffer.from(crypto.hkdfSync('sha512', password, salt, HKDF_INFO, KEY_LENGTH))
 }
 
+function encryptConfig(config: SecurityConfig, password: string): string {
+  const salt = crypto.randomBytes(SALT_LENGTH)
+  const iv = crypto.randomBytes(IV_LENGTH)
+  const key = deriveKey(password, salt)
+  const plaintext = JSON.stringify(config)
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
+  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf-8'), cipher.final()])
+  const tag = cipher.getAuthTag()
+  return JSON.stringify({
+    version: 1,
+    algorithm: ALGORITHM,
+    salt: salt.toString('base64'),
+    iv: iv.toString('base64'),
+    tag: tag.toString('base64'),
+    ciphertext: ciphertext.toString('base64'),
+  })
+}
+
+function decryptConfig(blob: string, password: string): SecurityConfig | null {
+  try {
+    const parsed = JSON.parse(blob)
+    const salt = Buffer.from(parsed.salt, 'base64')
+    const iv = Buffer.from(parsed.iv, 'base64')
+    const tag = Buffer.from(parsed.tag, 'base64')
+    const ciphertext = Buffer.from(parsed.ciphertext, 'base64')
+    const key = deriveKey(password, salt)
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv)
+    decipher.setAuthTag(tag)
+    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()])
+    return JSON.parse(decrypted.toString('utf-8'))
+  } catch {
+    return null
+  }
+}
+
 export function unlockSecurityConfig(password: string): boolean {
   try {
     if (!fs.existsSync(CONFIG_PATH)) {
-      _encryptionKey = deriveKey(password, crypto.randomBytes(SALT_LENGTH))
+      _cachedPassword = password
       _cached = structuredClone(DEFAULTS)
       return true
     }
 
     const raw = fs.readFileSync(CONFIG_PATH, 'utf-8')
-    const blob = JSON.parse(raw)
-    const salt = Buffer.from(blob.salt, 'base64')
-    const iv = Buffer.from(blob.iv, 'base64')
-    const tag = Buffer.from(blob.tag, 'base64')
-    const ciphertext = Buffer.from(blob.ciphertext, 'base64')
+    const config = decryptConfig(raw, password)
+    if (!config) return false
 
-    const key = deriveKey(password, salt)
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv)
-    decipher.setAuthTag(tag)
-    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()])
-    const config = JSON.parse(decrypted.toString('utf-8'))
-
-    _encryptionKey = key
-    _cached = deepMerge(DEFAULTS, config)
+    _cachedPassword = password
+    _cached = deepMerge(DEFAULTS, config as unknown as Partial<Record<string, unknown>>)
     return true
   } catch {
     return false
   }
 }
 
+export function reEncryptWithNewPassword(newPassword: string): void {
+  const config = loadSecurityConfig()
+  _cachedPassword = newPassword
+  saveSecurityConfig(config)
+}
+
 export function isUnlocked(): boolean {
-  return _encryptionKey !== null
+  return _cachedPassword !== null
 }
 
 export function loadSecurityConfig(): SecurityConfig {
@@ -112,32 +144,15 @@ export function loadSecurityConfig(): SecurityConfig {
 }
 
 export function saveSecurityConfig(config: SecurityConfig): void {
-  if (!_encryptionKey) {
+  if (!_cachedPassword) {
     throw new Error('Security config is locked — unlock with governance password first')
   }
 
-  const salt = crypto.randomBytes(SALT_LENGTH)
-  const key = Buffer.from(_encryptionKey)
-  const iv = crypto.randomBytes(IV_LENGTH)
-  const plaintext = JSON.stringify(config)
-
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
-  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf-8'), cipher.final()])
-  const tag = cipher.getAuthTag()
-
-  const blob = {
-    version: 1,
-    algorithm: ALGORITHM,
-    salt: salt.toString('base64'),
-    iv: iv.toString('base64'),
-    tag: tag.toString('base64'),
-    ciphertext: ciphertext.toString('base64'),
-  }
-
+  const encrypted = encryptConfig(config, _cachedPassword)
   const dir = path.dirname(CONFIG_PATH)
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   const tmp = `${CONFIG_PATH}.tmp.${process.pid}`
-  fs.writeFileSync(tmp, JSON.stringify(blob), { mode: 0o600 })
+  fs.writeFileSync(tmp, encrypted, { mode: 0o600 })
   fs.renameSync(tmp, CONFIG_PATH)
   _cached = config
 }

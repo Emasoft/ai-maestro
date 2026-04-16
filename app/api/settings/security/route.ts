@@ -1,0 +1,86 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { enforceSystemOwner } from '@/lib/route-auth'
+import {
+  loadSecurityConfig,
+  saveSecurityConfig,
+  getSecurityDefaults,
+  resetSecurityConfigCache,
+  type SecurityConfig,
+} from '@/lib/security-config'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET(request: NextRequest) {
+  const denied = enforceSystemOwner(request)
+  if (denied) return denied
+
+  const config = loadSecurityConfig()
+  const defaults = getSecurityDefaults()
+  return NextResponse.json({ config, defaults })
+}
+
+const SecurityPatchSchema = z.object({
+  keyRotation: z.object({
+    intervalDays: z.number().int().min(1).max(365).optional(),
+    overlapDays: z.number().int().min(1).max(30).optional(),
+  }).optional(),
+  argon2: z.object({
+    memoryCost: z.number().int().min(4096).max(1048576).optional(),
+    timeCost: z.number().int().min(1).max(20).optional(),
+    parallelism: z.number().int().min(1).max(16).optional(),
+  }).optional(),
+  ibct: z.object({
+    defaultTtlSeconds: z.number().int().min(60).max(86400).optional(),
+    maxDelegationDepth: z.number().int().min(1).max(10).optional(),
+  }).optional(),
+  ledger: z.object({
+    readOnlyOnTamper: z.boolean().optional(),
+    verifyOnStartup: z.boolean().optional(),
+  }).optional(),
+  passwordPolicy: z.object({
+    minLength: z.number().int().min(1).max(128).optional(),
+    maxLength: z.number().int().min(8).max(1024).optional(),
+  }).optional(),
+  sessionAuth: z.object({
+    sessionTtlDays: z.number().int().min(1).max(90).optional(),
+    sudoTokenTtlSeconds: z.number().int().min(10).max(600).optional(),
+  }).optional(),
+}).strict()
+
+export async function PATCH(request: NextRequest) {
+  const denied = enforceSystemOwner(request)
+  if (denied) return denied
+
+  let raw: unknown
+  try {
+    raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  const parsed = SecurityPatchSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+      { status: 400 },
+    )
+  }
+
+  const current = loadSecurityConfig()
+  const patch = parsed.data
+
+  const updated: SecurityConfig = {
+    keyRotation: { ...current.keyRotation, ...patch.keyRotation },
+    argon2: { ...current.argon2, ...patch.argon2 },
+    ibct: { ...current.ibct, ...patch.ibct },
+    ledger: { ...current.ledger, ...patch.ledger },
+    passwordPolicy: { ...current.passwordPolicy, ...patch.passwordPolicy },
+    sessionAuth: { ...current.sessionAuth, ...patch.sessionAuth },
+  }
+
+  saveSecurityConfig(updated)
+  resetSecurityConfigCache()
+
+  return NextResponse.json({ config: updated })
+}

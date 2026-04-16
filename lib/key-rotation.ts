@@ -2,9 +2,15 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import { getStateDir } from '@/lib/ecosystem-constants'
+import { loadSecurityConfig } from '@/lib/security-config'
 
-const ROTATION_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000
-const OVERLAP_MS = 7 * 24 * 60 * 60 * 1000
+function getRotationIntervalMs(): number {
+  return loadSecurityConfig().keyRotation.intervalDays * 24 * 60 * 60 * 1000
+}
+
+function getOverlapMs(): number {
+  return loadSecurityConfig().keyRotation.overlapDays * 24 * 60 * 60 * 1000
+}
 
 const HOST_KEYS_DIR = path.join(getStateDir(), 'host-keys')
 const METADATA_PATH = path.join(HOST_KEYS_DIR, 'rotation-metadata.json')
@@ -42,13 +48,13 @@ function saveMetadata(meta: RotationMetadata): void {
 export function needsRotation(): boolean {
   const meta = loadMetadata()
   const age = Date.now() - new Date(meta.currentKeyCreatedAt).getTime()
-  return age >= ROTATION_INTERVAL_MS
+  return age >= getRotationIntervalMs()
 }
 
 export function rotateHostKeys(): { rotated: boolean; newPublicKeyHex: string } {
   const meta = loadMetadata()
   const age = Date.now() - new Date(meta.currentKeyCreatedAt).getTime()
-  if (age < ROTATION_INTERVAL_MS) {
+  if (age < getRotationIntervalMs()) {
     const currentPub = fs.readFileSync(path.join(HOST_KEYS_DIR, 'public.hex'), 'utf-8').trim()
     return { rotated: false, newPublicKeyHex: currentPub }
   }
@@ -80,7 +86,7 @@ export function rotateHostKeys(): { rotated: boolean; newPublicKeyHex: string } 
   fs.writeFileSync(tmp4, publicKeyHex, { mode: 0o600 })
   fs.renameSync(tmp4, currentPubPath)
 
-  meta.previousKeyExpires = new Date(Date.now() + OVERLAP_MS).toISOString()
+  meta.previousKeyExpires = new Date(Date.now() + getOverlapMs()).toISOString()
   meta.currentKeyCreatedAt = new Date().toISOString()
   meta.rotationCount++
   meta.lastRotatedAt = new Date().toISOString()
@@ -149,7 +155,7 @@ export function getRotationStatus(): {
   const prevValid = meta.previousKeyExpires !== null && Date.now() < new Date(meta.previousKeyExpires).getTime()
   return {
     currentKeyAge: age,
-    nextRotationIn: Math.max(0, ROTATION_INTERVAL_MS - age),
+    nextRotationIn: Math.max(0, getRotationIntervalMs() - age),
     previousKeyValid: prevValid,
     rotationCount: meta.rotationCount,
   }

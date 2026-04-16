@@ -1,6 +1,7 @@
 import * as jose from 'jose'
 import crypto from 'crypto'
 import { getOrCreateHostKeyPair, getHostPublicKeyHex } from '@/lib/host-keys'
+import { loadSecurityConfig } from '@/lib/security-config'
 
 export type IbctMode = 'compact' | 'chained'
 
@@ -55,17 +56,20 @@ function derToJosePublicKey(publicKeyHex: string): crypto.KeyObject {
 export async function createCompactIbct(
   subject: string,
   scope: string[],
-  maxDepth: number,
-  ttlSeconds: number = 3600,
+  maxDepth?: number,
+  ttlSeconds?: number,
   context?: string,
 ): Promise<CompactIbct> {
+  const cfg = loadSecurityConfig().ibct
+  const effectiveTtl = ttlSeconds ?? cfg.defaultTtlSeconds
+  const effectiveDepth = maxDepth ?? cfg.maxDelegationDepth
   const { privateKeyHex } = getOrCreateHostKeyPair()
   const privateKey = derToJosePrivateKey(privateKeyHex)
   const issuer = hostAipId()
 
   const payload: Record<string, unknown> = {
     scope,
-    max_depth: maxDepth,
+    max_depth: effectiveDepth,
   }
   if (context) payload.context = context
 
@@ -74,7 +78,7 @@ export async function createCompactIbct(
     .setIssuer(issuer)
     .setSubject(subject)
     .setIssuedAt()
-    .setExpirationTime(`${ttlSeconds}s`)
+    .setExpirationTime(`${effectiveTtl}s`)
     .sign(privateKey)
 
   const decoded = jose.decodeJwt(token)
@@ -86,7 +90,7 @@ export async function createCompactIbct(
       iss: issuer,
       sub: subject,
       scope,
-      max_depth: maxDepth,
+      max_depth: effectiveDepth,
       context,
       exp: decoded.exp as number,
       iat: decoded.iat as number,

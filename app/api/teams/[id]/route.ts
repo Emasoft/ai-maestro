@@ -1,9 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getTeamById, updateTeamById } from '@/services/teams-service'
 import { getTeam } from '@/lib/team-registry'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { isValidUuid } from '@/lib/validation'
+
+const UpdateTeamSchema = z.object({
+  name: z.string().min(1).max(128).optional(),
+  description: z.string().max(512).optional(),
+  agentIds: z.array(z.string().uuid()).max(50).optional(),
+  // type and chiefOfStaffId are stripped by defense-in-depth below,
+  // but accepting them here avoids strict() rejecting the body
+  type: z.string().max(32).optional(),
+  chiefOfStaffId: z.string().uuid().nullable().optional(),
+}).strict()
+
+const DeleteTeamSchema = z.object({
+  password: z.string().min(1).max(256).optional(),
+}).strict()
 
 // GET /api/teams/[id] - Get a single team
 export async function GET(
@@ -43,17 +58,23 @@ export async function PUT(
     }
     const requestingAgentId = auth.agentId
 
-    let body
-    try {
-      body = await request.json()
-    } catch {
+    let raw: unknown
+    try { raw = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+
+    const parsed = UpdateTeamSchema.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+        { status: 400 },
+      )
     }
 
     // CC-005: Strip type and chiefOfStaffId from body — only dedicated governance endpoints can change these
     // SF-015: Intentional defense-in-depth — updateTeamById() in teams-service.ts also strips these fields.
     // Both layers strip independently so neither can be bypassed if the other is refactored.
-    const { type: _type, chiefOfStaffId: _cos, ...safeBody } = body
+    const { type: _type, chiefOfStaffId: _cos, ...safeBody } = parsed.data
 
     // Phase 3: Snapshot agentIds before update to detect membership changes for auto-title transitions
     // Use getTeam (no ACL check) — ACL is checked inside updateTeamById
@@ -126,8 +147,15 @@ export async function DELETE(
   // Extract governance password from request body
   let password: string | undefined
   try {
-    const body = await request.json()
-    password = body?.password
+    const raw = await request.json()
+    const parsed = DeleteTeamSchema.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+        { status: 400 },
+      )
+    }
+    password = parsed.data.password
   } catch {
     // No body is OK — DeleteTeam will reject if password is required
   }

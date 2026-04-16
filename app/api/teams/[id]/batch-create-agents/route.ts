@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
+
+const BatchAgentSchema = z.object({
+  name: z.string().min(1).max(64).regex(/^[a-zA-Z0-9_@.-]+$/, 'Agent name must be alphanumeric with _@.-'),
+  governanceTitle: z.string().max(32).optional(),
+  client: z.string().max(32).optional(),
+  program: z.string().max(32).optional(),
+  programArgs: z.string().max(2048).optional(),
+}).strict()
+
+const BatchCreateSchema = z.object({
+  agents: z.array(BatchAgentSchema).min(1).max(10),
+}).strict()
 
 /**
  * POST /api/teams/[id]/batch-create-agents
@@ -32,26 +45,25 @@ export async function POST(
       return NextResponse.json({ error: 'Team not found' }, { status: 404 })
     }
 
-    let body: { agents: Array<{ name: string; governanceTitle?: string; client?: string; program?: string; programArgs?: string }> }
-    try {
-      body = await request.json()
-    } catch {
+    let raw: unknown
+    try { raw = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    if (!Array.isArray(body.agents) || body.agents.length === 0) {
-      return NextResponse.json({ error: 'Body must contain a non-empty "agents" array' }, { status: 400 })
+    const parsed = BatchCreateSchema.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+        { status: 400 },
+      )
     }
-
-    if (body.agents.length > 10) {
-      return NextResponse.json({ error: 'Maximum 10 agents per batch' }, { status: 400 })
-    }
+    const body = parsed.data
 
     // Check for intra-batch name collisions (same name appears twice in the request)
     const nameSet = new Set<string>()
     for (const agentSpec of body.agents) {
-      const n = (agentSpec.name || '').toLowerCase().trim()
-      if (n && nameSet.has(n)) {
+      const n = agentSpec.name.toLowerCase().trim()
+      if (nameSet.has(n)) {
         return NextResponse.json({ error: `Duplicate agent name "${n}" in batch` }, { status: 400 })
       }
       nameSet.add(n)
@@ -63,11 +75,6 @@ export async function POST(
     const errors: Array<{ name: string; error: string }> = []
 
     for (const agentSpec of body.agents) {
-      if (!agentSpec.name) {
-        errors.push({ name: '(unnamed)', error: 'Agent name is required' })
-        continue
-      }
-
       const result = await CreateAgent({
         name: agentSpec.name,
         client: agentSpec.client || 'claude',

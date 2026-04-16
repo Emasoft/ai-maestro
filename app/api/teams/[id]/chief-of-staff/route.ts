@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { verifyPassword, loadGovernance, getManagerId } from '@/lib/governance'
 import { getTeam, updateTeam, TeamValidationException } from '@/lib/team-registry'
 import { getAgent, updateAgent } from '@/lib/agent-registry'
@@ -7,6 +8,11 @@ import { isChiefOfStaffAnywhere } from '@/lib/governance'
 import { checkRateLimit, recordAttempt, resetRateLimit } from '@/lib/rate-limit'
 import { isValidUuid } from '@/lib/validation'
 import { enforceAuth } from '@/lib/route-auth'
+
+const AssignCosSchema = z.object({
+  agentId: z.string().uuid().nullable(),
+  password: z.string().min(1).max(256),
+}).strict()
 
 // NT-008 fix: Force dynamic rendering for consistency with other POST-only routes
 export const dynamic = 'force-dynamic'
@@ -25,13 +31,17 @@ export async function POST(
     if (!isValidUuid(id)) {
       return NextResponse.json({ error: 'Invalid team ID format' }, { status: 400 })
     }
-    let body
-    try { body = await request.json() } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }) }
-    const { agentId: cosAgentId, password } = body
+    let raw: unknown
+    try { raw = await request.json() } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }) }
 
-    if (!password || typeof password !== 'string') {
-      return NextResponse.json({ error: 'Governance password is required' }, { status: 400 })
+    const parsed = AssignCosSchema.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+        { status: 400 },
+      )
     }
+    const { agentId: cosAgentId, password } = parsed.data
 
     const config = loadGovernance()
     if (!config.passwordHash) {

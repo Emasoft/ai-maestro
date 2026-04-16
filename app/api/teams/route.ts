@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { listAllTeams, createNewTeam } from '@/services/teams-service'
 import { authenticateFromRequest } from '@/lib/agent-auth'
+
+const CreateTeamSchema = z.object({
+  name: z.string().min(1).max(128),
+  description: z.string().max(512).optional(),
+  agentIds: z.array(z.string().uuid()).max(50).optional(),
+  type: z.literal('closed').optional(),
+  chiefOfStaffId: z.string().uuid().optional(),
+  governancePassword: z.string().max(256).optional(),
+}).strict()
 
 // NT-009: Force dynamic -- reads runtime filesystem state (team registry)
 export const dynamic = 'force-dynamic'
@@ -27,12 +37,19 @@ export async function POST(request: NextRequest) {
   }
   const requestingAgentId = auth.agentId
 
-  let body
-  try {
-    body = await request.json()
-  } catch {
+  let raw: unknown
+  try { raw = await request.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
+
+  const parsed = CreateTeamSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+      { status: 400 },
+    )
+  }
+  const body = parsed.data
 
   // Governance password required for team creation when called by an agent.
   // Two exemptions:
@@ -43,16 +60,14 @@ export async function POST(request: NextRequest) {
   const isManager = auth.governanceTitle?.toUpperCase() === 'MANAGER'
   if (!isSystemOwner && !isManager) {
     const { verifyPassword } = await import('@/lib/governance')
-    const password = body.governancePassword as string | undefined
-    if (!password) {
+    if (!body.governancePassword) {
       return NextResponse.json({ error: 'Governance password required for team creation. Include "governancePassword" in request body.' }, { status: 403 })
     }
-    if (!(await verifyPassword(password))) {
+    if (!(await verifyPassword(body.governancePassword))) {
       return NextResponse.json({ error: 'Invalid governance password' }, { status: 403 })
     }
   }
 
-  // Whitelist expected fields instead of spreading raw body
   const { name, description, agentIds, type, chiefOfStaffId } = body
 
   const result = await createNewTeam({ name, description, agentIds, type, chiefOfStaffId, requestingAgentId })

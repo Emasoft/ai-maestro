@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { notifyGroupSubscribers } from '@/services/groups-service'
 import { enforceAuth } from '@/lib/route-auth'
+
+const NotifyGroupSchema = z.object({
+  message: z.string().min(1).max(4096),
+  priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
+}).strict()
 
 // POST /api/groups/[id]/notify - Notify all group subscribers
 // Body: { message: string, priority?: string }
@@ -18,35 +24,21 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
   }
 
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
+  let raw: unknown
+  try { raw = await request.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  // Validate body is a plain object (not null, array, or primitive)
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 })
-  }
-
-  const { message, priority } = body as Record<string, unknown>
-
-  if (!message || typeof message !== 'string') {
-    return NextResponse.json({ error: 'message is required and must be a string' }, { status: 400 })
-  }
-
-  if (priority !== undefined && typeof priority !== 'string') {
-    return NextResponse.json({ error: 'priority must be a string' }, { status: 400 })
-  }
-
-  // Validate priority enum if provided
-  if (priority && !['low', 'normal', 'high', 'urgent'].includes(priority as string)) {
-    return NextResponse.json({ error: 'Invalid priority' }, { status: 400 })
+  const parsed = NotifyGroupSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+      { status: 400 },
+    )
   }
 
   try {
-    const result = await notifyGroupSubscribers(id, message, priority)
+    const result = await notifyGroupSubscribers(id, parsed.data.message, parsed.data.priority)
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }

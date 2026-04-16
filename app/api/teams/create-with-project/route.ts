@@ -1,31 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { verifyPassword } from '@/lib/governance'
 import { createNewTeam } from '@/services/teams-service'
 import { enforceAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
-interface CreateWithProjectRequest {
-  name: string
-  description?: string
-  password: string
+const safeOwnerRepo = /^[a-zA-Z0-9_.-]+$/
 
-  // GitHub Project (optional)
-  githubProject?: {
-    owner: string
-    repo: string
-    number: number
-  }
-
-  // COS assignment (optional — auto-created if not provided)
-  chiefOfStaffId?: string   // existing AUTONOMOUS agent UUID
-
-  // Orchestrator assignment (optional)
-  orchestratorId?: string   // existing agent UUID
-
-  // NOTE: repos field intentionally removed — repo registration is not implemented;
-  // callers should use POST /api/teams/[id]/repos after team creation.
-}
+const CreateWithProjectSchema = z.object({
+  name: z.string().min(1).max(128),
+  description: z.string().max(512).optional(),
+  password: z.string().min(1).max(256),
+  githubProject: z.object({
+    owner: z.string().min(1).max(64).regex(safeOwnerRepo, 'Must be alphanumeric with _.-'),
+    repo: z.string().min(1).max(64).regex(safeOwnerRepo, 'Must be alphanumeric with _.-'),
+    number: z.number().int().min(1),
+  }).strict().optional(),
+  chiefOfStaffId: z.string().uuid().optional(),
+  orchestratorId: z.string().uuid().optional(),
+}).strict()
 
 // POST /api/teams/create-with-project
 export async function POST(request: NextRequest) {
@@ -33,15 +27,19 @@ export async function POST(request: NextRequest) {
   if (authErr) return authErr
 
   try {
-    const body: CreateWithProjectRequest = await request.json()
+    let raw: unknown
+    try { raw = await request.json() } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
 
-    // Validate required fields
-    if (typeof body.name !== 'string' || !body.name.trim()) {
-      return NextResponse.json({ error: 'Team name is required' }, { status: 400 })
+    const parsed = CreateWithProjectSchema.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+        { status: 400 },
+      )
     }
-    if (typeof body.password !== 'string' || !body.password) {
-      return NextResponse.json({ error: 'Governance password is required' }, { status: 400 })
-    }
+    const body = parsed.data
 
     // Verify governance password
     const passwordValid = await verifyPassword(body.password)
@@ -74,22 +72,7 @@ export async function POST(request: NextRequest) {
 
     // Post-creation: GitHub project linking (not part of createNewTeam)
     if (body.githubProject) {
-      // Validate githubProject fields to prevent shell injection via gh CLI
-      const safeOwnerRepo = /^[a-zA-Z0-9_.-]+$/
-      if (
-        typeof body.githubProject.owner !== 'string' ||
-        !safeOwnerRepo.test(body.githubProject.owner) ||
-        typeof body.githubProject.repo !== 'string' ||
-        !safeOwnerRepo.test(body.githubProject.repo) ||
-        typeof body.githubProject.number !== 'number' ||
-        !Number.isInteger(body.githubProject.number) ||
-        body.githubProject.number < 1
-      ) {
-        return NextResponse.json(
-          { error: 'githubProject.owner and repo must be alphanumeric, number must be a positive integer' },
-          { status: 400 }
-        )
-      }
+      // Zod schema already validated owner/repo/number format and shell-injection safety
       const { updateTeam } = await import('@/lib/team-registry')
       await updateTeam(team.id, { githubProject: body.githubProject })
 

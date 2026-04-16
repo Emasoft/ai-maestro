@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { subscribeAgent } from '@/services/groups-service'
 import { enforceAuth } from '@/lib/route-auth'
+
+const SubscribeSchema = z.object({
+  agentId: z.string().uuid(),
+}).strict()
 
 // POST /api/groups/[id]/subscribe - Subscribe an agent to a group
 // Body: { agentId: string }
@@ -15,19 +20,20 @@ export async function POST(
   try {
     const { id: groupId } = await params
 
-    let body
-    try {
-      body = await request.json()
-    } catch {
+    let raw: unknown
+    try { raw = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    const { agentId } = body
-    if (!agentId || typeof agentId !== 'string') {
-      return NextResponse.json({ error: 'agentId is required and must be a string' }, { status: 400 })
+    const parsed = SubscribeSchema.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+        { status: 400 },
+      )
     }
 
-    const result = await subscribeAgent(groupId, agentId)
+    const result = await subscribeAgent(groupId, parsed.data.agentId)
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getGroupById, updateGroupById, deleteGroupById } from '@/services/groups-service'
 import { enforceAuth } from '@/lib/route-auth'
+
+const UpdateGroupSchema = z.object({
+  name: z.string().min(1).max(128).optional(),
+  description: z.string().max(512).optional(),
+  subscriberIds: z.array(z.string().uuid()).max(100).optional(),
+}).strict()
 
 // GET /api/groups/[id] - Get a single group
 export async function GET(
@@ -37,27 +44,20 @@ export async function PUT(
   try {
     const { id } = await params
 
-    let body
-    try {
-      body = await request.json()
-    } catch {
+    let raw: unknown
+    try { raw = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    const { name, description, subscriberIds } = body
-
-    // Validate optional fields have correct types
-    if (name !== undefined && typeof name !== 'string') {
-      return NextResponse.json({ error: 'name must be a string' }, { status: 400 })
-    }
-    if (description !== undefined && typeof description !== 'string') {
-      return NextResponse.json({ error: 'description must be a string' }, { status: 400 })
-    }
-    if (subscriberIds !== undefined && (!Array.isArray(subscriberIds) || !subscriberIds.every((id: unknown) => typeof id === 'string'))) {
-      return NextResponse.json({ error: 'subscriberIds must be an array of strings' }, { status: 400 })
+    const parsed = UpdateGroupSchema.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+        { status: 400 },
+      )
     }
 
-    const result = await updateGroupById(id, { name, description, subscriberIds })
+    const result = await updateGroupById(id, parsed.data)
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }

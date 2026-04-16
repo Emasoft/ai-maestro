@@ -1,7 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { listAgents, searchAgentsByQuery } from '@/services/agents-core-service'
 import { CreateAgent } from '@/services/element-management-service'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
+
+const CreateAgentSchema = z.object({
+  name: z.string().min(1).max(64).regex(/^[a-zA-Z0-9_@.-]+$/, 'Agent name must be alphanumeric with _@.-'),
+  label: z.string().max(128).optional(),
+  client: z.string().max(32).optional(),
+  program: z.string().max(32).optional(),
+  workingDirectory: z.string().max(512).optional(),
+  governanceTitle: z.string().max(32).optional(),
+  teamId: z.string().uuid().optional(),
+  avatar: z.string().max(512).optional(),
+  programArgs: z.string().max(2048).optional(),
+  pluginName: z.string().max(128).optional(),
+  createSession: z.boolean().optional(),
+  owner: z.string().max(128).optional(),
+  tags: z.array(z.string().max(64)).max(20).optional(),
+  model: z.string().max(64).optional(),
+  taskDescription: z.string().max(1024).optional(),
+  githubRepo: z.string().max(256).regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/, 'Must be owner/repo format').optional(),
+}).strict()
 
 // Force this route to be dynamic (not statically generated at build time)
 export const dynamic = 'force-dynamic'
@@ -59,31 +79,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }
 
-    let body: Record<string, unknown>
-    try { body = await request.json() } catch {
+    let raw: unknown
+    try { raw = await request.json() } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    // Delegate to all-in-one CreateAgent pipeline
+    const parsed = CreateAgentSchema.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+        { status: 400 },
+      )
+    }
+    const body = parsed.data
+
     const result = await CreateAgent({
-      name: body.name as string,
-      label: body.label as string | undefined,
-      client: body.client as string | undefined,
-      program: body.program as string | undefined,
-      workingDirectory: body.workingDirectory as string | undefined,
-      governanceTitle: body.governanceTitle as string | undefined,
-      teamId: body.teamId as string | undefined,
-      avatar: body.avatar as string | undefined,
-      programArgs: body.programArgs as string | undefined,
-      pluginName: body.pluginName as string | undefined,
-      createSession: body.createSession as boolean | undefined,
-      owner: body.owner as string | undefined,
-      tags: body.tags as string[] | undefined,
-      model: body.model as string | undefined,
-      taskDescription: body.taskDescription as string | undefined,
-      // R19.2: MAINTAINER requires githubRepo in "owner/repo" format (Gate 9a)
-      githubRepo: body.githubRepo as string | undefined,
-      // SEC-PHASE-1: authContext is mandatory for Change* pipelines invoked by CreateAgent
+      ...body,
       authContext: buildAuthContext(auth),
     })
 

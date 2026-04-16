@@ -1489,13 +1489,29 @@ async function startServer(handleRequest) {
         } catch { /* ignore */ }
       }
 
-      // R17: Ensure marketplace is registered.
+      // R17 + R20.21: Ensure all marketplaces are registered.
       try {
         const { execSync: execSyncMkt } = await import('child_process')
-        execSyncMkt('claude plugin marketplace add Emasoft/ai-maestro-plugins 2>/dev/null || true', {
-          timeout: 15000, stdio: 'pipe'
-        })
-      } catch { /* marketplace may already exist */ }
+        const os = await import('os')
+        const mktOpts = { timeout: 15000, stdio: 'pipe' }
+
+        // Remote GitHub marketplace
+        execSyncMkt('claude plugin marketplace add Emasoft/ai-maestro-plugins 2>/dev/null || true', mktOpts)
+
+        // Local role-plugins container (holds roles-marketplace/, codex-roles-marketplace/, etc.)
+        const rolesDir = os.homedir() + '/agents/role-plugins'
+        execSyncMkt(`claude plugin marketplace add "${rolesDir}" 2>/dev/null || true`, mktOpts)
+        execSyncMkt(`claude plugin marketplace update ai-maestro-local-roles-marketplace 2>/dev/null || true`, mktOpts)
+
+        // Local custom-plugins container (holds custom-marketplace/, codex-custom-marketplace/, etc.)
+        const customDir = os.homedir() + '/agents/custom-plugins'
+        execSyncMkt(`claude plugin marketplace add "${customDir}" 2>/dev/null || true`, mktOpts)
+        execSyncMkt(`claude plugin marketplace update ai-maestro-local-custom-marketplace 2>/dev/null || true`, mktOpts)
+
+        console.log('[Startup] All marketplaces registered (remote + 2 local containers)')
+      } catch (err) {
+        console.warn('[Startup] Marketplace registration partial:', err?.message?.slice(0, 80))
+      }
     } catch (error) {
       console.error('[Startup] R17 user-scope guard failed:', error)
     }

@@ -745,70 +745,101 @@ if [ "$INSTALL_SKILL" = true ]; then
     fi
 fi
 
-# Set up local role-plugins marketplace (for Haephestos-generated role-plugins)
+# ═══════════════════════════════════════════════════════════════
+# Set up ALL local marketplaces (R20.3 v3.7.0 per-client layout)
+#
+# Two containers, each with per-client marketplace dirs:
+#   ~/agents/role-plugins/    → roles-marketplace/, codex-roles-marketplace/, ...
+#   ~/agents/custom-plugins/  → custom-marketplace/, codex-custom-marketplace/, ...
+# Each container has a .claude-plugin/marketplace.json manifest that
+# Claude CLI reads. We register the CONTAINER (not each subfolder)
+# because Claude CLI resolves source paths relative to the manifest.
+# ═══════════════════════════════════════════════════════════════
+
 echo ""
-print_info "Setting up local role-plugins marketplace..."
+print_info "Setting up local marketplaces (R20.3 per-client layout)..."
 
-LOCAL_MKT_DIR="$HOME/agents/${LOCAL_MARKETPLACE_DIR_NAME:-role-plugins}"
-LOCAL_MKT_META="$LOCAL_MKT_DIR/.claude-plugin"
-LOCAL_MKT_JSON="$LOCAL_MKT_META/marketplace.json"
-LOCAL_MKT_NAME="${LOCAL_MARKETPLACE_NAME:-ai-maestro-local-roles-marketplace}"
+# Helper: ensure a container has .claude-plugin/marketplace.json with correct name,
+# preserving any existing plugins array.
+setup_local_marketplace() {
+    local MKT_DIR="$1"
+    local MKT_NAME="$2"
+    local MKT_DESC="$3"
+    local MKT_META="$MKT_DIR/.claude-plugin"
+    local MKT_JSON="$MKT_META/marketplace.json"
 
-# Create directory structure
-mkdir -p "$LOCAL_MKT_META"
+    mkdir -p "$MKT_META"
 
-# Create or update marketplace.json — ALWAYS preserve existing plugins
-EXISTING_PLUGINS='[]'
-if [ -f "$LOCAL_MKT_JSON" ] && command -v jq &>/dev/null; then
-    # Try to extract existing plugins array (may be missing, null, or file may be corrupt)
-    EXISTING_PLUGINS=$(jq -c 'if .plugins then .plugins elif type == "array" then . else [] end' "$LOCAL_MKT_JSON" 2>/dev/null || echo '[]')
-    # Validate it's actually a JSON array — if not, reset to empty
-    if ! echo "$EXISTING_PLUGINS" | jq 'type == "array"' 2>/dev/null | grep -q true; then
-        EXISTING_PLUGINS='[]'
+    # Preserve existing plugins
+    local EXISTING_PLUGINS='[]'
+    if [ -f "$MKT_JSON" ] && command -v jq &>/dev/null; then
+        EXISTING_PLUGINS=$(jq -c 'if .plugins then .plugins elif type == "array" then . else [] end' "$MKT_JSON" 2>/dev/null || echo '[]')
+        if ! echo "$EXISTING_PLUGINS" | jq 'type == "array"' 2>/dev/null | grep -q true; then
+            EXISTING_PLUGINS='[]'
+        fi
+        local PLUGIN_COUNT
+        PLUGIN_COUNT=$(echo "$EXISTING_PLUGINS" | jq 'length' 2>/dev/null || echo '0')
+        if [ "$PLUGIN_COUNT" -gt 0 ] 2>/dev/null; then
+            print_info "  $MKT_NAME: preserving $PLUGIN_COUNT existing plugin(s)"
+        fi
     fi
-    PLUGIN_COUNT=$(echo "$EXISTING_PLUGINS" | jq 'length' 2>/dev/null || echo '0')
-    if [ "$PLUGIN_COUNT" -gt 0 ] 2>/dev/null; then
-        print_info "Existing marketplace found with $PLUGIN_COUNT plugin(s) — preserving"
-    fi
-fi
 
-# Write manifest (always — ensures correct name/metadata, preserves plugins)
-if command -v jq &>/dev/null; then
-    jq -n \
-        --arg name "$LOCAL_MKT_NAME" \
-        --argjson plugins "$EXISTING_PLUGINS" \
-        '{
-            name: $name,
-            version: "1.0.0",
-            owner: { name: "local" },
-            metadata: { description: "Local role-plugin marketplace managed by AI Maestro" },
-            plugins: $plugins
-        }' > "$LOCAL_MKT_JSON"
-else
-    # No jq — write with cat (fresh only, preserves nothing if file existed)
-    if [ ! -f "$LOCAL_MKT_JSON" ]; then
-        cat > "$LOCAL_MKT_JSON" <<MKEOF
+    # Write manifest
+    if command -v jq &>/dev/null; then
+        jq -n \
+            --arg name "$MKT_NAME" \
+            --arg desc "$MKT_DESC" \
+            --argjson plugins "$EXISTING_PLUGINS" \
+            '{
+                name: $name,
+                version: "1.0.0",
+                owner: { name: "local" },
+                metadata: { description: $desc },
+                plugins: $plugins
+            }' > "$MKT_JSON"
+    else
+        if [ ! -f "$MKT_JSON" ]; then
+            cat > "$MKT_JSON" <<MKEOF
 {
-  "name": "$LOCAL_MKT_NAME",
+  "name": "$MKT_NAME",
   "version": "1.0.0",
   "owner": { "name": "local" },
-  "metadata": {
-    "description": "Local role-plugin marketplace managed by AI Maestro"
-  },
+  "metadata": { "description": "$MKT_DESC" },
   "plugins": []
 }
 MKEOF
+        fi
     fi
-fi
-print_success "Marketplace manifest ready: $LOCAL_MKT_JSON"
 
-# Register with Claude CLI (add first, then update — handles both fresh and reinstall)
-claude plugin marketplace add "$LOCAL_MKT_DIR" 2>/dev/null && \
-    print_success "Local marketplace registered: $LOCAL_MKT_NAME" || \
-    print_info "Local marketplace already registered"
-claude plugin marketplace update "$LOCAL_MKT_NAME" 2>/dev/null && \
-    print_success "Local marketplace updated: $LOCAL_MKT_NAME" || \
-    print_info "Local marketplace update skipped (may need manual refresh)"
+    # Ensure per-client marketplace subdirs + .abstract exist
+    mkdir -p "$MKT_DIR/.abstract"
+
+    # Register with Claude CLI
+    claude plugin marketplace add "$MKT_DIR" 2>/dev/null && \
+        print_success "  Registered: $MKT_NAME" || \
+        print_info "  Already registered: $MKT_NAME"
+    claude plugin marketplace update "$MKT_NAME" 2>/dev/null || true
+}
+
+# 1. Role-plugins container
+ROLES_DIR="$HOME/agents/${LOCAL_MARKETPLACE_DIR_NAME:-role-plugins}"
+setup_local_marketplace \
+    "$ROLES_DIR" \
+    "${LOCAL_MARKETPLACE_NAME:-ai-maestro-local-roles-marketplace}" \
+    "Local role-plugin marketplace managed by AI Maestro"
+# Ensure the Claude roles-marketplace subdir exists
+mkdir -p "$ROLES_DIR/roles-marketplace"
+
+# 2. Custom-plugins container
+CUSTOM_DIR="$HOME/agents/${CUSTOM_MARKETPLACE_DIR_NAME:-custom-plugins}"
+setup_local_marketplace \
+    "$CUSTOM_DIR" \
+    "${CUSTOM_MARKETPLACE_NAME:-ai-maestro-local-custom-marketplace}" \
+    "Local converted plugin marketplace managed by AI Maestro"
+# Ensure the Claude custom-marketplace subdir exists
+mkdir -p "$CUSTOM_DIR/custom-marketplace"
+
+print_success "All local marketplaces ready"
 
 echo ""
 echo "🧪 Verifying installation..."

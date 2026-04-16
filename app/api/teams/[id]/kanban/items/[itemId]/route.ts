@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 import { getTeam } from '@/lib/team-registry'
 import { checkTeamAccess } from '@/lib/team-acl'
 import { moveProjectItem, archiveProjectItem, configureProjectTemplate } from '@/lib/github-cli'
+
+const UpdateKanbanItemSchema = z.object({
+  status: z.string().min(1).max(64),
+}).strict()
 
 // PATCH /api/teams/[id]/kanban/items/[itemId] — Move item to new status
 export async function PATCH(
@@ -40,11 +45,19 @@ export async function PATCH(
   }
 
   try {
-    const body = await request.json()
-    const { status } = body
-    if (typeof status !== 'string' || !status.trim()) {
-      return NextResponse.json({ error: 'status is required and must be a string' }, { status: 400 })
+    let raw: unknown
+    try { raw = await request.json() } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
+
+    const parsed = UpdateKanbanItemSchema.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+        { status: 400 },
+      )
+    }
+    const { status } = parsed.data
 
     // Map short names to display names
     const statusMap: Record<string, string> = {

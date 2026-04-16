@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getTeamDocument, updateTeamDocument, deleteTeamDocument } from '@/services/teams-service'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
+
+const UpdateDocSchema = z.object({
+  title: z.string().min(1).max(256).optional(),
+  content: z.string().max(65536).optional(),
+  pinned: z.boolean().optional(),
+  tags: z.array(z.string().max(64)).max(20).optional(),
+}).strict()
 
 // GET /api/teams/[id]/documents/[docId] - Get a single document
 export async function GET(
@@ -41,15 +49,22 @@ export async function PUT(
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
   const requestingAgentId = auth.agentId
-  let body
-  try {
-    body = await request.json()
-  } catch {
+
+  let raw: unknown
+  try { raw = await request.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
-  // Whitelist only expected fields instead of spreading raw body
-  const { title, content, pinned, tags } = body
 
+  const parsed = UpdateDocSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+      { status: 400 },
+    )
+  }
+  const body = parsed.data
+
+  const { title, content, pinned, tags } = body
   const result = await updateTeamDocument(id, docId, { title, content, pinned, tags, requestingAgentId })
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })

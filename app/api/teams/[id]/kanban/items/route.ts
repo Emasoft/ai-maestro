@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 import { getTeam } from '@/lib/team-registry'
 import { checkTeamAccess } from '@/lib/team-acl'
 import { addProjectItem, listProjectItems, createIssue, linkIssueToProject } from '@/lib/github-cli'
+
+const CreateKanbanItemSchema = z.object({
+  title: z.string().min(1).max(512),
+  repo: z.string().max(256).optional(),
+  assignee: z.string().max(128).optional(),
+  labels: z.string().max(512).optional(),
+}).strict()
 
 // GET /api/teams/[id]/kanban/items — List kanban items
 export async function GET(
@@ -75,8 +83,19 @@ export async function POST(
   }
 
   try {
-    const { title, repo, assignee, labels } = await request.json()
-    if (!title) return NextResponse.json({ error: 'title is required' }, { status: 400 })
+    let raw: unknown
+    try { raw = await request.json() } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+
+    const parsed = CreateKanbanItemSchema.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+        { status: 400 },
+      )
+    }
+    const { title, repo, assignee, labels } = parsed.data
 
     // Default repo from project owner
     const targetRepo = repo || `${team.githubProject.owner}/${team.githubProject.repo}`

@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 import { getTeam } from '@/lib/team-registry'
 import { checkTeamAccess } from '@/lib/team-acl'
 import { listProjectItems, extractReposFromItems } from '@/lib/github-cli'
+
+const AddRepoSchema = z.object({
+  url: z.string().min(1).max(512),
+  name: z.string().max(256).optional(),
+}).strict()
 
 // GET /api/teams/[id]/repos — List repos for a team
 export async function GET(
@@ -52,15 +58,19 @@ export async function POST(
   const auth = authenticateFromRequest(request)
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
 
-  let body: { url?: unknown; name?: unknown }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Malformed JSON in request body' }, { status: 400 })
+  let raw: unknown
+  try { raw = await request.json() } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { url, name } = body
-  if (!url || typeof url !== 'string') return NextResponse.json({ error: 'url is required and must be a string' }, { status: 400 })
+  const parsed = AddRepoSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+      { status: 400 },
+    )
+  }
+  const { url, name } = parsed.data
 
   const team = getTeam(id)
   if (!team) return NextResponse.json({ error: 'Team not found' }, { status: 404 })

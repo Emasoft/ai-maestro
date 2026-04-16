@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getKanbanConfig, setKanbanConfig } from '@/services/teams-service'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 import type { KanbanColumnConfig } from '@/types/team'
+
+const KanbanColumnSchema = z.object({
+  id: z.string().min(1).max(64),
+  label: z.string().min(1).max(128),
+  color: z.string().min(1).max(64),
+  icon: z.string().max(64).optional(),
+}).strict()
+
+const UpdateKanbanConfigSchema = z.object({
+  columns: z.array(KanbanColumnSchema).min(1).max(20),
+}).strict()
 
 // GET /api/teams/[id]/kanban-config - Get team's kanban column configuration
 export async function GET(
@@ -39,36 +51,20 @@ export async function PUT(
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
 
-  let body: Record<string, unknown>
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Malformed JSON in request body' }, { status: 400 })
+  let raw: unknown
+  try { raw = await request.json() } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  if (!body.columns || !Array.isArray(body.columns)) {
-    return NextResponse.json({ error: 'columns array is required' }, { status: 400 })
-  }
-
-  // Validate that every element has the required KanbanColumnConfig fields with correct types
-  const isValidColumns = (body.columns as unknown[]).every(
-    (col) =>
-      col !== null &&
-      typeof col === 'object' &&
-      typeof (col as Record<string, unknown>).id === 'string' &&
-      typeof (col as Record<string, unknown>).label === 'string' &&
-      typeof (col as Record<string, unknown>).color === 'string' &&
-      ((col as Record<string, unknown>).icon === undefined ||
-        typeof (col as Record<string, unknown>).icon === 'string')
-  )
-  if (!isValidColumns) {
+  const parsed = UpdateKanbanConfigSchema.safeParse(raw)
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: 'Each column must have string fields: id, label, color (icon is optional string)' },
-      { status: 400 }
+      { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+      { status: 400 },
     )
   }
 
-  const result = await setKanbanConfig(id, body.columns as KanbanColumnConfig[], auth.agentId)
+  const result = await setKanbanConfig(id, parsed.data.columns as KanbanColumnConfig[], auth.agentId)
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }

@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { listTeamDocuments, createTeamDocument } from '@/services/teams-service'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
+
+const CreateDocSchema = z.object({
+  title: z.string().min(1).max(256),
+  content: z.string().max(65536).optional(),
+  pinned: z.boolean().optional(),
+  tags: z.array(z.string().max(64)).max(20).optional(),
+}).strict()
 
 // GET /api/teams/[id]/documents - List all documents for a team
 export async function GET(
@@ -42,14 +50,20 @@ export async function POST(
   }
   const requestingAgentId = auth.agentId
 
-  let body
-  try {
-    body = await request.json()
-  } catch {
+  let raw: unknown
+  try { raw = await request.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  // SF-002: Whitelist only expected CreateDocumentParams fields instead of spreading raw body
+  const parsed = CreateDocSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Validation failed', issues: parsed.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })) },
+      { status: 400 },
+    )
+  }
+  const body = parsed.data
+
   const { title, content, pinned, tags } = body
   const result = await createTeamDocument(id, { title, content, pinned, tags, requestingAgentId })
 

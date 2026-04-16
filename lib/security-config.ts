@@ -204,7 +204,11 @@ export function reEncryptWithNewPassword(newPassword: string): void {
 }
 
 export function isUnlocked(): boolean {
-  return _cachedPassword !== null
+  // Config is considered unlocked if:
+  // 1. We have a cached password (explicit unlock via login), OR
+  // 2. No encrypted config file exists (first-run, using defaults — nothing to unlock)
+  if (_cachedPassword !== null) return true
+  try { return !fs.existsSync(CONFIG_PATH) } catch { return false }
 }
 
 export function loadSecurityConfig(): SecurityConfig {
@@ -212,12 +216,16 @@ export function loadSecurityConfig(): SecurityConfig {
   return structuredClone(DEFAULTS)
 }
 
-export function saveSecurityConfig(config: SecurityConfig): void {
-  if (!_cachedPassword) {
+export function saveSecurityConfig(config: SecurityConfig, password?: string): void {
+  const effectivePassword: string | null = password || _cachedPassword
+  if (!effectivePassword) {
     throw new Error('Security config is locked — unlock with governance password first')
   }
+  const pwd: string = effectivePassword
+  // Cache the password if provided externally (e.g., from sudo flow)
+  if (password && !_cachedPassword) _cachedPassword = password
 
-  const encrypted = encryptConfig(config, _cachedPassword)
+  const encrypted = encryptConfig(config, pwd)
   const dir = path.dirname(CONFIG_PATH)
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   const tmp = `${CONFIG_PATH}.tmp.${process.pid}`

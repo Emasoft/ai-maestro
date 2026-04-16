@@ -59,7 +59,7 @@ function hasCredential(req: NextRequest): boolean {
   }
   // Bearer token
   const auth = req.headers.get('authorization') || ''
-  if (/^Bearer\s+(aim_tk_|amp_live_sk_|mst_)[A-Za-z0-9_\-]{10,}$/.test(auth.trim())) {
+  if (/^Bearer\s+(aim_tk_|amp_live_sk_|mst_|eyJ)[A-Za-z0-9_\-\.]{10,}$/.test(auth.trim())) {
     return true
   }
   // X-Forwarded-From (mesh-forwarded, only for /api/v1/route — but that

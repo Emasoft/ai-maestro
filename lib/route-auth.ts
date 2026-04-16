@@ -36,6 +36,17 @@ import {
   buildAuthContext,
   type AuthContext,
 } from './agent-auth'
+import { isReadOnlyMode, getTamperDetails } from './ledger-startup'
+
+function checkReadOnly(method: string): NextResponse | null {
+  if (isReadOnlyMode() && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+    return NextResponse.json(
+      { error: 'read_only_mode', message: 'Server is in read-only mode due to ledger tamper detection', details: getTamperDetails() },
+      { status: 503 },
+    )
+  }
+  return null
+}
 
 export type RequireAuthResult =
   | { ok: true; context: AuthContext; agentId?: string }
@@ -56,6 +67,9 @@ export type RequireAuthResult =
  *   const ctx = auth.context
  */
 export function requireAuth(request: NextRequest): RequireAuthResult {
+  const roBlock = checkReadOnly(request.method)
+  if (roBlock) return { ok: false, error: roBlock }
+
   const result = authenticateFromRequest(request)
   if (result.error) {
     return {
@@ -79,6 +93,9 @@ export function requireAuth(request: NextRequest): RequireAuthResult {
  * where agents may present IBCT tokens for scope-verified delegation.
  */
 export async function requireAuthAsync(request: NextRequest): Promise<RequireAuthResult> {
+  const roBlock = checkReadOnly(request.method)
+  if (roBlock) return { ok: false, error: roBlock }
+
   const result = await authenticateFromRequestAsync(request)
   if (result.error) {
     return {
@@ -103,6 +120,9 @@ export async function requireAuthAsync(request: NextRequest): Promise<RequireAut
  * "any authenticated caller can call this".
  */
 export function enforceAuth(request: NextRequest): NextResponse | null {
+  const roBlock = checkReadOnly(request.method)
+  if (roBlock) return roBlock
+
   const result = authenticateFromRequest(request)
   if (result.error) {
     return NextResponse.json(
@@ -120,6 +140,9 @@ export function enforceAuth(request: NextRequest): NextResponse | null {
  * registration, domain-level settings, user profile edits.
  */
 export function enforceSystemOwner(request: NextRequest): NextResponse | null {
+  const roBlock = checkReadOnly(request.method)
+  if (roBlock) return roBlock
+
   const result = authenticateFromRequest(request)
   if (result.error) {
     return NextResponse.json(

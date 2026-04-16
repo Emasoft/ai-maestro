@@ -6,6 +6,7 @@ import type { JsonPatch } from '@/types/json-patch'
 import { getHostPublicKeyHex, signHostAttestation } from '@/lib/host-keys'
 import { acquireLock } from '@/lib/file-lock'
 import { getSelfHostId } from '@/lib/hosts-config'
+import { verifyWithCurrentOrPrevious } from '@/lib/key-rotation'
 
 const GENESIS_HASH = '0'.repeat(64)
 
@@ -128,7 +129,6 @@ export class SignedLedger {
 
       let expectedPrevHash = GENESIS_HASH
       const localFingerprint = hostKeyFingerprint()
-      const localPubKeyHex = getHostPublicKeyHex()
 
       for (let i = 0; i < this.entries.length; i++) {
         const entry = this.entries[i]
@@ -152,17 +152,7 @@ export class SignedLedger {
         const canon = canonicalize(entry)
         try {
           if (entry.signerKeyFingerprint === localFingerprint) {
-            const valid = crypto.verify(
-              null,
-              Buffer.from(canon),
-              crypto.createPublicKey({
-                key: Buffer.from(localPubKeyHex, 'hex'),
-                format: 'der',
-                type: 'spki',
-              }),
-              Buffer.from(entry.signature, 'base64'),
-            )
-            if (!valid) {
+            if (!verifyWithCurrentOrPrevious(canon, entry.signature)) {
               return { ok: false, seq: entry.seq, reason: `Invalid signature at index ${i}` }
             }
           }

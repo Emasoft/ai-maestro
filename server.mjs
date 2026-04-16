@@ -1381,6 +1381,23 @@ async function startServer(handleRequest) {
       console.error('[SECURITY] Ledger verification failed to run:', error)
     }
 
+    // Check if host keys need rotation (30-day cycle, 7-day overlap)
+    try {
+      const { needsRotation, rotateHostKeys, getRotationStatus } = await import('./lib/key-rotation.ts')
+      if (needsRotation()) {
+        const { rotated, newPublicKeyHex } = rotateHostKeys()
+        if (rotated) {
+          console.log(`[SECURITY] Host key rotated. New public key: ${newPublicKeyHex.substring(0, 32)}...`)
+        }
+      } else {
+        const status = getRotationStatus()
+        const daysUntil = Math.round(status.nextRotationIn / (24 * 60 * 60 * 1000))
+        console.log(`[SECURITY] Host key rotation: next in ${daysUntil} days (rotation #${status.rotationCount})`)
+      }
+    } catch (error) {
+      console.error('[SECURITY] Key rotation check failed:', error)
+    }
+
     // Sync agent databases on startup
     try {
       const { syncAgentDatabases } = await import('./lib/agent-db-sync.mjs')

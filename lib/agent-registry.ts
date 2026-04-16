@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { v4 as uuidv4 } from 'uuid'
+import { compare as jsonPatchCompare } from 'fast-json-patch'
 import type { Agent, AgentSummary, AgentSession, CreateAgentRequest, UpdateAgentRequest, UpdateAgentMetricsRequest, DeploymentType } from '@/types/agent'
 import { parseSessionName, computeSessionName } from '@/types/agent'
 import { getSelfHost, getSelfHostId } from '@/lib/hosts-config'
@@ -10,10 +11,14 @@ import { invalidateAgentCache } from '@/lib/messageQueue'
 import { sessionExistsSync, killSessionSync, renameSessionSync } from '@/lib/agent-runtime'
 import { withLock } from '@/lib/file-lock'
 import { getStateDir } from '@/lib/ecosystem-constants'
+import { SignedLedger } from '@/lib/signed-ledger'
+import type { JsonPatch } from '@/types/json-patch'
 
 const AIMAESTRO_DIR = getStateDir()
 const AGENTS_DIR = path.join(AIMAESTRO_DIR, 'agents')
 const REGISTRY_FILE = path.join(AGENTS_DIR, 'registry.json')
+
+const registryLedger = new SignedLedger(REGISTRY_FILE)
 
 // System helper names that must never be registered as agents, assigned to teams,
 // or receive/send AMP messages.  These are ephemeral UI-only helpers (e.g. the
@@ -216,6 +221,14 @@ export function saveAgents(agents: Agent[]): boolean {
   try {
     ensureAgentsDir()
 
+    const prevAgents = _cachedAgents ?? []
+    const diff = jsonPatchCompare(prevAgents, agents) as JsonPatch
+    const op = prevAgents.length === 0 && agents.length > 0
+      ? 'create' as const
+      : agents.length < prevAgents.length
+        ? 'delete' as const
+        : 'update' as const
+
     const data = JSON.stringify(agents, null, 2)
     // MF-024: Atomic write -- write to temp file then rename to avoid corruption on crash
     const tmpPath = `${REGISTRY_FILE}.tmp.${process.pid}`
@@ -227,6 +240,12 @@ export function saveAgents(agents: Agent[]): boolean {
     const stat = fs.statSync(REGISTRY_FILE)
     _cachedAgents = agents
     _cachedMtimeMs = stat.mtimeMs
+
+    if (diff.length > 0) {
+      registryLedger.append(op, 'agents/registry.json', diff).catch(err => {
+        console.error('[signed-ledger] Failed to append registry mutation:', err)
+      })
+    }
 
     return true
   } catch (error) {

@@ -1025,6 +1025,30 @@ export default function AgentList({
         ) : (
           /* Compact View — grouped by closed team */
           <div className="py-2">
+            {/* WT-004#3 follow-up: compact HELPERS section. In compact mode
+                the sidebar is narrow (< 480px), so the Haephestos card is
+                reduced to an icon-only variant that still clicks through to
+                the embedded role-plugin forge. We keep the purple branding
+                and the HELPERS group label so users always know where the
+                card lives, even when the agent cards below have collapsed
+                to their compact layout. */}
+            <div className="mx-1 mb-1 rounded-lg overflow-hidden border border-purple-500/30 bg-purple-500/5">
+              <div className="px-3 py-1 text-[9px] font-semibold tracking-wider text-purple-400 uppercase border-b border-purple-500/20">
+                HELPERS
+              </div>
+              <button
+                type="button"
+                onClick={() => { window.location.href = '/?agent=haephestos' }}
+                className="w-full flex items-center justify-center px-3 py-2 hover:bg-purple-500/10 transition-colors"
+                title="Haephestos — Create a role-plugin"
+                aria-label="Haephestos — Create a role-plugin"
+              >
+                <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/40 flex items-center justify-center flex-shrink-0">
+                  <Wrench className="w-4 h-4 text-purple-300" />
+                </div>
+              </button>
+            </div>
+
             {Object.entries(teamGroupedAgents)
               .sort(([a], [b]) => {
                 if (a === 'NO-TEAM') return 1

@@ -24,7 +24,11 @@ import { randomBytes, timingSafeEqual } from 'crypto'
 import { verifyPasswordAuto } from '@/lib/argon2'
 import { loadGovernance } from './governance'
 
-const SUDO_TOKEN_TTL_MS = 60_000 // 60 seconds
+import { loadSecurityConfig } from '@/lib/security-config'
+
+function getSudoTokenTtlMs(): number {
+  return loadSecurityConfig().sessionAuth.sudoTokenTtlSeconds * 1000
+}
 const SUDO_TOKEN_BYTES = 32
 
 interface SudoRecord {
@@ -78,7 +82,7 @@ export async function issueSudoToken(password: string, subject: string): Promise
   sweep()
   const raw = randomBytes(SUDO_TOKEN_BYTES).toString('base64url')
   const tokenHash = hashToken(raw)
-  const expiresAt = Date.now() + SUDO_TOKEN_TTL_MS
+  const expiresAt = Date.now() + getSudoTokenTtlMs()
 
   // Keyed by hash for O(1) lookup without exposing raw tokens
   tokens.set(tokenHash, { tokenHash, expiresAt, subject })

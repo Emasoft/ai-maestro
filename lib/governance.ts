@@ -7,7 +7,6 @@
 
 import fs from 'fs'
 import path from 'path'
-import bcrypt from 'bcryptjs'
 import { compare as jsonPatchCompare } from 'fast-json-patch'
 import { loadTeams, getTeam } from './team-registry'
 import { withLock } from '@/lib/file-lock'
@@ -24,8 +23,6 @@ const AIMAESTRO_DIR = getStateDir()
 const GOVERNANCE_FILE = path.join(AIMAESTRO_DIR, 'governance.json')
 const governanceLedger = new SignedLedger(GOVERNANCE_FILE)
 let _prevGovernance: GovernanceConfig | null = null
-
-const BCRYPT_SALT_ROUNDS = 12
 
 /** Ensure ~/.aimaestro directory exists */
 function ensureAimaestroDir() {
@@ -117,11 +114,12 @@ export function saveGovernance(config: GovernanceConfig): void {
   }
 }
 
-/** Set governance password (bcrypt hash with 12 salt rounds) */
+/** Set governance password (Argon2id, memory-hard) */
 export async function setPassword(plaintext: string): Promise<void> {
+  const { hashPassword } = await import('@/lib/argon2')
   return withLock('governance', async () => {
     const config = loadGovernance()
-    config.passwordHash = await bcrypt.hash(plaintext, BCRYPT_SALT_ROUNDS)
+    config.passwordHash = await hashPassword(plaintext)
     config.passwordSetAt = new Date().toISOString()
     saveGovernance(config)
   })
@@ -130,15 +128,24 @@ export async function setPassword(plaintext: string): Promise<void> {
 // Phase 1: No lock on read. Minor TOCTOU with setPassword(). Acceptable for single-user localhost.
 // Returns false for both 'no password set' and 'wrong password'.
 // Callers should check hasPassword (config.passwordHash) separately if they need to distinguish.
-/** Verify plaintext against stored password hash. Returns false if no password set. */
+/** Verify plaintext against stored password hash. Auto-detects bcrypt vs argon2id. */
 export async function verifyPassword(plaintext: string): Promise<boolean> {
   const config = loadGovernance()
-  if (!config.passwordHash) {
-    // Phase 1 (localhost-only): timing difference between "no password" and "wrong password"
-    // is accepted risk. No remote attackers can observe timing in this deployment model.
-    return false
+  if (!config.passwordHash) return false
+
+  const { verifyPasswordAuto, needsRehash, hashPassword } = await import('@/lib/argon2')
+  const valid = await verifyPasswordAuto(config.passwordHash, plaintext)
+
+  if (valid && await needsRehash(config.passwordHash)) {
+    const newHash = await hashPassword(plaintext)
+    await withLock('governance', async () => {
+      const fresh = loadGovernance()
+      fresh.passwordHash = newHash
+      saveGovernance(fresh)
+    })
   }
-  return bcrypt.compare(plaintext, config.passwordHash)
+
+  return valid
 }
 
 // Phase 1: Re-reads governance.json per call. Acceptable for localhost. TODO Phase 2: Add in-memory caching.

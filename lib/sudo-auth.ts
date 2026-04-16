@@ -21,7 +21,7 @@
  */
 
 import { randomBytes, timingSafeEqual } from 'crypto'
-import bcrypt from 'bcryptjs'
+import { verifyPasswordAuto } from '@/lib/argon2'
 import { loadGovernance } from './governance'
 
 const SUDO_TOKEN_TTL_MS = 60_000 // 60 seconds
@@ -70,7 +70,7 @@ export async function issueSudoToken(password: string, subject: string): Promise
   if (!config.passwordHash) {
     throw new Error('sudo_mode_unavailable: governance password not set')
   }
-  const ok = await bcrypt.compare(password, config.passwordHash)
+  const ok = await verifyPasswordAuto(config.passwordHash, password)
   if (!ok) {
     throw new Error('sudo_mode_bad_password')
   }

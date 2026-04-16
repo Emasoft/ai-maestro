@@ -190,7 +190,10 @@ let _biscuitModule: BiscuitModule | null = null
 
 async function loadBiscuit(): Promise<BiscuitModule> {
   if (!_biscuitModule) {
-    _biscuitModule = await import('@biscuit-auth/biscuit-wasm')
+    // Dynamic import with variable to prevent webpack from statically resolving
+    // the WASM module (which causes "experiments.asyncWebAssembly" errors)
+    const mod = '@biscuit-auth/biscuit-wasm'
+    _biscuitModule = await import(/* webpackIgnore: true */ mod)
   }
   return _biscuitModule
 }

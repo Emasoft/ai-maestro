@@ -35,6 +35,7 @@
     "DELETE_/api/agents/role-plugins/install": "strict",
     "PATCH_/api/agents/[id]/title": "strict",
     "POST_/api/sessions/[id]/stop": "strict",
-    "POST_/api/sessions/[id]/restart": "strict"
+    "POST_/api/sessions/[id]/restart": "strict",
+    "PATCH_/api/settings/security": "strict"
   }
 }

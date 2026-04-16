@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { enforceSystemOwner } from '@/lib/route-auth'
-import { validateAndConsumeSudoToken } from '@/lib/sudo-auth'
+import { requireSudoToken } from '@/lib/sudo-guard'
 import {
   loadSecurityConfig,
   saveSecurityConfig,
@@ -72,14 +72,8 @@ export async function PATCH(request: NextRequest) {
   const denied = enforceSystemOwner(request)
   if (denied) return denied
 
-  const sudoToken = request.headers.get('X-Sudo-Token')
-  const sudoResult = validateAndConsumeSudoToken(sudoToken)
-  if (!sudoResult.ok) {
-    return NextResponse.json(
-      { error: 'Sudo authentication required to modify security settings' },
-      { status: 403 },
-    )
-  }
+  const sudoErr = requireSudoToken(request, 'PATCH', '/api/settings/security')
+  if (sudoErr) return sudoErr
 
   if (!isUnlocked()) {
     return NextResponse.json(

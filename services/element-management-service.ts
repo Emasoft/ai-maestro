@@ -1420,6 +1420,14 @@ export async function ChangeTitle(
     const g0err = await gate0Auth('change-title', agentId, options.authContext, ops)
     if (g0err) { result.error = g0err; return result }
 
+    // ── GATE 0b: IBCT scope enforcement ──────────────────────
+    {
+      const { checkIbctScope } = await import('@/lib/ibct-scope-check')
+      const scopeErr = checkIbctScope(options.authContext, 'ChangeTitle')
+      if (scopeErr) { result.error = scopeErr; return result }
+      ops.push('G0b: IBCT scope check passed')
+    }
+
     // ── GATE 1: Validate title value ─────────────────────────
     // R9.13: 'autonomous' is a real title bound to `ai-maestro-autonomous-agent`.
     // effectiveTitle is now just the normalized title — no autonomous→null
@@ -2034,6 +2042,15 @@ export async function ChangePlugin(
   }
 
   try {
+    // ── G00: IBCT scope enforcement ────────────────────────────
+    if (authContext) {
+      const { checkIbctScope } = await import('@/lib/ibct-scope-check')
+      const scopeOp = desired.action === 'uninstall' ? 'UninstallPlugin' : 'ChangePlugin'
+      const scopeErr = checkIbctScope(authContext, scopeOp)
+      if (scopeErr) { result.error = scopeErr; return result }
+      ops.push('G00: IBCT scope check passed')
+    }
+
     // ── G01: Validate plugin name format ──────────────────────
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(desired.name)) {
       result.error = `Invalid plugin name "${desired.name}". Must match /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/`
@@ -3764,6 +3781,14 @@ export async function DeleteTeam(
     const g0err = await gate0Auth('manage-team', teamId, options.authContext, ops)
     if (g0err) { result.error = g0err; return result }
 
+    // G00c: IBCT scope enforcement
+    {
+      const { checkIbctScope } = await import('@/lib/ibct-scope-check')
+      const scopeErr = checkIbctScope(options.authContext, 'DeleteTeam')
+      if (scopeErr) { result.error = scopeErr; return result }
+      ops.push('G00c: IBCT scope check passed')
+    }
+
     // G00b: Governance password verification + rate limiting
     {
       const { loadGovernance, verifyPassword } = await import('@/lib/governance')
@@ -4348,6 +4373,17 @@ export async function CreateAgent(
         return result
       }
       ops.push(`G01c: Agent creation limits OK (${allAgents.length}/${cfg.maxAgentsPerHost}, interval OK)`)
+    }
+
+    // ── G01d: IBCT scope enforcement ──────────────────────────
+    {
+      const { checkIbctScope } = await import('@/lib/ibct-scope-check')
+      const scopeErr = checkIbctScope(desired.authContext, 'CreateAgent')
+      if (scopeErr) {
+        result.error = scopeErr
+        return result
+      }
+      ops.push('G01d: IBCT scope check passed')
     }
 
     // ── G02: Infer client/program (smart, with deprecated client handling) ──

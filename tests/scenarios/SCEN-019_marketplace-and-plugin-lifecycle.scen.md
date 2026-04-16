@@ -1,7 +1,7 @@
 ---
 number: 19
 name: Marketplace registration + plugin install/uninstall + enable/disable
-version: "1.0"
+version: "1.1"
 description: >
   The user logs in, opens Settings → Plugins Explorer → Marketplaces tab,
   registers a new marketplace from a GitHub URL, verifies it appears in the
@@ -9,15 +9,18 @@ description: >
   enables and disables it, uninstalls it, then removes the marketplace.
   The scenario also verifies filter-as-you-type search works on both the
   marketplace list and the plugin list, and that Cancel/Clear correctly
-  resets the filter.
+  resets the filter. Additionally verifies the add / remove actions route
+  through the CreateMarketplace / DeleteMarketplace pipelines (commit
+  a2f90e0e) rather than bypassing them.
 client: claude
 interhosts: false
 device: desktop
 subsystems:
   - MarketplaceManager (Settings → Plugins Explorer → Marketplaces subtab)
   - GlobalElementsSection (Plugins Explorer UI)
-  - /api/settings/marketplaces (list + diagnose)
+  - /api/settings/marketplaces (list + CreateMarketplace / DeleteMarketplace routing)
   - /api/settings/global-plugins (install/uninstall/enable/disable)
+  - element-management-service (CreateMarketplace / DeleteMarketplace pipelines)
   - Claude CLI plugin marketplace add/remove/update
 ui_sections:
   - Login page
@@ -26,6 +29,7 @@ ui_sections:
   - Filter inputs at top of each list (filter-as-you-type)
   - Marketplace card expand/collapse
   - Plugin card with install/uninstall/enable/disable buttons
+  - Sudo password modal (Rule 12)
 data_produced:
   - 1 test marketplace registered (temporary, removed during cleanup)
   - 1 test plugin installed at user scope (temporary, uninstalled during cleanup)
@@ -52,7 +56,8 @@ commit: TBD
 
 ### S001: Commit pre-test state and verify server health
 - **Action:** `curl -s http://localhost:23000/api/v1/health` and
-  `pm2 list | grep ai-maestro` — confirm server is running.
+  `pm2 list | grep ai-maestro` — confirm server is running. (Rule 6
+  state-verification read only.)
 - **Goal:** Server healthy and listening.
 - **Creates:** nothing
 - **Modifies:** nothing
@@ -113,7 +118,7 @@ commit: TBD
 
 ---
 
-## Phase 2: Register a new marketplace
+## Phase 2: Register a new marketplace (via CreateMarketplace pipeline)
 
 ### S008: Open Add Marketplace form
 - **Action:** Click the "Add Marketplace" button at the top of
@@ -131,13 +136,22 @@ commit: TBD
 - **Modifies:** form state
 - **Verify:** Input value matches.
 
-### S010: Submit the add-marketplace request
+### S010: Submit the add-marketplace request (routes through CreateMarketplace pipeline)
 - **Action:** Click "Add".
 - **Goal:** The marketplace is added via Claude CLI and appears in the list.
-- **Creates:** `claude-plugins` marketplace registered globally
-- **Modifies:** `~/.claude/settings.json` `extraKnownMarketplaces`
+  Per commit a2f90e0e, `POST /api/settings/marketplaces` now routes through
+  the `CreateMarketplace` pipeline in element-management-service (not a
+  direct CLI call), ensuring the pipeline's gates (name validation,
+  duplicate detection, cache setup) are enforced.
+- **Creates:** `claude-plugins` marketplace registered globally via
+  CreateMarketplace pipeline
+- **Modifies:** `~/.claude/settings.json` `extraKnownMarketplaces`, CLI
+  cache under `~/.claude/plugins/cache/cblecker-claude-plugins/`
 - **Verify:** Wait for the new card to appear (may take a few seconds while
-  the CLI clones the repo). Screenshot.
+  the CLI clones the repo). Screenshot. Verify PM2 logs show a
+  `CreateMarketplace` pipeline invocation (e.g. `[CreateMarketplace] G*`
+  gate entries) and NOT a direct `claude plugin marketplace add` without
+  the pipeline wrapper.
 
 ### S011: Expand the new marketplace card
 - **Action:** Click the card for `claude-plugins`.
@@ -212,13 +226,23 @@ commit: TBD
 - **Verify:** Plugin no longer appears in the Plugins subtab list. The
   sudo modal appeared exactly once before the uninstall proceeded.
 
-### S018: Remove the test marketplace
+### S018: Remove the test marketplace (Rule 12 sudo password + DeleteMarketplace pipeline)
 - **Action:** Switch to Marketplaces subtab. Click Remove on the
-  `claude-plugins` marketplace card. Confirm.
+  `claude-plugins` marketplace card. When the sudo password modal
+  appears (Rule 12 — DELETE /api/settings/marketplaces is classified
+  strict), enter governance password `mYkri1-xoxrap-gogtan` and click
+  Confirm. Then confirm the removal dialog.
 - **Goal:** Marketplace unregistered from Claude CLI + cache removed.
+  Per commit a2f90e0e, `DELETE /api/settings/marketplaces` now routes
+  through the `DeleteMarketplace` pipeline in element-management-service,
+  enforcing pre-checks (e.g. refuse to remove a marketplace that hosts a
+  core R17 plugin — this test marketplace does NOT host a core plugin,
+  so removal should succeed).
 - **Removes:** The registered marketplace
 - **Verify:** Card no longer appears; `~/.claude/settings.json` no longer
-  references `claude-plugins` in `extraKnownMarketplaces`.
+  references `claude-plugins` in `extraKnownMarketplaces`. The sudo
+  modal appeared exactly once. PM2 logs show a `DeleteMarketplace`
+  pipeline invocation.
 
 ### S019: STATE-WIPE — Restore configuration files
 - **Action:** Compare current config files with backups from S002. Restore

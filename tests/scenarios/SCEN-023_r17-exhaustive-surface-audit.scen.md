@@ -1,7 +1,7 @@
 ---
 number: 23
 name: R17 Exhaustive Surface Audit
-version: "1.0"
+version: "1.1"
 description: >
   The user logs in, creates a fresh Claude test agent, and then systematically
   attempts to remove, disable, or move the core ai-maestro-plugin through every
@@ -20,6 +20,7 @@ subsystems:
   - element-management-service
   - role-plugins
   - agent-registry
+  - ai-maestro-plugins marketplace (remote GitHub, hosts the core plugin)
 ui_sections:
   - Sidebar -> Agents tab -> Create new agent
   - Agent Creation Wizard (steps 1-7)
@@ -27,6 +28,7 @@ ui_sections:
   - Agent Profile -> Plugins tab -> Disable toggle
   - Settings -> Plugins Explorer -> Marketplaces tab -> Remove button
   - Agent Profile -> Advanced tab -> Danger Zone -> Delete Agent
+  - Sudo password modal (Rule 12)
 data_produced:
   - 1 test agent "scen023-r17-audit-01" (temporary, created and deleted)
   - Plugin settings.local.json modifications (temporary, restored via R17 repair)
@@ -43,7 +45,9 @@ prerequisites:
   - AI Maestro server running at http://localhost:23000
   - Governance password set
   - Chrome browser open with DevTools accessible via CDP
-  - ai-maestro-plugins marketplace registered
+  - ai-maestro-plugins marketplace registered (remote GitHub marketplace —
+    hosts the core `ai-maestro-plugin`; per R20, Claude core is
+    remote-only and has no local core marketplace)
   - No pre-existing agent named "scen023-r17-audit-01"
 governance_password: "mYkri1-xoxrap-gogtan"
 commit: TBD
@@ -59,7 +63,15 @@ author: AI Maestro Team
 >
 > **Rule 6 exception:** Phases 4 and 5 perform direct API calls via curl. This is
 > allowed here because the scenario is testing that the API itself blocks bad requests —
-> state verification by testing the boundary, not bypass.
+> state verification by testing the boundary, not bypass. No successful destructive
+> action is performed through these calls; the expected outcome is rejection.
+>
+> **R20 marketplace naming:** The core plugin lives in the remote `ai-maestro-plugins`
+> marketplace (GitHub). Per R20, there is NO local core marketplace for Claude — the
+> core is remote-only. Local marketplaces are `ai-maestro-local-roles-marketplace`
+> (role-plugins, custom + converted) and `ai-maestro-local-custom-marketplace-<client>`
+> (non-Claude custom plugins). This scenario exercises the remote-core assumption in
+> Phase 5 by attempting to remove the ai-maestro-plugins marketplace.
 
 ## Phase 0: SAFE-SETUP
 
@@ -78,7 +90,7 @@ author: AI Maestro Team
 - **Verify:** Backup files exist and hash-match originals. Screenshot: SCEN-023/S002-backup.jpg
 
 #### S003: Build and verify server
-- **Action:** `yarn build && pm2 restart ai-maestro`, wait 4s, `GET /api/sessions`
+- **Action:** `yarn build && pm2 restart ai-maestro`, wait 4s, `GET /api/sessions` (Rule 6 verification read)
 - **Goal:** Server running with latest build
 - **Creates:** nothing
 - **Modifies:** PM2 process state
@@ -110,11 +122,11 @@ author: AI Maestro Team
 - **Verify:** Wizard visible. Screenshot: SCEN-023/S006-wizard-open.jpg
 
 #### S007: Complete the wizard
-- **Action:** Name `scen023-r17-audit-01`, client `claude`, title `autonomous`, accept defaults for folder/avatar, click Create
+- **Action:** Name `scen023-r17-audit-01`, client `claude`, title `AUTONOMOUS` (standalone title — no team required), accept defaults for folder/avatar, click Create
 - **Goal:** Agent created and registered
-- **Creates:** Agent `scen023-r17-audit-01`, folder `~/agents/scen023-r17-audit-01/`, tmux session, ai-maestro-plugin installed at local scope
-- **Modifies:** Registry, settings.local.json (ai-maestro-plugin enabled)
-- **Verify:** Agent appears in sidebar. `GET /api/agents/<id>` returns the new agent. Screenshot: SCEN-023/S007-agent-created.jpg
+- **Creates:** Agent `scen023-r17-audit-01`, folder `~/agents/scen023-r17-audit-01/`, tmux session, ai-maestro-plugin installed at local scope, ai-maestro-autonomous-agent role-plugin installed at local scope per R9.13
+- **Modifies:** Registry, settings.local.json (ai-maestro-plugin enabled + autonomous role-plugin)
+- **Verify:** Agent appears in sidebar. `GET /api/agents/<id>` returns the new agent (Rule 6 verification read). Screenshot: SCEN-023/S007-agent-created.jpg
 
 #### S008: Confirm core plugin is installed + enabled
 - **Action:** Navigate to Agent Profile → Config tab → Plugins section
@@ -166,13 +178,15 @@ author: AI Maestro Team
 > **Note:** This phase uses a direct curl call to `DELETE /api/agents/role-plugins/install`.
 > This is permitted under Rule 6 because it tests that the API boundary itself rejects
 > the request — bypassing the UI IS the test. We never perform a successful destructive
-> action; the expected outcome is rejection.
+> action; the expected outcome is rejection. The sudo token is obtained fresh via
+> `POST /api/auth/sudo-password` with the governance password; the test proves that
+> even with a valid sudo token, R17 blocks the call.
 
-#### S013: Direct API uninstall attempt
-- **Action:** Run `curl -X DELETE 'http://localhost:23000/api/agents/role-plugins/install' -H 'Content-Type: application/json' -d '{"pluginName":"ai-maestro-plugin","agentDir":"~/agents/scen023-r17-audit-01","marketplaceName":"ai-maestro-plugins"}'` (with appropriate sudo token headers)
-- **Goal:** API rejects with R17 error
-- **Creates:** nothing
-- **Modifies:** nothing
+#### S013: Direct API uninstall attempt (with fresh sudo token)
+- **Action:** First, exchange the governance password for a sudo token via `POST /api/auth/sudo-password -d '{"password":"mYkri1-xoxrap-gogtan"}'`. Capture the returned X-Sudo-Token. Then run `curl -X DELETE 'http://localhost:23000/api/agents/role-plugins/install' -H 'Content-Type: application/json' -H 'X-Sudo-Token: <token>' -d '{"pluginName":"ai-maestro-plugin","agentDir":"~/agents/scen023-r17-audit-01","marketplaceName":"ai-maestro-plugins"}'`
+- **Goal:** API rejects with R17 error even with a valid sudo token
+- **Creates:** nothing (token consumed on first request is a single-shot per Rule 12)
+- **Modifies:** nothing on the target plugin
 - **Verify:** Response status is 400 or 403 with an R17-related error message. Screenshot: SCEN-023/S013-api-blocked.jpg
 
 #### S014: Verify plugin still present
@@ -187,16 +201,19 @@ author: AI Maestro Team
 ## Phase 5: Marketplace removal must be blocked
 
 > **Note:** This phase also uses a direct API call via curl for the same reason as Phase 4.
+> Per R20, the `ai-maestro-plugins` marketplace is the remote GitHub marketplace that
+> hosts the core plugin. DeleteMarketplace pipeline (commit a2f90e0e) must reject its
+> removal because it hosts a core R17-protected plugin.
 
-#### S015: Attempt marketplace removal of ai-maestro-plugins
-- **Action:** Run `curl -X DELETE 'http://localhost:23000/api/settings/marketplaces?marketplaceName=ai-maestro-plugins'` (with sudo token)
-- **Goal:** Marketplace removal is rejected because it hosts a core plugin
+#### S015: Attempt marketplace removal of ai-maestro-plugins (with fresh sudo token)
+- **Action:** Exchange password for a fresh sudo token via `POST /api/auth/sudo-password` (the S013 token was consumed). Then run `curl -X DELETE 'http://localhost:23000/api/settings/marketplaces?marketplaceName=ai-maestro-plugins' -H 'X-Sudo-Token: <token>'`
+- **Goal:** Marketplace removal is rejected by the DeleteMarketplace pipeline because it hosts a core plugin (R17)
 - **Creates:** nothing
 - **Modifies:** nothing
 - **Verify:** Response status is 400 with R17 message (or similar). Screenshot: SCEN-023/S015-marketplace-blocked.jpg
 
 #### S016: Verify marketplace still registered
-- **Action:** Run `claude plugin marketplace list` or `GET /api/settings/marketplaces`
+- **Action:** Run `claude plugin marketplace list` or `GET /api/settings/marketplaces` (Rule 6 verification read)
 - **Goal:** ai-maestro-plugins marketplace still in the list
 - **Creates:** nothing
 - **Modifies:** nothing
@@ -214,14 +231,14 @@ author: AI Maestro Team
 - **Verify:** File content shows `false`. Screenshot: SCEN-023/S017-manually-disabled.jpg
 
 #### S018: Hibernate the agent via UI
-- **Action:** Select scen023-r17-audit-01 in the sidebar, click Hibernate (enter sudo password `mYkri1-xoxrap-gogtan` in the modal when prompted)
+- **Action:** Select scen023-r17-audit-01 in the sidebar, click Hibernate (enter sudo password `mYkri1-xoxrap-gogtan` in the modal when prompted — Rule 12 hibernate is strict for team agents; AUTONOMOUS agents may or may not prompt depending on registry state)
 - **Goal:** Agent hibernated
 - **Creates:** nothing
 - **Modifies:** Agent session status → offline, tmux session killed
 - **Verify:** Sidebar shows agent as offline. Screenshot: SCEN-023/S018-hibernated.jpg
 
 #### S019: Wake the agent via UI (triggers wake-gate R17)
-- **Action:** Click Wake on scen023-r17-audit-01
+- **Action:** Click Wake on scen023-r17-audit-01 (enter sudo password if prompted)
 - **Goal:** Wake-gate R17 detects disabled core plugin and re-enables before session creation
 - **Creates:** New tmux session
 - **Modifies:** Agent session status → online, settings.local.json (plugin re-enabled)
@@ -250,13 +267,13 @@ author: AI Maestro Team
 ## Phase CLEANUP: Restore Original State
 
 #### S022: Delete the test agent via UI
-- **Action:** Profile → Advanced → Danger Zone → Delete Agent. Enter sudo password `mYkri1-xoxrap-gogtan`. Check "Also delete agent folder". Type `scen023-r17-audit-01`. Click "Delete Forever".
+- **Action:** Profile → Advanced → Danger Zone → Delete Agent. Check "Also delete agent folder". Type `scen023-r17-audit-01`. Click "Delete Forever". When the sudo password modal appears (DELETE /api/agents/[id] is strict), enter sudo password `mYkri1-xoxrap-gogtan` and Confirm.
 - **Goal:** Agent removed from registry, folder deleted, tmux session killed
 - **Removes:** Agent from registry, `~/agents/scen023-r17-audit-01/`, tmux session
 - **Verify:** Agent no longer in sidebar. Folder does not exist. Screenshot: SCEN-023/S022-deleted.jpg
 
 #### S023: Purge cemetery entry
-- **Action:** Settings → Cemetery → find scen023-r17-audit-01 → click Purge (enter sudo password)
+- **Action:** Settings → Cemetery → find scen023-r17-audit-01 → click Purge → enter sudo password `mYkri1-xoxrap-gogtan` when prompted
 - **Goal:** Cemetery entry removed
 - **Removes:** Cemetery archive entry
 - **Verify:** Entry not listed. Screenshot: SCEN-023/S023-cemetery-purged.jpg

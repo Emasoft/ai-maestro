@@ -150,7 +150,7 @@ The scenario report (`tests/scenarios/reports/<scenario-name>_<timestamp>.report
 
 **NEVER bypass the UI** to achieve a step's goal. All interactions must go through the browser:
 
-- Click buttons, fill forms, select options — via Chrome DevTools CDP or Claude-in-Chrome
+- Click buttons, fill forms, select options — via `dev-browser` per Rule 8. Legacy chrome-devtools-mcp support is deprecated.
 - Do NOT call API endpoints directly with `curl` (except for state verification AFTER a UI action)
 - Do NOT modify settings files directly
 - Do NOT run CLI commands to achieve what the UI should do
@@ -246,7 +246,7 @@ commit_start: <git-hash>
 commit_end: <git-hash-or-same>
 started_at: <ISO-timestamp>
 completed_at: <ISO-timestamp>
-result: PASS | FAIL | PARTIAL
+result: PASS | FAIL | PARTIAL | STUCK
 steps_total: <N>
 steps_passed: <N>
 steps_failed: <N>
@@ -256,6 +256,7 @@ bugs_fixed: <N>
 issues_noticed: <N>
 cleanup_verified: true | false
 state_wipe_verified: true | false
+screenshots_purged: true | false
 ---
 
 # Scenario Report: <scenario-name>
@@ -360,17 +361,20 @@ data_produced:                      # Every artifact created during the test.
   - 2 test agents (temporary)       # Format: <count> <what> (<lifecycle>)
   - 1 test team (temporary)         # Lifecycle: "temporary, created and deleted"
   - Plugin settings modifications   # or "temporary, restored via STATE-WIPE"
-required_tools:                     # CDP tools used. Always include all 6 below.
-  - mcp__chrome-devtools__navigate_page
-  - mcp__chrome-devtools__take_snapshot
-  - mcp__chrome-devtools__take_screenshot
-  - mcp__chrome-devtools__click
-  - mcp__chrome-devtools__fill
-  - mcp__chrome-devtools__wait_for
+browser_stack: dev-browser          # Canonical. See Rule 8.
+# Legacy scenarios may still carry the pre-2026-04-15 chrome-devtools-mcp
+# required_tools list. That list is deprecated; new scenarios MUST use
+# browser_stack: dev-browser. The old shape is kept here for reference:
+# required_tools:
+#   - mcp__chrome-devtools__navigate_page
+#   - mcp__chrome-devtools__take_snapshot
+#   - mcp__chrome-devtools__take_screenshot
+#   - mcp__chrome-devtools__click
+#   - mcp__chrome-devtools__fill
+#   - mcp__chrome-devtools__wait_for
 prerequisites:                      # Conditions that must be true BEFORE Phase 0.
-  - AI Maestro server running at http://localhost:23000
+  - AI Maestro server running at http://localhost:23000 (dev-browser handles browser launch)
   - Governance password set
-  - Chrome browser open with DevTools accessible via CDP
   - ai-maestro-plugins marketplace registered
   - <any scenario-specific requirements, e.g. "Codex CLI installed">
 governance_password: "<password>"   # The actual password value, in quotes.
@@ -397,7 +401,8 @@ author: <who wrote the scenario>    # (optional) Person or team name.
 | `subsystems` | list | yes | Backend modules exercised. At least 1. |
 | `ui_sections` | list | yes | UI areas touched. Use `->` arrow notation. |
 | `data_produced` | list | yes | Every artifact created. Include lifecycle note. |
-| `required_tools` | list | yes | Always include the 6 standard CDP tools. |
+| `browser_stack` | string | yes | `dev-browser` per Rule 8. New scenarios MUST set this field. |
+| `required_tools` | list | no | Legacy chrome-devtools-mcp list from pre-2026-04-15 scenarios. Deprecated; do NOT add to new scenarios. |
 | `prerequisites` | list | yes | Testable conditions. Include CLI checks (e.g., `which codex`). |
 | `governance_password` | string | yes | Actual password in quotes. Referenced verbatim in steps. |
 | `commit` | string | yes | Git hash or `TBD`. Updated after first successful run. |
@@ -624,18 +629,35 @@ v3.6.0 the strict routes are:
 |-------|-------------------|
 | `DELETE /api/agents/[id]` | Every scenario's cleanup phase |
 | `DELETE /api/teams/[id]` | SCEN-001, SCEN-002, SCEN-005, SCEN-009, SCEN-010, SCEN-014 |
-| `DELETE /api/agents/cemetery/[id]` | Cleanup phase of every scenario that deletes an agent |
+| `DELETE /api/agents/cemetery` | Cleanup phase of every scenario that deletes an agent |
 | `POST /api/governance/password` | SCEN-001 governance password setup |
 | `DELETE /api/settings/marketplaces` | SCEN-019 cleanup |
 | `DELETE /api/agents/role-plugins/install` | SCEN-019, SCEN-020, SCEN-021 cleanup |
 | `PATCH /api/agents/[id]/title` | SCEN-001 title lifecycle |
-| `POST /api/agents/[id]/stop` | SCEN-011 stop session tests |
+| `POST /api/sessions/[id]/stop` | SCEN-011 stop session tests |
 | `POST /api/sessions/[id]/restart` | Element restart queue tests |
+| `PATCH /api/settings/security` | Security settings updates |
 
 When a NEW strict route is added to `security-registry.json`, update
 this table AND every scenario that touches that route.
 
-### Sudo modal recognition pattern for Chrome DevTools MCP
+### Sudo modal recognition pattern (dev-browser + legacy chrome-devtools-mcp)
+
+The same DOM structure is used in both automation stacks — the modal has
+`role="dialog"` and `aria-modal="true"`, so it is reliably locatable via
+the accessibility tree in either stack.
+
+**With `dev-browser` (current, Rule 8):**
+
+```
+page.snapshotForAI()      → locate modal with text "Confirm with password"
+page.click(passwordInput) → focus
+page.fill(passwordInput)  → type governance password
+page.click("Confirm")     → submit
+page.waitForModalGone()   → modal disappears
+```
+
+**With chrome-devtools-mcp (legacy, deprecated 2026-04-15):**
 
 ```
 take_snapshot          → find modal with text "Confirm with password"
@@ -644,9 +666,6 @@ fill (password input)  → type governance password
 click "Confirm" button → submit
 wait_for               → modal disappears
 ```
-
-The modal has `role="dialog"` and `aria-modal="true"` so it is reliably
-locatable via accessibility tree.
 
 ### 60-second window caveat
 
@@ -854,7 +873,7 @@ This is the ONE file the user reads when they wake up. Its purpose is to let the
 **Completed:** <iso-ts>
 **Base branch:** <branch-name-batch-started-on>
 **Total scenarios:** <N>
-**Pass:** <N>  Fail:** <N>  Partial:** <N>  Stuck:** <N>
+**Pass:** <N>  **Fail:** <N>  **Partial:** <N>  **Stuck:** <N>
 **Bugs fixed in place (Phase 1):** <N>
 **Proposals pending approval (this file):** <N> P0, <N> P1, <N> P2, <N> P3
 **Rate-limit events survived:** <N>

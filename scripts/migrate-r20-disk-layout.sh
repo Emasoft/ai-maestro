@@ -72,29 +72,34 @@ remove_empty_dir() {
   fi
 }
 
-# Detect client from plugin name suffix or .agent.toml compatible-clients
+# Detect client for a plugin directory.
+#
+# Role-plugins have a *.agent.toml with compatible-clients — use that.
+# Custom plugins do NOT have .agent.toml — detect client from name suffix:
+#   <name>-codex → codex, <name>-gemini → gemini, <name> (no suffix) → claude
 detect_client() {
   local plugin_dir="$1"
   local name=$(basename "$plugin_dir")
 
-  # Check .agent.toml compatible-clients first
+  # Role-plugins: check .agent.toml compatible-clients
   local toml_file=""
   for f in "${plugin_dir}"/*.agent.toml; do
     [[ -f "$f" ]] && toml_file="$f" && break
   done
   if [[ -n "$toml_file" ]]; then
-    local clients=$(grep -oP '"[^"]+"' "$toml_file" 2>/dev/null | head -1 | tr -d '"')
-    # Normalize: claude-code → claude (the directory convention uses short names)
-    case "$clients" in
+    # Extract first quoted string after compatible-clients
+    local raw_client=$(grep 'compatible-clients' "$toml_file" 2>/dev/null | grep -oP '"[^"]+"' | head -1 | tr -d '"')
+    # Normalize to short directory name
+    case "$raw_client" in
       claude-code|claude) echo "claude"; return ;;
       codex)  echo "codex"; return ;;
       gemini) echo "gemini"; return ;;
-      kiro|kiro-cli)   echo "kiro"; return ;;
+      kiro|kiro-cli) echo "kiro"; return ;;
       opencode) echo "opencode"; return ;;
     esac
   fi
 
-  # Fallback: detect from name suffix
+  # Custom plugins (no .agent.toml): detect from name suffix
   case "$name" in
     *-codex)  echo "codex" ;;
     *-gemini) echo "gemini" ;;

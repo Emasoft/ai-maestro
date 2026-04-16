@@ -676,7 +676,7 @@ async function ensureFourfoldIdentity(pluginDir: string, pluginName: string): Pr
 
   // Check 3: .agent.toml — already written by writeConvertedAgentProfile with correct name
 
-  // Check 4: Main agent file — rename to match plugin name if needed
+  // Check 4: Main agent file — ensure it matches the emitted plugin name (initial emission only, NOT renaming)
   const mainAgentName = `${pluginName}-main-agent`
   const agentsDir = path.join(pluginDir, 'agents')
   if (existsSync(agentsDir)) {

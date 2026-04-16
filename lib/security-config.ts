@@ -191,6 +191,11 @@ export function resetSecurityConfigCache(): void {
   _cached = null
 }
 
+export function lockSecurityConfig(): void {
+  _cachedPassword = null
+  _cached = null
+}
+
 export function getSecurityDefaults(): SecurityConfig {
   return structuredClone(DEFAULTS)
 }

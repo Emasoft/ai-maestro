@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import { getStateDir } from '@/lib/ecosystem-constants'
 import { loadSecurityConfig } from '@/lib/security-config'
+import { acquireLock } from '@/lib/file-lock'
 
 function getRotationIntervalMs(): number {
   return loadSecurityConfig().keyRotation.intervalDays * 24 * 60 * 60 * 1000
@@ -51,7 +52,16 @@ export function needsRotation(): boolean {
   return age >= getRotationIntervalMs()
 }
 
-export function rotateHostKeys(): { rotated: boolean; newPublicKeyHex: string } {
+export async function rotateHostKeys(): Promise<{ rotated: boolean; newPublicKeyHex: string }> {
+  const release = await acquireLock('host-keys')
+  try {
+    return rotateHostKeysInner()
+  } finally {
+    release()
+  }
+}
+
+function rotateHostKeysInner(): { rotated: boolean; newPublicKeyHex: string } {
   const meta = loadMetadata()
   const age = Date.now() - new Date(meta.currentKeyCreatedAt).getTime()
   if (age < getRotationIntervalMs()) {

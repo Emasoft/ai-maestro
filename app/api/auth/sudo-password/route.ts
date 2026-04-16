@@ -27,6 +27,15 @@ const SudoSchema = z.object({
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
+  const { checkAndRecordAttempt } = await import('@/lib/rate-limit')
+  const rateCheck = checkAndRecordAttempt('sudo-password', 5)
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { error: 'Too many sudo attempts. Try again later.' },
+      { status: 429 }
+    )
+  }
+
   const authResult = authenticateFromRequest(request)
   if (authResult.error) {
     return NextResponse.json({ error: authResult.error }, { status: authResult.status ?? 401 })

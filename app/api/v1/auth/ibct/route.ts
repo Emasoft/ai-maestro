@@ -89,15 +89,15 @@ export async function POST(request: Request) {
     const ibct = await createCompactIbct(
       `aip:key:ed25519:${agentName}`,
       scope,
-      3,
-      3600,
+      undefined,
+      undefined,
       agentTeam ? `team:${agentTeam.name}` : undefined,
     )
 
     return NextResponse.json({
       token_type: 'aip+jwt',
       access_token: ibct.token,
-      expires_in: 3600,
+      expires_in: ibct.claims.exp - ibct.claims.iat,
       scope: ibct.claims.scope,
       issuer: ibct.claims.iss,
       subject: ibct.claims.sub,

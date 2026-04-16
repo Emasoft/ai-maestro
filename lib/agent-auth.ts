@@ -27,6 +27,10 @@ export interface AgentAuthResult {
   governanceTitle?: string
   /** Team ID — from AID token (embedded) or registry (session secret / AMP key). null = no team. */
   teamId?: string | null
+  /** IBCT scope claims — present only for AIP token auth. Downstream must check scope.includes(required). */
+  ibctScope?: string[]
+  /** IBCT max delegation depth — present only for AIP token auth. */
+  ibctMaxDepth?: number
   /** Error message if authentication failed */
   error?: string
   /** HTTP status code for the error */
@@ -207,6 +211,11 @@ export async function authenticateFromRequestAsync(
     if (token.startsWith('eyJ')) {
       try {
         const claims = await verifyCompactIbct(token)
+
+        if (!claims.iss.startsWith('aip:key:ed25519:')) {
+          return { error: 'IBCT issuer not recognized', status: 401 }
+        }
+
         const agentId = claims.sub.startsWith('aip:key:ed25519:')
           ? claims.sub.slice('aip:key:ed25519:'.length)
           : claims.sub
@@ -216,6 +225,8 @@ export async function authenticateFromRequestAsync(
           agentId,
           governanceTitle: govContext.title,
           teamId: govContext.teamId,
+          ibctScope: claims.scope,
+          ibctMaxDepth: claims.max_depth,
         }
       } catch {
         return { error: 'Invalid or expired AIP token', status: 401 }
@@ -244,6 +255,10 @@ export interface AuthContext {
   governanceTitle?: string
   /** CC-GOV-004: Team ID from auth result — avoids redundant registry lookup */
   teamId?: string | null
+  /** IBCT scope claims — present when caller authenticated via AIP token */
+  ibctScope?: string[]
+  /** IBCT max delegation depth */
+  ibctMaxDepth?: number
 }
 
 /**
@@ -256,6 +271,8 @@ export function buildAuthContext(authResult: AgentAuthResult): AuthContext {
     isSystemOwner: !authResult.agentId,
     governanceTitle: authResult.governanceTitle,
     teamId: authResult.teamId,
+    ibctScope: authResult.ibctScope,
+    ibctMaxDepth: authResult.ibctMaxDepth,
   }
 }
 

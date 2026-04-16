@@ -32,6 +32,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   authenticateFromRequest,
+  authenticateFromRequestAsync,
   buildAuthContext,
   type AuthContext,
 } from './agent-auth'
@@ -56,6 +57,29 @@ export type RequireAuthResult =
  */
 export function requireAuth(request: NextRequest): RequireAuthResult {
   const result = authenticateFromRequest(request)
+  if (result.error) {
+    return {
+      ok: false,
+      error: NextResponse.json(
+        { error: result.error },
+        { status: result.status ?? 401 }
+      ),
+    }
+  }
+  return {
+    ok: true,
+    context: buildAuthContext(result),
+    agentId: result.agentId,
+  }
+}
+
+/**
+ * Async variant that additionally verifies AIP compact IBCT tokens (JWT/EdDSA).
+ * Falls back to sync auth for all non-IBCT token types. Use this in routes
+ * where agents may present IBCT tokens for scope-verified delegation.
+ */
+export async function requireAuthAsync(request: NextRequest): Promise<RequireAuthResult> {
+  const result = await authenticateFromRequestAsync(request)
   if (result.error) {
     return {
       ok: false,

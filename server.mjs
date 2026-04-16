@@ -1369,6 +1369,18 @@ async function startServer(handleRequest) {
       console.log(`> IP filter active: only localhost + Tailscale (100.64.0.0/10) allowed`)
     }
 
+    // Verify signed ledger chains before any registry writes
+    try {
+      const { verifyAllLedgers } = await import('./lib/ledger-startup.ts')
+      const ledgerResult = await verifyAllLedgers()
+      if (!ledgerResult.ok) {
+        console.error('[SECURITY] ⚠ TAMPER DETECTED — server is in READ-ONLY mode')
+        console.error('[SECURITY] Write API routes will return 503 until the tamper is resolved')
+      }
+    } catch (error) {
+      console.error('[SECURITY] Ledger verification failed to run:', error)
+    }
+
     // Sync agent databases on startup
     try {
       const { syncAgentDatabases } = await import('./lib/agent-db-sync.mjs')

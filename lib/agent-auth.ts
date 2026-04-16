@@ -18,6 +18,7 @@ import { authenticateRequest } from './amp-auth'
 import { validateGovernanceToken } from './aid-token'
 import { extractSessionFromCookie, validateSession } from './session-auth'
 import { isSessionSecret, validateSessionSecret } from './session-secret'
+import { verifyCompactIbct } from './ibct'
 
 export interface AgentAuthResult {
   /** Verified agent ID, or undefined for system owner / web UI */
@@ -181,6 +182,48 @@ export function authenticateFromRequest(request: { headers: { get(name: string):
     request.headers.get('X-Agent-Id'),
     request.headers.get('Cookie')
   )
+}
+
+/**
+ * Async variant that additionally supports AIP compact IBCT tokens (JWT/EdDSA).
+ * Falls back to the sync authenticateAgent for all non-IBCT token types.
+ *
+ * IBCT tokens are detected by their JWT structure: base64url header starting
+ * with 'eyJ'. The jose library verifies the Ed25519 signature and extracts
+ * scope claims. The `sub` claim maps to agentId; governance title and team
+ * are resolved from the scope array (not embedded in the JWT to avoid stale
+ * claims — the scope is the source of truth for what the token allows).
+ */
+export async function authenticateFromRequestAsync(
+  request: { headers: { get(name: string): string | null } }
+): Promise<AgentAuthResult> {
+  const authHeader = request.headers.get('Authorization')
+
+  if (authHeader) {
+    const token = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : authHeader
+
+    if (token.startsWith('eyJ')) {
+      try {
+        const claims = await verifyCompactIbct(token)
+        const agentId = claims.sub.startsWith('aip:key:ed25519:')
+          ? claims.sub.slice('aip:key:ed25519:'.length)
+          : claims.sub
+
+        const govContext = resolveGovernanceContext(agentId)
+        return {
+          agentId,
+          governanceTitle: govContext.title,
+          teamId: govContext.teamId,
+        }
+      } catch {
+        return { error: 'Invalid or expired AIP token', status: 401 }
+      }
+    }
+  }
+
+  return authenticateFromRequest(request)
 }
 
 /**

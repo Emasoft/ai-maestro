@@ -1369,13 +1369,23 @@ async function startServer(handleRequest) {
       console.log(`> IP filter active: only localhost + Tailscale (100.64.0.0/10) allowed`)
     }
 
-    // Verify signed ledger chains before any registry writes
+    // Verify signed ledger chains before any registry writes (configurable)
     try {
-      const { verifyAllLedgers } = await import('./lib/ledger-startup.ts')
-      const ledgerResult = await verifyAllLedgers()
-      if (!ledgerResult.ok) {
-        console.error('[SECURITY] ⚠ TAMPER DETECTED — server is in READ-ONLY mode')
-        console.error('[SECURITY] Write API routes will return 503 until the tamper is resolved')
+      const { loadSecurityConfig } = await import('./lib/security-config.ts')
+      const secConfig = loadSecurityConfig()
+      if (secConfig.ledger.verifyOnStartup) {
+        const { verifyAllLedgers } = await import('./lib/ledger-startup.ts')
+        const ledgerResult = await verifyAllLedgers()
+        if (!ledgerResult.ok) {
+          if (secConfig.ledger.readOnlyOnTamper) {
+            console.error('[SECURITY] ⚠ TAMPER DETECTED — server is in READ-ONLY mode')
+            console.error('[SECURITY] Write API routes will return 503 until the tamper is resolved')
+          } else {
+            console.warn('[SECURITY] ⚠ Ledger verification failed but readOnlyOnTamper is disabled — proceeding')
+          }
+        }
+      } else {
+        console.log('[SECURITY] Ledger startup verification: SKIPPED (disabled in security-config.json)')
       }
     } catch (error) {
       console.error('[SECURITY] Ledger verification failed to run:', error)

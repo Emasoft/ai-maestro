@@ -1,6 +1,7 @@
 import path from 'path'
 import { SignedLedger } from '@/lib/signed-ledger'
 import { getStateDir } from '@/lib/ecosystem-constants'
+import { loadSecurityConfig } from '@/lib/security-config'
 
 const AIMAESTRO_DIR = getStateDir()
 
@@ -48,9 +49,12 @@ export async function verifyAllLedgers(): Promise<{ ok: boolean; details: string
   const details = results.join('\n')
 
   if (!allOk) {
-    _readOnlyMode = true
+    const cfg = loadSecurityConfig()
+    if (cfg.ledger.readOnlyOnTamper) {
+      _readOnlyMode = true
+    }
     _tamperDetails = details
-    console.error('[SECURITY] Ledger verification FAILED — entering read-only mode')
+    console.error('[SECURITY] Ledger verification FAILED' + (_readOnlyMode ? ' — entering read-only mode' : ''))
     console.error(details)
   } else {
     console.log('[SECURITY] All ledger chains verified')

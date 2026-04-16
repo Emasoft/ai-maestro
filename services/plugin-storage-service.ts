@@ -337,10 +337,43 @@ export async function emitForClient(
   for (const file of files) {
     const fullPath = path.join(targetDir, file.path)
     await mkdir(path.dirname(fullPath), { recursive: true })
-    await writeFile(fullPath, file.content, 'utf-8')
+    // R20.26: the manifest's `name` field MUST equal the target folder name.
+    // The upstream emitters use the source plugin name verbatim; patch it to
+    // the suffixed target name so manifest-name = folder-name always holds.
+    const patchedContent = patchManifestName(file.path, file.content, targetName)
+    await writeFile(fullPath, patchedContent, 'utf-8')
   }
 
   return targetDir
+}
+
+/**
+ * R20.26 manifest-name enforcement: when emitting a plugin to a target
+ * client, the folder name is suffixed with `-<client>` but each emitter
+ * copies the source plugin name into the manifest verbatim. This helper
+ * rewrites the manifest's `name` field to match the target folder name.
+ *
+ * Applies to:
+ *   - `.claude-plugin/plugin.json` (Claude)
+ *   - `.codex-plugin/plugin.json` (Codex)
+ *   - `plugin.json` (any format at plugin root)
+ *
+ * Other files pass through untouched.
+ */
+function patchManifestName(relPath: string, content: string, targetName: string): string {
+  const isPluginManifest =
+    relPath === '.claude-plugin/plugin.json' ||
+    relPath === '.codex-plugin/plugin.json' ||
+    relPath === 'plugin.json'
+  if (!isPluginManifest) return content
+  try {
+    const parsed = JSON.parse(content) as Record<string, unknown>
+    if (parsed.name === targetName) return content
+    parsed.name = targetName
+    return JSON.stringify(parsed, null, 2)
+  } catch {
+    return content
+  }
 }
 
 /**
@@ -656,11 +689,16 @@ async function emitPluginToDir(
   if (!emitter) return false
   const files: ConvertedFile[] = emitter.emit(project)
 
+  // R20.26: manifest name MUST match folder name. Derive the target name
+  // from targetDir's basename so this helper works regardless of caller.
+  const targetName = path.basename(targetDir)
+
   await mkdir(targetDir, { recursive: true })
   for (const file of files) {
     const fullPath = path.join(targetDir, file.path)
     await mkdir(path.dirname(fullPath), { recursive: true })
-    await writeFile(fullPath, file.content, 'utf-8')
+    const patched = patchManifestName(file.path, file.content, targetName)
+    await writeFile(fullPath, patched, 'utf-8')
   }
   return true
 }

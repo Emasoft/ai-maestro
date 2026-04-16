@@ -821,30 +821,88 @@ MKEOF
     claude plugin marketplace update "$MKT_NAME" 2>/dev/null || true
 }
 
-# 1. Role-plugins container
+# Helper: create empty per-client marketplace subdirs (with flat marketplace.json)
+# for the 4 non-Claude clients. These are filesystem-only marketplaces — their
+# respective clients (codex, gemini, opencode, kiro) register them themselves
+# when needed, or the plugin-adapter copies files out of them directly.
+create_per_client_marketplaces() {
+    local CONTAINER="$1"       # role-plugins | custom-plugins | core-plugins
+    local KIND="$2"            # roles | custom | core
+    local PARENT="$HOME/agents/$CONTAINER"
+    mkdir -p "$PARENT"
+    for CLIENT in codex gemini kiro opencode; do
+        local CLIENT_MKT="$PARENT/${CLIENT}-${KIND}-marketplace"
+        mkdir -p "$CLIENT_MKT"
+        local MF="$CLIENT_MKT/marketplace.json"
+        if [ ! -f "$MF" ]; then
+            local DISPLAY_KIND
+            case "$KIND" in
+                roles)  DISPLAY_KIND="Roles" ;;
+                custom) DISPLAY_KIND="Custom" ;;
+                core)   DISPLAY_KIND="Core" ;;
+            esac
+            local DISPLAY_CLIENT
+            case "$CLIENT" in
+                codex) DISPLAY_CLIENT="Codex" ;;
+                gemini) DISPLAY_CLIENT="Gemini" ;;
+                kiro) DISPLAY_CLIENT="Kiro" ;;
+                opencode) DISPLAY_CLIENT="OpenCode" ;;
+            esac
+            cat > "$MF" <<MKEOF
+{
+  "name": "ai-maestro-local-${CLIENT}-${KIND}-marketplace",
+  "interface": {
+    "displayName": "AI Maestro Local $DISPLAY_KIND ($DISPLAY_CLIENT)"
+  },
+  "plugins": []
+}
+MKEOF
+            print_info "  Created: ${CLIENT}-${KIND}-marketplace/"
+        fi
+    done
+}
+
+# 1. Role-plugins container (Claude marketplace at container level + per-client subdirs)
 ROLES_DIR="$HOME/agents/${LOCAL_MARKETPLACE_DIR_NAME:-role-plugins}"
 setup_local_marketplace \
     "$ROLES_DIR" \
     "${LOCAL_MARKETPLACE_NAME:-ai-maestro-local-roles-marketplace}" \
-    "Local role-plugin marketplace managed by AI Maestro"
-# Ensure the Claude roles-marketplace subdir exists
+    "Local Claude role-plugin marketplace managed by AI Maestro"
+# Ensure the Claude roles-marketplace subdir exists (listed in the container manifest)
 mkdir -p "$ROLES_DIR/roles-marketplace"
+create_per_client_marketplaces "role-plugins" "roles"
 
-# 2. Custom-plugins container
+# 2. Custom-plugins container (Claude marketplace at container level + per-client subdirs)
 CUSTOM_DIR="$HOME/agents/${CUSTOM_MARKETPLACE_DIR_NAME:-custom-plugins}"
 setup_local_marketplace \
     "$CUSTOM_DIR" \
     "${CUSTOM_MARKETPLACE_NAME:-ai-maestro-local-custom-marketplace}" \
-    "Local converted plugin marketplace managed by AI Maestro"
-# Ensure the Claude custom-marketplace subdir exists
+    "Local Claude custom-plugin marketplace managed by AI Maestro"
+# Ensure the Claude custom-marketplace subdir exists (listed in the container manifest)
 mkdir -p "$CUSTOM_DIR/custom-marketplace"
+create_per_client_marketplaces "custom-plugins" "custom"
 
-# 3. Core-plugins container (converted ai-maestro-plugin for non-Claude clients)
+# 3. Core-plugins container
+# R20.25 (clarified 2026-04-16): Claude installs the core ai-maestro-plugin
+# from the REMOTE marketplace (Emasoft/ai-maestro-plugins). There is NO local
+# Claude core-marketplace — only per-client converted copies for non-Claude
+# clients (codex, gemini, kiro, opencode) that get the plugin via their
+# respective client-plugin-adapter (not a marketplace registration).
 CORE_DIR="$HOME/agents/${CORE_PLUGINS_CONTAINER_DIR_NAME:-core-plugins}"
-setup_local_marketplace \
-    "$CORE_DIR" \
-    "${CORE_MARKETPLACE_NAME:-ai-maestro-local-core-marketplace}" \
-    "Local core plugin marketplace managed by AI Maestro (converted ai-maestro-plugin for non-Claude clients)"
+mkdir -p "$CORE_DIR/.abstract"
+# Cleanup: if an earlier version of this installer created a Claude marketplace
+# manifest for core-plugins, remove it — Claude does not use this container.
+if [ -f "$CORE_DIR/.claude-plugin/marketplace.json" ]; then
+    print_info "  Removing stale Claude manifest at core-plugins/.claude-plugin/"
+    rm -rf "$CORE_DIR/.claude-plugin"
+fi
+# If Claude CLI has registered ai-maestro-local-core-marketplace from an earlier
+# run, unregister — Claude uses remote only.
+if claude plugin marketplace list 2>/dev/null | grep -q "ai-maestro-local-core-marketplace"; then
+    claude plugin marketplace remove "ai-maestro-local-core-marketplace" 2>/dev/null && \
+        print_info "  Unregistered stale Claude marketplace: ai-maestro-local-core-marketplace"
+fi
+create_per_client_marketplaces "core-plugins" "core"
 
 # Migrate: if the core plugin IR was in custom-plugins/.abstract/, move it to core-plugins/.abstract/
 if [ -d "$CUSTOM_DIR/.abstract/ai-maestro-plugin" ] && [ ! -d "$CORE_DIR/.abstract/ai-maestro-plugin" ]; then
@@ -852,7 +910,7 @@ if [ -d "$CUSTOM_DIR/.abstract/ai-maestro-plugin" ] && [ ! -d "$CORE_DIR/.abstra
         print_info "  Migrated core plugin IR from custom-plugins/.abstract/ to core-plugins/.abstract/"
 fi
 
-print_success "All local marketplaces ready (3 containers)"
+print_success "All local marketplaces ready (3 containers × 4 per-client + 2 Claude)"
 
 echo ""
 echo "🧪 Verifying installation..."

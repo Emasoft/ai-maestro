@@ -59,13 +59,30 @@ export const CUSTOM_PLUGINS_CONTAINER_DIR_NAME = 'custom-plugins'
 /** Shared IR hub folder name inside every container */
 export const ABSTRACT_IR_DIR_NAME = '.abstract'
 
-/** Marketplace subfolder prefix — actual folder is `marketplace-<client>` */
-export const MARKETPLACE_DIR_PREFIX = 'marketplace-'
+/**
+ * Build the per-client custom-plugins marketplace folder name.
+ * Claude (no prefix): `custom-marketplace`
+ * Others: `<client>-custom-marketplace`
+ */
+export function customMarketplaceDirName(client: string): string {
+  return client === 'claude' ? 'custom-marketplace' : `${client}-custom-marketplace`
+}
 
 /**
- * Build the per-client marketplace folder name: `marketplace-<client>`.
- * Example: `marketplaceDirName('codex')` → `"marketplace-codex"`.
+ * Build the per-client role-plugins marketplace folder name.
+ * Claude (no prefix): `roles-marketplace`
+ * Others: `<client>-roles-marketplace`
  */
+export function rolesMarketplaceDirName(client: string): string {
+  return client === 'claude' ? 'roles-marketplace' : `${client}-roles-marketplace`
+}
+
+/**
+ * @deprecated R20.3 — use customMarketplaceDirName or rolesMarketplaceDirName.
+ * Kept for one migration cycle.
+ */
+export const MARKETPLACE_DIR_PREFIX = 'marketplace-'
+/** @deprecated */
 export function marketplaceDirName(client: string): string {
   return `${MARKETPLACE_DIR_PREFIX}${client}`
 }
@@ -121,15 +138,17 @@ export function getRolePluginsContainerPath(): string {
  */
 export function getCustomMarketplacePathForClient(client: string): string {
   const { join } = require('path') as typeof import('path')
-  return join(getCustomPluginsContainerPath(), marketplaceDirName(client))
+  return join(getCustomPluginsContainerPath(), customMarketplaceDirName(client))
 }
 
 /**
  * Resolve a per-client marketplace folder inside the role-plugins container.
+ * Claude: ~/agents/role-plugins/roles-marketplace/
+ * Codex:  ~/agents/role-plugins/codex-roles-marketplace/
  */
 export function getRoleMarketplacePathForClient(client: string): string {
   const { join } = require('path') as typeof import('path')
-  return join(getRolePluginsContainerPath(), marketplaceDirName(client))
+  return join(getRolePluginsContainerPath(), rolesMarketplaceDirName(client))
 }
 
 /** Shared .abstract/ IR hub inside the custom-plugins container */

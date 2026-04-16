@@ -1,7 +1,7 @@
 # Operations Guide: AI Maestro
 
-**Version:** 0.26.0
-**Last Updated:** 2026-02-21
+**Version:** 0.27.3
+**Last Updated:** 2026-04-16
 **Phase:** Multi-host agents with AMP messaging, team governance, and kanban
 
 ---
@@ -72,10 +72,10 @@ cd ~/ai-maestro  # Replace with your actual AI Maestro installation path
 # Start the dashboard
 yarn dev
 
-# Wait for: "ready - started server on 0.0.0.0:23000"
+# Wait for: "ready - started server on http://127.0.0.1:23000"
 ```
 
-**⚠️ Network Access Warning:** By default, AI Maestro is accessible on your local network at port 23000. This means anyone on your WiFi can access it. See the [Security](#security) section for important information.
+**Network Access:** AI Maestro binds to `127.0.0.1` (localhost) by default, so it is reachable only from the machine itself. If Tailscale is installed and a CGNAT IP (`100.64.0.0/10`) is detected, the server dual-binds and accepts traffic **only** from localhost + Tailscale ranges — LAN and public IPs are rejected at the TCP layer by `isAllowedSource()` in `server.mjs`. See the [Security](#security) section for details.
 
 ### Step 5: Open the Dashboard
 
@@ -85,9 +85,9 @@ open http://localhost:23000
 
 # Or manually visit: http://localhost:23000
 
-# From another device on your network (tablet, phone, etc.)
-# Visit: http://YOUR-LOCAL-IP:23000
-# To find your local IP: ifconfig | grep "inet " | grep -v 127.0.0.1
+# From another device: Tailscale only (LAN IPs are blocked).
+# On the host: tailscale ip -4  (e.g. 100.99.233.43)
+# On the remote device: visit http://<tailscale-ip>:23000
 ```
 
 **🎉 Success!** You should see "my-app-dev" in the sidebar. Click it to view the terminal.
@@ -287,7 +287,7 @@ cd ~/projects/app-a && tmux new -s app-a -d && tmux send-keys -t app-a 'claude' 
 cd ~/projects/app-b && tmux new -s app-b -d && tmux send-keys -t app-b 'aider' C-m
 
 # Start dashboard
-cd ~/agents-web && yarn dev
+cd ~/ai-maestro && yarn dev
 
 # Work throughout the day using the dashboard
 
@@ -476,12 +476,11 @@ yarn dev
 yarn build
 pm2 start ecosystem.config.js
 
-# Custom port and hostname
-PORT=3001 yarn dev
-HOSTNAME=localhost PORT=3001 yarn dev  # Localhost-only for better security
+# Custom port (defaults to 23000)
+PORT=23001 yarn dev
 
-# Run localhost-only (more secure, not accessible on network)
-HOSTNAME=localhost yarn dev
+# Explicitly set the bind address (the default is already 127.0.0.1)
+HOSTNAME=127.0.0.1 PORT=23000 yarn dev
 ```
 
 ### Accessing the Dashboard
@@ -490,40 +489,39 @@ HOSTNAME=localhost yarn dev
 # Default URL (from same machine)
 open http://localhost:23000
 
-# From another device on your local network
-# 1. Find your local IP address:
-ifconfig | grep "inet " | grep -v 127.0.0.1
-# Example output: inet 10.0.0.87 ...
+# From another device: Tailscale only — LAN IPs are rejected at the TCP layer.
+# 1. On the host running AI Maestro:
+tailscale ip -4
+# Example output: 100.99.233.43
 
-# 2. On your other device (tablet, phone, another computer):
-# Visit: http://10.0.0.87:23000
-# (Replace 10.0.0.87 with your actual local IP)
+# 2. On the remote device (must also be on the same Tailscale network):
+# Visit: http://100.99.233.43:23000
+# (Use the raw Tailscale IPv4; MagicDNS *.ts.net hostnames do NOT work on iOS.)
 
 # Custom port
-open http://localhost:3001
+open http://localhost:23001
 ```
 
 ### Security
 
-**⚠️ Important:** By default, AI Maestro is accessible from any device on your local network:
-- ✅ **Convenient** - Access from tablets, phones, other computers
-- ⚠️ **No authentication** - Anyone on your WiFi can access it
-- ⚠️ **Unencrypted** - WebSocket connections use ws:// (not wss://)
-- ⚠️ **Full terminal access** - Anyone connected can run commands
+AI Maestro defaults to a **localhost-only** bind (`127.0.0.1`). The server never exposes itself to the LAN:
+
+- ✅ **Localhost-only by default** — binds to `127.0.0.1`, no LAN exposure
+- ✅ **Tailscale VPN gate** — if `tailscale ip -4` reports a CGNAT address the server also accepts traffic from `100.64.0.0/10` and `fd7a:115c:a1e0::/48`; every other source IP is dropped at the TCP layer by `isAllowedSource()` (`server.mjs`)
+- ⚠️ **No authentication for human users yet** — Phase 1 trusts the operating-system user. Add a login page before exposing the port to untrusted Tailscale peers.
+- ⚠️ **Unencrypted on localhost** — WebSocket is `ws://` on localhost; use HTTPS termination at the Tailscale Funnel / reverse proxy layer if remote exposure is required.
 
 **Safe for:**
-- Home networks (trusted WiFi)
-- Private office networks
-- Development on trusted LANs
+- Localhost-only development (the default)
+- Tailscale-only access from your own devices (iPad, laptop, remote host)
 
 **NOT safe for:**
-- Public WiFi (coffee shops, airports)
-- Shared office WiFi with untrusted users
-- Exposing to the internet
+- Public Internet exposure without a front-end auth layer
+- Shared Tailscale networks with untrusted peers (every peer can reach the dashboard)
 
-**To run localhost-only (more secure):**
+**To change the bind address** (still restricted to localhost or Tailscale by the IP filter):
 ```bash
-HOSTNAME=localhost PORT=3000 yarn dev
+HOSTNAME=127.0.0.1 PORT=23000 yarn dev
 ```
 
 See [SECURITY.md](../SECURITY.md) for full security details.
@@ -893,7 +891,7 @@ yarn install
 node --version  # Should be v20.x or later
 
 # 4. Try a different port
-PORT=3001 yarn dev
+PORT=23001 yarn dev
 ```
 
 ### Agent Names Look Weird
@@ -952,7 +950,7 @@ tmux capture-pane -pt <agent-name> -S - > ~/backups/agent-backup.txt
 
 ```bash
 # Morning routine
-cd ~/agents-web && yarn dev &           # Start dashboard
+cd ~/ai-maestro && yarn dev &           # Start dashboard
 start-ai-session main-work claude ~/projects
 start-ai-session experiments aider ~/tests
 open http://localhost:23000             # Open dashboard

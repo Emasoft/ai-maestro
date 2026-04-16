@@ -18,6 +18,7 @@ import AgentsSection from '@/components/settings/AgentsSection'
 import CommandsSection from '@/components/settings/CommandsSection'
 import GlobalElementsSection from '@/components/settings/GlobalElementsSection'
 import CemeterySection from '@/components/settings/CemeterySection'
+import SecuritySection from '@/components/settings/SecuritySection'
 import { VersionChecker } from '@/components/VersionChecker'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
@@ -33,10 +34,10 @@ export default function SettingsPage() {
 function SettingsPageInner() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const [activeSection, setActiveSection] = useState<'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery'>('hosts')
+  const [activeSection, setActiveSection] = useState<'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery'>('hosts')
   // Navigate to section from URL params (e.g. /settings?tab=global-elements)
   useEffect(() => {
-    const validTabs = ['hosts', 'domains', 'webhooks', 'help', 'about', 'onboarding', 'experiments', 'marketplace', 'global-elements', 'agents', 'commands', 'cemetery'] as const
+    const validTabs = ['security', 'hosts', 'domains', 'webhooks', 'help', 'about', 'onboarding', 'experiments', 'marketplace', 'global-elements', 'agents', 'commands', 'cemetery'] as const
     if (tabParam && (validTabs as readonly string[]).includes(tabParam)) {
       setActiveSection(tabParam as typeof validTabs[number])
     }
@@ -64,6 +65,7 @@ function SettingsPageInner() {
 
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto">
+            {activeSection === 'security' && <SecuritySection />}
             {activeSection === 'hosts' && <HostsSection />}
             {activeSection === 'domains' && <DomainsSection />}
             {activeSection === 'webhooks' && <WebhooksSection />}

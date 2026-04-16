@@ -1,8 +1,8 @@
 'use client'
 
-import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store, Puzzle, Bot, TerminalSquare, Archive } from 'lucide-react'
+import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store, Puzzle, Bot, TerminalSquare, Archive, Shield } from 'lucide-react'
 
-type SectionId = 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery'
+type SectionId = 'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery'
 
 interface SettingsSidebarProps {
   activeSection: SectionId
@@ -11,6 +11,12 @@ interface SettingsSidebarProps {
 
 export default function SettingsSidebar({ activeSection, onSectionChange }: SettingsSidebarProps) {
   const sections = [
+    {
+      id: 'security' as const,
+      label: 'Security',
+      icon: Shield,
+      description: 'Auth, encryption & policies',
+    },
     {
       id: 'hosts' as const,
       label: 'Hosts',

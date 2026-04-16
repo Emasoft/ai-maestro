@@ -759,6 +759,23 @@ fi
 echo ""
 print_info "Setting up local marketplaces (R20.3 per-client layout)..."
 
+# Step 0: Run R20 disk migration BEFORE creating the new layout.
+# This migrates pre-R20 directories (custom-plugins/claude/, codex/,
+# marketplace-<client>/, role-plugins/plugins/) into the new per-client
+# <client>-custom-marketplace/ / <client>-roles-marketplace/ layout.
+# IDEMPOTENT — running on an already-migrated layout is a no-op.
+if [ -x "$SCRIPT_DIR/scripts/migrate-r20-disk-layout.sh" ]; then
+    print_info "Running R20 disk-layout migration (idempotent)..."
+    "$SCRIPT_DIR/scripts/migrate-r20-disk-layout.sh" 2>&1 | sed 's/^/  /' || \
+        print_warning "R20 migration returned non-zero (continuing)"
+elif [ -f "$SCRIPT_DIR/scripts/migrate-r20-disk-layout.sh" ]; then
+    print_info "Running R20 disk-layout migration (idempotent)..."
+    bash "$SCRIPT_DIR/scripts/migrate-r20-disk-layout.sh" 2>&1 | sed 's/^/  /' || \
+        print_warning "R20 migration returned non-zero (continuing)"
+else
+    print_info "R20 migration script not found at scripts/migrate-r20-disk-layout.sh — skipping (fresh install)"
+fi
+
 # Helper: ensure a container has .claude-plugin/marketplace.json with correct name,
 # preserving any existing plugins array.
 setup_local_marketplace() {
@@ -941,6 +958,32 @@ if [ "$INSTALL_SCRIPTS" = true ]; then
         print_success "AMP scripts accessible in PATH"
     else
         print_warning "Restart terminal or run: source ~/.zshrc (or ~/.bashrc)"
+    fi
+
+    # Verify AID scripts explicitly (they were previously only installed by the generic *.sh loop).
+    echo ""
+    print_info "Checking AID scripts..."
+
+    AID_SCRIPTS=("aid-init.sh" "aid-auth.sh" "aid-token.sh" "aid-register.sh" "aid-status.sh" "aid-maestro-token.sh" "aid-helper.sh")
+    AID_OK=true
+
+    for script in "${AID_SCRIPTS[@]}"; do
+        if [ -x ~/.local/bin/"$script" ]; then
+            print_success "$script"
+        else
+            # AID scripts may not be present in every installation snapshot.
+            # Distinguish "script exists in source" from "failed to install".
+            if [ -f "$SCRIPTS_DIR/$script" ]; then
+                print_error "$script not installed (source exists at $SCRIPTS_DIR/$script)"
+                AID_OK=false
+            else
+                print_info "$script not in source tree — skipping"
+            fi
+        fi
+    done
+
+    if [ "$AID_OK" = false ]; then
+        print_warning "Some AID scripts were not installed correctly"
     fi
 fi
 

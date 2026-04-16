@@ -190,7 +190,51 @@ if [[ -d "${CUSTOM}/marketplace-gemini" ]]; then
   remove_empty_dir "${CUSTOM}/marketplace-gemini"
 fi
 
-# 1e. Move any top-level plugin dirs that shouldn't be at root
+# 1e. Rename old marketplace-kiro/ → kiro-custom-marketplace/
+if [[ -d "${CUSTOM}/marketplace-kiro" ]]; then
+  $DRY_RUN || mkdir -p "${CUSTOM}/kiro-custom-marketplace"
+  for plugin in "${CUSTOM}/marketplace-kiro"/*/; do
+    [[ -d "$plugin" ]] || continue
+    name=$(basename "$plugin")
+    [[ "$name" == ".claude-plugin" ]] && continue
+    move_plugin "$plugin" "${CUSTOM}/kiro-custom-marketplace/${name}"
+  done
+  if [[ -f "${CUSTOM}/marketplace-kiro/marketplace.json" ]]; then
+    if $DRY_RUN; then
+      log "WOULD MOVE marketplace.json → kiro-custom-marketplace/"
+    else
+      mv "${CUSTOM}/marketplace-kiro/marketplace.json" "${CUSTOM}/kiro-custom-marketplace/" 2>/dev/null || true
+    fi
+  fi
+  if [[ -d "${CUSTOM}/marketplace-kiro/.claude-plugin" ]]; then
+    move_plugin "${CUSTOM}/marketplace-kiro/.claude-plugin" "${CUSTOM}/kiro-custom-marketplace/.claude-plugin"
+  fi
+  remove_empty_dir "${CUSTOM}/marketplace-kiro"
+fi
+
+# 1f. Rename old marketplace-opencode/ → opencode-custom-marketplace/
+if [[ -d "${CUSTOM}/marketplace-opencode" ]]; then
+  $DRY_RUN || mkdir -p "${CUSTOM}/opencode-custom-marketplace"
+  for plugin in "${CUSTOM}/marketplace-opencode"/*/; do
+    [[ -d "$plugin" ]] || continue
+    name=$(basename "$plugin")
+    [[ "$name" == ".claude-plugin" ]] && continue
+    move_plugin "$plugin" "${CUSTOM}/opencode-custom-marketplace/${name}"
+  done
+  if [[ -f "${CUSTOM}/marketplace-opencode/marketplace.json" ]]; then
+    if $DRY_RUN; then
+      log "WOULD MOVE marketplace.json → opencode-custom-marketplace/"
+    else
+      mv "${CUSTOM}/marketplace-opencode/marketplace.json" "${CUSTOM}/opencode-custom-marketplace/" 2>/dev/null || true
+    fi
+  fi
+  if [[ -d "${CUSTOM}/marketplace-opencode/.claude-plugin" ]]; then
+    move_plugin "${CUSTOM}/marketplace-opencode/.claude-plugin" "${CUSTOM}/opencode-custom-marketplace/.claude-plugin"
+  fi
+  remove_empty_dir "${CUSTOM}/marketplace-opencode"
+fi
+
+# 1g. Move any top-level plugin dirs that shouldn't be at root
 for item in "${CUSTOM}"/*/; do
   [[ -d "$item" ]] || continue
   name=$(basename "$item")
@@ -230,12 +274,41 @@ if [[ -d "${ROLES}/plugins" ]]; then
   remove_empty_dir "${ROLES}/plugins"
 fi
 
+# 2a'. Rename legacy marketplace-<client>/ → <client>-roles-marketplace/
+# Mirrors the custom-plugins 1c-1f blocks. Role-plugins historically lived
+# under plugins/ but some manual installs may have placed them here.
+for mkt_client in codex gemini kiro opencode; do
+  legacy_dir="${ROLES}/marketplace-${mkt_client}"
+  target_dir="${ROLES}/${mkt_client}-roles-marketplace"
+  if [[ -d "$legacy_dir" ]]; then
+    $DRY_RUN || mkdir -p "$target_dir"
+    for plugin in "${legacy_dir}"/*/; do
+      [[ -d "$plugin" ]] || continue
+      name=$(basename "$plugin")
+      [[ "$name" == ".claude-plugin" ]] && continue
+      move_plugin "$plugin" "${target_dir}/${name}"
+    done
+    if [[ -f "${legacy_dir}/marketplace.json" ]]; then
+      if $DRY_RUN; then
+        log "WOULD MOVE marketplace.json → ${mkt_client}-roles-marketplace/"
+      else
+        mv "${legacy_dir}/marketplace.json" "${target_dir}/" 2>/dev/null || true
+      fi
+    fi
+    if [[ -d "${legacy_dir}/.claude-plugin" ]]; then
+      move_plugin "${legacy_dir}/.claude-plugin" "${target_dir}/.claude-plugin"
+    fi
+    remove_empty_dir "$legacy_dir"
+  fi
+done
+
 # 2b. Move any top-level role-plugin dirs into the right marketplace
 for item in "${ROLES}"/*/; do
   [[ -d "$item" ]] || continue
   name=$(basename "$item")
   case "$name" in
     roles-marketplace|*-roles-marketplace|.abstract|.claude-plugin|plugins) continue ;;
+    marketplace-*) continue ;;  # Already processed above
   esac
   # Detect which client this role-plugin belongs to
   client=$(detect_client "$item")

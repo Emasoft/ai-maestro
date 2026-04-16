@@ -8,11 +8,14 @@
 import fs from 'fs'
 import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
+import { compare as jsonPatchCompare } from 'fast-json-patch'
 import type { Team, TeamsFile } from '@/types/team'
 import type { TeamType } from '@/types/governance'
+import type { JsonPatch } from '@/types/json-patch'
 import { withLock } from '@/lib/file-lock'
 import { broadcastGovernanceSync } from '@/lib/governance-sync'
 import { getStateDir } from '@/lib/ecosystem-constants'
+import { SignedLedger } from '@/lib/signed-ledger'
 
 // --- Team Name Validation Constants ---
 // Mirrors agent name rigor from app/api/v1/register/route.ts but allows spaces/display chars
@@ -182,6 +185,8 @@ let migrationDone = false
 const AIMAESTRO_DIR = getStateDir()
 const TEAMS_DIR = path.join(AIMAESTRO_DIR, 'teams')
 const TEAMS_FILE = path.join(TEAMS_DIR, 'teams.json')
+const teamsLedger = new SignedLedger(TEAMS_FILE)
+let _prevTeams: Team[] = []
 
 function ensureTeamsDir() {
   if (!fs.existsSync(TEAMS_DIR)) {
@@ -230,11 +235,26 @@ export function loadTeams(): Team[] {
 
 export function saveTeams(teams: Team[]): void {
   ensureTeamsDir()
+
+  const diff = jsonPatchCompare(_prevTeams, teams) as JsonPatch
+  const op = _prevTeams.length === 0 && teams.length > 0
+    ? 'create' as const
+    : teams.length < _prevTeams.length
+      ? 'delete' as const
+      : 'update' as const
+
   const file: TeamsFile = { version: 1, teams }
   // Atomic write: write to temp file then rename to avoid corruption on crash
   const tmpFile = TEAMS_FILE + '.tmp.' + process.pid
   fs.writeFileSync(tmpFile, JSON.stringify(file, null, 2), 'utf-8')
   fs.renameSync(tmpFile, TEAMS_FILE)
+  _prevTeams = teams
+
+  if (diff.length > 0) {
+    teamsLedger.append(op, 'teams/teams.json', diff).catch(err => {
+      console.error('[signed-ledger] Failed to append teams mutation:', err)
+    })
+  }
 }
 
 export function getTeam(id: string): Team | null {

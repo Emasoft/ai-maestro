@@ -8,17 +8,22 @@
 import fs from 'fs'
 import path from 'path'
 import bcrypt from 'bcryptjs'
+import { compare as jsonPatchCompare } from 'fast-json-patch'
 import { loadTeams, getTeam } from './team-registry'
 import { withLock } from '@/lib/file-lock'
 import type { GovernanceConfig } from '@/types/governance'
 import { DEFAULT_GOVERNANCE_CONFIG } from '@/types/governance'
 import { broadcastGovernanceSync } from '@/lib/governance-sync'
 import type { Team } from '@/types/team'
+import type { JsonPatch } from '@/types/json-patch'
 import { getAgent } from '@/lib/agent-registry'
 import { getStateDir } from '@/lib/ecosystem-constants'
+import { SignedLedger } from '@/lib/signed-ledger'
 
 const AIMAESTRO_DIR = getStateDir()
 const GOVERNANCE_FILE = path.join(AIMAESTRO_DIR, 'governance.json')
+const governanceLedger = new SignedLedger(GOVERNANCE_FILE)
+let _prevGovernance: GovernanceConfig | null = null
 
 const BCRYPT_SALT_ROUNDS = 12
 
@@ -93,11 +98,22 @@ export function loadGovernance(): GovernanceConfig {
 export function saveGovernance(config: GovernanceConfig): void {
   // Fail-fast: let errors propagate to callers (all wrapped in withLock try/catch)
   ensureAimaestroDir()
+
+  const prev = _prevGovernance ?? DEFAULT_GOVERNANCE_CONFIG
+  const diff = jsonPatchCompare(prev, config) as JsonPatch
+
   // Atomic write: write to temp file then rename to avoid corruption on crash
   // SF-040: Include process.pid for multi-process safety
   const tmpFile = GOVERNANCE_FILE + `.tmp.${process.pid}`
   fs.writeFileSync(tmpFile, JSON.stringify(config, null, 2), 'utf-8')
   fs.renameSync(tmpFile, GOVERNANCE_FILE)
+  _prevGovernance = config
+
+  if (diff.length > 0) {
+    governanceLedger.append('update', 'governance.json', diff).catch(err => {
+      console.error('[signed-ledger] Failed to append governance mutation:', err)
+    })
+  }
 }
 
 /** Set governance password (bcrypt hash with 12 salt rounds) */

@@ -8,10 +8,13 @@
 import fs from 'fs'
 import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
+import { compare as jsonPatchCompare } from 'fast-json-patch'
 import type { Group, GroupsFile } from '@/types/group'
+import type { JsonPatch } from '@/types/json-patch'
 // TeamsFile type not used — migration reads raw JSON to handle legacy 'open' type values
 import { withLock } from '@/lib/file-lock'
 import { getStateDir } from '@/lib/ecosystem-constants'
+import { SignedLedger } from '@/lib/signed-ledger'
 
 // --- Group Name Validation Constants ---
 const GROUP_NAME_MIN_LENGTH = 2
@@ -42,6 +45,8 @@ function sanitizeGroupName(raw: string): string {
 const AIMAESTRO_DIR = getStateDir()
 const TEAMS_DIR = path.join(AIMAESTRO_DIR, 'teams')
 const GROUPS_FILE = path.join(TEAMS_DIR, 'groups.json')
+const groupsLedger = new SignedLedger(GROUPS_FILE)
+let _prevGroups: Group[] = []
 const TEAMS_FILE = path.join(TEAMS_DIR, 'teams.json')
 const MIGRATION_MARKER = path.join(TEAMS_DIR, '.groups-migrated')
 
@@ -219,11 +224,26 @@ export function loadGroups(): Group[] {
 
 export function saveGroups(groups: Group[]): void {
   ensureTeamsDir()
+
+  const diff = jsonPatchCompare(_prevGroups, groups) as JsonPatch
+  const op = _prevGroups.length === 0 && groups.length > 0
+    ? 'create' as const
+    : groups.length < _prevGroups.length
+      ? 'delete' as const
+      : 'update' as const
+
   const file: GroupsFile = { version: 1, groups }
   // Atomic write: write to temp file then rename to avoid corruption on crash
   const tmpFile = GROUPS_FILE + '.tmp.' + process.pid
   fs.writeFileSync(tmpFile, JSON.stringify(file, null, 2), 'utf-8')
   fs.renameSync(tmpFile, GROUPS_FILE)
+  _prevGroups = groups
+
+  if (diff.length > 0) {
+    groupsLedger.append(op, 'teams/groups.json', diff).catch(err => {
+      console.error('[signed-ledger] Failed to append groups mutation:', err)
+    })
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -16,6 +16,15 @@ const IbctRequestSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const { checkAndRecordAttempt } = await import('@/lib/rate-limit')
+    const rateCheck = checkAndRecordAttempt('ibct-token', 30)
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'rate_limited', message: 'Too many token requests. Try again later.' },
+        { status: 429 }
+      )
+    }
+
     const raw = await request.json()
     const parsed = IbctRequestSchema.safeParse(raw)
     if (!parsed.success) {

@@ -11,16 +11,27 @@
  */
 
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createSession, buildSessionCookie } from '@/lib/session-auth'
 import { checkAndRecordAttempt, resetRateLimit } from '@/lib/rate-limit'
+import { validateApiInput } from '@/lib/prompt-output-filter'
+
+const LoginSchema = z.object({
+  password: z.string().min(1).max(256),
+}).strict()
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
-    const { password } = body
-
-    if (!password || typeof password !== 'string') {
+    const raw = await request.json()
+    const parsed = LoginSchema.safeParse(raw)
+    if (!parsed.success) {
       return NextResponse.json({ error: 'Password required' }, { status: 400 })
+    }
+    const { password } = parsed.data
+
+    const injection = validateApiInput({ password }, ['password'])
+    if (injection) {
+      return NextResponse.json({ error: injection }, { status: 400 })
     }
 
     // CC-GOV-014: Rate-limit login attempts

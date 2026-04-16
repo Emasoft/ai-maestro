@@ -16,13 +16,17 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { issueSudoToken } from '@/lib/sudo-auth'
+
+const SudoSchema = z.object({
+  password: z.string().min(1).max(256),
+}).strict()
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
-  // Already gated by middleware — verify in full
   const authResult = authenticateFromRequest(request)
   if (authResult.error) {
     return NextResponse.json({ error: authResult.error }, { status: authResult.status ?? 401 })
@@ -30,19 +34,21 @@ export async function POST(request: NextRequest) {
   const ctx = buildAuthContext(authResult)
   const subject = ctx.isSystemOwner ? 'system-owner' : (ctx.agentId ?? 'unknown')
 
-  let body: { password?: string }
+  let raw: unknown
   try {
-    body = await request.json()
+    raw = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  if (!body.password || typeof body.password !== 'string') {
+  const parsed = SudoSchema.safeParse(raw)
+  if (!parsed.success) {
     return NextResponse.json({ error: 'password required' }, { status: 400 })
   }
+  const { password } = parsed.data
 
   try {
-    const { token, expiresAt } = await issueSudoToken(body.password, subject)
+    const { token, expiresAt } = await issueSudoToken(password, subject)
     return NextResponse.json({ token, expiresAt })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

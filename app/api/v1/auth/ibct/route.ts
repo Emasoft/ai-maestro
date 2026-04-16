@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { verifyProofWithPublicKeyHex } from '@/lib/aid-token'
 import { loadKeyPair } from '@/lib/amp-keys'
 import { loadTeams } from '@/lib/team-registry'
@@ -7,23 +8,24 @@ import { createCompactIbct, governanceScopeForTitle } from '@/lib/ibct'
 
 const SERVER_URL = `http://localhost:${process.env.PORT || 23000}`
 
+const IbctRequestSchema = z.object({
+  grant_type: z.literal('urn:aip:ibct'),
+  agent_identity: z.union([z.string(), z.object({ address: z.string().optional(), public_key: z.string().optional() })]),
+  proof: z.string().min(1),
+}).strict()
+
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
-
-    if (body.grant_type !== 'urn:aip:ibct') {
+    const raw = await request.json()
+    const parsed = IbctRequestSchema.safeParse(raw)
+    if (!parsed.success) {
+      const first = parsed.error.issues[0]
       return NextResponse.json(
-        { error: 'unsupported_grant_type', message: 'Only urn:aip:ibct is supported' },
+        { error: 'invalid_request', message: first?.message ?? 'Validation failed' },
         { status: 400 }
       )
     }
-
-    if (!body.agent_identity || !body.proof) {
-      return NextResponse.json(
-        { error: 'invalid_request', message: 'agent_identity and proof are required' },
-        { status: 400 }
-      )
-    }
+    const body = parsed.data
 
     let identity: { address?: string; public_key?: string }
     try {

@@ -66,6 +66,20 @@ export default function HostsSection() {
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
 
+  // Passkey state
+  interface PasskeyCredential {
+    credentialID: string
+    label: string
+    createdAt: string
+    transports: string[]
+    counter: number
+  }
+  const [passkeys, setPasskeys] = useState<PasskeyCredential[]>([])
+  const [loadingPasskeys, setLoadingPasskeys] = useState(false)
+  const [registeringPasskey, setRegisteringPasskey] = useState(false)
+  const [passkeyError, setPasskeyError] = useState<string | null>(null)
+  const [deletingPasskeyId, setDeletingPasskeyId] = useState<string | null>(null)
+
   // Form state
   const [formData, setFormData] = useState<Partial<Host>>({
     id: '',
@@ -77,11 +91,12 @@ export default function HostsSection() {
     tailscale: false,
   })
 
-  // Load hosts, organization, and governance on mount
+  // Load hosts, organization, governance, and passkeys on mount
   useEffect(() => {
     fetchHosts()
     fetchOrganization()
     fetchGovernance()
+    fetchPasskeys()
   }, [])
 
   const fetchGovernance = async () => {
@@ -153,6 +168,133 @@ export default function HostsSection() {
     } catch (err) {
       console.error('[HostsSection] logout error:', err)
       setLoggingOut(false)
+    }
+  }
+
+  // ── Passkey management ──────────────────────────────────────
+
+  const fetchPasskeys = async () => {
+    setLoadingPasskeys(true)
+    try {
+      const res = await fetch('/api/auth/webauthn/credentials')
+      if (res.ok) {
+        const data = await res.json()
+        setPasskeys(data.credentials ?? [])
+      }
+    } catch (err) {
+      console.error('[HostsSection] fetchPasskeys error:', err)
+    } finally {
+      setLoadingPasskeys(false)
+    }
+  }
+
+  const registerPasskey = async () => {
+    setRegisteringPasskey(true)
+    setPasskeyError(null)
+    try {
+      // 1. Get registration options from server
+      const optionsRes = await fetch('/api/auth/webauthn/register')
+      if (!optionsRes.ok) {
+        const err = await optionsRes.json().catch(() => ({ error: 'Failed to get registration options' }))
+        throw new Error(err.error || 'Failed to get registration options')
+      }
+      const options = await optionsRes.json()
+
+      // 2. Call WebAuthn browser API
+      const { startRegistration } = await import('@simplewebauthn/browser')
+      const regResponse = await startRegistration({ optionsJSON: options })
+
+      // 3. Get a sudo token (passkey registration is a privileged operation)
+      const sudoToken = await getSudoTokenForPasskey()
+      if (!sudoToken) {
+        throw new Error('Sudo authentication required to register a passkey')
+      }
+
+      // 4. Send registration response to server for verification
+      const verifyRes = await fetch('/api/auth/webauthn/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Sudo-Token': sudoToken,
+        },
+        body: JSON.stringify({
+          response: regResponse,
+          label: `Passkey ${new Date().toLocaleDateString()}`,
+        }),
+      })
+
+      if (!verifyRes.ok) {
+        const err = await verifyRes.json().catch(() => ({ error: 'Registration verification failed' }))
+        throw new Error(err.error || 'Registration verification failed')
+      }
+
+      // 5. Refresh the passkeys list
+      await fetchPasskeys()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Passkey registration failed'
+      // WebAuthn user cancellation is not an error
+      if (msg.includes('NotAllowedError') || msg.includes('AbortError')) {
+        setPasskeyError(null) // User cancelled, not an error
+      } else {
+        setPasskeyError(msg)
+        console.error('[HostsSection] registerPasskey error:', err)
+      }
+    } finally {
+      setRegisteringPasskey(false)
+    }
+  }
+
+  const deletePasskey = async (credentialID: string) => {
+    setDeletingPasskeyId(credentialID)
+    setPasskeyError(null)
+    try {
+      const sudoToken = await getSudoTokenForPasskey()
+      if (!sudoToken) {
+        throw new Error('Sudo authentication required to delete a passkey')
+      }
+
+      const res = await fetch('/api/auth/webauthn/credentials', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Sudo-Token': sudoToken,
+        },
+        body: JSON.stringify({ credentialID }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Delete failed' }))
+        throw new Error(err.error || 'Delete failed')
+      }
+
+      await fetchPasskeys()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete passkey'
+      setPasskeyError(msg)
+      console.error('[HostsSection] deletePasskey error:', err)
+    } finally {
+      setDeletingPasskeyId(null)
+    }
+  }
+
+  /**
+   * Get a sudo token by prompting the user for the governance password.
+   * Uses the existing sudo-password API endpoint.
+   */
+  const getSudoTokenForPasskey = async (): Promise<string | null> => {
+    const password = window.prompt('Enter governance password to confirm:')
+    if (!password) return null
+    try {
+      const res = await fetch('/api/auth/sudo-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      return data.token ?? null
+    } catch {
+      return null
     }
   }
 

@@ -72,11 +72,19 @@ let creationHelperPromise: Promise<ServiceResult<{
 // Watchdog: auto-kill session if browser disconnects
 // ---------------------------------------------------------------------------
 
-// The agent-creation page sends heartbeats every 30s.
+// The agent-creation page sends heartbeats every 15s.
 // If no heartbeat is received for WATCHDOG_TIMEOUT_MS, the session is killed.
 // This prevents zombie sessions from running indefinitely if the browser
 // tab closes without triggering beforeunload cleanup.
-const WATCHDOG_TIMEOUT_MS = 2 * 60 * 1000 // 2 minutes
+//
+// WT-004#1 (SCEN-004 P0-002, 2026-04-16): extended 2min -> 30min.
+// Interactive role-plugin creation involves long user pauses (reading
+// Claude's suggestions, multi-step forms, TOML preview review, plan
+// approval). 30min matches typical Claude Code idle timeout. Five other
+// zombie-safeguard layers still cover true leaks: beforeunload +
+// sendBeacon, client visibilitychange (suspend heartbeat when hidden),
+// this server watchdog, startup cleanup, and tightened tmux permissions.
+const WATCHDOG_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
 let lastHeartbeat: number = 0
 let watchdogTimer: ReturnType<typeof setInterval> | null = null
 

@@ -104,14 +104,75 @@ export default function HaephestosEmbeddedView({ agent, onAgentCreated }: Haephe
     finally { setWaking(false) }
   }, [])
 
-  // Heartbeat: keep the server-side watchdog alive (only when online)
+  // Heartbeat: keep the server-side watchdog alive (only when online).
+  //
+  // WT-004#1 (SCEN-004 P0-002, 2026-04-16): hardened heartbeat protocol.
+  // Three improvements over the previous setInterval/30s/catch(()=>{}):
+  //
+  //   1. Interval halved 30s -> 15s. The server watchdog fires at 30min,
+  //      so 15s = 120 heartbeats per watchdog window. Lots of headroom.
+  //   2. Failed heartbeats retry with exponential backoff (1s, 2s, 4s, 8s)
+  //      before falling through. A single 503 / network blip no longer
+  //      consumes a full interval cycle.
+  //   3. When the tab goes hidden, SUSPEND the interval. When it becomes
+  //      visible again, send an immediate heartbeat and resume. Saves
+  //      battery + connections and prevents false kills on background
+  //      tabs where setInterval is throttled by the browser.
+  //
+  // First heartbeat fires immediately on mount — don't wait 15s for the
+  // first tick.
   useEffect(() => {
     if (!isOnline) return
-    const heartbeatInterval = setInterval(() => {
-      fetch('/api/agents/creation-helper/heartbeat', { method: 'POST' }).catch(() => {})
-    }, 30_000)
-    fetch('/api/agents/creation-helper/heartbeat', { method: 'POST' }).catch(() => {})
-    return () => clearInterval(heartbeatInterval)
+    let cancelled = false
+    let attempt = 0
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let heartbeatInterval: ReturnType<typeof setInterval> | null = null
+
+    const sendHeartbeat = async () => {
+      if (cancelled) return
+      try {
+        const res = await fetch('/api/agents/creation-helper/heartbeat', { method: 'POST' })
+        if (!res.ok) throw new Error(`heartbeat ${res.status}`)
+        attempt = 0
+      } catch {
+        if (cancelled) return
+        attempt = Math.min(attempt + 1, 4)
+        retryTimer = setTimeout(sendHeartbeat, 1000 * Math.pow(2, attempt - 1))
+      }
+    }
+
+    const startInterval = () => {
+      if (heartbeatInterval) return
+      heartbeatInterval = setInterval(sendHeartbeat, 15_000)
+    }
+    const stopInterval = () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval)
+      heartbeatInterval = null
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        stopInterval()
+        if (retryTimer) {
+          clearTimeout(retryTimer)
+          retryTimer = null
+        }
+      } else {
+        sendHeartbeat() // immediate on resume
+        startInterval()
+      }
+    }
+
+    sendHeartbeat()
+    startInterval()
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      cancelled = true
+      stopInterval()
+      if (retryTimer) clearTimeout(retryTimer)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [isOnline])
 
   // Sync raw materials state to disk so Haephestos can read it

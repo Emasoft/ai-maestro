@@ -121,6 +121,42 @@ function encryptConfig(config: SecurityConfig, password: string): string {
   })
 }
 
+/**
+ * Validate that a decrypted config has sane values. An attacker who
+ * compromises the encrypted file (or provides a crafted config via the
+ * PATCH /api/settings/security endpoint) should not be able to set
+ * killSwitch.maxConsecutiveAuthFailures to 999999999 or disable
+ * readOnlyOnTamper. This function enforces hard lower/upper bounds
+ * that the PATCH endpoint's Zod schema also checks — but defense-in-depth
+ * means we validate on load as well.
+ */
+function clampConfig(config: Record<string, unknown>): void {
+  const clamp = (obj: Record<string, unknown>, key: string, min: number, max: number) => {
+    if (typeof obj[key] === 'number') obj[key] = Math.max(min, Math.min(max, obj[key] as number))
+  }
+  const ks = config.killSwitch as Record<string, unknown> | undefined
+  if (ks) {
+    clamp(ks, 'maxConsecutiveAuthFailures', 3, 100)
+    clamp(ks, 'lockoutDurationMinutes', 1, 1440)
+  }
+  const ac = config.agentCreation as Record<string, unknown> | undefined
+  if (ac) {
+    clamp(ac, 'minIntervalSeconds', 1, 3600)
+    clamp(ac, 'maxAgentsPerHost', 1, 500)
+  }
+  const rl = config.rateLimiting as Record<string, unknown> | undefined
+  if (rl) {
+    clamp(rl, 'loginAttemptsPerMinute', 1, 60)
+    clamp(rl, 'ibctTokenRequestsPerMinute', 1, 300)
+    clamp(rl, 'apiRequestsPerMinute', 10, 10000)
+  }
+  const pp = config.passwordPolicy as Record<string, unknown> | undefined
+  if (pp) {
+    clamp(pp, 'minLength', 4, 128)
+    clamp(pp, 'maxLength', 8, 1024)
+  }
+}
+
 function decryptConfig(blob: string, password: string): SecurityConfig | null {
   try {
     const parsed = JSON.parse(blob)
@@ -132,7 +168,10 @@ function decryptConfig(blob: string, password: string): SecurityConfig | null {
     const decipher = crypto.createDecipheriv(ALGORITHM, key, iv)
     decipher.setAuthTag(tag)
     const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()])
-    return JSON.parse(decrypted.toString('utf-8'))
+    const config = JSON.parse(decrypted.toString('utf-8'))
+    // Clamp values to sane ranges — defense against tampered encrypted files
+    if (config && typeof config === 'object') clampConfig(config)
+    return config
   } catch {
     return null
   }

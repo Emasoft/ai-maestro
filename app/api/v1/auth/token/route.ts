@@ -20,6 +20,17 @@ import { loadTeams } from '@/lib/team-registry'
 
 export async function POST(request: Request) {
   try {
+    // Rate limit: proof-of-possession verification is cryptographic work.
+    // Limit to 30 attempts/minute to prevent brute-force attacks.
+    const { checkAndRecordAttempt, resetRateLimit } = await import('@/lib/rate-limit')
+    const rateCheck = checkAndRecordAttempt('aid-token-exchange', 30)
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'rate_limited', message: 'Too many token exchange attempts. Try again later.' },
+        { status: 429 }
+      )
+    }
+
     const body = await request.json()
 
     // 1. Validate grant_type
@@ -150,6 +161,7 @@ export async function POST(request: Request) {
       scope
     )
 
+    resetRateLimit('aid-token-exchange')
     console.log(`[AID Token] Issued aim_tk_ token for agent "${agent.name}" (title=${governanceTitle}, team=${teamId || 'none'})`)
 
     const response = NextResponse.json(tokenResult)

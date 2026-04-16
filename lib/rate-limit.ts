@@ -46,6 +46,7 @@ export function recordAttempt(key: string, windowMs: number = DEFAULT_WINDOW_MS)
   if (entry && now >= entry.resetAt) { entry = undefined; limits.delete(key) }
   const fresh = entry || { count: 0, resetAt: now + windowMs }
   limits.set(key, { count: fresh.count + 1, resetAt: fresh.resetAt })
+  checkCap()
 }
 
 /**
@@ -77,14 +78,30 @@ export function resetRateLimit(key: string): void {
   limits.delete(key)
 }
 
-// Periodic cleanup to prevent Map from growing unbounded
-// (defensive — governance operations are infrequent so this rarely matters)
+// Hard cap: if Map exceeds this size, evict oldest entries immediately.
+// Prevents DoS via unique keys (e.g., per-IP rate limit keys from a botnet).
+const MAX_RATE_LIMIT_ENTRIES = 10_000
+
+function sweepAndCap(): void {
+  const now = Date.now()
+  for (const [key, entry] of limits) {
+    if (now >= entry.resetAt) limits.delete(key)
+  }
+  // If still over cap after sweeping expired, evict oldest
+  if (limits.size > MAX_RATE_LIMIT_ENTRIES) {
+    const sorted = [...limits.entries()].sort((a, b) => a[1].resetAt - b[1].resetAt)
+    const toEvict = sorted.slice(0, limits.size - MAX_RATE_LIMIT_ENTRIES)
+    for (const [key] of toEvict) limits.delete(key)
+  }
+}
+
+// Periodic cleanup — 5 min interval
 // Guard: skip in test to avoid vitest "open handles" warnings
 if (typeof setInterval !== 'undefined' && process.env.NODE_ENV !== 'test') {
-  setInterval(() => {
-    const now = Date.now()
-    for (const [key, entry] of limits) {
-      if (now >= entry.resetAt) limits.delete(key)
-    }
-  }, 5 * 60_000).unref() // Every 5 minutes, unref to not block process exit
+  setInterval(sweepAndCap, 5 * 60_000).unref()
+}
+
+// Inline cap check called on every record to prevent unbounded growth between sweeps
+function checkCap(): void {
+  if (limits.size > MAX_RATE_LIMIT_ENTRIES) sweepAndCap()
 }

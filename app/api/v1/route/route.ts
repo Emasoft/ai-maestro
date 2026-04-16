@@ -49,7 +49,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<AMPRouteR
       console.error('[AMP Route] Stack:', error.stack)
     }
     return NextResponse.json(
-      { error: 'internal_error', message: error instanceof Error ? error.message : 'Internal server error' } as AMPError,
+      { error: 'internal_error', message: 'Internal server error' } as AMPError,
       { status: 500 }
     )
   }

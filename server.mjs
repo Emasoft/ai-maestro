@@ -1393,6 +1393,10 @@ async function startServer(handleRequest) {
     if (needsIpFilter && tailscaleIp) {
       console.log(`> Tailscale VPN access on http://${tailscaleIp}:${port}`)
       console.log(`> IP filter active: only localhost + Tailscale (100.64.0.0/10) allowed`)
+    } else if (needsIpFilter && !tailscaleIp) {
+      console.warn(`> IP filter active but Tailscale not detected — only localhost connections will succeed`)
+    } else if (bindAddress === '127.0.0.1') {
+      console.log(`> Localhost-only mode (Tailscale: ${tailscaleIp ? 'available but not needed' : 'not detected'})`)
     }
 
     // Verify signed ledger chains before any registry writes (configurable)

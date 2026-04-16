@@ -1,10 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { isReadOnlyMode, getTamperDetails } from '@/lib/ledger-startup'
 
 type RouteHandler = (
   req: NextRequest,
   ctx: { params: Record<string, string> },
 ) => Promise<NextResponse> | NextResponse
+
+export function withReadOnlyGuard(handler: RouteHandler): RouteHandler {
+  return async (req: NextRequest, ctx: { params: Record<string, string> }) => {
+    if (isReadOnlyMode()) {
+      return NextResponse.json(
+        {
+          error: 'Server is in read-only mode due to ledger tamper detection',
+          details: getTamperDetails(),
+        },
+        { status: 503 },
+      )
+    }
+    return handler(req, ctx)
+  }
+}
 
 export function withValidation<T extends z.ZodTypeAny>(
   schema: T,

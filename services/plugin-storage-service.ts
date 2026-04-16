@@ -164,11 +164,12 @@ export async function convertAndStorePlugin(
 
   for (const targetClient of targetClients) {
     if (isRolePlugin) {
-      // Role-plugin: emit to ~/agents/role-plugins/marketplace-<client>/plugins/<name>/
-      // (R20.1 v3.6.0: per-client marketplace inside the role-plugins container)
-      const rolePluginName = sourceName
+      // Role-plugin: emit to ~/agents/role-plugins/<client>-roles-marketplace/<name>/
+      // R20.3: each client gets its own marketplace dir; plugin stored directly inside (no plugins/ subfolder)
+      // R20.4: multi-client plugins are duplicated — one copy per marketplace
+      const rolePluginName = targetClient === 'claude' ? sourceName : `${sourceName}-${targetClient}`
       const roleMarketplaceDir = getRoleMarketplacePathForClient(targetClient)
-      const targetDir = path.join(roleMarketplaceDir, 'plugins', rolePluginName)
+      const targetDir = path.join(roleMarketplaceDir, rolePluginName)
 
       // NEVER overwrite existing role-plugin folder
       if (existsSync(targetDir)) {
@@ -179,7 +180,8 @@ export async function convertAndStorePlugin(
       const emitted = await emitPluginToDir(sourceName, targetClient, targetDir)
       if (emitted) {
         // Write updated .agent.toml with new compatible-clients (the ONLY way to indicate target client)
-        await writeConvertedAgentProfile(targetDir, universalIR, rolePluginName, targetClient)
+        // R20.23: toml keeps ALL compatible clients, not just the target
+        await writeConvertedAgentProfile(targetDir, universalIR, rolePluginName, targetClients)
         // Ensure fourfold identity
         await ensureFourfoldIdentity(targetDir, rolePluginName)
         // Register with the local roles marketplace (claude-only, legacy path)
@@ -191,10 +193,10 @@ export async function convertAndStorePlugin(
         emittedDirs[targetClient] = targetDir
       }
     } else {
-      // Ordinary plugin: emit to ~/agents/custom-plugins/marketplace-<client>/<suffixedName>/
-      // Per-client marketplace folder inside the custom-plugins container.
-      // Name gets -<client> suffix so the plugin.json name matches its folder.
-      const suffixedName = `${sourceName}-${targetClient}`
+      // Ordinary plugin: emit to ~/agents/custom-plugins/<client>-custom-marketplace/<name>/
+      // R20.3: per-client marketplace dir. R20.4: multi-client plugins duplicated.
+      // Claude: no suffix. Others: <name>-<client> suffix.
+      const suffixedName = targetClient === 'claude' ? sourceName : `${sourceName}-${targetClient}`
       const customMarketplaceDir = getCustomMarketplacePathForClient(targetClient)
       const targetDir = path.join(customMarketplaceDir, suffixedName)
       await mkdir(targetDir, { recursive: true })
@@ -619,17 +621,21 @@ async function emitPluginToDir(
 /**
  * Write a converted .agent.toml with updated compatible-clients for the target client.
  */
+/**
+ * Write a .agent.toml for a converted plugin. Per R20.23, the toml retains
+ * the FULL compatible-clients list (all clients the plugin supports), not
+ * just the target client. Only the emitted code differs per marketplace copy.
+ */
 async function writeConvertedAgentProfile(
-  pluginDir: string, ir: UniversalPluginIR, newPluginName: string, targetClient: ClientType
+  pluginDir: string, ir: UniversalPluginIR, newPluginName: string, allCompatibleClients: string[]
 ): Promise<void> {
   const originalToml = ir.extensions?.['claude-code']
   const titles = ir.meta.compatible_titles || (originalToml as Record<string, unknown>)?.compatible_titles as string[] || []
-  const clients = [targetClient]
 
   const tomlContent = `[agent]
 name = "${newPluginName}"
 compatible-titles = [${titles.map(t => `"${t}"`).join(', ')}]
-compatible-clients = [${clients.map(c => `"${c}"`).join(', ')}]
+compatible-clients = [${allCompatibleClients.map(c => `"${c}"`).join(', ')}]
 `
   await writeFile(path.join(pluginDir, `${newPluginName}.agent.toml`), tomlContent, 'utf-8')
 }

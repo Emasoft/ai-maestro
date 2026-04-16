@@ -118,7 +118,7 @@ author: AI Maestro Team
 - **Verify:** Agent in sidebar. Screenshot: SCEN-010/S007-mgr-created.png
 
 #### S008: Assign MANAGER title
-- **Action:** AUTONOMOUS badge -> MANAGER -> password `mYkri1-xoxrap-gogtan`
+- **Action:** AUTONOMOUS badge -> MANAGER. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** MANAGER assigned
 - **Creates:** Plugin entry
 - **Modifies:** Governance (hasManager: true)
@@ -246,10 +246,10 @@ author: AI Maestro Team
 ## Phase 9: Test R14 -- Agent Deletion Recovery Detection
 
 #### S022: Delete the ORCHESTRATOR agent
-- **Action:** Profile -> Danger Zone -> Delete Agent (scen-r12-orch) with "Also delete folder"
+- **Action:** Profile -> Advanced -> Danger Zone -> Delete Agent (scen-r12-orch) -> check "Also delete agent folder" -> type `scen-r12-orch` -> Delete Forever. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** ORCHESTRATOR removed from team
 - **Removes:** Agent, folder, tmux
-- **Verify:** Agent gone. Screenshot: SCEN-010/S022-orch-deleted.png
+- **Verify:** Agent gone. Run `ls ~/agents/scen-r12-orch` returns "No such file or directory". Screenshot: SCEN-010/S022-orch-deleted.png
 
 #### S023: Verify cemetery shows deleted ORCHESTRATOR
 - **Action:** Settings -> Cemetery tab
@@ -286,17 +286,17 @@ author: AI Maestro Team
 - **Verify:** Team gone. Screenshot: SCEN-010/S025-team-deleted.png
 
 #### S026: Remove MANAGER title
-- **Action:** MANAGER badge -> AUTONOMOUS -> password `mYkri1-xoxrap-gogtan`
+- **Action:** MANAGER badge -> AUTONOMOUS. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Removes:** MANAGER title
 - **Verify:** `hasManager: false`. Screenshot: SCEN-010/S026-mgr-removed.png
 
 #### S027: Delete MANAGER agent with folder
-- **Action:** Danger Zone -> Delete -> "Also delete folder" -> type `scen-r12-mgr` -> Delete Forever
+- **Action:** Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type `scen-r12-mgr` -> Delete Forever. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Removes:** Agent, folder
-- **Verify:** Agent gone. Screenshot: SCEN-010/S027-mgr-deleted.png
+- **Verify:** Agent gone. Run `ls ~/agents/scen-r12-mgr` returns "No such file or directory". Screenshot: SCEN-010/S027-mgr-deleted.png
 
 #### S028: Purge all test cemetery entries
-- **Action:** Settings -> Cemetery. Purge all scen-r12-* entries.
+- **Action:** Settings -> Cemetery. For each `scen-r12-*` entry, click Purge. SUDO-MODE: when the sudo password modal appears for each purge (DELETE `/api/agents/cemetery` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. Each purge requires a fresh sudo token (tokens are one-shot).
 - **Removes:** Cemetery archives
 - **Verify:** No test entries. Screenshot: SCEN-010/S028-cemetery-purged.png
 

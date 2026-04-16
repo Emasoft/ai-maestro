@@ -303,20 +303,20 @@ author: AI Maestro Team
 ## Phase CLEANUP: Restore Original State
 
 #### S030: Stop the test agent
-- **Action:** In the dashboard, select scen012-r17-test, click Stop button (or send `/exit` via terminal)
+- **Action:** In the dashboard, select scen012-r17-test, click Stop button. SUDO-MODE: when the sudo password modal appears (POST `/api/sessions/{id}/stop` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. (Alternative: send `/exit` via terminal; this path does not prompt but requires manual confirmation inside Claude.)
 - **Goal:** Agent's Claude session exits gracefully
 - **Creates:** nothing
 - **Modifies:** Agent session status → offline
 - **Verify:** Agent shows as offline/hibernated in sidebar. Screenshot: SCEN-012/S030-agent-stopped.png
 
 #### S031: Delete the test agent via UI
-- **Action:** Agent Profile → Advanced tab → Danger Zone → Delete Agent → check "Also delete agent folder" → type "scen012-r17-test" → click "Delete Forever"
+- **Action:** Agent Profile → Advanced tab → Danger Zone → Delete Agent → check "Also delete agent folder" → type `scen012-r17-test` → click "Delete Forever". SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Agent removed from registry, folder deleted, tmux session killed
 - **Removes:** Agent from registry, ~/agents/scen012-r17-test/ directory, tmux session
-- **Verify:** Agent no longer in sidebar. Folder `~/agents/scen012-r17-test/` does not exist. Screenshot: SCEN-012/S031-agent-deleted.png
+- **Verify:** Agent no longer in sidebar. Run `ls ~/agents/scen012-r17-test` in a terminal and confirm it returns "No such file or directory" — this confirms the "Also delete agent folder" checkbox actually removed the folder. Screenshot: SCEN-012/S031-agent-deleted.png
 
 #### S032: Purge cemetery entry
-- **Action:** Navigate to Settings → Cemetery tab → find scen012-r17-test → click Purge
+- **Action:** Navigate to Settings → Cemetery tab → find scen012-r17-test → click Purge. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/cemetery` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Cemetery entry removed
 - **Removes:** Cemetery archive entry for scen012-r17-test
 - **Verify:** scen012-r17-test not listed in cemetery. Screenshot: SCEN-012/S032-cemetery-purged.png

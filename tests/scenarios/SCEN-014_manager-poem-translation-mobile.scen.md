@@ -144,7 +144,7 @@ author: AI Maestro Team
 - **Verify:** Agent in mobile list. Screenshot: SCEN-014/S010-manager-created.png
 
 #### S011: Assign MANAGER title
-- **Action:** Tap agent → tap AUTONOMOUS badge → select MANAGER → enter password `mYkri1-xoxrap-gogtan` → Confirm
+- **Action:** Tap agent → tap AUTONOMOUS badge → select MANAGER. SUDO-MODE: when the mobile sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and tap Confirm.
 - **Goal:** MANAGER title active with role-plugin
 - **Creates:** Plugin entry
 - **Modifies:** Governance, title
@@ -339,27 +339,27 @@ author: AI Maestro Team
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
 #### S030: Remove MANAGER title
-- **Action:** Tap `scen14-manager` → MANAGER badge → AUTONOMOUS → password `mYkri1-xoxrap-gogtan`
+- **Action:** Tap `scen14-manager` → MANAGER badge → AUTONOMOUS. SUDO-MODE: when the mobile sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and tap Confirm.
 - **Removes:** MANAGER title
 - **Verify:** `hasManager: false`. Screenshot: SCEN-014/S030-no-manager.png
 
 #### S031: Delete scen14-manager with folder
-- **Action:** Profile → Danger Zone → Delete Agent → check "Also delete agent folder" → type `scen14-manager` → Delete Forever
+- **Action:** Profile → Advanced → Danger Zone → Delete Agent → check "Also delete agent folder" → type `scen14-manager` → Delete Forever. SUDO-MODE: when the mobile sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and tap Confirm.
 - **Removes:** Agent, tmux, folder, AMP messages
-- **Verify:** Agent gone. Screenshot: SCEN-014/S031-manager-deleted.png
+- **Verify:** Agent gone. Run `ls ~/agents/scen14-manager` returns "No such file or directory". Screenshot: SCEN-014/S031-manager-deleted.png
 
 #### S032: Delete scen14-poet with folder
-- **Action:** Same procedure for scen14-poet
+- **Action:** Profile → Advanced → Danger Zone → Delete Agent → check "Also delete agent folder" → type `scen14-poet` → Delete Forever. SUDO-MODE: when the mobile sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and tap Confirm.
 - **Removes:** Agent, tmux, folder
-- **Verify:** Agent gone. Screenshot: SCEN-014/S032-poet-deleted.png
+- **Verify:** Agent gone. Run `ls ~/agents/scen14-poet` returns "No such file or directory". Screenshot: SCEN-014/S032-poet-deleted.png
 
 #### S033: Delete scen14-translator with folder
-- **Action:** Same procedure for scen14-translator
+- **Action:** Profile → Advanced → Danger Zone → Delete Agent → check "Also delete agent folder" → type `scen14-translator` → Delete Forever. SUDO-MODE: when the mobile sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and tap Confirm.
 - **Removes:** Agent, tmux, folder
-- **Verify:** Agent gone. Screenshot: SCEN-014/S033-translator-deleted.png
+- **Verify:** Agent gone. Run `ls ~/agents/scen14-translator` returns "No such file or directory". Screenshot: SCEN-014/S033-translator-deleted.png
 
 #### S034: Verify cemetery entries and purge
-- **Action:** Settings → Cemetery. Verify 3 entries (scen14-manager, scen14-poet, scen14-translator). Purge all.
+- **Action:** Settings → Cemetery. Verify 3 entries (scen14-manager, scen14-poet, scen14-translator). For each entry, tap Purge. SUDO-MODE: when the mobile sudo password modal appears for each purge (DELETE `/api/agents/cemetery` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and tap Confirm. Each purge requires a fresh sudo token (tokens are one-shot).
 - **Removes:** Cemetery archives
 - **Verify:** No test entries. Screenshot: SCEN-014/S034-cemetery-purged.png
 

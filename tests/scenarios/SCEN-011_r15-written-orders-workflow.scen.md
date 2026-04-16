@@ -107,7 +107,7 @@ author: AI Maestro Team
 ## Phase 2: Create MANAGER and Full Team
 
 #### S006: Create MANAGER agent and assign title
-- **Action:** Wizard: Claude Code -> `scen-r15-mgr` -> No team -> AUTONOMOUS -> Auto-folder -> Create -> Assign MANAGER -> password `mYkri1-xoxrap-gogtan`
+- **Action:** Wizard: Claude Code -> `scen-r15-mgr` -> No team -> AUTONOMOUS -> Auto-folder -> Create. Then click AUTONOMOUS badge -> MANAGER. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** MANAGER active with plugin
 - **Creates:** Agent, tmux session, folder, plugin
 - **Modifies:** Governance state
@@ -241,12 +241,12 @@ author: AI Maestro Team
 - **Verify:** Team gone. Screenshot: SCEN-011/S020-team-deleted.png
 
 #### S021: Remove MANAGER and delete agent
-- **Action:** AUTONOMOUS -> password `mYkri1-xoxrap-gogtan` -> Delete agent with folder
+- **Action:** Click MANAGER badge -> AUTONOMOUS. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. Then Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type `scen-r15-mgr` -> Delete Forever. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. Sudo tokens are one-shot; each strict operation gets its own fresh prompt.
 - **Removes:** MANAGER agent + folder
-- **Verify:** Agent gone. `hasManager: false`. Screenshot: SCEN-011/S021-mgr-deleted.png
+- **Verify:** Agent gone. `hasManager: false`. Run `ls ~/agents/scen-r15-mgr` returns "No such file or directory". Screenshot: SCEN-011/S021-mgr-deleted.png
 
 #### S022: Verify cemetery entries and purge
-- **Action:** Settings -> Cemetery. Verify test agents appear. Purge all scen-r15-* entries.
+- **Action:** Settings -> Cemetery. Verify test agents appear. For each `scen-r15-*` entry, click Purge. SUDO-MODE: when the sudo password modal appears for each purge (DELETE `/api/agents/cemetery` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Removes:** Cemetery archives
 - **Verify:** No test entries. Screenshot: SCEN-011/S022-cemetery-purged.png
 

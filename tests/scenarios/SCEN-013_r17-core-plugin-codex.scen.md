@@ -223,31 +223,34 @@ author: AI Maestro Team
 
 ---
 
-## Phase 4: Verify Re-Enable on Startup
+## Phase 4: Verify Re-Enable on Wake (wake-gate reconciliation)
 
-> This phase tests R17.15 + R17.18: if the plugin is manually disabled in settings.local.json,
-> the server re-enables it on next startup.
+> This phase tests the wake-gate R17 reconciliation path: when an agent is hibernated
+> and its `ai-maestro-plugin` entry is disabled in settings.local.json while asleep,
+> the wakeAgent R17 gate (during ChangeClient / InstallElement EXE phase) must
+> re-enable the plugin before the agent's Claude session launches.
+> This is distinct from the startup audit — it runs per-wake, not per-server-restart.
 
-#### S022: Manually disable the plugin in settings.local.json
-- **Action:** Read `~/agents/scen013-codex-r17-test/.claude/settings.local.json`, edit the `ai-maestro-plugin@ai-maestro-plugins` value from `true` to `false`, write back
-- **Goal:** Plugin is now disabled in the config file
+#### S022: Hibernate the test agent
+- **Action:** In the dashboard, select `scen013-codex-r17-test`, click Stop (send `/exit` in terminal if needed), then from Profile click Hibernate. Wait for the agent to show as hibernated.
+- **Goal:** Agent's Claude session is terminated; registry marks it hibernated. No running tmux process holds settings files open.
+- **Creates:** nothing
+- **Modifies:** Agent session status → hibernated
+- **Verify:** Sidebar shows agent as hibernated. API `GET /api/agents/<id>` reports no active session. Screenshot: SCEN-013/S022-hibernated.png
+
+#### S023: Manually disable the plugin in settings.local.json while hibernated
+- **Action:** Read `~/agents/scen013-codex-r17-test/.claude/settings.local.json`, edit the `ai-maestro-plugin@ai-maestro-plugins` value from `true` to `false`, write back.
+- **Goal:** Plugin is disabled in the config file while agent is asleep (pre-wake state: broken).
 - **Creates:** nothing
 - **Modifies:** settings.local.json (ai-maestro-plugin set to false)
-- **Verify:** File content shows `"ai-maestro-plugin@ai-maestro-plugins": false`. Screenshot: SCEN-013/S022-manually-disabled.png
+- **Verify:** File content shows `"ai-maestro-plugin@ai-maestro-plugins": false`. Registry still shows agent hibernated. Screenshot: SCEN-013/S023-manually-disabled.png
 
-#### S023: Restart server to trigger R17 startup audit
-- **Action:** `pm2 restart ai-maestro`, wait 4s
-- **Goal:** Server restarts and R17 audit re-enables the disabled plugin
-- **Creates:** nothing
-- **Modifies:** PM2 process state, settings.local.json (plugin re-enabled)
-- **Verify:** PM2 logs show `[Startup] R17:` with re-enabled count > 0. Screenshot: SCEN-013/S023-server-restarted.png
-
-#### S024: Verify plugin was re-enabled
-- **Action:** Read `~/agents/scen013-codex-r17-test/.claude/settings.local.json`
-- **Goal:** The plugin value is back to `true` — the server forced it back on
-- **Creates:** nothing
-- **Modifies:** nothing (already modified by server)
-- **Verify:** File content shows `"ai-maestro-plugin@ai-maestro-plugins": true`. Screenshot: SCEN-013/S024-re-enabled.png
+#### S024: Wake the agent via UI and verify wake-gate reconciliation
+- **Action:** In the dashboard, select `scen013-codex-r17-test` and click Wake. The wakeAgent pipeline MUST run the R17 reconciliation gate (part of ChangeClient G06-G07 or InstallElement EXE phase) which detects the disabled ai-maestro-plugin and re-enables it before launching the Claude Code session. Wait for the Claude idle prompt to appear.
+- **Goal:** Wake-gate detects disabled core plugin, re-enables it, plugin converts/installs for Codex if missing, agent launches cleanly with ai-maestro-plugin active.
+- **Creates:** nothing (reconciliation only)
+- **Modifies:** settings.local.json (plugin flipped back to true), agent session status (online)
+- **Verify:** Read `~/agents/scen013-codex-r17-test/.claude/settings.local.json` — `"ai-maestro-plugin@ai-maestro-plugins": true` is restored. PM2 logs show `[Wake] R17:` or `[Wake] R17-TRUST:` indicating the wake-gate ran reconciliation. Agent shows online in sidebar with Claude idle prompt visible. Registry reports hibernated=false. Screenshot: SCEN-013/S024-wake-reenabled.png
 
 ---
 
@@ -268,57 +271,62 @@ author: AI Maestro Team
 
 ---
 
-## Phase 6: Verify corePluginMissing Flag
+## Phase 6: Verify corePluginMissing Flag Reconciled on Wake
 
-> This phase tests R17.9 + R17.18: the corePluginMissing flag behavior.
+> This phase tests R17.9 + R17.18 via the wake-gate path: when the core plugin
+> file is completely missing from settings.local.json while the agent is
+> hibernated, waking it via the UI must trigger ChangeClient/InstallElement EXE
+> phase to detect the missing plugin and reinstall it automatically before the
+> Claude/Codex session launches. This is a wake-gate reconciliation test,
+> NOT a server-startup audit test.
 
-#### S026: Remove plugin from settings.local.json entirely
-- **Action:** Read `~/agents/scen013-codex-r17-test/.claude/settings.local.json`, remove the `ai-maestro-plugin@ai-maestro-plugins` key entirely from enabledPlugins, write back
-- **Goal:** Plugin entry completely removed from config
+#### S026: Hibernate the test agent again
+- **Action:** Select `scen013-codex-r17-test`, click Stop, then Hibernate from Profile. Wait until sidebar shows hibernated.
+- **Goal:** Agent's session is terminated so its settings.local.json can be edited safely.
+- **Creates:** nothing
+- **Modifies:** Agent session status → hibernated
+- **Verify:** API reports no active session for this agent. Screenshot: SCEN-013/S026-hibernated-again.png
+
+#### S027: Remove plugin from settings.local.json entirely (while hibernated)
+- **Action:** Read `~/agents/scen013-codex-r17-test/.claude/settings.local.json`, remove the `ai-maestro-plugin@ai-maestro-plugins` key entirely from enabledPlugins, write back.
+- **Goal:** Plugin entry completely gone from config (simulates a broken or tampered install while agent sleeps).
 - **Creates:** nothing
 - **Modifies:** settings.local.json (plugin entry removed)
-- **Verify:** File content shows enabledPlugins without any ai-maestro-plugin key. Screenshot: SCEN-013/S026-plugin-removed.png
+- **Verify:** File content shows `enabledPlugins` without any ai-maestro-plugin key. Screenshot: SCEN-013/S027-plugin-removed.png
 
-#### S027: Restart server to trigger R17 audit flagging
-- **Action:** `pm2 restart ai-maestro`, wait 4s
-- **Goal:** Server flags the agent with corePluginMissing=true
-- **Creates:** nothing
-- **Modifies:** PM2 process state, registry (corePluginMissing flag)
-- **Verify:** PM2 logs show `[Startup] R17:` with flagged count including this agent. Screenshot: SCEN-013/S027-flagged.png
-
-#### S028: Verify corePluginMissing flag in registry
-- **Action:** Read agent from API: `GET /api/agents/<agentId>` (use agent ID from S015)
-- **Goal:** Agent has `corePluginMissing: true` in the response
+#### S028: Capture pre-wake registry state
+- **Action:** Read agent from API: `GET /api/agents/<agentId>`. Because the server has not run a startup audit yet, the registry may not have the `corePluginMissing` flag set — the point of this phase is that the wake-gate detects the mismatch at wake time, regardless of what the registry says about it.
+- **Goal:** Record the registry state (flag may or may not be set — not authoritative). The authoritative detection happens in the next step when the user wakes the agent.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** API response shows corePluginMissing=true for this agent. Screenshot: SCEN-013/S028-flag-set.png
+- **Verify:** API response captured for later comparison. If `corePluginMissing` is true, note it; if absent, the wake-gate itself must detect and repair. Screenshot: SCEN-013/S028-registry-state.png
 
-#### S029: Wait for periodic R17 enforcement to detect and reinstall
-- **Action:** Wait up to 6 minutes for the periodic R17 enforcement (runs every 5 minutes) to detect the missing plugin and reinstall it. Alternatively, login and wake the agent to trigger the wakeAgent R17 gate.
-- **Goal:** The server's periodic enforcement or wakeAgent R17 gate detects the missing plugin and reinstalls it automatically
-- **Creates:** nothing
-- **Modifies:** settings.local.json (plugin reinstalled), registry (corePluginMissing cleared)
-- **Verify:** Read `~/agents/scen013-codex-r17-test/.claude/settings.local.json` — ai-maestro-plugin is back and set to true. PM2 logs show `[R17] Periodic enforcement: repaired 1 agent(s)` OR `[Wake] R17:`. Screenshot: SCEN-013/S029-reinstalled.png
+#### S029: Wake the agent and verify wake-gate reinstalls the core plugin
+- **Action:** In the dashboard, select `scen013-codex-r17-test` and click Wake. The wake-gate (ChangeClient G06-G07 plugin re-emit phase or InstallElement EXE phase) MUST detect the missing ai-maestro-plugin, convert it if needed for Codex format, install it into the agent folder, write it back into settings.local.json, then launch the Codex session. Wait for the Codex idle prompt.
+- **Goal:** Wake-gate plugin reconciliation ran (not a server audit). Core plugin is reinstalled specifically by the wake path, not by periodic enforcement.
+- **Creates:** Installed plugin files under ~/agents/scen013-codex-r17-test/ (location depends on Codex adapter)
+- **Modifies:** settings.local.json (ai-maestro-plugin key added back, set to true), registry (corePluginMissing cleared if it was set), session status (online)
+- **Verify:** Read `~/agents/scen013-codex-r17-test/.claude/settings.local.json` — `"ai-maestro-plugin@ai-maestro-plugins": true` is present again. PM2 logs show `[Wake] R17:` or `[Wake] R17-TRUST:` confirming the wake-gate ran the reconciliation. `GET /api/agents/<id>` shows `corePluginMissing: false` or absent. Agent online with idle prompt. Screenshot: SCEN-013/S029-wake-reinstalled.png
 
 ---
 
 ## Phase CLEANUP: Restore Original State
 
 #### S030: Stop the test agent
-- **Action:** In the dashboard, select scen013-codex-r17-test, click Stop button (or send `/exit` via terminal)
-- **Goal:** Agent's Claude session exits gracefully
+- **Action:** In the dashboard, select scen013-codex-r17-test, click Stop button. SUDO-MODE: when the sudo password modal appears (POST `/api/sessions/{id}/stop` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. (Alternative: send `/exit` via terminal; this path does not prompt but requires manual confirmation inside the Codex CLI.)
+- **Goal:** Agent's Codex session exits gracefully
 - **Creates:** nothing
 - **Modifies:** Agent session status → offline
 - **Verify:** Agent shows as offline/hibernated in sidebar. Screenshot: SCEN-013/S030-agent-stopped.png
 
 #### S031: Delete the test agent via UI
-- **Action:** Agent Profile → Advanced tab → Danger Zone → Delete Agent → check "Also delete agent folder" → type "scen013-codex-r17-test" → click "Delete Forever"
+- **Action:** Agent Profile → Advanced tab → Danger Zone → Delete Agent → check "Also delete agent folder" → type `scen013-codex-r17-test` → click "Delete Forever". SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Agent removed from registry, folder deleted, tmux session killed
 - **Removes:** Agent from registry, ~/agents/scen013-codex-r17-test/ directory, tmux session
-- **Verify:** Agent no longer in sidebar. Folder `~/agents/scen013-codex-r17-test/` does not exist. Screenshot: SCEN-013/S031-agent-deleted.png
+- **Verify:** Agent no longer in sidebar. Run `ls ~/agents/scen013-codex-r17-test` and confirm "No such file or directory" — this verifies the "Also delete agent folder" checkbox actually removed the folder. Screenshot: SCEN-013/S031-agent-deleted.png
 
 #### S032: Purge cemetery entry
-- **Action:** Navigate to Settings → Cemetery tab → find scen013-codex-r17-test → click Purge
+- **Action:** Navigate to Settings → Cemetery tab → find scen013-codex-r17-test → click Purge. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/cemetery` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Cemetery entry removed
 - **Removes:** Cemetery archive entry for scen013-codex-r17-test
 - **Verify:** scen013-codex-r17-test not listed in cemetery. Screenshot: SCEN-013/S032-cemetery-purged.png

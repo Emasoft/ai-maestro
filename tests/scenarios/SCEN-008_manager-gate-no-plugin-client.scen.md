@@ -115,7 +115,7 @@ author: AI Maestro Team
 ## Phase 2: Assign MANAGER (Claude Code)
 
 #### S008: Create and assign MANAGER `scen8-manager`
-- **Action:** Wizard: Claude Code, `scen8-manager`, AUTONOMOUS, finish. Assign MANAGER with password `mYkri1-xoxrap-gogtan`.
+- **Action:** Wizard: Claude Code, `scen8-manager`, AUTONOMOUS, finish. Click AUTONOMOUS badge -> MANAGER. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** MANAGER active
 - **Creates:** Agent, plugin
 - **Modifies:** Governance, registry
@@ -184,7 +184,7 @@ author: AI Maestro Team
 ## Phase 7: Change Gemini Title to ORCHESTRATOR -- NO Plugin
 
 #### S015: Open Title Dialog and assign ORCHESTRATOR
-- **Action:** Click MEMBER badge -> ORCHESTRATOR -> password `mYkri1-xoxrap-gogtan`
+- **Action:** Click MEMBER badge -> ORCHESTRATOR. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Title changes, plugin skipped (Gemini no-plugin)
 - **Creates:** nothing
 - **Modifies:** Agent title
@@ -252,27 +252,27 @@ author: AI Maestro Team
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
 #### S021: Remove MANAGER title
-- **Action:** Title -> AUTONOMOUS -> password `mYkri1-xoxrap-gogtan`
+- **Action:** Title badge -> AUTONOMOUS. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Removes:** MANAGER title
 - **Verify:** `hasManager: false`. Screenshot: SCEN-008/S021-no-manager.png
 
 #### S022: Delete `scen8-manager`
-- **Action:** Danger Zone -> Delete
-- **Removes:** Agent
-- **Verify:** Gone. Screenshot: SCEN-008/S022-mgr-deleted.png
+- **Action:** Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type `scen8-manager` -> Delete Forever. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Removes:** Agent + folder
+- **Verify:** Gone. Run `ls ~/agents/scen8-manager` returns "No such file or directory". Screenshot: SCEN-008/S022-mgr-deleted.png
 
 #### S023: Delete `scen8-gemini-member`
-- **Action:** Danger Zone -> Delete
-- **Removes:** Agent
-- **Verify:** Gone. Screenshot: SCEN-008/S023-gemini-deleted.png
+- **Action:** Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type `scen8-gemini-member` -> Delete Forever. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Removes:** Agent + folder
+- **Verify:** Gone. Run `ls ~/agents/scen8-gemini-member` returns "No such file or directory". Screenshot: SCEN-008/S023-gemini-deleted.png
 
 #### S024: Delete any remaining auto-COS agents
-- **Action:** Delete cos-* agents from this test
+- **Action:** For each `cos-*` agent created by this test, open Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type name -> Delete Forever. SUDO-MODE: when the sudo password modal appears for each deletion (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Removes:** Auto-COS
 - **Verify:** None remain. Screenshot: SCEN-008/S024-cos-deleted.png
 
 #### S025: Verify cemetery entries and purge
-- **Action:** Settings -> Cemetery. Verify and purge test entries.
+- **Action:** Settings -> Cemetery. Verify test entries appear. For each test entry, click Purge. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/cemetery` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. Each purge requires a fresh sudo token (tokens are one-shot, ~60s window).
 - **Removes:** Cemetery archives
 - **Verify:** No test entries. Screenshot: SCEN-008/S025-cemetery-purged.png
 

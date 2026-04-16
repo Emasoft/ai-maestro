@@ -48,8 +48,11 @@ import {
   getRolePluginsContainerPath,
   getCustomAbstractDir,
   getRoleAbstractDir,
+  getCoreAbstractDir,
   getCustomMarketplacePathForClient,
   getRoleMarketplacePathForClient,
+  getCoreMarketplacePathForClient,
+  MAIN_PLUGIN_NAME,
 } from '@/lib/ecosystem-constants'
 import { writeMarketplaceManifest, type MarketplacePluginEntry } from '@/lib/converter/marketplace-emitters'
 
@@ -65,6 +68,7 @@ const ROLE_PLUGINS_DIR = getRolePluginsContainerPath()
 //     ~/agents/role-plugins/.abstract/<name>/plugin-universal-ir.yaml
 const CUSTOM_ABSTRACT_DIR = getCustomAbstractDir()
 const ROLE_ABSTRACT_DIR = getRoleAbstractDir()
+const CORE_ABSTRACT_DIR = getCoreAbstractDir()
 
 /**
  * Resolve the correct IR hub for a plugin based on whether it is a
@@ -73,7 +77,8 @@ const ROLE_ABSTRACT_DIR = getRoleAbstractDir()
  * the type yet, pass `null` to get the search order: role first, then
  * custom.
  */
-function abstractDirForPluginType(isRolePlugin: boolean): string {
+function abstractDirForPluginType(isRolePlugin: boolean, isCorePlugin?: boolean): string {
+  if (isCorePlugin) return CORE_ABSTRACT_DIR
   return isRolePlugin ? ROLE_ABSTRACT_DIR : CUSTOM_ABSTRACT_DIR
 }
 
@@ -83,11 +88,24 @@ function abstractDirForPluginType(isRolePlugin: boolean): string {
  * Returns null if no IR exists.
  */
 function findAbstractDirByName(pluginName: string): string | null {
+  // Core plugin hub checked first (ai-maestro-plugin lives here)
+  const coreCandidate = path.join(CORE_ABSTRACT_DIR, pluginName)
+  if (existsSync(coreCandidate)) return coreCandidate
+  // Role-plugin hub (narrower namespace)
   const roleCandidate = path.join(ROLE_ABSTRACT_DIR, pluginName)
   if (existsSync(roleCandidate)) return roleCandidate
+  // Ordinary custom-plugin hub
   const customCandidate = path.join(CUSTOM_ABSTRACT_DIR, pluginName)
   if (existsSync(customCandidate)) return customCandidate
   return null
+}
+
+/** Determine which container a plugin belongs to based on its abstract dir location. */
+type PluginCategory = 'core' | 'role' | 'custom'
+function categorizePlugin(abstractDir: string): PluginCategory {
+  if (abstractDir.startsWith(CORE_ABSTRACT_DIR)) return 'core'
+  if (abstractDir.startsWith(ROLE_ABSTRACT_DIR)) return 'role'
+  return 'custom'
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -140,12 +158,12 @@ export async function convertAndStorePlugin(
   universalIR.meta.source_plugin = sourceName
   universalIR.meta.source_client = sourceClient
 
-  // 3. Store abstract format — picks the correct container-level IR hub
-  // based on whether this is a role-plugin (R20.8 + R20.9 v3.6.0). Role
-  // plugins go to ~/agents/role-plugins/.abstract/; ordinary plugins go
-  // to ~/agents/custom-plugins/.abstract/.
+  // 3. Store abstract format — picks the correct container-level IR hub.
+  // R20.25: core plugin (ai-maestro-plugin) → core-plugins/.abstract/
+  // R20.8/R20.9: role-plugins → role-plugins/.abstract/, ordinary → custom-plugins/.abstract/
   const isRolePlugin = universalIR.meta.is_role_plugin === true
-  const abstractBaseDir = abstractDirForPluginType(isRolePlugin)
+  const isCorePlugin = sourceName === MAIN_PLUGIN_NAME || sourceName.startsWith(MAIN_PLUGIN_NAME + '-')
+  const abstractBaseDir = abstractDirForPluginType(isRolePlugin, isCorePlugin)
   const abstractDir = path.join(abstractBaseDir, sourceName)
   await mkdir(abstractDir, { recursive: true })
 
@@ -191,20 +209,41 @@ export async function convertAndStorePlugin(
         }
         emittedDirs[targetClient] = targetDir
       }
+    } else if (isCorePlugin) {
+      // Core plugin: Claude uses remote marketplace (skip), others → core-plugins container
+      if (targetClient === 'claude') {
+        console.log(`[plugin-storage] Skipping Claude core plugin (installed from remote marketplace)`)
+        continue
+      }
+      const coreName = `${sourceName}-${targetClient}`
+      const coreMarketplaceDir = getCoreMarketplacePathForClient(targetClient)
+      const targetDir = path.join(coreMarketplaceDir, coreName)
+      // R20.26: overwrite if exists, write new if not
+      if (existsSync(targetDir)) {
+        console.log(`[plugin-storage] Overwriting core plugin: ${targetDir} (R20.26)`)
+      }
+      await mkdir(targetDir, { recursive: true })
+      const emitted = await emitPluginToDir(sourceName, targetClient, targetDir)
+      if (emitted) {
+        emittedDirs[targetClient] = targetDir
+      }
     } else {
-      // Ordinary plugin: emit to ~/agents/custom-plugins/<client>-custom-marketplace/<name>/
-      // R20.3: per-client marketplace dir. R20.4: multi-client plugins duplicated.
-      // Claude: no suffix. Others: <name>-<client> suffix.
-      const suffixedName = targetClient === 'claude' ? sourceName : `${sourceName}-${targetClient}`
+      // Ordinary custom plugin: emit to ~/agents/custom-plugins/<client>-custom-marketplace/<name>/
+      // R20.26: literal name match. Claude: <name>, others: <name>-<client>.
+      const targetName = targetClient === 'claude' ? sourceName : `${sourceName}-${targetClient}`
       const customMarketplaceDir = getCustomMarketplacePathForClient(targetClient)
-      const targetDir = path.join(customMarketplaceDir, suffixedName)
+      const targetDir = path.join(customMarketplaceDir, targetName)
+      // R20.26: overwrite if exists, write new if not
+      if (existsSync(targetDir)) {
+        console.log(`[plugin-storage] Overwriting custom plugin: ${targetDir} (R20.26)`)
+      }
       await mkdir(targetDir, { recursive: true })
       const emitted = await emitPluginToDir(sourceName, targetClient, targetDir)
       if (emitted) {
         await ensureCustomClientMarketplace(targetClient)
         await updateCustomClientMarketplaceManifest(
           targetClient,
-          suffixedName,
+          targetName,
           universalIR.meta.description || '',
           universalIR.meta.version
         )
@@ -246,11 +285,9 @@ export async function emitForClient(
   if (!targetProviderId) return null
 
   // Look in BOTH hubs — the same plugin name could be either a role-plugin
-  // (role-plugins/.abstract/) or an ordinary plugin (custom-plugins/.abstract/).
-  // findAbstractDirByName checks role first so role-plugins win on collision.
+  // Look in all 3 hubs: core first, role second, custom third.
   const abstractDir = findAbstractDirByName(pluginName)
   if (!abstractDir) return null
-  const isRolePlugin = abstractDir.startsWith(ROLE_ABSTRACT_DIR)
 
   const { getEmitter } = await import('@/lib/converter/emitters')
   const emitter = await getEmitter(targetProviderId)
@@ -278,12 +315,23 @@ export async function emitForClient(
 
   const files: ConvertedFile[] = emitter.emit(project)
 
-  // Pick the destination container+marketplace based on plugin type.
-  // Role-plugin →   ~/agents/role-plugins/marketplace-<client>/plugins/<name>/
-  // Ordinary plugin → ~/agents/custom-plugins/marketplace-<client>/<name>/
-  const targetDir = isRolePlugin
-    ? path.join(getRoleMarketplacePathForClient(targetClient), 'plugins', pluginName)
-    : path.join(getCustomMarketplacePathForClient(targetClient), pluginName)
+  // Pick the destination container+marketplace based on plugin category.
+  // R20.26: literal target name. Claude: <name>, others: <name>-<client>.
+  const category = categorizePlugin(abstractDir)
+  const targetName = targetClient === 'claude' ? pluginName : `${pluginName}-${targetClient}`
+  let targetDir: string
+  if (category === 'core') {
+    if (targetClient === 'claude') return null // Claude uses remote marketplace
+    targetDir = path.join(getCoreMarketplacePathForClient(targetClient), targetName)
+  } else if (category === 'role') {
+    targetDir = path.join(getRoleMarketplacePathForClient(targetClient), targetName)
+  } else {
+    targetDir = path.join(getCustomMarketplacePathForClient(targetClient), targetName)
+  }
+  // R20.26: overwrite if exists
+  if (existsSync(targetDir)) {
+    console.log(`[plugin-storage] emitForClient: overwriting ${targetDir} (R20.26)`)
+  }
   await mkdir(targetDir, { recursive: true })
 
   for (const file of files) {

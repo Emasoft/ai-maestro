@@ -423,6 +423,12 @@ export async function InstallElement(
       }
     }
 
+    // Non-Claude clients need their per-client adapter for install/uninstall
+    // (copies files into client-native paths: .codex-plugin/, .agents/, etc.)
+    // and for PG01 state verification. Declared here so both EXE (inside the
+    // non-idempotent block) and PG01 (after the block closes) can see it.
+    const useClientAdapter = clientType !== 'claude' && clientType !== 'unknown'
+
     // If idempotent, skip execution but still run post-gates
     if (!result.success) {
 
@@ -501,6 +507,45 @@ export async function InstallElement(
     try {
       switch (action) {
         case 'install': {
+          if (useClientAdapter) {
+            const { getAdapter } = await import('@/lib/client-plugin-adapters')
+            const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
+            const adapter = await getAdapter(clientType)
+            if (!adapter) {
+              result.error = `EXE: No plugin adapter for client "${clientType}"`
+              ops.push(result.error)
+              return result
+            }
+            let storageDir = convertedDir
+            if (!storageDir) {
+              const { emitForClient } = await import('@/services/plugin-storage-service')
+              storageDir = await emitForClient(name, clientType as 'codex' | 'gemini' | 'opencode' | 'kiro')
+            }
+            if (!storageDir) {
+              result.error = `EXE: No converted plugin dir for ${name}@${clientType} — conversion (G13) must have failed`
+              ops.push(result.error)
+              return result
+            }
+            const providerId = clientTypeToProviderId(clientType)
+            if (!providerId) {
+              result.error = `EXE: No provider ID for client "${clientType}"`
+              ops.push(result.error)
+              return result
+            }
+            const adapterRes = await adapter.install(
+              { name, clientType, storageDir, providerId },
+              cwd,
+              { scope: 'local' }
+            )
+            if (!adapterRes.success) {
+              result.error = `EXE: ${clientType}-adapter install failed: ${adapterRes.error || 'unknown'}`
+              ops.push(result.error)
+              return result
+            }
+            ops.push(`EXE: Installed via ${clientType}-adapter (${adapterRes.installedPaths.length} files copied from ${storageDir})`)
+            break
+          }
+
           let cliSuccess = false
           try {
             const cliResult = await execFileAsync('claude', [
@@ -531,6 +576,25 @@ export async function InstallElement(
         }
 
         case 'uninstall': {
+          if (useClientAdapter) {
+            const { getAdapter } = await import('@/lib/client-plugin-adapters')
+            const { clientTypeToProviderId } = await import('@/lib/client-capabilities')
+            const adapter = await getAdapter(clientType)
+            const providerId = clientTypeToProviderId(clientType)
+            if (adapter && providerId) {
+              const adapterRes = await adapter.uninstall(
+                { name, clientType, storageDir: convertedDir || '', providerId },
+                cwd,
+                { scope: 'local' }
+              )
+              if (adapterRes.success) {
+                ops.push(`EXE: Uninstalled via ${clientType}-adapter`)
+                break
+              }
+              ops.push(`EXE: ${clientType}-adapter uninstall failed: ${adapterRes.error || 'unknown'} — falling back`)
+            }
+          }
+
           try {
             const cliResult = await execFileAsync('claude', [
               'plugin', 'uninstall', `${name}@${resolvedMarketplace}`, '--scope', scope,
@@ -612,32 +676,70 @@ export async function InstallElement(
     // ═══════════════════════════════════════════════════════════
 
     // ── PG01: Verify action took effect ───────────────────────
+    // Non-Claude clients: ask the per-client adapter whether the plugin is
+    // detected at its native paths (.codex-plugin/, .gemini/, etc.).
+    // Claude/unknown: fall back to the original .claude/settings.local.json
+    // reading.
     if (scope === 'local' && agentDir) {
-      const verifyPath = join(agentDir, '.claude', 'settings.local.json')
-      try {
-        const settings = await loadJsonSafe(verifyPath) as Record<string, Record<string, unknown>>
-        const ep = settings.enabledPlugins as Record<string, boolean> | undefined
-        if (action === 'install' || action === 'enable') {
-          const found = ep && Object.keys(ep).some(k => k.includes(name) && ep[k] !== false)
-          ops.push(found
-            ? `PG01: Verified — ${name} present and enabled`
-            : `PG01: WARN — ${name} not found or disabled after ${action}`)
-          if (!found) result.success = false
-        } else if (action === 'uninstall') {
-          const stillPresent = ep && Object.keys(ep).some(k => k.includes(name))
-          ops.push(stillPresent
-            ? `PG01: WARN — ${name} still present after uninstall`
-            : `PG01: Verified — ${name} removed`)
-        } else if (action === 'disable') {
-          const isDisabled = ep && Object.keys(ep).some(k => k.includes(name) && ep[k] === false)
-          ops.push(isDisabled
-            ? `PG01: Verified — ${name} is disabled`
-            : `PG01: WARN — ${name} not in expected disabled state`)
-        } else {
-          ops.push(`PG01: Verification for "${action}" — skipped (update verified by CLI exit code)`)
+      if (useClientAdapter) {
+        try {
+          const { getAdapter } = await import('@/lib/client-plugin-adapters')
+          const adapter = await getAdapter(clientType)
+          if (!adapter) {
+            ops.push(`PG01: WARN — No adapter for "${clientType}" to verify state`)
+          } else {
+            const state = await adapter.detectState(name, agentDir)
+            const stateSummary = `installed=${state.installed} enabled=${state.enabled} method=${state.method}`
+            if (action === 'install' || action === 'enable') {
+              const ok = state.installed && state.enabled
+              ops.push(ok
+                ? `PG01: Verified via ${clientType}-adapter — ${stateSummary}`
+                : `PG01: WARN — ${clientType}-adapter reports ${stateSummary} after ${action}`)
+              if (!ok) result.success = false
+            } else if (action === 'uninstall') {
+              const ok = !state.installed
+              ops.push(ok
+                ? `PG01: Verified via ${clientType}-adapter — ${name} removed`
+                : `PG01: WARN — ${clientType}-adapter reports ${stateSummary} after uninstall`)
+            } else if (action === 'disable') {
+              const ok = !state.enabled || !state.installed
+              ops.push(ok
+                ? `PG01: Verified via ${clientType}-adapter — ${stateSummary}`
+                : `PG01: WARN — ${clientType}-adapter reports ${stateSummary} after disable`)
+            } else {
+              ops.push(`PG01: Verification for "${action}" — skipped`)
+            }
+          }
+        } catch (verifyErr) {
+          ops.push(`PG01: WARN — ${clientType}-adapter verify threw: ${verifyErr instanceof Error ? verifyErr.message : verifyErr}`)
         }
-      } catch {
-        ops.push(`PG01: WARN — Could not read settings for verification`)
+      } else {
+        const verifyPath = join(agentDir, '.claude', 'settings.local.json')
+        try {
+          const settings = await loadJsonSafe(verifyPath) as Record<string, Record<string, unknown>>
+          const ep = settings.enabledPlugins as Record<string, boolean> | undefined
+          if (action === 'install' || action === 'enable') {
+            const found = ep && Object.keys(ep).some(k => k.includes(name) && ep[k] !== false)
+            ops.push(found
+              ? `PG01: Verified — ${name} present and enabled`
+              : `PG01: WARN — ${name} not found or disabled after ${action}`)
+            if (!found) result.success = false
+          } else if (action === 'uninstall') {
+            const stillPresent = ep && Object.keys(ep).some(k => k.includes(name))
+            ops.push(stillPresent
+              ? `PG01: WARN — ${name} still present after uninstall`
+              : `PG01: Verified — ${name} removed`)
+          } else if (action === 'disable') {
+            const isDisabled = ep && Object.keys(ep).some(k => k.includes(name) && ep[k] === false)
+            ops.push(isDisabled
+              ? `PG01: Verified — ${name} is disabled`
+              : `PG01: WARN — ${name} not in expected disabled state`)
+          } else {
+            ops.push(`PG01: Verification for "${action}" — skipped (update verified by CLI exit code)`)
+          }
+        } catch {
+          ops.push(`PG01: WARN — Could not read settings for verification`)
+        }
       }
     } else {
       ops.push(`PG01: User-scope verification skipped`)

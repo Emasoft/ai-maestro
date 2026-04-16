@@ -65,6 +65,7 @@ export function loadGovernance(): GovernanceConfig {
       parsed.userName = generateUserName()
       saveGovernance(parsed)
     }
+    _prevGovernance = parsed
     return parsed
   } catch (error) {
     // Distinguish read errors from parse errors — parse errors indicate disk corruption

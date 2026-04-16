@@ -77,7 +77,7 @@ export async function createCompactIbct(
     .setExpirationTime(`${ttlSeconds}s`)
     .sign(privateKey)
 
-  const { payload: decoded } = await jose.decodeJwt(token) as { payload: Record<string, unknown> }
+  const decoded = jose.decodeJwt(token)
 
   return {
     mode: 'compact',

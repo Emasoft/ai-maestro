@@ -3,8 +3,9 @@ import fs from 'fs'
 import path from 'path'
 import type { LedgerEntry, LedgerFile, LedgerStats, VerifyResult } from '@/types/ledger'
 import type { JsonPatch } from '@/types/json-patch'
-import { getOrCreateHostKeyPair, getHostPublicKeyHex, signHostAttestation } from '@/lib/host-keys'
+import { getHostPublicKeyHex, signHostAttestation } from '@/lib/host-keys'
 import { acquireLock } from '@/lib/file-lock'
+import { getSelfHostId } from '@/lib/hosts-config'
 
 const GENESIS_HASH = '0'.repeat(64)
 
@@ -71,6 +72,10 @@ export class SignedLedger {
   }
 
   private persist(): void {
+    const dir = path.dirname(this.filePath)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
     const data: LedgerFile = { version: 1, entries: this.entries }
     const json = JSON.stringify(data, null, 2)
     const tmpPath = `${this.filePath}.tmp.${process.pid}`
@@ -93,9 +98,6 @@ export class SignedLedger {
       this.loaded = false
       this.ensureLoaded()
 
-      const { publicKeyHex } = getOrCreateHostKeyPair()
-      const hostId = blake2b256(publicKeyHex).substring(0, 16)
-
       const partial: Omit<LedgerEntry, 'signature'> = {
         seq: this.entries.length,
         ts: new Date().toISOString(),
@@ -103,7 +105,7 @@ export class SignedLedger {
         op,
         path: registryPath,
         diff,
-        signerHostId: hostId,
+        signerHostId: getSelfHostId(),
         signerKeyFingerprint: hostKeyFingerprint(),
       }
 
@@ -118,61 +120,63 @@ export class SignedLedger {
     }
   }
 
-  verify(): VerifyResult {
-    this.loaded = false
-    this.ensureLoaded()
+  async verify(): Promise<VerifyResult> {
+    const release = await acquireLock(this.lockName)
+    try {
+      this.loaded = false
+      this.ensureLoaded()
 
-    let expectedPrevHash = GENESIS_HASH
+      let expectedPrevHash = GENESIS_HASH
+      const localFingerprint = hostKeyFingerprint()
+      const localPubKeyHex = getHostPublicKeyHex()
 
-    for (const entry of this.entries) {
-      if (entry.prevHash !== expectedPrevHash) {
-        return {
-          ok: false,
-          seq: entry.seq,
-          reason: `Hash chain broken: expected prevHash ${expectedPrevHash}, got ${entry.prevHash}`,
-        }
-      }
+      for (let i = 0; i < this.entries.length; i++) {
+        const entry = this.entries[i]
 
-      if (entry.seq !== this.entries.indexOf(entry)) {
-        return {
-          ok: false,
-          seq: entry.seq,
-          reason: `Sequence gap: entry at index ${this.entries.indexOf(entry)} has seq ${entry.seq}`,
-        }
-      }
-
-      const canon = canonicalize(entry)
-      try {
-        const pubHex = entry.signerKeyFingerprint
-        // Signature verification requires the signer's full public key.
-        // For local-host verification we use our own key; for remote
-        // entries a key-registry lookup would be needed (Phase 2).
-        const localFingerprint = hostKeyFingerprint()
-        if (pubHex === localFingerprint) {
-          const pubKeyHex = getHostPublicKeyHex()
-          const valid = crypto.verify(
-            null,
-            Buffer.from(canon),
-            crypto.createPublicKey({
-              key: Buffer.from(pubKeyHex, 'hex'),
-              format: 'der',
-              type: 'spki',
-            }),
-            Buffer.from(entry.signature, 'base64'),
-          )
-          if (!valid) {
-            return { ok: false, seq: entry.seq, reason: 'Invalid signature' }
+        if (entry.prevHash !== expectedPrevHash) {
+          return {
+            ok: false,
+            seq: entry.seq,
+            reason: `Hash chain broken at index ${i}: expected prevHash ${expectedPrevHash.substring(0, 16)}…, got ${entry.prevHash.substring(0, 16)}…`,
           }
         }
-        // Remote entries: signature check deferred to Phase 2 (key registry)
-      } catch {
-        return { ok: false, seq: entry.seq, reason: 'Signature verification threw' }
+
+        if (entry.seq !== i) {
+          return {
+            ok: false,
+            seq: entry.seq,
+            reason: `Sequence gap: entry at index ${i} has seq ${entry.seq}`,
+          }
+        }
+
+        const canon = canonicalize(entry)
+        try {
+          if (entry.signerKeyFingerprint === localFingerprint) {
+            const valid = crypto.verify(
+              null,
+              Buffer.from(canon),
+              crypto.createPublicKey({
+                key: Buffer.from(localPubKeyHex, 'hex'),
+                format: 'der',
+                type: 'spki',
+              }),
+              Buffer.from(entry.signature, 'base64'),
+            )
+            if (!valid) {
+              return { ok: false, seq: entry.seq, reason: `Invalid signature at index ${i}` }
+            }
+          }
+        } catch {
+          return { ok: false, seq: entry.seq, reason: `Signature verification threw at index ${i}` }
+        }
+
+        expectedPrevHash = computeEntryHash(entry)
       }
 
-      expectedPrevHash = computeEntryHash(entry)
+      return { ok: true }
+    } finally {
+      release()
     }
-
-    return { ok: true }
   }
 
   stats(): LedgerStats {

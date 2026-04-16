@@ -221,6 +221,7 @@ export function loadTeams(): Team[] {
       saveTeams(teams)
     }
 
+    _prevTeams = teams
     return teams
   } catch (error: unknown) {
     // ENOENT is expected when no teams file exists yet — return empty array.

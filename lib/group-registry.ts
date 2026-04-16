@@ -196,7 +196,9 @@ export function loadGroups(): Group[] {
     }
     const data = fs.readFileSync(GROUPS_FILE, 'utf-8')
     const parsed: GroupsFile = JSON.parse(data)
-    return Array.isArray(parsed.groups) ? parsed.groups : []
+    const groups = Array.isArray(parsed.groups) ? parsed.groups : []
+    _prevGroups = groups
+    return groups
   } catch (error) {
     // Distinguish parse errors (disk corruption) from I/O errors
     if (error instanceof SyntaxError) {

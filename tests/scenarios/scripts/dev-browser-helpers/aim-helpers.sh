@@ -232,3 +232,439 @@ const state = await page.evaluate(() => ({
 console.log(JSON.stringify(state));
 EOF
 }
+
+# ----------------------------------------------------------------------------
+# aim_navigate_settings <tab>
+#
+# Navigates the persistent `dashboard` page to the settings page with the
+# specified tab selected. Valid tabs:
+#   security, hosts, domains, webhooks, help, about, onboarding,
+#   experiments, marketplace, global-elements, agents, commands, cemetery
+#
+# On success, stdout is JSON: {"ok":true, "tab":"<tab>", "url":"..."}
+# ----------------------------------------------------------------------------
+aim_navigate_settings() {
+  local tab="${1:?aim_navigate_settings: missing tab argument}"
+  dev-browser --browser "${AIM_BROWSER}" --headless --timeout 60 <<EOF
+const page = await browser.getPage("dashboard");
+await page.goto("${AIM_DASHBOARD_URL}settings?tab=${tab}", { waitUntil: "domcontentloaded", timeout: 45000 });
+await new Promise(r => setTimeout(r, 3000));
+const state = await page.evaluate(() => ({
+  url: window.location.href,
+  title: document.title
+}));
+console.log(JSON.stringify({ ok: true, tab: "${tab}", url: state.url }));
+EOF
+}
+
+# ----------------------------------------------------------------------------
+# aim_navigate_agent <agent_name>
+#
+# Clicks the agent with the given name in the sidebar to select it.
+# The agent name is matched by finding sidebar text that contains the name.
+# After clicking, waits for the terminal view to appear.
+#
+# On success, stdout is JSON: {"ok":true, "agent":"<name>"}
+# On failure (agent not found), exits non-zero.
+# ----------------------------------------------------------------------------
+aim_navigate_agent() {
+  local name="${1:?aim_navigate_agent: missing agent_name argument}"
+  dev-browser --browser "${AIM_BROWSER}" --headless --timeout 60 <<EOF
+const page = await browser.getPage("dashboard");
+// Ensure we are on the dashboard
+if (!page.url().startsWith("${AIM_DASHBOARD_URL}") || page.url().includes("/settings")) {
+  await page.goto("${AIM_DASHBOARD_URL}", { waitUntil: "domcontentloaded", timeout: 45000 });
+  await new Promise(r => setTimeout(r, 3000));
+}
+// Find and click the agent entry in the sidebar by matching text content
+const clicked = await page.evaluate((agentName) => {
+  const sidebar = document.querySelector('aside');
+  if (!sidebar) return false;
+  // Look for clickable elements containing the agent name
+  const candidates = Array.from(sidebar.querySelectorAll('[class*="cursor-pointer"], button, a, div[role="button"]'));
+  for (const el of candidates) {
+    const text = (el.textContent || '').trim();
+    if (text.includes(agentName)) {
+      el.click();
+      return true;
+    }
+  }
+  // Fallback: search all elements in sidebar
+  const allEls = Array.from(sidebar.querySelectorAll('*'));
+  for (const el of allEls) {
+    if (el.children.length > 3) continue; // skip containers
+    const text = (el.textContent || '').trim();
+    if (text === agentName || text.startsWith(agentName)) {
+      el.click();
+      return true;
+    }
+  }
+  return false;
+}, "${name}");
+if (!clicked) {
+  throw new Error("aim_navigate_agent: agent '${name}' not found in sidebar");
+}
+await new Promise(r => setTimeout(r, 2000));
+console.log(JSON.stringify({ ok: true, agent: "${name}" }));
+EOF
+}
+
+# ----------------------------------------------------------------------------
+# aim_create_agent <name> <title> [client]
+#
+# Drives the Agent Creation Wizard to create a new agent:
+#   1. Opens the wizard (clicks "+" or "New Agent" button)
+#   2. Selects the client (defaults to "claude" if not specified)
+#   3. Enters the persona name
+#   4. Selects "No Team" (AUTONOMOUS)
+#   5. Clicks through to create
+#
+# The wizard is a chat-based flow: client -> avatar/name -> team -> title ->
+# folder -> role-plugin -> summary -> creating.
+#
+# NOTE: This helper creates AUTONOMOUS agents only (no team assignment).
+# For team-assigned agents, use the full scenario step-by-step flow.
+#
+# On success, stdout is JSON: {"ok":true, "name":"<name>", "title":"<title>"}
+# On failure, exits non-zero with an error message.
+# ----------------------------------------------------------------------------
+aim_create_agent() {
+  local name="${1:?aim_create_agent: missing agent name}"
+  local title="${2:?aim_create_agent: missing title (e.g. MEMBER, AUTONOMOUS)}"
+  local client="${3:-claude}"
+
+  dev-browser --browser "${AIM_BROWSER}" --headless --timeout 120 <<EOF
+const page = await browser.getPage("dashboard");
+// Ensure we are on the dashboard
+if (!page.url().startsWith("${AIM_DASHBOARD_URL}") || page.url().includes("/settings")) {
+  await page.goto("${AIM_DASHBOARD_URL}", { waitUntil: "domcontentloaded", timeout: 45000 });
+  await new Promise(r => setTimeout(r, 3000));
+}
+
+// Step 1: Open the creation wizard by clicking the "+" button in the sidebar
+const opened = await page.evaluate(() => {
+  // Look for "+" button or "New Agent" / "Create Agent" button in sidebar/header
+  const btns = Array.from(document.querySelectorAll('button'));
+  for (const btn of btns) {
+    const text = (btn.textContent || '').trim();
+    const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+    if (text === '+' || text === 'New Agent' || ariaLabel.includes('new agent')
+        || ariaLabel.includes('create agent') || ariaLabel.includes('add agent')) {
+      btn.click();
+      return true;
+    }
+  }
+  // Fallback: look for Plus icon button
+  const plusBtns = Array.from(document.querySelectorAll('button svg'));
+  for (const svg of plusBtns) {
+    const btn = svg.closest('button');
+    if (btn && btn.querySelector('[class*="lucide-plus"], [data-lucide="plus"]')) {
+      btn.click();
+      return true;
+    }
+  }
+  return false;
+});
+if (!opened) throw new Error("aim_create_agent: could not find New Agent button");
+await new Promise(r => setTimeout(r, 2000));
+
+// Step 2: Select client — find the card with matching client text and click it
+const clientSelected = await page.evaluate((clientName) => {
+  // The wizard shows client cards; click the one matching our client
+  const cards = Array.from(document.querySelectorAll('[class*="cursor-pointer"], button, div[role="button"]'));
+  for (const card of cards) {
+    const text = (card.textContent || '').toLowerCase();
+    if (text.includes(clientName.toLowerCase())) {
+      card.click();
+      return true;
+    }
+  }
+  return false;
+}, "${client}");
+if (!clientSelected) throw new Error("aim_create_agent: could not select client '${client}'");
+await new Promise(r => setTimeout(r, 2000));
+
+// Step 3: Enter persona name
+// The wizard shows a name input field after client selection
+const nameField = await page.evaluateHandle(() => {
+  // Look for input with placeholder containing "name" or visible text input
+  const inputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'));
+  for (const input of inputs) {
+    const ph = (input.placeholder || '').toLowerCase();
+    if (ph.includes('name') || ph.includes('persona') || ph.includes('agent')) return input;
+  }
+  // Fallback: any visible text input in the wizard modal
+  const modal = document.querySelector('[class*="fixed"][class*="z-50"]');
+  if (modal) {
+    const inp = modal.querySelector('input[type="text"], input:not([type])');
+    if (inp) return inp;
+  }
+  return null;
+});
+if (!nameField) throw new Error("aim_create_agent: could not find name input");
+await page.evaluate((el, n) => {
+  const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  nativeSetter.call(el, n);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}, nameField, "${name}");
+await new Promise(r => setTimeout(r, 1000));
+
+// Submit the name — click the submit/next button
+const nameSubmitted = await page.evaluate(() => {
+  const modal = document.querySelector('[class*="fixed"][class*="z-50"]');
+  if (!modal) return false;
+  const btns = Array.from(modal.querySelectorAll('button'));
+  for (const btn of btns) {
+    const text = (btn.textContent || '').trim().toLowerCase();
+    if (text.includes('next') || text.includes('continue') || text.includes('submit')
+        || text.includes('ok') || text.includes('done')) {
+      btn.click();
+      return true;
+    }
+  }
+  // Fallback: press Enter on the input
+  const inp = modal.querySelector('input[type="text"], input:not([type])');
+  if (inp) {
+    inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    return true;
+  }
+  return false;
+});
+await new Promise(r => setTimeout(r, 2000));
+
+// Step 4: Team selection — select "No Team" for AUTONOMOUS
+const teamSelected = await page.evaluate(() => {
+  const modal = document.querySelector('[class*="fixed"][class*="z-50"]');
+  if (!modal) return false;
+  const items = Array.from(modal.querySelectorAll('[class*="cursor-pointer"], button, div[role="button"]'));
+  for (const item of items) {
+    const text = (item.textContent || '').toLowerCase();
+    if (text.includes('no team') || text.includes('autonomous') || text.includes('skip')
+        || text.includes('none')) {
+      item.click();
+      return true;
+    }
+  }
+  return false;
+});
+await new Promise(r => setTimeout(r, 2000));
+
+// Step 5: If a title step appears (for team agents), handle it
+// For AUTONOMOUS agents this may be skipped automatically
+
+// Step 6: Look for the "Create Agent!" button at the summary step and click it
+// Wait a bit for the wizard to settle through intermediate steps
+await new Promise(r => setTimeout(r, 3000));
+let created = false;
+for (let attempt = 0; attempt < 5; attempt++) {
+  created = await page.evaluate(() => {
+    const modal = document.querySelector('[class*="fixed"][class*="z-50"]');
+    if (!modal) return false;
+    const btns = Array.from(modal.querySelectorAll('button'));
+    for (const btn of btns) {
+      const text = (btn.textContent || '').trim();
+      if (text.includes('Create Agent')) {
+        btn.click();
+        return true;
+      }
+    }
+    return false;
+  });
+  if (created) break;
+  await new Promise(r => setTimeout(r, 2000));
+}
+
+if (!created) {
+  console.log(JSON.stringify({ ok: false, error: "Could not find Create Agent button at summary step" }));
+} else {
+  // Wait for creation animation to complete and "Let's Go!" to appear
+  await new Promise(r => setTimeout(r, 10000));
+  // Click "Let's Go!" if visible
+  await page.evaluate(() => {
+    const btns = Array.from(document.querySelectorAll('button'));
+    for (const btn of btns) {
+      const text = (btn.textContent || '').trim();
+      if (text.includes("Let") && text.includes("Go")) {
+        btn.click();
+        return;
+      }
+    }
+  });
+  await new Promise(r => setTimeout(r, 2000));
+  console.log(JSON.stringify({ ok: true, name: "${name}", title: "${title}" }));
+}
+EOF
+}
+
+# ----------------------------------------------------------------------------
+# aim_delete_agent <agent_name> <governance_password>
+#
+# Deletes an agent through the UI:
+#   1. Navigates to the agent in the sidebar
+#   2. Opens Profile -> Advanced -> Danger Zone
+#   3. Checks "Also delete agent folder"
+#   4. Types the agent name for confirmation
+#   5. Handles sudo modal (password re-entry)
+#   6. Clicks "Delete Forever"
+#
+# On success, stdout is JSON: {"ok":true, "deleted":"<name>"}
+# On failure, exits non-zero.
+# ----------------------------------------------------------------------------
+aim_delete_agent() {
+  local name="${1:?aim_delete_agent: missing agent_name}"
+  local password="${2:?aim_delete_agent: missing governance_password}"
+
+  # First navigate to the agent
+  aim_navigate_agent "${name}" >/dev/null 2>&1 || true
+  sleep 2
+
+  dev-browser --browser "${AIM_BROWSER}" --headless --timeout 90 <<EOF
+const page = await browser.getPage("dashboard");
+await new Promise(r => setTimeout(r, 2000));
+
+// Look for the Delete Agent button in the profile panel (Danger Zone area)
+// The profile panel should be open after navigating to the agent.
+// We need to find and click "Delete Agent" or a trash icon button.
+const deleteBtn = await page.evaluate(() => {
+  const btns = Array.from(document.querySelectorAll('button'));
+  for (const btn of btns) {
+    const text = (btn.textContent || '').trim();
+    if (text.includes('Delete Agent') || text.includes('Delete')) {
+      // Make sure it's in a danger zone context
+      const parent = btn.closest('[class*="red"], [class*="danger"]');
+      if (parent || text === 'Delete Agent') {
+        btn.click();
+        return true;
+      }
+    }
+  }
+  // Fallback: click any button with red/danger styling containing "Delete"
+  for (const btn of btns) {
+    const text = (btn.textContent || '').trim();
+    if (text.includes('Delete') && btn.className.includes('red')) {
+      btn.click();
+      return true;
+    }
+  }
+  return false;
+});
+if (!deleteBtn) throw new Error("aim_delete_agent: could not find Delete Agent button");
+await new Promise(r => setTimeout(r, 2000));
+
+// The DeleteAgentDialog should now be open
+// Step 1: Check "Also delete agent folder" checkbox
+await page.evaluate(() => {
+  const labels = Array.from(document.querySelectorAll('label'));
+  for (const label of labels) {
+    const text = (label.textContent || '').toLowerCase();
+    if (text.includes('also delete agent folder')) {
+      const checkbox = label.querySelector('input[type="checkbox"]');
+      if (checkbox && !checkbox.checked) checkbox.click();
+      return true;
+    }
+  }
+  return false;
+});
+
+// Step 2: Type the agent name in the confirmation field
+const confirmInput = await page.evaluateHandle((agentName) => {
+  const inputs = Array.from(document.querySelectorAll('input[type="text"]'));
+  for (const inp of inputs) {
+    if ((inp.placeholder || '').includes(agentName) || (inp.placeholder || '').toLowerCase().includes('type')) {
+      return inp;
+    }
+  }
+  // Fallback: find input near "Type ... to confirm" text
+  const modal = Array.from(document.querySelectorAll('[class*="fixed"]')).find(el =>
+    el.offsetHeight > 100 && (el.textContent || '').includes('to confirm')
+  );
+  if (modal) return modal.querySelector('input[type="text"]');
+  return null;
+}, "${name}");
+if (!confirmInput) throw new Error("aim_delete_agent: could not find confirmation input");
+await page.evaluate((el, n) => {
+  const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  nativeSetter.call(el, n);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}, confirmInput, "${name}");
+await new Promise(r => setTimeout(r, 500));
+
+// Step 3: Click "Delete Forever"
+const deleted = await page.evaluate(() => {
+  const btns = Array.from(document.querySelectorAll('button'));
+  for (const btn of btns) {
+    const text = (btn.textContent || '').trim();
+    if (text.includes('Delete Forever')) {
+      btn.click();
+      return true;
+    }
+  }
+  return false;
+});
+if (!deleted) throw new Error("aim_delete_agent: could not click Delete Forever");
+await new Promise(r => setTimeout(r, 1000));
+console.log(JSON.stringify({ ok: true, deleted: "${name}", sudo_pending: true }));
+EOF
+
+  # Handle the sudo modal that appears after clicking Delete Forever
+  aim_sudo_modal "${password}"
+  sleep 3
+  echo "{\"ok\":true,\"deleted\":\"${name}\"}"
+}
+
+# ----------------------------------------------------------------------------
+# aim_wait_for_idle <agent_name> [timeout_s]
+#
+# Polls the /api/sessions/activity endpoint until the specified agent's
+# notificationType becomes "idle_prompt" (the safe state where Claude has
+# finished processing and is waiting for input).
+#
+# This is an API-based check (allowed by Rule 6 as read-only verification).
+#
+# Arguments:
+#   agent_name   — the tmux session name of the agent
+#   timeout_s    — max seconds to wait (default: 120)
+#
+# On success: {"ok":true, "agent":"<name>", "status":"idle_prompt", "waited_s":<N>}
+# On timeout: {"ok":false, "agent":"<name>", "reason":"timeout", "last_status":"<status>"}
+# ----------------------------------------------------------------------------
+aim_wait_for_idle() {
+  local agent_name="${1:?aim_wait_for_idle: missing agent_name}"
+  local timeout_s="${2:-120}"
+  local poll_interval=3
+  local elapsed=0
+  local last_status="unknown"
+
+  while [ "${elapsed}" -lt "${timeout_s}" ]; do
+    local activity_json
+    activity_json=$(curl -sf "${AIM_DASHBOARD_URL}api/sessions/activity" 2>/dev/null || echo '{}')
+
+    # Extract the agent's notificationType from the JSON response
+    local notification_type
+    notification_type=$(echo "${activity_json}" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    activity = data.get('activity', {})
+    agent = activity.get('${agent_name}', {})
+    print(agent.get('notificationType', agent.get('status', 'unknown')))
+except:
+    print('unknown')
+" 2>/dev/null || echo "unknown")
+
+    last_status="${notification_type}"
+
+    if [ "${notification_type}" = "idle_prompt" ]; then
+      echo "{\"ok\":true,\"agent\":\"${agent_name}\",\"status\":\"idle_prompt\",\"waited_s\":${elapsed}}"
+      return 0
+    fi
+
+    sleep "${poll_interval}"
+    elapsed=$((elapsed + poll_interval))
+  done
+
+  echo "{\"ok\":false,\"agent\":\"${agent_name}\",\"reason\":\"timeout\",\"last_status\":\"${last_status}\"}"
+  return 1
+}

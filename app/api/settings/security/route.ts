@@ -48,6 +48,19 @@ const SecurityPatchSchema = z.object({
     sessionTtlDays: z.number().int().min(1).max(90).optional(),
     sudoTokenTtlSeconds: z.number().int().min(10).max(600).optional(),
   }).optional(),
+  rateLimiting: z.object({
+    ibctTokenRequestsPerMinute: z.number().int().min(1).max(1000).optional(),
+    loginAttemptsPerMinute: z.number().int().min(1).max(60).optional(),
+    apiRequestsPerMinute: z.number().int().min(10).max(10000).optional(),
+  }).optional(),
+  agentCreation: z.object({
+    minIntervalSeconds: z.number().int().min(0).max(3600).optional(),
+    maxAgentsPerHost: z.number().int().min(1).max(500).optional(),
+  }).optional(),
+  killSwitch: z.object({
+    maxConsecutiveAuthFailures: z.number().int().min(3).max(100).optional(),
+    lockoutDurationMinutes: z.number().int().min(1).max(1440).optional(),
+  }).optional(),
 }).strict()
 
 export async function PATCH(request: NextRequest) {
@@ -95,6 +108,9 @@ export async function PATCH(request: NextRequest) {
     ledger: { ...current.ledger, ...patch.ledger },
     passwordPolicy: { ...current.passwordPolicy, ...patch.passwordPolicy },
     sessionAuth: { ...current.sessionAuth, ...patch.sessionAuth },
+    rateLimiting: { ...current.rateLimiting, ...patch.rateLimiting },
+    agentCreation: { ...current.agentCreation, ...patch.agentCreation },
+    killSwitch: { ...current.killSwitch, ...patch.killSwitch },
   }
 
   saveSecurityConfig(updated)

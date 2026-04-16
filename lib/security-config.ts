@@ -27,6 +27,8 @@ export interface SecurityConfig {
   ledger: {
     readOnlyOnTamper: boolean
     verifyOnStartup: boolean
+    maxEntriesPerFile: number
+    compactAfterEntries: number
   }
   passwordPolicy: {
     minLength: number
@@ -35,6 +37,19 @@ export interface SecurityConfig {
   sessionAuth: {
     sessionTtlDays: number
     sudoTokenTtlSeconds: number
+  }
+  rateLimiting: {
+    ibctTokenRequestsPerMinute: number
+    loginAttemptsPerMinute: number
+    apiRequestsPerMinute: number
+  }
+  agentCreation: {
+    minIntervalSeconds: number
+    maxAgentsPerHost: number
+  }
+  killSwitch: {
+    maxConsecutiveAuthFailures: number
+    lockoutDurationMinutes: number
   }
 }
 
@@ -55,6 +70,8 @@ const DEFAULTS: SecurityConfig = {
   ledger: {
     readOnlyOnTamper: true,
     verifyOnStartup: true,
+    maxEntriesPerFile: 10000,
+    compactAfterEntries: 5000,
   },
   passwordPolicy: {
     minLength: 8,
@@ -63,6 +80,19 @@ const DEFAULTS: SecurityConfig = {
   sessionAuth: {
     sessionTtlDays: 7,
     sudoTokenTtlSeconds: 60,
+  },
+  rateLimiting: {
+    ibctTokenRequestsPerMinute: 30,
+    loginAttemptsPerMinute: 5,
+    apiRequestsPerMinute: 300,
+  },
+  agentCreation: {
+    minIntervalSeconds: 10,
+    maxAgentsPerHost: 50,
+  },
+  killSwitch: {
+    maxConsecutiveAuthFailures: 20,
+    lockoutDurationMinutes: 30,
   },
 }
 

@@ -7,6 +7,7 @@ import { getHostPublicKeyHex, signHostAttestation } from '@/lib/host-keys'
 import { acquireLock } from '@/lib/file-lock'
 import { getSelfHostId } from '@/lib/hosts-config'
 import { verifyWithCurrentOrPrevious } from '@/lib/key-rotation'
+import { loadSecurityConfig } from '@/lib/security-config'
 
 const GENESIS_HASH = '0'.repeat(64)
 
@@ -114,6 +115,12 @@ export class SignedLedger {
 
       const entry: LedgerEntry = { ...partial, signature }
       this.entries.push(entry)
+
+      const cfg = loadSecurityConfig().ledger
+      if (this.entries.length > cfg.maxEntriesPerFile) {
+        this.rotateLedger()
+      }
+
       this.persist()
       return entry
     } finally {
@@ -188,5 +195,20 @@ export class SignedLedger {
   getEntriesForPath(registryPath: string): LedgerEntry[] {
     this.ensureLoaded()
     return this.entries.filter(e => e.path === registryPath)
+  }
+
+  private rotateLedger(): void {
+    const cfg = loadSecurityConfig().ledger
+    const archivePath = this.filePath.replace('.ledger.json', `.ledger.${Date.now()}.archive.json`)
+    const archiveEntries = this.entries.slice(0, this.entries.length - cfg.compactAfterEntries)
+    const keepEntries = this.entries.slice(this.entries.length - cfg.compactAfterEntries)
+
+    const archiveData: LedgerFile = { version: 1, entries: archiveEntries }
+    const archiveTmp = `${archivePath}.tmp.${process.pid}`
+    fs.writeFileSync(archiveTmp, JSON.stringify(archiveData), { mode: 0o600 })
+    fs.renameSync(archiveTmp, archivePath)
+
+    this.entries = keepEntries
+    console.log(`[signed-ledger] Rotated: archived ${archiveEntries.length} entries to ${path.basename(archivePath)}, keeping ${keepEntries.length}`)
   }
 }

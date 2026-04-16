@@ -618,6 +618,30 @@ export async function InstallElement(
             })
             ops.push(`EXE: Uninstalled via direct settings removal`)
           }
+
+          // SCEN-019 P0-001: Always clean up plugin cache dir on user-scope
+          // uninstall. When the CLI fails and we fall through to direct
+          // settings removal, the cache dir `~/.claude/plugins/cache/
+          // <marketplace>/<plugin>/` is left behind. Next time `claude` reads
+          // the cache, it still sees the plugin files and may silently
+          // "re-enable" via orphaned marketplace manifests. Only applies to
+          // user scope — local scope doesn't own the shared cache, and
+          // other agents may still depend on the cached plugin.
+          if (scope === 'user' && clientType === 'claude') {
+            try {
+              const { rm: rmCache } = await import('fs/promises')
+              const { resolve: resolveCache } = await import('path')
+              const cacheDir = resolveCache(HOME, '.claude', 'plugins', 'cache', resolvedMarketplace, name)
+              const claudeCacheRoot = resolveCache(HOME, '.claude', 'plugins', 'cache')
+              // Safety: refuse to rm anything outside ~/.claude/plugins/cache/
+              if (cacheDir.startsWith(claudeCacheRoot + '/') && cacheDir !== claudeCacheRoot) {
+                await rmCache(cacheDir, { recursive: true, force: true })
+                ops.push(`EXE: Removed plugin cache dir ${cacheDir}`)
+              }
+            } catch (cacheErr) {
+              ops.push(`EXE: WARN — cache dir cleanup failed: ${cacheErr instanceof Error ? cacheErr.message : cacheErr}`)
+            }
+          }
           break
         }
 
@@ -5080,50 +5104,86 @@ export async function CreateAgent(
 
     // ── G08: Install role-plugin if specified ─────────────────
     // This handles the case where a specific plugin was chosen in the wizard
-    // (independent of title — title auto-installs via ChangeTitle G17)
+    // (independent of title — title auto-installs via ChangeTitle G17).
+    //
+    // SCEN-007 P0-001 fix: non-Claude clients must go through the R18
+    // conversion pipeline (convertAndStorePlugin + emitForClient) BEFORE
+    // install, not the legacy convertElements. R18.3d priority:
+    //   1. If target client already has a native plugin in its cache → reuse
+    //   2. Else if a compatible version exists in local role-plugins
+    //      marketplace → reuse
+    //   3. Else if previously emitted in custom-plugins/<client>/ → reuse
+    //   4. Else emit from existing Universal IR
+    //   5. Else fresh conversion via convertAndStorePlugin
+    // The subsequent install goes through the per-client adapter (same as G11).
     if (desired.pluginName) {
       try {
         const { detectClientType } = await import('@/lib/client-capabilities')
         const clientType = detectClientType(program)
 
         if (clientType === 'claude') {
-          // Direct install for Claude clients
+          // Direct install for Claude clients — createPersona is idempotent
+          // and wraps the Claude CLI install.
           const { createPersona } = await import('@/services/role-plugin-service')
           await createPersona({
             personaName: desired.label || name,
             pluginName: desired.pluginName,
           })
           ops.push(`G08: Role-plugin "${desired.pluginName}" installed (Claude)`)
-        } else {
-          // Non-Claude client: convert the plugin using the cross-client converter
+        } else if (clientType === 'codex' || clientType === 'gemini' || clientType === 'opencode' || clientType === 'kiro') {
+          // R18 cross-client conversion + adapter install.
           try {
-            const { convertElements } = await import('@/services/cross-client-conversion-service')
-            const providerMap: Record<string, string> = { codex: 'codex', gemini: 'gemini', opencode: 'opencode', kiro: 'kiro' }
-            const targetProvider = providerMap[clientType]
-            if (targetProvider) {
-              // Find the plugin in the cache to get its path
-              const { scanPluginCache } = await import('@/lib/converter/utils/plugin')
-              const plugins = await scanPluginCache()
-              const sourcePlugin = plugins.find(p => p.meta?.name === desired.pluginName)
-              if (sourcePlugin) {
-                const convResult = await convertElements({
-                  source: sourcePlugin.pluginDir,
-                  targetClient: targetProvider as import('@/lib/converter/types').ProviderId,
-                  elements: ['skills', 'agents', 'commands'],
-                  scope: 'user',
-                  dryRun: false,
-                  force: false,
-                })
-                ops.push(`G08: Role-plugin "${desired.pluginName}" converted to ${clientType} format (${convResult.ok ? 'ok' : 'failed'})`)
+            const { convertAndStorePlugin, emitForClient, findNativePluginForClient } = await import('@/services/plugin-storage-service')
+
+            // Step 1 (R18.3d.1): native in target client's cache — prefer if present.
+            let emittedDir: string | null = await findNativePluginForClient(desired.pluginName, clientType)
+
+            if (!emittedDir) {
+              // Step 2-4 (R18.3d.3+): emit from existing Universal IR if present.
+              try {
+                emittedDir = await emitForClient(desired.pluginName, clientType)
+              } catch {
+                emittedDir = null
+              }
+            }
+
+            if (!emittedDir) {
+              // Step 5 (R18.3d.5): fresh conversion from Claude source.
+              const claudeSource = await findNativePluginForClient(desired.pluginName, 'claude')
+              if (!claudeSource) {
+                throw new Error(`Source plugin "${desired.pluginName}" not found in Claude cache — cannot convert`)
+              }
+              await convertAndStorePlugin(desired.pluginName, 'claude', [clientType])
+              ops.push(`G08: Role-plugin "${desired.pluginName}" converted Claude → ${clientType} (R18)`)
+            } else {
+              ops.push(`G08: Role-plugin "${desired.pluginName}" reused native/emitted ${clientType} version`)
+            }
+
+            // Step 2: install via the per-client adapter into the agent's
+            // working directory. Uses the same path G11 uses.
+            if (workDir) {
+              const installResult = await InstallElement({
+                name: desired.pluginName,
+                marketplace: 'ai-maestro-local-roles-marketplace',
+                action: 'install',
+                scope: 'local',
+                agentDir: workDir,
+                agentId: agent.id,
+                clientType: clientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
+              })
+              if (installResult.success) {
+                ops.push(`G08: Role-plugin installed via ${clientType}-adapter`)
               } else {
-                ops.push(`G08: WARN — Plugin "${desired.pluginName}" not found in cache for conversion`)
+                ops.push(`G08: WARN — adapter install failed: ${installResult.error || 'unknown'}`)
               }
             } else {
-              ops.push(`G08: WARN — No converter for client type "${clientType}"`)
+              ops.push(`G08: WARN — no workDir, skipping adapter install`)
             }
           } catch (convErr) {
-            ops.push(`G08: WARN — Cross-client conversion failed: ${convErr instanceof Error ? convErr.message : convErr}`)
+            ops.push(`G08: WARN — Cross-client conversion/install failed: ${convErr instanceof Error ? convErr.message : convErr}`)
           }
+        } else {
+          ops.push(`G08: WARN — Unknown client type "${clientType}" — plugin install skipped`)
         }
       } catch (err) {
         ops.push(`G08: WARN — Plugin install failed: ${err instanceof Error ? err.message : err}`)

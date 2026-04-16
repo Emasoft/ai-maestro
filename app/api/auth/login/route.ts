@@ -56,6 +56,10 @@ export async function POST(request: Request) {
     // Reset rate limit on successful login
     resetRateLimit('auth-login')
 
+    // Unlock encrypted security config with the plaintext password
+    const { unlockSecurityConfig } = await import('@/lib/security-config')
+    unlockSecurityConfig(password)
+
     // Create session
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined
     const token = await createSession(ip || undefined)

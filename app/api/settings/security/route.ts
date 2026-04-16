@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { enforceSystemOwner } from '@/lib/route-auth'
+import { validateAndConsumeSudoToken } from '@/lib/sudo-auth'
 import {
   loadSecurityConfig,
   saveSecurityConfig,
   getSecurityDefaults,
   resetSecurityConfigCache,
+  isUnlocked,
   type SecurityConfig,
 } from '@/lib/security-config'
 
@@ -17,7 +19,7 @@ export async function GET(request: NextRequest) {
 
   const config = loadSecurityConfig()
   const defaults = getSecurityDefaults()
-  return NextResponse.json({ config, defaults })
+  return NextResponse.json({ config, defaults, encrypted: true, unlocked: isUnlocked() })
 }
 
 const SecurityPatchSchema = z.object({
@@ -51,6 +53,22 @@ const SecurityPatchSchema = z.object({
 export async function PATCH(request: NextRequest) {
   const denied = enforceSystemOwner(request)
   if (denied) return denied
+
+  const sudoToken = request.headers.get('X-Sudo-Token')
+  const sudoResult = validateAndConsumeSudoToken(sudoToken)
+  if (!sudoResult.ok) {
+    return NextResponse.json(
+      { error: 'Sudo authentication required to modify security settings' },
+      { status: 403 },
+    )
+  }
+
+  if (!isUnlocked()) {
+    return NextResponse.json(
+      { error: 'Security config is locked. Log in first to unlock it.' },
+      { status: 423 },
+    )
+  }
 
   let raw: unknown
   try {

@@ -1,8 +1,14 @@
+import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import { getStateDir } from '@/lib/ecosystem-constants'
 
-const CONFIG_PATH = path.join(getStateDir(), 'security-config.json')
+const CONFIG_PATH = path.join(getStateDir(), 'security-config.enc')
+const ALGORITHM = 'aes-256-gcm'
+const KEY_LENGTH = 32
+const IV_LENGTH = 16
+const SALT_LENGTH = 32
+const HKDF_INFO = 'aimaestro-security-config-v1'
 
 export interface SecurityConfig {
   keyRotation: {
@@ -61,27 +67,77 @@ const DEFAULTS: SecurityConfig = {
 }
 
 let _cached: SecurityConfig | null = null
+let _encryptionKey: Buffer | null = null
 
-export function loadSecurityConfig(): SecurityConfig {
-  if (_cached) return _cached
+function deriveKey(password: string, salt: Buffer): Buffer {
+  return Buffer.from(crypto.hkdfSync('sha512', password, salt, HKDF_INFO, KEY_LENGTH))
+}
+
+export function unlockSecurityConfig(password: string): boolean {
   try {
+    if (!fs.existsSync(CONFIG_PATH)) {
+      _encryptionKey = deriveKey(password, crypto.randomBytes(SALT_LENGTH))
+      _cached = structuredClone(DEFAULTS)
+      return true
+    }
+
     const raw = fs.readFileSync(CONFIG_PATH, 'utf-8')
-    const parsed = JSON.parse(raw)
-    const merged = deepMerge(DEFAULTS, parsed)
-    _cached = merged
-    return merged
+    const blob = JSON.parse(raw)
+    const salt = Buffer.from(blob.salt, 'base64')
+    const iv = Buffer.from(blob.iv, 'base64')
+    const tag = Buffer.from(blob.tag, 'base64')
+    const ciphertext = Buffer.from(blob.ciphertext, 'base64')
+
+    const key = deriveKey(password, salt)
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv)
+    decipher.setAuthTag(tag)
+    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()])
+    const config = JSON.parse(decrypted.toString('utf-8'))
+
+    _encryptionKey = key
+    _cached = deepMerge(DEFAULTS, config)
+    return true
   } catch {
-    const defaults = structuredClone(DEFAULTS)
-    _cached = defaults
-    return defaults
+    return false
   }
 }
 
+export function isUnlocked(): boolean {
+  return _encryptionKey !== null
+}
+
+export function loadSecurityConfig(): SecurityConfig {
+  if (_cached) return _cached
+  return structuredClone(DEFAULTS)
+}
+
 export function saveSecurityConfig(config: SecurityConfig): void {
+  if (!_encryptionKey) {
+    throw new Error('Security config is locked — unlock with governance password first')
+  }
+
+  const salt = crypto.randomBytes(SALT_LENGTH)
+  const key = Buffer.from(_encryptionKey)
+  const iv = crypto.randomBytes(IV_LENGTH)
+  const plaintext = JSON.stringify(config)
+
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
+  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf-8'), cipher.final()])
+  const tag = cipher.getAuthTag()
+
+  const blob = {
+    version: 1,
+    algorithm: ALGORITHM,
+    salt: salt.toString('base64'),
+    iv: iv.toString('base64'),
+    tag: tag.toString('base64'),
+    ciphertext: ciphertext.toString('base64'),
+  }
+
   const dir = path.dirname(CONFIG_PATH)
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   const tmp = `${CONFIG_PATH}.tmp.${process.pid}`
-  fs.writeFileSync(tmp, JSON.stringify(config, null, 2), { mode: 0o600 })
+  fs.writeFileSync(tmp, JSON.stringify(blob), { mode: 0o600 })
   fs.renameSync(tmp, CONFIG_PATH)
   _cached = config
 }
@@ -91,7 +147,7 @@ export function resetSecurityConfigCache(): void {
 }
 
 export function getSecurityDefaults(): SecurityConfig {
-  return { ...DEFAULTS }
+  return structuredClone(DEFAULTS)
 }
 
 function deepMerge<T>(defaults: T, overrides: Partial<Record<string, unknown>>): T {

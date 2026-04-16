@@ -109,7 +109,7 @@ export function saveGovernance(config: GovernanceConfig): void {
 
   if (diff.length > 0) {
     governanceLedger.append('update', 'governance.json', diff).catch(err => {
-      console.error('[signed-ledger] Failed to append governance mutation:', err)
+      console.error('[signed-ledger] AUDIT GAP: governance mutation NOT recorded in ledger:', err instanceof Error ? err.message : err)
     })
   }
 }

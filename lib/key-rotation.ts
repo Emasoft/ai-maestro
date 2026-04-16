@@ -141,7 +141,8 @@ function verifyWithKey(data: string, signatureBase64: string, publicKeyHex: stri
       type: 'spki',
     })
     return crypto.verify(null, Buffer.from(data), publicKey, Buffer.from(signatureBase64, 'base64'))
-  } catch {
+  } catch (err) {
+    console.error('[key-rotation] Signature verification error (not a mismatch — crypto error):', err instanceof Error ? err.message : err)
     return false
   }
 }

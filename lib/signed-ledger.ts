@@ -11,7 +11,7 @@ import { loadSecurityConfig } from '@/lib/security-config'
 
 const GENESIS_HASH = '0'.repeat(64)
 
-function blake2b256(data: string): string {
+function blake2bTrunc256(data: string): string {
   return crypto.createHash('blake2b512')
     .update(data)
     .digest()
@@ -33,12 +33,12 @@ function canonicalize(entry: Omit<LedgerEntry, 'signature'>): string {
 }
 
 function computeEntryHash(entry: LedgerEntry): string {
-  return blake2b256(canonicalize(entry) + entry.signature)
+  return blake2bTrunc256(canonicalize(entry) + entry.signature)
 }
 
 function hostKeyFingerprint(): string {
   const pubHex = getHostPublicKeyHex()
-  return blake2b256(pubHex).substring(0, 16)
+  return blake2bTrunc256(pubHex).substring(0, 32)
 }
 
 export class SignedLedger {
@@ -80,7 +80,7 @@ export class SignedLedger {
     }
     const data: LedgerFile = { version: 1, entries: this.entries }
     const json = JSON.stringify(data, null, 2)
-    const tmpPath = `${this.filePath}.tmp.${process.pid}`
+    const tmpPath = `${this.filePath}.tmp.${process.pid}.${Date.now()}`
     fs.writeFileSync(tmpPath, json, { mode: 0o600 })
     fs.renameSync(tmpPath, this.filePath)
   }

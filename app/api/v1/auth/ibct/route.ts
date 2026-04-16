@@ -103,9 +103,9 @@ export async function POST(request: Request) {
       subject: ibct.claims.sub,
     })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[ibct] Token issuance error:', err instanceof Error ? err.message : err)
     return NextResponse.json(
-      { error: 'server_error', message: msg },
+      { error: 'server_error', message: 'Internal error during token issuance' },
       { status: 500 }
     )
   }

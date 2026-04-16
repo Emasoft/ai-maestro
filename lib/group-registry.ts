@@ -243,7 +243,7 @@ export function saveGroups(groups: Group[]): void {
 
   if (diff.length > 0) {
     groupsLedger.append(op, 'teams/groups.json', diff).catch(err => {
-      console.error('[signed-ledger] Failed to append groups mutation:', err)
+      console.error('[signed-ledger] AUDIT GAP: groups mutation NOT recorded in ledger:', err instanceof Error ? err.message : err)
     })
   }
 }

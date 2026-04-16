@@ -78,6 +78,7 @@ export async function createCompactIbct(
     .setIssuer(issuer)
     .setSubject(subject)
     .setIssuedAt()
+    .setAudience('aimaestro:governance')
     .setExpirationTime(`${effectiveTtl}s`)
     .sign(privateKey)
 
@@ -108,6 +109,7 @@ export async function verifyCompactIbct(
   const { payload } = await jose.jwtVerify(token, publicKey, {
     typ: 'aip+jwt',
     algorithms: ['EdDSA'],
+    audience: 'aimaestro:governance',
   })
 
   return {
@@ -160,5 +162,9 @@ export function governanceScopeForTitle(title: string): string[] {
       'message:manager', 'message:cos', 'message:autonomous',
     ],
   }
-  return scopes[title] ?? []
+  const result = scopes[title]
+  if (!result) {
+    console.warn(`[ibct] Unknown governance title "${title}" — returning empty scope`)
+  }
+  return result ?? []
 }

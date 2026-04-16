@@ -5,8 +5,6 @@ import { validateAndConsumeSudoToken } from '@/lib/sudo-auth'
 import {
   loadSecurityConfig,
   saveSecurityConfig,
-  getSecurityDefaults,
-  resetSecurityConfigCache,
   isUnlocked,
   type SecurityConfig,
 } from '@/lib/security-config'
@@ -18,8 +16,7 @@ export async function GET(request: NextRequest) {
   if (denied) return denied
 
   const config = loadSecurityConfig()
-  const defaults = getSecurityDefaults()
-  return NextResponse.json({ config, defaults, encrypted: true, unlocked: isUnlocked() })
+  return NextResponse.json({ config, encrypted: true, unlocked: isUnlocked() })
 }
 
 const SecurityPatchSchema = z.object({
@@ -61,7 +58,15 @@ const SecurityPatchSchema = z.object({
     maxConsecutiveAuthFailures: z.number().int().min(3).max(100).optional(),
     lockoutDurationMinutes: z.number().int().min(1).max(1440).optional(),
   }).optional(),
-}).strict()
+}).strict().refine(
+  data => {
+    if (data.passwordPolicy?.minLength !== undefined && data.passwordPolicy?.maxLength !== undefined) {
+      return data.passwordPolicy.minLength <= data.passwordPolicy.maxLength
+    }
+    return true
+  },
+  { message: 'passwordPolicy.minLength must be <= maxLength' }
+)
 
 export async function PATCH(request: NextRequest) {
   const denied = enforceSystemOwner(request)
@@ -114,7 +119,6 @@ export async function PATCH(request: NextRequest) {
   }
 
   saveSecurityConfig(updated)
-  resetSecurityConfigCache()
 
   return NextResponse.json({ config: updated })
 }

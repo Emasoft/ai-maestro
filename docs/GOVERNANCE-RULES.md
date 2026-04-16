@@ -1,8 +1,9 @@
 ---
-version: "3.7.0"
-date: 2026-04-15
+version: "3.7.1"
+date: 2026-04-16
 branch: feature/team-governance
 changelog:
+  - "3.7.1: Drift-remediation pass (2026-04-16). Bumped version to match R20.25 / R20.27 / R20.28 body tags that were already labeled v3.7.1. Fixed R20.28 title count (Six → Five — enumeration has exactly five patterns). Added SCEN-023 and SCEN-024 to §0.8. Removed stale pointer to non-existent `app/api/agents/[id]/title/route.ts` (title changes dispatch via `PATCH /api/agents/[id]` per element-management-service). Clarified Overview wording: one remote marketplace + two local containers (+ one core container for non-Claude clients)."
   - "3.7.0: Added R9.13 (role-plugin mandatory for every agent, including AUTONOMOUS), R11.12 (role-plugin mandatory at every boundary), Invariant 8 rewritten. Added new §0 'Canonical source + copies' index and new §TERMINOLOGY (TITLE / ROLE / PERSONA three-layer model). AUTONOMOUS now resolves to the mandatory ai-maestro-autonomous-agent role-plugin."
   - "3.6.0: R20 revised — custom-plugins/ and role-plugins/ are CONTAINERS, not marketplaces. Each container holds one marketplace-<client>/ subfolder per client format (marketplace-claude/, marketplace-codex/, marketplace-openrouter/, ...). Each client-marketplace has its own schema per that client's spec. The .abstract/ IR hub lives at the container level and feeds all per-client marketplaces."
   - "3.5.0: Added R20 (Marketplace Governance) — three default marketplaces, source path format (./<plugin>), .abstract IR storage, core-plugin auto-update, converted-plugin re-emission on source update"
@@ -91,10 +92,9 @@ These files enforce the rules at runtime. When a rule changes, **update the gate
 | Path | What it checks | Must be updated when |
 |---|---|---|
 | `app/api/agents/route.ts` (POST/GET) | CreateAgent delegation; auth + title validation | R3, R9, R11 |
-| `app/api/agents/[id]/route.ts` (PATCH/DELETE) | Title change dispatcher, auth gate | R3, R9, R10, R11 |
+| `app/api/agents/[id]/route.ts` (PATCH/DELETE) | Title change dispatcher (delegates to `ChangeTitle` in element-management-service), auth gate, sudo-mode gate for strict operations | R3, R9, R10, R11 |
 | `app/api/agents/[id]/wake/route.ts` | R10 wake permission matrix | R10 |
 | `app/api/agents/[id]/hibernate/route.ts` | R10 hibernate permission matrix | R10 |
-| `app/api/agents/[id]/title/route.ts` | Title change pipeline + governance password | R3, R9, R11 |
 | `app/api/teams/route.ts` + `app/api/teams/[id]/route.ts` | R1, R2, R3 team CRUD + block/unblock | R1, R2, R3, R9 |
 | `app/api/governance/password/route.ts` | R16 password handling | R16 |
 | `app/api/governance/requests/*` | R4 governance request lifecycle | R4 |
@@ -120,10 +120,12 @@ When a rule changes, any scenario that exercises the old behavior must be rewrit
 | `SCEN-010_cos-lifecycle.scen.md` | R5 COS immutability | R5 |
 | `SCEN-011_agent-session-control.scen.md` | R10 lifecycle governance | R10 |
 | `SCEN-018_maintainer-lifecycle.scen.md` | R19 MAINTAINER | R19 |
-| `SCEN-019_marketplace-install-uninstall.scen.md` | R20 marketplace | R20 |
+| `SCEN-019_marketplace-and-plugin-lifecycle.scen.md` | R20 marketplace | R20 |
 | `SCEN-020_core-plugins-unchangeable.scen.md` | R17 core plugin | R17 |
-| `SCEN-021_user-vs-local-scope.scen.md` | R20.20 scope isolation | R20.20 |
+| `SCEN-021_user-local-scope-isolation.scen.md` | R20.20 scope isolation | R20.20 |
 | `SCEN-022_manager-autonomous-config-ops.scen.md` | R9, R9.13, R11 (MANAGER creates AUTONOMOUS) | R9, R11 |
+| `SCEN-023_r17-exhaustive-surface-audit.scen.md` | R17 exhaustive surface audit (cannot-uninstall, cannot-disable, all UI surfaces) | R17 |
+| `SCEN-024_delete-team-revert-cos.scen.md` | DeleteTeam COS revert behavior, R5 COS-immutability edge cases | R1, R3, R5 |
 
 ### 0.9 — Validation scripts and linters
 
@@ -222,9 +224,11 @@ If it helps communicating the model to a new contributor:
 AI Maestro implements a team governance model with eight governance titles
 (MANAGER, CHIEF-OF-STAFF, ORCHESTRATOR, ARCHITECT, INTEGRATOR, MEMBER,
 AUTONOMOUS, MAINTAINER), teams (isolated messaging + ACL), groups
-(lightweight broadcast collections), three default plugin marketplaces
-(R20), and an identity layer where every privileged action is backed by
-a cryptographically-signed AID token. Teams require a MANAGER to
+(lightweight broadcast collections), one remote marketplace plus two
+local plugin containers (role-plugins + custom-plugins) and — for
+non-Claude clients only — a third local core-plugins container (R20),
+and an identity layer where every privileged action is backed by a
+cryptographically-signed AID token. Teams require a MANAGER to
 function. Groups are unstructured collections with no governance.
 MAINTAINERs live at the host level bound to a GitHub repo and never
 join a team.
@@ -737,7 +741,7 @@ rather than re-implementing these operations.
 | R20.25 | **Core-plugins container (v3.7.1, clarified 2026-04-16):** A third container at `~/agents/core-plugins/` holds the converted versions of the `ai-maestro-plugin` (the CORE plugin) for non-Claude clients ONLY. Structure: `.abstract/ai-maestro-plugin/` (shared IR), `<client>-core-marketplace/ai-maestro-plugin-<client>/` (per-client emitted copy). **Claude does NOT use this container AT ALL** — Claude installs the core plugin from the remote `Emasoft/ai-maestro-plugins` marketplace and there is NO `~/agents/core-plugins/core-marketplace/` directory, NO local Claude core manifest, and NO Claude CLI marketplace registration for the core-plugins container. Non-Claude clients install the core plugin via their respective per-client adapter (`lib/client-plugin-adapters/<client>-adapter.ts`) which copies files directly from `<client>-core-marketplace/ai-maestro-plugin-<client>/` into the agent's working directory — there is no marketplace registration for core-plugins on any client side. When the remote core plugin updates, the server MUST re-emit into every `<client>-core-marketplace/` that exists (R20.10 + R20.12). | Explicit |
 | R20.26 | **NO-RENAMING-RULE-FOR-PLUGINS (v3.7.0):** Plugin names (both folder name and manifest name) are **immutable** once created. No AI Maestro API, UI action, or script/skill may rename an existing plugin. Names MUST be treated as permanent identifiers. Conversion behavior: (a) The converter computes the target name (Claude: `<name>`, others: `<name>-<client>`) and checks whether a folder with that exact literal name exists in the target marketplace. Example: original `programmer-plugin` → codex target name is `programmer-plugin-codex`. (b) If `programmer-plugin-codex` already exists in the codex marketplace → **overwrite** (update in place). (c) If `programmer-plugin-codex` does NOT exist → **write new**, regardless of whether identical plugins exist under different names. No similarity check, no deduplication. (d) There is no plugin registry beyond the filesystem — "the DB is the filesystem". Plugin dirs and their manifests ARE the registry. No external database, no rename tracking, no deduplication index. | Explicit |
 | R20.27 | **Manifest-name MUST equal folder-name (v3.7.1):** Every plugin's manifest `name` field MUST be exactly equal to the plugin's folder name. This rule applies to: (a) `.claude-plugin/plugin.json` for Claude plugins — `name === basename(folder)`; (b) `.codex-plugin/plugin.json` for Codex plugins — `name === basename(folder)` (which already includes the `-codex` suffix per R20.26); (c) any analogous manifest for future clients. The converter pipeline (`plugin-storage-service.ts::emitForClient`, `plugin-storage-service.ts::emitPluginToDir`) MUST rewrite the manifest `name` to match the target folder name whenever the target folder name differs from the source name (i.e. any non-Claude target). For role-plugins the fourfold-identity rule (R20.17) extends this to THREE additional checks: `<name>.agent.toml` filename, `[agent].name` inside the toml, and `agents/<name>-main-agent.md` frontmatter — ALL must match the folder name. The canonical marketplace `source` path (R20.18) is derived from the folder name, so a mismatch between folder and manifest breaks marketplace discovery. Validators and installers MUST reject any plugin whose folder name ≠ manifest name. | Explicit |
-| R20.28 | **Six canonical local marketplace folder patterns (v3.7.1):** The ONLY valid local marketplace folder names under `~/agents/` are exactly these six patterns. No other folder is ever registered as a marketplace, and no additional pattern is ever invented: (1) `~/agents/role-plugins/roles-marketplace/` — Claude role-plugins. (2) `~/agents/role-plugins/<client>-roles-marketplace/` — per-client role-plugins for codex, gemini, kiro, opencode. (3) `~/agents/custom-plugins/custom-marketplace/` — Claude custom (ordinary) plugins. (4) `~/agents/custom-plugins/<client>-custom-marketplace/` — per-client custom plugins. (5) `~/agents/core-plugins/<client>-core-marketplace/` — per-client converted core plugin (Claude is absent by R20.25). The installer MUST create every folder pattern that is applicable for the installed clients and MUST write a valid manifest inside each — even if the plugins array is currently empty. Filesystem-only per-client marketplaces (non-Claude) use a flat `marketplace.json` at the root of the marketplace folder; Claude marketplaces use `.claude-plugin/marketplace.json` at the CONTAINER level (not the per-client marketplace) per Claude's spec. | Explicit |
+| R20.28 | **Five canonical local marketplace folder patterns (v3.7.1):** The ONLY valid local marketplace folder names under `~/agents/` are exactly these five patterns. No other folder is ever registered as a marketplace, and no additional pattern is ever invented: (1) `~/agents/role-plugins/roles-marketplace/` — Claude role-plugins. (2) `~/agents/role-plugins/<client>-roles-marketplace/` — per-client role-plugins for codex, gemini, kiro, opencode. (3) `~/agents/custom-plugins/custom-marketplace/` — Claude custom (ordinary) plugins. (4) `~/agents/custom-plugins/<client>-custom-marketplace/` — per-client custom plugins. (5) `~/agents/core-plugins/<client>-core-marketplace/` — per-client converted core plugin (Claude is absent by R20.25). The installer MUST create every folder pattern that is applicable for the installed clients and MUST write a valid manifest inside each — even if the plugins array is currently empty. Filesystem-only per-client marketplaces (non-Claude) use a flat `marketplace.json` at the root of the marketplace folder; Claude marketplaces use `.claude-plugin/marketplace.json` at the CONTAINER level (not the per-client marketplace) per Claude's spec. | Explicit |
 
 ---
 

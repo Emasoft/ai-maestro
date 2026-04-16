@@ -2472,6 +2472,39 @@ async function copyDirRecursive(src: string, dest: string, depth = 0): Promise<v
 // Step 2: ChangeMarketplace
 // ══════════════════════════════════════════════════════════════
 
+// SCEN-017 P0-002: first-class CreateMarketplace / DeleteMarketplace / UpdateMarketplace
+// pipeline functions. These are thin wrappers around ChangeMarketplace so every
+// caller goes through the same gates (name validation, source validation,
+// CLI invocation, cache-dir cleanup, settings.json extraKnownMarketplaces
+// sync). The POST /api/settings/marketplaces route calls these wrappers
+// instead of running `claude plugin marketplace add/remove/update` via
+// execSync, which used to bypass the pipeline entirely.
+//
+// Rationale: giving each lifecycle action its own named entry point (even
+// if they all delegate to ChangeMarketplace) lets future gates be layered
+// onto one specific action without affecting the others — for example, a
+// future R17-core-hosting-marketplace guard on DeleteMarketplace is easy
+// to add here, whereas adding it inside the shared ChangeMarketplace
+// `if (action === 'remove')` branch would be fragile.
+export async function CreateMarketplace(desired: {
+  name: string
+  source: { repo: string } | { path: string }
+}, authContext?: AuthContext): Promise<ChangeResult> {
+  return ChangeMarketplace({ action: 'add', name: desired.name, source: desired.source }, authContext)
+}
+
+export async function DeleteMarketplace(desired: {
+  name: string
+}, authContext?: AuthContext): Promise<ChangeResult> {
+  return ChangeMarketplace({ action: 'remove', name: desired.name }, authContext)
+}
+
+export async function UpdateMarketplace(desired: {
+  name: string
+}, authContext?: AuthContext): Promise<ChangeResult> {
+  return ChangeMarketplace({ action: 'update', name: desired.name }, authContext)
+}
+
 export async function ChangeMarketplace(desired: {
   action: 'add' | 'remove' | 'update'
   name: string

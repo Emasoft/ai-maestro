@@ -42,8 +42,21 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Auto-detect marketplace: use explicit body param, or look up predefined defaults
+    // SCEN-021 P0-001: marketplace must be explicit for any non-role plugin.
+    // The old default `ai-maestro-local-roles-marketplace` was silently applied
+    // to plugins hosted in OTHER marketplaces, writing a wrong stamp to
+    // settings.local.json and breaking the plugin at runtime (the Claude Code
+    // runtime can't find the plugin body because it's not in that marketplace's
+    // cache dir). For non-role plugins the client MUST supply marketplaceName.
+    // For predefined role plugins the marketplace is inferred from the
+    // PREDEFINED_ROLE_PLUGINS map as before.
     const predefined = PREDEFINED_ROLE_PLUGINS[body.pluginName]
+    if (!predefined && !body.marketplaceName) {
+      return NextResponse.json(
+        { error: 'marketplaceName is required for non-role plugins' },
+        { status: 400 },
+      )
+    }
     const marketplace = body.marketplaceName || predefined?.marketplace || 'ai-maestro-local-roles-marketplace'
 
     const result = await ChangePlugin(null, {

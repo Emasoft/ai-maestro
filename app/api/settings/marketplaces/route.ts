@@ -15,6 +15,15 @@ import semver from 'semver'
 import { LOCAL_MARKETPLACE_NAME, MAIN_PLUGIN_NAME, MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
 import { enforceSystemOwner } from '@/lib/route-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
+// SCEN-017 P0-001 / P0-002: route marketplace lifecycle through the central
+// element-management pipeline. CreateMarketplace / DeleteMarketplace /
+// UpdateMarketplace are first-class gateway entry points that wrap the
+// existing ChangeMarketplace pipeline (name validation, CLI invocation,
+// cache-dir cleanup, settings.json sync). The route used to call
+// `claude plugin marketplace add/remove/update` via execSync directly,
+// which bypassed every gate. This import + the rewired handlers below
+// fix that.
+import { CreateMarketplace, DeleteMarketplace, UpdateMarketplace } from '@/services/element-management-service'
 
 /**
  * R17 core plugin guard — rejects destructive actions targeting the
@@ -1003,46 +1012,48 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
     return NextResponse.json({ error: 'marketplaceName is required' }, { status: 400 })
   }
 
+  // SCEN-017 P0-001 / P0-002: route through the DeleteMarketplace pipeline
+  // instead of calling `claude plugin marketplace remove` via execSync.
+  //
   // SCEN-019 BUG-002: The UI passes a "display name" (e.g., the repo slug
   // `cblecker-claude-plugins`) but Claude CLI stores marketplaces under their
   // `.claude-plugin/marketplace.json` `name` field (e.g., `claude-plugins`).
   // We need to clean up under BOTH names — the UI name AND the CLI name — so
   // neither the cache dir nor the settings.json entry is orphaned.
+  //
+  // DeleteMarketplace removes ONE name per call (CLI + cache + settings), so
+  // we iterate over both name candidates. Its internal cache-cleanup covers
+  // `~/.claude/plugins/marketplaces/<name>/`; we still sweep
+  // `~/.claude/plugins/cache/<name>/` and the enabledPlugins orphan keys
+  // here because the pipeline today is focused on marketplace state, not
+  // downstream plugin-key cleanup.
   const cliName = await resolveCliMarketplaceName(marketplaceName)
   const nameCandidates = Array.from(new Set([marketplaceName, cliName]))
 
-  // Remove via Claude CLI first (one attempt per candidate)
   for (const name of nameCandidates) {
-    try {
-      const { execSync } = await import('child_process')
-      execSync(`claude plugin marketplace remove "${shellSafe(name)}" 2>&1`, { timeout: 15000 })
-    } catch (err) {
-      // CLI removal may fail if not registered — continue with file cleanup
-      console.error('[marketplaces] CLI marketplace remove', name, err)
+    const result = await DeleteMarketplace({ name })
+    if (!result.success) {
+      // Non-fatal: the marketplace may not be registered under this name variant.
+      // Continue with file cleanup and return a partial success below.
+      console.error('[marketplaces] DeleteMarketplace failed for', name, result.error)
     }
   }
 
-  // Remove clone dirs + cached plugins under BOTH name candidates
+  // Belt-and-braces: remove any remaining per-plugin cache dirs
+  // (DeleteMarketplace cleans the top-level marketplace dir but not the
+  // per-plugin children under `~/.claude/plugins/cache/<marketplace>/`).
   for (const name of nameCandidates) {
-    const cloneDir = join(MARKETPLACES_DIR, name)
     const mktCacheDir = join(CACHE_DIR, name)
-    if (existsSync(cloneDir)) {
-      await rm(cloneDir, { recursive: true, force: true })
-    }
     if (existsSync(mktCacheDir)) {
       await rm(mktCacheDir, { recursive: true, force: true })
     }
   }
 
-  // Remove from extraKnownMarketplaces in settings (try ALL name variants)
+  // Remove any enabledPlugins entries for this marketplace under ALL name
+  // variants. DeleteMarketplace does not touch enabledPlugins; that's this
+  // route's concern because `<plugin>@<marketplace>` key stamping is a
+  // marketplaces-route stamping decision, not a marketplace pipeline concern.
   const settings = await readJsonSafe(SETTINGS_PATH) || {}
-  const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
-  for (const name of nameCandidates) {
-    delete ekm[name]
-  }
-  settings.extraKnownMarketplaces = ekm
-
-  // Remove any enabledPlugins entries for this marketplace under ALL name variants
   const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
   for (const key of Object.keys(ep)) {
     for (const name of nameCandidates) {
@@ -1063,12 +1074,12 @@ async function handleUpdateMarketplace(marketplaceName?: string) {
   if (!marketplaceName) {
     return NextResponse.json({ error: 'marketplaceName is required' }, { status: 400 })
   }
-  const { execSync } = await import('child_process')
-  try {
-    const cliName = await resolveCliMarketplaceName(marketplaceName)
-    execSync(`claude plugin marketplace update "${shellSafe(cliName)}" 2>&1`, { timeout: 60000, stdio: 'pipe' })
-  } catch (err) {
-    return NextResponse.json({ error: `Failed to update marketplace: ${String(err).substring(0, 500)}` }, { status: 500 })
+  // SCEN-017 P0-001 / P0-002: route through the UpdateMarketplace pipeline
+  // instead of calling `claude plugin marketplace update` via execSync.
+  const cliName = await resolveCliMarketplaceName(marketplaceName)
+  const result = await UpdateMarketplace({ name: cliName })
+  if (!result.success) {
+    return NextResponse.json({ error: `Failed to update marketplace: ${String(result.error).substring(0, 500)}` }, { status: 500 })
   }
   UPDATE_CHECK_CACHE.delete(marketplaceName!)
   return NextResponse.json({ success: true, action: 'update-marketplace', marketplaceName })
@@ -1262,25 +1273,22 @@ async function handleAddMarketplace(url?: string) {
   const repo = match[1].replace(/\.git$/, '')
   const marketplaceName = repo.split('/')[1] // Use repo name as marketplace name
 
-  // Let Claude CLI handle the cloning and registration — it manages its own clone directory
-  const { execSync } = await import('child_process')
-  try {
-    const output = execSync(`claude plugin marketplace add "${shellSafe(repo)}" --scope user 2>&1`, {
-      timeout: 120000,
-      stdio: 'pipe',
-    }).toString()
-    // CLI outputs the registered name, e.g. "Successfully added marketplace: kriscard"
-    console.log(`Marketplace add output: ${output}`)
-  } catch (err) {
-    const errStr = String(err)
-    // If the marketplace already exists, that's fine
+  // SCEN-017 P0-001 / P0-002: route through the CreateMarketplace pipeline
+  // instead of `claude plugin marketplace add` via execSync. The pipeline
+  // handles CLI invocation uniformly for both `{ repo }` and `{ path }`
+  // sources.
+  const result = await CreateMarketplace({ name: marketplaceName, source: { repo } })
+  if (!result.success) {
+    const errStr = String(result.error || '')
     if (errStr.includes('already') || errStr.includes('exists')) {
       return NextResponse.json({ error: `Marketplace "${marketplaceName}" already exists` }, { status: 409 })
     }
     return NextResponse.json({ error: `Failed to add marketplace: ${errStr.substring(0, 500)}` }, { status: 500 })
   }
 
-  // Add to extraKnownMarketplaces
+  // Add to extraKnownMarketplaces — the pipeline does CLI registration but
+  // doesn't populate extraKnownMarketplaces (that's the route's stamping
+  // concern, not the pipeline's; the pipeline stays source-agnostic).
   const settings = await readJsonSafe(SETTINGS_PATH) || {}
   const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
   ekm[marketplaceName] = { source: { source: 'github', repo } }

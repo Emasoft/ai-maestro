@@ -52,14 +52,23 @@ export default function MarketplacesTab({ workingDirectory, installedPluginNames
 
   useEffect(() => { fetchMarketplaces() }, [fetchMarketplaces])
 
-  const handleInstall = async (pluginName: string) => {
+  // SCEN-021 P0-001: the marketplace NAME must travel with every install call.
+  // Without it, installPluginLocally defaults to `ai-maestro-local-roles-marketplace`
+  // even for plugins hosted in a completely different marketplace — the install
+  // then writes `<name>@ai-maestro-local-roles-marketplace` to settings.local.json
+  // but the Claude Code runtime looks for the plugin body in the REAL marketplace
+  // cache dir, which is wrong. The install silently produces runtime failures.
+  //
+  // Fix: always pass the marketplace name. The API layer (role-plugins/install)
+  // also rejects calls that omit `marketplaceName` for non-role plugins.
+  const handleInstall = async (marketplaceName: string, pluginName: string) => {
     if (!workingDirectory || installing) return
     setInstalling(pluginName)
     try {
       const res = await fetch('/api/agents/role-plugins/install', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pluginName, agentDir: workingDirectory, scope: 'local' }),
+        body: JSON.stringify({ pluginName, marketplaceName, agentDir: workingDirectory, scope: 'local' }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Install failed' }))
@@ -175,7 +184,7 @@ export default function MarketplacesTab({ workingDirectory, installedPluginNames
                                 </span>
                               ) : (
                                 <button
-                                  onClick={() => handleInstall(p.name)}
+                                  onClick={() => handleInstall(mkt.name, p.name)}
                                   disabled={!workingDirectory || installing === p.name}
                                   className="flex items-center gap-1 text-[9px] text-blue-400 hover:text-blue-300 px-1.5 py-0.5 rounded disabled:opacity-50"
                                   title="Install to this agent (--scope local)"

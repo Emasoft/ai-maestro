@@ -839,7 +839,20 @@ setup_local_marketplace \
 # Ensure the Claude custom-marketplace subdir exists
 mkdir -p "$CUSTOM_DIR/custom-marketplace"
 
-print_success "All local marketplaces ready"
+# 3. Core-plugins container (converted ai-maestro-plugin for non-Claude clients)
+CORE_DIR="$HOME/agents/${CORE_PLUGINS_CONTAINER_DIR_NAME:-core-plugins}"
+setup_local_marketplace \
+    "$CORE_DIR" \
+    "${CORE_MARKETPLACE_NAME:-ai-maestro-local-core-marketplace}" \
+    "Local core plugin marketplace managed by AI Maestro (converted ai-maestro-plugin for non-Claude clients)"
+
+# Migrate: if the core plugin IR was in custom-plugins/.abstract/, move it to core-plugins/.abstract/
+if [ -d "$CUSTOM_DIR/.abstract/ai-maestro-plugin" ] && [ ! -d "$CORE_DIR/.abstract/ai-maestro-plugin" ]; then
+    mv "$CUSTOM_DIR/.abstract/ai-maestro-plugin" "$CORE_DIR/.abstract/ai-maestro-plugin" 2>/dev/null && \
+        print_info "  Migrated core plugin IR from custom-plugins/.abstract/ to core-plugins/.abstract/"
+fi
+
+print_success "All local marketplaces ready (3 containers)"
 
 echo ""
 echo "🧪 Verifying installation..."

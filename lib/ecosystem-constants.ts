@@ -56,6 +56,9 @@ export const ROLE_PLUGINS_CONTAINER_DIR_NAME = 'role-plugins'
 /** Custom-plugins CONTAINER directory name (under ~/agents/) */
 export const CUSTOM_PLUGINS_CONTAINER_DIR_NAME = 'custom-plugins'
 
+/** Core-plugins CONTAINER directory name (under ~/agents/) */
+export const CORE_PLUGINS_CONTAINER_DIR_NAME = 'core-plugins'
+
 /** Shared IR hub folder name inside every container */
 export const ABSTRACT_IR_DIR_NAME = '.abstract'
 
@@ -75,6 +78,15 @@ export function customMarketplaceDirName(client: string): string {
  */
 export function rolesMarketplaceDirName(client: string): string {
   return client === 'claude' ? 'roles-marketplace' : `${client}-roles-marketplace`
+}
+
+/**
+ * Build the per-client core-plugins marketplace folder name.
+ * Claude: NOT stored locally (installed from remote Emasoft/ai-maestro-plugins).
+ * Others: `<client>-core-marketplace`
+ */
+export function coreMarketplaceDirName(client: string): string {
+  return `${client}-core-marketplace`
 }
 
 /**
@@ -149,6 +161,38 @@ export function getCustomMarketplacePathForClient(client: string): string {
 export function getRoleMarketplacePathForClient(client: string): string {
   const { join } = require('path') as typeof import('path')
   return join(getRolePluginsContainerPath(), rolesMarketplaceDirName(client))
+}
+
+/**
+ * Resolve the core-plugins CONTAINER root path: ~/agents/core-plugins/
+ *
+ * Inside this container (R20.25 v3.7.0):
+ *   ~/agents/core-plugins/.abstract/ai-maestro-plugin/  — shared IR hub
+ *   ~/agents/core-plugins/codex-core-marketplace/        — Codex converted core plugin
+ *   ~/agents/core-plugins/gemini-core-marketplace/       — Gemini converted core plugin
+ *
+ * Claude does NOT have a local core-marketplace — it installs from remote
+ * Emasoft/ai-maestro-plugins marketplace directly.
+ */
+export function getCorePluginsContainerPath(): string {
+  const { homedir } = require('os') as typeof import('os')
+  const { join } = require('path') as typeof import('path')
+  return join(homedir(), 'agents', CORE_PLUGINS_CONTAINER_DIR_NAME)
+}
+
+/**
+ * Resolve a per-client marketplace folder inside the core-plugins container.
+ * Only used for non-Claude clients (Claude uses the remote marketplace).
+ */
+export function getCoreMarketplacePathForClient(client: string): string {
+  const { join } = require('path') as typeof import('path')
+  return join(getCorePluginsContainerPath(), coreMarketplaceDirName(client))
+}
+
+/** Shared .abstract/ IR hub inside the core-plugins container */
+export function getCoreAbstractDir(): string {
+  const { join } = require('path') as typeof import('path')
+  return join(getCorePluginsContainerPath(), ABSTRACT_IR_DIR_NAME)
 }
 
 /** Shared .abstract/ IR hub inside the custom-plugins container */

@@ -14,6 +14,12 @@
 #     roles-marketplace/<plugin>/              Claude role plugins (no client prefix)
 #     codex-roles-marketplace/<plugin-codex>/  Codex role plugins
 #
+#   ~/agents/core-plugins/
+#     .abstract/ai-maestro-plugin/             Shared IR hub for the core plugin
+#     codex-core-marketplace/ai-maestro-plugin-codex/  Codex core plugin
+#     gemini-core-marketplace/ai-maestro-plugin-gemini/ Gemini core plugin
+#     (Claude has NO local core marketplace — installs from remote)
+#
 # RULES:
 #   - .abstract/ stays as .abstract/ (hidden dir, dot prefix kept)
 #   - Claude plugins have NO client suffix (just <plugin-name>)
@@ -30,6 +36,7 @@ set -euo pipefail
 AGENTS_DIR="${HOME}/agents"
 CUSTOM="${AGENTS_DIR}/custom-plugins"
 ROLES="${AGENTS_DIR}/role-plugins"
+CORE="${AGENTS_DIR}/core-plugins"
 DRY_RUN=false
 MOVED=0
 ERRORS=0
@@ -244,8 +251,57 @@ done
 # 3. Update marketplace.json manifests
 # ═══════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════
+# 3. CORE PLUGINS (ai-maestro-plugin conversions for non-Claude clients)
+# ═══════════════════════════════════════════════════════════════
+
 echo ""
-echo "3. Marketplace manifests"
+echo "3. Core Plugins (${CORE})"
+
+$DRY_RUN || mkdir -p "${CORE}/.abstract"
+
+# 3a. Migrate core plugin IR from custom-plugins/.abstract/ → core-plugins/.abstract/
+if [[ -d "${CUSTOM}/.abstract/ai-maestro-plugin" && ! -d "${CORE}/.abstract/ai-maestro-plugin" ]]; then
+  move_plugin "${CUSTOM}/.abstract/ai-maestro-plugin" "${CORE}/.abstract/ai-maestro-plugin"
+fi
+
+# 3b. Move converted core plugins from custom-plugins marketplaces → core-plugins marketplaces
+# The ai-maestro-plugin and ai-maestro-plugin-<client> in each custom-marketplace are the CORE plugin.
+for mkt_dir in "${CUSTOM}"/*-custom-marketplace/; do
+  [[ -d "$mkt_dir" ]] || continue
+  mkt_name=$(basename "$mkt_dir")
+  # Extract client from dir name: codex-custom-marketplace → codex
+  client="${mkt_name%-custom-marketplace}"
+  [[ -z "$client" || "$client" == "$mkt_name" ]] && continue
+
+  core_mkt="${CORE}/${client}-core-marketplace"
+  $DRY_RUN || mkdir -p "$core_mkt"
+
+  for plugin in "${mkt_dir}"ai-maestro-plugin*/; do
+    [[ -d "$plugin" ]] || continue
+    name=$(basename "$plugin")
+    move_plugin "$plugin" "${core_mkt}/${name}"
+  done
+done
+
+# 3c. Also move from Claude custom-marketplace (ai-maestro-plugin is the core)
+if [[ -d "${CUSTOM}/custom-marketplace/ai-maestro-plugin" ]]; then
+  # Claude's core plugin should NOT be in custom-plugins — it comes from the remote marketplace.
+  # Move it to core-plugins/.abstract/ as the IR source if not already there.
+  if [[ ! -d "${CORE}/.abstract/ai-maestro-plugin" ]]; then
+    move_plugin "${CUSTOM}/custom-marketplace/ai-maestro-plugin" "${CORE}/.abstract/ai-maestro-plugin"
+  else
+    log "SKIP: Claude core plugin in custom-marketplace/ — IR already in core-plugins/.abstract/"
+    log "  You can remove ~/agents/custom-plugins/custom-marketplace/ai-maestro-plugin/ manually"
+  fi
+fi
+
+# ═══════════════════════════════════════════════════════════════
+# 4. Marketplace manifests
+# ═══════════════════════════════════════════════════════════════
+
+echo ""
+echo "4. Marketplace manifests"
 
 ROLES_MANIFEST="${ROLES}/.claude-plugin/marketplace.json"
 if [[ -f "$ROLES_MANIFEST" ]] && ! $DRY_RUN; then
@@ -285,17 +341,17 @@ if $DRY_RUN; then
 fi
 echo ""
 echo "Final layout:"
-echo "  ~/agents/custom-plugins/"
-for d in "${CUSTOM}"/*/; do
-  [[ -d "$d" ]] || continue
-  name=$(basename "$d")
-  count=$(find "$d" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
-  echo "    ${name}/ (${count} plugins)"
-done
-echo "  ~/agents/role-plugins/"
-for d in "${ROLES}"/*/; do
-  [[ -d "$d" ]] || continue
-  name=$(basename "$d")
-  count=$(find "$d" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
-  echo "    ${name}/ (${count} plugins)"
+for container_label in "custom-plugins" "role-plugins" "core-plugins"; do
+  dir="${AGENTS_DIR}/${container_label}"
+  echo "  ~/agents/${container_label}/"
+  if [[ -d "$dir" ]]; then
+    for d in "${dir}"/*/; do
+      [[ -d "$d" ]] || continue
+      name=$(basename "$d")
+      count=$(find "$d" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+      echo "    ${name}/ (${count} plugins)"
+    done
+  else
+    echo "    (not created yet)"
+  fi
 done

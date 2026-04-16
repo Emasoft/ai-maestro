@@ -1508,7 +1508,15 @@ async function startServer(handleRequest) {
         execSyncMkt(`claude plugin marketplace add "${customDir}" 2>/dev/null || true`, mktOpts)
         execSyncMkt(`claude plugin marketplace update ai-maestro-local-custom-marketplace 2>/dev/null || true`, mktOpts)
 
-        console.log('[Startup] All marketplaces registered (remote + 2 local containers)')
+        // Local core-plugins container (holds codex-core-marketplace/, gemini-core-marketplace/, etc.)
+        // Claude's core plugin comes from remote Emasoft/ai-maestro-plugins; non-Claude clients use local conversions.
+        const coreDir = os.homedir() + '/agents/core-plugins'
+        if (fs.existsSync(coreDir)) {
+          execSyncMkt(`claude plugin marketplace add "${coreDir}" 2>/dev/null || true`, mktOpts)
+          execSyncMkt(`claude plugin marketplace update ai-maestro-local-core-marketplace 2>/dev/null || true`, mktOpts)
+        }
+
+        console.log('[Startup] All marketplaces registered (remote + 3 local containers)')
       } catch (err) {
         console.warn('[Startup] Marketplace registration partial:', err?.message?.slice(0, 80))
       }

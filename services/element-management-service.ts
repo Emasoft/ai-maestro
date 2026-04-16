@@ -356,7 +356,10 @@ export async function InstallElement(
     // ── G08: Core plugin guard (R17.14–R17.17) ────────────────
     if (name === 'ai-maestro-plugin') {
       if (action === 'uninstall' || action === 'disable') {
-        result.error = `The ai-maestro-plugin is a core system plugin and cannot be ${action}d (R17.14–R17.15). ` +
+        // Use explicit past-tense to avoid grammar error on 'uninstall' (would
+        // become 'uninstalld' with naive `${action}d` template expansion).
+        const pastTense = action === 'uninstall' ? 'uninstalled' : 'disabled'
+        result.error = `The ai-maestro-plugin is a core system plugin and cannot be ${pastTense} (R17.14–R17.15). ` +
           `Without this plugin, the agent has no hooks, no state detection, no messaging — it cannot function.`
         ops.push(`G08: DENIED — core plugin ${action} blocked by R17`)
         return result

@@ -193,8 +193,14 @@ lookup_agent_by_session() {
     local api_url
     api_url=$(get_api_base)
 
+    # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate
+    local -a _lookup_auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        _lookup_auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+
     local response
-    response=$(curl -s --max-time 5 "${api_url}/api/agents" 2>/dev/null)
+    response=$(curl -s --max-time 5 "${_lookup_auth_args[@]}" "${api_url}/api/agents" 2>/dev/null)
 
     if [ -z "$response" ]; then
         return 1
@@ -236,9 +242,15 @@ lookup_agent_by_directory() {
     local api_url
     api_url=$(get_api_base)
 
+    # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate
+    local -a _lookup_auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        _lookup_auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+
     # Query the agents API and find agent with matching workingDirectory
     local response
-    response=$(curl -s --max-time 5 "${api_url}/api/agents" 2>/dev/null)
+    response=$(curl -s --max-time 5 "${_lookup_auth_args[@]}" "${api_url}/api/agents" 2>/dev/null)
 
     if [ -z "$response" ]; then
         return 1

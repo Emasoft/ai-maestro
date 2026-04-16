@@ -47,15 +47,26 @@ export default function DeleteAgentDialog({
     setDeleteError(null)
 
     try {
-      // Call the API with deleteFolder param. DELETE /api/agents/[id] is
-      // classified "strict" in security-registry.json, so the request
-      // will come back 403 sudo_required on the first try; sudoFetch
-      // transparently prompts the user for the governance password and
-      // retries with the X-Sudo-Token header.
+      // Call the API with hard=true (always) + deleteFolder param. DELETE
+      // /api/agents/[id] is classified "strict" in security-registry.json,
+      // so the request will come back 403 sudo_required on the first try;
+      // sudoFetch transparently prompts the user for the governance password
+      // and retries with the X-Sudo-Token header.
+      //
+      // CRITICAL (SCEN-002 P0-003): This dialog is the "Delete Forever"
+      // UI — the user has typed the agent name verbatim to confirm a
+      // permanent deletion. The API defaults to soft-delete (`hard=false`)
+      // which only marks the entry as deletedAt in registry.json; the
+      // agent keeps appearing in the registry file AND the G09 folder
+      // deletion is guarded by `if (hard && deleteFolder)`, so without
+      // `hard=true` the folder is also kept. The UI must pass hard=true
+      // so the registry entry is actually removed and the folder cleanup
+      // runs when requested.
       const baseUrl = hostUrl || ''
       const params = new URLSearchParams()
+      params.set('hard', 'true')
       if (deleteFolder) params.set('deleteFolder', 'true')
-      const qs = params.toString() ? `?${params.toString()}` : ''
+      const qs = `?${params.toString()}`
       const res = await sudoFetch(
         `${baseUrl}/api/agents/${agentId}${qs}`,
         { method: 'DELETE' },

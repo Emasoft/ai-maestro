@@ -3986,24 +3986,65 @@ export async function DeleteTeam(
     ])]
     if (agentsToRevert.length > 0) {
       const { hibernateAgent } = await import('@/services/agents-core-service')
+      const { getAgent: getAgentFromRegistry, updateAgent } = await import('@/lib/agent-registry')
+      // Titles that are team-scoped and MUST be reverted when their team is deleted.
+      // MANAGER and MAINTAINER are global (host-scoped) titles — they are NOT
+      // team-specific. Even if a MANAGER was used as the bootstrap agent when
+      // creating a team (because the Create Team modal forces ≥1 agent), deleting
+      // that team MUST NOT strip the MANAGER title — otherwise every subsequent
+      // team operation is blocked because no MANAGER exists. AUTONOMOUS agents
+      // in the list (should not happen, but defensive) are also skipped.
+      // See: tests/scenarios/reports/scenario_proposed-improvements_007_20260414T015913Z.md (P0).
+      const TEAM_SCOPED_TITLES = new Set([
+        'member',
+        'chief-of-staff',
+        'orchestrator',
+        'architect',
+        'integrator',
+      ])
       for (const agentId of agentsToRevert) {
+        let currentTitle: string | null = null
         try {
-          // BUG-002 fix (SCEN-005): ChangeTitle requires authContext as a security
-          // invariant. Without it the call returns "authContext is mandatory" and
-          // the COS/Member never reverts to AUTONOMOUS — the team gets deleted but
-          // its former agents retain their titles AND their role-plugins. Pass
-          // through the DeleteTeam authContext so ChangeTitle treats this revert
-          // as an already-authorized governance operation.
-          const titleResult = await ChangeTitle(agentId, 'autonomous', {
-            authContext: options.authContext,
-          })
-          if (titleResult.success) {
-            ops.push(`G03: Agent ${agentId.substring(0, 8)} → AUTONOMOUS`)
-          } else {
-            ops.push(`G03: WARN — ChangeTitle failed for ${agentId.substring(0, 8)}: ${titleResult.error}`)
+          const a = getAgentFromRegistry(agentId)
+          currentTitle = a?.governanceTitle || null
+        } catch { /* best effort */ }
+
+        const shouldRevertTitle = currentTitle
+          ? TEAM_SCOPED_TITLES.has(currentTitle)
+          : true // unknown title → err on safe side and revert
+
+        if (!shouldRevertTitle) {
+          ops.push(`G03: Agent ${agentId.substring(0, 8)} title "${currentTitle}" is global — NOT reverted (R7: MANAGER/MAINTAINER are host-scoped, not team-scoped)`)
+        } else {
+          try {
+            // BUG-002 fix (SCEN-005): ChangeTitle requires authContext as a security
+            // invariant. Without it the call returns "authContext is mandatory" and
+            // the COS/Member never reverts to AUTONOMOUS — the team gets deleted but
+            // its former agents retain their titles AND their role-plugins. Pass
+            // through the DeleteTeam authContext so ChangeTitle treats this revert
+            // as an already-authorized governance operation.
+            const titleResult = await ChangeTitle(agentId, 'autonomous', {
+              authContext: options.authContext,
+            })
+            if (titleResult.success) {
+              ops.push(`G03: Agent ${agentId.substring(0, 8)} → AUTONOMOUS`)
+            } else {
+              ops.push(`G03: WARN — ChangeTitle failed for ${agentId.substring(0, 8)}: ${titleResult.error}`)
+            }
+          } catch (err) {
+            ops.push(`G03: WARN — ChangeTitle exception for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
           }
+        }
+
+        // Clear the legacy `team` field on the agent's registry record.
+        // ChangeTitle only writes `governanceTitle`; it does NOT clear `team`.
+        // Without this, the agent's record keeps the old team name as a ghost
+        // reference (seen in SCEN-007 ISSUE-001).
+        try {
+          await updateAgent(agentId, { team: '' })
+          ops.push(`G03: Cleared legacy team field for ${agentId.substring(0, 8)}`)
         } catch (err) {
-          ops.push(`G03: WARN — ChangeTitle exception for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
+          ops.push(`G03: WARN — team field clear failed for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
         }
         // Hibernate the agent via the canonical hibernateAgent pipeline
         // (same code path used by POST /api/agents/[id]/hibernate). This

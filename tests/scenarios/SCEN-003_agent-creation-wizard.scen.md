@@ -362,14 +362,14 @@ author: AI Maestro Team
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
 #### S038: Delete scen-test-integrator-rex
-- **Action:** Click on `scen-test-integrator-rex` in sidebar, click delete button in profile panel -> Danger Zone -> Delete Agent -> confirm
+- **Action:** Click on `scen-test-integrator-rex` in sidebar, click delete button in profile panel -> Danger Zone -> Delete Agent -> confirm. When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Agent fully removed from registry and team
 - **Creates:** Cemetery archive entry
 - **Modifies:** Agent registry (entry removed), team agentIds (agent removed)
 - **Verify:** Agent no longer appears in sidebar. Screenshot: SCEN-003/S038-integrator-deleted.png
 
 #### S039: Delete scen-test-member-zeta
-- **Action:** Click on `scen-test-member-zeta` in sidebar, click delete button in profile panel, confirm deletion
+- **Action:** Click on `scen-test-member-zeta` in sidebar, click delete button in profile panel, confirm deletion. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Agent fully removed from registry and team
 - **Creates:** Cemetery archive entry
 - **Modifies:** Agent registry (entry removed), team agentIds (agent removed)
@@ -383,7 +383,7 @@ author: AI Maestro Team
 - **Verify:** Team card no longer appears in sidebar. Screenshot: SCEN-003/S040-team-deleted.png
 
 #### S041: Verify cemetery entries and purge
-- **Action:** Navigate to Settings -> Cemetery tab. Verify deleted test agents appear. Click "Purge" for each test entry.
+- **Action:** Navigate to Settings -> Cemetery tab. Verify deleted test agents appear. Click "Purge" for each test entry. When the sudo password modal appears each time (`DELETE /api/agents/cemetery` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Cemetery entries verified then purged (no test artifacts remain)
 - **Removes:** Cemetery archives for test agents
 - **Verify:** No scen-test entries remain in cemetery. Screenshot: SCEN-003/S041-cemetery-purged.png

@@ -176,14 +176,14 @@ author: AI Maestro Team
 - **Goal:** Title Assignment Dialog opens with radio cards
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog shows AUTONOMOUS and MANAGER options (agent is not in a team -> standalone titles only). MANAGER grayed out if already assigned, with message showing who holds it. Screenshot: SCEN-001/S015-title-dialog-standalone.png
+- **Verify:** Dialog shows AUTONOMOUS, MANAGER, and MAINTAINER options (agent is not in a team -> standalone titles only, per R19 MAINTAINER is a standalone title requiring `githubRepo`). MANAGER grayed out if already assigned, with message showing who holds it. Screenshot: SCEN-001/S015-title-dialog-standalone.png
 
 #### S016: Verify only standalone titles are shown and MANAGER singleton enforced
 - **Action:** Inspect dialog options
-- **Goal:** Only AUTONOMOUS and MANAGER should be visible (agent has no team -> team titles hidden). If MANAGER is already assigned, it should be disabled with explanation text.
+- **Goal:** Only AUTONOMOUS, MANAGER, and MAINTAINER should be visible (agent has no team -> team titles hidden). If MANAGER is already assigned, it should be disabled with explanation text. MAINTAINER is selectable but requires a `githubRepo` value to be provided before assignment can succeed.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** No ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER/COS options shown. MANAGER disabled if already taken. Screenshot: SCEN-001/S016-singleton-enforced.png
+- **Verify:** No ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER/COS options shown. MANAGER disabled if already taken. MAINTAINER present. Screenshot: SCEN-001/S016-singleton-enforced.png
 
 #### S017: Cancel dialog and add agent to existing team first
 - **Action:** Cancel title dialog, click "Reassign" button next to Team field, select an existing team
@@ -214,7 +214,7 @@ author: AI Maestro Team
 - **Verify:** "Enter Governance Password" dialog with input field. Screenshot: SCEN-001/S020-password-dialog.png
 
 #### S021: Enter governance password and submit
-- **Action:** Type governance password `mYkri1-xoxrap-gogtan`, click Confirm
+- **Action:** Type governance password `mYkri1-xoxrap-gogtan`, click Confirm. When the sudo password modal appears (`PATCH /api/agents/[id]/title` is a strict route per Rule 12), enter the governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** Title changes to ORCHESTRATOR, role-plugin installed
 - **Creates:** Plugin entry in agent's settings.local.json
 - **Modifies:** Agent governanceTitle in registry, plugin state
@@ -232,7 +232,7 @@ author: AI Maestro Team
 - **Verify:** Dialog shows with ORCHESTRATOR pre-selected. Screenshot: SCEN-001/S022-title-dialog-orchestrator.png
 
 #### S023: Select ARCHITECT and confirm with password
-- **Action:** Select ARCHITECT, click Confirm, enter password `mYkri1-xoxrap-gogtan`, submit
+- **Action:** Select ARCHITECT, click Confirm, enter password `mYkri1-xoxrap-gogtan`, submit. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title`), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** Title swaps to ARCHITECT, plugin swaps to architect
 - **Creates:** nothing (plugin swap)
 - **Modifies:** Agent title (-> ARCHITECT), plugin (orchestrator -> architect)
@@ -250,7 +250,7 @@ author: AI Maestro Team
 ## Phase 6: Revert to MEMBER
 
 #### S025: Click ARCHITECT title badge -> select MEMBER -> password
-- **Action:** Open title dialog, select MEMBER, confirm with password `mYkri1-xoxrap-gogtan`
+- **Action:** Open title dialog, select MEMBER, confirm with password `mYkri1-xoxrap-gogtan`. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title`), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** Title reverts to MEMBER, programmer plugin auto-installed
 - **Creates:** nothing
 - **Modifies:** Agent title (-> MEMBER), plugin (-> ai-maestro-programmer-agent)
@@ -268,7 +268,7 @@ author: AI Maestro Team
 ## Phase 7: Singleton Constraint Check
 
 #### S027: Assign ORCHESTRATOR to test agent again
-- **Action:** Open title dialog, select ORCHESTRATOR, password `mYkri1-xoxrap-gogtan`
+- **Action:** Open title dialog, select ORCHESTRATOR, enter governance password `mYkri1-xoxrap-gogtan`, click Confirm. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title`), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** Test agent is now ORCHESTRATOR
 - **Creates:** Plugin entry
 - **Modifies:** Agent title, plugin
@@ -345,7 +345,7 @@ author: AI Maestro Team
 - **Verify:** Title shows AUTONOMOUS, no team, no role-plugin. Screenshot: SCEN-001/S034-reverted-autonomous.png
 
 #### S035: Delete test agent via UI
-- **Action:** Click delete button in profile panel -> Danger Zone -> "Delete Agent" -> check "Also delete agent folder" -> type `scen-test-title-agent` -> click "Delete Forever"
+- **Action:** Click delete button in profile panel -> Danger Zone -> "Delete Agent" -> check "Also delete agent folder" -> type `scen-test-title-agent` -> click "Delete Forever". When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Test agent fully removed from registry, archived to cemetery
 - **Creates:** Cemetery archive entry (zip file)
 - **Modifies:** Agent registry (entry removed)
@@ -359,7 +359,7 @@ author: AI Maestro Team
 - **Verify:** Cemetery list shows `scen-test-title-agent` with archive date and download/revive/purge options. Screenshot: SCEN-001/S036-cemetery-entry.png
 
 #### S037: Purge agent from Cemetery
-- **Action:** Click "Purge" button next to the `scen-test-title-agent` cemetery entry, confirm
+- **Action:** Click "Purge" button next to the `scen-test-title-agent` cemetery entry, confirm. When the sudo password modal appears (`DELETE /api/agents/cemetery` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Cemetery entry fully removed (no test artifacts remain)
 - **Removes:** Cemetery zip archive for `scen-test-title-agent`
 - **Verify:** Agent no longer in cemetery list. Screenshot: SCEN-001/S037-cemetery-purged.png

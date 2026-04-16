@@ -279,7 +279,7 @@ author: AI Maestro Team
 - **Verify:** Blue border on CHIEF-OF-STAFF card. Screenshot: SCEN-002/S028-cos-selected.png
 
 #### S029: Enter governance password and confirm
-- **Action:** Click Confirm, password dialog appears. Type `mYkri1-xoxrap-gogtan`, click Confirm.
+- **Action:** Click Confirm, password dialog appears. Type `mYkri1-xoxrap-gogtan`, click Confirm. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** Title changes to CHIEF-OF-STAFF, COS role-plugin auto-installed
 - **Creates:** Plugin entry in agent's settings.local.json
 - **Modifies:** Agent governanceTitle (MEMBER -> CHIEF-OF-STAFF), team chiefOfStaffId, plugin state
@@ -332,7 +332,7 @@ author: AI Maestro Team
 - **Verify:** ORCHESTRATOR card is not grayed out, is clickable. Screenshot: SCEN-002/S034-orchestrator-available.png
 
 #### S035: Select ORCHESTRATOR and confirm with password
-- **Action:** Click ORCHESTRATOR, click Confirm. Enter `mYkri1-xoxrap-gogtan` in password dialog, submit.
+- **Action:** Click ORCHESTRATOR, click Confirm. Enter `mYkri1-xoxrap-gogtan` in password dialog, submit. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** Title changes to ORCHESTRATOR, orchestrator role-plugin auto-installed
 - **Creates:** Plugin entry in agent's settings.local.json
 - **Modifies:** Agent governanceTitle (MEMBER -> ORCHESTRATOR), plugin state
@@ -438,7 +438,7 @@ author: AI Maestro Team
 - **Verify:** Title badge shows "MEMBER". Screenshot: SCEN-002/S047-alpha-member-again.png
 
 #### S048: Re-assign ORCHESTRATOR title
-- **Action:** Click title badge, select ORCHESTRATOR, confirm with `mYkri1-xoxrap-gogtan`
+- **Action:** Click title badge, select ORCHESTRATOR, confirm with `mYkri1-xoxrap-gogtan`. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** Title changes back to ORCHESTRATOR, plugin re-installed
 - **Creates:** Plugin entry in settings.local.json
 - **Modifies:** Agent governanceTitle (MEMBER -> ORCHESTRATOR), plugin state
@@ -509,14 +509,14 @@ author: AI Maestro Team
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
 #### S055: Delete scen-test-agent-alpha
-- **Action:** Click on `scen-test-agent-alpha` in sidebar, click delete button in profile panel -> Danger Zone -> "Delete Agent" -> confirm
+- **Action:** Click on `scen-test-agent-alpha` in sidebar, click delete button in profile panel -> Danger Zone -> "Delete Agent" -> confirm. When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Test agent fully removed from registry and team
 - **Creates:** Cemetery archive entry
 - **Modifies:** Agent registry (entry removed), team agentIds (alpha removed)
 - **Verify:** Agent no longer appears in sidebar. Screenshot: SCEN-002/S055-alpha-deleted.png
 
 #### S056: Delete scen-test-agent-beta
-- **Action:** Click on `scen-test-agent-beta` in sidebar, click delete button in profile panel, confirm deletion
+- **Action:** Click on `scen-test-agent-beta` in sidebar, click delete button in profile panel, confirm deletion. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Test agent fully removed from registry and team
 - **Creates:** Cemetery archive entry
 - **Modifies:** Agent registry (entry removed), team agentIds (beta removed), team chiefOfStaffId (cleared)
@@ -530,7 +530,7 @@ author: AI Maestro Team
 - **Verify:** Team card no longer appears in sidebar. Screenshot: SCEN-002/S057-team-deleted.png
 
 #### S058: Delete auto-COS agent (cos-scen-test-team-alpha)
-- **Action:** Find `cos-scen-test-team-alpha` in agent list (ALL tab). If still present (not deleted by "Delete Agents Too"), click delete button, confirm.
+- **Action:** Find `cos-scen-test-team-alpha` in agent list (ALL tab). If still present (not deleted by "Delete Agents Too"), click delete button, confirm. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Auto-created COS agent removed from registry
 - **Creates:** nothing
 - **Modifies:** Agent registry (entry removed)
@@ -544,7 +544,7 @@ author: AI Maestro Team
 - **Verify:** Cemetery list shows entries for the deleted test agents. Screenshot: SCEN-002/S059-cemetery-entries.png
 
 #### S060: Purge all test cemetery entries
-- **Action:** For each test agent in cemetery (scen-test-agent-alpha, scen-test-agent-beta, cos-scen-test-team-alpha), click "Purge" and confirm
+- **Action:** For each test agent in cemetery (scen-test-agent-alpha, scen-test-agent-beta, cos-scen-test-team-alpha), click "Purge" and confirm. When the sudo password modal appears each time (`DELETE /api/agents/cemetery` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** All test cemetery entries removed
 - **Removes:** Cemetery zip archives for test agents
 - **Verify:** No test agent entries remain in cemetery. Screenshot: SCEN-002/S060-cemetery-purged.png

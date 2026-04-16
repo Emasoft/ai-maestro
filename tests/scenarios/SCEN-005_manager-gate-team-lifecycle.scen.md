@@ -216,7 +216,7 @@ author: AI Maestro Team
 - **Goal:** Title Assignment Dialog opens with radio cards
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog shows available titles. Since agent has no team, only AUTONOMOUS and MANAGER should be shown. Screenshot: SCEN-005/S019-open-title-assignment-dialog.png
+- **Verify:** Dialog shows available titles. Since agent has no team, only the standalone titles should be shown: AUTONOMOUS, MANAGER, and MAINTAINER (R19 — MAINTAINER is a standalone title requiring `githubRepo`). Screenshot: SCEN-005/S019-open-title-assignment-dialog.png
 
 #### S020: Select MANAGER title
 - **Action:** Click the MANAGER radio card
@@ -226,7 +226,7 @@ author: AI Maestro Team
 - **Verify:** Blue border on MANAGER card, Confirm not disabled. Screenshot: SCEN-005/S020-select-manager-title.png
 
 #### S021: Confirm and enter governance password
-- **Action:** Click Confirm, enter governance password `mYkri1-xoxrap-gogtan`, submit
+- **Action:** Click Confirm, enter governance password `mYkri1-xoxrap-gogtan`, submit. When the sudo password modal appears (`PATCH /api/agents/[id]/title` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** Title changes to MANAGER, role-plugin installed
 - **Creates:** Plugin entry in agent's settings
 - **Modifies:** Agent governanceTitle in registry, governance state (hasManager: true), plugin state
@@ -465,10 +465,10 @@ author: AI Maestro Team
 
 #### S051: Verify only standalone titles are shown
 - **Action:** Inspect the dialog options
-- **Goal:** Only AUTONOMOUS and MANAGER visible. Team titles must NOT appear.
+- **Goal:** Only standalone titles visible: AUTONOMOUS, MANAGER, and MAINTAINER (R19 — MAINTAINER is a standalone title requiring `githubRepo`). Team titles (MEMBER, COS, ORCHESTRATOR, ARCHITECT, INTEGRATOR) must NOT appear.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Exactly 2 options. Screenshot: SCEN-005/S051-standalone-titles.png
+- **Verify:** Exactly 3 options (AUTONOMOUS, MANAGER, MAINTAINER). Screenshot: SCEN-005/S051-standalone-titles.png
 
 #### S052: Close the dialog
 - **Action:** Click Cancel or press Escape
@@ -570,7 +570,7 @@ author: AI Maestro Team
 - **Verify:** Dialog visible. Screenshot: SCEN-005/S064-title-dialog.png
 
 #### S065: Change title to AUTONOMOUS (remove MANAGER)
-- **Action:** Select AUTONOMOUS, click Confirm, enter governance password `mYkri1-xoxrap-gogtan`, submit
+- **Action:** Select AUTONOMOUS, click Confirm, enter governance password `mYkri1-xoxrap-gogtan`, submit. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** MANAGER title removed, agent becomes AUTONOMOUS. Blocking cascade triggers (R9.8).
 - **Creates:** nothing
 - **Modifies:** Agent title (-> AUTONOMOUS), governance state (hasManager: false), all teams blocked, team agents hibernated
@@ -619,7 +619,7 @@ author: AI Maestro Team
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
 #### S070: Re-assign MANAGER to unblock teams for cleanup
-- **Action:** Open title dialog for `scen-test-manager`, select MANAGER, enter governance password `mYkri1-xoxrap-gogtan`, confirm
+- **Action:** Open title dialog for `scen-test-manager`, select MANAGER, enter governance password `mYkri1-xoxrap-gogtan`, confirm. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** MANAGER restored so teams can be deleted
 - **Removes:** nothing
 - **Verify:** `GET /api/governance` shows `hasManager: true`. Screenshot: SCEN-005/S070-manager-restored.png
@@ -631,31 +631,31 @@ author: AI Maestro Team
 - **Verify:** Team gone from `GET /api/teams`. Screenshot: SCEN-005/S071-blocking-team-deleted.png
 
 #### S072: Remove MANAGER title from `scen-test-manager`
-- **Action:** Open title dialog, select AUTONOMOUS, enter governance password `mYkri1-xoxrap-gogtan`, confirm
+- **Action:** Open title dialog, select AUTONOMOUS, enter governance password `mYkri1-xoxrap-gogtan`, confirm. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** No MANAGER on host
 - **Removes:** MANAGER title
 - **Verify:** `GET /api/governance` shows `hasManager: false`. Screenshot: SCEN-005/S072-no-manager.png
 
 #### S073: Delete test agent `scen-test-manager` via Danger Zone
-- **Action:** Profile -> Danger Zone -> "Delete Agent" -> check "Also delete agent folder" -> type `scen-test-manager` -> Delete Forever
+- **Action:** Profile -> Advanced -> Danger Zone -> "Delete Agent" -> check "Also delete agent folder" -> type `scen-test-manager` -> Delete Forever. When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Test agent fully removed
 - **Removes:** Agent, folder, tmux session
 - **Verify:** Agent no longer in sidebar. Screenshot: SCEN-005/S073-manager-deleted.png
 
 #### S074: Delete test agent `scen-test-team-member`
-- **Action:** Click delete button in profile panel, confirm
+- **Action:** Click on `scen-test-team-member` in sidebar, open Profile → Advanced → Danger Zone, click Delete Agent, check "Also delete agent folder", type the agent name and click Delete Forever. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Test agent fully removed
 - **Removes:** Agent
 - **Verify:** Agent gone. Screenshot: SCEN-005/S074-member-deleted.png
 
 #### S075: Delete any remaining auto-COS agents (cos-* prefix)
-- **Action:** Check agent list for `cos-` prefix agents from this test. Delete each.
+- **Action:** Check agent list for `cos-` prefix agents from this test. For each, click the agent in the sidebar, open Profile → Advanced → Danger Zone, click Delete Agent, check "Also delete agent folder", type the agent name and click Delete Forever. When the sudo password modal appears each time (`DELETE /api/agents/[id]` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** All auto-COS agents removed
 - **Removes:** Auto-COS agents
 - **Verify:** None remain. Screenshot: SCEN-005/S075-cos-deleted.png
 
 #### S076: Verify cemetery entries and purge
-- **Action:** Navigate to Settings -> Cemetery tab. Verify deleted test agents appear in cemetery with download/revive/purge options. Click "Purge" for each test entry.
+- **Action:** Navigate to Settings -> Cemetery tab. Verify deleted test agents appear in cemetery with download/revive/purge options. Click "Purge" for each test entry. When the sudo password modal appears each time (`DELETE /api/agents/cemetery` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Cemetery entries verified, then purged (no test artifacts remain)
 - **Removes:** Cemetery zip archives for test agents
 - **Verify:** No scen-test entries remain in cemetery. Screenshot: SCEN-005/S076-cemetery-purged.png

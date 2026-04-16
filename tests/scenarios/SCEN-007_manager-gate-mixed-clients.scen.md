@@ -121,7 +121,7 @@ author: AI Maestro Team
 ## Phase 2: Assign MANAGER (Claude Agent)
 
 #### S008: Create and assign MANAGER `scen7-manager`
-- **Action:** Wizard: Claude Code -> `scen7-manager` -> AUTONOMOUS -> finish. Then assign MANAGER with password `mYkri1-xoxrap-gogtan`.
+- **Action:** Wizard: Claude Code -> `scen7-manager` -> AUTONOMOUS -> finish. Then click the AUTONOMOUS title badge, select MANAGER, click Confirm, enter governance password `mYkri1-xoxrap-gogtan`. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** MANAGER active with Claude-native plugin
 - **Creates:** Agent, plugin
 - **Modifies:** Governance, registry
@@ -215,14 +215,14 @@ author: AI Maestro Team
 ## Phase 8: Title Swaps -- Per-Client Plugin Format
 
 #### S018: Assign ORCHESTRATOR to Claude agent
-- **Action:** Click Claude agent -> title badge -> ORCHESTRATOR -> password `mYkri1-xoxrap-gogtan`
+- **Action:** Click Claude agent -> title badge -> ORCHESTRATOR -> enter governance password `mYkri1-xoxrap-gogtan`. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** Claude-native orchestrator plugin installed
 - **Creates:** nothing
 - **Modifies:** Title, plugin (Claude format)
 - **Verify:** ORCHESTRATOR badge, `ai-maestro-orchestrator-agent`. Screenshot: SCEN-007/S018-claude-orchestrator.png
 
 #### S019: Assign ARCHITECT to Codex agent
-- **Action:** Click Codex agent -> title badge -> ARCHITECT -> password `mYkri1-xoxrap-gogtan`
+- **Action:** Click Codex agent -> title badge -> ARCHITECT -> enter governance password `mYkri1-xoxrap-gogtan`. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Goal:** Codex-converted architect plugin installed
 - **Creates:** nothing
 - **Modifies:** Title, plugin (Codex format)
@@ -297,34 +297,34 @@ author: AI Maestro Team
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
 #### S026: Remove MANAGER title from `scen7-manager`
-- **Action:** Title -> AUTONOMOUS -> password `mYkri1-xoxrap-gogtan`
+- **Action:** Click `scen7-manager` in sidebar, open Profile panel, click the MANAGER title badge, select AUTONOMOUS, click Confirm, enter governance password `mYkri1-xoxrap-gogtan`. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
 - **Removes:** MANAGER title
 - **Verify:** `hasManager: false`. Screenshot: SCEN-007/S026-no-manager.png
 
 #### S027: Delete `scen7-manager`
-- **Action:** Danger Zone -> Delete
-- **Removes:** Agent
-- **Verify:** Gone. Screenshot: SCEN-007/S027-mgr-deleted.png
+- **Action:** Click `scen7-manager` in sidebar, Profile → Advanced → Danger Zone → Delete Agent, check "Also delete agent folder", type `scen7-manager`, click Delete Forever. When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Removes:** Agent, folder
+- **Verify:** Gone from sidebar. Screenshot: SCEN-007/S027-mgr-deleted.png
 
 #### S028: Delete `scen7-claude-member`
-- **Action:** Danger Zone -> Delete
-- **Removes:** Agent
-- **Verify:** Gone. Screenshot: SCEN-007/S028-claude-deleted.png
+- **Action:** Click `scen7-claude-member` in sidebar, Profile → Advanced → Danger Zone → Delete Agent, check "Also delete agent folder", type `scen7-claude-member`, click Delete Forever. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Removes:** Agent, folder
+- **Verify:** Gone from sidebar. Screenshot: SCEN-007/S028-claude-deleted.png
 
 #### S029: Delete `scen7-codex-member`
-- **Action:** Danger Zone -> Delete
-- **Removes:** Agent
-- **Verify:** Gone. Screenshot: SCEN-007/S029-codex-deleted.png
+- **Action:** Click `scen7-codex-member` in sidebar, Profile → Advanced → Danger Zone → Delete Agent, check "Also delete agent folder", type `scen7-codex-member`, click Delete Forever. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Removes:** Agent, folder
+- **Verify:** Gone from sidebar. Screenshot: SCEN-007/S029-codex-deleted.png
 
 #### S030: Delete any remaining auto-COS agents
-- **Action:** Delete cos-* agents from this test
+- **Action:** Check agent list for `cos-` prefix agents from this test. For each, click the agent, Profile → Advanced → Danger Zone → Delete Agent, check "Also delete agent folder", type the agent name and click Delete Forever. When the sudo password modal appears each time (strict route `DELETE /api/agents/[id]` per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Removes:** Auto-COS agents
-- **Verify:** None remain. Screenshot: SCEN-007/S030-cos-deleted.png
+- **Verify:** None remain in sidebar. Screenshot: SCEN-007/S030-cos-deleted.png
 
 #### S031: Verify cemetery entries and purge
-- **Action:** Settings -> Cemetery. Verify test entries. Purge all.
+- **Action:** Navigate to Settings -> Cemetery. Verify deleted test agents appear. Click Purge for each test entry. When the sudo password modal appears each time (`DELETE /api/agents/cemetery` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Removes:** Cemetery archives
-- **Verify:** No test entries. Screenshot: SCEN-007/S031-cemetery-purged.png
+- **Verify:** No test entries remain. Screenshot: SCEN-007/S031-cemetery-purged.png
 
 #### S032: STATE-WIPE -- Restore configuration files
 - **Action:** Restore from S002 backup

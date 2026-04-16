@@ -306,33 +306,32 @@ author: AI Maestro Team
 >
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
-#### S030: Delete the test plugin from marketplace
-- **Action:** Remove `~/agents/role-plugins/<test-plugin-name>/` directory. Update marketplace manifest to remove the entry.
-- **Goal:** Test plugin fully removed
+#### S030: Delete the test plugin via UI (Settings → Plugins Explorer)
+- **Action:** Navigate to Settings → Plugins Explorer → Marketplaces tab. Locate the `ai-maestro-local-roles-marketplace` card and expand it. Click the uninstall button next to the test plugin entry. When the sudo password modal appears (`DELETE /api/agents/role-plugins/install` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Goal:** Test plugin fully removed via the plugin lifecycle API (pipeline handles directory removal + marketplace manifest update).
 - **Creates:** nothing
-- **Modifies:** Marketplace manifest, plugins directory
+- **Modifies:** Marketplace manifest, plugins directory (via API)
 - **Verify:** Plugin no longer appears in `GET /api/agents/role-plugins`. Screenshot: SCEN-004/S030-plugin-removed.png
 
-#### S031: Delete Haephestos agent from registry (if still present)
-- **Action:** Check if `_aim-creation-helper` exists in agent registry. If so, `DELETE /api/agents/<id>`.
-- **Goal:** No stale Haephestos agent entry
-- **Creates:** nothing
-- **Modifies:** Agent registry
-- **Verify:** Agent not in registry. Screenshot: SCEN-004/S031-haephestos-removed.png
+#### S031: Delete Haephestos agent via UI (if still present)
+- **Action:** In the sidebar HELPERS section, if `_aim-creation-helper` still shows as a registered agent, click it. In the Profile panel, open Advanced tab → Danger Zone → Delete Agent. Check "Also delete agent folder". Type `_aim-creation-helper` to confirm and click "Delete Forever". When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. The Delete Agent pipeline handles tmux session kill + registry removal + folder deletion + cemetery archive atomically.
+- **Goal:** No stale Haephestos agent entry, no stale tmux session, no stale workspace
+- **Creates:** Cemetery archive entry (optional — ephemeral helper may skip cemetery per implementation)
+- **Modifies:** Agent registry, tmux sessions, filesystem
+- **Verify:** `_aim-creation-helper` not in registry, not in `tmux list-sessions`, `~/agents/haephestos/` does not exist. Screenshot: SCEN-004/S031-haephestos-removed.png
 
-#### S032: Kill Haephestos tmux session (if still running)
-- **Action:** `tmux kill-session -t _aim-creation-helper 2>/dev/null`
-- **Goal:** No stale tmux sessions
+#### S032: Purge Haephestos cemetery entry (if one was created)
+- **Action:** Navigate to Settings → Cemetery tab. If `_aim-creation-helper` appears in the cemetery list, click Purge and confirm. When the sudo password modal appears (`DELETE /api/agents/cemetery` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Goal:** No cemetery artifact from the test
+- **Removes:** Cemetery zip archive for `_aim-creation-helper` (if present)
+- **Verify:** Cemetery list has no `_aim-creation-helper` entry. Screenshot: SCEN-004/S032-cemetery-purged.png
+
+#### S033: Verify via API that no test artifacts remain
+- **Action:** Check `GET /api/agents` (no `_aim-creation-helper`), `GET /api/agents/role-plugins` (no test plugin), `GET /api/agents/cemetery` (no test entry). Also confirm `~/agents/haephestos/` does not exist via `ls` (read-only).
+- **Goal:** All APIs confirm no residual test artifacts
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Session not in tmux list. Screenshot: SCEN-004/S032-session-gone.png
-
-#### S033: Delete Haephestos workspace (if still present)
-- **Action:** `rm -rf ~/agents/haephestos/` (if exists)
-- **Goal:** Clean filesystem
-- **Creates:** nothing
-- **Modifies:** Filesystem cleanup
-- **Verify:** Directory does not exist. Screenshot: SCEN-004/S033-workspace-gone.png
+- **Verify:** All API responses clean, filesystem clean. Screenshot: SCEN-004/S033-api-clean.png
 
 #### S034: STATE-WIPE -- Restore configuration files
 - **Action:** Compare current config files with backups from S002. If any differ, restore from backup.

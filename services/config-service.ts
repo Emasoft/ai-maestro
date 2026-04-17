@@ -33,10 +33,7 @@ import {
 import { escapeForCozo } from '@/lib/cozo-utils'
 import { getSystemSettings } from '@/lib/system-settings'
 import { statePath } from '@/lib/ecosystem-constants'
-import type {
-  MemoryRunResult,
-  MessageCheckResult,
-} from '@/types/subconscious'
+import type { MessageCheckResult } from '@/types/subconscious'
 
 const execFileAsync = promisify(execFile)
 
@@ -80,24 +77,10 @@ interface StatusFileContent {
   isRunning: boolean
   activityState: 'active' | 'idle' | 'disconnected'
   startedAt: number | null
-  memoryCheckInterval: number
   messageCheckInterval: number
-  lastMemoryRun: number | null
   lastMessageRun: number | null
-  lastMemoryResult: MemoryRunResult | null
   lastMessageResult: MessageCheckResult | null
-  totalMemoryRuns: number
   totalMessageRuns: number
-  cumulativeMessagesIndexed: number
-  cumulativeConversationsIndexed: number
-  consolidation?: {
-    enabled: boolean
-    scheduledHour: number
-    lastRun: number | null
-    nextRun: number | null
-    lastResult: unknown | null
-    totalRuns: number
-  }
 }
 
 interface AgentStatus {
@@ -107,15 +90,10 @@ interface AgentStatus {
   hasStatusFile: boolean
   lastUpdated: number | null
   status: {
-    lastMemoryRun: number | null
     lastMessageRun: number | null
-    lastMemoryResult: MemoryRunResult | null
     lastMessageResult: MessageCheckResult | null
-    totalMemoryRuns: number
     totalMessageRuns: number
   } | null
-  cumulativeMessagesIndexed: number
-  cumulativeConversationsIndexed: number
 }
 
 // -- PTY Debug types --
@@ -206,8 +184,6 @@ function readAgentStatusFile(agentId: string): AgentStatus {
     hasStatusFile: false,
     lastUpdated: null,
     status: null,
-    cumulativeMessagesIndexed: 0,
-    cumulativeConversationsIndexed: 0,
   }
 
   try {
@@ -229,15 +205,10 @@ function readAgentStatusFile(agentId: string): AgentStatus {
       hasStatusFile: true,
       lastUpdated: data.lastUpdated,
       status: {
-        lastMemoryRun: data.lastMemoryRun,
         lastMessageRun: data.lastMessageRun,
-        lastMemoryResult: data.lastMemoryResult,
         lastMessageResult: data.lastMessageResult,
-        totalMemoryRuns: data.totalMemoryRuns || 0,
         totalMessageRuns: data.totalMessageRuns || 0,
       },
-      cumulativeMessagesIndexed: data.cumulativeMessagesIndexed || 0,
-      cumulativeConversationsIndexed: data.cumulativeConversationsIndexed || 0,
     }
   } catch (error) {
     console.error(`[Subconscious API] Error reading status for ${agentId}:`, error)
@@ -404,11 +375,8 @@ export function getSubconsciousStatus(): ServiceResult<any> {
           activeAgents: 0,
           runningSubconscious: 0,
           isWarmingUp: false,
-          totalMemoryRuns: 0,
           totalMessageRuns: 0,
-          lastMemoryRun: null,
           lastMessageRun: null,
-          lastMemoryResult: null,
           lastMessageResult: null,
           agents: [],
         },
@@ -421,32 +389,19 @@ export function getSubconsciousStatus(): ServiceResult<any> {
     const activeAgents = statuses.filter(s => s.initialized).length
     const runningSubconscious = statuses.filter(s => s.isRunning).length
 
-    let lastMemoryRun: number | null = null
     let lastMessageRun: number | null = null
-    let lastMemoryResult: MemoryRunResult | null = null
     let lastMessageResult: MessageCheckResult | null = null
-    let totalMemoryRuns = 0
     let totalMessageRuns = 0
-    let cumulativeMessagesIndexed = 0
-    let cumulativeConversationsIndexed = 0
 
     for (const s of statuses) {
       if (s.status) {
-        totalMemoryRuns += s.status.totalMemoryRuns || 0
         totalMessageRuns += s.status.totalMessageRuns || 0
 
-        if (s.status.lastMemoryRun && (!lastMemoryRun || s.status.lastMemoryRun > lastMemoryRun)) {
-          lastMemoryRun = s.status.lastMemoryRun
-          lastMemoryResult = s.status.lastMemoryResult
-        }
         if (s.status.lastMessageRun && (!lastMessageRun || s.status.lastMessageRun > lastMessageRun)) {
           lastMessageRun = s.status.lastMessageRun
           lastMessageResult = s.status.lastMessageResult
         }
       }
-
-      cumulativeMessagesIndexed += s.cumulativeMessagesIndexed || 0
-      cumulativeConversationsIndexed += s.cumulativeConversationsIndexed || 0
     }
 
     const isWarmingUp = discoveredAgentIds.length > 0 && runningSubconscious === 0
@@ -458,14 +413,9 @@ export function getSubconsciousStatus(): ServiceResult<any> {
         activeAgents,
         runningSubconscious,
         isWarmingUp,
-        totalMemoryRuns,
         totalMessageRuns,
-        lastMemoryRun,
         lastMessageRun,
-        lastMemoryResult,
         lastMessageResult,
-        cumulativeMessagesIndexed,
-        cumulativeConversationsIndexed,
         agents: statuses.map(s => ({
           agentId: s.agentId,
           hasStatusFile: s.hasStatusFile,
@@ -475,8 +425,6 @@ export function getSubconsciousStatus(): ServiceResult<any> {
           status: s.isRunning && s.status ? {
             isRunning: s.isRunning,
             ...s.status,
-            cumulativeMessagesIndexed: s.cumulativeMessagesIndexed,
-            cumulativeConversationsIndexed: s.cumulativeConversationsIndexed,
           } : null,
         })),
       },

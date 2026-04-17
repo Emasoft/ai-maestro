@@ -2,15 +2,14 @@
  * Agent - The core abstraction for autonomous agents
  *
  * An Agent is a cognitive entity that:
- * - Maintains its own memory (database)
- * - Has a subconscious that maintains awareness (indexing, messages)
- * - Can search its own history autonomously
+ * - Maintains its own database (legacy CozoDB — being retired with TRDD-70a521d9)
+ * - Has a subconscious that tracks activity state and writes a status file
  * - Operates independently without central coordination
  *
  * Philosophy:
- * - Database is a property of agent memory, not the agent itself
- * - Subconscious runs in the background, maintaining memory without conscious effort
- * - Each agent is truly autonomous and self-sufficient
+ * - Subconscious runs in the background, mirroring lifecycle + activity without
+ *   conscious effort. It no longer drives the RAG memory subsystem.
+ * - Each agent is truly autonomous and self-sufficient.
  */
 
 import { AgentDatabase } from './cozo-db'
@@ -24,7 +23,6 @@ import { VoiceSubsystem } from './cerebellum/voice-subsystem'
 
 import * as fs from 'fs'
 import * as path from 'path'
-import * as os from 'os'
 import { statePath } from '@/lib/ecosystem-constants'
 
 // Get this host's API base URL from configuration
@@ -47,18 +45,8 @@ interface AgentConfig {
 }
 
 interface SubconsciousConfig {
-  memoryCheckInterval?: number  // How often to check for new conversations (default: 5 minutes)
   messageCheckInterval?: number // How often to check for messages (default: 5 minutes) - DEPRECATED
   messagePollingEnabled?: boolean // Enable message polling (default: false - use push notifications instead)
-  consolidationEnabled?: boolean // Enable long-term memory consolidation (default: true)
-  consolidationHour?: number    // Hour of day to run consolidation (default: 2 = 2 AM)
-}
-
-// Activity-based interval configuration
-const ACTIVITY_INTERVALS = {
-  active: 5 * 60 * 1000,        // 5 min when actively used
-  idle: 30 * 60 * 1000,         // 30 min when idle
-  disconnected: 60 * 60 * 1000  // 60 min when no session connected
 }
 
 // Type for host hints (optional optimization from AI Maestro host)
@@ -73,54 +61,28 @@ export interface HostHint {
 /**
  * Agent Subconscious
  *
- * Runs in the background for each agent, maintaining:
- * 1. Memory (indexes new conversation content)
- * 2. Awareness (checks for messages from other agents)
+ * Runs in the background for each agent, tracking activity state,
+ * writing a status file the dashboard can read without loading the agent
+ * into memory, and (optionally, deprecated) polling for new messages.
+ *
+ * TRDD-70a521d9 Phase 1 detached the RAG memory callbacks — no more
+ * maintainMemory, scheduleConsolidation, runConsolidation. The timer
+ * infrastructure remains for message polling + lifecycle.
  */
 interface SubconsciousStatus {
   isRunning: boolean
   startedAt: number | null
-  memoryCheckInterval: number
   messageCheckInterval: number
   messagePollingEnabled: boolean  // false = using push notifications (default)
   activityState: 'active' | 'idle' | 'disconnected'
   staggerOffset: number
-  lastMemoryRun: number | null
   lastMessageRun: number | null
-  lastMemoryResult: {
-    success: boolean
-    messagesProcessed?: number
-    conversationsDiscovered?: number
-    error?: string
-  } | null
   lastMessageResult: {
     success: boolean
     unreadCount?: number
     error?: string
   } | null
-  totalMemoryRuns: number
   totalMessageRuns: number
-  // Cumulative stats (accumulated across this session)
-  cumulativeMessagesIndexed: number
-  cumulativeConversationsIndexed: number
-  // Long-term memory consolidation
-  consolidation: {
-    enabled: boolean
-    scheduledHour: number
-    lastRun: number | null
-    nextRun: number | null
-    lastResult: {
-      success: boolean
-      memoriesCreated?: number
-      memoriesReinforced?: number
-      memoriesLinked?: number
-      conversationsProcessed?: number
-      durationMs?: number
-      providerUsed?: string
-      error?: string
-    } | null
-    totalRuns: number
-  }
 }
 
 // Static counter for staggering initial runs across all agents
@@ -129,56 +91,32 @@ let subconsciousInstanceCount = 0
 class AgentSubconscious {
   private agentId: string
   private agent: Agent
-  private memoryTimer: NodeJS.Timeout | null = null
   private messageTimer: NodeJS.Timeout | null = null
-  private consolidationTimer: NodeJS.Timeout | null = null
-  private initialDelayTimer: NodeJS.Timeout | null = null
   private isRunning = false
-  private memoryCheckInterval: number
   private messageCheckInterval: number
-  private instanceNumber: number
   private staggerOffset: number
 
-  // Activity state for adaptive intervals
+  // Activity state (purely informational after Phase 1 — no interval impact)
   private activityState: 'active' | 'idle' | 'disconnected' = 'disconnected'
 
   // Status tracking
   private startedAt: number | null = null
-  private lastMemoryRun: number | null = null
   private lastMessageRun: number | null = null
-  private lastMemoryResult: SubconsciousStatus['lastMemoryResult'] = null
   private lastMessageResult: SubconsciousStatus['lastMessageResult'] = null
-  private totalMemoryRuns = 0
   private totalMessageRuns = 0
-  // Cumulative stats (accumulated across this session)
-  private cumulativeMessagesIndexed = 0
-  private cumulativeConversationsIndexed = 0
 
   // Message polling (deprecated - use push notifications instead)
   private messagePollingEnabled: boolean
 
-  // Long-term memory consolidation
-  private consolidationEnabled: boolean
-  private consolidationHour: number
-  private lastConsolidationRun: number | null = null
-  private nextConsolidationRun: number | null = null
-  private lastConsolidationResult: SubconsciousStatus['consolidation']['lastResult'] = null
-  private totalConsolidationRuns = 0
-
   constructor(agentId: string, agent: Agent, config: SubconsciousConfig = {}) {
     this.agentId = agentId
     this.agent = agent
-    // Default interval (will be adjusted based on activity)
-    this.memoryCheckInterval = config.memoryCheckInterval || ACTIVITY_INTERVALS.disconnected
     this.messageCheckInterval = config.messageCheckInterval || 5 * 60 * 1000  // 5 minutes (deprecated)
     // Message polling is DISABLED by default - use push notifications instead (RFC: Message Delivery Notifications)
     // Explicitly requires config.messagePollingEnabled === true to enable; any other value (undefined, false) keeps it disabled.
     this.messagePollingEnabled = config.messagePollingEnabled === true
-    // Long-term memory consolidation config
-    this.consolidationEnabled = config.consolidationEnabled !== false  // Default: enabled
-    this.consolidationHour = config.consolidationHour ?? 2  // Default: 2 AM
-    // Assign instance number for staggering initial runs
-    this.instanceNumber = subconsciousInstanceCount++
+    // Bump the static counter (kept for logging symmetry with older logs)
+    subconsciousInstanceCount++
     // Calculate stagger offset based on agentId hash (consistent across restarts)
     this.staggerOffset = this.calculateStaggerOffset()
   }
@@ -208,7 +146,6 @@ class AgentSubconscious {
 
     console.log(`[Agent ${this.agentId.substring(0, 8)}] 🧠 Starting subconscious...`)
     console.log(`[Agent ${this.agentId.substring(0, 8)}]   - Stagger offset: ${Math.round(this.staggerOffset / 1000)}s`)
-    console.log(`[Agent ${this.agentId.substring(0, 8)}]   - Memory interval: ${this.memoryCheckInterval / 60000} min (${this.activityState})`)
     console.log(`[Agent ${this.agentId.substring(0, 8)}]   - Message polling: ${this.messagePollingEnabled ? 'enabled (legacy)' : 'disabled (using push notifications)'}`)
 
     // Message polling is DEPRECATED - push notifications handle this at delivery time
@@ -229,28 +166,6 @@ class AgentSubconscious {
       }, this.messageCheckInterval)
     }
 
-    // Start memory maintenance with stagger offset
-    // First run is delayed by staggerOffset, then runs on interval
-    this.initialDelayTimer = setTimeout(() => {
-      // Run first memory maintenance
-      this.maintainMemory().catch(err => {
-        console.error(`[Agent ${this.agentId.substring(0, 8)}] Initial memory maintenance failed:`, err)
-      })
-
-      // Clear any existing memoryTimer before setting a new one — rescheduleMemoryTimer()
-      // may have already created one if a host hint arrived during the initial delay.
-      if (this.memoryTimer) {
-        clearInterval(this.memoryTimer)
-      }
-
-      // Start the regular interval timer
-      this.memoryTimer = setInterval(() => {
-        this.maintainMemory().catch(err => {
-          console.error(`[Agent ${this.agentId.substring(0, 8)}] Memory maintenance failed:`, err)
-        })
-      }, this.memoryCheckInterval)
-    }, this.staggerOffset)
-
     this.isRunning = true
     this.startedAt = Date.now()
 
@@ -264,138 +179,19 @@ class AgentSubconscious {
       console.log(`[Agent ${this.agentId.substring(0, 8)}] Host hints not available - running autonomously`)
     }
 
-    // Schedule long-term memory consolidation
-    if (this.consolidationEnabled) {
-      this.scheduleConsolidation()
-    }
-
-    console.log(`[Agent ${this.agentId.substring(0, 8)}] ✓ Subconscious running (first memory check in ${Math.round(this.staggerOffset / 1000)}s)`)
+    console.log(`[Agent ${this.agentId.substring(0, 8)}] ✓ Subconscious running`)
 
     // Write initial status file
     this.writeStatusFile()
   }
 
   /**
-   * Schedule next consolidation run
-   */
-  private scheduleConsolidation() {
-    // Calculate time until next scheduled consolidation
-    const now = new Date()
-    const nextRun = new Date(now)
-    nextRun.setHours(this.consolidationHour, 0, 0, 0)
-
-    // If we've already passed the scheduled hour today, schedule for tomorrow
-    if (now >= nextRun) {
-      nextRun.setDate(nextRun.getDate() + 1)
-    }
-
-    // Add stagger offset to prevent all agents from running at once
-    const staggerMinutes = Math.abs(this.agentId.split('').reduce(
-      (acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0
-    )) % 30  // Spread across 30 minutes
-    nextRun.setMinutes(staggerMinutes)
-
-    const timeUntilRun = nextRun.getTime() - now.getTime()
-    this.nextConsolidationRun = nextRun.getTime()
-
-    console.log(`[Agent ${this.agentId.substring(0, 8)}] 📚 Consolidation scheduled for ${nextRun.toLocaleTimeString()} (in ${Math.round(timeUntilRun / 60000)} min)`)
-
-    // Clear existing timer
-    if (this.consolidationTimer) {
-      clearTimeout(this.consolidationTimer)
-    }
-
-    // Set timer for consolidation
-    this.consolidationTimer = setTimeout(() => {
-      this.runConsolidation().catch(err => {
-        console.error(`[Agent ${this.agentId.substring(0, 8)}] Consolidation failed:`, err)
-      }).finally(() => {
-        // Schedule next run after this one completes
-        if (this.isRunning && this.consolidationEnabled) {
-          this.scheduleConsolidation()
-        }
-      })
-    }, timeUntilRun)
-  }
-
-  /**
-   * Run memory consolidation
-   * Extracts long-term memories from recent conversations
-   */
-  private async runConsolidation() {
-    this.totalConsolidationRuns++
-    this.lastConsolidationRun = Date.now()
-    const startTime = Date.now()
-
-    console.log(`[Agent ${this.agentId.substring(0, 8)}] 📚 Running memory consolidation...`)
-
-    try {
-      // Call the consolidation API endpoint
-      const response = await fetch(`${getSelfApiBase()}/api/agents/${this.agentId}/memory/consolidate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-
-      if (!response.ok) {
-        this.lastConsolidationResult = { success: false, error: `HTTP ${response.status}` }
-        console.error(`[Agent ${this.agentId.substring(0, 8)}] Consolidation failed: ${response.status}`)
-        return
-      }
-
-      const result = await response.json()
-
-      this.lastConsolidationResult = {
-        success: result.status !== 'failed',
-        memoriesCreated: result.memories_created || 0,
-        memoriesReinforced: result.memories_reinforced || 0,
-        memoriesLinked: result.memories_linked || 0,
-        conversationsProcessed: result.conversations_processed || 0,
-        durationMs: Date.now() - startTime,
-        providerUsed: result.provider_used || 'unknown',
-        error: result.errors?.length > 0 ? result.errors.join('; ') : undefined
-      }
-
-      console.log(`[Agent ${this.agentId.substring(0, 8)}] ✓ Consolidation complete: ${result.memories_created} created, ${result.memories_reinforced} reinforced (${result.provider_used})`)
-    } catch (error) {
-      this.lastConsolidationResult = {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        durationMs: Date.now() - startTime
-      }
-      console.error(`[Agent ${this.agentId.substring(0, 8)}] Consolidation error:`, error)
-    }
-
-    // Update status file after consolidation
-    this.writeStatusFile()
-  }
-
-  /**
-   * Manually trigger consolidation (for testing or on-demand)
-   */
-  async triggerConsolidation(): Promise<SubconsciousStatus['consolidation']['lastResult']> {
-    await this.runConsolidation()
-    return this.lastConsolidationResult
-  }
-
-  /**
    * Stop the subconscious
    */
   stop() {
-    if (this.memoryTimer) {
-      clearInterval(this.memoryTimer)
-      this.memoryTimer = null
-    }
     if (this.messageTimer) {
       clearInterval(this.messageTimer)
       this.messageTimer = null
-    }
-    if (this.consolidationTimer) {
-      clearTimeout(this.consolidationTimer)
-      this.consolidationTimer = null
-    }
-    if (this.initialDelayTimer) {
-      clearTimeout(this.initialDelayTimer)
-      this.initialDelayTimer = null
     }
 
     // Unsubscribe from host hints
@@ -409,53 +205,6 @@ class AgentSubconscious {
     console.log(`[Agent ${this.agentId.substring(0, 8)}] Subconscious stopped`)
 
     // Write final status file (marks as not running)
-    this.writeStatusFile()
-  }
-
-  /**
-   * Maintain memory by indexing new conversation content
-   * Calls runIndexDelta directly (no HTTP self-fetch) to eliminate TCP overhead
-   */
-  private async maintainMemory() {
-    this.totalMemoryRuns++
-    this.lastMemoryRun = Date.now()
-
-    // Check global kill-switch before doing any work
-    const { getSystemSettings } = await import('./system-settings')
-    if (!getSystemSettings().conversationIndexerEnabled) {
-      this.lastMemoryResult = { success: true, messagesProcessed: 0 }
-      this.writeStatusFile()
-      return
-    }
-
-    try {
-      // Direct function call — no HTTP round-trip, no TCP connection, no JSON serialization
-      const { runIndexDelta } = await import('./index-delta')
-      const result = await runIndexDelta(this.agentId)
-
-      const messagesProcessed = result.total_messages_processed || 0
-      const conversationsDiscovered = result.new_conversations_discovered || 0
-
-      this.cumulativeMessagesIndexed += messagesProcessed
-      this.cumulativeConversationsIndexed += conversationsDiscovered
-
-      this.lastMemoryResult = {
-        success: result.success,
-        messagesProcessed,
-        conversationsDiscovered
-      }
-
-      if (result.success && messagesProcessed > 0) {
-        console.log(`[Agent ${this.agentId.substring(0, 8)}] ✓ Indexed ${messagesProcessed} new message(s) (cumulative: ${this.cumulativeMessagesIndexed})`)
-      }
-      if (!result.success && result.error) {
-        console.error(`[Agent ${this.agentId.substring(0, 8)}] Index failed: ${result.error}`)
-      }
-    } catch (error) {
-      this.lastMemoryResult = { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
-      console.error(`[Agent ${this.agentId.substring(0, 8)}] Memory maintenance error:`, error)
-    }
-
     this.writeStatusFile()
   }
 
@@ -636,28 +385,16 @@ class AgentSubconscious {
   }
 
   /**
-   * Set activity state and adjust intervals accordingly
-   * Called by the host when session activity changes
+   * Set activity state. Called by the host when session activity changes.
+   * After TRDD-70a521d9 Phase 1 this only tracks the state value for
+   * reporting; it no longer drives any memory-maintenance interval.
    */
   setActivityState(state: 'active' | 'idle' | 'disconnected') {
     const prevState = this.activityState
+    if (prevState !== state) {
+      console.log(`[Agent ${this.agentId.substring(0, 8)}] Activity: ${prevState} -> ${state}`)
+    }
     this.activityState = state
-
-    // Trigger immediate index on idle transition (good time to catch up)
-    if (prevState === 'active' && state === 'idle') {
-      console.log(`[Agent ${this.agentId.substring(0, 8)}] Session went idle - triggering memory maintenance`)
-      this.maintainMemory().catch(err => {
-        console.error(`[Agent ${this.agentId.substring(0, 8)}] Idle transition maintenance failed:`, err)
-      })
-    }
-
-    // Update interval based on new activity state
-    const newInterval = ACTIVITY_INTERVALS[state]
-    if (newInterval !== this.memoryCheckInterval) {
-      console.log(`[Agent ${this.agentId.substring(0, 8)}] Activity: ${prevState} -> ${state}, interval: ${newInterval / 60000} min`)
-      this.memoryCheckInterval = newInterval
-      this.rescheduleMemoryTimer()
-    }
   }
 
   /**
@@ -665,26 +402,6 @@ class AgentSubconscious {
    */
   getActivityState(): 'active' | 'idle' | 'disconnected' {
     return this.activityState
-  }
-
-  /**
-   * Reschedule memory timer with new interval
-   */
-  private rescheduleMemoryTimer() {
-    if (!this.isRunning) return
-
-    // Clear existing timer
-    if (this.memoryTimer) {
-      clearInterval(this.memoryTimer)
-      this.memoryTimer = null
-    }
-
-    // Start new timer with updated interval
-    this.memoryTimer = setInterval(() => {
-      this.maintainMemory().catch(err => {
-        console.error(`[Agent ${this.agentId.substring(0, 8)}] Memory maintenance failed:`, err)
-      })
-    }, this.memoryCheckInterval)
   }
 
   /**
@@ -696,7 +413,7 @@ class AgentSubconscious {
 
     switch (hint.type) {
       case 'idle_transition':
-        // Session just went idle - good time to index
+        // Session just went idle
         console.log(`[Agent ${this.agentId.substring(0, 8)}] Host hint: idle_transition`)
         this.setActivityState('idle')
         // Propagate idle to cerebellum so voice subsystem can trigger
@@ -704,17 +421,10 @@ class AgentSubconscious {
         break
 
       case 'run_now':
-        // Host says it's a good time to run
-        console.log(`[Agent ${this.agentId.substring(0, 8)}] Host hint: run_now`)
-        this.maintainMemory().catch(err => {
-          console.error(`[Agent ${this.agentId.substring(0, 8)}] Hint-triggered maintenance failed:`, err)
-        })
-        break
-
       case 'skip':
-        // Host is busy - we'll just wait for next interval
-        // (no action needed, just don't run)
-        console.log(`[Agent ${this.agentId.substring(0, 8)}] Host hint: skip (will wait for next interval)`)
+        // Memory maintenance used to react to these hints. After TRDD-70a521d9
+        // Phase 1 they are ignored — kept in the switch so the enum is
+        // exhaustive and future non-memory subsystems can opt in.
         break
     }
   }
@@ -726,27 +436,13 @@ class AgentSubconscious {
     return {
       isRunning: this.isRunning,
       startedAt: this.startedAt,
-      memoryCheckInterval: this.memoryCheckInterval,
       messageCheckInterval: this.messageCheckInterval,
       messagePollingEnabled: this.messagePollingEnabled,
       activityState: this.activityState,
       staggerOffset: this.staggerOffset,
-      lastMemoryRun: this.lastMemoryRun,
       lastMessageRun: this.lastMessageRun,
-      lastMemoryResult: this.lastMemoryResult,
       lastMessageResult: this.lastMessageResult,
-      totalMemoryRuns: this.totalMemoryRuns,
       totalMessageRuns: this.totalMessageRuns,
-      cumulativeMessagesIndexed: this.cumulativeMessagesIndexed,
-      cumulativeConversationsIndexed: this.cumulativeConversationsIndexed,
-      consolidation: {
-        enabled: this.consolidationEnabled,
-        scheduledHour: this.consolidationHour,
-        lastRun: this.lastConsolidationRun,
-        nextRun: this.nextConsolidationRun,
-        lastResult: this.lastConsolidationResult,
-        totalRuns: this.totalConsolidationRuns
-      }
     }
   }
 
@@ -770,24 +466,10 @@ class AgentSubconscious {
         isRunning: this.isRunning,
         activityState: this.activityState,
         startedAt: this.startedAt,
-        memoryCheckInterval: this.memoryCheckInterval,
         messageCheckInterval: this.messageCheckInterval,
-        lastMemoryRun: this.lastMemoryRun,
         lastMessageRun: this.lastMessageRun,
-        lastMemoryResult: this.lastMemoryResult,
         lastMessageResult: this.lastMessageResult,
-        totalMemoryRuns: this.totalMemoryRuns,
         totalMessageRuns: this.totalMessageRuns,
-        cumulativeMessagesIndexed: this.cumulativeMessagesIndexed,
-        cumulativeConversationsIndexed: this.cumulativeConversationsIndexed,
-        consolidation: {
-          enabled: this.consolidationEnabled,
-          scheduledHour: this.consolidationHour,
-          lastRun: this.lastConsolidationRun,
-          nextRun: this.nextConsolidationRun,
-          lastResult: this.lastConsolidationResult,
-          totalRuns: this.totalConsolidationRuns
-        }
       }
 
       fs.writeFileSync(statusPath, JSON.stringify(status, null, 2))
@@ -1120,21 +802,14 @@ class AgentRegistry {
       .filter(s => s.status !== null)
 
     const runningCount = subconsciousStatuses.filter(s => s.status?.isRunning).length
-    const totalMemoryRuns = subconsciousStatuses.reduce((sum, s) => sum + (s.status?.totalMemoryRuns || 0), 0)
     const totalMessageRuns = subconsciousStatuses.reduce((sum, s) => sum + (s.status?.totalMessageRuns || 0), 0)
 
-    // Find the most recent runs across all agents
-    let lastMemoryRun: number | null = null
+    // Find the most recent message run across all agents
     let lastMessageRun: number | null = null
-    let lastMemoryResult: SubconsciousStatus['lastMemoryResult'] = null
     let lastMessageResult: SubconsciousStatus['lastMessageResult'] = null
 
     for (const s of subconsciousStatuses) {
       // Use !== null instead of truthiness so a zero timestamp (edge case) is not skipped
-      if (s.status?.lastMemoryRun !== null && s.status?.lastMemoryRun !== undefined && (lastMemoryRun === null || s.status.lastMemoryRun > lastMemoryRun)) {
-        lastMemoryRun = s.status.lastMemoryRun
-        lastMemoryResult = s.status.lastMemoryResult
-      }
       if (s.status?.lastMessageRun !== null && s.status?.lastMessageRun !== undefined && (lastMessageRun === null || s.status.lastMessageRun > lastMessageRun)) {
         lastMessageRun = s.status.lastMessageRun
         lastMessageResult = s.status.lastMessageResult
@@ -1144,11 +819,8 @@ class AgentRegistry {
     return {
       activeAgents: this.agents.size,
       runningSubconscious: runningCount,
-      totalMemoryRuns,
       totalMessageRuns,
-      lastMemoryRun,
       lastMessageRun,
-      lastMemoryResult,
       lastMessageResult,
       agents: subconsciousStatuses
     }

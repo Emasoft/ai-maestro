@@ -502,14 +502,14 @@ export async function getConsolidationStatus(agentId: string): Promise<ServiceRe
       byCategory[row[0] as string] = row[1] as number
     }
 
-    const subconscious = agent.getSubconscious()
-    const consolidationStatus = subconscious?.getStatus().consolidation || null
-
+    // TRDD-70a521d9 Phase 1: consolidation is no longer tracked on the
+    // subconscious. This route returns null until the whole memory service
+    // is deleted in Phase 2.
     return {
       data: {
         success: true,
         agent_id: agentId,
-        consolidation: consolidationStatus,
+        consolidation: null,
         memory_stats: {
           by_category: byCategory,
           total: Object.values(byCategory).reduce((a, b) => a + b, 0)

@@ -2,19 +2,12 @@
  * Subconscious Status Types
  *
  * The subconscious system runs background processes for each agent:
- * - Memory maintenance: Indexes conversation history into CozoDB
- * - Message checking: Checks for unread inter-agent messages
+ * - Message checking (legacy polling — disabled by default, replaced by push notifications)
+ * - Activity state tracking
+ * - status.json lifecycle write-out for the dashboard
+ *
+ * Memory-specific fields were removed in TRDD-70a521d9 Phase 1.
  */
-
-/**
- * Result from a memory maintenance run
- */
-export interface MemoryRunResult {
-  success: boolean
-  messagesProcessed?: number
-  conversationsDiscovered?: number
-  error?: string
-}
 
 /**
  * Result from a message check run
@@ -30,28 +23,10 @@ export interface MessageCheckResult {
  */
 export interface SubconsciousProcessStatus {
   startedAt: number | null
-  memoryCheckInterval: number
   messageCheckInterval: number
-  lastMemoryRun: number | null
   lastMessageRun: number | null
-  lastMemoryResult: MemoryRunResult | null
   lastMessageResult: MessageCheckResult | null
-  totalMemoryRuns: number
   totalMessageRuns: number
-  // Cumulative stats (accumulated during this session)
-  cumulativeMessagesIndexed?: number
-  cumulativeConversationsIndexed?: number
-}
-
-/**
- * Database memory stats (actual data stored)
- */
-export interface MemoryStats {
-  totalMessages: number
-  totalConversations: number
-  totalVectors: number
-  oldestMessage: number | null
-  newestMessage: number | null
 }
 
 /**
@@ -75,7 +50,7 @@ export interface AgentSubconsciousSummary {
   isRunning: boolean
   initialized: boolean
   isWarmingUp: boolean
-  status: Omit<SubconsciousProcessStatus, 'startedAt' | 'memoryCheckInterval' | 'messageCheckInterval'> | null
+  status: Omit<SubconsciousProcessStatus, 'startedAt' | 'messageCheckInterval'> | null
 }
 
 /**
@@ -88,32 +63,16 @@ export interface GlobalSubconsciousStatus {
   activeAgents: number
   runningSubconscious: number
   isWarmingUp: boolean
-  totalMemoryRuns: number
   totalMessageRuns: number
-  lastMemoryRun: number | null
   lastMessageRun: number | null
-  lastMemoryResult: MemoryRunResult | null
   lastMessageResult: MessageCheckResult | null
-  // Cumulative stats aggregated across all agents (this session)
-  cumulativeMessagesIndexed?: number
-  cumulativeConversationsIndexed?: number
-  // Database stats (actual data stored across all agents)
-  databaseStats?: {
-    totalMessages: number
-    totalConversations: number
-  }
   agents: Array<{
     agentId: string
     status: {
       isRunning: boolean
-      lastMemoryRun: number | null
       lastMessageRun: number | null
-      lastMemoryResult: MemoryRunResult | null
       lastMessageResult: MessageCheckResult | null
-      totalMemoryRuns: number
       totalMessageRuns: number
-      cumulativeMessagesIndexed?: number
-      cumulativeConversationsIndexed?: number
     } | null
   }>
 }

@@ -128,3 +128,52 @@ Each phase must build (`yarn build`) and pass (`yarn test`) before proceeding. E
 
 - **Full reference audit:** `docs_dev/2026-04-17-rag-memory-removal-audit-v2.md`
 - **Earlier first-pass audit (Haiku, superseded — do not use):** `docs_dev/2026-04-17-rag-memory-removal-audit.md` — kept for comparison until the cleanup task lands; can be deleted afterwards.
+
+## 9. Audit addenda (2026-04-17 Phase 1 scan)
+
+Findings discovered during Phase 1 that were not fully captured by the original
+v2 audit. Each is already handled correctly in the phased plan except where
+noted.
+
+1. **`services/config-service.ts::getConversationMessages` (line ~788)** queries
+   the CozoDB `messages` table via `agent.getDatabase()`. Original Risk #3 only
+   flagged `lib/transcript-export.ts` — there are TWO such paths. Phase 5 must
+   rewrite both (or retire the feature). Route: `GET /api/conversations/[file]/messages`.
+
+2. **`services/agents-subconscious-service.ts` was not just "strip memory fields".**
+   `getSubconsciousStatus()` actively called `agent.getDatabase()` and
+   `db.getMemoryStats()`. `triggerSubconsciousAction()` had a `case 'consolidate'`
+   invoking a method we removed in Phase 1. Phase 1 surgery covered both.
+
+3. **`lib/agent.ts::AgentSubconscious` had 3 extra memory callsites** beyond the
+   start/stop timers — inside `setActivityState()` (idle-transition trigger),
+   inside `handleHostHint()` (`run_now` case), and inside `rescheduleMemoryTimer()`
+   (a whole private helper method). All removed in Phase 1.
+
+4. **The subconscious used `fetch('/api/agents/<id>/memory/consolidate')`** — not a
+   direct method call. Phase ordering matters: Phase 1 must remove the fetch
+   before Phase 2 can safely delete the route. Phase 1 complete.
+
+5. **`lib/cerebellum/memory-subsystem.ts` is misleadingly named.** It's the
+   Subsystem-interface adapter wrapping AgentSubconscious — not a RAG memory
+   subsystem. Phase 1 updated its `getStatus()` to drop `totalMemoryRuns` and
+   documented the name mismatch. Rename deferred to Phase 7.
+
+6. **`services/config-service.ts` has its own StatusFileContent / AgentStatus
+   types** mirroring the on-disk status.json shape. These were separately
+   trimmed in Phase 1.
+
+7. **`writeStatusFile()` now writes only message + activity fields.** Existing
+   on-disk `status.json` files still carry the memory-shaped legacy keys;
+   readers must tolerate that (Phase 7 already notes this).
+
+8. **UI components `AgentSubconsciousIndicator.tsx` + `SubconsciousStatus.tsx`**
+   duck-type the status prop with their own interfaces. They don't fail
+   compile after Phase 1 — they just render empty for the now-missing fields.
+   Phase 3 strips them properly.
+
+9. **`lib/index-delta.ts` still has two importers** (`headless-router.ts` +
+   `agents-memory-service.ts`). Both go away in Phase 2/6 — order matters.
+
+10. **`server.mjs:1443` imports `agent-db-sync.mjs`** — confirmed. Phase 5 must
+    strip it before `cozo-node` is removed in Phase 8.

@@ -14,6 +14,10 @@ import { ServiceResult } from '@/types/service'
 /**
  * Get the subconscious status for an agent.
  * This will initialize the agent if it doesn't exist yet.
+ *
+ * TRDD-70a521d9 Phase 1: memory-shaped fields (lastMemoryRun, totalMemoryRuns,
+ * cumulativeMessagesIndexed, memoryStats, consolidation, etc.) were removed
+ * when the subconscious stopped driving the RAG memory subsystem.
  */
 export async function getSubconsciousStatus(agentId: string): Promise<ServiceResult<Record<string, unknown>>> {
   const agent = await agentRegistry.getAgent(agentId)
@@ -24,17 +28,6 @@ export async function getSubconsciousStatus(agentId: string): Promise<ServiceRes
   const subconscious = agent.getSubconscious()
   const status = subconscious?.getStatus() || null
 
-  // Get database memory stats
-  let memoryStats = null
-  try {
-    const db = await agent.getDatabase()
-    if (db) {
-      memoryStats = await db.getMemoryStats()
-    }
-  } catch {
-    // Database stats not available
-  }
-
   return {
     data: {
       success: true,
@@ -44,26 +37,23 @@ export async function getSubconsciousStatus(agentId: string): Promise<ServiceRes
       isWarmingUp: false,
       status: status ? {
         startedAt: status.startedAt,
-        memoryCheckInterval: status.memoryCheckInterval,
         messageCheckInterval: status.messageCheckInterval,
-        lastMemoryRun: status.lastMemoryRun,
         lastMessageRun: status.lastMessageRun,
-        lastMemoryResult: status.lastMemoryResult,
         lastMessageResult: status.lastMessageResult,
-        totalMemoryRuns: status.totalMemoryRuns,
         totalMessageRuns: status.totalMessageRuns,
-        cumulativeMessagesIndexed: status.cumulativeMessagesIndexed,
-        cumulativeConversationsIndexed: status.cumulativeConversationsIndexed
       } : null,
-      consolidation: status?.consolidation || null,
-      memoryStats
     },
     status: 200
   }
 }
 
 /**
- * Trigger subconscious actions (consolidate, index).
+ * Trigger subconscious actions.
+ *
+ * TRDD-70a521d9 Phase 1: the `consolidate` action was removed with the
+ * RAG memory subsystem. Remaining actions are no-ops that exist only so
+ * clients that shipped with the old action names get a structured 400
+ * instead of a 404 on the whole route.
  */
 export async function triggerSubconsciousAction(
   agentId: string,
@@ -80,33 +70,5 @@ export async function triggerSubconsciousAction(
     return { error: 'Subconscious not initialized', status: 400 }
   }
 
-  switch (action) {
-    case 'consolidate': {
-      console.log(`[Agent ${agentId.substring(0, 8)}] Manual consolidation triggered`)
-      const result = await subconscious.triggerConsolidation()
-      return {
-        data: {
-          success: result?.success ?? false,
-          action: 'consolidate',
-          result
-        },
-        status: 200
-      }
-    }
-
-    case 'index': {
-      console.log(`[Agent ${agentId.substring(0, 8)}] Manual indexing triggered`)
-      return {
-        data: {
-          success: true,
-          action: 'index',
-          message: 'Indexing will run on next interval'
-        },
-        status: 200
-      }
-    }
-
-    default:
-      return { error: `Unknown action: ${action}`, status: 400 }
-  }
+  return { error: `Unknown action: ${action}`, status: 400 }
 }

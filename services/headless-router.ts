@@ -67,9 +67,8 @@ import {
   runDeltaIndex,
   getTracking,
   initializeTracking,
-  getMetrics,
-  updateMetrics,
 } from '@/services/agents-memory-service'
+import { getMetrics, updateMetrics } from '@/services/agents-metrics-service'
 
 import {
   getDatabaseInfo,

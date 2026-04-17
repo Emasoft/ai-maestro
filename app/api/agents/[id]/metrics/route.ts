@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { enforceAuth } from '@/lib/route-auth'
-import { getMetrics, updateMetrics } from '@/services/agents-memory-service'
+import { getMetrics, updateMetrics } from '@/services/agents-metrics-service'
 import { isValidUuid } from '@/lib/validation'
 
 /**

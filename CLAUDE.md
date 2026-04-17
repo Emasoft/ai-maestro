@@ -233,12 +233,10 @@ The subconscious process runs on the **same machine where the agent lives**. Thi
 
 The subconscious does NOT need remote API calls to access agent data - everything is local. This is why `index-delta` can read `.jsonl` files directly from disk.
 
-**Subconscious timers (v0.18.10+):**
-- `maintainMemory()` - Indexes conversations for semantic search (runs periodically)
-- `triggerConsolidation()` - Long-term memory consolidation (runs periodically)
+**Subconscious timers (v0.29+ / post-RAG removal per TRDD-70a521d9):**
 - `checkMessages()` - **DISABLED by default** (push notifications replace polling)
 
-Message polling was removed in favor of push notifications. When messages arrive, agents receive instant tmux notifications instead of waiting for the next poll cycle. To re-enable polling (not recommended), set `messagePollingEnabled: true` in the subconscious config.
+The RAG-based memory maintenance (`maintainMemory()` + nightly `triggerConsolidation()`) was removed in Phase 1 of TRDD-70a521d9 once Claude Code shipped first-class built-in memory. Only message polling remains, and it stays off by default. To re-enable polling (not recommended), set `messagePollingEnabled: true` in the subconscious config.
 
 ### 3. Session Discovery Pattern
 

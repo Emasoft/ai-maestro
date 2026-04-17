@@ -298,7 +298,6 @@ import {
   getPtyDebugInfo,
   getDockerInfo,
   parseConversationFile,
-  getConversationMessages,
   getExportJobStatus,
   deleteExportJob,
 } from '@/services/config-service'
@@ -556,10 +555,6 @@ const routes: Route[] = [
   { method: 'POST', pattern: /^\/api\/conversations\/parse$/, paramNames: [], handler: async (req, res) => {
     const body = await readJsonBody(req)
     sendServiceResult(res, await parseConversationFile(body.filePath))
-  }},
-  { method: 'GET', pattern: /^\/api\/conversations\/([^/]+)\/messages$/, paramNames: ['file'], handler: async (_req, res, params, query) => {
-    const result = await getConversationMessages(decodeURIComponent(params.file), query.agentId || undefined)
-    sendServiceResult(res, result)
   }},
   { method: 'GET', pattern: /^\/api\/export\/jobs\/([^/]+)$/, paramNames: ['jobId'], handler: async (_req, res, params) => {
     sendServiceResult(res, await getExportJobStatus(params.jobId))

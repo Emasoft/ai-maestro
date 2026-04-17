@@ -1438,14 +1438,6 @@ async function startServer(handleRequest) {
       console.error('[SECURITY] Key rotation check failed:', error)
     }
 
-    // Sync agent databases on startup
-    try {
-      const { syncAgentDatabases } = await import('./lib/agent-db-sync.mjs')
-      await syncAgentDatabases()
-    } catch (error) {
-      console.error('[DB-SYNC] Failed to sync agent databases on startup:', error)
-    }
-
     // Manager gate: if no MANAGER exists, block all teams + hibernate team agents
     try {
       const { getManagerId } = await import('./lib/governance.ts')

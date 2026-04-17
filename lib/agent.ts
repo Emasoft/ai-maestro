@@ -12,7 +12,6 @@
  * - Each agent is truly autonomous and self-sufficient.
  */
 
-import { AgentDatabase } from './cozo-db'
 import { hostHints } from './host-hints'
 import { getAgent as getAgentFromRegistry } from './agent-registry'
 import { getSelfHost } from './hosts-config'
@@ -489,7 +488,6 @@ export type { SubconsciousStatus }
 export class Agent {
   private agentId: string
   private config: AgentConfig
-  private database: AgentDatabase | null = null
   private subconscious: AgentSubconscious | null = null
   private cerebellum: Cerebellum | null = null
   private initialized = false
@@ -509,13 +507,6 @@ export class Agent {
     }
 
     console.log(`[Agent ${this.agentId.substring(0, 8)}] Initializing...`)
-
-    // Initialize database (agent's memory)
-    this.database = new AgentDatabase({
-      agentId: this.agentId,
-      workingDirectory: this.config.workingDirectory
-    })
-    await this.database.initialize()
 
     // Create cerebellum (orchestrates subsystems)
     this.cerebellum = new Cerebellum(this.agentId)
@@ -553,24 +544,8 @@ export class Agent {
     }
     this.subconscious = null
 
-    // Close database
-    if (this.database) {
-      await this.database.close()
-      this.database = null
-    }
-
     this.initialized = false
     console.log(`[Agent ${this.agentId.substring(0, 8)}] ✓ Shutdown complete`)
-  }
-
-  /**
-   * Get the agent's database
-   */
-  async getDatabase(): Promise<AgentDatabase> {
-    if (!this.database) {
-      throw new Error(`Agent ${this.agentId} not initialized`)
-    }
-    return this.database
   }
 
   /**
@@ -601,7 +576,6 @@ export class Agent {
     return {
       agentId: this.agentId,
       initialized: this.initialized,
-      database: this.database ? 'connected' : 'disconnected',
       subconscious: this.subconscious?.getStatus() || null,
       cerebellum: this.cerebellum?.getStatus() || null,
     }

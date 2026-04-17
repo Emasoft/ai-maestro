@@ -13,7 +13,6 @@
  *   GET    /api/debug/pty                         -> getPtyDebugInfo
  *   GET    /api/docker/info                       -> getDockerInfo
  *   POST   /api/conversations/parse               -> parseConversationFile
- *   GET    /api/conversations/[file]/messages      -> getConversationMessages
  *   GET    /api/export/jobs/[jobId]               -> getExportJobStatus
  *   DELETE /api/export/jobs/[jobId]               -> deleteExportJob
  */
@@ -24,13 +23,11 @@ import path from 'path'
 import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
 import { discoverAgentDatabases } from '@/lib/agent-startup'
-import { agentRegistry } from '@/lib/agent'
 import {
   getOrganizationInfo,
   setOrganization,
   isValidOrganizationName,
 } from '@/lib/hosts-config'
-import { escapeForCozo } from '@/lib/cozo-utils'
 import { statePath } from '@/lib/ecosystem-constants'
 import type { MessageCheckResult } from '@/types/subconscious'
 
@@ -713,89 +710,6 @@ export function parseConversationFile(conversationFile: string): ServiceResult<P
     }
   } catch (error) {
     console.error('[Parse Conversation] Error:', error)
-    return {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      status: 500,
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// GET /api/conversations/[file]/messages
-// ---------------------------------------------------------------------------
-
-/**
- * Get messages for a conversation from the RAG database (fast, cached).
- */
-export async function getConversationMessages(
-  encodedFile: string,
-  agentId: string | undefined
-): Promise<ServiceResult<ConversationMessages | { error: string; fallback_to_parse: boolean; conversation_file: string }>> {
-  if (!agentId) {
-    return {
-      error: 'agentId query parameter is required',
-      status: 400,
-    }
-  }
-
-  try {
-    const conversationFile = decodeURIComponent(encodedFile)
-
-    // Null-check agent before calling getDatabase() to return clean 404
-    const agent = await agentRegistry.getAgent(agentId)
-    if (!agent) {
-      return { error: 'Agent not found', status: 404 }
-    }
-    const agentDb = await agent.getDatabase()
-
-    // Use escapeForCozo to prevent CozoScript injection via conversationFile (CC-P1-803)
-    const result = await agentDb.run(`
-      ?[msg_id, conversation_file, role, ts, text] :=
-        *messages{msg_id, conversation_file, role, ts, text},
-        conversation_file = ${escapeForCozo(conversationFile)}
-
-      :order ts
-    `)
-
-    if (!result.rows || result.rows.length === 0) {
-      // Error must be at the top level so callers using `if (result.error)` detect it.
-      // fallback_to_parse and conversation_file go in data so the route handler can
-      // spread them alongside the error in the JSON response (SF-024).
-      return {
-        error: 'No messages found in RAG database. Conversation may not be indexed yet.',
-        data: {
-          error: 'No messages found in RAG database. Conversation may not be indexed yet.',
-          fallback_to_parse: true,
-          conversation_file: conversationFile,
-        },
-        status: 404,
-      }
-    }
-
-    const messages = result.rows.map((row: any[]) => ({
-      msg_id: row[0],
-      conversation_file: row[1],
-      type: row[2],
-      timestamp: new Date(row[3]).toISOString(),
-      message: {
-        content: row[4],
-      },
-    }))
-
-    return {
-      data: {
-        success: true,
-        messages,
-        metadata: {
-          totalMessages: messages.length,
-          source: 'rag_database',
-          conversationFile,
-        },
-      },
-      status: 200,
-    }
-  } catch (error) {
-    console.error('[Messages API] Error:', error)
     return {
       error: error instanceof Error ? error.message : 'Unknown error',
       status: 500,

@@ -175,11 +175,11 @@ public/avatars/*_enhanced.png
 .claude/.DS_Store
 .claude/cache/
 .claude/chat_history/
-.claude/agent-memory/
 .claude/projects/
 .claude/todos/
 .claude/settings.local.json
 .claude/worktrees/
+CLAUDE.local.md
 
 # External backup files
 *.externbak

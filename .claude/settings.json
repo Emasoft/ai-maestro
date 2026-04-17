@@ -1,3 +1,87 @@
 {
-  "hooks": {}
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(bash ${CLAUDE_PROJECT_DIR}/.claude/scripts/archive-old-reports.sh)",
+      "Bash(bash ./tests/scenarios/scripts/cleanup-overnight-batch.sh:*)",
+      "Bash(bash ./tests/scenarios/scripts/setup-overnight-batch.sh:*)",
+      "Bash(cd:*)",
+      "Bash(chmod +x ./.claude/scripts/subagent-write-guard.sh)",
+      "Bash(chmod +x .claude/scripts/*.sh)",
+      "Bash(cp ~/.aimaestro/agents/registry.json ./tests/scenarios/state-backups/SCEN-018_20260413T112700Z/registry.json)",
+      "Bash(cp ~/.aimaestro/governance.json ./tests/scenarios/state-backups/SCEN-018_20260413T112700Z/governance.json)",
+      "Bash(cp ~/.claude/plugins/cache/emasoft-plugins/rechecker-plugin/3.2.17/scripts/finalize-session.py /tmp/fin.py)",
+      "Bash(cp ~/.claude/plugins/cache/emasoft-plugins/rechecker-plugin/3.2.17/scripts/finalize-session.py /tmp/finalize-test.py)",
+      "Bash(cp ~/.claude/plugins/cache/emasoft-plugins/rechecker-plugin/3.2.17/scripts/log-subagent-tokens.py /tmp/log-test.py)",
+      "Bash(cp ~/.claude/settings.json ./tests/scenarios/state-backups/SCEN-018_20260413T112700Z/claude-settings.json)",
+      "Bash(cp ~/.claude/settings.local.json ./tests/scenarios/state-backups/SCEN-018_20260413T112700Z/claude-settings-local.json)",
+      "Bash(cp ~/.claude/skills/commit/SKILL.md /tmp/SKILL-test.md)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh repo view:*)",
+      "Bash(git -C ~/ai-maestro status --short)",
+      "Bash(git -C ~/ai-maestro status -s)",
+      "Bash(git add:*)",
+      "Bash(git branch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git commit:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git push:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git status:*)",
+      "Bash(git worktree:*)",
+      "Bash(ln -s ../../tests/scenarios/SCENARIOS_TESTS_RULES.md .claude/rules/SCENARIOS_TESTS_RULES.md)",
+      "Bash(mkdir -p ./.claude/scripts ./.claude/agents)",
+      "Bash(mkdir -p ./tests/scenarios/screenshots/SCEN-018 ./tests/scenarios/state-backups/SCEN-018_20260413T112700Z)",
+      "Bash(mkdir -p .claude/skills)",
+      "Bash(mkdir -p ~/.claude/skills/run-scenario-test)",
+      "Bash(mkdir -p ~/.claude/skills/run-scenarios-batch)",
+      "Bash(mv ./.claude/agents/scenario-improvement-implementer.md ~/.claude/agents/scenario-improvement-implementer.md.old)",
+      "Bash(mv ./.claude/skills/run-scenarios-batch/SKILL.md ~/.claude/skills/run-scenarios-batch/SKILL.md.old)",
+      "Bash(npx eslint:*)",
+      "Bash(npx tsc:*)",
+      "Bash(python3 - /tmp/fin.py)",
+      "Bash(python3 - /tmp/finalize-test.py)",
+      "Bash(python3 - /tmp/log-test.py)",
+      "Bash(python3 - /tmp/SKILL-test.md)",
+      "Bash(rm -f ./resume_needed_alert.md)",
+      "Bash(rm -f /tmp/cron-test-log.txt)",
+      "Bash(rm -f /tmp/ps-snapshot.txt /tmp/ps-snapshot-2.txt /tmp/claude-strings.txt)",
+      "Bash(rm -f /tmp/rate-limit-experiment.log)",
+      "Bash(rm -f /tmp/write_alerts_bot.pid)",
+      "Bash(rm ./.claude/skills/implement-scenario-improvements/SKILL.md)",
+      "Bash(rm .claude/rules/SCENARIOS_TESTS_RULES.md)",
+      "Bash(rm /tmp/log-test.py)",
+      "Bash(rm /tmp/SKILL-test.md)",
+      "Bash(rm ~/.claude/plans/polished-sprouting-flamingo.md.bak)",
+      "Bash(rm ~/.claude/skills/run-scenarios-batch/SKILL.md ~/.claude/agents/scenario-runner.md ~/.claude/agents/scenario-improvement-implementer.md)",
+      "Bash(rmdir ./.claude/skills/implement-scenario-improvements)",
+      "Bash(rmdir ./.claude/skills/run-scenarios-batch ./.claude/skills ./.claude/agents)",
+      "Bash(rmdir ~/.claude/skills/run-scenarios-batch)",
+      "Bash(yarn build:*)",
+      "Bash(yarn test:*)",
+      "mcp__plugin_llm-externalizer_llm-externalizer__chat",
+      "mcp__plugin_llm-externalizer_llm-externalizer__check_against_specs",
+      "Read(//.claude/plugins/cache/ai-maestro-plugins/**)",
+      "Read(//.claude/skills/**)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/scripts/archive-old-reports.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "spinnerTipsEnabled": false
 }

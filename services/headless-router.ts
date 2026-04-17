@@ -10,7 +10,6 @@
 
 import { createHash } from 'crypto'
 import type { IncomingMessage, ServerResponse } from 'http'
-import type { MemoryCategory, MemoryTier } from '@/lib/cozo-schema-memory'
 import { authenticateAgent, buildAuthContext } from '../lib/agent-auth'
 
 // ---------------------------------------------------------------------------
@@ -53,21 +52,6 @@ import {
   sendChatMessage,
 } from '@/services/agents-chat-service'
 
-import {
-  getMemory,
-  initializeMemory,
-  getConsolidationStatus,
-  triggerConsolidation,
-  manageConsolidation,
-  queryLongTermMemories,
-  deleteLongTermMemory,
-  updateLongTermMemory,
-  searchConversations,
-  ingestConversations,
-  runDeltaIndex,
-  getTracking,
-  initializeTracking,
-} from '@/services/agents-memory-service'
 import { getMetrics, updateMetrics } from '@/services/agents-metrics-service'
 
 import {
@@ -342,7 +326,6 @@ import {
   deleteExportJob,
 } from '@/services/config-service'
 
-import { updateSystemSettings, type SystemSettings } from '@/lib/system-settings'
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -576,19 +559,6 @@ const routes: Route[] = [
   // =========================================================================
   { method: 'GET', pattern: /^\/api\/config$/, paramNames: [], handler: async (_req, res) => {
     sendServiceResult(res, await getSystemConfig())
-  }},
-  { method: 'PATCH', pattern: /^\/api\/config$/, paramNames: [], handler: async (req, res) => {
-    const body = await readJsonBody(req) ?? {}
-    const patch: Partial<SystemSettings> = {}
-    if (typeof body.conversationIndexerEnabled === 'boolean') {
-      patch.conversationIndexerEnabled = body.conversationIndexerEnabled
-    }
-    if (Object.keys(patch).length === 0) {
-      sendServiceResult(res, { status: 400, error: 'No valid settings provided' })
-      return
-    }
-    const updated = updateSystemSettings(patch)
-    sendServiceResult(res, { status: 200, data: { success: true, settings: updated } })
   }},
   { method: 'GET', pattern: /^\/api\/organization$/, paramNames: [], handler: async (_req, res) => {
     sendServiceResult(res, await getOrganization())
@@ -1031,91 +1001,7 @@ const routes: Route[] = [
     sendServiceResult(res, await sendChatMessage(params.id, body.message))
   }},
 
-  // Memory
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/memory\/consolidate$/, paramNames: ['id'], handler: async (_req, res, params) => {
-    sendServiceResult(res, await getConsolidationStatus(params.id))
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/memory\/consolidate$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await triggerConsolidation(params.id, body))
-  }},
-  { method: 'PATCH', pattern: /^\/api\/agents\/([^/]+)\/memory\/consolidate$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await manageConsolidation(params.id, body))
-  }},
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/memory\/long-term$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
-    // Guard each numeric param against NaN (parseInt/parseFloat returns NaN for non-numeric strings).
-    const limitVal = query.limit ? parseInt(query.limit) : undefined
-    const minConfidenceVal = query.minConfidence ? parseFloat(query.minConfidence) : undefined
-    const maxTokensVal = query.maxTokens ? parseInt(query.maxTokens) : undefined
-    // Query params are untyped strings — the service validates enum values at runtime
-    sendServiceResult(res, await queryLongTermMemories(params.id, {
-      query: query.query || query.q,
-      category: (query.category as MemoryCategory) || undefined,
-      limit: limitVal !== undefined && !isNaN(limitVal) ? limitVal : undefined,
-      includeRelated: query.includeRelated === 'true',
-      minConfidence: minConfidenceVal !== undefined && !isNaN(minConfidenceVal) ? minConfidenceVal : undefined,
-      tier: (query.tier as MemoryTier) || undefined,
-      view: query.view,
-      memoryId: query.id || undefined,
-      maxTokens: maxTokensVal !== undefined && !isNaN(maxTokensVal) ? maxTokensVal : undefined,
-    }))
-  }},
-  { method: 'PATCH', pattern: /^\/api\/agents\/([^/]+)\/memory\/long-term$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await updateLongTermMemory(params.id, body))
-  }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/memory\/long-term$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
-    sendServiceResult(res, await deleteLongTermMemory(params.id, query.id || ''))
-  }},
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/memory$/, paramNames: ['id'], handler: async (_req, res, params) => {
-    sendServiceResult(res, await getMemory(params.id))
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/memory$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await initializeMemory(params.id, body))
-  }},
-
-  // Search / Index
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/search$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
-    // Guard each numeric param against NaN (parseInt/parseFloat returns NaN for non-numeric strings).
-    const limitVal = query.limit ? parseInt(query.limit) : undefined
-    const minScoreVal = query.minScore ? parseFloat(query.minScore) : undefined
-    const startTsVal = query.startTs ? parseInt(query.startTs) : undefined
-    const endTsVal = query.endTs ? parseInt(query.endTs) : undefined
-    const bm25WeightVal = query.bm25Weight ? parseFloat(query.bm25Weight) : undefined
-    const semanticWeightVal = query.semanticWeight ? parseFloat(query.semanticWeight) : undefined
-    sendServiceResult(res, await searchConversations(params.id, {
-      query: query.q || query.query || '',
-      mode: query.mode,
-      limit: limitVal !== undefined && !isNaN(limitVal) ? limitVal : undefined,
-      minScore: minScoreVal !== undefined && !isNaN(minScoreVal) ? minScoreVal : undefined,
-      roleFilter: (query.roleFilter as 'user' | 'assistant') || undefined,
-      conversationFile: query.conversationFile,
-      startTs: startTsVal !== undefined && !isNaN(startTsVal) ? startTsVal : undefined,
-      endTs: endTsVal !== undefined && !isNaN(endTsVal) ? endTsVal : undefined,
-      useRrf: query.useRrf === 'true' ? true : query.useRrf === 'false' ? false : undefined,
-      bm25Weight: bm25WeightVal !== undefined && !isNaN(bm25WeightVal) ? bm25WeightVal : undefined,
-      semanticWeight: semanticWeightVal !== undefined && !isNaN(semanticWeightVal) ? semanticWeightVal : undefined,
-    }))
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/search$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await ingestConversations(params.id, body))
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/index-delta$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await runDeltaIndex(params.id, body))
-  }},
-
-  // Tracking / Metrics
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/tracking$/, paramNames: ['id'], handler: async (_req, res, params) => {
-    sendServiceResult(res, await getTracking(params.id))
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/tracking$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await initializeTracking(params.id, body))
-  }},
+  // Metrics (memory/search/tracking/index-delta routes removed — TRDD-70a521d9 Phase 2)
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/metrics$/, paramNames: ['id'], handler: async (_req, res, params) => {
     sendServiceResult(res, await getMetrics(params.id))
   }},

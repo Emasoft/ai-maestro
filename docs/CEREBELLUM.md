@@ -72,7 +72,7 @@ interface Subsystem {
 | `terminal-buffer.ts` | 49 | Ring buffer (8KB) for accumulating PTY output |
 | `session-bridge.ts` | 41 | TypeScript bridge for terminal buffer sharing |
 | `session-bridge.mjs` | 57 | ESM bridge for server.mjs (shares `globalThis._cerebellumBuffers`) |
-| `memory-subsystem.ts` | 57 | Wraps AgentSubconscious for memory indexing |
+| `subconscious-subsystem.ts` | 57 | Wraps AgentSubconscious for lifecycle + activity state |
 | `voice-subsystem.ts` | ~500 | Voice narration: buffer, LLM summarization, speech history |
 | `voice-prompts.ts` | ~200 | LLM prompt, event classification, template fallbacks |
 

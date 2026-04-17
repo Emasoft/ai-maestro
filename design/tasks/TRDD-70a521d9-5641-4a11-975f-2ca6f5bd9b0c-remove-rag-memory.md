@@ -3,7 +3,7 @@
 **TRDD ID:** `70a521d9-5641-4a11-975f-2ca6f5bd9b0c`
 **Filename:** `design/tasks/TRDD-70a521d9-5641-4a11-975f-2ca6f5bd9b0c-remove-rag-memory.md`
 **Tracked in:** this repo (design/tasks/ is git-tracked)
-**Status:** Not started — design ready, audit complete, awaiting implementation kickoff.
+**Status:** DONE — Phases 0-8 landed in commits e2b1e229..087be7a2..091c2f0cd..phase78 on feature/team-governance. Phase 9 (on-disk `agent.db` deletion) is a runtime-only step the operator runs on deploy.
 **Created:** 2026-04-17
 **Owner:** TBD
 **Priority:** P1 — eliminates ~276 MB of node_modules, removes a whole subsystem and its native build deps, simplifies agent lifecycle.

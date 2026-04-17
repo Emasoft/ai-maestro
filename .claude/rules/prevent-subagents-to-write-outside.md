@@ -165,4 +165,4 @@ This applies to `Bash` tool calls only — the `Write` tool is not affected beca
 
 | Date | Incident | Fix |
 |------|----------|-----|
-| 2026-04-14 | Overnight batch implementer escaped worktree, corrupted parent tree | Project-scoped write-guard at .claude/scripts/subagent-write-guard.sh + this rule + migration from scenarios-autorunner plugin into .claude/ |
+| 2026-04-14 | Overnight batch implementer escaped worktree, corrupted parent tree | Project-scoped write-guard at .claude/scripts/subagent-write-guard.sh + this rule + migration of scenario agent definitions into project-scoped `.claude/` |

@@ -1,5 +1,7 @@
 # TRDD Inventory — design/tasks/ — 2026-04-17
 
+> **Migration note:** Two TRDDs below (TRDD-1222f06a and TRDD-f79f6047) were originally scoped against the `scenarios-autorunner` plugin. That plugin is obsolete — its deliverables (scenario runner, improvement implementer, skills, hooks, scripts, rules) now live directly in the project under `.claude/` (project-scoped and git-tracked). The TRDDs are kept as historical design records; wherever they reference the plugin, read it as the project's `.claude/` scenario definitions.
+
 **Generated:** 2026-04-17
 **Source branch:** `fork/feature/team-governance` (materialized at head)
 **Total TRDDs:** 5
@@ -119,7 +121,7 @@
   - Rule 13 AUTONOMOUS-PROTOCOL is the canonical Rule 13 (line 674+).
   - `tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh` exists.
   - BUT scenarios still use `mcp__chrome-devtools__*` in `required_tools` (verified in SCEN-001, SCEN-014, SCEN-018, SCEN-024). This is a backward-compat / migration debt explicitly flagged in TRDD §4.3 Open Question 5: "Do we rewrite them or introduce a browser_stack field?"
-  - The upstream `scenarios-autorunner` plugin rewrite (v2.0.0 target) is a separate repo — its status lives outside this project.
+  - The upstream `scenarios-autorunner` plugin has been retired — its deliverables were absorbed into the project's `.claude/` scenario definitions (agents, skills, scripts, rules, all project-scoped and git-tracked).
 - **Suggested action:** update TRDD status to **"In progress — rules + helpers shipped; scenario `required_tools` migration + plugin v2.0.0 pending"** and add a section summarizing what landed vs what remains.
 
 ---

@@ -104,11 +104,6 @@ import {
   removeRepo,
 } from '@/services/agents-repos-service'
 
-import {
-  getPlaybackState,
-  controlPlayback,
-} from '@/services/agents-playback-service'
-
 import { createDockerAgent } from '@/services/agents-docker-service'
 
 import {
@@ -1060,14 +1055,7 @@ const routes: Route[] = [
     sendServiceResult(res, await removeRepo(params.id, query.url || ''))
   }},
 
-  // Playback
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/playback$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
-    sendServiceResult(res, await getPlaybackState(params.id, query.sessionId))
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/playback$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await controlPlayback(params.id, body))
-  }},
+  // Playback routes removed — TRDD-70a521d9
 
   // Export / Transfer
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/export$/, paramNames: ['id'], handler: async (_req, res, params) => {

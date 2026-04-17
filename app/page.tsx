@@ -19,11 +19,10 @@ import MigrationBanner from '@/components/MigrationBanner'
 import { VersionChecker } from '@/components/VersionChecker'
 import AgentSearch from '@/components/AgentSearch'
 import TranscriptExport from '@/components/TranscriptExport'
-import AgentPlayback from '@/components/AgentPlayback'
 import { useAgents } from '@/hooks/useAgents'
 import { TerminalProvider } from '@/contexts/TerminalContext'
 import { useHelpPanel } from '@/contexts/HelpPanelContext'
-import { Terminal, Mail, User, GitBranch, MessageSquare, Moon, Power, Loader2, Plus, Search, Download, Play, ExternalLink } from 'lucide-react'
+import { Terminal, Mail, User, GitBranch, MessageSquare, Moon, Power, Loader2, Plus, Search, Download, ExternalLink } from 'lucide-react'
 import { agentToSession } from '@/lib/agent-utils'
 import type { Agent, AgentRole } from '@/types/agent'
 
@@ -82,7 +81,7 @@ export default function DashboardPage() {
   const [isResizing, setIsResizing] = useState(false)
   const { deviceType } = useDeviceType()
   const isMobile = deviceType === 'phone'
-  const [activeTab, setActiveTab] = useState<'terminal' | 'chat' | 'messages' | 'worktree' | 'search' | 'export' | 'playback'>('terminal')
+  const [activeTab, setActiveTab] = useState<'terminal' | 'chat' | 'messages' | 'worktree' | 'search' | 'export'>('terminal')
   const [unreadCount, setUnreadCount] = useState(0)
   // profileScrollToDangerZone — forwarded to AgentProfilePanel → AgentProfile (embedded)
   const [profileScrollToDangerZone, setProfileScrollToDangerZone] = useState(false)
@@ -762,18 +761,6 @@ export default function DashboardPage() {
                       Search
                     </button>
                     <button
-                      onClick={() => setActiveTab('playback')}
-                      className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
-                        activeTab === 'playback'
-                          ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50'
-                          : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/30'
-                      }`}
-                      title="Playback"
-                    >
-                      <Play className="w-4 h-4" />
-                      Playback
-                    </button>
-                    <button
                       onClick={() => setActiveTab('export')}
                       className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
                         activeTab === 'export'
@@ -952,15 +939,6 @@ export default function DashboardPage() {
                       <div className="flex-1 overflow-auto p-4">
                         <AgentSearch
                           agentId={agent.id}
-                          className="max-w-4xl mx-auto"
-                        />
-                      </div>
-                    ) : activeTab === 'playback' ? (
-                      <div className="flex-1 overflow-auto p-4">
-                        <AgentPlayback
-                          agentId={agent.id}
-                          sessionId={session.id}
-                          agentName={agent.label || agent.name}
                           className="max-w-4xl mx-auto"
                         />
                       </div>

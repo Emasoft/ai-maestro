@@ -1,12 +1,9 @@
 /**
- * Memory Subsystem - Adapter wrapping the existing AgentSubconscious
+ * Subconscious Subsystem - Adapter wrapping AgentSubconscious
  *
- * Despite the historical name, this is NOT a RAG-memory subsystem — it's the
  * Subsystem-interface adapter that lets Cerebellum manage AgentSubconscious
- * as one of its subsystems. TRDD-70a521d9 Phase 1 detached the memory
- * callbacks; this wrapper now only forwards lifecycle + activity state.
- *
- * Renaming is deferred (TRDD Phase 7 cleanup) to keep Phase 1's diff focused.
+ * lifecycle (start/stop, activity state, status reporting). Post-TRDD-70a521d9
+ * the subconscious is message-polling + activity-state only (no memory).
  */
 
 import type { Subsystem, SubsystemContext, SubsystemStatus, ActivityState } from './types'
@@ -19,8 +16,8 @@ type AgentSubconsciousInstance = any
 // Factory type for creating subconscious instances
 export type SubconsciousFactory = () => AgentSubconsciousInstance
 
-export class MemorySubsystem implements Subsystem {
-  readonly name = 'memory'
+export class SubconsciousSubsystem implements Subsystem {
+  readonly name = 'subconscious'
   private subconscious: AgentSubconsciousInstance
 
   constructor(subconsciousFactory: SubconsciousFactory) {

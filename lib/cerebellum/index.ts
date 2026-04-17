@@ -1,5 +1,5 @@
 export { Cerebellum } from './cerebellum'
-export { MemorySubsystem } from './memory-subsystem'
+export { SubconsciousSubsystem } from './subconscious-subsystem'
 export { VoiceSubsystem } from './voice-subsystem'
 export { TerminalOutputBuffer } from './terminal-buffer'
 export { getOrCreateBuffer, getBuffer, removeBuffer } from './session-bridge'

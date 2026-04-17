@@ -17,7 +17,7 @@ import { getAgent as getAgentFromRegistry } from './agent-registry'
 import { getSelfHost } from './hosts-config'
 import { computeSessionName } from '@/types/agent'
 import { Cerebellum } from './cerebellum/cerebellum'
-import { MemorySubsystem } from './cerebellum/memory-subsystem'
+import { SubconsciousSubsystem } from './cerebellum/subconscious-subsystem'
 import { VoiceSubsystem } from './cerebellum/voice-subsystem'
 
 import * as fs from 'fs'
@@ -513,10 +513,10 @@ export class Agent {
 
     // Register memory subsystem (wraps existing AgentSubconscious unchanged)
     const agent = this
-    const memorySubsystem = new MemorySubsystem(
+    const subconsciousSubsystem = new SubconsciousSubsystem(
       () => new AgentSubconscious(this.agentId, agent, subconsciousConfig)
     )
-    this.cerebellum.registerSubsystem(memorySubsystem)
+    this.cerebellum.registerSubsystem(subconsciousSubsystem)
 
     // Register voice subsystem (LLM-powered speech summarization)
     this.cerebellum.registerSubsystem(new VoiceSubsystem())
@@ -524,8 +524,8 @@ export class Agent {
     // Start all subsystems
     this.cerebellum.start()
 
-    // Backward compat: expose subconscious from memory subsystem
-    this.subconscious = memorySubsystem.getSubconscious()
+    // Backward compat: expose subconscious from subconscious subsystem
+    this.subconscious = subconsciousSubsystem.getSubconscious()
 
     this.initialized = true
     console.log(`[Agent ${this.agentId.substring(0, 8)}] ✓ Initialized`)

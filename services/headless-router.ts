@@ -55,18 +55,6 @@ import {
 import { getMetrics, updateMetrics } from '@/services/agents-metrics-service'
 
 import {
-  getDatabaseInfo,
-  initializeDatabase,
-  queryDbGraph,
-  indexDbSchema,
-  clearDbGraph,
-  queryGraph,
-  queryCodeGraph,
-  indexCodeGraph,
-  deleteCodeGraph,
-} from '@/services/agents-graph-service'
-
-import {
   listMessages as listAgentMessages,
   sendMessage as sendAgentMessage,
   getMessage as getAgentMessage,
@@ -93,12 +81,6 @@ import {
   transferAgent,
 } from '@/services/agents-transfer-service'
 import type { AgentImportOptions } from '@/types/portable'
-
-import {
-  queryDocs,
-  indexDocs,
-  clearDocs,
-} from '@/services/agents-docs-service'
 
 import {
   getSkillsConfig,
@@ -1010,88 +992,7 @@ const routes: Route[] = [
     sendServiceResult(res, await updateMetrics(params.id, body))
   }},
 
-  // Graph - code
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/graph\/code$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
-    // Explicitly extract and coerce query params to match queryCodeGraph's expected types
-    const depthVal = query.depth ? parseInt(query.depth, 10) : undefined
-    sendServiceResult(res, await queryCodeGraph(params.id, {
-      action: query.action,
-      name: query.name || null,
-      from: query.from || null,
-      to: query.to || null,
-      project: query.project || null,
-      nodeId: query.nodeId || null,
-      depth: depthVal !== undefined && !isNaN(depthVal) ? depthVal : undefined,
-    }))
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/graph\/code$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await indexCodeGraph(params.id, body))
-  }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/graph\/code$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
-    sendServiceResult(res, await deleteCodeGraph(params.id, query.projectPath || ''))
-  }},
-
-  // Graph - db
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/graph\/db$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
-    // Explicitly extract and coerce query params to match queryDbGraph's expected types
-    sendServiceResult(res, await queryDbGraph(params.id, {
-      action: query.action,
-      name: query.name || null,
-      column: query.column || null,
-      database: query.database || null,
-    }))
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/graph\/db$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await indexDbSchema(params.id, body))
-  }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/graph\/db$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
-    sendServiceResult(res, await clearDbGraph(params.id, query.database || ''))
-  }},
-
-  // Graph - query
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/graph\/query$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
-    // Explicitly extract and coerce query params to match queryGraph's expected types
-    sendServiceResult(res, await queryGraph(params.id, {
-      queryType: query.queryType || null,
-      name: query.name || null,
-      type: query.type || null,
-      from: query.from || null,
-      to: query.to || null,
-    }))
-  }},
-
-  // Database
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/database$/, paramNames: ['id'], handler: async (_req, res, params) => {
-    sendServiceResult(res, await getDatabaseInfo(params.id))
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/database$/, paramNames: ['id'], handler: async (_req, res, params) => {
-    sendServiceResult(res, await initializeDatabase(params.id))
-  }},
-
-  // Docs
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/docs$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
-    // Explicitly extract and coerce query params to match DocsQueryOptions types
-    const limitVal = query.limit ? parseInt(query.limit, 10) : undefined
-    sendServiceResult(res, await queryDocs(params.id, {
-      action: query.action,
-      q: query.q || null,
-      keyword: query.keyword || null,
-      type: query.type || null,
-      docId: query.docId || null,
-      limit: limitVal !== undefined && !isNaN(limitVal) ? limitVal : undefined,
-      project: query.project || null,
-    }))
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/docs$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await indexDocs(params.id, body))
-  }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/docs$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
-    // clearDocs expects optional string; provide empty string fallback for undefined
-    sendServiceResult(res, await clearDocs(params.id, query.project || ''))
-  }},
+  // Graph/Database/Docs routes removed — TRDD-70a521d9 Phase 4 (RAG feature retired)
 
   // Skills
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/skills\/settings$/, paramNames: ['id'], handler: async (_req, res, params) => {

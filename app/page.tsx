@@ -23,7 +23,7 @@ import AgentPlayback from '@/components/AgentPlayback'
 import { useAgents } from '@/hooks/useAgents'
 import { TerminalProvider } from '@/contexts/TerminalContext'
 import { useHelpPanel } from '@/contexts/HelpPanelContext'
-import { Terminal, Mail, User, GitBranch, MessageSquare, Share2, FileText, Moon, Power, Loader2, Plus, Search, Download, Play, ExternalLink } from 'lucide-react'
+import { Terminal, Mail, User, GitBranch, MessageSquare, Moon, Power, Loader2, Plus, Search, Download, Play, ExternalLink } from 'lucide-react'
 import { agentToSession } from '@/lib/agent-utils'
 import type { Agent, AgentRole } from '@/types/agent'
 
@@ -58,21 +58,9 @@ const AgentProfilePanel = dynamic(
   { ssr: false }
 )
 
-// Heavy component using cytoscape - only shown on graph tab
-const AgentGraph = dynamic(
-  () => import('@/components/AgentGraph'),
-  { ssr: false }
-)
-
 // Only shown when waking an agent
 const WakeAgentDialog = dynamic(
   () => import('@/components/WakeAgentDialog'),
-  { ssr: false }
-)
-
-// Only shown on docs tab
-const DocumentationPanel = dynamic(
-  () => import('@/components/DocumentationPanel'),
   { ssr: false }
 )
 
@@ -94,7 +82,7 @@ export default function DashboardPage() {
   const [isResizing, setIsResizing] = useState(false)
   const { deviceType } = useDeviceType()
   const isMobile = deviceType === 'phone'
-  const [activeTab, setActiveTab] = useState<'terminal' | 'chat' | 'messages' | 'worktree' | 'graph' | 'docs' | 'search' | 'export' | 'playback'>('terminal')
+  const [activeTab, setActiveTab] = useState<'terminal' | 'chat' | 'messages' | 'worktree' | 'search' | 'export' | 'playback'>('terminal')
   const [unreadCount, setUnreadCount] = useState(0)
   // profileScrollToDangerZone — forwarded to AgentProfilePanel → AgentProfile (embedded)
   const [profileScrollToDangerZone, setProfileScrollToDangerZone] = useState(false)
@@ -762,28 +750,6 @@ export default function DashboardPage() {
                       WorkTree
                     </button>
                     <button
-                      onClick={() => setActiveTab('graph')}
-                      className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
-                        activeTab === 'graph'
-                          ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50'
-                          : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/30'
-                      }`}
-                    >
-                      <Share2 className="w-4 h-4" />
-                      Graph
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('docs')}
-                      className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
-                        activeTab === 'docs'
-                          ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50'
-                          : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/30'
-                      }`}
-                    >
-                      <FileText className="w-4 h-4" />
-                      Docs
-                    </button>
-                    <button
                       onClick={() => setActiveTab('search')}
                       className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
                         activeTab === 'search'
@@ -980,22 +946,6 @@ export default function DashboardPage() {
                         agentId={agent.id}
                         agentAlias={agent.label || agent.name}
                         hostId={agent.hostId}
-                        isActive={true}
-                      />
-                    ) : activeTab === 'graph' ? (
-                      <AgentGraph
-                        sessionName={session.id}
-                        agentId={agent.id}
-                        workingDirectory={session.workingDirectory}
-                        hostUrl={agent.hostUrl}
-                        isActive={true}
-                      />
-                    ) : activeTab === 'docs' ? (
-                      <DocumentationPanel
-                        sessionName={session.id}
-                        agentId={agent.id}
-                        workingDirectory={session.workingDirectory}
-                        hostUrl={agent.hostUrl}
                         isActive={true}
                       />
                     ) : activeTab === 'search' ? (

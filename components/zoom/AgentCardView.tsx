@@ -6,7 +6,6 @@ import {
   Terminal,
   Mail,
   User,
-  Brain,
   Moon,
   Power,
   Loader2
@@ -39,18 +38,6 @@ const MessageCenter = dynamic(
   }
 )
 
-const MemoryViewer = dynamic(
-  () => import('@/components/MemoryViewer'),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-violet-500 animate-spin" />
-      </div>
-    )
-  }
-)
-
 const AgentProfileTab = dynamic(
   () => import('@/components/zoom/AgentProfileTab'),
   {
@@ -63,7 +50,7 @@ const AgentProfileTab = dynamic(
   }
 )
 
-type TabType = 'terminal' | 'messages' | 'profile' | 'memory'
+type TabType = 'terminal' | 'messages' | 'profile'
 
 interface AgentCardViewProps {
   agent: Agent
@@ -151,7 +138,6 @@ export default function AgentCardView({
     { id: 'terminal', label: 'Terminal', icon: <Terminal className="w-4 h-4" /> },
     { id: 'messages', label: 'Messages', icon: <Mail className="w-4 h-4" />, badge: unreadCount },
     { id: 'profile', label: 'Profile', icon: <User className="w-4 h-4" /> },
-    { id: 'memory', label: 'Memory', icon: <Brain className="w-4 h-4" /> },
   ]
 
   const displayName = agent.label || agent.name || 'Unnamed Agent'
@@ -281,21 +267,6 @@ export default function AgentCardView({
           />
         </div>
 
-        {/* Memory Tab */}
-        <div
-          className="absolute inset-0 overflow-hidden"
-          style={{
-            visibility: activeTab === 'memory' ? 'visible' : 'hidden',
-            pointerEvents: activeTab === 'memory' ? 'auto' : 'none',
-            zIndex: activeTab === 'memory' ? 10 : 0
-          }}
-        >
-          <MemoryViewer
-            agentId={agent.id}
-            hostUrl={agent.hostUrl}
-            isActive={activeTab === 'memory'}
-          />
-        </div>
       </div>
     </div>
   )

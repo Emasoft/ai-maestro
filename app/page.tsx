@@ -23,7 +23,7 @@ import AgentPlayback from '@/components/AgentPlayback'
 import { useAgents } from '@/hooks/useAgents'
 import { TerminalProvider } from '@/contexts/TerminalContext'
 import { useHelpPanel } from '@/contexts/HelpPanelContext'
-import { Terminal, Mail, User, GitBranch, MessageSquare, Share2, FileText, Moon, Power, Loader2, Brain, Plus, Search, Download, Play, ExternalLink } from 'lucide-react'
+import { Terminal, Mail, User, GitBranch, MessageSquare, Share2, FileText, Moon, Power, Loader2, Plus, Search, Download, Play, ExternalLink } from 'lucide-react'
 import { agentToSession } from '@/lib/agent-utils'
 import type { Agent, AgentRole } from '@/types/agent'
 
@@ -55,12 +55,6 @@ const ImportAgentDialog = dynamic(
 // Right panel — Profile (Overview + Config tabs)
 const AgentProfilePanel = dynamic(
   () => import('@/components/AgentProfilePanel'),
-  { ssr: false }
-)
-
-// Heavy component with canvas/graph - only shown on memory tab
-const MemoryViewer = dynamic(
-  () => import('@/components/MemoryViewer'),
   { ssr: false }
 )
 
@@ -100,7 +94,7 @@ export default function DashboardPage() {
   const [isResizing, setIsResizing] = useState(false)
   const { deviceType } = useDeviceType()
   const isMobile = deviceType === 'phone'
-  const [activeTab, setActiveTab] = useState<'terminal' | 'chat' | 'messages' | 'worktree' | 'graph' | 'memory' | 'docs' | 'search' | 'export' | 'playback'>('terminal')
+  const [activeTab, setActiveTab] = useState<'terminal' | 'chat' | 'messages' | 'worktree' | 'graph' | 'docs' | 'search' | 'export' | 'playback'>('terminal')
   const [unreadCount, setUnreadCount] = useState(0)
   // profileScrollToDangerZone — forwarded to AgentProfilePanel → AgentProfile (embedded)
   const [profileScrollToDangerZone, setProfileScrollToDangerZone] = useState(false)
@@ -353,72 +347,6 @@ export default function DashboardPage() {
   }, [agents, refreshAgents])
 
   // Initialize agent memories for all agents on load
-  useEffect(() => {
-    if (agents.length === 0) return
-
-    const initKey = 'aimaestro-agents-initialized'
-    const lastInit = sessionStorage.getItem(initKey)
-    const now = Date.now()
-
-    if (lastInit && (now - parseInt(lastInit)) < 3600000) {
-      console.log('[Dashboard] Agent memories already initialized in this session')
-      return
-    }
-
-    // Timeout for memory initialization - 15s for local, 20s for remote
-    const INIT_TIMEOUT_LOCAL = 15000
-    const INIT_TIMEOUT_REMOTE = 20000
-
-    const initializeAgentMemories = async () => {
-      console.log(`[Dashboard] Initializing memory for ${agents.length} agents...`)
-
-      const initPromises = agents.map(async (agent) => {
-        const baseUrl = agent.hostUrl || ''
-        const timeout = baseUrl ? INIT_TIMEOUT_REMOTE : INIT_TIMEOUT_LOCAL
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), timeout)
-
-        try {
-          // Use agent's hostUrl to route to correct host for remote agents
-          const checkResponse = await fetch(`${baseUrl}/api/agents/${agent.id}/memory`, {
-            signal: controller.signal
-          })
-          clearTimeout(timeoutId)
-          const checkData = await checkResponse.json()
-
-          if (!checkData.success || (!checkData.sessions?.length && !checkData.projects?.length)) {
-            console.log(`[Dashboard] Initializing memory for agent ${agent.id}`)
-            const initController = new AbortController()
-            const initTimeoutId = setTimeout(() => initController.abort(), timeout)
-            await fetch(`${baseUrl}/api/agents/${agent.id}/memory`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ populateFromSessions: true }),
-              signal: initController.signal
-            })
-            clearTimeout(initTimeoutId)
-          }
-          return { agent: agent.id, success: true }
-        } catch (error) {
-          clearTimeout(timeoutId)
-          const errorMsg = error instanceof Error && error.name === 'AbortError'
-            ? `Timed out after ${timeout / 1000}s`
-            : error
-          console.error(`[Dashboard] Failed to initialize agent ${agent.id}:`, errorMsg)
-          return { agent: agent.id, success: false, error: errorMsg }
-        }
-      })
-
-      // Use Promise.allSettled so one slow/failed agent doesn't block others
-      const results = await Promise.allSettled(initPromises)
-      const successful = results.filter(r => r.status === 'fulfilled' && r.value?.success).length
-      console.log(`[Dashboard] Agent memory initialization complete: ${successful}/${agents.length} succeeded`)
-      sessionStorage.setItem(initKey, now.toString())
-    }
-
-    initializeAgentMemories()
-  }, [agents])
-
   // Fetch unread message count for active agent
   useEffect(() => {
     if (!activeAgentId || !activeAgent) return
@@ -845,17 +773,6 @@ export default function DashboardPage() {
                       Graph
                     </button>
                     <button
-                      onClick={() => setActiveTab('memory')}
-                      className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
-                        activeTab === 'memory'
-                          ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50'
-                          : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/30'
-                      }`}
-                    >
-                      <Brain className="w-4 h-4" />
-                      Memory
-                    </button>
-                    <button
                       onClick={() => setActiveTab('docs')}
                       className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
                         activeTab === 'docs'
@@ -1070,12 +987,6 @@ export default function DashboardPage() {
                         sessionName={session.id}
                         agentId={agent.id}
                         workingDirectory={session.workingDirectory}
-                        hostUrl={agent.hostUrl}
-                        isActive={true}
-                      />
-                    ) : activeTab === 'memory' ? (
-                      <MemoryViewer
-                        agentId={agent.id}
                         hostUrl={agent.hostUrl}
                         isActive={true}
                       />

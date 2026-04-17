@@ -9,7 +9,6 @@
  */
 
 import fs from 'fs'
-import path from 'path'
 import { agentRegistry } from './agent'
 import { statePath } from '@/lib/ecosystem-constants'
 
@@ -18,6 +17,23 @@ const AGENTS_DIR = statePath('agents')
 /**
  * Discover all agent database directories
  * Agent databases are stored as directories (not .json files) in ~/.aimaestro/agents/
+ *
+ * IMPORTANT — do NOT rewrite this to be registry-only. The per-agent disk dir
+ * `~/.aimaestro/agents/<uuid>/` holds not just the CozoDB but also the agent's
+ * Ed25519 AMP identity keys (`keys/`), the subconscious `status.json`, and
+ * other identity-scoped state. The intersection of "dir exists on disk" AND
+ * "agent id is in registry" is the AID integrity invariant — both must be
+ * true for this agent to be considered real. Feeding registry-only IDs into
+ * `initializeAllAgents()` would trigger `agentRegistry.getAgent()` which in
+ * turn calls `getDatabase()` on a possibly-missing dir, creating a fresh
+ * empty `agent.db` (and directory) that contains no keys — silently
+ * fabricating a new identity for what was supposed to be an existing agent.
+ *
+ * TRDD-70a521d9 note: the RAG memory removal Phase 9 deletes only the
+ * `agent.db` files inside these directories (`find -name 'agent.db' -delete`),
+ * not the directories themselves. So this FS scan keeps working after memory
+ * is gone; the coupling to fix is inside `agentRegistry.getAgent()` → make
+ * sure subconscious startup stops calling `getDatabase()` (Phase 1 work).
  */
 export function discoverAgentDatabases(): string[] {
   if (!fs.existsSync(AGENTS_DIR)) {

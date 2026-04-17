@@ -184,7 +184,9 @@ export function governanceScopeForTitle(title: string): string[] {
 // Biscuit WASM v0.6.0 type definitions are inaccurate for the Node.js ESM
 // runtime (constructors marked private, methods missing from types, etc.).
 // We use a minimal runtime-verified interface and cast through `unknown`.
-/* eslint-disable @typescript-eslint/no-explicit-any */
+// (The project's ESLint config extends only `next/core-web-vitals` — no
+// `@typescript-eslint` plugin is loaded, so `any` is not flagged and no
+// disable comment is needed.)
 type BiscuitModule = any
 let _biscuitModule: BiscuitModule | null = null
 

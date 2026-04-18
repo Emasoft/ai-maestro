@@ -365,25 +365,6 @@ amp-reply.sh <message-id> "Acknowledged, deploying now"
 amp-delete.sh <message-id>
 ```
 
-### Code Intelligence
-
-```bash
-# Index your project
-docs-index.sh ~/Code/my-project
-graph-index-delta.sh ~/Code/my-project  # Update the code graph index for a specific project path
-
-# Search documentation
-docs-search.sh "authentication flow"
-
-# Query code graph
-graph-find-callers.sh handleRequest
-graph-find-callees.sh processPayment
-graph-find-path.sh UserController PaymentService
-
-# Search memory
-memory-search.sh "database migration decision"
-```
-
 ### Plugin Management
 
 ```bash

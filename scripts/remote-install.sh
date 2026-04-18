@@ -414,7 +414,7 @@ uninstall() {
         maestro_info "Stopped mailman tmux session"
     fi
 
-    # Remove agent tool scripts (old messaging + AMP + graph + memory + docs + agent CLI)
+    # Remove agent tool scripts (old messaging + AMP + agent CLI)
     local scripts=(
         "check-aimaestro-messages.sh" "read-aimaestro-message.sh"
         "send-aimaestro-message.sh" "reply-aimaestro-message.sh"
@@ -424,12 +424,6 @@ uninstall() {
         "amp-fetch.sh" "amp-delete.sh" "amp-forward.sh" "amp-search.sh"
         "amp-thread.sh"
         "aimaestro-agent.sh"
-        "memory-search.sh" "memory-helper.sh"
-        "graph-describe.sh" "graph-find-callers.sh" "graph-find-callees.sh"
-        "graph-find-related.sh" "graph-find-by-type.sh" "graph-find-serializers.sh"
-        "graph-find-associations.sh" "graph-find-path.sh"
-        "docs-search.sh" "docs-find-by-type.sh" "docs-stats.sh"
-        "docs-index.sh" "docs-index-delta.sh" "docs-list.sh" "docs-get.sh"
     )
     for script in "${scripts[@]}"; do
         rm -f "$HOME/.local/bin/$script" 2>/dev/null || true
@@ -445,7 +439,7 @@ uninstall() {
     claude plugin uninstall "${MAIN_PLUGIN_NAME:-ai-maestro-plugin}" 2>/dev/null || true
     claude plugin marketplace remove "${MARKETPLACE_NAME:-ai-maestro-plugins}" 2>/dev/null || true
     # Also clean up any legacy standalone skills
-    for skill in agent-messaging memory-search graph-query docs-search planning ai-maestro-agents-management team-governance; do
+    for skill in agent-messaging planning ai-maestro-agents-management team-governance; do
         rm -rf "$HOME/.claude/skills/$skill" 2>/dev/null || true
     done
     maestro_info "Removed AI Maestro plugin and legacy skills"
@@ -1104,9 +1098,6 @@ act3_clone_and_build() {
                     # to skip all other tool categories.
                     local tool_flags=""
                     [ ! -f "$HOME/.local/bin/amp-send.sh" ] && tool_flags="$tool_flags --skip-messaging"
-                    [ ! -d "$HOME/.local/share/aimaestro/memory" ] && tool_flags="$tool_flags --skip-memory"
-                    [ ! -f "$HOME/.local/bin/graph-describe.sh" ] && tool_flags="$tool_flags --skip-graph"
-                    [ ! -f "$HOME/.local/bin/docs-search.sh" ] && tool_flags="$tool_flags --skip-docs"
                     [ ! -f "$HOME/.local/bin/aimaestro-agent.sh" ] && tool_flags="$tool_flags --skip-agent-cli"
                     chmod +x install.sh
                     ./install.sh --from-remote -y "${tool_flags[@]}"

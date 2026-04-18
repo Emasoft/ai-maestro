@@ -128,26 +128,6 @@ function diagnoseAgentCli(): ToolStatus {
   return binExists('aimaestro-agent.sh') ? 'installed' : 'missing'
 }
 
-function diagnoseDocTools(): ToolStatus {
-  const required = ['docs-search.sh', 'docs-list.sh', 'docs-get.sh']
-  const found = required.filter(binExists)
-  if (found.length === 0) return 'missing'
-  if (found.length < required.length) return 'partial'
-  return 'installed'
-}
-
-function diagnoseGraphTools(): ToolStatus {
-  const required = ['graph-describe.sh', 'graph-find-callers.sh', 'graph-index-delta.sh']
-  const found = required.filter(binExists)
-  if (found.length === 0) return 'missing'
-  if (found.length < required.length) return 'partial'
-  return 'installed'
-}
-
-function diagnoseMemoryTools(): ToolStatus {
-  return binExists('memory-search.sh') ? 'installed' : 'missing'
-}
-
 function diagnoseTailscaleServe(): ToolStatus {
   try {
     // Check if tailscale is installed — use execFileSync to avoid shell injection
@@ -226,33 +206,6 @@ const TOOLS: ToolDef[] = [
     runArgs: ['-y'],
     confirmMessage: 'This will install/update the aimaestro-agent CLI tool and its modules to ~/.local/bin/.',
     diagnose: diagnoseAgentCli,
-  },
-  {
-    id: 'doc-tools',
-    name: 'Documentation Tools',
-    description: 'Auto-generated documentation index, search, and browse scripts (docs-search, docs-list, etc.).',
-    script: 'install-doc-tools.sh',
-    runArgs: ['-y'],
-    confirmMessage: 'This will install/update documentation tools to ~/.local/bin/.',
-    diagnose: diagnoseDocTools,
-  },
-  {
-    id: 'graph-tools',
-    name: 'Code Graph Tools',
-    description: 'CozoDB-backed code graph scripts for call graphs, symbol relationships, and semantic queries.',
-    script: 'install-graph-tools.sh',
-    runArgs: ['-y'],
-    confirmMessage: 'This will install/update code graph tools to ~/.local/bin/.',
-    diagnose: diagnoseGraphTools,
-  },
-  {
-    id: 'memory-tools',
-    name: 'Memory Search Tools',
-    description: 'Semantic search over conversation history (memory-search). Requires subconscious indexing.',
-    script: 'install-memory-tools.sh',
-    runArgs: ['-y'],
-    confirmMessage: 'This will install/update memory search tools to ~/.local/bin/.',
-    diagnose: diagnoseMemoryTools,
   },
 ]
 

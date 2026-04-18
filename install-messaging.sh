@@ -726,7 +726,7 @@ if [ "$INSTALL_SKILL" = true ]; then
     fi
 
     # Step 3: Remove legacy standalone skills (now bundled in plugin)
-    LEGACY_SKILLS=("agent-messaging" "graph-query" "memory-search" "docs-search" "planning" "ai-maestro-agents-management" "team-governance")
+    LEGACY_SKILLS=("agent-messaging" "planning" "ai-maestro-agents-management" "team-governance")
     REMOVED_COUNT=0
 
     for skill in "${LEGACY_SKILLS[@]}"; do
@@ -1001,7 +1001,7 @@ if [ "$INSTALL_SKILL" = true ]; then
 
     # Verify no standalone skills remain (they should have been migrated)
     STANDALONE_REMAINING=0
-    for skill in agent-messaging graph-query memory-search docs-search planning ai-maestro-agents-management team-governance; do
+    for skill in agent-messaging planning ai-maestro-agents-management team-governance; do
         if [ -d ~/.claude/skills/"$skill" ]; then
             print_warning "Standalone skill still exists: $skill (should use plugin version)"
             STANDALONE_REMAINING=$((STANDALONE_REMAINING + 1))

@@ -35,9 +35,6 @@ SKIP_TOOLS=false
 NON_INTERACTIVE=false
 FROM_REMOTE=false
 
-SKIP_MEMORY=false
-SKIP_GRAPH=false
-SKIP_DOCS=false
 SKIP_HOOKS=false
 SKIP_AGENT_CLI=false
 
@@ -54,18 +51,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --non-interactive|-y)
             NON_INTERACTIVE=true
-            shift
-            ;;
-        --skip-memory)
-            SKIP_MEMORY=true
-            shift
-            ;;
-        --skip-graph)
-            SKIP_GRAPH=true
-            shift
-            ;;
-        --skip-docs)
-            SKIP_DOCS=true
             shift
             ;;
         --skip-hooks)
@@ -85,9 +70,6 @@ while [[ $# -gt 0 ]]; do
             echo "  -y, --non-interactive  Non-interactive mode (auto-accept all prompts)"
             echo "  --from-remote          Called from remote-install.sh (internal)"
             echo "  --skip-tools           Skip agent tools installation"
-            echo "  --skip-memory          Skip memory tools"
-            echo "  --skip-graph           Skip graph tools"
-            echo "  --skip-docs            Skip documentation tools"
             echo "  --skip-hooks           Skip Claude Code hooks"
             echo "  --skip-agent-cli       Skip agent management CLI"
             echo "  -h, --help             Show this help message"
@@ -858,7 +840,7 @@ if [ -n "$INSTALL_DIR" ]; then
     fi
 fi
 
-# Install agent tools (messaging, memory, graph, docs, hooks, agent CLI)
+# Install agent tools (messaging, hooks, agent CLI)
 if [ -n "$INSTALL_DIR" ] && [ "$SKIP_TOOLS" != true ]; then
     echo ""
     if [ "$FROM_REMOTE" != true ]; then
@@ -867,9 +849,6 @@ if [ -n "$INSTALL_DIR" ] && [ "$SKIP_TOOLS" != true ]; then
 
     # Component selection — all enabled by default, --skip-* flags can disable
     INSTALL_MESSAGING=true
-    INSTALL_MEMORY=true
-    INSTALL_GRAPH=true
-    INSTALL_DOCS=true
     INSTALL_HOOKS=true
     INSTALL_AGENT_CLI=true
 
@@ -881,9 +860,6 @@ if [ -n "$INSTALL_DIR" ] && [ "$SKIP_TOOLS" != true ]; then
     GATEWAYS_REPO="https://github.com/23blocks-OS/aimaestro-gateways.git"
 
     # Apply per-component skip flags from CLI arguments
-    if [ "$SKIP_MEMORY" = true ]; then INSTALL_MEMORY=false; fi
-    if [ "$SKIP_GRAPH" = true ]; then INSTALL_GRAPH=false; fi
-    if [ "$SKIP_DOCS" = true ]; then INSTALL_DOCS=false; fi
     if [ "$SKIP_HOOKS" = true ]; then INSTALL_HOOKS=false; fi
     if [ "$SKIP_AGENT_CLI" = true ]; then INSTALL_AGENT_CLI=false; fi
 
@@ -897,37 +873,31 @@ if [ -n "$INSTALL_DIR" ] && [ "$SKIP_TOOLS" != true ]; then
             echo "  Agent tools to install:"
             echo ""
             echo "    1) [$(_check $INSTALL_MESSAGING)]  AMP Messaging     Agent-to-agent communication"
-            echo "    2) [$(_check $INSTALL_MEMORY)]  Memory Search     Search conversation history"
-            echo "    3) [$(_check $INSTALL_GRAPH)]  Code Graph        Query code relationships"
-            echo "    4) [$(_check $INSTALL_DOCS)]  Documentation     Search auto-generated docs"
-            echo "    5) [$(_check $INSTALL_HOOKS)]  Claude Hooks      Claude Code integration"
-            echo "    6) [$(_check $INSTALL_AGENT_CLI)]  Agent CLI         Agent management from terminal"
+            echo "    2) [$(_check $INSTALL_HOOKS)]  Claude Hooks      Claude Code integration"
+            echo "    3) [$(_check $INSTALL_AGENT_CLI)]  Agent CLI         Agent management from terminal"
             echo ""
             echo "  Messaging gateways (configured after install):"
             echo ""
-            echo "    7) [$(_check $INSTALL_GW_SLACK)]  Slack Gateway     Slack workspace bridge"
-            echo "    8) [$(_check $INSTALL_GW_DISCORD)]  Discord Gateway   Discord server bridge"
-            echo "    9) [$(_check $INSTALL_GW_EMAIL)]  Email Gateway     Email (Mandrill) bridge"
-            echo "   10) [$(_check $INSTALL_GW_WHATSAPP)]  WhatsApp Gateway  WhatsApp Web bridge (beta)"
+            echo "    4) [$(_check $INSTALL_GW_SLACK)]  Slack Gateway     Slack workspace bridge"
+            echo "    5) [$(_check $INSTALL_GW_DISCORD)]  Discord Gateway   Discord server bridge"
+            echo "    6) [$(_check $INSTALL_GW_EMAIL)]  Email Gateway     Email (Mandrill) bridge"
+            echo "    7) [$(_check $INSTALL_GW_WHATSAPP)]  WhatsApp Gateway  WhatsApp Web bridge (beta)"
             echo ""
-            echo "  Type a number (1-10) to toggle  |  a) All  n) None"
+            echo "  Type a number (1-7) to toggle  |  a) All  n) None"
             echo "  Press Enter when ready to install selected components"
             read -p "  > " choice
             case $choice in
                 1) if [ "$INSTALL_MESSAGING" = true ]; then INSTALL_MESSAGING=false; else INSTALL_MESSAGING=true; fi ;;
-                2) if [ "$INSTALL_MEMORY" = true ]; then INSTALL_MEMORY=false; else INSTALL_MEMORY=true; fi ;;
-                3) if [ "$INSTALL_GRAPH" = true ]; then INSTALL_GRAPH=false; else INSTALL_GRAPH=true; fi ;;
-                4) if [ "$INSTALL_DOCS" = true ]; then INSTALL_DOCS=false; else INSTALL_DOCS=true; fi ;;
-                5) if [ "$INSTALL_HOOKS" = true ]; then INSTALL_HOOKS=false; else INSTALL_HOOKS=true; fi ;;
-                6) if [ "$INSTALL_AGENT_CLI" = true ]; then INSTALL_AGENT_CLI=false; else INSTALL_AGENT_CLI=true; fi ;;
-                7) if [ "$INSTALL_GW_SLACK" = true ]; then INSTALL_GW_SLACK=false; else INSTALL_GW_SLACK=true; fi ;;
-                8) if [ "$INSTALL_GW_DISCORD" = true ]; then INSTALL_GW_DISCORD=false; else INSTALL_GW_DISCORD=true; fi ;;
-                9) if [ "$INSTALL_GW_EMAIL" = true ]; then INSTALL_GW_EMAIL=false; else INSTALL_GW_EMAIL=true; fi ;;
-                10) if [ "$INSTALL_GW_WHATSAPP" = true ]; then INSTALL_GW_WHATSAPP=false; else INSTALL_GW_WHATSAPP=true; fi ;;
-                a|A) INSTALL_MESSAGING=true; INSTALL_MEMORY=true; INSTALL_GRAPH=true; INSTALL_DOCS=true; INSTALL_HOOKS=true; INSTALL_AGENT_CLI=true; INSTALL_GW_SLACK=true; INSTALL_GW_DISCORD=true; INSTALL_GW_EMAIL=true; INSTALL_GW_WHATSAPP=true ;;
-                n|N) INSTALL_MESSAGING=false; INSTALL_MEMORY=false; INSTALL_GRAPH=false; INSTALL_DOCS=false; INSTALL_HOOKS=false; INSTALL_AGENT_CLI=false; INSTALL_GW_SLACK=false; INSTALL_GW_DISCORD=false; INSTALL_GW_EMAIL=false; INSTALL_GW_WHATSAPP=false ;;
+                2) if [ "$INSTALL_HOOKS" = true ]; then INSTALL_HOOKS=false; else INSTALL_HOOKS=true; fi ;;
+                3) if [ "$INSTALL_AGENT_CLI" = true ]; then INSTALL_AGENT_CLI=false; else INSTALL_AGENT_CLI=true; fi ;;
+                4) if [ "$INSTALL_GW_SLACK" = true ]; then INSTALL_GW_SLACK=false; else INSTALL_GW_SLACK=true; fi ;;
+                5) if [ "$INSTALL_GW_DISCORD" = true ]; then INSTALL_GW_DISCORD=false; else INSTALL_GW_DISCORD=true; fi ;;
+                6) if [ "$INSTALL_GW_EMAIL" = true ]; then INSTALL_GW_EMAIL=false; else INSTALL_GW_EMAIL=true; fi ;;
+                7) if [ "$INSTALL_GW_WHATSAPP" = true ]; then INSTALL_GW_WHATSAPP=false; else INSTALL_GW_WHATSAPP=true; fi ;;
+                a|A) INSTALL_MESSAGING=true; INSTALL_HOOKS=true; INSTALL_AGENT_CLI=true; INSTALL_GW_SLACK=true; INSTALL_GW_DISCORD=true; INSTALL_GW_EMAIL=true; INSTALL_GW_WHATSAPP=true ;;
+                n|N) INSTALL_MESSAGING=false; INSTALL_HOOKS=false; INSTALL_AGENT_CLI=false; INSTALL_GW_SLACK=false; INSTALL_GW_DISCORD=false; INSTALL_GW_EMAIL=false; INSTALL_GW_WHATSAPP=false ;;
                 "") break ;;
-                *) echo "  Invalid choice. Use 1-10, a, n, or Enter." ;;
+                *) echo "  Invalid choice. Use 1-7, a, n, or Enter." ;;
             esac
         done
     fi
@@ -936,7 +906,7 @@ if [ -n "$INSTALL_DIR" ] && [ "$SKIP_TOOLS" != true ]; then
     TOOLS_INSTALLED=0
 
     # Install messaging (AMP scripts to ~/.local/bin + ai-maestro plugin from marketplace)
-    # The plugin bundles ALL skills (messaging, memory, graph, docs, planning, governance, etc.)
+    # The plugin bundles ALL skills (messaging, planning, governance, etc.)
     if [ "$INSTALL_MESSAGING" = true ] && [ -f "install-messaging.sh" ]; then
         echo ""
         print_step "Installing messaging tools + AI Maestro plugin..."
@@ -944,42 +914,6 @@ if [ -n "$INSTALL_DIR" ] && [ "$SKIP_TOOLS" != true ]; then
             ./install-messaging.sh -y
         else
             ./install-messaging.sh
-        fi
-        TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
-    fi
-
-    # Install memory tools (scripts only — skill bundled in ai-maestro plugin)
-    if [ "$INSTALL_MEMORY" = true ] && [ -f "install-memory-tools.sh" ]; then
-        echo ""
-        print_step "Installing memory scripts..."
-        if [ "$NON_INTERACTIVE" = true ]; then
-            ./install-memory-tools.sh -y
-        else
-            ./install-memory-tools.sh
-        fi
-        TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
-    fi
-
-    # Install graph tools (scripts only — skill bundled in ai-maestro plugin)
-    if [ "$INSTALL_GRAPH" = true ] && [ -f "install-graph-tools.sh" ]; then
-        echo ""
-        print_step "Installing graph scripts..."
-        if [ "$NON_INTERACTIVE" = true ]; then
-            ./install-graph-tools.sh -y
-        else
-            ./install-graph-tools.sh
-        fi
-        TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
-    fi
-
-    # Install doc tools (scripts only — skill bundled in ai-maestro plugin)
-    if [ "$INSTALL_DOCS" = true ] && [ -f "install-doc-tools.sh" ]; then
-        echo ""
-        print_step "Installing doc scripts..."
-        if [ "$NON_INTERACTIVE" = true ]; then
-            ./install-doc-tools.sh -y
-        else
-            ./install-doc-tools.sh
         fi
         TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
     fi

@@ -32,9 +32,6 @@ RESTART="🔄"
 
 # Parse command line arguments
 NON_INTERACTIVE=false
-SKIP_MEMORY=false
-SKIP_GRAPH=false
-SKIP_DOCS=false
 SKIP_HOOKS=false
 SKIP_AGENT_CLI=false
 while [[ $# -gt 0 ]]; do
@@ -50,18 +47,6 @@ while [[ $# -gt 0 ]]; do
             echo "  -y, --yes, --non-interactive  Run without prompts (auto-accept all)"
             echo "  -h, --help                    Show this help message"
             exit 0
-            ;;
-        --skip-memory)
-            SKIP_MEMORY=true
-            shift
-            ;;
-        --skip-graph)
-            SKIP_GRAPH=true
-            shift
-            ;;
-        --skip-docs)
-            SKIP_DOCS=true
-            shift
             ;;
         --skip-hooks)
             SKIP_HOOKS=true
@@ -269,42 +254,21 @@ else
     print_warning "install-messaging.sh not found - skipping messaging tools"
 fi
 
-# 2. Memory tools (optional — skip with --skip-memory)
-if [ "$SKIP_MEMORY" != true ] && [ -f "install-memory-tools.sh" ]; then
-    print_info "Reinstalling memory tools..."
-    ./install-memory-tools.sh -y
-    print_success "Memory tools reinstalled"
-fi
-
-# 3. Graph tools (optional — skip with --skip-graph)
-if [ "$SKIP_GRAPH" != true ] && [ -f "install-graph-tools.sh" ]; then
-    print_info "Reinstalling graph tools..."
-    ./install-graph-tools.sh -y
-    print_success "Graph tools reinstalled"
-fi
-
-# 4. Doc tools (optional — skip with --skip-docs)
-if [ "$SKIP_DOCS" != true ] && [ -f "install-doc-tools.sh" ]; then
-    print_info "Reinstalling doc tools..."
-    ./install-doc-tools.sh -y
-    print_success "Doc tools reinstalled"
-fi
-
-# 5. Agent CLI (optional — skip with --skip-agent-cli)
+# 2. Agent CLI (optional — skip with --skip-agent-cli)
 if [ "$SKIP_AGENT_CLI" != true ] && [ -f "install-agent-cli.sh" ]; then
     print_info "Reinstalling agent management CLI..."
     ./install-agent-cli.sh -y
     print_success "Agent CLI reinstalled"
 fi
 
-# 6. Claude Code hooks — now provided by ai-maestro-plugin (v2.4.0+)
+# 3. Claude Code hooks — now provided by ai-maestro-plugin (v2.4.0+)
 # The plugin's hooks/hooks.json handles all events via ${CLAUDE_PLUGIN_ROOT}.
 # No settings.json modification needed.
 if [ "$SKIP_HOOKS" != true ]; then
     print_info "Claude Code hooks: provided by ai-maestro-plugin (no settings.json changes)"
 fi
 
-# 7. Marketplace plugin already updated in step 0 above
+# 4. Marketplace plugin already updated in step 0 above
 
 # Issue 7.12: Capture verification exit code instead of piping to || true
 if [ -f "verify-installation.sh" ]; then

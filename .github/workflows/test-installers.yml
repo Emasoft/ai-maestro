@@ -62,79 +62,6 @@ jobs:
             echo "✓ $script installed"
           done
 
-          # Verify core helper scripts were installed
-          for script in docs-search.sh docs-helper.sh; do
-            if [ ! -x ~/.local/bin/$script ]; then
-              echo "ERROR: $script not installed or not executable"
-              exit 1
-            fi
-            echo "✓ $script installed"
-          done
-
-      - name: Test install-memory-tools.sh
-        run: |
-          echo "=== Testing install-memory-tools.sh ==="
-
-          ./install-memory-tools.sh -y
-
-          # Verify memory scripts were installed
-          for script in memory-search.sh memory-helper.sh; do
-            if [ ! -x ~/.local/bin/$script ]; then
-              echo "ERROR: $script not installed or not executable"
-              exit 1
-            fi
-            echo "✓ $script installed"
-          done
-
-          # Note: memory-search skill is now bundled in the ai-maestro plugin,
-          # not installed by this standalone installer
-          echo "✓ memory-search skill bundled in plugin (not tested here)"
-
-      - name: Test install-graph-tools.sh
-        run: |
-          echo "=== Testing install-graph-tools.sh ==="
-
-          ./install-graph-tools.sh -y
-
-          # Verify graph scripts were installed
-          for script in graph-helper.sh graph-describe.sh graph-find-callers.sh graph-find-callees.sh graph-find-related.sh graph-find-by-type.sh; do
-            if [ ! -x ~/.local/bin/$script ]; then
-              echo "ERROR: $script not installed or not executable"
-              exit 1
-            fi
-            echo "✓ $script installed"
-          done
-
-          # Note: graph-query skill is now bundled in the ai-maestro plugin,
-          # not installed by this standalone installer
-          echo "✓ graph-query skill bundled in plugin (not tested here)"
-
-      - name: Test install-doc-tools.sh
-        run: |
-          echo "=== Testing install-doc-tools.sh ==="
-
-          ./install-doc-tools.sh -y
-
-          # Verify docs-helper.sh was installed to share dir
-          if [ ! -f ~/.local/share/aimaestro/shell-helpers/docs-helper.sh ]; then
-            echo "ERROR: docs-helper.sh not installed to share dir"
-            exit 1
-          fi
-          echo "✓ docs-helper.sh installed to share dir"
-
-          # Verify doc scripts were installed
-          for script in docs-search.sh docs-index.sh docs-stats.sh docs-list.sh docs-get.sh docs-find-by-type.sh; do
-            if [ ! -x ~/.local/bin/$script ]; then
-              echo "ERROR: $script not installed or not executable"
-              exit 1
-            fi
-            echo "✓ $script installed"
-          done
-
-          # Note: docs-search skill is now bundled in the ai-maestro plugin,
-          # not installed by this standalone installer
-          echo "✓ docs-search skill bundled in plugin (not tested here)"
-
       - name: Test install-agent-cli.sh
         run: |
           echo "=== Testing install-agent-cli.sh ==="
@@ -170,18 +97,6 @@ jobs:
         run: |
           echo "=== Testing scripts can source dependencies ==="
 
-          # Test that memory-helper.sh can source common.sh
-          bash -n ~/.local/bin/memory-helper.sh
-          echo "✓ memory-helper.sh syntax OK"
-
-          # Test that graph-helper.sh can source common.sh
-          bash -n ~/.local/bin/graph-helper.sh
-          echo "✓ graph-helper.sh syntax OK"
-
-          # Test that docs-helper.sh can source common.sh (in share dir)
-          bash -n ~/.local/share/aimaestro/shell-helpers/docs-helper.sh
-          echo "✓ docs-helper.sh syntax OK"
-
           # Test that agent-helper.sh can source dependencies
           bash -n ~/.local/share/aimaestro/shell-helpers/agent-helper.sh
           echo "✓ agent-helper.sh syntax OK"
@@ -195,10 +110,7 @@ jobs:
           echo "=== Testing script help output ==="
 
           # These should show help or error gracefully (not crash)
-          ~/.local/bin/memory-search.sh --help || true
-          ~/.local/bin/docs-search.sh --help || true
           ~/.local/bin/amp-send.sh --help || true
-          ~/.local/bin/graph-describe.sh --help || true
           ~/.local/bin/aimaestro-agent.sh --help || true
 
           echo "✓ Scripts handle missing tmux session gracefully"
@@ -264,9 +176,6 @@ jobs:
           echo ""
           echo "Tested installers:"
           echo "  ✓ install-messaging.sh"
-          echo "  ✓ install-memory-tools.sh"
-          echo "  ✓ install-graph-tools.sh"
-          echo "  ✓ install-doc-tools.sh"
           echo "  ✓ install-agent-cli.sh"
           echo ""
           echo "Installed scripts:"

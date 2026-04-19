@@ -14,7 +14,9 @@ import {
   getPluginsForTitle,
   deleteRolePlugin,
   PREDEFINED_ROLE_PLUGINS,
+  GITHUB_MARKETPLACE_NAME,
 } from '@/services/role-plugin-service'
+import { TITLE_PLUGIN_MAP } from '@/lib/ecosystem-constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +24,35 @@ export async function GET(req: NextRequest) {
   try {
     const title = req.nextUrl.searchParams.get('title')
     const client = req.nextUrl.searchParams.get('client')
-    const plugins = title ? await getPluginsForTitle(title, client || undefined) : await listRolePlugins()
+    let plugins = title ? await getPluginsForTitle(title, client || undefined) : await listRolePlugins()
+    // SCEN-006 fix: when no native plugin exists for target client, fall back to the
+    // Claude-native required plugin so the wizard doesn't block. ChangeTitle Gates
+    // 15-16 will auto-convert at agent creation / title assignment.
+    if (title && client && plugins.length === 0) {
+      const defaultPlugin = TITLE_PLUGIN_MAP[title.toUpperCase()]
+      if (defaultPlugin) {
+        const claudeCandidates = await getPluginsForTitle(title, 'claude')
+        const match = claudeCandidates.find(p => p.name === defaultPlugin) ?? claudeCandidates[0]
+        if (match) {
+          plugins = [match]
+        } else {
+          // Last-resort default descriptor (no .agent.toml resolution — the pipeline
+          // still handles conversion at commit time).
+          plugins = [
+            {
+              name: defaultPlugin,
+              version: '1.0.0',
+              description: `${title.toUpperCase()} — auto-assigned default (will be converted for ${client})`,
+              pluginDir: '',
+              source: 'marketplace',
+              marketplace: GITHUB_MARKETPLACE_NAME,
+              compatibleTitles: [title.toUpperCase()],
+              compatibleClients: ['claude-code'],
+            } as any,
+          ]
+        }
+      }
+    }
     return NextResponse.json({ plugins })
   } catch (error) {
     console.error('[role-plugins] List failed:', error)

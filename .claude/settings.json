@@ -83,5 +83,8 @@
       }
     ]
   },
+  "enabledPlugins": {
+    "ai-maestro-janitor@ai-maestro-plugins": true
+  },
   "spinnerTipsEnabled": false
 }

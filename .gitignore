@@ -204,6 +204,17 @@ resume_needed_alert.md
 
 # Claude Code CronCreate lock file — ephemeral runtime artifact
 .claude/scheduled_tasks.lock
+# Claude Code CronCreate state file — per-session, contains local cron refs
+.claude/scheduled_tasks.json
+
+# ai-maestro-janitor plugin state + logs (project-local, see janitor README)
+.janitor/
+
+# Next.js smoke-test / broken backup build dirs
+.next.bak-*/
+
+# resume-handoff + create-handoff workspace (user scratch, not project code)
+thoughts/
 
 # Scenario test outputs (per-run artifacts, not source)
 tests/scenarios/reports/

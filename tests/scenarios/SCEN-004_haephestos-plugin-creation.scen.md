@@ -153,6 +153,13 @@ author: AI Maestro Team
 - **Modifies:** Agent registry, tmux sessions
 - **Verify:** Terminal shows Claude prompt or Haephestos greeting. Status indicator shows "Online" or "Active". Screenshot: SCEN-004/S011-haephestos-awake.png
 
+#### S011a: CRITICAL — verify Haephestos workdir is safe before any further interaction
+- **Action:** Read-only check: `curl -s "http://localhost:23000/api/agents" -H "Cookie: <session>" | jq '.agents[] | select(.name=="_aim-creation-helper") | .workingDirectory'` — the response MUST be a path starting with `/Users/<user>/agents/` (typically `~/agents/haephestos/`). If it is `/Users/<user>/ai-maestro` or any path outside `~/agents/`, the environment is a critical security bug. STOP IMMEDIATELY, record as BUG-001 / P0 finding in the report, abandon the scenario without cleanup, alert the user.
+- **Goal:** Haephestos's workingDirectory is confirmed under `~/agents/` — safe for all subsequent steps including cleanup with `alsoDeleteFolder=true`.
+- **Creates:** nothing
+- **Modifies:** nothing
+- **Verify:** The JSON response shows a path under `~/agents/`. Screenshot: SCEN-004/S011a-haephestos-workdir-verified.png
+
 #### S012: Verify TOML preview panel is visible
 - **Action:** `take_snapshot` to check for "Rich"/"Raw" tabs or TOML preview area
 - **Goal:** The left panel with TOML viewer is present

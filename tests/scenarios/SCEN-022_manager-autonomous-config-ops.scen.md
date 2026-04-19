@@ -124,6 +124,13 @@ commit: TBD
   confirm via `GET /api/agents/<id>/local-config` that the plugin is
   listed in `enabledPlugins` at `--scope local`.
 
+### S004a: CRITICAL — verify workdir is safe under ~/agents/
+- **Action:** Read-only check: `curl -s "http://localhost:23000/api/agents" -H "Cookie: <session>" | jq '.agents[] | select(.name=="scen022-autobot") | .workingDirectory'` — the returned path MUST be `/Users/<user>/agents/scen022-autobot` exactly. Then `ls -la ~/agents/scen022-autobot/.claude/settings.local.json` (read-only) to confirm the folder was actually created at that location (not somewhere else). If the workingDirectory field is anything outside `/Users/<user>/agents/`, or the `ls` fails (folder not at the expected path), STOP IMMEDIATELY — the CLI script has a critical security bug. Record as BUG-001 / P0 finding, abandon the scenario without cleanup, alert the user.
+- **Goal:** scen022-autobot's working directory is confirmed under `~/agents/scen022-autobot/` — safe for cleanup's folder-delete step.
+- **Creates:** nothing
+- **Modifies:** nothing
+- **Verify:** curl returns `~/agents/scen022-autobot` path, ls succeeds.
+
 ### S005: Verify the test agent appears in the sidebar
 - **Action:** Refresh sidebar or wait for useAgents polling.
 - **Goal:** New agent visible.

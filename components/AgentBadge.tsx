@@ -176,6 +176,14 @@ export default function AgentBadge({
   const avatarUrl = hasStoredAvatarUrl ? agent.avatar : getAvatarUrl(agent.id)
   const [imageError, setImageError] = React.useState(false)
 
+  // Working directory for the secondary row (replaces the legacy agent-ID display).
+  // Cards show workdir so the user can see at a glance which project each agent
+  // belongs to. Home-relative paths are abbreviated to ~ for readability.
+  const rawWorkdir = agent.workingDirectory || agent.sessions?.[0]?.workingDirectory || ''
+  const displayWorkdir = rawWorkdir
+    ? rawWorkdir.replace(/^\/Users\/[^/]+/, '~').replace(/\/$/, '')
+    : ''
+
   // Reset imageError whenever avatarUrl changes so a new image is always attempted.
   // Without this, a previous load failure keeps imageError true across re-renders
   // (e.g. when agent.avatar is updated dynamically), causing the fallback to show
@@ -417,19 +425,21 @@ export default function AgentBadge({
                 {agent.label || agent.name}
               </h3>
             )}
-            {/* agent.name is shown as secondary ID handle only when agent.label (persona name)
-                is present — otherwise agent.name already appears in the h3 as the primary
-                display name and showing it again here would be a redundant duplicate. */}
-            {agent.label && (
+            {/* Row 2 — working directory (replaces the legacy agent-ID row). Shows
+                where the agent is doing its work so the user can tell a project agent
+                from a test agent at a glance. Falls back silently if workdir is unset. */}
+            {displayWorkdir && (
               <p
-                className="text-[10px] leading-tight text-slate-300 mt-0.5"
+                className="text-[10px] leading-tight text-slate-300 mt-0.5 truncate"
                 style={{
                   textShadow: '0 0 6px rgba(0,0,0,0.9), 0 1px 2px rgba(0,0,0,0.8)',
                 }}
+                title={rawWorkdir}
               >
-                {agent.name}
+                {displayWorkdir}
               </p>
             )}
+            {/* Row 3 — host, always shown when present */}
             {agent.hostId && (
               <p
                 className="text-[9px] text-slate-400 mt-0.5"
@@ -486,38 +496,29 @@ export default function AgentBadge({
             </h3>
           )}
 
-          {/* Full name and host - Secondary info, centered */}
-          {/* When agent.label (persona name) is present, agent.name (the ID handle) is shown
-              in the secondary row alongside the Docker container icon — this avoids duplicating
-              the primary display name already in the h3.
-              When agent.label is absent, agent.name already fills the h3 as the primary name,
-              so the secondary row shows ONLY the Box icon (no agent.name) to avoid duplication. */}
+          {/* Row 2 — working directory (replaces the legacy agent-ID row).
+              Shows where the agent is doing its work so project agents are
+              distinguishable from test agents at a glance. Docker icon is
+              appended when applicable. */}
           <div className={`${(agent.label || agent.name) ? 'mt-1' : 'mt-3'} w-full`}>
-            {agent.label ? (
-              <p className={`
-                text-[11px] leading-tight flex items-center justify-center gap-1
-                ${isHibernated ? 'text-slate-600' : 'text-slate-400'}
-              `}>
-                {agent.name}
+            {(displayWorkdir || agent.deployment?.cloud?.provider === 'local-container') && (
+              <p
+                className={`
+                  text-[11px] leading-tight flex items-center justify-center gap-1 truncate px-1
+                  ${isHibernated ? 'text-slate-600' : 'text-slate-400'}
+                `}
+                title={rawWorkdir || ''}
+              >
+                {displayWorkdir && <span className="truncate">{displayWorkdir}</span>}
                 {agent.deployment?.cloud?.provider === 'local-container' && (
                   <span className="flex-shrink-0" aria-label="Docker container">
                     <Box className="w-3 h-3 text-blue-400" />
                   </span>
                 )}
               </p>
-            ) : (
-              agent.deployment?.cloud?.provider === 'local-container' && (
-                <p className={`
-                  text-[11px] leading-tight flex items-center justify-center gap-1
-                  ${isHibernated ? 'text-slate-600' : 'text-slate-400'}
-                `}>
-                  <span className="flex-shrink-0" aria-label="Docker container">
-                    <Box className="w-3 h-3 text-blue-400" />
-                  </span>
-                </p>
-              )
             )}
 
+            {/* Row 3 — host, always shown when present */}
             {agent.hostId && (
               <p className="text-[10px] text-slate-500 mt-0.5">
                 @{agent.hostId}

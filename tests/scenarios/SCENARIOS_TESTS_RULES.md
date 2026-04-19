@@ -157,11 +157,16 @@ The scenario report (`tests/scenarios/reports/<scenario-name>_<timestamp>.report
 
 If the UI cannot accomplish a step, that is a **BUG** — fix it (Rule 4), don't bypass it.
 
+**Exception:** State verification (reading API responses, checking files) is allowed after a UI action to confirm the backend state matches what the UI shows. Reads never violate Rule 6.
+
+**Additional allowed surface:** pre/post-scenario fixture scripts (`setup-SCEN-NNN.sh`, `cleanup-SCEN-NNN.sh`) that run OUTSIDE the scenario step sequence. Prefer UI-driven setup/restore; use these only when a UI path is genuinely unavailable.
+
 ### Bypass invalidates the entire run — restart from step 1
 
-If the runner bypasses the UI even ONCE during the scenario (for any reason —
-a broken element, a technical shortcut, a "just this one call" workaround),
-**the scenario run is INVALIDATED.** The runner MUST:
+If the runner bypasses the UI even ONCE during the scenario step sequence
+(for any reason — a broken element, a technical shortcut, a "just this
+one call" workaround), **the scenario run is INVALIDATED.** The runner
+MUST:
 
 1. Stop the current run immediately.
 2. Record the bypass in the in-progress report under a section titled
@@ -178,17 +183,9 @@ mutations may be DETECTED and reacted to by the system, potentially
 corrupting state that is hard to restore.
 
 "But the UI has a bug here" is a **Rule 4 FIX-AS-YOU-GO trigger**, never a
-Rule 6 exception. Repair the UI/API so the UI works, then resume.
-
-### The only two allowed exceptions
-
-1. **Read-only state verification** — `curl GET`, file reads, `git status`
-   — after a UI action, to check backend state matches UI. Reads never
-   violate Rule 6.
-2. **Pre/post-scenario fixture scripts** — `setup-SCEN-NNN.sh` and
-   `cleanup-SCEN-NNN.sh` that run OUTSIDE the scenario step sequence.
-   Even these should be preferred only when a UI path is genuinely
-   unavailable. Always prefer UI-driven setup/restore.
+Rule 6 bypass excuse. Repair the UI/API so the UI works, then resume.
+Read-only state verification remains fully allowed at any time — the
+invalidation rule applies only to state-mutating bypasses.
 
 ---
 

@@ -168,12 +168,9 @@ describe('DeleteMarketplace pipeline — regression coverage (commit a2f90e0e)',
     expect(withAuth).toHaveProperty('success')
     expect(withAuth).toHaveProperty('operations')
 
-    // Without authContext — current implementation accepts this.
-    mockExecFile.mockClear()
-    const withoutAuth = await DeleteMarketplace({ name: 'any-name-2' })
-    expect(withoutAuth).toHaveProperty('success')
-    expect(withoutAuth).toHaveProperty('operations')
-    expect(Array.isArray(withoutAuth.operations)).toBe(true)
+    // Post-2026-04-19: authContext is MANDATORY at the type level. The
+    // "without-auth" runtime branch no longer exists — tsc rejects the call
+    // at compile time. Callers must construct a concrete AuthContext.
   })
 
   it('Returns a well-formed ChangeResult on every invocation', async () => {

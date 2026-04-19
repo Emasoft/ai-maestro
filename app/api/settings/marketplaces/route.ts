@@ -1031,7 +1031,7 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
   const nameCandidates = Array.from(new Set([marketplaceName, cliName]))
 
   for (const name of nameCandidates) {
-    const result = await DeleteMarketplace({ name })
+    const result = await DeleteMarketplace({ name }, { isSystemOwner: true as const })
     if (!result.success) {
       // Non-fatal: the marketplace may not be registered under this name variant.
       // Continue with file cleanup and return a partial success below.
@@ -1077,7 +1077,7 @@ async function handleUpdateMarketplace(marketplaceName?: string) {
   // SCEN-017 P0-001 / P0-002: route through the UpdateMarketplace pipeline
   // instead of calling `claude plugin marketplace update` via execSync.
   const cliName = await resolveCliMarketplaceName(marketplaceName)
-  const result = await UpdateMarketplace({ name: cliName })
+  const result = await UpdateMarketplace({ name: cliName }, { isSystemOwner: true as const })
   if (!result.success) {
     return NextResponse.json({ error: `Failed to update marketplace: ${String(result.error).substring(0, 500)}` }, { status: 500 })
   }
@@ -1277,7 +1277,7 @@ async function handleAddMarketplace(url?: string) {
   // instead of `claude plugin marketplace add` via execSync. The pipeline
   // handles CLI invocation uniformly for both `{ repo }` and `{ path }`
   // sources.
-  const result = await CreateMarketplace({ name: marketplaceName, source: { repo } })
+  const result = await CreateMarketplace({ name: marketplaceName, source: { repo } }, { isSystemOwner: true as const })
   if (!result.success) {
     const errStr = String(result.error || '')
     if (errStr.includes('already') || errStr.includes('exists')) {

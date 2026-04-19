@@ -236,7 +236,7 @@ export async function POST(req: NextRequest) {
       marketplace,
       action: enabled ? 'enable' : 'disable',
       scope: 'user',
-    })
+    }, { isSystemOwner: true as const })
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })

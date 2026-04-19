@@ -231,19 +231,11 @@ describe('CreateMarketplace pipeline — regression coverage (commit a2f90e0e)',
     )
     expect(withAuth.success).toBe(true)
 
-    // Without authContext — the current implementation accepts this too.
-    mockExecFile.mockClear()
-    const withoutAuth = await CreateMarketplace({
-      name: 'without-auth',
-      source: { repo: 'Emasoft/x' },
-    })
-    // We don't assert on the exact outcome here (success vs rejection)
-    // because the contract is still evolving. We only assert that the
-    // function returns a well-formed ChangeResult object in either case,
-    // so downstream callers can always read `.success` and `.operations`.
-    expect(withoutAuth).toHaveProperty('success')
-    expect(withoutAuth).toHaveProperty('operations')
-    expect(Array.isArray(withoutAuth.operations)).toBe(true)
+    // Post-2026-04-19: authContext is MANDATORY at the type level. The old
+    // "without-auth-accepted" codepath is gone — tsc rejects the call at
+    // compile time, so we no longer exercise the runtime path. Callers must
+    // construct a concrete AuthContext (typically via requireAuth() in
+    // routes, or { isSystemOwner: true } for system-initiated work).
   })
 
   it('Returns a well-formed ChangeResult on every invocation', async () => {

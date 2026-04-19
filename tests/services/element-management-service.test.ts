@@ -62,6 +62,13 @@ vi.mock('@/lib/agent-registry', () => mockAgentRegistry)
 vi.mock('@/lib/client-capabilities', () => mockClientCapabilities)
 
 // ============================================================================
+// authContext is mandatory on every Change*/Delete* entry point since the
+// 2026-04-19 P0-001 refactor. Tests use this shared test-scope authContext
+// and pass it explicitly at every call site.
+// ============================================================================
+const _tAuth = { isSystemOwner: true as const }
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -442,7 +449,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'install',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/Invalid plugin name/)
     })
@@ -455,7 +462,7 @@ describe('element-management-service', () => {
         marketplace: 'ai-maestro-plugins',
         action: 'install',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/ChangeTitle/)
     })
@@ -472,7 +479,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'install',
         scope: 'local',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockAgentRegistry.getAgent).toHaveBeenCalledWith(agent.id)
     })
@@ -485,7 +492,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'install',
         scope: 'local',
-      })
+      }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/agentDir/)
     })
@@ -498,7 +505,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'install',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.pluginKey).toBe('my-plugin@some-marketplace')
     })
 
@@ -516,7 +523,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'install',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(result.action).toBe('no-op')
       // Should NOT have called execFileAsync
@@ -534,7 +541,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'uninstall',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(result.action).toBe('no-op')
     })
@@ -552,7 +559,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'enable',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(result.action).toBe('no-op')
     })
@@ -570,7 +577,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'disable',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(result.action).toBe('no-op')
     })
@@ -600,7 +607,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'uninstall',
         scope: 'local',
-      })
+      }, _tAuth)
       // my-custom-plugin is NOT the required plugin for chief-of-staff
       // so G08 should pass and uninstall should proceed
       expect(result.success).toBe(true)
@@ -617,7 +624,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'install',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(result.action).toBe('install')
       expect(mockExecFileAsync).toHaveBeenCalledWith(
@@ -640,7 +647,7 @@ describe('element-management-service', () => {
         action: 'install',
         scope: 'local',
         agentDir: '/tmp/agent-dir',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(result.restartNeeded).toBe(true)
     })
@@ -658,7 +665,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'enable',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(result.action).toBe('enable')
       expect(mockExecFileAsync).toHaveBeenCalledWith(
@@ -681,7 +688,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'disable',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(result.action).toBe('disable')
       expect(mockExecFileAsync).toHaveBeenCalledWith(
@@ -705,7 +712,7 @@ describe('element-management-service', () => {
         action: 'enable',
         scope: 'local',
         agentDir: '/tmp/agent-dir',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       const writeCall = mockFsWriteFile.mock.calls.find(
         (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('settings.local.json')
@@ -729,7 +736,7 @@ describe('element-management-service', () => {
         action: 'disable',
         scope: 'local',
         agentDir: '/tmp/agent-dir',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       const writeCall = mockFsWriteFile.mock.calls.find(
         (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('settings.local.json')
@@ -753,7 +760,7 @@ describe('element-management-service', () => {
         action: 'update',
         scope: 'local',
         agentDir: '/tmp/agent-dir',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(result.action).toBe('update')
       expect(result.restartNeeded).toBe(true)
@@ -770,7 +777,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'install',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.restartNeeded).toBe(true)
     })
 
@@ -787,7 +794,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'enable',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.restartNeeded).toBe(true)
     })
 
@@ -802,7 +809,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'install',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.operations.length).toBeGreaterThan(0)
       expect(result.operations[0]).toMatch(/^G01:/)
     })
@@ -819,7 +826,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'install',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/CLI crashed/)
     })
@@ -837,7 +844,7 @@ describe('element-management-service', () => {
         marketplace: 'some-marketplace',
         action: 'update',
         scope: 'user',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
@@ -903,7 +910,7 @@ describe('element-management-service', () => {
     it('should reject invalid marketplace name format', async () => {
       /** Validates that marketplace names with slashes are rejected */
       const { ChangeMarketplace } = await import('@/services/element-management-service')
-      const result = await ChangeMarketplace({ action: 'add', name: 'bad/name', source: { repo: 'org/repo' } })
+      const result = await ChangeMarketplace({ action: 'add', name: 'bad/name', source: { repo: 'org/repo' } }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/Invalid marketplace name/)
     })
@@ -911,7 +918,7 @@ describe('element-management-service', () => {
     it('should reject add without source', async () => {
       /** Validates that add action requires a source */
       const { ChangeMarketplace } = await import('@/services/element-management-service')
-      const result = await ChangeMarketplace({ action: 'add', name: 'my-marketplace' })
+      const result = await ChangeMarketplace({ action: 'add', name: 'my-marketplace' }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/source.*required/i)
     })
@@ -919,7 +926,7 @@ describe('element-management-service', () => {
     it('should add marketplace via CLI with repo source', async () => {
       /** Validates that add dispatches to claude CLI with repo source */
       const { ChangeMarketplace } = await import('@/services/element-management-service')
-      const result = await ChangeMarketplace({ action: 'add', name: 'my-mp', source: { repo: 'org/repo' } })
+      const result = await ChangeMarketplace({ action: 'add', name: 'my-mp', source: { repo: 'org/repo' } }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
@@ -931,7 +938,7 @@ describe('element-management-service', () => {
     it('should remove marketplace via CLI', async () => {
       /** Validates that remove dispatches to claude CLI */
       const { ChangeMarketplace } = await import('@/services/element-management-service')
-      const result = await ChangeMarketplace({ action: 'remove', name: 'my-mp' })
+      const result = await ChangeMarketplace({ action: 'remove', name: 'my-mp' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
@@ -943,7 +950,7 @@ describe('element-management-service', () => {
     it('should update marketplace via CLI', async () => {
       /** Validates that update dispatches to claude CLI */
       const { ChangeMarketplace } = await import('@/services/element-management-service')
-      const result = await ChangeMarketplace({ action: 'update', name: 'my-mp' })
+      const result = await ChangeMarketplace({ action: 'update', name: 'my-mp' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
@@ -956,7 +963,7 @@ describe('element-management-service', () => {
       /** Validates that CLI errors return success=false with error message */
       mockExecFileAsync.mockRejectedValueOnce(new Error('CLI exploded'))
       const { ChangeMarketplace } = await import('@/services/element-management-service')
-      const result = await ChangeMarketplace({ action: 'add', name: 'my-mp', source: { repo: 'org/repo' } })
+      const result = await ChangeMarketplace({ action: 'add', name: 'my-mp', source: { repo: 'org/repo' } }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/CLI exploded/)
     })
@@ -966,7 +973,7 @@ describe('element-management-service', () => {
     it('should reject names with path traversal', async () => {
       /** Validates that skill names containing .. are rejected */
       const { ChangeSkill } = await import('@/services/element-management-service')
-      const result = await ChangeSkill(null, { name: '../hack', action: 'install', scope: 'user', sourcePath: '/tmp/skill' })
+      const result = await ChangeSkill(null, { name: '../hack', action: 'install', scope: 'user', sourcePath: '/tmp/skill' }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/Invalid.*name|path traversal/i)
     })
@@ -974,7 +981,7 @@ describe('element-management-service', () => {
     it('should reject names with slashes', async () => {
       /** Validates that skill names containing / are rejected */
       const { ChangeSkill } = await import('@/services/element-management-service')
-      const result = await ChangeSkill(null, { name: 'bad/name', action: 'install', scope: 'user', sourcePath: '/tmp/skill' })
+      const result = await ChangeSkill(null, { name: 'bad/name', action: 'install', scope: 'user', sourcePath: '/tmp/skill' }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/Invalid.*name/i)
     })
@@ -982,7 +989,7 @@ describe('element-management-service', () => {
     it('should reject install without sourcePath', async () => {
       /** Validates that install action requires sourcePath */
       const { ChangeSkill } = await import('@/services/element-management-service')
-      const result = await ChangeSkill(null, { name: 'my-skill', action: 'install', scope: 'user' })
+      const result = await ChangeSkill(null, { name: 'my-skill', action: 'install', scope: 'user' }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/sourcePath.*required/i)
     })
@@ -991,7 +998,7 @@ describe('element-management-service', () => {
       /** Validates that install fails when source directory is missing */
       mockFsExistsSync.mockReturnValue(false)
       const { ChangeSkill } = await import('@/services/element-management-service')
-      const result = await ChangeSkill(null, { name: 'my-skill', action: 'install', scope: 'user', sourcePath: '/tmp/nonexistent' })
+      const result = await ChangeSkill(null, { name: 'my-skill', action: 'install', scope: 'user', sourcePath: '/tmp/nonexistent' }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/not found|not exist/i)
     })
@@ -1000,7 +1007,7 @@ describe('element-management-service', () => {
       /** Validates that install rejects name conflict */
       mockFsExistsSync.mockReturnValue(true)
       const { ChangeSkill } = await import('@/services/element-management-service')
-      const result = await ChangeSkill(null, { name: 'my-skill', action: 'install', scope: 'user', sourcePath: '/tmp/skill' })
+      const result = await ChangeSkill(null, { name: 'my-skill', action: 'install', scope: 'user', sourcePath: '/tmp/skill' }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/already exists|conflict/i)
     })
@@ -1010,7 +1017,7 @@ describe('element-management-service', () => {
       mockFsExistsSync.mockReturnValue(true)
       const { rm: mockRm } = await import('fs/promises')
       const { ChangeSkill } = await import('@/services/element-management-service')
-      const result = await ChangeSkill(null, { name: 'my-skill', action: 'remove', scope: 'user' })
+      const result = await ChangeSkill(null, { name: 'my-skill', action: 'remove', scope: 'user' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockRm).toHaveBeenCalled()
     })
@@ -1019,7 +1026,7 @@ describe('element-management-service', () => {
       /** Validates that remove fails when skill directory is missing */
       mockFsExistsSync.mockReturnValue(false)
       const { ChangeSkill } = await import('@/services/element-management-service')
-      const result = await ChangeSkill(null, { name: 'my-skill', action: 'remove', scope: 'user' })
+      const result = await ChangeSkill(null, { name: 'my-skill', action: 'remove', scope: 'user' }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/not found|not exist/i)
     })
@@ -1030,7 +1037,7 @@ describe('element-management-service', () => {
       mockAgentRegistry.getAgent.mockReturnValue(agent)
       mockFsExistsSync.mockReturnValue(true)
       const { ChangeSkill } = await import('@/services/element-management-service')
-      const result = await ChangeSkill(agent.id, { name: 'my-skill', action: 'remove', scope: 'local' })
+      const result = await ChangeSkill(agent.id, { name: 'my-skill', action: 'remove', scope: 'local' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockAgentRegistry.getAgent).toHaveBeenCalledWith(agent.id)
     })
@@ -1040,7 +1047,7 @@ describe('element-management-service', () => {
     it('should reject names with path traversal', async () => {
       /** Validates that agent definition names containing .. are rejected */
       const { ChangeAgentDef } = await import('@/services/element-management-service')
-      const result = await ChangeAgentDef(null, { name: '../hack', action: 'install', scope: 'user', content: '# test' })
+      const result = await ChangeAgentDef(null, { name: '../hack', action: 'install', scope: 'user', content: '# test' }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/Invalid.*name|path traversal/i)
     })
@@ -1049,7 +1056,7 @@ describe('element-management-service', () => {
       /** Validates that install with content writes the .md file */
       mockFsExistsSync.mockReturnValue(false)
       const { ChangeAgentDef } = await import('@/services/element-management-service')
-      const result = await ChangeAgentDef(null, { name: 'my-agent', action: 'install', scope: 'user', content: '# My Agent' })
+      const result = await ChangeAgentDef(null, { name: 'my-agent', action: 'install', scope: 'user', content: '# My Agent' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockFsWriteFile).toHaveBeenCalled()
     })
@@ -1059,7 +1066,7 @@ describe('element-management-service', () => {
       mockFsExistsSync.mockReturnValue(true)
       const { rm: mockRm } = await import('fs/promises')
       const { ChangeAgentDef } = await import('@/services/element-management-service')
-      const result = await ChangeAgentDef(null, { name: 'my-agent', action: 'remove', scope: 'user' })
+      const result = await ChangeAgentDef(null, { name: 'my-agent', action: 'remove', scope: 'user' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockRm).toHaveBeenCalled()
     })
@@ -1070,7 +1077,7 @@ describe('element-management-service', () => {
       /** Validates that install with content writes the .md file for commands */
       mockFsExistsSync.mockReturnValue(false)
       const { ChangeCommand } = await import('@/services/element-management-service')
-      const result = await ChangeCommand(null, { name: 'my-cmd', action: 'install', scope: 'user', content: '# Command' })
+      const result = await ChangeCommand(null, { name: 'my-cmd', action: 'install', scope: 'user', content: '# Command' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockFsWriteFile).toHaveBeenCalled()
     })
@@ -1080,7 +1087,7 @@ describe('element-management-service', () => {
       mockFsExistsSync.mockReturnValue(true)
       const { rm: mockRm } = await import('fs/promises')
       const { ChangeCommand } = await import('@/services/element-management-service')
-      const result = await ChangeCommand(null, { name: 'my-cmd', action: 'remove', scope: 'user' })
+      const result = await ChangeCommand(null, { name: 'my-cmd', action: 'remove', scope: 'user' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockRm).toHaveBeenCalled()
     })
@@ -1091,7 +1098,7 @@ describe('element-management-service', () => {
       /** Validates that install with content writes the .md file for rules */
       mockFsExistsSync.mockReturnValue(false)
       const { ChangeRule } = await import('@/services/element-management-service')
-      const result = await ChangeRule(null, { name: 'my-rule', action: 'install', scope: 'user', content: '# Rule' })
+      const result = await ChangeRule(null, { name: 'my-rule', action: 'install', scope: 'user', content: '# Rule' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockFsWriteFile).toHaveBeenCalled()
     })
@@ -1101,7 +1108,7 @@ describe('element-management-service', () => {
       mockFsExistsSync.mockReturnValue(true)
       const { rm: mockRm } = await import('fs/promises')
       const { ChangeRule } = await import('@/services/element-management-service')
-      const result = await ChangeRule(null, { name: 'my-rule', action: 'remove', scope: 'user' })
+      const result = await ChangeRule(null, { name: 'my-rule', action: 'remove', scope: 'user' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockRm).toHaveBeenCalled()
     })
@@ -1112,7 +1119,7 @@ describe('element-management-service', () => {
       /** Validates that install with content writes the .md file for output styles */
       mockFsExistsSync.mockReturnValue(false)
       const { ChangeOutputStyle } = await import('@/services/element-management-service')
-      const result = await ChangeOutputStyle(null, { name: 'my-style', action: 'install', scope: 'user', content: '# Style' })
+      const result = await ChangeOutputStyle(null, { name: 'my-style', action: 'install', scope: 'user', content: '# Style' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockFsWriteFile).toHaveBeenCalled()
     })
@@ -1122,7 +1129,7 @@ describe('element-management-service', () => {
       mockFsExistsSync.mockReturnValue(true)
       const { rm: mockRm } = await import('fs/promises')
       const { ChangeOutputStyle } = await import('@/services/element-management-service')
-      const result = await ChangeOutputStyle(null, { name: 'my-style', action: 'remove', scope: 'user' })
+      const result = await ChangeOutputStyle(null, { name: 'my-style', action: 'remove', scope: 'user' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockRm).toHaveBeenCalled()
     })
@@ -1132,7 +1139,7 @@ describe('element-management-service', () => {
     it('should reject invalid server name', async () => {
       /** Validates that MCP server names with path traversal are rejected */
       const { ChangeMCP } = await import('@/services/element-management-service')
-      const result = await ChangeMCP(null, { name: '../evil', action: 'add', scope: 'user', config: {} })
+      const result = await ChangeMCP(null, { name: '../evil', action: 'add', scope: 'user', config: {} }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/Invalid.*name/i)
     })
@@ -1140,7 +1147,7 @@ describe('element-management-service', () => {
     it('should reject add without config', async () => {
       /** Validates that add action requires config */
       const { ChangeMCP } = await import('@/services/element-management-service')
-      const result = await ChangeMCP(null, { name: 'my-mcp', action: 'add', scope: 'user' })
+      const result = await ChangeMCP(null, { name: 'my-mcp', action: 'add', scope: 'user' }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/config.*required/i)
     })
@@ -1153,7 +1160,7 @@ describe('element-management-service', () => {
         action: 'add',
         scope: 'user',
         config: { command: 'node', args: ['server.js'] },
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
@@ -1165,7 +1172,7 @@ describe('element-management-service', () => {
     it('should remove MCP server via CLI', async () => {
       /** Validates that remove dispatches to claude mcp remove */
       const { ChangeMCP } = await import('@/services/element-management-service')
-      const result = await ChangeMCP(null, { name: 'my-mcp', action: 'remove', scope: 'user' })
+      const result = await ChangeMCP(null, { name: 'my-mcp', action: 'remove', scope: 'user' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
@@ -1177,7 +1184,7 @@ describe('element-management-service', () => {
     it('should use scope flag for project scope', async () => {
       /** Validates that project scope passes --scope project to CLI */
       const { ChangeMCP } = await import('@/services/element-management-service')
-      const result = await ChangeMCP(null, { name: 'my-mcp', action: 'remove', scope: 'project', agentDir: '/tmp/project' })
+      const result = await ChangeMCP(null, { name: 'my-mcp', action: 'remove', scope: 'project', agentDir: '/tmp/project' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockExecFileAsync).toHaveBeenCalledWith(
         'claude',
@@ -1190,7 +1197,7 @@ describe('element-management-service', () => {
       /** Validates that CLI errors return success=false */
       mockExecFileAsync.mockRejectedValueOnce(new Error('MCP failed'))
       const { ChangeMCP } = await import('@/services/element-management-service')
-      const result = await ChangeMCP(null, { name: 'my-mcp', action: 'remove', scope: 'user' })
+      const result = await ChangeMCP(null, { name: 'my-mcp', action: 'remove', scope: 'user' }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/MCP failed/)
     })
@@ -1200,7 +1207,7 @@ describe('element-management-service', () => {
     it('should reject invalid LSP name', async () => {
       /** Validates that LSP server names with path traversal are rejected */
       const { ChangeLSP } = await import('@/services/element-management-service')
-      const result = await ChangeLSP(null, { name: '../evil', action: 'add', config: {} })
+      const result = await ChangeLSP(null, { name: '../evil', action: 'add', config: {} }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/Invalid.*name/i)
     })
@@ -1208,7 +1215,7 @@ describe('element-management-service', () => {
     it('should reject add without config', async () => {
       /** Validates that add action requires config */
       const { ChangeLSP } = await import('@/services/element-management-service')
-      const result = await ChangeLSP(null, { name: 'my-lsp', action: 'add' })
+      const result = await ChangeLSP(null, { name: 'my-lsp', action: 'add' }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/config.*required/i)
     })
@@ -1223,7 +1230,7 @@ describe('element-management-service', () => {
         action: 'add',
         config: { command: 'pylsp', args: [] },
         agentDir: '/tmp/project',
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockFsWriteFile).toHaveBeenCalled()
     })
@@ -1233,7 +1240,7 @@ describe('element-management-service', () => {
       mockFsExistsSync.mockReturnValue(true)
       mockFsReadFile.mockResolvedValue(JSON.stringify({ 'my-lsp': { command: 'pylsp' } }))
       const { ChangeLSP } = await import('@/services/element-management-service')
-      const result = await ChangeLSP(null, { name: 'my-lsp', action: 'remove', agentDir: '/tmp/project' })
+      const result = await ChangeLSP(null, { name: 'my-lsp', action: 'remove', agentDir: '/tmp/project' }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockFsWriteFile).toHaveBeenCalled()
     })
@@ -1248,7 +1255,7 @@ describe('element-management-service', () => {
         action: 'add',
         scope: 'user',
         hookConfig: { command: 'echo test' },
-      })
+      }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/Invalid.*event/i)
     })
@@ -1256,7 +1263,7 @@ describe('element-management-service', () => {
     it('should reject add without hookConfig', async () => {
       /** Validates that add action requires hookConfig */
       const { ChangeHook } = await import('@/services/element-management-service')
-      const result = await ChangeHook(null, { event: 'PreToolUse', action: 'add', scope: 'user' })
+      const result = await ChangeHook(null, { event: 'PreToolUse', action: 'add', scope: 'user' }, _tAuth)
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/hookConfig.*required/i)
     })
@@ -1271,7 +1278,7 @@ describe('element-management-service', () => {
         action: 'add',
         scope: 'user',
         hookConfig: { command: 'echo test' },
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockFsWriteFile).toHaveBeenCalled()
     })
@@ -1288,7 +1295,7 @@ describe('element-management-service', () => {
         action: 'remove',
         scope: 'user',
         hookConfig: { command: 'echo test' },
-      })
+      }, _tAuth)
       expect(result.success).toBe(true)
       expect(mockFsWriteFile).toHaveBeenCalled()
     })

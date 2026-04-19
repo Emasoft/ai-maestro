@@ -2357,7 +2357,7 @@ export async function ChangePlugin(
     /** N:1 model: bypass role-plugin guard for compatible plugin swaps from RoleTab dropdown */
     rolePluginSwap?: boolean
   },
-  authContext?: AuthContext,
+  authContext: AuthContext,
 ): Promise<ChangePluginResult> {
   const ops: string[] = []
   const pluginKey = `${desired.name}@${desired.marketplace}`
@@ -2705,19 +2705,19 @@ async function copyDirRecursive(src: string, dest: string, depth = 0): Promise<v
 export async function CreateMarketplace(desired: {
   name: string
   source: { repo: string } | { path: string }
-}, authContext?: AuthContext): Promise<ChangeResult> {
+}, authContext: AuthContext): Promise<ChangeResult> {
   return ChangeMarketplace({ action: 'add', name: desired.name, source: desired.source }, authContext)
 }
 
 export async function DeleteMarketplace(desired: {
   name: string
-}, authContext?: AuthContext): Promise<ChangeResult> {
+}, authContext: AuthContext): Promise<ChangeResult> {
   return ChangeMarketplace({ action: 'remove', name: desired.name }, authContext)
 }
 
 export async function UpdateMarketplace(desired: {
   name: string
-}, authContext?: AuthContext): Promise<ChangeResult> {
+}, authContext: AuthContext): Promise<ChangeResult> {
   return ChangeMarketplace({ action: 'update', name: desired.name }, authContext)
 }
 
@@ -2725,7 +2725,7 @@ export async function ChangeMarketplace(desired: {
   action: 'add' | 'remove' | 'update'
   name: string
   source?: { repo: string } | { path: string }
-}, authContext?: AuthContext): Promise<ChangeResult> {
+}, _authContext: AuthContext): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
@@ -2801,7 +2801,7 @@ export async function ChangeSkill(agentId: string | null, desired: {
   sourcePath?: string
   targetClient?: string
   agentDir?: string
-}, authContext?: AuthContext): Promise<ChangeResult> {
+}, _authContext: AuthContext): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
@@ -2989,7 +2989,7 @@ async function changeSimpleElement(
 export async function ChangeAgentDef(
   agentId: string | null,
   desired: { name: string; action: 'install' | 'remove'; scope: 'user' | 'local'; sourcePath?: string; content?: string; agentDir?: string },
-  _authContext?: AuthContext,
+  _authContext: AuthContext,
 ): Promise<ChangeResult> {
   return changeSimpleElement('agent definition', 'agents', '.md', agentId, desired)
 }
@@ -2997,7 +2997,7 @@ export async function ChangeAgentDef(
 export async function ChangeCommand(
   agentId: string | null,
   desired: { name: string; action: 'install' | 'remove'; scope: 'user' | 'local'; sourcePath?: string; content?: string; agentDir?: string },
-  _authContext?: AuthContext,
+  _authContext: AuthContext,
 ): Promise<ChangeResult> {
   return changeSimpleElement('command', 'commands', '.md', agentId, desired)
 }
@@ -3005,7 +3005,7 @@ export async function ChangeCommand(
 export async function ChangeRule(
   agentId: string | null,
   desired: { name: string; action: 'install' | 'remove'; scope: 'user' | 'local'; sourcePath?: string; content?: string; agentDir?: string },
-  _authContext?: AuthContext,
+  _authContext: AuthContext,
 ): Promise<ChangeResult> {
   return changeSimpleElement('rule', 'rules', '.md', agentId, desired)
 }
@@ -3013,7 +3013,7 @@ export async function ChangeRule(
 export async function ChangeOutputStyle(
   agentId: string | null,
   desired: { name: string; action: 'install' | 'remove'; scope: 'user' | 'local'; sourcePath?: string; content?: string; agentDir?: string },
-  _authContext?: AuthContext,
+  _authContext: AuthContext,
 ): Promise<ChangeResult> {
   return changeSimpleElement('output style', 'output-styles', '.md', agentId, desired)
 }
@@ -3028,7 +3028,7 @@ export async function ChangeMCP(agentId: string | null, desired: {
   scope: 'user' | 'local' | 'project'
   config?: Record<string, unknown>
   agentDir?: string
-}, _authContext?: AuthContext): Promise<ChangeResult> {
+}, _authContext: AuthContext): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
@@ -3085,7 +3085,7 @@ export async function ChangeLSP(agentId: string | null, desired: {
   action: 'add' | 'remove'
   config?: Record<string, unknown>
   agentDir?: string
-}, _authContext?: AuthContext): Promise<ChangeResult> {
+}, _authContext: AuthContext): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
@@ -3163,7 +3163,7 @@ export async function ChangeHook(agentId: string | null, desired: {
   hookConfig?: { command: string; matcher?: string; timeout?: number }
   scope: 'user' | 'local'
   agentDir?: string
-}, _authContext?: AuthContext): Promise<ChangeResult> {
+}, _authContext: AuthContext): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
@@ -3413,7 +3413,7 @@ export async function ChangeTeam(
 export async function ChangeName(
   agentId: string,
   newName: string,
-  authContext?: AuthContext,
+  authContext: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
@@ -3490,7 +3490,7 @@ export async function ChangeName(
 export async function ChangeFolder(
   agentId: string,
   newFolder: string,
-  authContext?: AuthContext,
+  authContext: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
@@ -3572,7 +3572,7 @@ export async function ChangeFolder(
 export async function ChangeAvatar(
   agentId: string,
   avatarPath: string,
-  authContext?: AuthContext,
+  authContext: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
@@ -3634,7 +3634,7 @@ export async function ChangeAvatar(
 export async function ChangeCLIArgs(
   agentId: string,
   newArgs: string,
-  authContext?: AuthContext,
+  authContext: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
@@ -3725,7 +3725,7 @@ interface PluginConversionPlan {
 export async function ChangeClient(
   agentId: string,
   newClient: string,
-  authContext?: AuthContext,
+  authContext: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
@@ -4135,8 +4135,8 @@ export interface DeleteTeamResult {
  */
 export async function DeleteTeam(
   teamId: string,
-  options?: {
-    authContext?: AuthContext
+  options: {
+    authContext: AuthContext
     password?: string         // Governance password (required when passwordHash is set)
   },
 ): Promise<DeleteTeamResult> {
@@ -4446,8 +4446,8 @@ export interface DeleteAgentResult {
  */
 export async function DeleteAgent(
   agentId: string,
-  options?: {
-    authContext?: AuthContext
+  options: {
+    authContext: AuthContext
     hard?: boolean          // true = permanent delete with backup; false = soft-delete (default)
     deleteFolder?: boolean  // true = also rm -rf the agent's ~/agents/<name>/ folder
   },

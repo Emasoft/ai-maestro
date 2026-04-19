@@ -10,8 +10,32 @@ All UI scenario tests in AI Maestro MUST follow these 11 rules. No exceptions.
 
 ---
 
+## Rule 0 — Who you are in a scenario (CRITICAL)
+
+**You are the HUMAN USER of AI Maestro. You are NOT an agent.**
+
+A human user of AI Maestro:
+- Logs in to the dashboard in a web browser.
+- Clicks buttons, fills forms, types in the **chat section** of an agent's view.
+- Has no AI Maestro identity: no AID, no governance title, no agent registry entry, no `~/agents/<you>/` folder, no tmux session owned by the app.
+- Cannot and must not use the **terminal section** of an agent's view for their own actions — that section is a live read-only stream of what an agent is doing. The user observes there; the user never drives agents there.
+
+**The scenario runner (this agent and any of its forked subagents) plays the role of that human user.** It drives the web UI via `dev-browser` exactly as a human would — through the chat section, through form inputs, through buttons. It does **not** talk to agents through their terminal section; it does **not** create an agent-identity for itself; it does **not** register itself with the app.
+
+**Every "agent" a scenario creates is created THROUGH the UI and lives under `~/agents/<name>/`.** That is the only path the dashboard's Agent Creation Wizard writes to. No scenario — ever — places a test agent inside:
+- `~/ai-maestro/` (the source tree / where the controller Claude Code may be running)
+- `~/.claude/` (the human user's Claude Code config)
+- any other user-owned source or config folder
+
+**Why this matters for safety.** Cleanup (Rule 1) deletes every test agent AND its working folder via the UI's "Also delete agent folder" checkbox. If a test agent's folder happened to be inside `~/ai-maestro/`, cleanup would destroy the project source. If a test agent's folder were inside `~/.claude/`, cleanup would destroy the user's Claude Code config. These must be impossible by construction — and they are, because the Wizard enforces `~/agents/<name>/`. A scenario that finds a way to create an agent outside `~/agents/` has found a critical security bug and MUST fail with that bug reported — never proceed.
+
+**Consequence for rewipe-list.** The default rewipe-list does NOT contain `~/.claude/*` files. Those belong to the human user, not to any scenario. A scenario may add `~/.claude/settings.json` to its rewipe-list ONLY if its explicit purpose is to test user-scope plugin install/uninstall behavior — and even then, the scenario author commits to reverting every mutation through the UI before cleanup runs. The default rewipe-list only covers `~/.aimaestro/*` server-state files that the app itself owns.
+
+---
+
 ## Table of Contents
 
+0. [Rule 0: Who you are in a scenario](#rule-0--who-you-are-in-a-scenario-critical) — You are the human user, not an agent
 1. [Rule 1: CLEAN-AFTER-YOURSELF](#rule-1-clean-after-yourself) — Revert system to pre-test state
 2. [Rule 2: 0-IMPACT](#rule-2-0-impact) — Never use existing user resources
 3. [Rule 3: STATE-WIPE](#rule-3-state-wipe) — Backup and restore config files
@@ -63,14 +87,15 @@ Configuration files can be modified by side effects (settings.json, settings.loc
 
 **Two mandatory checkpoints:**
 
-1. **CHECKPOINT-SAVE (before test begins):** Run the per-scenario wrapper `setup-SCEN-<NNN>.sh`. It delegates to `scenario-setup.sh <NNN>`, which reads `rewipe-list` from the scenario frontmatter and backs up every listed file. The default list that every scenario should include:
-   - `~/.claude/settings.json`
-   - `~/.claude/settings.local.json`
+1. **CHECKPOINT-SAVE (before test begins):** Run the per-scenario wrapper `setup-SCEN-<NNN>.sh`. It delegates to `scenario-setup.sh <NNN>`, which reads `rewipe-list` from the scenario frontmatter and backs up every listed file. The default safe list covers only app-owned server state:
    - `~/.aimaestro/governance.json`
    - `~/.aimaestro/agents/registry.json`
    - `~/.aimaestro/teams/teams.json`
    - `~/.aimaestro/teams/groups.json`
-   - Any agent `<agentDir>/.claude/settings.local.json` that will be touched
+
+   **Files OUTSIDE the default list (add only with strong justification):**
+   - `~/.claude/settings.json` / `~/.claude/settings.local.json` — these belong to the HUMAN USER's Claude Code. Touch them only if the scenario's entire purpose is to test user-scope plugin install/uninstall, and revert every mutation through the UI before cleanup.
+   - Any `~/agents/<test-agent>/.claude/settings.local.json` — these are inside test-agent working directories, which are deleted during cleanup anyway. Only add if the scenario checks a specific setting mid-run.
 
    Backups are saved to `tests/scenarios/state-backups/SCEN-<NNN>_<timestamp>/` (gitignored).
 
@@ -420,12 +445,10 @@ data_produced:                      # Every artifact created during the test.
   - 1 test team (temporary)         # Lifecycle: "temporary, created and deleted"
   - Plugin settings modifications   # or "temporary, restored via STATE-WIPE"
 rewipe-list:                        # Files backed up by setup-SCEN-<NNN>.sh and
-  - ~/.claude/settings.json         # restored by cleanup-SCEN-<NNN>.sh.
-  - ~/.claude/settings.local.json   # Paths may contain ~ or $VARS (shell-expanded).
-  - ~/.aimaestro/governance.json
-  - ~/.aimaestro/agents/registry.json
-  - ~/.aimaestro/teams/teams.json
-  - ~/.aimaestro/teams/groups.json
+  - ~/.aimaestro/governance.json    # restored by cleanup-SCEN-<NNN>.sh.
+  - ~/.aimaestro/agents/registry.json # Default: only app-owned server state.
+  - ~/.aimaestro/teams/teams.json   # Never add ~/.claude/* unless scenario
+  - ~/.aimaestro/teams/groups.json  # tests user-scope plugins (see Rule 0).
 git-fixtures: []                    # Array of GitHub URLs. Local clone MUST exist at
                                     # tests/scenarios/fixtures/git/<repo-name>/ with
                                     # tag scenario-start. Reference as GITFIX[0], GITFIX[1].

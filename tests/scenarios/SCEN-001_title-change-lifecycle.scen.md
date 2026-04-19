@@ -46,8 +46,6 @@ prerequisites:
   - At least 1 existing team with available slots
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:
-  - ~/.claude/settings.json
-  - ~/.claude/settings.local.json
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
   - ~/.aimaestro/teams/teams.json

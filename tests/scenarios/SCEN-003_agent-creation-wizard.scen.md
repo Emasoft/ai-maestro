@@ -57,8 +57,6 @@ prerequisites:
   - Role-plugin defaults synced (ai-maestro-integrator-agent, ai-maestro-programmer-agent available)
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:
-  - ~/.claude/settings.json
-  - ~/.claude/settings.local.json
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
   - ~/.aimaestro/teams/teams.json

@@ -56,8 +56,6 @@ prerequisites:
   - Role-plugins have message templates in shared/ or references/
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:
-  - ~/.claude/settings.json
-  - ~/.claude/settings.local.json
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
   - ~/.aimaestro/teams/teams.json

@@ -53,8 +53,6 @@ prerequisites:
   - R12 composition-check API implemented (GET /api/teams/{id}/composition-check)
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:
-  - ~/.claude/settings.json
-  - ~/.claude/settings.local.json
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
   - ~/.aimaestro/teams/teams.json

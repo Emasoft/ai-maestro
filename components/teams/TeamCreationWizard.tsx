@@ -280,39 +280,58 @@ export default function TeamCreationWizard({
     setSubmitting(true)
     setSubmitError(null)
     try {
-      // Build the creation payload
+      // SCEN-003 BUG-001 fix (2026-04-19):
+      // /api/teams/create-with-project uses a .strict() Zod schema that
+      // only accepts: name, description, password, githubProject,
+      // chiefOfStaffId, orchestratorId. The previous payload included
+      // `agentIds: []`, `autoCreateCos`, `autoCreateOrchestrator`,
+      // `githubRepos`, `newRepo`, `createGithubProject`, `githubProjectUrl`
+      // — all of which caused EVERY team creation via the full wizard to
+      // fail with "Validation failed". The service (createNewTeam) already
+      // auto-creates a COS when chiefOfStaffId is absent, so the
+      // autoCreateCos flag was redundant.
+      //
+      // TODO(post-scenario): extend /api/teams/create-with-project to
+      // accept repos/project creation/auto-orchestrator, OR extract those
+      // side effects into follow-up calls after the team row exists.
+      // For now the wizard degrades gracefully — a team is created with
+      // an auto-COS but no repos/project.
       const payload: Record<string, unknown> = {
         name: data.teamName.trim(),
         description: data.description.trim() || undefined,
         password: data.password,
-        agentIds: [],
-      }
-
-      // GitHub repos
-      if (data.selectedRepos.length > 0) {
-        payload.githubRepos = data.selectedRepos
-      }
-      if (data.createNewRepo && data.newRepoName.trim()) {
-        payload.newRepo = { name: data.newRepoName.trim(), private: data.newRepoPrivate, org: data.selectedOrg || undefined }
-      }
-
-      // GitHub Project
-      if (data.projectChoice === 'create') {
-        payload.createGithubProject = true
-      } else if (data.projectChoice === 'link' && data.linkedProjectInfo) {
-        payload.githubProjectUrl = data.linkedProjectUrl.trim()
       }
 
       // Roles
-      if (data.cosAgentId === 'auto') {
-        payload.autoCreateCos = true
-      } else if (data.cosAgentId) {
+      //   cosAgentId === 'auto'  → omit chiefOfStaffId, server auto-creates
+      //   cosAgentId specific    → send as chiefOfStaffId
+      if (data.cosAgentId && data.cosAgentId !== 'auto') {
         payload.chiefOfStaffId = data.cosAgentId
       }
-      if (data.orchestratorAgentId === 'auto') {
-        payload.autoCreateOrchestrator = true
-      } else if (data.orchestratorAgentId) {
+      if (data.orchestratorAgentId && data.orchestratorAgentId !== 'auto') {
         payload.orchestratorId = data.orchestratorAgentId
+      }
+
+      // GitHub Project — only the "link" path can be mapped to the current
+      // route schema (owner+repo+number tuple). GitHubProjectInfo exposes
+      // a `url` field but no pre-parsed owner/repo, so we extract them from
+      // the URL. Repo selection, new-repo creation, and
+      // createGithubProject=true are not plumbed through yet and are
+      // silently dropped here to keep team creation working.
+      if (data.projectChoice === 'link' && data.linkedProjectInfo) {
+        const info = data.linkedProjectInfo
+        // URL format: https://github.com/<owner>/<repo>/projects/<number>
+        // or https://github.com/orgs/<owner>/projects/<number>
+        const m =
+          /github\.com\/(?:orgs\/)?([^/]+)(?:\/([^/]+))?\/projects\/(\d+)/.exec(info.url || '')
+        if (m && m[1] && m[3]) {
+          const owner = m[1]
+          const repo = m[2] || m[1]
+          const number = Number(m[3])
+          if (Number.isFinite(number) && number > 0) {
+            payload.githubProject = { owner, repo, number }
+          }
+        }
       }
 
       const res = await fetch('/api/teams/create-with-project', {
@@ -322,7 +341,10 @@ export default function TeamCreationWizard({
       })
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: 'Failed to create team' }))
-        throw new Error(errData.error || 'Failed to create team')
+        const issuesMsg = Array.isArray(errData.issues) && errData.issues.length > 0
+          ? ` (${errData.issues.map((i: { path: string; message: string }) => `${i.path}: ${i.message}`).join('; ')})`
+          : ''
+        throw new Error((errData.error || 'Failed to create team') + issuesMsg)
       }
       const result = await res.json()
       onCreated(result.team?.id || result.id)

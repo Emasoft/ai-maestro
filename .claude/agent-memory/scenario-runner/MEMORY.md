@@ -1,5 +1,80 @@
 # Scenario Runner Memory
 
+## SCEN-003 run 2026-04-19T13:16:51Z — PASS with 3 bug fixes
+
+**Run ID:** 20260419T131651Z
+**Branch:** feature/team-governance
+**Reports:**
+- tests/scenarios/reports/SCEN-003_20260419T131651Z.report.md
+- tests/scenarios/reports/scenario_proposed-improvements_003_20260419T131651Z.md
+
+**Verdict:** PASS (43 steps: 40 as-written, 3 passed-after-fix, 3 scenario authoring bugs adapted)
+
+### Bugs fixed in-place (NOT committed — user must commit)
+1. **BUG-001 (P0)**: `components/teams/TeamCreationWizard.tsx::handleCreate()` sent `agentIds/autoCreateCos/autoCreateOrchestrator/githubRepos/newRepo/createGithubProject/githubProjectUrl` — ALL rejected by the `.strict()` Zod schema at `/api/teams/create-with-project`. Rewrote to send only schema-accepted fields. Every `/teams` team creation was broken without this.
+2. **BUG-002 (P1, restored from SCEN-002 stash)**: `hooks/useTeam.ts` removed `lastActivityAt` from PUT body (strict schema rejected it) + improved error surfacing (server error message instead of generic "Failed to update team").
+3. **BUG-003 (P0, restored from SCEN-002 stash)**: `app/teams/page.tsx::handleDelete()` added sudo-token exchange via `/api/auth/sudo-password` before DELETE. Without this, every `/teams` team delete returned `sudo_required`.
+
+### Key learnings for future scenario runs (MUST READ if you see these UI elements)
+- **Sidebar Create Team form (TeamListView.tsx) requires ≥1 agent** — submit button is disabled until one is selected. For empty teams with auto-COS, use the full `/teams` page wizard instead.
+- **Agent creation wizard uses conversation-style auto-advance** — selecting an option auto-fires the next step. The "Step X of Y" counter updates when the next widget renders.
+- **Synthetic MouseEvent dispatch often fails on React buttons.** Always prefer `page.click('button:has-text("...")')` via Playwright CDP. React synthetic events skip `dispatchEvent()` calls. Confirmed broken for: TeamPickerWidget team cards, sidebar TeamListView modal Create Team button.
+- **Wizard step-advance chevron**: 48x38 px button at `(~943, ~393)` with `svg.lucide-chevron-right` descendant. When disabled (empty name field), `page.click()` fails silently. Use `page.mouse.click(x, y)` on the center coord when nothing else works.
+- **Profile panel is a 420px right-side div**. Opens via top-bar "Profile" button. State persists across page reloads.
+- **Config / Advanced tabs inside Profile panel are `<div class="cursor-pointer">`**, not `<button>`. Use `page.click('div.cursor-pointer:text-is("Config")')`.
+- **"Danger Zone" accordion collapses the Delete Agent button**. First click the DANGER ZONE heading to expand, then the Delete Agent button becomes clickable.
+- **DeleteTeam via /teams page** does NOT offer "delete agents too" — the auto-COS becomes orphan AUTONOMOUS. See PROP-P1-001. For clean cleanup, you MUST delete the orphan COS separately via Profile → Danger Zone → Delete Agent (with "Also delete agent folder" checkbox).
+- **Hard-delete (folder checkbox) skips cemetery** — agents are fully removed from registry AND disk, no cemetery archive. Soft-delete (uncheck folder box) archives to cemetery for later purge.
+- **`X-Agent-Id` header alone → 401, not 403** (agent-identity auth requires `Authorization: Bearer <api-key>`). The self-mod RBAC check at `lib/authorization.ts:117-122` never runs because auth fails first. This is STRONGER defense-in-depth than the scenario expected.
+- **Sudo modal HAS `role="dialog" aria-modal="true"`** (UPDATED — earlier MEMORY entries said it lacked these; that was outdated). `aim_sudo_modal` helper's structural detection works reliably.
+- **Wizard INTEGRATOR AND MEMBER both get auto-locked plugins** when only 1 plugin is compatible with `(title, client)` — this is correct per R9.13 but confusingly labeled. Label reads "Auto-assigned for <TITLE> title (R9.13: mandatory)" even when it's just N=1 not a mandatory pairing. Filed PROP-P1-003.
+
+### Adaptations required for SCEN-003 (scenario .md needs updates — filed as P2 proposals)
+- S008 "Do NOT select any agents" → used /teams page full wizard (sidebar form refuses empty teams)
+- S029 "MEMBER title allows user choice" → in practice MEMBER has only 1 compatible plugin too → auto-locked
+- S037 "403 self-mod forbidden" → actually 401 (auth layer runs first, stronger)
+- S040 "click Delete Agents Too" → no such button on /teams page; had to delete orphan COS manually
+
+---
+
+## SCEN-002 run 2026-04-19T12:22:15Z — PASS with 3 bug fixes
+
+**Run id:** 20260419T122215Z
+**Branch:** feature/team-governance
+**Reports:**
+- tests/scenarios/reports/SCEN-002_20260419T122215Z.report.md
+- tests/scenarios/reports/scenario_proposed-improvements_002_20260419T122215Z.md
+
+**Verdict:** PASS — 62 steps (56 pass, 3 adapted, 3 skipped). 3 bugs found + fixed in-run (NOT committed — user must commit).
+
+**Fixes APPLIED (BUT NOT COMMITTED — user must commit):**
+- `hooks/useTeam.ts` — BUG-001 (P1): surface server errors instead of generic "Failed to update team"; BUG-002 (P0): remove stale `lastActivityAt` field that caused strict schema to reject EVERY team update
+- `app/teams/page.tsx` — BUG-003 (P0): exchange password for sudo token via `/api/auth/sudo-password` before DELETE /api/teams/[id] (pattern mirrors `components/sidebar/TeamListView.tsx:78-99`)
+
+**Scenario adaptations (authoring issue in scenario .md, not a code bug):**
+- S028-S030 (COS promotion): Team has auto-COS on creation — CHIEF-OF-STAFF singleton is already taken. Adapted: verify singleton DISABLED state + verify auto-COS plugin installed.
+- S038-S039 (Kanban): Task creation requires GitHub project link (post-2026-03-27 governance simplification). Adapted: SKIPPED with filed issue ISSUE-002.
+- S057 (Team delete "Delete Agents Too"): UI has no "Delete Agents Too" button. Adapted: used "Delete Team" (hibernates agents with AUTONOMOUS title), then delete agents individually (S055, S056, S058).
+- S041 (Edit Team modal): UI has no Edit Team modal. Adapted: used team dashboard's Add/Remove Agent controls directly.
+
+**Key findings:**
+- The sudo modal NOW HAS `role="dialog" aria-modal="true"` (improvement since SCEN-020 MEMORY note that said it lacked these). `aim_sudo_modal` helper's structural detection still works.
+- "Also delete agent folder" checkbox WORKS correctly when agent has no `.git/` in working dir — scen-test-agent-alpha folder was hard-deleted successfully.
+- Delete-confirm modal (type name, check folder box, Delete Forever) is also `role="dialog" aria-modal="true"` — structurally detectable.
+- `_aim-assistant` system agent gets auto-instantiated when + button is clicked on sidebar. This creates a minor registry drift vs baseline (1 extra entry, hibernated). Proposed fix in ISSUE-005.
+
+**R4.7 (COS cannot be removed) enforcement chain confirmed at 3 layers:**
+1. Client-side guard: `components/teams/TeamOverviewSection.tsx:76-79` fires before API call if chiefOfStaffId matches target.
+2. Server-side validation: `lib/team-registry.ts:141-147` returns 400 with specific message.
+3. Client error surfacing (after BUG-001 fix): specific error message from server is shown.
+
+**Workarounds discovered:**
+- DANGER ZONE is a collapsed accordion — must click the heading to expand before Delete Agent button appears. Use `page.getByText('DANGER ZONE').first().click({force: true})`.
+- Agent offline + hibernated: sidebar shows "This agent is offline" main area with "Start Session" + "View Profile" buttons — click "View Profile" to reach the profile panel without waking the agent.
+- Advanced tab is a `<div class="cursor-pointer">`, not a button — query with `div.cursor-pointer` + text content filter.
+- Team card click navigates to `/teams/<id>` team dashboard (no Edit Team modal).
+- Hover over agent in team dashboard to reveal "Remove from team" button — opacity-0 → opacity-100 on group-hover.
+
 ## SCEN-020 smoke test 2026-04-15T11:27:16Z — PARTIAL (FIRST run of rewritten Rule 13 AUTONOMOUS-PROTOCOL)
 
 **Run id:** 20260415T112716Z

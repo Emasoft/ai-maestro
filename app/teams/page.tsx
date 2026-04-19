@@ -88,9 +88,34 @@ export default function TeamsPage() {
   const handleDelete = async (teamId: string) => {
     setDeleteError(null)
     try {
+      // SCEN-002 BUG-003 fix: DELETE /api/teams/[id] is classified "strict" (sudo-mode required).
+      // We must exchange the inline governance password for a sudo token BEFORE the DELETE call,
+      // then pass BOTH the sudo token (header) and the governance password (body) to satisfy
+      // the two-layer requirement. Previously, this handler only sent the password in the body,
+      // which caused the server to reject with "sudo_required".
+      // Pattern mirrors components/sidebar/TeamListView.tsx handleDelete.
+      const sudoRes = await fetch('/api/auth/sudo-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: deletePassword }),
+      })
+      if (sudoRes.status === 403) {
+        setDeleteError('Password does not match')
+        return
+      }
+      if (!sudoRes.ok) {
+        const err = await sudoRes.json().catch(() => ({ error: `HTTP ${sudoRes.status}` }))
+        setDeleteError(err.error || 'Sudo token request failed')
+        return
+      }
+      const { token: sudoToken } = await sudoRes.json() as { token: string }
+
       const res = await fetch(`/api/teams/${teamId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Sudo-Token': sudoToken,
+        },
         body: JSON.stringify({ password: deletePassword }),
       })
       if (!res.ok) {

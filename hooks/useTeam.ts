@@ -74,15 +74,31 @@ export function useTeam(teamId: string | null): UseTeamResult {
     )
     setTeam(prev => prev ? { ...prev, ...safeUpdates, updatedAt: new Date().toISOString() } : prev)
     try {
+      // SCEN-002 BUG-002 fix: Do NOT send `lastActivityAt` in the PUT body.
+      // The server's UpdateTeamSchema (app/api/teams/[id]/route.ts) uses .strict()
+      // and does not include `lastActivityAt`, so including it here caused EVERY
+      // team update from this hook to fail with HTTP 400 "Validation failed".
+      // lastActivityAt is a server-side concern and should be updated by the API,
+      // not dictated by the client.
       const res = await fetch(`/api/teams/${teamId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...updates, lastActivityAt: new Date().toISOString() }),
+        body: JSON.stringify(updates),
       })
       if (!res.ok) {
         // CC-004: Don't call fetchTeam() here — the throw propagates to the catch block
         // which already calls fetchTeam() to revert the optimistic update
-        throw new Error('Failed to update team')
+        // SCEN-002 BUG-001 fix: Surface specific server-side error (e.g. R4.7 "Cannot remove
+        // the Chief-of-Staff from team members") instead of the generic "Failed to update team".
+        // This helps users understand WHY the operation was rejected.
+        let serverMessage: string | null = null
+        try {
+          const body = await res.json()
+          serverMessage = body?.error || body?.message || null
+        } catch {
+          // Body wasn't JSON — fall through with generic message
+        }
+        throw new Error(serverMessage || `Failed to update team (HTTP ${res.status})`)
       }
       const data = await res.json()
       setTeam(data.team)

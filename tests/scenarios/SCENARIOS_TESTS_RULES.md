@@ -59,9 +59,11 @@ This prevents test runs from corrupting the user's real configuration, data, or 
 
 Configuration files can be modified by side effects (settings.json, settings.local.json, governance.json, etc.). These must be captured and restored.
 
+**CHECKPOINT-SAVE and CHECKPOINT-RESTORE are performed by the shared setup/restore scripts** at `tests/scenarios/scripts/scenario-setup.sh` and `scenario-restore.sh`. The list of files to back up is declared per-scenario in the `rewipe-list` frontmatter field. The shared setup reads that list, copies each file to `tests/scenarios/state-backups/SCEN-<NNN>_<timestamp>/` with an integrity `MANIFEST.sha256`, and the shared restore verifies and replays the manifest.
+
 **Two mandatory checkpoints:**
 
-1. **CHECKPOINT-SAVE (before test begins):** Backup the following files:
+1. **CHECKPOINT-SAVE (before test begins):** Run the per-scenario wrapper `setup-SCEN-<NNN>.sh`. It delegates to `scenario-setup.sh <NNN>`, which reads `rewipe-list` from the scenario frontmatter and backs up every listed file. The default list that every scenario should include:
    - `~/.claude/settings.json`
    - `~/.claude/settings.local.json`
    - `~/.aimaestro/governance.json`
@@ -70,7 +72,7 @@ Configuration files can be modified by side effects (settings.json, settings.loc
    - `~/.aimaestro/teams/groups.json`
    - Any agent `<agentDir>/.claude/settings.local.json` that will be touched
 
-   Backups are saved to `tests/scenarios/state-backups/<scenario-name>_<timestamp>/`
+   Backups are saved to `tests/scenarios/state-backups/SCEN-<NNN>_<timestamp>/` (gitignored).
 
 2. **CHECKPOINT-RESTORE (during cleanup):**
 
@@ -88,9 +90,23 @@ Configuration files can be modified by side effects (settings.json, settings.loc
 
    **NEVER use bash/CLI to delete agent folders.** That is a Rule 6 violation. The "Also delete agent folder" checkbox in the Delete Agent dialog handles folder cleanup. If agent folders remain after UI deletion, that is a BUG to report — not a reason to use bash.
 
-   After restoration, verify file contents match the backup byte-for-byte.
+   After restoration, verify file contents match the backup byte-for-byte. `scenario-restore.sh` performs this SHA256 check automatically for every file in the MANIFEST.
 
 The scenario report MUST include the backup file list and restoration verification.
+
+### Fixture fields (git-fixtures, dir-fixtures)
+
+In addition to `rewipe-list`, scenarios may declare two fixture arrays in frontmatter:
+
+- **`git-fixtures`** — URLs of GitHub repositories the scenario uses. Each must exist as a local clone at `tests/scenarios/fixtures/git/<repo-name>/` AND carry a `scenario-start` tag. The shared setup script `git reset --hard`s each fixture to that tag before the scenario runs (scenario author prepares the fork and the tag in advance — the scripts never clone for you). In scenario steps, reference fixtures as `GITFIX[n]` where `n` is the 0-based index.
+- **`dir-fixtures`** — Absolute paths to local folders the scenario uses. Each must exist. If the path is a git repo with a `scenario-start` tag, the setup resets it. Referenced in steps as `FOLDFIX[n]`.
+
+Fixture creation is NOT automated — the scenario author must:
+1. Fork the upstream repo, clone locally under `tests/scenarios/fixtures/git/`.
+2. Commit the baseline state and tag it `scenario-start`.
+3. Document the fork URL in `git-fixtures`.
+
+For directory fixtures, prepare the folder (with its initial file set or git baseline + `scenario-start` tag) in advance of the first run. Fixtures persist across runs and are reset by the shared setup on each scenario start.
 
 ---
 
@@ -114,7 +130,7 @@ Every fix attempt is logged in the report (Rule 5). The scenario is never abando
 
 ## Rule 5: TRACK-AND-REPORT
 
-The scenario report (`tests/scenarios/reports/<scenario-name>_<timestamp>.report.md`) records:
+The scenario report (`reports/scenarios-runner/<scenario-name>_<timestamp>.report.md`) records:
 
 ### For every step:
 - Step ID and description
@@ -205,6 +221,20 @@ Before starting a scenario:
    tmux list-sessions | grep '^cos-scen-' | cut -d: -f1 | xargs -I{} tmux kill-session -t {}
    ```
    This prevents dead sessions from interfering with the test or cluttering the UI.
+8. **RUN THE PER-SCENARIO SETUP SCRIPT (MANDATORY):** Invoke `tests/scenarios/scripts/setup-SCEN-<NNN>.sh`. This runs the shared `scenario-setup.sh` which:
+   - Reads the scenario's `rewipe-list`, `git-fixtures`, `dir-fixtures` from frontmatter.
+   - Creates `state-backups/SCEN-<NNN>_<timestamp>/` with a SHA256 `MANIFEST`.
+   - Backs up every file in `rewipe-list`.
+   - Resets every `git-fixture` repo to the `scenario-start` tag.
+   - Verifies every `dir-fixture` exists (and resets it if it's a git repo with `scenario-start`).
+
+   **If the setup script exits non-zero, the scenario MUST NOT start.** The runner investigates the root cause (missing fixture? missing tag? unreadable file?), fixes the underlying problem (not by bypassing — by making the script's original intent succeed), then re-runs the setup. Common causes:
+   - Fixture fork not cloned locally → cloning is the scenario author's job, do it now.
+   - Fixture missing `scenario-start` tag → author must create the baseline commit + tag.
+   - `rewipe-list` file path typo → fix the frontmatter.
+   - `yq` missing → install yq.
+
+   Never edit the shared scripts to "skip" a failing fixture. Fix the fixture.
 
 If running in a worktree, all scenario artifacts (screenshots, reports, backups) are saved inside the worktree, then copied to the main tree on completion.
 
@@ -389,6 +419,18 @@ data_produced:                      # Every artifact created during the test.
   - 2 test agents (temporary)       # Format: <count> <what> (<lifecycle>)
   - 1 test team (temporary)         # Lifecycle: "temporary, created and deleted"
   - Plugin settings modifications   # or "temporary, restored via STATE-WIPE"
+rewipe-list:                        # Files backed up by setup-SCEN-<NNN>.sh and
+  - ~/.claude/settings.json         # restored by cleanup-SCEN-<NNN>.sh.
+  - ~/.claude/settings.local.json   # Paths may contain ~ or $VARS (shell-expanded).
+  - ~/.aimaestro/governance.json
+  - ~/.aimaestro/agents/registry.json
+  - ~/.aimaestro/teams/teams.json
+  - ~/.aimaestro/teams/groups.json
+git-fixtures: []                    # Array of GitHub URLs. Local clone MUST exist at
+                                    # tests/scenarios/fixtures/git/<repo-name>/ with
+                                    # tag scenario-start. Reference as GITFIX[0], GITFIX[1].
+dir-fixtures: []                    # Array of absolute local paths. MUST exist.
+                                    # Reference as FOLDFIX[0], FOLDFIX[1].
 browser_stack: dev-browser          # Canonical. See Rule 8.
 # Legacy scenarios may still carry the pre-2026-04-15 chrome-devtools-mcp
 # required_tools list. That list is deprecated; new scenarios MUST use
@@ -429,6 +471,9 @@ author: <who wrote the scenario>    # (optional) Person or team name.
 | `subsystems` | list | yes | Backend modules exercised. At least 1. |
 | `ui_sections` | list | yes | UI areas touched. Use `->` arrow notation. |
 | `data_produced` | list | yes | Every artifact created. Include lifecycle note. |
+| `rewipe-list` | list of strings | yes | File paths to back up before the scenario and restore after. May be `[]` but the standard 6 config files are the recommended minimum. Paths support `~` and `$VARS`. |
+| `git-fixtures` | list of strings | yes | GitHub URLs. Local clone at `tests/scenarios/fixtures/git/<repo-name>/` with `scenario-start` tag MUST exist before the run. Scripts never clone for you. Referenced in steps as `GITFIX[n]` (0-indexed). |
+| `dir-fixtures` | list of strings | yes | Absolute paths to local folders/repos used during the run. Setup resets git repos with the `scenario-start` tag. Referenced in steps as `FOLDFIX[n]` (0-indexed). |
 | `browser_stack` | string | yes | `dev-browser` per Rule 8. New scenarios MUST set this field. |
 | `required_tools` | list | no | Legacy chrome-devtools-mcp list from pre-2026-04-15 scenarios. Deprecated; do NOT add to new scenarios. |
 | `prerequisites` | list | yes | Testable conditions. Include CLI checks (e.g., `which codex`). |
@@ -528,15 +573,17 @@ RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)
 Every screenshot for that run is then saved under a **timestamped per-run subdirectory** AND the file itself **also carries the same timestamp**, so both the dir and the file are unambiguous even if someone moves or copies them:
 
 ```
-tests/scenarios/screenshots/SCEN-<NNN>_<RUN_ID>/S<NNN>_<RUN_ID>_<short-desc>.jpg
+reports/scenarios-runner/screenshots/SCEN-<NNN>_<RUN_ID>/S<NNN>_<RUN_ID>_<short-desc>.jpg
 ```
 
 Examples (for a scenario run started at 2026-04-14T14:30:00Z):
 
 ```
-tests/scenarios/screenshots/SCEN-009_20260414T143000Z/S014_20260414T143000Z_task-sent.jpg
-tests/scenarios/screenshots/SCEN-009_20260414T143000Z/S033_20260414T143000Z_manager-removed.jpg
+reports/scenarios-runner/screenshots/SCEN-009_20260414T143000Z/S014_20260414T143000Z_task-sent.jpg
+reports/scenarios-runner/screenshots/SCEN-009_20260414T143000Z/S033_20260414T143000Z_manager-removed.jpg
 ```
+
+**Output directory note:** as of 2026-04-19, scenario outputs (reports + proposals + screenshots) live under project-root `reports/scenarios-runner/` which is **git-tracked**. The janitor plugin migrates content older than 48 hours to `reports_dev/scenarios-runner/` (gitignored) automatically. The prior path `tests/scenarios/screenshots/` is deprecated — do NOT save new screenshots there.
 
 **Format: JPEG 97%** — not PNG. UI screenshots compress well as JPEG 97% with no visible quality loss, and saves ~50 MB per 22-scenario batch vs PNG. If your browser automation MCP only produces PNG, convert each file immediately after capture using `sips -s format jpeg -s formatOptions 97 <file>.png --out <file>.jpg && rm <file>.png`, or call `tests/scenarios/scripts/compress-screenshots.sh` at the end of your run to batch-convert. The canonical on-disk format is `.jpg`.
 
@@ -575,7 +622,7 @@ rm -rf "${CLAUDE_PROJECT_DIR}/tests/scenarios/screenshots/SCEN-${NNN}_${RUN_ID}"
 
 **The runner reports the deletion in its summary line** so the parent batch conductor can verify (the report's `screenshots_purged: true|false` field). The conductor logs total disk reclaimed at the end of the batch.
 
-**Why this is safe:** the per-run screenshot directory uses the timestamped naming convention from earlier in this rule (`SCEN-NNN_<RUN_ID>/...`). A purge of one run's directory cannot ever affect a different run's screenshots, even for the same scenario. The git-tracked report file (`tests/scenarios/reports/SCEN-NNN_<timestamp>.report.md`) survives the purge — it records every step, every bug, every fix, and the path to the (now-deleted) screenshots, so the audit trail is intact even if a future investigation needs to re-create the visual evidence (which can be done by re-running the scenario).
+**Why this is safe:** the per-run screenshot directory uses the timestamped naming convention from earlier in this rule (`SCEN-NNN_<RUN_ID>/...`). A purge of one run's directory cannot ever affect a different run's screenshots, even for the same scenario. The git-tracked report file (`reports/scenarios-runner/SCEN-NNN_<timestamp>.report.md`) survives the purge — it records every step, every bug, every fix, and the path to the (now-deleted) screenshots, so the audit trail is intact even if a future investigation needs to re-create the visual evidence (which can be done by re-running the scenario).
 
 ---
 
@@ -607,7 +654,7 @@ After the scenario test completes and the report is saved, execute an **in-depth
 
 **Output:** Save the writeup to:
 ```
-tests/scenarios/reports/scenario_proposed-improvements_<NNN>_<datetime>.md
+reports/scenarios-runner/scenario_proposed-improvements_<NNN>_<datetime>.md
 ```
 
 The file must reference the scenario report it is based on. Each proposal must include: problem description, root cause analysis, proposed solution with specific files/changes, and priority (P0-P3).
@@ -833,7 +880,7 @@ If phase == "master_cleanup":
   1. Stop the dev-browser daemon with `dev-browser stop`.
   2. Run the project's master cleanup script (kill scen* tmux sessions,
      STATE-WIPE restore from backups per Rule 3).
-  3. Generate tests/scenarios/reports/CONSOLIDATED_PROPOSALS_<batch_id>.md
+  3. Generate reports/scenarios-runner/CONSOLIDATED_PROPOSALS_<batch_id>.md
      by reading all scenario_proposed-improvements_*.md files produced in
      this batch and combining them per the format below.
   4. Stage and commit the consolidated proposals file.
@@ -873,7 +920,7 @@ The cron fire then:
 - Updates state.json with the scenario's verdict and report paths
 - `git add` the explicit modified source files
 - `git commit -m "fix(scen-NNN): <summary>"` — one commit for bug fixes per scenario, on the current branch
-- `git add tests/scenarios/reports/SCEN-NNN_<ts>.report.md tests/scenarios/reports/scenario_proposed-improvements_<NNN>_<ts>.md`
+- `git add reports/scenarios-runner/SCEN-NNN_<ts>.report.md reports/scenarios-runner/scenario_proposed-improvements_<NNN>_<ts>.md`
 - `git commit -m "docs(scen-NNN): add scenario report and proposals"` — separate commit for the reports
 - If verdict==PASS with all bugs verified fixed, delete the per-run screenshot dir per Rule 10 auto-purge
 - Exit the cron fire
@@ -885,7 +932,7 @@ No branch creation. No worktree. No `git push`. No PR draft. All of that is Phas
 1. `dev-browser stop` (cleanly shuts down Chromium; note: no `daemon stop` subcommand — use `dev-browser stop`)
 2. Run the project's cleanup script (kill scen* tmux sessions, restore registry/teams)
 3. STATE-WIPE restore from backups
-4. Generate `tests/scenarios/reports/CONSOLIDATED_PROPOSALS_<batch_id>.md` with the format below
+4. Generate `reports/scenarios-runner/CONSOLIDATED_PROPOSALS_<batch_id>.md` with the format below
 5. Commit the consolidated file
 6. Set `phase="consolidated"` in state.json — this is the terminal state, the cron will see it and stop firing
 7. Optionally delete the durable cron via CronDelete
@@ -932,7 +979,7 @@ Save this file when you are done. Then run the Phase 3 command at the bottom.
 #### SCEN-001: <proposal title>
 - [ ] **Approve**
 - **Scenario:** SCEN-001 — <scenario name>
-- **Source report:** `tests/scenarios/reports/scenario_proposed-improvements_001_<ts>.md`
+- **Source report:** `reports/scenarios-runner/scenario_proposed-improvements_001_<ts>.md`
 - **Problem:** <one paragraph>
 - **Root cause:** <one paragraph>
 - **Proposed fix:** <one paragraph — file paths, line ranges, what to change>
@@ -979,7 +1026,7 @@ worktrees should be minimal. Implementation is fast.
 
 ### SCEN-018 FAIL
 - **Reason:** <one-line>
-- **Report:** tests/scenarios/reports/SCEN-018_<ts>.report.md
+- **Report:** reports/scenarios-runner/SCEN-018_<ts>.report.md
 - **Screenshots:** tests/scenarios/screenshots/SCEN-018_<RUN_ID>/ (kept because verdict != PASS)
 - **Recommended action:** re-run manually after investigating, or delete the scenario if it's no longer relevant
 

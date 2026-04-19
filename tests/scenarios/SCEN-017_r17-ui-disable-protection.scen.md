@@ -58,6 +58,15 @@ prerequisites:
   - ai-maestro-plugin installed and enabled at user scope (verify via `GET /api/settings/global-plugins`)
   - No pre-existing agent named "scen017-ui-test"
 governance_password: "mYkri1-xoxrap-gogtan"
+rewipe-list:
+  - ~/.claude/settings.json
+  - ~/.claude/settings.local.json
+  - ~/.aimaestro/governance.json
+  - ~/.aimaestro/agents/registry.json
+  - ~/.aimaestro/teams/teams.json
+  - ~/.aimaestro/teams/groups.json
+git-fixtures: []
+dir-fixtures: []
 commit: TBD
 author: AI Maestro Team
 ---

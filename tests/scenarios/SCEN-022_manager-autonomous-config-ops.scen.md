@@ -57,6 +57,15 @@ prerequisites:
     (not exercised in this scenario but must be picker-visible for the
     MANAGER's agent-management skill to report it accurately)
 governance_password: "mYkri1-xoxrap-gogtan"
+rewipe-list:
+  - ~/.claude/settings.json
+  - ~/.claude/settings.local.json
+  - ~/.aimaestro/governance.json
+  - ~/.aimaestro/agents/registry.json
+  - ~/.aimaestro/teams/teams.json
+  - ~/.aimaestro/teams/groups.json
+git-fixtures: []
+dir-fixtures: []
 commit: TBD
 ---
 

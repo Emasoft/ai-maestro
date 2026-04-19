@@ -66,6 +66,17 @@ prerequisites:
   - Emasoft/scen018-test-repo-beta exists with src/other.py (known multiply bug), tests/test_other.py (failing test), scripts/publish.py, pyproject.toml with bumpable version, v0.1.0 git tag, branch ruleset (require PR, no force-push, no branch delete)
   - Codex CLI NOT required (claude-only scenario)
 governance_password: "mYkri1-xoxrap-gogtan"
+rewipe-list:
+  - ~/.claude/settings.json
+  - ~/.claude/settings.local.json
+  - ~/.aimaestro/governance.json
+  - ~/.aimaestro/agents/registry.json
+  - ~/.aimaestro/teams/teams.json
+  - ~/.aimaestro/teams/groups.json
+git-fixtures:
+  - https://github.com/Emasoft/scen018-test-repo-alpha.git
+  - https://github.com/Emasoft/scen018-test-repo-beta.git
+dir-fixtures: []
 commit: TBD
 ---
 

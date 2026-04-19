@@ -41,7 +41,9 @@ For each scenario ID `N` in the parsed list, in numeric order:
 
 1. **Check resume state.** Read `${CLAUDE_PROJECT_DIR}/tests/scenarios/state/batch-progress.log` (create the directory if missing). If it already contains a `SCENARIO_DONE <N>` line from a previous run in this batch window, skip this scenario and move to the next.
 
-2. **Per-scenario pre-setup script (optional).** If `${CLAUDE_PROJECT_DIR}/tests/scenarios/scripts/setup-SCEN-<padded-id>.sh` exists, run it via Bash. If it does not exist, log a WARN and continue — the scenario runner falls back to the scenario's own Phase 0 SAFE-SETUP.
+2. **Per-scenario pre-setup script (MANDATORY).** Run `${CLAUDE_PROJECT_DIR}/tests/scenarios/scripts/setup-SCEN-<padded-id>.sh` via Bash. Every scenario MUST have this script (all 24 are generated from a template — see `scenario-setup.sh`). The script reads the scenario's `rewipe-list`, `git-fixtures`, `dir-fixtures` frontmatter and prepares the environment.
+
+   **If the setup script fails (non-zero exit), the scenario MUST NOT start.** Log the failure in `batch-progress.log` as `SCENARIO_SETUP_FAIL <N> <reason>`, skip this scenario, and continue to the next one. The setup failure is a scenario-author problem (missing fixture, missing tag, bad path) — not something the batch conductor should paper over. Do NOT spawn the scenario-runner subagent when setup fails; it would just restart the scenario from step 1 in an uninitialized environment.
 
 3. **Spawn the scenario-runner subagent** via the Agent tool:
    ```
@@ -53,7 +55,7 @@ For each scenario ID `N` in the parsed list, in numeric order:
    ```
    Wait for the subagent to return. Parse the 2-line result into pass/fail/partial + report path.
 
-4. **Per-scenario cleanup script (optional).** If `${CLAUDE_PROJECT_DIR}/tests/scenarios/scripts/cleanup-SCEN-<padded-id>.sh` exists, run it via Bash. Safety-net cleanup in case the subagent's in-UI cleanup missed anything.
+4. **Per-scenario cleanup script (MANDATORY).** Run `${CLAUDE_PROJECT_DIR}/tests/scenarios/scripts/cleanup-SCEN-<padded-id>.sh` via Bash. This delegates to `scenario-restore.sh` which verifies and replays the MANIFEST.sha256. If it fails, log `SCENARIO_CLEANUP_FAIL <N> <reason>` in `batch-progress.log`, but continue to the next scenario (cleanup failures are noted for operator review, not fatal to the batch).
 
 5. **Append progress.** One line to `${CLAUDE_PROJECT_DIR}/tests/scenarios/state/batch-progress.log`:
    ```

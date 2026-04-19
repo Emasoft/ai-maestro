@@ -54,6 +54,15 @@ prerequisites:
     exercised in this scenario but required for the Title Assignment
     Dialog to pass invariant checks)
 governance_password: "mYkri1-xoxrap-gogtan"
+rewipe-list:
+  - ~/.claude/settings.json
+  - ~/.claude/settings.local.json
+  - ~/.aimaestro/governance.json
+  - ~/.aimaestro/agents/registry.json
+  - ~/.aimaestro/teams/teams.json
+  - ~/.aimaestro/teams/groups.json
+git-fixtures: []
+dir-fixtures: []
 commit: TBD
 author: AI Maestro Team
 ---

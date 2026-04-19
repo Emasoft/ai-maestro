@@ -54,6 +54,15 @@ prerequisites:
   - No pre-existing agents named "scen015-alice" or "scen015-bob"
   - P002 (CreateAgent G12 AMP identity auto-init) is deployed on the running server
 governance_password: "mYkri1-xoxrap-gogtan"
+rewipe-list:
+  - ~/.claude/settings.json
+  - ~/.claude/settings.local.json
+  - ~/.aimaestro/governance.json
+  - ~/.aimaestro/agents/registry.json
+  - ~/.aimaestro/teams/teams.json
+  - ~/.aimaestro/teams/groups.json
+git-fixtures: []
+dir-fixtures: []
 commit: TBD
 author: AI Maestro Team
 ---

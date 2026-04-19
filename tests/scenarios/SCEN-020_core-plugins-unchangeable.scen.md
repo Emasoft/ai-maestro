@@ -46,6 +46,15 @@ prerequisites:
   - MAINTAINER role-plugin available as an optional title for step S012
     (per R19, MAINTAINER must be picker-visible)
 governance_password: "mYkri1-xoxrap-gogtan"
+rewipe-list:
+  - ~/.claude/settings.json
+  - ~/.claude/settings.local.json
+  - ~/.aimaestro/governance.json
+  - ~/.aimaestro/agents/registry.json
+  - ~/.aimaestro/teams/teams.json
+  - ~/.aimaestro/teams/groups.json
+git-fixtures: []
+dir-fixtures: []
 commit: TBD
 ---
 

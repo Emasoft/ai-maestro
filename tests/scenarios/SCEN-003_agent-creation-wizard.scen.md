@@ -56,6 +56,15 @@ prerequisites:
   - ai-maestro-plugins marketplace registered (Emasoft/ai-maestro-plugins)
   - Role-plugin defaults synced (ai-maestro-integrator-agent, ai-maestro-programmer-agent available)
 governance_password: "mYkri1-xoxrap-gogtan"
+rewipe-list:
+  - ~/.claude/settings.json
+  - ~/.claude/settings.local.json
+  - ~/.aimaestro/governance.json
+  - ~/.aimaestro/agents/registry.json
+  - ~/.aimaestro/teams/teams.json
+  - ~/.aimaestro/teams/groups.json
+git-fixtures: []
+dir-fixtures: []
 commit: TBD
 author: AI Maestro Team
 ---

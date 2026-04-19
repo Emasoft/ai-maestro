@@ -216,13 +216,14 @@ resume_needed_alert.md
 # resume-handoff + create-handoff workspace (user scratch, not project code)
 thoughts/
 
-# Scenario test outputs (per-run artifacts, not source)
-tests/scenarios/reports/
-tests/scenarios/screenshots/
+# Scenario test outputs — runtime ephemeral (state + backups)
 tests/scenarios/state-backups/
 tests/scenarios/state/
 state-backups/
 playwright-report/
+# Legacy scenario output paths (migrated 2026-04-19 to reports/scenarios-runner/)
+tests/scenarios/reports/
+tests/scenarios/screenshots/
 
 # Dev workspace for throwaway files
 tests_dev/

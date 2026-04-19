@@ -76,8 +76,22 @@ The parent harness's master setup (per Rule 13) has already provisioned fixtures
 
 1. `git status` to record `commit_start`
 2. Generate a `RUN_ID` in ISO 8601 basic format: `RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)`
-3. Sanity-check the dev-browser daemon by listing pages and confirming the `dashboard` page is on `http://localhost:23000/`. If not, the master setup is broken — abort with a clear error rather than trying to fix it yourself.
-4. Take a baseline screenshot at `tests/scenarios/screenshots/SCEN-${NNN}_${RUN_ID}/S000_${RUN_ID}_baseline.jpg`.
+3. **Run the per-scenario setup script (MANDATORY):** invoke
+   ```
+   bash "${CLAUDE_PROJECT_DIR}/tests/scenarios/scripts/setup-SCEN-${NNN}.sh"
+   ```
+   Capture stdout and stderr. The script ends with `SETUP_OK` on success or `SETUP_FAIL <reason>` on failure.
+
+   **If the script fails (non-zero exit or any `SETUP_FAIL` line), the scenario MUST NOT start.** Diagnose the underlying cause and fix it — never bypass, never work around. Typical causes:
+   - `git-fixture[n] <url> — expected local clone at <path>`: the fixture fork hasn't been cloned locally. Clone it and create the `scenario-start` tag, then retry setup.
+   - `git-fixture[n] <path> missing tag 'scenario-start'`: the baseline tag is missing. Check out the author-intended baseline commit, tag it, retry.
+   - `dir-fixture[n] <path> missing`: the scenario author must prepare the folder. If it's an author-error, add the folder with sensible baseline content, then retry.
+   - `'yq' not on PATH`: install yq (`brew install yq`), retry.
+   - Missing file in `rewipe-list`: correct the frontmatter path typo, retry.
+
+   After every fix, re-run the setup script. Repeat until you get `SETUP_OK`. ONLY then proceed to step 4.
+4. Sanity-check the dev-browser daemon by listing pages and confirming the `dashboard` page is on `http://localhost:23000/`. If not, the master setup is broken — abort with a clear error rather than trying to fix it yourself.
+5. Take a baseline screenshot at `reports/scenarios-runner/screenshots/SCEN-${NNN}_${RUN_ID}/S000_${RUN_ID}_baseline.jpg`.
 
 ## Phase C — Execute the scenario
 
@@ -86,7 +100,7 @@ For each numbered step in the scenario file:
 1. **Snapshot first** — use `page.snapshotForAI()` (per the loaded dev-browser skill) to discover elements. Use `track: "main"` for incremental snapshots after the first call.
 2. **Perform the action** via Playwright methods on the page (click, fill, waitForSelector, etc.).
 3. **Verify** via another snapshot OR a read-only state check (`curl GET` on a health/state endpoint — reads are allowed, writes are not — Rule 6).
-4. **Screenshot** via `page.screenshot()` + `saveScreenshot()`, then move the file from `~/.dev-browser/tmp/` to the canonical Rule 10 path `tests/scenarios/screenshots/SCEN-${NNN}_${RUN_ID}/S<step>_${RUN_ID}_<short-desc>.jpg`.
+4. **Screenshot** via `page.screenshot()` + `saveScreenshot()`, then move the file from `~/.dev-browser/tmp/` to the canonical Rule 10 path `reports/scenarios-runner/screenshots/SCEN-${NNN}_${RUN_ID}/S<step>_${RUN_ID}_<short-desc>.jpg`.
 5. **Append a row** to the in-progress report including the screenshot's relative path.
 
 For the API specifics (which methods to call, how to pass selectors, how to use `track`), refer to the dev-browser skill loaded at the start. This agent definition deliberately does NOT duplicate that documentation.
@@ -110,17 +124,25 @@ AI Maestro implements a sudo-mode layer (Rule 12). Destructive operations may tr
 
 ## Phase F — CLEANUP (Rules 1, 2, 3)
 
-Execute the scenario's CLEANUP phase steps via the UI. The scenario file will have numbered cleanup steps — follow them exactly. Any parent-harness safety-net cleanup script runs AFTER you return, but it cannot replace in-scenario cleanup (Rule 1 says cleanup is mandatory AND must go through the UI).
+Execute the scenario's CLEANUP phase steps via the UI. The scenario file will have numbered cleanup steps — follow them exactly. Cleanup is mandatory AND must go through the UI (Rule 1).
 
-After the UI cleanup, take a post-test screenshot and compare with the baseline. Note any drift in the report.
+After the UI cleanup, **run the per-scenario cleanup script**:
+
+```
+bash "${CLAUDE_PROJECT_DIR}/tests/scenarios/scripts/cleanup-SCEN-${NNN}.sh"
+```
+
+This delegates to `scenario-restore.sh` which verifies and replays the `rewipe-list` MANIFEST (SHA256-integrity-checked file restore). If it exits non-zero, diagnose and fix the underlying cause — never bypass.
+
+Finally, take a post-test screenshot and compare with the baseline. Note any drift in the report.
 
 ## Phase G — Reports (Rules 9, 11)
 
 Write two files:
 
-1. `tests/scenarios/reports/SCEN-NNN_<timestamp>.report.md` — the Rule 9 structured report with YAML frontmatter, step tables, bugs fixed, issues noticed, cleanup verification, state-wipe verification.
+1. `reports/scenarios-runner/SCEN-NNN_<timestamp>.report.md` — the Rule 9 structured report with YAML frontmatter, step tables, bugs fixed, issues noticed, cleanup verification, state-wipe verification.
 
-2. `tests/scenarios/reports/scenario_proposed-improvements_NNN_<timestamp>.md` — the Rule 11 11th-HOUR analysis. This is your **primary deliverable**. Categorize every proposal as P0/P1/P2/P3 with:
+2. `reports/scenarios-runner/scenario_proposed-improvements_NNN_<timestamp>.md` — the Rule 11 11th-HOUR analysis. This is your **primary deliverable**. Categorize every proposal as P0/P1/P2/P3 with:
    - Problem description
    - Root cause analysis
    - Concrete fix (file path, line range, current code, proposed code)
@@ -133,8 +155,8 @@ Your LAST text output must be exactly these 2 or 3 lines:
 
 ```
 [PASS|FAIL|PARTIAL] SCEN-NNN — <one-line result>
-Report: tests/scenarios/reports/SCEN-NNN_<timestamp>.report.md
-Improvements: tests/scenarios/reports/scenario_proposed-improvements_NNN_<timestamp>.md
+Report: reports/scenarios-runner/SCEN-NNN_<timestamp>.report.md
+Improvements: reports/scenarios-runner/scenario_proposed-improvements_NNN_<timestamp>.md
 ```
 
 No code blocks, no step tables, no screenshots inline — just the summary lines. The parent (run-scenarios-batch skill or main Claude) reads the report file if it needs details.

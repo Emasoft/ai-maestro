@@ -44,6 +44,15 @@ prerequisites:
   - ai-maestro-plugins marketplace registered
   - No pre-existing agent named "scen012-r17-test"
 governance_password: "mYkri1-xoxrap-gogtan"
+rewipe-list:
+  - ~/.claude/settings.json
+  - ~/.claude/settings.local.json
+  - ~/.aimaestro/governance.json
+  - ~/.aimaestro/agents/registry.json
+  - ~/.aimaestro/teams/teams.json
+  - ~/.aimaestro/teams/groups.json
+git-fixtures: []
+dir-fixtures: []
 commit: TBD
 author: AI Maestro Team
 ---

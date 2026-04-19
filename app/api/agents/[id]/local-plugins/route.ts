@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { enforceAuth } from '@/lib/route-auth'
+import { requireAuth } from '@/lib/route-auth'
 import { ChangePlugin } from '@/services/element-management-service'
 import { isValidUuid } from '@/lib/validation'
 
@@ -18,8 +18,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   // #114: Authenticate before any side effect.
-  const authErr = enforceAuth(req)
-  if (authErr) return authErr
+  const auth = requireAuth(req)
+  if (!auth.ok) return auth.error
 
   try {
     const { id: agentId } = await params
@@ -50,7 +50,7 @@ export async function POST(
       marketplace,
       action: enabled ? 'enable' : 'disable',
       scope: 'local',
-    })
+    }, auth.context)
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })

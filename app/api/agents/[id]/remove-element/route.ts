@@ -69,32 +69,32 @@ export async function POST(
     // Delegate to centralized Change* functions
     switch (elementType) {
       case 'skill': {
-        const r = await ChangeSkill(id, { name: safeName, action: 'remove', scope: 'local', agentDir: agentWorkDir })
+        const r = await ChangeSkill(id, { name: safeName, action: 'remove', scope: 'local', agentDir: agentWorkDir }, auth.context)
         if (!r.success) return NextResponse.json({ error: r.error || 'Skill removal failed' }, { status: r.error?.includes('not found') ? 404 : 500 })
         break
       }
       case 'agent': {
-        const r = await ChangeAgentDef(id, { name: safeName, action: 'remove', scope: 'local', agentDir: agentWorkDir })
+        const r = await ChangeAgentDef(id, { name: safeName, action: 'remove', scope: 'local', agentDir: agentWorkDir }, auth.context)
         if (!r.success) return NextResponse.json({ error: r.error || 'Agent definition removal failed' }, { status: r.error?.includes('not found') ? 404 : 500 })
         break
       }
       case 'rule': {
-        const r = await ChangeRule(id, { name: safeName, action: 'remove', scope: 'local', agentDir: agentWorkDir })
+        const r = await ChangeRule(id, { name: safeName, action: 'remove', scope: 'local', agentDir: agentWorkDir }, auth.context)
         if (!r.success) return NextResponse.json({ error: r.error || 'Rule removal failed' }, { status: r.error?.includes('not found') ? 404 : 500 })
         break
       }
       case 'command': {
-        const r = await ChangeCommand(id, { name: safeName, action: 'remove', scope: 'local', agentDir: agentWorkDir })
+        const r = await ChangeCommand(id, { name: safeName, action: 'remove', scope: 'local', agentDir: agentWorkDir }, auth.context)
         if (!r.success) return NextResponse.json({ error: r.error || 'Command removal failed' }, { status: r.error?.includes('not found') ? 404 : 500 })
         break
       }
       case 'outputStyle': {
-        const r = await ChangeOutputStyle(id, { name: safeName, action: 'remove', scope: 'local', agentDir: agentWorkDir })
+        const r = await ChangeOutputStyle(id, { name: safeName, action: 'remove', scope: 'local', agentDir: agentWorkDir }, auth.context)
         if (!r.success) return NextResponse.json({ error: r.error || 'Output style removal failed' }, { status: r.error?.includes('not found') ? 404 : 500 })
         break
       }
       case 'mcp': {
-        const r = await ChangeMCP(id, { name: safeName, action: 'remove', scope: 'local', agentDir: agentWorkDir })
+        const r = await ChangeMCP(id, { name: safeName, action: 'remove', scope: 'local', agentDir: agentWorkDir }, auth.context)
         if (!r.success) return NextResponse.json({ error: r.error || 'MCP removal failed' }, { status: 500 })
         break
       }

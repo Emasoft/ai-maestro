@@ -46,7 +46,7 @@ Copy this checklist and track your progress:
 
 ### Rules reference
 
-Canonical rules file: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — tracked in git, single source of truth for the 12 rules. Pass this path into every subagent prompt.
+Canonical rules file: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — tracked in git, single source of truth for the 13 rules (Rule 13 = AUTONOMOUS-PROTOCOL, added 2026-04-15). Pass this path into every subagent prompt.
 
 ### Argument formats
 

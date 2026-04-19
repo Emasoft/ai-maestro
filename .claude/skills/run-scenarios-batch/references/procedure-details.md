@@ -48,7 +48,7 @@ For each scenario ID `N` in the parsed list, in numeric order:
    Agent(
        description: "Run SCEN-<padded-id> end-to-end",
        subagent_type: "scenario-runner",
-       prompt: "Run scenario number <N>. Scenario file: ${CLAUDE_PROJECT_DIR}/tests/scenarios/SCEN-<padded-id>_*.scen.md. Rules file: <resolved-rules-path>. Follow rules 1-12, drive the app via Chrome CDP, write the report + proposals under ${CLAUDE_PROJECT_DIR}/tests/scenarios/reports/, and return a 2-line summary."
+       prompt: "Run scenario number <N>. Scenario file: ${CLAUDE_PROJECT_DIR}/tests/scenarios/SCEN-<padded-id>_*.scen.md. Rules file: <resolved-rules-path>. Follow rules 1-13, drive the app via the dev-browser CLI (Rule 8 — loaded via Skill(skill: 'dev-browser:dev-browser')), write the report + proposals under ${CLAUDE_PROJECT_DIR}/tests/scenarios/reports/, and return a 2-line summary."
    )
    ```
    Wait for the subagent to return. Parse the 2-line result into pass/fail/partial + report path.

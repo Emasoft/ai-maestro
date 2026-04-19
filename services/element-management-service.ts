@@ -1694,9 +1694,32 @@ export async function ChangeTitle(
     }
 
     // ── GATE 8: Singleton check — COS/ORCHESTRATOR per team ──
+    // SCEN-001 BUG-001 fix: enforce the per-team singleton here too, not
+    // only in the calling UI. The TitleAssignmentDialog reads
+    // team.orchestratorId / team.chiefOfStaffId to grey out the option,
+    // but if the caller bypasses the UI (API PATCH, MANAGER flow, COS
+    // reassign, etc.) the check must still trigger. G13b below sets
+    // these fields after a successful title change, so this gate is the
+    // pre-write counterpart.
     if (newTitle && SINGLETON_TEAM_TITLES.has(newTitle)) {
-      // These are checked by the caller (team route) — ChangeTitle logs it
-      ops.push(`G08: ${newTitle.toUpperCase()} is per-team singleton — caller must validate team slot`)
+      const { loadTeams: loadTeamsG8 } = await import('@/lib/team-registry')
+      const allTeamsG8 = loadTeamsG8()
+      const memberTeamG8 = allTeamsG8.find(t => t.agentIds.includes(agentId))
+      if (memberTeamG8) {
+        if (newTitle === 'orchestrator' && memberTeamG8.orchestratorId && memberTeamG8.orchestratorId !== agentId) {
+          const currentOrch = getAgent(memberTeamG8.orchestratorId)
+          result.error = `Only one Orchestrator is allowed per team. "${currentOrch?.name || memberTeamG8.orchestratorId}" already holds this title in team "${memberTeamG8.name}".`
+          ops.push(`G08: DENIED — ORCHESTRATOR singleton already held by ${memberTeamG8.orchestratorId}`)
+          return result
+        }
+        if (newTitle === 'chief-of-staff' && memberTeamG8.chiefOfStaffId && memberTeamG8.chiefOfStaffId !== agentId) {
+          const currentCos = getAgent(memberTeamG8.chiefOfStaffId)
+          result.error = `Only one Chief-of-Staff is allowed per team. "${currentCos?.name || memberTeamG8.chiefOfStaffId}" already holds this title in team "${memberTeamG8.name}".`
+          ops.push(`G08: DENIED — CHIEF-OF-STAFF singleton already held by ${memberTeamG8.chiefOfStaffId}`)
+          return result
+        }
+      }
+      ops.push(`G08: ${newTitle.toUpperCase()} per-team singleton check passed`)
     } else {
       ops.push(`G08: Not a per-team singleton title`)
     }
@@ -1850,6 +1873,40 @@ export async function ChangeTitle(
       }
     } else {
       ops.push(`G13: New title not MANAGER — governance.json unchanged`)
+    }
+
+    // ── GATE 13b: Set orchestratorId/chiefOfStaffId on the team ─
+    // SCEN-001 BUG-001 fix: when an agent becomes ORCHESTRATOR or
+    // CHIEF-OF-STAFF of a team, record the agent's id on the team so
+    // the UI dialog, the per-team singleton check, and the DeleteTeam
+    // revert path can find it. Without this, the team keeps
+    // orchestratorId=null even though the agent is the orchestrator,
+    // and a second agent can be assigned orchestrator in the same
+    // team.
+    if (newTitle === 'orchestrator' || newTitle === 'chief-of-staff') {
+      try {
+        const { loadTeams: loadTeamsG13b, updateTeam: updateTeamG13b } = await import('@/lib/team-registry')
+        const allTeamsG13b = loadTeamsG13b()
+        const memberTeamG13b = allTeamsG13b.find(t => t.agentIds.includes(agentId))
+        if (memberTeamG13b) {
+          const managerIdG13b = getManagerId()
+          if (newTitle === 'orchestrator' && memberTeamG13b.orchestratorId !== agentId) {
+            await updateTeamG13b(memberTeamG13b.id, { orchestratorId: agentId }, managerIdG13b)
+            ops.push(`G13b: Set orchestratorId=${agentId} on team "${memberTeamG13b.name}"`)
+          } else if (newTitle === 'chief-of-staff' && memberTeamG13b.chiefOfStaffId !== agentId) {
+            await updateTeamG13b(memberTeamG13b.id, { chiefOfStaffId: agentId }, managerIdG13b)
+            ops.push(`G13b: Set chiefOfStaffId=${agentId} on team "${memberTeamG13b.name}"`)
+          } else {
+            ops.push(`G13b: ${newTitle} id already set on team "${memberTeamG13b.name}"`)
+          }
+        } else {
+          ops.push(`G13b: WARN — agent ${agentId} is ${newTitle} but not in any team (Gate 9 should have caught this)`)
+        }
+      } catch (err) {
+        ops.push(`G13b: WARN — Failed to set ${newTitle}Id on team: ${err instanceof Error ? err.message : err}`)
+      }
+    } else {
+      ops.push(`G13b: New title not ORCHESTRATOR/CHIEF-OF-STAFF — team ids unchanged`)
     }
 
     // ── GATE 14: Write governanceTitle to agent registry ─────

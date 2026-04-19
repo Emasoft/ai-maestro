@@ -828,10 +828,14 @@ export async function InstallElement(
         const agentPG04 = getAgentPG04(desired.agentId)
         const title = (agentPG04?.governanceTitle || 'autonomous').toLowerCase()
         const defaultPlugin = TITLE_PLUGIN_MAP[title]
+        // System-initiated repair: PG04 is triggered from ChangePlugin's post-gate
+        // on behalf of an R9.13 recovery, NOT a user action. isSystemOwner is the
+        // honest authContext here — no external principal is making this request.
+        const pg04AuthContext: AuthContext = { isSystemOwner: true as const }
         if (defaultPlugin && defaultPlugin !== name) {
           ops.push(`PG04: R9.13 violation — agent has title "${title}" but lost role-plugin "${name}". Reinstalling default "${defaultPlugin}" via ChangeTitle.`)
           // ChangeTitle handles the full role-plugin install pipeline
-          const titleResult = await ChangeTitle(desired.agentId, title, {})
+          const titleResult = await ChangeTitle(desired.agentId, title, { authContext: pg04AuthContext })
           if (titleResult.success) {
             ops.push(`PG04: ChangeTitle restored default plugin "${defaultPlugin}" (${titleResult.operations.length} sub-gates)`)
           } else {
@@ -840,7 +844,7 @@ export async function InstallElement(
         } else if (defaultPlugin === name) {
           // The uninstalled plugin WAS the default — reinstall it in place
           ops.push(`PG04: Uninstalled the default plugin for title "${title}" — reinstalling via ChangeTitle`)
-          const titleResult = await ChangeTitle(desired.agentId, title, {})
+          const titleResult = await ChangeTitle(desired.agentId, title, { authContext: pg04AuthContext })
           ops.push(titleResult.success
             ? `PG04: Default plugin "${defaultPlugin}" reinstalled`
             : `PG04: WARN — Reinstall failed: ${titleResult.error}`)
@@ -1519,8 +1523,8 @@ const SINGLETON_TEAM_TITLES: ReadonlySet<string> = new Set(['chief-of-staff', 'o
 export async function ChangeTitle(
   agentId: string,
   newTitle: string | null,
-  options?: {
-    authContext?: AuthContext,
+  options: {
+    authContext: AuthContext,
     teamIds?: string[]
     skipPluginSync?: boolean
     skipRestart?: boolean
@@ -3254,7 +3258,7 @@ export async function ChangeTeam(
     teamId: string | null  // null = remove from all teams
     role?: string           // 'member' | 'chief-of-staff' | 'orchestrator' | 'architect' | 'integrator'
   },
-  authContext?: AuthContext,
+  authContext: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }

@@ -157,7 +157,38 @@ The scenario report (`tests/scenarios/reports/<scenario-name>_<timestamp>.report
 
 If the UI cannot accomplish a step, that is a **BUG** — fix it (Rule 4), don't bypass it.
 
-**Exception:** State verification (reading API responses, checking files) is allowed after a UI action to confirm the backend state matches what the UI shows.
+### Bypass invalidates the entire run — restart from step 1
+
+If the runner bypasses the UI even ONCE during the scenario (for any reason —
+a broken element, a technical shortcut, a "just this one call" workaround),
+**the scenario run is INVALIDATED.** The runner MUST:
+
+1. Stop the current run immediately.
+2. Record the bypass in the in-progress report under a section titled
+   `Rule 6 violation detected — run INVALIDATED`, naming the step and the
+   bypass method.
+3. Perform the CLEANUP phase (Rule 1) to restore original state.
+4. Restart the scenario from step S001.
+
+Partial credit does not exist. A single bypass means the code path under
+test was not actually exercised through the production surface, so the
+test proved nothing about that step. Additionally, AI Maestro uses
+immutable ledgers + strong security infrastructure — out-of-band
+mutations may be DETECTED and reacted to by the system, potentially
+corrupting state that is hard to restore.
+
+"But the UI has a bug here" is a **Rule 4 FIX-AS-YOU-GO trigger**, never a
+Rule 6 exception. Repair the UI/API so the UI works, then resume.
+
+### The only two allowed exceptions
+
+1. **Read-only state verification** — `curl GET`, file reads, `git status`
+   — after a UI action, to check backend state matches UI. Reads never
+   violate Rule 6.
+2. **Pre/post-scenario fixture scripts** — `setup-SCEN-NNN.sh` and
+   `cleanup-SCEN-NNN.sh` that run OUTSIDE the scenario step sequence.
+   Even these should be preferred only when a UI path is genuinely
+   unavailable. Always prefer UI-driven setup/restore.
 
 ---
 

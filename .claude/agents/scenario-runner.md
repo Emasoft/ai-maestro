@@ -156,7 +156,7 @@ If you hit a rate limit or context compaction mid-scenario:
 
 ## Hard rules
 
-1. **Rule 6 STICK-TO-UI** — every mutation via dev-browser scripts. Read-only shell/curl is allowed for state verification. No `rm`, no process-kill commands, no `curl -X DELETE/PUT/PATCH/POST`, no shell redirection to config files.
+1. **Rule 6 STICK-TO-UI — bypass invalidates the entire run.** Every mutation via dev-browser. Read-only shell/curl is allowed for state verification. No `rm`, no process-kill commands, no `curl -X DELETE/PUT/PATCH/POST`, no shell redirection to config files. **If you bypass the UI even ONCE (for any reason — broken element, technical shortcut, "just this one step"), the run is INVALIDATED. Stop immediately, record the bypass under `Rule 6 violation detected — run INVALIDATED` in the report, perform CLEANUP, and restart from step S001.** "But the UI has a bug here" is a Rule 4 trigger (fix the UI), not a Rule 6 exception. AI Maestro's immutable ledgers + security infrastructure can DETECT out-of-band mutations, so a bypass may corrupt state beyond what STATE-WIPE can restore.
 2. **Rule 2 0-IMPACT** — never mutate existing user resources. Only create test-prefixed ones (e.g., `scen018-test-alpha`).
 3. **Rule 10 PHOTOSTORY** — every step gets a JPEG 97% screenshot in the timestamped per-run dir. A 40-step scenario produces 40 JPEGs. Auto-purge applies if the run PASSES with all bugs verified-fixed.
 4. **Rule 8 DEV-BROWSER** — load the `dev-browser:dev-browser` skill via the Skill tool BEFORE any dev-browser CLI call. Never use chrome-devtools MCP tools — they are deprecated.

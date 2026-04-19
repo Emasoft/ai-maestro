@@ -133,12 +133,12 @@ author: AI Maestro Team
 - **Modifies:** nothing
 - **Verify:** Screenshot saved to `tests/scenarios/screenshots/SCEN-005/S007-baseline.png`
 
-#### S008: Ensure no MANAGER exists (precondition)
-- **Action:** Check `GET /api/governance` for `hasManager: false`. If a MANAGER exists, remove MANAGER title via title dialog (set to AUTONOMOUS with password) before proceeding.
-- **Goal:** No MANAGER on the host -- required for Phase 2 tests
+#### S008: Precondition — NO real MANAGER may exist
+- **Action:** Check `GET /api/governance` for `hasManager`. READ-ONLY: do NOT remove any existing MANAGER. If `hasManager: true`, the host has a REAL user MANAGER (likely one of the user's real agents like `alexandre`) — the scenario MUST HALT immediately. Demoting the real MANAGER would trigger the R9.8 blocking cascade across all the user's real teams and is forbidden by Rule 0.
+- **Goal:** Confirm `hasManager: false`. If false, proceed. If true, HALT with this exit report: `SCENARIO_ABORTED SCEN-005 — real MANAGER exists on host, refuse to demote. User must manually hibernate or remove their real MANAGER before running this scenario.`
 - **Creates:** nothing
-- **Modifies:** Possibly removes existing MANAGER title (will be restored in cleanup)
-- **Verify:** `GET /api/governance` returns `hasManager: false`. Screenshot: SCEN-005/S008-ensure-no-manager-exists.png
+- **Modifies:** nothing — this step is read-only. No existing MANAGER title is ever removed.
+- **Verify:** `GET /api/governance` returns `hasManager: false`. If it returns `hasManager: true`, the scenario STOPS here and reports abort. Screenshot: SCEN-005/S008-ensure-no-manager-exists.png
 
 ---
 
@@ -655,17 +655,17 @@ author: AI Maestro Team
 - **Removes:** Agent
 - **Verify:** Agent gone. Screenshot: SCEN-005/S074-member-deleted.png
 
-#### S075: Delete any remaining auto-COS agents (cos-* prefix)
-- **Action:** Check agent list for `cos-` prefix agents from this test. For each, click the agent in the sidebar, open Profile → Advanced → Danger Zone, click Delete Agent, check "Also delete agent folder", type the agent name and click Delete Forever. When the sudo password modal appears each time (`DELETE /api/agents/[id]` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
-- **Goal:** All auto-COS agents removed
-- **Removes:** Auto-COS agents
-- **Verify:** None remain. Screenshot: SCEN-005/S075-cos-deleted.png
+#### S075: Delete auto-COS agents created by this scenario (explicit names only)
+- **Action:** Build an EXPLICIT LIST of auto-COS names to delete, derived ONLY from the team names this scenario created. In this scenario: auto-COS for `scen-test-governance-team` is `cos-scen-test-governance-team`, and for `scen-test-blocking-team` is `cos-scen-test-blocking-team`. DO NOT use prefix-match like "cos-*" — that could accidentally match real user agents. For each name in the explicit list `["cos-scen-test-governance-team", "cos-scen-test-blocking-team"]`, click that exact agent in the sidebar, open Profile → Advanced → Danger Zone, click Delete Agent, check "Also delete agent folder", type the exact name and click Delete Forever. When the sudo password modal appears each time (strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. If any of these names no longer exist (already cleaned up), skip that one and continue.
+- **Goal:** The two scen-prefixed auto-COS agents are removed. No other agent is touched.
+- **Removes:** `cos-scen-test-governance-team`, `cos-scen-test-blocking-team` (and their folders) — if present.
+- **Verify:** Neither of the two named agents appears in the sidebar. Pre-existing user agents like `ecos-chief-of-staff-one` are still present. Screenshot: SCEN-005/S075-cos-deleted.png
 
-#### S076: Verify cemetery entries and purge
-- **Action:** Navigate to Settings -> Cemetery tab. Verify deleted test agents appear in cemetery with download/revive/purge options. Click "Purge" for each test entry. When the sudo password modal appears each time (`DELETE /api/agents/cemetery` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
-- **Goal:** Cemetery entries verified, then purged (no test artifacts remain)
-- **Removes:** Cemetery zip archives for test agents
-- **Verify:** No scen-test entries remain in cemetery. Screenshot: SCEN-005/S076-cemetery-purged.png
+#### S076: Verify cemetery entries and purge (explicit names only)
+- **Action:** Navigate to Settings -> Cemetery tab. Build the explicit list of cemetery entries this scenario is responsible for: `["scen-test-manager", "scen-test-team-member", "cos-scen-test-governance-team", "cos-scen-test-blocking-team"]`. For each name in that list, click "Purge" on its entry, confirm, and enter governance password `mYkri1-xoxrap-gogtan` when the sudo modal appears. Do NOT purge any other entry — only the ones whose names match the explicit list.
+- **Goal:** Scenario-created cemetery entries are gone. Pre-existing cemetery entries (from other scenarios or prior runs) are untouched.
+- **Removes:** Cemetery zip archives for entries in the explicit list (if present).
+- **Verify:** None of the four named cemetery entries is present after the purge. Other entries remain. Screenshot: SCEN-005/S076-cemetery-purged.png
 
 #### S077: STATE-WIPE -- Restore configuration files
 - **Action:** Compare current config files with backups from S002. If any differ, restore from backup.

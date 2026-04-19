@@ -190,15 +190,15 @@ commit: TBD
 - **Verify:** Plugin name appears in the list; filter-as-you-type finds it
   by name.
 
-### S014: Verify scope is USER (not local)
-- **Action:** For each currently-running agent in the dashboard, open its
-  Agent Profile → Config → Plugins section and verify the newly-installed
-  plugin does NOT appear there.
-- **Goal:** User-scope install does NOT affect agents' local scope.
-  This is the critical invariant — scope isolation.
+### S014: Verify scope is USER (not local) — API-only, no clicking real agents
+- **Action:** This check is pure state verification (Rule 6 read-only). DO NOT click on any agent card, DO NOT open any real user agent's Profile tab — that would touch the user's real agents in violation of Rule 0. Instead:
+  1. Read `~/.claude/settings.json` directly (read-only) and verify the newly-installed plugin appears under `enabledPlugins` at USER scope.
+  2. For each agent in `GET /api/agents`, call `GET /api/agents/<id>/local-config` (pure API read — does NOT attach to the agent's tmux or open its Profile UI). Verify the plugin does NOT appear in that agent's local `enabledPlugins`.
+  3. If iterating via API is not available, verify scope isolation by spot-checking one test agent that this scenario itself created (if any) — never a real user agent.
+- **Goal:** User-scope install does NOT affect agents' local scope. This is the critical invariant — scope isolation. The verification is done via filesystem + API reads only; no real user agent is ever clicked.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Agent's local plugin list does NOT contain the new plugin.
+- **Verify:** The plugin is listed in user-scope `~/.claude/settings.json`. For every agent, `GET /api/agents/<id>/local-config` shows the plugin NOT in local scope.
 
 ---
 

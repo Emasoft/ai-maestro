@@ -1,7 +1,7 @@
 ---
 number: 22
 name: MANAGER performs full config ops on AUTONOMOUS agent via skills/scripts
-version: "1.1"
+version: "1.2"
 description: >
   Tests the plugin abstraction layer (skills + scripts) end-to-end: a
   MANAGER agent, acting entirely autonomously without user help, creates
@@ -35,9 +35,12 @@ ui_sections:
   - Sudo password modal (Rule 12, shown on the fallback user-driven
     cleanup delete in S013 when MANAGER's delete is blocked by sudo)
 data_produced:
-  - 1 AUTONOMOUS test agent "scen022-autobot" created by MANAGER, deleted
-    by user fallback during cleanup
-  - 1 AMP message from MANAGER to user (the completion report)
+  - 1 MANAGER test agent "scen022-manager" created by user via Wizard
+    (precondition step S002a); deleted by user during cleanup (S014b).
+  - 1 AUTONOMOUS test agent "scen022-autobot" created by
+    scen022-manager; deleted by user fallback during cleanup (S013).
+  - 1 AMP message from scen022-manager to user (the completion report)
+  - 2 cemetery entries (one per deleted agent) purged during cleanup
   - All artifacts removed during cleanup
 required_tools:
   - mcp__chrome-devtools__navigate_page
@@ -49,13 +52,17 @@ required_tools:
 prerequisites:
   - AI Maestro server running at http://localhost:23000
   - Governance password set
-  - MANAGER agent exists (if not, create one as setup step)
+  - NO real user MANAGER currently assigned on host (S002 precondition
+    check — if a real MANAGER exists, the scenario HALTS rather than
+    demoting it, to avoid triggering the R9.8 blocking cascade on
+    user teams)
   - `aimaestro-agent.sh` installed at `~/.local/bin/`
-  - $AID_AUTH exported in MANAGER's environment (auto-populated on wake)
+  - $AID_AUTH is auto-populated in scen022-manager's environment on wake
+    (no manual export needed)
   - Small test plugin available in a registered marketplace
   - MAINTAINER role-plugin available as a title option per R19
     (not exercised in this scenario but must be picker-visible for the
-    MANAGER's agent-management skill to report it accurately)
+    scen022-manager's agent-management skill to report it accurately)
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:
   - ~/.aimaestro/governance.json
@@ -78,32 +85,33 @@ commit: TBD
 - **Modifies:** nothing
 - **Verify:** Health OK; backups exist.
 
-### S002: Login + verify MANAGER exists
-- **Action:** Navigate to `/`, enter password `mYkri1-xoxrap-gogtan`,
-  click Login. Confirm a MANAGER agent is visible in the sidebar (red
-  TITLE badge).
-- **Goal:** MANAGER available for test.
+### S002: Login + precondition check — NO real MANAGER may exist
+- **Action:** Navigate to `/`, enter password `mYkri1-xoxrap-gogtan`, click Login. Then READ-ONLY check `GET /api/governance`. If `hasManager: true`, the host has a real user MANAGER (likely one of `alexandre`, `luckas-bot`, etc.). The scenario MUST HALT — this scenario creates its own test MANAGER and cannot safely co-exist with an existing real MANAGER.
+- **Goal:** Confirm `hasManager: false`. If true, HALT with `SCENARIO_ABORTED SCEN-022 — real MANAGER exists on host.`
 - **Creates:** session cookie
-- **Modifies:** nothing
-- **Verify:** If no MANAGER, create one (not counted as scenario step
-  but documented in prerequisites).
+- **Modifies:** nothing — do NOT demote any existing MANAGER.
+- **Verify:** `hasManager: false`.
 
-### S003: Wake MANAGER if hibernated
-- **Action:** Click MANAGER card in sidebar; if hibernated, click Wake.
-  If the sudo password modal appears (Rule 12 — wake on team agents is
-  manager-gated per v0.27.3), enter governance password
-  `mYkri1-xoxrap-gogtan` and Confirm.
-- **Goal:** MANAGER is online with a terminal session.
+### S002a: Create a scen-prefixed test MANAGER agent via the Wizard
+- **Action:** Click the "+" button in the Agents sidebar to open the Agent Creation Wizard. Enter name EXACTLY `scen022-manager`. Select client Claude. Title: MANAGER (the scenario creates its own MANAGER rather than relying on ambient state). Let the wizard auto-assign the MANAGER role-plugin (`ai-maestro-assistant-manager-agent`) and the default workdir `~/agents/scen022-manager/`. DO NOT override the folder. DO NOT click "Import from existing folder". Enter governance password `mYkri1-xoxrap-gogtan` when prompted (assigning MANAGER title requires it per Rule 12).
+- **Goal:** The scenario's OWN test MANAGER agent exists at `~/agents/scen022-manager/`. No real user agent is promoted.
+- **Creates:** 1 test agent `scen022-manager` with MANAGER title and role-plugin, workdir `~/agents/scen022-manager/`.
+- **Modifies:** Agent registry, governance.json (hasManager becomes true, managerId points at the test agent).
+- **Verify:** `GET /api/agents | jq '.agents[] | select(.name=="scen022-manager") | .workingDirectory'` returns `/Users/<user>/agents/scen022-manager` exactly. If any other path, HALT as P0 bug.
+
+### S003: Wake the test MANAGER if hibernated
+- **Action:** Click `scen022-manager` card in sidebar (the scenario's own test MANAGER — never any other MANAGER-titled agent); if hibernated, click Wake. If the sudo password modal appears, enter governance password `mYkri1-xoxrap-gogtan` and Confirm. Do NOT click any other agent.
+- **Goal:** The scenario-owned test MANAGER is online with a terminal session.
 - **Creates:** tmux session (if was hibernated)
-- **Modifies:** session status
-- **Verify:** Terminal shows Claude prompt.
+- **Modifies:** session status of `scen022-manager` only
+- **Verify:** Terminal shows Claude prompt for `scen022-manager`.
 
 ---
 
 ## Phase 1: MANAGER creates an AUTONOMOUS agent (step-1 — via script)
 
-### S004: Send instruction to MANAGER via prompt builder
-- **Action:** In MANAGER's prompt builder, send:
+### S004: Send instruction to scen022-manager via prompt builder
+- **Action:** Ensure `scen022-manager` is the selected sidebar card. In scen022-manager's prompt builder (NOT any other MANAGER-titled agent), send:
   ```
   Create a new AUTONOMOUS agent named "scen022-autobot" (title AUTONOMOUS
   auto-resolves to the mandatory role-plugin `ai-maestro-autonomous-agent`
@@ -111,13 +119,13 @@ commit: TBD
   Use the aimaestro-agent.sh CLI (NOT the web UI). Report success to me
   via AMP when done.
   ```
-- **Goal:** MANAGER executes `aimaestro-agent.sh create --name
+- **Goal:** scen022-manager executes `aimaestro-agent.sh create --name
   scen022-autobot --title AUTONOMOUS --program claude ...`.
 - **Creates:** test agent in registry with `ai-maestro-autonomous-agent`
-  role-plugin installed at --scope local (by MANAGER, not user)
+  role-plugin installed at --scope local (by scen022-manager, not user)
 - **Modifies:** registry.json,
   `~/agents/scen022-autobot/.claude/settings.local.json`
-- **Verify:** Watch MANAGER's terminal for the command invocation. After
+- **Verify:** Watch scen022-manager's terminal for the command invocation. After
   ~20s, `GET /api/agents` (Rule 6 verification read) and confirm
   scen022-autobot is present with title `autonomous` AND its
   `role-plugin` field reports `ai-maestro-autonomous-agent`. Also
@@ -142,14 +150,14 @@ commit: TBD
 
 ## Phase 2: MANAGER installs a plugin into the new agent at LOCAL scope
 
-### S006: Send instruction to MANAGER
-- **Action:** Prompt builder:
+### S006: Send instruction to scen022-manager
+- **Action:** Confirm `scen022-manager` remains the selected sidebar card. In its prompt builder:
   ```
   Install the plugin "rechecker-plugin" (or another small utility) into
   agent scen022-autobot at --scope local using the agent-management
   skill / ChangePlugin API. Do not touch my user-scope plugins.
   ```
-- **Goal:** MANAGER calls `PATCH /api/agents/<id>` with
+- **Goal:** scen022-manager calls `PATCH /api/agents/<id>` with
   `{ plugins: [{ name: 'rechecker-plugin', scope: 'local' }] }` or uses
   the `aimaestro-agent.sh install-plugin` subcommand.
 - **Creates:** Local-scope plugin install in scen022-autobot
@@ -170,18 +178,18 @@ commit: TBD
 ## Phase 3: MANAGER disables then re-enables the plugin
 
 ### S008: Disable
-- **Action:** Prompt:
+- **Action:** In scen022-manager's prompt builder:
   ```
   Disable the rechecker-plugin in scen022-autobot without uninstalling.
   ```
-- **Goal:** MANAGER sets enabled=false via API.
+- **Goal:** scen022-manager sets enabled=false via API.
 - **Creates:** nothing
 - **Modifies:** `~/agents/scen022-autobot/.claude/settings.local.json`
 - **Verify:** Config tab shows disabled state; local-config API confirms
   (Rule 6 verification read).
 
 ### S009: Re-enable
-- **Action:** Prompt:
+- **Action:** In scen022-manager's prompt builder:
   ```
   Re-enable the rechecker-plugin in scen022-autobot.
   ```
@@ -196,42 +204,43 @@ commit: TBD
 
 ### S010: Wait for AMP message to user
 - **Action:** Open the human user card in the sidebar, watch the inbox
-  for a message from MANAGER summarizing what was done.
-- **Goal:** Verify the MANAGER sent a final completion report with
-  step-by-step details.
+  for a message from scen022-manager summarizing what was done.
+- **Goal:** Verify the scen022-manager test agent sent a final
+  completion report with step-by-step details.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Inbox contains a recent message from MANAGER subjected
-  something like "scen022 complete" or similar.
+- **Verify:** Inbox contains a recent message from scen022-manager
+  (sender name must match exactly) subjected something like
+  "scen022 complete" or similar.
 
 ---
 
 ## Phase 5: MANAGER attempts to delete the test agent (Rule 12 sudo blocks)
 
 ### S011: Send delete instruction
-- **Action:** Prompt:
+- **Action:** In scen022-manager's prompt builder:
   ```
   Delete agent scen022-autobot. Use the aimaestro-agent.sh delete
   subcommand with --delete-folder. Confirm to me when done.
   ```
-- **Goal:** MANAGER calls DELETE /api/agents/<id>?deleteFolder=true.
+- **Goal:** scen022-manager calls DELETE /api/agents/<id>?deleteFolder=true.
   **Expected outcome:** Rule 12 rejects the call. DELETE
   /api/agents/[id] is classified "strict" in security-registry.json,
   which means the caller must present an X-Sudo-Token earned by
   re-entering the governance password via POST /api/auth/sudo-password.
   Agents CANNOT obtain sudo tokens (sudo-mode is system-owner only) —
-  so the MANAGER's direct DELETE call returns 403 sudo_required. When
-  this happens:
+  so scen022-manager's direct DELETE call returns 403 sudo_required.
+  When this happens:
     1. Record the failure in the scenario report as the EXPECTED result
        of Rule 12 enforcement (agents cannot bypass sudo-mode).
     2. Fall back to the user performing the delete manually via the UI
        in the S013 cleanup step.
-- **Removes:** intentionally blocked — the MANAGER is not allowed to
+- **Removes:** intentionally blocked — scen022-manager is not allowed to
   perform sudo-gated deletes.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** 403 response captured in MANAGER terminal log with
-  `sudo_required`. `GET /api/agents` still lists scen022-autobot.
+- **Verify:** 403 response captured in scen022-manager's terminal log
+  with `sudo_required`. `GET /api/agents` still lists scen022-autobot.
 
 ### S012: Verify cemetery handling
 - **Action:** If the delete was soft, navigate to Settings → Cemetery and
@@ -263,21 +272,65 @@ commit: TBD
 - **Verify:** Agent not in sidebar; `GET /api/agents` does not return it
   (Rule 6 verification read). Sudo modal appeared once.
 
-### S014: Purge cemetery entry
-- **Action:** Settings → Cemetery → find scen022-autobot row → click
+### S014: Purge scen022-autobot cemetery entry
+- **Action:** Settings → Cemetery → find the `scen022-autobot` row
+  (match the name exactly; do NOT purge any other row) → click
   Purge → enter sudo password `mYkri1-xoxrap-gogtan` when prompted.
-- **Removes:** Cemetery record
-- **Verify:** Cemetery list no longer shows the entry.
+- **Removes:** scen022-autobot cemetery record ONLY
+- **Verify:** Cemetery list no longer shows `scen022-autobot`. All
+  other cemetery entries unchanged (count drops by exactly 1).
+
+### S014a: Demote scen022-manager before deletion
+- **Action:** Click `scen022-manager` card → Profile → title badge
+  → select AUTONOMOUS (no team, no governance responsibilities) →
+  enter governance password `mYkri1-xoxrap-gogtan` when prompted by
+  the Title Assignment Dialog. This frees the MANAGER slot so the
+  blocking cascade does NOT fire during deletion.
+- **Goal:** `scen022-manager` title is AUTONOMOUS (no longer MANAGER).
+- **Removes:** MANAGER title from scen022-manager; governance.json
+  reverts to `hasManager: false`.
+- **Verify:** `GET /api/governance | jq '.hasManager'` returns `false`.
+
+### S014b: Delete scen022-manager via UI
+- **Action:** Click `scen022-manager` card → Profile → Advanced
+  → Danger Zone → Delete Agent. Check "Also delete agent folder"
+  (safe — workdir is `~/agents/scen022-manager/`, enforced by G03
+  guard). Type `scen022-manager` in the confirmation field. Click
+  Delete Forever. Enter governance password
+  `mYkri1-xoxrap-gogtan` in the sudo modal and Confirm.
+- **Removes:** scen022-manager from registry,
+  `~/agents/scen022-manager/`, tmux session.
+- **Verify:** `GET /api/agents | jq '.agents[] | select(.name=="scen022-manager")'`
+  returns nothing. Folder `~/agents/scen022-manager/` does not exist.
+
+### S014c: Purge scen022-manager cemetery entry
+- **Action:** Settings → Cemetery → find the `scen022-manager` row
+  (match the name exactly) → click Purge → enter sudo password
+  `mYkri1-xoxrap-gogtan`.
+- **Removes:** scen022-manager cemetery record ONLY.
+- **Verify:** Cemetery list no longer shows `scen022-manager`. No
+  other cemetery entries touched.
 
 ### S015: STATE-WIPE restore
 - **Action:** Compare config files with S001 backups; restore any that
-  still differ (only settings files — registry/teams already cleaned
-  by S013 UI delete).
+  still differ (only settings files — registry/teams/governance
+  already cleaned by S013 + S014a + S014b UI flow).
 - **Goal:** Config files match pre-test state.
 - **Removes:** nothing
 - **Verify:** File hashes match.
 
-### S016: Post-test screenshot
+### S016: Verify no scen022-prefixed artifacts remain
+- **Action:** Read-only checks:
+  `GET /api/agents | jq '.agents[] | select(.name | test("^scen022-"))'` —
+  must return empty.
+  `ls -d ~/agents/scen022-* 2>/dev/null || echo OK` — must print `OK`.
+- **Goal:** Zero scen022-prefixed artifacts on host.
+- **Creates:** nothing
+- **Modifies:** nothing
+- **Verify:** Both checks return empty / OK. If anything remains, fail
+  the scenario (cleanup incomplete).
+
+### S017: Post-test screenshot
 - **Action:** Dashboard screenshot.
 - **Goal:** UI matches pre-test baseline.
 - **Creates:** nothing

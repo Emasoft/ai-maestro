@@ -323,15 +323,15 @@ author: AI Maestro Team
 - **Removes:** Agent, folder
 - **Verify:** Gone from sidebar. Screenshot: SCEN-007/S029-codex-deleted.png
 
-#### S030: Delete any remaining auto-COS agents
-- **Action:** Check agent list for `cos-` prefix agents from this test. For each, click the agent, Profile → Advanced → Danger Zone → Delete Agent, check "Also delete agent folder", type the agent name and click Delete Forever. When the sudo password modal appears each time (strict route `DELETE /api/agents/[id]` per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
-- **Removes:** Auto-COS agents
-- **Verify:** None remain in sidebar. Screenshot: SCEN-007/S030-cos-deleted.png
+#### S030: Delete the scenario's auto-COS agent (explicit cos-scen7-* name)
+- **Action:** EXPLICIT LIST: `["cos-scen7-mixed-team"]`. Click that exact agent in the sidebar, Profile → Advanced → Danger Zone → Delete Agent, check "Also delete agent folder", type the exact name and click Delete Forever. Enter governance password `mYkri1-xoxrap-gogtan` when the sudo modal appears. Do NOT use broad `cos-*` prefix matching (could hit `ecos-chief-of-staff-one` if a sloppy implementation substring-matches).
+- **Removes:** `cos-scen7-mixed-team` (and folder) if present.
+- **Verify:** That specific agent gone from sidebar. `ecos-chief-of-staff-one` and all user's real agents unchanged. Screenshot: SCEN-007/S030-cos-deleted.png
 
-#### S031: Verify cemetery entries and purge
-- **Action:** Navigate to Settings -> Cemetery. Verify deleted test agents appear. Click Purge for each test entry. When the sudo password modal appears each time (`DELETE /api/agents/cemetery` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
-- **Removes:** Cemetery archives
-- **Verify:** No test entries remain. Screenshot: SCEN-007/S031-cemetery-purged.png
+#### S031: Purge cemetery entries (explicit scen7 names only)
+- **Action:** Settings → Cemetery. EXPLICIT LIST: `["scen7-manager", "scen7-claude-member", "scen7-codex-member", "cos-scen7-mixed-team"]`. For each name in the list, click Purge on that specific entry, enter governance password `mYkri1-xoxrap-gogtan`. Do NOT purge any other entry.
+- **Removes:** Cemetery zip archives for the four explicit names (if present).
+- **Verify:** None of the four named entries remain. Other cemetery entries are untouched. Screenshot: SCEN-007/S031-cemetery-purged.png
 
 #### S032: STATE-WIPE -- Restore configuration files
 - **Action:** Restore from S002 backup

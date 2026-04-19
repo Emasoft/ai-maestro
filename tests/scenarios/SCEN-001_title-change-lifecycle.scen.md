@@ -192,12 +192,19 @@ author: AI Maestro Team
 - **Modifies:** nothing
 - **Verify:** No ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER/COS options shown. MANAGER disabled if already taken. MAINTAINER present. Screenshot: SCEN-001/S016-singleton-enforced.png
 
-#### S017: Cancel dialog and add agent to existing team first
-- **Action:** Cancel title dialog, click "Reassign" button next to Team field, select an existing team
-- **Goal:** Agent joins a team, title auto-transitions to MEMBER with programmer plugin
-- **Creates:** nothing (joining existing team)
-- **Modifies:** Team membership (agent added), agent title (-> MEMBER), plugin (-> ai-maestro-programmer-agent)
-- **Verify:** Team name shown in profile, title badge shows MEMBER, plugin banner shows ai-maestro-programmer-agent. Screenshot: SCEN-001/S017-joined-team-member.png
+#### S017: Create a dedicated test team for the test agent
+- **Action:** Click Teams tab in sidebar. Click "+" or "Create Team" button. Enter team name EXACTLY `scen001-title-team`. Description: `Isolated test team for SCEN-001 — delete in cleanup`. Click Next. When prompted for initial agents, do NOT select any existing agents. Click "Create Team". Enter governance password `mYkri1-xoxrap-gogtan` when prompted. Wait for team creation to complete and its auto-COS (named `cos-scen001-title-team` per the scen-prefixed convention) to appear.
+- **Goal:** New isolated test team exists. An auto-COS with scen001- prefix was created by the system.
+- **Creates:** 1 test team (`scen001-title-team`), 1 auto-COS agent (`cos-scen001-title-team`)
+- **Modifies:** teams.json, agent registry (auto-COS)
+- **Verify:** Teams tab shows `scen001-title-team`. Agents tab shows `cos-scen001-title-team` online or hibernated.
+
+#### S017a: Add the test agent to the new test team
+- **Action:** Back on the Agents tab, click `scen-test-title-agent`. In the Profile panel, click the "Reassign" button next to the Team field. Select ONLY `scen001-title-team` (the scenario's own team — never a pre-existing user team). Click Confirm and provide governance password if prompted.
+- **Goal:** Test agent joins the isolated test team. Title auto-transitions to MEMBER with programmer plugin.
+- **Creates:** nothing (joining scenario-owned team)
+- **Modifies:** Team membership (test agent added to scen001-title-team), agent title (-> MEMBER), plugin (-> ai-maestro-programmer-agent)
+- **Verify:** Team field in profile shows `scen001-title-team` exactly. Title badge shows MEMBER. Plugin banner shows `ai-maestro-programmer-agent`. No real user team was touched. Screenshot: SCEN-001/S017-joined-team-member.png
 
 #### S018: Click title badge (now showing MEMBER)
 - **Action:** Click the MEMBER title button
@@ -281,19 +288,26 @@ author: AI Maestro Team
 - **Modifies:** Agent title, plugin
 - **Verify:** ORCHESTRATOR badge visible. Screenshot: SCEN-001/S027-orchestrator-again.png
 
-#### S028: Switch to a DIFFERENT agent in the same team
-- **Action:** Click on another agent that is in the same team
-- **Goal:** Profile panel shows the other agent
-- **Creates:** nothing
-- **Modifies:** nothing
-- **Verify:** Different agent's profile loaded. Screenshot: SCEN-001/S028-other-agent.png
+#### S027a: Create a SECOND scen-prefixed test agent in the same team
+- **Action:** Click the "+" button to open the Agent Creation Wizard. Enter name EXACTLY `scen001-title-agent-2`. Select client Claude. In the Team step, select `scen001-title-team` (the team created in S017). Let the wizard auto-assign MEMBER title and programmer plugin. Click through the wizard with explicit field values (never "accept defaults"); the folder is the wizard's default `~/agents/scen001-title-agent-2/` — verify that value is shown and do not override it. Complete creation.
+- **Goal:** A second isolated test agent exists in the scenario's own team. This second agent is what S028-S032 will interact with — NEVER a pre-existing user agent.
+- **Creates:** 1 test agent (`scen001-title-agent-2`) with MEMBER title and ai-maestro-programmer-agent plugin, workdir `~/agents/scen001-title-agent-2/`
+- **Modifies:** Agent registry, team membership (added to scen001-title-team)
+- **Verify:** `GET /api/agents` shows the new agent with `workingDirectory` starting exactly with `/Users/<user>/agents/scen001-title-agent-2`. If the workdir is anywhere else, halt and file as P0 bug.
 
-#### S029: Open title dialog for the other agent
-- **Action:** Click their title badge
-- **Goal:** Title dialog opens
+#### S028: Select the second scen-prefixed test agent (never a real user agent)
+- **Action:** In the sidebar Agents tab, click on `scen001-title-agent-2` by its exact name. Do NOT click any other agent — in particular, do NOT click any agent not prefixed `scen001-`, even if such an agent is visible in the same team view.
+- **Goal:** Profile panel shows `scen001-title-agent-2` — the scenario's own second test agent.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog visible. Screenshot: SCEN-001/S029-title-dialog-other.png
+- **Verify:** Profile h1 shows `scen001-title-agent-2`. Team field shows `scen001-title-team`. Screenshot: SCEN-001/S028-other-agent.png
+
+#### S029: Open title dialog for the scen-prefixed second agent
+- **Action:** On `scen001-title-agent-2`'s profile, click the title badge (currently MEMBER).
+- **Goal:** Title dialog opens for the scen-prefixed test agent.
+- **Creates:** nothing
+- **Modifies:** nothing
+- **Verify:** Dialog visible, profile h1 still shows `scen001-title-agent-2`. Screenshot: SCEN-001/S029-title-dialog-other.png
 
 #### S030: Verify ORCHESTRATOR option is DISABLED
 - **Action:** Inspect ORCHESTRATOR radio card
@@ -316,9 +330,9 @@ author: AI Maestro Team
 > **Context:** Only MANAGER or COS can change titles. A MEMBER agent trying to
 > change another agent's title via the API should be denied.
 
-#### S032: Attempt title change via API with MEMBER auth headers
-- **Action:** Get a MEMBER agent's ID from the same team. Send `PATCH /api/agents/<testAgentId>` with header `X-Agent-Id: <memberAgentId>` and body `{"governanceTitle": "architect"}`.
-- **Goal:** API returns 403 -- MEMBER agents cannot change titles (only MANAGER/COS/user can)
+#### S032: Attempt title change via API with the scen-prefixed MEMBER's auth headers
+- **Action:** Read the ID of `scen001-title-agent-2` (the scenario's OWN scen-prefixed second agent — never a real user agent's ID) via `GET /api/agents | jq '.agents[] | select(.name=="scen001-title-agent-2") | .id'`. Then send `PATCH /api/agents/<testAgentId>` with header `X-Agent-Id: <scen001-title-agent-2-id>` and body `{"governanceTitle": "architect"}`. DO NOT use any other agent's ID — if you cannot find `scen001-title-agent-2` in the API response, halt and file a bug (the scenario's S027a should have created it).
+- **Goal:** API returns 403 -- MEMBER agents (scen001-title-agent-2 in this case) cannot change other agents' titles (only MANAGER/COS/user can). The RBAC check is verified end-to-end using TEST agents, never real user agents.
 - **Creates:** nothing
 - **Modifies:** nothing
 - **Verify:** Response status 403. Error indicates insufficient permissions. Test agent's title remains ORCHESTRATOR. Screenshot: SCEN-001/S032-rbac-denied.png
@@ -351,7 +365,19 @@ author: AI Maestro Team
 - **Modifies:** Team membership (removed), agent title (-> AUTONOMOUS), plugins (cleared)
 - **Verify:** Title shows AUTONOMOUS, no team, no role-plugin. Screenshot: SCEN-001/S034-reverted-autonomous.png
 
-#### S035: Delete test agent via UI
+#### S034a: Delete the second scen-prefixed test agent (scen001-title-agent-2)
+- **Action:** Click `scen001-title-agent-2` in sidebar. Profile → Danger Zone → "Delete Agent" → check "Also delete agent folder" → type `scen001-title-agent-2` → click "Delete Forever". When the sudo password modal appears, enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Goal:** Second scen-prefixed test agent removed from registry, folder `~/agents/scen001-title-agent-2/` deleted.
+- **Removes:** Agent `scen001-title-agent-2`, its folder, and its tmux session if any.
+- **Verify:** Agent no longer in sidebar. `GET /api/agents` returns 404 for its ID. `ls ~/agents/scen001-title-agent-2` fails. Screenshot: SCEN-001/S034a-agent-2-deleted.png
+
+#### S034b: Delete the test team (scen001-title-team)
+- **Action:** Click Teams tab in sidebar. Click `scen001-title-team` → Delete team. Enter governance password `mYkri1-xoxrap-gogtan`. Check "Delete agents in this team too" (to catch the auto-COS). Click Delete Team.
+- **Goal:** Test team removed. Auto-COS `cos-scen001-title-team` removed via cascade.
+- **Removes:** Team `scen001-title-team`, auto-COS agent `cos-scen001-title-team` (and its folder).
+- **Verify:** Teams tab no longer shows `scen001-title-team`. `cos-scen001-title-team` no longer in sidebar. Screenshot: SCEN-001/S034b-team-deleted.png
+
+#### S035: Delete primary test agent via UI
 - **Action:** Click delete button in profile panel -> Danger Zone -> "Delete Agent" -> check "Also delete agent folder" -> type `scen-test-title-agent` -> click "Delete Forever". When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Test agent fully removed from registry, archived to cemetery
 - **Creates:** Cemetery archive entry (zip file)
@@ -365,11 +391,11 @@ author: AI Maestro Team
 - **Modifies:** nothing
 - **Verify:** Cemetery list shows `scen-test-title-agent` with archive date and download/revive/purge options. Screenshot: SCEN-001/S036-cemetery-entry.png
 
-#### S037: Purge agent from Cemetery
-- **Action:** Click "Purge" button next to the `scen-test-title-agent` cemetery entry, confirm. When the sudo password modal appears (`DELETE /api/agents/cemetery` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
-- **Goal:** Cemetery entry fully removed (no test artifacts remain)
-- **Removes:** Cemetery zip archive for `scen-test-title-agent`
-- **Verify:** Agent no longer in cemetery list. Screenshot: SCEN-001/S037-cemetery-purged.png
+#### S037: Purge all scen001-* entries from Cemetery
+- **Action:** For each cemetery entry with name in the explicit list `["scen-test-title-agent", "scen001-title-agent-2", "cos-scen001-title-team"]` (derived from the agents this scenario created), click its "Purge" button, confirm via the sudo password modal with `mYkri1-xoxrap-gogtan`. Do NOT purge any other cemetery entries — only the ones whose names match the explicit list.
+- **Goal:** All cemetery entries created by this scenario are removed. Pre-existing entries from other scenarios or prior runs are untouched.
+- **Removes:** Cemetery zip archives for each entry in the explicit list (if present).
+- **Verify:** For each name in the list, cemetery no longer shows that entry. Other cemetery entries (if any) are still present. Screenshot: SCEN-001/S037-cemetery-purged.png
 
 #### S038: STATE-WIPE -- Restore configuration files
 - **Action:** Compare current config files with backups from S002. If any differ, restore from backup.

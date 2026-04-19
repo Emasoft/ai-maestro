@@ -273,10 +273,10 @@ author: AI Maestro Team
 - **Removes:** Agent + folder
 - **Verify:** Gone. Run `ls ~/agents/scen8-gemini-member` returns "No such file or directory". Screenshot: SCEN-008/S023-gemini-deleted.png
 
-#### S024: Delete any remaining auto-COS agents
-- **Action:** For each `cos-*` agent created by this test, open Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type name -> Delete Forever. SUDO-MODE: when the sudo password modal appears for each deletion (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
-- **Removes:** Auto-COS
-- **Verify:** None remain. Screenshot: SCEN-008/S024-cos-deleted.png
+#### S024: Delete scen8 auto-COS agent (explicit name only)
+- **Action:** EXPLICIT LIST: `["cos-scen8-noplugin-team"]`. Click that exact agent in the sidebar, open Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type the exact name -> Delete Forever. Enter governance password `mYkri1-xoxrap-gogtan` when the sudo modal appears. Do NOT use `cos-*` prefix or substring matching — that could accidentally hit `ecos-chief-of-staff-one` or other real agents.
+- **Removes:** `cos-scen8-noplugin-team` (and folder) if present.
+- **Verify:** That specific agent gone. `ecos-chief-of-staff-one` and all user's real agents unchanged. Screenshot: SCEN-008/S024-cos-deleted.png
 
 #### S025: Verify cemetery entries and purge
 - **Action:** Settings -> Cemetery. Verify test entries appear. For each test entry, click Purge. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/cemetery` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. Each purge requires a fresh sudo token (tokens are one-shot, ~60s window).

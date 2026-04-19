@@ -309,10 +309,17 @@ author: AI Maestro Team
 - **Removes:** Agent, tmux, folder
 - **Verify:** Agent gone. Run `ls ~/agents/scen-mgr-jsonl` returns "No such file or directory". Screenshot: SCEN-009/S027-mgr-deleted.png
 
-#### S028: Delete any remaining test agents
-- **Action:** Check for agents containing "jsonl", "swift", "scen-mgr". For each, open Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type name -> Delete Forever. SUDO-MODE: when the sudo password modal appears for each deletion (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. Each deletion requires a fresh sudo token.
-- **Removes:** Stray agents, sessions, folders
-- **Verify:** Agent count matches baseline. Screenshot: SCEN-009/S028-cleanup-agents.png
+#### S028: Delete remaining scen9-prefixed agents (strict ^scen9-/^cos-scen9- prefix only)
+- **Action:** Fetch `GET /api/agents | jq '.agents[] | select(.name | test("^scen9-|^cos-scen9-")) | .name'`. For EACH name returned, open Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type exact name -> Delete Forever. Enter governance password `mYkri1-xoxrap-gogtan` when the sudo modal appears. Do NOT use substring matches like "jsonl" or "swift" — a user might have real agents with those words in their names (e.g. a swift project agent in ~/Code/).
+- **Removes:** Only agents whose name starts exactly with `scen9-` or `cos-scen9-`.
+- **Verify:** After the deletion, `GET /api/agents | jq '.agents[] | select(.name | test("^scen9-|^cos-scen9-"))'` returns empty. Pre-existing user agents are untouched. Screenshot: SCEN-009/S028-cleanup-agents.png
+
+#### S028a: Post-cleanup hard workdir check — every remaining agent must be a real user agent
+- **Action:** `GET /api/agents | jq '.agents[] | {name, workingDirectory}'`. For each returned agent, verify: (a) name does NOT start with `scen` in any form, (b) workingDirectory does NOT start with `/Users/<user>/agents/scen` in any form. If any scen-* agent remains, halt and report as cleanup failure.
+- **Goal:** No scenario-created agent survives cleanup.
+- **Creates:** nothing
+- **Modifies:** nothing
+- **Verify:** Report prints "Cleanup verified: 0 scen-prefixed agents remain."
 
 #### S029: Verify cemetery entries and purge
 - **Action:** Settings -> Cemetery. Verify test agents. For each test entry, click Purge. SUDO-MODE: when the sudo password modal appears for each purge (DELETE `/api/agents/cemetery` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.

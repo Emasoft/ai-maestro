@@ -121,12 +121,12 @@ author: AI Maestro Team
 - **Modifies:** nothing
 - **Verify:** Screenshot saved. Screenshot: SCEN-006/S006-baseline.png
 
-#### S007: Ensure no MANAGER exists
-- **Action:** Check `GET /api/governance` for `hasManager: false`. Remove if needed.
-- **Goal:** No MANAGER on host
+#### S007: Precondition — NO real MANAGER may exist
+- **Action:** READ-ONLY check: `GET /api/governance`. Do NOT remove any existing MANAGER. If `hasManager: true`, the scenario MUST HALT immediately — demoting the real user MANAGER would trigger R9.8 blocking cascade across the user's real teams and is a Rule 0 violation.
+- **Goal:** Confirm `hasManager: false`. If true, HALT with `SCENARIO_ABORTED SCEN-006 — real MANAGER exists on host, refuse to demote.`
 - **Creates:** nothing
-- **Modifies:** Possibly removes existing MANAGER
-- **Verify:** `hasManager: false`. Screenshot: SCEN-006/S007-no-manager.png
+- **Modifies:** nothing — this step is read-only.
+- **Verify:** `hasManager: false`. If true, scenario aborts without executing subsequent steps. Screenshot: SCEN-006/S007-no-manager.png
 
 #### S008: Verify Codex CLI is available
 - **Action:** Run `which codex` or `codex --version`
@@ -182,12 +182,12 @@ author: AI Maestro Team
 - **Modifies:** Registries
 - **Verify:** Team in sidebar. Screenshot: SCEN-006/S013-team-created.png
 
-#### S014: Tell MANAGER to wake the auto-COS agent
-- **Action:** Click `scen006-manager` in sidebar. In the Prompt Builder, type `Wake up the COS agent for our team` and click Send. Wait for MANAGER to execute the wake command.
-- **Goal:** COS agent session started (status changes from Offline to Online/Idle)
-- **Creates:** tmux session for COS agent
-- **Modifies:** COS agent status
-- **Verify:** COS agent shows Online/Idle in sidebar. Screenshot: SCEN-006/S014-cos-woken.png
+#### S014: Tell MANAGER to wake the auto-COS agent (by exact name)
+- **Action:** Before sending any prompt, read the team's `chiefOfStaffId` via `GET /api/teams | jq '.teams[] | select(.name=="scen006-governance-team") | .chiefOfStaffId'`, then look up that id's NAME via `GET /api/agents | jq '.agents[] | select(.id=="<cos-id>") | .name'`. Verify the name starts with `cos-scen006-` (it should be `cos-scen006-governance-team`). If the name does NOT start with `cos-scen006-`, HALT — the team's COS is somehow linked to a non-scenario agent and proceeding would touch the user's state. Click `scen006-manager` in sidebar. In the Prompt Builder, type exactly: `Wake up the agent named "<resolved-cos-name>" (the Chief-of-Staff of team scen006-governance-team). Use aimaestro-agent.sh wake <resolved-cos-name>. Do not wake any other agent.` Click Send. Wait for MANAGER to execute the wake command.
+- **Goal:** The specific scenario-owned COS agent session is started. No other agent is touched.
+- **Creates:** tmux session for the resolved COS agent only.
+- **Modifies:** That COS agent's status.
+- **Verify:** The resolved `cos-scen006-*` agent shows Online/Idle in sidebar. No other agent status changed. Screenshot: SCEN-006/S014-cos-woken.png
 
 #### S015: Verify auto-COS uses Claude (not Codex)
 - **Action:** Click COS agent in sidebar, open Profile panel. Check Program field.
@@ -336,17 +336,17 @@ author: AI Maestro Team
 - **Removes:** Agent, folder
 - **Verify:** Agent gone from sidebar. Screenshot: SCEN-006/S030-codex-deleted.png
 
-#### S031: Delete any remaining auto-COS agents
-- **Action:** Check agent list for `cos-` prefix agents from this test. For each, click the agent, open Profile → Advanced → Danger Zone → Delete Agent, check "Also delete agent folder", type agent name and click Delete Forever. When the sudo password modal appears each time (strict route `DELETE /api/agents/[id]` per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
-- **Goal:** All auto-COS removed
-- **Removes:** Auto-COS agents
-- **Verify:** None remain in sidebar. Screenshot: SCEN-006/S031-cos-deleted.png
+#### S031: Delete the scenario-created auto-COS agent (explicit name)
+- **Action:** EXPLICIT LIST: `["cos-scen006-governance-team"]`. Click that exact agent (and only that one) in the sidebar, open Profile → Advanced → Danger Zone → Delete Agent, check "Also delete agent folder", type the exact name and click Delete Forever. Enter governance password `mYkri1-xoxrap-gogtan` when the sudo modal appears. Do NOT use prefix-based matching (`cos-*`) — that could hit the user's real agents like `ecos-chief-of-staff-one`.
+- **Goal:** The single scenario-owned auto-COS is removed. No other agent is touched.
+- **Removes:** `cos-scen006-governance-team` (and its folder) if present.
+- **Verify:** That specific agent is no longer in sidebar. Pre-existing agents (ecos-chief-of-staff-one, etc.) are unchanged. Screenshot: SCEN-006/S031-cos-deleted.png
 
-#### S032: Verify cemetery entries and purge
-- **Action:** Settings -> Cemetery tab. Verify test agents appear. Click Purge for each. When the sudo password modal appears each time (`DELETE /api/agents/cemetery` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
-- **Goal:** Cemetery verified, test entries purged
-- **Removes:** Cemetery archives
-- **Verify:** No test entries. Screenshot: SCEN-006/S032-cemetery-purged.png
+#### S032: Purge cemetery entries (explicit scen006 names only)
+- **Action:** Settings -> Cemetery tab. EXPLICIT LIST: `["scen006-manager", "scen006-codex-member", "cos-scen006-governance-team"]`. For each name in the list, click Purge on that specific entry, enter governance password `mYkri1-xoxrap-gogtan` when the sudo modal appears. Do NOT purge any other entry.
+- **Goal:** Cemetery entries created by THIS scenario are gone. All other entries are untouched.
+- **Removes:** Cemetery zip archives for the three explicit names (if present).
+- **Verify:** None of the three named entries in the cemetery list. Other cemetery entries (from other scenarios) still present. Screenshot: SCEN-006/S032-cemetery-purged.png
 
 #### S033: STATE-WIPE -- Restore configuration files
 - **Action:** Compare and restore config files from S002 backup

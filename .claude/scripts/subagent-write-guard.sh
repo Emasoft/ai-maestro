@@ -214,6 +214,64 @@ case "$TOOL_NAME" in
         # portion of the command.
         CMD_SCAN=$(strip_heredoc_bodies "$CMD")
 
+        # ── RULE 0 ENFORCEMENT (2026-04-19) ─────────────────────────
+        # Scenario subagents play the HUMAN USER role. They must NEVER
+        # shell out to mutate agent state — all agent mutations go
+        # through the UI (dev-browser). These guards catch the most
+        # tempting CLI shortcuts that would bypass the UI.
+
+        # 0a. `curl` DELETE/POST/PATCH against /api/agents, /api/teams,
+        #     /api/governance — bypasses the UI. Runner is the user;
+        #     the user has NO programmatic access to these. Read-only
+        #     curl GET is allowed for state verification.
+        if echo "$CMD_SCAN" | grep -qE 'curl[^|;&]*(-X[[:space:]]+)?(DELETE|POST|PATCH|PUT)[^|;&]*(/api/(agents|teams|groups|governance|auth/sudo))'; then
+            block "Rule 0: subagent attempted curl mutation of agent/team/governance endpoints. Use the UI (dev-browser) instead."
+        fi
+        if echo "$CMD_SCAN" | grep -qE 'curl[^|;&]*--request[[:space:]]+(DELETE|POST|PATCH|PUT)[^|;&]*(/api/(agents|teams|groups|governance|auth/sudo))'; then
+            block "Rule 0: subagent attempted curl mutation of agent/team/governance endpoints. Use the UI (dev-browser) instead."
+        fi
+
+        # 0b. `tmux kill-session` on anything not scenario-prefixed.
+        #     Legitimate scenario cleanup kills tmux sessions whose names
+        #     start with scen-, scen<digits>-, cos-scen-, or a -jsonl-
+        #     suffix (SCEN-009). Killing any other session — including
+        #     _aim-* internal ones, or real user agents — is forbidden.
+        while IFS= read -r tmux_target; do
+            [ -z "$tmux_target" ] && continue
+            case "$tmux_target" in
+                scen[-_]*|scen[0-9]*|cos-scen*|*-jsonl-*|r17-test-*) : ;;  # allowed
+                *) block "Rule 0: subagent attempted 'tmux kill-session -t $tmux_target' on non-scenario session. Forbidden." ;;
+            esac
+        done < <(
+            echo "$CMD_SCAN" \
+                | grep -oE 'tmux[[:space:]]+(kill-session|kill-server)[[:space:]]+(-t[[:space:]]+)?[^[:space:]&|;()"'"'"']+' \
+                | sed -E 's/^tmux[[:space:]]+(kill-session|kill-server)[[:space:]]+(-t[[:space:]]+)?//' \
+                || true
+        )
+
+        # 0c. Path-string scan: any write/cleanup operation that mentions
+        #     ~/ai-maestro, ~/.claude, ~/.aimaestro, or ~/Code anywhere
+        #     on the command line (outside a heredoc body). Reads are
+        #     fine (cat/grep/ls), but write verbs + those paths = never.
+        if echo "$CMD_SCAN" | grep -qE '(^|[[:space:]])(rm|mv|cp|mkdir|rmdir|touch|tee|chmod|chown|install|ln|dd|truncate|shred)([[:space:]]|$)'; then
+            for forbidden_prefix in \
+                "$HOME/ai-maestro/" \
+                "$HOME/.claude/" \
+                "$HOME/.aimaestro/" \
+                "$HOME/Code/"; do
+                if echo "$CMD_SCAN" | grep -qF "$forbidden_prefix" 2>/dev/null; then
+                    block "Rule 0: write op references forbidden tree: ${forbidden_prefix%/} (reads are allowed, writes are not)"
+                fi
+            done
+        fi
+
+        # 0d. `sqlite3`, direct registry.json edit, teams.json edit —
+        #     scenarios must mutate state via UI, not by editing JSON.
+        if echo "$CMD_SCAN" | grep -qE '(>[[:space:]]*|tee[[:space:]]+)[^[:space:]]*(\.aimaestro|registry\.json|teams\.json|groups\.json|governance\.json)'; then
+            block "Rule 0: subagent attempted direct JSON registry/teams/groups/governance write. Use the UI."
+        fi
+        # ────────────────────────────────────────────────────────────
+
         # 1. `cd /absolute/path` — catches the primary escape vector
         #    (subagent 2 used this to reach the parent repo).
         #    Matches: `cd /foo`, `cd /foo && ...`, `cd /foo; ...`, `; cd /foo`

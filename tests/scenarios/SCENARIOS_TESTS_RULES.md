@@ -48,7 +48,17 @@ Specifically:
 - `/tmp`, `/var`, system folders
 - Any other user-owned source, config, or notes folder
 
-**The Wizard is the enforcement surface.** Every scenario creates and modifies agents only via the Agent Creation Wizard (or equivalent UI dialogs). The Wizard writes to `~/agents/<name>/` and rejects any other target. If during a scenario step you see any UI that would let an agent be created or edited to live outside `~/agents/`, that is a critical security bug — STOP, record it as BUG-001 in the report, file a P0 proposal, and fail the scenario (do not proceed).
+**The Wizard is the enforcement surface.** Every scenario creates and modifies agents only via the Agent Creation Wizard (or equivalent UI dialogs). The Wizard writes to `~/agents/<name>/` and rejects any other target (G03-ENFORCE + G03-SAFETY in `services/element-management-service.ts:5074-5129`). If during a scenario step you see any UI that would let an agent be created or edited to live outside `~/agents/`, that is a critical security bug — STOP, record it as BUG-001 in the report, file a P0 proposal, and fail the scenario (do not proceed).
+
+**Belt-and-braces at delete time.** `DeleteAgent` in `services/element-management-service.ts:4771-4786` refuses `alsoDeleteFolder=true` when `agent.workingDirectory` is not under `~/agents/`. This means that even if a stale registry entry exists with `workingDirectory = ~/ai-maestro/` (as happened with legacy `_aim-*` service agents), clicking "Delete Agent with folder" on that entry CANNOT destroy the ai-maestro source tree — the pipeline refuses and only removes the registry entry. Still, a scenario must NEVER intentionally click delete on such an entry — it's a Rule 0 violation. The app guard is the second line; the first line is: don't go there.
+
+**The hard blacklist — agents the runner must never interact with:**
+
+- Any agent whose `workingDirectory` is NOT under `~/agents/` — these are user-owned real agents (see explicit list below). Verify via `GET /api/agents?includeDeleted=false` before any interaction.
+- Legacy `_aim-*` service agents whose workdir is still `~/ai-maestro/` (registry drift from older AI Maestro versions) — report and skip.
+- The user's pre-existing real agents by explicit name: `alexandre`, `luckas-bot`, `jhonny-bot`, `jack-bot`, `genny-bot`, `teseo-bot`, `sergei`, `barry`, `ecos-chief-of-staff-one`, `backend-infrastructure-engineer`, `tmux-test-audit`, `default`, and anything in `~/Code/*` or `~/agents/jvs-*`, `~/agents/swift-*`, `~/agents/my-*`, `~/agents/integrator-rex`.
+
+The ONLY scenario that legitimately interacts with an `_aim-*` agent is **SCEN-004 (Haephestos plugin creation)** — the scenario exists specifically to test that flow. Even then, the runner must (a) verify the Haephestos workdir is under `~/agents/haephestos/` before any click, (b) halt and file P0 if it's anywhere else.
 
 **Why this matters for safety.** Cleanup (Rule 1) deletes every test agent AND its working folder via the UI's "Also delete agent folder" checkbox. If a test agent's folder ever landed outside `~/agents/`, cleanup would destroy that folder. Inside `~/ai-maestro/` that means the project source. Inside `~/.claude/` that means the human user's Claude Code config. These must be impossible by construction.
 

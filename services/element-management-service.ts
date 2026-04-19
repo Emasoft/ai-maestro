@@ -1849,8 +1849,59 @@ export async function ChangeTitle(
     }
 
     // ── GATE 14: Write governanceTitle to agent registry ─────
-    await updateAgent(agentId, { governanceTitle: effectiveTitle as any })
-    ops.push(`EXE: Set governanceTitle="${effectiveTitle || 'null'}" in agent registry`)
+    //
+    // BUG-SCEN-002-P0-1 fix: verify the write actually persisted. Previous
+    // behavior silently accepted whatever updateAgent returned — if the
+    // write failed (cache glitch, lock contention, updateAgent returning
+    // null) the pipeline continued and the old title stayed on disk,
+    // creating UI/persistence drift. We now:
+    //   1. Capture updateAgent's return value (null = agent not found)
+    //   2. Re-read from disk (bypassing the agent cache) to confirm the
+    //      in-memory change was flushed to registry.json
+    //   3. FAIL the entire ChangeTitle pipeline if persistence verification
+    //      does not match — callers (DeleteTeam, TitleAssignmentDialog)
+    //      then know the registry is in an inconsistent state and can
+    //      surface the error rather than silently succeed.
+    const g14Updated = await updateAgent(agentId, { governanceTitle: effectiveTitle as any })
+    if (!g14Updated) {
+      result.error = `G14: updateAgent returned null for ${agentId} — registry not written`
+      ops.push(`G14: DENIED — updateAgent returned null`)
+      return result
+    }
+    if ((g14Updated.governanceTitle || null) !== (effectiveTitle || null)) {
+      result.error = `G14: in-memory post-write mismatch — expected "${effectiveTitle || 'null'}", got "${g14Updated.governanceTitle || 'null'}"`
+      ops.push(`G14: DENIED — in-memory post-write mismatch`)
+      return result
+    }
+    // Re-verify by re-reading from disk. The file must reflect the new
+    // title; any drift means saveAgents() silently dropped the field or
+    // a concurrent writer clobbered it.
+    try {
+      const { readFileSync } = await import('fs')
+      const { join: pathJoin } = await import('path')
+      const REGISTRY_PATH = pathJoin(HOME, '.aimaestro', 'agents', 'registry.json')
+      const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8')) as Array<Record<string, unknown>>
+      const diskAgent = diskAgents.find((a) => a.id === agentId)
+      if (!diskAgent) {
+        result.error = `G14: registry.json does not contain agent ${agentId} after write`
+        ops.push(`G14: DENIED — agent missing from registry.json after write`)
+        return result
+      }
+      const diskTitle = (diskAgent.governanceTitle as string | null | undefined) ?? null
+      const expectedTitle = effectiveTitle ?? null
+      if (diskTitle !== expectedTitle) {
+        result.error = `G14: registry.json title drift — disk="${diskTitle ?? 'null'}", expected="${expectedTitle ?? 'null'}"`
+        ops.push(`G14: DENIED — registry.json shows "${diskTitle ?? 'null'}" after write, expected "${expectedTitle ?? 'null'}"`)
+        return result
+      }
+      ops.push(`G14: Set governanceTitle="${effectiveTitle || 'null'}" in registry (verified on disk)`)
+    } catch (verifyErr) {
+      // If we cannot even read the registry file, the write is unverifiable
+      // and the pipeline must NOT continue as if it succeeded.
+      result.error = `G14: registry verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`
+      ops.push(`G14: DENIED — registry verification failed`)
+      return result
+    }
 
     // ── GATE 14b: Revoke existing AID governance tokens ─────
     // Title changed → existing tokens embed the old title → revoke them.
@@ -2204,20 +2255,40 @@ export async function ChangeTitle(
     }
 
     // ── GATE 22: Verify final state in registry ──────────────
-    // CRITICAL (SCEN-007 P0-003, SCEN-020 BUG-001): This gate MUST hard-fail
-    // if the registry write did not actually persist. Previously this was a
-    // silent WARN, which let callers claim success while governanceTitle stayed
-    // null in ~/.aimaestro/agents/registry.json. The UI masked the bug via a
-    // fallback `governanceTitle ?? (team ? 'member' : 'autonomous')` — users
-    // only noticed when hitting the API directly. Fail fast instead.
+    // CRITICAL (SCEN-007 P0-003, SCEN-020 BUG-001, SCEN-002 P0-001):
+    // This gate MUST hard-fail if the registry write did not persist.
+    // Previously this was a silent WARN, which let callers claim success
+    // while governanceTitle stayed null in ~/.aimaestro/agents/registry.json.
+    // The UI masked the bug via a fallback `governanceTitle ?? (team ?
+    // 'member' : 'autonomous')` — users only noticed when hitting the API
+    // directly. Fail fast instead. Additionally, re-read from disk so any
+    // late clobber (G15–G21 side effects, concurrent writer) is caught
+    // before declaring success.
     const verifyAgent = getAgent(agentId)
     const finalTitle = verifyAgent?.governanceTitle || null
-    if (finalTitle !== effectiveTitle) {
-      ops.push(`G22: FAIL — Final registry title "${finalTitle}" != expected "${effectiveTitle}" (persistence lost)`)
-      result.error = `Title persistence check failed: registry has "${finalTitle}" but expected "${effectiveTitle}"`
+    if (finalTitle !== (effectiveTitle || null)) {
+      result.error = `G22: Final in-memory title drift — registry shows "${finalTitle || 'null'}", expected "${effectiveTitle || 'null'}"`
+      ops.push(`G22: DENIED — in-memory registry title drift`)
       return result
     }
-    ops.push(`G22: Final registry title verified: "${finalTitle || 'null'}"`)
+    try {
+      const { readFileSync } = await import('fs')
+      const { join: pathJoin } = await import('path')
+      const REGISTRY_PATH = pathJoin(HOME, '.aimaestro', 'agents', 'registry.json')
+      const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8')) as Array<Record<string, unknown>>
+      const diskAgent = diskAgents.find((a) => a.id === agentId)
+      const diskFinalTitle = (diskAgent?.governanceTitle as string | null | undefined) ?? null
+      if (diskFinalTitle !== (effectiveTitle || null)) {
+        result.error = `G22: Final on-disk title drift — registry.json shows "${diskFinalTitle || 'null'}", expected "${effectiveTitle || 'null'}"`
+        ops.push(`G22: DENIED — on-disk registry title drift`)
+        return result
+      }
+      ops.push(`G22: Final title verified in cache + registry.json: "${effectiveTitle || 'null'}"`)
+    } catch (verifyErr) {
+      result.error = `G22: Final verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`
+      ops.push(`G22: DENIED — final verification failed`)
+      return result
+    }
 
     // ── GATE 23: Verify governance.json consistency ──────────
     if (newTitle === 'manager') {
@@ -4158,6 +4229,12 @@ export async function DeleteTeam(
       ...(team.chiefOfStaffId ? [team.chiefOfStaffId] : []),
       ...(team.orchestratorId && !team.agentIds.includes(team.orchestratorId) ? [team.orchestratorId] : []),
     ])]
+    // SCEN-002 P0-001: Collect any per-agent title-revert failures. Any
+    // failure is a persistence-layer bug — registry.json would show a
+    // non-AUTONOMOUS title on an agent whose team has been deleted. Do
+    // NOT treat as "best effort WARN"; escalate to pipeline error so the
+    // UI surfaces it and the operator can retry or intervene.
+    const revertFailures: Array<{ agentId: string; error: string }> = []
     if (agentsToRevert.length > 0) {
       const { hibernateAgent } = await import('@/services/agents-core-service')
       const { getAgent: getAgentFromRegistry, updateAgent } = await import('@/lib/agent-registry')
@@ -4201,12 +4278,20 @@ export async function DeleteTeam(
               authContext: options.authContext,
             })
             if (titleResult.success) {
-              ops.push(`G03: Agent ${agentId.substring(0, 8)} → AUTONOMOUS`)
+              ops.push(`G03: Agent ${agentId.substring(0, 8)} → AUTONOMOUS (verified in registry)`)
             } else {
-              ops.push(`G03: WARN — ChangeTitle failed for ${agentId.substring(0, 8)}: ${titleResult.error}`)
+              // SCEN-002 P0-001: ChangeTitle now includes strong persistence
+              // verification (G14 + G22). A non-success result here means
+              // the title reversion did NOT land on disk, so we MUST surface
+              // the error rather than claim success.
+              const reason = titleResult.error || 'unknown'
+              revertFailures.push({ agentId, error: reason })
+              ops.push(`G03: FAILED — ChangeTitle failed for ${agentId.substring(0, 8)}: ${reason}`)
             }
           } catch (err) {
-            ops.push(`G03: WARN — ChangeTitle exception for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
+            const msg = err instanceof Error ? err.message : String(err)
+            revertFailures.push({ agentId, error: msg })
+            ops.push(`G03: FAILED — ChangeTitle exception for ${agentId.substring(0, 8)}: ${msg}`)
           }
         }
 
@@ -4246,6 +4331,20 @@ export async function DeleteTeam(
       }
     } else {
       ops.push('G03: No agents in team — skipped')
+    }
+
+    // SCEN-002 P0-001 fix: If ANY agent title revert failed, abort BEFORE
+    // deleting the team from the registry. Continuing would leave the
+    // system in the exact inconsistent state the bug reports flagged:
+    // team gone from teams.json, but its former agents still carry the
+    // old title in agents/registry.json (ghost titles). The caller can
+    // inspect `operations` for per-agent reasons and retry if desired.
+    if (revertFailures.length > 0) {
+      result.error = `DeleteTeam aborted: ${revertFailures.length} agent(s) failed to revert to AUTONOMOUS. ` +
+        `Team NOT deleted to preserve consistency. Retry or inspect operations log. First failure: ` +
+        `${revertFailures[0].agentId.substring(0, 8)}=${revertFailures[0].error}`
+      ops.push(`G03: ABORTED — ${revertFailures.length} title revert failure(s); team preserved`)
+      return result
     }
 
     // ── G04: Delete team from registry ─────────────────────────
@@ -4564,6 +4663,46 @@ export async function DeleteAgent(
       return result
     }
     ops.push(`G08: ${hard ? 'Hard' : 'Soft'}-deleted from registry`)
+
+    // ── G08b: Verify deletion landed on disk ───────────────────
+    // SCEN-002 P0-003: registryDelete() can return true even when the
+    // on-disk write silently failed (cache glitch, lock contention). Without
+    // this check, UI reports success while ~/.aimaestro/agents/registry.json
+    // still contains the deleted agent — which resurrects on next restart.
+    // For soft-delete: verify the agent has `deletedAt` set on disk.
+    // For hard-delete: verify the agent entry is GONE from disk.
+    try {
+      const { readFileSync } = await import('fs')
+      const { join: pathJoinG08 } = await import('path')
+      const REGISTRY_PATH_G08 = pathJoinG08(HOME, '.aimaestro', 'agents', 'registry.json')
+      const diskAgents = JSON.parse(readFileSync(REGISTRY_PATH_G08, 'utf-8')) as Array<Record<string, unknown>>
+      const diskAgent = diskAgents.find((a) => a.id === agentId)
+      if (hard) {
+        if (diskAgent) {
+          result.error = `G08b: Hard-delete verification failed — agent ${agentId} still present in registry.json`
+          ops.push(`G08b: DENIED — agent still in registry.json after hard-delete`)
+          return result
+        }
+        ops.push(`G08b: Verified on disk — agent removed from registry.json`)
+      } else {
+        if (!diskAgent) {
+          // Soft-delete should KEEP the entry, just mark it deleted
+          result.error = `G08b: Soft-delete verification failed — agent ${agentId} removed from registry.json (expected deletedAt marker)`
+          ops.push(`G08b: DENIED — agent missing from registry.json after soft-delete`)
+          return result
+        }
+        if (!diskAgent.deletedAt) {
+          result.error = `G08b: Soft-delete verification failed — agent ${agentId} on disk lacks deletedAt`
+          ops.push(`G08b: DENIED — agent lacks deletedAt after soft-delete`)
+          return result
+        }
+        ops.push(`G08b: Verified on disk — agent marked deletedAt in registry.json`)
+      }
+    } catch (verifyErr) {
+      result.error = `G08b: Registry verification failed: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`
+      ops.push(`G08b: DENIED — registry verification failed`)
+      return result
+    }
 
     // ── G09: Delete agent folder (hard-delete only) ────────────
     // Soft-delete preserves the folder (data is in the cemetery zip).

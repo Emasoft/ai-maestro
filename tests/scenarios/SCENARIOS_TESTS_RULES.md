@@ -12,24 +12,59 @@ All UI scenario tests in AI Maestro MUST follow these 11 rules. No exceptions.
 
 ## Rule 0 — Who you are in a scenario (CRITICAL)
 
-**You are the HUMAN USER of AI Maestro. You are NOT an agent.**
+**You are the HUMAN USER of AI Maestro. You are NOT an agent. You are NEVER an agent. Not even partially.**
+
+Scenarios are always played from the user's seat — the user who opens a browser, logs in to the dashboard, and drives the app through forms, buttons, and the **chat section** of an agent's view. No scenario, no phase, no step, no subagent, no "just this once" exception lets the runner adopt an agent identity.
+
+### What the human user has, and does not have
 
 A human user of AI Maestro:
 - Logs in to the dashboard in a web browser.
 - Clicks buttons, fills forms, types in the **chat section** of an agent's view.
-- Has no AI Maestro identity: no AID, no governance title, no agent registry entry, no `~/agents/<you>/` folder, no tmux session owned by the app.
-- Cannot and must not use the **terminal section** of an agent's view for their own actions — that section is a live read-only stream of what an agent is doing. The user observes there; the user never drives agents there.
+- Has NO AI Maestro identity: no AID, no governance title, no agent registry entry, no `~/agents/<you>/` folder, no tmux session owned by the app.
+- Cannot — and must not — use the **terminal section** of an agent's view for their own actions. That section is a live read-only stream of what an agent is doing. The user observes there; the user never drives agents there. Scenarios that need to push instructions into an agent do so through the agent's **chat section** (typed-message UI), not by writing into the terminal stream.
 
-**The scenario runner (this agent and any of its forked subagents) plays the role of that human user.** It drives the web UI via `dev-browser` exactly as a human would — through the chat section, through form inputs, through buttons. It does **not** talk to agents through their terminal section; it does **not** create an agent-identity for itself; it does **not** register itself with the app.
+**The scenario runner (this agent and any of its forked subagents) plays the role of that human user.** It drives the web UI via `dev-browser` exactly as a human would. It does NOT:
+- Talk to agents through their terminal section.
+- Create an agent-identity for itself, request an AID, or register itself with the app.
+- Write into any file inside `~/agents/<anything>/` directly (all agent mutations go through the UI).
+- Use CLI tools such as `aimaestro-agent.sh`, `amp-send.sh`, or direct API calls to affect agents — those are agent-to-agent tooling, not user tooling.
 
-**Every "agent" a scenario creates is created THROUGH the UI and lives under `~/agents/<name>/`.** That is the only path the dashboard's Agent Creation Wizard writes to. No scenario — ever — places a test agent inside:
-- `~/ai-maestro/` (the source tree / where the controller Claude Code may be running)
+### The "every agent lives in ~/agents/" hard invariant
+
+**Every agent that a scenario creates, modifies, or touches lives under `~/agents/<name>/`. No title is exempt. No test mode is exempt. No import flow is exempt.**
+
+Specifically:
+- MANAGER test agents → `~/agents/<name>/`
+- CHIEF-OF-STAFF test agents → `~/agents/<name>/`
+- MEMBER, ARCHITECT, ORCHESTRATOR, INTEGRATOR, MAINTAINER, AUTONOMOUS test agents → `~/agents/<name>/`
+- The auto-COS that the system creates when a team is created → `~/agents/<name>/`
+- Any agent the runner imports via the Wizard's "Import from existing folder" option → the source folder for that import MUST itself be prepared in advance as a fixture under `~/agents/<name>/` (see the fixture rule below). Importing from outside `~/agents/` is forbidden.
+
+**Paths that no scenario ever creates or modifies an agent inside:**
+- `~/ai-maestro/` (the source tree / where a controller Claude Code may be running)
 - `~/.claude/` (the human user's Claude Code config)
-- any other user-owned source or config folder
+- `~/.aimaestro/` (server-state files only — never an agent workdir)
+- `/tmp`, `/var`, system folders
+- Any other user-owned source, config, or notes folder
 
-**Why this matters for safety.** Cleanup (Rule 1) deletes every test agent AND its working folder via the UI's "Also delete agent folder" checkbox. If a test agent's folder happened to be inside `~/ai-maestro/`, cleanup would destroy the project source. If a test agent's folder were inside `~/.claude/`, cleanup would destroy the user's Claude Code config. These must be impossible by construction — and they are, because the Wizard enforces `~/agents/<name>/`. A scenario that finds a way to create an agent outside `~/agents/` has found a critical security bug and MUST fail with that bug reported — never proceed.
+**The Wizard is the enforcement surface.** Every scenario creates and modifies agents only via the Agent Creation Wizard (or equivalent UI dialogs). The Wizard writes to `~/agents/<name>/` and rejects any other target. If during a scenario step you see any UI that would let an agent be created or edited to live outside `~/agents/`, that is a critical security bug — STOP, record it as BUG-001 in the report, file a P0 proposal, and fail the scenario (do not proceed).
 
-**Consequence for rewipe-list.** The default rewipe-list does NOT contain `~/.claude/*` files. Those belong to the human user, not to any scenario. A scenario may add `~/.claude/settings.json` to its rewipe-list ONLY if its explicit purpose is to test user-scope plugin install/uninstall behavior — and even then, the scenario author commits to reverting every mutation through the UI before cleanup runs. The default rewipe-list only covers `~/.aimaestro/*` server-state files that the app itself owns.
+**Why this matters for safety.** Cleanup (Rule 1) deletes every test agent AND its working folder via the UI's "Also delete agent folder" checkbox. If a test agent's folder ever landed outside `~/agents/`, cleanup would destroy that folder. Inside `~/ai-maestro/` that means the project source. Inside `~/.claude/` that means the human user's Claude Code config. These must be impossible by construction.
+
+### Import-from-existing-folder scenarios
+
+When a scenario exercises the Wizard's "Import from existing folder" flow:
+1. The fixture folder MUST already exist on disk at a path inside `~/agents/` (for example `~/agents/scen-NNN-import-fixture/`), BEFORE the scenario starts.
+2. The fixture MUST be declared in the scenario's frontmatter under `dir-fixtures:` and referenced in the step body as `FOLDFIX[n]`.
+3. The scenario author prepares the fixture in advance (populates files, optional `scenario-start` git tag). The shared setup script resets it if tagged.
+4. The Wizard's "Import" field is typed with the `FOLDFIX[n]` path.
+5. Cleanup deletes the imported agent via the UI (folder-delete included). The fixture path itself is preserved for the next run — it is a fixture, not a per-run artifact.
+6. The fixture path is NEVER under `~/ai-maestro/`, `~/.claude/`, or any other source/config folder. If the app lets you point "Import" at an outside path, that is a critical security bug — same treatment as above.
+
+### Consequence for rewipe-list
+
+The default rewipe-list does NOT contain `~/.claude/*` files. Those belong to the human user, not to any scenario. A scenario may add `~/.claude/settings.json` to its rewipe-list ONLY if its explicit purpose is to test user-scope plugin install/uninstall behavior — and even then, the scenario author commits to reverting every mutation through the UI before cleanup runs. The default rewipe-list only covers `~/.aimaestro/*` server-state files that the app itself owns.
 
 ---
 

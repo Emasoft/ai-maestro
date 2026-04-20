@@ -4226,6 +4226,17 @@ export async function DeleteTeam(
   options: {
     authContext: AuthContext
     password?: string         // Governance password (required when passwordHash is set)
+    /**
+     * Proposal 7 (2026-04-20): when true, cascade-delete every team
+     * agent through the DeleteAgent pipeline AFTER the team itself is
+     * removed. The default (false) preserves agents as AUTONOMOUS — the
+     * long-standing behavior. Set from the "Delete Agents Too" checkbox
+     * in the sidebar Team Delete dialog. Deletion goes through the full
+     * DeleteAgent pipeline (never raw registry deletion), with hard=true
+     * and deleteFolder=true, so each agent's ~/agents/<name>/ workdir
+     * is wiped and a per-agent ledger entry is emitted.
+     */
+    deleteAgents?: boolean
   },
 ): Promise<DeleteTeamResult> {
   const ops: string[] = []
@@ -4491,12 +4502,54 @@ export async function DeleteTeam(
       ops.push(`G06: WARN — data file cleanup failed: ${err instanceof Error ? err.message : err}`)
     }
 
-    // G07: Removed — agent deletion via DeleteTeam is no longer supported.
-    // The ONLY way to delete an agent is through Profile → Advanced → Danger Zone → Delete Agent.
-    ops.push('G07: Agents preserved as AUTONOMOUS (agent deletion only via Profile → Danger Zone)')
+    // ── G07: Optional cascade — delete team agents (proposal 7) ────
+    // Opt-in via the "Delete Agents Too" checkbox in the sidebar Team
+    // Delete dialog. Cascade goes through the DeleteAgent pipeline per
+    // agent (NEVER raw registry deletion, never bash rm), inherits the
+    // caller's authContext, and sets hard=true + deleteFolder=true so
+    // the workdir is wiped too. Per-agent failures do NOT roll back —
+    // the team is already gone from the registry; the operator can
+    // re-try individual deletions via Profile → Danger Zone if any
+    // fail. Every successful DeleteAgent emits its own ledger entry
+    // (see TRDD-eac02238).
+    if (options?.deleteAgents && agentsToRevert.length > 0) {
+      const deleteFailures: Array<{ agentId: string; error: string }> = []
+      let deletedCount = 0
+      for (const agentId of agentsToRevert) {
+        try {
+          const delResult = await DeleteAgent(agentId, {
+            authContext: options.authContext,
+            hard: true,
+            deleteFolder: true,
+          })
+          if (delResult.success) {
+            deletedCount++
+            ops.push(`G07: DeleteAgent succeeded for ${agentId.substring(0, 8)} (hard, folder wiped)`)
+          } else {
+            deleteFailures.push({ agentId, error: delResult.error || 'unknown' })
+            ops.push(`G07: DeleteAgent FAILED for ${agentId.substring(0, 8)}: ${delResult.error || 'unknown'}`)
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          deleteFailures.push({ agentId, error: msg })
+          ops.push(`G07: DeleteAgent EXCEPTION for ${agentId.substring(0, 8)}: ${msg}`)
+        }
+      }
+      ops.push(`G07: Cascade summary — ${deletedCount}/${agentsToRevert.length} agents deleted, ${deleteFailures.length} failed`)
+      if (deleteFailures.length > 0) {
+        // Team is already deleted — surface a non-fatal warning in the
+        // success path so the caller can display a toast but the sidebar
+        // still removes the team row.
+        result.error = `Team deleted, but ${deleteFailures.length} of ${agentsToRevert.length} agents failed to delete. ` +
+          `First failure: ${deleteFailures[0].agentId.substring(0, 8)}=${deleteFailures[0].error}. ` +
+          `Retry via Profile → Advanced → Danger Zone → Delete Agent.`
+      }
+    } else {
+      ops.push('G07: Agents preserved as AUTONOMOUS (deleteAgents not requested)')
+    }
 
     result.success = true
-    console.log(`[DeleteTeam] "${team.name}" deleted (${ops.length} gates, ${agentsToRevert.length} agents reverted)`)
+    console.log(`[DeleteTeam] "${team.name}" deleted (${ops.length} gates, ${agentsToRevert.length} agents reverted${options?.deleteAgents ? ', cascade delete requested' : ''})`)
     return result
   } catch (err) {
     result.error = err instanceof Error ? err.message : String(err)

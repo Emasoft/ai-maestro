@@ -18,6 +18,9 @@ const UpdateTeamSchema = z.object({
 
 const DeleteTeamSchema = z.object({
   password: z.string().min(1).max(256).optional(),
+  // Proposal 7 (2026-04-20): cascade-delete team agents through the
+  // DeleteAgent pipeline. Opt-in via the "Delete Agents Too" checkbox.
+  deleteAgents: z.boolean().optional(),
 }).strict()
 
 // GET /api/teams/[id] - Get a single team
@@ -150,8 +153,9 @@ export async function DELETE(
   }
   const requestingAgentId = auth.agentId
 
-  // Extract governance password from request body
+  // Extract governance password + optional deleteAgents cascade flag from request body
   let password: string | undefined
+  let deleteAgents = false
   try {
     const raw = await request.json()
     const parsed = DeleteTeamSchema.safeParse(raw)
@@ -162,15 +166,20 @@ export async function DELETE(
       )
     }
     password = parsed.data.password
+    // Proposal 7 (2026-04-20): cascade-delete team agents via the
+    // DeleteAgent pipeline. Single parse captures both password and
+    // the cascade flag; unknown fields already blocked by .strict().
+    deleteAgents = parsed.data.deleteAgents ?? false
   } catch {
     // No body is OK — DeleteTeam will reject if password is required
   }
 
-  // Delegate to the all-in-one pipeline
+  // Delegate to the all-in-one pipeline.
   const { DeleteTeam } = await import('@/services/element-management-service')
   const delResult = await DeleteTeam(id, {
     authContext: { agentId: requestingAgentId, isSystemOwner: !requestingAgentId, governanceTitle: auth.governanceTitle, teamId: auth.teamId },
     password,
+    deleteAgents,
   })
   if (!delResult.success) {
     const status = delResult.error?.includes('not found') ? 404

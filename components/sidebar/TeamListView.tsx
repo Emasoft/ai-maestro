@@ -74,6 +74,19 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
   const [deletePassword, setDeletePassword] = useState('')
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  // Proposal 7 (2026-04-20): cascade-delete team agents via the
+  // DeleteAgent pipeline. Default false — preserves long-standing
+  // "agents revert to AUTONOMOUS" behaviour. The cascade runs through
+  // the full pipeline (never raw registry writes), hard=true,
+  // deleteFolder=true, and emits a ledger entry per agent.
+  const [cascadeDeleteAgents, setCascadeDeleteAgents] = useState(false)
+
+  const resetDeleteModal = () => {
+    setDeleteTarget(null)
+    setDeletePassword('')
+    setDeleteError(null)
+    setCascadeDeleteAgents(false)
+  }
 
   const handleDelete = async () => {
     if (!deleteTarget) return
@@ -106,7 +119,10 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
           'Content-Type': 'application/json',
           'X-Sudo-Token': sudoToken,
         },
-        body: JSON.stringify({ password: deletePassword }),
+        body: JSON.stringify({
+          password: deletePassword,
+          deleteAgents: cascadeDeleteAgents,
+        }),
       })
       const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
       if (!res.ok) {
@@ -114,8 +130,7 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
         return
       }
       setTeams(prev => prev.filter(t => t.id !== deleteTarget.id))
-      setDeleteTarget(null)
-      setDeletePassword('')
+      resetDeleteModal()
     } catch {
       setDeleteError('Network error')
     } finally {
@@ -246,11 +261,14 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
 
       {/* Delete team confirmation modal with password */}
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => { setDeleteTarget(null); setDeletePassword(''); setDeleteError(null) }}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={resetDeleteModal}>
           <div className="bg-gray-900 rounded-xl w-full max-w-sm shadow-2xl border border-gray-700 p-5" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-red-400 mb-3">Delete Team</h3>
             <p className="text-xs text-gray-300 mb-4">
-              Permanently delete <span className="font-semibold text-white">{deleteTarget.name}</span> and revert all agents to AUTONOMOUS?
+              Permanently delete <span className="font-semibold text-white">{deleteTarget.name}</span>
+              {cascadeDeleteAgents
+                ? ' and permanently DELETE all member agents (including their workdirs)?'
+                : ' and revert all member agents to AUTONOMOUS?'}
             </p>
 
             <div className="space-y-3 mb-4">
@@ -265,6 +283,27 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
                   autoFocus
                 />
               </div>
+              {/* Proposal 7 (2026-04-20): cascade-delete checkbox. When
+                  checked, each team agent is deleted via the full
+                  DeleteAgent pipeline (hard + deleteFolder) after the
+                  team itself is removed. Without this, agents revert
+                  to AUTONOMOUS and stay in the registry (existing
+                  behaviour preserved). */}
+              <label className="flex items-start gap-2 text-xs text-gray-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={cascadeDeleteAgents}
+                  onChange={e => setCascadeDeleteAgents(e.target.checked)}
+                  className="mt-0.5 w-3.5 h-3.5 accent-red-500 cursor-pointer"
+                  disabled={deleting}
+                />
+                <span>
+                  <span className="font-semibold text-red-400">Delete member agents too</span>
+                  <span className="block text-[10px] text-gray-500 leading-tight mt-0.5">
+                    Permanently removes each member agent plus its <code className="text-gray-400">~/agents/&lt;name&gt;/</code> folder. Every delete goes through the full DeleteAgent pipeline with an audit-log entry. Cannot be undone.
+                  </span>
+                </span>
+              </label>
             </div>
 
             {deleteError && (
@@ -275,7 +314,7 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
 
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => { setDeleteTarget(null); setDeletePassword(''); setDeleteError(null) }}
+                onClick={resetDeleteModal}
                 className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg hover:bg-gray-800 transition-colors"
               >
                 Cancel
@@ -285,7 +324,9 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
                 disabled={!deletePassword || deleting}
                 className="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
-                {deleting ? 'Deleting...' : 'Delete Team'}
+                {deleting
+                  ? (cascadeDeleteAgents ? 'Deleting team + agents…' : 'Deleting…')
+                  : (cascadeDeleteAgents ? 'Delete Team + Agents' : 'Delete Team')}
               </button>
             </div>
           </div>

@@ -211,8 +211,18 @@ export default function HelpPanel() {
   return (
     <div
       className={`fixed top-0 right-0 h-full w-[420px] z-50 transform transition-transform duration-300 ease-out ${
-        isOpen ? 'translate-x-0' : 'translate-x-full'
+        isOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
       }`}
+      // Proposal 4 (2026-04-20): when the panel is closed it is translated
+      // 420px to the right of the viewport (off-screen). Without the
+      // aria-hidden + pointer-events-none + inert, Playwright / Chrome-
+      // DevTools automation can still locate and try to click the close
+      // button there, which fails with "element is outside of the
+      // viewport" at a 1280-wide viewport (the SCEN-001 device: desktop
+      // size). Hiding the subtree from the a11y tree and disabling events
+      // makes the closed panel truly non-interactable.
+      aria-hidden={!isOpen}
+      inert={!isOpen}
     >
       <div className="h-full bg-gray-950/95 backdrop-blur-xl border-l border-gray-800/50 shadow-2xl flex flex-col">
         {/* Header */}

@@ -6,7 +6,7 @@ The ultimate aim of UI scenario tests is NOT just to verify that features work. 
 
 Every scenario run should produce a `scenario_proposed-improvements_<NNN>_<datetime>.md` report with actionable proposals. These proposals are then reviewed, prioritized, and implemented before the next scenario batch. Over time, this creates a virtuous cycle: tests find issues, issues get fixed, fixes get verified by re-running the same scenarios.
 
-All UI scenario tests in AI Maestro MUST follow these 11 rules. No exceptions.
+All UI scenario tests in AI Maestro MUST follow these 14 rules. No exceptions.
 
 ---
 
@@ -1257,3 +1257,74 @@ STEP 6: Post-test screenshot
 - Edit registry.json or teams.json directly — use UI or API
 
 **If agent folders remain after UI deletion, that is a BUG (Rule 4: fix it), not a reason to bypass the UI.**
+
+---
+
+## Rule 14: REPORTS-TO-PROJECT-ROOT (added 2026-04-20)
+
+**Every report, every proposal, every screenshot, every log that any agent produces MUST be written under `<main-project-root>/reports/`.** No exceptions for worktree-isolated agents, no exceptions for forked subagents, no exceptions for plugins in the `~/.claude/plugins/cache/` tree.
+
+`<main-project-root>/reports/` and `<main-project-root>/reports_dev/` are both **git-ignored**. Reports often contain private data (screenshots of the dashboard with real agent names, conversation transcripts, environment values). They must never be committed.
+
+### How to resolve the main project root
+
+For plain agents (not in a worktree): `${CLAUDE_PROJECT_DIR}` is already the main project root. Use it directly.
+
+For worktree-isolated agents (spawned with `isolation: worktree`): `${CLAUDE_PROJECT_DIR}` points at the **worktree**, not the main repo. To reach the main project root from inside a worktree, use:
+
+```bash
+MAIN_PROJECT_ROOT="$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)"
+```
+
+`git rev-parse --git-common-dir` returns the shared `.git` directory (which lives in the main working tree, not the worktree). Its parent directory is the main working tree itself.
+
+Every agent that writes a report then uses:
+
+```bash
+REPORTS_DIR="${MAIN_PROJECT_ROOT}/reports"
+mkdir -p "${REPORTS_DIR}/<per-agent-subfolder>"
+# write report files to ${REPORTS_DIR}/<per-agent-subfolder>/...
+```
+
+The per-agent subfolder keeps outputs from different agents separate:
+- `reports/scenarios-runner/…` — scenario-runner reports + proposals + screenshots
+- `reports/parallel-tester/…` — parallel-tester-agent FAIL screenshots + logs
+- `reports/parallel-worker/…` — parallel-worker-agent logs (when it writes any)
+- `reports/scenario-improvement-implementer/…` — implementer logs
+- `reports/<role-plugin-name>-agent/…` — any report a role-plugin main-agent writes
+- `reports/<skill-name>/…` — any report a skill writes directly
+
+### Why this rule exists
+
+1. **Worktree cleanup erases reports.** Agents in `isolation: worktree` have their worktree destroyed after they return (or on next orchestrator cycle). If the report lives inside the worktree, it's lost.
+2. **Private data must never be committed.** Reports often screenshot real governance passwords, agent names tied to user identity, conversation content. Gitignoring `reports/` + `reports_dev/` ensures this data never lands in a public branch.
+3. **One location to audit.** A single `reports/` folder at project root is the authoritative place to find every agent output. No hunting across worktrees, across plugin caches, across `/tmp` scratch directories.
+
+### What counts as a "report"
+
+- Scenario run reports (`SCEN-NNN_<ts>.report.md`).
+- 11th-HOUR proposal reports (`scenario_proposed-improvements_NNN_<ts>.md`).
+- Smoke-test FAIL screenshots.
+- Agent log captures, bug autopsies, audit outputs.
+- Batch-level aggregation reports.
+- Any file an agent produces for human review — if a human would want to read it later, it belongs in `reports/`.
+
+**Not covered by this rule:**
+- Ephemeral agent MEMORY (`/path/to/agent/.claude/agent-memory/<name>/MEMORY.md`) — that's agent-local state, not a report.
+- Git-tracked design docs (`design/tasks/TRDD-*.md`) — those are committed artifacts, not reports.
+- Build output (`.next/`, `dist/`, `target/`) — those have their own gitignored locations.
+- User-facing docs (`docs/`) — committed documentation.
+
+### Rollout status
+
+This rule was added 2026-04-20. Implementation phases:
+
+1. **Project-scoped** — done in the commit that introduced this rule:
+   - `.gitignore` adds `reports/`.
+   - `tests/scenarios/SCENARIOS_TESTS_RULES.md` (this file) documents the rule.
+   - `.claude/agents/parallel-worker-agent.md`, `.claude/agents/parallel-tester-agent.md`, `.claude/agents/scenario-runner.md`, `.claude/agents/scenario-improvement-implementer.md` all reference the rule and use `${MAIN_PROJECT_ROOT}/reports/…` paths.
+   - `.claude/skills/run-scenarios-batch/**` references the rule.
+2. **Role-plugins in external repos** — separate rollout. A TRDD under `design/tasks/` lists the 8 plugin repos that must publish an update: ai-maestro-architect-agent, ai-maestro-assistant-manager-agent, ai-maestro-autonomous-agent, ai-maestro-chief-of-staff, ai-maestro-integrator-agent, ai-maestro-maintainer-agent, ai-maestro-orchestrator-agent, ai-maestro-programmer-agent — plus `ai-maestro-plugin` (the core). Each publish uses the repo's own `scripts/publish.py` workflow.
+3. **Third-party plugins** — no enforcement; those plugins either adopt the rule voluntarily or their reports land outside AI Maestro's curated `reports/` tree.
+
+Until Phase 2 completes, role-plugin agents may still write to legacy paths (typically inside their persona's working directory). The main orchestrator must NOT copy those into `reports/` — the source repo must adopt the rule explicitly.

@@ -105,10 +105,16 @@ task_plan.md
 findings.md
 progress.md
 
+# Agent reports — reports/ and reports_dev/ are both gitignored per the
+# 2026-04-20 rule "all agents save reports to project-root ./reports/
+# (private data — never committed)". See SCENARIOS_TESTS_RULES.md Rule 14
+# and the rollout TRDD for the universal report-directory contract.
+reports/
+reports_dev/
+
 # Rechecker reports and pending merge files
 .rechecker/
 rck-*.md
-reports_dev/
 
 # Dev folders (local only, not published)
 docs_dev/

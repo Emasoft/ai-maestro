@@ -69,8 +69,8 @@ Improvements: <branch-name or "skipped">
 
 Where `P` = pass, `F` = fail, `X` = partial.
 
-Aggregated batch report is saved to:
-`${CLAUDE_PROJECT_DIR}/tests/scenarios/reports/scenario-batch-<range>_<timestamp>.md`
+Aggregated batch report is saved under the project-root `reports/` directory (Rule 14):
+`${CLAUDE_PROJECT_DIR}/reports/scenarios-runner/scenario-batch-<range>_<timestamp>.md`
 
 Progress log is appended to:
 `${CLAUDE_PROJECT_DIR}/tests/scenarios/state/batch-progress.log`

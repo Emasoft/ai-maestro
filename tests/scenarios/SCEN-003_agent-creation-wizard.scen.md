@@ -121,19 +121,19 @@ author: AI Maestro Team
 
 ## Phase 2: Create Test Team (0-IMPACT)
 
-#### S007: Switch to Teams tab
-- **Action:** Click "Teams" tab in sidebar
-- **Goal:** Teams view shown with "Create Team" button
+#### S007: Navigate to /teams page (use the full wizard, not the sidebar mini-form)
+- **Action:** Click "Teams" in the sidebar navigation — this navigates to `/teams` (the full Team Creation Wizard). Do NOT use the sidebar's "+ Create Team" mini-form, which requires ≥1 selected agent (verified 2026-04-20 in TeamListView.tsx disable-submit logic). The `/teams` wizard allows empty teams via auto-COS.
+- **Goal:** `/teams` page shown with "Create Team" button + any existing team cards.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows "Create Team" button visible. Screenshot: SCEN-003/S007-teams-tab.png
+- **Verify:** Browser URL ends in `/teams`. Snapshot shows Create Team button. Screenshot: SCEN-003/S007-teams-page.png
 
-#### S008: Create test team for wizard agents
-- **Action:** Click "+ Create Team", fill name `scen-test-wizard-team`, description `Scenario 003 wizard test team`. Do NOT select any agents. Click "Create Team".
-- **Goal:** Empty team created (agents will be added via wizard)
-- **Creates:** Team `scen-test-wizard-team` in teams registry, auto-COS agent
-- **Modifies:** Teams registry (new entry)
-- **Verify:** Team card appears in sidebar showing name `scen-test-wizard-team`. Screenshot: SCEN-003/S008-team-created.png
+#### S008: Create test team via full wizard (with auto-COS)
+- **Action:** Click "Create Team". Fill Team Info step (name `scen-test-wizard-team`, description `Scenario 003 wizard test team`, governance password `mYkri1-xoxrap-gogtan`). Skip GitHub Repos + GitHub Project steps (Next → Next). On Team Roles step leave COS as "Auto-create" and Orchestrator as "None". Click Next → Create Team on the Confirm step. (Proposal 16 fix 2026-04-20 — replaced contradictory "Do NOT select any agents" wording with the actual /teams wizard flow.)
+- **Goal:** Team created with auto-generated COS agent. No contradiction with the UI reality.
+- **Creates:** Team `scen-test-wizard-team` + auto-COS agent (typically `cos-scen-test-wizard-team`).
+- **Modifies:** Teams registry, agents registry (auto-COS entry).
+- **Verify:** Browser redirects to `/teams/<new-id>`. Team card on `/teams` now shows "1 agent" (the auto-COS). Registry lists a new COS with a random robot avatar. Screenshot: SCEN-003/S008-team-created.png
 
 ---
 

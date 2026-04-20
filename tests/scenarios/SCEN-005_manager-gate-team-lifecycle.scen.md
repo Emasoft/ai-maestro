@@ -470,12 +470,15 @@ author: AI Maestro Team
 - **Modifies:** nothing
 - **Verify:** Dialog visible with title options. Screenshot: SCEN-005/S050-open-title-dialog.png
 
-#### S051: Verify only standalone titles are shown
-- **Action:** Inspect the dialog options
-- **Goal:** Only standalone titles visible: AUTONOMOUS, MANAGER, and MAINTAINER (R19 — MAINTAINER is a standalone title requiring `githubRepo`). Team titles (MEMBER, COS, ORCHESTRATOR, ARCHITECT, INTEGRATOR) must NOT appear.
+#### S051: Verify only standalone titles are shown (enabled set depends on singleton state)
+- **Action:** Inspect the dialog options. (Proposal 34 fix 2026-04-20 — rewrote goal to match MANAGER singleton reality.)
+- **Goal:** Only STANDALONE titles are rendered: AUTONOMOUS, MANAGER, MAINTAINER. Team titles (MEMBER, COS, ORCHESTRATOR, ARCHITECT, INTEGRATOR) MUST NOT appear for this no-team agent. ENABLED-STATE depends on singleton enforcement:
+  - AUTONOMOUS: always enabled.
+  - MAINTAINER: always enabled (R19 standalone, requires `githubRepo` input).
+  - MANAGER: enabled iff `governance.hasManager === false` at the time of dialog render. If another MANAGER was assigned earlier in this scenario (e.g. after S021), MANAGER is correctly DISABLED here; only AUTONOMOUS + MAINTAINER are clickable.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Exactly 3 options (AUTONOMOUS, MANAGER, MAINTAINER). Screenshot: SCEN-005/S051-standalone-titles.png
+- **Verify:** 3 standalone titles rendered. Enabled/disabled mix matches the singleton-state description above. Screenshot: SCEN-005/S051-standalone-titles.png
 
 #### S052: Close the dialog
 - **Action:** Click Cancel or press Escape
@@ -514,14 +517,14 @@ author: AI Maestro Team
 - **Goal:** Second dialog appears asking about agents and requesting governance password
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Second dialog with Keep Agents and Delete Agents Too buttons. Screenshot: SCEN-005/S056-delete-dialog-2.png
+- **Verify:** Second dialog with the "Delete Team" primary button and the governance password field. (Proposal 36 fix 2026-04-20 — the old "Keep Agents vs Delete Agents Too" split does not exist in current UI; single "Delete Team" button runs the Keep-Agents semantics by default. Proposal 7 will add the optional "Delete Agents Too" checkbox in a separate commit.) Screenshot: SCEN-005/S056-delete-dialog-2.png
 
-#### S057: Enter governance password and choose "Keep Agents"
-- **Action:** Enter governance password `mYkri1-xoxrap-gogtan` if prompted, click "Keep Agents"
-- **Goal:** Team deleted via DeleteTeam 8-gate pipeline (governance password verified, agents revert to AUTONOMOUS, transfers cancelled, team data files deleted)
+#### S057: Enter governance password and confirm team delete
+- **Action:** Enter governance password `mYkri1-xoxrap-gogtan`, click "Delete Team". (Proposal 36 fix 2026-04-20 — removed stale "Keep Agents" button reference.)
+- **Goal:** Team deleted via DeleteTeam 8-gate pipeline. Agents revert to AUTONOMOUS (Keep-Agents semantics — the current default when Proposal 7's checkbox is not added or not ticked). Transfers cancelled. Team data files deleted.
 - **Creates:** nothing
-- **Modifies:** Teams registry (team removed), agent titles (all -> AUTONOMOUS), plugins stripped
-- **Verify:** Dialog closes, team gone from sidebar. Screenshot: SCEN-005/S057-team-deleted.png
+- **Modifies:** Teams registry (team removed), agent titles (all -> AUTONOMOUS), plugins stripped.
+- **Verify:** Dialog closes, team gone from sidebar. Orphan auto-COS persists as AUTONOMOUS hibernated agent (cleanup in subsequent scenario step). Screenshot: SCEN-005/S057-team-deleted.png
 
 #### S058: Verify team no longer exists
 - **Action:** Check `GET /api/teams` -- `scen-test-governance-team` should be gone

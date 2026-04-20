@@ -377,12 +377,19 @@ author: AI Maestro Team
 - **Removes:** Team `scen001-title-team`, auto-COS agent `cos-scen001-title-team` (and its folder).
 - **Verify:** Teams tab no longer shows `scen001-title-team`. `cos-scen001-title-team` no longer in sidebar. Screenshot: SCEN-001/S034b-team-deleted.png
 
-#### S035: Delete primary test agent via UI
-- **Action:** Click delete button in profile panel -> Danger Zone -> "Delete Agent" -> check "Also delete agent folder" -> type `scen-test-title-agent` -> click "Delete Forever". When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
-- **Goal:** Test agent fully removed from registry, archived to cemetery
-- **Creates:** Cemetery archive entry (zip file)
+#### S035: Soft-delete primary test agent via UI (cemetery path)
+- **Action:** Click delete button in profile panel -> Danger Zone -> "Delete Agent". Proposal 3 (2026-04-20) — DO NOT check "Also delete agent folder"; leaving the checkbox unchecked triggers a soft-delete that preserves the workdir AND archives to the cemetery. Type `scen-test-title-agent` -> click "Delete Forever". When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Goal:** Test agent removed from registry, archived to cemetery, workdir on disk preserved for revive.
+- **Creates:** Cemetery archive entry (zip file with manifest + registry snapshot + agent.db). Workdir at `~/agents/scen-test-title-agent/` remains.
 - **Modifies:** Agent registry (entry removed)
-- **Verify:** Agent no longer appears in sidebar, API returns 404 for agent ID. Screenshot: SCEN-001/S035-agent-deleted.png
+- **Verify:** Agent no longer appears in sidebar, API returns 404 for agent ID. `~/agents/scen-test-title-agent/` still exists on disk. Screenshot: SCEN-001/S035-agent-deleted.png
+
+#### S035b: Hard-delete variant covers the folder-checkbox branch
+- **Action:** Only runs if S027a created a SECOND test agent AND it still exists. Click `scen001-title-agent-2` (if present) -> Danger Zone -> "Delete Agent" -> CHECK "Also delete agent folder" -> type `scen001-title-agent-2` -> click "Delete Forever". Enter governance password when the sudo modal appears.
+- **Goal:** Hard-delete path exercised — agent removed from registry, workdir REMOVED from disk, NO cemetery archive (per services/element-management-service.ts G03 `hard=true` skip).
+- **Creates:** nothing (no cemetery entry for this variant).
+- **Removes:** `~/agents/scen001-title-agent-2/` directory + registry entry.
+- **Verify:** `ls ~/agents/ | grep scen001-title-agent-2` returns nothing. Cemetery list does NOT contain `scen001-title-agent-2`. Screenshot: SCEN-001/S035b-hard-delete.png
 
 #### S036: Verify agent appears in Cemetery
 - **Action:** Navigate to Settings page -> click "Cemetery" tab

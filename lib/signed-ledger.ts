@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import type { LedgerEntry, LedgerFile, LedgerStats, VerifyResult } from '@/types/ledger'
+import type { LedgerEntry, LedgerFile, LedgerStats, VerifyResult, AppendOptions } from '@/types/ledger'
 import type { JsonPatch } from '@/types/json-patch'
 import { getHostPublicKeyHex, signHostAttestation } from '@/lib/host-keys'
 import { acquireLock } from '@/lib/file-lock'
@@ -19,8 +19,24 @@ function blake2bTrunc256(data: string): string {
     .toString('hex')
 }
 
+/**
+ * Canonicalize a ledger entry for hashing + signing.
+ *
+ * v1 layout (pre-2026-04-20):
+ *   [seq, ts, prevHash, op, path, diff, signerHostId, signerKeyFingerprint]
+ *
+ * v1.1 layout (TRDD-eac02238 — per-op audit):
+ *   [seq, ts, prevHash, op, path, diff, signerHostId, signerKeyFingerprint,
+ *    authAction, authAgentId, authActor]
+ *
+ * BACKWARD COMPATIBILITY: if any of `authAction/authAgentId/authActor` is
+ * undefined on the entry, the extra fields are OMITTED ENTIRELY (not
+ * serialized as null, not as undefined). The resulting canonical array
+ * for such entries is identical to what v1 produced. Existing ledger
+ * files continue to verify byte-for-byte after this change lands.
+ */
 function canonicalize(entry: Omit<LedgerEntry, 'signature'>): string {
-  return JSON.stringify([
+  const base: unknown[] = [
     entry.seq,
     entry.ts,
     entry.prevHash,
@@ -29,7 +45,19 @@ function canonicalize(entry: Omit<LedgerEntry, 'signature'>): string {
     entry.diff,
     entry.signerHostId,
     entry.signerKeyFingerprint,
-  ])
+  ]
+  // Only include the auth trio when ANY of them is set. If present, all
+  // three are appended in a fixed order so the shape is deterministic.
+  // Individual undefined values become null within that trio, but the
+  // trio is only added when at least one is defined.
+  const hasAuth =
+    entry.authAction !== undefined ||
+    entry.authAgentId !== undefined ||
+    entry.authActor !== undefined
+  if (hasAuth) {
+    base.push(entry.authAction ?? null, entry.authAgentId ?? null, entry.authActor ?? null)
+  }
+  return JSON.stringify(base)
 }
 
 function computeEntryHash(entry: LedgerEntry): string {
@@ -94,6 +122,7 @@ export class SignedLedger {
     op: LedgerEntry['op'],
     registryPath: string,
     diff: JsonPatch,
+    opts?: AppendOptions,
   ): Promise<LedgerEntry> {
     const release = await acquireLock(this.lockName)
     try {
@@ -109,6 +138,11 @@ export class SignedLedger {
         diff,
         signerHostId: getSelfHostId(),
         signerKeyFingerprint: hostKeyFingerprint(),
+        // Only set fields when defined — preserves omit-when-absent
+        // canonicalization semantics (see canonicalize() above).
+        ...(opts?.authAction !== undefined && { authAction: opts.authAction }),
+        ...(opts?.authAgentId !== undefined && { authAgentId: opts.authAgentId }),
+        ...(opts?.authActor !== undefined && { authActor: opts.authActor }),
       }
 
       const signature = signHostAttestation(canonicalize(partial))

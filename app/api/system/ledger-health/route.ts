@@ -44,12 +44,29 @@ interface PerLedgerReport {
   reason?: string // only when verified === false
 }
 
+interface RoleMissingAgent {
+  agentId: string
+  hibernatedAt: string
+  boot: boolean                // true if event was 'hibernate_role_missing_at_boot'
+}
+
 interface LedgerHealthResponse {
   ok: boolean                  // true iff EVERY ledger verified cleanly
   readOnlyMode: boolean        // current isReadOnlyMode() state
   ledgers: PerLedgerReport[]
   details: string              // human-readable multi-line summary
   checkedAt: string
+  // Phase 0.B-derived (#238): count + per-agent list of R9.13 auto-hibernations.
+  // Sourced from the agents ledger by filtering op ∈ {hibernate_role_missing,
+  // hibernate_role_missing_at_boot}. Gives operators a fast read on "how
+  // many agents lost their role-plugin during the last batch of uninstalls
+  // / the last reboot".
+  roleMissingHibernations: {
+    total: number
+    runtime: number   // hibernate_role_missing events (user or pipeline triggered)
+    atBoot: number    // hibernate_role_missing_at_boot events (startup scan)
+    recent: RoleMissingAgent[]  // newest 10 for the Diagnostics panel
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -125,12 +142,45 @@ export async function GET(request: NextRequest) {
     )
     .join('\n')
 
+  // Phase 0.B-derived (#238): count R9.13 auto-hibernations by replaying
+  // the agents ledger. Cheap — entry count is tiny in practice — and always
+  // in-sync with the signed log because the ledger is append-only.
+  const agentsLedgerFile = LEDGER_FILES.find(l => l.label === 'agents')?.file
+  let roleMissingHibernations = { total: 0, runtime: 0, atBoot: 0, recent: [] as RoleMissingAgent[] }
+  if (agentsLedgerFile) {
+    try {
+      const agentsLedger = new SignedLedger(agentsLedgerFile)
+      await agentsLedger.verify().catch(() => { /* counts are best-effort even on tamper */ })
+      const matches = agentsLedger.getEntries().filter(e =>
+        e.op === 'hibernate_role_missing' || e.op === 'hibernate_role_missing_at_boot',
+      )
+      const recent = matches.slice(-10).reverse().map(e => {
+        const patchOp = Array.isArray(e.diff) ? e.diff[0] : null
+        const agentId = typeof patchOp?.path === 'string'
+          ? patchOp.path.replace(/^\/agents\/([^/]+).*/, '$1')
+          : ''
+        return {
+          agentId,
+          hibernatedAt: e.ts,
+          boot: e.op === 'hibernate_role_missing_at_boot',
+        }
+      })
+      roleMissingHibernations = {
+        total: matches.length,
+        runtime: matches.filter(e => e.op === 'hibernate_role_missing').length,
+        atBoot: matches.filter(e => e.op === 'hibernate_role_missing_at_boot').length,
+        recent,
+      }
+    } catch { /* non-fatal — keep zeroes */ }
+  }
+
   const response: LedgerHealthResponse = {
     ok,
     readOnlyMode: isReadOnlyMode(),
     ledgers,
     details,
     checkedAt: new Date().toISOString(),
+    roleMissingHibernations,
   }
 
   // If any ledger failed verify, also echo the cached startup tamper details

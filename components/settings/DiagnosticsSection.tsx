@@ -29,12 +29,24 @@ interface PerLedgerReport {
   reason?: string
 }
 
+interface RoleMissingAgent {
+  agentId: string
+  hibernatedAt: string
+  boot: boolean
+}
+
 interface LedgerHealthResponse {
   ok: boolean
   readOnlyMode: boolean
   ledgers: PerLedgerReport[]
   details: string
   checkedAt: string
+  roleMissingHibernations?: {
+    total: number
+    runtime: number
+    atBoot: number
+    recent: RoleMissingAgent[]
+  }
 }
 
 const POLL_INTERVAL_MS = 30_000
@@ -172,6 +184,49 @@ export default function DiagnosticsSection() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* #238 (TRDD-c7a81642, 2026-04-20): R9.13 auto-hibernation counter.
+          Sourced from the agents ledger — shows how many agents lost their
+          role-plugin and got auto-hibernated at runtime (PG04 fallback ran
+          out) vs at server boot (startup scan). Non-zero values are a
+          signal that a role-plugin uninstall or a client-binary swap left
+          some agents stuck. Clicking an entry deep-links to the Config
+          tab for that agent so the user can assign a new role-plugin. */}
+      {report?.roleMissingHibernations && report.roleMissingHibernations.total > 0 && (
+        <div className="border border-amber-600/30 rounded-lg p-3 bg-amber-500/5">
+          <div className="flex items-start gap-2 mb-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold text-amber-200">
+                Role-plugin auto-hibernations: {report.roleMissingHibernations.total}
+              </p>
+              <p className="text-[10px] text-amber-300/70">
+                Runtime (PG04 fallback failed): <strong>{report.roleMissingHibernations.runtime}</strong>
+                {' · '}
+                At boot (startup scan): <strong>{report.roleMissingHibernations.atBoot}</strong>
+              </p>
+            </div>
+          </div>
+          {report.roleMissingHibernations.recent.length > 0 && (
+            <ul className="space-y-1 text-[10px] text-gray-400">
+              {report.roleMissingHibernations.recent.map((r, i) => (
+                <li key={`${r.agentId}-${r.hibernatedAt}-${i}`} className="flex items-center gap-2">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${r.boot ? 'bg-red-500' : 'bg-amber-500'}`} />
+                  <a
+                    href={`/?agent=${encodeURIComponent(r.agentId)}&tab=config`}
+                    className="font-mono text-gray-300 hover:text-amber-300"
+                    title="Open Profile → Config tab to assign a role-plugin"
+                  >
+                    {r.agentId.slice(0, 12)}
+                  </a>
+                  <span className="text-gray-600">{new Date(r.hibernatedAt).toLocaleString()}</span>
+                  <span className="text-gray-600">{r.boot ? 'at boot' : 'runtime'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

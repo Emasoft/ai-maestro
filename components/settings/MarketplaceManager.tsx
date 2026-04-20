@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { sudoFetch } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
-import { MAIN_PLUGIN_NAME, MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
+import { MAIN_PLUGIN_NAME, MARKETPLACE_NAME, PLUGIN_COMPATIBLE_TITLES } from '@/lib/ecosystem-constants'
 
 interface PluginStatus {
   name: string
@@ -560,6 +560,33 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
                                   <span className="text-[9px] text-emerald-500/70 flex-shrink-0">up to date</span>
                                 ) : null}
                                 {elCount > 0 && <span className="text-[9px] text-gray-600"><span className="hidden sm:inline">{elCount} elements</span><span className="sm:hidden">({elCount})</span></span>}
+                                {/* #240 (TRDD-c7a81642 §7, 2026-04-20): role-plugin
+                                    badge. Shows which governance title(s) this
+                                    plugin can serve, sourced from the TOML's
+                                    compatible-titles (mirrored in ecosystem-
+                                    constants PLUGIN_COMPATIBLE_TITLES). When the
+                                    plugin is compatible with MULTIPLE titles we
+                                    render "Compatible — multiple options" so
+                                    the user sees that uninstalling it won't
+                                    orphan agents who could fall back to
+                                    another installed role-plugin. */}
+                                {PLUGIN_COMPATIBLE_TITLES[plugin.name] && (() => {
+                                  const compat = PLUGIN_COMPATIBLE_TITLES[plugin.name] as readonly string[]
+                                  const label = compat.length > 1
+                                    ? `Role-plugin · ${compat.length} titles`
+                                    : `Role-plugin · ${compat[0].toUpperCase()}`
+                                  const tooltip = compat.length > 1
+                                    ? `Compatible — multiple options: ${compat.join(', ').toUpperCase()}`
+                                    : `Compatible with ${compat[0].toUpperCase()}`
+                                  return (
+                                    <span
+                                      className="text-[9px] text-indigo-300/80 bg-indigo-500/10 border border-indigo-500/30 px-1 py-0.5 rounded flex-shrink-0"
+                                      title={tooltip}
+                                    >
+                                      {label}
+                                    </span>
+                                  )
+                                })()}
                                 {hasErrors && (
                                   <button
                                     onClick={(e) => { e.stopPropagation(); setErrorPopup({ name: plugin.name, errors: plugin.errors }) }}

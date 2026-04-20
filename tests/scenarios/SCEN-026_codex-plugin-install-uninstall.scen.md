@@ -3,24 +3,37 @@ number: 26
 name: Codex Role-Plugin Emission + Normal-Plugin Install/Uninstall via UI
 version: "1.0"
 description: >
-  The user creates a Codex agent via the Agent Creation Wizard. Because
-  there is no Codex-native role-plugin shipped for the default title,
-  AI Maestro's plugin-storage-service auto-emits a Codex build from the
-  Claude abstract (UniversalPluginIR), stores it under
-  ~/agents/role-plugins/codex-roles-marketplace/<name>/, and the
-  ChangePlugin installer wires it into the agent's Codex config. The
-  user then swaps the agent's title (MEMBER → ARCHITECT) and confirms
-  the converter emits + installs a second role-plugin, and the old one
-  is uninstalled via ChangePlugin G14c. The user uninstalls the active
-  role-plugin to exercise the R9.13 role-plugin-or-hibernate invariant:
-  the agent is auto-hibernated and POST /api/agents/{id}/wake refuses
-  with 409 role_plugin_required. A compatible role-plugin is re-assigned
-  via the Config tab, the agent wakes. Next, the user installs and
-  uninstalls 4 real-world Codex plugins (openai/plugins,
-  hashgraph-online/awesome-codex-plugins, remotion-dev/codex-plugin,
-  supabase-community/codex-plugin) via Settings → Plugins Explorer to
-  confirm the normal-plugin install/uninstall flow works for Codex.
-  Cleans up the test agent + all 4 installed plugins via the UI.
+  TWO DISTINCT FLOWS, both driven entirely through the UI.
+
+  Role-plugin flow (Phases 1-3): The user creates a Codex agent via the
+  Agent Creation Wizard. Because no Codex-native role-plugin ships for
+  the default title, AI Maestro's plugin-storage-service auto-emits a
+  Codex build from the Claude abstract (UniversalPluginIR), stores it
+  under ~/agents/role-plugins/codex-roles-marketplace/<name>/, and the
+  ChangePlugin installer wires it into Codex's own marketplace manifest
+  at ~/.agents/plugins/marketplace.json. The user swaps the agent's
+  title (MEMBER → ARCHITECT) and confirms the converter emits + installs
+  a second role-plugin while the old one is uninstalled via ChangePlugin
+  G14c. Uninstalling the active role-plugin exercises R9.13: the agent
+  auto-hibernates and POST /api/agents/{id}/wake refuses with 409
+  role_plugin_required. A compatible role-plugin is re-assigned via the
+  Config tab; the agent wakes.
+
+  Regular-plugin flow (Phases 4-5): the user registers and installs 4
+  real-world Codex plugins — a mix of (a) two catalog MARKETPLACES
+  (openai/plugins, hashgraph-online/awesome-codex-plugins) and (b) two
+  SINGLE-PLUGIN repos (remotion-dev/codex-plugin,
+  supabase-community/codex-plugin) — via Settings → Plugins Explorer.
+  These plugins are ALREADY in Codex format. AI Maestro does NOT copy
+  them into any AI-Maestro-owned folder. Instead the UI invokes Codex's
+  own file-based install protocol — edits ~/.agents/plugins/marketplace.json,
+  flips enable state in ~/.codex/config.toml — and records every
+  operation in the signed ledger so the matching Uninstall button can
+  roll it back. Plugin-name collisions are disambiguated by
+  "<name>@<marketplace>" (e.g. codex-plugin@supabase-community/codex-plugin
+  vs codex-plugin@remotion-dev/codex-plugin); no folder rename is needed
+  because these are regular plugins, not Haephestos-created/converted
+  customs. Cleanup removes all 4 via the UI and deletes the test agent.
 client: codex
 interhosts: false
 device: desktop
@@ -44,15 +57,21 @@ ui_sections:
   - Sudo password modal (Rule 12)
 data_produced:
   - 1 test agent "scen026-codex-plugin-test" (temporary, created + deleted)
-  - Up to 2 converted Codex role-plugins under ~/agents/role-plugins/codex-roles-marketplace/ (temporary)
-  - 4 normal Codex plugins installed locally into the test agent's .codex config (temporary)
-  - Ledger entries: create_agent, change_title, change_plugin (×N), hibernate_role_missing, wake
+  - Up to 2 converted Codex role-plugins under ~/agents/role-plugins/codex-roles-marketplace/ (role-plugins ARE stored by AI Maestro because they were derived from the Claude abstract — per TRDD-c7a81642 R20.28)
+  - 4 regular Codex marketplaces/plugins referenced from ~/.agents/plugins/marketplace.json + enable flags in ~/.codex/config.toml (owned by Codex itself, NOT copied by AI Maestro)
+  - Ledger entries: create_agent, change_title, change_plugin (×N, both role-plugin and regular), hibernate_role_missing, wake, add_marketplace (×2), remove_marketplace (×2)
   - Backup directory under tests/scenarios/state-backups/SCEN-026_<ts>/
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
   - ~/.aimaestro/teams/teams.json
   - ~/.aimaestro/teams/groups.json
+  # Codex-owned files are included so Phase 4/5 mutations can be
+  # verified-and-restored bit-for-bit via CHECKPOINT-RESTORE. The
+  # UI cleanup path should already leave these clean; STATE-WIPE is
+  # belt-and-braces.
+  - ~/.agents/plugins/marketplace.json
+  - ~/.codex/config.toml
 git-fixtures:
   - https://github.com/openai/plugins
   - https://github.com/hashgraph-online/awesome-codex-plugins
@@ -75,19 +94,43 @@ author: AI Maestro Team
 
 # Codex Plugin Install/Uninstall Scenario
 
-> **Scope note:** This scenario exists because role-plugins authored as
-> Claude Code are the canonical source, and Codex-compatible builds are
-> auto-derived via the UniversalPluginIR. If the converter + installer +
-> uninstaller round-trip works, the system is in good shape for any
-> title the user assigns on a Codex agent. The scenario tests ONE title
-> swap (MEMBER → ARCHITECT) as a representative exercise — not every
-> title, to keep the scenario bounded.
+> **Scope note — TWO distinct flows:**
+>
+> 1. **Role-plugins** (derivatives of Claude originals). Tested in
+>    Phases 1-3. These ARE stored by AI Maestro under
+>    `~/agents/role-plugins/codex-roles-marketplace/` because they
+>    were auto-emitted from the Claude abstract — the rule
+>    "uniquely named customs live in a local AI-Maestro marketplace"
+>    applies ONLY here, per TRDD-c7a81642 R20.28. The scenario tests
+>    one title swap (MEMBER → ARCHITECT) as a representative exercise.
+>
+> 2. **Regular plugins** (already in Codex format, not derived from
+>    Claude). Tested in Phases 4-5. AI Maestro does NOT store these;
+>    Codex owns them. Plugin-name collisions across publishers are
+>    normal and are disambiguated by the `<name>@<marketplace>` fully
+>    qualified form — e.g. `codex-plugin@supabase-community/codex-plugin`
+>    vs `codex-plugin@remotion-dev/codex-plugin` live side by side
+>    without any rename.
 
 > **Reference:** Codex plugin model — https://developers.openai.com/codex/plugins/build
-> Plugins install to `~/.codex/plugins/cache/<marketplace>/<name>/<version>/`.
-> Manifest is `.codex-plugin/plugin.json`. Enable/disable state lives in
-> `~/.codex/config.toml`. Scope: user-global (`~/.agents/plugins/marketplace.json`)
-> or repo-scoped (`$REPO_ROOT/.agents/plugins/marketplace.json`).
+>
+> Codex uses a FILE-BASED install model (no `codex plugin install` CLI
+> exists today):
+> - User-global marketplace manifest: `~/.agents/plugins/marketplace.json`
+> - Repo-scoped marketplace manifest: `$REPO_ROOT/.agents/plugins/marketplace.json`
+> - Cache path (where plugin files live once installed): `~/.codex/plugins/cache/<marketplace>/<name>/<version>/`
+> - Enable/disable state: `~/.codex/config.toml`
+> - Plugin manifest (inside the plugin dir): `.codex-plugin/plugin.json`
+>
+> So "install" under the hood means: (a) add a plugin entry to the
+> marketplace manifest that points at the plugin folder, (b) flip
+> enabled=true in `config.toml`, (c) restart Codex so it re-reads
+> config. AI Maestro wraps this sequence behind a single UI Install
+> button, and logs a `change_plugin` (or `add_marketplace`) ledger
+> entry so the matching Uninstall button can reverse the change
+> idempotently. AI Maestro never copies the plugin source files into
+> any AI-Maestro-owned folder — they stay wherever the user points
+> (the git fixture, a local working folder, or a GitHub URL).
 
 ---
 
@@ -237,124 +280,170 @@ author: AI Maestro Team
 
 ---
 
-## Phase 4: Install 4 normal Codex plugins via the Plugins Explorer
+## Phase 4: Register + install 4 regular Codex plugins via the Plugins Explorer
 
-> **Note:** Each plugin below is installed from a local fixture clone at
-> `tests/scenarios/fixtures/git/<repo>/`. We do this via the Settings →
-> Plugins Explorer UI (never via shell) so Rule 6 holds. The scenario
-> author must have cloned + tagged `scenario-start` for each fixture
-> before the first run (see prerequisites).
+> **Fixture type map:**
+>
+> | Fixture | Type | Plugin count |
+> |---|---|---|
+> | `openai/plugins` | CATALOG MARKETPLACE | ~9 example plugins (Figma, Notion, Expo, Netlify, Remotion, Google Slides, …) |
+> | `hashgraph-online/awesome-codex-plugins` | CATALOG MARKETPLACE | 12 official + ~40 community |
+> | `remotion-dev/codex-plugin` | SINGLE PLUGIN | 1 (`codex-plugin`) |
+> | `supabase-community/codex-plugin` | SINGLE PLUGIN | 1 (`codex-plugin`) |
+>
+> All 4 MUST be cloned by the scenario author to their per-publisher
+> path under `tests/scenarios/fixtures/git/` with a `scenario-start`
+> tag BEFORE the first run (Rule 3). Because the two single-plugin
+> repos share the folder name `codex-plugin`, the fixture layout uses
+> publisher-prefixed clone paths:
+> - `tests/scenarios/fixtures/git/openai__plugins/`
+> - `tests/scenarios/fixtures/git/hashgraph-online__awesome-codex-plugins/`
+> - `tests/scenarios/fixtures/git/remotion-dev__codex-plugin/`
+> - `tests/scenarios/fixtures/git/supabase-community__codex-plugin/`
+>
+> This on-disk prefix is a fixture-layout convenience only. The PLUGIN
+> name inside each repo stays `codex-plugin`; Codex disambiguates by
+> the marketplace portion of the fully qualified key
+> (`<name>@<marketplace>`) — no plugin rename happens, because these
+> are REGULAR plugins (already in Codex format), not Haephestos-
+> created or cross-client-converted customs.
+
+> **What AI Maestro actually does (Codex file-based install model, per
+> https://developers.openai.com/codex/plugins/build):**
+>
+> 1. User clicks "Add Marketplace" or "Install Plugin" in the UI.
+> 2. AI Maestro edits Codex's OWN `~/.agents/plugins/marketplace.json`
+>    to add a marketplace entry pointing at the fixture folder.
+> 3. For a plugin install, AI Maestro flips the plugin's enable flag
+>    in `~/.codex/config.toml` (keyed by `<name>@<marketplace>`).
+> 4. AI Maestro triggers a Codex reload so the new plugin is picked up.
+> 5. Every operation is written to the signed ledger with
+>    `authActor=user` so the matching Uninstall button can roll it
+>    back symmetrically.
+>
+> AI Maestro does NOT copy plugin files into its own `~/agents/*`
+> folders. The fixtures stay exactly where the user pointed them. Only
+> the TWO Codex-owned files listed above are mutated, and they're in
+> `rewipe-list` so STATE-WIPE restores them even if a test step errors
+> out.
 
 #### S018: Open Settings → Plugins Explorer → Marketplaces tab
 - **Action:** Click the settings gear → "Plugins Explorer" sidebar item → "Marketplaces" tab
 - **Goal:** The Marketplaces panel is visible, listing the currently registered marketplaces (`ai-maestro-plugins` remote + local containers)
-- **Creates:** nothing
+- **Creates:** nothing (UI state only)
 - **Modifies:** UI state
 - **Verify:** At least 2 rows visible. Screenshot of the panel.
 
-#### S019: Install `openai/plugins` from the local fixture
-- **Action:** Click "+ Add Marketplace", choose "Local directory", browse to `tests/scenarios/fixtures/git/plugins/` (the openai/plugins fixture). Confirm. Then from the plugin list within that marketplace, install one plugin (the fixture's first entry — scenario author's choice, typically the top-level example plugin).
-- **Goal:** Plugin installed into the TEST AGENT's Codex config (local scope, not user-scope — Rule 2 0-IMPACT)
-- **Creates:** Ledger `add_marketplace`; `change_plugin(install)`; plugin files cached under `~/.codex/plugins/cache/...`
-- **Modifies:** Codex config.toml for the test agent's workdir (enable state); `~/.codex/plugins/cache/`
-- **Verify:** Plugin listed as "installed" in the Marketplaces view. Screenshot of the installed state.
+#### S019: Register the `openai/plugins` MARKETPLACE from the local fixture
+- **Action:** Click "+ Add Marketplace" → choose "Local directory" → browse to `tests/scenarios/fixtures/git/openai__plugins/` → Confirm. Enter governance password in the sudo modal.
+- **Goal:** AI Maestro adds a marketplace entry to `~/.agents/plugins/marketplace.json` pointing at the fixture path. Ledger entry `add_marketplace` with `authActor=user`. Codex itself is notified (reload or next start).
+- **Creates:** Ledger entry `add_marketplace`; 1 new entry in `~/.agents/plugins/marketplace.json`
+- **Modifies:** `~/.agents/plugins/marketplace.json`
+- **Verify:** UI lists `openai/plugins` with its bundled plugin list expanded. `jq '.' < ~/.agents/plugins/marketplace.json` shows the new entry; `source.path` equals the absolute fixture path. Screenshot of the row.
 
-#### S020: Install a plugin from `hashgraph-online/awesome-codex-plugins`
-- **Action:** Same as S019 but with fixture path `tests/scenarios/fixtures/git/awesome-codex-plugins/`. Install the first plugin listed in that marketplace.
-- **Goal:** Second plugin installed
-- **Creates:** ledger + plugin files (same shape as S019)
-- **Modifies:** same scope as S019
-- **Verify:** Installed indicator shown. Screenshot.
+#### S020: Install one plugin from the `openai/plugins` marketplace
+- **Action:** Expand the `openai/plugins` row. Pick the first listed plugin (author's choice — typically `figma` or `notion`). Click its "Install" button. Enter governance password in the sudo modal.
+- **Goal:** AI Maestro flips the plugin's enabled flag to true in `~/.codex/config.toml` keyed as `<name>@openai/plugins`. Codex is reloaded. Ledger entry `change_plugin(install)` with `authActor=user`.
+- **Creates:** Ledger entry; new enable entry in `~/.codex/config.toml`
+- **Modifies:** `~/.codex/config.toml`
+- **Verify:** The chosen plugin shows "Installed" in the UI. `grep "@openai/plugins" ~/.codex/config.toml` returns the new line with `enabled=true`. Screenshot.
 
-#### S021: Install `remotion-dev/codex-plugin`
-- **Action:** Same as S019 but fixture path `tests/scenarios/fixtures/git/codex-plugin/` (the remotion-dev repo). Install the single plugin it exposes.
-- **Goal:** Third plugin installed
-- **Creates:** ledger + plugin files
-- **Modifies:** same scope as S019
-- **Verify:** Installed indicator shown. Screenshot.
+#### S021: Register `awesome-codex-plugins` + install one of its plugins
+- **Action:** Repeat the S019-S020 pattern but point at `tests/scenarios/fixtures/git/hashgraph-online__awesome-codex-plugins/`. After the marketplace registers, install the first plugin it lists (author's choice — e.g. `github`, `linear`, or `slack`).
+- **Goal:** Second marketplace registered + a second plugin enabled; 2 more ledger entries (`add_marketplace` + `change_plugin(install)`).
+- **Creates:** 1 entry in marketplace.json, 1 entry in config.toml, 2 ledger entries
+- **Modifies:** `~/.agents/plugins/marketplace.json` + `~/.codex/config.toml`
+- **Verify:** Both files updated; UI shows Installed state. Screenshot.
 
-#### S022: Install `supabase-community/codex-plugin`
-- **Action:** Same as S019 but fixture path `tests/scenarios/fixtures/git/codex-plugin/` — NOTE: this repo name collides with remotion's, so the author must place it under `tests/scenarios/fixtures/git/supabase-codex-plugin/` and document the renamed fixture directory. Install the single plugin it exposes.
-- **Goal:** Fourth plugin installed
-- **Creates:** ledger + plugin files
-- **Modifies:** same scope as S019
-- **Verify:** Installed indicator shown. Screenshot.
+#### S022: Register + install the `remotion-dev/codex-plugin` SINGLE-PLUGIN repo
+- **Action:** Click "+ Add Marketplace" → "Local directory" → `tests/scenarios/fixtures/git/remotion-dev__codex-plugin/` → Confirm. Because this is a single-plugin repo, its own `.codex-plugin/plugin.json` is all AI Maestro needs to expose it as a one-plugin marketplace. Then click Install on the `codex-plugin` entry. Governance password as needed.
+- **Goal:** Plugin enabled in `~/.codex/config.toml` as `codex-plugin@remotion-dev/codex-plugin`. The marketplace portion of the key will disambiguate it from S023's same-name plugin published by a DIFFERENT author.
+- **Creates:** marketplace.json entry + config.toml entry + 2 ledger entries
+- **Modifies:** same two files
+- **Verify:** `grep "codex-plugin@remotion-dev" ~/.codex/config.toml` returns exactly 1 line. Screenshot.
 
-#### S023: Confirm all 4 plugins are listed in the agent's Config → Plugins section
-- **Action:** Back in the agent's Profile → Config tab, scroll to the Plugins section (below Role-Plugin). All 4 freshly-installed plugins are listed with their names + source marketplace.
-- **Goal:** The agent's local-config scan correctly enumerates the 4 newly-installed plugins
+#### S023: Register + install `supabase-community/codex-plugin` (same plugin name, different marketplace)
+- **Action:** Same pattern as S022 but fixture `tests/scenarios/fixtures/git/supabase-community__codex-plugin/`. Both this plugin and the remotion one are named `codex-plugin` — they coexist because they live under DIFFERENT marketplaces. NO rename, NO conflict. This is the key property the scenario proves.
+- **Goal:** Two plugins both named `codex-plugin` installed simultaneously, keyed as `codex-plugin@remotion-dev/codex-plugin` and `codex-plugin@supabase-community/codex-plugin`.
+- **Creates:** marketplace.json entry + config.toml entry + 2 ledger entries
+- **Modifies:** same two files
+- **Verify:** `grep -c "codex-plugin@" ~/.codex/config.toml` returns 2. Both entries visible side-by-side in the UI. Screenshot of the Plugins Explorer showing both rows.
+
+#### S024: Confirm all 4 regular plugins are listed in the agent's Config → Plugins section
+- **Action:** Back in the agent's Profile → Config tab, scroll to the Plugins section. All 4 freshly-installed regular plugins appear with their fully qualified `<name>@<marketplace>` labels; the role-plugin row remains separate above them.
+- **Goal:** The local-config scan correctly enumerates all 4 regular plugins (plus the role-plugin + R17 core plugin).
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** 4 plugins visible with matching names. Screenshot of the Plugins section showing all 4.
+- **Verify:** 4 regular-plugin rows visible with the expected `<name>@<marketplace>` labels; both `codex-plugin@…` rows are distinct. Screenshot.
 
 ---
 
-## Phase 5: Uninstall the 4 normal Codex plugins
+## Phase 5: Uninstall the 4 regular Codex plugins
 
-#### S024: Uninstall plugin 1 (openai/plugins) from the Config tab
-- **Action:** Click the trash icon next to the plugin in the Config → Plugins section. Enter governance password in the sudo modal.
-- **Goal:** Plugin uninstalled via ChangePlugin pipeline
-- **Creates:** Ledger `change_plugin(uninstall)`
-- **Modifies:** Codex config.toml; cache dir
-- **Verify:** Plugin no longer listed in the Plugins section. Screenshot.
-
-#### S025: Uninstall plugin 2 (awesome-codex-plugins)
-- **Action:** Same pattern as S024
-- **Goal:** Plugin 2 uninstalled
+#### S025: Uninstall plugin 1 (`<name>@openai/plugins`) via the Config tab
+- **Action:** In Profile → Config → Plugins section, click the trash icon next to the openai/plugins entry. Enter governance password in the sudo modal.
+- **Goal:** AI Maestro flips the plugin's enable flag to false in `~/.codex/config.toml` (or removes the entry entirely, per the UI's uninstall semantics), Codex is reloaded, `change_plugin(uninstall)` ledger entry is appended with `authActor=user`.
 - **Creates:** Ledger entry
-- **Modifies:** Codex config
-- **Verify:** Plugin no longer listed. Screenshot.
+- **Modifies:** `~/.codex/config.toml`
+- **Verify:** Plugin row no longer appears in the Plugins section. `grep "@openai/plugins" ~/.codex/config.toml` returns 0 lines (or shows enabled=false, depending on UI semantics). Screenshot.
 
-#### S026: Uninstall plugin 3 (remotion-dev/codex-plugin)
-- **Action:** Same pattern as S024
-- **Goal:** Plugin 3 uninstalled
+#### S026: Uninstall plugin 2 (`<name>@hashgraph-online/awesome-codex-plugins`)
+- **Action:** Same pattern as S025
+- **Goal:** Second regular plugin uninstalled
 - **Creates:** Ledger entry
-- **Modifies:** Codex config
-- **Verify:** Plugin no longer listed. Screenshot.
+- **Modifies:** `~/.codex/config.toml`
+- **Verify:** Plugin no longer listed; ledger entry present. Screenshot.
 
-#### S027: Uninstall plugin 4 (supabase-community/codex-plugin)
-- **Action:** Same pattern as S024
-- **Goal:** Plugin 4 uninstalled
+#### S027: Uninstall plugin 3 (`codex-plugin@remotion-dev/codex-plugin`)
+- **Action:** Same pattern as S025. Critically, clicking uninstall here MUST NOT also uninstall the `codex-plugin@supabase-community/codex-plugin` entry — the marketplace portion of the key must uniquely scope the operation.
+- **Goal:** Third plugin uninstalled; the other same-named plugin remains installed
 - **Creates:** Ledger entry
-- **Modifies:** Codex config
-- **Verify:** Plugin no longer listed. Screenshot.
+- **Modifies:** `~/.codex/config.toml`
+- **Verify:** `grep -c "codex-plugin@" ~/.codex/config.toml` returns 1 (only the supabase one remains). Screenshot of the UI showing exactly one `codex-plugin` row still present.
 
-#### S028: Confirm the agent's Plugins section is back to baseline
+#### S028: Uninstall plugin 4 (`codex-plugin@supabase-community/codex-plugin`)
+- **Action:** Same pattern as S025
+- **Goal:** Fourth regular plugin uninstalled
+- **Creates:** Ledger entry
+- **Modifies:** `~/.codex/config.toml`
+- **Verify:** `grep -c "codex-plugin@" ~/.codex/config.toml` returns 0. Screenshot.
+
+#### S029: Confirm the agent's Plugins section is back to baseline
 - **Action:** In Profile → Config → Plugins section, confirm only the R17 core plugin (ai-maestro-plugin, Codex-converted) and the role-plugin remain.
-- **Goal:** No leftover normal plugins from the 4 fixture installs
+- **Goal:** No leftover regular plugins from the 4 fixture installs; only the two AI-Maestro-managed plugins (core + role) stay
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin count matches pre-Phase-4 state. Screenshot.
+- **Verify:** Plugin count matches the pre-Phase-4 state — exactly 2 AI-Maestro-managed plugins visible. Screenshot.
 
 ---
 
 ## Phase CLEANUP: Restore Original State
 
-#### S029: Remove the 4 fixture marketplaces from Settings → Plugins Explorer
-- **Action:** In Settings → Plugins Explorer → Marketplaces tab, click the remove icon next to each of the 4 fixture marketplaces added in Phase 4. Enter the governance password in each sudo modal.
-- **Goal:** Marketplaces unregistered via `DELETE /api/settings/marketplaces`; `remove_marketplace` ledger entries appended
-- **Removes:** 4 marketplace registrations
-- **Verify:** Marketplaces panel shows only pre-test marketplaces. Screenshot.
+#### S030: Remove the 4 fixture marketplaces from Settings → Plugins Explorer
+- **Action:** In Settings → Plugins Explorer → Marketplaces tab, click the remove icon next to each of the 4 marketplaces registered in Phase 4 (openai/plugins, awesome-codex-plugins, remotion-dev/codex-plugin, supabase-community/codex-plugin). Enter the governance password in each sudo modal.
+- **Goal:** Marketplaces unregistered via `DELETE /api/settings/marketplaces`. AI Maestro edits `~/.agents/plugins/marketplace.json` to remove each entry; `remove_marketplace` ledger entries appended with `authActor=user`.
+- **Removes:** 4 marketplace entries from `~/.agents/plugins/marketplace.json`
+- **Verify:** Marketplaces panel shows only pre-test marketplaces. `jq '.marketplaces | length' < ~/.agents/plugins/marketplace.json` equals the pre-test count. Screenshot.
 
-#### S030: Delete the test agent via Profile → Advanced → Danger Zone
+#### S031: Delete the test agent via Profile → Advanced → Danger Zone
 - **Action:** Open Profile → Advanced → Danger Zone → click "Delete Agent". Check "Also delete agent folder". Type the agent name `scen026-codex-plugin-test` in the confirmation field. Click "Delete Forever". Enter governance password in the sudo modal.
-- **Goal:** DeleteAgent pipeline removes registry entry, kills tmux session, deletes `~/agents/scen026-codex-plugin-test/`. Converted Codex role-plugins left in `~/agents/role-plugins/codex-roles-marketplace/` are garbage-collected by the pipeline (or remain as inert emitted artifacts — either is acceptable; they have no `enabled` state anywhere now)
+- **Goal:** DeleteAgent pipeline removes registry entry, kills tmux session, deletes `~/agents/scen026-codex-plugin-test/`. Converted Codex role-plugins left in `~/agents/role-plugins/codex-roles-marketplace/` are garbage-collected by the pipeline (or remain as inert emitted artifacts — either is acceptable; they have no `enabled` state anywhere now).
 - **Removes:** agent registry entry, workdir, tmux session
 - **Verify:** Sidebar no longer lists the agent. `GET /api/agents/<id>` returns 404. `ls ~/agents/scen026-codex-plugin-test/` returns ENOENT. Screenshot of the sidebar with the agent gone.
 
-#### S031: Purge cemetery entry
+#### S032: Purge cemetery entry
 - **Action:** Settings → Cemetery tab → find the `scen026-codex-plugin-test` entry → click "Purge". Enter governance password in the sudo modal.
 - **Goal:** Cemetery cleared of this test agent
 - **Removes:** cemetery entry
 - **Verify:** Cemetery tab no longer lists the agent. Screenshot.
 
-#### S032: STATE-WIPE — restore configuration files
-- **Action:** Run `tests/scenarios/scripts/cleanup-SCEN-026.sh`. The script delegates to `scenario-restore.sh 26`, which compares current `rewipe-list` files with their backups and restores any that differ.
-- **Goal:** `governance.json`, `agents/registry.json`, `teams/teams.json`, `teams/groups.json` all match their pre-test SHA256
-- **Removes:** nothing (file contents restored if they drifted; usually the UI delete in S030 + marketplace removals in S029 already restored them)
+#### S033: STATE-WIPE — restore configuration files
+- **Action:** Run `tests/scenarios/scripts/cleanup-SCEN-026.sh`. The script delegates to `scenario-restore.sh 26`, which compares every `rewipe-list` file against its backup SHA256 and restores any that differ.
+- **Goal:** `governance.json`, `agents/registry.json`, `teams/teams.json`, `teams/groups.json`, `~/.agents/plugins/marketplace.json`, `~/.codex/config.toml` all match their pre-test SHA256. Belt-and-braces after the UI-driven cleanup in S025-S030.
+- **Removes:** nothing (file contents restored if they drifted)
 - **Verify:** `scenario-restore.sh` exits 0 after MANIFEST verification. Screenshot of the script's last line.
 
-#### S033: Post-test screenshot
+#### S034: Post-test screenshot
 - **Action:** Navigate back to the dashboard root. Capture a full-page screenshot.
 - **Goal:** UI matches Phase 0 baseline (Rule 1 CLEAN-AFTER-YOURSELF)
 - **Creates:** nothing

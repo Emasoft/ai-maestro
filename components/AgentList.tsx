@@ -35,6 +35,7 @@ import AgentCreationWizard from './AgentCreationWizard'
 import WakeAgentDialog from './WakeAgentDialog'
 import { useHosts } from '@/hooks/useHosts'
 import { useSessionActivity, type SessionActivityStatus } from '@/hooks/useSessionActivity'
+import { useClientAvailability } from '@/hooks/useClientAvailability'
 import { SubconsciousStatus } from './SubconsciousStatus'
 import AgentBadge from './AgentBadge'
 import SidebarViewSwitcher, { type SidebarView } from './sidebar/SidebarViewSwitcher'
@@ -219,6 +220,18 @@ export default function AgentList({
    * registered yet (first run); the page-level bootstrap useEffect
    * resolves that case via the creation-helper/session API.
    */
+  // User directive 2026-04-20: "haephestos will never show on systems
+  // where no claude code is installed". Haephestos orchestrates plugin
+  // creation by spawning a real `claude` process, so the card is dead
+  // code on a host without Claude Code on PATH. We treat `loading` and
+  // error states as "show it" (fail-open) because the more-common bug
+  // direction is a broken probe rendering users' real Haephestos
+  // invisible — vs an unwanted card briefly appearing.
+  const claudeProbe = useClientAvailability('claude')
+  const haephestosVisible = claudeProbe.loading || claudeProbe.error !== null
+    ? true
+    : claudeProbe.data?.available === true
+
   const handleHaephestosClick = () => {
     const haephestos = agents.find(a => a.name === '_aim-creation-helper')
     if (haephestos) {
@@ -939,9 +952,12 @@ export default function AgentList({
           <div className="p-3 space-y-3">
             {/* WT-004#3: permanent HELPERS section pinned to the top of the
                 sidebar. The Haephestos card is NOT a real agent — it's a
-                shortcut to the embedded role-plugin creation helper. Always
-                visible regardless of viewMode filter so users can always
-                find the forge. */}
+                shortcut to the embedded role-plugin creation helper. Shown
+                whenever Claude Code is installed on the server (user
+                directive 2026-04-20: never render this card on a host
+                without `claude` on PATH, because Haephestos orchestrates
+                plugin creation by spawning a real `claude` process). */}
+            {haephestosVisible && (
             <div className="rounded-lg overflow-hidden border border-purple-500/30 bg-purple-500/5">
               <div className="px-3 py-1.5 text-[9px] font-semibold tracking-wider text-purple-400 uppercase border-b border-purple-500/20">
                 HELPERS
@@ -961,6 +977,7 @@ export default function AgentList({
                 </div>
               </button>
             </div>
+            )}
 
             {Object.entries(teamGroupedAgents)
               .sort(([a], [b]) => {
@@ -1061,13 +1078,10 @@ export default function AgentList({
         ) : (
           /* Compact View — grouped by closed team */
           <div className="py-2">
-            {/* WT-004#3 follow-up: compact HELPERS section. In compact mode
-                the sidebar is narrow (< 480px), so the Haephestos card is
-                reduced to an icon-only variant that still clicks through to
-                the embedded role-plugin forge. We keep the purple branding
-                and the HELPERS group label so users always know where the
-                card lives, even when the agent cards below have collapsed
-                to their compact layout. */}
+            {/* WT-004#3 follow-up: compact HELPERS section. Same
+                claude-installed gate as the normal variant — on a host
+                without Claude Code on PATH the card is hidden entirely. */}
+            {haephestosVisible && (
             <div className="mx-1 mb-1 rounded-lg overflow-hidden border border-purple-500/30 bg-purple-500/5">
               <div className="px-3 py-1 text-[9px] font-semibold tracking-wider text-purple-400 uppercase border-b border-purple-500/20">
                 HELPERS
@@ -1084,6 +1098,7 @@ export default function AgentList({
                 </div>
               </button>
             </div>
+            )}
 
             {Object.entries(teamGroupedAgents)
               .sort(([a], [b]) => {

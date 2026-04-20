@@ -55,6 +55,53 @@ cd ~/agents/haephestos/toml && "$PSS_BIN" --agent ~/agents/haephestos/uploads/ag
 
 This generates `<role-name>.agent.toml` in `~/agents/haephestos/toml/`. The TOML viewer in the UI auto-updates every 5 seconds.
 
+**Fallback when PSS is unavailable or errors (proposal 19, 2026-04-20).** If `$PSS_BIN` is empty (binary not cached), the PSS command exits non-zero, or the expected `.agent.toml` never appears in `~/agents/haephestos/toml/` after the run, do NOT abort the session. Instead, hand-craft a minimal starter TOML and tell the user PSS was unavailable so they know the skill list is a conservative default instead of a tailored recommendation. Write this verbatim to `~/agents/haephestos/toml/<role-name>.agent.toml` (kebab-case role slug):
+
+```toml
+[agent]
+name = "<role-name>"
+description = "<role description from Step 1>"
+version = "0.1.0"
+# compatible-titles and compatible-clients are added in Step 6
+
+[agent.role]
+type = "<role type — e.g. programmer, architect, orchestrator>"
+prefix = "<3-5 char kebab prefix>"
+governance = "team-scoped"
+
+[description]
+text = "<1-2 sentence role description>"
+
+[dependencies]
+plugins = ["ai-maestro", "llm-externalizer", "perfect-skill-suggester", "claude-plugins-validation"]
+skills = ["agent-messaging", "team-governance"]
+
+[skills]
+primary = []
+secondary = []
+specialized = []
+
+[agents]
+recommended = []
+
+[commands]
+recommended = []
+
+[rules]
+recommended = []
+
+[hooks]
+recommended = []
+
+[mcp]
+recommended = []
+
+[output_styles]
+recommended = []
+```
+
+Announce the fallback clearly in the chat: "PSS binary is unavailable — I wrote a minimal starter TOML instead. We'll fill in the skill lists manually in Step 3." Then proceed to Step 3 with the user curating elements by hand. Do NOT silently retry PSS more than once, and do NOT try to substitute a different LLM for element selection — the user must know they are in fallback mode.
+
 ### Step 3: Prune and Refine
 
 Examine the generated TOML. For each element (skill, agent, command, hook, mcp, rule), use the element-description API to understand what it does:

@@ -20,6 +20,8 @@ import {
   ChevronRight,
   RefreshCw,
   Lock,
+  MoreVertical,
+  Trash2,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useAgentLocalConfig } from '@/hooks/useAgentLocalConfig'
@@ -119,6 +121,24 @@ export default function AgentProfilePanel({
   const [activeTab, setActiveTab] = useState<TabId>('role')
   const [browsePath, setBrowsePath] = useState<string | null>(null)
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  // Proposal 13 (2026-04-20): header "Agent Actions" dropdown. Consolidates
+  // the Delete-Agent shortcut so the user doesn't have to switch to
+  // Advanced → scroll → Danger Zone on every destructive operation.
+  // The dropdown does NOT bypass the confirmation dialog or the sudo-mode
+  // token — it just navigates there in one click.
+  const [actionsOpen, setActionsOpen] = useState(false)
+  const [actionsScrollSignal, setActionsScrollSignal] = useState(0)
+  const actionsMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!actionsOpen) return
+    const onDocClick = (e: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target as Node)) {
+        setActionsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [actionsOpen])
 
   // Role Plugin modal state
   const [showRolePluginModal, setShowRolePluginModal] = useState(false)
@@ -280,6 +300,49 @@ export default function AgentProfilePanel({
             {agentName || 'Profile'}
           </h2>
         </div>
+        {/* Proposal 13 (2026-04-20): Agent Actions dropdown. Shortcut to
+            Advanced → Danger Zone so users don't have to hunt through the
+            tab nav every time they want to delete an agent. Does NOT skip
+            the DeleteAgentDialog confirmation or the sudo-mode token
+            requirement — it just opens the Advanced tab and auto-scrolls
+            to the Danger Zone block. */}
+        {onDeleteAgent && (
+          <div className="relative flex-shrink-0" ref={actionsMenuRef}>
+            <button
+              type="button"
+              onClick={() => setActionsOpen(v => !v)}
+              className="p-1 rounded-md cursor-pointer hover:bg-gray-700/60 transition-colors"
+              title="Agent actions"
+              aria-label="Open agent actions menu"
+              aria-haspopup="menu"
+              aria-expanded={actionsOpen}
+            >
+              <MoreVertical className="w-4 h-4 text-gray-500 hover:text-gray-300" />
+            </button>
+            {actionsOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full mt-1 w-52 rounded-md border border-gray-700 bg-gray-900 shadow-xl z-20"
+              >
+                <button
+                  role="menuitem"
+                  type="button"
+                  onClick={() => {
+                    setActionsOpen(false)
+                    setTopTab('advanced')
+                    // Bump the signal so the Advanced tab scrolls to
+                    // Danger Zone even if the parent prop didn't change.
+                    setActionsScrollSignal(s => s + 1)
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-300 hover:bg-red-900/30 hover:text-red-200 rounded-md text-left"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete Agent…
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         {onClose && (
           <div
             onClick={onClose}
@@ -514,7 +577,9 @@ export default function AgentProfilePanel({
             sessionStatus={sessionStatus}
             onStartSession={onStartSession}
             onDeleteAgent={onDeleteAgent}
-            scrollToDangerZone={scrollToDangerZone}
+            // Proposal 13: parent's scrollToDangerZone OR the local signal
+            // from the Agent Actions dropdown both trigger the auto-scroll.
+            scrollToDangerZone={scrollToDangerZone || actionsScrollSignal > 0}
             hostUrl={hostUrl}
             onDataChanged={refetch}
           />

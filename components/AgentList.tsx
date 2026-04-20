@@ -198,6 +198,15 @@ export default function AgentList({
   // Drag-and-drop state
   const [draggedAgent, setDraggedAgent] = useState<Agent | null>(null)
 
+  /**
+   * Proposal 30 (2026-04-20): the HELPERS Haephestos card is rendered in
+   * two places (normal sidebar + compact sidebar). Previously both had
+   * inline `() => { window.location.href = '/?agent=haephestos' }`
+   * duplicated. Extracted here so a future fix (e.g. proposal 18
+   * navigation race, or 0.D `which claude` gate) only touches one site.
+   */
+  const handleHaephestosClick = () => { window.location.href = '/?agent=haephestos' }
+
   // Host management
   const [staleHostPopup, setStaleHostPopup] = useState<{ id: string; name: string; error: string } | null>(null)
   const { hosts } = useHosts()
@@ -912,7 +921,7 @@ export default function AgentList({
               </div>
               <button
                 type="button"
-                onClick={() => { window.location.href = '/?agent=haephestos' }}
+                onClick={handleHaephestosClick}
                 className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-purple-500/10 transition-colors text-left"
                 title="Create a new role-plugin with Haephestos"
               >
@@ -1038,7 +1047,7 @@ export default function AgentList({
               </div>
               <button
                 type="button"
-                onClick={() => { window.location.href = '/?agent=haephestos' }}
+                onClick={handleHaephestosClick}
                 className="w-full flex items-center justify-center px-3 py-2 hover:bg-purple-500/10 transition-colors"
                 title="Haephestos — Create a role-plugin"
                 aria-label="Haephestos — Create a role-plugin"

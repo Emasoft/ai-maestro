@@ -99,7 +99,10 @@ async function fetchHostAgents(host: Host): Promise<HostFetchResult> {
       }
     }
   } catch (error) {
-    console.error(`[useAgents] Failed to fetch from ${host.name} (${host.url}):`, error)
+    // Proposal 29 (2026-04-20): log the actual URL used (same-origin
+    // when isSelf, peer host otherwise) so operators aren't misled by
+    // a Tailscale-looking URL string that wasn't the real target.
+    console.error(`[useAgents] Failed to fetch from ${host.name} (${baseUrl || 'same-origin'}):`, error)
 
     // Try to use cached data for peer hosts (not self)
     if (!isSelf) {

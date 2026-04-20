@@ -252,7 +252,19 @@ Repeat the fix-validate cycle until the report shows 0 CRITICAL, 0 MAJOR, and 0 
 
 ### Step 8: Publish
 
-When the plugin passes validation, publish it via the API:
+When the plugin passes validation, publish it.
+
+**Preferred (proposal 22, 2026-04-20):** the `ai-maestro` plugin ships a
+slash command that wraps the publish API with nicer error messages and
+idempotent retries:
+
+```
+/aim-publish-plugin $OUTPUT_DIR
+```
+
+If `/aim-publish-plugin` is not available in this session (older
+`ai-maestro` plugin version, or the plugin was uninstalled), fall back
+to the raw API call:
 
 ```bash
 curl -s -X POST http://localhost:23000/api/agents/creation-helper/publish-plugin \
@@ -260,7 +272,11 @@ curl -s -X POST http://localhost:23000/api/agents/creation-helper/publish-plugin
   -d "$(jq -n --arg pd "$OUTPUT_DIR" '{pluginDir: $pd}')"
 ```
 
-If the API returns errors, fix the issues and retry.
+Either path publishes to the local role-plugins marketplace and runs
+`claude plugin marketplace update ai-maestro-local-roles-marketplace` so
+Claude Code picks the new plugin up immediately.
+
+If the API (or the slash command) returns errors, fix the issues and retry.
 
 On success, write the completion signal:
 ```bash

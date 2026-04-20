@@ -302,7 +302,7 @@ html.is-touch .overflow-auto {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Notification toast entrance animation (used by SkillsSection, AgentsSection, CommandsSection) */
+/* Notification toast entrance animation (used by settings/SkillsSection, AgentsSection, CommandsSection) */
 @keyframes slideInFromRight {
   from {
     transform: translateX(100%);

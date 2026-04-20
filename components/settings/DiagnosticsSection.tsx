@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, RefreshCw, ShieldAlert } from 'lucide-react'
+import { Activity, AlertTriangle, CheckCircle2, RefreshCw, ShieldAlert } from 'lucide-react'
 
 interface PerLedgerReport {
   label: string
@@ -35,6 +35,17 @@ interface RoleMissingAgent {
   boot: boolean
 }
 
+interface ConfigTrackerAgentSummary {
+  agentId: string
+  agentName: string
+  isRunning: boolean
+  lastScanAt: number | null
+  intervalMs: number
+  driftCountSinceStart: number
+  lastDriftAt: number | null
+  lastDriftPaths: string[]
+}
+
 interface LedgerHealthResponse {
   ok: boolean
   readOnlyMode: boolean
@@ -46,6 +57,11 @@ interface LedgerHealthResponse {
     runtime: number
     atBoot: number
     recent: RoleMissingAgent[]
+  }
+  configTracker?: {
+    totalDrifts: number
+    trackedAgents: number
+    agents: ConfigTrackerAgentSummary[]
   }
 }
 
@@ -226,6 +242,64 @@ export default function DiagnosticsSection() {
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+      )}
+
+      {/* #243 (TRDD-7123d51a §3.4): Subconscious config-change tracker.
+          Each agent's subconscious scans its .claude/ every 30s and
+          appends ledger entries for changes the API didn't record
+          (plugin installs done via the agent's own Claude Code session,
+          skill edits made by hand, etc.). This card surfaces the agents
+          with the highest recent drift so operators can investigate
+          unexpected client-internal mutations. Clicking an agent
+          deep-links to the Config tab where every installed element is
+          visible. */}
+      {report?.configTracker && report.configTracker.trackedAgents > 0 && (
+        <div className="border border-indigo-600/30 rounded-lg p-3 bg-indigo-500/5">
+          <div className="flex items-start gap-2 mb-2">
+            <Activity className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold text-indigo-200">
+                Config change tracker
+              </p>
+              <p className="text-[10px] text-indigo-300/70">
+                {report.configTracker.trackedAgents} tracked · total drifts since start: <strong>{report.configTracker.totalDrifts}</strong>
+              </p>
+            </div>
+          </div>
+          {report.configTracker.agents.length > 0 ? (
+            <ul className="space-y-1 text-[10px] text-gray-400">
+              {report.configTracker.agents.map(a => (
+                <li key={a.agentId} className="flex items-center gap-2">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${a.isRunning ? 'bg-emerald-500' : 'bg-gray-500'}`} />
+                  <a
+                    href={`/?agent=${encodeURIComponent(a.agentId)}&tab=config`}
+                    className="font-mono text-gray-300 hover:text-indigo-300"
+                    title={`${a.agentName} — open Config tab`}
+                  >
+                    {a.agentName}
+                  </a>
+                  <span className="text-gray-500" title="Drifts since subconscious start">
+                    {a.driftCountSinceStart} drift{a.driftCountSinceStart === 1 ? '' : 's'}
+                  </span>
+                  {a.lastDriftAt && (
+                    <span className="text-gray-600">
+                      · last: {new Date(a.lastDriftAt).toLocaleTimeString()}
+                    </span>
+                  )}
+                  {a.lastDriftPaths.length > 0 && (
+                    <span className="text-gray-500 truncate" title={a.lastDriftPaths.join(', ')}>
+                      · {a.lastDriftPaths.slice(0, 3).join(', ')}{a.lastDriftPaths.length > 3 ? '…' : ''}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[10px] text-gray-500">
+              No drift detected on any agent. Tracker is running in baseline-only mode.
+            </p>
           )}
         </div>
       )}

@@ -25,11 +25,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import fs from 'fs'
 import path from 'path'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { SignedLedger } from '@/lib/signed-ledger'
 import { getStateDir } from '@/lib/ecosystem-constants'
 import { isReadOnlyMode, getTamperDetails, verifyAllLedgers } from '@/lib/ledger-startup'
+import { loadAgents } from '@/lib/agent-registry'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +52,27 @@ interface RoleMissingAgent {
   boot: boolean                // true if event was 'hibernate_role_missing_at_boot'
 }
 
+/**
+ * #243 (TRDD-7123d51a §3.4 / derived task 0.C-#243).
+ *
+ * Per-agent config-tracker snapshot pulled from the agent's
+ * status.json (`~/.aimaestro/agents/<uuid>/status.json`). The
+ * tracker writes this sub-object every 30s by default. We surface
+ * the top-N drifted agents so operators can spot out-of-band
+ * client-internal mutations (plugin install/uninstall, skill edit,
+ * etc.) without tailing the ledger themselves.
+ */
+interface ConfigTrackerAgentSummary {
+  agentId: string
+  agentName: string             // Best-available display name (label || name || id)
+  isRunning: boolean            // Is the subconscious currently running?
+  lastScanAt: number | null     // Epoch ms of last scan attempt
+  intervalMs: number            // Tracker cadence (0 = disabled)
+  driftCountSinceStart: number  // Cumulative count since agent.start()
+  lastDriftAt: number | null    // Epoch ms of last drift emit
+  lastDriftPaths: string[]      // Sub-tree names that drifted on the last tick
+}
+
 interface LedgerHealthResponse {
   ok: boolean                  // true iff EVERY ledger verified cleanly
   readOnlyMode: boolean        // current isReadOnlyMode() state
@@ -66,6 +89,15 @@ interface LedgerHealthResponse {
     runtime: number   // hibernate_role_missing events (user or pipeline triggered)
     atBoot: number    // hibernate_role_missing_at_boot events (startup scan)
     recent: RoleMissingAgent[]  // newest 10 for the Diagnostics panel
+  }
+  // Phase 0.C-derived (#243): subconscious config-change tracker rollup.
+  // Only agents with a non-zero drift count OR a recent (last 10 min)
+  // scan are returned, capped at 20 entries sorted by driftCountSinceStart
+  // DESC. Empty array when no agent has run the tracker yet.
+  configTracker: {
+    totalDrifts: number
+    trackedAgents: number
+    agents: ConfigTrackerAgentSummary[]
   }
 }
 
@@ -174,6 +206,76 @@ export async function GET(request: NextRequest) {
     } catch { /* non-fatal — keep zeroes */ }
   }
 
+  // Phase 0.C-derived (#243): aggregate config-tracker status across all
+  // active agents. Each agent's subconscious writes its tracker state to
+  // `~/.aimaestro/agents/<uuid>/status.json`; the Diagnostics panel needs
+  // a cross-agent roll-up so operators can see which agents had recent
+  // drift. Iterating all agents is cheap — status.json is < 1KB per agent
+  // and the endpoint is already O(N_entries) for ledger verify.
+  const configTracker = (() => {
+    const allAgents = loadAgents().filter(a => !a.deletedAt)
+    const summaries: ConfigTrackerAgentSummary[] = []
+    let totalDrifts = 0
+    let tracked = 0
+    const tenMinutesAgo = Date.now() - 10 * 60 * 1000
+
+    for (const agent of allAgents) {
+      const statusPath = path.join(stateDir, 'agents', agent.id, 'status.json')
+      if (!fs.existsSync(statusPath)) continue
+      try {
+        const raw = fs.readFileSync(statusPath, 'utf-8')
+        const parsed: {
+          isRunning?: boolean
+          configTracker?: {
+            intervalMs?: number
+            lastScanAt?: number | null
+            driftCountSinceStart?: number
+            lastDriftAt?: number | null
+            lastDriftPaths?: string[]
+          } | null
+        } = JSON.parse(raw)
+        const ct = parsed.configTracker
+        if (!ct) continue
+        tracked++
+        totalDrifts += ct.driftCountSinceStart ?? 0
+
+        // Skip agents that are idle AND haven't drifted recently — they add
+        // noise to the panel without carrying signal. Keeps the list to
+        // "things an operator might want to investigate".
+        const recentScan = ct.lastScanAt && ct.lastScanAt > tenMinutesAgo
+        if ((ct.driftCountSinceStart ?? 0) === 0 && !recentScan) continue
+
+        summaries.push({
+          agentId: agent.id,
+          agentName: agent.label || agent.name || agent.id,
+          isRunning: parsed.isRunning === true,
+          lastScanAt: ct.lastScanAt ?? null,
+          intervalMs: ct.intervalMs ?? 0,
+          driftCountSinceStart: ct.driftCountSinceStart ?? 0,
+          lastDriftAt: ct.lastDriftAt ?? null,
+          lastDriftPaths: Array.isArray(ct.lastDriftPaths) ? ct.lastDriftPaths : [],
+        })
+      } catch {
+        // Ignore unreadable/invalid status files — they don't affect the
+        // overall ledger-health verdict. The file may be mid-write.
+      }
+    }
+
+    // Sort by drift count DESC, then lastScanAt DESC. Cap at 20.
+    summaries.sort((a, b) => {
+      if (b.driftCountSinceStart !== a.driftCountSinceStart) {
+        return b.driftCountSinceStart - a.driftCountSinceStart
+      }
+      return (b.lastScanAt ?? 0) - (a.lastScanAt ?? 0)
+    })
+
+    return {
+      totalDrifts,
+      trackedAgents: tracked,
+      agents: summaries.slice(0, 20),
+    }
+  })()
+
   const response: LedgerHealthResponse = {
     ok,
     readOnlyMode: isReadOnlyMode(),
@@ -181,6 +283,7 @@ export async function GET(request: NextRequest) {
     details,
     checkedAt: new Date().toISOString(),
     roleMissingHibernations,
+    configTracker,
   }
 
   // If any ledger failed verify, also echo the cached startup tamper details

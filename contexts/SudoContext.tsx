@@ -23,8 +23,15 @@
  * Or let `sudoFetch` (lib/sudo-fetch.ts) handle the retry loop for you.
  */
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
+import { usePathname } from 'next/navigation'
 import { Lock, X, AlertCircle, Loader2 } from 'lucide-react'
+
+// Proposal 32 (2026-04-20): auto-cancel window. If the user opens the
+// sudo modal, walks away, and the timer expires, the modal closes so
+// a subsequent click isn't silently intercepted. Matches the 60s
+// server-side token TTL + 60s grace.
+const SUDO_MODAL_TIMEOUT_MS = 120_000
 
 interface SudoContextValue {
   /**
@@ -64,6 +71,30 @@ export function SudoProvider({ children }: { children: ReactNode }) {
     setPassword('')
     setError(null)
   }, [resolver])
+
+  // Proposal 32 (2026-04-20): dismiss the sudo modal on:
+  //   (a) Next.js pathname change (user navigated away without interacting).
+  //   (b) 120-second inactivity (server token TTL is 60s; grace for keystrokes).
+  // Without these the modal lingers as a global portal and intercepts
+  // subsequent clicks, confusing users.
+  const pathname = usePathname()
+  const lastPathnameRef = useRef<string | null>(pathname)
+  useEffect(() => {
+    if (!resolver) {
+      lastPathnameRef.current = pathname
+      return
+    }
+    if (lastPathnameRef.current !== pathname) {
+      lastPathnameRef.current = pathname
+      cancel()
+    }
+  }, [pathname, resolver, cancel])
+
+  useEffect(() => {
+    if (!resolver) return
+    const timer = setTimeout(cancel, SUDO_MODAL_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [resolver, cancel])
 
   const submit = useCallback(async () => {
     if (!resolver || !password || submitting) return

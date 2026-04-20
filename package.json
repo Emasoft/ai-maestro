@@ -41,7 +41,8 @@
     "container:lint": "podman run --rm ai-maestro-dev yarn lint",
     "container:build-app": "podman run --rm ai-maestro-dev sh -c 'rm -rf .next && yarn build'",
     "container:shell": "podman run --rm -it ai-maestro-dev bash",
-    "container:ci": "podman run --rm ai-maestro-dev sh -c 'yarn test && yarn lint && npx tsc --noEmit && rm -rf .next && yarn build'"
+    "container:ci": "podman run --rm ai-maestro-dev sh -c 'yarn test && yarn lint && npx tsc --noEmit && rm -rf .next && yarn build'",
+    "build:jsonl-reader": "bash scripts/build-jsonl-reader.sh"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",

@@ -461,6 +461,34 @@ export default function AgentProfilePanel({
             </div>
           )}
 
+          {/* TRDD-c7a81642 (R9.13 extension, 2026-04-20): roleMissing banner.
+              Agents in this state are hibernated and /wake refuses them until
+              a compatible role-plugin is assigned. The Assign button reuses
+              the existing RolePluginModal which already filters options by
+              (governanceTitle, client). After a successful install, the
+              ChangePlugin pipeline clears roleMissing via the usual PG04
+              flow (compatibleSurvived branch), and the banner disappears on
+              the next refetch. */}
+          {agentInfo?.roleMissing && (
+            <div className="flex items-start gap-2 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30">
+              <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-amber-200">This agent has no role-plugin installed.</p>
+                <p className="text-[10px] text-amber-300/80 mt-0.5">
+                  Wake is disabled until you assign one. Pick a role-plugin
+                  compatible with the agent&rsquo;s title and client below.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowRolePluginModal(true)}
+                  className="mt-2 px-2.5 py-1 text-[11px] font-medium rounded bg-amber-600 hover:bg-amber-500 text-white"
+                >
+                  Assign role-plugin…
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Folder browser mode — replaces tab grid + tab content */}
           {browsePath && (
             <FolderBrowser

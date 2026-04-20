@@ -28,6 +28,11 @@ export interface AgentInfo {
   model?: string
   programArgs?: string
   tags?: string[]
+  // TRDD-c7a81642 (R9.13 extension, 2026-04-20): forwarded from the agent
+  // registry record. When true, the agent has no role-plugin installed and
+  // cannot be awakened until the Profile → Config tab assigns one. Surfaced
+  // as a prominent amber banner in the Config tab.
+  roleMissing?: boolean
 }
 
 export interface AvailableRolePlugin {

@@ -988,6 +988,9 @@ export default function DashboardPage() {
                           title: (agent.governanceTitle || agent.role) as AgentRole | undefined,
                           program: agent.program,
                           tags: agent.tags,
+                          // TRDD-c7a81642: forward the R9.13 invariant flag so
+                          // the Config tab can render the recovery banner.
+                          roleMissing: agent.roleMissing,
                         }}
                         onClose={toggleProfilePanel}
                         onAgentDataChanged={refreshAgents}

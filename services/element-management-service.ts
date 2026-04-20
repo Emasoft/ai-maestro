@@ -847,9 +847,18 @@ export async function InstallElement(
     // agent). Call ChangeTitle to reinstall the default plugin for their
     // title. AUTONOMOUS now maps to ai-maestro-autonomous-agent, so the
     // repair path is identical to every other title.
+    //
+    // TRDD-c7a81642 extension (2026-04-20): when both the fallback scan
+    // AND the default-plugin reinstall fail, the agent is persisted
+    // with NO role-plugin. That violates R9.13 and the agent must be
+    // simultaneously hibernated with `roleMissing=true`. Wake attempts
+    // will then return 409 role_plugin_required until the Profile
+    // Config tab assigns a plugin. A `hibernate_role_missing` ledger op
+    // is emitted so state-restore can replay and the Diagnostics panel
+    // can count auto-hibernations.
     if (desired.agentId && action === 'uninstall' && isRolePlugin && result.success) {
       try {
-        const { getAgent: getAgentPG04 } = await import('@/lib/agent-registry')
+        const { getAgent: getAgentPG04, updateAgent: updateAgentPG04 } = await import('@/lib/agent-registry')
         const agentPG04 = getAgentPG04(desired.agentId)
         const title = (agentPG04?.governanceTitle || 'autonomous').toLowerCase()
         const defaultPlugin = TITLE_PLUGIN_MAP[title]
@@ -857,24 +866,73 @@ export async function InstallElement(
         // on behalf of an R9.13 recovery, NOT a user action. isSystemOwner is the
         // honest authContext here — no external principal is making this request.
         const pg04AuthContext: AuthContext = { isSystemOwner: true as const }
-        if (defaultPlugin && defaultPlugin !== name) {
-          ops.push(`PG04: R9.13 violation — agent has title "${title}" but lost role-plugin "${name}". Reinstalling default "${defaultPlugin}" via ChangeTitle.`)
-          // ChangeTitle handles the full role-plugin install pipeline
-          const titleResult = await ChangeTitle(desired.agentId, title, { authContext: pg04AuthContext })
-          if (titleResult.success) {
-            ops.push(`PG04: ChangeTitle restored default plugin "${defaultPlugin}" (${titleResult.operations.length} sub-gates)`)
-          } else {
-            ops.push(`PG04: WARN — ChangeTitle failed: ${titleResult.error}`)
+
+        // Check if ANY compatible role-plugin still remains installed
+        // before attempting a fresh install. If so, PG04 is a no-op.
+        let compatibleSurvived = false
+        try {
+          const { scanAgentLocalConfig } = await import('@/services/agent-local-config-service')
+          const cfgResult = scanAgentLocalConfig(desired.agentId)
+          const cfg = cfgResult.data
+          if (cfg?.rolePlugin?.name) {
+            compatibleSurvived = true
+            ops.push(`PG04: compatible role-plugin "${cfg.rolePlugin.name}" still installed — no repair needed`)
           }
-        } else if (defaultPlugin === name) {
-          // The uninstalled plugin WAS the default — reinstall it in place
-          ops.push(`PG04: Uninstalled the default plugin for title "${title}" — reinstalling via ChangeTitle`)
-          const titleResult = await ChangeTitle(desired.agentId, title, { authContext: pg04AuthContext })
-          ops.push(titleResult.success
-            ? `PG04: Default plugin "${defaultPlugin}" reinstalled`
-            : `PG04: WARN — Reinstall failed: ${titleResult.error}`)
-        } else {
-          ops.push(`PG04: No default plugin mapping for title "${title}" — skipped`)
+        } catch (scanErr) {
+          ops.push(`PG04: WARN — scanAgentLocalConfig failed: ${scanErr instanceof Error ? scanErr.message : scanErr}`)
+        }
+
+        let repairSucceeded = compatibleSurvived
+        if (!compatibleSurvived) {
+          if (defaultPlugin && defaultPlugin !== name) {
+            ops.push(`PG04: R9.13 violation — agent has title "${title}" but lost role-plugin "${name}". Reinstalling default "${defaultPlugin}" via ChangeTitle.`)
+            const titleResult = await ChangeTitle(desired.agentId, title, { authContext: pg04AuthContext })
+            repairSucceeded = titleResult.success
+            ops.push(repairSucceeded
+              ? `PG04: ChangeTitle restored default plugin "${defaultPlugin}" (${titleResult.operations.length} sub-gates)`
+              : `PG04: ChangeTitle failed: ${titleResult.error}`)
+          } else if (defaultPlugin === name) {
+            ops.push(`PG04: Uninstalled the default plugin for title "${title}" — reinstalling via ChangeTitle`)
+            const titleResult = await ChangeTitle(desired.agentId, title, { authContext: pg04AuthContext })
+            repairSucceeded = titleResult.success
+            ops.push(repairSucceeded
+              ? `PG04: Default plugin "${defaultPlugin}" reinstalled`
+              : `PG04: Reinstall failed: ${titleResult.error}`)
+          } else {
+            ops.push(`PG04: No default plugin mapping for title "${title}" — skipped`)
+          }
+        }
+
+        // TRDD-c7a81642: if repair didn't succeed AND no compatible plugin
+        // survived, the agent is now in R9.13 violation. Set roleMissing +
+        // hibernate so `/wake` refuses until the Config tab assigns one.
+        if (!repairSucceeded) {
+          try {
+            await updateAgentPG04(desired.agentId, { roleMissing: true })
+            ops.push(`PG04: set roleMissing=true (R9.13-extension)`)
+            // Fire-and-forget hibernate via the canonical pipeline so
+            // the tmux session is killed and session status flipped to
+            // offline. Authorization reuses the system-owner context.
+            const { hibernateAgent } = await import('@/services/agents-core-service')
+            const hibResult = await hibernateAgent(desired.agentId, {
+              sessionIndex: 0,
+              authContext: pg04AuthContext,
+            })
+            ops.push(hibResult?.data?.success
+              ? `PG04: auto-hibernated agent (reason: role_plugin_missing)`
+              : `PG04: WARN — hibernate after roleMissing set: ${hibResult?.error ?? 'unknown'}`)
+            // Ledger-emit: record the governance-class event so the
+            // Diagnostics panel / state-restore tool can count it.
+            await tryEmitLedgerOp(
+              'hibernate_role_missing',
+              [{ op: 'replace', path: `/agents/${desired.agentId}/roleMissing`, value: true }],
+              pg04AuthContext,
+              'pg04-hibernate-role-missing',
+              ops,
+            )
+          } catch (hibErr) {
+            ops.push(`PG04: WARN — roleMissing/hibernate path failed: ${hibErr instanceof Error ? hibErr.message : hibErr}`)
+          }
         }
       } catch (pg04Err) {
         ops.push(`PG04: WARN — Title-plugin repair failed: ${pg04Err instanceof Error ? pg04Err.message : pg04Err}`)

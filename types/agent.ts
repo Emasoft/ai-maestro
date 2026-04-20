@@ -273,6 +273,17 @@ export interface Agent {
   // Required when governanceTitle === 'maintainer'. Immutable once set.
   githubRepo?: string             // Format: 'owner/repo'. One MAINTAINER per repo per host.
 
+  // TRDD-c7a81642 (2026-04-20) — Universal role-plugin-or-hibernate invariant
+  // extension of R9.13. True iff the agent is currently persisted with NO
+  // role-plugin (default is absent when the invariant is satisfied). The
+  // only path to this flag is through PG04 in ChangePlugin (post-uninstall
+  // repair failed) OR the server-startup scan. The agent MUST be
+  // simultaneously hibernated — a `roleMissing=true` agent can never be in
+  // `status: 'online'` state. `POST /api/agents/{id}/wake` returns 409
+  // role_plugin_required while this flag is set. Cleared by a successful
+  // ChangePlugin install from the Profile → Config tab recovery flow.
+  roleMissing?: boolean
+
   // Soft-delete: when set, agent is marked as deleted but data is preserved for restore
   deletedAt?: string             // ISO timestamp when soft-deleted, undefined = active
 }
@@ -556,6 +567,11 @@ export interface UpdateAgentRequest {
   corePluginMissing?: boolean    // True if ai-maestro-plugin failed to install
   // AMP Identity Status (P002)
   ampIdentityMissing?: boolean   // True if amp-init.sh failed during CreateAgent G12
+  // R9.13 extension (TRDD-c7a81642) — role-plugin-or-hibernate invariant.
+  // Set to true by PG04 fallback or the server-startup scan when the agent
+  // cannot maintain a compatible role-plugin. Cleared by the Profile →
+  // Config tab "Assign role-plugin" recovery flow.
+  roleMissing?: boolean
   // MAINTAINER title properties (R19) — set via ChangeTitle, immutable after
   githubRepo?: string             // Format: 'owner/repo'. One MAINTAINER per repo per host.
   // DEPRECATED: for backward compatibility

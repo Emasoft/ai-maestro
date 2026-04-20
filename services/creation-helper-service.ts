@@ -17,8 +17,9 @@
  *   GET    /api/agents/creation-helper/response   -> captureResponse
  */
 
-import { copyFileSync, existsSync, mkdirSync, unlinkSync } from 'fs'
+import { copyFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { homedir } from 'os'
 import { getAgentByName, createAgent, deleteAgent } from '@/lib/agent-registry'
 import { parseNameForDisplay } from '@/types/agent'
 import { getRuntime } from '@/lib/agent-runtime'
@@ -32,6 +33,47 @@ const SESSION_NAME = '_aim-creation-helper'
 const SESSION_LABEL = 'Agent Creation Helper'
 const AGENT_FILE_NAME = 'haephestos-creation-helper.md'
 const LOG_PREFIX = '[CreationHelper]'
+
+/**
+ * Proposal 20 (2026-04-20) — Haephestos workdir.
+ *
+ * Previous behaviour: tmux session was launched with `cwd = process.cwd()`
+ * (the ai-maestro project dir). That caused TWO bugs:
+ *
+ *   1. Context overflow. Claude Code auto-loads the parent CLAUDE.md of
+ *      its cwd as "project instructions". ai-maestro/CLAUDE.md is ~3000
+ *      lines — it dominated Haephestos's context window before the first
+ *      user message.
+ *   2. Cleanup mismatch. The cleanup route wipes ~/agents/haephestos/,
+ *      but Haephestos's real state (conversation cache, PSS scratch, draft
+ *      TOML) lived under ~/.claude/projects/-Users-*-ai-maestro/, which
+ *      cleanup never touched — stale context leaked between sessions.
+ *
+ * Fix: run Haephestos inside ~/agents/haephestos/ with a minimal CLAUDE.md
+ * that disables parent-CLAUDE auto-load. Matches the workdir the cleanup
+ * route already knows about (app/api/agents/creation-helper/cleanup/route.ts:32).
+ */
+const HAEPHESTOS_WORKDIR = join(homedir(), 'agents', 'haephestos')
+const HAEPHESTOS_CLAUDE_MD_CONTENT = `# Haephestos Role-Plugin Forge
+
+This is a scratch workdir for the Agent Creation Helper persona. Everything
+inside this folder is ephemeral — the ai-maestro cleanup route wipes it on
+every session start.
+
+## Do NOT auto-load the parent project CLAUDE.md
+
+Haephestos is a standalone role-plugin forge. It does not need any
+ancestor project's CLAUDE.md. This file exists solely so Claude Code's
+CLAUDE.md walk-up stops here and does not pull in ~/ai-maestro/CLAUDE.md
+(~3000 lines) by accident.
+
+## Persona source
+
+The actual persona lives in the plugin-shipped agent file:
+  ~/ai-maestro/.claude/agents/haephestos-creation-helper.md
+
+Claude Code loads it via \`--agent haephestos-creation-helper\` at launch.
+`
 
 // Sonnet for intelligent config suggestions; haiku would be too limited
 const MODEL = 'sonnet'
@@ -130,16 +172,25 @@ function sourceAgentFile(): string {
   return join(process.cwd(), 'agents', AGENT_FILE_NAME)
 }
 
-/** Path where the agent file is deployed for `claude --agent`. */
+/**
+ * Path where the agent file is deployed for `claude --agent`.
+ *
+ * Proposal 20 (2026-04-20): deploy into HAEPHESTOS_WORKDIR/.claude/agents/
+ * instead of the ai-maestro project's .claude/agents/. The tmux session
+ * now runs with cwd=HAEPHESTOS_WORKDIR, so Claude Code's project-scoped
+ * agent resolution walks up from HAEPHESTOS_WORKDIR — it never looks at
+ * ai-maestro's .claude/ anymore. Cleanup wipes the whole workdir between
+ * sessions, which matches the "ephemeral persona" contract.
+ */
 function deployedAgentFile(): string {
-  return join(process.cwd(), '.claude', 'agents', AGENT_FILE_NAME)
+  return join(HAEPHESTOS_WORKDIR, '.claude', 'agents', AGENT_FILE_NAME)
 }
 
 /** Copy the agent persona file to .claude/agents/ so `claude --agent` finds it. */
 function deployAgentFile(): void {
   const src = sourceAgentFile()
   const dst = deployedAgentFile()
-  const dstDir = join(process.cwd(), '.claude', 'agents')
+  const dstDir = join(HAEPHESTOS_WORKDIR, '.claude', 'agents')
 
   if (!existsSync(src)) {
     throw new Error(`Agent file not found: ${src}`)
@@ -496,10 +547,23 @@ export function createCreationHelper(): Promise<ServiceResult<{
     // Deploy agent persona file to .claude/agents/
     deployAgentFile()
 
-    // Create tmux session in the AI Maestro project directory
+    // Proposal 20 (2026-04-20): run Haephestos inside ~/agents/haephestos/
+    // so Claude Code does NOT auto-load the ai-maestro project CLAUDE.md
+    // into the context window, and so the cleanup route's wipe of that
+    // directory actually matches the session's state path. Seed a minimal
+    // CLAUDE.md here to halt the ancestor-walk that Claude Code performs
+    // when looking for project instructions.
+    if (!existsSync(HAEPHESTOS_WORKDIR)) {
+      mkdirSync(HAEPHESTOS_WORKDIR, { recursive: true })
+    }
+    const workdirClaudeMd = join(HAEPHESTOS_WORKDIR, 'CLAUDE.md')
+    if (!existsSync(workdirClaudeMd)) {
+      writeFileSync(workdirClaudeMd, HAEPHESTOS_CLAUDE_MD_CONTENT, 'utf8')
+    }
+
+    // Create tmux session in the Haephestos workdir
     const runtime = getRuntime()
-    const cwd = process.cwd()
-    await runtime.createSession(SESSION_NAME, cwd)
+    await runtime.createSession(SESSION_NAME, HAEPHESTOS_WORKDIR)
 
     // Register agent in registry
     if (!agent) {
@@ -512,7 +576,7 @@ export function createCreationHelper(): Promise<ServiceResult<{
         tags,
         owner: 'system',
         createSession: true,
-        workingDirectory: cwd,
+        workingDirectory: HAEPHESTOS_WORKDIR,
         programArgs: '',
       })
     }

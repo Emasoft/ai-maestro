@@ -35,6 +35,7 @@ const {
       copyFileSync: vi.fn(),
       mkdirSync: vi.fn(),
       unlinkSync: vi.fn(),
+      writeFileSync: vi.fn(),
     },
   }
 })
@@ -62,6 +63,7 @@ vi.mock('fs', () => ({
   copyFileSync: (...args: unknown[]) => mockFs.copyFileSync(...args),
   mkdirSync: (...args: unknown[]) => mockFs.mkdirSync(...args),
   unlinkSync: (...args: unknown[]) => mockFs.unlinkSync(...args),
+  writeFileSync: (...args: unknown[]) => mockFs.writeFileSync(...args),
 }))
 
 // Now import the service under test
@@ -167,6 +169,39 @@ describe('createCreationHelper', () => {
     expect(cmd).toContain('--model sonnet')
     expect(cmd).toContain('--permission-mode default')
     expect(cmd).toContain('--tools Read,Write,Edit,Bash,Glob,Grep,Agent,WebFetch')
+  })
+
+  // Proposal 20 (2026-04-20) regression guard.
+  it('creates tmux session inside ~/agents/haephestos/ (never inside ai-maestro cwd)', async () => {
+    await createCreationHelper()
+
+    expect(mockRuntime.createSession).toHaveBeenCalledTimes(1)
+    const call = mockRuntime.createSession.mock.calls[0]
+    expect(call[0]).toBe('_aim-creation-helper')
+    const cwdArg = call[1] as string
+    expect(cwdArg).toMatch(/[/\\]agents[/\\]haephestos$/)
+    // CRITICAL: the cwd MUST NOT be the ai-maestro project root. That was
+    // the bug this test locks in — the old code passed process.cwd(),
+    // which made Claude Code auto-load the ~3000-line ai-maestro CLAUDE.md.
+    expect(cwdArg).not.toBe(process.cwd())
+  })
+
+  // Proposal 20 (2026-04-20) regression guard.
+  it('seeds a minimal CLAUDE.md inside ~/agents/haephestos/ when missing', async () => {
+    // existsSync returns false only for the workdir CLAUDE.md — simulate
+    // the first-run case where the directory was just created (or wiped
+    // by the cleanup route) and the marker file does not exist yet.
+    mockFs.existsSync.mockImplementation((path: string) => {
+      return !(typeof path === 'string' && /[/\\]agents[/\\]haephestos[/\\]CLAUDE\.md$/.test(path))
+    })
+
+    await createCreationHelper()
+
+    expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/[/\\]agents[/\\]haephestos[/\\]CLAUDE\.md$/),
+      expect.stringContaining('Do NOT auto-load the parent project CLAUDE.md'),
+      'utf8',
+    )
   })
 })
 

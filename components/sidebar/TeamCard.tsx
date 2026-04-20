@@ -64,6 +64,21 @@ export default function TeamCard({ team, agents, onStartMeeting: _onStartMeeting
                 R12
               </span>
             )}
+            {/* Proposal 38 (2026-04-20): distinct BLOCKED badge when the
+                manager-gated cascade has frozen the team (team.blocked=true
+                because no MANAGER on host). Red not amber — functional
+                paralysis, not a composition warning. Tooltip tells the
+                user how to resolve. */}
+            {team.blocked && (
+              <span
+                className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 flex-shrink-0"
+                aria-label="Team is blocked — no MANAGER on host"
+                title="BLOCKED (R9.8): no MANAGER on host. Team operations are frozen and agents are hibernated. Assign a MANAGER in the Title Assignment Dialog to unblock."
+              >
+                <AlertTriangle className="w-2.5 h-2.5" />
+                BLOCKED
+              </span>
+            )}
           </div>
 
           {team.description && (

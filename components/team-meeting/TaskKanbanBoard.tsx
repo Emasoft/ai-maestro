@@ -60,6 +60,13 @@ interface TaskKanbanBoardProps {
   teamId?: string
   teamAgentIds?: string[]
   columns?: KanbanColumnConfig[]
+  /**
+   * Proposal 37 (2026-04-20): when false, the Add Task button tooltip
+   * tells the user they need to link a GitHub Project first (tasks are
+   * backed by GitHub Issues). Defaults to true (backwards compatible —
+   * callers that don't pass it assume the team has a project).
+   */
+  teamHasGithubProject?: boolean
 }
 
 export default function TaskKanbanBoard({
@@ -73,6 +80,7 @@ export default function TaskKanbanBoard({
   onClose,
   teamName,
   teamId,
+  teamHasGithubProject = true,
 }: TaskKanbanBoardProps) {
   const cols = kanbanColumns || DEFAULT_KANBAN_COLUMNS
 
@@ -327,6 +335,7 @@ export default function TaskKanbanBoard({
                 onSortAsc={() => setColState(col.id, { sort: 'asc' })}
                 onSortDesc={() => setColState(col.id, { sort: 'desc' })}
                 getAgentStatus={getAgentStatusForTask}
+                teamHasGithubProject={teamHasGithubProject}
               />
             )
           })}
@@ -420,6 +429,8 @@ interface EnhancedColumnProps {
   onSortAsc: () => void
   onSortDesc: () => void
   getAgentStatus: (task: TaskWithDeps) => { color: string; pulse: boolean; label: string } | undefined
+  /** Proposal 37: drives the quick-add tooltip — see button below. */
+  teamHasGithubProject: boolean
 }
 
 function EnhancedColumn({
@@ -428,6 +439,7 @@ function EnhancedColumn({
   onDrop, onSelectTask, onQuickAdd, onFilterChange, onCycleSort,
   onToggleCollapse, onMenuToggle, onColorPickerToggle, onColorChange,
   onClearFilter, onSortAsc, onSortDesc, getAgentStatus,
+  teamHasGithubProject,
 }: EnhancedColumnProps) {
   const [isDragOver, setIsDragOver] = useState(false)
 
@@ -627,10 +639,13 @@ function EnhancedColumn({
         )}
       </div>
 
-      {/* Quick add */}
+      {/* Quick add — proposal 37: tooltip explains GitHub Project requirement when missing */}
       <button
         onClick={() => onQuickAdd(colId)}
         className="flex items-center gap-1 mx-2 mb-2 px-2 py-1.5 rounded-lg text-[11px] text-gray-600 hover:text-gray-400 hover:bg-gray-800/60 transition-colors flex-shrink-0"
+        title={teamHasGithubProject
+          ? 'Add task (creates a GitHub Issue in the linked project)'
+          : 'Requires GitHub Project — link one in Repos tab. Tasks are backed by GitHub Issues.'}
       >
         <Plus className="w-3 h-3" />
         Add task

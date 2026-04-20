@@ -1,8 +1,8 @@
 'use client'
 
-import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store, Puzzle, Bot, TerminalSquare, Archive, Shield } from 'lucide-react'
+import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store, Puzzle, Bot, TerminalSquare, Archive, Shield, Activity } from 'lucide-react'
 
-type SectionId = 'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery'
+type SectionId = 'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery' | 'diagnostics'
 
 interface SettingsSidebarProps {
   activeSection: SectionId
@@ -64,6 +64,16 @@ export default function SettingsSidebar({ activeSection, onSectionChange }: Sett
       label: 'Cemetery',
       icon: Archive,
       description: 'Revive deleted agents',
+    },
+    {
+      // #234 (2026-04-20): Ledger-health diagnostics panel. Fits here
+      // between Cemetery and Experiments because it's an operator-
+      // visibility tool sitting right next to the other "inspect the
+      // system" entries (Cemetery + Hosts + Plugins).
+      id: 'diagnostics' as const,
+      label: 'Diagnostics',
+      icon: Activity,
+      description: 'Ledger health + integrity',
     },
     {
       id: 'experiments' as const,

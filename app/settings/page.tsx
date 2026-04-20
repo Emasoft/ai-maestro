@@ -19,6 +19,7 @@ import CommandsSection from '@/components/settings/CommandsSection'
 import GlobalElementsSection from '@/components/settings/GlobalElementsSection'
 import CemeterySection from '@/components/settings/CemeterySection'
 import SecuritySection from '@/components/settings/SecuritySection'
+import DiagnosticsSection from '@/components/settings/DiagnosticsSection'
 import { VersionChecker } from '@/components/VersionChecker'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
@@ -34,10 +35,10 @@ export default function SettingsPage() {
 function SettingsPageInner() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const [activeSection, setActiveSection] = useState<'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery'>('hosts')
+  const [activeSection, setActiveSection] = useState<'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery' | 'diagnostics'>('hosts')
   // Navigate to section from URL params (e.g. /settings?tab=global-elements)
   useEffect(() => {
-    const validTabs = ['security', 'hosts', 'domains', 'webhooks', 'help', 'about', 'onboarding', 'experiments', 'marketplace', 'global-elements', 'agents', 'commands', 'cemetery'] as const
+    const validTabs = ['security', 'hosts', 'domains', 'webhooks', 'help', 'about', 'onboarding', 'experiments', 'marketplace', 'global-elements', 'agents', 'commands', 'cemetery', 'diagnostics'] as const
     if (tabParam && (validTabs as readonly string[]).includes(tabParam)) {
       setActiveSection(tabParam as typeof validTabs[number])
     }
@@ -74,6 +75,7 @@ function SettingsPageInner() {
             {activeSection === 'commands' && <CommandsSection initialClient={(searchParams.get('client') as import('@/lib/converter/types').ProviderId) || 'claude-code'} />}
             {activeSection === 'global-elements' && <GlobalElementsSection initialSubtab={searchParams.get('subtab') as 'plugins' | 'elements' | 'marketplaces' | null} initialMarketplace={searchParams.get('marketplace')} />}
             {activeSection === 'cemetery' && <CemeterySection />}
+            {activeSection === 'diagnostics' && <div className="p-6 max-w-4xl"><DiagnosticsSection /></div>}
             {activeSection === 'experiments' && <ExperimentsSection />}
             {activeSection === 'onboarding' && <OnboardingSection />}
             {activeSection === 'help' && <HelpSection />}

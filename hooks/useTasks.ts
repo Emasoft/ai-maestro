@@ -73,7 +73,19 @@ export function useTasks(teamId: string | null): UseTasksResult {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
-      if (!res.ok) throw new Error('Failed to create task')
+      if (!res.ok) {
+        // Proposal 6 (2026-04-20): surface the server's specific error
+        // (e.g. "Cannot create task: team has no GitHub Project linked")
+        // instead of a generic "Failed to create task" token. The server
+        // already returns { error: "..." } for actionable cases; the
+        // previous throw-a-constant swallowed that context.
+        let msg = 'Failed to create task'
+        try {
+          const body = await res.json()
+          if (typeof body?.error === 'string' && body.error) msg = body.error
+        } catch { /* body not JSON; keep fallback */ }
+        throw new Error(msg)
+      }
       await fetchTasks()
     } catch (err) {
       await fetchTasks() // Revert optimistic state on network error

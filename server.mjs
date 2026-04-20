@@ -1535,6 +1535,19 @@ async function startServer(handleRequest) {
       console.log('[Startup] Cleaned up orphaned _aim-creation-helper session (if any)')
     } catch { /* ignore — session might not exist */ }
 
+    // #242 (TRDD-7123d51a §9 follow-up): system-level tracker.
+    // Runs a single process-wide 60s scan of user-global marketplaces +
+    // client-binary versions. Emits ledger entries for additions,
+    // removals, and version changes. Non-fatal on failure — the agent
+    // subconscious per-agent tracker keeps working regardless.
+    try {
+      const { getSystemTracker } = await import('./lib/system-tracker.ts')
+      getSystemTracker().start()
+      console.log('[Startup] System-tracker started (marketplaces + client-binary versions)')
+    } catch (err) {
+      console.warn('[Startup] System-tracker start failed (non-fatal):', err?.message?.slice(0, 120))
+    }
+
     // Normalize agent hostIds on startup (Phase 1: AMP Protocol Fix)
     // This ensures all agents have canonical hostIds for proper AMP addressing
     setTimeout(async () => {

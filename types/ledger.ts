@@ -40,6 +40,13 @@ export type LedgerOp =
   | 'archive_agent' | 'purge_cemetery'
   // ── Marketplace ──────────────────────────────────────────────
   | 'add_marketplace' | 'remove_marketplace' | 'update_marketplace'
+  // ── System tracker (TRDD-7123d51a §9 follow-up, #242) ────────
+  /**
+   * Emitted by `lib/system-tracker.ts` when a client binary version
+   * changes between scans. The diff carries { old, new, client } on a
+   * path like `/system/clientVersions/<client>`.
+   */
+  | 'change_client_version'
 
 /**
  * LedgerActor — who initiated the operation.

@@ -18,7 +18,13 @@ const AIMAESTRO_DIR = getStateDir()
 const AGENTS_DIR = path.join(AIMAESTRO_DIR, 'agents')
 const REGISTRY_FILE = path.join(AGENTS_DIR, 'registry.json')
 
-const registryLedger = new SignedLedger(REGISTRY_FILE)
+/**
+ * Per-file signed ledger for agents/registry.json. Exported so that
+ * element-management-service can emit per-operation audit entries
+ * (TRDD-eac02238) in addition to the coarse save-level entries
+ * emitted by saveAgents() below.
+ */
+export const registryLedger = new SignedLedger(REGISTRY_FILE)
 
 // System helper names that must never be registered as agents, assigned to teams,
 // or receive/send AMP messages.  These are ephemeral UI-only helpers (e.g. the

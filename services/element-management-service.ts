@@ -1964,6 +1964,37 @@ export async function ChangeTitle(
       return result
     }
 
+    // ── G14c: Per-op ledger entry for title change (TRDD-eac02238) ─
+    // Emit a discrete 'change_title' entry AFTER the registry write is
+    // verified on disk. Fire-and-forget — see lib/ledger-emit.ts for
+    // failure semantics. The save-level bulk diff emitted by
+    // lib/agent-registry.ts::saveAgents() is kept as a belt-and-braces
+    // safety net; the per-op entry here gives state-restore tooling
+    // the operation granularity it needs.
+    try {
+      const { emitAgentOp } = await import('@/lib/ledger-emit')
+      emitAgentOp(
+        'change_title',
+        [
+          {
+            op: 'replace',
+            path: `/agents/${agentId}/governanceTitle`,
+            value: effectiveTitle ?? null,
+          },
+        ],
+        {
+          action: 'change-title',
+          agentId: options.authContext.agentId ?? null,
+          actor: options.authContext.agentId ? 'agent' : 'user',
+        },
+      )
+      ops.push(`G14c: Per-op ledger entry emitted (change_title: "${oldTitle || 'null'}" → "${effectiveTitle || 'null'}")`)
+    } catch (emitErr) {
+      // Fire-and-forget: an emit failure does NOT fail ChangeTitle
+      // because the save-level ledger entry still captured the mutation.
+      console.error('[ChangeTitle] G14c ledger-emit threw (non-fatal):', emitErr instanceof Error ? emitErr.message : emitErr)
+    }
+
     // ── GATE 14b: Revoke existing AID governance tokens ─────
     // Title changed → existing tokens embed the old title → revoke them.
     // Agent must re-authenticate to get a token with the new title.

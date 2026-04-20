@@ -19,6 +19,28 @@ export interface MessageCheckResult {
 }
 
 /**
+ * Config-change tracker status (TRDD-7123d51a).
+ *
+ * Reported from the subconscious on every heartbeat so the Diagnostics
+ * panel + GET /api/agents/[id]/subconscious can surface the drift count
+ * and the subpaths that last changed. `driftCountSinceStart` resets on
+ * each AgentSubconscious.start() — it counts ledger-emitted drifts, not
+ * scan attempts.
+ */
+export interface ConfigTrackerStatus {
+  intervalMs: number
+  lastScanAt: number | null
+  driftCountSinceStart: number
+  lastDriftAt: number | null
+  /**
+   * Short sub-tree names that drifted on the most recent tick (e.g.
+   * `['skills', 'settings']`). Capped at 32 entries so the status file
+   * can't balloon on a pathological agent.
+   */
+  lastDriftPaths: string[]
+}
+
+/**
  * Status details for a running subconscious process
  */
 export interface SubconsciousProcessStatus {
@@ -27,6 +49,8 @@ export interface SubconsciousProcessStatus {
   lastMessageRun: number | null
   lastMessageResult: MessageCheckResult | null
   totalMessageRuns: number
+  /** TRDD-7123d51a — populated when the config-change tracker is active. */
+  configTracker?: ConfigTrackerStatus
 }
 
 /**

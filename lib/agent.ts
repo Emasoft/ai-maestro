@@ -46,6 +46,15 @@ interface AgentConfig {
 interface SubconsciousConfig {
   messageCheckInterval?: number // How often to check for messages (default: 5 minutes) - DEPRECATED
   messagePollingEnabled?: boolean // Enable message polling (default: false - use push notifications instead)
+  /**
+   * TRDD-7123d51a — cadence of the config-change tracker (ms).
+   * Default 30_000 (30s). The tracker scans the agent's `.claude/`
+   * directory + `~/.claude/settings.json`, diffs against the last
+   * snapshot, and emits ledger entries for drift not already recorded
+   * by the API. Set to 0 to DISABLE the tracker entirely (not
+   * recommended — silences drift from client-internal installs).
+   */
+  configTrackerInterval?: number
 }
 
 // Type for host hints (optional optimization from AI Maestro host)
@@ -82,6 +91,14 @@ interface SubconsciousStatus {
     error?: string
   } | null
   totalMessageRuns: number
+  /** TRDD-7123d51a — config-change tracker status (null when interval=0). */
+  configTracker: {
+    intervalMs: number
+    lastScanAt: number | null
+    driftCountSinceStart: number
+    lastDriftAt: number | null
+    lastDriftPaths: string[]
+  } | null
 }
 
 // Static counter for staggering initial runs across all agents
@@ -107,6 +124,23 @@ class AgentSubconscious {
   // Message polling (deprecated - use push notifications instead)
   private messagePollingEnabled: boolean
 
+  // TRDD-7123d51a — config-change tracker state
+  private configTimer: NodeJS.Timeout | null = null
+  private configTrackerInterval: number   // 0 = disabled
+  /**
+   * Stringified per-sub-tree snapshots from the most recent scan.
+   * Comparing serialized strings is cheap (single V8 intern + eq) and
+   * avoids the cost of a full structural deep-diff 2× per minute per
+   * agent. We trade a little CPU on JSON.stringify for a lot of CPU
+   * saved on diff walk.
+   */
+  private lastConfigSnapshotJson: Map<string, string> = new Map()
+  private configTrackerHasBaseline = false
+  private configLastScanAt: number | null = null
+  private configDriftCountSinceStart = 0
+  private configLastDriftAt: number | null = null
+  private configLastDriftPaths: string[] = []
+
   constructor(agentId: string, agent: Agent, config: SubconsciousConfig = {}) {
     this.agentId = agentId
     this.agent = agent
@@ -114,6 +148,9 @@ class AgentSubconscious {
     // Message polling is DISABLED by default - use push notifications instead (RFC: Message Delivery Notifications)
     // Explicitly requires config.messagePollingEnabled === true to enable; any other value (undefined, false) keeps it disabled.
     this.messagePollingEnabled = config.messagePollingEnabled === true
+    // TRDD-7123d51a — default 30s; `0` disables. Using `??` (not `||`) so
+    // `0` is preserved as "disabled" instead of falling through to the default.
+    this.configTrackerInterval = config.configTrackerInterval ?? 30_000
     // Bump the static counter (kept for logging symmetry with older logs)
     subconsciousInstanceCount++
     // Calculate stagger offset based on agentId hash (consistent across restarts)
@@ -178,6 +215,10 @@ class AgentSubconscious {
       console.log(`[Agent ${this.agentId.substring(0, 8)}] Host hints not available - running autonomously`)
     }
 
+    // TRDD-7123d51a — start the config-change tracker last so the other
+    // subsystems are already initialized when the first scan runs.
+    this.startConfigChangeTracker()
+
     console.log(`[Agent ${this.agentId.substring(0, 8)}] ✓ Subconscious running`)
 
     // Write initial status file
@@ -192,6 +233,10 @@ class AgentSubconscious {
       clearInterval(this.messageTimer)
       this.messageTimer = null
     }
+
+    // TRDD-7123d51a — stop the config-change tracker before unsubscribing
+    // from host hints so an in-flight scan can still find its host config.
+    this.stopConfigChangeTracker()
 
     // Unsubscribe from host hints
     try {
@@ -442,6 +487,194 @@ class AgentSubconscious {
       lastMessageRun: this.lastMessageRun,
       lastMessageResult: this.lastMessageResult,
       totalMessageRuns: this.totalMessageRuns,
+      configTracker: this.configTrackerInterval > 0 ? {
+        intervalMs: this.configTrackerInterval,
+        lastScanAt: this.configLastScanAt,
+        driftCountSinceStart: this.configDriftCountSinceStart,
+        lastDriftAt: this.configLastDriftAt,
+        lastDriftPaths: [...this.configLastDriftPaths],
+      } : null,
+    }
+  }
+
+  // ── Config-change tracker (TRDD-7123d51a) ─────────────────────────
+
+  /**
+   * Sub-trees of `AgentLocalConfig` we watch for drift. Each maps to the
+   * best-matching extended `LedgerOp` so an external audit tool can
+   * group tracker-emitted entries by element kind.
+   */
+  private static readonly CONFIG_SUBTREES: ReadonlyArray<{
+    key: keyof import('@/types/agent-local-config').AgentLocalConfig
+    op: import('@/types/ledger').LedgerOp
+  }> = [
+    { key: 'skills', op: 'change_skill' },
+    { key: 'agents', op: 'change_agent_def' },
+    { key: 'hooks', op: 'change_hook' },
+    { key: 'rules', op: 'change_rule' },
+    { key: 'commands', op: 'change_command' },
+    { key: 'mcpServers', op: 'change_mcp' },
+    { key: 'lspServers', op: 'change_lsp' },
+    { key: 'outputStyles', op: 'change_output_style' },
+    { key: 'plugins', op: 'change_plugin' },
+    { key: 'rolePlugin', op: 'change_plugin' },
+    { key: 'settings', op: 'update' },
+    { key: 'userGlobalSettings', op: 'update' },
+    { key: 'keybindings', op: 'update' },
+  ]
+
+  /**
+   * Start the config-change tracker (if enabled). Idempotent.
+   * The first tick runs ~1s after start() so the dashboard sees the
+   * baseline quickly without hammering disk at boot; subsequent ticks
+   * run every `configTrackerInterval` ms.
+   */
+  startConfigChangeTracker() {
+    if (this.configTrackerInterval <= 0) return
+    if (this.configTimer) return  // Already running
+    console.log(`[Agent ${this.agentId.substring(0, 8)}]   - Config tracker: ${this.configTrackerInterval / 1000}s cadence`)
+    // First tick after a short warmup; failures are swallowed so a
+    // transient registry-read error never breaks the timer chain.
+    setTimeout(() => {
+      this.runConfigScan().catch(err => {
+        console.error(`[Agent ${this.agentId.substring(0, 8)}] Initial config scan failed:`, err)
+      })
+    }, 1_000)
+    this.configTimer = setInterval(() => {
+      this.runConfigScan().catch(err => {
+        console.error(`[Agent ${this.agentId.substring(0, 8)}] Config scan failed:`, err)
+      })
+    }, this.configTrackerInterval)
+  }
+
+  /** Stop the config-change tracker and clear the baseline. */
+  stopConfigChangeTracker() {
+    if (this.configTimer) {
+      clearInterval(this.configTimer)
+      this.configTimer = null
+    }
+  }
+
+  /**
+   * One scan cycle. First tick sets the baseline WITHOUT emitting
+   * ledger entries; later ticks diff against baseline, emit for any
+   * sub-tree that drifted AND is not covered by a fresh API-path
+   * ledger entry (see {@link wasRecentlyRecordedByApi}). Silent on
+   * "agent not found / workdir missing" to avoid log spam when an
+   * agent is being deleted mid-scan.
+   */
+  private async runConfigScan(): Promise<void> {
+    // Dynamic import — breaks the lib/agent.ts ↔ services/ cycle that
+    // would otherwise pull half of next.js into cerebellum's load path.
+    const { scanAgentLocalConfig } = await import('@/services/agent-local-config-service')
+    const result = scanAgentLocalConfig(this.agentId)
+    this.configLastScanAt = Date.now()
+    if (!result.data) {
+      // Agent deleted, or workdir moved — write status and exit silently.
+      this.writeStatusFile()
+      return
+    }
+    const snapshot = result.data
+
+    if (!this.configTrackerHasBaseline) {
+      // First tick — baseline only, no emits.
+      for (const { key } of AgentSubconscious.CONFIG_SUBTREES) {
+        this.lastConfigSnapshotJson.set(key, JSON.stringify(snapshot[key] ?? null))
+      }
+      this.configTrackerHasBaseline = true
+      this.writeStatusFile()
+      return
+    }
+
+    const driftPaths: string[] = []
+    for (const { key, op } of AgentSubconscious.CONFIG_SUBTREES) {
+      const newJson = JSON.stringify(snapshot[key] ?? null)
+      const oldJson = this.lastConfigSnapshotJson.get(key) ?? 'null'
+      if (newJson === oldJson) continue
+      // Drift detected. Skip if a matching API-emitted entry is already
+      // on the ledger within the last 10s (dedup, per TRDD §3.3).
+      if (this.wasRecentlyRecordedByApi(String(key))) {
+        this.lastConfigSnapshotJson.set(key, newJson)
+        continue
+      }
+      driftPaths.push(String(key))
+      this.emitConfigDrift(op, String(key), snapshot[key])
+      this.lastConfigSnapshotJson.set(key, newJson)
+    }
+
+    if (driftPaths.length > 0) {
+      this.configDriftCountSinceStart += driftPaths.length
+      this.configLastDriftAt = Date.now()
+      // Cap to 32 to bound the status-file size; newest N win.
+      this.configLastDriftPaths = driftPaths.slice(-32)
+    }
+    this.writeStatusFile()
+  }
+
+  /**
+   * Scan the last 50 agents-ledger entries for one with
+   * `signerHostId === this host` AND timestamp within the last 10s
+   * that touches `/agents/<this agent id>/<subtreeKey>`.
+   *
+   * Mis-fires are acceptable (TRDD §3.3):
+   * - False positive → a real drift gets dropped; next tick catches it.
+   * - False negative → duplicate ledger entry; harmless to the chain.
+   */
+  private wasRecentlyRecordedByApi(subtreeKey: string): boolean {
+    try {
+      // Delayed `require` — same circular-import reason as runConfigScan.
+      const { registryLedger } = require('@/lib/agent-registry')
+      const { getSelfHostId } = require('@/lib/hosts-config')
+      const selfHostId = getSelfHostId()
+      const tenSecondsAgo = Date.now() - 10_000
+      const entries = registryLedger.getEntries().slice(-50)
+      for (const e of entries) {
+        if (new Date(e.ts).getTime() < tenSecondsAgo) continue
+        if (e.signerHostId && e.signerHostId.toLowerCase() !== selfHostId) continue
+        if (e.authActor !== 'user' && e.authActor !== 'system') continue
+        if (!Array.isArray(e.diff)) continue
+        for (const patchOp of e.diff) {
+          if (typeof patchOp?.path !== 'string') continue
+          if (patchOp.path.includes(`/agents/${this.agentId}`) &&
+              patchOp.path.includes(subtreeKey)) {
+            return true
+          }
+        }
+      }
+    } catch {
+      // Ledger unavailable — fail open (emit instead of dedup).
+    }
+    return false
+  }
+
+  /**
+   * Append a per-subtree ledger entry with `authActor='agent'` and
+   * a JSON-Patch diff pointing at `/agents/<id>/config/<key>`. Uses
+   * `replace` because the tracker can't reconstruct the old value as
+   * a structural patch — it has only a string snapshot. `replace` is
+   * correct for a "we observed the new state" semantic and matches
+   * how `ledger-replay.mjs` (#233) applies entries.
+   */
+  private emitConfigDrift(op: import('@/types/ledger').LedgerOp, subtreeKey: string, newValue: unknown): void {
+    try {
+      const { emitAgentOp } = require('@/lib/ledger-emit')
+      emitAgentOp(
+        op,
+        [{
+          op: 'replace',
+          path: `/agents/${this.agentId}/config/${subtreeKey}`,
+          value: newValue ?? null,
+        }],
+        {
+          action: `config-tracker-${subtreeKey}`,
+          agentId: this.agentId,
+          actor: 'agent',
+        },
+      )
+    } catch (err) {
+      // Fire-and-forget — at worst we miss one tick's drift, next
+      // tick will still see the old snapshot vs new state and retry.
+      console.error(`[Agent ${this.agentId.substring(0, 8)}] Config drift emit failed for ${subtreeKey}:`, err)
     }
   }
 
@@ -469,6 +702,15 @@ class AgentSubconscious {
         lastMessageRun: this.lastMessageRun,
         lastMessageResult: this.lastMessageResult,
         totalMessageRuns: this.totalMessageRuns,
+        // TRDD-7123d51a — so the Diagnostics panel can show drift counts
+        // without loading the agent into memory.
+        configTracker: this.configTrackerInterval > 0 ? {
+          intervalMs: this.configTrackerInterval,
+          lastScanAt: this.configLastScanAt,
+          driftCountSinceStart: this.configDriftCountSinceStart,
+          lastDriftAt: this.configLastDriftAt,
+          lastDriftPaths: this.configLastDriftPaths,
+        } : null,
       }
 
       fs.writeFileSync(statusPath, JSON.stringify(status, null, 2))

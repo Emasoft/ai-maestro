@@ -139,6 +139,21 @@ export interface AgentLocalConfig {
   plugins: LocalPlugin[]
   rolePlugin: RolePlugin | null
   globalDependencies: GlobalDependencies | null
+  /** Project-scoped `.claude/settings.local.json` (author-level overrides for this agent's workdir). */
   settings: Record<string, unknown>
+  /**
+   * User-global `~/.claude/settings.json` (TRDD-7123d51a §3.2). Some plugin
+   * enables and CLI defaults live here, outside the agent's own workdir.
+   * `null` when the file is absent (fresh install or user never opened Claude
+   * Code). The subconscious config-change tracker diffs this sub-tree on
+   * every tick; drift emits a ledger `update` entry scoped to the agent.
+   */
+  userGlobalSettings: Record<string, unknown> | null
+  /**
+   * Project-scoped `.claude/keybindings.json` (TRDD-7123d51a §3.2).
+   * `null` when the file is absent. Tracked so that keybinding edits the
+   * user performs from Claude Code settings land in the ledger.
+   */
+  keybindings: Record<string, unknown> | null
   lastScanned: string
 }

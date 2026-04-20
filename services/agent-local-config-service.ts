@@ -73,6 +73,8 @@ export function scanAgentLocalConfig(agentId: string): ServiceResult<AgentLocalC
           rolePlugin: null,
           globalDependencies: null,
           settings: {},
+          userGlobalSettings: readJsonSafe(path.join(os.homedir(), '.claude', 'settings.json')) ?? null,
+          keybindings: null,
           lastScanned: new Date().toISOString(),
         },
         status: 200,
@@ -173,6 +175,12 @@ function scanClaudeDirectory(claudeDir: string, workDir: string): AgentLocalConf
     if (pe) p.elements = pe
   }
 
+  // TRDD-7123d51a §3.2 — user-global + keybinding sub-trees for the
+  // subconscious config-change tracker. Both are `null` when the file is
+  // absent so the tracker can treat "missing" distinctly from "empty".
+  const userGlobalSettings = readJsonSafe(path.join(os.homedir(), '.claude', 'settings.json')) ?? null
+  const keybindings = readJsonSafe(path.join(claudeDir, 'keybindings.json')) ?? null
+
   return {
     workingDirectory: workDir,
     skills,
@@ -187,6 +195,8 @@ function scanClaudeDirectory(claudeDir: string, workDir: string): AgentLocalConf
     rolePlugin,
     globalDependencies,
     settings: settingsData || {},
+    userGlobalSettings,
+    keybindings,
     lastScanned: new Date().toISOString(),
   }
 }

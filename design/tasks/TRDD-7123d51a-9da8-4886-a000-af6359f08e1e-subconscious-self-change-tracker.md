@@ -3,7 +3,7 @@
 **TRDD ID:** `7123d51a-9da8-4886-a000-af6359f08e1e`
 **Filename:** `design/tasks/TRDD-7123d51a-9da8-4886-a000-af6359f08e1e-subconscious-self-change-tracker.md`
 **Tracked in:** this repo (design/tasks/ is git-tracked)
-**Status:** Not started
+**Status:** Implemented 2026-04-20 (core tracker + scanner extension + 5 unit tests shipped in task #250). Derived tasks #241/#242/#243 unblocked.
 **Created:** 2026-04-20
 **Owner:** TBD
 **Priority:** P1 — closes the durability gap for agent-initiated config changes (Claude Code's own plugin install/uninstall / skill edits / MCP changes) that today bypass the ai-maestro API entirely.

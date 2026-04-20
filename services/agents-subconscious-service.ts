@@ -41,6 +41,10 @@ export async function getSubconsciousStatus(agentId: string): Promise<ServiceRes
         lastMessageRun: status.lastMessageRun,
         lastMessageResult: status.lastMessageResult,
         totalMessageRuns: status.totalMessageRuns,
+        // TRDD-7123d51a — surface the config-change tracker so callers
+        // (Diagnostics panel, /api/agents/[id]/subconscious) can render
+        // per-agent drift without loading the agent into memory.
+        configTracker: status.configTracker ?? null,
       } : null,
     },
     status: 200

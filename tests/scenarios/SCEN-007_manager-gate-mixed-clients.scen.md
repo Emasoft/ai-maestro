@@ -203,19 +203,19 @@ author: AI Maestro Team
 
 ## Phase 7: RBAC Probes
 
-#### S016: Attempt agent self-modification for Claude member
-- **Action:** `PATCH /api/agents/<claudeMemberId>` with `X-Agent-Id: <claudeMemberId>` and body `{"label": "self-hack"}`
-- **Goal:** 403 -- no self-modification
+#### S016: Attempt agent self-identity probe for Claude member (no Bearer)
+- **Action:** `PATCH /api/agents/<claudeMemberId>` with `X-Agent-Id: <claudeMemberId>` (no Bearer) and body `{"label": "self-hack"}`
+- **Goal:** 401 -- identity header without matching Bearer is rejected by `lib/agent-auth.ts` before RBAC. The 403 RBAC denial for authenticated self-modification is covered by `tests/authorization.test.ts`.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response 403. Screenshot: SCEN-007/S016-no-self-mod.png
+- **Verify:** Response 401. Screenshot: SCEN-007/S016-auth-required.png
 
-#### S017: Attempt agent lifecycle by MEMBER
-- **Action:** `POST /api/agents/<codexMemberId>/hibernate` with `X-Agent-Id: <claudeMemberId>`
-- **Goal:** 403 -- MEMBER cannot hibernate other agents
+#### S017: Attempt agent lifecycle by identity header (no Bearer)
+- **Action:** `POST /api/agents/<codexMemberId>/hibernate` with `X-Agent-Id: <claudeMemberId>` (no Bearer)
+- **Goal:** 401 -- same auth-layer rule. R10.4 MEMBER-cannot-hibernate-others is verified with a real Bearer in `tests/authorization.test.ts`.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response 403. Screenshot: SCEN-007/S017-rbac-denied.png
+- **Verify:** Response 401. Screenshot: SCEN-007/S017-auth-required.png
 
 ---
 

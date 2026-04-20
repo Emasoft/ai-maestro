@@ -167,12 +167,12 @@ author: AI Maestro Team
 > properties via API. This phase verifies that constraint through the UI by
 > attempting an API call with the agent's own auth headers.
 
-#### S014: Verify no-self-modification via API
-- **Action:** Check `GET /api/agents/<agentId>` to get the agent's ID. Then attempt `PATCH /api/agents/<agentId>` with auth header `X-Agent-Id: <agentId>` and body `{"label": "hacked"}`. This simulates an agent trying to modify itself.
-- **Goal:** API returns 403 with error indicating self-modification is forbidden
+#### S014: Verify agent-self-identity probe is blocked at the auth layer
+- **Action:** Check `GET /api/agents/<agentId>` to get the agent's ID. Then attempt `PATCH /api/agents/<agentId>` with header `X-Agent-Id: <agentId>` and NO `Authorization: Bearer …` header, body `{"label": "hacked"}`.
+- **Goal:** API returns 401 -- sending only `X-Agent-Id` without a Bearer token is treated as anonymous identity-spoofing and rejected by `lib/agent-auth.ts` BEFORE any RBAC check runs. This is the most-secure model: the server never trusts the `X-Agent-Id` header on its own; a matching Bearer is required to prove identity. RBAC denials (403) are covered by unit tests in `tests/authorization.test.ts`, which can exercise the post-auth path with real tokens.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response status is 403. Error message mentions self-modification or "cannot modify own". Screenshot: SCEN-001/S014-no-self-mod.png
+- **Verify:** Response status is 401. Error message mentions "authentication required" or "requires authentication". Screenshot: SCEN-001/S014-auth-required.png
 
 ---
 
@@ -330,12 +330,12 @@ author: AI Maestro Team
 > **Context:** Only MANAGER or COS can change titles. A MEMBER agent trying to
 > change another agent's title via the API should be denied.
 
-#### S032: Attempt title change via API with the scen-prefixed MEMBER's auth headers
-- **Action:** Read the ID of `scen001-title-agent-2` (the scenario's OWN scen-prefixed second agent — never a real user agent's ID) via `GET /api/agents | jq '.agents[] | select(.name=="scen001-title-agent-2") | .id'`. Then send `PATCH /api/agents/<testAgentId>` with header `X-Agent-Id: <scen001-title-agent-2-id>` and body `{"governanceTitle": "architect"}`. DO NOT use any other agent's ID — if you cannot find `scen001-title-agent-2` in the API response, halt and file a bug (the scenario's S027a should have created it).
-- **Goal:** API returns 403 -- MEMBER agents (scen001-title-agent-2 in this case) cannot change other agents' titles (only MANAGER/COS/user can). The RBAC check is verified end-to-end using TEST agents, never real user agents.
+#### S032: Attempt title change via API with the scen-prefixed MEMBER's identity header (no Bearer)
+- **Action:** Read the ID of `scen001-title-agent-2` (the scenario's OWN scen-prefixed second agent — never a real user agent's ID) via `GET /api/agents | jq '.agents[] | select(.name=="scen001-title-agent-2") | .id'`. Then send `PATCH /api/agents/<testAgentId>` with header `X-Agent-Id: <scen001-title-agent-2-id>` (no `Authorization: Bearer …`) and body `{"governanceTitle": "architect"}`. DO NOT use any other agent's ID — if you cannot find `scen001-title-agent-2` in the API response, halt and file a bug (the scenario's S027a should have created it).
+- **Goal:** API returns 401 -- sending the identity header without a matching Bearer token is blocked by `lib/agent-auth.ts` before RBAC runs. The server never trusts `X-Agent-Id` alone. The TRUE RBAC check (MEMBER cannot change other agents' titles — 403 once authenticated) is verified by `tests/authorization.test.ts`, which can provide a real Bearer token.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response status 403. Error indicates insufficient permissions. Test agent's title remains ORCHESTRATOR. Screenshot: SCEN-001/S032-rbac-denied.png
+- **Verify:** Response status 401. Error message references the missing Bearer or "Agent identity requires authentication". Test agent's title remains ORCHESTRATOR. Screenshot: SCEN-001/S032-auth-required.png
 
 ---
 

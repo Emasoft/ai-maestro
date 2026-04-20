@@ -172,19 +172,19 @@ author: AI Maestro Team
 
 ## Phase 6: RBAC Probes
 
-#### S013: Attempt agent self-modification for Gemini agent
-- **Action:** `PATCH /api/agents/<geminiId>` with `X-Agent-Id: <geminiId>` and body `{"label": "self-hack"}`
-- **Goal:** 403 -- no self-modification
+#### S013: Attempt agent self-identity probe for Gemini agent (no Bearer)
+- **Action:** `PATCH /api/agents/<geminiId>` with `X-Agent-Id: <geminiId>` (no Bearer) and body `{"label": "self-hack"}`
+- **Goal:** 401 -- identity header without Bearer rejected by `lib/agent-auth.ts` before RBAC. Post-auth 403 self-modification denial is covered by `tests/authorization.test.ts`.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response 403. Screenshot: SCEN-008/S013-no-self-mod.png
+- **Verify:** Response 401. Screenshot: SCEN-008/S013-auth-required.png
 
-#### S014: Attempt lifecycle operation as MEMBER
-- **Action:** `POST /api/agents/<managerId>/hibernate` with `X-Agent-Id: <geminiId>`
-- **Goal:** 403 -- MEMBER cannot hibernate others
+#### S014: Attempt lifecycle operation via identity header (no Bearer)
+- **Action:** `POST /api/agents/<managerId>/hibernate` with `X-Agent-Id: <geminiId>` (no Bearer)
+- **Goal:** 401 -- same auth-layer rule. R10.4 MEMBER-cannot-hibernate-others (403) is verified with a real Bearer in `tests/authorization.test.ts`.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response 403. Screenshot: SCEN-008/S014-rbac-denied.png
+- **Verify:** Response 401. Screenshot: SCEN-008/S014-auth-required.png
 
 ---
 

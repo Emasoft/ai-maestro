@@ -406,19 +406,19 @@ author: AI Maestro Team
 
 ## Phase 8: RBAC Probes
 
-#### S043: Attempt agent self-modification via API
-- **Action:** Get `scen-test-team-member`'s ID. Attempt `PATCH /api/agents/<id>` with header `X-Agent-Id: <id>` and body `{"label": "self-hack"}`.
-- **Goal:** API returns 403 -- no agent can modify itself
+#### S043: Attempt agent self-identity probe via API (no Bearer)
+- **Action:** Get `scen-test-team-member`'s ID. Attempt `PATCH /api/agents/<id>` with header `X-Agent-Id: <id>` and NO Bearer, body `{"label": "self-hack"}`.
+- **Goal:** API returns 401 -- `X-Agent-Id` without a matching Bearer is rejected by `lib/agent-auth.ts` as anonymous identity-spoofing, before any RBAC check runs. The post-auth self-modification denial (403) is covered by `tests/authorization.test.ts` which can supply a real Bearer token.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response 403. Agent unchanged. Screenshot: SCEN-005/S043-no-self-mod.png
+- **Verify:** Response 401. Agent unchanged. Screenshot: SCEN-005/S043-auth-required.png
 
-#### S044: Attempt agent lifecycle operation as wrong role
-- **Action:** Get MEMBER agent's ID. Attempt `POST /api/agents/<managerId>/hibernate` with header `X-Agent-Id: <memberId>`.
-- **Goal:** API returns 403 -- MEMBER cannot hibernate other agents (R10.4)
+#### S044: Attempt agent lifecycle via identity header only (no Bearer)
+- **Action:** Get MEMBER agent's ID. Attempt `POST /api/agents/<managerId>/hibernate` with header `X-Agent-Id: <memberId>` (no Bearer).
+- **Goal:** API returns 401 -- same rule as S043: identity headers without a matching Bearer are rejected before RBAC. R10.4 MEMBER-cannot-hibernate-others (403) is verified by `tests/authorization.test.ts` with an authenticated Bearer.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response 403. Screenshot: SCEN-005/S044-rbac-lifecycle-denied.png
+- **Verify:** Response 401. Screenshot: SCEN-005/S044-auth-required.png
 
 ---
 

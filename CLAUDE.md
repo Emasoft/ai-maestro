@@ -851,11 +851,31 @@ The same scripts are also bundled in the plugin (for slash commands). When the A
 
 Plugins in AI Maestro are split into two completely separate categories with different lifecycles, storage locations, and management flows. **Never mix the two.**
 
+### CRITICAL — source vs install target (clarified 2026-04-20, R20.29)
+
+**The three AI Maestro local-marketplace containers under `~/agents/{role,custom,core}-plugins/…` are SOURCE STORAGE / publishing surfaces, NOT the installed location of any plugin.**
+
+A plugin LIVES at its install target — the CLIENT'S own plugin cache (`~/.claude/plugins/cache/…`, `~/.codex/plugins/cache/…`, etc.) — reached via THAT CLIENT'S own install protocol. This invariant holds regardless of the plugin's source:
+
+- a GitHub URL,
+- a local folder,
+- one of the 3 AI Maestro local marketplaces, OR
+- a remote marketplace (`Emasoft/ai-maestro-plugins` or any third-party).
+
+In all 4 cases AI Maestro invokes the client's protocol to install INTO the client:
+- **Claude**: `claude plugin install <plugin> <marketplace> --scope local` (+ enable in `~/.claude/settings.local.json`).
+- **Codex**: file-based — add entry to `~/.agents/plugins/marketplace.json`, flip `enabled=true` for `<name>@<marketplace>` in `~/.codex/config.toml`, reload Codex.
+- Future clients: whatever their protocol is.
+
+AI Maestro only WRITES into `~/agents/{role,custom,core}-plugins/…` when it is the AUTHOR or CONVERTER of the plugin (Haephestos-generated customs, Claude→non-Claude conversions, core-plugin emissions for non-Claude clients). In every other case the plugin's source stays where the user pointed and AI Maestro installs from there directly. Uninstall operates on the client target only — the AI Maestro source, when one exists, is preserved across uninstall/reinstall cycles so later reinstalls do not require re-emission.
+
+See R20.29 in `docs/GOVERNANCE-RULES.md` for the canonical wording and SCEN-026 for the end-to-end test.
+
 ### 1. Role-Plugins (Agent Specializations)
 
 Role-plugins define an agent's job specialization. They contain a `.agent.toml` profile with `compatible-titles` and `compatible-clients` fields.
 
-**Storage:** ALL role-plugins live in `~/agents/role-plugins/<plugin-name>/`. No exceptions.
+**Source storage** (NOT installed state — see the source-vs-install-target block above): role-plugin SOURCES live in `~/agents/role-plugins/<marketplace>/<plugin-name>/` (Haephestos-authored or converted) or on GitHub `Emasoft/ai-maestro-plugins` (8 predefined defaults). The INSTALL target is always the client's own plugin cache, reached via that client's install protocol.
 
 **Local marketplace:** `ai-maestro-local-roles-marketplace` (directory-based, registered with Claude CLI via `claude plugin marketplace add ~/agents/role-plugins/`).
 

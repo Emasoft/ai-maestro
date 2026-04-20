@@ -94,22 +94,62 @@ author: AI Maestro Team
 
 # Codex Plugin Install/Uninstall Scenario
 
-> **Scope note — TWO distinct flows:**
+> **Hard architectural rule — source vs install target:**
+>
+> The three AI Maestro local folders
+> `~/agents/{role,custom,core}-plugins/<marketplace>/<plugin>/`
+> are MARKETPLACES + SOURCE STORAGE. They hold plugins as publishable
+> source, NOT as installed state. A plugin "lives" at its install
+> target, which is ALWAYS the client's own plugin location — reached
+> via the client's own install protocol, no matter where the source
+> came from. Sources can be:
+>
+> - a GitHub URL,
+> - a local folder,
+> - one of the 3 AI Maestro local marketplaces, OR
+> - a remote marketplace (like `Emasoft/ai-maestro-plugins`).
+>
+> All 4 cases install via the client's protocol into the client's
+> target state. For Codex that target is:
+> `~/.agents/plugins/marketplace.json` (a marketplace entry pointing at
+> the source) + `~/.codex/config.toml` (enabled flag keyed by
+> `<name>@<marketplace>`), and Codex itself copies/references the
+> files into `~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/`.
+>
+> So for a role-plugin installed from AI Maestro's local roles
+> marketplace, the sequence AI Maestro performs is:
+>
+> 1. Emit the role-plugin into the local source path
+>    `~/agents/role-plugins/codex-roles-marketplace/<plugin>/`
+>    (only the first time — source is reusable across installs/uninstalls).
+> 2. Ensure that local marketplace is registered with Codex by
+>    adding/updating its entry in `~/.agents/plugins/marketplace.json`.
+> 3. Install the specific plugin INTO Codex via its protocol —
+>    flip enabled=true in `~/.codex/config.toml` keyed as
+>    `<plugin>@ai-maestro-local-roles-marketplace`, reload Codex.
+>
+> Uninstall reverses step 3 only — the source in step 1 stays put so
+> a later reinstall doesn't require re-emission.
+>
+> **Scope — TWO distinct flows:**
 >
 > 1. **Role-plugins** (derivatives of Claude originals). Tested in
->    Phases 1-3. These ARE stored by AI Maestro under
->    `~/agents/role-plugins/codex-roles-marketplace/` because they
->    were auto-emitted from the Claude abstract — the rule
->    "uniquely named customs live in a local AI-Maestro marketplace"
->    applies ONLY here, per TRDD-c7a81642 R20.28. The scenario tests
->    one title swap (MEMBER → ARCHITECT) as a representative exercise.
+>    Phases 1-3. Source lives in
+>    `~/agents/role-plugins/codex-roles-marketplace/` because the
+>    role-plugin was auto-emitted from the Claude abstract per
+>    TRDD-c7a81642 R20.28. The INSTALL target is Codex itself — the
+>    local marketplace is just the publishing surface. Phases 1-3
+>    cycle through MEMBER → ARCHITECT → uninstall → re-assign as a
+>    representative round-trip.
 >
-> 2. **Regular plugins** (already in Codex format, not derived from
->    Claude). Tested in Phases 4-5. AI Maestro does NOT store these;
->    Codex owns them. Plugin-name collisions across publishers are
->    normal and are disambiguated by the `<name>@<marketplace>` fully
->    qualified form — e.g. `codex-plugin@supabase-community/codex-plugin`
->    vs `codex-plugin@remotion-dev/codex-plugin` live side by side
+> 2. **Regular plugins** (already in Codex format, authored elsewhere).
+>    Tested in Phases 4-5. AI Maestro holds NO source copy; the user
+>    points at the plugin's GitHub/folder location directly and
+>    Codex's install protocol does the rest. Plugin-name collisions
+>    across publishers are normal and are disambiguated by the
+>    `<name>@<marketplace>` fully qualified form — e.g.
+>    `codex-plugin@supabase-community/codex-plugin` vs
+>    `codex-plugin@remotion-dev/codex-plugin` live side by side
 >    without any rename.
 
 > **Reference:** Codex plugin model — https://developers.openai.com/codex/plugins/build
@@ -192,20 +232,29 @@ author: AI Maestro Team
   - Step 6 Team: "No team (autonomous)"
   - Step 7 Title: leave auto (MEMBER)
   Then click "Create Agent".
-- **Goal:** Agent created via `POST /api/agents`, sidebar refreshes, new agent selected
-- **Creates:** 1 agent registry entry; 1 agent workdir at `~/agents/scen026-codex-plugin-test/`; 1 Codex role-plugin auto-emitted under `~/agents/role-plugins/codex-roles-marketplace/ai-maestro-programmer-agent/`; ledger entries `create_agent` + `change_plugin(install)`
-- **Modifies:** agents/registry.json; codex enable-state in the agent's workdir
-- **Verify:** Agent appears in sidebar with green dot. `GET /api/agents/<id>` returns `program: "codex"`. `GET /api/agents/<id>/local-config` includes a non-null `rolePlugin`. Screenshot of the agent selected in the sidebar.
+- **Goal:** Agent created via `POST /api/agents`. Under the hood AI Maestro performs TWO distinct actions — (a) SOURCE EMIT: if no native Codex build of the MEMBER role-plugin exists, emit one into the local marketplace at `~/agents/role-plugins/codex-roles-marketplace/ai-maestro-programmer-agent/`; (b) TARGET INSTALL: invoke Codex's file-based install protocol — add `ai-maestro-local-roles-marketplace` to `~/.agents/plugins/marketplace.json`, flip `enabled=true` for `ai-maestro-programmer-agent@ai-maestro-local-roles-marketplace` in `~/.codex/config.toml`, and reload Codex so it materializes the plugin into `~/.codex/plugins/cache/…`.
+- **Creates:** 1 agent registry entry; 1 agent workdir at `~/agents/scen026-codex-plugin-test/`; possibly 1 emitted role-plugin SOURCE under `~/agents/role-plugins/codex-roles-marketplace/ai-maestro-programmer-agent/`; 1 marketplace entry + 1 enabled entry on the CODEX side; ledger entries `create_agent` + `change_plugin(install)` (+ `add_marketplace` if the local marketplace wasn't already registered with Codex)
+- **Modifies:** `agents/registry.json` (author-side); `~/.agents/plugins/marketplace.json` + `~/.codex/config.toml` (Codex-side)
+- **Verify:** Agent appears in sidebar with green dot. `GET /api/agents/<id>` returns `program: "codex"`. `GET /api/agents/<id>/local-config` includes a non-null `rolePlugin`. `grep "ai-maestro-programmer-agent@" ~/.codex/config.toml` returns exactly 1 enabled entry. Screenshot.
 
-#### S008: Confirm the Codex-converted role-plugin files exist on disk
-- **Action:** Read-only check: `ls ~/agents/role-plugins/codex-roles-marketplace/ai-maestro-programmer-agent/` and verify the quad-match files:
-  - `<plugin-name>.agent.toml` with `compatible-clients = ["codex"]`
-  - `agents/<plugin-name>-main-agent.md`
-  - `plugin.json` (or Codex-flavored `.codex-plugin/plugin.json`, whichever the emitter produces)
-- **Goal:** The UniversalPluginIR → Codex emitter produced a well-formed role-plugin
+#### S008: Confirm BOTH the source and the target install are in place
+- **Action:** Read-only checks in two layers:
+  1. **Source side** (the local marketplace publication):
+     `ls ~/agents/role-plugins/codex-roles-marketplace/ai-maestro-programmer-agent/` —
+     must contain the quad-match files (`<name>.agent.toml` with
+     `compatible-clients = ["codex"]`, `agents/<name>-main-agent.md`,
+     and the Codex-flavoured `.codex-plugin/plugin.json`).
+  2. **Target side** (what Codex itself sees):
+     `jq '.marketplaces["ai-maestro-local-roles-marketplace"]' < ~/.agents/plugins/marketplace.json`
+     returns the entry pointing at the local marketplace path;
+     `grep "ai-maestro-programmer-agent@ai-maestro-local-roles-marketplace" ~/.codex/config.toml`
+     returns an enabled entry.
+- **Goal:** Prove the source→target flow worked end-to-end: emitted
+  to source, registered with Codex, enabled in Codex.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** All 3 files exist and the TOML's `compatible-clients` list contains `codex`. Screenshot of the directory listing.
+- **Verify:** All source-side files exist; both target-side keys
+  resolve. Screenshot showing both listings.
 
 #### S009: Open Profile → Config tab → Role-Plugin card
 - **Action:** Click the agent in the sidebar to open its Profile, then the `Config` tab. Locate the "Role-Plugin" card.
@@ -227,17 +276,20 @@ author: AI Maestro Team
 
 #### S011: Assign ARCHITECT + enter governance password
 - **Action:** Click the ARCHITECT radio card, enter governance password `mYkri1-xoxrap-gogtan` in the modal, click "Assign". If the sudo modal also appears, enter the same password there.
-- **Goal:** ChangeTitle pipeline runs: G14c uninstalls the old programmer role-plugin, G16 installs the ARCHITECT-compatible role-plugin (auto-emitted to Codex from the Claude abstract if no native Codex version exists).
-- **Creates:** 1 new Codex role-plugin under `~/agents/role-plugins/codex-roles-marketplace/ai-maestro-architect-agent/`; 3-4 new ledger entries (`change_title`, `change_plugin(uninstall)`, `change_plugin(install)`)
-- **Modifies:** agents/registry.json (governanceTitle + rolePlugin); the agent's workdir Codex enable-state
-- **Verify:** TitleBadge reads "ARCHITECT". Role-Plugin card updates to `ai-maestro-architect-agent` with green dot. `GET /api/agents/<id>/local-config` shows the new rolePlugin. Screenshot of the updated Profile header.
+- **Goal:** ChangeTitle pipeline runs TWO symmetric source→target ops: (a) G14c TARGET UNINSTALL of the programmer role-plugin from Codex — flip its `enabled` flag to false (or remove its key) in `~/.codex/config.toml`. The SOURCE at `~/agents/role-plugins/codex-roles-marketplace/ai-maestro-programmer-agent/` stays in place for future reuse. (b) G16 checks for a native/emitted Codex source of `ai-maestro-architect-agent`; if missing, emits one into the local marketplace; then TARGET INSTALL via Codex's protocol — flip enabled=true for `ai-maestro-architect-agent@ai-maestro-local-roles-marketplace` in config.toml.
+- **Creates:** Possibly 1 new role-plugin SOURCE under `~/agents/role-plugins/codex-roles-marketplace/ai-maestro-architect-agent/` (only if not already emitted); 1 new enabled entry in `~/.codex/config.toml`; 3-4 ledger entries (`change_title`, `change_plugin(uninstall)`, `change_plugin(install)`)
+- **Modifies:** `agents/registry.json` (governanceTitle + rolePlugin); `~/.codex/config.toml` (two toggles — one disabled, one enabled); possibly `~/.agents/plugins/marketplace.json` if the local marketplace needed registration
+- **Verify:** TitleBadge reads "ARCHITECT". Role-Plugin card updates to `ai-maestro-architect-agent` with green dot. `GET /api/agents/<id>/local-config` shows the new rolePlugin. Screenshot.
 
-#### S012: Confirm on-disk the old role-plugin was uninstalled + new one installed
-- **Action:** Read-only check of `~/.codex/plugins/cache/` (or the equivalent Codex scope) and the agent's Codex config — the old `ai-maestro-programmer-agent` entry is gone, the new `ai-maestro-architect-agent` entry is present.
-- **Goal:** Codex uninstall pipeline executed cleanly (no orphaned enable entry)
+#### S012: Confirm the Codex target state swapped cleanly
+- **Action:** Read-only check of the Codex-side target state (NOT the AI Maestro source — the source is expected to still contain both plugins' folders, because source is publishing, not install):
+  - `grep "ai-maestro-programmer-agent@" ~/.codex/config.toml` returns 0 enabled lines (old target install removed)
+  - `grep "ai-maestro-architect-agent@" ~/.codex/config.toml` returns exactly 1 enabled line (new target install present)
+  - `ls ~/agents/role-plugins/codex-roles-marketplace/` still shows BOTH `ai-maestro-programmer-agent/` and `ai-maestro-architect-agent/` source folders (sources are preserved across target swaps — this is the key property under test)
+- **Goal:** The target install is the uniquely-installed ARCHITECT role-plugin; the source layer retains both publications
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** grep/`jq` shows exactly one AI Maestro role-plugin in the Codex config, and its name is `ai-maestro-architect-agent`. Screenshot of the grep output.
+- **Verify:** All 3 assertions above hold. Screenshot of the grep output + `ls` output.
 
 #### S013: Verify ledger captured the title swap
 - **Action:** Read `~/.aimaestro/agents/registry.json.ledger.jsonl` (append-only). Filter by `op=change_title` and `op=change_plugin` within the last 60s.

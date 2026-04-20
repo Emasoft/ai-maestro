@@ -1,8 +1,9 @@
 ---
-version: "3.7.1"
-date: 2026-04-16
+version: "3.7.2"
+date: 2026-04-20
 branch: feature/team-governance
 changelog:
+  - "3.7.2: Source-vs-install-target clarification (2026-04-20). Added R20.29 and a new 'CRITICAL — source vs install target' block to the R20 intro making explicit that the 3 AI Maestro local-marketplace containers under `~/agents/{role,custom,core}-plugins/` are SOURCE STORAGE only. A plugin LIVES at its install target (the client's own plugin cache) reached via the client's own install protocol — regardless of whether the source was a GitHub URL, a local folder, a remote marketplace, or one of the 3 AI Maestro locals. AI Maestro only WRITES into local sources when it is the author or converter of the plugin. Driven by SCEN-026 authoring feedback."
   - "3.7.1: Drift-remediation pass (2026-04-16). Bumped version to match R20.25 / R20.27 / R20.28 body tags that were already labeled v3.7.1. Fixed R20.28 title count (Six → Five — enumeration has exactly five patterns). Added SCEN-023 and SCEN-024 to §0.8. Removed stale pointer to non-existent `app/api/agents/[id]/title/route.ts` (title changes dispatch via `PATCH /api/agents/[id]` per element-management-service). Clarified Overview wording: one remote marketplace + two local containers (+ one core container for non-Claude clients)."
   - "3.7.0: Added R9.13 (role-plugin mandatory for every agent, including AUTONOMOUS), R11.12 (role-plugin mandatory at every boundary), Invariant 8 rewritten. Added new §0 'Canonical source + copies' index and new §TERMINOLOGY (TITLE / ROLE / PERSONA three-layer model). AUTONOMOUS now resolves to the mandatory ai-maestro-autonomous-agent role-plugin."
   - "3.6.0: R20 revised — custom-plugins/ and role-plugins/ are CONTAINERS, not marketplaces. Each container holds one marketplace-<client>/ subfolder per client format (marketplace-claude/, marketplace-codex/, marketplace-openrouter/, ...). Each client-marketplace has its own schema per that client's spec. The .abstract/ IR hub lives at the container level and feeds all per-client marketplaces."
@@ -698,6 +699,37 @@ contents. The key architectural distinction is between **containers** and
   client format (Claude, Codex, OpenRouter, Gemini, …). Each is named
   `marketplace-<client>/` inside its container.
 
+### CRITICAL — source vs install target (clarified 2026-04-20)
+
+**The three AI Maestro local-marketplace containers
+(`~/agents/{role,custom,core}-plugins/…`) are SOURCE STORAGE only. They
+are publishing surfaces, NOT the installed location of any plugin.**
+
+A plugin LIVES at its install target, which is ALWAYS the client's own
+plugin cache (e.g. `~/.claude/plugins/cache/…`, `~/.codex/plugins/cache/…`),
+reached via the client's own install protocol. This holds regardless of
+where the plugin's source came from:
+
+- a GitHub URL,
+- a local folder,
+- one of the 3 AI Maestro local marketplaces, OR
+- a remote marketplace (`Emasoft/ai-maestro-plugins`, or any third-party).
+
+In all 4 cases AI Maestro installs the plugin INTO the client by invoking
+that client's protocol (for Claude: `claude plugin install`; for Codex:
+the file-based edit of `~/.agents/plugins/marketplace.json` +
+`~/.codex/config.toml`). AI Maestro only WRITES into
+`~/agents/{role,custom,core}-plugins/…` when it is the author or converter
+of the plugin — i.e. when there is no upstream source to install from
+(Haephestos-generated customs, Claude→other-client conversions, core-plugin
+emissions for non-Claude clients). In every other case the source folder
+stays where the user pointed (GitHub, a local checkout, etc.) and AI
+Maestro installs from there directly.
+
+Uninstall likewise operates on the client target only — the AI Maestro
+local source, when one exists, is preserved so a later reinstall doesn't
+require re-emission.
+
 Each client's marketplace has its OWN manifest schema per that client's spec:
 
 - **Claude Code** — manifest at `<marketplace>/.claude-plugin/marketplace.json`;
@@ -742,6 +774,7 @@ rather than re-implementing these operations.
 | R20.26 | **NO-RENAMING-RULE-FOR-PLUGINS (v3.7.0):** Plugin names (both folder name and manifest name) are **immutable** once created. No AI Maestro API, UI action, or script/skill may rename an existing plugin. Names MUST be treated as permanent identifiers. Conversion behavior: (a) The converter computes the target name (Claude: `<name>`, others: `<name>-<client>`) and checks whether a folder with that exact literal name exists in the target marketplace. Example: original `programmer-plugin` → codex target name is `programmer-plugin-codex`. (b) If `programmer-plugin-codex` already exists in the codex marketplace → **overwrite** (update in place). (c) If `programmer-plugin-codex` does NOT exist → **write new**, regardless of whether identical plugins exist under different names. No similarity check, no deduplication. (d) There is no plugin registry beyond the filesystem — "the DB is the filesystem". Plugin dirs and their manifests ARE the registry. No external database, no rename tracking, no deduplication index. | Explicit |
 | R20.27 | **Manifest-name MUST equal folder-name (v3.7.1):** Every plugin's manifest `name` field MUST be exactly equal to the plugin's folder name. This rule applies to: (a) `.claude-plugin/plugin.json` for Claude plugins — `name === basename(folder)`; (b) `.codex-plugin/plugin.json` for Codex plugins — `name === basename(folder)` (which already includes the `-codex` suffix per R20.26); (c) any analogous manifest for future clients. The converter pipeline (`plugin-storage-service.ts::emitForClient`, `plugin-storage-service.ts::emitPluginToDir`) MUST rewrite the manifest `name` to match the target folder name whenever the target folder name differs from the source name (i.e. any non-Claude target). For role-plugins the fourfold-identity rule (R20.17) extends this to THREE additional checks: `<name>.agent.toml` filename, `[agent].name` inside the toml, and `agents/<name>-main-agent.md` frontmatter — ALL must match the folder name. The canonical marketplace `source` path (R20.18) is derived from the folder name, so a mismatch between folder and manifest breaks marketplace discovery. Validators and installers MUST reject any plugin whose folder name ≠ manifest name. | Explicit |
 | R20.28 | **Five canonical local marketplace folder patterns (v3.7.1):** The ONLY valid local marketplace folder names under `~/agents/` are exactly these five patterns. No other folder is ever registered as a marketplace, and no additional pattern is ever invented: (1) `~/agents/role-plugins/roles-marketplace/` — Claude role-plugins. (2) `~/agents/role-plugins/<client>-roles-marketplace/` — per-client role-plugins for codex, gemini, kiro, opencode. (3) `~/agents/custom-plugins/custom-marketplace/` — Claude custom (ordinary) plugins. (4) `~/agents/custom-plugins/<client>-custom-marketplace/` — per-client custom plugins. (5) `~/agents/core-plugins/<client>-core-marketplace/` — per-client converted core plugin (Claude is absent by R20.25). The installer MUST create every folder pattern that is applicable for the installed clients and MUST write a valid manifest inside each — even if the plugins array is currently empty. Filesystem-only per-client marketplaces (non-Claude) use a flat `marketplace.json` at the root of the marketplace folder; Claude marketplaces use `.claude-plugin/marketplace.json` at the CONTAINER level (not the per-client marketplace) per Claude's spec. | Explicit |
+| R20.29 | **Source-vs-install-target invariant (v3.7.2, 2026-04-20):** The three AI Maestro local-marketplace containers under `~/agents/{role,custom,core}-plugins/` are SOURCE STORAGE / publishing surfaces, NOT the installed location of any plugin. A plugin LIVES at its install target — the client's own plugin cache (`~/.claude/plugins/cache/…`, `~/.codex/plugins/cache/…`, etc.) — reached via that client's own install protocol (`claude plugin install` for Claude; file-based edits to `~/.agents/plugins/marketplace.json` + `~/.codex/config.toml` for Codex). This invariant holds regardless of the plugin's SOURCE: whether the source is (a) a GitHub URL, (b) a local folder, (c) one of the 3 AI Maestro local marketplaces, or (d) a remote marketplace like `Emasoft/ai-maestro-plugins`, the install step ALWAYS invokes the client's own protocol to write into the client's target state. AI Maestro only WRITES into the local source containers when it is the author or converter of the plugin (Haephestos-generated customs, Claude→non-Claude conversions, core-plugin emissions for non-Claude clients); in every other case the plugin's source stays where the user pointed. Uninstall operates on the client target only — the AI Maestro source, when one exists, is preserved across uninstall/reinstall cycles so later reinstalls do not require re-emission. Tested by SCEN-026 Phase 1 S008 (source + target layers both asserted independently) and Phase 2 S012 (source folders preserved after target swap). | Explicit |
 
 ---
 

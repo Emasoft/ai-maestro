@@ -1,5 +1,72 @@
 # Scenario Runner Memory
 
+## SCEN-002 run 2026-04-20T23:01:38Z — PASS (52 as-written + 8 adapted + 2 skipped, 0 code fixes committed)
+
+**Run ID:** 20260420T230138Z
+**Branch:** feature/team-governance
+**Reports:**
+- reports/scenarios-runner/SCEN-002_20260420T230138Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_002_20260420T230138Z.md
+
+**Verdict:** PASS — 62-step scenario completed. All cleanup verified via UI, STATE-WIPE all 4 files SHA256-matched. No code fixes committed; all issues filed as P0/P1/P2/P3 proposals.
+
+### Quick-reference pattern index for future SCEN-002 runs
+- Scenario requires `scen002-manager` creation in Phase 2.5 (R9.8 blocks teams w/o MANAGER). Scenario file v2.0 does NOT say this — P2-001 proposes v3.0 rewrite.
+- Team creation auto-creates a COS persona "Zaire" (`cos-scen-test-team-alpha`). Singleton held. Scenario S028-S030 adapted: verify CHIEF-OF-STAFF DISABLED for beta; navigate to Zaire to verify COS plugin.
+- Title-change flow has DOUBLE password modal: (1) "Enter Governance Password" inline in Title Assignment Dialog + (2) "Confirm with password" sudo modal. Fill BOTH with governance password.
+- `/teams` page delete has 2-dialog flow: (1) "Are you sure" → Delete (2) "Delete Team Agents?" with password → Delete Team. NO "Delete Agents Too" button. Agents revert to AUTONOMOUS + hibernated.
+- "Remove from team" button on team dashboard is `opacity-0 group-hover:opacity-100`. No confirmation dialog — instant remove. Zaire (COS) row has a DISABLED red button with title "Chief-of-Staff cannot be removed directly — reassign..." (R4.7 client-side enforcement).
+- "Also delete agent folder" checkbox — recurring bug (6+ consecutive runs now). Folder mostly deleted but `.claude/settings.local.json` + possibly `.claude/amama/*` remain. Safe to MOVE leftover to /tmp. Root cause hypothesis: race between plugin uninstall Claude CLI call (rewriting settings.local.json) and G09 folder rm.
+- Kanban task creation requires GitHub project link (since 2026-03-27). S038-S039 SKIP with message "Cannot create task: team has no GitHub Project linked".
+- R9.13: AUTONOMOUS agents get `ai-maestro-autonomous-agent` plugin mandatorily. After team-remove, agent's Role Plugin is NOT "None" — it's `ai-maestro-autonomous-agent` (scenario's "Role Plugin should be None" is outdated).
+- S054 RBAC self-mod probe uses curl PATCH — BLOCKED by subagent-write-guard hook per Rule 6. DEFER this step in every run (can only be unit-tested).
+
+### UI interaction patterns re-validated this run
+- Sidebar `+` (Create new agent) opens a 1-item dropdown ("Create Agent") on first click, closes on second. 2 clicks = open wizard.
+- Profile panel click: Click agent in sidebar → opens terminal view. Click "Profile" button in the agent top-bar → profile panel slides out from right. Profile panel tabs: Overview / Config / Advanced (all cursor-pointer DIVs, not BUTTON).
+- Title Assignment Dialog is inline in Profile panel area at bottom (y~800px; scroll Profile to find badge). Dialog overlay is NOT full-screen sudo-like — it's a nested card.
+
+---
+
+## SCEN-001 run 2026-04-20T21:58:47Z — PASS with 2 P0 bugs fixed in-place
+
+**Run ID:** 20260420T215847Z
+**Branch:** feature/team-governance
+**Reports:**
+- reports/scenarios-runner/SCEN-001_20260420T215847Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_001_20260420T215847Z.md
+
+**Verdict:** PASS — 2 BLOCKER bugs fixed: a1107965 (AgentList SWC wedge) + c6c39958 (UpdateTeamSchema orchestratorId).
+
+### BUG-001 (fixed a1107965): AgentList SWC parser wedge — dashboard 100% unreachable
+- commit 9f46fb91 introduced `X || Y ? Z : W` ternary in AgentList.tsx:228-237
+- SWC in TS+JSX mode wedges and fails 372 lines later at `<div>` in return()
+- Fix: split into 3 boolean variables (see the file for final form)
+- **Add eslint no-mixed-operators rule** to prevent regression (PROP-P0-001)
+
+### BUG-002 (fixed c6c39958): ORCHESTRATOR→MEMBER demotion stranded agent at null title
+- `components/governance/TitleAssignmentDialog.impl.tsx:471-480` calls `updateTeamOrchestratorId(null)` after `clearGovernanceTitle()` 
+- `app/api/teams/[id]/route.ts` UpdateTeamSchema was `.strict()` WITHOUT `orchestratorId` — Zod 400, threw before `setGovernanceTitle('member')`
+- Fix: add `orchestratorId: z.string().uuid().nullable().optional()` to UpdateTeamSchema
+- **Derive Zod schema from TypeScript type** to prevent drift (PROP-P1-001)
+
+### Key findings for future SCEN-001 / team-title runs
+- **Create MANAGER first.** R9.8 blocks team creation without MANAGER on host. User does NOT pre-create one — every scenario creates `scen<NNN>-manager` itself, then deletes it in cleanup.
+- **Title Assignment Dialog (v0.27.3) shows ALL 8 options** with disabled/grayed state + "Requires team membership" explanation for team-only titles. Scenario files saying "only N shown" are outdated.
+- **Delete dialog ALWAYS sends `hard=true`** — there is NO soft-delete path in the UI. The "Also delete agent folder" checkbox controls `deleteFolder`, NOT soft-vs-hard. No cemetery archive is ever created from the DeleteAgentDialog path. Scenarios expecting a cemetery entry after soft-delete are outdated (see ISSUE-002, PROP-P1-003).
+- **/teams page delete dialog has NO "Delete Agents Too" checkbox** — agents are ALWAYS reverted to AUTONOMOUS + hibernated when the team is deleted. The DELETE endpoint accepts `deleteAgents=true` but the UI doesn't expose it (see ISSUE-001).
+- **DANGER ZONE accordion text appears only in `innerText`, not `textContent`** — must use `(e.innerText || '') === 'DANGER ZONE'` in `page.evaluate` queries, NOT `textContent`.
+- **Orphan ~/agents/<name>/ folder after soft-delete is Rule 0 safe to MOVE (not delete) to /tmp.** After soft-delete the folder stays but the registry entry is gone, creating registry-vs-disk drift on the next server poll.
+- **Sudo token is one-shot.** Every consecutive 403 in a multi-step PATCH requires re-filling the sudo modal. sudoFetch re-prompts automatically — trust it.
+- **Two-step demotion (ARCHITECT/INTEGRATOR/ORCHESTRATOR → MEMBER) is NOT atomic.** If any intermediate PATCH fails, the agent is stranded. PROP-P1-002 proposes server-side atomization.
+- **Haephestos HELPERS card workaround for bootstrapping**: still `POST /api/agents/creation-helper/session` then click sidebar (from SCEN-004 run 2026-04-19 MEMORY).
+
+### Procedural notes for SAFE-SETUP
+- If `_next/static/chunks/main-app.js` returns 404 (dev bundle broken): `pm2 stop ai-maestro && mv .next .next.stale-$(date -u +%Y%m%dT%H%M%SZ) && pm2 restart ai-maestro && sleep 20`. Then re-login. (PROP-P3-002 suggests automating this in the shared setup script.)
+- Login cookie is lost on pm2 restart — always re-run login (S006) after any server restart.
+
+---
+
 ## SCEN-004 run 2026-04-19T15:52:44Z — PARTIAL (27/35 steps pass, 5 bugs found, 0 fixed)
 
 **Run ID:** 20260419T155244Z

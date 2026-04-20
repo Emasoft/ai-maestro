@@ -196,6 +196,17 @@ export default function DashboardPage() {
     }
 
     if (agentParam) {
+      // Proposal 18 (2026-04-20): "haephestos" is a sentinel, not a real id.
+      // The dedicated Haephestos useEffect below resolves it to the real
+      // agent id (a.name === '_aim-creation-helper') and strips the URL
+      // only after a successful resolution. If we strip here, a race with
+      // the async agents fetch leaves activeAgentId="haephestos" forever
+      // (no agent.id matches) and the purple card click appears to do
+      // nothing.
+      if (agentParam === 'haephestos') {
+        urlParamProcessedRef.current = true
+        return
+      }
       setActiveAgentId(decodeURIComponent(agentParam))
       window.history.replaceState({}, '', window.location.pathname)
       urlParamProcessedRef.current = true

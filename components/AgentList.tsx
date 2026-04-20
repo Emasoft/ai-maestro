@@ -209,12 +209,24 @@ export default function AgentList({
 
   /**
    * Proposal 30 (2026-04-20): the HELPERS Haephestos card is rendered in
-   * two places (normal sidebar + compact sidebar). Previously both had
-   * inline `() => { window.location.href = '/?agent=haephestos' }`
-   * duplicated. Extracted here so a future fix (e.g. proposal 18
-   * navigation race, or 0.D `which claude` gate) only touches one site.
+   * two places (normal sidebar + compact sidebar). Single handler so a
+   * future fix (e.g. 0.D `which claude` gate) only touches one site.
+   *
+   * Proposal 18 (2026-04-20): if the Haephestos agent is already in the
+   * agents list, select it in-place via onAgentSelect — avoids the full
+   * page reload and the URL race with useAgents's async fetch. Fall back
+   * to the ?agent=haephestos URL only when the agent hasn't been
+   * registered yet (first run); the page-level bootstrap useEffect
+   * resolves that case via the creation-helper/session API.
    */
-  const handleHaephestosClick = () => { window.location.href = '/?agent=haephestos' }
+  const handleHaephestosClick = () => {
+    const haephestos = agents.find(a => a.name === '_aim-creation-helper')
+    if (haephestos) {
+      onAgentSelect(haephestos)
+      return
+    }
+    window.location.href = '/?agent=haephestos'
+  }
 
   // Host management
   const [staleHostPopup, setStaleHostPopup] = useState<{ id: string; name: string; error: string } | null>(null)

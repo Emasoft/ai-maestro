@@ -2712,6 +2712,37 @@ export async function ChangePlugin(
     result.success = true
     ops.push(`G13: Success`)
 
+    // TRDD-eac02238 step 6 (fan-out, 2026-04-20): emit per-op ledger
+    // entry for ChangePlugin. Covers install/uninstall/enable/disable.
+    // state-restore replays from this by re-applying the action to
+    // the agent's client settings file.
+    try {
+      const { emitAgentOp } = await import('@/lib/ledger-emit')
+      // ChangePlugin can operate user-scope (agentId === null) or local-scope
+      // (agentId === the target agent). The ledger path reflects the scope
+      // so state-restore can distinguish global vs per-agent plugin moves.
+      const ledgerPath = agentId
+        ? `/agents/${agentId}/plugins/${pluginKey}`
+        : `/user/plugins/${pluginKey}`
+      emitAgentOp(
+        'change_plugin',
+        [
+          {
+            op: 'replace',
+            path: ledgerPath,
+            value: { action: desired.action, marketplace: desired.marketplace, scope: desired.scope },
+          },
+        ],
+        {
+          action: `change-plugin-${desired.action}`,
+          agentId: authContext?.agentId ?? null,
+          actor: authContext?.agentId ? 'agent' : 'user',
+        },
+      )
+    } catch (ledgerErr) {
+      ops.push(`LEDGER: WARN — per-op append failed: ${ledgerErr instanceof Error ? ledgerErr.message : ledgerErr}`)
+    }
+
     console.log(`[ChangePlugin] ${pluginKey}: ${desired.action} (${ops.length} gates)`)
     return result
   } catch (err) {
@@ -4878,6 +4909,32 @@ export async function DeleteAgent(
       ops.push('G09: Soft-delete — folder preserved')
     }
 
+    // TRDD-eac02238 step 6 (fan-out, 2026-04-20): emit per-op ledger
+    // entry for DeleteAgent. Diff encodes hard vs soft (remove vs
+    // replace with deletedAt). Single op name 'delete_agent' per the
+    // canonical LedgerOp enum; the action field + diff shape lets
+    // state-restore distinguish the two cases.
+    try {
+      const { emitAgentOp } = await import('@/lib/ledger-emit')
+      emitAgentOp(
+        'delete_agent',
+        [
+          {
+            op: hard ? 'remove' : 'replace',
+            path: `/agents/${agentId}`,
+            value: hard ? null : { ...agent, deletedAt: new Date().toISOString() },
+          },
+        ],
+        {
+          action: hard ? 'delete-agent-hard' : 'delete-agent-soft',
+          agentId: options.authContext?.agentId ?? null,
+          actor: options.authContext?.agentId ? 'agent' : 'user',
+        },
+      )
+    } catch (ledgerErr) {
+      ops.push(`LEDGER: WARN — per-op append failed: ${ledgerErr instanceof Error ? ledgerErr.message : ledgerErr}`)
+    }
+
     result.success = true
     console.log(`[DeleteAgent] "${agent.name}" deleted (hard=${hard}, ${ops.length} gates)`)
     return result
@@ -5614,6 +5671,38 @@ export async function CreateAgent(
       }
     } catch (g12Err) {
       ops.push(`G12: WARN — unexpected error: ${g12Err instanceof Error ? g12Err.message : g12Err}`)
+    }
+
+    // TRDD-eac02238 step 6 (fan-out, 2026-04-20): emit per-op ledger
+    // entry for CreateAgent. Fire-and-forget to avoid blocking the
+    // response; the save-level bulk-diff emitted by agent-registry
+    // saveAgents() stays as a safety net.
+    try {
+      const { emitAgentOp } = await import('@/lib/ledger-emit')
+      emitAgentOp(
+        'create_agent',
+        [
+          {
+            op: 'add',
+            path: `/agents/${agent.id}`,
+            value: {
+              id: agent.id,
+              name: agent.name,
+              label: agent.label ?? null,
+              program,
+              governanceTitle: agent.governanceTitle ?? null,
+              team: agent.team ?? null,
+            },
+          },
+        ],
+        {
+          action: 'create-agent',
+          agentId: desired.authContext?.agentId ?? null,
+          actor: desired.authContext?.agentId ? 'agent' : 'user',
+        },
+      )
+    } catch (ledgerErr) {
+      ops.push(`LEDGER: WARN — per-op append failed: ${ledgerErr instanceof Error ? ledgerErr.message : ledgerErr}`)
     }
 
     result.success = true

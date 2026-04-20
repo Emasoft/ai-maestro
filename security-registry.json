@@ -32,6 +32,7 @@
     "DELETE_/api/agents/cemetery": "strict",
     "POST_/api/governance/password": "strict",
     "DELETE_/api/settings/marketplaces": "strict",
+    "DELETE_/api/agents/role-plugins": "strict",
     "DELETE_/api/agents/role-plugins/install": "strict",
     "PATCH_/api/agents/[id]/title": "strict",
     "POST_/api/sessions/[id]/stop": "strict",

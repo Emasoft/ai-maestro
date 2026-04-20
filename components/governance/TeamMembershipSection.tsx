@@ -131,7 +131,18 @@ export default function TeamMembershipSection({
     try {
       const result = await onLeaveTeam(teamId)
       if (!result.success) {
-        setError(result.error || 'Failed to leave team')
+        // Proposal 2 (2026-04-20): removeAgentFromTeam in useGovernance
+        // makes unwrapped fetch calls that can return raw 'sudo_required'
+        // when strict routes are hit (after security-registry classification).
+        // Translate the raw token into a human-readable message rather
+        // than leaking the API error string into the profile panel.
+        // A deeper refactor (wrap removeAgentFromTeam with sudoFetch) is
+        // tracked as a derived task — see TeamMembershipSection.tsx TODO.
+        const raw = result.error || 'Failed to leave team'
+        const cleaned = /sudo.?required/i.test(raw)
+          ? 'This action requires the governance password. Try again and enter it when prompted.'
+          : raw
+        setError(cleaned)
       } else {
         setInfoMessage('Successfully left team')
         onDataChanged?.()

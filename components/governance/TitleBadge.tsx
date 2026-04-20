@@ -1,6 +1,6 @@
 'use client'
 
-import { Crown, Megaphone, Shield, Plus, Compass, GitMerge, Bot, Wrench } from 'lucide-react'
+import { Crown, Megaphone, Shield, Compass, GitMerge, Bot, Wrench } from 'lucide-react'
 import type { GovernanceTitle } from '@/hooks/useGovernance'
 export type { GovernanceTitle }
 
@@ -81,24 +81,17 @@ export default function TitleBadge({ title, onClick, size = 'md' }: TitleBadgePr
     }
 
     case 'member': {
-      if (onClick) {
-        // Clickable: show "ASSIGN TITLE" button (all caps like all governance titles)
-        return (
-          <button
-            type="button"
-            onClick={onClick}
-            className={`inline-flex items-center ${sizeClasses} rounded-full border border-dashed font-bold tracking-wider transition-colors uppercase
-              border-gray-600 text-gray-500 hover:border-gray-500 hover:text-gray-400 cursor-pointer`}
-          >
-            <Plus className={iconSize} />
-            ASSIGN TITLE
-          </button>
-        )
-      }
-      // Read-only: show MEMBER label
-      const classes = `inline-flex items-center ${sizeClasses} rounded-full border font-bold tracking-wider
-            bg-gray-500/10 text-gray-400 border-gray-500/25 cursor-default`
-      return <span className={classes}>MEMBER</span>
+      // Proposal 1 (2026-04-20): the clickable variant used to show
+      // "ASSIGN TITLE" but that nudge was wrong for a confirmed team
+      // MEMBER — the user is already a member and clicking is a
+      // title-change affordance, not a first-time assignment. Now the
+      // label reads MEMBER in both read-only and clickable variants;
+      // clickability is retained so a MANAGER/COS can still open the
+      // Title Assignment Dialog.
+      const classes = `inline-flex items-center ${sizeClasses} rounded-full border font-bold tracking-wider transition-colors
+            bg-gray-500/10 text-gray-400 border-gray-500/25
+            ${onClick ? 'hover:bg-gray-500/20 cursor-pointer' : 'cursor-default'}`
+      return renderBadge(classes, <>MEMBER</>)
     }
 
     default: {

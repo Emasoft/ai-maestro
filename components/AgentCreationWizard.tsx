@@ -116,7 +116,14 @@ function robotQuestion(step: WizardStep): ChatMessage {
 
 interface AgentCreationWizardProps {
   onClose: () => void
-  onComplete: () => void
+  /**
+   * Proposal 31 (2026-04-20) — DATA-LOSS near-miss fix.
+   * The wizard MUST forward the newly-created agent id so the parent can
+   * switch activeAgentId + the profile panel to the new agent. Without this,
+   * the pre-wizard agent stays "active" and a subsequent Delete click
+   * destroys the wrong agent (SCEN-005 near-miss on a real MANAGER).
+   */
+  onComplete: (newAgentId: string | null) => void
 }
 
 // --- Component ---
@@ -161,6 +168,10 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
   const [animationPhase, setAnimationPhase] = useState<'preparing' | 'creating' | 'ready' | 'error'>('preparing')
   const [animationProgress, setAnimationProgress] = useState(0)
   const [creationSuccess, setCreationSuccess] = useState(false)
+  // Proposal 31 (2026-04-20) — DATA-LOSS fix. Capture the created agent id
+  // from the POST /api/agents response so we can hand it to the parent on
+  // "Let's Go!" and prevent a stale profile-panel selection.
+  const [createdAgentId, setCreatedAgentId] = useState<string | null>(null)
   const [showLetsGo, setShowLetsGo] = useState(false)
   const [creationError, setCreationError] = useState('')
 
@@ -414,6 +425,9 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
         throw new Error(data.error || 'Failed to create agent')
       }
 
+      // Proposal 31: capture new agent id for DATA-LOSS-safe handoff on "Let's Go!"
+      const body = await response.json().catch(() => null) as { agent?: { id?: string } } | null
+      if (body?.agent?.id) setCreatedAgentId(body.agent.id)
       setCreationSuccess(true)
     } catch (err) {
       setCreationError(err instanceof Error ? err.message : 'Failed to create agent')
@@ -537,7 +551,7 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
                 {showLetsGo && (
                   <div className="mt-6 flex justify-center">
                     <button
-                      onClick={onComplete}
+                      onClick={() => onComplete(createdAgentId)}
                       className="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold rounded-xl shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all duration-300 transform hover:scale-105 flex items-center gap-2"
                     >
                       Let&apos;s Go! 🚀

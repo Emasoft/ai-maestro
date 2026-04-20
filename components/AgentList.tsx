@@ -79,6 +79,14 @@ interface AgentListProps {
   subconsciousRefreshTrigger?: number  // Increment to force subconscious status refresh
   sidebarWidth?: number  // Current sidebar width for responsive grid
   hostErrors?: Record<string, Error>  // Hosts that failed to respond (keyed by hostId)
+  /**
+   * Proposal 31 (2026-04-20) — DATA-LOSS near-miss fix.
+   * Called after the creation wizard succeeds so the parent can switch
+   * activeAgentId to the new agent. Without this, the profile panel stays
+   * on the pre-wizard agent and the user's next "Delete" click hits the
+   * wrong one (SCEN-005 near-miss on a real MANAGER).
+   */
+  onAgentCreated?: (newAgentId: string) => void
 }
 
 /**
@@ -175,6 +183,7 @@ export default function AgentList({
   subconsciousRefreshTrigger,
   sidebarWidth = 320,
   hostErrors = {},
+  onAgentCreated,
 }: AgentListProps) {
   const [showWizardModal, setShowWizardModal] = useState(false)
   const [showCreateDropdown, setShowCreateDropdown] = useState(false)
@@ -557,9 +566,15 @@ export default function AgentList({
     }
   }
 
-  const handleCreateComplete = () => {
+  // Proposal 31 (2026-04-20) — DATA-LOSS near-miss fix.
+  // The wizard now hands us the new agent id so the parent can switch
+  // activeAgentId before the user clicks anything in the (still-open)
+  // profile panel. Forgetting this is what let SCEN-005 nearly delete
+  // a real MANAGER.
+  const handleCreateComplete = (newAgentId: string | null) => {
     setShowWizardModal(false)
     onRefresh?.()
+    if (newAgentId) onAgentCreated?.(newAgentId)
   }
 
   return (

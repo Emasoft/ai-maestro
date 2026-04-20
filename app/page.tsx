@@ -377,6 +377,17 @@ export default function DashboardPage() {
     setProfileScrollToDangerZone(false)
   }
 
+  // Proposal 31 (2026-04-20) — DATA-LOSS near-miss fix.
+  // The wizard hands us the new agent id; we switch activeAgentId so the
+  // terminal AND the (possibly still-open) profile panel track the new agent.
+  // Without this handoff, the next profile click (Delete, Hibernate, etc.)
+  // would still target the pre-wizard agent — SCEN-005 nearly destroyed a
+  // real MANAGER this way.
+  const handleAgentCreated = (newAgentId: string) => {
+    setActiveAgentId(newAgentId)
+    setProfileScrollToDangerZone(false)
+  }
+
   // handleShowAgentProfileDangerZone removed — sidebar delete shortcut was removed (ISSUE-002).
   // The Danger Zone is only accessible via Profile → Advanced → Danger Zone.
 
@@ -609,6 +620,7 @@ export default function DashboardPage() {
                 subconsciousRefreshTrigger={subconsciousRefreshTrigger}
                 sidebarWidth={sidebarWidth}
                 hostErrors={hostErrors}
+                onAgentCreated={handleAgentCreated}
               />
             </ErrorBoundary>
           </aside>

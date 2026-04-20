@@ -436,9 +436,13 @@ export default function MobileDashboard({
         <div className="fixed inset-0 z-50 bg-gray-900 overflow-y-auto">
           <AgentCreationWizard
             onClose={() => setShowCreationWizard(false)}
-            onComplete={() => {
+            onComplete={(newAgentId) => {
+              // Proposal 31 (2026-04-20): switch the mobile active agent to the
+              // freshly-created one so the next profile action targets the
+              // right agent (DATA-LOSS near-miss fix).
               setShowCreationWizard(false)
               onRefresh()
+              if (newAgentId) setActiveAgentId(newAgentId)
             }}
           />
         </div>

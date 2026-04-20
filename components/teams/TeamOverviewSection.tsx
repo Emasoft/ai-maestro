@@ -276,27 +276,43 @@ export default function TeamOverviewSection({ team, agents, agentsLoading, agent
           ) : teamAgents.length === 0 ? (
             <p className="text-sm text-gray-500 py-4 text-center">No agents in this team yet</p>
           ) : (
-            teamAgents.map(agent => (
-              <div
-                key={agent.id}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800/50 transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs text-gray-300 flex-shrink-0">
-                  {(agent.label || agent.name || '?')[0].toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-200 truncate">{agent.label || agent.name || agent.id.slice(0, 8)}</p>
-                  <p className="text-xs text-gray-500 truncate">{agent.session?.status === 'online' ? 'Online' : 'Offline'}</p>
-                </div>
-                <button
-                  onClick={() => handleRemoveAgent(agent.id)}
-                  className="p-1 rounded hover:bg-red-900/30 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                  title="Remove from team"
+            teamAgents.map(agent => {
+              // Proposal 9 (2026-04-20): disable the Remove button for the
+              // Chief-of-Staff so the user doesn't click it and then hit the
+              // "Cannot remove the Chief-of-Staff" error toast. The server
+              // already rejects this path, but the UI should not even look
+              // clickable — COS removal requires unassigning the title
+              // first via the Title Assignment dialog (R9 governance).
+              const isCos = team.chiefOfStaffId === agent.id
+              return (
+                <div
+                  key={agent.id}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800/50 transition-colors group"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))
+                  <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs text-gray-300 flex-shrink-0">
+                    {(agent.label || agent.name || '?')[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-200 truncate">{agent.label || agent.name || agent.id.slice(0, 8)}</p>
+                    <p className="text-xs text-gray-500 truncate">{agent.session?.status === 'online' ? 'Online' : 'Offline'}</p>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveAgent(agent.id)}
+                    disabled={isCos}
+                    className={`p-1 rounded transition-all ${
+                      isCos
+                        ? 'text-gray-700 cursor-not-allowed opacity-40'
+                        : 'text-gray-600 hover:bg-red-900/30 hover:text-red-400 opacity-0 group-hover:opacity-100'
+                    }`}
+                    title={isCos
+                      ? 'Chief-of-Staff cannot be removed directly — reassign the CHIEF-OF-STAFF title first, then remove.'
+                      : 'Remove from team'}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )
+            })
           )}
         </div>
       </div>

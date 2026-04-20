@@ -233,19 +233,28 @@ export default function TitleAssignmentDialog({
     return () => document.removeEventListener('keydown', handleKey)
   }, [isOpen, handleClose])
 
-  // Agent name lookup map for resolving COS UUIDs to human-readable names (R7.8)
+  // Agent name lookup map for resolving COS UUIDs to human-readable names (R7.8).
+  //
+  // Proposal 11 (2026-04-20): previously this fetched /api/sessions, which
+  // only lists agents with a live tmux session. Any reference to a
+  // hibernated / offline agent (e.g. a MANAGER that stopped, or a COS on
+  // another team whose session hasn't been started yet) fell through to
+  // `id.slice(0, 8)` — the user saw a raw UUID prefix like "a5f3b1c2"
+  // instead of a persona name. Switch to /api/agents which returns the
+  // full registry (online + offline + hibernated) so every rendered
+  // disabled-reason / current-COS note shows a readable name.
   const [agentNameMap, setAgentNameMap] = useState<Map<string, string>>(new Map())
   useEffect(() => {
     if (!isOpen) return
     // SF-021: Abort fetch on cleanup (dialog close or unmount) to prevent stale state updates
     const controller = new AbortController()
-    fetch('/api/sessions', { signal: controller.signal })
-      .then(r => r.ok ? r.json() : { sessions: [] })
+    fetch('/api/agents', { signal: controller.signal })
+      .then(r => r.ok ? r.json() : { agents: [] })
       .then(data => {
         const map = new Map<string, string>()
-        for (const s of (data.sessions || [])) {
-          if (s.agentId && (s.label || s.name)) {
-            map.set(s.agentId, s.label || s.name)
+        for (const a of (data.agents || [])) {
+          if (a.id && (a.label || a.name)) {
+            map.set(a.id, a.label || a.name)
           }
         }
         setAgentNameMap(map)

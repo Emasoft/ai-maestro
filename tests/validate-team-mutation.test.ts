@@ -243,7 +243,7 @@ describe('validateTeamMutation', () => {
     })
   })
 
-  // --- COS removal guard (1 test) ---
+  // --- COS removal guard (proposal 14 — full R4.7 coverage) ---
 
   describe('COS removal guard', () => {
     it('rejects removing the COS from agentIds without removing the COS role first (R4.7)', () => {
@@ -269,6 +269,72 @@ describe('validateTeamMutation', () => {
         error: expect.stringContaining('Cannot remove the Chief-of-Staff from team members'),
         code: 400,
       })
+    })
+
+    // Proposal 14 (2026-04-20) — R4.7 happy paths.
+    it('allows dropping the COS from agentIds when chiefOfStaffId is cleared to null in the same mutation', () => {
+      /** Remove both the agentIds entry AND chiefOfStaffId in one call — should pass. */
+      const existingTeams = [
+        makeTeam({
+          id: 'team-closed',
+          name: 'Closed Team',
+          type: 'closed',
+          chiefOfStaffId: 'cos-agent-id',
+          agentIds: ['cos-agent-id', 'agent-1', 'agent-2'],
+        }),
+      ]
+      const result = validateTeamMutation(
+        existingTeams,
+        'team-closed',
+        { agentIds: ['agent-1', 'agent-2'], chiefOfStaffId: null },
+        null,
+      )
+      expect(result.valid).toBe(true)
+    })
+
+    it('allows agentIds changes that keep the COS in the list (add a new member, COS preserved)', () => {
+      /** Mutating agentIds without affecting the COS must not trip R4.7 */
+      const existingTeams = [
+        makeTeam({
+          id: 'team-closed',
+          name: 'Closed Team',
+          type: 'closed',
+          chiefOfStaffId: 'cos-agent-id',
+          agentIds: ['cos-agent-id', 'agent-1'],
+        }),
+      ]
+      const result = validateTeamMutation(
+        existingTeams,
+        'team-closed',
+        { agentIds: ['cos-agent-id', 'agent-1', 'agent-2'] }, // COS still present
+        null,
+      )
+      expect(result.valid).toBe(true)
+    })
+
+    it('rejects assigning a new chiefOfStaffId to an agent not in the resulting agentIds', () => {
+      /** R4.7 corollary: COS must always be a member of the team. Assigning
+          a COS who is not in agentIds would violate R4.6/R4.7 the moment the
+          team is saved. Validator must catch that at mutation time too. */
+      const existingTeams = [
+        makeTeam({
+          id: 'team-closed',
+          name: 'Closed Team',
+          type: 'closed',
+          chiefOfStaffId: 'old-cos-id',
+          agentIds: ['old-cos-id', 'agent-1', 'agent-2'],
+        }),
+      ]
+      const result = validateTeamMutation(
+        existingTeams,
+        'team-closed',
+        { agentIds: ['old-cos-id', 'agent-1'], chiefOfStaffId: 'new-cos-not-in-team' },
+        null,
+      )
+      expect(result.valid).toBe(false)
+      if (!result.valid) {
+        expect(result.error).toMatch(/Chief-of-Staff/i)
+      }
     })
   })
 

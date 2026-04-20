@@ -15,7 +15,6 @@ import type { Agent, AgentDocumentation, Repository } from '@/types/agent'
 import TransferAgentDialog from '@/components/TransferAgentDialog'
 import ExportAgentDialog from '@/components/ExportAgentDialog'
 import DeleteAgentDialog from '@/components/DeleteAgentDialog'
-import SkillsSection from '@/components/SkillsSection'
 import { AgentSkillEditor } from '@/components/marketplace'
 import AvatarPicker from '@/components/AvatarPicker'
 import EmailAddressesSection from '@/components/EmailAddressesSection'
@@ -63,7 +62,6 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
     email: false,
     repositories: false,
     installedSkills: false,
-    skillSettings: false,
     metrics: false,
     documentation: false,
     dangerZone: false
@@ -688,21 +686,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
           )}
         </section>
 
-        {/* Skill Settings Section */}
-        <section>
-          <button
-            onClick={() => toggleSection('skillSettings')}
-            className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 hover:text-gray-400 transition-all"
-          >
-            {expandedSections.skillSettings ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-            <Cpu className="w-4 h-4" />
-            Skill Settings
-          </button>
-
-          {expandedSections.skillSettings && (
-            <SkillsSection agentId={agent.id} hostUrl={hostUrl} />
-          )}
-        </section>
+        {/* Skill Settings section removed 2026-04-20 — RAG/consolidation gone (TRDD-70a521d9 Phase-2 cleanup). */}
 
         {/* Metrics Section */}
         <section>

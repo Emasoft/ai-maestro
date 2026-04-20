@@ -7,7 +7,7 @@ import {
   DollarSign, Database, BookOpen, Link2, Edit2,
   ChevronDown, ChevronRight, Plus, Trash2, TrendingUp, TrendingDown,
   Cloud, Monitor, Server, Play, Wifi, WifiOff, Folder, Download, Send, RotateCcw,
-  GitBranch, FolderGit2, RefreshCw, AlertTriangle, Brain,
+  GitBranch, FolderGit2, RefreshCw, AlertTriangle,
   Terminal, Shield, Webhook, ScrollText, Users, Puzzle, Palette,
   ToggleLeft, ToggleRight, Loader2
 } from 'lucide-react'
@@ -15,7 +15,6 @@ import type { Agent, AgentDocumentation, LiveAgentSessionStatus, Repository } fr
 import TransferAgentDialog from './TransferAgentDialog'
 import ExportAgentDialog from './ExportAgentDialog'
 import DeleteAgentDialog from './DeleteAgentDialog'
-import SkillsSection from './SkillsSection'
 // AgentSkillEditor (marketplace skills) moved to Settings → Global Elements
 import AvatarPicker from './AvatarPicker'
 import EmailAddressesSection from './EmailAddressesSection'
@@ -1135,7 +1134,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                 )}
               </section>
 
-              {/* Long-Term Memory section removed — MemoryViewer in toolbar, SkillsSection in Advanced tab */}
+              {/* Long-Term Memory section fully removed 2026-04-20 (RAG + LTM UI gone per TRDD-70a521d9 Phase 2). */}
 
               </>)}
 
@@ -1294,17 +1293,8 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                 ))
               })()}
 
-              {/* Long-Term Memory Options + Metrics/Documentation/Danger — hidden in overview mode */}
+              {/* Metrics/Documentation/Danger — hidden in overview mode. Long-Term Memory Options section removed 2026-04-20 (TRDD-70a521d9 Phase-2 cleanup; RAG gone). */}
               {renderMode !== 'overview' && (<>
-              {/* Memory configuration (renamed from "Skill Settings") */}
-              <section className="space-y-4">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500">
-                  <Brain className="w-4 h-4" />
-                  Long-Term Memory Options
-                </div>
-                <SkillsSection agentId={agent.id} hostUrl={hostUrl} />
-              </section>
-
               <section>
                 <button
                   onClick={() => toggleSection('metrics')}

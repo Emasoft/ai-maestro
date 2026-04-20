@@ -43,6 +43,31 @@ const execFileAsync = promisify(execFile)
 // ── Auth context (Phase 1: optional, Phase 2: required per SF-058) ──
 import type { AuthContext } from '@/lib/agent-auth'
 
+// ── Per-op ledger emit helper (TRDD-eac02238) ───────────────────
+// Every Change* pipeline calls this right before returning success.
+// Wraps emitAgentOp with a try/catch + ops.push so a ledger append
+// failure never blocks the pipeline response and always leaves a
+// breadcrumb in the operations log. Centralised here so the boilerplate
+// stays in ONE place instead of repeated at ~15 success sites.
+async function tryEmitLedgerOp(
+  op: import('@/types/ledger').LedgerOp,
+  diff: import('@/types/json-patch').JsonPatch,
+  authContext: AuthContext | null | undefined,
+  action: string,
+  ops: string[],
+): Promise<void> {
+  try {
+    const { emitAgentOp } = await import('@/lib/ledger-emit')
+    emitAgentOp(op, diff, {
+      action,
+      agentId: authContext?.agentId ?? null,
+      actor: authContext?.agentId ? 'agent' : 'user',
+    })
+  } catch (ledgerErr) {
+    ops.push(`LEDGER: WARN — per-op append failed: ${ledgerErr instanceof Error ? ledgerErr.message : ledgerErr}`)
+  }
+}
+
 // ── Paths ─────────────────────────────────────────────────────
 const HOME = homedir()
 const ROLE_PLUGINS_DIR = join(HOME, 'agents', LOCAL_MARKETPLACE_DIR_NAME)
@@ -3000,6 +3025,16 @@ export async function ChangeSkill(agentId: string | null, desired: {
       ops.push(`G05: Final state verified`)
     }
 
+    {
+      const scopePath = agentId ? `/agents/${agentId}/skills/${desired.name}` : `/user/skills/${desired.name}`
+      await tryEmitLedgerOp(
+        'change_skill',
+        [{ op: 'replace', path: scopePath, value: { action: desired.action, scope: desired.scope } }],
+        _authContext,
+        `change-skill-${desired.action}`,
+        ops,
+      )
+    }
     result.success = true
     result.restartNeeded = true
     ops.push(`G06: Success`)
@@ -3030,6 +3065,12 @@ async function changeSimpleElement(
     content?: string
     agentDir?: string
   },
+  // TRDD-eac02238 step 6 (fan-out): per-op ledger emit is shared across
+  // the 4 simple-element Change* pipelines (AgentDef, Command, Rule,
+  // OutputStyle). Caller passes the specific LedgerOp + authContext so
+  // one helper covers all four.
+  ledgerOp?: import('@/types/ledger').LedgerOp,
+  authContext?: AuthContext,
 ): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
@@ -3093,6 +3134,19 @@ async function changeSimpleElement(
       ops.push(`G05: Final state verified`)
     }
 
+    if (ledgerOp) {
+      const scopePath = agentId
+        ? `/agents/${agentId}/${subDir}/${desired.name}`
+        : `/user/${subDir}/${desired.name}`
+      await tryEmitLedgerOp(
+        ledgerOp,
+        [{ op: 'replace', path: scopePath, value: { action: desired.action, scope: desired.scope } }],
+        authContext,
+        `${ledgerOp}-${desired.action}`,
+        ops,
+      )
+    }
+
     result.success = true
     result.restartNeeded = true
     ops.push(`G06: Success`)
@@ -3108,33 +3162,33 @@ async function changeSimpleElement(
 export async function ChangeAgentDef(
   agentId: string | null,
   desired: { name: string; action: 'install' | 'remove'; scope: 'user' | 'local'; sourcePath?: string; content?: string; agentDir?: string },
-  _authContext: AuthContext,
+  authContext: AuthContext,
 ): Promise<ChangeResult> {
-  return changeSimpleElement('agent definition', 'agents', '.md', agentId, desired)
+  return changeSimpleElement('agent definition', 'agents', '.md', agentId, desired, 'change_agent_def', authContext)
 }
 
 export async function ChangeCommand(
   agentId: string | null,
   desired: { name: string; action: 'install' | 'remove'; scope: 'user' | 'local'; sourcePath?: string; content?: string; agentDir?: string },
-  _authContext: AuthContext,
+  authContext: AuthContext,
 ): Promise<ChangeResult> {
-  return changeSimpleElement('command', 'commands', '.md', agentId, desired)
+  return changeSimpleElement('command', 'commands', '.md', agentId, desired, 'change_command', authContext)
 }
 
 export async function ChangeRule(
   agentId: string | null,
   desired: { name: string; action: 'install' | 'remove'; scope: 'user' | 'local'; sourcePath?: string; content?: string; agentDir?: string },
-  _authContext: AuthContext,
+  authContext: AuthContext,
 ): Promise<ChangeResult> {
-  return changeSimpleElement('rule', 'rules', '.md', agentId, desired)
+  return changeSimpleElement('rule', 'rules', '.md', agentId, desired, 'change_rule', authContext)
 }
 
 export async function ChangeOutputStyle(
   agentId: string | null,
   desired: { name: string; action: 'install' | 'remove'; scope: 'user' | 'local'; sourcePath?: string; content?: string; agentDir?: string },
-  _authContext: AuthContext,
+  authContext: AuthContext,
 ): Promise<ChangeResult> {
-  return changeSimpleElement('output style', 'output-styles', '.md', agentId, desired)
+  return changeSimpleElement('output style', 'output-styles', '.md', agentId, desired, 'change_output_style', authContext)
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3147,7 +3201,7 @@ export async function ChangeMCP(agentId: string | null, desired: {
   scope: 'user' | 'local' | 'project'
   config?: Record<string, unknown>
   agentDir?: string
-}, _authContext: AuthContext): Promise<ChangeResult> {
+}, authContext: AuthContext): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
@@ -3183,6 +3237,16 @@ export async function ChangeMCP(agentId: string | null, desired: {
       ops.push(`G04: Removed MCP server "${desired.name}" (scope: ${desired.scope})`)
     }
 
+    {
+      const scopePath = agentId ? `/agents/${agentId}/mcp/${desired.name}` : `/user/mcp/${desired.name}`
+      await tryEmitLedgerOp(
+        'change_mcp',
+        [{ op: 'replace', path: scopePath, value: { action: desired.action, scope: desired.scope } }],
+        authContext,
+        `change-mcp-${desired.action}`,
+        ops,
+      )
+    }
     result.success = true
     result.restartNeeded = true
     ops.push(`G05: Success`)
@@ -3204,7 +3268,7 @@ export async function ChangeLSP(agentId: string | null, desired: {
   action: 'add' | 'remove'
   config?: Record<string, unknown>
   agentDir?: string
-}, _authContext: AuthContext): Promise<ChangeResult> {
+}, authContext: AuthContext): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
@@ -3255,6 +3319,16 @@ export async function ChangeLSP(agentId: string | null, desired: {
       ops.push(`G04: Removed LSP "${desired.name}" from ${lspJsonPath}`)
     }
 
+    {
+      const scopePath = agentId ? `/agents/${agentId}/lsp/${desired.name}` : `/user/lsp/${desired.name}`
+      await tryEmitLedgerOp(
+        'change_lsp',
+        [{ op: 'replace', path: scopePath, value: { action: desired.action } }],
+        authContext,
+        `change-lsp-${desired.action}`,
+        ops,
+      )
+    }
     result.success = true
     result.restartNeeded = true
     ops.push(`G05: Success`)
@@ -3282,7 +3356,7 @@ export async function ChangeHook(agentId: string | null, desired: {
   hookConfig?: { command: string; matcher?: string; timeout?: number }
   scope: 'user' | 'local'
   agentDir?: string
-}, _authContext: AuthContext): Promise<ChangeResult> {
+}, authContext: AuthContext): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
@@ -3355,6 +3429,16 @@ export async function ChangeHook(agentId: string | null, desired: {
     // If an error was set inside withSettingsLock, return it
     if (result.error) return result
 
+    {
+      const scopePath = agentId ? `/agents/${agentId}/hooks/${desired.event}` : `/user/hooks/${desired.event}`
+      await tryEmitLedgerOp(
+        'change_hook',
+        [{ op: 'replace', path: scopePath, value: { action: desired.action, scope: desired.scope } }],
+        authContext,
+        `change-hook-${desired.action}`,
+        ops,
+      )
+    }
     result.success = true
     result.restartNeeded = true
     ops.push(`G05: Success`)
@@ -3466,6 +3550,13 @@ export async function ChangeTeam(
       ops.push(`PG01: Cleared agent team field in registry`)
 
       result.restartNeeded = titleResult.restartNeeded
+      await tryEmitLedgerOp(
+        'change_team',
+        [{ op: 'replace', path: `/agents/${agentId}/team`, value: null }],
+        authContext,
+        'change-team-remove',
+        ops,
+      )
       result.success = true
       console.log(`[ChangeTeam] Agent ${agentId} "${agent.name}": removed from team "${currentTeam.name}" (${ops.length} gates)`)
       return result
@@ -3515,6 +3606,13 @@ export async function ChangeTeam(
     ops.push(`PG01: Set agent team field to "${targetTeam.name}" in registry`)
 
     result.restartNeeded = titleResult.restartNeeded
+    await tryEmitLedgerOp(
+      'change_team',
+      [{ op: 'replace', path: `/agents/${agentId}/team`, value: targetTeam.name }],
+      authContext,
+      'change-team-add',
+      ops,
+    )
     result.success = true
     console.log(`[ChangeTeam] Agent ${agentId} "${agent.name}": added to team "${targetTeam.name}" as ${effectiveRole.toUpperCase()} (${ops.length} gates)`)
     return result
@@ -3596,6 +3694,13 @@ export async function ChangeName(
       ops.push(`G06: Final name verified: "${normalized}"`)
     }
 
+    await tryEmitLedgerOp(
+      'change_name',
+      [{ op: 'replace', path: `/agents/${agentId}/name`, value: normalized }],
+      authContext,
+      'change-name',
+      ops,
+    )
     result.success = true
     console.log(`[ChangeName] Agent ${agentId}: "${agent.name}" → "${normalized}" (${ops.length} gates, restart=${result.restartNeeded})`)
     return result
@@ -3678,6 +3783,13 @@ export async function ChangeFolder(
     result.restartNeeded = true
     ops.push(`G07: Restart needed (working directory changed)`)
 
+    await tryEmitLedgerOp(
+      'change_folder',
+      [{ op: 'replace', path: `/agents/${agentId}/workingDirectory`, value: resolved }],
+      authContext,
+      'change-folder',
+      ops,
+    )
     result.success = true
     console.log(`[ChangeFolder] Agent ${agentId} "${agent.name}": "${currentResolved}" → "${resolved}" (${ops.length} gates)`)
     return result
@@ -3740,6 +3852,13 @@ export async function ChangeAvatar(
     }
     ops.push(`G03: Updated avatar in registry`)
 
+    await tryEmitLedgerOp(
+      'change_avatar',
+      [{ op: 'replace', path: `/agents/${agentId}/avatar`, value: avatarPath }],
+      authContext,
+      'change-avatar',
+      ops,
+    )
     result.success = true
     console.log(`[ChangeAvatar] Agent ${agentId} "${agent.name}": avatar → "${avatarPath}" (${ops.length} gates)`)
     return result
@@ -3804,6 +3923,13 @@ export async function ChangeCLIArgs(
     result.restartNeeded = true
     ops.push(`G05: Restart needed (CLI args changed)`)
 
+    await tryEmitLedgerOp(
+      'change_cli_args',
+      [{ op: 'replace', path: `/agents/${agentId}/programArgs`, value: newArgs }],
+      authContext,
+      'change-cli-args',
+      ops,
+    )
     result.success = true
     console.log(`[ChangeCLIArgs] Agent ${agentId} "${agent.name}": args → "${newArgs}" (${ops.length} gates)`)
     return result
@@ -4215,6 +4341,13 @@ export async function ChangeClient(
     result.restartNeeded = true
     ops.push(`G10: Restart needed (client + plugins changed)`)
 
+    await tryEmitLedgerOp(
+      'change_client',
+      [{ op: 'replace', path: `/agents/${agentId}/program`, value: normalized }],
+      authContext,
+      'change-client',
+      ops,
+    )
     result.success = true
     console.log(`[ChangeClient] Agent ${agentId} "${agent.name}": client "${oldProgram}" → "${normalized}" (${ops.length} gates, ${plans.length} plugins converted)`)
     return result

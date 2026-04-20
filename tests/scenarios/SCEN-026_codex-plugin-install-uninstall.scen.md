@@ -334,6 +334,14 @@ author: AI Maestro Team
 
 ## Phase 4: Register + install 4 regular Codex plugins via the Plugins Explorer
 
+> **Scope of every install in this phase: LOCAL** (per-agent, scoped to
+> the test agent's workdir). This follows R20.30: the Agent Profile →
+> Config → Plugins surface exposes local-scope installs only. A
+> different agent on the same Codex host that had the same plugin
+> installed locally would be unaffected by any of these ops. Multi-agent
+> isolation itself is exercised by SCEN-021; here we just note the
+> scope so Phase 5 can assert symmetric local-scope uninstall semantics.
+
 > **Fixture type map:**
 >
 > | Fixture | Type | Plugin count |
@@ -460,12 +468,14 @@ author: AI Maestro Team
 - **Modifies:** `~/.codex/config.toml`
 - **Verify:** `grep -c "codex-plugin@" ~/.codex/config.toml` returns 0. Screenshot.
 
-#### S029: Confirm the agent's Plugins section is back to baseline
-- **Action:** In Profile → Config → Plugins section, confirm only the R17 core plugin (ai-maestro-plugin, Codex-converted) and the role-plugin remain.
-- **Goal:** No leftover regular plugins from the 4 fixture installs; only the two AI-Maestro-managed plugins (core + role) stay
+#### S029: Confirm the agent's Plugins section is back to baseline AND the fixture folders are untouched
+- **Action:** Two read-only checks that together prove R20.29 + R20.31 hold after the uninstall round:
+  1. **Client target side.** In Profile → Config → Plugins section, confirm only the R17 core plugin (ai-maestro-plugin, Codex-converted) and the role-plugin remain. `grep -c "@openai/plugins\|@hashgraph-online/awesome-codex-plugins\|@remotion-dev/codex-plugin\|@supabase-community/codex-plugin" ~/.codex/config.toml` returns 0.
+  2. **Source side.** `ls tests/scenarios/fixtures/git/openai__plugins/ tests/scenarios/fixtures/git/hashgraph-online__awesome-codex-plugins/ tests/scenarios/fixtures/git/remotion-dev__codex-plugin/ tests/scenarios/fixtures/git/supabase-community__codex-plugin/` — all 4 fixture folders still exist with ALL their files intact. AI Maestro MUST NOT have deleted anything from them (R20.31: source folders are user-owned; AI Maestro never reaches in).
+- **Goal:** Local-scope uninstall cleaned the client target; the user-owned source fixtures are exactly as they were before Phase 4.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin count matches the pre-Phase-4 state — exactly 2 AI-Maestro-managed plugins visible. Screenshot.
+- **Verify:** Plugin count matches the pre-Phase-4 state (exactly 2 AI-Maestro-managed plugins visible); all 4 fixture source trees pass a `diff` against their `scenario-start` tag with zero output. Screenshot of both proofs.
 
 ---
 

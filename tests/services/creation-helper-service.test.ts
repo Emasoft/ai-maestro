@@ -171,6 +171,19 @@ describe('createCreationHelper', () => {
     expect(cmd).toContain('--tools Read,Write,Edit,Bash,Glob,Grep,Agent,WebFetch')
   })
 
+  // Proposal 24 (2026-04-20) regression guard — Haephestos must be ephemeral.
+  // Any regression that adds `--continue` (or `-c`) to the launch command
+  // would resurrect the previous conversation, which defeats the whole
+  // "each session starts from zero" contract and could leak TOML drafts
+  // across users.
+  it('never launches claude with --continue (ephemeral session invariant)', async () => {
+    await createCreationHelper()
+
+    const launchCmd = mockRuntime.sendKeys.mock.calls[1][1] as string
+    expect(launchCmd).not.toMatch(/--continue\b/)
+    expect(launchCmd).not.toMatch(/(?:^|\s)-c(?:\s|$)/)
+  })
+
   // Proposal 20 (2026-04-20) regression guard.
   it('creates tmux session inside ~/agents/haephestos/ (never inside ai-maestro cwd)', async () => {
     await createCreationHelper()

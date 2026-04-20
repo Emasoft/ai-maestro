@@ -1,6 +1,6 @@
 'use client'
 
-import { Users, ListTodo, FileText, Clock, Play, Trash2 } from 'lucide-react'
+import { Users, ListTodo, FileText, Clock, Play, Trash2, Pencil } from 'lucide-react'
 import type { Team } from '@/types/team'
 
 interface TeamListCardProps {
@@ -10,9 +10,19 @@ interface TeamListCardProps {
   onClick: () => void
   onStartMeeting: () => void
   onDelete: () => void
+  /**
+   * Proposal 10 (2026-04-20): open the Team Overview (Edit) view for bulk
+   * agent add/remove. Navigates to /teams/{id} which renders
+   * TeamOverviewSection — the canonical bulk-edit surface that already
+   * routes per-agent changes through the ChangeTeam pipeline (see
+   * PUT /api/teams/[id] + ChangeTeam fan-out). Without this shortcut,
+   * users had to click the card itself (same destination) with no
+   * visible "edit" affordance in the grid.
+   */
+  onEdit: () => void
 }
 
-export default function TeamListCard({ team, taskCount, docCount, onClick, onStartMeeting, onDelete }: TeamListCardProps) {
+export default function TeamListCard({ team, taskCount, docCount, onClick, onStartMeeting, onDelete, onEdit }: TeamListCardProps) {
   return (
     <div
       className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-5 hover:border-emerald-600/50 transition-all cursor-pointer group"
@@ -29,13 +39,22 @@ export default function TeamListCard({ team, taskCount, docCount, onClick, onSta
             <span className="text-[10px] text-gray-500">{team.agentIds.length} agent{team.agentIds.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete() }}
-          className="p-1 rounded hover:bg-red-900/30 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-          title="Delete team"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit() }}
+            className="p-1 rounded hover:bg-emerald-900/30 text-gray-600 hover:text-emerald-400 opacity-0 group-hover:opacity-100 transition-all"
+            title="Edit team (name, description, members)"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete() }}
+            className="p-1 rounded hover:bg-red-900/30 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+            title="Delete team"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Description */}

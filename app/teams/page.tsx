@@ -195,6 +195,12 @@ export default function TeamsPage() {
                 onClick={() => router.push(`/teams/${team.id}`)}
                 onStartMeeting={() => router.push(`/team-meeting?team=${team.id}`)}
                 onDelete={() => setDeleteConfirm(team.id)}
+                // Proposal 10: Edit navigates to the Team Overview, where
+                // bulk agent toggles + name/description edits already flow
+                // through the ChangeTeam pipeline (via PUT /api/teams/[id]
+                // — see app/api/teams/[id]/route.ts line 94+). No separate
+                // modal needed; the Overview IS the bulk-edit surface.
+                onEdit={() => router.push(`/teams/${team.id}`)}
               />
             ))}
           </div>

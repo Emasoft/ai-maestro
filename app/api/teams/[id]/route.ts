@@ -14,6 +14,14 @@ const UpdateTeamSchema = z.object({
   // but accepting them here avoids strict() rejecting the body
   type: z.string().max(32).optional(),
   chiefOfStaffId: z.string().uuid().nullable().optional(),
+  // SCEN-001 2026-04-20 fix (BUG-002): the Title Assignment Dialog's
+  // ORCHESTRATOR → MEMBER demotion path calls `updateTeamOrchestratorId(null)`
+  // to clear the team's orchestratorId slot before re-titling. Without this
+  // schema entry, .strict() rejected the body with 400, and the whole flow
+  // aborted before setGovernanceTitle('member') ever ran — leaving the agent
+  // at governanceTitle=null. The orchestratorId slot is a team-level property,
+  // not a governance-gated field, so accepting it here is safe.
+  orchestratorId: z.string().uuid().nullable().optional(),
 }).strict()
 
 const DeleteTeamSchema = z.object({

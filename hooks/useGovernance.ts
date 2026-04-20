@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { Team } from '@/types/team'
 import type { TransferRequest, GovernanceTitle } from '@/types/governance'
 import type { GovernanceRequest } from '@/types/governance-request'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 // Re-export so downstream consumers still work
 export type { GovernanceTitle } from '@/types/governance'
@@ -35,6 +37,14 @@ export interface GovernanceState {
 }
 
 export function useGovernance(agentId: string | null): GovernanceState {
+  // Proposal 2-derived (#248, 2026-04-20): removeAgentFromTeam PATCHes
+  // governanceTitle, which is a strict sudo-required route. Without
+  // sudoFetch, the user got a bare "sudo_required" string leaking
+  // through as the error message (proposal 2 patched the leak at the
+  // handler level, but the deeper fix is to actually handle the 403
+  // with a sudo-token retry). Grab the resolver here; the hook runs
+  // inside SudoProvider so the context is always available.
+  const { requestSudoToken } = useSudo()
   const [loading, setLoading] = useState(true)
   const [hasPassword, setHasPassword] = useState(false)
   const [hasManager, setHasManager] = useState(false)
@@ -402,17 +412,30 @@ export function useGovernance(agentId: string | null): GovernanceState {
           const errData = await res.json()
           return { success: false, error: errData.error || 'Failed to remove agent from team' }
         }
-        // Phase 3: Revert to AUTONOMOUS role + uninstall team plugin when agent leaves
-        const patchRes = await fetch(`/api/agents/${targetAgentId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: 'autonomous', governanceTitle: null }),
-        })
+        // Phase 3: Revert to AUTONOMOUS role + uninstall team plugin when agent leaves.
+        //
+        // Proposal 2-derived (#248, 2026-04-20): governanceTitle changes go
+        // through ChangeTitle which is strict (sudo required). sudoFetch
+        // catches the first 403 sudo_required response, pops the sudo modal,
+        // and retries with the X-Sudo-Token. That replaces the ugly bare
+        // "sudo_required" error string the user used to see on Leave-team.
+        const patchRes = await sudoFetch(
+          `/api/agents/${targetAgentId}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: 'autonomous', governanceTitle: null }),
+          },
+          requestSudoToken,
+        )
         if (!patchRes.ok) {
           const patchErr = await patchRes.json().catch(() => ({ error: `HTTP ${patchRes.status}` }))
           throw new Error(patchErr.error || `Failed to revert agent title (HTTP ${patchRes.status})`)
         }
-        // Uninstall current role-plugin (MEMBER plugins are not valid for AUTONOMOUS)
+        // Uninstall current role-plugin (MEMBER plugins are not valid for AUTONOMOUS).
+        // DELETE /api/agents/role-plugins was classified strict in proposal 23
+        // (commit a41433cc); wrap with sudoFetch too so the modal fires on the
+        // retry path instead of the best-effort swallow losing the 403.
         const agentRes = await fetch(`/api/agents/${targetAgentId}`)
         if (agentRes.ok) {
           const agentData = await agentRes.json()
@@ -421,11 +444,15 @@ export function useGovernance(agentId: string | null): GovernanceState {
           if (workDir && currentPlugin) {
             // Extract plugin name from main-agent name (e.g. "ai-maestro-programmer-agent-main-agent" → "ai-maestro-programmer-agent")
             const pluginName = currentPlugin.replace(/-main-agent$/, '')
-            await fetch('/api/agents/role-plugins/install', {
-              method: 'DELETE',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ pluginName, agentDir: workDir }),
-            }).catch(() => {}) // Best-effort uninstall
+            await sudoFetch(
+              '/api/agents/role-plugins/install',
+              {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pluginName, agentDir: workDir }),
+              },
+              requestSudoToken,
+            ).catch(() => {}) // Best-effort uninstall
           }
         }
         // MF-014 + SF-040: Use mutationAbortRef so unmount cancels in-flight refresh

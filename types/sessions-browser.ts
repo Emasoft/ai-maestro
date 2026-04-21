@@ -27,6 +27,31 @@ export interface SessionSummary {
    * unless the filename is non-standard.
    */
   id: string
+
+  // ---------------------------------------------------------------
+  // Phase 5 metadata fields (additive — all optional for back-compat).
+  // Populated lazily from the Rust `analyze_file_metadata` command on
+  // first request; cached in-process keyed by (path, size, mtime).
+  // Downstream consumers treat `undefined` as "not yet analyzed".
+  // ---------------------------------------------------------------
+
+  /**
+   * First non-meta user message in the file, truncated to 120 chars.
+   * Used by the session-divider row to preview what the session was about.
+   */
+  firstUserText?: string
+  /**
+   * True when the file's mtime is within the last 10 minutes AND no
+   * explicit shutdown marker has been written. Drives the "ongoing"
+   * badge on divider rows and the live-tailing decision in Phase 11.
+   */
+  isOngoing?: boolean
+  /**
+   * Count of rows with `isCompactSummary: true`. One badge per count
+   * on the divider row; also signals phase boundaries for the
+   * integrated context panel.
+   */
+  compactionCount?: number
 }
 
 export interface SessionsListResponse {

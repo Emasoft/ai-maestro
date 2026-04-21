@@ -18,6 +18,8 @@ import {
   projectDirForWorkingDirectory,
   listSessionsInProjectDir,
   getSessionsForAgent,
+  getSessionsForAgentWithMetadata,
+  clearMetadataCache,
   resolveSessionPath,
   recordSessionMapping,
   clearSessionMappings,
@@ -253,5 +255,217 @@ describe('ensureOpenForPath', () => {
     const sid = await ensureOpenForPath('/abs/a.jsonl')
     expect(sid).toBe('rust-sid-xyz')
     expect(openMock).toHaveBeenCalledWith(path.resolve('/abs/a.jsonl'))
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Phase 5 §4 — getSessionsForAgentWithMetadata
+// ---------------------------------------------------------------------------
+
+describe('getSessionsForAgentWithMetadata', () => {
+  const tmpDir = path.join(os.tmpdir(), `aim-sb-meta-test-${Date.now()}`)
+
+  beforeEach(() => {
+    clearSessionMappings()
+    clearMetadataCache()
+    vi.mocked(getAgent).mockReset()
+    vi.mocked(getJsonlReader).mockReset()
+    fs.mkdirSync(tmpDir, { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  function mkFakeJsonl(name: string, content = 'line1\n'): string {
+    const p = path.join(tmpDir, name)
+    fs.writeFileSync(p, content)
+    return p
+  }
+
+  it('enriches each session with firstUserText, isOngoing, compactionCount', async () => {
+    const fakePath = mkFakeJsonl('abc.jsonl', '{}\n')
+    const analyzeMock = vi.fn().mockResolvedValue({
+      ok: true,
+      firstUserMessagePreview: 'hello from user',
+      isOngoing: true,
+      compactionCount: 2,
+      phaseTokenBreakdown: [],
+      shutdownToolCalls: 0,
+      rejections: 0,
+      requestIdDedupedAssistantTokens: 100,
+      hasSubagentSpawns: false,
+      hasCompactSummary: true,
+    })
+    vi.mocked(getJsonlReader).mockReturnValue({
+      analyzeFileMetadata: analyzeMock,
+    } as any)
+
+    const res = await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1', workingDirectory: '/Users/e/x' }),
+      lister: () => [
+        {
+          path: fakePath,
+          size: 10,
+          messageCount: null,
+          lastModified: new Date().toISOString(),
+          displayName: 'abc',
+          id: 'abc',
+        },
+      ],
+    })
+
+    expect(res.ok).toBe(true)
+    expect(res.data?.sessions).toHaveLength(1)
+    const s = res.data!.sessions[0]
+    expect(s.firstUserText).toBe('hello from user')
+    expect(s.isOngoing).toBe(true)
+    expect(s.compactionCount).toBe(2)
+    expect(analyzeMock).toHaveBeenCalledWith(fakePath)
+  })
+
+  it('caches metadata keyed by path+size+mtime', async () => {
+    const fakePath = mkFakeJsonl('cache-me.jsonl', '{}\n')
+    const stat = fs.statSync(fakePath)
+    const analyzeMock = vi.fn().mockResolvedValue({
+      ok: true,
+      firstUserMessagePreview: 'cached preview',
+      isOngoing: false,
+      compactionCount: 0,
+      phaseTokenBreakdown: [],
+      shutdownToolCalls: 0,
+      rejections: 0,
+      requestIdDedupedAssistantTokens: 0,
+      hasSubagentSpawns: false,
+      hasCompactSummary: false,
+    })
+    vi.mocked(getJsonlReader).mockReturnValue({
+      analyzeFileMetadata: analyzeMock,
+    } as any)
+
+    const summary = {
+      path: fakePath,
+      size: stat.size,
+      messageCount: null,
+      lastModified: stat.mtime.toISOString(),
+      displayName: 'cache-me',
+      id: 'cache-me',
+    }
+
+    // First call — analyze runs.
+    await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1', workingDirectory: '/Users/e/x' }),
+      lister: () => [summary],
+    })
+    expect(analyzeMock).toHaveBeenCalledTimes(1)
+
+    // Second call — cache hit, analyze must NOT run again.
+    const second = await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1', workingDirectory: '/Users/e/x' }),
+      lister: () => [summary],
+    })
+    expect(analyzeMock).toHaveBeenCalledTimes(1)
+    expect(second.data?.sessions[0].firstUserText).toBe('cached preview')
+  })
+
+  it('invalidates cache when mtime changes', async () => {
+    const fakePath = mkFakeJsonl('mtime.jsonl', '{}\n')
+    const originalStat = fs.statSync(fakePath)
+    let callNum = 0
+    const analyzeMock = vi.fn().mockImplementation(() => {
+      callNum += 1
+      return Promise.resolve({
+        ok: true,
+        firstUserMessagePreview: `preview-${callNum}`,
+        isOngoing: false,
+        compactionCount: 0,
+        phaseTokenBreakdown: [],
+        shutdownToolCalls: 0,
+        rejections: 0,
+        requestIdDedupedAssistantTokens: 0,
+        hasSubagentSpawns: false,
+        hasCompactSummary: false,
+      })
+    })
+    vi.mocked(getJsonlReader).mockReturnValue({
+      analyzeFileMetadata: analyzeMock,
+    } as any)
+
+    const summary1 = {
+      path: fakePath,
+      size: originalStat.size,
+      messageCount: null,
+      lastModified: originalStat.mtime.toISOString(),
+      displayName: 'mtime',
+      id: 'mtime',
+    }
+    await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1', workingDirectory: '/Users/e/x' }),
+      lister: () => [summary1],
+    })
+    expect(analyzeMock).toHaveBeenCalledTimes(1)
+
+    // Advance the mtime — cache must invalidate.
+    const summary2 = {
+      ...summary1,
+      lastModified: new Date(Date.parse(summary1.lastModified) + 60_000).toISOString(),
+    }
+    await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1', workingDirectory: '/Users/e/x' }),
+      lister: () => [summary2],
+    })
+    expect(analyzeMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves metadata fields undefined when analyzer fails (other fields intact)', async () => {
+    const fakePath = mkFakeJsonl('failing.jsonl', '{}\n')
+    const analyzeMock = vi
+      .fn()
+      .mockRejectedValue(new Error('simulated reader failure'))
+    vi.mocked(getJsonlReader).mockReturnValue({
+      analyzeFileMetadata: analyzeMock,
+    } as any)
+
+    const res = await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1', workingDirectory: '/Users/e/x' }),
+      lister: () => [
+        {
+          path: fakePath,
+          size: 10,
+          messageCount: null,
+          lastModified: new Date().toISOString(),
+          displayName: 'failing',
+          id: 'failing',
+        },
+      ],
+    })
+
+    expect(res.ok).toBe(true)
+    const s = res.data!.sessions[0]
+    // Core fields still present.
+    expect(s.displayName).toBe('failing')
+    expect(s.id).toBe('failing')
+    // Metadata fields are undefined (not crashed, not poisoned with null).
+    expect(s.firstUserText).toBeUndefined()
+    expect(s.isOngoing).toBeUndefined()
+    expect(s.compactionCount).toBeUndefined()
+  })
+
+  it('still returns 404 when agent does not exist', async () => {
+    const res = await getSessionsForAgentWithMetadata('ghost', {
+      agentFetcher: () => null,
+    })
+    expect(res.ok).toBe(false)
+    expect(res.status).toBe(404)
+    expect(res.error).toBe('agent_not_found')
+  })
+
+  it('returns an empty list for an agent without workingDirectory', async () => {
+    const res = await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1' }),
+    })
+    expect(res.ok).toBe(true)
+    expect(res.data?.projectDir).toBeNull()
+    expect(res.data?.sessions).toEqual([])
   })
 })

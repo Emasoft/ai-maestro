@@ -2,13 +2,17 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import {
-  getSessionsForAgent,
+  getSessionsForAgentWithMetadata,
   hasSessionCookie,
 } from '@/services/sessions-browser-service'
 
 export const dynamic = 'force-dynamic'
 
 // Response schema — validated before returning (acceptance criterion #3).
+// Phase 5 §4 extends this with three optional metadata fields
+// (`firstUserText`, `isOngoing`, `compactionCount`). They are OPTIONAL so
+// existing callers that don't know about them continue to parse the
+// response unchanged.
 const SessionSummarySchema = z.object({
   path: z.string(),
   size: z.number().int().nonnegative(),
@@ -16,6 +20,9 @@ const SessionSummarySchema = z.object({
   lastModified: z.string(),
   displayName: z.string(),
   id: z.string(),
+  firstUserText: z.string().optional(),
+  isOngoing: z.boolean().optional(),
+  compactionCount: z.number().int().nonnegative().optional(),
 })
 
 const SessionsListResponseSchema = z.object({
@@ -31,7 +38,10 @@ export async function GET(
     return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
   }
   const { id } = await params
-  const result = getSessionsForAgent(id)
+  // Phase 5 §4 — fetch the list enriched with metadata. Falls back to
+  // plain file-system rows when the Rust analyzer fails (metadata fields
+  // remain undefined; response still parses against the schema above).
+  const result = await getSessionsForAgentWithMetadata(id)
   if (!result.ok || !result.data) {
     return NextResponse.json(
       { error: result.error ?? 'internal_error' },

@@ -28,6 +28,7 @@ import type {
   ReadRangeOkResponse,
   SearchOkResponse,
   ContextBreakdownOkResponse,
+  AnalyzeFileMetadataOkResponse,
   CloseOkResponse,
   SearchKind,
 } from '@/lib/jsonl-reader-protocol'
@@ -391,6 +392,28 @@ export class JsonlReader extends EventEmitter {
       throw new JsonlReaderProtocolError(String(resp.error), resp.detail)
     }
     return resp as ContextBreakdownOkResponse
+  }
+
+  /**
+   * Phase 5 §3.8 — run the streaming metadata analyzer on `filePath`.
+   *
+   * Unlike every other method on this class, `analyzeFileMetadata` takes a
+   * raw absolute path — NOT a sessionId. The sessions-browser list calls
+   * this BEFORE opening a Rust-side session handle so it can populate
+   * divider-row previews, ongoing flags, and compaction counts without
+   * paying for an index build.
+   *
+   * The child is still lazily spawned on first call (same FIFO queue and
+   * self-healing as the rest of the API), and the call is still
+   * serialized through the singleton Rust process, so concurrent callers
+   * pipeline their requests on the queue.
+   */
+  async analyzeFileMetadata(filePath: string): Promise<AnalyzeFileMetadataOkResponse> {
+    const resp = await this.sendRequest({ cmd: 'analyze_file_metadata', path: filePath })
+    if (isErrorResponse(resp)) {
+      throw new JsonlReaderProtocolError(String(resp.error), resp.detail)
+    }
+    return resp as AnalyzeFileMetadataOkResponse
   }
 
   async close(sessionId: string): Promise<CloseOkResponse> {

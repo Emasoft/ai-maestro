@@ -66,6 +66,20 @@ export interface ContextBreakdownRequest {
   sessionId: string
 }
 
+/**
+ * Phase 5 §3.8 — streaming metadata analyzer.
+ *
+ * NOTE: Takes a raw absolute path, NOT a sessionId. The sessions-browser
+ * list calls this BEFORE opening a Rust-side session handle so it can
+ * populate divider rows (first-user preview, ongoing flag, compaction
+ * count) without paying for an index build. The Rust side validates
+ * the path itself.
+ */
+export interface AnalyzeFileMetadataRequest {
+  cmd: 'analyze_file_metadata'
+  path: string
+}
+
 export type JsonlReaderRequest =
   | PingRequest
   | OpenRequest
@@ -73,6 +87,7 @@ export type JsonlReaderRequest =
   | ReadRangeRequest
   | SearchRequest
   | ContextBreakdownRequest
+  | AnalyzeFileMetadataRequest
 
 // ---------------------------------------------------------------------------
 // Responses
@@ -132,6 +147,32 @@ export interface ContextBreakdownOkResponse {
   modelId: string | null
 }
 
+/**
+ * Phase 5 §3.8 metadata analyzer response. Every field is always
+ * present — additive forward-compat is handled by the DOWNSTREAM
+ * consumer (adding new fields over time never breaks existing ones).
+ */
+export interface PhaseTokenBreakdown {
+  phaseId: number
+  pre: number
+  peak: number
+  /** `null` while the phase is open (the last phase of the file). */
+  post: number | null
+}
+
+export interface AnalyzeFileMetadataOkResponse {
+  ok: true
+  firstUserMessagePreview: string
+  isOngoing: boolean
+  compactionCount: number
+  phaseTokenBreakdown: PhaseTokenBreakdown[]
+  shutdownToolCalls: number
+  rejections: number
+  requestIdDedupedAssistantTokens: number
+  hasSubagentSpawns: boolean
+  hasCompactSummary: boolean
+}
+
 export type JsonlReaderResponse =
   | PingOkResponse
   | OpenOkResponse
@@ -139,6 +180,7 @@ export type JsonlReaderResponse =
   | ReadRangeOkResponse
   | SearchOkResponse
   | ContextBreakdownOkResponse
+  | AnalyzeFileMetadataOkResponse
   | ErrorResponse
 
 // Narrowing helpers

@@ -429,7 +429,13 @@ export async function InstallElement(
     {
       const currentSettings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
       const ep = (currentSettings.enabledPlugins || {}) as Record<string, boolean>
-      const existingKey = Object.keys(ep).find(k => k.includes(name))
+      // SCEN-012 FIX: Boundary-aware match (see PG01 comment for the false-positive
+      // case this avoids — ai-maestro-plugin vs ai-maestro-plugins marketplace).
+      const existingKey = Object.keys(ep).find(k => {
+        const at = k.indexOf('@')
+        const pluginPart = at >= 0 ? k.substring(0, at) : k
+        return pluginPart === name
+      })
       const currentlyInstalled = !!existingKey
       const currentlyEnabled = currentlyInstalled && ep[existingKey!] !== false
 
@@ -599,6 +605,28 @@ export async function InstallElement(
               await saveJsonSafe(settingsPath, settings)
             })
             ops.push(`EXE: Installed via direct settings write — ${pluginKey} → true`)
+          } else if (scope === 'local' && clientType === 'claude') {
+            // SCEN-012 FIX: Belt-and-braces write-back for local Claude installs.
+            // The `claude plugin install` CLI can fail silently when invoked from
+            // a server child process due to PATH / env differences (same root
+            // cause fixed in ChangeClient G08b). Verify the key is actually in
+            // settings.local.json and write it back if not. Without this, G11
+            // (install ai-maestro-plugin during CreateAgent) can return success
+            // while the plugin is not actually enabled, violating R17.1/R17.6.
+            try {
+              await withSettingsLock(settingsPath, async () => {
+                const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
+                const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+                if (ep[pluginKey] !== true) {
+                  ep[pluginKey] = true
+                  settings.enabledPlugins = ep
+                  await saveJsonSafe(settingsPath, settings)
+                  ops.push(`EXE: Write-back — CLI claimed success but ${pluginKey} missing; force-wrote ${pluginKey} → true`)
+                }
+              })
+            } catch (wbErr) {
+              ops.push(`EXE: WARN — Write-back fallback failed: ${wbErr instanceof Error ? wbErr.message : wbErr}`)
+            }
           }
           break
         }
@@ -634,9 +662,14 @@ export async function InstallElement(
             await withSettingsLock(settingsPath, async () => {
               const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
               const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-              // Remove all keys matching this plugin name (handle marketplace variants)
+              // SCEN-012 FIX: Boundary-aware match. Old `k.includes(name)` deleted
+              // ai-maestro-autonomous-agent@ai-maestro-plugins when uninstalling
+              // ai-maestro-plugin, because "ai-maestro-plugins" contains "ai-maestro-plugin"
+              // as substring. Require exact name match before "@".
               for (const k of Object.keys(ep)) {
-                if (k.includes(name)) delete ep[k]
+                const at = k.indexOf('@')
+                const pluginPart = at >= 0 ? k.substring(0, at) : k
+                if (pluginPart === name) delete ep[k]
               }
               settings.enabledPlugins = ep
               await saveJsonSafe(settingsPath, settings)
@@ -674,7 +707,12 @@ export async function InstallElement(
           await withSettingsLock(settingsPath, async () => {
             const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
             const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-            const existingKey = Object.keys(ep).find(k => k.includes(name)) || pluginKey
+            // SCEN-012 FIX: Boundary-aware match (see PG01 comment).
+            const existingKey = Object.keys(ep).find(k => {
+              const at = k.indexOf('@')
+              const pluginPart = at >= 0 ? k.substring(0, at) : k
+              return pluginPart === name
+            }) || pluginKey
             ep[existingKey] = true
             settings.enabledPlugins = ep
             await saveJsonSafe(settingsPath, settings)
@@ -687,7 +725,12 @@ export async function InstallElement(
           await withSettingsLock(settingsPath, async () => {
             const settings = await loadJsonSafe(settingsPath) as Record<string, Record<string, unknown>>
             const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-            const existingKey = Object.keys(ep).find(k => k.includes(name)) || pluginKey
+            // SCEN-012 FIX: Boundary-aware match (see PG01 comment).
+            const existingKey = Object.keys(ep).find(k => {
+              const at = k.indexOf('@')
+              const pluginPart = at >= 0 ? k.substring(0, at) : k
+              return pluginPart === name
+            }) || pluginKey
             ep[existingKey] = false
             settings.enabledPlugins = ep
             await saveJsonSafe(settingsPath, settings)
@@ -770,19 +813,29 @@ export async function InstallElement(
         try {
           const settings = await loadJsonSafe(verifyPath) as Record<string, Record<string, unknown>>
           const ep = settings.enabledPlugins as Record<string, boolean> | undefined
+          // SCEN-012 FIX: Use boundary-aware matching instead of substring `includes`.
+          // The old `k.includes(name)` returned TRUE for "ai-maestro-autonomous-agent@ai-maestro-plugins"
+          // when looking for "ai-maestro-plugin" (because "ai-maestro-plugins" contains "ai-maestro-plugin"
+          // as substring). That caused G11 ai-maestro-plugin install to be marked successful even though
+          // the key was never written — violating R17.1/R17.6. Match on exact name before "@".
+          const matchesName = (k: string): boolean => {
+            const at = k.indexOf('@')
+            const pluginPart = at >= 0 ? k.substring(0, at) : k
+            return pluginPart === name
+          }
           if (action === 'install' || action === 'enable') {
-            const found = ep && Object.keys(ep).some(k => k.includes(name) && ep[k] !== false)
+            const found = ep && Object.keys(ep).some(k => matchesName(k) && ep[k] !== false)
             ops.push(found
               ? `PG01: Verified — ${name} present and enabled`
               : `PG01: WARN — ${name} not found or disabled after ${action}`)
             if (!found) result.success = false
           } else if (action === 'uninstall') {
-            const stillPresent = ep && Object.keys(ep).some(k => k.includes(name))
+            const stillPresent = ep && Object.keys(ep).some(k => matchesName(k))
             ops.push(stillPresent
               ? `PG01: WARN — ${name} still present after uninstall`
               : `PG01: Verified — ${name} removed`)
           } else if (action === 'disable') {
-            const isDisabled = ep && Object.keys(ep).some(k => k.includes(name) && ep[k] === false)
+            const isDisabled = ep && Object.keys(ep).some(k => matchesName(k) && ep[k] === false)
             ops.push(isDisabled
               ? `PG01: Verified — ${name} is disabled`
               : `PG01: WARN — ${name} not in expected disabled state`)
@@ -821,7 +874,14 @@ export async function InstallElement(
           await withSettingsLock(userSettingsPath, async () => {
             const us = await loadJsonSafe(userSettingsPath) as Record<string, Record<string, unknown>>
             const uep = (us.enabledPlugins || {}) as Record<string, boolean>
-            const userKey = Object.keys(uep).find(k => k.includes('ai-maestro-plugin'))
+            // SCEN-012 FIX: Boundary-aware match. Old `k.includes('ai-maestro-plugin')`
+            // also matched role-plugin names like ai-maestro-autonomous-agent@ai-maestro-plugins
+            // (marketplace name contains "ai-maestro-plugin" as substring).
+            const userKey = Object.keys(uep).find(k => {
+              const at = k.indexOf('@')
+              const pluginPart = at >= 0 ? k.substring(0, at) : k
+              return pluginPart === 'ai-maestro-plugin'
+            })
             if (userKey && uep[userKey] !== false) {
               uep[userKey] = false
               us.enabledPlugins = uep
@@ -1011,7 +1071,12 @@ export async function InstallElement(
           await withSettingsLock(userSettingsPath, async () => {
             const us = await loadJsonSafe(userSettingsPath) as Record<string, Record<string, unknown>>
             const uep = (us.enabledPlugins || {}) as Record<string, boolean>
-            const userKey = Object.keys(uep).find(k => k.includes(name))
+            // SCEN-012 FIX: Boundary-aware match.
+            const userKey = Object.keys(uep).find(k => {
+              const at = k.indexOf('@')
+              const pluginPart = at >= 0 ? k.substring(0, at) : k
+              return pluginPart === name
+            })
             if (userKey && uep[userKey] !== false) {
               uep[userKey] = false
               us.enabledPlugins = uep

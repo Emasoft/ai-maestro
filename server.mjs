@@ -1471,7 +1471,15 @@ async function startServer(handleRequest) {
         try {
           const us = JSON.parse(readFileSync(userSettingsPath, 'utf-8'))
           const userPlugins = us.enabledPlugins || {}
-          const userPluginKey = Object.keys(userPlugins).find(k => k.includes('ai-maestro-plugin'))
+          // SCEN-012 FIX: Boundary-aware match. `k.includes('ai-maestro-plugin')`
+          // false-positive matched on ai-maestro-autonomous-agent@ai-maestro-plugins
+          // because the marketplace name contains the core plugin name as a
+          // substring. Require exact name match before "@".
+          const userPluginKey = Object.keys(userPlugins).find(k => {
+            const at = k.indexOf('@')
+            const pluginPart = at >= 0 ? k.substring(0, at) : k
+            return pluginPart === 'ai-maestro-plugin'
+          })
           if (userPluginKey && userPlugins[userPluginKey] !== false) {
             userPlugins[userPluginKey] = false
             us.enabledPlugins = userPlugins

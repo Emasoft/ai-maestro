@@ -1595,7 +1595,16 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
         try {
           const ls = JSON.parse(readR17(localSettingsPath, 'utf-8'))
           const plugins = ls.enabledPlugins || {}
-          const pluginKey = Object.keys(plugins).find((k: string) => k.includes('ai-maestro-plugin'))
+          // SCEN-012 FIX: Boundary-aware match. `k.includes('ai-maestro-plugin')`
+          // false-positive matched on ai-maestro-autonomous-agent@ai-maestro-plugins
+          // because the marketplace name contains the core plugin name as a
+          // substring. R17 wake-gate would skip the repair, leaving disabled
+          // plugins disabled. Require exact name match before "@".
+          const pluginKey = Object.keys(plugins).find((k: string) => {
+            const at = k.indexOf('@')
+            const pluginPart = at >= 0 ? k.substring(0, at) : k
+            return pluginPart === 'ai-maestro-plugin'
+          })
           hasPlugin = !!pluginKey && plugins[pluginKey] !== false
         } catch { /* corrupt — treat as missing */ }
       }

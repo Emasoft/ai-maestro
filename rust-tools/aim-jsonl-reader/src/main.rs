@@ -35,6 +35,7 @@ mod metadata;
 mod protocol;
 mod reader;
 mod search;
+mod timeline;
 
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Write};
@@ -45,15 +46,21 @@ use serde_json::{json, Value};
 use crate::protocol::{err, errors, ok, optional_bool, optional_str, optional_u64, required_str, required_u64};
 use crate::reader::SessionHandle;
 use crate::search::{compile_regex, search, SearchKind, DEFAULT_LIMIT};
+use crate::timeline::TimelineRegistry;
 
 /// In-process session registry. Keyed by sessionId.
 struct Sessions {
     map: HashMap<String, SessionHandle>,
+    /// Phase 6 §3.6 — timeline registry. Keyed by timelineId.
+    timelines: TimelineRegistry,
 }
 
 impl Sessions {
     fn new() -> Self {
-        Sessions { map: HashMap::new() }
+        Sessions {
+            map:       HashMap::new(),
+            timelines: TimelineRegistry::default(),
+        }
     }
 
     fn open(&mut self, path: PathBuf) -> Result<(String, bool, u64), Value> {
@@ -252,6 +259,88 @@ fn dispatch(cmd: &str, req: &Value, sessions: &mut Sessions) -> Value {
                     }
                     ok(val)
                 }
+                Err(e) => err(errors::READ_FAILED, e.to_string()),
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Phase 6 §3.6 — timeline commands.
+        //
+        // open_timeline builds a TimelineHandle from a list of {path, laneId}
+        // pairs, sorts them by first-entry timestamp, builds a stitched
+        // sparse index, and registers the handle. Returns the new timelineId
+        // plus the manifest.
+        //
+        // read_timeline_range, search_timeline, and context_at all take a
+        // previously-opened timelineId.
+        // ---------------------------------------------------------------
+        "open_timeline" => {
+            let files_val = match req.get("files") {
+                Some(v) => v,
+                None => return err(errors::INVALID_REQUEST, "missing 'files'"),
+            };
+            let files_arr = match files_val.as_array() {
+                Some(a) => a,
+                None => return err(errors::INVALID_REQUEST, "'files' must be an array"),
+            };
+            if files_arr.is_empty() {
+                return err(errors::INVALID_REQUEST, "'files' must be non-empty");
+            }
+            let mut inputs: Vec<(PathBuf, String)> = Vec::with_capacity(files_arr.len());
+            for (i, item) in files_arr.iter().enumerate() {
+                let path_str = match item.get("path").and_then(Value::as_str) {
+                    Some(s) => s,
+                    None => {
+                        return err(
+                            errors::INVALID_REQUEST,
+                            format!("files[{i}] missing 'path'"),
+                        )
+                    }
+                };
+                let lane_id = match item.get("laneId").and_then(Value::as_str) {
+                    Some(s) => s.to_string(),
+                    None => {
+                        return err(
+                            errors::INVALID_REQUEST,
+                            format!("files[{i}] missing 'laneId'"),
+                        )
+                    }
+                };
+                inputs.push((PathBuf::from(path_str), lane_id));
+            }
+            match sessions.timelines.open(&inputs) {
+                Ok(tl) => {
+                    let manifest = tl.manifest();
+                    ok(manifest)
+                }
+                Err(e) => err(errors::OPEN_FAILED, e.to_string()),
+            }
+        }
+
+        "read_timeline_range" => {
+            let tlid = match required_str(req, "timelineId") {
+                Ok(s) => s,
+                Err(e) => return e,
+            };
+            let from_global = match required_u64(req, "fromGlobal") {
+                Ok(n) => n,
+                Err(e) => return e,
+            };
+            let to_global = match required_u64(req, "toGlobal") {
+                Ok(n) => n,
+                Err(e) => return e,
+            };
+            let tl = match sessions.timelines.get(tlid) {
+                Some(h) => h,
+                None => {
+                    return err(
+                        errors::TIMELINE_NOT_FOUND,
+                        format!("no open timeline: {tlid}"),
+                    )
+                }
+            };
+            match tl.read_range(from_global, to_global) {
+                Ok(rows) => ok(json!({ "rows": rows })),
                 Err(e) => err(errors::READ_FAILED, e.to_string()),
             }
         }

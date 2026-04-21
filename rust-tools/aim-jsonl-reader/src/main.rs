@@ -46,7 +46,7 @@ use serde_json::{json, Value};
 use crate::protocol::{err, errors, ok, optional_bool, optional_str, optional_u64, required_str, required_u64};
 use crate::reader::SessionHandle;
 use crate::search::{compile_regex, search, SearchKind, DEFAULT_LIMIT};
-use crate::timeline::TimelineRegistry;
+use crate::timeline::{ContextAtTarget, TimelineRegistry};
 
 /// In-process session registry. Keyed by sessionId.
 struct Sessions {
@@ -341,6 +341,83 @@ fn dispatch(cmd: &str, req: &Value, sessions: &mut Sessions) -> Value {
             };
             match tl.read_range(from_global, to_global) {
                 Ok(rows) => ok(json!({ "rows": rows })),
+                Err(e) => err(errors::READ_FAILED, e.to_string()),
+            }
+        }
+
+        "search_timeline" => {
+            let tlid = match required_str(req, "timelineId") {
+                Ok(s) => s,
+                Err(e) => return e,
+            };
+            let query = match required_str(req, "query") {
+                Ok(q) => q,
+                Err(e) => return e,
+            };
+            let kind_str = optional_str(req, "kind", "substring");
+            let case_insensitive = optional_bool(req, "caseInsensitive", true);
+            let tl = match sessions.timelines.get(tlid) {
+                Some(h) => h,
+                None => {
+                    return err(
+                        errors::TIMELINE_NOT_FOUND,
+                        format!("no open timeline: {tlid}"),
+                    )
+                }
+            };
+            let matches = match kind_str {
+                "regex" => match compile_regex(query, case_insensitive) {
+                    Ok(re) => match tl.search(&SearchKind::Regex { re }) {
+                        Ok(m) => m,
+                        Err(e) => return err(errors::SEARCH_FAILED, e.to_string()),
+                    },
+                    Err(e) => return err(errors::SEARCH_FAILED, e.to_string()),
+                },
+                _ => match tl.search(&SearchKind::Substring {
+                    needle:           query.as_bytes(),
+                    case_insensitive,
+                }) {
+                    Ok(m) => m,
+                    Err(e) => return err(errors::SEARCH_FAILED, e.to_string()),
+                },
+            };
+            ok(json!({ "matches": matches }))
+        }
+
+        "context_at" => {
+            let tlid = match required_str(req, "timelineId") {
+                Ok(s) => s,
+                Err(e) => return e,
+            };
+            let anchor_uuid = req.get("anchorUuid").and_then(Value::as_str);
+            let global_line = req.get("globalLineIndex").and_then(Value::as_u64);
+            let target = match (anchor_uuid, global_line) {
+                (Some(u), _) => ContextAtTarget::Uuid(u.to_string()),
+                (None, Some(g)) => ContextAtTarget::GlobalLine(g),
+                (None, None) => {
+                    return err(
+                        errors::INVALID_REQUEST,
+                        "context_at requires 'anchorUuid' or 'globalLineIndex'",
+                    )
+                }
+            };
+            let tl = match sessions.timelines.get(tlid) {
+                Some(h) => h,
+                None => {
+                    return err(
+                        errors::TIMELINE_NOT_FOUND,
+                        format!("no open timeline: {tlid}"),
+                    )
+                }
+            };
+            match tl.context_at(target) {
+                Ok(mut val) => {
+                    if let Some(obj) = val.as_object_mut() {
+                        obj.insert("ok".to_string(), Value::Bool(true));
+                        return val;
+                    }
+                    ok(val)
+                }
                 Err(e) => err(errors::READ_FAILED, e.to_string()),
             }
         }

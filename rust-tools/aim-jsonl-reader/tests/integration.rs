@@ -870,6 +870,192 @@ fn timeline_main_plus_worktree_sibling() {
 }
 
 #[test]
+fn timeline_context_at_phase_history_with_compactions() {
+    // File with 2 compaction markers → 3 phases.
+    let tmp = TempDir::new().unwrap();
+    let lines = vec![
+        json!({"uuid":"u-0","timestamp":"2026-04-20T00:00:00.000Z","role":"user","content":"a"}),
+        json!({
+            "uuid":"u-1","timestamp":"2026-04-20T00:00:01.000Z","role":"assistant",
+            "model":"claude-sonnet-4-6",
+            "message":{"usage":{"output_tokens":10}}
+        }),
+        json!({
+            "uuid":"c-1","timestamp":"2026-04-20T00:00:02.000Z",
+            "isCompactSummary": true
+        }),
+        json!({
+            "uuid":"u-2","timestamp":"2026-04-20T00:00:03.000Z","role":"assistant",
+            "model":"claude-sonnet-4-6",
+            "message":{"usage":{"output_tokens":20}}
+        }),
+        json!({
+            "uuid":"c-2","timestamp":"2026-04-20T00:00:04.000Z",
+            "isCompactSummary": true
+        }),
+        json!({
+            "uuid":"u-3","timestamp":"2026-04-20T00:00:05.000Z","role":"assistant",
+            "model":"claude-sonnet-4-6",
+            "message":{"usage":{"output_tokens":5}}
+        }),
+    ];
+    let path = write_jsonl(tmp.path(), "phases.jsonl", &lines);
+
+    let mut r = Reader::spawn();
+    let open = r.req(json!({
+        "cmd":"open_timeline",
+        "files":[{"path": path.to_str().unwrap(), "laneId":"main"}],
+    }));
+    let tlid = open["timelineId"].as_str().unwrap().to_string();
+
+    // Anchor at the final assistant entry — covers ALL 3 phases.
+    let ctx = r.req(json!({
+        "cmd":"context_at","timelineId": tlid,
+        "anchorUuid":"u-3"
+    }));
+    assert_eq!(ctx["ok"], json!(true), "{}", ctx);
+    let phases = ctx["phaseHistory"].as_array().unwrap();
+    assert_eq!(phases.len(), 3, "expected 3 phases, got {:?}", phases);
+    assert_eq!(phases[0]["phaseId"], json!(0));
+    assert_eq!(phases[1]["phaseId"], json!(1));
+    assert_eq!(phases[2]["phaseId"], json!(2));
+    // Phase 0 closes at output=10.
+    assert_eq!(phases[0]["post"], json!(10));
+    // Phase 1 closes at output=10+20=30.
+    assert_eq!(phases[1]["post"], json!(30));
+    // Phase 2 still open.
+    assert!(phases[2]["post"].is_null());
+
+    // Cumulative messages = 10 + 20 + 5 = 35.
+    let cumulative = &ctx["cumulative"];
+    assert_eq!(cumulative["messages"], json!(35));
+    assert_eq!(cumulative["modelId"], json!("claude-sonnet-4-6"));
+    // modelContextLimit for sonnet-4 = 200k.
+    assert_eq!(cumulative["modelContextLimit"], json!(200_000));
+
+    r.shutdown();
+}
+
+#[test]
+fn timeline_context_at_stops_at_anchor() {
+    // Anchor at the FIRST assistant entry — later entries must NOT
+    // contribute to the cumulative buckets.
+    let tmp = TempDir::new().unwrap();
+    let lines = vec![
+        json!({
+            "uuid":"u-0","timestamp":"2026-04-20T00:00:00.000Z","role":"assistant",
+            "model":"claude-sonnet-4-6",
+            "message":{"usage":{"output_tokens":7}}
+        }),
+        json!({
+            "uuid":"u-1","timestamp":"2026-04-20T00:00:01.000Z","role":"assistant",
+            "model":"claude-sonnet-4-6",
+            "message":{"usage":{"output_tokens":100}}
+        }),
+    ];
+    let path = write_jsonl(tmp.path(), "cut.jsonl", &lines);
+
+    let mut r = Reader::spawn();
+    let open = r.req(json!({
+        "cmd":"open_timeline",
+        "files":[{"path": path.to_str().unwrap(), "laneId":"main"}],
+    }));
+    let tlid = open["timelineId"].as_str().unwrap().to_string();
+
+    let ctx = r.req(json!({
+        "cmd":"context_at","timelineId": tlid,
+        "anchorUuid":"u-0",
+    }));
+    assert_eq!(ctx["ok"], json!(true), "{}", ctx);
+    assert_eq!(ctx["cumulative"]["messages"], json!(7),
+        "anchor at u-0 must not include u-1's 100 tokens");
+    assert_eq!(ctx["anchorGlobalLine"], json!(0));
+
+    r.shutdown();
+}
+
+#[test]
+fn timeline_search_across_files_sorted_globally() {
+    // 3 files, each contains the search term exactly once. Matches must
+    // be returned in ASCENDING globalLineIndex order regardless of file
+    // traversal order on the Rust side.
+    let tmp = TempDir::new().unwrap();
+
+    let a_lines = vec![
+        json!({"uuid":"a-0","timestamp":"2026-04-20T00:00:00.000Z","role":"user","content":"plain"}),
+        json!({"uuid":"a-1","timestamp":"2026-04-20T00:00:01.000Z","role":"user","content":"match-me here"}),
+    ];
+    let a = write_jsonl(tmp.path(), "aa.jsonl", &a_lines);
+
+    let b_lines = vec![
+        json!({"uuid":"b-0","timestamp":"2026-04-20T00:00:10.000Z","role":"user","content":"also has match-me"}),
+        json!({"uuid":"b-1","timestamp":"2026-04-20T00:00:11.000Z","role":"user","content":"plain again"}),
+    ];
+    let b = write_jsonl(tmp.path(), "bb.jsonl", &b_lines);
+
+    let c_lines = vec![
+        json!({"uuid":"c-0","timestamp":"2026-04-20T00:00:20.000Z","role":"user","content":"final match-me row"}),
+    ];
+    let c = write_jsonl(tmp.path(), "cc.jsonl", &c_lines);
+
+    let mut r = Reader::spawn();
+    let open = r.req(json!({
+        "cmd":"open_timeline",
+        "files": [
+            {"path": a.to_str().unwrap(), "laneId":"A"},
+            {"path": b.to_str().unwrap(), "laneId":"B"},
+            {"path": c.to_str().unwrap(), "laneId":"C"},
+        ],
+    }));
+    let tlid = open["timelineId"].as_str().unwrap().to_string();
+
+    let resp = r.req(json!({
+        "cmd":"search_timeline","timelineId": tlid,
+        "query":"match-me","kind":"substring","caseInsensitive":false,
+    }));
+    assert_eq!(resp["ok"], json!(true), "{}", resp);
+    let matches = resp["matches"].as_array().unwrap();
+    assert_eq!(matches.len(), 3);
+    // Global-order: 1 (from A), 2 (from B), 4 (from C).
+    assert_eq!(matches[0]["globalLineIndex"], json!(1));
+    assert_eq!(matches[0]["laneId"], json!("A"));
+    assert_eq!(matches[1]["globalLineIndex"], json!(2));
+    assert_eq!(matches[1]["laneId"], json!("B"));
+    assert_eq!(matches[2]["globalLineIndex"], json!(4));
+    assert_eq!(matches[2]["laneId"], json!("C"));
+    r.shutdown();
+}
+
+#[test]
+fn timeline_search_regex_works_across_files() {
+    let tmp = TempDir::new().unwrap();
+    let a = write_jsonl(tmp.path(), "r1.jsonl", &[
+        json!({"uuid":"a-0","timestamp":"2026-04-20T00:00:00.000Z","v":"abc123"}),
+    ]);
+    let b = write_jsonl(tmp.path(), "r2.jsonl", &[
+        json!({"uuid":"b-0","timestamp":"2026-04-20T00:00:10.000Z","v":"abc987"}),
+    ]);
+
+    let mut r = Reader::spawn();
+    let open = r.req(json!({
+        "cmd":"open_timeline",
+        "files":[
+            {"path": a.to_str().unwrap(), "laneId":"A"},
+            {"path": b.to_str().unwrap(), "laneId":"B"},
+        ],
+    }));
+    let tlid = open["timelineId"].as_str().unwrap().to_string();
+
+    let resp = r.req(json!({
+        "cmd":"search_timeline","timelineId": tlid,
+        "query":"abc\\d+","kind":"regex","caseInsensitive":false,
+    }));
+    let matches = resp["matches"].as_array().unwrap();
+    assert_eq!(matches.len(), 2);
+    r.shutdown();
+}
+
+#[test]
 fn open_timeline_rejects_empty_files_array() {
     let mut r = Reader::spawn();
     let resp = r.req(json!({"cmd":"open_timeline","files":[]}));
@@ -902,3 +1088,56 @@ fn read_timeline_range_unknown_timeline_errors() {
     r.shutdown();
 }
 
+#[test]
+fn context_at_requires_anchor_uuid_or_global_line() {
+    // Open a real timeline first so we get past the timeline_not_found
+    // branch and hit the anchor-missing branch.
+    let tmp = TempDir::new().unwrap();
+    let path = write_timestamped(tmp.path(), "a.jsonl", "a", 0, 2, false);
+
+    let mut r = Reader::spawn();
+    let open = r.req(json!({
+        "cmd":"open_timeline",
+        "files":[{"path": path.to_str().unwrap(), "laneId":"main"}],
+    }));
+    let tlid = open["timelineId"].as_str().unwrap().to_string();
+    let resp = r.req(json!({"cmd":"context_at","timelineId": tlid}));
+    assert_eq!(resp["ok"], json!(false));
+    assert_eq!(resp["error"], json!("invalid_request"));
+    r.shutdown();
+}
+
+#[test]
+fn context_at_by_global_line_index() {
+    // Use a globalLineIndex anchor rather than a uuid.
+    let tmp = TempDir::new().unwrap();
+    let lines = vec![
+        json!({
+            "uuid":"u-0","timestamp":"2026-04-20T00:00:00.000Z","role":"assistant",
+            "model":"claude-sonnet-4-6",
+            "message":{"usage":{"output_tokens":3}}
+        }),
+        json!({
+            "uuid":"u-1","timestamp":"2026-04-20T00:00:01.000Z","role":"assistant",
+            "model":"claude-sonnet-4-6",
+            "message":{"usage":{"output_tokens":4}}
+        }),
+    ];
+    let path = write_jsonl(tmp.path(), "line-anchor.jsonl", &lines);
+
+    let mut r = Reader::spawn();
+    let open = r.req(json!({
+        "cmd":"open_timeline",
+        "files":[{"path": path.to_str().unwrap(), "laneId":"main"}],
+    }));
+    let tlid = open["timelineId"].as_str().unwrap().to_string();
+
+    // Anchor at line 1 (the second assistant entry) — should sum both.
+    let ctx = r.req(json!({
+        "cmd":"context_at","timelineId": tlid,
+        "globalLineIndex": 1,
+    }));
+    assert_eq!(ctx["cumulative"]["messages"], json!(7));
+    assert_eq!(ctx["anchorGlobalLine"], json!(1));
+    r.shutdown();
+}

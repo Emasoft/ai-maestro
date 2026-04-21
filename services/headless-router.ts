@@ -302,6 +302,21 @@ import {
   deleteExportJob,
 } from '@/services/config-service'
 
+// Sessions Browser (TRDD-d46b42e9 Phase 2) — imports are kept at the bottom
+// of the import block so the 4 added routes form an additive diff easy to
+// review.
+import {
+  getSessionsForAgent as getSessionsForAgentBrowser,
+  hasSessionCookie,
+  resolveSessionPath,
+  ensureOpenForPath,
+} from '@/services/sessions-browser-service'
+import {
+  getJsonlReader,
+  JsonlReaderBinaryMissingError,
+  JsonlReaderProtocolError,
+} from '@/lib/jsonl-reader'
+
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -2912,6 +2927,145 @@ const routes: Route[] = [
     const buffer = fs.readFileSync(realPath)
     res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename="${sanitized}"`, 'Content-Length': String(buffer.length) })
     res.end(buffer)
+  }},
+
+  // =========================================================================
+  // Sessions Browser (TRDD-d46b42e9 Phase 2)
+  // =========================================================================
+  { method: 'GET', pattern: /^\/api\/sessions-browser\/agents\/([^/]+)\/sessions$/, paramNames: ['id'], handler: async (req, res, params) => {
+    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+      sendJson(res, 401, { error: 'unauthenticated' })
+      return
+    }
+    const result = getSessionsForAgentBrowser(params.id)
+    if (!result.ok || !result.data) {
+      sendJson(res, result.status || 500, { error: result.error || 'internal_error' })
+      return
+    }
+    sendJson(res, 200, result.data)
+  }},
+  { method: 'POST', pattern: /^\/api\/sessions-browser\/sessions\/([^/]+)\/range$/, paramNames: ['sid'], handler: async (req, res, params) => {
+    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+      sendJson(res, 401, { error: 'unauthenticated' })
+      return
+    }
+    const absolutePath = resolveSessionPath(params.sid)
+    if (!absolutePath) {
+      sendJson(res, 404, { error: 'session_not_found' })
+      return
+    }
+    let body: any
+    try {
+      body = await readJsonBody(req)
+    } catch {
+      sendJson(res, 400, { error: 'invalid_request' })
+      return
+    }
+    const fromLine = typeof body?.fromLine === 'number' ? body.fromLine : NaN
+    const toLine = typeof body?.toLine === 'number' ? body.toLine : NaN
+    if (!Number.isInteger(fromLine) || !Number.isInteger(toLine) || fromLine < 0 || toLine < 0) {
+      sendJson(res, 400, { error: 'invalid_request' })
+      return
+    }
+    try {
+      const readerSid = await ensureOpenForPath(absolutePath)
+      const resp = await getJsonlReader().readRange(readerSid, fromLine, toLine)
+      sendJson(res, 200, { sessionId: params.sid, fromLine, toLine, lines: resp.lines })
+    } catch (err) {
+      if (err instanceof JsonlReaderBinaryMissingError) {
+        sendJson(res, 503, { error: 'binary_missing', detail: err.message })
+        return
+      }
+      if (err instanceof JsonlReaderProtocolError) {
+        const status = err.code === 'session_not_found' ? 404 : 502
+        sendJson(res, status, { error: err.code, detail: err.detail })
+        return
+      }
+      sendJson(res, 500, { error: 'internal_error', detail: (err as Error).message })
+    }
+  }},
+  { method: 'POST', pattern: /^\/api\/sessions-browser\/sessions\/([^/]+)\/search$/, paramNames: ['sid'], handler: async (req, res, params) => {
+    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+      sendJson(res, 401, { error: 'unauthenticated' })
+      return
+    }
+    const absolutePath = resolveSessionPath(params.sid)
+    if (!absolutePath) {
+      sendJson(res, 404, { error: 'session_not_found' })
+      return
+    }
+    let body: any
+    try {
+      body = await readJsonBody(req)
+    } catch {
+      sendJson(res, 400, { error: 'invalid_request' })
+      return
+    }
+    const query = typeof body?.query === 'string' ? body.query : ''
+    if (!query) {
+      sendJson(res, 400, { error: 'invalid_request' })
+      return
+    }
+    const kind = body?.kind === 'regex' ? 'regex' : body?.kind === 'substring' ? 'substring' : undefined
+    const caseInsensitive = typeof body?.caseInsensitive === 'boolean' ? body.caseInsensitive : undefined
+    const limit = typeof body?.limit === 'number' && Number.isInteger(body.limit) && body.limit > 0 ? body.limit : undefined
+    try {
+      const readerSid = await ensureOpenForPath(absolutePath)
+      const resp = await getJsonlReader().search(readerSid, query, { kind, caseInsensitive, limit })
+      sendJson(res, 200, { sessionId: params.sid, matches: resp.matches })
+    } catch (err) {
+      if (err instanceof JsonlReaderBinaryMissingError) {
+        sendJson(res, 503, { error: 'binary_missing', detail: err.message })
+        return
+      }
+      if (err instanceof JsonlReaderProtocolError) {
+        const status = err.code === 'session_not_found' ? 404 : 502
+        sendJson(res, status, { error: err.code, detail: err.detail })
+        return
+      }
+      sendJson(res, 500, { error: 'internal_error', detail: (err as Error).message })
+    }
+  }},
+  { method: 'GET', pattern: /^\/api\/sessions-browser\/sessions\/([^/]+)\/context-breakdown$/, paramNames: ['sid'], handler: async (req, res, params) => {
+    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+      sendJson(res, 401, { error: 'unauthenticated' })
+      return
+    }
+    const absolutePath = resolveSessionPath(params.sid)
+    if (!absolutePath) {
+      sendJson(res, 404, { error: 'session_not_found' })
+      return
+    }
+    try {
+      const readerSid = await ensureOpenForPath(absolutePath)
+      const resp = await getJsonlReader().contextBreakdown(readerSid)
+      sendJson(res, 200, {
+        sessionId: params.sid,
+        systemPrompt: resp.systemPrompt,
+        systemTools: resp.systemTools,
+        mcpTools: resp.mcpTools,
+        customAgents: resp.customAgents,
+        memory: resp.memory,
+        messages: resp.messages,
+        freeSpace: resp.freeSpace,
+        cacheRead: resp.cacheRead,
+        total: resp.total,
+        modelContextLimit: resp.modelContextLimit,
+        approximate: resp.approximate,
+        modelId: resp.modelId,
+      })
+    } catch (err) {
+      if (err instanceof JsonlReaderBinaryMissingError) {
+        sendJson(res, 503, { error: 'binary_missing', detail: err.message })
+        return
+      }
+      if (err instanceof JsonlReaderProtocolError) {
+        const status = err.code === 'session_not_found' ? 404 : 502
+        sendJson(res, status, { error: err.code, detail: err.detail })
+        return
+      }
+      sendJson(res, 500, { error: 'internal_error', detail: (err as Error).message })
+    }
   }},
 ]
 

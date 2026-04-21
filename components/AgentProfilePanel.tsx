@@ -38,6 +38,8 @@ import { useSudo } from '@/contexts/SudoContext'
 
 // Lazy-load AgentProfile — only mounted when Overview tab is active
 const AgentProfile = dynamic(() => import('@/components/AgentProfile'), { ssr: false })
+// Lazy-load SessionsTab — only mounted when Sessions tab is active (Phase 3, TRDD-d46b42e9)
+const SessionsTab = dynamic(() => import('@/components/agent-profile/SessionsTab'), { ssr: false })
 
 // ---------------------------------------------------------------------------
 // Title → Role-Plugin map — derived from ecosystem-constants (lower-cased keys for UI matching).
@@ -93,7 +95,7 @@ interface AgentProfilePanelProps {
 // Main component
 // ---------------------------------------------------------------------------
 
-type TopTab = 'overview' | 'config' | 'advanced'
+type TopTab = 'overview' | 'config' | 'sessions' | 'advanced'
 
 export default function AgentProfilePanel({
   agentId,
@@ -118,6 +120,32 @@ export default function AgentProfilePanel({
     onAgentDataChangedRef.current?.() // Sidebar refresh last
   }, [rawRefetch])
   const [topTab, setTopTab] = useState<TopTab>('overview')
+  // Phase 3 (TRDD-d46b42e9) — session count shown as a badge on the Sessions
+  // tab. Fetches the Phase 2 list route once per agent. null until the first
+  // response arrives.
+  const [sessionCount, setSessionCount] = useState<number | null>(null)
+  useEffect(() => {
+    if (!agentId) {
+      setSessionCount(null)
+      return
+    }
+    const ctrl = new AbortController()
+    fetch(`/api/sessions-browser/agents/${encodeURIComponent(agentId)}/sessions`, {
+      method: 'GET',
+      credentials: 'include',
+      signal: ctrl.signal,
+    })
+      .then(async res => {
+        if (!res.ok) return null
+        const body = await res.json() as { sessions?: unknown[] }
+        return Array.isArray(body.sessions) ? body.sessions.length : 0
+      })
+      .then(count => {
+        if (!ctrl.signal.aborted && typeof count === 'number') setSessionCount(count)
+      })
+      .catch(() => { /* ignore — badge stays null */ })
+    return () => ctrl.abort()
+  }, [agentId])
   const [activeTab, setActiveTab] = useState<TabId>('role')
   const [browsePath, setBrowsePath] = useState<string | null>(null)
   const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -356,7 +384,7 @@ export default function AgentProfilePanel({
 
       {/* Top-level tabs */}
       <div className="flex border-b border-gray-800">
-        {([['overview', 'Overview'], ['config', 'Config'], ['advanced', 'Advanced']] as [TopTab, string][]).map(([t, label]) => (
+        {([['overview', 'Overview'], ['config', 'Config'], ['sessions', 'Sessions'], ['advanced', 'Advanced']] as [TopTab, string][]).map(([t, label]) => (
           <div
             key={t}
             onClick={() => setTopTab(t)}
@@ -367,6 +395,11 @@ export default function AgentProfilePanel({
             }`}
           >
             {label}
+            {t === 'sessions' && sessionCount !== null && sessionCount > 0 && (
+              <span className="ml-1 text-[9px] font-normal text-gray-500 tabular-nums">
+                ({sessionCount})
+              </span>
+            )}
           </div>
         ))}
       </div>
@@ -591,6 +624,13 @@ export default function AgentProfilePanel({
             </div>
           )}
         </>
+      )}
+
+      {/* Sessions tab — JSONL transcript browser (TRDD-d46b42e9 Phase 3) */}
+      {topTab === 'sessions' && (
+        <div className="flex-1 min-h-0 flex" style={{ touchAction: 'pan-y', overscrollBehavior: 'contain' }}>
+          <SessionsTab agentId={agentId} />
+        </div>
       )}
 
       {/* Advanced tab — Metrics, Documentation, Danger Zone */}

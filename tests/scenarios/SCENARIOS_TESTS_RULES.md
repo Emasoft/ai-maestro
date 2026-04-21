@@ -1260,11 +1260,43 @@ STEP 6: Post-test screenshot
 
 ---
 
-## Rule 14: REPORTS-TO-PROJECT-ROOT (added 2026-04-20)
+## Rule 14: REPORTS-TO-PROJECT-ROOT (added 2026-04-20, tightened 2026-04-21)
 
-**Every report, every proposal, every screenshot, every log that any agent produces MUST be written under `<main-project-root>/reports/`.** No exceptions for worktree-isolated agents, no exceptions for forked subagents, no exceptions for plugins in the `~/.claude/plugins/cache/` tree.
+**Every report, every proposal, every screenshot, every log that any agent, plugin, MCP tool, skill, hook, or subagent produces MUST be written under `<main-project-root>/reports/` — and NOWHERE ELSE.** No carve-outs. No per-tool exceptions. No worktree-local paths. No `reports_dev/<tool>/` fallbacks. No `/tmp/` landing zones. Even when running inside a git worktree or a plugin cache, output resolves to the MAIN project root's `reports/` folder.
 
-`<main-project-root>/reports/` and `<main-project-root>/reports_dev/` are both **git-ignored**. Reports often contain private data (screenshots of the dashboard with real agent names, conversation transcripts, environment values). They must never be committed.
+### The one-and-only path convention
+
+```
+<$MAIN_ROOT>/reports/<component>/<ts±tz>-<slug>.<ext>
+```
+
+Where:
+
+- `<$MAIN_ROOT>` = the main project root (never the worktree — see "How to resolve" below).
+- `<component>` = short kebab-case name of the agent/tool/skill producing the report. Examples: `scenarios-runner`, `parallel-tester`, `parallel-worker`, `scenario-improvement-implementer`, `research`, `llm-externalizer`, `caa`, `cpv`, `janitor`, `subconscious-tracker`. One component = one folder.
+- `<ts±tz>` = ISO 8601 timestamp with timezone offset, compact form: `20260421T060000Z` (UTC) or `20260421T080000+0200` (local). Lexically sortable. NEVER bare date-only.
+- `<slug>` = short kebab-case description of the report. Must be unique within the same timestamp+component.
+- `<ext>` = `md` for markdown reports, `jpg`/`png` for screenshots, `log` for raw output, `json` for structured data, `html` for rendered output.
+
+Examples of compliant paths:
+- `reports/scenarios-runner/20260421T052926Z-SCEN-012.report.md`
+- `reports/scenarios-runner/20260421T052926Z-SCEN-012-proposals.md`
+- `reports/scenarios-runner/screenshots/SCEN-012_20260421T052926Z/S014_20260421T052926Z_verify.jpg`
+- `reports/parallel-tester/20260421T005826Z-jsonl-phase2_S7_FAIL.log`
+- `reports/research/20260421T060542Z-jsonl-browser-comparison-vs-claude-devtools.md`
+- `reports/llm-externalizer/20260421T060000Z-code-review-agents-core.md`
+
+Examples of NON-compliant paths (all FORBIDDEN):
+- `reports_dev/llm_externalizer/report.md` (wrong top-level folder)
+- `<worktree>/reports/component/report.md` (worktree-local — destroyed on cleanup)
+- `/tmp/aim-report.log` (outside project)
+- `reports/component/report.md` (missing timestamp)
+- `reports/component/2026-04-21-report.md` (date-only, not ISO 8601 with time)
+- `reports/<tool>/reports/<ts>-report.md` (tool created its own nested folder)
+
+### Gitignore — both folders
+
+Both `<$MAIN_ROOT>/reports/` and `<$MAIN_ROOT>/reports_dev/` are git-ignored to prevent private data (dashboard screenshots with real agent names, governance passwords, conversation transcripts, environment values, API keys in logs) from leaking through commits. This is enforced via `.gitignore` (committed) — if you ever see either folder tracked, fix the `.gitignore` and `git rm --cached -r` the offending paths.
 
 ### How to resolve the main project root
 
@@ -1286,13 +1318,18 @@ mkdir -p "${REPORTS_DIR}/<per-agent-subfolder>"
 # write report files to ${REPORTS_DIR}/<per-agent-subfolder>/...
 ```
 
-The per-agent subfolder keeps outputs from different agents separate:
-- `reports/scenarios-runner/…` — scenario-runner reports + proposals + screenshots
-- `reports/parallel-tester/…` — parallel-tester-agent FAIL screenshots + logs
-- `reports/parallel-worker/…` — parallel-worker-agent logs (when it writes any)
-- `reports/scenario-improvement-implementer/…` — implementer logs
-- `reports/<role-plugin-name>-agent/…` — any report a role-plugin main-agent writes
-- `reports/<skill-name>/…` — any report a skill writes directly
+### LLM Externalizer and other MCP tools — no carve-outs
+
+The LLM Externalizer MCP server's internal default `output_dir` is `<project>/reports_dev/llm_externalizer/`. That path is **non-compliant** with Rule 14 and MUST be overridden on EVERY call.
+
+```json
+{"tool": "code_task",
+ "output_dir": "<$MAIN_ROOT>/reports/llm-externalizer/",
+ "instructions": "...",
+ "input_files_paths": "..."}
+```
+
+The same override requirement applies to every MCP tool, plugin, or skill that has its own default report path. The server/tool's factory default is documentation of the untouched factory state; your `output_dir` override always wins and MUST resolve under `<$MAIN_ROOT>/reports/<component>/`. If a tool has no `output_dir` parameter, that tool is non-compliant and you file a bug instead of using it.
 
 ### Why this rule exists
 

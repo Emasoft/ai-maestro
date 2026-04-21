@@ -169,3 +169,146 @@ export interface SessionDataState {
   searching: boolean
   searchError: string | null
 }
+
+// ---------------------------------------------------------------------------
+// Phase 6 — cross-file timeline types (additive; existing shapes untouched)
+// ---------------------------------------------------------------------------
+
+/**
+ * Classification of where a constituent .jsonl file came from.
+ * Drives lane assignment and divider-row labelling in later phases.
+ */
+export type TimelineFileKind =
+  | 'main'
+  | 'subagent'
+  | 'worktree-main'
+  | 'worktree-subagent'
+
+/**
+ * Description of one file that participates in a timeline. Returned by
+ * `resolveTimelineSources` and carried through to the manifest response.
+ */
+export interface TimelineFile {
+  /** Absolute path to the `.jsonl` file. */
+  absPath: string
+  /** Session UUID derived from the filename (no extension). */
+  sessionId: string
+  /** Where this file came from (main-thread, subagent, worktree). */
+  kind: TimelineFileKind
+  /** Opaque lane id passed to the Rust reader (e.g. `main`, `subagent:<slug>`). */
+  laneId: string
+  /** For subagent files, the parent session's id. `null` for main-thread files. */
+  parentSessionId: string | null
+  /** Agent id from the first-line `agentId`, when present (subagents only). */
+  agentId: string | null
+  /** Slug from the first-line `slug`, when present (subagents only). */
+  slug: string | null
+  /** File size in bytes. */
+  size: number
+  /** ISO-8601 mtime — used for cache invalidation. */
+  lastModified: string
+}
+
+/** Enumerated constituent files for an agent's timeline. */
+export interface ResolvedTimelineSources {
+  /** Main-thread `.jsonl`s under `~/.claude/projects/<agent-slug>/`. */
+  mainFiles: TimelineFile[]
+  /** Files in sibling `--claude-worktrees-*` project dirs. */
+  worktreeFiles: TimelineFile[]
+  /**
+   * In-session subagent files (`<sid>/subagents/*.jsonl`). Zero in v0 of
+   * this resolver — the enumeration walks the main project dir only; a
+   * deeper walk is introduced when the subagent-file layout lands.
+   */
+  subagentFiles: TimelineFile[]
+  /**
+   * Every `~/.claude/projects/` subdirectory that contributed at least one
+   * file — surfaced so the UI can show the set of workdirs feeding a lane.
+   */
+  projectDirs: string[]
+}
+
+/**
+ * Manifest returned by `GET /api/sessions-browser/agents/:id/timeline`.
+ * Mirrors the Rust-side `open_timeline` manifest, plus a `files` field
+ * exposed for client-side rendering of divider rows and lane strips.
+ */
+export interface TimelineManifest {
+  timelineId: string
+  agentId: string
+  /**
+   * Ordered list of files that the Rust reader opened (sorted by first
+   * timestamp ASC by the reader itself — we echo that order here).
+   */
+  files: TimelineFile[]
+  /** Sum of every file's line count. */
+  totalLines: number
+  /** Resolved agent project directories that contributed files. */
+  projectDirs: string[]
+  /** ISO-8601 timestamp when the manifest was generated. */
+  generatedAt: string
+  /** Per-lane summary echoed from the Rust manifest. */
+  lanes: TimelineLaneSummary[]
+}
+
+/** Per-lane summary — shape mirrors the Rust response. */
+export interface TimelineLaneSummary {
+  laneId: string
+  fileIndexes: number[]
+  firstTimestampIso: string
+  lastTimestampIso: string
+  lineCount: number
+}
+
+/** One row returned by the range API. Mirrors the Rust reader row. */
+export interface VirtualRow {
+  sessionId: string
+  laneId: string
+  fileIndex: number
+  localLineIndex: number
+  globalLineIndex: number
+  raw: unknown
+}
+
+/** One match returned by the timeline search API. */
+export interface TimelineSearchMatch {
+  globalLineIndex: number
+  laneId: string
+  sessionId: string
+  fileIndex: number
+  localLineIndex: number
+  byteOffset: number
+  snippet: string
+}
+
+/** Context-at response shape, echoed by the integrated context API. */
+export interface TimelineContextResult {
+  anchorGlobalLine: number | null
+  cumulative: TimelineBuckets
+  exactAtCursor: TimelineBuckets
+  phaseHistory: TimelinePhaseEntry[]
+}
+
+/** Categorical buckets — mirrors TimelineBuckets in the reader protocol. */
+export interface TimelineBuckets {
+  systemPrompt: number
+  systemTools: number
+  mcpTools: number
+  customAgents: number
+  memory: number
+  messages: number
+  cacheRead: number
+  total: number
+  freeSpace: number
+  modelContextLimit: number
+  approximate: boolean
+  modelId: string | null
+}
+
+/** One phase in the phase-history split on isCompactSummary markers. */
+export interface TimelinePhaseEntry {
+  phaseId: number
+  pre: number
+  peak: number
+  post: number | null
+}

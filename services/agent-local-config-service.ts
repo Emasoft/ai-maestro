@@ -57,6 +57,20 @@ export function scanAgentLocalConfig(agentId: string): ServiceResult<AgentLocalC
     }
 
     const claudeDir = path.join(resolvedWorkDir, '.claude')
+    const codexInstalledDir = path.join(resolvedWorkDir, '.codex', 'installed-plugins')
+
+    // BUG-001 FIX (SCEN-013): For non-Claude clients (Codex/Gemini/OpenCode/Kiro),
+    // .claude/ may not exist OR may exist but be empty — the agent DOES have
+    // plugins installed at client-native paths (e.g. .codex/installed-plugins/,
+    // .codex-plugin/). Previously this path returned an empty config, causing
+    // the Config tab to show "Plugins 0" even when R17 core plugin IS installed.
+    //
+    // Priority: if .codex/installed-plugins/ exists, use the Codex scanner.
+    // Otherwise, fall through to the Claude scanner (empty .claude/ returns empty).
+    if (fs.existsSync(codexInstalledDir)) {
+      return { data: scanCodexDirectory(resolvedWorkDir), status: 200 }
+    }
+
     if (!fs.existsSync(claudeDir)) {
       return {
         data: {
@@ -91,6 +105,120 @@ export function scanAgentLocalConfig(agentId: string): ServiceResult<AgentLocalC
 // ---------------------------------------------------------------------------
 // Scanner implementation
 // ---------------------------------------------------------------------------
+
+/**
+ * Codex-client scanner (BUG-001 FIX, SCEN-013 2026-04-21).
+ *
+ * Codex agents do NOT have a .claude/ directory. Their plugin layout is:
+ *   <agentDir>/.codex-plugin/plugin.json                   core plugin manifest
+ *   <agentDir>/.codex/installed-plugins/<name>.json        install-tracking manifest
+ *   <agentDir>/.agents/skills/<name>/SKILL.md              converted skill content
+ *
+ * Each file in .codex/installed-plugins/ describes one installed plugin:
+ *   { "name": "ai-maestro-plugin", "clientType": "codex",
+ *     "installedAt": "...", "paths": [".agents/skills/...", ".codex-plugin/plugin.json"] }
+ *
+ * This scanner reads that directory to build a LocalPlugin list and scans
+ * .agents/skills/ to surface skills to the profile panel.
+ */
+function scanCodexDirectory(workDir: string): AgentLocalConfig {
+  const installedDir = path.join(workDir, '.codex', 'installed-plugins')
+  const plugins: LocalPlugin[] = []
+  const skills: LocalSkill[] = []
+  const seenSkills = new Set<string>()
+
+  const manifestFiles = safeReaddir(installedDir)
+    .filter(name => name.endsWith('.json'))
+
+  for (const file of manifestFiles) {
+    const manifestPath = path.join(installedDir, file)
+    const manifest = readJsonSafe(manifestPath)
+    if (!manifest || typeof manifest !== 'object') continue
+    const m = manifest as Record<string, unknown>
+    const pluginName = typeof m.name === 'string' ? m.name : path.basename(file, '.json')
+
+    // Try to read the plugin's own manifest (.codex-plugin/plugin.json) for
+    // richer metadata (version, description). For the R17 core plugin this
+    // lives at <workDir>/.codex-plugin/plugin.json.
+    let pluginMeta: { description?: string; version?: string; author?: string } = {}
+    const pluginManifestPath = path.join(workDir, '.codex-plugin', 'plugin.json')
+    const pluginManifest = readJsonSafe(pluginManifestPath)
+    if (pluginManifest && typeof pluginManifest === 'object') {
+      const pm = pluginManifest as Record<string, unknown>
+      if (typeof pm.description === 'string') pluginMeta.description = pm.description
+      if (typeof pm.version === 'string') pluginMeta.version = pm.version
+      if (typeof pm.author === 'string') pluginMeta.author = pm.author
+      else if (pm.author && typeof pm.author === 'object') {
+        const a = pm.author as Record<string, unknown>
+        if (typeof a.name === 'string') pluginMeta.author = a.name
+      }
+    }
+
+    plugins.push({
+      name: pluginName,
+      key: `${pluginName}@ai-maestro-plugins`,
+      path: workDir,
+      marketplace: 'ai-maestro-plugins',
+      enabled: true,
+      ...pluginMeta,
+    })
+
+    // Collect skills from the manifest's paths (converted for Codex at .agents/skills/)
+    const paths = Array.isArray(m.paths) ? m.paths : []
+    for (const p of paths) {
+      if (typeof p !== 'string') continue
+      const skillMatch = p.match(/^\.agents\/skills\/([^/]+)\/SKILL\.md$/)
+      if (!skillMatch) continue
+      const skillName = skillMatch[1]
+      if (seenSkills.has(skillName)) continue
+      seenSkills.add(skillName)
+      const fullSkillPath = path.join(workDir, p)
+      if (!fs.existsSync(fullSkillPath)) continue
+      const { description, frontmatter } = extractAllFrontmatter(fullSkillPath)
+      skills.push({
+        name: skillName,
+        path: fullSkillPath,
+        description: description ?? undefined,
+        frontmatter,
+        sourcePlugin: pluginName,
+      })
+    }
+  }
+
+  // Attach the skills to each plugin's elements so the UI can show them
+  // under the "Plugins" section as well as at the top level.
+  for (const p of plugins) {
+    p.elements = {
+      skills: skills.filter(s => s.sourcePlugin === p.name),
+      agents: [],
+      commands: [],
+      hooks: [],
+      rules: [],
+      mcpServers: [],
+      lspServers: [],
+      outputStyles: [],
+    }
+  }
+
+  return {
+    workingDirectory: workDir,
+    skills,
+    agents: [],
+    hooks: [],
+    rules: [],
+    commands: [],
+    mcpServers: [],
+    lspServers: [],
+    outputStyles: [],
+    plugins,
+    rolePlugin: null,
+    globalDependencies: null,
+    settings: {},
+    userGlobalSettings: readJsonSafe(path.join(os.homedir(), '.claude', 'settings.json')) ?? null,
+    keybindings: null,
+    lastScanned: new Date().toISOString(),
+  }
+}
 
 function scanClaudeDirectory(claudeDir: string, workDir: string): AgentLocalConfig {
   const settingsData = readJsonSafe(path.join(claudeDir, 'settings.local.json'))

@@ -21,6 +21,8 @@ pub mod errors {
     pub const READ_FAILED:        &str = "read_failed";
     pub const SEARCH_FAILED:      &str = "search_failed";
     pub const PANIC:              &str = "panic";
+    /// Timeline id was not registered (never opened, or was closed).
+    pub const TIMELINE_NOT_FOUND: &str = "timeline_not_found";
 }
 
 /// Response helpers. All responses are a single JSON line. No trailing

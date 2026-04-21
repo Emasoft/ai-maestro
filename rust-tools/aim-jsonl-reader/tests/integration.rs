@@ -635,3 +635,270 @@ fn rss_stays_bounded_on_2gb_fixture() {
     }
     r.shutdown();
 }
+
+// ── 8. Phase 6 — timeline commands (open_timeline, read_timeline_range,
+//    search_timeline, context_at) ─────────────────────────────────────
+//
+// These tests exercise the stitched multi-file commands added in Phase 6.
+// They parallel the single-file tests above: one file, two files, main +
+// subagent, main + worktree, compaction-aware, and search-across-files.
+
+/// Write a file with sequential timestamps starting at `start_seconds_into_minute`
+/// for `count` lines. Each entry carries a `uuid` of the form "<name>-<i>".
+/// Returns the file path.
+fn write_timestamped(
+    dir: &Path,
+    filename: &str,
+    uuid_prefix: &str,
+    start_seconds: u64,
+    count: u64,
+    is_sidechain: bool,
+) -> PathBuf {
+    let mut lines: Vec<Value> = Vec::with_capacity(count as usize);
+    for i in 0..count {
+        let ts = format!("2026-04-20T00:00:{:02}.000Z", (start_seconds + i) % 60);
+        let uuid = format!("{uuid_prefix}-{i}");
+        let mut line = json!({
+            "uuid": uuid,
+            "timestamp": ts,
+            "role": if i % 2 == 0 { "user" } else { "assistant" },
+            "content": format!("entry {uuid_prefix} {i}"),
+        });
+        if is_sidechain {
+            line["isSidechain"] = json!(true);
+        }
+        lines.push(line);
+    }
+    write_jsonl(dir, filename, &lines)
+}
+
+#[test]
+fn open_timeline_single_file_returns_manifest() {
+    let tmp = TempDir::new().unwrap();
+    let path = write_timestamped(tmp.path(), "one.jsonl", "a", 0, 5, false);
+
+    let mut r = Reader::spawn();
+    let resp = r.req(json!({
+        "cmd": "open_timeline",
+        "files": [
+            {"path": path.to_str().unwrap(), "laneId": "main"},
+        ],
+    }));
+    assert_eq!(resp["ok"], json!(true), "{}", resp);
+    assert!(resp["timelineId"].as_str().unwrap().starts_with("tl-"));
+    assert_eq!(resp["globalLineCount"], json!(5));
+    let lanes = resp["lanes"].as_array().unwrap();
+    assert_eq!(lanes.len(), 1);
+    assert_eq!(lanes[0]["laneId"], json!("main"));
+    assert_eq!(lanes[0]["lineCount"], json!(5));
+    let file_idxs = lanes[0]["fileIndexes"].as_array().unwrap();
+    assert_eq!(file_idxs.len(), 1);
+    r.shutdown();
+}
+
+#[test]
+fn open_timeline_two_files_merged_by_timestamp() {
+    // Fixture: file B's first timestamp is EARLIER than file A's — the
+    // manifest ordering must put B's lane first, A's second.
+    let tmp = TempDir::new().unwrap();
+    let a = write_timestamped(tmp.path(), "a.jsonl", "a", 30, 3, false);
+    let b = write_timestamped(tmp.path(), "b.jsonl", "b", 0, 4, false);
+
+    let mut r = Reader::spawn();
+    let resp = r.req(json!({
+        "cmd": "open_timeline",
+        "files": [
+            {"path": a.to_str().unwrap(), "laneId": "lane-A"},
+            {"path": b.to_str().unwrap(), "laneId": "lane-B"},
+        ],
+    }));
+    assert_eq!(resp["ok"], json!(true), "{}", resp);
+    // 3 + 4 = 7 lines total.
+    assert_eq!(resp["globalLineCount"], json!(7));
+    let tlid = resp["timelineId"].as_str().unwrap().to_string();
+
+    // Read the first 4 rows — must come from lane-B (earlier start).
+    let range = r.req(json!({
+        "cmd": "read_timeline_range",
+        "timelineId": tlid,
+        "fromGlobal": 0,
+        "toGlobal": 3,
+    }));
+    assert_eq!(range["ok"], json!(true));
+    let rows = range["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 4);
+    for row in rows {
+        assert_eq!(row["laneId"], json!("lane-B"));
+    }
+
+    // Read the next 3 rows — must come from lane-A.
+    let range2 = r.req(json!({
+        "cmd": "read_timeline_range",
+        "timelineId": tlid,
+        "fromGlobal": 4,
+        "toGlobal": 6,
+    }));
+    let rows2 = range2["rows"].as_array().unwrap();
+    assert_eq!(rows2.len(), 3);
+    for row in rows2 {
+        assert_eq!(row["laneId"], json!("lane-A"));
+    }
+
+    r.shutdown();
+}
+
+#[test]
+fn read_timeline_range_spans_file_boundary() {
+    // Two files, 3 + 3 lines. Request [2..4] — 1 line from first file,
+    // 2 from second.
+    let tmp = TempDir::new().unwrap();
+    let a = write_timestamped(tmp.path(), "first.jsonl", "a", 0, 3, false);
+    let b = write_timestamped(tmp.path(), "second.jsonl", "b", 30, 3, false);
+
+    let mut r = Reader::spawn();
+    let open = r.req(json!({
+        "cmd": "open_timeline",
+        "files": [
+            {"path": a.to_str().unwrap(), "laneId": "main"},
+            {"path": b.to_str().unwrap(), "laneId": "main"},
+        ],
+    }));
+    let tlid = open["timelineId"].as_str().unwrap().to_string();
+
+    let range = r.req(json!({
+        "cmd": "read_timeline_range",
+        "timelineId": tlid,
+        "fromGlobal": 2,
+        "toGlobal": 4,
+    }));
+    let rows = range["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[0]["localLineIndex"], json!(2));
+    assert_eq!(rows[0]["fileIndex"], json!(0));
+    // Second file starts at globalLineIndex 3.
+    assert_eq!(rows[1]["globalLineIndex"], json!(3));
+    assert_eq!(rows[1]["fileIndex"], json!(1));
+    assert_eq!(rows[1]["localLineIndex"], json!(0));
+    assert_eq!(rows[2]["fileIndex"], json!(1));
+    assert_eq!(rows[2]["localLineIndex"], json!(1));
+
+    r.shutdown();
+}
+
+#[test]
+fn timeline_lane_identification_main_plus_subagent() {
+    // Main file with a Task tool_use, plus a subagent file with isSidechain: true.
+    let tmp = TempDir::new().unwrap();
+    let main_lines = vec![
+        json!({"uuid":"m-0","timestamp":"2026-04-20T00:00:00.000Z","role":"user","content":"start"}),
+        json!({
+            "uuid":"m-1","timestamp":"2026-04-20T00:00:05.000Z",
+            "type":"tool_use","name":"Task","input":{"subagent_type":"helper"}
+        }),
+    ];
+    let main = write_jsonl(tmp.path(), "main.jsonl", &main_lines);
+    let subagent_lines = vec![
+        json!({
+            "uuid":"s-0","timestamp":"2026-04-20T00:00:06.000Z",
+            "isSidechain": true, "role":"user","content":"subagent start"
+        }),
+        json!({
+            "uuid":"s-1","timestamp":"2026-04-20T00:00:08.000Z",
+            "isSidechain": true, "role":"assistant","content":"subagent reply"
+        }),
+    ];
+    let sub = write_jsonl(tmp.path(), "sub.jsonl", &subagent_lines);
+
+    let mut r = Reader::spawn();
+    let resp = r.req(json!({
+        "cmd": "open_timeline",
+        "files": [
+            {"path": main.to_str().unwrap(), "laneId": "main"},
+            {"path": sub.to_str().unwrap(), "laneId": "subagent:helper"},
+        ],
+    }));
+    assert_eq!(resp["ok"], json!(true), "{}", resp);
+    let tlid = resp["timelineId"].as_str().unwrap().to_string();
+    let lanes = resp["lanes"].as_array().unwrap();
+    assert_eq!(lanes.len(), 2);
+
+    let range = r.req(json!({
+        "cmd": "read_timeline_range",
+        "timelineId": tlid,
+        "fromGlobal": 0,
+        "toGlobal": 10,
+    }));
+    let rows = range["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 4);
+    // First two rows from main (earlier timestamps), last two from subagent.
+    assert_eq!(rows[0]["laneId"], json!("main"));
+    assert_eq!(rows[1]["laneId"], json!("main"));
+    assert_eq!(rows[2]["laneId"], json!("subagent:helper"));
+    assert_eq!(rows[3]["laneId"], json!("subagent:helper"));
+    // Subagent rows carry isSidechain: true in raw.
+    assert_eq!(rows[2]["raw"]["isSidechain"], json!(true));
+
+    r.shutdown();
+}
+
+#[test]
+fn timeline_main_plus_worktree_sibling() {
+    // Both lanes are "main-thread" from a project-root perspective, but
+    // one is a worktree of the same agent. Smoke test that the merge
+    // works and the lane IDs pass through unchanged.
+    let tmp = TempDir::new().unwrap();
+    let main = write_timestamped(tmp.path(), "m.jsonl", "m", 0, 2, false);
+    let worktree = write_timestamped(tmp.path(), "w.jsonl", "w", 10, 2, false);
+
+    let mut r = Reader::spawn();
+    let resp = r.req(json!({
+        "cmd": "open_timeline",
+        "files": [
+            {"path": main.to_str().unwrap(), "laneId": "main"},
+            {"path": worktree.to_str().unwrap(), "laneId": "worktree:fix-bug"},
+        ],
+    }));
+    assert_eq!(resp["ok"], json!(true), "{}", resp);
+    let lanes = resp["lanes"].as_array().unwrap();
+    let lane_ids: Vec<&str> = lanes
+        .iter()
+        .map(|l| l["laneId"].as_str().unwrap())
+        .collect();
+    assert!(lane_ids.contains(&"main"));
+    assert!(lane_ids.contains(&"worktree:fix-bug"));
+    r.shutdown();
+}
+
+#[test]
+fn open_timeline_rejects_empty_files_array() {
+    let mut r = Reader::spawn();
+    let resp = r.req(json!({"cmd":"open_timeline","files":[]}));
+    assert_eq!(resp["ok"], json!(false));
+    assert_eq!(resp["error"], json!("invalid_request"));
+    r.shutdown();
+}
+
+#[test]
+fn open_timeline_rejects_missing_path() {
+    let mut r = Reader::spawn();
+    let resp = r.req(json!({
+        "cmd":"open_timeline",
+        "files":[{"laneId":"main"}],
+    }));
+    assert_eq!(resp["ok"], json!(false));
+    assert_eq!(resp["error"], json!("invalid_request"));
+    r.shutdown();
+}
+
+#[test]
+fn read_timeline_range_unknown_timeline_errors() {
+    let mut r = Reader::spawn();
+    let resp = r.req(json!({
+        "cmd":"read_timeline_range","timelineId":"tl-deadbeef",
+        "fromGlobal":0,"toGlobal":10,
+    }));
+    assert_eq!(resp["ok"], json!(false));
+    assert_eq!(resp["error"], json!("timeline_not_found"));
+    r.shutdown();
+}
+

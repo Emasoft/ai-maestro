@@ -12,6 +12,8 @@ coverage
 # match app/api/plugin-builder/build/ or other nested build/ directories
 .next
 .next.broken-*
+.next.stale-*
+.next.stale2-*
 out
 /build
 dist
@@ -185,6 +187,7 @@ public/avatars/*_enhanced.png
 .claude/todos/
 .claude/settings.local.json
 .claude/worktrees/
+.claude/agent-memory/
 CLAUDE.local.md
 
 # External backup files

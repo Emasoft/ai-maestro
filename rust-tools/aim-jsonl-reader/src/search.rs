@@ -145,7 +145,11 @@ fn ascii_to_lower(b: u8) -> u8 {
 /// Build a ≤200-byte snippet around the match. Tries to center the
 /// window on the match; trims cleanly at UTF-8 boundaries to avoid
 /// panics in downstream JSON serialization.
-fn snippet_of(line: &[u8], match_offset: usize) -> String {
+///
+/// `pub(crate)` so the timeline module can reuse the same snippet
+/// builder for cross-file search results without duplicating the
+/// UTF-8-safe truncation logic.
+pub(crate) fn snippet_of(line: &[u8], match_offset: usize) -> String {
     let line_len = line.len();
     let half = MAX_SNIPPET_BYTES / 2;
     let start = match_offset.saturating_sub(half);

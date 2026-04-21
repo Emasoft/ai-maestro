@@ -306,7 +306,7 @@ import {
 // of the import block so the 4 added routes form an additive diff easy to
 // review.
 import {
-  getSessionsForAgent as getSessionsForAgentBrowser,
+  getSessionsForAgentWithMetadata as getSessionsForAgentBrowser,
   hasSessionCookie,
   resolveSessionPath,
   ensureOpenForPath,
@@ -2937,7 +2937,12 @@ const routes: Route[] = [
       sendJson(res, 401, { error: 'unauthenticated' })
       return
     }
-    const result = getSessionsForAgentBrowser(params.id)
+    // Phase 5 §4 — enriched with metadata (firstUserText, isOngoing,
+    // compactionCount). The metadata-enriched variant is async; the
+    // previous non-enriched variant was synchronous — that's the only
+    // change at this call site. On analyzer failure, metadata fields
+    // are simply left undefined in each session row.
+    const result = await getSessionsForAgentBrowser(params.id)
     if (!result.ok || !result.data) {
       sendJson(res, result.status || 500, { error: result.error || 'internal_error' })
       return

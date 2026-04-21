@@ -259,4 +259,94 @@ describe('JsonlReader', () => {
       sessionId: 'sid-r',
     })
   })
+
+  // ------------------------------------------------------------------
+  // Phase 5 §3.8 — analyzeFileMetadata
+  // ------------------------------------------------------------------
+
+  it('analyzeFileMetadata sends path-based request and returns metadata', async () => {
+    // Unlike readRange/search/context, this call takes a raw path —
+    // the Rust side does not require an open sessionId. Verify the
+    // wire shape: `{cmd:"analyze_file_metadata", path:"..."}` with
+    // NO sessionId field.
+    onSpawn = (child) => {
+      respondWith(child, [
+        {
+          ok: true,
+          firstUserMessagePreview: 'hello world',
+          isOngoing: true,
+          compactionCount: 2,
+          phaseTokenBreakdown: [
+            { phaseId: 0, pre: 0, peak: 30, post: 30 },
+            { phaseId: 1, pre: 30, peak: 70, post: 70 },
+            { phaseId: 2, pre: 70, peak: 100, post: null },
+          ],
+          shutdownToolCalls: 0,
+          rejections: 1,
+          requestIdDedupedAssistantTokens: 100,
+          hasSubagentSpawns: true,
+          hasCompactSummary: true,
+        },
+      ])
+    }
+
+    const result = await reader.analyzeFileMetadata('/tmp/sess.jsonl')
+
+    expect(result.ok).toBe(true)
+    expect(result.firstUserMessagePreview).toBe('hello world')
+    expect(result.isOngoing).toBe(true)
+    expect(result.compactionCount).toBe(2)
+    expect(result.phaseTokenBreakdown).toHaveLength(3)
+    expect(result.phaseTokenBreakdown[2].post).toBeNull()
+    expect(result.hasSubagentSpawns).toBe(true)
+    expect(result.hasCompactSummary).toBe(true)
+    expect(result.requestIdDedupedAssistantTokens).toBe(100)
+
+    const req = lastRequest(currentChildRef.current!)
+    expect(req).toMatchObject({
+      cmd: 'analyze_file_metadata',
+      path: '/tmp/sess.jsonl',
+    })
+    // CRITICAL: no sessionId field — this call runs WITHOUT opening
+    // a Rust-side handle first.
+    expect(req.sessionId).toBeUndefined()
+  })
+
+  it('analyzeFileMetadata surfaces Rust error responses as JsonlReaderProtocolError', async () => {
+    onSpawn = (child) => {
+      respondWith(child, [
+        { ok: false, error: 'open_failed', detail: 'no such file: /tmp/ghost.jsonl' },
+      ])
+    }
+    await expect(reader.analyzeFileMetadata('/tmp/ghost.jsonl')).rejects.toBeInstanceOf(
+      JsonlReaderProtocolError,
+    )
+  })
+
+  it('analyzeFileMetadata does NOT create or touch an OpenSessionEntry', async () => {
+    // Regression guard — if someone later wires this through `touch()`
+    // (like readRange/search/context do), a missing sessionId would
+    // silently become a no-op but the bookkeeping would be wrong.
+    // This test confirms that analyzeFileMetadata does not pollute the
+    // openSessions map.
+    onSpawn = (child) => {
+      respondWith(child, [
+        {
+          ok: true,
+          firstUserMessagePreview: 'first line',
+          isOngoing: false,
+          compactionCount: 0,
+          phaseTokenBreakdown: [{ phaseId: 0, pre: 0, peak: 0, post: null }],
+          shutdownToolCalls: 0,
+          rejections: 0,
+          requestIdDedupedAssistantTokens: 0,
+          hasSubagentSpawns: false,
+          hasCompactSummary: false,
+        },
+      ])
+    }
+    expect(reader.openSessions.size).toBe(0)
+    await reader.analyzeFileMetadata('/tmp/anything.jsonl')
+    expect(reader.openSessions.size).toBe(0)
+  })
 })

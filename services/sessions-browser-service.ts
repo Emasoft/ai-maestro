@@ -27,6 +27,7 @@ import path from 'path'
 import { getAgent } from '@/lib/agent-registry'
 import type { SessionSummary, SessionsListResponse } from '@/types/sessions-browser'
 import { getJsonlReader } from '@/lib/jsonl-reader'
+import type { AnalyzeFileMetadataOkResponse } from '@/lib/jsonl-reader-protocol'
 
 /**
  * Convert an absolute working directory into Claude's project-dir slug.
@@ -248,4 +249,108 @@ export async function ensureOpenForPath(absolutePath: string): Promise<string> {
   const reader = getJsonlReader()
   const resp = await reader.open(resolved)
   return resp.sessionId
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 §4 — metadata enrichment for the sessions list.
+// ---------------------------------------------------------------------------
+//
+// `getSessionsForAgent` returns the cheap file-system rows (path, size,
+// mtime). The UI now wants a richer row that includes a first-user
+// preview, an ongoing flag, and a compaction count. Those fields come
+// from the Rust `analyze_file_metadata` streaming analyzer, which is
+// too expensive to run on every list request — so we cache its output
+// in-process keyed by (path, size, mtime). Any change to size or mtime
+// invalidates the entry.
+//
+// The cache is deliberately tiny (in-process, Map<string, entry>) so
+// worker-reboot resets it. That matches the other caches in this module
+// (the sid→path reverse map) and keeps us from introducing disk I/O
+// for what is essentially a UI affordance.
+
+interface MetadataCacheEntry {
+  size: number
+  mtime: string // SessionSummary.lastModified — ISO-8601
+  value: AnalyzeFileMetadataOkResponse
+}
+
+const metadataCache = new Map<string, MetadataCacheEntry>()
+
+/** Test hook — wipe the metadata cache between cases. */
+export function clearMetadataCache(): void {
+  metadataCache.clear()
+}
+
+/**
+ * Return a cached analyze_file_metadata response for `summary`, running
+ * the analyzer on cache miss. Never throws — on analyzer failure we
+ * return `null` and the caller leaves the metadata fields undefined.
+ */
+async function analyzeWithCache(
+  summary: SessionSummary,
+): Promise<AnalyzeFileMetadataOkResponse | null> {
+  const cached = metadataCache.get(summary.path)
+  if (
+    cached &&
+    cached.size === summary.size &&
+    cached.mtime === summary.lastModified
+  ) {
+    return cached.value
+  }
+  try {
+    const reader = getJsonlReader()
+    const resp = await reader.analyzeFileMetadata(summary.path)
+    metadataCache.set(summary.path, {
+      size: summary.size,
+      mtime: summary.lastModified,
+      value: resp,
+    })
+    return resp
+  } catch {
+    // Swallow — the caller will leave the metadata fields undefined.
+    // We do NOT poison the cache on failure (so a transient error
+    // doesn't permanently hide metadata for this session).
+    return null
+  }
+}
+
+/**
+ * Agent → project dir → list → metadata-enriched list.
+ *
+ * Mirrors `getSessionsForAgent` but augments each session with the
+ * Phase 5 metadata fields (`firstUserText`, `isOngoing`, `compactionCount`).
+ * The rest of the logic — 404 on missing agent, empty list for missing
+ * workingDirectory, sid→path mapping — is identical.
+ */
+export async function getSessionsForAgentWithMetadata(
+  agentId: string,
+  opts: GetSessionsForAgentOptions = {},
+): Promise<GetSessionsForAgentResult> {
+  const base = getSessionsForAgent(agentId, opts)
+  if (!base.ok || !base.data) return base
+
+  const enriched: SessionSummary[] = []
+  for (const s of base.data.sessions) {
+    const meta = await analyzeWithCache(s)
+    if (meta) {
+      enriched.push({
+        ...s,
+        firstUserText: meta.firstUserMessagePreview,
+        isOngoing: meta.isOngoing,
+        compactionCount: meta.compactionCount,
+      })
+    } else {
+      // Analyzer failed — leave metadata fields undefined, keep the rest.
+      enriched.push(s)
+    }
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    data: {
+      projectDir: base.data.projectDir,
+      sessions: enriched,
+    },
+  }
 }

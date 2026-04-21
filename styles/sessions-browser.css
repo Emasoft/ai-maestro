@@ -1,0 +1,63 @@
+/* Sessions Browser — Phase 3 UI styles (TRDD-d46b42e9 §6)
+ *
+ * Keep this file tiny. Every rule here exists because the Tailwind utility
+ * equivalent is awkward or cross-cuts too many components. Prefer adding
+ * Tailwind classes directly; only promote to CSS when reuse is real.
+ */
+
+/* Token badge shown on the top-right of each assistant message bubble.
+ * Format is fixed by spec: `in: N · out: N · cache: N`, small-caps
+ * monospace, font-feature tabular-nums so the columns line up on scroll.
+ */
+.aim-msg-tokens {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace;
+  font-feature-settings: "tnum" 1, "smcp" 1;
+  /* Small-caps fallback for platforms that do not honor OpenType smcp. */
+  font-variant-caps: all-small-caps;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* Highlight wrapper applied to matched search terms inside a transcript.
+ * The current match (matchIndex) additionally gets `.aim-match-current`
+ * so we can style it with a stronger emphasis.
+ */
+.aim-match {
+  background-color: rgba(250, 204, 21, 0.25); /* tailwind amber-300/25 */
+  border-radius: 2px;
+  padding: 0 2px;
+}
+.aim-match-current {
+  background-color: rgba(250, 204, 21, 0.55);
+  outline: 1px solid rgba(250, 204, 21, 0.8);
+}
+
+/* Context breakdown bars. Each bar keeps its own hue; we render inline
+ * background-color via the component, but the base sizing is shared.
+ */
+.aim-ctx-bar-track {
+  background-color: rgba(55, 65, 81, 0.4); /* gray-700/40 */
+  border-radius: 9999px;
+  height: 6px;
+  overflow: hidden;
+}
+.aim-ctx-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 180ms ease-out;
+}
+
+/* Keyboard-focusable row style for the session picker. */
+.aim-session-row:focus-visible {
+  outline: 2px solid rgba(16, 185, 129, 0.7); /* emerald-500/70 */
+  outline-offset: -1px;
+}

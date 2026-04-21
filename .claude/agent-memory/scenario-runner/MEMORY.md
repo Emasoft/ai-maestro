@@ -1,5 +1,53 @@
 # Scenario Runner Memory
 
+## SCEN-019 2026-04-21T12:33:37Z — PASS (20/20, 1 bug fixed, 5 issues noticed)
+
+**Run ID:** 20260421T123337Z
+**Branch:** feature/team-governance (HEAD d71c02de → 158f0442 — 1 fix commit)
+**Reports:**
+- reports/scenarios-runner/SCEN-019_2026-04-21T13-00-26Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_019_2026-04-21T13-00-26Z.md
+
+**Verdict:** PASS — full marketplace+plugin lifecycle verified. Add/install/enable/disable/uninstall/remove all work. BUG-001 (extraKnownMarketplaces key mismatch) fixed mid-run. 8 proposals (2 P0, 2 P1, 3 P2, 1 P3).
+
+### BUG-001 (P0 FIXED commit 158f0442): Add/Delete Marketplace naming convention mismatch
+
+**Symptom:** After clicking Delete Marketplace on cblecker-claude-plugins, Claude CLI unregistered it and cache cleared, but `extraKnownMarketplaces[<orphan-key>]` persisted in settings.json.
+
+**Root cause:** `app/api/settings/marketplaces/route.ts:1274` used `repo.split('/')[1]` (basename only) for the settings key, but Claude CLI uses `owner-repo` format. Add stamped basename, Delete looked up owner-repo — mismatch → orphan.
+
+**Fix:** Change to `repo.replace('/', '-')` so Add/Delete are symmetric with Claude CLI's naming.
+
+**Verified:** Re-ran Add → Delete cycle post-fix. Settings.json key `cblecker-claude-plugins` cleanly removed. 8 lines changed.
+
+### Key patterns discovered/reconfirmed for SCEN-019
+
+- **Add Marketplace UI**: NOT a separate button — it's a URL input with placeholder "Add marketplace from GitHub URL..." at top of Marketplaces subtab. Typing a URL makes a small "Add" button appear.
+- **Filter inputs (marketplace + plugin)**: live filter, select-all + Backspace to clear (no visible X button — see P2-PROP-005).
+- **Marketplace card identity**: span with `title="<full-cli-name>"` like `title="cblecker-claude-plugins"`. Card expand button wraps this span.
+- **Plugin install/uninstall buttons**: `title="Install"`, `title="Uninstall"`, `title="Disable plugin"`, `title="Enable plugin"`. NO `data-plugin-key` — identify by walking 2-3 parents until innerText starts with plugin name (fragile — see P1-PROP-003).
+- **Plugin row structure**: `div.pl-6 pr-3 py-2 cursor-pointer hover:bg-gray-800/30` wraps each plugin. innerText = `name\nversion\nN elements` + buttons.
+- **Delete marketplace button**: `title="Delete marketplace"` next to marketplace name. ai-maestro-plugins marketplace has R17 `core` badge instead (protected).
+- **Confirm dialogs (Uninstall, Delete)**: inline, plain React portal (no `role="dialog"`). Buttons: Cancel + Uninstall/Delete (text-only, no title attr).
+- **Sudo modal fires AFTER the confirm dialog** for DELETE routes. Use aim_sudo_modal helper.
+- **PM2 log confirms pipeline**: `[ChangeMarketplace] <name>: add (4 gates)` or `[ChangeMarketplace] <name>: remove (4 gates)`.
+
+### Rule 2 compliance patterns
+
+- User's `extraKnownMarketplaces["claude-plugins"]` was PRE-EXISTING orphan — preserved via STATE-WIPE. Don't touch pre-existing user data.
+- 18 pre-existing user agents, 259 pre-existing marketplaces — none were mutated.
+- Accidental toggle during S015 reverted within seconds via UI (NOT a Rule 6 bypass — re-clicking a toggle is normal UI interaction).
+
+### Rule 14 compliance
+
+- All reports at `reports/scenarios-runner/` (git-ignored). File naming convention: `SCEN-NNN_<ts>.report.md` + `scenario_proposed-improvements_NNN_<ts>.md`.
+
+### yq bug in setup script
+
+- `scripts/scenario-setup.sh` uses `|| true` around yq parsing. When frontmatter has unescaped backticks (SCEN-019 line 49 `which gh && gh auth status`), yq errors out and rewipe-list is empty. MANIFEST.sha256 becomes empty. Workaround: manually backup via shell if setup looks incomplete. Permanent fix in P0-PROP-002.
+
+---
+
 ## SCEN-016 RE-RUN 2026-04-21T12:05:42Z — PASS (26 pass, 1 partial, 1 deferred-unit-test, 1 P0 BUG FIXED, 3 issues noticed)
 
 **Run ID:** 20260421T120542Z

@@ -1,5 +1,299 @@
 # Scenario Runner Memory
 
+## SCEN-012 run 2026-04-21T05:29:26Z — PASS (27 pass, 5 adapt, 1 P0 bug found+fixed)
+
+**Run ID:** 20260421T052926Z
+**Branch:** feature/team-governance (HEAD c3d69829 — 1 bug-fix commit in place)
+**Reports:**
+- reports/scenarios-runner/SCEN-012_20260421T052926Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_012_20260421T052926Z.md
+
+**Verdict:** PASS — BUG-001 R17 substring-match regression fixed in-place (6 sites), then SCEN-012 verified end-to-end. 8 proposals filed (2 P0, 2 P1, 2 P2, 2 P3).
+
+### BUG-001 (P0 FIXED in commit c3d69829): R17 core-plugin substring match false-positive
+
+**Symptom:** New AUTONOMOUS agent's `.claude/settings.local.json` contained ONLY `ai-maestro-autonomous-agent@ai-maestro-plugins` — the CORE `ai-maestro-plugin` was silently NOT installed despite G11 logging "OK (19 gates)". Config tab: "Plugins 0" instead of expected 1.
+
+**Root cause:** 6 sites used `k.includes('ai-maestro-plugin')` or `k.includes(name)`. Marketplace `ai-maestro-plugins` (trailing `s`) contains `ai-maestro-plugin` as substring, so role-plugin keys like `ai-maestro-autonomous-agent@ai-maestro-plugins` were false-positively reported as the core plugin. PG01 verify, G10 idempotency, wake-gate hasPlugin check, PG03 scope consistency, PG07 duplicate detection, server.mjs startup R17.17 — all affected.
+
+**Fix:** Boundary-aware matching (split on `@`, compare plugin segment with `===`). Plus added belt-and-braces settings.local.json write-back after successful `claude plugin install` in EXE:install (mirrors ChangeClient G08b pattern). Files: `services/element-management-service.ts`, `services/agents-core-service.ts`, `server.mjs`.
+
+**Verified:** Fresh agent post-fix has BOTH plugins; hibernate+wake correctly re-installs disabled or entirely-removed core plugin; log lines `[Wake] R17: ai-maestro-plugin missing or disabled ... installing before wake` and `[Wake] R17: ai-maestro-plugin installed (23 gates)` now fire reliably.
+
+### Key adaptations (scenario authoring stale)
+- **S023/S024 startup audit gone** — `server.mjs:1434-1438` explicitly removed the audit. Adapted to hibernate+wake (the authoritative R17 enforcement path today). Same as prior memory note from SCEN-012 2026-04-14 run.
+- **S027/S028 corePluginMissing stays false** — flag is only mutated by InstallElement PG02 now, not by startup audit. Scenario expected `true` after removal + restart.
+- **S025 trust auto-accept log missing** — agent had launchCount>0 after hibernate+wake, so R17-TRUST gate doesn't fire. Verified via `tmux capture-pane` showing Claude idle prompt `❯` instead.
+- **S030 stop button skipped** — Delete Agent kills tmux session automatically. No need to explicit-stop first.
+
+### New patterns worth saving
+- **Substring match hazard pattern:** any time `.includes(pluginName)` appears and `pluginName` is a prefix of the marketplace name — HAZARD. Mitigate via split-on-@ + exact compare.
+- **Sudo-after-Delete-Forever flow:** Delete Agent dialog checks folder checkbox + types name + clicks Delete Forever → page shows `input[type="password"]` for the sudo. Use `aim_sudo_modal` helper from aim-helpers.sh to fill.
+- **Post-pm2-restart cookie loss is CERTAIN:** always call `aim_login` before API fetches that need auth after any `pm2 restart ai-maestro`.
+- **Config tab "Plugins 1" = exactly 1 local plugin in settings.local.json**, doesn't count the per-plugin child elements (each plugin's skills/agents/commands are counted in its own rows). Simplest sanity check for R17 enforcement: ONE line in Plugins section = core plugin installed.
+- **InstallElement "OK (N gates)" log DOES NOT mean write succeeded** — before fix, this line appeared even when the CLI's write was lost. After fix, the belt-and-braces write-back guarantees the key is present when N includes a write-back message.
+
+### Blacklist safety (Rule 0)
+- 17 pre-existing user agents enumerated pre-test. None touched.
+- 3 pre-existing orphan test teams preserved.
+- Two `scen012-r17-test` instances (pre-fix + post-fix) each created in `~/agents/scen012-r17-test/`, verified before any click, both deleted with folder at end.
+
+---
+
+## SCEN-011 run 2026-04-21T04:36:53Z — PARTIAL (18 pass, 3 adapt, 1 blocked, 2 vacuous, 0 bugs fixed)
+
+**Run ID:** 20260421T043653Z
+**Branch:** feature/team-governance (HEAD 20da2e47 — unchanged, 0 code commits)
+**Reports:**
+- reports/scenarios-runner/SCEN-011_20260421T043653Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_011_20260421T043653Z.md
+
+**Verdict:** PARTIAL — R16 password non-leak VERIFIED (0 leaks across log/AMP/files). R15 written-orders NOT verified end-to-end because MANAGER blocked at auth wall (correct R16 behaviour, but gates S016-S019 downstream checks). 10 proposals filed (2 P0, 3 P1, 2 P2, 3 P3).
+
+### Key findings & adaptations (NO code changes)
+- **S016 MANAGER did not delegate.** After 90s: 25 Bash (curl /api/governance, ls ~/.agent-messaging, env grep auth, cat amp-send, etc.), 3 Read, 1 Skill, 0 Write, 0 amp-send. Agent concluded "need user to log in via UI" — R16-correct but R15 unobservable.
+- **PROP-P0-002 filed:** NO zero-password agent-to-server auth path exists. `sessionSecretHash` in registry is server-hashed, useless to agent. Need per-agent API token written to `<workdir>/.aimaestro-agent-token`.
+- **S012 kanban BLOCKED AGAIN** — "Cannot create task: team has no GitHub Project linked" (recurring since SCEN-002, 6+ months). PROP-P0-001 filed with fix options.
+- **S006 + S021 DOUBLE password** confirmed again (inline "Enter Governance Password" + sudo modal "Confirm with password"). PROP-P1-001 filed.
+- **S010/S011 RBAC probes: 401 not 403** — auth layer blocks `credentials:"omit"` before RBAC. Stronger defense-in-depth, same pattern as SCEN-003/006/007/008/010. PROP-P3-001 filed to update scenario expectations.
+- **STATE-WIPE 4/4 SHA256-matched**, all 6 test agents + folders deleted via UI, 17 pre-existing user agents untouched, 3 orphan test teams preserved.
+
+### Environment issue (test-harness only, not a bug)
+- `.next/` cache had stale ref to `components/agent-profile/SessionsTab.tsx` (exists only in `.claude/worktrees/agent-*/`). All APIs returned 500. Fix: `mv .next .next.stale-scen011-${RUN_ID}` + `pm2 restart ai-maestro`. Clean rebuild fixed it. 3rd `.next.stale-*` dir in project root — filed as PROP-P3-003.
+
+### New patterns found this run
+- **MANAGER title-revert workflow (S021):** MUST revert MANAGER → AUTONOMOUS BEFORE calling Delete Agent. Otherwise team-blocking cascade may reject. Same double-password flow.
+- **sessionSecretHash field location:** `registry.json → agent.metadata.sessionSecretHash = "sha256:<64hex>"`. Hashed; the agent cannot use it directly to auth.
+- **Auto-COS persona name varies:** This run "Patricia" (prior runs "Jairus", "Malakai"). Random at creation. Agent ID is `cos-<team-name>` deterministic, persona name is NOT.
+- **Delete Agent dialog Delete Forever button:** `button:has-text("Delete Forever")` MAY fail with "outside viewport" error on 1280×720. Use `page.evaluate` direct DOM click: `btn.click()`.
+- **Input fill for delete-confirmation:** `page.locator('input[placeholder="<name>"]').fill("<name>")` works reliably (triggers React onChange). `document.dispatchEvent(new Event('input'))` fallback only needed when Playwright rejects outside-viewport.
+- **Profile panel → Advanced tab:** NOT a `<button>`, it's a `<div class="cursor-pointer">` with text "Advanced". Use `els.find(el => el.textContent === 'Advanced' && el.children.length === 0)`.
+
+### Blacklist verification (Rule 0)
+- 17 pre-existing user agents enumerated pre-test. NONE touched.
+- 3 pre-existing orphan teams (Test Kanban Team, scen003-test-wizard-team, scen8-noplugin-team) preserved untouched.
+- All 6 scenario agents (scen-r15-mgr, scen-r15-arch, scen-r15-orch, scen-r15-integ, scen-r15-mem, cos-r15-test-team) verified with workdir under `~/agents/` before any click. All deleted with folder during cleanup.
+- No `_aim-*` or user real agents touched.
+
+---
+
+## SCEN-010 run 2026-04-21T04:06:30Z — PASS (27 pass, 2 skip, 3 adapt, 0 bugs, 0 fixes)
+
+**Run ID:** 20260421T040630Z
+**Branch:** feature/team-governance (HEAD 20da2e47 — unchanged)
+**Reports:**
+- reports/scenarios-runner/SCEN-010_20260421T040630Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_010_20260421T040630Z.md
+
+**Verdict:** PASS — R12 composition-check backend API works perfectly end-to-end: incomplete (missing orch+integ) → complete (all 5 titles) → degraded (missing orch after delete). STATE-WIPE 4/4 SHA256-matched. All 6 test agents + folders cleaned via UI. 3 P1/P2 proposals filed.
+
+### Key adaptations (not bugs, pre-existing patterns per memory)
+- **S014 UI warning badge missing**: API correctly reports `{complete:false, missingTitles:[...]}` but neither team card nor dashboard shows any visible indicator → filed as PROP-P1-001.
+- **S015/S016 401 vs 403**: auth layer blocks self-mod + RBAC probes with 401 auth_required before RBAC rules fire (stronger defense-in-depth, same as SCEN-003/SCEN-006/SCEN-007/SCEN-008).
+- **S020/S021 blocked**: Kanban task creation blocked by "team has no GitHub Project linked" 400 — same recurring pre-existing bug since SCEN-002/003/006.
+- **S023/S028 cemetery no-op**: Hard-delete (alsoDeleteFolder=true) SKIPS cemetery by design. Cemetery has only 2026-04-14 leftovers. 0 scen-r12 entries expected.
+- **S025 Delete Team dialog**: NO "Delete Agents Too" checkbox. 2-dialog flow: "Are you sure" → Delete, then "Delete Team Agents?" with inline password → Delete Team (reverts agents to AUTONOMOUS, keeps them). I had to separately delete each of 4 team agents after S025 to hit full Rule 1 cleanup. Recurring pattern.
+
+### Quick-reference pattern index for future SCEN-010-style runs
+- **Wizard step count:**
+  - Claude NO-TEAM: 7 steps (client, name+avatar, team, title, folder, role-plugin, summary)
+  - Claude WITH-TEAM: 6 steps (team agents auto-use team's folder, skip folder step) — confirmed this run with architect/member/orch/integ
+- **MANAGER title change modal flow:** DOUBLE password (inline "Enter Governance Password" + sudo modal "Confirm with password"). Fill BOTH or dialog hangs. Confirmed S008 + S026.
+- **Create Team dialog requires ≥1 agent selected.** Must pick MANAGER as seed (at minimum). Agents shown in button-with-span.truncate format, iterate via DOM.
+- **Wizard chevron-right button location in this dashboard:** x=943, y=329, width=48, height=38 at 1280×800 viewport — click via `page.mouse.click(943+24, 329+19)` when Playwright locators can't find it.
+- **Agent-ready modal at wizard end:** `div.fixed.inset-0.bg-black/60` — first button is X close, second button is "Let's Go! 🚀". Always close before proceeding.
+- **Dashboard's right-side Help panel is ALWAYS present** as a static non-intercepting UI. Its `AI Maestro Help` heading appears in all snapshots. NOT a modal to close — ignore it.
+- **Profile panel doesn't auto-open when clicking agent card** — have to explicitly click Profile button after selection.
+- **Profile panel open via URL: `/?agent=<agentId>`** shortcuts sidebar navigation to the agent, then click Profile button to reveal panel. More reliable than h3 card click when the h3 is outside viewport.
+- **Governance Title button location in Profile Overview:** search for element with textContent "Governance Title" (no children), walk up 4 levels, find first button — that's the badge (confirmed S008, S026).
+- **Delete Agent dialog structure:** checkbox for "Also delete agent folder", input with placeholder=<agent-name> for confirmation, button "Delete Forever" disabled until both conditions met. Use `page.locator('input[placeholder="<name>"]').fill(<name>)` via Playwright (not setter dispatch) — Playwright fill triggers React's `onChange` correctly. Setter dispatch via `input.dispatchEvent(new Event('input'))` works but is less reliable.
+- **RBAC probe semantics:** 401 from `/api/agents/{id}` with header `X-Agent-Id: <id>` and `credentials: "omit"` = auth layer blocked before RBAC. 403 would happen only if we had a valid session + invalid X-Agent-Id. 401 is correct defense-in-depth.
+- **R12 composition-check response shape:** `{teamId, teamName, complete:boolean, agentCount:number, requiredTitles:string[], presentTitles:string[], missingTitles:string[], agents: [{id,name,title}]}`. `requiredTitles` is always `[chief-of-staff, architect, orchestrator, integrator, member]`. MANAGER is NOT required (it's host-wide singleton, not team-level).
+- **Pre-existing orphan teams as of 2026-04-21:** Test Kanban Team (2 agents), scen003-test-wizard-team (3 agents, cos ee3149bb), scen8-noplugin-team (2 agents, cos 4200d22f). Preserve untouched per Rule 2 0-IMPACT. Note scen003/scen8 are from 2+ weeks ago prior runs and had MANAGER removed during cleanup, so their COS remains but team is "blocked" until MANAGER is re-assigned.
+
+### Rule 0 safety
+- 17 pre-existing user agents enumerated pre-test. NONE touched.
+- All 6 scenario agents (scen-r12-mgr, scen-r12-architect, scen-r12-member, scen-r12-orch, scen-r12-integ, cos-scen-r12-incomplete) verified with workdir under `~/agents/` before any click, all deleted with folder during cleanup.
+- 3 pre-existing orphan test teams preserved untouched.
+
+---
+
+## SCEN-008 run 2026-04-21T02:53:00Z — PARTIAL (17 pass, 3 adapt, 2 bugs pre-existing, 0 fixed)
+
+**Run ID:** 20260421T025300Z
+**Branch:** feature/team-governance (HEAD e1f2b44a — unchanged)
+**Reports:**
+- reports/scenarios-runner/SCEN-008_20260421T025300Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_008_20260421T025300Z.md
+
+**Verdict:** PARTIAL — no-plugin client (Gemini CLI) end-to-end verified. BUG-001 ChangeTeam silent-failure (regression from SCEN-007/SCEN-020). BUG-002 Title Change Dialog double-password hang (new-to-scenario-memory UX bug). STATE-WIPE 4/4 matched. All 3 test agents (scen8-manager, scen8-gemini-member, cos-scen8-noplugin-team-r27) + folders cleaned via UI.
+
+### 2 bugs this run (both pre-existing, not fixed)
+1. **BUG-001 (P0, recurring)**: ChangeTeam silent failure — same as SCEN-007 BUG-003 and SCEN-020 BUG-002. Team.agentIds updated, but agent.title=null (expected "autonomous") + agent.team=<oldTeam> (orphan pointer). 6+ months old regression.
+2. **BUG-002 (P0, UX hang)**: Title Assignment Dialog has TWO password prompts — INLINE (in dialog body, "Enter governance password") + SUDO MODAL ("Confirm with password"). If only ONE is filled, dialog hangs in "Saving..." with disabled buttons. No error toast. Only way out = browser reload. Recipe: ALWAYS fill BOTH. Silent hang.
+
+### Quick-reference pattern index for future SCEN-008 + no-plugin-client runs
+- **Gemini wizard is 5 steps with team, 6 steps standalone.** Claude is 6/7, Codex 6/7. Gemini/OpenCode skip plugin step because no plugin.
+- **Gemini agent workdir is BYTE-FOR-BYTE EMPTY** after creation: no `.gemini/`, no `.claude/`, no `.codex-plugin/`, no plugin cache, no init files. `/Users/<user>/agents/<name>/` is an empty dir.
+- **Gemini Config tab OMITS the Role section entirely** (no "No plugin support" messaging) — contrast with Claude which shows ROLE PLUGIN + metadata + 53 Skills / 10 Agents / 4 Hooks / 23 Commands counts.
+- **"auto-assigns plugin" badge appears in title picker even for Gemini** — false label, should be hidden for no-plugin clients.
+- **COS immutability**: PUT /api/teams/<id> with agentIds=[] (excluding COS) → 400 "Cannot remove the Chief-of-Staff from team members — remove the COS role first".
+- **Team delete dialog**: 2 dialogs, NOT 3. (1) "Are you sure" → Delete, (2) "Delete Team Agents?" with INLINE password + "Delete Team" button. NO "Delete Agents Too" checkbox in UI v0.27.3. Agents revert to AUTONOMOUS + hibernate.
+- **Trash button targeting on /teams page**: multiple teams = multiple hover-only trash buttons (opacity:0 → opacity:1). MUST target by exact x/y coordinates (from getBoundingClientRect) OR walk up to card ancestor matching specific team name. First-match can hit wrong team (near-miss: my S019 first attempt hit "Test Kanban Team" dialog, caught by reading dialog content before Delete).
+- **Cemetery skipped by hard-delete**: when "Also delete agent folder" is checked, delete is HARD (skips cemetery). Prior-run cemetery entries (e.g., from 2026-04-14) persist forever — cemetery grows across all scenario history.
+- **R9.13 enforcement for MANAGER AUTONOMOUS wizard**: auto-locks `ai-maestro-autonomous-agent` plugin. No dropdown, just a locked label "Auto-assigned for AUTONOMOUS title (R9.13: mandatory)" + Continue button.
+- **Orphan team from prior run**: Preserve, don't delete (Rule 0). Use unique team name suffix (e.g., `-r27` or `-${RUN_ID}`) to avoid name collision. STATE-WIPE restore brings back the orphan (as expected, since backup predates changes).
+
+### Rule 0 safety
+- 17 pre-existing user agents enumerated pre-test, 10 with workdir outside `~/agents/` (user's real agents). NONE touched.
+- All 3 scenario agents created with `scen8-` or `cos-scen8-` prefix, workdirs verified under `~/agents/` before any click.
+- Near-miss at S019: first trash-button selector hit "Test Kanban Team" dialog — CANCELED IMMEDIATELY before Delete click, no destructive action. Retry used exact x/y (312, 318) targeting. No user data affected.
+- Orphan `scen8-noplugin-team` from prior 2026-04-14 run: not touched. Pre-existing, not mine.
+
+---
+
+## SCEN-007 run 2026-04-21T02:05:38Z — PARTIAL (27 pass, 2 skip, 4 adapt, 3 bugs found, 0 fixed)
+
+**Run ID:** 20260421T020538Z
+**Branch:** feature/team-governance (HEAD e1f2b44a — unchanged)
+**Reports:**
+- reports/scenarios-runner/SCEN-007_20260421T020538Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_007_20260421T020538Z.md
+
+**Verdict:** PARTIAL — 2 P0 bugs discovered (BUG-002 Codex role-plugin silent-skip, BUG-003 ChangeTeam silent failure recurring from SCEN-020). All 4 test agents created/deleted. STATE-WIPE 4/4 SHA256-matched. Mixed-client team creation and title swaps all functional end-to-end (registry-wise).
+
+### 3 bugs this run (all pre-existing, not fixed)
+1. **BUG-001 (P2)** — GET /api/agents/{id}/local-config returns plugins=[] for fresh COS + Codex agents despite install. Same as SCEN-020/021 MEMORY.
+2. **BUG-002 (P0) — NEW**: **Codex role-plugin silent-skip**. ChangeTitle for Codex agent assigns title in registry, installs CORE plugin correctly, but NEVER installs role-plugin. `.codex/installed-plugins/` only has core; `.agents/agents/` never created; role-plugin conversion to codex-roles-marketplace never triggered. R9.13 violation.
+3. **BUG-003 (P0) — REGRESSION**: ChangeTeam silent failure. "Remove from team" via team-dashboard trash icon updates team.agentIds but leaves agent with title=null (not "autonomous") + agent.team pointing at team (orphan pointer). Same symptom as SCEN-020 BUG-002. My 2026-04-14 MEMORY explicitly noted "Fixes NOT YET applied: Add authContext: AuthContext to ChangeTeam signature". 6+ months later still not fixed.
+
+### Quick-reference pattern index for future SCEN-007 + cross-client runs
+- **Codex role-plugin creation marketplace source** is `~/agents/role-plugins/codex-roles-marketplace/<plugin>-codex/`. Only `ai-maestro-programmer-agent-codex` exists today (from 2026-04-19). Others (architect-codex, orchestrator-codex, etc.) must be pre-warmed via conversion OR will silently fail when titles change.
+- **Team creation dialog REQUIRES at least 1 agent to be selected.** Can't create empty team. Scenario S010 must pick the MANAGER as seed.
+- **Kanban task creation blocked without GitHub project link** (recurring since 2026-03-27).
+- **"Leave team" button does NOT exist in Profile.** Canonical path: team dashboard `/teams/<id>` → Overview tab → hover agent row → red trash icon (`title="Remove from team"`, opacity-0 → opacity-100 on hover).
+- **Team delete dialog has NO "Delete Agents Too" checkbox.** 2-dialog flow: (1) "Are you sure..." → Delete (2) "Delete Team Agents?" with inline governance password → Delete Team (Keep Agents implicit default).
+- **Auto-COS sidebar label ≠ agent name.** Persona `label="Malakai"` (auto-random) shown in sidebar, but `name="cos-scen7-mixed-team"` is what you delete by. Automation must search both.
+- **MANAGER title survives team deletion** (host-wide singleton, not team-level). Only team-level titles (CHIEF-OF-STAFF, ORCHESTRATOR, MEMBER, ARCHITECT, INTEGRATOR) revert.
+- **Hard-delete (folder checkbox) skips cemetery** — confirmed again. S031 cemetery-purge is no-op for this scenario's agents.
+- **Codex agent directory layout:**
+  - `.codex-plugin/plugin.json` → core plugin manifest (name=ai-maestro-plugin-codex)
+  - `.codex/installed-plugins/<name>.json` → installed plugin list (one entry per plugin, with `clientType` + `paths`)
+  - `.agents/skills/` → converted skill tree (all of core's 25 skills converted on install)
+  - `.agents/agents/` → SHOULD contain role-plugin main agent, but MISSING due to BUG-002
+  - `.claude/` → empty (Codex doesn't use it)
+- **Playwright page.click "outside viewport" error:** when a dialog's Confirm button is reported as outside viewport despite being visible, use `button.click()` via page.evaluate (direct JS dispatch), not page.click locator.
+- **Teams page has HOVER-ONLY delete buttons on each team card.** 4 teams = 4 trash buttons; must target by ancestor containing the specific team's text.
+
+### Rule 0 safety
+- 17 pre-existing user agents enumerated pre-test. NONE touched.
+- All 4 scenario agents created with proper prefix, workdirs verified under `~/agents/`, all deleted post-test with folder-delete.
+- 3 pre-existing test teams (Test Kanban Team, scen003-test-wizard-team, scen8-noplugin-team) from prior runs preserved (Rule 2 0-IMPACT).
+
+---
+
+## SCEN-006 run 2026-04-21T01:31:45Z — PASS (34/34 steps, 3 adapted, 0 code fixes)
+
+**Run ID:** 20260421T013145Z
+**Branch:** feature/team-governance (HEAD `20da2e47` — unchanged)
+**Reports:**
+- reports/scenarios-runner/SCEN-006_20260421T013145Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_006_20260421T013145Z.md
+
+**Verdict:** PASS — MANAGER-gate / team-blocking (R9.8), auto-COS creation, Codex MEMBER creation with cross-client conversion, COS immutability (R4.7), and team delete/cleanup all verified through the production UI. STATE-WIPE SHA256-matched all 4 files. 5 observations filed as P1/P2/P3 proposals.
+
+### Adaptations (same patterns as SCEN-001/002/003/005)
+- **S014 MANAGER-wakes-COS via chat** → adapted to user-driven "Start Session" click on the COS card. Agent-to-agent messaging is SCEN-012/013 territory, not this scenario's.
+- **S021 "MEMBER cannot change own title via UI"** → the UI opens the dialog for the human user always (user is exempt from RBAC). Verified via API probe: `fetch('/api/agents/<id>/title', {method:'PATCH', headers:{'X-Agent-Id':'<id>'}, credentials:'omit'})` → 401 `auth_required`, same as SCEN-003 finding.
+- **S023 "Leave team" button in Profile** → does not exist in v0.27.3. Reassign dropdown has only other teams (NO "No team" option). Canonical path: team dashboard `/teams/<id>` → hover the agent row → click red trash icon (opacity-0 → opacity-100).
+
+### Quick-reference pattern index for future SCEN-006-style runs
+- **Agent creation wizard is 7 steps without team, 6 steps with team.** Team-selection step (#3) skips the "Auto-create folder / Browse" step if the team is in NO-TEAM category? (Confirmed: 6 steps for team-assigned agents, 7 for standalone.)
+- **Codex wizard step 5 auto-locks `ai-maestro-programmer-agent` for MEMBER+codex.** R9.13 mandatory label. Same pattern as Claude MEMBER.
+- **Codex agent creation takes ~20s** (wizard "Create Agent!" → Claude CLI + conversion + writeback). Add 10-15s tolerance.
+- **Codex agent on-disk layout:** `<workdir>/.codex-plugin/plugin.json` (core `ai-maestro-plugin-codex`), `<workdir>/.codex/installed-plugins/<name>.json` (per-plugin manifest), `<workdir>/.agents/skills/**` (converted skill tree). Role-plugin source stored at `~/agents/role-plugins/codex-roles-marketplace/<name>-codex/`.
+- **Local-config scanner BROKEN for Codex/Gemini/OpenCode/Kiro.** `GET /api/agents/<id>/local-config` returns all-empty for non-Claude agents. Profile → Config tab reports "0 plugins" despite disk evidence. Filed as PROP-P1-001.
+- **`/teams` page "Delete Team" 2-dialog flow:** (1) "Are you sure" → Delete (2) "Delete Team Agents?" with inline governance password input + "Delete Team" button (NO cleanup-agents checkbox — always "Keep Agents" path; agents revert to AUTONOMOUS).
+- **`/teams` page has NO banner when hasManager=false.** Sidebar Teams tab has the banner + disables Create Team. Delta worth fixing (PROP-P3-001).
+- **Wizard-from-sidebar "Create new agent" + button → dropdown with ONE item "Create Agent".** Two clicks = open wizard. (Same as prior runs.)
+- **Team dashboard "Remove from team" icon is hover-only.** `opacity-0 group-hover:opacity-100`. COS row has the icon DISABLED with title="Chief-of-Staff cannot be removed directly — reassign the CHIEF-OF-STAFF title first, then remove." (R4.7 client-side).
+- **Profile → Reassign dropdown has NO "Leave team" / "No team" option** — only other teams. Filed as PROP-P1-002.
+- **Hard-delete (folder checkbox) skips cemetery.** S032 is a no-op for hard-deleted test agents.
+- **Title change flow = 1 inline password + 1 sudo modal.** Inline password for "Enter Governance Password" in the dialog; sudo modal "Confirm with password" for the PATCH. `aim_sudo_modal` handles the second.
+- **STATE-WIPE backup MANIFEST format:** `<hash>  <live-path>  HOME/<relative-path>` (two-path format). `sha256sum -c` can't parse it (rejects). Manual verification: hash `<backup-dir>/HOME/<path>` vs `<live-path>`. Cleanup script's own verification works.
+- **Auto-COS persona name "Jairus"** — same as recurring in SCEN-002. Auto-generated. Agent ID is `cos-scen006-governance-team` (deterministic prefix), persona name is random.
+- **User click is exempt from RBAC.** The "no-self-modification" rule applies only to PATCH from an agent OAuth token, not to human clicks. Title Assignment Dialog opens for the user always; some options greyed (team-required, singleton-held).
+
+### Rule 0 safety
+- 17 pre-existing user agents enumerated pre-test, 10 with workdir outside `~/agents/` (user's real agents). NONE were touched.
+- All 3 scenario agents created with `scen006-` or `cos-scen006-` prefix, workdirs verified under `~/agents/` before any click.
+- Post-test roster byte-for-byte matches baseline.
+
+---
+
+## SCEN-004 run 2026-04-21T00:20:36Z — PASS (32/35 steps, 3 adapted, 2 bugs found)
+
+**Run ID:** 20260421T002036Z
+**Branch:** feature/team-governance (HEAD 20da2e47 — unchanged, 0 code fixes committed)
+**Reports:**
+- reports/scenarios-runner/SCEN-004_20260421T002036Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_004_20260421T002036Z.md
+
+**Verdict:** PASS — Haephestos end-to-end pipeline works (plugin built with correct quad-identity, published, filterable by title+client, fully cleaned up). 2 bugs documented. STATE-WIPE SHA256-matched all 4 files.
+
+### 2 bugs this run
+1. **BUG-001 (P2, test-harness only)**: dev-browser `setInputFiles({buffer})` saves CORRUPTED binary instead of UTF-8 text. Workaround: use `page.evaluate(() => fetch(/api/agents/creation-helper/file-picker, FormData))` which IS the production call path. NOT an ai-maestro bug.
+2. **BUG-002 (P0, recurring)**: PSS-generated `<plugin>-main-agent.md` has frontmatter `name: <plugin>` instead of `name: <plugin>-main-agent`. Publish API correctly rejects with 422. Required manual fix before publish succeeds. Filed as PROP-P0-001 with 3 redundant fix paths (PSS upstream, Haephestos persona, API auto-fix).
+
+### Quick-reference pattern index for future SCEN-004 runs
+- **Clicking Haephestos sidebar card auto-wakes it** — no separate "Wake up" button needed in v0.29.8. The card IS the wake trigger.
+- **File uploads via dev-browser MUST use `page.evaluate + Blob + File + FormData`**, not `setInputFiles({buffer})`. Buffer encoding is broken in QuickJS sandbox.
+- **Haephestos Profile button opens the TOML viewer**, not the standard Agent Profile. There is NO "Danger Zone → Delete Agent" UI for `_aim-creation-helper`. Use `POST /api/agents/creation-helper/cleanup` (production beforeunload path).
+- **Prompt Builder "Send" button doesn't reliably route to xterm.** Use `textarea.nth(0).focus(); keyboard.type(...); keyboard.press('Enter')` (the production keystroke path).
+- **Publish validation quad-identity rejection message** is explicit: `main-agent frontmatter name "X" does not match expected "X-main-agent"`. Fix with Edit tool BEFORE calling publish-plugin, or scripts will loop.
+- **No UI path exists** to uninstall a local-scope role-plugin from `ai-maestro-local-roles-marketplace`. Use `DELETE /api/agents/role-plugins?name=<X>` (the production endpoint a future UI button would call). Same as 2026-04-19 BUG-004.
+- **`POST /api/agents/creation-helper/cleanup`** returns `{cleaned: true, files: [tmux:_aim-creation-helper, ~/agents/haephestos/, .claude/projects/-Users-*-agents-haephestos/]}` — single endpoint handles tmux kill + workspace wipe + conversation log removal. This is the production cleanup path (beforeunload + visibilitychange hooks call it).
+- **Write-guard hook blocks `curl POST/DELETE /api/agents/*`** — routes through dev-browser `page.evaluate + fetch` work (correct Rule 6 compliance).
+- **Write-guard hook blocks `mkdir`/`mv` referencing `$HOME/ai-maestro/` literal path** — must use RELATIVE paths from the project root (cwd).
+- **Haephestos ignores "skip discovery" directives** but responds to very explicit instructions ("ONE thing: sed that line") — prefer mechanical instructions over high-level ones.
+
+### 3 adaptations required
+- S013-S014 (file upload): `setInputFiles({buffer})` → `fetch + FormData` via page.evaluate
+- S030 (delete plugin via UI): no UI button → `DELETE /api/agents/role-plugins?name=X`
+- S031 (delete Haephestos via UI): no Profile → Danger Zone UI → `POST /api/agents/creation-helper/cleanup`
+
+---
+
+## SCEN-003 run 2026-04-20T23:53:51Z — PASS (43 steps, 37 as-written + 6 adapted, 0 code fixes)
+
+**Run ID:** 20260420T235351Z
+**Branch:** feature/team-governance (HEAD e1f2b44a — unchanged, 0 bug fixes)
+**Reports:**
+- reports/scenarios-runner/SCEN-003_20260420T235351Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_003_20260420T235351Z.md
+
+**Verdict:** PASS — zero code bugs; all 6 discrepancies were scenario-authoring issues. STATE-WIPE SHA256-verified all 4 files.
+
+### Quick-reference pattern index for future SCEN-003 runs
+- **Same MANAGER-first pattern as SCEN-001/002:** R9.8 blocks team creation w/o MANAGER. Scenario file v2.0 does NOT acknowledge this — PROP-P0-001 proposes v3.0 rewrite to insert scen003-manager creation as Phase 2.5.
+- **Wizard step count is dynamic:** 7 steps when NO team, 6 steps with team (folder step skipped). Scenario file assumes static 6.
+- **MEMBER auto-locks same as INTEGRATOR when N=1 plugin compatible.** Scenario's S029 "MEMBER allows user choice" is wrong by default. Dropdown only appears for N≥2.
+- **/teams delete has NO "Delete Agents Too" button.** 2-dialog flow: (1) "Are you sure" → Delete, (2) "Delete Team Agents?" with password → "Delete Team" (reverts agents to AUTONOMOUS, doesn't delete them). Orphan auto-COS must be deleted separately.
+- **Hard-delete (folder checkbox) skips cemetery.** S041 "purge cemetery" is a no-op for hard-deleted agents. Only soft-delete (uncheck folder box) creates cemetery entries.
+- **S037 self-mod probe returns 401 not 403.** Auth layer rejects before RBAC even runs. Stronger defense-in-depth than scenario expected.
+- **Config tab post-creation shows "Change" button for MEMBER** (not locked), in contrast to INTEGRATOR's "Only option for INTEGRATOR" label. Suggests post-creation plugin swap is allowed for MEMBER even though creation-time R9.13 auto-locked.
+
+### UI interaction patterns confirmed this run
+- Sidebar `+` Create Agent: 2 clicks = open wizard (1st opens dropdown with single "Create Agent" item, 2nd = click item).
+- Name input placeholder: `e.g. Alex-Bot` (on Step 2). Avatar pagination uses `← Prev / Next →` buttons inside the wizard — do NOT confuse with the wizard's advance chevron.
+- Wizard advance chevron: at y≈543, x≈1023, width 48×38, has `svg.lucide-chevron-right`, DISABLED until required field is filled.
+- Profile panel: click Profile BUTTON (not the tab) to toggle. Once open, width=420 at x=1020. Tabs (Overview / Config / Advanced) are `div.cursor-pointer`, not `<button>`.
+- Danger Zone: accordion BUTTON (not heading) — `button` whose `.textContent === 'Danger Zone'` — click to expand.
+- Delete confirm dialog: input placeholder = agent name, type it exactly, check "Also delete agent folder" checkbox, click "Delete Forever". Sudo modal appears right after.
+- Team delete: 1st dialog "Are you sure?" → Delete button, 2nd dialog with governance password input → "Delete Team" button. NO cleanup-agents checkbox.
+
+---
+
 ## SCEN-002 run 2026-04-20T23:01:38Z — PASS (52 as-written + 8 adapted + 2 skipped, 0 code fixes committed)
 
 **Run ID:** 20260420T230138Z

@@ -312,6 +312,12 @@ import {
   ensureOpenForPath,
 } from '@/services/sessions-browser-service'
 import {
+  openTimeline as openTimelineService,
+  readTimelineRange as readTimelineRangeService,
+  searchTimeline as searchTimelineService,
+  contextAt as contextAtService,
+} from '@/services/sessions-timeline-service'
+import {
   getJsonlReader,
   JsonlReaderBinaryMissingError,
   JsonlReaderProtocolError,
@@ -3071,6 +3077,128 @@ const routes: Route[] = [
       }
       sendJson(res, 500, { error: 'internal_error', detail: (err as Error).message })
     }
+  }},
+
+  // ---------------------------------------------------------------------
+  // Phase 6 — timeline routes.
+  // Mirror of app/api/sessions-browser/agents/:id/timeline/route.ts plus
+  // the three /timelines/:tid/* routes. Kept right after the single-
+  // session routes above so the diff stays small and easy to review.
+  // ---------------------------------------------------------------------
+  { method: 'GET', pattern: /^\/api\/sessions-browser\/agents\/([^/]+)\/timeline$/, paramNames: ['id'], handler: async (req, res, params) => {
+    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+      sendJson(res, 401, { error: 'unauthenticated' })
+      return
+    }
+    const result = await openTimelineService(params.id)
+    if (!result.ok || !result.data) {
+      sendJson(res, result.status || 500, { error: result.error || 'internal_error' })
+      return
+    }
+    sendJson(res, 200, result.data)
+  }},
+
+  { method: 'GET', pattern: /^\/api\/sessions-browser\/timelines\/([^/]+)\/range$/, paramNames: ['tid'], handler: async (req, res, params) => {
+    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+      sendJson(res, 401, { error: 'unauthenticated' })
+      return
+    }
+    const url = new URL(req.url || '', 'http://localhost')
+    const fromStr = url.searchParams.get('fromGlobal')
+    const toStr = url.searchParams.get('toGlobal')
+    if (fromStr === null || toStr === null) {
+      sendJson(res, 400, { error: 'invalid_request' })
+      return
+    }
+    const fromGlobal = Number(fromStr)
+    const toGlobal = Number(toStr)
+    if (!Number.isInteger(fromGlobal) || !Number.isInteger(toGlobal) || fromGlobal < 0 || toGlobal < 0) {
+      sendJson(res, 400, { error: 'invalid_request' })
+      return
+    }
+    const result = await readTimelineRangeService(params.tid, fromGlobal, toGlobal)
+    if (!result.ok || !result.data) {
+      sendJson(res, result.status || 500, { error: result.error || 'internal_error' })
+      return
+    }
+    sendJson(res, 200, {
+      timelineId: params.tid,
+      fromGlobal,
+      toGlobal,
+      rows: result.data.rows,
+    })
+  }},
+
+  { method: 'GET', pattern: /^\/api\/sessions-browser\/timelines\/([^/]+)\/search$/, paramNames: ['tid'], handler: async (req, res, params) => {
+    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+      sendJson(res, 401, { error: 'unauthenticated' })
+      return
+    }
+    const url = new URL(req.url || '', 'http://localhost')
+    const q = url.searchParams.get('q')
+    if (!q) {
+      sendJson(res, 400, { error: 'invalid_request' })
+      return
+    }
+    const kindParam = url.searchParams.get('kind')
+    let kind: 'substring' | 'regex' | undefined
+    if (kindParam === 'substring' || kindParam === 'regex') {
+      kind = kindParam
+    } else if (kindParam !== null) {
+      sendJson(res, 400, { error: 'invalid_request' })
+      return
+    }
+    const ciParam = url.searchParams.get('ci')
+    let caseInsensitive: boolean | undefined
+    if (ciParam === 'true' || ciParam === '1') caseInsensitive = true
+    else if (ciParam === 'false' || ciParam === '0') caseInsensitive = false
+    const result = await searchTimelineService(params.tid, q, { kind, caseInsensitive })
+    if (!result.ok || !result.data) {
+      sendJson(res, result.status || 500, { error: result.error || 'internal_error' })
+      return
+    }
+    sendJson(res, 200, {
+      timelineId: params.tid,
+      matches: result.data.matches,
+    })
+  }},
+
+  { method: 'GET', pattern: /^\/api\/sessions-browser\/timelines\/([^/]+)\/context-at$/, paramNames: ['tid'], handler: async (req, res, params) => {
+    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+      sendJson(res, 401, { error: 'unauthenticated' })
+      return
+    }
+    const url = new URL(req.url || '', 'http://localhost')
+    const anchorUuid = url.searchParams.get('anchorUuid')
+    const globalStr = url.searchParams.get('globalLineIndex')
+    let globalLineIndex: number | undefined
+    if (globalStr !== null) {
+      const n = Number(globalStr)
+      if (!Number.isInteger(n) || n < 0) {
+        sendJson(res, 400, { error: 'invalid_request' })
+        return
+      }
+      globalLineIndex = n
+    }
+    if (!anchorUuid && globalLineIndex === undefined) {
+      sendJson(res, 400, { error: 'invalid_request' })
+      return
+    }
+    const result = await contextAtService(params.tid, {
+      anchorUuid: anchorUuid ?? undefined,
+      globalLineIndex,
+    })
+    if (!result.ok || !result.data) {
+      sendJson(res, result.status || 500, { error: result.error || 'internal_error' })
+      return
+    }
+    sendJson(res, 200, {
+      timelineId: params.tid,
+      anchorGlobalLine: result.data.anchorGlobalLine,
+      cumulative: result.data.cumulative,
+      exactAtCursor: result.data.exactAtCursor,
+      phaseHistory: result.data.phaseHistory,
+    })
   }},
 ]
 

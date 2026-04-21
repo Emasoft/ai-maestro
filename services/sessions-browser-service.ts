@@ -1,0 +1,242 @@
+/**
+ * Sessions Browser Service — agent → project dir → .jsonl file discovery.
+ *
+ * Claude Code persists every conversation at
+ *   ~/.claude/projects/<slugged-project-dir>/<session-uuid>.jsonl
+ *
+ * The slug rule (empirically verified against real installations):
+ *   1. Take the agent's absolute workingDirectory.
+ *   2. Replace each '/' with '-'.
+ *   3. Strip the leading '-' that results from an absolute path.
+ *
+ * Example:
+ *   workingDirectory: /Users/emanuele/code/ai-maestro
+ *   slug:             Users-emanuele-code-ai-maestro
+ *
+ * This service is pure (no side effects other than filesystem reads) so
+ * both Next.js route handlers and the headless router can call it.
+ */
+
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+
+import { getAgent } from '@/lib/agent-registry'
+import type { SessionSummary, SessionsListResponse } from '@/types/sessions-browser'
+import { getJsonlReader } from '@/lib/jsonl-reader'
+
+/**
+ * Convert an absolute working directory into Claude's project-dir slug.
+ * Returns null if the input is not an absolute-looking path.
+ */
+export function slugifyWorkingDirectory(workingDirectory: string): string | null {
+  if (!workingDirectory) return null
+  // Normalize: trim trailing slashes, then replace path separators.
+  // Accept either Unix-style or Windows-style absolute paths defensively,
+  // but Claude Code on macOS/Linux always uses '/'.
+  const normalized = workingDirectory.replace(/\\+/g, '/').replace(/\/+$/g, '')
+  if (normalized.length === 0) return null
+  const replaced = normalized.replace(/\//g, '-')
+  const stripped = replaced.replace(/^-+/, '')
+  return stripped.length > 0 ? stripped : null
+}
+
+/**
+ * Return the absolute path to the Claude Code projects directory for the
+ * given working directory, or null if slugging fails.
+ * Does NOT check that the directory exists — callers decide.
+ */
+export function projectDirForWorkingDirectory(workingDirectory: string): string | null {
+  const slug = slugifyWorkingDirectory(workingDirectory)
+  if (!slug) return null
+  return path.join(os.homedir(), '.claude', 'projects', slug)
+}
+
+/**
+ * List `.jsonl` session files in the given directory, sorted by mtime DESC.
+ * Each entry carries file size, mtime, and a lazy `messageCount = null`.
+ * Non-.jsonl files, hidden files, and sidecar `.aimidx` files are ignored.
+ *
+ * If the directory does not exist, returns an empty array (not an error).
+ */
+export function listSessionsInProjectDir(projectDir: string): SessionSummary[] {
+  let entries: fs.Dirent[]
+  try {
+    entries = fs.readdirSync(projectDir, { withFileTypes: true })
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code === 'ENOENT' || code === 'ENOTDIR') return []
+    throw err
+  }
+
+  const summaries: SessionSummary[] = []
+  for (const ent of entries) {
+    if (!ent.isFile()) continue
+    if (ent.name.startsWith('.')) continue
+    if (!ent.name.endsWith('.jsonl')) continue
+    const abs = path.join(projectDir, ent.name)
+    let stat: fs.Stats
+    try {
+      stat = fs.statSync(abs)
+    } catch {
+      continue
+    }
+    const displayName = ent.name.replace(/\.jsonl$/, '')
+    summaries.push({
+      path: abs,
+      size: stat.size,
+      messageCount: null,
+      lastModified: stat.mtime.toISOString(),
+      displayName,
+      id: displayName,
+    })
+  }
+
+  summaries.sort((a, b) => {
+    const ta = Date.parse(a.lastModified)
+    const tb = Date.parse(b.lastModified)
+    return tb - ta
+  })
+  return summaries
+}
+
+/**
+ * Full pipeline: agent id → registry lookup → working dir → slug → list.
+ *
+ * `agentFetcher` is injectable so unit tests can feed a synthetic agent.
+ * In production, it defaults to `getAgent` from the file-based registry.
+ */
+export interface AgentFetcher {
+  (id: string): { id: string; workingDirectory?: string } | null
+}
+
+export interface GetSessionsForAgentOptions {
+  agentFetcher?: AgentFetcher
+  /**
+   * Override the list function for tests (so we can simulate a populated
+   * project dir without touching the filesystem).
+   */
+  lister?: (projectDir: string) => SessionSummary[]
+}
+
+export interface GetSessionsForAgentResult {
+  ok: boolean
+  status: number
+  data?: SessionsListResponse
+  error?: string
+}
+
+/**
+ * Parse a raw `Cookie` header and return true iff it carries a non-empty
+ * `aim_session` cookie.
+ *
+ * Exported here (rather than living inside each route.ts) so the Next.js
+ * routes and the headless-router share the same auth gate. When the
+ * rest of the project's auth stack merges in, swap this helper for a
+ * richer check (e.g. validating the session token against the server
+ * store). For now the mere presence of the cookie value is what the
+ * spec defines.
+ */
+export function hasSessionCookie(cookieHeader: string | null | undefined): boolean {
+  if (!cookieHeader) return false
+  const parts = cookieHeader.split(/;\s*/)
+  for (const p of parts) {
+    const eq = p.indexOf('=')
+    if (eq === -1) continue
+    const name = p.slice(0, eq).trim()
+    if (name === 'aim_session') {
+      const val = p.slice(eq + 1).trim()
+      if (val.length > 0) return true
+    }
+  }
+  return false
+}
+
+/**
+ * Reverse-lookup map: session UUID → absolute .jsonl path.
+ *
+ * Populated whenever `getSessionsForAgent` runs. Route handlers that
+ * receive a `:sid` path-param use this to resolve the path and then
+ * open the Rust-side session on demand.
+ *
+ * Entries never time out (the dashboard process holds them for its
+ * lifetime) but are replaced on each re-list — so if a session is
+ * deleted, its entry naturally ages out the next time the list runs.
+ */
+const sidToPath = new Map<string, string>()
+
+export function recordSessionMapping(sessionId: string, absolutePath: string): void {
+  sidToPath.set(sessionId, absolutePath)
+}
+
+export function resolveSessionPath(sessionId: string): string | null {
+  return sidToPath.get(sessionId) ?? null
+}
+
+/** Test hook — wipe the reverse map between cases. */
+export function clearSessionMappings(): void {
+  sidToPath.clear()
+}
+
+export function getSessionsForAgent(
+  agentId: string,
+  opts: GetSessionsForAgentOptions = {},
+): GetSessionsForAgentResult {
+  const fetch = opts.agentFetcher ?? ((id: string) => getAgent(id))
+  const agent = fetch(agentId)
+  if (!agent) {
+    return { ok: false, status: 404, error: 'agent_not_found' }
+  }
+  const wd = agent.workingDirectory
+  if (!wd) {
+    // Agent with no working dir has no project dir. Return empty list, not 404.
+    return {
+      ok: true,
+      status: 200,
+      data: { projectDir: null, sessions: [] },
+    }
+  }
+  const projectDir = projectDirForWorkingDirectory(wd)
+  if (!projectDir) {
+    return {
+      ok: true,
+      status: 200,
+      data: { projectDir: null, sessions: [] },
+    }
+  }
+  const lister = opts.lister ?? listSessionsInProjectDir
+  const sessions = lister(projectDir)
+  for (const s of sessions) {
+    recordSessionMapping(s.id, s.path)
+  }
+  return {
+    ok: true,
+    status: 200,
+    data: { projectDir, sessions },
+  }
+}
+
+/**
+ * Resolve a UI-level session id to the absolute .jsonl path it refers to.
+ *
+ * The route handlers accept session ids in two forms:
+ *   1. The Rust-side sessionId returned by a previous `open` call — safe,
+ *      just pass through to the reader.
+ *   2. A fresh UI-side identifier (the session's displayName, i.e. the UUID).
+ *      In this case we must first figure out which agent's project dir owns
+ *      it, then call `reader.open(absolutePath)`.
+ *
+ * Rather than doing a reverse-index across every agent on every request,
+ * we accept a `?path=/abs/to/session.jsonl` query param on the route
+ * handlers as the authoritative form. The session list endpoint returns
+ * `path` for every entry; the UI sends it back verbatim.
+ *
+ * This helper opens (or reuses) the reader-side session for `absolutePath`
+ * and returns the Rust-side sessionId.
+ */
+export async function ensureOpenForPath(absolutePath: string): Promise<string> {
+  const resolved = path.resolve(absolutePath)
+  const reader = getJsonlReader()
+  const resp = await reader.open(resolved)
+  return resp.sessionId
+}

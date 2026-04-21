@@ -226,8 +226,14 @@ export default function MobileDashboard({
                   </div>
 
                   {/* Terminal (always mounted, visibility toggled) */}
+                  {/* BUG-001 fix: wrapper MUST be flex column so TerminalView's root
+                      `flex-1 flex flex-col bg-terminal-bg` actually expands to fill the
+                      parent. Without `flex flex-col` here, `flex-1` has no anchor and the
+                      terminal container collapses to height:0, leaving the UI stuck on the
+                      "Initializing terminal..." spinner forever (init retries fail because
+                      rect.height === 0). */}
                   <div
-                    className="absolute inset-0"
+                    className="absolute inset-0 flex flex-col"
                     style={{
                       visibility: viewMode === 'terminal' ? 'visible' : 'hidden',
                       pointerEvents: viewMode === 'terminal' ? 'auto' : 'none'

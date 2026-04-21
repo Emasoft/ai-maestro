@@ -31,6 +31,11 @@ import type {
   AnalyzeFileMetadataOkResponse,
   CloseOkResponse,
   SearchKind,
+  OpenTimelineFileInput,
+  OpenTimelineOkResponse,
+  ReadTimelineRangeOkResponse,
+  SearchTimelineOkResponse,
+  ContextAtOkResponse,
 } from '@/lib/jsonl-reader-protocol'
 import { isErrorResponse } from '@/lib/jsonl-reader-protocol'
 
@@ -413,6 +418,100 @@ export class JsonlReader extends EventEmitter {
       throw new JsonlReaderProtocolError(String(resp.error), resp.detail)
     }
     return resp as AnalyzeFileMetadataOkResponse
+  }
+
+  // -------------------------------------------------------------------------
+  // Phase 6 — timeline commands. See jsonl-reader-protocol.ts for shape
+  // docs and rust-tools/aim-jsonl-reader/src/timeline.rs for the backing
+  // implementation. Unlike per-file `open`, timelines are NOT tracked
+  // by the Node wrapper's session registry — they live only on the
+  // Rust side, keyed by the returned timelineId. Callers that re-open
+  // the same set of files will get a fresh timelineId (the Rust-side
+  // id is deterministic, so it happens to match, but we do not rely
+  // on that).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Open a cross-file timeline. Sends one `open_timeline` request with the
+   * full list of {path, laneId} pairs. Returns the Rust-side manifest
+   * (timelineId + total lines + per-lane summaries).
+   */
+  async openTimeline(
+    files: OpenTimelineFileInput[],
+  ): Promise<OpenTimelineOkResponse> {
+    const resp = await this.sendRequest({ cmd: 'open_timeline', files })
+    if (isErrorResponse(resp)) {
+      throw new JsonlReaderProtocolError(String(resp.error), resp.detail)
+    }
+    return resp as OpenTimelineOkResponse
+  }
+
+  /**
+   * Read rows in the inclusive [fromGlobal, toGlobal] global-line range
+   * on the given timeline. The Rust side binary-searches its stitched
+   * sparse index and delegates to the per-file reader.
+   */
+  async readTimelineRange(
+    timelineId: string,
+    fromGlobal: number,
+    toGlobal: number,
+  ): Promise<ReadTimelineRangeOkResponse> {
+    const resp = await this.sendRequest({
+      cmd: 'read_timeline_range',
+      timelineId,
+      fromGlobal,
+      toGlobal,
+    })
+    if (isErrorResponse(resp)) {
+      throw new JsonlReaderProtocolError(String(resp.error), resp.detail)
+    }
+    return resp as ReadTimelineRangeOkResponse
+  }
+
+  /**
+   * Search every file in the timeline and return globally-sorted matches.
+   * There is no match limit on the Rust side — callers that want top-N
+   * should post-truncate. Rust defaults to `substring` kind with
+   * case-insensitive=true when fields are omitted.
+   */
+  async searchTimeline(
+    timelineId: string,
+    query: string,
+    opts: { kind?: SearchKind; caseInsensitive?: boolean } = {},
+  ): Promise<SearchTimelineOkResponse> {
+    const resp = await this.sendRequest({
+      cmd: 'search_timeline',
+      timelineId,
+      query,
+      kind: opts.kind,
+      caseInsensitive: opts.caseInsensitive,
+    })
+    if (isErrorResponse(resp)) {
+      throw new JsonlReaderProtocolError(String(resp.error), resp.detail)
+    }
+    return resp as SearchTimelineOkResponse
+  }
+
+  /**
+   * Compute a context-at-cursor breakdown plus phase history up to the
+   * anchor. Exactly one of `anchorUuid` or `globalLineIndex` must be
+   * provided — the Rust side rejects missing-anchor requests as
+   * `invalid_request`.
+   */
+  async contextAt(
+    timelineId: string,
+    target: { anchorUuid?: string; globalLineIndex?: number },
+  ): Promise<ContextAtOkResponse> {
+    const resp = await this.sendRequest({
+      cmd: 'context_at',
+      timelineId,
+      anchorUuid: target.anchorUuid,
+      globalLineIndex: target.globalLineIndex,
+    })
+    if (isErrorResponse(resp)) {
+      throw new JsonlReaderProtocolError(String(resp.error), resp.detail)
+    }
+    return resp as ContextAtOkResponse
   }
 
   async close(sessionId: string): Promise<CloseOkResponse> {

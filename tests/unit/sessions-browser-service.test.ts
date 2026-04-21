@@ -32,23 +32,39 @@ import { getJsonlReader } from '@/lib/jsonl-reader'
 // ---------------------------------------------------------------------------
 
 describe('slugifyWorkingDirectory', () => {
-  it('replaces / with - and strips leading -', () => {
+  it('replaces / with - and preserves the leading dash', () => {
+    // Claude Code's on-disk convention KEEPS the leading dash on absolute
+    // paths (verified: `ls ~/.claude/projects/ | awk '{print substr($0,1,1)}' | sort -u`
+    // returns only `-`). Stripping it produced slugs that never matched any
+    // real project dir and made every agent look session-less.
+    expect(slugifyWorkingDirectory('/Users/alice/proj')).toBe(
+      '-Users-alice-proj',
+    )
     expect(slugifyWorkingDirectory('/Users/e/code/ai-maestro')).toBe(
-      'Users-e-code-ai-maestro',
+      '-Users-e-code-ai-maestro',
     )
   })
 
-  it('strips multiple leading dashes (nested absolute paths)', () => {
-    // Input that already starts with '-' should still have only leading dashes stripped.
-    expect(slugifyWorkingDirectory('/a/b')).toBe('a-b')
+  it('strips trailing slashes before substitution (no trailing dash)', () => {
+    expect(slugifyWorkingDirectory('/Users/alice/proj/')).toBe(
+      '-Users-alice-proj',
+    )
+    expect(slugifyWorkingDirectory('/a/b///')).toBe('-a-b')
   })
 
-  it('returns null for empty input', () => {
+  it('preserves the leading dash even for short paths', () => {
+    expect(slugifyWorkingDirectory('/a/b')).toBe('-a-b')
+  })
+
+  it('returns null for empty input or a bare root slash', () => {
     expect(slugifyWorkingDirectory('')).toBeNull()
     expect(slugifyWorkingDirectory('/')).toBeNull()
   })
 
-  it('normalizes Windows-style separators', () => {
+  it('normalizes Windows-style separators without inventing a leading dash', () => {
+    // Windows paths don't start with '/', so no leading dash is added.
+    // This defensive branch exists because node code occasionally ingests
+    // them; Claude Code on macOS/Linux only ever produces Unix paths.
     expect(slugifyWorkingDirectory('C:\\Users\\e')).toBe('C:-Users-e')
   })
 })
@@ -58,10 +74,10 @@ describe('slugifyWorkingDirectory', () => {
 // ---------------------------------------------------------------------------
 
 describe('projectDirForWorkingDirectory', () => {
-  it('builds the full ~/.claude/projects/<slug> path', () => {
+  it('builds the full ~/.claude/projects/<slug> path with the leading dash preserved', () => {
     const result = projectDirForWorkingDirectory('/Users/e/code/a')
     expect(result).toBe(
-      path.join(os.homedir(), '.claude', 'projects', 'Users-e-code-a'),
+      path.join(os.homedir(), '.claude', 'projects', '-Users-e-code-a'),
     )
   })
 

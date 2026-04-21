@@ -126,6 +126,8 @@ function scanCodexDirectory(workDir: string): AgentLocalConfig {
   const plugins: LocalPlugin[] = []
   const skills: LocalSkill[] = []
   const seenSkills = new Set<string>()
+  let rolePlugin: RolePlugin | null = null
+  let globalDependencies: GlobalDependencies | null = null
 
   const manifestFiles = safeReaddir(installedDir)
     .filter(name => name.endsWith('.json'))
@@ -152,6 +154,22 @@ function scanCodexDirectory(workDir: string): AgentLocalConfig {
         const a = pm.author as Record<string, unknown>
         if (typeof a.name === 'string') pluginMeta.author = a.name
       }
+    }
+
+    // PROP-P0-001 FIX (SCEN-016 2026-04-21): Quad-match against the source
+    // folder's .agent.toml to identify this plugin as a ROLE plugin. Without
+    // this, GET /api/agents/:id/local-config returns rolePlugin:null for any
+    // Codex agent, making the UI show "No role plugin" even when
+    // ai-maestro-autonomous-agent is correctly installed.
+    //
+    // Source resolution order (mirrors R18.3d in ChangeClient):
+    //   1. ~/agents/role-plugins/<name>/<name>.agent.toml            (authoritative local marketplace)
+    //   2. ~/.codex/plugins/cache/<marketplace>/<name>/<version>/<name>.agent.toml  (Codex native cache)
+    //   3. ~/agents/role-plugins/<name>-codex/<name>-codex.agent.toml  (Codex-emitted target, some flows)
+    const quadMatch = resolveRolePluginForCodex(pluginName)
+    if (quadMatch && !rolePlugin) {
+      rolePlugin = quadMatch.rolePlugin
+      globalDependencies = extractTomlDependencies(quadMatch.profilePath)
     }
 
     plugins.push({
@@ -211,14 +229,115 @@ function scanCodexDirectory(workDir: string): AgentLocalConfig {
     lspServers: [],
     outputStyles: [],
     plugins,
-    rolePlugin: null,
-    globalDependencies: null,
+    rolePlugin,
+    globalDependencies,
     settings: {},
     userGlobalSettings: readJsonSafe(path.join(os.homedir(), '.claude', 'settings.json')) ?? null,
     keybindings: null,
     lastScanned: new Date().toISOString(),
   }
 }
+
+/**
+ * PROP-P0-001 (SCEN-016 2026-04-21): Resolve a Codex plugin name to its
+ * source folder + .agent.toml and run the quad-match rule that identifies it
+ * as a role plugin. Returns the constructed RolePlugin object if the quad
+ * matches, or null otherwise (meaning this is a normal plugin).
+ *
+ * Quad-match rule (must all be satisfied):
+ *   1. <name>.agent.toml exists at plugin root
+ *   2. [agent].name inside the TOML === pluginName
+ *   3. agents/<name>-main-agent.md exists at plugin root
+ *   4. frontmatter `name:` in that .md === <name>-main-agent
+ *
+ * Source search order (richest-first; first match wins):
+ *   a. ~/agents/role-plugins/<name>/            (local marketplace — authoritative)
+ *   b. ~/.codex/plugins/cache/<marketplace>/<name>/<version>/ (Codex native cache)
+ *   c. ~/agents/role-plugins/<name>-codex/      (Codex emission target, fallback)
+ */
+function resolveRolePluginForCodex(
+  pluginName: string,
+): { rolePlugin: RolePlugin; profilePath: string } | null {
+  const homeDir = os.homedir()
+
+  // Candidate source folders, in priority order
+  const candidates: { dir: string; marketplace: string }[] = []
+
+  // (a) Local role-plugins marketplace
+  candidates.push({
+    dir: path.join(getLocalMarketplacePath(), pluginName),
+    marketplace: LOCAL_MARKETPLACE_NAME,
+  })
+
+  // (b) Codex native cache: ~/.codex/plugins/cache/<marketplace>/<name>/<version>/
+  const codexCacheRoot = path.join(homeDir, '.codex', 'plugins', 'cache')
+  if (fs.existsSync(codexCacheRoot)) {
+    for (const marketplaceName of safeReaddir(codexCacheRoot)) {
+      const nameDir = path.join(codexCacheRoot, marketplaceName, pluginName)
+      if (!fs.existsSync(nameDir)) continue
+      const versions = safeReaddir(nameDir)
+      if (versions.length === 0) continue
+      const semverVersions = versions.filter(v => semver.valid(v))
+      let picked: string
+      if (semverVersions.length > 0) {
+        semverVersions.sort(semver.rcompare)
+        picked = semverVersions[0]
+      } else {
+        versions.sort()
+        picked = versions[versions.length - 1]
+      }
+      candidates.push({
+        dir: path.join(nameDir, picked),
+        marketplace: marketplaceName,
+      })
+    }
+  }
+
+  // (c) Codex-suffixed fallback in local role-plugins marketplace
+  candidates.push({
+    dir: path.join(getLocalMarketplacePath(), `${pluginName}-codex`),
+    marketplace: LOCAL_MARKETPLACE_NAME,
+  })
+
+  for (const cand of candidates) {
+    if (!fs.existsSync(cand.dir)) continue
+
+    const profilePath = path.join(cand.dir, `${pluginName}.agent.toml`)
+    if (!fs.existsSync(profilePath)) continue
+
+    const tomlAgentName = extractTomlAgentName(profilePath)
+    if (tomlAgentName !== pluginName) continue
+
+    const mainAgentName = `${pluginName}-main-agent`
+    const mainAgentPath = path.join(cand.dir, 'agents', `${mainAgentName}.md`)
+    if (!fs.existsSync(mainAgentPath)) continue
+
+    const mainAgentFrontmatterName = extractFrontmatterField(mainAgentPath, 'name')
+    if (mainAgentFrontmatterName !== mainAgentName) continue
+
+    const compat = extractTomlCompatibility(profilePath)
+    return {
+      rolePlugin: {
+        name: pluginName,
+        profilePath,
+        mainAgentName,
+        mainAgentPath,
+        marketplace: cand.marketplace,
+        ...compat,
+      },
+      profilePath,
+    }
+  }
+
+  return null
+}
+
+// TODO (PROP-P0-001 follow-up): scanGeminiDirectory / scanOpenCodeDirectory /
+// scanKiroDirectory do not exist yet. When they are added, each should call
+// its own equivalent resolveRolePluginFor<Client>() that searches the matching
+// client's cache path (e.g. ~/.gemini/plugins/, ~/.opencode/plugins/) plus
+// ~/agents/role-plugins/<name>/ and ~/agents/role-plugins/<name>-<client>/.
+// The quad-match rule is identical across clients.
 
 function scanClaudeDirectory(claudeDir: string, workDir: string): AgentLocalConfig {
   const settingsData = readJsonSafe(path.join(claudeDir, 'settings.local.json'))

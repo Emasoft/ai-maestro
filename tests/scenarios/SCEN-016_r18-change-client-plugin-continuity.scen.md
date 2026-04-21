@@ -33,8 +33,8 @@ ui_sections:
 data_produced:
   - 1 test agent "scen016-r18-test" (temporary, created and deleted)
   - ~/agents/scen016-r18-test/ working directory (temporary, deleted)
-  - ~/agents/custom-plugins/.abstract/ai-maestro-plugin/ (may be pre-existing; untouched on cleanup)
-  - ~/agents/custom-plugins/codex/ai-maestro-plugin-codex/ (may be pre-existing; untouched on cleanup)
+  - ~/agents/core-plugins/.abstract/ai-maestro-plugin/ (may be pre-existing; untouched on cleanup) — R20.28 split
+  - ~/agents/core-plugins/codex-core-marketplace/ai-maestro-plugin-codex/ (may be pre-existing; untouched on cleanup) — R20.28 split
   - Agent registry entry (temporary, deleted)
   - Cemetery archive entry (temporary, purged)
 required_tools:
@@ -160,6 +160,16 @@ author: AI Maestro Team
 
 ## Phase 2: Change Client Claude → Codex (R18 Pipeline)
 
+> **Note (R20.28 path split, clarified 2026-04-20):** Steps that used to look
+> for emitted plugins under `~/agents/custom-plugins/` now resolve to the
+> `core-plugins/` and `role-plugins/` containers instead. The split is:
+>   - `~/agents/role-plugins/` — role plugins (including `ai-maestro-autonomous-agent`).
+>   - `~/agents/custom-plugins/` — user-authored (Haephestos) plugins only.
+>   - `~/agents/core-plugins/` — the core `ai-maestro-plugin` + its per-client
+>     emissions (`.abstract/`, `claude-core-marketplace/`,
+>     `codex-core-marketplace/`, etc.).
+> See R20.28 / R20.29 in `docs/GOVERNANCE-RULES.md` for the canonical wording.
+
 #### S013: Open agent Profile panel
 - **Action:** Click agent card "scen016-r18-test" in sidebar
 - **Goal:** Profile panel loads
@@ -184,19 +194,19 @@ author: AI Maestro Team
 #### S016: Change client to Codex via Program selector
 - **Action:** Change Program dropdown from "claude" to "codex"
 - **Goal:** ChangeClient AIO pipeline runs server-side
-- **Creates:** `~/agents/custom-plugins/.abstract/ai-maestro-plugin/plugin-universal-ir.yaml` (if it did not exist), `~/agents/custom-plugins/codex/ai-maestro-plugin-codex/` directory
+- **Creates:** `~/agents/core-plugins/.abstract/ai-maestro-plugin/plugin-universal-ir.yaml` (if it did not exist), `~/agents/core-plugins/codex-core-marketplace/ai-maestro-plugin-codex/` directory (R20.28 split)
 - **Modifies:** agent registry `program: "codex"`, agent .claude/ directory (plugin files replaced)
 - **Verify:** API PATCH returns 200, no error. Screenshot: SCEN-016/S016-client-changed.png
 
 #### S017: Verify R18.3(a/b/c) — Universal IR was created
-- **Action:** Check existence of `~/agents/custom-plugins/.abstract/ai-maestro-plugin/plugin-universal-ir.yaml` on disk.
+- **Action:** Check existence of `~/agents/core-plugins/.abstract/ai-maestro-plugin/plugin-universal-ir.yaml` on disk (R20.28: core-plugin IRs live under `core-plugins/.abstract/`, not the old `custom-plugins/.abstract/`).
 - **Goal:** Confirm the Universal IR was generated during the conversion
 - **Creates:** nothing (verification)
 - **Modifies:** nothing
 - **Verify:** File exists with valid YAML content. Screenshot: SCEN-016/S017-universal-ir-exists.png
 
 #### S018: Verify R18.3 — Codex plugin was emitted
-- **Action:** Check `~/agents/custom-plugins/codex/ai-maestro-plugin-codex/` exists with at least one file (e.g. plugin.json, skills/, commands/)
+- **Action:** Check `~/agents/core-plugins/codex-core-marketplace/ai-maestro-plugin-codex/` exists with at least one file (e.g. plugin.json, skills/, commands/). Per R20.28, core-plugin emissions land in per-client core marketplaces (`codex-core-marketplace`, `claude-core-marketplace`, …), not under `custom-plugins/`.
 - **Goal:** Confirm the Codex version was emitted from the IR
 - **Creates:** nothing (verification)
 - **Modifies:** nothing

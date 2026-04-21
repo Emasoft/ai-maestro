@@ -31,6 +31,7 @@
 
 mod context;
 mod index;
+mod metadata;
 mod protocol;
 mod reader;
 mod search;
@@ -214,6 +215,36 @@ fn dispatch(cmd: &str, req: &Value, sessions: &mut Sessions) -> Value {
                 Err(e) => return e,
             };
             match context::compute(&handle.path) {
+                Ok(mut val) => {
+                    if let Some(obj) = val.as_object_mut() {
+                        obj.insert("ok".to_string(), Value::Bool(true));
+                        return val;
+                    }
+                    ok(val)
+                }
+                Err(e) => err(errors::READ_FAILED, e.to_string()),
+            }
+        }
+
+        // Phase 5 §3.8 — single-pass metadata analyzer. Takes a raw path
+        // (NOT a sessionId) because the sessions-browser list calls this
+        // BEFORE it opens a Rust-side session handle, so it can populate
+        // divider-row previews, ongoing flags, and compaction counts
+        // without paying for an index build. The path is validated the
+        // same way `open` validates its path.
+        "analyze_file_metadata" => {
+            let path_str = match required_str(req, "path") {
+                Ok(p) => p,
+                Err(e) => return e,
+            };
+            let path = PathBuf::from(path_str);
+            if !path.exists() {
+                return err(
+                    errors::OPEN_FAILED,
+                    format!("no such file: {}", path.display()),
+                );
+            }
+            match metadata::compute(&path) {
                 Ok(mut val) => {
                     if let Some(obj) = val.as_object_mut() {
                         obj.insert("ok".to_string(), Value::Bool(true));

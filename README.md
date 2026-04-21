@@ -293,6 +293,7 @@ AI Maestro uses three categories of plugins:
 - [Intelligence Guide](./docs/AGENT-INTELLIGENCE.md) · [Code Graph Visualization](./docs/images/code_graph01.png)
 - [Operations Guide](./docs/OPERATIONS-GUIDE.md)
 - [Team Governance Rules](./docs/GOVERNANCE-RULES.md) — R1-R15: titles, teams, messaging, composition, role boundaries, resilience
+- [JSONL Session Browser](./docs/SESSIONS-BROWSER.md) — Open any agent's Claude Code session as a chat transcript with per-message tokens, context breakdown, and in-session search
 
 **Troubleshooting:**
 - [Common Issues](./docs/TROUBLESHOOTING.md) · [Security](./SECURITY.md) · [Windows Installation](./docs/WINDOWS-INSTALLATION.md)

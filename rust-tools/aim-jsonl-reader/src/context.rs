@@ -20,6 +20,7 @@
 // Model context limit: looked up from the `model` field of the first
 // assistant record we encounter. Unknown/absent -> 200_000.
 
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -46,6 +47,12 @@ pub struct Buckets {
     pub cache_read:      u64,
     pub approximate:     bool,
     pub model_id:        Option<String>,
+    /// Request IDs of assistant entries we've already counted.
+    /// Phase 5 §1 — the same requestId may appear on multiple rows when a
+    /// turn is retried; only the first occurrence contributes to the
+    /// running totals. Entries without a `requestId` continue to count
+    /// individually (they bypass this set entirely).
+    pub seen_request_ids: HashSet<String>,
 }
 
 pub fn compute(path: &Path) -> Result<Value> {
@@ -167,6 +174,26 @@ fn classify(v: &Value, b: &mut Buckets) {
             }
         }
         Some("assistant") => {
+            // Phase 5 §1: deduplicateByRequestId.
+            // Assistant turns that were retried mid-stream produce multiple
+            // JSONL entries sharing the same `requestId` but with different
+            // `uuid`s. Prior to this fix the running total summed every one,
+            // overcounting tokens on any retried turn. We now keep only the
+            // FIRST entry per requestId in the running totals.
+            // Entries without a requestId continue to count individually —
+            // this preserves fidelity on older JSONL files and on edge cases
+            // where the field is absent.
+            if let Some(rid) = v.get("requestId").and_then(Value::as_str) {
+                if !b.seen_request_ids.insert(rid.to_string()) {
+                    // Already counted a row with this requestId. Skip
+                    // entirely — do NOT add output_tokens, do NOT add
+                    // cache_read, do NOT advance `approximate` via the
+                    // estimate fallback. This matches the invariant the
+                    // reference implementation enforces.
+                    return;
+                }
+            }
+
             if let Some(u) = usage_field(v, "output_tokens") {
                 b.messages += u;
             } else {

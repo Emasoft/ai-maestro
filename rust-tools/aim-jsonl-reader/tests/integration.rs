@@ -355,6 +355,146 @@ fn context_breakdown_unknown_model_falls_back_to_200k() {
     r.shutdown();
 }
 
+// ── 5.1 Request-ID dedup for token math (Phase 5 §1) ────────────
+//
+// Assistant turns that were retried produce multiple JSONL entries
+// sharing the same `requestId` but with different `uuid`s. v1 summed the
+// `usage.output_tokens` of every such entry, which overcounted tokens
+// on any session with a streamed retry. Phase 5 fixes this by keeping
+// only the first occurrence per `requestId` in the running totals.
+// Entries without a `requestId` continue to count individually.
+
+#[test]
+fn context_breakdown_dedup_by_request_id_for_output_tokens() {
+    let tmp = TempDir::new().unwrap();
+    let path = write_jsonl(tmp.path(), "dedup-out.jsonl", &[
+        // Two assistant entries with the SAME requestId — second must NOT
+        // add to output_tokens. Total assistant output must be 80, not 160.
+        json!({
+            "uuid": "aaa-1",
+            "requestId": "req-xyz",
+            "role": "assistant",
+            "model": "claude-sonnet-4-6",
+            "message": {
+                "usage": {
+                    "output_tokens": 80,
+                    "cache_read_input_tokens": 5
+                }
+            }
+        }),
+        json!({
+            "uuid": "aaa-2",
+            "requestId": "req-xyz",
+            "role": "assistant",
+            "model": "claude-sonnet-4-6",
+            "message": {
+                "usage": {
+                    "output_tokens": 80,
+                    "cache_read_input_tokens": 5
+                }
+            }
+        }),
+    ]);
+
+    let mut r = Reader::spawn();
+    let open = r.req(json!({"cmd":"open","path": path.to_str().unwrap()}));
+    let sid = open["sessionId"].as_str().unwrap().to_string();
+
+    let b = r.req(json!({"cmd":"context_breakdown","sessionId": sid}));
+    assert_eq!(b["ok"], json!(true));
+    // messages should be exactly 80 (one output, not 160 as v1 produced).
+    assert_eq!(
+        b["messages"], json!(80),
+        "duplicate requestId must not double-count output_tokens"
+    );
+    // cacheRead should be exactly 5 (one entry, not 10).
+    assert_eq!(
+        b["cacheRead"], json!(5),
+        "duplicate requestId must not double-count cache_read_input_tokens"
+    );
+    r.shutdown();
+}
+
+#[test]
+fn context_breakdown_counts_distinct_request_ids() {
+    let tmp = TempDir::new().unwrap();
+    let path = write_jsonl(tmp.path(), "dedup-distinct.jsonl", &[
+        json!({
+            "uuid": "a",
+            "requestId": "req-1",
+            "role": "assistant",
+            "model": "claude-sonnet-4-6",
+            "message": {"usage": {"output_tokens": 40}}
+        }),
+        json!({
+            "uuid": "b",
+            "requestId": "req-2",
+            "role": "assistant",
+            "model": "claude-sonnet-4-6",
+            "message": {"usage": {"output_tokens": 60}}
+        }),
+    ]);
+
+    let mut r = Reader::spawn();
+    let open = r.req(json!({"cmd":"open","path": path.to_str().unwrap()}));
+    let sid = open["sessionId"].as_str().unwrap().to_string();
+
+    let b = r.req(json!({"cmd":"context_breakdown","sessionId": sid}));
+    // Distinct requestIds — both entries contribute. 40 + 60 = 100.
+    assert_eq!(b["messages"], json!(100));
+    r.shutdown();
+}
+
+#[test]
+fn context_breakdown_counts_entries_without_request_id_individually() {
+    let tmp = TempDir::new().unwrap();
+    let path = write_jsonl(tmp.path(), "dedup-none.jsonl", &[
+        // Neither entry carries requestId → no dedup; both count.
+        json!({
+            "role": "assistant",
+            "model": "claude-sonnet-4-6",
+            "message": {"usage": {"output_tokens": 15}}
+        }),
+        json!({
+            "role": "assistant",
+            "model": "claude-sonnet-4-6",
+            "message": {"usage": {"output_tokens": 25}}
+        }),
+    ]);
+
+    let mut r = Reader::spawn();
+    let open = r.req(json!({"cmd":"open","path": path.to_str().unwrap()}));
+    let sid = open["sessionId"].as_str().unwrap().to_string();
+
+    let b = r.req(json!({"cmd":"context_breakdown","sessionId": sid}));
+    // Neither has a requestId → both contribute. 15 + 25 = 40.
+    assert_eq!(b["messages"], json!(40));
+    r.shutdown();
+}
+
+#[test]
+fn context_breakdown_dedup_from_static_fixture() {
+    // Use the on-disk fixture at tests/fixtures/dedup/retry_same_request_id.jsonl.
+    // This protects the fix from future refactors that might accidentally
+    // reintroduce double-counting on streamed retries.
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("dedup")
+        .join("retry_same_request_id.jsonl");
+    assert!(fixture.exists(), "fixture missing: {}", fixture.display());
+
+    let mut r = Reader::spawn();
+    let open = r.req(json!({"cmd":"open","path": fixture.to_str().unwrap()}));
+    let sid = open["sessionId"].as_str().unwrap().to_string();
+
+    let b = r.req(json!({"cmd":"context_breakdown","sessionId": sid}));
+    assert_eq!(b["ok"], json!(true));
+    assert_eq!(b["messages"], json!(80));
+    assert_eq!(b["cacheRead"], json!(5));
+    r.shutdown();
+}
+
 // ── 6. Error paths ───────────────────────────────────────────────
 
 #[test]

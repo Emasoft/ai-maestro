@@ -4,14 +4,17 @@
  * Claude Code persists every conversation at
  *   ~/.claude/projects/<slugged-project-dir>/<session-uuid>.jsonl
  *
- * The slug rule (empirically verified against real installations):
+ * The slug rule (empirically verified against real installations —
+ * `ls ~/.claude/projects/ | awk '{print substr($0,1,1)}' | sort -u`
+ * yields only `-` on any host running Claude Code):
  *   1. Take the agent's absolute workingDirectory.
- *   2. Replace each '/' with '-'.
- *   3. Strip the leading '-' that results from an absolute path.
+ *   2. Strip trailing slashes.
+ *   3. Replace each '/' with '-'.
+ *   4. KEEP the leading '-' that results from an absolute path.
  *
  * Example:
  *   workingDirectory: /Users/emanuele/code/ai-maestro
- *   slug:             Users-emanuele-code-ai-maestro
+ *   slug:             -Users-emanuele-code-ai-maestro
  *
  * This service is pure (no side effects other than filesystem reads) so
  * both Next.js route handlers and the headless router can call it.
@@ -27,7 +30,10 @@ import { getJsonlReader } from '@/lib/jsonl-reader'
 
 /**
  * Convert an absolute working directory into Claude's project-dir slug.
- * Returns null if the input is not an absolute-looking path.
+ * The leading dash IS preserved — Claude Code's on-disk convention under
+ * `~/.claude/projects/` always names absolute-path slugs with a leading
+ * `-` (verified by listing the directory on any real host).
+ * Returns null if the input is empty or collapses to just `/`.
  */
 export function slugifyWorkingDirectory(workingDirectory: string): string | null {
   if (!workingDirectory) return null
@@ -36,9 +42,12 @@ export function slugifyWorkingDirectory(workingDirectory: string): string | null
   // but Claude Code on macOS/Linux always uses '/'.
   const normalized = workingDirectory.replace(/\\+/g, '/').replace(/\/+$/g, '')
   if (normalized.length === 0) return null
-  const replaced = normalized.replace(/\//g, '-')
-  const stripped = replaced.replace(/^-+/, '')
-  return stripped.length > 0 ? stripped : null
+  // Replace each '/' with '-'. Claude Code keeps the leading dash that
+  // results from an absolute path — do NOT strip it, or the slug will
+  // not match any real `~/.claude/projects/` directory and every agent
+  // will appear to have zero sessions.
+  const slug = normalized.replace(/\//g, '-')
+  return slug.length > 0 ? slug : null
 }
 
 /**

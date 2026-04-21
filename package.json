@@ -73,7 +73,8 @@
     "tsx": "~4.21.0",
     "uuid": "^13.0.0",
     "ws": "^8.18.0",
-    "yauzl": "^3.2.0"
+    "yauzl": "^3.2.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/archiver": "^7.0.0",

@@ -80,3 +80,67 @@ export interface ContextBreakdownResponse {
   approximate: boolean
   modelId: string | null
 }
+
+// ---------------------------------------------------------------------------
+// UI-side types (Phase 3 only — not wire shapes)
+// ---------------------------------------------------------------------------
+
+/** Canonical message role derived from a JSONL record. */
+export type MessageRole = 'user' | 'assistant' | 'system' | 'tool'
+
+/** Usage stats attached to assistant messages. */
+export interface MessageUsage {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+}
+
+/**
+ * A single transcript line normalized for UI rendering. Built from the raw
+ * JSONL record returned by the range route. The UI hook ignores fields it
+ * does not understand — the JSONL schema is best-effort, not a strict
+ * contract.
+ */
+export interface TranscriptLine {
+  /** Index of this line in the file (0-based). */
+  lineIndex: number
+  /** Role of the speaker / record. */
+  role: MessageRole
+  /** Best-effort message body for plain-text display. Empty for tool calls. */
+  text: string
+  /**
+   * Tool-use payload if this line is a `tool_use` / `tool_result` record.
+   * The UI collapses these into a summary row.
+   */
+  toolName?: string
+  toolInput?: unknown
+  toolResult?: unknown
+  toolUseId?: string
+  /** Usage stats present only on assistant messages that carry `usage`. */
+  usage?: MessageUsage
+  /** ISO timestamp if present on the record. */
+  timestamp?: string
+  /** Whether this line is a tool_use or tool_result record. */
+  isToolEvent: boolean
+  /** Raw record, kept for debugging / highlight / future expansion. */
+  raw: unknown
+}
+
+/** Search match augmented with the UI's local line index alias. */
+export interface HighlightedMatch {
+  line: number
+  byteOffset: number
+  snippet: string
+}
+
+/** Convenience tuple returned by `useJsonlSession`. */
+export interface SessionDataState {
+  loading: boolean
+  error: string | null
+  lines: TranscriptLine[]
+  breakdown: ContextBreakdownResponse | null
+  matches: HighlightedMatch[]
+  searching: boolean
+  searchError: string | null
+}

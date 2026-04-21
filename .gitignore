@@ -236,3 +236,7 @@ tests/scenarios/screenshots/
 
 # Dev workspace for throwaway files
 tests_dev/
+
+# rust-tools/ — lives on feature/jsonl-session-browser only; keep untracked
+# on other branches so branch switches don't pollute the working tree.
+rust-tools/

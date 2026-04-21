@@ -250,10 +250,20 @@ function scanCodexDirectory(workDir: string): AgentLocalConfig {
  *   3. agents/<name>-main-agent.md exists at plugin root
  *   4. frontmatter `name:` in that .md === <name>-main-agent
  *
+ * SCEN-016 RE-RUN FIX (2026-04-21): The original fix used deprecated path
+ * shape `~/agents/role-plugins/<name>/` which NO LONGER EXISTS post R20.28
+ * (role-plugins/ is now a CONTAINER with per-client marketplace subfolders).
+ * After R20.28, the authoritative quad-match source for any Codex agent's
+ * role plugin is the Claude cache — because Codex emissions are DERIVED
+ * from the Claude plugin via conversion, and the Codex emission toml name
+ * is `<name>-codex.agent.toml` (not `<name>.agent.toml`), so it fails the
+ * canonical quad-match. The Claude cache holds the canonical name.
+ *
  * Source search order (richest-first; first match wins):
- *   a. ~/agents/role-plugins/<name>/            (local marketplace — authoritative)
- *   b. ~/.codex/plugins/cache/<marketplace>/<name>/<version>/ (Codex native cache)
- *   c. ~/agents/role-plugins/<name>-codex/      (Codex emission target, fallback)
+ *   a. ~/.claude/plugins/cache/<marketplace>/<name>/<version>/   — canonical source
+ *   b. ~/.codex/plugins/cache/<marketplace>/<name>/<version>/   — Codex native cache
+ *   c. ~/agents/role-plugins/.abstract/<name>/                   — IR hub with canonical name
+ *   d. ~/agents/role-plugins/<name>/                             — legacy, still supported
  */
 function resolveRolePluginForCodex(
   pluginName: string,
@@ -263,11 +273,31 @@ function resolveRolePluginForCodex(
   // Candidate source folders, in priority order
   const candidates: { dir: string; marketplace: string }[] = []
 
-  // (a) Local role-plugins marketplace
-  candidates.push({
-    dir: path.join(getLocalMarketplacePath(), pluginName),
-    marketplace: LOCAL_MARKETPLACE_NAME,
-  })
+  // (a) Claude native cache (canonical quad-match target — this is where
+  // 'ai-maestro-autonomous-agent' keeps name = "ai-maestro-autonomous-agent"
+  // in its TOML, unlike the Codex emission which uses "-codex" suffix).
+  const claudeCacheRoot = path.join(homeDir, '.claude', 'plugins', 'cache')
+  if (fs.existsSync(claudeCacheRoot)) {
+    for (const marketplaceName of safeReaddir(claudeCacheRoot)) {
+      const nameDir = path.join(claudeCacheRoot, marketplaceName, pluginName)
+      if (!fs.existsSync(nameDir)) continue
+      const versions = safeReaddir(nameDir)
+      if (versions.length === 0) continue
+      const semverVersions = versions.filter(v => semver.valid(v))
+      let picked: string
+      if (semverVersions.length > 0) {
+        semverVersions.sort(semver.rcompare)
+        picked = semverVersions[0]
+      } else {
+        versions.sort()
+        picked = versions[versions.length - 1]
+      }
+      candidates.push({
+        dir: path.join(nameDir, picked),
+        marketplace: marketplaceName,
+      })
+    }
+  }
 
   // (b) Codex native cache: ~/.codex/plugins/cache/<marketplace>/<name>/<version>/
   const codexCacheRoot = path.join(homeDir, '.codex', 'plugins', 'cache')
@@ -293,9 +323,21 @@ function resolveRolePluginForCodex(
     }
   }
 
-  // (c) Codex-suffixed fallback in local role-plugins marketplace
+  // (c) .abstract/ IR hub: ~/agents/role-plugins/.abstract/<name>/
+  // This is a post-R20.28 canonical location for the canonical-named toml
+  // across all clients. Note the main-agent is typically stored WITHOUT the
+  // .md extension in this hub (as a bare file), so the quad-match may still
+  // fail here — but we include it for completeness.
   candidates.push({
-    dir: path.join(getLocalMarketplacePath(), `${pluginName}-codex`),
+    dir: path.join(homeDir, 'agents', 'role-plugins', '.abstract', pluginName),
+    marketplace: LOCAL_MARKETPLACE_NAME,
+  })
+
+  // (d) Legacy local role-plugins layout: ~/agents/role-plugins/<name>/
+  // Pre-R20.28 this was the main local source. Kept for backward compat
+  // with agents whose role-plugins still live at the container root.
+  candidates.push({
+    dir: path.join(getLocalMarketplacePath(), pluginName),
     marketplace: LOCAL_MARKETPLACE_NAME,
   })
 

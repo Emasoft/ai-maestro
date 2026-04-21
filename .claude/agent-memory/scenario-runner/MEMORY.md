@@ -1,5 +1,126 @@
 # Scenario Runner Memory
 
+## SCEN-014 run 2026-04-21T09:51:45Z — PASS (37 pass, 1 P0 bug fixed, 4 issues noticed)
+
+**Run ID:** 20260421T095145Z
+**Branch:** feature/team-governance (HEAD e73ce441 → 8198de7d — 1 fix commit)
+**Reports:**
+- reports/scenarios-runner/SCEN-014_2026-04-21T10-27-36Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_014_2026-04-21T10-27-36Z.md
+
+**Verdict:** PASS — Full 3-agent orchestration flow (MANAGER → poet → translator → PDF) verified end-to-end on smartphone viewport (390×844). 8 proposals filed (2 P1, 3 P2, 3 P3).
+
+### BUG-001 (P0 FIXED commit 8198de7d): Mobile terminal stuck in "Initializing terminal..."
+
+**Symptom:** `components/MobileDashboard.tsx` rendered 21 `Initializing terminal...` spinners with rect.height=0. Xterm never initialized. Chat view worked; terminal view was dead.
+
+**Root cause:** Wrapper around `<TerminalView>` at `components/MobileDashboard.tsx:229-230` was `<div className="absolute inset-0">` (display:block). TerminalView root is `flex-1 flex flex-col bg-terminal-bg` — `flex-1` requires a flex-container parent to grow. With block display on the wrapper, `flex-1` had no anchor → height 0 → TerminalView's init retry loop (20×150ms=3s) bailed out.
+
+**Fix:** Add `flex flex-col` to the wrapper div so TerminalView's `flex-1` actually expands. +7 lines (comment + fix), -1 line.
+
+**Verified:** Terminal height 688px after fix (was 0px), xterm renders, agents readable, full scenario completes.
+
+### Mobile dashboard patterns (first time mobile tested in scenarios)
+
+- **Mobile viewport** is triggered by `page.setViewportSize({width:390,height:844})` on a named dev-browser instance `ai-maestro-scenarios-smartphone`. AI Maestro's width-based media query swaps between Desktop/Tablet/Mobile dashboards.
+- **Mobile header**: buttons with aria-labels "Select agent" (agent picker), "Agent profile" (profile panel), "Create agent" (wizard +), "Refresh agents".
+- **Mobile bottom nav**: 4 tabs `Agent | Messages | Work | Hosts` as buttons at `getBoundingClientRect().top > 700`.
+- **Terminal ↔ Chat view toggle**: `[class*="lucide-terminal"]` and `[class*="lucide-message-square"]` small buttons in top-right. Chat view textareas have `placeholder="Message <name>..."`. Send button is parent div's button with `[class*="lucide-send"]`.
+- **Profile tabs are `<div>` with `cursor-pointer`**, NOT `<button>`. Click them directly (not parent or child). Test: `el.textContent === 'Advanced' && el.children.length === 0 && className.includes('cursor-pointer')`.
+- **Danger Zone section**: collapsed by default. Click "Danger Zone" header button FIRST to expand, THEN "Delete Agent" button becomes visible.
+- **MobileMessageCenter**: 2 tabs (Inbox/Sent). Lists with subject/from/timestamp. Tapping opens detail view. **BUG: attachments not visually indicated in detail view** (PROP-P1-001 filed).
+- **AMP push notification DOES NOT wake recipient** — agents stay idle until user chat-nudges them. PROP-P1-002 filed.
+
+### Patterns reconfirmed this run
+
+- **MANAGER title change DOUBLE password** (inline "Enter Governance Pa..." + sudo modal "Confirm with password") — still the pattern. Both must be filled.
+- **Hard-delete with "Also delete agent folder" SKIPS cemetery** — no scen14-* entries added to cemetery by my deletes. Cemetery shows only week-old 4/14/2026 scen14 entries from prior runs.
+- **STATE-WIPE restore** via `cleanup-SCEN-014.sh` → `scenario-restore.sh`: 4 files SHA256-verified, `RESTORE_OK`. Registry correctly restored to pre-test 18 agents.
+- **dev-browser wizard 7-step flow** (Claude Code, no-team AUTONOMOUS): Claude Code card → fill Persona Name → blue chevron Next (idx=1 among wizard modal buttons) → "No team (Autonomous)" → Next → AUTONOMOUS → Next → Auto-create agent folder → Next → Next → Create Agent! → wait ~12s → "Let's Go! 🚀".
+- **aim_sudo_modal helper** works reliably for sudo password prompts. Structural detection of fixed/absolute container with password input + Confirm button.
+
+### Agent orchestration works end-to-end on mobile viewport
+
+- MANAGER with `ai-maestro-assistant-manager-agent` role-plugin: reads typed chat message, `amp-send`s to poet, polls inbox with bash loop, `amp-download`s attachment (falls back to `cp` from on-disk cache because "No download URL or API credentials"), forwards to translator via `amp-send --attach`, after Italian translation generates 3-page PDF with reportlab via uv-managed `.venv-pdf`. Full run time: ~9m27s of agent work.
+- Poet + Translator with `ai-maestro-autonomous-agent` role-plugin: idle until user chat-nudges them to check inbox (PROP-P1-002 bug). Write .md file → `amp-send --attach` back.
+- Inline password prompt for title change and double modal: sudo token is one-shot so each strict op fires the modal again (expected per Rule 12).
+
+### Rule 0 blacklist safety
+
+- 18 pre-existing user agents enumerated pre-test. NONE touched.
+- 8 real user agents with workdir in `~/Code/*` (SKIA, SVG_PROCESSING, SVG-MATRIX, SVG-BBOX, SMART_MEDIA_MANAGER, SKILL_FACTORY, TEXT2PATH, SVG_FBF_PROJECT). NEVER clicked.
+- 1 `scen013-codex-r17-test` pre-existing orphan preserved (workdir doesn't exist but registry entry still there).
+- 3 scenario agents (scen14-manager, scen14-poet, scen14-translator) verified `workingDirectory` under `~/agents/<name>/` before every click. All deleted with folder at end.
+- Zero `_aim-*` interactions.
+
+### dev-browser write-guard gotcha
+
+- The scenario-runner's PreToolUse hook blocks Bash commands that reference `/Users/emanuelesabetta/ai-maestro` if `CLAUDE_PROJECT_DIR` is not set in the shell subprocess. Export `export CLAUDE_PROJECT_DIR="/Users/emanuelesabetta/ai-maestro"` or use absolute paths only.
+- Also BLOCKS `Edit` to `/Users/emanuelesabetta/.claude/agent-memory/...` — project memory lives at `.claude/agent-memory/scenario-runner/MEMORY.md` inside the repo (NOT `~/.claude/`).
+- Helper script pattern: save to `/tmp/scen014_helpers.sh` sources aim-helpers.sh + provides `take_screenshot <step> <desc>` that converts PNG to JPEG-97 inside project `reports/scenarios-runner/screenshots/SCEN-<NNN>_<RUN_ID>/`.
+
+---
+
+## SCEN-013 run 2026-04-21T09:24:46Z — PARTIAL (21 pass, 8 adapt, 4 skip, 1 BUG fixed, 2 BUGS open)
+
+**Run ID:** 20260421T092446Z
+**Branch:** feature/team-governance (HEAD e1f2b44a → e73ce441 — 1 fix commit landed)
+**Reports:**
+- reports/scenarios-runner/SCEN-013_20260421T094457Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_013_20260421T094457Z.md
+
+**Verdict:** PARTIAL — R17 file-level enforcement for Codex verified (core plugin installed at CreateAgent, 41 paths / 25 skills / `core` label + no X after BUG-001 fix). Wake-gate Phase 4/6 UNTESTABLE because (a) UI has no Hibernate button and (b) Codex `--name` flag rejected. 9 proposals (2 P0, 3 P1, 2 P2, 3 P3).
+
+### BUG-001 (P0 FIXED commit e73ce441): scanAgentLocalConfig was Claude-only
+
+**Symptom:** Codex agent's Config tab shows Plugins 0 / Skills 0 despite R17 having installed plugin at `.codex/installed-plugins/ai-maestro-plugin.json`.
+
+**Root cause:** `services/agent-local-config-service.ts:59-82` hardcodes `.claude/` existence check. Codex agents have no `.claude/settings.local.json` so scanner short-circuits to empty config. Same pattern noted in SCEN-020/021 memory but never fixed there.
+
+**Fix:** Added `scanCodexDirectory(workDir)`: reads `.codex/installed-plugins/*.json` (install manifests), `.codex-plugin/plugin.json` (richer metadata), `.agents/skills/<name>/SKILL.md` (converted skills). Routes there when `.codex/installed-plugins/` exists. +128 lines.
+
+**Verified:** Config tab now shows Plugins 1, Skills 24, `core` label span.text-blue-400, 0 uninstall buttons.
+
+### BUG-002 (P0 NOT FIXED, PROP-P0-001): Codex `--name` flag rejected
+
+**Symptom:** `codex --name scen013-codex-r17-test` → `error: unexpected argument '--name' found`. Agent stuck in zsh. Blocks ALL Codex use + Phases 4-6.
+
+**Root cause (inferred):** AI Maestro passes Claude-specific `--name` to every client. Codex only has `--enable`. Fix = per-client arg builder.
+
+### BUG-003 (P1 NOT FIXED, PROP-P0-002): R17 wake-gate Claude-only
+
+**Symptom:** `agents-core-service.ts:1589-1610` reads ONLY `.claude/settings.local.json` for `hasPlugin` check. Codex always `hasPlugin=false` → wake-gate ALWAYS reinstalls (safe but wasteful + semantically wrong).
+
+**Fix proposal:** Client-aware `hasCorePluginInstalled(workDir, clientType)` helper.
+
+### Codex-specific patterns (NEW — first time tested)
+
+- **Codex native layout**: `.codex-plugin/plugin.json` (core manifest, name=`ai-maestro-plugin-codex` with `-codex` suffix), `.codex/installed-plugins/<name>.json` (install-tracking manifest, name=`ai-maestro-plugin` no suffix, `clientType: codex`, 41 paths), `.agents/skills/<name>/SKILL.md` (25 converted skills).
+- **Wizard for Codex**: 7 steps identical to Claude (client → name → team → title → folder → plugin (locked autonomous) → summary).
+- **Codex log at create**: `[InstallElement] install "ai-maestro-plugin" — OK (23 gates)` fires twice (storage + install).
+- **Agent action menu for Codex**: only "Delete Agent…" — NO Hibernate, NO Stop Session. PROP-P1-001 to add.
+- **"New Session" button for Codex is broken today** — sends `codex --name <name>` keystrokes which fails. Use only after PROP-P0-001 lands.
+- **R17 wake-gate does NOT check `.codex/installed-plugins/`** — always fires InstallElement for Codex (wasteful but accidentally R17-safe).
+- **Codex never reaches idle prompt today** (BUG-002) — tmux shows persistent zsh prompt `%`.
+
+### Pre-existing patterns reconfirmed this run
+
+- **Orphan registry-entry trap**: Setup backs up while orphan exists → STATE-WIPE restore reintroduces it → need 2nd UI delete. PROP-P1-002 filed.
+- **Hard-delete skips cemetery** (R3): 0 cemetery entries post-delete.
+- **Sudo modal via `aim_sudo_modal`** helper fires on Delete Agent Forever — works reliably.
+- **`setup-SCEN-013.sh` script is mandatory** — ran clean, 4 files backed up with MANIFEST.sha256.
+- **`scenario-restore.sh` verifies SHA256** — 4 files restored, `RESTORE_OK` reported.
+
+### Rule 0 blacklist safety
+
+- 17 pre-existing user agents enumerated pre-test.
+- 10 with workdir outside `~/agents/` (all `~/Code/*` or `default`). NONE touched.
+- Zero `_aim-*` interactions. Haephestos not touched.
+- Test agent `scen013-codex-r17-test` created/deleted, workdir under `~/agents/` verified before every click.
+- Near-miss: orphan from prior run already existed — deleted via UI before scenario started (not a Rule 0 violation because orphan had safe workdir `~/agents/scen013-codex-r17-test`).
+
+---
+
 ## SCEN-012 run 2026-04-21T05:29:26Z — PASS (27 pass, 5 adapt, 1 P0 bug found+fixed)
 
 **Run ID:** 20260421T052926Z

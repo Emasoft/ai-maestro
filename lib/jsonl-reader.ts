@@ -142,7 +142,6 @@ export class JsonlReader extends EventEmitter {
   /** Map: sessionId → entry (for read/search/close). */
   private readonly sessionsById = new Map<string, OpenSessionEntry>()
   private sweepTimer: NodeJS.Timeout | null = null
-  private writing = false
   private readonly binaryPath: string
   private readonly idleTtlMs: number
   private readonly sweepIntervalMs: number

@@ -1534,6 +1534,7 @@ export default function AgentList({
         onConfirm={handleWakeConfirm}
         agentName={wakeDialogAgent?.name || wakeDialogAgent?.id || ''}
         agentAlias={wakeDialogAgent?.name}
+        agentProgram={wakeDialogAgent?.program}
       />
 
       {/* Stale/unreachable host popup */}

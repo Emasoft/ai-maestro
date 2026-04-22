@@ -537,12 +537,16 @@ HELP
 
 cmd_delete() {
     local agent=""
-    local keep_folder=false keep_data=false confirm_delete=false
+    # delete_folder defaults to FALSE to match the server's default. Scenarios
+    # (and most user calls) that want the folder removed must pass --delete-folder
+    # explicitly — mirrors the UI "Also delete agent folder" checkbox.
+    local keep_data=false confirm_delete=false delete_folder=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --confirm) confirm_delete=true; shift ;;
-            --keep-folder) keep_folder=true; shift ;;
+            --delete-folder) delete_folder=true; shift ;;
+            --keep-folder) delete_folder=false; shift ;;   # explicit opposite (default)
             --keep-data) keep_data=true; shift ;;
             -h|--help)
                 cat << 'HELP'
@@ -550,21 +554,29 @@ Usage: aimaestro-agent.sh delete <agent> --confirm [options]
 
 Options:
   --confirm         Required for deletion (safety flag)
-  --keep-folder     Don't delete project folder
-  --keep-data       Don't delete agent data directory
+  --delete-folder   Also delete ~/agents/<name>/ (mirrors UI "Also delete agent folder")
+  --keep-folder     Keep the folder (default, explicit)
+  --keep-data       Don't delete agent data directory (~/.aimaestro/agents/<id>/)
 
 Examples:
-  # Delete agent (requires --confirm for safety)
+  # Delete agent only (folder preserved)
   aimaestro-agent.sh delete my-agent --confirm
 
-  # Delete agent but keep the project folder
-  aimaestro-agent.sh delete my-agent --confirm --keep-folder
+  # Delete agent AND its ~/agents/my-agent/ folder
+  aimaestro-agent.sh delete my-agent --confirm --delete-folder
 
   # Delete agent but keep agent data (logs, history)
   aimaestro-agent.sh delete my-agent --confirm --keep-data
 
   # Delete by agent ID
   aimaestro-agent.sh delete abc123-uuid --confirm
+
+Note (Rule 12): DELETE /api/agents/[id] is a strict route — it requires an
+X-Sudo-Token minted from the governance password. Agents cannot earn sudo
+tokens; only the human user can, via the password modal in the dashboard
+UI. If this command is invoked by an agent (AID_AUTH present but no sudo
+token), the API returns "sudo_required" and this CLI prints a guidance
+message asking the user to perform the delete via the dashboard.
 HELP
                 return 0 ;;
             -*) print_error "Unknown option: $1"; return 1 ;;
@@ -585,6 +597,7 @@ HELP
         print_error "Deleting agent '$agent_name' requires --confirm flag"
         print_error "This will:"
         print_error "   - Kill all tmux sessions"
+        [[ "$delete_folder" == true ]] && print_error "   - Delete ~/agents/$agent_name/"
         [[ "$keep_data" == false ]] && print_error "   - Delete agent data (~/.aimaestro/agents/$agent_id/)"
         print_error ""
         print_error "Run with --confirm to proceed"
@@ -599,12 +612,36 @@ HELP
     # SCEN-022 BUG-001 fix (P0): inject AID_AUTH for agent callers
     local -a auth_args=()
     _build_auth_args auth_args
-    local response
-    # MEDIUM-010: Add timeout to curl
-    response=$(curl -s --max-time 30 -X DELETE "${auth_args[@]}" "${api_base}/api/agents/${agent_id}")
+
+    # Assemble the query string — deleteFolder=true only when the caller
+    # asked for it. keepData has its own separate flag.
+    local query="?deleteFolder=${delete_folder}"
+    [[ "$keep_data" == true ]] && query="${query}&keepData=true"
+
+    local response http_code
+    # MEDIUM-010: Add timeout to curl. Capture HTTP status separately so we
+    # can detect the "sudo_required" 403 and print a user-facing message.
+    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X DELETE "${auth_args[@]}" "${api_base}/api/agents/${agent_id}${query}")
+    http_code=$(echo "$response" | tail -n1)
+    response=$(echo "$response" | sed '$d')
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
+
+    # Rule 12 guidance: intercept sudo_required and explain the UI path.
+    if [[ "$http_code" = "403" ]] && [[ "$error" = "sudo_required" ]]; then
+        print_error "DELETE requires user-driven sudo (Rule 12)."
+        print_error ""
+        print_error "Agents cannot earn sudo tokens — only the human user can,"
+        print_error "via the governance password modal in the dashboard UI. To"
+        print_error "complete this operation, ask the user to:"
+        print_error "  1. Open the dashboard → click agent '$agent_name'"
+        print_error "  2. Profile → Advanced → Danger Zone → Delete Agent"
+        [[ "$delete_folder" == true ]] && print_error "  3. Check 'Also delete agent folder'"
+        print_error "  4. Enter the governance password when prompted"
+        return 1
+    fi
+
     if [[ -n "$error" ]]; then
         print_error "$error"
         return 1

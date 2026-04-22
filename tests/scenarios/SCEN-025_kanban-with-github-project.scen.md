@@ -52,16 +52,11 @@ prerequisites:
   - Governance password set
   - Tailscale-optional (this scenario only uses localhost)
   - ai-maestro-plugins marketplace registered
-  - `ai-maestro-local-roles-marketplace` registered (per R20)
-  - GitHub CLI authenticated (`gh auth status` must succeed)
-  - `gh api user --jq .login` must return a user with write access to the
-    fixture repo `Emasoft/scen025-kanban-fixture` (scenario author's fork)
-  - Fixture repo cloned locally to
-    `tests/scenarios/fixtures/git/scen025-kanban-fixture/` with tag
-    `scenario-start` (scenario author prepares this in advance —
-    `scenario-setup.sh` resets to tag, never clones)
-  - Fixture GitHub Project "SCEN-025 Fixture Board" exists and has
-    columns: Backlog, Pending, In Progress, Review, Completed
+  - "ai-maestro-local-roles-marketplace registered (per R20)"
+  - "GitHub CLI authenticated ('gh auth status' must succeed)"
+  - "'gh api user --jq .login' must return a user with write access to the fixture repo Emasoft/scen025-kanban-fixture (scenario author's fork)"
+  - "Fixture repo cloned locally to tests/scenarios/fixtures/git/scen025-kanban-fixture/ with tag 'scenario-start' (scenario author prepares this in advance — scenario-setup.sh resets to tag, never clones)"
+  - 'Fixture GitHub Project "SCEN-025 Fixture Board" exists and has columns: Backlog, Pending, In Progress, Review, Completed'
   - No pre-existing agents matching "scen025-*"
   - No pre-existing team named "scen025-team"
 governance_password: "mYkri1-xoxrap-gogtan"

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAgentById, updateAgentById } from '@/services/agents-core-service'
+import { getAgentById, updateAgentById, bodyHasChangeableField } from '@/services/agents-core-service'
 import type { UpdateAgentRequest } from '@/types/agent'
 import { isValidUuid } from '@/lib/validation'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
@@ -61,41 +61,49 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    // #116: PATCH is a dispatcher — updateAgentById routes many fields through
-    // element-management-service Change* pipelines. Some of those pipelines
-    // are strictly destructive and require a sudo token. We inspect the body
-    // and gate individually:
+    // PROP #1 (2026-04-22 security tightening): PATCH is a dispatcher —
+    // updateAgentById routes every CHANGEABLE_FIELD through an
+    // element-management-service Change* pipeline. Change* pipelines run
+    // privileged multi-step operations: registry writes, plugin installs,
+    // plugin uninstalls + re-emits (ChangeClient R18), tmux rename
+    // (ChangeName), CLI-arg substitution (ChangeCLIArgs — accepts
+    // `--dangerously-skip-permissions`), folder moves (ChangeFolder —
+    // can escape ~/agents/ if validation is bypassed), avatar path
+    // writes, and governance-title transitions. Every one of these is a
+    // security-relevant operation that a user should consciously
+    // re-authenticate for — the attack surface is not just the title
+    // or client change the previous (narrow) gate covered.
     //
-    //   governanceTitle  → ChangeTitle   (irreversible governance transition)
-    //   program          → ChangeClient  (uninstalls all plugins + re-emits;
-    //                                     cannot round-trip losslessly — see
-    //                                     R18.3b "never X→Claude lossy")
+    // OLD gate (pre-PROP #1): only governanceTitle and program triggered
+    // sudo. That meant:
+    //   - A renamed agent could silently hijack AMP identity (name is the
+    //     address agents are reached at — see R14 AMP adjacency checks).
+    //   - programArgs could inject --dangerously-skip-permissions into
+    //     the next launch without sudo (SEC-P1-04).
+    //   - workingDirectory could be retargeted outside ~/agents/ if a
+    //     future Change* regression weakens ChangeFolder Gate 3.
+    //   - avatar path writes (cosmetic, low risk) slipped through
+    //     unchallenged.
     //
-    // All other fields (name, label, avatar, model, tags, workingDirectory,
-    // preferences, metadata, documentation, ...) stay at "normal" auth.
+    // NEW gate: ANY CHANGEABLE_FIELD or legacy alias triggers a single
+    // sudo check. Non-Change* fields (label, model, tags, preferences,
+    // metadata, documentation) keep their existing "normal-auth" gate —
+    // those are plain registry writes.
     //
-    // WHY `in` and not `=== 'string'`: null is a legal value meaning "clear
-    // the title", and the client sends it as literal null. Using `in` is
-    // also the only way to detect `undefined`-typed dispatch fields without
-    // erroneously accepting a `{ governanceTitle: undefined }` body that
-    // would otherwise slip through.
+    // Implementation via the shared `bodyHasChangeableField()` helper
+    // means there is ONE place to edit the list, and TypeScript enforces
+    // that CHANGEABLE_FIELDS stays in sync with UpdateAgentRequest
+    // (via `satisfies readonly (keyof UpdateAgentRequest)[]` in
+    // services/agents-core-service.ts — PROP #3).
     //
-    // WHY governanceTitle (not title): the UpdateAgentRequest type uses the
-    // field name `governanceTitle` (see types/agent.ts:549). `title` is not
-    // a member of the type — an earlier draft that checked `body.title` was
-    // a latent bypass.
-    if (body) {
-      if ('governanceTitle' in body) {
-        const sudoErr = requireSudoToken(request, 'PATCH', '/api/agents/[id]/title')
-        if (sudoErr) return sudoErr
-      }
-      if ('program' in body) {
-        // Client change reuses the same strict classification — one sudo
-        // token covers either destructive dispatch. Registry lookup is by
-        // METHOD + pathTemplate, so we reuse the title entry.
-        const sudoErr = requireSudoToken(request, 'PATCH', '/api/agents/[id]/title')
-        if (sudoErr) return sudoErr
-      }
+    // Path template: `/api/agents/[id]/title` is reused as the strict-
+    // route registry key. security-registry.json already classifies this
+    // key as strict. The route handler itself is /api/agents/[id]
+    // (rewrite-neutral), so the key is a logical tag for the "agent
+    // destructive-op" family, not a literal path.
+    if (bodyHasChangeableField(body)) {
+      const sudoErr = requireSudoToken(request, 'PATCH', '/api/agents/[id]/title')
+      if (sudoErr) return sudoErr
     }
 
     // Pass full auth context — each Change* function decides its own authorization

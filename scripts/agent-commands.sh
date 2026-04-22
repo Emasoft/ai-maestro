@@ -739,14 +739,36 @@ HELP
     local -a auth_args=()
     _build_auth_args auth_args
 
-    local response
-    # MEDIUM-010: Add timeout to curl
-    response=$(curl -s --max-time 30 -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
+    local response http_code
+    # MEDIUM-010: Add timeout to curl. Capture HTTP status separately so we
+    # can detect the "sudo_required" 403 and print user-facing guidance.
+    # PROP #1: PATCH /api/agents/{id} now sudo-requires ALL Change*-owned
+    # fields (name, workingDirectory, avatar, programArgs, program,
+    # governanceTitle, githubRepo) — any update through cmd_update with
+    # one of these fields will trip this gate when invoked by an agent
+    # (agents cannot earn sudo tokens per Rule 12).
+    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
         -H "Content-Type: application/json" \
         -d "$payload")
+    http_code=$(echo "$response" | tail -n1)
+    response=$(echo "$response" | sed '$d')
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
+
+    # Rule 12 guidance: intercept sudo_required and explain the UI path.
+    if [[ "$http_code" = "403" ]] && [[ "$error" = "sudo_required" ]]; then
+        print_error "UPDATE requires user-driven sudo (Rule 12)."
+        print_error ""
+        print_error "Agents cannot earn sudo tokens — only the human user can,"
+        print_error "via the governance password modal in the dashboard UI. To"
+        print_error "complete this agent update, ask the user to:"
+        print_error "  1. Open the dashboard → click agent '$RESOLVED_ALIAS'"
+        print_error "  2. Profile → Overview/Advanced → edit the desired field"
+        print_error "  3. Enter the governance password when prompted"
+        return 1
+    fi
+
     if [[ -n "$error" ]]; then
         print_error "$error"
         return 1
@@ -829,14 +851,34 @@ HELP
     local payload
     payload=$(jq -n --arg name "$new_name" '{name: $name}')
 
-    local response
-    # MEDIUM-010: Add timeout to curl
-    response=$(curl -s --max-time 30 -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
+    local response http_code
+    # MEDIUM-010: Add timeout to curl. Capture HTTP status separately so we
+    # can detect the "sudo_required" 403 and print user-facing guidance.
+    # PROP #1: agent rename is a sudo-required Change*-owned field now —
+    # renaming hijacks AMP identity, so agents must not rename without
+    # explicit human approval.
+    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
         -H "Content-Type: application/json" \
         -d "$payload")
+    http_code=$(echo "$response" | tail -n1)
+    response=$(echo "$response" | sed '$d')
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
+
+    # Rule 12 guidance: intercept sudo_required and explain the UI path.
+    if [[ "$http_code" = "403" ]] && [[ "$error" = "sudo_required" ]]; then
+        print_error "RENAME requires user-driven sudo (Rule 12)."
+        print_error ""
+        print_error "Agents cannot earn sudo tokens — renaming an agent hijacks"
+        print_error "its AMP identity (other agents address it by name), so the"
+        print_error "human user must re-authenticate. To complete the rename:"
+        print_error "  1. Open the dashboard → click agent '$old_name'"
+        print_error "  2. Profile → Overview → click the name field → enter '$new_name'"
+        print_error "  3. Enter the governance password when prompted"
+        return 1
+    fi
+
     if [[ -n "$error" ]]; then
         print_error "$error"
         return 1
@@ -871,13 +913,30 @@ HELP
             if ! mv -n "$old_dir" "$new_dir" 2>/dev/null; then
                 print_warning "Cannot rename folder (target may exist): $new_dir"
             else
-                # HIGH-002: Use jq for JSON construction to avoid injection
-                local dir_payload
+                # HIGH-002: Use jq for JSON construction to avoid injection.
+                # PROP #1: workingDirectory is now a strict Change* field;
+                # this PATCH requires sudo. Capture HTTP status so we can
+                # roll back the mv if the API refuses (otherwise the folder
+                # is in new_dir but the registry still points at old_dir —
+                # a far worse state than "rename refused cleanly").
+                local dir_payload dir_response dir_http_code
                 dir_payload=$(jq -n --arg d "$new_dir" '{workingDirectory: $d}')
-                curl -s --max-time 30 -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
+                dir_response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
                     -H "Content-Type: application/json" \
-                    -d "$dir_payload" >/dev/null
-                print_info "Renamed folder: $old_dir -> $new_dir"
+                    -d "$dir_payload")
+                dir_http_code=$(echo "$dir_response" | tail -n1)
+                if [[ "$dir_http_code" = "403" ]]; then
+                    # Roll back — the folder moved on disk but the registry
+                    # wasn't updated. Put it back so the agent still works.
+                    mv -n "$new_dir" "$old_dir" 2>/dev/null || true
+                    print_warning "Folder rename refused (sudo required). Restored original path."
+                    print_warning "To rename via UI: Profile → Advanced → change working directory."
+                elif [[ "$dir_http_code" -ge 400 ]]; then
+                    mv -n "$new_dir" "$old_dir" 2>/dev/null || true
+                    print_warning "Folder rename failed (HTTP $dir_http_code). Restored original path."
+                else
+                    print_info "Renamed folder: $old_dir -> $new_dir"
+                fi
             fi
         fi
     fi

@@ -1,5 +1,52 @@
 # Scenario Runner Memory
 
+## SCEN-022 2026-04-22T03:26:29Z — PASS (16 PASS + 1 N/A, 0 bugs, 4 issues, 8 proposals)
+
+**Run ID:** 20260422T032629Z
+**Branch:** feature/team-governance (HEAD bd1683e8, no commits — zero in-scenario fixes needed)
+**Reports:**
+- reports/scenarios-runner/SCEN-022_2026-04-22T03-26-44Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_022_2026-04-22T03-26-44Z.md
+
+**Verdict:** PASS — Full plugin-abstraction-layer verified end-to-end. MANAGER created AUTONOMOUS agent, installed/disabled/re-enabled plugin, sent AMP report, hit expected Rule 12 block on DELETE. User-driven UI cleanup (sudo modals × 2) succeeded. 8 proposals filed (2 P0, 3 P1, 2 P2, 1 P3).
+
+### Rule 12 sudo enforcement reconfirmed
+
+- Agent tried `aimaestro-agent.sh delete <agent> --confirm` → server returned `403 sudo_required`.
+- Agents cannot earn sudo tokens (by design).
+- Fallback to user-driven UI delete worked: sudo modal filled with governance password × 2 (one per delete).
+
+### yq setup bug STILL open (ISSUE-004 / P0-PROP-001)
+
+- **Re-confirmed from SCEN-019/021.** `scripts/scenario-setup.sh:28-30` uses `2>/dev/null || true` around yq calls. SCEN-022 frontmatter line 59 (`` - `aimaestro-agent.sh` installed at `~/.local/bin/` ``) has unquoted backticks → yq errors out → empty MANIFEST.sha256 → SETUP_FAIL silent.
+- **Workaround used in this run:** manually created valid backup at runtime (before S001 verify). 4 files, SHA256-manifest, confirmed with `scenario-restore.sh` after cleanup.
+- **Permanent fix in proposal P0-PROP-001** — drop `|| true`, add manifest-count validation, remove backticks from affected scenario frontmatters.
+
+### Patterns reconfirmed this run
+
+- **Wizard MANAGER creation** (7 steps, no sudo modal until Create button): Create new agent → Create Agent menu → Claude Code → persona name + blue next button (bg-blue-600 px-4, no text) → No team (Autonomous) → MANAGER title card → Auto-create folder → Continue → Create Agent! → wait 15s → "Let's Go! 🚀".
+- **Profile panel toggle**: Sidebar agent card → click "Profile" button (not aria-label "Toggle Profile Panel" — that fails; use button with text "Profile"). Then click "Advanced" DIV to reveal Danger Zone, then click "Danger Zone" BUTTON to expand → Delete Agent button visible.
+- **Title badge click opens z-70 dialog**: Clicking the MANAGER BUTTON (class includes `inline-flex items-center text-sm px-3 py-1 gap-1.5 rounded-full border`) opens "Assign Governance Title" dialog at fixed z-[70]. Dialog is NOT the same as the profile panel sidebar. Click AUTONOMOUS card → Confirm (emerald) → sudo modal fires.
+- **Prompt builder**: `textarea[placeholder="Compose your prompt here. Enter = send+execute • Ctrl/Cmd+Enter = insert only • Shift+Enter = new line"]`. Send button is a BUTTON with exact text "Send" in the same area.
+- **Hard-delete skips cemetery** — confirmed AGAIN. `alsoDeleteFolder=true` does NOT create cemetery entries. SCEN-022 S014/S014c are N/A in current app flow.
+- **AMP user resolution fails**: `amp-send.sh default "..."` returns "Cannot deliver message to 'default@default.aimaestro.local'". MANAGER falls back to self-delivery. User has no AMP identity. Fix is P1-PROP-003.
+- **STATE-WIPE restore works after manual backup**: `cleanup-SCEN-022.sh` → `RESTORE_OK SCEN-022 (4 files restored)`, 4/4 SHA256 matched when the backup was created manually at runtime.
+
+### Rule 0 blacklist safety
+
+- 18+ pre-existing user agents enumerated via `GET /api/agents`; all untouched.
+- Zero interactions with `alexandre`, `luckas-bot`, `jhonny-bot`, `jack-bot`, `genny-bot`, `teseo-bot`, `ecos-chief-of-staff-one`, `backend-infrastructure-engineer`, `tmux-test-audit`, `default` etc.
+- Zero `_aim-*` interactions.
+- Pre-existing cemetery orphan `scen022-autobot-export-2026-04-14T15-35-32.zip` from APRIL 14 test run was LEFT UNTOUCHED per Rule 2 0-IMPACT.
+
+### Rule 6 compliance
+
+- ZERO bypasses during state mutation. Every mutation via browser UI (Wizard clicks, sudo modals, prompt builder Send).
+- Read-only `curl -b cookies GET /api/...` used for Rule 6 verification reads — allowed.
+- MANAGER's `aimaestro-agent.sh ...` calls are agent-facing abstraction (sanctioned) — NOT a user-facing bypass.
+
+---
+
 ## SCEN-019 2026-04-21T12:33:37Z — PASS (20/20, 1 bug fixed, 5 issues noticed)
 
 **Run ID:** 20260421T123337Z

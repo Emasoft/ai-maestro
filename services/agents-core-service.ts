@@ -653,7 +653,7 @@ export function getAgentById(id: string): ServiceResult<{ agent: Agent }> {
 // `alias` is a legacy alias for `name` — it is stripped from cleanBody too,
 // but it is NOT a CHANGEABLE_FIELD because it does not have its own Change*
 // dispatch. ChangeName absorbs it via `body.name || body.alias`.
-const CHANGEABLE_FIELDS = [
+export const CHANGEABLE_FIELDS = [
   'governanceTitle',
   'name',
   'workingDirectory',
@@ -664,6 +664,32 @@ const CHANGEABLE_FIELDS = [
 ] as const satisfies readonly (keyof UpdateAgentRequest)[]
 
 type ChangeableField = typeof CHANGEABLE_FIELDS[number]
+
+// Legacy field names that ALSO dispatch to a Change* pipeline (via absorb-
+// in-dispatcher semantics). Kept for sudo-gate coverage so PATCH routes that
+// still receive `alias` (deprecated in UpdateAgentRequest, absorbed by
+// ChangeName via `body.name || body.alias`) don't bypass the security gate.
+export const CHANGEABLE_FIELD_ALIASES = ['alias'] as const
+
+/**
+ * Return true when `body` carries any field that will dispatch through a
+ * Change* pipeline. Used by the PATCH route to decide whether the whole
+ * request requires a sudo token (PROP #1 — see route-level comment for
+ * the security rationale). Callers may pass any object shape; non-UA
+ * bodies return false.
+ */
+export function bodyHasChangeableField(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return false
+  const bodyKeys = Object.keys(body as Record<string, unknown>)
+  if (bodyKeys.length === 0) return false
+  for (const field of CHANGEABLE_FIELDS) {
+    if (bodyKeys.includes(field)) return true
+  }
+  for (const alias of CHANGEABLE_FIELD_ALIASES) {
+    if (bodyKeys.includes(alias)) return true
+  }
+  return false
+}
 
 export async function updateAgentById(id: string, body: UpdateAgentRequest, requestingAgentId?: string | null, authContext?: AuthContext): Promise<ServiceResult<{ agent: Agent; restartNeeded?: boolean; warnings?: string[] }>> {
   // Side-channel data collected from Change* pipelines that needs to reach

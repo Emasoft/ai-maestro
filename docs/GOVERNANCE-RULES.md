@@ -315,29 +315,33 @@ join a team.
 
 All teams are closed. Messaging between agents is governed by a title-based directed communication graph. Missing connections are forbidden.
 
-**Adjacency matrix** (Y = allowed, empty = forbidden):
+**Adjacency matrix** (Y = allowed, empty = forbidden).
+**2026-04-22 update** — COS is now strictly the team gateway (reaches team roles + MANAGER only); MAINTAINER and AUTONOMOUS are governance-layer titles reachable only from MANAGER, and they in turn reach only MANAGER (AUTONOMOUS additionally reaches peer AUTONOMOUS). COS↔MAINTAINER, COS↔AUTONOMOUS, and MAINTAINER↔AUTONOMOUS edges are now FORBIDDEN.
 
-| Sender \ Recipient | MANAGER | COS | ORCHESTRATOR | ARCHITECT | INTEGRATOR | MEMBER | AUTONOMOUS |
-|---------------------|:-------:|:---:|:------------:|:---------:|:----------:|:------:|:----------:|
-| **MANAGER**         |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |     Y      |
-| **CHIEF-OF-STAFF**  |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |     Y      |
-| **ORCHESTRATOR**    |         |  Y  |              |     Y     |     Y      |   Y    |            |
-| **ARCHITECT**       |         |  Y  |      Y       |           |            |        |            |
-| **INTEGRATOR**      |         |  Y  |      Y       |           |            |        |            |
-| **MEMBER**          |         |  Y  |      Y       |           |            |        |            |
-| **AUTONOMOUS**      |    Y    |  Y  |              |           |            |        |     Y      |
+| Sender \ Recipient | MANAGER | COS | ORCHESTRATOR | ARCHITECT | INTEGRATOR | MEMBER | MAINTAINER | AUTONOMOUS |
+|---------------------|:-------:|:---:|:------------:|:---------:|:----------:|:------:|:----------:|:----------:|
+| **MANAGER**         |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |     Y      |     Y      |
+| **CHIEF-OF-STAFF**  |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |            |            |
+| **ORCHESTRATOR**    |         |  Y  |              |     Y     |     Y      |   Y    |            |            |
+| **ARCHITECT**       |         |  Y  |      Y       |           |            |        |            |            |
+| **INTEGRATOR**      |         |  Y  |      Y       |           |            |        |            |            |
+| **MEMBER**          |         |  Y  |      Y       |           |            |        |            |            |
+| **MAINTAINER**      |    Y    |     |              |           |            |        |            |            |
+| **AUTONOMOUS**      |    Y    |     |              |           |            |        |            |     Y      |
 
 | ID | Rule | Source |
 |----|------|--------|
 | R6.1 | Communication rules are defined by the directed graph above — each (sender, recipient) pair must be explicitly listed | Explicit |
-| R6.2 | **MANAGER** and **COS** can message all titles (full graph access) | Explicit |
-| R6.3 | **ORCHESTRATOR** can message COS, ARCHITECT, INTEGRATOR, MEMBER (not MANAGER or AUTONOMOUS) | Explicit |
-| R6.4 | **ARCHITECT**, **INTEGRATOR**, **MEMBER** can only message COS and ORCHESTRATOR | Explicit |
-| R6.5 | **AUTONOMOUS** can message MANAGER, COS, and other AUTONOMOUS agents | Explicit |
-| R6.6 | The **user** is exempt from the graph — can message any agent and receive responses from all | Explicit |
-| R6.7 | When a message is blocked, the error must include a **routing suggestion** (e.g., "INTEGRATOR cannot message MANAGER. Route through CHIEF-OF-STAFF instead.") | Explicit |
-| R6.8 | **Three layers of enforcement**: (1) API server validates sender/recipient titles before delivery, (2) Role-plugin main-agent .md files list allowed recipients, (3) Sub-agents are forbidden from using AMP messaging entirely | Explicit |
-| R6.9 | Sub-agents have no AMP identity and cannot authenticate — they communicate only with their spawning main-agent | Explicit |
+| R6.2 | **MANAGER** has full graph access — can message every title, including MAINTAINER and AUTONOMOUS. MANAGER is the sole bridge between the team layer and the governance layer. | Explicit |
+| R6.3 | **CHIEF-OF-STAFF** is strictly the team gateway — can message MANAGER, COS peers, and the team roles (ORCHESTRATOR, ARCHITECT, INTEGRATOR, MEMBER). Cannot message MAINTAINER or AUTONOMOUS (tightened 2026-04-22). | Explicit |
+| R6.4 | **ORCHESTRATOR** can message COS, ARCHITECT, INTEGRATOR, MEMBER. Cannot message MANAGER, MAINTAINER, or AUTONOMOUS. | Explicit |
+| R6.5 | **ARCHITECT**, **INTEGRATOR**, **MEMBER** can only message COS and ORCHESTRATOR. | Explicit |
+| R6.5a | **AUTONOMOUS** can message only MANAGER and other AUTONOMOUS agents. Cannot reach COS, team roles, or MAINTAINER (tightened 2026-04-22). | Explicit |
+| R6.5b | **MAINTAINER** can message only MANAGER. Cannot reach COS, team roles, AUTONOMOUS, or peer MAINTAINERs (tightened 2026-04-22). MAINTAINER is a governance-layer title — cross-maintainer coordination goes through MANAGER. | Explicit |
+| R6.6 | The **user** is exempt from the graph — can message any agent and receive responses from all. Additionally, user-to-user messaging (human-to-human) is always allowed; this graph governs agent-to-agent communication only. | Explicit |
+| R6.7 | When a message is blocked, the error must include a **routing suggestion**. Under the 2026-04-22 tightening, almost every cross-layer route now goes through MANAGER (not COS) — the routing-suggestion table in `lib/communication-graph.ts` is the authoritative source for these hints. | Explicit |
+| R6.8 | **Three layers of enforcement**: (1) API server validates sender/recipient titles before delivery, (2) Role-plugin main-agent .md files list allowed recipients, (3) Sub-agents are forbidden from using AMP messaging entirely. | Explicit |
+| R6.9 | Sub-agents have no AMP identity and cannot authenticate — they communicate only with their spawning main-agent. | Explicit |
 
 Full spec: `docs_dev/2026-04-03-communication-graph.md`
 

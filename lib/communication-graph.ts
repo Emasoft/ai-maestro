@@ -23,15 +23,21 @@ import type { AgentRole } from '@/types/agent'
  * to prevent agents from sending messages on the user's behalf. This graph governs
  * agent-to-agent communication only.
  */
+// 2026-04-22 update — graph tightened. COS, MAINTAINER, and AUTONOMOUS
+// boundaries narrowed so MANAGER is the sole contact point for the
+// governance-layer titles (MAINTAINER and AUTONOMOUS). COS is now strictly
+// the team gateway (reaches team roles + MANAGER, but NOT MAINTAINER
+// or AUTONOMOUS). AUTONOMOUS reaches MANAGER + other AUTONOMOUS only.
+// MAINTAINER reaches MANAGER only. See docs/GOVERNANCE-RULES.md §R6.
 const COMMUNICATION_GRAPH: Record<AgentRole, ReadonlySet<AgentRole>> = {
   'manager':        new Set<AgentRole>(['manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member', 'autonomous', 'maintainer']),
-  'chief-of-staff': new Set<AgentRole>(['manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member', 'autonomous', 'maintainer']),
+  'chief-of-staff': new Set<AgentRole>(['manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member']),
   'orchestrator':   new Set<AgentRole>(['chief-of-staff', 'architect', 'integrator', 'member']),
   'architect':      new Set<AgentRole>(['chief-of-staff', 'orchestrator']),
   'integrator':     new Set<AgentRole>(['chief-of-staff', 'orchestrator']),
   'member':         new Set<AgentRole>(['chief-of-staff', 'orchestrator']),
-  'autonomous':     new Set<AgentRole>(['manager', 'chief-of-staff', 'autonomous', 'maintainer']),
-  'maintainer':     new Set<AgentRole>(['manager', 'chief-of-staff', 'autonomous', 'maintainer']),
+  'autonomous':     new Set<AgentRole>(['manager', 'autonomous']),
+  'maintainer':     new Set<AgentRole>(['manager']),
 }
 
 /** All valid agent roles for the communication graph. */
@@ -53,7 +59,12 @@ export function getAllowedRecipients(senderRole: AgentRole): AgentRole[] {
   return set ? [...set] : []
 }
 
-/** Routing suggestions when a connection is forbidden. */
+/** Routing suggestions when a connection is forbidden.
+ *  Updated 2026-04-22 for tightened graph: MAINTAINER and AUTONOMOUS are
+ *  now governance-layer titles that only speak to/from MANAGER (and each
+ *  other, for AUTONOMOUS peers). COS is strictly a team gateway — it no
+ *  longer reaches MAINTAINER or AUTONOMOUS. All cross-layer routing goes
+ *  through MANAGER. */
 const ROUTING_SUGGESTIONS: Record<string, string> = {
   // Workers → MANAGER: go through COS
   'orchestrator->manager':   'Route through chief-of-staff',
@@ -70,28 +81,38 @@ const ROUTING_SUGGESTIONS: Record<string, string> = {
   'member->architect':       'Route through orchestrator',
   'member->integrator':      'Route through orchestrator',
   'member->member':          'Route through orchestrator',
-  // Workers → AUTONOMOUS: go through COS
-  'orchestrator->autonomous': 'Route through chief-of-staff',
-  'architect->autonomous':    'Route through chief-of-staff',
-  'integrator->autonomous':   'Route through chief-of-staff',
-  'member->autonomous':       'Route through chief-of-staff',
-  // AUTONOMOUS → team workers: contact COS or MANAGER
-  'autonomous->orchestrator': 'Contact chief-of-staff or manager instead',
-  'autonomous->architect':    'Contact chief-of-staff or manager instead',
-  'autonomous->integrator':   'Contact chief-of-staff or manager instead',
-  'autonomous->member':       'Contact chief-of-staff or manager instead',
+  // Team titles → AUTONOMOUS: only MANAGER reaches AUTONOMOUS from the
+  // team side. COS is no longer a gateway to AUTONOMOUS.
+  'orchestrator->autonomous': 'Route through manager',
+  'architect->autonomous':    'Route through manager',
+  'integrator->autonomous':   'Route through manager',
+  'member->autonomous':       'Route through manager',
+  'chief-of-staff->autonomous': 'Route through manager',
+  // AUTONOMOUS → team titles: contact MANAGER only. AUTONOMOUS no longer
+  // reaches COS directly.
+  'autonomous->chief-of-staff': 'Contact manager instead',
+  'autonomous->orchestrator': 'Contact manager instead',
+  'autonomous->architect':    'Contact manager instead',
+  'autonomous->integrator':   'Contact manager instead',
+  'autonomous->member':       'Contact manager instead',
+  'autonomous->maintainer':   'Contact manager instead',
   // ORCHESTRATOR → ORCHESTRATOR (cross-team): go through COS
   'orchestrator->orchestrator': 'Route through chief-of-staff for cross-team coordination',
-  // Workers → MAINTAINER: go through COS or MANAGER
-  'orchestrator->maintainer': 'Route through chief-of-staff or manager',
-  'architect->maintainer':    'Route through chief-of-staff or manager',
-  'integrator->maintainer':   'Route through chief-of-staff or manager',
-  'member->maintainer':       'Route through chief-of-staff or manager',
-  // MAINTAINER → team workers: contact COS or MANAGER
-  'maintainer->orchestrator': 'Contact chief-of-staff or manager instead',
-  'maintainer->architect':    'Contact chief-of-staff or manager instead',
-  'maintainer->integrator':   'Contact chief-of-staff or manager instead',
-  'maintainer->member':       'Contact chief-of-staff or manager instead',
+  // Team titles → MAINTAINER: only MANAGER reaches MAINTAINER now.
+  // COS is no longer a gateway to MAINTAINER.
+  'chief-of-staff->maintainer': 'Route through manager',
+  'orchestrator->maintainer': 'Route through manager',
+  'architect->maintainer':    'Route through manager',
+  'integrator->maintainer':   'Route through manager',
+  'member->maintainer':       'Route through manager',
+  // MAINTAINER → anyone-but-MANAGER: contact MANAGER only.
+  'maintainer->chief-of-staff': 'Contact manager instead',
+  'maintainer->orchestrator': 'Contact manager instead',
+  'maintainer->architect':    'Contact manager instead',
+  'maintainer->integrator':   'Contact manager instead',
+  'maintainer->member':       'Contact manager instead',
+  'maintainer->maintainer':   'Contact manager instead (MAINTAINER-to-MAINTAINER coordination routes through MANAGER)',
+  'maintainer->autonomous':   'Contact manager instead',
 }
 
 export interface MessageRouteValidation {

@@ -627,17 +627,18 @@ CLAUDE.md               - This file - guidance for Claude Code
 
 AMP messaging is governed by a title-based directed communication graph. Each governance title defines which other titles the agent can message. Missing connections are blocked with HTTP 403 and a routing suggestion.
 
-**Adjacency matrix** (Y = allowed, empty = forbidden):
+**Adjacency matrix** (Y = allowed, empty = forbidden). 2026-04-22 update: COS is strictly the team gateway (no longer reaches MAINTAINER / AUTONOMOUS); MAINTAINER and AUTONOMOUS are governance-layer titles reachable only from MANAGER.
 
-| Sender \ Recipient | MANAGER | COS | ORCHESTRATOR | ARCHITECT | INTEGRATOR | MEMBER | AUTONOMOUS |
-|---------------------|:-------:|:---:|:------------:|:---------:|:----------:|:------:|:----------:|
-| **MANAGER**         |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |     Y      |
-| **CHIEF-OF-STAFF**  |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |     Y      |
-| **ORCHESTRATOR**    |         |  Y  |              |     Y     |     Y      |   Y    |            |
-| **ARCHITECT**       |         |  Y  |      Y       |           |            |        |            |
-| **INTEGRATOR**      |         |  Y  |      Y       |           |            |        |            |
-| **MEMBER**          |         |  Y  |      Y       |           |            |        |            |
-| **AUTONOMOUS**      |    Y    |  Y  |              |           |            |        |     Y      |
+| Sender \ Recipient | MANAGER | COS | ORCHESTRATOR | ARCHITECT | INTEGRATOR | MEMBER | MAINTAINER | AUTONOMOUS |
+|---------------------|:-------:|:---:|:------------:|:---------:|:----------:|:------:|:----------:|:----------:|
+| **MANAGER**         |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |     Y      |     Y      |
+| **CHIEF-OF-STAFF**  |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |            |            |
+| **ORCHESTRATOR**    |         |  Y  |              |     Y     |     Y      |   Y    |            |            |
+| **ARCHITECT**       |         |  Y  |      Y       |           |            |        |            |            |
+| **INTEGRATOR**      |         |  Y  |      Y       |           |            |        |            |            |
+| **MEMBER**          |         |  Y  |      Y       |           |            |        |            |            |
+| **MAINTAINER**      |    Y    |     |              |           |            |        |            |            |
+| **AUTONOMOUS**      |    Y    |     |              |           |            |        |            |     Y      |
 
 **Three layers of enforcement:**
 1. **API (server-side)**: `lib/communication-graph.ts` → `validateMessageRoute()` checks sender/recipient titles before delivery. Returns `403 title_communication_forbidden` with routing suggestion.

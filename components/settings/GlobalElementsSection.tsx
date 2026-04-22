@@ -98,8 +98,18 @@ const ELEMENT_SECTIONS: { key: keyof ElementTotals; label: string; icon: typeof 
 ]
 
 /**
- * Plugins Explorer — manages user-level plugins, elements, and marketplaces.
- * Three tabs: Plugins (toggle + info), Elements (active elements), Marketplaces (full management).
+ * Extensions — manages user-scope components, plugins, and marketplaces
+ * for each client (Claude, Codex, etc.). Three subtabs: COMPONENTS
+ * (skills/agents/commands/hooks/rules/MCP/LSP/output-styles, whether they
+ * come from an enabled plugin or a standalone folder), PLUGINS (installed
+ * plugins at user scope with enable/disable toggles), MARKETPLACES
+ * (registered marketplaces and their available plugins). Local/project
+ * scope is NOT listed here — per-agent scope lives on the Agent Profile
+ * → Config tab. See the 2026-04-22 Extensions refactor notes for the
+ * invariants (components cannot be extracted from a plugin; each client
+ * has its own plugin registry; per-client capabilities drive visible
+ * subtabs). The internal URL/state key stays `global-elements` to keep
+ * every existing link and scenario URL working.
  */
 export default function GlobalElementsSection({ initialSubtab, initialMarketplace }: { initialSubtab?: 'plugins' | 'elements' | 'marketplaces' | null; initialMarketplace?: string | null } = {}) {
   const { requestSudoToken } = useSudo()
@@ -409,8 +419,41 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
     return items
   }, [flatElements, elementTypeFilter, elementSearch, activeOnly])
 
-  // Client-level tab: Claude vs Codex (higher-level tab bar)
-  const [clientTab, setClientTab] = useState<'claude' | 'codex'>('claude')
+  // Client-level tab: Claude vs Codex (higher-level tab bar).
+  // Persisted per user across sessions (2026-04-22 Extensions page refactor):
+  // when the user returns to the Extensions page they see whichever client
+  // tab + subtab they last viewed. The storage key is generic so a future
+  // Gemini/OpenCode/Kiro tab slots in without migration.
+  const [clientTab, setClientTab] = useState<'claude' | 'codex'>(() => {
+    if (typeof window === 'undefined') return 'claude'
+    const saved = window.localStorage.getItem('extensions.clientTab')
+    return saved === 'codex' ? 'codex' : 'claude'
+  })
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('extensions.clientTab', clientTab)
+  }, [clientTab])
+
+  // Persist subtab choice per client. Different clients may expose different
+  // subtabs (Gemini/OpenCode/Kiro have no MARKETPLACES tab — those clients
+  // arrive in Phase 2), so the key is namespaced by client so "last subtab"
+  // never resurrects a subtab that does not exist on the current client.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(`extensions.subtab.${clientTab}`, activeTab)
+  }, [activeTab, clientTab])
+  // Load saved subtab on first mount AND whenever client changes.
+  // `initialSubtab` (URL param) still wins — it's the explicit intent of a
+  // link or a back-navigation — but when it's absent, fall back to the last
+  // saved subtab for this client instead of always landing on 'elements'.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (initialSubtab) return  // URL param wins
+    const saved = window.localStorage.getItem(`extensions.subtab.${clientTab}`)
+    if (saved === 'plugins' || saved === 'elements' || saved === 'marketplaces') {
+      setActiveTab(saved)
+    }
+  }, [clientTab, initialSubtab])
 
   if (loading) {
     return (
@@ -423,7 +466,17 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
 
   return (
     <div ref={containerRef} className="p-4 sm:p-6 max-w-4xl">
-      <h2 className="text-xl font-bold text-white mb-2">Plugins Explorer</h2>
+      {/* Page title — "Extensions" is the umbrella term agreed 2026-04-22.
+          The internal URL/state key stays `global-elements` (see app/settings/
+          page.tsx) for bookmark stability; only the visible label changed. */}
+      <h2 className="text-xl font-bold text-white mb-2">Extensions</h2>
+      <p className="text-xs text-gray-500 mb-4">
+        Everything installed at user scope for this client: <strong>components</strong>
+        {' '}(skills, agents, commands, hooks, rules, MCP, LSP, output-styles),
+        the <strong>plugins</strong> that bundle them, and the <strong>marketplaces</strong>
+        {' '}those plugins came from. Local/project-scope add-ons are managed
+        per agent on the Agent Profile → Config tab.
+      </p>
 
       {/* Higher-level client tab bar: Claude | Codex */}
       <div className="flex items-center gap-2 mb-4 border-b border-gray-700/50 pb-0">
@@ -474,7 +527,9 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
           }`}
         >
           <Wand2 className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="hidden sm:inline">Elements</span>
+          {/* Label is "COMPONENTS" (2026-04-22 rename) — the state key
+              `elements` stays for URL-stability reasons. */}
+          <span className="hidden sm:inline">COMPONENTS</span>
           {totalElements > 0 && <span className="opacity-60">{totalElements}</span>}
         </button>
         <button
@@ -486,7 +541,9 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
           }`}
         >
           <Puzzle className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="hidden sm:inline">Plugins</span>
+          {/* ALL-CAPS to match COMPONENTS/MARKETPLACES — consistent casing
+              (2026-04-22 Extensions refactor). */}
+          <span className="hidden sm:inline">PLUGINS</span>
           <span className="opacity-60">{enabledCount}/{totalCount}</span>
         </button>
         <button
@@ -498,7 +555,7 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
           }`}
         >
           <Store className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="hidden sm:inline">Marketplaces</span>
+          <span className="hidden sm:inline">MARKETPLACES</span>
         </button>
       </div>
 

@@ -48,9 +48,7 @@ prerequisites:
   - Governance password set
   - ai-maestro-plugins marketplace registered
   - At least one role-plugin available (e.g. ai-maestro-autonomous-agent)
-  - A small, non-destructive test plugin available in some marketplace.
-    Suggested: `rechecker-plugin` or any minor utility plugin. The exact
-    plugin name is recorded in the scenario report.
+  - A small non-destructive test plugin available in some marketplace (suggested rechecker-plugin or any minor utility plugin; exact plugin name is recorded in the scenario report)
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:
   - ~/.aimaestro/governance.json

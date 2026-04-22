@@ -621,7 +621,7 @@ const routes: Route[] = [
   }},
   { method: 'POST', pattern: /^\/api\/sessions\/activity\/update$/, paramNames: [], handler: async (req, res) => {
     const body = await readJsonBody(req)
-    const result = await broadcastActivityUpdate(body.sessionName, body.status, body.hookStatus, body.notificationType)
+    const result = broadcastActivityUpdate(body.sessionName, body.status, body.hookStatus, body.notificationType)
     sendServiceResult(res, result)
   }},
   // Parameterized session routes AFTER all static sub-paths

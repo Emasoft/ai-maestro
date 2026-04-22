@@ -34,14 +34,22 @@ export interface ClientCapabilities {
   plugins: boolean
   /**
    * Whether the client has a "marketplaces" concept separate from plugins.
+   *
    * Claude: every user-scope plugin MUST come from a registered marketplace
    *         (no exception — `claude plugin install X Y --scope user` requires
    *         marketplace Y to be added first via `claude plugin marketplace add`).
-   * Codex:  marketplace support is primitive/evolving; standalone plugins
-   *         without a marketplace are allowed, so the Extensions MARKETPLACES
-   *         subtab does not apply yet. Flip this flag when Codex's marketplace
-   *         system stabilizes.
-   * Others: no marketplace system at all.
+   * Codex:  HAS marketplaces. The Codex app reads repo marketplaces from
+   *         `$REPO_ROOT/.agents/plugins/marketplace.json` (see the template
+   *         at github.com/hon454/codex-marketplace). Standalone plugins
+   *         without a marketplace ARE allowed — marketplace is an additive
+   *         concept, not a requirement like Claude. Our own local
+   *         codex-custom-marketplace is (or should be) a valid Codex
+   *         marketplace once its manifest sits at `.agents/plugins/marketplace.json`.
+   *         [Known gap 2026-04-22: services/plugin-storage-service.ts
+   *         currently writes to `<root>/marketplace.json` for Codex — the
+   *         manifest path migration to `.agents/plugins/marketplace.json`
+   *         is tracked as a follow-up.]
+   * Others: no marketplace system at all today.
    *
    * Drives the visibility of the Settings → Extensions → MARKETPLACES subtab
    * (see components/settings/GlobalElementsSection.tsx).
@@ -96,7 +104,11 @@ const CAPABILITIES: Record<ClientType, ClientCapabilities> = {
     },
   },
   codex: {
-    skills: true, plugins: true, marketplaces: false, agents: true, hooks: false,
+    // Codex DOES have marketplaces — see the template at
+    // github.com/hon454/codex-marketplace. Standalone plugins (no marketplace)
+    // are also allowed, which is different from Claude's strict require-marketplace
+    // model, but the marketplace subtab is populated either way.
+    skills: true, plugins: true, marketplaces: true, agents: true, hooks: false,
     rules: false, commands: false, mcpServers: true, lspServers: false, rolePlugins: false,
     configFile: 'config.toml',
     skillPaths: { project: '.codex/skills', user: '~/.codex/skills' },

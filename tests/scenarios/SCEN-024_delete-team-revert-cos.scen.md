@@ -45,14 +45,11 @@ prerequisites:
   - AI Maestro server running at http://localhost:23000
   - Governance password set
   - Chrome browser open with DevTools accessible via CDP
-  - ai-maestro-plugins marketplace registered (remote GitHub marketplace,
-    hosts `ai-maestro-chief-of-staff` role-plugin)
-  - `ai-maestro-local-roles-marketplace` registered (local, per R20)
-  - No pre-existing agents matching "scen024-*"
-  - No pre-existing team named "scen024-team"
-  - MAINTAINER role-plugin available as a picker option (per R19 — not
-    exercised in this scenario but required for the Title Assignment
-    Dialog to pass invariant checks)
+  - "ai-maestro-plugins marketplace registered (remote GitHub marketplace, hosts ai-maestro-chief-of-staff role-plugin)"
+  - "ai-maestro-local-roles-marketplace registered (local, per R20)"
+  - 'No pre-existing agents matching "scen024-*"'
+  - 'No pre-existing team named "scen024-team"'
+  - "MAINTAINER role-plugin available as a picker option (per R19 — not exercised in this scenario but required for the Title Assignment Dialog to pass invariant checks)"
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:
   - ~/.aimaestro/governance.json

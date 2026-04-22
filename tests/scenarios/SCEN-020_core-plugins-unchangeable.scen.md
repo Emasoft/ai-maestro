@@ -41,10 +41,9 @@ required_tools:
 prerequisites:
   - AI Maestro server running at http://localhost:23000
   - Governance password set
-  - `ai-maestro-plugin` installed at user scope (core)
-  - `ai-maestro-autonomous-agent` role-plugin available in local marketplace
-  - MAINTAINER role-plugin available as an optional title for step S012
-    (per R19, MAINTAINER must be picker-visible)
+  - "ai-maestro-plugin installed at user scope (core)"
+  - "ai-maestro-autonomous-agent role-plugin available in local marketplace"
+  - "MAINTAINER role-plugin available as an optional title for step S012 (per R19, MAINTAINER must be picker-visible)"
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:
   - ~/.aimaestro/governance.json

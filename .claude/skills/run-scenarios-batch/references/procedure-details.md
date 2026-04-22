@@ -50,7 +50,7 @@ For each scenario ID `N` in the parsed list, in numeric order:
    Agent(
        description: "Run SCEN-<padded-id> end-to-end",
        subagent_type: "scenario-runner",
-       prompt: "Run scenario number <N>. Scenario file: ${CLAUDE_PROJECT_DIR}/tests/scenarios/SCEN-<padded-id>_*.scen.md. Rules file: <resolved-rules-path>. Follow rules 1-13, drive the app via the dev-browser CLI (Rule 8 — loaded via Skill(skill: 'dev-browser:dev-browser')), write the report + proposals under ${CLAUDE_PROJECT_DIR}/tests/scenarios/reports/, and return a 2-line summary."
+       prompt: "Run scenario number <N>. Scenario file: ${CLAUDE_PROJECT_DIR}/tests/scenarios/SCEN-<padded-id>_*.scen.md. Rules file: <resolved-rules-path>. Follow rules 1-13, drive the app via the dev-browser CLI (Rule 8 — loaded via Skill(skill: 'dev-browser:dev-browser')), write the report + proposals under ${CLAUDE_PROJECT_DIR}/reports/scenarios-runner/, and return a 2-line summary."
    )
    ```
    Wait for the subagent to return. Parse the 2-line result into pass/fail/partial + report path.
@@ -66,7 +66,7 @@ For each scenario ID `N` in the parsed list, in numeric order:
 
 ## Step 4 — Aggregate the batch report
 
-After the loop completes, write an aggregated summary to `${CLAUDE_PROJECT_DIR}/tests/scenarios/reports/scenario-batch-<range>_<timestamp>.md` with:
+After the loop completes, write an aggregated summary to `${CLAUDE_PROJECT_DIR}/reports/scenarios-runner/scenario-batch-<range>_<timestamp>.md` with:
 
 - Per-scenario result table (ID, status, bugs found, bugs fixed, duration, report path)
 - Aggregated P0 proposal count (parse each `scenario_proposed-improvements_NNN_*.md` header)

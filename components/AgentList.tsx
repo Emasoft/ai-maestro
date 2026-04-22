@@ -228,9 +228,14 @@ export default function AgentList({
   // direction is a broken probe rendering users' real Haephestos
   // invisible — vs an unwanted card briefly appearing.
   const claudeProbe = useClientAvailability('claude')
-  const haephestosVisible = claudeProbe.loading || claudeProbe.error !== null
-    ? true
-    : claudeProbe.data?.available === true
+  // SCEN-001 2026-04-20 fix: explicit parens around ternary operands
+  // required — the prior form `X || Y ? Z : W` without parens triggered
+  // a SWC parser bug that manifested as "Unexpected token `div`" on the
+  // first JSX inside the component's render return. The legs still short
+  // to fail-open: if the probe is loading or failed, show the card.
+  const probePendingOrFailed: boolean = claudeProbe.loading || claudeProbe.error !== null
+  const probeSaysAvailable: boolean = claudeProbe.data?.available === true
+  const haephestosVisible: boolean = probePendingOrFailed ? true : probeSaysAvailable
 
   const handleHaephestosClick = () => {
     const haephestos = agents.find(a => a.name === '_aim-creation-helper')

@@ -160,19 +160,28 @@ author: AI Maestro Team
 - **Modifies:** Registry (both agents → member)
 - **Verify:** Team in sidebar. `GET /api/teams/<id>` (Rule 6 verification read) returns the new team with both agentIds. Screenshot: SCEN-024/S010-team-created.jpg
 
-#### S011: Promote scen024-cos-01 to CHIEF-OF-STAFF
-- **Action:** Open scen024-cos-01 profile → click title badge → CHIEF-OF-STAFF → select `scen024-team` in the team picker → enter sudo password `mYkri1-xoxrap-gogtan` in the sudo modal (Rule 12) → Confirm
-- **Goal:** Agent becomes COS of scen024-team
+#### S011: Verify auto-COS exists for scen024-team
+- **Action:** `GET /api/teams/<id>` + `GET /api/agents` (Rule 6 verification reads) — auto-COS is created by the Create Team pipeline when no chiefOfStaffId is provided (teams-service.ts:222-254). Auto-COS naming: `cos-<teamslug>`.
+- **Goal:** Auto-COS `cos-scen024-team` exists, has `governanceTitle=chief-of-staff`, and is `team.chiefOfStaffId`.
 - **Creates:** nothing
-- **Modifies:** Registry (governanceTitle=chief-of-staff), teams.json (chiefOfStaffId set), settings.local.json (COS role-plugin installed)
-- **Verify:** `GET /api/agents/<id>` (Rule 6 verification read) → `governanceTitle === "chief-of-staff"`. Read `~/agents/scen024-cos-01/.claude/settings.local.json` — COS role-plugin key present and enabled. Sudo modal appeared once. Screenshot: SCEN-024/S011-cos-promoted.jpg
+- **Modifies:** nothing (the auto-COS was created during S010 by the CreateTeam pipeline)
+- **Verify:** `cos-scen024-team` exists in registry with `governanceTitle === "chief-of-staff"`. `team.chiefOfStaffId` = cos-scen024-team's id. Read `~/agents/cos-scen024-team/.claude/settings.local.json` — COS role-plugin key present and enabled. Screenshot: SCEN-024/S011-auto-cos-verified.jpg
+
+> **Authoring-bug note (2026-04-22 run):** The original S011 asked to promote
+> scen024-cos-01 to CHIEF-OF-STAFF, but the Create Team dialog in the current UI
+> has NO COS picker and the CreateTeam API auto-creates `cos-<teamslug>` when no
+> chiefOfStaffId is provided (see `services/teams-service.ts:222-254`). The auto-COS
+> is a mandatory side-effect of team creation. The BUG-002 regression test is
+> about "any COS reverts on team delete" — so the auto-COS is the valid COS under
+> test. S011 was rewritten to verify the auto-COS instead of promoting
+> scen024-cos-01. Filed as P1-PROP in 11th-HOUR proposals.
 
 #### S012: Confirm initial state
 - **Action:** `GET /api/agents` and `GET /api/teams/<id>` (Rule 6 verification reads); also read registry.json directly
 - **Goal:** Baseline state before DeleteTeam
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** mgr=manager, cos=chief-of-staff, mbr=member, team.chiefOfStaffId=cos-id, team.agentIds=[cos, mbr]. Screenshot: SCEN-024/S012-baseline-state.jpg
+- **Verify:** mgr=manager, auto-COS cos-scen024-team=chief-of-staff, cos-01=member, mbr=member, team.chiefOfStaffId=auto-COS-id, team.agentIds=[auto-COS, cos-01, mbr]. Screenshot: SCEN-024/S012-baseline-state.jpg
 
 ---
 
@@ -196,26 +205,26 @@ author: AI Maestro Team
 
 ## Phase 3: Verify invariants after DeleteTeam
 
-#### S015: Verify scen024-cos-01 reverted to AUTONOMOUS
-- **Action:** `GET /api/agents/<cos-id>` (use the agent ID from S008 / S011; Rule 6 verification read)
+#### S015: Verify former COS (cos-scen024-team / Tatiana) reverted to AUTONOMOUS
+- **Action:** `GET /api/agents/<auto-cos-id>` (Rule 6 verification read) — the auto-COS whose id was captured at S011
 - **Goal:** Former COS is now AUTONOMOUS
 - **Creates:** nothing
 - **Modifies:** nothing
 - **Verify:** `data.agent.governanceTitle === "autonomous"` OR `null`. Screenshot: SCEN-024/S015-cos-reverted.jpg
 
 #### S016: Verify COS role-plugin uninstalled from former COS
-- **Action:** Read `~/agents/scen024-cos-01/.claude/settings.local.json`
+- **Action:** Read `~/agents/cos-scen024-team/.claude/settings.local.json`
 - **Goal:** No `ai-maestro-chief-of-staff` key in enabledPlugins (or set to false)
 - **Creates:** nothing
 - **Modifies:** nothing
 - **Verify:** File content does NOT contain any `ai-maestro-chief-of-staff@...` key enabled. Screenshot: SCEN-024/S016-cos-plugin-gone.jpg
 
-#### S017: Verify scen024-mbr-01 reverted to AUTONOMOUS
-- **Action:** `GET /api/agents/<mbr-id>` (Rule 6 verification read)
-- **Goal:** Former MEMBER is AUTONOMOUS
+#### S017: Verify scen024-cos-01 AND scen024-mbr-01 reverted to AUTONOMOUS
+- **Action:** `GET /api/agents/<cos-01-id>` and `GET /api/agents/<mbr-id>` (Rule 6 verification reads) — scen024-cos-01 was a MEMBER of the team (not the COS), scen024-mbr-01 was also a MEMBER
+- **Goal:** Both former MEMBERs are AUTONOMOUS
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** `data.agent.governanceTitle === "autonomous"` OR `null`. Screenshot: SCEN-024/S017-mbr-reverted.jpg
+- **Verify:** Both `data.agent.governanceTitle === "autonomous"` OR `null`. Screenshot: SCEN-024/S017-members-reverted.jpg
 
 #### S018: Verify scen024-mgr-01 is STILL MANAGER (standalone title preserved)
 - **Action:** `GET /api/agents/<mgr-id>` (Rule 6 verification read)
@@ -229,7 +238,7 @@ author: AI Maestro Team
 - **Goal:** No zombie team field
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Both responses have `team === null` or the field absent. Screenshot: SCEN-024/S019-team-cleared.jpg
+- **Verify:** All 3 responses (cos-scen024-team, scen024-cos-01, scen024-mbr-01) have `team === null` or the field absent. Screenshot: SCEN-024/S019-team-cleared.jpg
 
 ---
 
@@ -247,17 +256,23 @@ author: AI Maestro Team
 - **Removes:** Registry, folder, tmux session
 - **Verify:** Not in sidebar. Sudo modal appeared once. Screenshot: SCEN-024/S021-mbr-deleted.jpg
 
+#### S021b: Delete cos-scen024-team (Tatiana, the auto-COS) via UI (Rule 12 sudo)
+- **Action:** Profile → Advanced → Danger Zone → Delete Agent. Check "Also delete agent folder". Type `cos-scen024-team`. Click Delete Forever. Sudo password modal appears — enter `mYkri1-xoxrap-gogtan`.
+- **Goal:** Auto-COS removed
+- **Removes:** Registry entry, ~/agents/cos-scen024-team/, tmux session (if any)
+- **Verify:** Agent not in sidebar. Sudo modal appeared once. Screenshot: SCEN-024/S021b-auto-cos-deleted.jpg
+
 #### S022: Demote + delete scen024-mgr-01 (Rule 12 sudo x 2)
 - **Action:** Open profile → title badge → AUTONOMOUS → enter sudo password `mYkri1-xoxrap-gogtan` in the first sudo modal (title change strict). Then Advanced → Danger Zone → Delete Agent, enter sudo password `mYkri1-xoxrap-gogtan` in the second sudo modal (delete strict), "Also delete folder", type `scen024-mgr-01`, Delete Forever.
 - **Goal:** MANAGER removed (two-step because MANAGER is a standalone title, and each strict op needs a fresh sudo token per Rule 12 single-shot)
 - **Removes:** Registry, folder, tmux session
 - **Verify:** Not in sidebar. Two sudo modals appeared (one per strict op). Screenshot: SCEN-024/S022-mgr-deleted.jpg
 
-#### S023: Purge cemetery entries (Rule 12 sudo x 3)
-- **Action:** Settings → Cemetery → Purge each of scen024-mgr-01, scen024-cos-01, scen024-mbr-01 — enter sudo password `mYkri1-xoxrap-gogtan` in each sudo modal (cemetery purge is strict, single-shot token per op).
+#### S023: Purge cemetery entries (Rule 12 sudo x 4)
+- **Action:** Settings → Cemetery → Purge each of scen024-mgr-01, scen024-cos-01, scen024-mbr-01, cos-scen024-team — enter sudo password `mYkri1-xoxrap-gogtan` in each sudo modal (cemetery purge is strict, single-shot token per op). (Note: if hard-delete with folder skipped cemetery per R20.x, no entries will be listed — the step becomes N/A.)
 - **Goal:** Cemetery clean
 - **Removes:** Cemetery entries
-- **Verify:** None listed. Three sudo modals appeared (one per entry). Screenshot: SCEN-024/S023-cemetery-purged.jpg
+- **Verify:** None listed. Up to four sudo modals appeared (one per entry, or 0 if hard-delete skipped cemetery). Screenshot: SCEN-024/S023-cemetery-purged.jpg
 
 #### S024: STATE-WIPE — Restore configuration files
 - **Action:** Compare current config with backups from S002. Restore settings.json / settings.local.json / governance.json if they differ. Do NOT restore registry.json / teams.json — UI delete already cleaned those.

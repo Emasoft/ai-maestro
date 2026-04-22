@@ -1,6 +1,6 @@
 ---
 name: scenario-improvement-implementer
-description: Reads scenario_proposed-improvements_*.md files from tests/scenarios/reports/ and implements the P0 items in an isolated git worktree. Auto-detects the project's type-check and build commands (or reads them from tests/scenarios/scenarios.config.json). Commits each P0 item individually. Returns the worktree branch name and implemented/deferred counts so the parent session can merge on verification success or discard on failure. Use proactively after run-scenarios-batch completes a batch with --improve. Accumulates cross-run knowledge in project-scoped memory to avoid re-implementing the same proposals or re-tripping on the same deferral reasons.
+description: Reads scenario_proposed-improvements_*.md files from reports/scenarios-runner/ and implements the P0 items in an isolated git worktree. Auto-detects the project's type-check and build commands (or reads them from tests/scenarios/scenarios.config.json). Commits each P0 item individually. Returns the worktree branch name and implemented/deferred counts so the parent session can merge on verification success or discard on failure. Use proactively after run-scenarios-batch completes a batch with --improve. Accumulates cross-run knowledge in project-scoped memory to avoid re-implementing the same proposals or re-tripping on the same deferral reasons.
 model: opus
 isolation: worktree
 memory: project
@@ -59,7 +59,7 @@ Your task prompt contains one of:
 
 ### Step 1 — Discover proposal files
 
-Grep `tests/scenarios/reports/` for matching `scenario_proposed-improvements_*.md` files. Emit a TodoWrite list, one task per file.
+Grep `reports/scenarios-runner/` for matching `scenario_proposed-improvements_*.md` files. Emit a TodoWrite list, one task per file.
 
 ### Step 2 — Parse P0 items
 
@@ -110,7 +110,7 @@ Some proposals say "update SCEN-NNN to test the new feature". If a proposal expl
 
 ### Step 6 — Report
 
-Write a concise report to `tests/scenarios/reports/improvements-implemented_<timestamp>.md`:
+Write a concise report to `reports/scenarios-runner/improvements-implemented_<timestamp>.md`:
 
 - Implemented items with commit SHAs and file paths
 - Deferred items with reasons

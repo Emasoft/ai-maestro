@@ -677,6 +677,12 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
       avatar: body.avatar,
       programArgs: body.programArgs,
       program: body.program,
+      // R19.2: githubRepo is a MAINTAINER-title attribute. Must be forwarded to
+      // ChangeTitle's options (Gate 9a validates "owner/repo" format and repo
+      // uniqueness). We also strip it from cleanBody below so updateAgent does
+      // not leak-write it to the registry for non-maintainer transitions — the
+      // ChangeTitle pipeline is the single source of truth for this field.
+      githubRepo: body.githubRepo,
     }
 
     // Strip changeable fields from body so updateAgent only handles simple fields
@@ -688,6 +694,11 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
     delete cleanBody.avatar
     delete cleanBody.programArgs
     delete cleanBody.program
+    // R19.2: githubRepo is an attribute of the MAINTAINER title transition,
+    // owned by the ChangeTitle pipeline (Gate 9a). Strip it from the generic
+    // updateAgent path so it is not written behind ChangeTitle's back when
+    // the title itself is rejected. See SCEN-020 BUG-001.
+    delete cleanBody.githubRepo
 
     // Execute simple updateAgent for remaining fields (tags, label, model, etc.)
     const agent = await updateAgent(id, cleanBody)
@@ -716,7 +727,19 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
       try {
         const { ChangeTitle } = await import('@/services/element-management-service')
         const ac = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }
-        const titleResult = await ChangeTitle(id, newTitle, { authContext: ac })
+        // R19.2: forward githubRepo from body.githubRepo into ChangeTitle's
+        // options so Gate 9a receives it for MAINTAINER transitions. Before
+        // this fix, PATCH { governanceTitle: 'maintainer', githubRepo: 'x/y' }
+        // would reach ChangeTitle with no githubRepo, fail Gate 9a, and leave
+        // the title unchanged — while the separate updateAgent(cleanBody)
+        // call silently wrote githubRepo to the registry anyway (SCEN-020
+        // BUG-001). Both paths are now covered: strip the field from
+        // cleanBody (above) and pipe it through here.
+        const titleOptions: { authContext: typeof ac; githubRepo?: string } = { authContext: ac }
+        if (typeof changeableFields.githubRepo === 'string' && changeableFields.githubRepo.trim()) {
+          titleOptions.githubRepo = changeableFields.githubRepo.trim()
+        }
+        const titleResult = await ChangeTitle(id, newTitle, titleOptions)
         if (!titleResult.success) console.warn('[agents] ChangeTitle failed:', titleResult.error)
         anyChangeExecuted = true
       } catch (err) {
@@ -1595,7 +1618,16 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
         try {
           const ls = JSON.parse(readR17(localSettingsPath, 'utf-8'))
           const plugins = ls.enabledPlugins || {}
-          const pluginKey = Object.keys(plugins).find((k: string) => k.includes('ai-maestro-plugin'))
+          // SCEN-012 FIX: Boundary-aware match. `k.includes('ai-maestro-plugin')`
+          // false-positive matched on ai-maestro-autonomous-agent@ai-maestro-plugins
+          // because the marketplace name contains the core plugin name as a
+          // substring. R17 wake-gate would skip the repair, leaving disabled
+          // plugins disabled. Require exact name match before "@".
+          const pluginKey = Object.keys(plugins).find((k: string) => {
+            const at = k.indexOf('@')
+            const pluginPart = at >= 0 ? k.substring(0, at) : k
+            return pluginPart === 'ai-maestro-plugin'
+          })
           hasPlugin = !!pluginKey && plugins[pluginKey] !== false
         } catch { /* corrupt — treat as missing */ }
       }

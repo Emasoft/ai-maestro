@@ -1271,7 +1271,14 @@ async function handleAddMarketplace(url?: string) {
     return NextResponse.json({ error: 'Invalid GitHub URL' }, { status: 400 })
   }
   const repo = match[1].replace(/\.git$/, '')
-  const marketplaceName = repo.split('/')[1] // Use repo name as marketplace name
+  // SCEN-019 BUG-001 fix: Claude CLI names marketplaces using the "owner-repo"
+  // convention (e.g. "cblecker-claude-plugins" for github.com/cblecker/claude-plugins),
+  // NOT just the repo-basename. Previously we stamped extraKnownMarketplaces
+  // with just the basename ("claude-plugins"), which didn't match the CLI-reported
+  // name. This caused DeleteMarketplace to leave orphaned keys in settings.json
+  // because it looked up the CLI name but the entry was keyed by basename.
+  // Now we use owner-repo everywhere to match Claude CLI's internal naming.
+  const marketplaceName = repo.replace('/', '-')
 
   // SCEN-017 P0-001 / P0-002: route through the CreateMarketplace pipeline
   // instead of `claude plugin marketplace add` via execSync. The pipeline

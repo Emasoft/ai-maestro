@@ -508,6 +508,31 @@ if [ "$ROUTE" = "local" ]; then
 
             echo "$DELIVERY_MSG" > "${RECIPIENT_INBOX}/${SENDER_DIR}/${MSG_ID}.json"
 
+            # SCEN-015 BUG-001 FIX (2026-04-21): For local filesystem delivery,
+            # copy attachment blobs from sender's attachments/<att_id>/ dir into
+            # the recipient's attachments/<att_id>/ dir. Without this step,
+            # amp-download run as the recipient falls through to the
+            # "No download URL or API credentials available" error because
+            # the download code only looks for local attachment blobs inside
+            # the CALLER's $AMP_ATTACHMENTS_DIR. Mirroring the blob keeps
+            # the envelope's .id / .digest valid and enables round-trip
+            # integrity verification end-to-end without any API.
+            RECIPIENT_ATT_BASE="${RECIPIENT_AMP_DIR}/attachments"
+            echo "$ATTACHMENTS_JSON" | jq -c '.[]?' 2>/dev/null | while IFS= read -r _att_meta; do
+                [ -z "$_att_meta" ] && continue
+                _att_id=$(echo "$_att_meta" | jq -r '.id // empty')
+                _att_filename=$(echo "$_att_meta" | jq -r '.filename // empty')
+                [ -z "$_att_id" ] || [ -z "$_att_filename" ] && continue
+                _src_blob="${AMP_ATTACHMENTS_DIR}/${_att_id}/${_att_filename}"
+                if [ -f "$_src_blob" ]; then
+                    _dst_dir="${RECIPIENT_ATT_BASE}/${_att_id}"
+                    mkdir -p "$_dst_dir"
+                    chmod 700 "$_dst_dir" 2>/dev/null || true
+                    cp "$_src_blob" "${_dst_dir}/${_att_filename}"
+                    chmod 600 "${_dst_dir}/${_att_filename}" 2>/dev/null || true
+                fi
+            done
+
             echo "✅ Message sent (local filesystem delivery)"
             echo ""
             echo "  To:       ${FULL_RECIPIENT}"
@@ -663,6 +688,31 @@ if [ "$ROUTE" = "local" ]; then
                 fi
 
                 echo "$DELIVERY_MSG" > "${RECIPIENT_INBOX}/${SENDER_DIR}/${MSG_ID}.json"
+
+                # SCEN-015 BUG-001 FIX (2026-04-21): same attachment mirror as
+                # the first local-delivery path (see the comment block above).
+                # This is the auto-registered-then-fallback path that triggers
+                # when AMP auto-registration fails but the recipient is on
+                # this machine. Without mirroring the attachments here, the
+                # recipient's amp-download will fail with "No download URL or
+                # API credentials available" because it only looks for local
+                # blobs under the CALLER's attachments dir, never the
+                # sender's.
+                RECIPIENT_ATT_BASE="${RECIPIENT_AMP_DIR}/attachments"
+                echo "$ATTACHMENTS_JSON" | jq -c '.[]?' 2>/dev/null | while IFS= read -r _att_meta; do
+                    [ -z "$_att_meta" ] && continue
+                    _att_id=$(echo "$_att_meta" | jq -r '.id // empty')
+                    _att_filename=$(echo "$_att_meta" | jq -r '.filename // empty')
+                    [ -z "$_att_id" ] || [ -z "$_att_filename" ] && continue
+                    _src_blob="${AMP_ATTACHMENTS_DIR}/${_att_id}/${_att_filename}"
+                    if [ -f "$_src_blob" ]; then
+                        _dst_dir="${RECIPIENT_ATT_BASE}/${_att_id}"
+                        mkdir -p "$_dst_dir"
+                        chmod 700 "$_dst_dir" 2>/dev/null || true
+                        cp "$_src_blob" "${_dst_dir}/${_att_filename}"
+                        chmod 600 "${_dst_dir}/${_att_filename}" 2>/dev/null || true
+                    fi
+                done
 
                 echo "✅ Message sent (local filesystem delivery)"
                 echo ""

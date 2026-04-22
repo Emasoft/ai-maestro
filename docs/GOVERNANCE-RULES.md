@@ -315,33 +315,40 @@ join a team.
 
 All teams are closed. Messaging between agents is governed by a title-based directed communication graph. Missing connections are forbidden.
 
-**Adjacency matrix** (Y = allowed, empty = forbidden).
-**2026-04-22 update** — COS is now strictly the team gateway (reaches team roles + MANAGER only); MAINTAINER and AUTONOMOUS are governance-layer titles reachable only from MANAGER, and they in turn reach only MANAGER (AUTONOMOUS additionally reaches peer AUTONOMOUS). COS↔MAINTAINER, COS↔AUTONOMOUS, and MAINTAINER↔AUTONOMOUS edges are now FORBIDDEN.
+**Adjacency matrix.** Cell values:
 
-| Sender \ Recipient | MANAGER | COS | ORCHESTRATOR | ARCHITECT | INTEGRATOR | MEMBER | MAINTAINER | AUTONOMOUS |
-|---------------------|:-------:|:---:|:------------:|:---------:|:----------:|:------:|:----------:|:----------:|
-| **MANAGER**         |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |     Y      |     Y      |
-| **CHIEF-OF-STAFF**  |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |            |            |
-| **ORCHESTRATOR**    |         |  Y  |              |     Y     |     Y      |   Y    |            |            |
-| **ARCHITECT**       |         |  Y  |      Y       |           |            |        |            |            |
-| **INTEGRATOR**      |         |  Y  |      Y       |           |            |        |            |            |
-| **MEMBER**          |         |  Y  |      Y       |           |            |        |            |            |
-| **MAINTAINER**      |    Y    |     |              |           |            |        |            |            |
-| **AUTONOMOUS**      |    Y    |     |              |           |            |        |            |     Y      |
+- **`Y`** — sender may freely initiate a message to recipient.
+- blank — sender is **forbidden** from sending to recipient (API returns HTTP 403 with routing suggestion).
+- **`1`** — sender may send EXACTLY ONE reply to recipient if the recipient previously messaged the sender. Without a prior inbound message from the recipient, this edge is equivalent to blank. Used only for team-agent edges to the human user (`C/O/R/I/E -> H`). MAINTAINER and AUTONOMOUS have full `Y` edges to H.
+
+**2026-04-22 v2 update** — the HUMAN USER (**H**) is now a first-class node in the graph. H has unconditional outbound access to every node (including other humans). Inbound to H from team agents (COS, ORCHESTRATOR, ARCHITECT, INTEGRATOR, MEMBER) is `1` — reply-only. Inbound to H from governance-layer titles (MANAGER, MAINTAINER, AUTONOMOUS) is `Y` — they may initiate messages to the user.
+
+| Sender \ Recipient | HUMAN | MANAGER | COS | ORCHESTRATOR | ARCHITECT | INTEGRATOR | MEMBER | MAINTAINER | AUTONOMOUS |
+|---------------------|:-----:|:-------:|:---:|:------------:|:---------:|:----------:|:------:|:----------:|:----------:|
+| **HUMAN**           |   Y   |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |     Y      |     Y      |
+| **MANAGER**         |   Y   |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |     Y      |     Y      |
+| **CHIEF-OF-STAFF**  |   1   |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |            |            |
+| **ORCHESTRATOR**    |   1   |         |  Y  |              |     Y     |     Y      |   Y    |            |            |
+| **ARCHITECT**       |   1   |         |  Y  |      Y       |           |            |        |            |            |
+| **INTEGRATOR**      |   1   |         |  Y  |      Y       |           |            |        |            |            |
+| **MEMBER**          |   1   |         |  Y  |      Y       |           |            |        |            |            |
+| **MAINTAINER**      |   Y   |    Y    |     |              |           |            |        |            |            |
+| **AUTONOMOUS**      |   Y   |    Y    |     |              |           |            |        |            |     Y      |
 
 | ID | Rule | Source |
 |----|------|--------|
-| R6.1 | Communication rules are defined by the directed graph above — each (sender, recipient) pair must be explicitly listed | Explicit |
-| R6.2 | **MANAGER** has full graph access — can message every title, including MAINTAINER and AUTONOMOUS. MANAGER is the sole bridge between the team layer and the governance layer. | Explicit |
-| R6.3 | **CHIEF-OF-STAFF** is strictly the team gateway — can message MANAGER, COS peers, and the team roles (ORCHESTRATOR, ARCHITECT, INTEGRATOR, MEMBER). Cannot message MAINTAINER or AUTONOMOUS (tightened 2026-04-22). | Explicit |
-| R6.4 | **ORCHESTRATOR** can message COS, ARCHITECT, INTEGRATOR, MEMBER. Cannot message MANAGER, MAINTAINER, or AUTONOMOUS. | Explicit |
-| R6.5 | **ARCHITECT**, **INTEGRATOR**, **MEMBER** can only message COS and ORCHESTRATOR. | Explicit |
-| R6.5a | **AUTONOMOUS** can message only MANAGER and other AUTONOMOUS agents. Cannot reach COS, team roles, or MAINTAINER (tightened 2026-04-22). | Explicit |
-| R6.5b | **MAINTAINER** can message only MANAGER. Cannot reach COS, team roles, AUTONOMOUS, or peer MAINTAINERs (tightened 2026-04-22). MAINTAINER is a governance-layer title — cross-maintainer coordination goes through MANAGER. | Explicit |
-| R6.6 | The **user** is exempt from the graph — can message any agent and receive responses from all. Additionally, user-to-user messaging (human-to-human) is always allowed; this graph governs agent-to-agent communication only. | Explicit |
-| R6.7 | When a message is blocked, the error must include a **routing suggestion**. Under the 2026-04-22 tightening, almost every cross-layer route now goes through MANAGER (not COS) — the routing-suggestion table in `lib/communication-graph.ts` is the authoritative source for these hints. | Explicit |
-| R6.8 | **Three layers of enforcement**: (1) API server validates sender/recipient titles before delivery, (2) Role-plugin main-agent .md files list allowed recipients, (3) Sub-agents are forbidden from using AMP messaging entirely. | Explicit |
+| R6.1 | Communication rules are defined by the directed graph above — each (sender, recipient) pair must be explicitly listed with its edge type (`Y` = allow, `1` = reply-only, blank = deny). | Explicit |
+| R6.2 | **MANAGER** has full graph access — can freely message every node, including the human user, MAINTAINER, and AUTONOMOUS. MANAGER is the sole bridge between the team layer and the governance layer. | Explicit |
+| R6.3 | **CHIEF-OF-STAFF** is strictly the team gateway — can message MANAGER, COS peers, and the team roles (ORCHESTRATOR, ARCHITECT, INTEGRATOR, MEMBER). Cannot initiate messages to MAINTAINER, AUTONOMOUS, or the human user (H-edge is reply-only). | Explicit |
+| R6.4 | **ORCHESTRATOR** can message COS, ARCHITECT, INTEGRATOR, MEMBER. Cannot initiate to MANAGER, MAINTAINER, AUTONOMOUS, or the human user (H-edge is reply-only). | Explicit |
+| R6.5 | **ARCHITECT**, **INTEGRATOR**, **MEMBER** can only freely message COS and ORCHESTRATOR. H-edge is reply-only (may answer a user message once; cannot initiate). | Explicit |
+| R6.5a | **AUTONOMOUS** can freely message MANAGER, other AUTONOMOUS agents, AND the human user. Cannot reach COS, team roles, or MAINTAINER. The H-edge is `Y` (not reply-only) — AUTONOMOUS operates outside teams and may initiate user-directed messages. | Explicit |
+| R6.5b | **MAINTAINER** can freely message MANAGER and the human user. Cannot reach COS, team roles, AUTONOMOUS, or peer MAINTAINERs. The H-edge is `Y` (not reply-only) — MAINTAINERs need to surface repo-scoped concerns directly to the user when MANAGER routing would add latency. | Explicit |
+| R6.6 | The **human user (H)** is a first-class node with unconditional outbound `Y` to every other node INCLUDING other humans (H -> H is `Y` for user-to-user messaging). Inbound to H from team titles is `1` (reply-only: team agents cannot proactively initiate but may reply once to an inbound user message). Inbound to H from governance titles (M/T/A) is `Y`. Agents are additionally persona-discouraged from proactively initiating user contact — the reply-only rule is the hard floor; the persona sets the soft floor. | Explicit |
+| R6.7 | When a message is blocked, the error must include a **routing suggestion**. The routing-suggestion table in `lib/communication-graph.ts` is authoritative. Under the 2026-04-22 tightening, almost every cross-layer route goes through MANAGER (not COS). | Explicit |
+| R6.8 | **Three layers of enforcement**: (1) API server validates sender/recipient titles before delivery via `validateMessageRoute()`, (2) Role-plugin main-agent .md files list allowed/reply-only recipients, (3) Sub-agents are forbidden from using AMP messaging entirely. | Explicit |
 | R6.9 | Sub-agents have no AMP identity and cannot authenticate — they communicate only with their spawning main-agent. | Explicit |
+| R6.10 | **Reply-only enforcement** (`1` edges): the sender must pass `inReplyToMessageId` referencing an inbound user→agent message. The AMP inbox layer enforces the "one reply per inbound message" invariant by marking the original message `replied=true`; subsequent attempts to reply to the same message id are rejected. | Explicit |
 
 Full spec: `docs_dev/2026-04-03-communication-graph.md`
 

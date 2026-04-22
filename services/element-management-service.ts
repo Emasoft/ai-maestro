@@ -33,6 +33,7 @@ import {
   MARKETPLACE_NAME as GITHUB_MARKETPLACE_NAME_IMPORT,
   LOCAL_MARKETPLACE_NAME,
   LOCAL_MARKETPLACE_DIR_NAME,
+  CUSTOM_MARKETPLACE_NAME,
   PREDEFINED_ROLE_PLUGIN_NAMES,
   ROLE_PLUGIN_MAIN_AGENTS,
   TITLE_PLUGIN_MAP as ECOSYSTEM_TITLE_PLUGIN_MAP,
@@ -1162,21 +1163,34 @@ export async function installPluginLocally(
     throw new Error('agentDir must not contain ".."')
   }
 
-  // For predefined marketplace role-plugins: use `claude plugin install` CLI.
-  if (marketplaceName === GITHUB_MARKETPLACE_NAME && PREDEFINED_ROLE_PLUGINS[pluginName]) {
+  // For predefined marketplace role-plugins AND any other non-custom plugin:
+  // use `claude plugin install` CLI. This ensures the plugin is actually
+  // downloaded into the user-scope cache (~/.claude/plugins/cache/<mkt>/<name>/)
+  // and that the agent's `.claude/settings.local.json` enabledPlugins key is
+  // added atomically. The check for LOCAL_MARKETPLACE_NAME / CUSTOM_MARKETPLACE_NAME
+  // routes Haephestos-authored local plugins through the legacy direct-settings
+  // write path (those plugins live in `~/agents/{role,custom}-plugins/…` and
+  // cannot be resolved by Claude CLI).
+  const isLocalOnlyMarketplace = (
+    marketplaceName === LOCAL_MARKETPLACE_NAME ||
+    marketplaceName === CUSTOM_MARKETPLACE_NAME
+  )
+  if (!isLocalOnlyMarketplace) {
     try {
       await execFileAsync('claude', [
-        'plugin', 'install', pluginName, GITHUB_MARKETPLACE_NAME, '--scope', 'local',
+        'plugin', 'install', pluginName, marketplaceName, '--scope', 'local',
       ], { timeout: 120000, cwd: resolvedDir })
-      console.log(`[element-mgmt] Installed ${pluginName} from ${GITHUB_MARKETPLACE_NAME} via Claude CLI (scope: local, cwd: ${resolvedDir})`)
+      console.log(`[element-mgmt] Installed ${pluginName} from ${marketplaceName} via Claude CLI (scope: local, cwd: ${resolvedDir})`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      throw new Error(`Failed to install role-plugin "${pluginName}" from ${GITHUB_MARKETPLACE_NAME}: ${msg}`)
+      throw new Error(`Failed to install plugin "${pluginName}" from ${marketplaceName}: ${msg}`)
     }
     return
   }
 
-  // For local/custom plugins, write settings.local.json directly
+  // For Haephestos-authored local/custom plugins, write settings.local.json directly.
+  // These plugins live in `~/agents/{role,custom}-plugins/…` and cannot be
+  // resolved by Claude CLI's marketplace lookup.
   const pluginKey = `${pluginName}@${marketplaceName}`
   const claudeDir = join(resolvedDir, '.claude')
   const localSettings = join(claudeDir, 'settings.local.json')
@@ -1234,26 +1248,36 @@ export async function uninstallPluginLocally(
 
   const pluginKey = `${pluginName}@${marketplaceName}`
 
-  // For predefined marketplace plugins: use `claude plugin uninstall` CLI + settings cleanup
-  if (marketplaceName === GITHUB_MARKETPLACE_NAME && PREDEFINED_ROLE_PLUGINS[pluginName]) {
+  // For non-custom marketplaces: use `claude plugin uninstall` CLI + settings cleanup.
+  // This matches installPluginLocally's symmetric path — Claude CLI owns the
+  // plugin cache and the agent's enabledPlugins entry for any plugin whose
+  // source is a registered GitHub marketplace (predefined role-plugins and
+  // third-party plugins alike). Haephestos-authored local customs keep the
+  // legacy direct-settings path.
+  const isLocalOnlyMarketplace = (
+    marketplaceName === LOCAL_MARKETPLACE_NAME ||
+    marketplaceName === CUSTOM_MARKETPLACE_NAME
+  )
+  if (!isLocalOnlyMarketplace) {
     try {
       await execFileAsync('claude', [
-        'plugin', 'uninstall', pluginName, GITHUB_MARKETPLACE_NAME, '--scope', 'local',
+        'plugin', 'uninstall', pluginName, marketplaceName, '--scope', 'local',
       ], { timeout: 30000, cwd: resolvedDir })
-      console.log(`[element-mgmt] Uninstalled ${pluginName} from ${GITHUB_MARKETPLACE_NAME} via Claude CLI (scope: local, cwd: ${resolvedDir})`)
+      console.log(`[element-mgmt] Uninstalled ${pluginName} from ${marketplaceName} via Claude CLI (scope: local, cwd: ${resolvedDir})`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (!msg.includes('not found') && !msg.includes('not installed')) {
         console.warn(`[element-mgmt] CLI uninstall failed for ${pluginName}: ${msg}`)
       }
     }
-    // SAFEGUARD: Also remove from settings.local.json directly
+    // SAFEGUARD: Also remove from settings.local.json directly (defence in depth —
+    // Claude CLI has historically been flaky about settings.local.json cleanup).
     const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
     if (existsSync(localSettings)) {
       await withSettingsLock(localSettings, async () => {
         const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
         const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-        if (ep[pluginKey]) {
+        if (pluginKey in ep) {
           delete ep[pluginKey]
           settings.enabledPlugins = ep
           await saveJsonSafe(localSettings, settings)
@@ -1261,20 +1285,20 @@ export async function uninstallPluginLocally(
         }
       })
     }
-    return
-  }
+    // Fall through to installed_plugins.json cleanup below.
+  } else {
+    // For Haephestos-authored local/custom plugins: manipulate settings.local.json directly
+    const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
 
-  // For local/custom plugins: manipulate settings.local.json directly
-  const localSettings = join(resolvedDir, '.claude', 'settings.local.json')
-
-  if (existsSync(localSettings)) {
-    await withSettingsLock(localSettings, async () => {
-      const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
-      const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-      delete ep[pluginKey]
-      settings.enabledPlugins = ep
-      await saveJsonSafe(localSettings, settings)
-    })
+    if (existsSync(localSettings)) {
+      await withSettingsLock(localSettings, async () => {
+        const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+        const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+        delete ep[pluginKey]
+        settings.enabledPlugins = ep
+        await saveJsonSafe(localSettings, settings)
+      })
+    }
   }
 
   // Remove from installed_plugins.json

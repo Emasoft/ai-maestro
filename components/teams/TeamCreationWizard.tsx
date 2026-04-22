@@ -62,10 +62,28 @@ interface GitHubProjectInfo {
 
 type ProjectChoice = 'create' | 'link' | 'skip'
 
+// An agent the user can pick to BECOME a team officer (COS or Orchestrator).
+// Filtering at fetch time guarantees only AUTONOMOUS agents not in any team
+// appear here — so the picker never offers an ineligible target.
+//
+// Why AUTONOMOUS only: a team officer title (COS / Orchestrator / Architect /
+// Integrator / Member) requires team membership (TEAM_TITLES set in
+// element-management-service.ts). An agent already in another team carries
+// one of those titles; reassigning it to a NEW team is a two-step process
+// (remove from old team → revert to AUTONOMOUS → add to new team). The
+// Team Creation Wizard is the ENTRY point — not the right surface for that
+// migration. If the user wants to pull an existing team member into the new
+// team, they do it from the Team Membership section after creation.
+//
+// Why only agents not in any team: same reason — membership exclusivity.
+// AUTONOMOUS agents are specifically NOT in a team (R9.13: the autonomous
+// role-plugin is the fallback identity when no team binds them).
 interface AgentOption {
   id: string
   name: string
   label?: string
+  /** Governance title — only AUTONOMOUS agents reach this picker */
+  governanceTitle: string | null
 }
 
 interface WizardData {
@@ -213,21 +231,60 @@ export default function TeamCreationWizard({
       .finally(() => setReposLoading(false))
   }, [data.selectedOrg])
 
-  // ── Fetch agents on Step 4 entry ──────────────────────────────────
+  // ── Fetch eligible agents on Step 4 entry ─────────────────────────
+  // Previously this pulled from /api/sessions which returns Session objects
+  // with no governanceTitle — so the picker offered every agent as a COS
+  // candidate, including MANAGERs, existing COSes of other teams, MEMBERs,
+  // and MAINTAINERs. Assigning any of those as COS of the new team would
+  // either be a silent title override (security risk) or a no-op (because
+  // ChangeTitle Gate 9 would reject the transition without team removal
+  // first, showing the user a cryptic error late in the flow).
+  //
+  // Correct behavior per team governance (R9.13, R11.12, and the 2026-04-21
+  // user directive): offer ONLY agents whose current title is AUTONOMOUS
+  // and who are not members of ANY team. These are the legal "free" agents
+  // that can be pulled into the new team and assigned their first team
+  // title. An agent becomes a COS only at the moment its team is created —
+  // no COS exists without a team, no team exists without a COS.
+  //
+  // Fetch strategy: query /api/agents (has governanceTitle) and /api/teams
+  // (has agentIds for every team) in parallel, then locally compute the
+  // intersection. This is cheap (both endpoints cache aggressively and
+  // return compact JSON) and avoids a new server endpoint.
   useEffect(() => {
     if (step !== 3) return
     setAgentsLoading(true)
-    fetch('/api/sessions')
-      .then(r => r.ok ? r.json() : [])
-      .then(d => {
-        const list = Array.isArray(d) ? d : (d.sessions || [])
-        setAgents(list.map((s: { id: string; name: string; label?: string }) => ({
-          id: s.id,
-          name: s.name,
-          label: s.label,
-        })))
+    Promise.all([
+      fetch('/api/agents').then(r => r.ok ? r.json() : { agents: [] }),
+      fetch('/api/teams').then(r => r.ok ? r.json() : { teams: [] }),
+    ])
+      .then(([agentsRes, teamsRes]: [
+        { agents?: Array<{ id: string; name: string; label?: string; governanceTitle?: string | null; deletedAt?: string | null }> },
+        { teams?: Array<{ agentIds?: string[] }> }
+      ]) => {
+        const allAgents = Array.isArray(agentsRes.agents) ? agentsRes.agents : []
+        const allTeams = Array.isArray(teamsRes.teams) ? teamsRes.teams : []
+        // Set of all agent IDs that are already in a team.
+        const agentsInAnyTeam = new Set<string>()
+        for (const team of allTeams) {
+          for (const aid of (team.agentIds || [])) {
+            agentsInAnyTeam.add(aid)
+          }
+        }
+        // Keep: live + AUTONOMOUS + not in any team.
+        const eligible = allAgents
+          .filter(a => !a.deletedAt)
+          .filter(a => (a.governanceTitle || 'autonomous') === 'autonomous')
+          .filter(a => !agentsInAnyTeam.has(a.id))
+          .map(a => ({
+            id: a.id,
+            name: a.name,
+            label: a.label,
+            governanceTitle: a.governanceTitle || 'autonomous',
+          }))
+        setAgents(eligible)
       })
-      .catch((err) => { console.error('Failed to fetch agents:', err); setAgents([]) })
+      .catch((err) => { console.error('Failed to fetch eligible agents:', err); setAgents([]) })
       .finally(() => setAgentsLoading(false))
   }, [step])
 
@@ -712,20 +769,30 @@ export default function TeamCreationWizard({
                     <span className="text-sm font-medium text-white">Chief of Staff</span>
                     <span className="text-xs text-red-400">(required)</span>
                   </div>
-                  <p className="text-xs text-gray-500 mb-2">Leads the team, manages membership, routes external messages.</p>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Leads the team, manages membership, routes external messages.
+                    Choose Auto-create to spawn a new COS agent, or reuse one of
+                    your existing AUTONOMOUS agents (they become COS when this
+                    team is created — there is no COS without a team).
+                  </p>
                   <select
                     value={data.cosAgentId}
                     onChange={e => update('cosAgentId', e.target.value)}
                     aria-label="Select Chief of Staff"
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
                   >
-                    <option value="auto">Auto-create COS agent</option>
+                    <option value="auto">Auto-create new COS agent</option>
                     {agents.map(a => (
                       <option key={a.id} value={a.id} disabled={a.id === data.orchestratorAgentId}>
-                        {a.label || a.name}{a.id === data.orchestratorAgentId ? ' (assigned as Orchestrator)' : ''}
+                        Reuse {a.label || a.name} (AUTONOMOUS → becomes COS){a.id === data.orchestratorAgentId ? ' — assigned as Orchestrator' : ''}
                       </option>
                     ))}
                   </select>
+                  {agents.length === 0 && !agentsLoading && (
+                    <p className="text-[11px] text-gray-600 mt-1 italic">
+                      No AUTONOMOUS agents available for reuse — Auto-create will spawn one.
+                    </p>
+                  )}
                 </div>
 
                 {/* Orchestrator */}
@@ -735,7 +802,12 @@ export default function TeamCreationWizard({
                     <span className="text-sm font-medium text-white">Orchestrator</span>
                     <span className="text-xs text-gray-600">(optional)</span>
                   </div>
-                  <p className="text-xs text-gray-500 mb-2">Primary kanban manager, assigns tasks, direct MANAGER communication.</p>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Primary kanban manager, assigns tasks, direct MANAGER
+                    communication. Same rules as COS: choose Auto-create or
+                    reuse an AUTONOMOUS agent (becomes Orchestrator on team
+                    creation).
+                  </p>
                   <select
                     value={data.orchestratorAgentId}
                     onChange={e => update('orchestratorAgentId', e.target.value)}
@@ -743,10 +815,10 @@ export default function TeamCreationWizard({
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
                   >
                     <option value="">None</option>
-                    <option value="auto">Auto-create Orchestrator agent</option>
+                    <option value="auto">Auto-create new Orchestrator agent</option>
                     {agents.map(a => (
                       <option key={a.id} value={a.id} disabled={a.id === data.cosAgentId}>
-                        {a.label || a.name}{a.id === data.cosAgentId ? ' (assigned as COS)' : ''}
+                        Reuse {a.label || a.name} (AUTONOMOUS → becomes Orchestrator){a.id === data.cosAgentId ? ' — assigned as COS' : ''}
                       </option>
                     ))}
                   </select>
@@ -826,9 +898,12 @@ export default function TeamCreationWizard({
                     <Shield className="w-3.5 h-3.5 text-yellow-400" />
                     <span className="text-xs text-gray-400">COS:</span>
                     {data.cosAgentId === 'auto' ? (
-                      <span className="text-xs text-emerald-400">Auto-create</span>
+                      <span className="text-xs text-emerald-400">Auto-create new</span>
                     ) : data.cosAgentId ? (
-                      <span className="text-xs text-white">{agents.find(a => a.id === data.cosAgentId)?.label || agents.find(a => a.id === data.cosAgentId)?.name || data.cosAgentId}</span>
+                      <span className="text-xs text-white">
+                        Reuse {agents.find(a => a.id === data.cosAgentId)?.label || agents.find(a => a.id === data.cosAgentId)?.name || data.cosAgentId}
+                        <span className="text-gray-500"> (AUTONOMOUS → COS)</span>
+                      </span>
                     ) : (
                       <span className="text-xs text-gray-600 italic">None</span>
                     )}
@@ -837,9 +912,12 @@ export default function TeamCreationWizard({
                     <Megaphone className="w-3.5 h-3.5 text-blue-400" />
                     <span className="text-xs text-gray-400">Orchestrator:</span>
                     {data.orchestratorAgentId === 'auto' ? (
-                      <span className="text-xs text-emerald-400">Auto-create</span>
+                      <span className="text-xs text-emerald-400">Auto-create new</span>
                     ) : data.orchestratorAgentId ? (
-                      <span className="text-xs text-white">{agents.find(a => a.id === data.orchestratorAgentId)?.label || agents.find(a => a.id === data.orchestratorAgentId)?.name || data.orchestratorAgentId}</span>
+                      <span className="text-xs text-white">
+                        Reuse {agents.find(a => a.id === data.orchestratorAgentId)?.label || agents.find(a => a.id === data.orchestratorAgentId)?.name || data.orchestratorAgentId}
+                        <span className="text-gray-500"> (AUTONOMOUS → Orchestrator)</span>
+                      </span>
                     ) : (
                       <span className="text-xs text-gray-600 italic">None</span>
                     )}

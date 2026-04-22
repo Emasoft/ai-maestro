@@ -4,9 +4,23 @@
 **Filename:** `design/tasks/TRDD-80557822-comm-graph-downstream-sync.md`
 **Tracked in:** this repo (design/tasks/ is git-tracked)
 
-**Status:** Not started.
+**Status:** In progress — v1 tightening covered; v2 expansion (HUMAN node + reply-only edges) added 2026-04-22.
 **Priority:** P1 (drift exists — agents still carry the OLD graph in their personas until these repos are re-published).
-**Blocked by:** nothing. Commit `b411352a` has already shipped the canonical change in-repo; this TRDD covers the downstream propagation.
+**Blocked by:** nothing. In-repo changes shipped in `b411352a` (v1) and the next commit (v2 — HUMAN node + reply-only `1>` edges). This TRDD covers the downstream propagation.
+
+## v2 expansion (2026-04-22 afternoon)
+
+The graph was further revised to:
+- Add **HUMAN (H)** as a first-class graph node (previously "exempt from graph").
+- Introduce the **`1>` reply-only edge type**: sender may send exactly ONE reply to recipient only if the recipient previously messaged the sender.
+- Set all team-agent → H edges (`C`, `O`, `R`, `I`, `E`) to reply-only. Team agents may only reply to inbound user messages; cannot initiate.
+- Set M/T/A → H edges to full `Y` (they may initiate user contact).
+- Set H → * edges to full `Y` (user can message everyone, including other humans).
+
+Downstream sync consumers must mirror:
+1. The expanded 9-node matrix (M, C, O, R, I, E, T, A, H).
+2. The `1>` notation — agents' personas and skill docs must clarify that team titles must not proactively message the user.
+3. The R6.10 rule — reply-only enforcement requires `inReplyToMessageId`.
 
 ---
 

@@ -1187,14 +1187,32 @@ export async function routeMessage(
 
     const recipientAgentName = localAgent.name || localAgent.alias || recipientName
 
-    // Title-based communication graph — enforces directed messaging rules between governance titles
+    // Title-based communication graph — enforces directed messaging rules between governance titles.
+    // 2026-04-22 v2 graph: HUMAN (H) is a first-class node; team titles have
+    // reply-only (`1>`) edges to H that require inReplyToMessageId.
     // NOTE: In Phase 1, the user (web UI) sends messages via /api/teams/{id}/notify, NOT /v1/route.
     // The isUserMessage flag exists for Phase 2 (maestro auth) when the user may send via /v1/route.
     // Currently isUserSender is always false here because auth + agent resolution precede this point.
     const isUserSender = !senderAgent && !isMeshForwarded
     const senderTitle = isMeshForwarded ? (verifiedSenderRole || null) : (senderAgent?.governanceTitle || null)
     const recipientTitle = localAgent.governanceTitle || null
-    const graphCheck = validateMessageRoute(senderTitle, recipientTitle, { isUserMessage: isUserSender })
+    // String-cast the comparison because AgentRole does not include 'human'
+    // or the legacy 'user' sentinel; the AMP route handler historically
+    // accepted either shape so both are normalised to recipientIsHuman.
+    const recipientTitleStr = String(recipientTitle ?? '')
+    const recipientIsHuman = recipientTitleStr === 'human' || recipientTitleStr === 'user'
+    // AMP body may carry inReplyTo for thread replies; if the caller
+    // populated it we thread the id through to the graph check so reply-only
+    // edges can resolve. `unknown` double-cast because AMPRouteRequest is a
+    // closed shape — the field is optional and may appear in future revisions.
+    const bodyRecord = body as unknown as Record<string, unknown>
+    const inReplyToRaw = bodyRecord?.inReplyTo
+    const inReplyToId = typeof inReplyToRaw === 'string' ? inReplyToRaw : undefined
+    const graphCheck = validateMessageRoute(senderTitle, recipientTitle, {
+      isUserMessage: isUserSender,
+      recipientIsHuman,
+      inReplyToMessageId: inReplyToId,
+    })
     if (!graphCheck.allowed) {
       const suggestion = graphCheck.suggestion ? ` ${graphCheck.suggestion}.` : ''
       return {

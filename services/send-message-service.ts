@@ -153,18 +153,31 @@ export async function SendMessage(
       }
     }
 
-    // ── G06: Communication graph check (R6) ───────────────────
+    // ── G06: Communication graph check (R6, R6.10) ──────────────
+    // 2026-04-22 v2: graph now includes HUMAN (H) as a first-class node
+    // with reply-only (`1>`) edges from team titles. Pass `recipientIsHuman`
+    // when the target is the user, and `inReplyToMessageId` when this is
+    // a reply to a prior H→agent message. validateMessageRoute rejects
+    // reply-only edges without the reply context.
     if (!input.skipGraphCheck && senderTitle !== 'user' && senderTitle !== 'system') {
       try {
         const { validateMessageRoute } = await import('@/lib/communication-graph')
-        const graphResult = validateMessageRoute(senderTitle, recipientTitle)
+        // recipientTitle is typed as AgentRole | null | undefined; AgentRole
+        // does not include 'human' or 'user', but legacy flows may pass either
+        // sentinel on the wire. Normalise by string-cast before comparison.
+        const recipientTitleStr = String(recipientTitle ?? '')
+        const recipientIsHuman = recipientTitleStr === 'human' || recipientTitleStr === 'user'
+        const graphResult = validateMessageRoute(senderTitle, recipientTitle, {
+          recipientIsHuman,
+          inReplyToMessageId: input.inReplyTo,
+        })
         if (!graphResult.allowed) {
-          result.error = `Message blocked by communication graph (R6): ${graphResult.reason || `${senderTitle.toUpperCase()} cannot message ${recipientTitle.toUpperCase()}`}. ` +
+          result.error = `Message blocked by communication graph (R6): ${graphResult.reason || `${senderTitle.toUpperCase()} cannot message ${(recipientTitle || 'unknown').toUpperCase()}`}. ` +
             (graphResult.suggestion ? `Suggestion: ${graphResult.suggestion}` : '')
-          ops.push(`G06: DENIED — R6 graph: ${senderTitle} → ${recipientTitle} forbidden`)
+          ops.push(`G06: DENIED — R6 graph: ${senderTitle} → ${recipientTitle ?? 'unknown'} forbidden${graphResult.edgeType ? ` (${graphResult.edgeType})` : ''}`)
           return result
         }
-        ops.push(`G06: R6 graph allows ${senderTitle} → ${recipientTitle}`)
+        ops.push(`G06: R6 graph allows ${senderTitle} → ${recipientTitle ?? 'unknown'}${graphResult.edgeType === 'reply-only' ? ' (reply-only)' : ''}`)
       } catch {
         // Communication graph module not available — allow (fail-open for local messages)
         ops.push(`G06: WARN — Communication graph check skipped (module not available)`)

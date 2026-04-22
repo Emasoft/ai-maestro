@@ -54,8 +54,8 @@ prerequisites:
   - AI Maestro server running at http://localhost:23000
   - Governance password set
   - Chrome browser open with DevTools accessible via CDP
-  - ai-maestro-plugins marketplace registered at user scope
-  - ai-maestro-plugin installed and enabled at user scope (verify via `GET /api/settings/global-plugins`)
+  - "ai-maestro-plugins marketplace registered (registration itself is user-scope — just the marketplace URL known to Claude CLI, no plugins auto-installed)"
+  - "ai-maestro-plugin installed and enabled at LOCAL scope inside the test agent's workdir (per R17.17 — NEVER user scope; PG03 self-heals any accidental user-scope entry)"
   - No pre-existing agent named "scen017-ui-test"
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:

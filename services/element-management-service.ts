@@ -1735,15 +1735,34 @@ export async function ChangeTitle(
 
     // ── GATE 1: Validate title value ─────────────────────────
     // R9.13: 'autonomous' is a real title bound to `ai-maestro-autonomous-agent`.
-    // effectiveTitle is now just the normalized title — no autonomous→null
-    // collapse, which is how the legacy "no plugin for autonomous" path used
-    // to slip through Gates 15/16. See docs/GOVERNANCE-RULES.md R9.13 / R11.12.
-    const effectiveTitle = newTitle
-    if (newTitle && !VALID_TITLES.has(newTitle)) {
-      result.error = `Invalid title "${newTitle}". Valid: ${[...VALID_TITLES].join(', ')}`
+    // Two NORMALIZATIONS happen here to keep callers + legacy clients honest:
+    //   (a) No `autonomous → null` collapse on the way OUT (effectiveTitle
+    //       stays `'autonomous'` if that's what was requested). This prevents
+    //       the old bug where `null` was treated as "no title = skip plugin
+    //       install" even when the user actually wanted AUTONOMOUS.
+    //   (b) `null → 'autonomous'` collapse on the way IN. Every caller that
+    //       passes `null` today means "revert to AUTONOMOUS" (teams-service
+    //       on member-remove, governance-service on manager-demote, the
+    //       chief-of-staff replace route, and the TitleAssignmentDialog
+    //       which sends `{governanceTitle: null, role: 'autonomous'}`).
+    //       Previously `null` slipped through Gates 15/16 without installing
+    //       `ai-maestro-autonomous-agent`, violating R9.13 silently. The
+    //       normalization here fixes that regression end-to-end.
+    // See docs/GOVERNANCE-RULES.md R9.13 / R11.12.
+    const rawTitle = newTitle
+    const effectiveTitle = newTitle === null ? 'autonomous' : newTitle
+    if (effectiveTitle && !VALID_TITLES.has(effectiveTitle)) {
+      result.error = `Invalid title "${effectiveTitle}". Valid: ${[...VALID_TITLES].join(', ')}`
       return result
     }
-    ops.push(`G01: Title "${newTitle || 'none'}" is valid`)
+    if (rawTitle === null) {
+      ops.push(`G01: Null title normalized to "autonomous" (R9.13: every agent carries a role-plugin)`)
+    } else {
+      ops.push(`G01: Title "${effectiveTitle}" is valid`)
+    }
+    // Update the result record so the API response reflects the actual
+    // title that will be persisted, not the raw `null` the client sent.
+    result.newTitle = effectiveTitle
 
     // ── GATE 2: Validate agent exists ────────────────────────
     const { getAgent, updateAgent } = await import('@/lib/agent-registry')
@@ -1763,7 +1782,13 @@ export async function ChangeTitle(
     // support at all (e.g. gemini, opencode, aider), skip plugin installation
     // entirely. The title still applies, but no plugin is installed because
     // these clients cannot load Claude Code role-plugins.
-    const titleRequiresPlugin = newTitle ? !!getRequiredPluginForTitle(newTitle) : false
+    // Uses effectiveTitle (post-Gate 1 normalization). Previously this
+    // referenced `newTitle` directly, which meant a PATCH body of
+    // `{governanceTitle: null, role: 'autonomous'}` passed through as
+    // "no title → no plugin required", skipping Gates 15/16 and leaving
+    // the agent with no role-plugin. Now `null` becomes `'autonomous'`
+    // at Gate 1 and this check correctly resolves `ai-maestro-autonomous-agent`.
+    const titleRequiresPlugin = effectiveTitle ? !!getRequiredPluginForTitle(effectiveTitle) : false
     let agentClientType = 'claude' // default
     let needsPluginConversion = false
     let clientSupportsRolePlugins = true
@@ -1796,23 +1821,25 @@ export async function ChangeTitle(
         if (!clientSupportsRolePlugins) {
           ops.push(`G03: Client "${agentClientType}" has no role-plugin support — skipping plugin install (title only)`)
         } else {
-          // Check if compatible plugins exist for this title + client
-          const compatiblePlugins = await getCompatiblePluginsForTitle(newTitle!, agentClientType)
+          // Check if compatible plugins exist for this title + client.
+          // Uses effectiveTitle (post-Gate-1 normalization). Previously
+          // `newTitle!` would throw when the caller passed null for AUTONOMOUS.
+          const compatiblePlugins = await getCompatiblePluginsForTitle(effectiveTitle, agentClientType)
           if (compatiblePlugins.length > 0) {
-            ops.push(`G03: ${compatiblePlugins.length} compatible plugin(s) for ${newTitle?.toUpperCase()}+${agentClientType}`)
+            ops.push(`G03: ${compatiblePlugins.length} compatible plugin(s) for ${effectiveTitle.toUpperCase()}+${agentClientType}`)
           } else {
             // No plugins for this client — check if plugins exist for OTHER clients (auto-convert)
-            const anyPlugins = await getCompatiblePluginsForTitle(newTitle!)
+            const anyPlugins = await getCompatiblePluginsForTitle(effectiveTitle)
             if (anyPlugins.length > 0) {
               needsPluginConversion = true
-              ops.push(`G03: No native ${agentClientType} plugin for ${newTitle?.toUpperCase()} — will auto-convert from ${anyPlugins[0].name}`)
+              ops.push(`G03: No native ${agentClientType} plugin for ${effectiveTitle.toUpperCase()} — will auto-convert from ${anyPlugins[0].name}`)
             } else {
               // R9.13: role-plugin is mandatory. If not even a fallback entry
               // exists in TITLE_PLUGIN_MAP, the title has no governance persona
               // and the operation MUST be rejected rather than leaving the agent
               // without a plugin.
-              ops.push(`G03: DENIED — no compatible role-plugin found for title "${newTitle}" (R9.13: role-plugin is mandatory)`)
-              result.error = `role-plugin is mandatory — no compatible plugin found for title "${newTitle}" (R9.13)`
+              ops.push(`G03: DENIED — no compatible role-plugin found for title "${effectiveTitle}" (R9.13: role-plugin is mandatory)`)
+              result.error = `role-plugin is mandatory — no compatible plugin found for title "${effectiveTitle}" (R9.13)`
               return result
             }
           }
@@ -1900,19 +1927,20 @@ export async function ChangeTitle(
     // Team titles (member, chief-of-staff, orchestrator, architect, integrator)
     // can ONLY be assigned to agents that belong to a team. If the agent has no
     // team, the title is rejected. Only MANAGER and AUTONOMOUS are standalone.
-    if (newTitle && TEAM_TITLES.has(newTitle)) {
+    // Uses effectiveTitle (post-Gate-1 null→'autonomous' normalization).
+    if (TEAM_TITLES.has(effectiveTitle)) {
       const { loadTeams: loadTeamsG9 } = await import('@/lib/team-registry')
       const allTeamsG9 = loadTeamsG9()
       const agentInTeam = allTeamsG9.some(t => t.agentIds.includes(agentId))
       if (!agentInTeam) {
-        result.error = `Title "${newTitle.toUpperCase()}" requires team membership. Assign the agent to a team first.`
+        result.error = `Title "${effectiveTitle.toUpperCase()}" requires team membership. Assign the agent to a team first.`
         return result
       }
-      ops.push(`EXE: ${newTitle.toUpperCase()} requires team — agent is in a team ✓`)
-    } else if (newTitle && STANDALONE_TITLES.has(newTitle)) {
-      ops.push(`EXE: ${newTitle.toUpperCase()} is standalone — no team required`)
+      ops.push(`EXE: ${effectiveTitle.toUpperCase()} requires team — agent is in a team ✓`)
+    } else if (STANDALONE_TITLES.has(effectiveTitle)) {
+      ops.push(`EXE: ${effectiveTitle.toUpperCase()} is standalone — no team required`)
     } else {
-      ops.push(`EXE: Title being cleared — team check N/A`)
+      ops.push(`EXE: Title "${effectiveTitle}" — team check N/A`)
     }
 
     // ── GATE 9a: MAINTAINER validation (R19.2, R19.3) ────────
@@ -2417,7 +2445,7 @@ export async function ChangeTitle(
     } else if (options?.skipPluginSync) {
       ops.push(`G16: Plugin install skipped (skipPluginSync=true)`)
     } else if (!targetPluginName) {
-      ops.push(`G16: No plugin to install for ${newTitle || 'none'}`)
+      ops.push(`G16: No plugin to install for ${effectiveTitle || 'none'}`)
     } else {
       ops.push(`G16: Plugin "${targetPluginName}" already installed — no change`)
     }
@@ -2443,11 +2471,11 @@ export async function ChangeTitle(
             // Verify the active plugin matches the expected one for this title
             const activeName = activeRolePlugins[0].split('@')[0]
             if (activeName !== targetPluginName) {
-              ops.push(`G17: MISMATCH — active "${activeName}" != expected "${targetPluginName}" for ${newTitle}. Fixing.`)
+              ops.push(`G17: MISMATCH — active "${activeName}" != expected "${targetPluginName}" for ${effectiveTitle}. Fixing.`)
               await uninstallAllRolePlugins(agentDir)
               await installPluginLocally(targetPluginName, agentDir, targetMarketplace).catch(() => {})
             } else {
-              ops.push(`G17: Plugin state consistent (${activeName} matches ${newTitle})`)
+              ops.push(`G17: Plugin state consistent (${activeName} matches ${effectiveTitle})`)
             }
           } else {
             ops.push(`G17: Plugin state consistent (${activeRolePlugins.length} role-plugin(s))`)
@@ -2574,12 +2602,17 @@ export async function ChangeTitle(
     }
 
     result.success = true
-    console.log(`[ChangeTitle] Agent ${agentId} "${agent.name}": ${oldTitle || 'none'} → ${newTitle || 'none'} (${ops.length} gates, restart=${result.restartNeeded})`)
+    console.log(`[ChangeTitle] Agent ${agentId} "${agent.name}": ${oldTitle || 'none'} → ${effectiveTitle || 'none'} (${ops.length} gates, restart=${result.restartNeeded})`)
 
-    // ISSUE-001: Broadcast governance update so UI refreshes instantly
+    // ISSUE-001: Broadcast governance update so UI refreshes instantly.
+    // Broadcasts effectiveTitle (post-Gate-1 normalization). Previously
+    // sent the raw `newTitle` which meant that a revert-to-AUTONOMOUS
+    // PATCH with `{governanceTitle: null}` would push `null` to every
+    // client — the sidebar would flash "no title" for up to 10s until
+    // the next poll reconciled it back to "AUTONOMOUS".
     try {
       const { broadcastGovernanceUpdate } = await import('@/services/shared-state')
-      broadcastGovernanceUpdate(agentId, newTitle)
+      broadcastGovernanceUpdate(agentId, effectiveTitle)
     } catch { /* non-fatal — UI will still catch up via 10s poll */ }
 
     return result

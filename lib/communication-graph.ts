@@ -259,6 +259,14 @@ export function validateMessageRoute(
           edgeType: 'reply-only',
         }
       }
+      // ADVISORY ONLY: this layer only checks that the caller passed SOMETHING
+      // in inReplyToMessageId. It does NOT load the referenced message, verify
+      // its sender/recipient pair, or mark it `replied=true`. The full
+      // "one-reply-per-inbound" invariant lives in the AMP inbox layer and is
+      // tracked as a follow-up in TRDD-80557822. Until that ships the
+      // reply-only edge can be unlocked by any truthy string. The path is only
+      // reachable once the human user becomes an AMP recipient (Phase 2 maestro
+      // auth) — today `recipientIsHuman` is always false so this branch is dead.
       return { allowed: true, edgeType: 'reply-only' }
     }
     return {

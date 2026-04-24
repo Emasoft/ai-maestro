@@ -1201,12 +1201,13 @@ export async function routeMessage(
     // accepted either shape so both are normalised to recipientIsHuman.
     const recipientTitleStr = String(recipientTitle ?? '')
     const recipientIsHuman = recipientTitleStr === 'human' || recipientTitleStr === 'user'
-    // AMP body may carry inReplyTo for thread replies; if the caller
-    // populated it we thread the id through to the graph check so reply-only
-    // edges can resolve. `unknown` double-cast because AMPRouteRequest is a
-    // closed shape — the field is optional and may appear in future revisions.
+    // AMP body carries the reply-thread id in the canonical `in_reply_to`
+    // (snake_case) field — see AMPRouteRequest and every other `body.in_reply_to`
+    // reader in this file. `unknown` double-cast because AMPRouteRequest is a
+    // closed shape and TypeScript would otherwise refuse to index it by
+    // arbitrary key even though the protocol keeps the field optional.
     const bodyRecord = body as unknown as Record<string, unknown>
-    const inReplyToRaw = bodyRecord?.inReplyTo
+    const inReplyToRaw = bodyRecord?.in_reply_to
     const inReplyToId = typeof inReplyToRaw === 'string' ? inReplyToRaw : undefined
     const graphCheck = validateMessageRoute(senderTitle, recipientTitle, {
       isUserMessage: isUserSender,

@@ -134,3 +134,37 @@ Each repo has its own git history. To revert, `git revert` the R6-sync commit in
 - NOT updating role-plugin caches directly (`~/.claude/plugins/cache/...`). Per CLAUDE.md, cached copies are ephemeral — updates must go through the plugin's own GitHub repo + `publish.py`.
 - NOT touching the `docs_dev/2026-04-03-communication-graph.md` spec (stale, dev-private, superseded by `docs/GOVERNANCE-RULES.md` §R6).
 - NOT writing new unit tests for the comm graph — the existing scenario batch exercises it, and a dedicated unit-test module is a separate TRDD.
+
+## 8. Follow-up: R6.10 reply-only enforcement (still in scope of THIS TRDD)
+
+Today `validateMessageRoute` only checks that `inReplyToMessageId` is a
+truthy string on reply-only edges. It does NOT:
+
+1. Load the referenced message from the AMP inbox.
+2. Verify the referenced message's recipient matches the current sender.
+3. Verify the referenced message's sender matches the current recipient
+   (the human user).
+4. Mark the original message `replied=true` to refuse a second reply to
+   the same inbound id.
+
+The path is dead today — no production flow routes messages to the human
+user via `validateMessageRoute`, so `recipientIsHuman` is always `false`
+at both call sites (`services/send-message-service.ts` G06 and
+`services/amp-service.ts` /v1/route). The invariant becomes load-bearing
+the moment Phase 2 maestro auth wires H as an AMP recipient.
+
+### Work required to close the gap
+
+- Add `isReplyToInbound(messageId, senderAgentId, humanUserId): boolean`
+  to `lib/amp-inbox-writer.ts` (or a new `lib/amp-reply-guard.ts`).
+- Call it from both `send-message-service.ts` G06 and `amp-service.ts`
+  at the reply-only branch of `validateMessageRoute` consumers.
+- Mark the original message `replied=true` atomically on successful
+  delivery; reject the second attempt with a clear error.
+- Remove the "ADVISORY ONLY" comment in
+  `lib/communication-graph.ts::validateMessageRoute` and the
+  "(enforcement partial)" note in `docs/GOVERNANCE-RULES.md` §R6.10.
+- Update the honest wording in R6.10 to reclaim the strong invariant.
+
+This MUST ship before any Phase 2 maestro-auth work lands — at that
+point the advisory gate becomes exploitable.

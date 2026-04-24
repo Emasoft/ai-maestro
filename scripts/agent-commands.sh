@@ -537,12 +537,16 @@ HELP
 
 cmd_delete() {
     local agent=""
-    local keep_folder=false keep_data=false confirm_delete=false
+    # delete_folder defaults to FALSE to match the server's default. Scenarios
+    # (and most user calls) that want the folder removed must pass --delete-folder
+    # explicitly — mirrors the UI "Also delete agent folder" checkbox.
+    local keep_data=false confirm_delete=false delete_folder=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --confirm) confirm_delete=true; shift ;;
-            --keep-folder) keep_folder=true; shift ;;
+            --delete-folder) delete_folder=true; shift ;;
+            --keep-folder) delete_folder=false; shift ;;   # explicit opposite (default)
             --keep-data) keep_data=true; shift ;;
             -h|--help)
                 cat << 'HELP'
@@ -550,21 +554,29 @@ Usage: aimaestro-agent.sh delete <agent> --confirm [options]
 
 Options:
   --confirm         Required for deletion (safety flag)
-  --keep-folder     Don't delete project folder
-  --keep-data       Don't delete agent data directory
+  --delete-folder   Also delete ~/agents/<name>/ (mirrors UI "Also delete agent folder")
+  --keep-folder     Keep the folder (default, explicit)
+  --keep-data       Don't delete agent data directory (~/.aimaestro/agents/<id>/)
 
 Examples:
-  # Delete agent (requires --confirm for safety)
+  # Delete agent only (folder preserved)
   aimaestro-agent.sh delete my-agent --confirm
 
-  # Delete agent but keep the project folder
-  aimaestro-agent.sh delete my-agent --confirm --keep-folder
+  # Delete agent AND its ~/agents/my-agent/ folder
+  aimaestro-agent.sh delete my-agent --confirm --delete-folder
 
   # Delete agent but keep agent data (logs, history)
   aimaestro-agent.sh delete my-agent --confirm --keep-data
 
   # Delete by agent ID
   aimaestro-agent.sh delete abc123-uuid --confirm
+
+Note (Rule 12): DELETE /api/agents/[id] is a strict route — it requires an
+X-Sudo-Token minted from the governance password. Agents cannot earn sudo
+tokens; only the human user can, via the password modal in the dashboard
+UI. If this command is invoked by an agent (AID_AUTH present but no sudo
+token), the API returns "sudo_required" and this CLI prints a guidance
+message asking the user to perform the delete via the dashboard.
 HELP
                 return 0 ;;
             -*) print_error "Unknown option: $1"; return 1 ;;
@@ -585,6 +597,7 @@ HELP
         print_error "Deleting agent '$agent_name' requires --confirm flag"
         print_error "This will:"
         print_error "   - Kill all tmux sessions"
+        [[ "$delete_folder" == true ]] && print_error "   - Delete ~/agents/$agent_name/"
         [[ "$keep_data" == false ]] && print_error "   - Delete agent data (~/.aimaestro/agents/$agent_id/)"
         print_error ""
         print_error "Run with --confirm to proceed"
@@ -599,12 +612,36 @@ HELP
     # SCEN-022 BUG-001 fix (P0): inject AID_AUTH for agent callers
     local -a auth_args=()
     _build_auth_args auth_args
-    local response
-    # MEDIUM-010: Add timeout to curl
-    response=$(curl -s --max-time 30 -X DELETE "${auth_args[@]}" "${api_base}/api/agents/${agent_id}")
+
+    # Assemble the query string — deleteFolder=true only when the caller
+    # asked for it. keepData has its own separate flag.
+    local query="?deleteFolder=${delete_folder}"
+    [[ "$keep_data" == true ]] && query="${query}&keepData=true"
+
+    local response http_code
+    # MEDIUM-010: Add timeout to curl. Capture HTTP status separately so we
+    # can detect the "sudo_required" 403 and print a user-facing message.
+    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X DELETE "${auth_args[@]}" "${api_base}/api/agents/${agent_id}${query}")
+    http_code=$(echo "$response" | tail -n1)
+    response=$(echo "$response" | sed '$d')
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
+
+    # Rule 12 guidance: intercept sudo_required and explain the UI path.
+    if [[ "$http_code" = "403" ]] && [[ "$error" = "sudo_required" ]]; then
+        print_error "DELETE requires user-driven sudo (Rule 12)."
+        print_error ""
+        print_error "Agents cannot earn sudo tokens — only the human user can,"
+        print_error "via the governance password modal in the dashboard UI. To"
+        print_error "complete this operation, ask the user to:"
+        print_error "  1. Open the dashboard → click agent '$agent_name'"
+        print_error "  2. Profile → Advanced → Danger Zone → Delete Agent"
+        [[ "$delete_folder" == true ]] && print_error "  3. Check 'Also delete agent folder'"
+        print_error "  4. Enter the governance password when prompted"
+        return 1
+    fi
+
     if [[ -n "$error" ]]; then
         print_error "$error"
         return 1
@@ -702,14 +739,36 @@ HELP
     local -a auth_args=()
     _build_auth_args auth_args
 
-    local response
-    # MEDIUM-010: Add timeout to curl
-    response=$(curl -s --max-time 30 -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
+    local response http_code
+    # MEDIUM-010: Add timeout to curl. Capture HTTP status separately so we
+    # can detect the "sudo_required" 403 and print user-facing guidance.
+    # PROP #1: PATCH /api/agents/{id} now sudo-requires ALL Change*-owned
+    # fields (name, workingDirectory, avatar, programArgs, program,
+    # governanceTitle, githubRepo) — any update through cmd_update with
+    # one of these fields will trip this gate when invoked by an agent
+    # (agents cannot earn sudo tokens per Rule 12).
+    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
         -H "Content-Type: application/json" \
         -d "$payload")
+    http_code=$(echo "$response" | tail -n1)
+    response=$(echo "$response" | sed '$d')
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
+
+    # Rule 12 guidance: intercept sudo_required and explain the UI path.
+    if [[ "$http_code" = "403" ]] && [[ "$error" = "sudo_required" ]]; then
+        print_error "UPDATE requires user-driven sudo (Rule 12)."
+        print_error ""
+        print_error "Agents cannot earn sudo tokens — only the human user can,"
+        print_error "via the governance password modal in the dashboard UI. To"
+        print_error "complete this agent update, ask the user to:"
+        print_error "  1. Open the dashboard → click agent '$RESOLVED_ALIAS'"
+        print_error "  2. Profile → Overview/Advanced → edit the desired field"
+        print_error "  3. Enter the governance password when prompted"
+        return 1
+    fi
+
     if [[ -n "$error" ]]; then
         print_error "$error"
         return 1
@@ -792,14 +851,34 @@ HELP
     local payload
     payload=$(jq -n --arg name "$new_name" '{name: $name}')
 
-    local response
-    # MEDIUM-010: Add timeout to curl
-    response=$(curl -s --max-time 30 -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
+    local response http_code
+    # MEDIUM-010: Add timeout to curl. Capture HTTP status separately so we
+    # can detect the "sudo_required" 403 and print user-facing guidance.
+    # PROP #1: agent rename is a sudo-required Change*-owned field now —
+    # renaming hijacks AMP identity, so agents must not rename without
+    # explicit human approval.
+    response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
         -H "Content-Type: application/json" \
         -d "$payload")
+    http_code=$(echo "$response" | tail -n1)
+    response=$(echo "$response" | sed '$d')
 
     local error
     error=$(echo "$response" | jq -r '.error // empty')
+
+    # Rule 12 guidance: intercept sudo_required and explain the UI path.
+    if [[ "$http_code" = "403" ]] && [[ "$error" = "sudo_required" ]]; then
+        print_error "RENAME requires user-driven sudo (Rule 12)."
+        print_error ""
+        print_error "Agents cannot earn sudo tokens — renaming an agent hijacks"
+        print_error "its AMP identity (other agents address it by name), so the"
+        print_error "human user must re-authenticate. To complete the rename:"
+        print_error "  1. Open the dashboard → click agent '$old_name'"
+        print_error "  2. Profile → Overview → click the name field → enter '$new_name'"
+        print_error "  3. Enter the governance password when prompted"
+        return 1
+    fi
+
     if [[ -n "$error" ]]; then
         print_error "$error"
         return 1
@@ -834,13 +913,30 @@ HELP
             if ! mv -n "$old_dir" "$new_dir" 2>/dev/null; then
                 print_warning "Cannot rename folder (target may exist): $new_dir"
             else
-                # HIGH-002: Use jq for JSON construction to avoid injection
-                local dir_payload
+                # HIGH-002: Use jq for JSON construction to avoid injection.
+                # PROP #1: workingDirectory is now a strict Change* field;
+                # this PATCH requires sudo. Capture HTTP status so we can
+                # roll back the mv if the API refuses (otherwise the folder
+                # is in new_dir but the registry still points at old_dir —
+                # a far worse state than "rename refused cleanly").
+                local dir_payload dir_response dir_http_code
                 dir_payload=$(jq -n --arg d "$new_dir" '{workingDirectory: $d}')
-                curl -s --max-time 30 -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
+                dir_response=$(curl -s --max-time 30 -w '\n%{http_code}' -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}" \
                     -H "Content-Type: application/json" \
-                    -d "$dir_payload" >/dev/null
-                print_info "Renamed folder: $old_dir -> $new_dir"
+                    -d "$dir_payload")
+                dir_http_code=$(echo "$dir_response" | tail -n1)
+                if [[ "$dir_http_code" = "403" ]]; then
+                    # Roll back — the folder moved on disk but the registry
+                    # wasn't updated. Put it back so the agent still works.
+                    mv -n "$new_dir" "$old_dir" 2>/dev/null || true
+                    print_warning "Folder rename refused (sudo required). Restored original path."
+                    print_warning "To rename via UI: Profile → Advanced → change working directory."
+                elif [[ "$dir_http_code" -ge 400 ]]; then
+                    mv -n "$new_dir" "$old_dir" 2>/dev/null || true
+                    print_warning "Folder rename failed (HTTP $dir_http_code). Restored original path."
+                else
+                    print_info "Renamed folder: $old_dir -> $new_dir"
+                fi
             fi
         fi
     fi

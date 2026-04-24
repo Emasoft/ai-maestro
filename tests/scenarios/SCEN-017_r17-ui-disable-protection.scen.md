@@ -43,19 +43,13 @@ data_produced:
   - Possible ~/.claude/settings.json enabledPlugins modifications (temporary, restored via STATE-WIPE)
   - Agent registry entry (temporary, deleted)
   - Cemetery archive entry (temporary, purged)
-required_tools:
-  - mcp__chrome-devtools__navigate_page
-  - mcp__chrome-devtools__take_snapshot
-  - mcp__chrome-devtools__take_screenshot
-  - mcp__chrome-devtools__click
-  - mcp__chrome-devtools__fill
-  - mcp__chrome-devtools__wait_for
+browser_stack: dev-browser
 prerequisites:
   - AI Maestro server running at http://localhost:23000
   - Governance password set
-  - Chrome browser open with DevTools accessible via CDP
-  - ai-maestro-plugins marketplace registered at user scope
-  - ai-maestro-plugin installed and enabled at user scope (verify via `GET /api/settings/global-plugins`)
+  - "ai-maestro-plugins marketplace registered and cached on disk at ~/.claude/plugins/cache/ai-maestro-plugins/ai-maestro-plugin/ — registration itself is user-scope (just the marketplace URL), NOT a user-scope install"
+  - "ai-maestro-plugin installed at LOCAL scope inside every agent's workdir (per R17.17 IRON rule — AI Maestro NEVER installs at user scope; only the human user may via Settings → Plugins Explorer). SCEN-017 Phase 2 exercises this local-scope invariant."
+  - "Phase 3/4 assert R17 protection on ANY user-scope install that happens to exist. Since AI Maestro never creates one by default, Phase 3/4 are SKIP/N/A unless the human user has previously installed ai-maestro-plugin at user scope via the Settings UI. S017 branches on this at runtime."
   - No pre-existing agent named "scen017-ui-test"
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:
@@ -101,12 +95,12 @@ author: AI Maestro Team
 - **Modifies:** tmux state (kills only scen017-* sessions)
 - **Verify:** `tmux list-sessions | grep '^scen017-'` returns nothing. Screenshot: SCEN-017/S004-no-orphans.png
 
-#### S005: Verify ai-maestro-plugin is installed at user scope
-- **Action:** `curl -s http://localhost:23000/api/settings/global-plugins | jq '.marketplaces[] | select(.marketplace=="ai-maestro-plugins") | .plugins[] | select(.name=="ai-maestro-plugin")'` — confirm the core plugin is present and enabled at user scope before the test begins
-- **Goal:** The core plugin is installed and enabled — scenario will test the protection of an already-present plugin, not its initial install
+#### S005: Verify ai-maestro-plugin is cached and ready to install at LOCAL scope
+- **Action:** Check the on-disk cache: `ls ~/.claude/plugins/cache/ai-maestro-plugins/ai-maestro-plugin/plugin.json` — the cached plugin manifest must exist. This is what CreateAgent Gate 12 reads to install the core plugin into the new agent's `.claude/settings.local.json` (LOCAL scope per R17.17 IRON rule). Do NOT query `/api/settings/global-plugins` — that reports user-scope state, which is NOT a prerequisite for this scenario (AI Maestro never installs at user scope).
+- **Goal:** The core plugin is cached and ready. When S010 runs, Gate 12 will install it at LOCAL scope inside the test agent's workdir (the baseline that Phase 2 protects).
 - **Creates:** nothing (verification only)
 - **Modifies:** nothing
-- **Verify:** JSON output includes `"name": "ai-maestro-plugin"` with `"enabled": true`. If absent, prerequisites are broken — STOP and fix before running. Screenshot: SCEN-017/S005-plugin-installed.png
+- **Verify:** `plugin.json` exists in the cache directory. If missing, the ai-maestro-plugins marketplace was never updated — run `claude plugin marketplace update ai-maestro-plugins` and retry. Screenshot: SCEN-017/S005-plugin-cached.png
 
 #### S006: Login to dashboard
 - **Action:** Navigate to `http://localhost:23000/`, fill governance password `mYkri1-xoxrap-gogtan`, click Sign In
@@ -187,7 +181,23 @@ author: AI Maestro Team
 
 ## Phase 3: Surface 2 — Settings -> Plugins Explorer -> Plugins subtab
 
-> This is the new ground SCEN-017 breaks. The user-scope plugin manager in Settings has its own per-plugin enable/disable toggle. The code in `components/settings/GlobalElementsSection.tsx` uses `plugin.name !== 'ai-maestro'` as the guard, but the actual `pluginName` parsed from the settings key `ai-maestro-plugin@ai-maestro-plugins` is `"ai-maestro-plugin"`, NOT `"ai-maestro"`. So the guard does not match and the toggle IS rendered. When clicked, `ChangePlugin` Gate 7 should reject the request — but we need to confirm the UI (a) surfaces a visible error and (b) does not leave a stale "disabled" optimistic state.
+> **Optional phase — conditional on user-scope install existing.** AI Maestro
+> NEVER installs ai-maestro-plugin at user scope (IRON rule, per R17.17). The
+> only way a user-scope install exists is if the human user manually installed
+> it via Settings → Plugins Explorer → Install. If no user-scope install
+> exists when S017 inspects the row, Phase 3 records the absence as PASS
+> (R17 protection is inherently satisfied — there is nothing to disable) and
+> steps S018-S020 are marked N/A.
+>
+> When a user-scope install DOES exist, this phase verifies R17 still protects
+> it from being disabled via the Settings UI. The code in
+> `components/settings/GlobalElementsSection.tsx` uses `plugin.name !== 'ai-maestro'`
+> as the guard, but the actual `pluginName` parsed from the settings key
+> `ai-maestro-plugin@ai-maestro-plugins` is `"ai-maestro-plugin"`, NOT
+> `"ai-maestro"`. So the guard does not match and the toggle IS rendered.
+> When clicked, `ChangePlugin` Gate 7 should reject the request — but we
+> need to confirm the UI (a) surfaces a visible error and (b) does not
+> leave a stale "disabled" optimistic state.
 
 #### S015: Navigate to Settings -> Plugins Explorer (Plugins subtab)
 - **Action:** `navigate_page` to `http://localhost:23000/settings?tab=global-elements&subtab=plugins`
@@ -222,7 +232,7 @@ author: AI Maestro Team
 - **Goal:** Confirm the server rejected the disable operation — the value is still `true`
 - **Creates:** nothing (read-only verification)
 - **Modifies:** nothing
-- **Verify:** File shows `"ai-maestro-plugin@ai-maestro-plugins": true` (or equivalent enabled state). If the value is `false`, R17 Gate 7 is broken — FILE BUG-SURFACE-2B (critical: enforcement bypass at user scope). Screenshot: SCEN-017/S019-settings-json.png
+- **Verify:** File shows `"ai-maestro-plugin@ai-maestro-plugins": true` (or equivalent enabled state). If the value is `false`, R17 Gate 7 is broken — FILE BUG-SURFACE-2B (critical: enforcement bypass on a user-initiated user-scope install; R17 protection applies to any scope, not only the LOCAL-scope install AI Maestro itself manages). Screenshot: SCEN-017/S019-settings-json.png
 
 #### S020: Reload the Plugins subtab and verify displayed state
 - **Action:** `navigate_page` to `http://localhost:23000/settings?tab=global-elements&subtab=plugins` again to force a fresh fetch

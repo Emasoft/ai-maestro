@@ -46,7 +46,7 @@ prerequisites:
   - Governance password set
   - Chrome browser with DevTools accessible
   - Internet access for cloning marketplace from GitHub
-  - `which gh && gh auth status` succeeds
+  - "'which gh && gh auth status' succeeds"
   - Marketplace used for testing: https://github.com/cblecker/claude-plugins
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:

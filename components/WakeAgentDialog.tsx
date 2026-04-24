@@ -11,6 +11,13 @@ interface WakeAgentDialogProps {
   onConfirm: (program: string) => void
   agentName: string
   agentAlias?: string
+  /**
+   * The agent's configured program from the registry (e.g. 'claude', 'codex').
+   * Used as the default picker selection so a user who clicks Wake without
+   * changing anything launches the binary the agent was created with.
+   * Falls back to 'claude' if absent (legacy agents without a program field).
+   */
+  agentProgram?: string
 }
 
 const CLI_OPTIONS = [
@@ -56,9 +63,18 @@ export default function WakeAgentDialog({
   onClose,
   onConfirm,
   agentName,
-  agentAlias
+  agentAlias,
+  agentProgram
 }: WakeAgentDialogProps) {
-  const [selectedProgram, setSelectedProgram] = useState<string>('claude')
+  // Default the picker to the agent's configured program so users tapping
+  // Wake in a hurry don't accidentally launch the wrong binary (observed
+  // in SCEN-023 S021: dialog opened with "cursor" selected for a
+  // claude-configured agent). Only known CLI_OPTIONS ids are accepted;
+  // anything else (or missing) falls back to 'claude'.
+  const defaultProgram = CLI_OPTIONS.some((o) => o.id === agentProgram)
+    ? (agentProgram as string)
+    : 'claude'
+  const [selectedProgram, setSelectedProgram] = useState<string>(defaultProgram)
   const [isWaking, setIsWaking] = useState(false)
   const [mounted, setMounted] = useState(false)
 
@@ -69,13 +85,15 @@ export default function WakeAgentDialog({
     setMounted(true)
   }, [])
 
-  // Reset isWaking state when dialog closes or opens
+  // Reset isWaking state when dialog closes. Re-initialize the picker to
+  // the current agent's program on close so the NEXT open (possibly for a
+  // different agent) starts from the right default.
   useEffect(() => {
     if (!isOpen) {
       setIsWaking(false)
-      setSelectedProgram('claude')
+      setSelectedProgram(defaultProgram)
     }
-  }, [isOpen])
+  }, [isOpen, defaultProgram])
 
   const handleConfirm = () => {
     setIsWaking(true)

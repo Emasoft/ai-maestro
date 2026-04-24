@@ -68,10 +68,12 @@ author: AI Maestro Team
 > the corner cases — every surface where a user or agent might try to remove, disable,
 > or tamper with the core plugin. Each attempt MUST be blocked or auto-repaired.
 >
-> **Rule 6 exception:** Phases 4 and 5 perform direct API calls via curl. This is
-> allowed here because the scenario is testing that the API itself blocks bad requests —
-> state verification by testing the boundary, not bypass. No successful destructive
-> action is performed through these calls; the expected outcome is rejection.
+> **Rule 6 discipline:** every mutation goes through the UI. Phase 6 and Phase 7
+> intentionally simulate a user hand-editing `settings.local.json` (a real user
+> action that the wake-gate must survive) — those file edits are not Rule 6
+> violations because the user on the host is free to edit their own files, and
+> R17 is specifically about surviving that. API-level penetration of the R17
+> guard belongs in unit/integration tests, not UI scenarios.
 >
 > **R20 marketplace naming:** The core plugin lives in the remote `ai-maestro-plugins`
 > marketplace (GitHub). Per R20, there is NO local core marketplace for Claude — the
@@ -180,51 +182,42 @@ author: AI Maestro Team
 
 ---
 
-## Phase 4: Direct DELETE API must be blocked (Rule 6 exception)
+## Phase 4 [DELETED]: Direct DELETE API penetration test
 
-> **Note:** This phase uses a direct curl call to `DELETE /api/agents/role-plugins/install`.
-> This is permitted under Rule 6 because it tests that the API boundary itself rejects
-> the request — bypassing the UI IS the test. We never perform a successful destructive
-> action; the expected outcome is rejection. The sudo token is obtained fresh via
-> `POST /api/auth/sudo-password` with the governance password; the test proves that
-> even with a valid sudo token, R17 blocks the call.
-
-#### S013: Direct API uninstall attempt (with fresh sudo token)
-- **Action:** First, exchange the governance password for a sudo token via `POST /api/auth/sudo-password -d '{"password":"mYkri1-xoxrap-gogtan"}'`. Capture the returned X-Sudo-Token. Then run `curl -X DELETE 'http://localhost:23000/api/agents/role-plugins/install' -H 'Content-Type: application/json' -H 'X-Sudo-Token: <token>' -d '{"pluginName":"ai-maestro-plugin","agentDir":"~/agents/scen023-r17-audit-01","marketplaceName":"ai-maestro-plugins"}'`
-- **Goal:** API rejects with R17 error even with a valid sudo token
-- **Creates:** nothing (token consumed on first request is a single-shot per Rule 12)
-- **Modifies:** nothing on the target plugin
-- **Verify:** Response status is 400 or 403 with an R17-related error message. Screenshot: SCEN-023/S013-api-blocked.jpg
-
-#### S014: Verify plugin still present
-- **Action:** Read `~/agents/scen023-r17-audit-01/.claude/settings.local.json`
-- **Goal:** Plugin untouched
-- **Creates:** nothing
-- **Modifies:** nothing
-- **Verify:** Same as S010. Screenshot: SCEN-023/S014-api-still-installed.jpg
+> **Removed (2026-04-22).** Former steps S013/S014 performed `curl -X DELETE` on
+> the role-plugin install endpoint. Per Rule 6 every mutation must go through
+> the UI. The UI uninstall path is already exercised in Phase 2 (S009-S012),
+> which is the user-facing boundary we care about. API-layer penetration of
+> R17 (verifying the guard still rejects when the UI is bypassed with a valid
+> sudo token) is a legitimate concern but belongs in unit/integration tests
+> — not a UI scenario. Tracked as a new proposal: "Port SCEN-023 Phase 4/5
+> API-penetration coverage to integration tests."
+>
+> **Step numbers S013/S014 intentionally unused.** Renumbering later scenarios
+> would invalidate cross-references in prior reports.
 
 ---
 
-## Phase 5: Marketplace removal must be blocked
+## Phase 5: Marketplace removal must be blocked via UI
 
-> **Note:** This phase also uses a direct API call via curl for the same reason as Phase 4.
-> Per R20, the `ai-maestro-plugins` marketplace is the remote GitHub marketplace that
-> hosts the core plugin. DeleteMarketplace pipeline (commit a2f90e0e) must reject its
-> removal because it hosts a core R17-protected plugin.
+> Per R20, the `ai-maestro-plugins` marketplace is the remote GitHub marketplace
+> that hosts the core plugin. The UI surface in Settings → Plugins Explorer →
+> Marketplaces tab must prevent the user from removing it: either the trash
+> icon is hidden/disabled on that card, OR clicking it produces an R17 rejection.
 
-#### S015: Attempt marketplace removal of ai-maestro-plugins (with fresh sudo token)
-- **Action:** Exchange password for a fresh sudo token via `POST /api/auth/sudo-password` (the S013 token was consumed). Then run `curl -X DELETE 'http://localhost:23000/api/settings/marketplaces?marketplaceName=ai-maestro-plugins' -H 'X-Sudo-Token: <token>'`
-- **Goal:** Marketplace removal is rejected by the DeleteMarketplace pipeline because it hosts a core plugin (R17)
+#### S015: Attempt marketplace removal via UI
+- **Action:** Navigate to Settings → Plugins Explorer → Marketplaces tab. Locate the `ai-maestro-plugins` marketplace card. If a trash icon / remove button is rendered, click it. If a sudo password modal appears, enter `mYkri1-xoxrap-gogtan` and Confirm. Then click the final "Remove marketplace" confirm button.
+- **Goal:** The UI either hides/disables the remove-marketplace control for `ai-maestro-plugins`, OR the attempt produces an R17 rejection toast (DeleteMarketplace pipeline refuses because it hosts a core plugin).
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response status is 400 with R17 message (or similar). Screenshot: SCEN-023/S015-marketplace-blocked.jpg
+- **Verify:** Either no remove control rendered (record a screenshot of the card with no trash icon), OR an error toast / dialog appears citing R17 / "hosts core plugin". Screenshot: SCEN-023/S015-marketplace-blocked.jpg
 
 #### S016: Verify marketplace still registered
-- **Action:** Run `claude plugin marketplace list` or `GET /api/settings/marketplaces` (Rule 6 verification read)
+- **Action:** Read the same Marketplaces subtab — the `ai-maestro-plugins` card is still present. Optionally confirm via `GET /api/settings/marketplaces` (Rule 6 verification read only).
 - **Goal:** ai-maestro-plugins marketplace still in the list
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Marketplace listed. Screenshot: SCEN-023/S016-marketplace-present.jpg
+- **Verify:** Marketplace card still visible. Screenshot: SCEN-023/S016-marketplace-present.jpg
 
 ---
 
@@ -279,11 +272,18 @@ author: AI Maestro Team
 - **Removes:** Agent from registry, `~/agents/scen023-r17-audit-01/`, tmux session
 - **Verify:** Agent no longer in sidebar. Folder does not exist. Screenshot: SCEN-023/S022-deleted.jpg
 
-#### S023: Purge cemetery entry
-- **Action:** Settings → Cemetery → find scen023-r17-audit-01 → click Purge → enter sudo password `mYkri1-xoxrap-gogtan` when prompted
-- **Goal:** Cemetery entry removed
-- **Removes:** Cemetery archive entry
-- **Verify:** Entry not listed. Screenshot: SCEN-023/S023-cemetery-purged.jpg
+#### S023 [REMOVED]: Purge cemetery entry — N/A on folder-delete path
+
+> **Removed (2026-04-22).** S022's "Also delete agent folder" path does NOT
+> produce a cemetery entry (the DeleteAgent pipeline skips cemetery archival
+> when the folder is also being destroyed). Observed consistently across
+> SCEN-017, SCEN-022, and SCEN-023 runs: cemetery was empty after S022, so
+> this step was always N/A, burning runner tokens on a no-op verification.
+> If a dedicated cemetery-purge test is needed, author a separate scenario
+> that deletes an agent WITHOUT folder-delete, verifies the cemetery entry
+> appears, then purges it.
+>
+> Step number S023 intentionally unused to preserve report cross-references.
 
 #### S024: STATE-WIPE — Restore configuration files
 - **Action:** Compare current config files with backups from S002. Restore settings.json / settings.local.json / governance.json if they differ (do NOT restore registry.json — UI delete already cleaned it).

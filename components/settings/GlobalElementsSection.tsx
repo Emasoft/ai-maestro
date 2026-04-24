@@ -11,6 +11,11 @@ import MarketplaceManager from './MarketplaceManager'
 import { sudoFetch } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
 import { MAIN_PLUGIN_NAME } from '@/lib/ecosystem-constants'
+import {
+  getVisibleExtensionsSubtabs,
+  type ClientType,
+  type ExtensionSubtab,
+} from '@/lib/client-capabilities'
 
 interface PluginInfo {
   name: string
@@ -98,8 +103,18 @@ const ELEMENT_SECTIONS: { key: keyof ElementTotals; label: string; icon: typeof 
 ]
 
 /**
- * Plugins Explorer — manages user-level plugins, elements, and marketplaces.
- * Three tabs: Plugins (toggle + info), Elements (active elements), Marketplaces (full management).
+ * Extensions — manages user-scope components, plugins, and marketplaces
+ * for each client (Claude, Codex, etc.). Three subtabs: COMPONENTS
+ * (skills/agents/commands/hooks/rules/MCP/LSP/output-styles, whether they
+ * come from an enabled plugin or a standalone folder), PLUGINS (installed
+ * plugins at user scope with enable/disable toggles), MARKETPLACES
+ * (registered marketplaces and their available plugins). Local/project
+ * scope is NOT listed here — per-agent scope lives on the Agent Profile
+ * → Config tab. See the 2026-04-22 Extensions refactor notes for the
+ * invariants (components cannot be extracted from a plugin; each client
+ * has its own plugin registry; per-client capabilities drive visible
+ * subtabs). The internal URL/state key stays `global-elements` to keep
+ * every existing link and scenario URL working.
  */
 export default function GlobalElementsSection({ initialSubtab, initialMarketplace }: { initialSubtab?: 'plugins' | 'elements' | 'marketplaces' | null; initialMarketplace?: string | null } = {}) {
   const { requestSudoToken } = useSudo()
@@ -128,6 +143,16 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
   const [elementSearch, setElementSearch] = useState('')
   const [elementTypeFilter, setElementTypeFilter] = useState<string>('all')
   const [activeOnly, setActiveOnly] = useState(false) // filter to only show elements from enabled plugins
+  // 2026-04-22 Extensions Phase 1b: source filter for the COMPONENTS tab.
+  // 'all' shows every component (both in-plugin and standalone, color-
+  // differentiated in the card background). 'in-plugin' shows only
+  // components bundled in an installed plugin. 'standalone' shows only
+  // components living in per-client standalone folders (~/.claude/skills/,
+  // etc.). The three choices are mutually exclusive — the user picks one.
+  // Persisted per-client so returning to a different client does not
+  // inherit the prior client's preference. Defaults to 'all'.
+  type SourceFilter = 'all' | 'in-plugin' | 'standalone'
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [expandedElement, setExpandedElement] = useState<string | null>(null) // accordion for element cards
   const [elementContent, setElementContent] = useState<Record<string, string>>({}) // lazy-loaded file content cache
   const [loadingContent, setLoadingContent] = useState<string | null>(null)
@@ -391,6 +416,12 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
   // Filtered flat elements for card view
   const filteredFlatElements = useMemo(() => {
     let items = flatElements
+    // Source filter: in-plugin vs standalone. Backend marks standalone
+    // components with sourcePlugin === '(standalone)' (see
+    // app/api/settings/global-elements/route.ts). The sentinel is stable
+    // across element types.
+    if (sourceFilter === 'in-plugin') items = items.filter(e => e.sourcePlugin !== '(standalone)')
+    else if (sourceFilter === 'standalone') items = items.filter(e => e.sourcePlugin === '(standalone)')
     if (activeOnly) items = items.filter(e => e.pluginEnabled)
     // elementTypeFilter holds the plural ELEMENT_SECTIONS key (e.g. 'skills'), while e.type is singular
     // (e.g. 'skill'). Use typeInfo() to map the singular type to its section key for comparison.
@@ -407,10 +438,82 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
       )
     }
     return items
-  }, [flatElements, elementTypeFilter, elementSearch, activeOnly])
+  }, [flatElements, elementTypeFilter, elementSearch, activeOnly, sourceFilter])
 
-  // Client-level tab: Claude vs Codex (higher-level tab bar)
-  const [clientTab, setClientTab] = useState<'claude' | 'codex'>('claude')
+  // Client-level tab: one of the supported clients.
+  // Persisted per user across sessions (2026-04-22 Extensions page refactor):
+  // when the user returns to the Extensions page they see whichever client
+  // tab + subtab they last viewed. Phase 2 expanded this from {claude, codex}
+  // to the full 5-client matrix (claude, codex, gemini, opencode, kiro).
+  // Aider is deprecated and explicitly excluded.
+  type ExtensionsClient = Exclude<ClientType, 'aider' | 'unknown'>
+  const VALID_CLIENTS: readonly ExtensionsClient[] = ['claude', 'codex', 'gemini', 'opencode', 'kiro']
+  const [clientTab, setClientTab] = useState<ExtensionsClient>(() => {
+    if (typeof window === 'undefined') return 'claude'
+    const saved = window.localStorage.getItem('extensions.clientTab')
+    if (saved && (VALID_CLIENTS as readonly string[]).includes(saved)) {
+      return saved as ExtensionsClient
+    }
+    return 'claude'
+  })
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('extensions.clientTab', clientTab)
+  }, [clientTab])
+
+  // Visible subtabs for the active client. Drives the subtab bar rendering
+  // AND the saved-subtab fallback logic (saved values from a different
+  // client may not exist on this one).
+  const visibleSubtabs = useMemo(() => getVisibleExtensionsSubtabs(clientTab), [clientTab])
+  // When clientTab changes, if the current activeTab is not supported on
+  // the new client, fall back to COMPONENTS (which every client supports).
+  useEffect(() => {
+    if (!visibleSubtabs.includes(activeTab as ExtensionSubtab)) {
+      setActiveTab('elements')
+    }
+  }, [visibleSubtabs, activeTab])
+
+  // Persist subtab choice per client. Different clients may expose different
+  // subtabs (Gemini/OpenCode/Kiro have no MARKETPLACES tab — those clients
+  // arrive in Phase 2), so the key is namespaced by client so "last subtab"
+  // never resurrects a subtab that does not exist on the current client.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(`extensions.subtab.${clientTab}`, activeTab)
+  }, [activeTab, clientTab])
+  // Load saved subtab on first mount AND whenever client changes.
+  // `initialSubtab` (URL param) still wins — it's the explicit intent of a
+  // link or a back-navigation — but when it's absent, fall back to the last
+  // saved subtab for this client instead of always landing on 'elements'.
+  // The saved value is additionally gated by visibleSubtabs — clients that
+  // don't expose MARKETPLACES cannot "resume" on a saved 'marketplaces' tab.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (initialSubtab) return  // URL param wins
+    const saved = window.localStorage.getItem(`extensions.subtab.${clientTab}`) as ExtensionSubtab | null
+    if (saved && visibleSubtabs.includes(saved)) {
+      setActiveTab(saved)
+    } else {
+      setActiveTab('elements')
+    }
+  // visibleSubtabs is derived from clientTab; depending on clientTab is enough.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientTab, initialSubtab])
+
+  // Persist COMPONENTS source filter (all | in-plugin | standalone) per client.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(`extensions.sourceFilter.${clientTab}`, sourceFilter)
+  }, [sourceFilter, clientTab])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = window.localStorage.getItem(`extensions.sourceFilter.${clientTab}`)
+    if (saved === 'all' || saved === 'in-plugin' || saved === 'standalone') {
+      setSourceFilter(saved)
+    } else {
+      setSourceFilter('all')
+    }
+  }, [clientTab])
 
   if (loading) {
     return (
@@ -423,47 +526,78 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
 
   return (
     <div ref={containerRef} className="p-4 sm:p-6 max-w-4xl">
-      <h2 className="text-xl font-bold text-white mb-2">Plugins Explorer</h2>
+      {/* Page title — "Extensions" is the umbrella term agreed 2026-04-22.
+          The internal URL/state key stays `global-elements` (see app/settings/
+          page.tsx) for bookmark stability; only the visible label changed. */}
+      <h2 className="text-xl font-bold text-white mb-2">Extensions</h2>
+      <p className="text-xs text-gray-500 mb-4">
+        Everything installed at user scope for this client: <strong>components</strong>
+        {' '}(skills, agents, commands, hooks, rules, MCP, LSP, output-styles),
+        the <strong>plugins</strong> that bundle them, and the <strong>marketplaces</strong>
+        {' '}those plugins came from. Local/project-scope add-ons are managed
+        per agent on the Agent Profile → Config tab.
+      </p>
 
-      {/* Higher-level client tab bar: Claude | Codex */}
-      <div className="flex items-center gap-2 mb-4 border-b border-gray-700/50 pb-0">
-        <button
-          onClick={() => setClientTab('claude')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px ${
-            clientTab === 'claude'
-              ? 'text-orange-300 border-orange-400'
-              : 'text-gray-500 border-transparent hover:text-gray-400 hover:border-gray-600'
-          }`}
-        >
-          <Terminal className="w-4 h-4" />
-          Claude Code
-        </button>
-        <button
-          onClick={() => setClientTab('codex')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px ${
-            clientTab === 'codex'
-              ? 'text-green-300 border-green-400'
-              : 'text-gray-500 border-transparent hover:text-gray-400 hover:border-gray-600'
-          }`}
-        >
-          <Bot className="w-4 h-4" />
-          Codex
-        </button>
+      {/* Higher-level client tab bar — all 5 supported clients.
+          2026-04-22 Extensions Phase 2: each client gets its own tab with
+          a distinct accent color; the capability table in
+          lib/client-capabilities.ts decides which subtabs render inside.
+          Aider is intentionally excluded (deprecated per CLAUDE.md). */}
+      <div className="flex items-center gap-2 mb-4 border-b border-gray-700/50 pb-0 overflow-x-auto">
+        {([
+          { id: 'claude',   label: 'Claude Code', icon: Terminal, active: 'text-orange-300 border-orange-400' },
+          { id: 'codex',    label: 'Codex',       icon: Bot,      active: 'text-green-300 border-green-400' },
+          { id: 'gemini',   label: 'Gemini',      icon: Bot,      active: 'text-blue-300 border-blue-400' },
+          { id: 'opencode', label: 'OpenCode',    icon: Bot,      active: 'text-purple-300 border-purple-400' },
+          { id: 'kiro',     label: 'Kiro',        icon: Bot,      active: 'text-pink-300 border-pink-400' },
+        ] as const).map(tab => {
+          const Icon = tab.icon
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setClientTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px whitespace-nowrap ${
+                clientTab === tab.id
+                  ? tab.active
+                  : 'text-gray-500 border-transparent hover:text-gray-400 hover:border-gray-600'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
 
-      {/* Codex tab — work in progress placeholder */}
-      {clientTab === 'codex' && (
-        <div className="flex flex-col items-center justify-center py-20 text-gray-500">
-          <Construction className="w-12 h-12 mb-4 text-gray-600" />
-          <p className="text-lg font-semibold text-gray-400">Work in Progress</p>
-          <p className="text-sm mt-2">Codex plugin support coming in a future update.</p>
+      {/* Non-Claude clients: placeholder body until Phase 3 unifies the
+          /api/settings/extensions?client=<id> endpoint and fills in the
+          per-client component/plugin/marketplace data. The subtab bar
+          still renders below (gated by capability) so the user sees
+          exactly which sections WILL be populated for this client. */}
+      {clientTab !== 'claude' && (
+        <div className="bg-gray-800/30 border border-gray-700/50 rounded-lg p-4 mb-4 text-sm text-gray-400">
+          <div className="flex items-center gap-2 mb-2">
+            <Construction className="w-4 h-4 text-amber-400" />
+            <span className="font-semibold text-gray-200">
+              {clientTab.charAt(0).toUpperCase() + clientTab.slice(1)} support — subtab layout preview
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 leading-relaxed">
+            The tab bar above shows which Extensions subtabs apply to this client
+            based on its capabilities: COMPONENTS (always), PLUGINS (if the client
+            supports a plugin system), MARKETPLACES (if the client has a marketplace
+            registry). Data fetching for non-Claude clients ships in Phase 3 under
+            a unified <code className="text-[11px] bg-gray-900/50 px-1 rounded">/api/settings/extensions?client={clientTab}</code> endpoint.
+          </p>
         </div>
       )}
 
-      {/* Claude tab — existing content */}
-      {clientTab === 'claude' && (<>
-
-      {/* Tab bar: Elements | Plugins | Marketplaces */}
+      {/* Subtab bar: COMPONENTS | PLUGINS | MARKETPLACES.
+          Rendered for EVERY client (not just Claude) — the buttons
+          themselves are gated by `visibleSubtabs` which is derived from
+          the per-client capability table. A Gemini user sees only
+          COMPONENTS; a Codex user sees COMPONENTS + PLUGINS; a Claude
+          user sees all three. 2026-04-22 Extensions Phase 2. */}
       <div className="flex items-center gap-1 mb-4 sm:mb-6 bg-gray-800/30 rounded-lg p-1">
         <button
           onClick={() => switchTab('elements')}
@@ -474,33 +608,44 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
           }`}
         >
           <Wand2 className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="hidden sm:inline">Elements</span>
+          {/* Label is "COMPONENTS" (2026-04-22 rename) — the state key
+              `elements` stays for URL-stability reasons. */}
+          <span className="hidden sm:inline">COMPONENTS</span>
           {totalElements > 0 && <span className="opacity-60">{totalElements}</span>}
         </button>
-        <button
-          onClick={() => switchTab('plugins')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 sm:px-3 rounded-md text-xs font-semibold transition-all ${
-            activeTab === 'plugins'
-              ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-              : 'text-gray-500 hover:text-gray-400 hover:bg-gray-700/50 border border-transparent'
-          }`}
-        >
-          <Puzzle className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="hidden sm:inline">Plugins</span>
-          <span className="opacity-60">{enabledCount}/{totalCount}</span>
-        </button>
-        <button
-          onClick={() => switchTab('marketplaces')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 sm:px-3 rounded-md text-xs font-semibold transition-all ${
-            activeTab === 'marketplaces'
-              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-              : 'text-gray-500 hover:text-gray-400 hover:bg-gray-700/50 border border-transparent'
-          }`}
-        >
-          <Store className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="hidden sm:inline">Marketplaces</span>
-        </button>
+        {visibleSubtabs.includes('plugins') && (
+          <button
+            onClick={() => switchTab('plugins')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 sm:px-3 rounded-md text-xs font-semibold transition-all ${
+              activeTab === 'plugins'
+                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                : 'text-gray-500 hover:text-gray-400 hover:bg-gray-700/50 border border-transparent'
+            }`}
+          >
+            <Puzzle className="w-3.5 h-3.5 flex-shrink-0" />
+            {/* ALL-CAPS to match COMPONENTS/MARKETPLACES — consistent casing
+                (2026-04-22 Extensions refactor). */}
+            <span className="hidden sm:inline">PLUGINS</span>
+            {clientTab === 'claude' && <span className="opacity-60">{enabledCount}/{totalCount}</span>}
+          </button>
+        )}
+        {visibleSubtabs.includes('marketplaces') && (
+          <button
+            onClick={() => switchTab('marketplaces')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 sm:px-3 rounded-md text-xs font-semibold transition-all ${
+              activeTab === 'marketplaces'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                : 'text-gray-500 hover:text-gray-400 hover:bg-gray-700/50 border border-transparent'
+            }`}
+          >
+            <Store className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="hidden sm:inline">MARKETPLACES</span>
+          </button>
+        )}
       </div>
+
+      {/* Claude tab — existing content */}
+      {clientTab === 'claude' && (<>
 
       {/* ================================================================= */}
       {/* Marketplaces tab — ONLY lists marketplaces. No plugins or elements here. */}
@@ -712,6 +857,50 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
       {/* Install hint */}
       <p className="text-[10px] text-gray-600 italic mb-3">To install elements (MCP, LSP, skills, subagents, rules, etc.) just ask the agent. To manage hooks, use the /hooks menu in Claude Code.</p>
 
+      {/* Source filter — 3-way switch.
+          Components are either in-plugin (bundled in an installed plugin,
+          lifecycle-coupled to that plugin) OR standalone (live in a
+          per-client global folder such as ~/.claude/skills/, independent
+          of any plugin). They are rendered with distinct background tints
+          in 'all' mode so the user can see the two worlds at a glance.
+          2026-04-22 Extensions Phase 1b. */}
+      <div className="flex items-center gap-1 mb-3 bg-gray-800/30 rounded-lg p-1 max-w-md">
+        {(['all', 'in-plugin', 'standalone'] as const).map(key => {
+          const label = key === 'in-plugin' ? 'In-plugin' : key === 'standalone' ? 'Standalone' : 'All'
+          const count = key === 'all'
+            ? flatElements.length
+            : key === 'standalone'
+              ? flatElements.filter(e => e.sourcePlugin === '(standalone)').length
+              : flatElements.filter(e => e.sourcePlugin !== '(standalone)').length
+          return (
+            <button
+              key={key}
+              onClick={() => setSourceFilter(key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-[11px] font-semibold transition-all ${
+                sourceFilter === key
+                  ? key === 'standalone'
+                    ? 'bg-pink-500/20 text-pink-200 border border-pink-500/30'
+                    : key === 'in-plugin'
+                      ? 'bg-blue-500/20 text-blue-200 border border-blue-500/30'
+                      : 'bg-gray-600/30 text-gray-100 border border-gray-500/40'
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 border border-transparent'
+              }`}
+              title={
+                key === 'all' ? 'Show both standalone and in-plugin components'
+                : key === 'in-plugin' ? 'Only components bundled inside installed plugins'
+                : 'Only components living in per-client standalone folders (~/.claude/skills/, etc.)'
+              }
+            >
+              {key === 'standalone' ? <span className="text-[12px] leading-none">⛺︎</span>
+                : key === 'in-plugin' ? <Puzzle className="w-3 h-3" />
+                : <span className="text-[10px] leading-none">∀</span>}
+              <span>{label}</span>
+              <span className="opacity-60">{count}</span>
+            </button>
+          )
+        })}
+      </div>
+
       {/* Search + Active-only toggle */}
       <div className="flex items-center gap-3 mb-4">
         <div className="relative flex-1">
@@ -757,13 +946,20 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
             const ti = typeInfo(el.type)
             const TypeIcon = ti.icon
 
+            // Background tint communicates the component's source at a
+            // glance. Aligned with the source-filter switch colors so
+            // the pink card = pink "Standalone" button, blue-tinted
+            // in-plugin aligns with the blue "In-plugin" button. The
+            // ai-maestro core plugin gets its own amber tint because
+            // R17 special-cases it throughout the UI.
+            // 2026-04-22 Extensions Phase 1b consistency pass.
             return (
               <div key={elKey} ref={ref => { elementRefs.current[elKey] = ref }} className={`rounded-lg border overflow-hidden ${
                 el.sourcePlugin === '(standalone)'
-                  ? 'border-gray-800/60 bg-[#FF0090]/10'
+                  ? 'border-pink-500/25 bg-pink-500/10'
                   : el.sourcePlugin === 'ai-maestro'
-                    ? 'border-amber-500/20 bg-amber-500/5'
-                    : el.pluginEnabled ? 'border-gray-800/60' : 'border-gray-800/30 opacity-60'
+                    ? 'border-amber-500/25 bg-amber-500/5'
+                    : el.pluginEnabled ? 'border-blue-500/15 bg-blue-500/[0.04]' : 'border-gray-800/30 bg-gray-800/10 opacity-60'
               }`}>
                 {/* Element card header — two-row layout: name on top, source info below on mobile */}
                 <div

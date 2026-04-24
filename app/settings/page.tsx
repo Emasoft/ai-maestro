@@ -36,9 +36,20 @@ function SettingsPageInner() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
   const [activeSection, setActiveSection] = useState<'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery' | 'diagnostics'>('hosts')
-  // Navigate to section from URL params (e.g. /settings?tab=global-elements)
+  // Navigate to section from URL params (e.g. /settings?tab=global-elements
+  // or the post-rename /settings?tab=extensions alias). The internal state
+  // key remains `global-elements` — the UI label changed to "Extensions"
+  // (2026-04-22), but renaming the route/state key would break every
+  // bookmark, scenario URL, doc link, and stored URL in the wild. The alias
+  // below is the user-visible rename; the internal key is a stability
+  // invariant.
   useEffect(() => {
     const validTabs = ['security', 'hosts', 'domains', 'webhooks', 'help', 'about', 'onboarding', 'experiments', 'marketplace', 'global-elements', 'agents', 'commands', 'cemetery', 'diagnostics'] as const
+    const extensionsAlias = 'extensions'
+    if (tabParam === extensionsAlias) {
+      setActiveSection('global-elements')
+      return
+    }
     if (tabParam && (validTabs as readonly string[]).includes(tabParam)) {
       setActiveSection(tabParam as typeof validTabs[number])
     }

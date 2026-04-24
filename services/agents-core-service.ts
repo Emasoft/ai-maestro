@@ -627,6 +627,70 @@ export function getAgentById(id: string): ServiceResult<{ agent: Agent }> {
 // PATCH /api/agents/[id] -- update agent
 // ---------------------------------------------------------------------------
 
+// CHANGEABLE_FIELDS — the one canonical list of PATCH body fields that are
+// routed through element-management-service Change* pipelines instead of the
+// generic updateAgent() path. Any field NOT in this tuple falls through as a
+// simple registry write.
+//
+// Why a tuple and not a Set: the `satisfies readonly (keyof UpdateAgentRequest)[]`
+// constraint is what makes the compile-time check work — if a developer adds
+// 'workingDirector' (typo) or 'unknown-field' here, TypeScript fails the build
+// at this line instead of letting the typo slip through and ship a silent
+// Change*-owned field leak to the generic path.
+//
+// Maintainer contract when adding a new field:
+//   1. Add it to UpdateAgentRequest in types/agent.ts FIRST.
+//   2. Add the key here. TypeScript will not let you use a string that is
+//      not a key of UpdateAgentRequest.
+//   3. Add the corresponding `if (changeableFields.<k> !== ...)` dispatch
+//      inside updateAgentById — the compiler cannot enforce this automatically
+//      (would require procedural codegen), so the runtime "anyChangeExecuted"
+//      flag is the safety net. Every existing dispatch lives in ONE function,
+//      so search-replace on `// Change<X>` comments reveals every site.
+//   4. If the transition is destructive, add a sudo gate in
+//      app/api/agents/[id]/route.ts PATCH (see R19 sudo-mode + security-registry.json).
+//
+// `alias` is a legacy alias for `name` — it is stripped from cleanBody too,
+// but it is NOT a CHANGEABLE_FIELD because it does not have its own Change*
+// dispatch. ChangeName absorbs it via `body.name || body.alias`.
+export const CHANGEABLE_FIELDS = [
+  'governanceTitle',
+  'name',
+  'workingDirectory',
+  'avatar',
+  'programArgs',
+  'program',
+  'githubRepo',
+] as const satisfies readonly (keyof UpdateAgentRequest)[]
+
+type ChangeableField = typeof CHANGEABLE_FIELDS[number]
+
+// Legacy field names that ALSO dispatch to a Change* pipeline (via absorb-
+// in-dispatcher semantics). Kept for sudo-gate coverage so PATCH routes that
+// still receive `alias` (deprecated in UpdateAgentRequest, absorbed by
+// ChangeName via `body.name || body.alias`) don't bypass the security gate.
+export const CHANGEABLE_FIELD_ALIASES = ['alias'] as const
+
+/**
+ * Return true when `body` carries any field that will dispatch through a
+ * Change* pipeline. Used by the PATCH route to decide whether the whole
+ * request requires a sudo token (PROP #1 — see route-level comment for
+ * the security rationale). Callers may pass any object shape; non-UA
+ * bodies return false.
+ */
+export function bodyHasChangeableField(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return false
+  const bodyKeys = Object.keys(body as Record<string, unknown>)
+  if (bodyKeys.length === 0) return false
+  for (const field of CHANGEABLE_FIELDS) {
+    if (bodyKeys.includes(field)) return true
+  }
+  for (const alias of CHANGEABLE_FIELD_ALIASES) {
+    if (bodyKeys.includes(alias)) return true
+  }
+  return false
+}
+
 export async function updateAgentById(id: string, body: UpdateAgentRequest, requestingAgentId?: string | null, authContext?: AuthContext): Promise<ServiceResult<{ agent: Agent; restartNeeded?: boolean; warnings?: string[] }>> {
   // Side-channel data collected from Change* pipelines that needs to reach
   // the PATCH response body (e.g. ChangeClient's restartNeeded flag, which
@@ -669,8 +733,16 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
       }
     }
 
-    // Fields handled by Change* functions — strip from body, call Change* separately
-    const changeableFields = {
+    // Fields handled by Change* functions — strip from body, call Change* separately.
+    // Keys are typed against ChangeableField so TypeScript refuses to compile
+    // if a field is missing from CHANGEABLE_FIELDS or carries a typo.
+    // Values preserve their original UpdateAgentRequest types via a mapped
+    // type — downstream consumers like ChangeTitle still receive
+    // `AgentRole | null | undefined` instead of `unknown`.
+    // `name` also falls back to the legacy `body.alias` (deprecated) so
+    // callers that still send the old field name continue to work — the
+    // fallback is intentional and lives here, not in CHANGEABLE_FIELDS.
+    const changeableFields: { [K in ChangeableField]: UpdateAgentRequest[K] } = {
       governanceTitle: body.governanceTitle,
       name: body.name || body.alias,
       workingDirectory: body.workingDirectory,
@@ -685,20 +757,16 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
       githubRepo: body.githubRepo,
     }
 
-    // Strip changeable fields from body so updateAgent only handles simple fields
-    const cleanBody = { ...body }
-    delete cleanBody.governanceTitle
-    delete cleanBody.name
+    // Strip changeable fields from body so updateAgent only handles simple fields.
+    // Driven by CHANGEABLE_FIELDS so that adding a new entry there automatically
+    // strips it here — no more two-place drift.
+    const cleanBody: UpdateAgentRequest = { ...body }
+    for (const field of CHANGEABLE_FIELDS) {
+      delete cleanBody[field]
+    }
+    // Legacy alias for `name` — ChangeName reads it via `body.name || body.alias`
+    // above, so the generic updateAgent path must not see it.
     delete cleanBody.alias
-    delete cleanBody.workingDirectory
-    delete cleanBody.avatar
-    delete cleanBody.programArgs
-    delete cleanBody.program
-    // R19.2: githubRepo is an attribute of the MAINTAINER title transition,
-    // owned by the ChangeTitle pipeline (Gate 9a). Strip it from the generic
-    // updateAgent path so it is not written behind ChangeTitle's back when
-    // the title itself is rejected. See SCEN-020 BUG-001.
-    delete cleanBody.githubRepo
 
     // Execute simple updateAgent for remaining fields (tags, label, model, etc.)
     const agent = await updateAgent(id, cleanBody)

@@ -55,9 +55,14 @@ export default function SettingsSidebar({ activeSection, onSectionChange }: Sett
     },
     {
       id: 'global-elements' as const,
-      label: 'Plugins',
+      label: 'Extensions',
+      // "Extensions" is the umbrella term per the Add-Ons → Extensions decision
+      // (2026-04-22). It covers components, plugins, and marketplaces — all
+      // three subtabs of the page. The URL/state key stays `global-elements`
+      // for now so existing links in docs, scenarios, and bookmarks keep
+      // working. A future commit adds `tab=extensions` as an alias.
       icon: Puzzle,
-      description: 'Plugins & marketplaces',
+      description: 'Components, plugins, marketplaces',
     },
     {
       id: 'cemetery' as const,

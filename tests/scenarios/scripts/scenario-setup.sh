@@ -25,9 +25,32 @@ command -v yq >/dev/null 2>&1 || { echo "SETUP_FAIL 'yq' not on PATH (required f
 
 FM=$(awk '/^---$/{c++; if(c==2) exit; next} c==1' "$SCEN_FILE")
 
-REWIPE=$(echo "$FM"  | yq e '.["rewipe-list"][]?  // ""' - 2>/dev/null || true)
-GITFIX=$(echo "$FM"  | yq e '.["git-fixtures"][]? // ""' - 2>/dev/null || true)
-FOLDFIX=$(echo "$FM" | yq e '.["dir-fixtures"][]? // ""' - 2>/dev/null || true)
+# Fail-fast frontmatter parser. A prior version swallowed yq errors with
+# `|| true`, which let backtick-laden prerequisites silently produce an
+# empty MANIFEST (SCEN-019/021/022/023/024 all hit this). Now every parse
+# failure aborts setup with the scenario name, the key, and the yq stderr
+# so the author can fix the frontmatter before state-wipe proceeds.
+parse_list() {
+  local key="$1"
+  local out err rc=0
+  err=$(mktemp)
+  out=$(echo "$FM" | yq e ".[\"$key\"][]? // \"\"" - 2>"$err") || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "SETUP_FAIL yq parse error for key '$key' in $(basename "$SCEN_FILE") — fix frontmatter then re-run" >&2
+    echo "--- yq stderr ---" >&2
+    cat "$err" >&2
+    echo "--- frontmatter ---" >&2
+    echo "$FM" >&2
+    rm -f "$err"
+    exit 1
+  fi
+  rm -f "$err"
+  printf '%s' "$out"
+}
+
+REWIPE=$(parse_list "rewipe-list")
+GITFIX=$(parse_list "git-fixtures")
+FOLDFIX=$(parse_list "dir-fixtures")
 
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 BACKUP_DIR="$PROJECT_DIR/tests/scenarios/state-backups/SCEN-${NNN}_${TS}"

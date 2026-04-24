@@ -32,6 +32,29 @@ export function providerIdToClientType(pid: ProviderId): ClientType {
 export interface ClientCapabilities {
   skills: boolean
   plugins: boolean
+  /**
+   * Whether the client has a "marketplaces" concept separate from plugins.
+   *
+   * Claude: every user-scope plugin MUST come from a registered marketplace
+   *         (no exception — `claude plugin install X Y --scope user` requires
+   *         marketplace Y to be added first via `claude plugin marketplace add`).
+   * Codex:  HAS marketplaces. The Codex app reads repo marketplaces from
+   *         `$REPO_ROOT/.agents/plugins/marketplace.json` (see the template
+   *         at github.com/hon454/codex-marketplace). Standalone plugins
+   *         without a marketplace ARE allowed — marketplace is an additive
+   *         concept, not a requirement like Claude. Our own local
+   *         codex-custom-marketplace is (or should be) a valid Codex
+   *         marketplace once its manifest sits at `.agents/plugins/marketplace.json`.
+   *         [Known gap 2026-04-22: services/plugin-storage-service.ts
+   *         currently writes to `<root>/marketplace.json` for Codex — the
+   *         manifest path migration to `.agents/plugins/marketplace.json`
+   *         is tracked as a follow-up.]
+   * Others: no marketplace system at all today.
+   *
+   * Drives the visibility of the Settings → Extensions → MARKETPLACES subtab
+   * (see components/settings/GlobalElementsSection.tsx).
+   */
+  marketplaces: boolean
   agents: boolean
   hooks: boolean
   rules: boolean
@@ -61,7 +84,7 @@ export interface ClientCapabilities {
 
 const CAPABILITIES: Record<ClientType, ClientCapabilities> = {
   claude: {
-    skills: true, plugins: true, agents: true, hooks: true,
+    skills: true, plugins: true, marketplaces: true, agents: true, hooks: true,
     rules: true, commands: true, mcpServers: true, lspServers: true, rolePlugins: true,
     configFile: 'CLAUDE.md',
     skillPaths: { project: '.claude/skills', user: '~/.claude/skills' },
@@ -81,7 +104,11 @@ const CAPABILITIES: Record<ClientType, ClientCapabilities> = {
     },
   },
   codex: {
-    skills: true, plugins: true, agents: true, hooks: false,
+    // Codex DOES have marketplaces — see the template at
+    // github.com/hon454/codex-marketplace. Standalone plugins (no marketplace)
+    // are also allowed, which is different from Claude's strict require-marketplace
+    // model, but the marketplace subtab is populated either way.
+    skills: true, plugins: true, marketplaces: true, agents: true, hooks: false,
     rules: false, commands: false, mcpServers: true, lspServers: false, rolePlugins: false,
     configFile: 'config.toml',
     skillPaths: { project: '.codex/skills', user: '~/.codex/skills' },
@@ -101,7 +128,7 @@ const CAPABILITIES: Record<ClientType, ClientCapabilities> = {
     },
   },
   gemini: {
-    skills: true, plugins: false, agents: false, hooks: true,
+    skills: true, plugins: false, marketplaces: false, agents: false, hooks: true,
     rules: false, commands: true, mcpServers: true, lspServers: false, rolePlugins: false,
     configFile: 'GEMINI.md',
     skillPaths: { project: '.gemini/skills', user: '~/.gemini/skills' },
@@ -121,7 +148,7 @@ const CAPABILITIES: Record<ClientType, ClientCapabilities> = {
     },
   },
   opencode: {
-    skills: true, plugins: false, agents: false, hooks: false,
+    skills: true, plugins: false, marketplaces: false, agents: false, hooks: false,
     rules: false, commands: false, mcpServers: true, lspServers: false, rolePlugins: false,
     configFile: 'AGENTS.md',
     skillPaths: { project: '.opencode/skills', user: '~/.opencode/skills' },
@@ -141,7 +168,7 @@ const CAPABILITIES: Record<ClientType, ClientCapabilities> = {
     },
   },
   kiro: {
-    skills: true, plugins: false, agents: true, hooks: true,
+    skills: true, plugins: false, marketplaces: false, agents: true, hooks: true,
     rules: false, commands: false, mcpServers: true, lspServers: false, rolePlugins: false,
     configFile: '.kiro/settings.json',
     skillPaths: { project: '.kiro/skills', user: '~/.kiro/skills' },
@@ -161,7 +188,7 @@ const CAPABILITIES: Record<ClientType, ClientCapabilities> = {
     },
   },
   aider: {
-    skills: true, plugins: false, agents: false, hooks: false,
+    skills: true, plugins: false, marketplaces: false, agents: false, hooks: false,
     rules: false, commands: false, mcpServers: false, lspServers: false, rolePlugins: false,
     configFile: '.aider.conf.yml',
     skillPaths: { project: 'skills', user: '' },
@@ -181,7 +208,7 @@ const CAPABILITIES: Record<ClientType, ClientCapabilities> = {
     },
   },
   unknown: {
-    skills: true, plugins: false, agents: false, hooks: false,
+    skills: true, plugins: false, marketplaces: false, agents: false, hooks: false,
     rules: false, commands: false, mcpServers: false, lspServers: false, rolePlugins: false,
     configFile: '',
     skillPaths: { project: '', user: '' },
@@ -285,6 +312,41 @@ export function buildLaunchCommand(
   }
 
   return parts.join(' ')
+}
+
+/**
+ * Extension-subtab keys used in Settings → Extensions.
+ * Stable strings chosen to match existing state keys — the COMPONENTS
+ * subtab's internal key is 'elements' for URL-back-compat reasons (see
+ * GlobalElementsSection.tsx 2026-04-22 refactor note).
+ */
+export type ExtensionSubtab = 'elements' | 'plugins' | 'marketplaces'
+
+/**
+ * Which Extensions subtabs are visible for a given client. Drives the
+ * subtab bar in Settings → Extensions.
+ *
+ *   - COMPONENTS ('elements'): always visible. Every client has
+ *     components at user scope (either standalone in ~/.<client>/skills/
+ *     etc., or bundled inside installed plugins).
+ *   - PLUGINS ('plugins'): visible when `capabilities.plugins === true`.
+ *     Clients without a plugin system (Gemini, OpenCode, Kiro) only show
+ *     COMPONENTS. (Their standalone components are all they have.)
+ *   - MARKETPLACES ('marketplaces'): visible when
+ *     `capabilities.marketplaces === true`. Currently Claude only.
+ *     Codex flips true once its marketplace protocol stabilizes.
+ *
+ * Callers use this to render the subtab bar AND to refuse to load a
+ * saved subtab choice that isn't supported on the current client (e.g.
+ * user was last on MARKETPLACES for Claude, then switched to Gemini —
+ * the saved value is ignored and Gemini lands on COMPONENTS).
+ */
+export function getVisibleExtensionsSubtabs(ct: ClientType): ExtensionSubtab[] {
+  const caps = CAPABILITIES[ct]
+  const subtabs: ExtensionSubtab[] = ['elements']  // COMPONENTS always shown
+  if (caps.plugins) subtabs.push('plugins')
+  if (caps.marketplaces) subtabs.push('marketplaces')
+  return subtabs
 }
 
 /** Human-readable label for the detected client type */

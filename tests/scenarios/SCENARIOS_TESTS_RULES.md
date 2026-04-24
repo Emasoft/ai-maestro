@@ -308,6 +308,32 @@ Before starting a scenario:
 
 If running in a worktree, all scenario artifacts (screenshots, reports, backups) are saved inside the worktree, then copied to the main tree on completion.
 
+### Auto-COS creation on team creation (authoring note)
+
+When a scenario creates a team via the UI Create Team dialog and does NOT specify
+a `chiefOfStaffId`, the CreateTeam pipeline **auto-creates a new agent** named
+`cos-<teamslug>` with a random robot persona name (Tatiana, Aria, Mia, etc.) and
+installs `ai-maestro-chief-of-staff@ai-maestro-plugins` at that agent's local
+scope. That auto-COS satisfies the "no team without a COS, no COS without a
+team" invariant (R3 + R11).
+
+Every scenario that creates a team MUST:
+
+1. **Declare the auto-COS in the `data_produced` frontmatter field** with
+   lifecycle "temporary, created and deleted". Don't claim the COS comes
+   from one of your member agents — it doesn't.
+2. **List the auto-COS in the prerequisites** with a note that its persona
+   name is RANDOM and its folder is deterministically `cos-<teamslug>`.
+3. **Clean up the auto-COS explicitly**. Either use "Delete Agents Too"
+   on team deletion (which cascades), or delete it separately via UI after
+   deleting the team. Its tmux session name will also be `cos-<teamslug>`.
+4. **Never hardcode the auto-COS persona name** in verification steps.
+   Use `team.chiefOfStaffId` from the API response to look the agent up.
+
+An agent becomes COS only at the moment of team creation; no AUTONOMOUS
+agent is a COS until it's assigned to a team. Scenarios must NOT treat
+the auto-COS as pre-existing — it is produced by the CreateTeam pipeline.
+
 ---
 
 ## Rule 8: DEV-BROWSER

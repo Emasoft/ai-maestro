@@ -56,7 +56,7 @@ prerequisites:
     check — if a real MANAGER exists, the scenario HALTS rather than
     demoting it, to avoid triggering the R9.8 blocking cascade on
     user teams)
-  - `aimaestro-agent.sh` installed at `~/.local/bin/`
+  - "aimaestro-agent.sh installed at ~/.local/bin/"
   - $AID_AUTH is auto-populated in scen022-manager's environment on wake
     (no manual export needed)
   - Small test plugin available in a registered marketplace

@@ -1816,6 +1816,19 @@ export async function ChangeTitle(
                 )
                 if (cpResult.success) {
                   ops.push(`G14c: Uninstalled "${entry.name}@${entry.marketplace}" (bound to old title "${oldTitle}")`)
+                  // Propagate ChangePlugin's restartNeeded into the outer ChangeTitle result.
+                  // G19 below compares currentPluginName vs targetPluginName to decide whether
+                  // to mark restartNeeded. But G14c has ALREADY stripped the old plugin from
+                  // settings.local.json, so G19 reads currentPluginName=null and, if the new
+                  // title's target plugin is also absent (or matches the empty state), G19
+                  // would set restartNeeded=false — yet the tmux session is STILL running
+                  // with the uninstalled plugin loaded in Claude's process memory until a
+                  // manual restart. Propagating cpResult.restartNeeded here (OR-merge style —
+                  // true wins, G19 cannot downgrade a prior true) matches the fact that we
+                  // DID mutate the agent's plugin set and the client binary must relaunch.
+                  if (cpResult.restartNeeded) {
+                    result.restartNeeded = true
+                  }
                 } else {
                   ops.push(`G14c: WARN — ChangePlugin uninstall failed for "${entry.name}": ${cpResult.error || 'unknown'}`)
                 }

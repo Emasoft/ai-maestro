@@ -38,9 +38,23 @@ export async function POST(
 
   const { sid } = await params
 
-  // Resolve UI sid (UUID) → absolute path. The list endpoint populates the
-  // reverse map. If we have no record, 404.
-  const absolutePath = resolveSessionPath(sid)
+  // Resolve UI sid (UUID) → absolute path.
+  //
+  // Two resolution paths (in order):
+  //   1. Authoritative `?path=<abs>` query param — the list endpoint returns
+  //      every session's absolute `path`; the UI sends it back verbatim. This
+  //      works regardless of which Next.js worker process serves the request,
+  //      because it carries the path explicitly instead of relying on the
+  //      in-memory `sidToPath` cache (which is per-process and not shared
+  //      across Next.js compilation workers in dev/RSC mode — confirmed by
+  //      SCEN-027 BUG-001 on 2026-04-26: list-population in worker A was not
+  //      visible to range-resolution in worker B, causing 404).
+  //   2. Fallback to the in-memory `sidToPath` map populated by a previous
+  //      list call in the same worker process. Kept for backward compat with
+  //      callers that don't yet pass `?path=` and for warm-cache cases.
+  const url = new URL(request.url)
+  const pathParam = url.searchParams.get('path')
+  const absolutePath = pathParam || resolveSessionPath(sid)
   if (!absolutePath) {
     return NextResponse.json({ error: 'session_not_found' }, { status: 404 })
   }

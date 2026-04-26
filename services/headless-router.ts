@@ -2946,12 +2946,14 @@ const routes: Route[] = [
     }
     sendJson(res, 200, result.data)
   }},
-  { method: 'POST', pattern: /^\/api\/sessions-browser\/sessions\/([^/]+)\/range$/, paramNames: ['sid'], handler: async (req, res, params) => {
+  { method: 'POST', pattern: /^\/api\/sessions-browser\/sessions\/([^/]+)\/range$/, paramNames: ['sid'], handler: async (req, res, params, query) => {
     if (!hasSessionCookie(getHeader(req, 'cookie'))) {
       sendJson(res, 401, { error: 'unauthenticated' })
       return
     }
-    const absolutePath = resolveSessionPath(params.sid)
+    // Prefer the explicit `?path=` (avoids cross-worker map staleness — see
+    // SCEN-027 BUG-001 and the Next.js route handler for context).
+    const absolutePath = query?.path || resolveSessionPath(params.sid)
     if (!absolutePath) {
       sendJson(res, 404, { error: 'session_not_found' })
       return
@@ -2986,12 +2988,13 @@ const routes: Route[] = [
       sendJson(res, 500, { error: 'internal_error', detail: (err as Error).message })
     }
   }},
-  { method: 'POST', pattern: /^\/api\/sessions-browser\/sessions\/([^/]+)\/search$/, paramNames: ['sid'], handler: async (req, res, params) => {
+  { method: 'POST', pattern: /^\/api\/sessions-browser\/sessions\/([^/]+)\/search$/, paramNames: ['sid'], handler: async (req, res, params, urlQuery) => {
     if (!hasSessionCookie(getHeader(req, 'cookie'))) {
       sendJson(res, 401, { error: 'unauthenticated' })
       return
     }
-    const absolutePath = resolveSessionPath(params.sid)
+    // See SCEN-027 BUG-001: prefer `?path=` over the unreliable in-memory map.
+    const absolutePath = urlQuery?.path || resolveSessionPath(params.sid)
     if (!absolutePath) {
       sendJson(res, 404, { error: 'session_not_found' })
       return
@@ -3003,8 +3006,8 @@ const routes: Route[] = [
       sendJson(res, 400, { error: 'invalid_request' })
       return
     }
-    const query = typeof body?.query === 'string' ? body.query : ''
-    if (!query) {
+    const searchQuery = typeof body?.query === 'string' ? body.query : ''
+    if (!searchQuery) {
       sendJson(res, 400, { error: 'invalid_request' })
       return
     }
@@ -3013,7 +3016,7 @@ const routes: Route[] = [
     const limit = typeof body?.limit === 'number' && Number.isInteger(body.limit) && body.limit > 0 ? body.limit : undefined
     try {
       const readerSid = await ensureOpenForPath(absolutePath)
-      const resp = await getJsonlReader().search(readerSid, query, { kind, caseInsensitive, limit })
+      const resp = await getJsonlReader().search(readerSid, searchQuery, { kind, caseInsensitive, limit })
       sendJson(res, 200, { sessionId: params.sid, matches: resp.matches })
     } catch (err) {
       if (err instanceof JsonlReaderBinaryMissingError) {
@@ -3028,12 +3031,13 @@ const routes: Route[] = [
       sendJson(res, 500, { error: 'internal_error', detail: (err as Error).message })
     }
   }},
-  { method: 'GET', pattern: /^\/api\/sessions-browser\/sessions\/([^/]+)\/context-breakdown$/, paramNames: ['sid'], handler: async (req, res, params) => {
+  { method: 'GET', pattern: /^\/api\/sessions-browser\/sessions\/([^/]+)\/context-breakdown$/, paramNames: ['sid'], handler: async (req, res, params, query) => {
     if (!hasSessionCookie(getHeader(req, 'cookie'))) {
       sendJson(res, 401, { error: 'unauthenticated' })
       return
     }
-    const absolutePath = resolveSessionPath(params.sid)
+    // See SCEN-027 BUG-001: prefer `?path=` over the unreliable in-memory map.
+    const absolutePath = query?.path || resolveSessionPath(params.sid)
     if (!absolutePath) {
       sendJson(res, 404, { error: 'session_not_found' })
       return

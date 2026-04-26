@@ -211,19 +211,32 @@ async function fetchSessionsList(agentId: string, signal?: AbortSignal): Promise
   return (await res.json()) as SessionsListResponse
 }
 
+// Build a query-string suffix that includes the absolute path when known.
+// The route handlers prefer `?path=` over the in-memory sid→path cache —
+// see app/api/sessions-browser/sessions/[sid]/range/route.ts. SCEN-027
+// BUG-001 (2026-04-26) showed the in-memory map is unreliable across
+// Next.js worker processes; carrying the path explicitly is the fix.
+function pathQuery(path?: string | null): string {
+  return path ? `?path=${encodeURIComponent(path)}` : ''
+}
+
 async function fetchRange(
   sid: string,
   fromLine: number,
   toLine: number,
+  path: string | undefined,
   signal?: AbortSignal,
 ): Promise<RangeResponse> {
-  const res = await fetch(`/api/sessions-browser/sessions/${encodeURIComponent(sid)}/range`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fromLine, toLine }),
-    signal,
-  })
+  const res = await fetch(
+    `/api/sessions-browser/sessions/${encodeURIComponent(sid)}/range${pathQuery(path)}`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromLine, toLine }),
+      signal,
+    },
+  )
   if (!res.ok) {
     const detail = await safeErrorDetail(res)
     throw new Error(`range_failed:${res.status}${detail ? `:${detail}` : ''}`)
@@ -233,10 +246,11 @@ async function fetchRange(
 
 async function fetchContextBreakdown(
   sid: string,
+  path: string | undefined,
   signal?: AbortSignal,
 ): Promise<ContextBreakdownResponse> {
   const res = await fetch(
-    `/api/sessions-browser/sessions/${encodeURIComponent(sid)}/context-breakdown`,
+    `/api/sessions-browser/sessions/${encodeURIComponent(sid)}/context-breakdown${pathQuery(path)}`,
     { method: 'GET', credentials: 'include', signal },
   )
   if (!res.ok) {
@@ -249,21 +263,25 @@ async function fetchContextBreakdown(
 async function fetchSearch(
   sid: string,
   query: string,
+  path: string | undefined,
   opts: { caseInsensitive?: boolean; limit?: number; kind?: 'substring' | 'regex' } = {},
   signal?: AbortSignal,
 ): Promise<SearchResponse> {
-  const res = await fetch(`/api/sessions-browser/sessions/${encodeURIComponent(sid)}/search`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      query,
-      caseInsensitive: opts.caseInsensitive ?? true,
-      limit: opts.limit ?? 500,
-      kind: opts.kind ?? 'substring',
-    }),
-    signal,
-  })
+  const res = await fetch(
+    `/api/sessions-browser/sessions/${encodeURIComponent(sid)}/search${pathQuery(path)}`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query,
+        caseInsensitive: opts.caseInsensitive ?? true,
+        limit: opts.limit ?? 500,
+        kind: opts.kind ?? 'substring',
+      }),
+      signal,
+    },
+  )
   if (!res.ok) {
     const detail = await safeErrorDetail(res)
     throw new Error(`search_failed:${res.status}${detail ? `:${detail}` : ''}`)
@@ -456,12 +474,13 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     const summary = sessions.find(s => s.id === selectedSessionId)
     const hintedCount = summary?.messageCount ?? null
     setTotalLines(hintedCount)
+    const sessionPath = summary?.path
 
     const ctrl = new AbortController()
     inFlightRef.current = ctrl
     setTranscriptLoading(true)
 
-    fetchRange(selectedSessionId, 0, pageSize - 1, ctrl.signal)
+    fetchRange(selectedSessionId, 0, pageSize - 1, sessionPath, ctrl.signal)
       .then(r => {
         if (ctrl.signal.aborted) return
         const normalized = r.lines.map((raw, i) => normalizeLine(raw, i))
@@ -492,10 +511,13 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     // If we know we've hit end-of-file, short-circuit.
     if (totalLines !== null && from >= totalLines) return
 
+    const summary = sessions.find(s => s.id === selectedSessionId)
+    const sessionPath = summary?.path
+
     const ctrl = new AbortController()
     inFlightRef.current = ctrl
     setTranscriptLoading(true)
-    fetchRange(selectedSessionId, from, from + pageSize - 1, ctrl.signal)
+    fetchRange(selectedSessionId, from, from + pageSize - 1, sessionPath, ctrl.signal)
       .then(r => {
         if (ctrl.signal.aborted) return
         const normalized = r.lines.map((raw, i) => normalizeLine(raw, from + i))
@@ -516,7 +538,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
       .finally(() => {
         if (!ctrl.signal.aborted) setTranscriptLoading(false)
       })
-  }, [selectedSessionId, pageSize, transcriptLoading, totalLines])
+  }, [selectedSessionId, pageSize, transcriptLoading, totalLines, sessions])
 
   // Context breakdown ----------------------------------------------------
   const [breakdown, setBreakdown] = useState<ContextBreakdownResponse | null>(null)
@@ -527,9 +549,11 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     setBreakdown(null)
     setBreakdownError(null)
     if (!selectedSessionId) return
+    const summary = sessions.find(s => s.id === selectedSessionId)
+    const sessionPath = summary?.path
     const ctrl = new AbortController()
     setBreakdownLoading(true)
-    fetchContextBreakdown(selectedSessionId, ctrl.signal)
+    fetchContextBreakdown(selectedSessionId, sessionPath, ctrl.signal)
       .then(r => {
         if (ctrl.signal.aborted) return
         setBreakdown(r)
@@ -542,7 +566,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
         if (!ctrl.signal.aborted) setBreakdownLoading(false)
       })
     return () => ctrl.abort()
-  }, [selectedSessionId])
+  }, [selectedSessionId, sessions])
 
   // Search ---------------------------------------------------------------
   const [query, setQueryRaw] = useState('')
@@ -568,11 +592,13 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
       return
     }
     searchTimerRef.current = setTimeout(() => {
+      const summary = sessions.find(s => s.id === selectedSessionId)
+      const sessionPath = summary?.path
       const ctrl = new AbortController()
       searchCtrlRef.current = ctrl
       setSearching(true)
       setSearchError(null)
-      fetchSearch(selectedSessionId, query, { caseInsensitive: true, limit: 500 }, ctrl.signal)
+      fetchSearch(selectedSessionId, query, sessionPath, { caseInsensitive: true, limit: 500 }, ctrl.signal)
         .then(r => {
           if (ctrl.signal.aborted) return
           setMatches(r.matches)
@@ -591,7 +617,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     return () => {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
     }
-  }, [selectedSessionId, query])
+  }, [selectedSessionId, query, sessions])
 
   const setQuery = useCallback((q: string) => setQueryRaw(q), [])
 

@@ -39,7 +39,12 @@ export async function GET(
   }
 
   const { sid } = await params
-  const absolutePath = resolveSessionPath(sid)
+  // See range/route.ts for the rationale on `?path=` fallback (SCEN-027 BUG-001).
+  // Cross-worker map-staleness is the documented failure mode; carrying the path
+  // back from the list response is the safe round-trip.
+  const url = new URL(request.url)
+  const pathParam = url.searchParams.get('path')
+  const absolutePath = pathParam || resolveSessionPath(sid)
   if (!absolutePath) {
     return NextResponse.json({ error: 'session_not_found' }, { status: 404 })
   }

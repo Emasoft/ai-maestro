@@ -1,5 +1,47 @@
 # Scenario Runner Memory
 
+## SCEN-001 2026-04-26T20:14Z — PASS (33 PASS, 1 FIXED in-session, 5 SKIP, 4 bugs found, 1 fixed, 3 issues, 10 proposals)
+
+**Run ID:** 20260426T193902Z
+**Branch:** feature/phase6-jsonl-rebase-test (HEAD 50673eac → 6afa73e9, 1 fix commit)
+**Reports:**
+- reports/scenarios-runner/SCEN-001_2026-04-26T20-14-43Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_001_2026-04-26T20-14-43Z.md
+
+**Verdict:** PASS — fixed BUG-002 verified working. New regression (BUG-003) found+fixed in-session (commit 6afa73e9, R3 Gate 9b interaction with DeleteTeam). S025 MEMBER selection succeeded via precise card-text selector `button:has-text("MEMBER"):has-text("Standard agent, no governance privileges")`. BUG-004 (cemetery dead UI) filed as P0-PROP-002.
+
+### BUG-003 (FIXED commit 6afa73e9): DeleteTeam blocked by R3 Gate 9b on revert
+
+services/element-management-service.ts DeleteTeam G03 — pre-remove agent from team.agentIds via updateTeam BEFORE calling ChangeTitle (Gate 9b in ChangeTitle rejects standalone titles when agent is still in any team — added by 50673eac for BUG-002 but breaks DeleteTeam's revert path because team isn't gone until G04). If agent is COS or orchestratorId, clear those fields in same updateTeam call to satisfy R4.7.
+
+### BUG-004 (FILED P0-PROP-002): "Delete Forever" hardcodes hard=true
+
+components/DeleteAgentDialog.tsx:65 sets `params.set('hard', 'true')` UNCONDITIONALLY. Cemetery archive is `if (!hard)` gated, so UI-triggered deletes never archive. Recommended fix: 3-way checkbox (default soft, "permanent" = hard+folder).
+
+### Patterns confirmed/discovered this run
+
+- **MEMBER card precise selector:** `button:has-text("MEMBER"):has-text("Standard agent, no governance privileges")` (also ORCHESTRATOR="Primary kanban manager", ARCHITECT="Design documents"). Using just title text matches non-card elements.
+- **Teams-tab Delete flow:** trash icon hidden under `class="hidden group-hover:flex"`. CSS override required: `.hidden.group-hover\\:flex { display: flex !important; }`. Click trash → "Confirm" inline button replaces icon → click Confirm → Delete Team modal opens with inline password + cascade checkbox.
+- **Reassign dropdown — Leave team via X icon:** `button[title="Leave team"]`, opacity-0 group-hover:opacity-100, atomic ChangeTeam+ChangeTitle revert.
+- **Auto-COS persona name was "Zaire"** (RANDOM, never hardcode).
+- **Create Team requires ≥1 agent selected** (button disabled at "Agents * (0 selected)"). Pick the scenario's OWN test agent (not user's pre-existing agents) — Rule 0 compliance.
+- **Hidden hover buttons (group-hover:flex/block)** are NOT clickable by Playwright `locator.hover()` reliably in headless mode — always use CSS override.
+- **Profile button (right toolbar) toggles** — re-click after tab changes.
+- **Title button is BUTTON tag** (not SPAN); SPAN copy at top of profile is read-only.
+
+### Rule 0 blacklist safety
+
+- 20 pre-existing user agents enumerated; 10 had workdir OUTSIDE `~/agents/` — all preserved.
+- 3 pre-existing teams + 31 cemetery entries + 3 test orphans (scen013/021-alpha/021-beta) — all preserved.
+- ZERO `_aim-*` interactions.
+
+### Process notes carried forward
+
+- After yarn build + pm2 restart, dashboard cookie may invalidate — re-run aim_login helper.
+- Hidden `group-hover:` Tailwind classes are unreliable in headless tests. P1-PROP-002 proposes replacing with `opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto` repo-wide.
+
+---
+
 ## SCEN-001 2026-04-26T21:18Z — PARTIAL (24 PASS, 1 FAIL, 14 SKIP, 2 bugs found, 1 fixed in-session, 4 issues, 8 proposals)
 
 **Run ID:** 20260426T184411Z

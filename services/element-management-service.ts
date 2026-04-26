@@ -1938,7 +1938,24 @@ export async function ChangeTitle(
       }
       ops.push(`EXE: ${effectiveTitle.toUpperCase()} requires team — agent is in a team ✓`)
     } else if (STANDALONE_TITLES.has(effectiveTitle)) {
-      ops.push(`EXE: ${effectiveTitle.toUpperCase()} is standalone — no team required`)
+      // R3 enforcement (reverse direction): STANDALONE titles
+      // (MANAGER, AUTONOMOUS, MAINTAINER) MUST NOT be assigned to an agent
+      // that is currently a member of any team. The forward direction is
+      // already enforced (Gate 9 above rejects TEAM_TITLES when the agent
+      // has no team). The reverse was missing — found by SCEN-001 BUG-002:
+      // ARCHITECT → AUTONOMOUS while still in a team would succeed,
+      // setting agent.team=null but leaving the agent's id in
+      // team.agentIds (registry drift, R3 violation).
+      // The fix: refuse here. Caller must first ChangeTeam the agent out
+      // of the team, then ChangeTitle to the standalone title.
+      const { loadTeams: loadTeamsG9b } = await import('@/lib/team-registry')
+      const allTeamsG9b = loadTeamsG9b()
+      const memberTeamG9b = allTeamsG9b.find(t => t.agentIds.includes(agentId))
+      if (memberTeamG9b) {
+        result.error = `R3: ${effectiveTitle.toUpperCase()} is a standalone title and cannot be assigned while the agent is in a team. Remove agent from team "${memberTeamG9b.name}" first (Team UI → Members → Remove, or ChangeTeam pipeline), then re-attempt the title change.`
+        return result
+      }
+      ops.push(`EXE: ${effectiveTitle.toUpperCase()} is standalone — agent is not in any team ✓ (R3)`)
     } else {
       ops.push(`EXE: Title "${effectiveTitle}" — team check N/A`)
     }

@@ -52,8 +52,13 @@ const {
     mockDeleteAgent: vi.fn(async (id: string) => { store.delete(id) }),
     mockUpdateAgent: vi.fn(async (id: string, patch: Record<string, unknown>) => {
       const existing = store.get(id)
-      if (existing) store.set(id, { ...existing, ...patch })
-      return existing
+      if (!existing) return null
+      // Real updateAgent returns the MERGED agent (post-patch). Returning the
+      // pre-merge value made ChangeTitle G14 fail with "in-memory post-write
+      // mismatch" (it reads governanceTitle from the returned object).
+      const updated = { ...existing, ...patch }
+      store.set(id, updated)
+      return updated
     }),
     mockGetAgent: vi.fn((id: string) => store.get(id)),
     mockLoadSecurityConfig: vi.fn(() => ({
@@ -173,6 +178,14 @@ vi.mock('fs/promises', () => ({
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => false),
+  // ChangeTitle G14 + G22 use readFileSync from 'fs' to verify that
+  // updateAgent's mutation actually flushed to registry.json. They JSON.parse
+  // the result and look up the agent by id. Returning the in-memory store
+  // simulates a perfectly-healthy registry — without this, both gates throw
+  // "registry verification failed" and ChangeTitle aborts before G14b/15/16,
+  // and CreateAgent's G06 rolls back the agent before reaching G08.
+  readFileSync: vi.fn(() => JSON.stringify(Array.from(registryStore.values()))),
+  writeFileSync: vi.fn(),
   promises: {
     readFile: vi.fn(async () => ''),
     writeFile: vi.fn(async () => undefined),

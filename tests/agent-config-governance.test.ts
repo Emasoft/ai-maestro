@@ -115,6 +115,12 @@ vi.mock('@/lib/agent-startup', () => ({
 
 vi.mock('@/services/shared-state', () => ({
   sessionActivity: new Map(),
+  // updateAgentById dynamically imports broadcastAgentUpdate to push status_update
+  // events to /status WebSocket subscribers after every successful field change
+  // (lines ~921, ~941 of services/agents-core-service.ts). The function is a
+  // no-op side-effect in unit tests — we only need a stub that exists on the
+  // mock object so the dynamic import does not throw "No export defined".
+  broadcastAgentUpdate: vi.fn(),
 }))
 
 vi.mock('@/lib/agent-runtime', () => ({

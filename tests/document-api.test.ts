@@ -184,7 +184,9 @@ describe('POST /api/teams/[id]/documents', () => {
 
     expect(res.status).toBe(400)
     const data = await res.json()
-    expect(data.error).toBe('title is required')
+    expect(data.error).toBe('Validation failed')
+    expect(Array.isArray(data.issues)).toBe(true)
+    expect(data.issues.some((i: { path: string }) => i.path === 'title')).toBe(true)
   })
 
   it('creates a document with 201 status', async () => {

@@ -168,17 +168,23 @@ describe('GET /api/teams', () => {
 
 describe('POST /api/teams', () => {
   it('creates team with name and agents', async () => {
+    // PR #28 introduced strict zod schema requiring agentIds to be RFC 4122 UUIDs.
+    // Use crypto.randomUUID() to generate valid v4 UUIDs the schema accepts.
+    const a1 = crypto.randomUUID()
+    const a2 = crypto.randomUUID()
     const req = makeRequest('/api/teams', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'New Team', agentIds: ['a1', 'a2'] }),
+      body: JSON.stringify({ name: 'New Team', agentIds: [a1, a2] }),
     })
     const res = await createTeamRoute(req)
 
     expect(res.status).toBe(201)
     const data = await res.json()
     expect(data.team.name).toBe('New Team')
-    expect(data.team.agentIds).toEqual(['a1', 'a2'])
+    // agentIds preserved as provided (registry uses them as-is)
+    expect(data.team.agentIds).toContain(a1)
+    expect(data.team.agentIds).toContain(a2)
   })
 
   it('creates team with empty agentIds', async () => {
@@ -320,7 +326,12 @@ describe('PUT /api/teams/[id]', () => {
     expect(data.team.name).toBe('Updated')
   })
 
-  it('updates instructions via PUT', async () => {
+  // PR #28 (ace5152d) introduced UpdateTeamSchema as strict() omitting
+  // `instructions`, `lastActivityAt`, and `lastMeetingAt`. The route now
+  // rejects unknown fields with HTTP 400 — these fields can no longer be
+  // updated through the generic PUT. The registry-level `updateTeam`
+  // still accepts them (used by dedicated callers/services).
+  it('rejects instructions in PUT body (strict schema)', async () => {
     const team = await createTeam({ name: 'Instructions Team', agentIds: [] })
 
     const req = makeRequest(`/api/teams/${team.id}`, {
@@ -330,12 +341,12 @@ describe('PUT /api/teams/[id]', () => {
     })
     const res = await updateTeamRoute(req, makeParams(team.id) as any)
 
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(400)
     const data = await res.json()
-    expect(data.team.instructions).toBe('# Team Guidelines\n\nFollow these rules.')
+    expect(data.error).toBe('Validation failed')
   })
 
-  it('updates lastActivityAt via PUT', async () => {
+  it('rejects lastActivityAt in PUT body (strict schema)', async () => {
     const team = await createTeam({ name: 'Activity Team', agentIds: [] })
     const ts = '2025-06-15T10:30:00.000Z'
 
@@ -346,20 +357,18 @@ describe('PUT /api/teams/[id]', () => {
     })
     const res = await updateTeamRoute(req, makeParams(team.id) as any)
 
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(400)
     const data = await res.json()
-    expect(data.team.lastActivityAt).toBe(ts)
+    expect(data.error).toBe('Validation failed')
   })
 
-  it('persists instructions to storage', async () => {
+  it('persists instructions to storage via registry updateTeam', async () => {
+    // The route's PUT no longer accepts `instructions` (strict schema), but
+    // the registry-level updateTeam continues to support it for service-layer
+    // callers. Verify persistence at the registry boundary.
     const team = await createTeam({ name: 'Persist', agentIds: [] })
 
-    const req = makeRequest(`/api/teams/${team.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instructions: 'Saved' }),
-    })
-    await updateTeamRoute(req, makeParams(team.id) as any)
+    await updateTeam(team.id, { instructions: 'Saved' })
 
     const teams = loadTeams()
     expect(teams[0].instructions).toBe('Saved')
@@ -372,10 +381,14 @@ describe('PUT /api/teams/[id]', () => {
     // the same module instance as the route's static import when vi.mock is active.
     const spy = vi.spyOn(await import('@/lib/team-registry'), 'updateTeam')
 
+    // PR #28: chiefOfStaffId in PUT body must be a UUID per the strict zod schema
+    // (route's defense-in-depth strips it before reaching the registry, but the
+    // schema validates it first).
+    const cosUuid = crypto.randomUUID()
     const req = makeRequest(`/api/teams/${team.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'closed', chiefOfStaffId: 'some-agent', name: 'Updated Name' }),
+      body: JSON.stringify({ type: 'closed', chiefOfStaffId: cosUuid, name: 'Updated Name' }),
     })
     const res = await updateTeamRoute(req, makeParams(team.id) as any)
 
@@ -479,7 +492,15 @@ describe('DELETE /api/teams/[id]', () => {
 
   // CC-006: Closed team deletion guard - MANAGER is allowed
   it('allows MANAGER to delete closed team', async () => {
-    const team = await createTeam({ name: 'Mgr Delete', agentIds: ['cos-agent'], type: 'closed', chiefOfStaffId: 'cos-agent' })
+    // After governance simplification (2026-03-27), ALL teams are closed.
+    // PR #28 batch 3 (ace5152d) added G03 in DeleteTeam: each team agent is
+    // reverted to AUTONOMOUS via ChangeTitle, which itself verifies registry
+    // persistence on disk (G14). Stubbing every step of that pipeline is
+    // counter-productive for an API-shape test — the deletion-guard logic
+    // we want to verify (MANAGER allowed) is fully exercised by an empty
+    // agentIds team. The "closed team" attribute is type='closed', not the
+    // presence of a COS.
+    const team = await createTeam({ name: 'Mgr Delete', agentIds: [], type: 'closed' })
     // deleteTeamById checks getManagerId() === requestingAgentId, not isManager()
     vi.mocked(getManagerId).mockReturnValue('manager-agent')
 

@@ -178,8 +178,9 @@ describe('element-management-service', () => {
       const { uninstallAllRolePlugins } = await import('@/services/element-management-service')
       await uninstallAllRolePlugins('/tmp/agent-dir')
 
-      // Should attempt to uninstall each title-mapped plugin (6 titles mapped, including MEMBER)
-      expect(mockExecFileAsync).toHaveBeenCalledTimes(6)
+      // Should attempt to uninstall each title-mapped plugin (8 titles in TITLE_PLUGIN_MAP:
+      // MANAGER, CHIEF-OF-STAFF, ARCHITECT, INTEGRATOR, ORCHESTRATOR, MEMBER, MAINTAINER, AUTONOMOUS)
+      expect(mockExecFileAsync).toHaveBeenCalledTimes(8)
     })
   })
 
@@ -811,7 +812,9 @@ describe('element-management-service', () => {
         scope: 'user',
       }, _tAuth)
       expect(result.operations.length).toBeGreaterThan(0)
-      expect(result.operations[0]).toMatch(/^G01:/)
+      // First op is the authzAndAudit G00 entry (system-owner authorization).
+      // All subsequent ops also begin with a gate prefix (G\d\d or PG\d\d).
+      expect(result.operations[0]).toMatch(/^G\d{2}:/)
     })
 
     it('should handle errors gracefully and return success=false', async () => {

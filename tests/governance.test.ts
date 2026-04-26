@@ -41,17 +41,36 @@ vi.mock('uuid', () => ({
   }),
 }))
 
-// Note: Mock uses simple string comparison, not constant-time comparison like real bcrypt.
-// This is acceptable for Phase 1 (localhost-only) — timing-attack resistance is not tested here.
-vi.mock('bcryptjs', () => ({
-  default: {
-    hash: vi.fn((plain: string, _rounds: number) => Promise.resolve(`hashed:${plain}`)),
-    compare: vi.fn((plain: string, hash: string) => Promise.resolve(hash === `hashed:${plain}`)),
-  },
+// Mock the argon2 wrapper (the source uses hashPassword/verifyPasswordAuto/needsRehash from
+// `@/lib/argon2`, NOT bcryptjs directly). The mock uses simple string comparison; constant-time
+// comparison is irrelevant here (Phase 1 localhost; timing-attack resistance is not under test).
+vi.mock('@/lib/argon2', () => ({
+  hashPassword: vi.fn((plain: string) => Promise.resolve(`hashed:${plain}`)),
+  verifyPassword: vi.fn((hash: string, plain: string) => Promise.resolve(hash === `hashed:${plain}`)),
+  verifyPasswordAuto: vi.fn((hash: string, plain: string) => Promise.resolve(hash === `hashed:${plain}`)),
+  isArgon2Hash: vi.fn((hash: string) => hash.startsWith('$argon2')),
+  isBcryptHash: vi.fn((hash: string) => hash.startsWith('$2b$') || hash.startsWith('$2a$')),
+  // Always return false so verifyPassword never triggers the rehash branch in the test path.
+  needsRehash: vi.fn(() => Promise.resolve(false)),
+}))
+
+// `setPassword` calls into `@/lib/security-config` to optionally re-encrypt cached secrets.
+// Tests don't seed an unlocked security config, so isUnlocked must return false and
+// reEncryptWithNewPassword must be a no-op. Mocking avoids real disk I/O for the encrypted vault.
+vi.mock('@/lib/security-config', () => ({
+  isUnlocked: vi.fn(() => false),
+  reEncryptWithNewPassword: vi.fn(),
+  loadSecurityConfig: vi.fn(() => ({
+    argon2: { memoryCost: 65536, timeCost: 3, parallelism: 4 },
+  })),
 }))
 
 vi.mock('@/lib/file-lock', () => ({
+  // `withLock` is what governance.ts actually calls. `acquireLock` is exported by the real
+  // module too, so the mock declares it to avoid noisy "No 'acquireLock' export" warnings
+  // emitted when other tests/modules accidentally probe the surface during a vitest run.
   withLock: vi.fn((_name: string, fn: () => unknown) => Promise.resolve(fn())),
+  acquireLock: vi.fn(() => Promise.resolve(() => {})),
 }))
 
 vi.mock('@/lib/team-registry', () => ({
@@ -65,6 +84,22 @@ vi.mock('@/lib/team-registry', () => ({
 vi.mock('@/lib/governance-sync', () => ({
   broadcastGovernanceSync: vi.fn(() => Promise.resolve()),
 }))
+
+// Mock the signed-ledger so saveGovernance's `governanceLedger.append(...)` becomes a no-op.
+// Without this the real ledger emits "AUDIT GAP" warnings at every save during tests.
+// Use a real class (not vi.fn().mockImplementation) so `new SignedLedger(path)` works at
+// module-init time: `lib/agent-registry.ts` (transitively imported via team-registry mock
+// path resolution, no — actually direct via governance.ts -> team-registry import) constructs
+// SignedLedger at module top-level, so the constructor must be a real callable class.
+vi.mock('@/lib/signed-ledger', () => {
+  class SignedLedger {
+    constructor(_registryPath: string) {}
+    append(_op: string, _file: string, _diff: unknown): Promise<void> {
+      return Promise.resolve()
+    }
+  }
+  return { SignedLedger }
+})
 
 // ============================================================================
 // Import module under test (after mocks)
@@ -175,7 +210,7 @@ describe('loadGovernance', () => {
 
 describe('setPassword', () => {
   it('hashes the plaintext password and persists it to governance config', async () => {
-    /** Verifies that setPassword stores a bcrypt hash and timestamp in governance.json */
+    /** Verifies that setPassword stores an argon2id hash and timestamp in governance.json */
     await setPassword('my-governance-pass')
 
     const config = loadGovernance()
@@ -185,9 +220,11 @@ describe('setPassword', () => {
     expect(typeof config.passwordSetAt).toBe('string')
     // Verify the timestamp is a valid ISO date
     expect(new Date(config.passwordSetAt!).toISOString()).toBe(config.passwordSetAt)
-    // CC-002: Verify bcrypt.hash was called with the correct salt rounds (12)
-    const bcrypt = await import('bcryptjs')
-    expect(bcrypt.default.hash).toHaveBeenCalledWith('my-governance-pass', 12)
+    // CC-002: Verify the argon2id wrapper was called with the plaintext password.
+    // `setPassword` no longer accepts a salt-rounds parameter — argon2id options are
+    // sourced from `loadSecurityConfig().argon2` inside the wrapper itself.
+    const argon2Module = await import('@/lib/argon2')
+    expect(argon2Module.hashPassword).toHaveBeenCalledWith('my-governance-pass')
   })
 })
 

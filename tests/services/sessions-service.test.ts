@@ -281,7 +281,13 @@ describe('createSession', () => {
 
     await createSession({ name: 'MyAgent' })
 
-    expect(mockRuntime.createSession).toHaveBeenCalledWith('myagent', expect.any(String))
+    // Source passes 3 args: (sessionName, cwd, initialEnv).
+    // Env bag always contains AGENT_WORK_DIR + AIM_AGENT_NAME (lowercased name).
+    expect(mockRuntime.createSession).toHaveBeenCalledWith(
+      'myagent',
+      expect.any(String),
+      expect.objectContaining({ AIM_AGENT_NAME: 'myagent' })
+    )
   })
 
   it('uses provided working directory', async () => {
@@ -291,7 +297,12 @@ describe('createSession', () => {
 
     await createSession({ name: 'agent', workingDirectory: '/custom/path' })
 
-    expect(mockRuntime.createSession).toHaveBeenCalledWith('agent', '/custom/path')
+    // Source passes 3 args: (sessionName, cwd, initialEnv). cwd flows into AGENT_WORK_DIR.
+    expect(mockRuntime.createSession).toHaveBeenCalledWith(
+      'agent',
+      '/custom/path',
+      expect.objectContaining({ AGENT_WORK_DIR: '/custom/path' })
+    )
   })
 
   it('registers a new agent when not found in registry', async () => {

@@ -71,15 +71,26 @@ vi.mock('fs', () => {
 
 // fs/promises — cp, rm, mkdir are spies; we record the calls so tests can
 // assert the correct source/dest were computed by the route.
-const cpSpy = vi.fn(async (_src: string, _dest: string, _opts?: unknown) => {
-  /* no-op — we only care that it was called with the right args */
-})
-const rmSpy = vi.fn(async (_path: string, _opts?: unknown) => {
-  /* no-op */
-})
-const mkdirSpy = vi.fn(async (_path: string, _opts?: unknown) => {
-  /* no-op */
-})
+//
+// vi.hoisted() is required here: vi.mock() is hoisted to the top of the file
+// (before any const/let/var), so referencing plain top-level spies inside the
+// mock factory throws ReferenceError. Hoisted spies are initialized at the
+// same time as the mocks, making them safe to use inside factories.
+const { cpSpy, rmSpy, mkdirSpy, ensureMarketplaceSpy, updateMarketplaceManifestSpy } = vi.hoisted(() => ({
+  cpSpy: vi.fn(async (_src: string, _dest: string, _opts?: unknown) => {
+    /* no-op — we only care that it was called with the right args */
+  }),
+  rmSpy: vi.fn(async (_path: string, _opts?: unknown) => {
+    /* no-op */
+  }),
+  mkdirSpy: vi.fn(async (_path: string, _opts?: unknown) => {
+    /* no-op */
+  }),
+  ensureMarketplaceSpy: vi.fn(async () => undefined),
+  updateMarketplaceManifestSpy: vi.fn(
+    async (_name: string, _description: string, _version: string) => undefined,
+  ),
+}))
 
 vi.mock('fs/promises', () => ({
   cp: cpSpy,
@@ -89,11 +100,6 @@ vi.mock('fs/promises', () => ({
 
 // role-plugin-service — marketplace registration is a spy so we can verify
 // it was called with the expected name/description/version.
-const ensureMarketplaceSpy = vi.fn(async () => undefined)
-const updateMarketplaceManifestSpy = vi.fn(
-  async (_name: string, _description: string, _version: string) => undefined,
-)
-
 vi.mock('@/services/role-plugin-service', () => ({
   ensureMarketplace: ensureMarketplaceSpy,
   updateMarketplaceManifest: updateMarketplaceManifestSpy,

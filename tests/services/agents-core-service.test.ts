@@ -73,6 +73,7 @@ const {
     },
     mockSharedState: {
       sessionActivity: new Map<string, number>(),
+      broadcastAgentUpdate: vi.fn(),
     },
     mockAgentStartup: {
       initializeAllAgents: vi.fn().mockResolvedValue({ initialized: [], failed: [] }),
@@ -135,9 +136,23 @@ vi.mock('@/lib/team-registry', () => mockTeamRegistry)
 // Mock element-management-service: pipelines that agents-core-service delegates to
 const mockDeleteAgentPipeline = vi.fn()
 const mockCreateAgentPipeline = vi.fn()
+const mockInstallElement = vi.fn()
+const mockChangeTitle = vi.fn()
+const mockChangeName = vi.fn()
+const mockChangeFolder = vi.fn()
+const mockChangeAvatar = vi.fn()
+const mockChangeCLIArgs = vi.fn()
+const mockChangeClient = vi.fn()
 vi.mock('@/services/element-management-service', () => ({
   DeleteAgent: (...args: unknown[]) => mockDeleteAgentPipeline(...args),
   CreateAgent: (...args: unknown[]) => mockCreateAgentPipeline(...args),
+  InstallElement: (...args: unknown[]) => mockInstallElement(...args),
+  ChangeTitle: (...args: unknown[]) => mockChangeTitle(...args),
+  ChangeName: (...args: unknown[]) => mockChangeName(...args),
+  ChangeFolder: (...args: unknown[]) => mockChangeFolder(...args),
+  ChangeAvatar: (...args: unknown[]) => mockChangeAvatar(...args),
+  ChangeCLIArgs: (...args: unknown[]) => mockChangeCLIArgs(...args),
+  ChangeClient: (...args: unknown[]) => mockChangeClient(...args),
 }))
 
 // ============================================================================
@@ -181,6 +196,15 @@ beforeEach(() => {
   mockDeleteAgentPipeline.mockResolvedValue({ success: true, agentId: 'agent-1', hard: false, operations: [] })
   // Default: CreateAgent pipeline succeeds
   mockCreateAgentPipeline.mockResolvedValue({ success: true, agentId: 'uuid-1', operations: [], restartNeeded: false })
+  // Default: InstallElement (R17 gate) succeeds
+  mockInstallElement.mockResolvedValue({ success: true, operations: [], stdout: '', stderr: '' })
+  // Default: Change* pipelines succeed
+  mockChangeTitle.mockResolvedValue({ success: true, operations: [] })
+  mockChangeName.mockResolvedValue({ success: true, operations: [] })
+  mockChangeFolder.mockResolvedValue({ success: true, operations: [] })
+  mockChangeAvatar.mockResolvedValue({ success: true, operations: [] })
+  mockChangeCLIArgs.mockResolvedValue({ success: true, operations: [] })
+  mockChangeClient.mockResolvedValue({ success: true, operations: [], restartNeeded: false })
   // Default: authorization allows all
   mockAuthorization.authorize.mockReturnValue({ allowed: true })
   // Default: MANAGER exists
@@ -520,7 +544,18 @@ describe('wakeAgent', () => {
     expect(result.status).toBe(200)
     expect(result.data?.woken).toBe(true)
     expect(result.data?.sessionName).toBe('my-agent')
-    expect(mockRuntime.createSession).toHaveBeenCalledWith('my-agent', '/home')
+    // R17 fix (TRDD-WT022#1): wakeAgent passes an atomic env bag as the 3rd
+    // arg to runtime.createSession (AGENT_WORK_DIR, AIM_AGENT_NAME,
+    // AIM_AGENT_ID, AMP_DIR) to avoid the post-create env-injection race.
+    expect(mockRuntime.createSession).toHaveBeenCalledWith(
+      'my-agent',
+      '/home',
+      expect.objectContaining({
+        AGENT_WORK_DIR: '/home',
+        AIM_AGENT_NAME: 'my-agent',
+        AIM_AGENT_ID: 'agent-1',
+      })
+    )
   })
 
   it('returns already running when session exists', async () => {

@@ -50,10 +50,17 @@ const {
     mockLoadAgents: vi.fn(() => Array.from(store.values())),
     mockCreateAgent: vi.fn(),
     mockGetAgent: vi.fn((id: string) => store.get(id)),
+    // Returns the POST-patch object so ChangeTitle's Gate 14
+     // ("in-memory post-write mismatch") can see the new title.
+     // Returning the pre-patch reference (the previous bug) made
+     // Gate 14 fail with `expected "autonomous", got "null"`, which
+     // rolled the agent back at G06 in CreateAgent — G11 never ran.
     mockUpdateAgent: vi.fn(async (id: string, patch: Record<string, unknown>) => {
       const existing = store.get(id)
-      if (existing) store.set(id, { ...existing, ...patch })
-      return existing
+      if (!existing) return null
+      const updated = { ...existing, ...patch }
+      store.set(id, updated)
+      return updated
     }),
     mockLoadSecurityConfig: vi.fn(() => ({
       agentCreation: { maxAgentsPerHost: 100, minIntervalSeconds: 0 },
@@ -73,6 +80,12 @@ vi.mock('@/lib/agent-registry', () => ({
   updateAgent: mockUpdateAgent,
   getAgent: mockGetAgent,
   saveAgents: vi.fn(),
+  // ChangeTitle Gate 14c emits per-op ledger entries via
+  // lib/ledger-emit.ts which imports `registryLedger` from this
+  // module and chains `.append(...).catch(...)`. The emit is
+  // fire-and-forget and only WARNs on failure, but exporting a
+  // resolving-promise stub here keeps the test stderr clean.
+  registryLedger: { append: vi.fn(async () => undefined) },
 }))
 
 vi.mock('@/lib/security-config', () => ({
@@ -169,8 +182,22 @@ vi.mock('fs/promises', () => ({
   writeFile: vi.fn(async () => undefined),
 }))
 
+// fs mock — ChangeTitle's Gate 14 and Gate 22 do a synchronous
+// re-read of ~/.aimaestro/agents/registry.json via `readFileSync`
+// to verify that the in-memory write was flushed to disk. Since the
+// real registry never gets touched in this unit test, we serve a
+// synthetic JSON document derived from the in-memory `registryStore`
+// so the disk re-read sees exactly what `mockUpdateAgent` just wrote.
+// Without this, Gate 14/22 would throw on JSON.parse and the
+// pipeline would abort BEFORE reaching G11.
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => false),
+  readFileSync: vi.fn((p: string) => {
+    if (typeof p === 'string' && p.endsWith('registry.json')) {
+      return JSON.stringify(Array.from(registryStore.values()))
+    }
+    return ''
+  }),
   promises: {
     readFile: vi.fn(async () => ''),
     writeFile: vi.fn(async () => undefined),

@@ -52,8 +52,14 @@ const {
     mockDeleteAgent: vi.fn(async (id: string) => { store.delete(id) }),
     mockUpdateAgent: vi.fn(async (id: string, patch: Record<string, unknown>) => {
       const existing = store.get(id)
-      if (existing) store.set(id, { ...existing, ...patch })
-      return existing
+      if (!existing) return null
+      const updated = { ...existing, ...patch }
+      store.set(id, updated)
+      // Return the PATCHED record so ChangeTitle Gate 14's in-memory check
+      // (g14Updated.governanceTitle === effectiveTitle) sees the new value.
+      // Returning `existing` would leak the pre-patch reference and the
+      // gate would short-circuit with "in-memory post-write mismatch".
+      return updated
     }),
     mockGetAgent: vi.fn((id: string) => store.get(id)),
     mockLoadSecurityConfig: vi.fn(() => ({
@@ -114,6 +120,14 @@ vi.mock('@/lib/team-registry', () => ({
   isAgentInAnyTeam: vi.fn(() => false),
   blockAllTeams: vi.fn(),
   unblockAllTeams: vi.fn(),
+  // ChangeTitle Gates 11/12/13b call updateTeam to clear/set
+  // chiefOfStaffId/orchestratorId on team transitions. ChangeTeam (called
+  // from CreateAgent G07 for the team-required-title branch) also relies
+  // on this. Without it, "No updateTeam export defined" is thrown and the
+  // pipeline collapses before G07/G07b ops are logged.
+  updateTeam: vi.fn(async () => undefined),
+  deleteTeam: vi.fn(async () => undefined),
+  addTeam: vi.fn(async () => undefined),
 }))
 
 // Governance primitives consulted by ChangeTitle. Stubbed to a
@@ -179,8 +193,20 @@ vi.mock('fs/promises', () => ({
   writeFile: vi.fn(async () => undefined),
 }))
 
+// ChangeTitle Gates 14 + 22 verify that the registry write landed by reading
+// ~/.aimaestro/agents/registry.json from disk via fs.readFileSync. Without a
+// readFileSync mock that mirrors registryStore, Gate 14 throws + the catch
+// returns "G14: registry verification failed", which short-circuits the
+// pipeline before G07 ("No team requested") is logged. Mirror the in-memory
+// store so the on-disk view matches whatever updateAgent has just written.
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => false),
+  readFileSync: vi.fn((p: string) => {
+    if (typeof p === 'string' && p.endsWith('registry.json')) {
+      return JSON.stringify(Array.from(registryStore.values()))
+    }
+    return ''
+  }),
   promises: {
     readFile: vi.fn(async () => ''),
     writeFile: vi.fn(async () => undefined),

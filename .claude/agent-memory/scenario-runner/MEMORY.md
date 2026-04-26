@@ -1,5 +1,52 @@
 # Scenario Runner Memory
 
+## SCEN-002 2026-04-26T23:22Z — PASS (60 PASS, 2 DEFERRED, 1 N/A, 0 bugs, 1 issue, 8 proposals)
+
+**Run ID:** 20260426T232245Z (Run #4 after 3 rate-limited prior runs)
+**Branch:** feature/phase6-jsonl-rebase-test (HEAD 9ba6b4c7 — no commits, ZERO bugs found)
+**Reports:**
+- reports/scenarios-runner/SCEN-002_2026-04-26T23-22-45Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_002_2026-04-26T23-22-45Z.md
+**Screenshots:** moved to /tmp/scen002-screenshots-PASS-20260426T232245Z/ (Rule 10 auto-purge)
+
+**Verdict:** PASS — Phase 5 R4.7 fix (commit 9ba6b4c7) verified working bidirectionally:
+- From beta (S028): CHIEF-OF-STAFF DISABLED with `Only one Chief-of-Staff is allowed per team. "Aiken" already holds this title.`
+- From Aiken (S031): AUTONOMOUS, MANAGER, MAINTAINER DISABLED with `Only available to standalone agents. Remove this agent from its team first.`
+
+### Title lifecycle fully exercised (no bugs)
+AUTONOMOUS → MEMBER (auto on team-join, S023) → ORCHESTRATOR (2-password flow, S035) → AUTONOMOUS (auto on team-leave, S044) → MEMBER (auto on team-rejoin, S047) → ORCHESTRATOR (re-assign, S048). Plugin sequence: autonomous-agent → programmer-agent → orchestrator-agent → autonomous-agent (R9.13 mandate).
+
+### Patterns confirmed/discovered this run
+
+- **Auto-COS persona this run = "Aiken"** (RANDOM — never hardcode).
+- **AUTHORING-001 fix re-applied:** scen002-manager creation between S012 and S013 mandatory because R9.8 disables Create Team without MANAGER on host. Filed as P0-PROP-001 to add to scenario file permanently.
+- **Profile button TOGGLES** — clicking after sidebar agent change may need 2 clicks (panel collapses on agent switch in some cases).
+- **Sidebar search bar conflicts with dialog name-confirm input** — `input[type="text"]` first match returns sidebar search. Use placeholder-targeted selector for dialog (`input[placeholder="scen-test-agent-alpha"]`).
+- **Inline Confirm in Teams trash flow:** trash button click → "Confirm" replaces trash icon at same position (x<400 sidebar). Position-based filter clicks the right one.
+- **Delete Team submit label changes dynamically:** "Delete Team" → "Delete Team + Agents" when "Delete Agents Too" checked. Use multi-candidate locator: `'button:has-text("Delete Team"), button:has-text("Delete Team + Agents")'`.
+- **2-password flow for ChangeTitle:** inline GovernancePasswordDialog (textbox `[type="password"]`) + sudo modal (textbox `[placeholder="••••••••"]`). Both = governance password.
+- **"Remove from team" buttons hidden under `opacity-0 group-hover:opacity-100`** — CSS injection required: `.opacity-0.group-hover\\:opacity-100 { opacity: 1 !important; pointer-events: auto !important; }`.
+- **Hard-delete with folder skips cemetery (6th confirmation across runs)** — every UI delete sends `hard=true` (DeleteAgentDialog.tsx:65). P1-PROP-001 proposes 3-way mode picker.
+- **STATE-WIPE works perfectly:** cleanup-SCEN-002.sh restores 4 files via SHA256 verification. RESTORE_OK output is the success signal.
+- **Cascade delete works correctly:** "Delete Agents Too" on team delete cascades to ALL members (including auto-COS Aiken). 22→21 agents in single operation.
+
+### Rule 0 blacklist safety
+
+- 20 pre-existing user agents enumerated; ALL preserved.
+- 3 pre-existing teams (Test Kanban Team, scen003-test-wizard-team, scen8-noplugin-team) preserved.
+- ZERO `_aim-*` interactions.
+- All test agents created at `~/agents/<name>/` (Wizard-enforced).
+
+### Rule 6 compliance
+
+- ZERO state-mutating bypasses on AUT.
+- Read-only `page.evaluate(async () => fetch('/api/...'))` for verification — allowed.
+- 2 DEFERRED steps (S038-S039 kanban CRUD) per scenario file.
+- 1 DEFERRED step (S054 RBAC self-mod) — scenario asks for state-mutating curl PATCH; UI cannot replicate this attack from the browser.
+- Inline AUTHORING-001 fix (creating scen002-manager) was a UI Wizard flow — not a Rule 6 bypass.
+
+---
+
 ## SCEN-001 2026-04-26T20:14Z — PASS (33 PASS, 1 FIXED in-session, 5 SKIP, 4 bugs found, 1 fixed, 3 issues, 10 proposals)
 
 **Run ID:** 20260426T193902Z

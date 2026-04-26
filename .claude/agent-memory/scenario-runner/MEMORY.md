@@ -1,5 +1,78 @@
 # Scenario Runner Memory
 
+## SCEN-027 2026-04-26T15:13:33Z — PASS (19 PASS + 2 SKIP, 1 bug FIXED, 4 issues, 7 proposals)
+
+**Run ID:** 20260426T151330Z
+**Branch:** feature/phase6-jsonl-rebase-test (HEAD 34b1cc34 → 967d8d2c, 1 fix commit)
+**Reports:**
+- reports/scenarios-runner/SCEN-027_2026-04-26T15-45-24Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_027_2026-04-26T15-45-24Z.md
+
+**Verdict:** PASS — full Sessions-tab E2E verified. BUG-001 (cross-worker sidToPath map staleness in JSONL session browser endpoints) found at S009, diagnosed (Next.js worker-process module isolation), fixed by adding `?path=` query param fallback to range/context-breakdown/search route handlers + headless router + useJsonlSession hook. Verified end-to-end. 7 proposals filed (1 P0 regression test, 3 P1, 2 P2, 1 P3).
+
+### BUG-001 (P0 FIXED commit 967d8d2c): JSONL session-browser routes 404 due to cross-worker map staleness
+
+**Symptom:** After clicking session row in Sessions tab, transcript shows `range_failed:404:session_not_found` and context breakdown shows `Failed to load context: context_failed:404:session_not_found` even though the list endpoint returned the session correctly with the badge `Sessions(1)`.
+
+**Root cause:** services/sessions-browser-service.ts:176 declares a module-level `Map<string, string> sidToPath` that the list endpoint populates and the 3 sister routes (range, context-breakdown, search) read. Next.js production-mode tsx server.mjs spawns multiple worker processes — different routes run in different worker processes — so the in-memory map is per-process and not shared.
+
+**Fix:** Routes now accept `?path=<abs>` query param (preferred); fall back to `resolveSessionPath(sid)` only if absent. useJsonlSession hook now passes path from list response on every range/context/search call.
+
+**Verified:** S009-S015 post-fix. Commit 967d8d2c, 5 files, 95 insertions / 41 deletions.
+
+### Patterns reconfirmed/discovered this run
+
+- **Wizard 7-step flow for AUTONOMOUS agent**: Create new agent (icon button title="Create new agent") → Create Agent menu item (button class `w-full px-3 py-2`) → Claude Code card (BUTTON tag, click directly works) → blue Next chevron (bg-blue-600 px-4, no text, hasIcon: true) → No team (Autonomous) BUTTON → AUTONOMOUS card → Auto-create agent folder button → Continue → Create Agent! → wait ~0s for Let's Go (faster this run than memory's 15s — likely because no role-plugin install needed for AUTONOMOUS).
+- **No sudo modal during Create Agent for AUTONOMOUS** — confirmed; the Wizard's Create Agent flow doesn't gate behind sudo for AUTONOMOUS title (matches MEMORY for prior No-Team agent creations).
+- **Sessions tab structure**: NOT three-pane (scenario S008 description was wrong). Single right-column Profile panel layout with: top tab bar (Overview/Config/Sessions(N)/Advanced), then SESSIONS list section with search input "Search this session…" (NOT "Search session transcript"), then transcript inline as scrolling list, then CONTEXT BREAKDOWN section with 7 buckets vertically stacked.
+- **Sessions tab badge `Sessions(1)`** — the badge updates as soon as list endpoint completes. Click on the tab DIV (cursor-pointer, NOT a button).
+- **Sessions tab session row**: button class `aim-session-row` containing UUID + size + msg count + relative time. Reliable selector.
+- **Search bar**: input type="search", placeholder "Search this session…". 13 matches for query "user" in a fresh "hello" + Claude reply session.
+- **Search Next button**: button with `aria-label="Next match"` (matching `aria-label="Previous match"` and `aria-label="Clear search"` for adjacent buttons). Width 22, height 22.
+- **DeleteAgent + Danger Zone flow**: Profile → Advanced div tab → Danger Zone BUTTON (NOT just a text — actual button at y=923 in this run, must scrollIntoView first) → Delete Agent button → inline dialog with `Also delete agent folder` checkbox + name confirm input + `Delete Forever` button → sudo modal → aim_sudo_modal helper (worked first try this run).
+- **DeleteAgent does NOT touch `~/.claude/projects/-Users-*-agents-<name>/`** — by design (R20 belt-and-braces only deletes paths under `~/agents/`). Filed as ISSUE-002 + PROP-002 (opt-in checkbox).
+- **Hard-delete with folder skips cemetery** — reconfirmed (4th time across SCEN-022/023/024/027). 0 cemetery entries for scen027.
+- **STATE-WIPE restore via cleanup-SCEN-027.sh**: `RESTORE_OK SCEN-027 (4 files restored)`. 4/4 SHA256 byte-for-byte match.
+- **Free space percentage display bug**: Context Breakdown shows `1.00M(100000000.0%)` — missing divide-by-modelContextLimit. Filed as ISSUE-001 + PROP-003.
+
+### Cross-worker module isolation in Next.js production tsx mode
+
+This run discovered an architectural quirk worth permanent memorization:
+
+- AI Maestro server runs via `tsx server.mjs` (PM2 process 20602 → child 20719) with NODE_ENV=production.
+- Despite NODE_ENV=production, Next.js spawns `jest-worker processChild.js` (PID 49267) as a worker for compilation/execution of route handlers.
+- Different route handlers can be assigned to different worker processes.
+- Module-level state (e.g., `Map`, `Set`, singleton instances) is per-process, NOT shared.
+- Any feature relying on cross-route in-memory state must use either: (a) explicit query params / body fields to carry state across the boundary, (b) a process-shared store (filesystem, Redis, sqlite), (c) ensure state is RECONSTRUCTABLE on demand from a stable source (e.g., the path can always be derived from the agent's workdir).
+
+The right architectural fix for Phase 2 of TRDD-d46b42e9 (this feature) was always option (a) — and the comment in services/sessions-browser-service.ts:240-242 acknowledged it. This bug was a "designed-in" regression that slipped through code review.
+
+### Rule 0 blacklist safety
+
+- 20 pre-existing user agents enumerated via `GET /api/agents`; all untouched.
+- Pre-existing orphans preserved: scen013-codex-r17-test, scen021-alpha, scen021-beta.
+- Pre-existing 31 cemetery entries preserved.
+- Zero interactions with alexandre, luckas-bot, jhonny-bot, jack-bot, genny-bot, teseo-bot, ecos-chief-of-staff-one, backend-infrastructure-engineer, tmux-test-audit, default, SVG/SKIA project agents.
+- Zero `_aim-*` interactions.
+
+### Rule 6 compliance
+
+- ZERO bypasses during state mutation. Every state-mutating action via dev-browser UI (Wizard clicks, sidebar selection, Profile/Sessions/Search/Delete dialog).
+- Read-only `page.evaluate(async () => fetch(...))` used for Rule 6 verification reads — allowed.
+- Read-only API calls also used for BUG-001 diagnosis (curl-equivalent via browser fetch) — allowed.
+
+### Rule 10 PHOTOSTORY
+
+22 screenshots saved (S001-S021 + S008b debug). RETAINED (not auto-purged) because the BUG-001 fix references them as visual evidence of the before/after.
+
+### Process learnings worth carrying forward
+
+- **Always check pm2 logs in parallel with UI debugging.** The 404 root cause was visible in pm2 logs (only one of two simultaneous fetches showed up) — would have taken 30 minutes longer without checking.
+- **Always test `?<custom-param>=` direct fetch BEFORE making UI changes.** Tested the route signature change against the API directly first; only then updated the hook.
+- **Don't over-rely on memory of UI structure.** Memory said "Sessions tab in tab bar" but it's actually a div with cursor-pointer; helped to verify by walking the DOM rather than assuming.
+
+---
+
 ## SCEN-024 2026-04-22T04:31:02Z — PASS (24 PASS + 1 N/A, 0 bugs, 3 issues, 8 proposals, 1 authoring-bug fix)
 
 **Run ID:** 20260422T043102Z

@@ -4744,6 +4744,39 @@ export async function DeleteTeam(
         if (!shouldRevertTitle) {
           ops.push(`G03: Agent ${agentId.substring(0, 8)} title "${currentTitle}" is global — NOT reverted (R7: MANAGER/MAINTAINER are host-scoped, not team-scoped)`)
         } else {
+          // SCEN-001 BUG-003 fix (2026-04-26): remove agent from team.agentIds
+          // BEFORE calling ChangeTitle. The ChangeTitle pipeline gained a Gate
+          // 9b R3-reverse-enforcement check (commit 50673eac, BUG-002 fix)
+          // that REJECTS revert-to-AUTONOMOUS while the agent is still listed
+          // in any team's agentIds. Without this preliminary removal, every
+          // DeleteTeam call now fails on the first agent because the team
+          // hasn't been deleted yet (G04 runs later) so Gate 9b sees the
+          // agent in team.agentIds and refuses. Pre-removing from agentIds
+          // here keeps the pipeline atomic from the agent's perspective —
+          // the team itself is deleted from teams.json a few gates later.
+          // If the agent is the team's COS, clear chiefOfStaffId in the same
+          // updateTeam call to satisfy R4.7 (cannot remove COS from agentIds
+          // unless COS role is also cleared) and R4.6 (auto-add COS to
+          // agentIds is harmless when chiefOfStaffId is null).
+          try {
+            const { loadTeams: loadTeamsG03, updateTeam: updateTeamG03 } = await import('@/lib/team-registry')
+            const teamsG03 = loadTeamsG03()
+            const teamG03 = teamsG03.find(t => t.id === teamId)
+            if (teamG03 && teamG03.agentIds.includes(agentId)) {
+              const newAgentIds = teamG03.agentIds.filter(x => x !== agentId)
+              const updates: { agentIds: string[]; chiefOfStaffId?: string | null; orchestratorId?: string | null } = { agentIds: newAgentIds }
+              if (teamG03.chiefOfStaffId === agentId) {
+                updates.chiefOfStaffId = null
+              }
+              if (teamG03.orchestratorId === agentId) {
+                updates.orchestratorId = null
+              }
+              await updateTeamG03(teamId, updates)
+              ops.push(`G03: Removed ${agentId.substring(0, 8)} from team.agentIds (pre-revert, R3 Gate 9b prep)`)
+            }
+          } catch (err) {
+            ops.push(`G03: WARN — pre-revert agentIds removal failed for ${agentId.substring(0, 8)}: ${err instanceof Error ? err.message : err}`)
+          }
           try {
             // BUG-002 fix (SCEN-005): ChangeTitle requires authContext as a security
             // invariant. Without it the call returns "authContext is mandatory" and

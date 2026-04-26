@@ -1,5 +1,45 @@
 # Scenario Runner Memory
 
+## SCEN-001 2026-04-26T21:18Z — PARTIAL (24 PASS, 1 FAIL, 14 SKIP, 2 bugs found, 1 fixed in-session, 4 issues, 8 proposals)
+
+**Run ID:** 20260426T184411Z
+**Branch:** feature/phase6-jsonl-rebase-test (HEAD 8ab33231 — no commits, BUG-001 was env-only)
+**Reports:**
+- reports/scenarios-runner/SCEN-001_2026-04-26T21-18-00Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_001_2026-04-26T21-18-00Z.md
+
+**Verdict:** PARTIAL — Title-change pipeline through MEMBER → ORCHESTRATOR → ARCHITECT verified. 31-gate ChangeTitle pipeline confirmed via pm2 logs. BUG-001 (corrupt .next cache) cleared by `mv .next /tmp/`. BUG-002 (P0): ChangeTitle to AUTONOMOUS while in team passes 31 gates but leaves agent in `team.agentIds` with `governanceTitle='autonomous'` — registry/team drift. AUTHORING-001: scenario assumed pre-existing MANAGER (Create Team disabled without one) — fixed inline by creating scen001-manager via Wizard.
+
+### Patterns confirmed/discovered
+
+- **MANAGER+AUTONOMOUS via Wizard:** wizard MANAGER title is selectable when no MANAGER on host. Confirms title-singleton enforcement.
+- **Create Team is DISABLED without MANAGER on host (R9.8 enforcement).** Button title="Cannot create team — no MANAGER on this host. Assign one first."
+- **Auto-COS persona name is RANDOM** (this run: "Laird"). NEVER hardcode in scenarios.
+- **TitleAssignmentDialog has BOTH inline GovernancePasswordDialog AND sudo modal** — two passwords both = governance password.
+- **dev-browser dispatchEvent vs Playwright locator:** dispatchEvent silently dismissed dialogs because outer overlay's onClick=handleClose fired despite the inner motion.div's stopPropagation. Use `page.locator(...).click({force:true})` for ANY click in the TitleAssignmentDialog.
+- **Help panel auto-opens covering Sign In** — close button at x=2296 with viewport=1920. Use dispatchEvent or Escape.
+- **Corrupt .next cache pattern:** `Cannot find module './vendor-chunks/smol-toml.js'` → all API routes return 500. Fix: `mv .next /tmp/aim-next-stale-<ts>` + `pm2 restart ai-maestro`.
+- **Sidebar agent card click does NOT auto-open Profile panel** — must separately click Profile button.
+- **Hard-delete with folder skips cemetery** — confirmed (5th time).
+
+### BUG-002 details (filed as P0 for user approval, NOT fixed)
+
+`pm2 logs` showed: `[ChangeTitle] architect → autonomous (31 gates, restart=true)` followed by `PATCH 200 in 3878ms`. Post-state: registry says agent.governanceTitle='autonomous', team=null. But team.agentIds STILL contains the agent. Root cause: ChangeTitle pipeline doesn't have a gate that REJECTS team→standalone-title transitions OR atomically removes from team. R3 says AUTONOMOUS must be standalone — definitional violation.
+
+### Rule 0 blacklist safety
+
+- 20 pre-existing user agents enumerated; all untouched.
+- 3 pre-existing test orphans preserved (scen013, scen021-alpha, scen021-beta).
+- 31 pre-existing cemetery entries preserved.
+- 3 pre-existing teams preserved.
+- Zero `_aim-*` interactions.
+
+### Rule 6 compliance
+
+Zero state-mutating bypasses on AUT. One env bypass: `mv .next /tmp/...` (gitignored build cache, Rule 4 fix).
+
+---
+
 ## SCEN-027 2026-04-26T15:13:33Z — PASS (19 PASS + 2 SKIP, 1 bug FIXED, 4 issues, 7 proposals)
 
 **Run ID:** 20260426T151330Z

@@ -1,29 +1,18 @@
 'use client'
 
-import { useMemo, useState, useEffect, useRef } from 'react'
-import type { UnifiedAgent } from '@/types/agent'
-import { formatDistanceToNow } from '@/lib/utils'
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
+import type { Agent } from '@/types/agent'
 import {
   ChevronRight,
-  Folder,
-  FolderOpen,
-  Layers,
   Terminal,
   Plus,
   RefreshCw,
   Edit2,
   Trash2,
-  Package,
-  Code2,
   Mail,
-  RotateCcw,
-  Cloud,
   Server,
   Settings,
   Network,
-  Play,
-  Circle,
-  Wifi,
   WifiOff,
   User,
   Upload,
@@ -35,21 +24,49 @@ import {
   X,
   Brain,
   CheckCircle,
+  ChevronDown,
+  XCircle,
+  Users,
+  Lock,
+  Wrench,
 } from 'lucide-react'
 import Link from 'next/link'
-import CreateAgentAnimation, { getPreviewAvatarUrl } from './CreateAgentAnimation'
+import AgentCreationWizard from './AgentCreationWizard'
 import WakeAgentDialog from './WakeAgentDialog'
 import { useHosts } from '@/hooks/useHosts'
 import { useSessionActivity, type SessionActivityStatus } from '@/hooks/useSessionActivity'
+import { useClientAvailability } from '@/hooks/useClientAvailability'
 import { SubconsciousStatus } from './SubconsciousStatus'
 import AgentBadge from './AgentBadge'
+import SidebarViewSwitcher, { type SidebarView } from './sidebar/SidebarViewSwitcher'
+import TeamListView from './sidebar/TeamListView'
+import GroupListView from './sidebar/GroupListView'
+import MeetingListView from './sidebar/MeetingListView'
+import HumanUserCard, { HUMAN_SELF_ID } from './sidebar/HumanUserCard'
+
+interface UnregisteredSessionUI {
+  tmuxSessionName: string
+  workingDirectory: string
+  createdAt: string
+  windows: number
+  paneCommand?: string
+  programRunning?: boolean
+  originalAgentName?: string
+  originalAgentLabel?: string
+  originalAgentId?: string
+  originalProgram?: string
+  originalProgramArgs?: string
+}
 
 interface AgentListProps {
-  agents: UnifiedAgent[]
+  agents: Agent[]
+  unregisteredSessions?: UnregisteredSessionUI[]
   activeAgentId: string | null
-  onAgentSelect: (agent: UnifiedAgent) => void
-  onShowAgentProfile: (agent: UnifiedAgent) => void
-  onShowAgentProfileDangerZone?: (agent: UnifiedAgent) => void  // Opens profile scrolled to danger zone
+  onAgentSelect: (agent: Agent) => void
+  /** Called when the local human user card is clicked. Parent should swap
+   *  the main content area to HumanUserPanel. */
+  onHumanSelect?: () => void
+  onShowAgentProfile: (agent: Agent) => void
   onImportAgent?: () => void  // Opens import dialog
   loading?: boolean
   error?: Error | null
@@ -58,10 +75,19 @@ interface AgentListProps {
     total: number
     online: number
     offline: number
-    orphans: number
+    unregistered?: number
   } | null
   subconsciousRefreshTrigger?: number  // Increment to force subconscious status refresh
   sidebarWidth?: number  // Current sidebar width for responsive grid
+  hostErrors?: Record<string, Error>  // Hosts that failed to respond (keyed by hostId)
+  /**
+   * Proposal 31 (2026-04-20) — DATA-LOSS near-miss fix.
+   * Called after the creation wizard succeeds so the parent can switch
+   * activeAgentId to the new agent. Without this, the profile panel stays
+   * on the pre-wizard agent and the user's next "Delete" click hits the
+   * wrong one (SCEN-005 near-miss on a real MANAGER).
+   */
+  onAgentCreated?: (newAgentId: string) => void
 }
 
 /**
@@ -142,14 +168,14 @@ const COLOR_PALETTE = [
   },
 ]
 
-const DEFAULT_ICON = Layers
 
 export default function AgentList({
   agents,
+  unregisteredSessions = [],
   activeAgentId,
   onAgentSelect,
+  onHumanSelect,
   onShowAgentProfile,
-  onShowAgentProfileDangerZone,
   onImportAgent,
   loading,
   error,
@@ -157,26 +183,71 @@ export default function AgentList({
   stats,
   subconsciousRefreshTrigger,
   sidebarWidth = 320,
+  hostErrors = {},
+  onAgentCreated,
 }: AgentListProps) {
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [actionLoading, setActionLoading] = useState(false)
+  const [showWizardModal, setShowWizardModal] = useState(false)
+  const [showCreateDropdown, setShowCreateDropdown] = useState(false)
+  const createDropdownRef = useRef<HTMLDivElement>(null)
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => {
-    if (typeof window === 'undefined') return 'list'
-    return (localStorage.getItem('agent-sidebar-view-mode') as 'list' | 'grid') || 'list'
+  const [viewMode, setViewMode] = useState<'normal' | 'compact'>(() => {
+    if (typeof window === 'undefined') return 'compact'
+    const saved = localStorage.getItem('agent-sidebar-view-mode')
+    // Migrate old values
+    if (saved === 'list') return 'compact'
+    if (saved === 'grid') return 'normal'
+    return (saved as 'normal' | 'compact') || 'compact'
   })
   // Track if user manually toggled view mode (don't auto-switch if true)
   const [userOverrodeViewMode, setUserOverrodeViewMode] = useState(false)
   const prevSidebarWidthRef = useRef(sidebarWidth)
   const [hibernatingAgents, setHibernatingAgents] = useState<Set<string>>(new Set())
   const [wakingAgents, setWakingAgents] = useState<Set<string>>(new Set())
-  const [wakeDialogAgent, setWakeDialogAgent] = useState<UnifiedAgent | null>(null)
+  const [wakeDialogAgent, setWakeDialogAgent] = useState<Agent | null>(null)
 
   // Drag-and-drop state
-  const [draggedAgent, setDraggedAgent] = useState<UnifiedAgent | null>(null)
-  const [dropTarget, setDropTarget] = useState<string | null>(null) // Format: "level1" or "level1-level2"
+  const [draggedAgent, setDraggedAgent] = useState<Agent | null>(null)
+
+  /**
+   * Proposal 30 (2026-04-20): the HELPERS Haephestos card is rendered in
+   * two places (normal sidebar + compact sidebar). Single handler so a
+   * future fix (e.g. 0.D `which claude` gate) only touches one site.
+   *
+   * Proposal 18 (2026-04-20): if the Haephestos agent is already in the
+   * agents list, select it in-place via onAgentSelect — avoids the full
+   * page reload and the URL race with useAgents's async fetch. Fall back
+   * to the ?agent=haephestos URL only when the agent hasn't been
+   * registered yet (first run); the page-level bootstrap useEffect
+   * resolves that case via the creation-helper/session API.
+   */
+  // User directive 2026-04-20: "haephestos will never show on systems
+  // where no claude code is installed". Haephestos orchestrates plugin
+  // creation by spawning a real `claude` process, so the card is dead
+  // code on a host without Claude Code on PATH. We treat `loading` and
+  // error states as "show it" (fail-open) because the more-common bug
+  // direction is a broken probe rendering users' real Haephestos
+  // invisible — vs an unwanted card briefly appearing.
+  const claudeProbe = useClientAvailability('claude')
+  // SCEN-001 2026-04-20 fix: explicit parens around ternary operands
+  // required — the prior form `X || Y ? Z : W` without parens triggered
+  // a SWC parser bug that manifested as "Unexpected token `div`" on the
+  // first JSX inside the component's render return. The legs still short
+  // to fail-open: if the probe is loading or failed, show the card.
+  const probePendingOrFailed: boolean = claudeProbe.loading || claudeProbe.error !== null
+  const probeSaysAvailable: boolean = claudeProbe.data?.available === true
+  const haephestosVisible: boolean = probePendingOrFailed ? true : probeSaysAvailable
+
+  const handleHaephestosClick = () => {
+    const haephestos = agents.find(a => a.name === '_aim-creation-helper')
+    if (haephestos) {
+      onAgentSelect(haephestos)
+      return
+    }
+    window.location.href = '/?agent=haephestos'
+  }
 
   // Host management
+  const [staleHostPopup, setStaleHostPopup] = useState<{ id: string; name: string; error: string } | null>(null)
   const { hosts } = useHosts()
   const [selectedHostFilter, setSelectedHostFilter] = useState<string>(() => {
     if (typeof window === 'undefined') return 'all'
@@ -195,43 +266,66 @@ export default function AgentList({
     return saved !== 'false'
   })
 
+  const [deadSessionsExpanded, setDeadSessionsExpanded] = useState(false)
+
   // Search state
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Session activity tracking (for waiting/active/idle status)
+  // Status filter tabs: 'active' (default) shows online sessions, 'hiber' shows offline, 'all' shows everything
+  const [statusFilter, setStatusFilter] = useState<'active' | 'hiber' | 'all'>('active')
+
+  // Sidebar view state (agents / teams / meetings)
+  const [sidebarView, setSidebarView] = useState<SidebarView>(() => {
+    if (typeof window === 'undefined') return 'agents'
+    return (localStorage.getItem('agent-sidebar-view') as SidebarView) || 'agents'
+  })
+
+  // Session activity tracking (for waiting/active/idle status).
+  // `getSessionActivity(sessionName)` returns a SessionActivityInfo with:
+  //   - status: 'active' | 'idle' | 'waiting' — terminal output level
+  //   - notificationType: 'idle_prompt' | 'permission_prompt' | undefined — hook-detected prompt state
+  // These are forwarded to AgentBadge and AgentStatusIndicator to drive
+  // the colored dot indicator and label shown next to each agent.
   const { getSessionActivity } = useSessionActivity()
 
-  // State for accordion panels - load from localStorage
-  const [expandedLevel1, setExpandedLevel1] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set()
-    const saved = localStorage.getItem('agent-sidebar-expanded-level1')
-    if (saved) {
-      try {
-        return new Set(JSON.parse(saved))
-      } catch (e) {
-        return new Set()
-      }
-    }
-    return new Set()
-  })
-  const [expandedLevel2, setExpandedLevel2] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set()
-    const saved = localStorage.getItem('agent-sidebar-expanded-level2')
-    if (saved) {
-      try {
-        return new Set(JSON.parse(saved))
-      } catch (e) {
-        return new Set()
-      }
-    }
-    return new Set()
-  })
+  // Teams data for team-based grouping — re-fetched when agents change (team membership may have changed)
+  const [teams, setTeams] = useState<Array<{ id: string; name: string; agentIds: string[] }>>([])
+  const fetchTeams = useCallback(() => {
+    fetch('/api/teams').then(r => r.ok ? r.json() : { teams: [] }).then(data => {
+      setTeams(data.teams || [])
+    }).catch(() => {})
+  }, [])
+  useEffect(() => { fetchTeams() }, [agents, fetchTeams])
 
-  // Filter agents by selected host and search query
+  // State for team accordion panels — all expanded by default
+  const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set())
+  // Auto-expand all teams when team data loads
+  useEffect(() => {
+    if (teams.length > 0) {
+      const allTeamNames = new Set(teams.map(t => t.name))
+      allTeamNames.add('NO-TEAM')
+      setExpandedTeams(allTeamNames)
+    }
+  }, [teams])
+
+  // Filter agents by selected host, status tab, and search query
   const filteredAgents = useMemo(() => {
     let result = selectedHostFilter === 'all'
       ? agents
       : agents.filter((a) => a.hostId === selectedHostFilter)
+
+    // Apply status filter (active/hiber/all)
+    // Use sessions[0] (array form) consistently — a.session (singular) is legacy/may be null
+    if (statusFilter === 'active') {
+      result = result.filter(a => a.sessions?.[0]?.status === 'online')
+    } else if (statusFilter === 'hiber') {
+      // HIBER tab includes:
+      //  - agents with sessions but currently offline (classic hibernated)
+      //  - agents that were just created and never had a tmux session (sessions empty/missing)
+      // Without the second case, brand-new auto-COS agents and freshly created agents
+      // disappear from both ACTIVE and HIBER until their first session is started.
+      result = result.filter(a => a.sessions?.[0]?.status !== 'online')
+    }
 
     // Apply search filter (name, label, or host)
     if (searchQuery.trim()) {
@@ -245,25 +339,27 @@ export default function AgentList({
     }
 
     return result
-  }, [agents, selectedHostFilter, searchQuery])
+  }, [agents, selectedHostFilter, statusFilter, searchQuery])
 
-  // Group agents by tags (level1 = first tag, level2 = second tag)
-  const groupedAgents = useMemo(() => {
-    const groups: Record<string, Record<string, UnifiedAgent[]>> = {}
+  // Group agents by closed team membership
+  const teamGroupedAgents = useMemo(() => {
+    const groups: Record<string, { teamName: string; agents: Agent[] }> = {}
+    // Build a set of agent IDs that belong to closed teams
+    const agentTeamMap = new Map<string, string>() // agentId → teamName
+    for (const team of teams) {
+      for (const aid of team.agentIds) {
+        agentTeamMap.set(aid, team.name)
+      }
+    }
 
     filteredAgents.forEach((agent) => {
-      const tags = agent.tags || []
-      const level1 = tags[0] || 'ungrouped'
-      const level2 = tags[1] || 'default'
-
-      if (!groups[level1]) groups[level1] = {}
-      if (!groups[level1][level2]) groups[level1][level2] = []
-
-      groups[level1][level2].push(agent)
+      const teamName = agentTeamMap.get(agent.id) || 'NO-TEAM'
+      if (!groups[teamName]) groups[teamName] = { teamName, agents: [] }
+      groups[teamName].agents.push(agent)
     })
 
     return groups
-  }, [filteredAgents])
+  }, [filteredAgents, teams])
 
   // Calculate grid columns based on sidebar width
   // 320px = 1 col, 480px = 2 cols, 640px+ = 3 cols
@@ -290,56 +386,25 @@ export default function AgentList({
 
     // Auto-switch if user hasn't manually overridden
     if (!userOverrodeViewMode) {
-      if (sidebarWidth >= 480 && viewMode === 'list') {
-        setViewMode('grid')
-      } else if (sidebarWidth < 480 && viewMode === 'grid') {
-        setViewMode('list')
+      if (sidebarWidth >= 480 && viewMode === 'compact') {
+        setViewMode('normal')
+      } else if (sidebarWidth < 480 && viewMode === 'normal') {
+        setViewMode('compact')
       }
     }
   }, [sidebarWidth, viewMode, userOverrodeViewMode])
 
-  // Initialize NEW panels as open on first mount
-  const initializedRef = useRef(false)
+  // Close create dropdown on click outside
   useEffect(() => {
-    if (initializedRef.current) return
-    initializedRef.current = true
-
-    setExpandedLevel1((prev) => {
-      const newExpanded = new Set(prev)
-      Object.keys(groupedAgents).forEach((level1) => {
-        if (!prev.has(level1)) {
-          newExpanded.add(level1)
-        }
-      })
-      return newExpanded
-    })
-
-    setExpandedLevel2((prev) => {
-      const newExpanded = new Set(prev)
-      Object.entries(groupedAgents).forEach(([level1, level2Groups]) => {
-        Object.keys(level2Groups).forEach((level2) => {
-          const key = `${level1}-${level2}`
-          if (!prev.has(key)) {
-            newExpanded.add(key)
-          }
-        })
-      })
-      return newExpanded
-    })
-  }, [groupedAgents])
-
-  // Save expanded state to localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('agent-sidebar-expanded-level1', JSON.stringify(Array.from(expandedLevel1)))
+    if (!showCreateDropdown) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (createDropdownRef.current && !createDropdownRef.current.contains(e.target as Node)) {
+        setShowCreateDropdown(false)
+      }
     }
-  }, [expandedLevel1])
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('agent-sidebar-expanded-level2', JSON.stringify(Array.from(expandedLevel2)))
-    }
-  }, [expandedLevel2])
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showCreateDropdown])
 
   // Fetch unread message counts for all agents (using agent ID for storage)
   // OPTIMIZED: Use Promise.all for parallel fetching instead of sequential loop
@@ -382,6 +447,11 @@ export default function AgentList({
     localStorage.setItem('agent-sidebar-view-mode', viewMode)
   }, [viewMode])
 
+  // Persist sidebar view
+  useEffect(() => {
+    localStorage.setItem('agent-sidebar-view', sidebarView)
+  }, [sidebarView])
+
   // Persist footer expanded state
   useEffect(() => {
     localStorage.setItem('agent-sidebar-footer-expanded', footerExpanded.toString())
@@ -396,31 +466,6 @@ export default function AgentList({
   useEffect(() => {
     localStorage.setItem('agent-sidebar-host-filter', selectedHostFilter)
   }, [selectedHostFilter])
-
-  const toggleLevel1 = (level1: string) => {
-    setExpandedLevel1((prev) => {
-      const next = new Set(prev)
-      if (next.has(level1)) {
-        next.delete(level1)
-      } else {
-        next.add(level1)
-      }
-      return next
-    })
-  }
-
-  const toggleLevel2 = (level1: string, level2: string) => {
-    const key = `${level1}-${level2}`
-    setExpandedLevel2((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) {
-        next.delete(key)
-      } else {
-        next.add(key)
-      }
-      return next
-    })
-  }
 
   const getCategoryColor = (category: string) => {
     const storageKey = `category-color-${category.toLowerCase()}`
@@ -441,16 +486,14 @@ export default function AgentList({
     return COLOR_PALETTE[colorIndex]
   }
 
-  const countAgentsInCategory = (level1: string) => {
-    const level2Groups = groupedAgents[level1]
-    return Object.values(level2Groups).reduce((sum, agents) => sum + agents.length, 0)
-  }
-
-  const handleAgentClick = (agent: UnifiedAgent) => {
+  const handleAgentClick = (agent: Agent) => {
     // Check if this is a hibernated agent (offline but has session config)
-    const isHibernated = agent.session?.status !== 'online' && (agent.sessions && agent.sessions.length > 0)
+    // Use sessions[0] (array form) consistently — agent.session (singular) is legacy
+    const sessionStatus = agent.sessions?.[0]?.status
+    const isOnline = sessionStatus === 'online'
+    const isHibernated = !isOnline && agent.sessions && agent.sessions.length > 0
 
-    if (agent.session?.status === 'online' || isHibernated) {
+    if (isOnline || isHibernated) {
       // Online or hibernated agent - select and show tabs
       onAgentSelect(agent)
     } else {
@@ -459,8 +502,10 @@ export default function AgentList({
     }
   }
 
-  const handleHibernate = async (agent: UnifiedAgent, e: React.MouseEvent) => {
-    e.stopPropagation()
+  const handleHibernate = async (agent: Agent, e?: React.MouseEvent) => {
+    // stopPropagation prevents the parent agent-select click from also firing.
+    // Event is optional to support programmatic calls that have no DOM event.
+    e?.stopPropagation()
 
     if (hibernatingAgents.has(agent.id)) return
 
@@ -492,8 +537,8 @@ export default function AgentList({
     }
   }
 
-  const handleWake = (agent: UnifiedAgent, e: React.MouseEvent) => {
-    e.stopPropagation()
+  const handleWake = (agent: Agent, e?: React.MouseEvent) => {
+    e?.stopPropagation()
     if (wakingAgents.has(agent.id)) return
     // Open the dialog to select which CLI to use
     setWakeDialogAgent(agent)
@@ -534,7 +579,7 @@ export default function AgentList({
   }
 
   // Drag and drop handlers
-  const handleDragStart = (e: React.DragEvent, agent: UnifiedAgent) => {
+  const handleDragStart = (e: React.DragEvent, agent: Agent) => {
     setDraggedAgent(agent)
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', agent.id)
@@ -546,99 +591,20 @@ export default function AgentList({
 
   const handleDragEnd = (e: React.DragEvent) => {
     setDraggedAgent(null)
-    setDropTarget(null)
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = '1'
     }
   }
 
-  const handleDragOver = (e: React.DragEvent, target: string) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    if (dropTarget !== target) {
-      setDropTarget(target)
-    }
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    // Only clear drop target if we're leaving the actual element
-    // (not just moving to a child element)
-    const relatedTarget = e.relatedTarget as HTMLElement
-    if (!e.currentTarget.contains(relatedTarget)) {
-      setDropTarget(null)
-    }
-  }
-
-  const handleDrop = async (e: React.DragEvent, level1: string, level2?: string) => {
-    e.preventDefault()
-    setDropTarget(null)
-
-    if (!draggedAgent) return
-
-    // Calculate new tags
-    const newTags = level2 && level2 !== 'default' ? [level1, level2] : [level1]
-
-    // Check if tags actually changed
-    const currentTags = draggedAgent.tags || []
-    const currentLevel1 = currentTags[0] || 'ungrouped'
-    const currentLevel2 = currentTags[1] || 'default'
-
-    if (currentLevel1 === level1 && currentLevel2 === (level2 || 'default')) {
-      setDraggedAgent(null)
-      return // No change
-    }
-
-    try {
-      // Use agent's hostUrl for remote agents
-      const baseUrl = draggedAgent.hostUrl || ''
-      const response = await fetch(`${baseUrl}/api/agents/${draggedAgent.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tags: newTags }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to move agent')
-      }
-
-      // Refresh the agent list to show updated position
-      onRefresh?.()
-    } catch (error) {
-      console.error('Failed to move agent:', error)
-      alert(error instanceof Error ? error.message : 'Failed to move agent')
-    } finally {
-      setDraggedAgent(null)
-    }
-  }
-
-  const handleCreateAgent = async (name: string, workingDirectory?: string, hostId?: string, label?: string, avatar?: string): Promise<boolean> => {
-    setActionLoading(true)
-
-    try {
-      const response = await fetch('/api/sessions/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, workingDirectory, hostId, label, avatar }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to create agent')
-      }
-
-      return true // Success - modal will handle showing celebration
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to create session')
-      return false
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  const handleCreateComplete = () => {
-    setShowCreateModal(false)
+  // Proposal 31 (2026-04-20) — DATA-LOSS near-miss fix.
+  // The wizard now hands us the new agent id so the parent can switch
+  // activeAgentId before the user clicks anything in the (still-open)
+  // profile panel. Forgetting this is what let SCEN-005 nearly delete
+  // a real MANAGER.
+  const handleCreateComplete = (newAgentId: string | null) => {
+    setShowWizardModal(false)
     onRefresh?.()
+    if (newAgentId) onAgentCreated?.(newAgentId)
   }
 
   return (
@@ -663,7 +629,7 @@ export default function AgentList({
                 <span>{stats.offline}</span>
               </div>
             )}
-            <div className="relative">
+            <div className="relative" ref={createDropdownRef}>
               {/* Pulsing ring when no agents */}
               {agents.length === 0 && (
                 <>
@@ -672,27 +638,43 @@ export default function AgentList({
                 </>
               )}
               <button
-                onClick={() => setShowCreateModal(true)}
-                className={`relative p-1.5 rounded-lg hover:bg-sidebar-hover transition-all duration-200 text-green-400 hover:text-green-300 hover:scale-110 ${
+                onClick={() => setShowCreateDropdown(!showCreateDropdown)}
+                className={`relative p-1.5 rounded-lg hover:bg-sidebar-hover transition-all duration-200 text-green-400 hover:text-green-300 hover:scale-110 flex items-center gap-0.5 ${
                   agents.length === 0 ? 'ring-2 ring-green-500/50' : ''
                 }`}
                 aria-label="Create new agent"
                 title="Create new agent"
               >
                 <Plus className="w-4 h-4" />
+                <ChevronDown className="w-3 h-3" />
               </button>
+              {showCreateDropdown && (
+                <div className="absolute right-0 top-full mt-1 w-52 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
+                  <button
+                    onClick={() => {
+                      setShowCreateDropdown(false)
+                      setShowWizardModal(true)
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-200 hover:bg-gray-700 transition-colors flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4 text-green-400" />
+                    Create Agent
+                  </button>
+                  {/* Advanced wizard removed — Haephestos creates role-plugins, not agents */}
+                </div>
+              )}
             </div>
             {/* View mode toggle */}
             <button
               onClick={() => {
-                setViewMode(viewMode === 'list' ? 'grid' : 'list')
+                setViewMode(viewMode === 'compact' ? 'normal' : 'compact')
                 setUserOverrodeViewMode(true) // User manually toggled, respect their choice
               }}
               className="p-1.5 rounded-lg hover:bg-sidebar-hover transition-all duration-200 text-gray-400 hover:text-gray-200 hover:scale-110"
-              aria-label={viewMode === 'list' ? 'Switch to grid view' : 'Switch to list view'}
-              title={viewMode === 'list' ? 'Grid view' : 'List view'}
+              aria-label={viewMode === 'compact' ? 'Switch to normal view' : 'Switch to compact view'}
+              title={viewMode === 'compact' ? 'Normal view' : 'Compact view'}
             >
-              {viewMode === 'list' ? (
+              {viewMode === 'compact' ? (
                 <LayoutGrid className="w-4 h-4" />
               ) : (
                 <List className="w-4 h-4" />
@@ -784,31 +766,49 @@ export default function AgentList({
               {hosts.map((host) => {
                 const count = agents.filter((a) => a.hostId === host.id).length
                 const isSelected = selectedHostFilter === host.id
-                // Check if this is the self host by URL pattern (client-side detection)
-                const isSelf = !host.url || host.url.includes('localhost') || host.url.includes('127.0.0.1')
+                const hostIsSelf = host.isSelf || !host.url || host.url.includes('localhost') || host.url.includes('127.0.0.1')
+                const hasError = !hostIsSelf && !!hostErrors[host.id]
 
                 return (
-                  <button
+                  <div
                     key={host.id}
-                    onClick={() => setSelectedHostFilter(host.id)}
-                    className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-xs transition-all ${
+                    className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-xs transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-blue-500/20 text-blue-300'
-                        : 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                        : hasError
+                          ? 'text-red-400/70 hover:bg-red-900/20 hover:text-red-300'
+                          : 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
                     }`}
+                    onClick={() => setSelectedHostFilter(host.id)}
+                    title={hasError ? `Unreachable: ${hostErrors[host.id]?.message || 'connection failed'}` : host.url}
                   >
-                    <span className="flex items-center gap-1.5">
-                      {isSelf ? (
-                        <Terminal className="w-3.5 h-3.5" />
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      {hostIsSelf ? (
+                        <Terminal className="w-3.5 h-3.5 shrink-0" />
+                      ) : hasError ? (
+                        <XCircle
+                          className="w-3.5 h-3.5 shrink-0 text-red-500 hover:text-red-300"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setStaleHostPopup({
+                              id: host.id,
+                              name: host.name,
+                              error: hostErrors[host.id]?.message || 'Connection failed',
+                            })
+                          }}
+                        />
                       ) : (
-                        <Network className="w-3.5 h-3.5" />
+                        <Network className="w-3.5 h-3.5 shrink-0" />
                       )}
-                      {host.name}
+                      <span className="truncate">{host.name}</span>
+                      {hasError && (
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-red-900/40 text-red-400 shrink-0">offline</span>
+                      )}
                     </span>
-                    <span className={isSelected ? 'text-blue-400' : 'text-gray-500'}>
+                    <span className={isSelected ? 'text-blue-400' : hasError ? 'text-red-500/50' : 'text-gray-500'}>
                       {count}
                     </span>
-                  </button>
+                  </div>
                 )
               })}
 
@@ -821,6 +821,20 @@ export default function AgentList({
             </div>
           )}
         </div>
+
+        {/* Human user (local user) — always visible, chat-only */}
+        {onHumanSelect && (
+          <div className="mt-2 -mx-4 border-y border-sidebar-border/60 bg-gray-900/30">
+            <HumanUserCard
+              isSelected={activeAgentId === HUMAN_SELF_ID}
+              onSelect={onHumanSelect}
+            />
+          </div>
+        )}
+
+        {/* View Switcher */}
+        <SidebarViewSwitcher activeView={sidebarView} onViewChange={setSidebarView} />
+
       </div>
 
       {/* Error State */}
@@ -830,7 +844,62 @@ export default function AgentList({
         </div>
       )}
 
-      {/* Agent List */}
+      {/* Teams View */}
+      {sidebarView === 'teams' && (
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <TeamListView agents={agents} searchQuery={searchQuery} />
+        </div>
+      )}
+
+      {/* Groups View */}
+      {sidebarView === 'groups' && (
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <GroupListView agents={agents} searchQuery={searchQuery} />
+        </div>
+      )}
+
+      {/* Meetings View */}
+      {sidebarView === 'meetings' && (
+        <div className="flex-1 min-h-0">
+          <MeetingListView agents={agents} searchQuery={searchQuery} />
+        </div>
+      )}
+
+      {/* Status Filter Tabs — sits directly on top of the agent scroll area */}
+      {sidebarView === 'agents' && (
+        <div className="flex-shrink-0 px-2 flex items-end gap-0 border-b border-gray-700/60 bg-sidebar">
+          {([
+            { key: 'active' as const, label: 'ACTIVE', count: agents.filter(a => a.sessions?.[0]?.status === 'online').length, color: 'emerald' },
+            { key: 'all' as const, label: 'ALL', count: agents.length, color: 'blue' },
+            // HIBER counts every agent that is not online — includes brand-new agents
+            // (sessions empty) so they remain visible until their first wake.
+            { key: 'hiber' as const, label: 'HIBER', count: agents.filter(a => a.sessions?.[0]?.status !== 'online').length, color: 'amber' },
+          ]).map(tab => {
+            const isActive = statusFilter === tab.key
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setStatusFilter(tab.key)}
+                className={`flex-1 text-[10px] font-bold uppercase tracking-wider transition-all rounded-t-lg ${
+                  isActive
+                    ? `py-2 px-2 -mb-px border border-b-0 shadow-[0_-2px_8px_rgba(0,0,0,0.4)] ${
+                        tab.color === 'emerald' ? 'text-emerald-200 border-emerald-400/50 bg-emerald-950/40 shadow-emerald-500/10'
+                        : tab.color === 'amber' ? 'text-amber-200 border-amber-400/50 bg-amber-950/40 shadow-amber-500/10'
+                        : 'text-blue-200 border-blue-400/50 bg-blue-950/40 shadow-blue-500/10'
+                      }`
+                    : 'py-1.5 px-2 mb-0 text-gray-500 hover:text-gray-400 bg-gray-800/40 border border-b-0 border-transparent hover:bg-gray-800/60'
+                }`}
+              >
+                {tab.label}
+                <span className="ml-1 opacity-60">{tab.count}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Agent List — immediately below the tab bar */}
+      {sidebarView === 'agents' && (
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {loading && agents.length === 0 ? (
           <div className="px-4 py-8 text-center text-gray-400">
@@ -877,27 +946,65 @@ export default function AgentList({
 
             {/* Or create button */}
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => setShowWizardModal(true)}
               className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold rounded-xl shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all duration-300 transform hover:scale-105"
             >
               Create Your First Agent
             </button>
           </div>
-        ) : viewMode === 'grid' ? (
-          /* Grid View - Corporate Badge Layout with Collapsible Tag Groups */
+        ) : viewMode === 'normal' ? (
+          /* Normal View — Full card with avatar image, grouped by closed team */
           <div className="p-3 space-y-3">
-            {Object.entries(groupedAgents)
-              .sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()))
-              .map(([level1, level2Groups]) => {
-                const colors = getCategoryColor(level1)
-                const agentCount = countAgentsInCategory(level1)
-                const isExpanded = expandedLevel1.has(level1)
+            {/* WT-004#3: permanent HELPERS section pinned to the top of the
+                sidebar. The Haephestos card is NOT a real agent — it's a
+                shortcut to the embedded role-plugin creation helper. Shown
+                whenever Claude Code is installed on the server (user
+                directive 2026-04-20: never render this card on a host
+                without `claude` on PATH, because Haephestos orchestrates
+                plugin creation by spawning a real `claude` process). */}
+            {haephestosVisible && (
+            <div className="rounded-lg overflow-hidden border border-purple-500/30 bg-purple-500/5">
+              <div className="px-3 py-1.5 text-[9px] font-semibold tracking-wider text-purple-400 uppercase border-b border-purple-500/20">
+                HELPERS
+              </div>
+              <button
+                type="button"
+                onClick={handleHaephestosClick}
+                className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-purple-500/10 transition-colors text-left"
+                title="Create a new role-plugin with Haephestos"
+              >
+                <div className="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500/40 flex items-center justify-center flex-shrink-0">
+                  <Wrench className="w-4 h-4 text-purple-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium text-gray-200 truncate">Haephestos</div>
+                  <div className="text-[10px] text-gray-500 truncate">Create a role-plugin</div>
+                </div>
+              </button>
+            </div>
+            )}
+
+            {Object.entries(teamGroupedAgents)
+              .sort(([a], [b]) => {
+                // NO-TEAM always last
+                if (a === 'NO-TEAM') return 1
+                if (b === 'NO-TEAM') return -1
+                return a.toLowerCase().localeCompare(b.toLowerCase())
+              })
+              .map(([teamName, group]) => {
+                const colors = getCategoryColor(teamName)
+                const isExpanded = expandedTeams.has(teamName)
 
                 return (
-                  <div key={level1} className="rounded-lg overflow-hidden border border-slate-700/50">
-                    {/* Level 1 Header - Collapsible */}
+                  <div key={teamName} className="rounded-lg overflow-hidden border border-slate-700/50">
+                    {/* Team Header - Collapsible */}
                     <button
-                      onClick={() => toggleLevel1(level1)}
+                      onClick={() => setExpandedTeams(prev => {
+                        const next = new Set(prev)
+                        if (next.has(teamName)) next.delete(teamName)
+                        else next.add(teamName)
+                        return next
+                      })}
                       className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-700/30 transition-colors"
                       style={{ backgroundColor: colors.bg }}
                     >
@@ -905,90 +1012,61 @@ export default function AgentList({
                         className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
                         style={{ color: colors.icon }}
                       />
+                      <Users className="w-3.5 h-3.5" style={{ color: colors.icon }} />
                       <span
                         className="font-bold uppercase text-xs tracking-wider flex-1 text-left"
                         style={{ color: colors.icon }}
                       >
-                        {level1}
+                        {teamName}
                       </span>
                       <span
                         className="text-xs px-2 py-0.5 rounded-full font-medium"
                         style={{ backgroundColor: colors.active, color: colors.activeText }}
                       >
-                        {agentCount}
+                        {group.agents.length}
                       </span>
                     </button>
 
-                    {/* Level 1 Content */}
+                    {/* Team Content */}
                     {isExpanded && (
-                      <div className="p-2 space-y-3 bg-slate-900/30">
-                        {Object.entries(level2Groups)
-                          .sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()))
-                          .map(([level2, agentsList]) => {
-                            const level2Key = `${level1}-${level2}`
-                            const isLevel2Expanded = expandedLevel2.has(level2Key)
-
-                            return (
-                              <div key={level2Key}>
-                                {/* Level 2 Header - Collapsible (skip if "default") */}
-                                {level2 !== 'default' && (
-                                  <button
-                                    onClick={() => toggleLevel2(level1, level2)}
-                                    className="w-full flex items-center gap-2 px-2 py-1.5 mb-2 rounded-md hover:bg-slate-700/30 transition-colors"
-                                  >
-                                    <ChevronRight
-                                      className={`w-3 h-3 transition-transform duration-200 text-slate-400 ${isLevel2Expanded ? 'rotate-90' : ''}`}
-                                    />
-                                    <Folder className="w-3.5 h-3.5" style={{ color: colors.icon }} />
-                                    <span className="text-xs text-slate-300 capitalize flex-1 text-left">
-                                      {level2}
-                                    </span>
-                                    <span
-                                      className="text-[10px] px-1.5 py-0.5 rounded-full"
-                                      style={{ backgroundColor: colors.bg, color: colors.icon }}
-                                    >
-                                      {agentsList.length}
-                                    </span>
-                                  </button>
-                                )}
-
-                                {/* Agent Grid */}
-                                {(level2 === 'default' || isLevel2Expanded) && (
-                                  <div
+                      <div className="p-2 bg-slate-900/30">
+                                <div
                                     className="grid gap-2"
                                     style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}
                                   >
-                                    {[...agentsList]
+                                    {[...group.agents]
                                       .sort((a, b) => {
-                                        // Sort by status first (online > hibernated > offline), then by alias
-                                        const aSession = a.sessions?.[0]
-                                        const bSession = b.sessions?.[0]
-                                        const aOnline = aSession?.status === 'online' ? 2 : (a.sessions?.length ? 1 : 0)
-                                        const bOnline = bSession?.status === 'online' ? 2 : (b.sessions?.length ? 1 : 0)
+                                        const aOnline = a.sessions?.[0]?.status === 'online' ? 2 : (a.sessions?.length ? 1 : 0)
+                                        const bOnline = b.sessions?.[0]?.status === 'online' ? 2 : (b.sessions?.length ? 1 : 0)
                                         if (aOnline !== bOnline) return bOnline - aOnline
-                                        return (a.label || a.name || a.alias || '').toLowerCase().localeCompare((b.label || b.name || b.alias || '').toLowerCase())
+                                        return (a.label || a.name || '').toLowerCase().localeCompare((b.label || b.name || '').toLowerCase())
                                       })
                                       .map((agent) => {
                                         const session = agent.sessions?.[0]
                                         const isOnline = session?.status === 'online'
                                         const isHibernated = !isOnline && agent.sessions && agent.sessions.length > 0
                                         const sessionName = agent.name
+                                        // Retrieve real-time activity from the WebSocket-backed useSessionActivity hook.
+                                        // activityInfo.status drives the badge color (active/idle/waiting).
+                                        // activityInfo.notificationType ('idle_prompt'/'permission_prompt') drives
+                                        // higher-priority badge states and the Approve/Stop/Restart button enablement
+                                        // in AgentProfile. programRunning comes from the session API (tmux pane check).
                                         const activityInfo = sessionName ? getSessionActivity(sessionName) : null
 
                                         return (
                                           <AgentBadge
                                             key={agent.id}
                                             agent={agent}
+                                            variant="normal"
                                             isSelected={activeAgentId === agent.id}
                                             activityStatus={activityInfo?.status}
+                                            notificationType={activityInfo?.notificationType}
+                                            programRunning={agent.session?.programRunning}
                                             unreadCount={unreadCounts[agent.id]}
                                             onSelect={handleAgentClick}
                                             onRename={() => onShowAgentProfile(agent)}
-                                            onDelete={() => onShowAgentProfileDangerZone?.(agent)}
-                                            onHibernate={isOnline ? () => {
-                                              handleHibernate(agent, { stopPropagation: () => {} } as React.MouseEvent)
-                                            } : undefined}
-                                            onWake={isHibernated ? () => setWakeDialogAgent(agent) : undefined}
+                                            onHibernate={isOnline ? (a) => handleHibernate(a) : undefined}
+                                            onWake={isHibernated ? (a) => handleWake(a) : undefined}
                                             onOpenTerminal={isOnline ? () => handleAgentClick(agent) : undefined}
                                             onSendMessage={() => {/* TODO: Implement send message dialog */}}
                                             onCopyId={() => navigator.clipboard.writeText(agent.id)}
@@ -996,10 +1074,6 @@ export default function AgentList({
                                         )
                                       })}
                                   </div>
-                                )}
-                              </div>
-                            )
-                          })}
                       </div>
                     )}
                   </div>
@@ -1007,29 +1081,53 @@ export default function AgentList({
               })}
           </div>
         ) : (
-          /* List View - Hierarchical Layout */
+          /* Compact View — grouped by closed team */
           <div className="py-2">
-            {Object.entries(groupedAgents)
-              .sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()))
-              .map(([level1, level2Groups]) => {
-              const colors = getCategoryColor(level1)
-              const isExpanded = expandedLevel1.has(level1)
-              const CategoryIcon = DEFAULT_ICON
-              const agentCount = countAgentsInCategory(level1)
+            {/* WT-004#3 follow-up: compact HELPERS section. Same
+                claude-installed gate as the normal variant — on a host
+                without Claude Code on PATH the card is hidden entirely. */}
+            {haephestosVisible && (
+            <div className="mx-1 mb-1 rounded-lg overflow-hidden border border-purple-500/30 bg-purple-500/5">
+              <div className="px-3 py-1 text-[9px] font-semibold tracking-wider text-purple-400 uppercase border-b border-purple-500/20">
+                HELPERS
+              </div>
+              <button
+                type="button"
+                onClick={handleHaephestosClick}
+                className="w-full flex items-center justify-center px-3 py-2 hover:bg-purple-500/10 transition-colors"
+                title="Haephestos — Create a role-plugin"
+                aria-label="Haephestos — Create a role-plugin"
+              >
+                <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/40 flex items-center justify-center flex-shrink-0">
+                  <Wrench className="w-4 h-4 text-purple-300" />
+                </div>
+              </button>
+            </div>
+            )}
+
+            {Object.entries(teamGroupedAgents)
+              .sort(([a], [b]) => {
+                if (a === 'NO-TEAM') return 1
+                if (b === 'NO-TEAM') return -1
+                return a.toLowerCase().localeCompare(b.toLowerCase())
+              })
+              .map(([teamName, group]) => {
+              const colors = getCategoryColor(teamName)
+              const isExpanded = expandedTeams.has(teamName)
 
               return (
-                <div key={level1} className="mb-1">
-                  {/* Level 1 Header - Drop target */}
+                <div key={teamName} className="mb-1">
+                  {/* Team Header */}
                   <button
-                    onClick={() => toggleLevel1(level1)}
-                    onDragOver={(e) => handleDragOver(e, level1)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, level1)}
-                    className={`w-full px-3 py-2.5 flex items-center gap-3 text-left hover:bg-sidebar-hover transition-all duration-200 group rounded-lg mx-1 ${
-                      dropTarget === level1 ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-900' : ''
-                    }`}
+                    onClick={() => setExpandedTeams(prev => {
+                      const next = new Set(prev)
+                      if (next.has(teamName)) next.delete(teamName)
+                      else next.add(teamName)
+                      return next
+                    })}
+                    className={`w-full px-3 py-2.5 flex items-center gap-3 text-left hover:bg-sidebar-hover transition-all duration-200 group rounded-lg mx-1`}
                     style={{
-                      backgroundColor: dropTarget === level1 ? colors.active : (isExpanded ? colors.bg : 'transparent'),
+                      backgroundColor: isExpanded ? colors.bg : 'transparent',
                     }}
                   >
                     <div
@@ -1039,7 +1137,7 @@ export default function AgentList({
                         border: `1px solid ${colors.border}40`,
                       }}
                     >
-                      <CategoryIcon className="w-4 h-4" style={{ color: colors.icon }} />
+                      <Users className="w-4 h-4" style={{ color: colors.icon }} />
                     </div>
 
                     <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -1047,7 +1145,7 @@ export default function AgentList({
                         className="font-semibold uppercase text-xs tracking-wider truncate"
                         style={{ color: isExpanded ? colors.activeText : colors.icon }}
                       >
-                        {level1}
+                        {teamName}
                       </span>
                       <span
                         className="text-xs font-medium px-2 py-0.5 rounded-full transition-all duration-200"
@@ -1057,7 +1155,7 @@ export default function AgentList({
                           border: `1px solid ${colors.border}30`,
                         }}
                       >
-                        {agentCount}
+                        {group.agents.length}
                       </span>
                     </div>
 
@@ -1069,63 +1167,11 @@ export default function AgentList({
                     />
                   </button>
 
-                  {/* Level 2 Groups */}
+                  {/* Team Agents */}
                   {isExpanded && (
                     <div className="ml-2 mt-1 space-y-0.5">
-                      {Object.entries(level2Groups)
-                        .sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()))
-                        .map(([level2, agentsList]) => {
-                        const level2Key = `${level1}-${level2}`
-                        const isLevel2Expanded = expandedLevel2.has(level2Key)
-
-                        return (
-                          <div key={level2Key}>
-                            {/* Level 2 Header (hide if it's "default") - Drop target */}
-                            {level2 !== 'default' && (
-                              <button
-                                onClick={() => toggleLevel2(level1, level2)}
-                                onDragOver={(e) => handleDragOver(e, level2Key)}
-                                onDragLeave={handleDragLeave}
-                                onDrop={(e) => handleDrop(e, level1, level2)}
-                                className={`w-full px-3 py-2 pl-10 flex items-center gap-2 text-left hover:bg-sidebar-hover transition-all duration-200 rounded-lg group ${
-                                  dropTarget === level2Key ? 'ring-2 ring-blue-500 ring-offset-1 ring-offset-gray-900' : ''
-                                }`}
-                              >
-                                <div className="flex-shrink-0">
-                                  {isLevel2Expanded ? (
-                                    <FolderOpen className="w-3.5 h-3.5" style={{ color: colors.icon }} />
-                                  ) : (
-                                    <Folder className="w-3.5 h-3.5" style={{ color: colors.icon }} />
-                                  )}
-                                </div>
-
-                                <span className="text-sm text-gray-300 capitalize flex-1 truncate">
-                                  {level2}
-                                </span>
-
-                                <span
-                                  className="text-xs px-1.5 py-0.5 rounded-full"
-                                  style={{
-                                    backgroundColor: colors.bg,
-                                    color: colors.icon,
-                                  }}
-                                >
-                                  {agentsList.length}
-                                </span>
-
-                                <ChevronRight
-                                  className={`w-3 h-3 transition-transform duration-200 ${
-                                    isLevel2Expanded ? 'rotate-90' : ''
-                                  }`}
-                                  style={{ color: colors.icon }}
-                                />
-                              </button>
-                            )}
-
-                            {/* Agents */}
-                            {(level2 === 'default' || isLevel2Expanded) && (
                               <ul className="space-y-0.5">
-                                {[...agentsList]
+                                {[...group.agents]
                                   .sort((a, b) => {
                                     // Sort by status first (online > hibernated > offline), then by alias
                                     const aSession = a.sessions?.[0]
@@ -1133,16 +1179,20 @@ export default function AgentList({
                                     const aOnline = aSession?.status === 'online' ? 2 : (a.sessions?.length ? 1 : 0)
                                     const bOnline = bSession?.status === 'online' ? 2 : (b.sessions?.length ? 1 : 0)
                                     if (aOnline !== bOnline) return bOnline - aOnline
-                                    return (a.label || a.name || a.alias || '').toLowerCase().localeCompare((b.label || b.name || b.alias || '').toLowerCase())
+                                    return (a.label || a.name || '').toLowerCase().localeCompare((b.label || b.name || '').toLowerCase())
                                   })
                                   .map((agent) => {
                                   const isActive = activeAgentId === agent.id
-                                  const session = agent.sessions?.[0]
-                                  const isOnline = session?.status === 'online'
+                                  const isOnline = agent.session?.status === 'online' || agent.sessions?.[0]?.status === 'online'
                                   const isHibernated = !isOnline && agent.sessions && agent.sessions.length > 0
-                                  const indentClass = level2 === 'default' ? 'pl-10' : 'pl-14'
+                                  const indentClass = 'pl-10'
 
-                                  // Get activity status for online agents
+                                  // Get activity status for online agents.
+                                  // Data flow: useSessionActivity hook → WebSocket /status endpoint → server
+                                  // monitors tmux hooks → returns SessionActivityInfo per session.
+                                  // activityInfo.notificationType and .status are passed through to
+                                  // AgentStatusIndicator which renders the colored dot + label.
+                                  // agent.session.programRunning is from the sessions API (tmux pane command check).
                                   const sessionName = agent.name
                                   const activityInfo = sessionName ? getSessionActivity(sessionName) : null
                                   const activityStatus = activityInfo?.status
@@ -1186,7 +1236,7 @@ export default function AgentList({
                                               <span className="text-3xl flex-shrink-0">{agent.avatar}</span>
                                             ) : (
                                               <User
-                                                className="w-10 h-10 flex-shrink-0"
+                                                className="w-12 h-12 flex-shrink-0"
                                                 style={{ color: isActive ? colors.activeText : colors.icon }}
                                               />
                                             )}
@@ -1203,7 +1253,7 @@ export default function AgentList({
                                                     color: isActive ? colors.activeText : 'rgb(229, 231, 235)',
                                                   }}
                                                 >
-                                                  {agent.label || agent.name || agent.alias}
+                                                  {agent.label || agent.name}
                                                 </span>
 
                                                 {/* Cached indicator */}
@@ -1216,15 +1266,7 @@ export default function AgentList({
                                                   </span>
                                                 )}
 
-                                                {/* Orphan indicator */}
-                                                {agent.isOrphan && (
-                                                  <span
-                                                    className="text-[10px] px-1 py-0.5 rounded bg-yellow-500/20 text-yellow-400 flex-shrink-0"
-                                                    title="Auto-registered from orphan session"
-                                                  >
-                                                    NEW
-                                                  </span>
-                                                )}
+                                                {/* Orphan indicator removed — orphans no longer exist */}
 
                                                 {/* Unread message indicator */}
                                                 {unreadCounts[agent.id] && unreadCounts[agent.id] > 0 && (
@@ -1241,6 +1283,8 @@ export default function AgentList({
                                                   isOnline={isOnline}
                                                   isHibernated={isHibernated}
                                                   activityStatus={activityStatus}
+                                                  notificationType={activityInfo?.notificationType}
+                                                  programRunning={agent.session?.programRunning}
                                                 />
                                               </div>
 
@@ -1275,7 +1319,11 @@ export default function AgentList({
                                             {/* Hibernate button - show when agent is online */}
                                             {isOnline && (
                                               <button
-                                                onClick={(e) => handleHibernate(agent, e)}
+                                                onClick={(e) => {
+                                                  // Stop propagation first to prevent the parent onClick (handleAgentClick) from firing
+                                                  e.stopPropagation()
+                                                  handleHibernate(agent, e)
+                                                }}
                                                 disabled={hibernatingAgents.has(agent.id)}
                                                 className="p-1 rounded hover:bg-yellow-500/20 text-gray-400 hover:text-yellow-400 transition-all duration-200 disabled:opacity-50"
                                                 title="Hibernate agent (stop session)"
@@ -1290,7 +1338,11 @@ export default function AgentList({
                                             {/* Wake button - show when agent is hibernated */}
                                             {isHibernated && (
                                               <button
-                                                onClick={(e) => handleWake(agent, e)}
+                                                onClick={(e) => {
+                                                  // Stop propagation first to prevent the parent onClick (handleAgentClick) from firing
+                                                  e.stopPropagation()
+                                                  setWakeDialogAgent(agent)
+                                                }}
                                                 disabled={wakingAgents.has(agent.id)}
                                                 className="p-1 rounded hover:bg-green-500/20 text-gray-400 hover:text-green-400 transition-all duration-200 disabled:opacity-50"
                                                 title="Wake agent (start session)"
@@ -1302,6 +1354,14 @@ export default function AgentList({
                                                 )}
                                               </button>
                                             )}
+                                            <a
+                                              href={`/companion?agent=${encodeURIComponent(agent.id)}`}
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="p-1 rounded hover:bg-pink-500/20 text-gray-400 hover:text-pink-400 transition-all duration-200"
+                                              title="Companion View"
+                                            >
+                                              <User className="w-3 h-3" />
+                                            </a>
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation()
@@ -1312,18 +1372,6 @@ export default function AgentList({
                                             >
                                               <Edit2 className="w-3 h-3" />
                                             </button>
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation()
-                                                if (onShowAgentProfileDangerZone) {
-                                                  onShowAgentProfileDangerZone(agent)
-                                                }
-                                              }}
-                                              className="p-1 rounded hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-all duration-200"
-                                              title="Delete agent"
-                                            >
-                                              <Trash2 className="w-3 h-3" />
-                                            </button>
                                           </div>
                                         </div>
                                       </div>
@@ -1331,10 +1379,6 @@ export default function AgentList({
                                   )
                                 })}
                               </ul>
-                            )}
-                          </div>
-                        )
-                      })}
                     </div>
                   )}
 
@@ -1346,9 +1390,83 @@ export default function AgentList({
           </div>
         )}
       </div>
+      )}
+
+      {/* Dead Sessions — orphan tmux sessions from deleted agents */}
+      {unregisteredSessions.length > 0 && (
+        <div className="flex-shrink-0 border-t border-red-900/30 bg-red-950/20">
+          <div className="px-3 py-2">
+            <button
+              onClick={() => setDeadSessionsExpanded(!deadSessionsExpanded)}
+              className="flex items-center gap-1.5 w-full text-[10px] font-bold uppercase tracking-wider text-red-400/70 mb-1.5 hover:text-red-300 transition-colors"
+            >
+              <ChevronRight className={`w-3 h-3 transition-transform ${deadSessionsExpanded ? 'rotate-90' : ''}`} />
+              Dead Sessions ({unregisteredSessions.length})
+            </button>
+            {deadSessionsExpanded && unregisteredSessions.map((session) => {
+              const displayName = session.originalAgentName || session.tmuxSessionName
+              const label = session.originalAgentLabel || displayName
+              return (
+                <div
+                  key={session.tmuxSessionName}
+                  className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-red-950/30 border border-red-900/20 mb-1 group"
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <div className="w-2 h-2 rounded-full bg-red-500/50 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs text-red-300/80 truncate font-medium">{label}</div>
+                      <div className="text-[10px] text-gray-500 truncate">
+                        {session.originalProgram || 'unknown'} • {session.workingDirectory?.replace(/.*\/agents\//, '~/agents/') || '?'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                    <button
+                      onClick={async () => {
+                        try {
+                          await fetch(`/api/sessions/${encodeURIComponent(session.tmuxSessionName)}/kill`, { method: 'POST' })
+                          onRefresh?.()
+                        } catch { /* ignore */ }
+                      }}
+                      className="p-1 rounded hover:bg-red-900/50 text-red-400 hover:text-red-300 transition-all"
+                      title={`Kill tmux session "${session.tmuxSessionName}"`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await fetch('/api/agents', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              name: `_${displayName}`,
+                              label: label,
+                              client: session.originalProgram || 'claude',
+                              programArgs: session.originalProgramArgs || '',
+                              workingDirectory: session.workingDirectory || undefined,
+                              allowExternalFolder: true,
+                              createSession: false,
+                            }),
+                          })
+                          onRefresh?.()
+                        } catch { /* ignore */ }
+                      }}
+                      className="p-1 rounded hover:bg-green-900/50 text-green-400 hover:text-green-300 transition-all"
+                      title={`Revive as "_${displayName}" (re-create agent from history)`}
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Footer - Collapsible */}
-      <div className="border-t border-sidebar-border mt-auto">
+      <div className="flex-shrink-0 border-t border-sidebar-border">
         {/* Footer Header */}
         <div className="flex items-center justify-between px-4 py-2">
           <button
@@ -1401,13 +1519,11 @@ export default function AgentList({
         )}
       </div>
 
-      {/* Create Agent Modal */}
-      {showCreateModal && (
-        <CreateAgentModal
-          onClose={() => setShowCreateModal(false)}
-          onCreate={handleCreateAgent}
+      {/* Creation Wizard */}
+      {showWizardModal && (
+        <AgentCreationWizard
+          onClose={() => setShowWizardModal(false)}
           onComplete={handleCreateComplete}
-          loading={actionLoading}
         />
       )}
 
@@ -1417,8 +1533,56 @@ export default function AgentList({
         onClose={() => setWakeDialogAgent(null)}
         onConfirm={handleWakeConfirm}
         agentName={wakeDialogAgent?.name || wakeDialogAgent?.id || ''}
-        agentAlias={wakeDialogAgent?.alias}
+        agentAlias={wakeDialogAgent?.name}
+        agentProgram={wakeDialogAgent?.program}
       />
+
+      {/* Stale/unreachable host popup */}
+      {staleHostPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setStaleHostPopup(null)}>
+          <div
+            className="bg-gray-900 border border-red-800/60 rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <XCircle className="w-5 h-5 text-red-500 shrink-0" />
+              <h3 className="text-sm font-semibold text-red-300">Host Unreachable</h3>
+            </div>
+            <p className="text-xs text-gray-300 mb-1">
+              <span className="font-medium text-white">{staleHostPopup.name}</span>{' '}
+              <span className="text-gray-500">({staleHostPopup.id})</span>
+            </p>
+            <p className="text-xs text-red-400/80 mb-4 bg-red-950/30 rounded px-2 py-1.5 font-mono break-all">
+              {staleHostPopup.error}
+            </p>
+            <div className="flex items-center gap-2 justify-end">
+              <button
+                onClick={() => setStaleHostPopup(null)}
+                className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg hover:bg-gray-800 transition-colors"
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/hosts/${encodeURIComponent(staleHostPopup.id)}`, { method: 'DELETE' })
+                    if (res.ok) {
+                      setStaleHostPopup(null)
+                      if (selectedHostFilter === staleHostPopup.id) {
+                        setSelectedHostFilter('all')
+                      }
+                      window.location.reload()
+                    }
+                  } catch { /* ignore */ }
+                }}
+                className="px-3 py-1.5 text-xs text-red-300 bg-red-900/40 hover:bg-red-800/60 rounded-lg border border-red-700/40 hover:border-red-600/60 transition-colors"
+              >
+                Remove Host
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1426,15 +1590,40 @@ export default function AgentList({
 function AgentStatusIndicator({
   isOnline,
   isHibernated,
-  activityStatus
+  activityStatus,
+  notificationType,
+  programRunning,
 }: {
   isOnline: boolean
   isHibernated?: boolean
   activityStatus?: SessionActivityStatus
+  notificationType?: string
+  programRunning?: boolean
 }) {
   if (isOnline) {
-    // Online states: waiting, active, or idle
-    if (activityStatus === 'waiting') {
+    // 1. Exited — session alive but AI program stopped
+    if (programRunning === false) {
+      return (
+        <div className="flex items-center gap-1.5 flex-shrink-0" title="Program exited">
+          <div className="w-2 h-2 rounded-full bg-gray-400 ring-2 ring-gray-400/30" />
+          <span className="text-xs text-gray-400 hidden lg:inline">Exited</span>
+        </div>
+      )
+    }
+
+    // 2. Permission — agent blocked waiting for user permission
+    if (notificationType === 'permission_prompt') {
+      return (
+        <div className="flex items-center gap-1.5 flex-shrink-0" title="Waiting for permission">
+          <div className="w-2 h-2 rounded-full bg-orange-500 ring-2 ring-orange-500/30 animate-pulse" />
+          <Lock className="w-3 h-3 text-orange-500" />
+          <span className="text-xs text-orange-400 hidden lg:inline">Permission</span>
+        </div>
+      )
+    }
+
+    // 3. Waiting — idle prompt or generic waiting state
+    if (notificationType === 'idle_prompt' || activityStatus === 'waiting') {
       return (
         <div className="flex items-center gap-1.5 flex-shrink-0" title="Waiting for input">
           <div className="w-2 h-2 rounded-full bg-amber-500 ring-2 ring-amber-500/30 animate-pulse" />
@@ -1443,6 +1632,7 @@ function AgentStatusIndicator({
       )
     }
 
+    // 4. Active — agent is processing
     if (activityStatus === 'active') {
       return (
         <div className="flex items-center gap-1.5 flex-shrink-0" title="Processing">
@@ -1452,7 +1642,7 @@ function AgentStatusIndicator({
       )
     }
 
-    // Idle or unknown activity status - show as online/idle
+    // 5. Idle — online but not doing anything
     return (
       <div className="flex items-center gap-1.5 flex-shrink-0" title="Online - Idle">
         <div className="w-2 h-2 rounded-full bg-green-500 ring-2 ring-green-500/30" />
@@ -1463,8 +1653,9 @@ function AgentStatusIndicator({
 
   if (isHibernated) {
     return (
-      <div className="flex items-center flex-shrink-0" title="Hibernated - Click to wake">
-        <Power className="w-3.5 h-3.5 text-gray-500" />
+      <div className="flex items-center gap-1.5 flex-shrink-0" title="Hibernated">
+        <div className="w-2 h-2 rounded-full bg-slate-500 ring-2 ring-slate-500/30" />
+        <span className="text-xs text-gray-500 hidden lg:inline">Hiber</span>
       </div>
     )
   }
@@ -1477,360 +1668,5 @@ function AgentStatusIndicator({
   )
 }
 
-// Host Selector Component - beautiful list with search for large networks
-function HostSelector({
-  hosts,
-  selectedHostId,
-  onSelect,
-}: {
-  hosts: Array<{ id: string; name: string; url?: string; isSelf?: boolean }>
-  selectedHostId: string
-  onSelect: (hostId: string) => void
-}) {
-  const [searchQuery, setSearchQuery] = useState('')
 
-  // Filter hosts by search query
-  const filteredHosts = hosts.filter(host =>
-    host.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    host.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    host.url?.toLowerCase().includes(searchQuery.toLowerCase())
-  )
 
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-300 mb-2">
-        Host
-      </label>
-
-      {/* Search input - only show if more than 2 hosts */}
-      {hosts.length > 2 && (
-        <div className="relative mb-2">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search hosts..."
-            className="w-full pl-9 pr-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-          />
-        </div>
-      )}
-
-      {/* Host list - scrollable */}
-      <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-        {filteredHosts.length === 0 ? (
-          <div className="p-3 text-center text-gray-500 text-sm">
-            No hosts found
-          </div>
-        ) : (
-          filteredHosts.map(host => (
-            <button
-              key={host.id}
-              type="button"
-              onClick={() => onSelect(host.id)}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all ${
-                selectedHostId === host.id
-                  ? 'bg-blue-500/20 border-blue-500/50 text-blue-300'
-                  : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-600'
-              }`}
-            >
-              <Server className="w-5 h-5 flex-shrink-0" />
-              <div className="flex-1 text-left min-w-0">
-                <div className="font-medium truncate">
-                  {host.name}
-                  {host.isSelf && (
-                    <span className="ml-2 text-xs text-gray-500">(this machine)</span>
-                  )}
-                </div>
-                {host.url && (
-                  <div className="text-xs text-gray-500 truncate">{host.url}</div>
-                )}
-              </div>
-              {selectedHostId === host.id && (
-                <CheckCircle className="w-5 h-5 text-blue-400 flex-shrink-0" />
-              )}
-            </button>
-          ))
-        )}
-      </div>
-
-      <p className="text-xs text-gray-500 mt-2">
-        Choose which machine to create this agent on
-      </p>
-    </div>
-  )
-}
-
-// Animated Create Modal
-function CreateAgentModal({
-  onClose,
-  onCreate,
-  onComplete,
-  loading,
-}: {
-  onClose: () => void
-  onCreate: (name: string, workingDirectory?: string, hostId?: string, label?: string, avatar?: string) => Promise<boolean>
-  onComplete: () => void
-  loading: boolean
-}) {
-  const { hosts } = useHosts()
-  const [name, setName] = useState('')
-  const [workingDirectory, setWorkingDirectory] = useState('')
-  const [selectedHostId, setSelectedHostId] = useState<string>('')
-  const [animationPhase, setAnimationPhase] = useState<'naming' | 'preparing' | 'creating' | 'ready' | 'error'>('creating')
-
-  // Set default host to self/local host on mount
-  useEffect(() => {
-    if (hosts.length > 0 && !selectedHostId) {
-      const selfHost = hosts.find(h => h.isSelf) || hosts[0]
-      setSelectedHostId(selfHost.id)
-    }
-  }, [hosts, selectedHostId])
-  const [animationProgress, setAnimationProgress] = useState(0)
-  const [isCreating, setIsCreating] = useState(false)  // Animation in progress
-  const [creationSuccess, setCreationSuccess] = useState(false)  // Agent created successfully
-  const [showButton, setShowButton] = useState(false)  // Show "Let's Go!" button
-
-  // Fun AI-themed aliases - split by gender to match avatar photos
-  // IA names are feminine (Spanish style), AI names are masculine
-  const FEMALE_ALIASES = [
-    'MarIA', 'SofIA', 'LucIA', 'JulIA', 'NatalIA', 'OlivIA', 'VictorIA', 'ValerIA',
-    'NovaIA', 'StellaIA', 'AuroraIA', 'CelestIA', 'HarmonIA', 'SerenIA', 'DataIA',
-  ]
-  const MALE_ALIASES = [
-    'LunAI', 'NovAI', 'AriAI', 'ZarAI', 'KAI', 'SkyAI', 'MaxAI', 'LeoAI',
-    'MirAI', 'EchoAI', 'ZenAI', 'NeoAI', 'PixAI', 'BytAI', 'CodeAI',
-    'AtlAI', 'OrionAI', 'PhoenixAI', 'TitanAI', 'VegAI', 'CosmAI',
-  ]
-
-  // Get a gender-matched alias based on the agent name
-  // Uses same hash logic as AgentBadge avatar selection for consistency
-  const getRandomAlias = (agentName: string): string => {
-    let hash = 0
-    for (let i = 0; i < agentName.length; i++) {
-      const char = agentName.charCodeAt(i)
-      hash = ((hash << 5) - hash) + char
-      hash = hash & hash
-    }
-    // Same gender logic as avatar - ensures name matches photo gender
-    const isMale = (Math.abs(hash >> 8) % 2 === 0)
-    const aliases = isMale ? MALE_ALIASES : FEMALE_ALIASES
-    return aliases[Math.abs(hash) % aliases.length]
-  }
-
-  // Animate through phases when creating - spread over 10 seconds for a delightful experience
-  useEffect(() => {
-    if (isCreating) {
-      // Reset and start animation sequence
-      setAnimationPhase('preparing')
-      setAnimationProgress(5)
-
-      // Progress updates for preparing phase (0-2.5s)
-      const timer1 = setTimeout(() => {
-        setAnimationProgress(12)
-      }, 500)
-
-      const timer2 = setTimeout(() => {
-        setAnimationProgress(20)
-      }, 1000)
-
-      const timer3 = setTimeout(() => {
-        setAnimationProgress(28)
-      }, 1800)
-
-      // Transition to creating phase (2.5s)
-      const timer4 = setTimeout(() => {
-        setAnimationPhase('creating')
-        setAnimationProgress(35)
-      }, 2500)
-
-      // Progress updates for creating phase (2.5-6s)
-      const timer5 = setTimeout(() => {
-        setAnimationProgress(45)
-      }, 3200)
-
-      const timer6 = setTimeout(() => {
-        setAnimationProgress(55)
-      }, 3900)
-
-      const timer7 = setTimeout(() => {
-        setAnimationProgress(65)
-      }, 4600)
-
-      const timer8 = setTimeout(() => {
-        setAnimationProgress(78)
-      }, 5300)
-
-      const timer9 = setTimeout(() => {
-        setAnimationProgress(90)
-      }, 6000)
-
-      // Transition to ready/celebration phase (6.5s)
-      const timer10 = setTimeout(() => {
-        setAnimationPhase('ready')
-        setAnimationProgress(100)
-      }, 6500)
-
-      // Show the "Let's Go!" button after celebration animations complete (8s)
-      const timer11 = setTimeout(() => {
-        if (creationSuccess) {
-          setShowButton(true)
-        }
-      }, 8000)
-
-      return () => {
-        clearTimeout(timer1)
-        clearTimeout(timer2)
-        clearTimeout(timer3)
-        clearTimeout(timer4)
-        clearTimeout(timer5)
-        clearTimeout(timer6)
-        clearTimeout(timer7)
-        clearTimeout(timer8)
-        clearTimeout(timer9)
-        clearTimeout(timer10)
-        clearTimeout(timer11)
-      }
-    }
-  }, [isCreating, creationSuccess])
-
-  // Show button when API completes successfully and we're in ready phase
-  useEffect(() => {
-    if (creationSuccess && animationPhase === 'ready') {
-      // Small delay after reaching ready phase to let animations settle
-      const timer = setTimeout(() => {
-        setShowButton(true)
-      }, 1500)
-      return () => clearTimeout(timer)
-    }
-  }, [creationSuccess, animationPhase])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (name.trim()) {
-      setIsCreating(true)
-      // Generate persona name (like "NatalIA") and avatar URL to be saved
-      // These must match what's shown in the preview animation
-      const personaName = getRandomAlias(name.trim())
-      const avatarUrl = getPreviewAvatarUrl(name.trim())
-      // Pass selectedHostId to create agent on the chosen host
-      const success = await onCreate(name.trim(), workingDirectory.trim() || undefined, selectedHostId || undefined, personaName, avatarUrl)
-      if (success) {
-        setCreationSuccess(true)
-        // Animation continues, user will click "Let's Go!" to close
-      } else {
-        // Error occurred, close modal
-        setIsCreating(false)
-      }
-    }
-  }
-
-  const handleLetsGo = () => {
-    onComplete()
-  }
-
-  // Show animation when creating or when celebration is showing
-  const showAnimation = isCreating || creationSuccess
-
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={showAnimation ? undefined : onClose}>
-      <div className="bg-gray-900 rounded-xl w-full max-w-lg shadow-2xl border border-gray-700 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        {showAnimation ? (
-          // Animated creation view
-          <div className="p-6">
-            <div className="text-center mb-2">
-              <h3 className="text-lg font-semibold text-gray-100">
-                {animationPhase === 'ready' ? 'Your Agent is Ready!' : 'Creating Your Agent'}
-              </h3>
-              {animationPhase !== 'ready' && <p className="text-sm text-gray-400">{name}</p>}
-            </div>
-            <CreateAgentAnimation
-              phase={animationPhase}
-              agentName={name}
-              agentAlias={getRandomAlias(name)}
-              avatarUrl={getPreviewAvatarUrl(name)}
-              progress={animationProgress}
-              showNextSteps={showButton}
-            />
-            {/* Let's Go button - appears after celebration */}
-            {showButton && (
-              <div className="mt-6 flex justify-center">
-                <button
-                  onClick={handleLetsGo}
-                  className="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold rounded-xl shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all duration-300 transform hover:scale-105 flex items-center gap-2"
-                >
-                  <span>Let&apos;s Go!</span>
-                  <span className="text-lg">🚀</span>
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          // Form view
-          <div className="p-6">
-            <h3 className="text-lg font-semibold text-gray-100 mb-4">Create New Agent</h3>
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="agent-name" className="block text-sm font-medium text-gray-300 mb-1">
-                    Agent Name *
-                  </label>
-                  <input
-                    id="agent-name"
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="23blocks-api-myagent"
-                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    autoFocus
-                    pattern="[a-zA-Z0-9_\-]+"
-                    title="Only letters, numbers, dashes, and underscores allowed"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Format: group-subgroup-name (e.g., 23blocks-api-auth)
-                  </p>
-                </div>
-                <div>
-                  <label htmlFor="working-dir" className="block text-sm font-medium text-gray-300 mb-1">
-                    Working Directory (optional)
-                  </label>
-                  <input
-                    id="working-dir"
-                    type="text"
-                    value={workingDirectory}
-                    onChange={(e) => setWorkingDirectory(e.target.value)}
-                    placeholder={typeof process !== 'undefined' ? process.env?.HOME || '/home/user' : '/home/user'}
-                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  />
-                </div>
-                {hosts.length > 1 && (
-                  <HostSelector
-                    hosts={hosts}
-                    selectedHostId={selectedHostId}
-                    onSelect={setSelectedHostId}
-                  />
-                )}
-              </div>
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-gray-200 transition-colors rounded-lg hover:bg-gray-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!name.trim()}
-                  className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-blue-500/25"
-                >
-                  Create Agent
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}

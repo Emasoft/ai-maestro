@@ -1,6 +1,5 @@
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import crypto from 'crypto'
 import { v4 as uuidv4 } from 'uuid'
 import type {
@@ -10,8 +9,9 @@ import type {
   WebhookEmailChangedPayload,
   WebhookAgentPayload,
 } from '@/types/agent'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const WEBHOOKS_FILE = path.join(AIMAESTRO_DIR, 'webhooks.json')
 
 // ============================================================================
@@ -87,7 +87,7 @@ export function getWebhook(id: string): WebhookSubscription | null {
 /**
  * Create a new webhook subscription
  */
-export function createWebhook(request: CreateWebhookRequest): WebhookSubscription {
+export function createWebhook(request: CreateWebhookRequest, createdBy?: string): WebhookSubscription {
   const webhooks = loadWebhooks()
 
   // Check for duplicate URL + events combination
@@ -107,6 +107,7 @@ export function createWebhook(request: CreateWebhookRequest): WebhookSubscriptio
     secret: request.secret || generateSecret(),
     description: request.description,
     status: 'active',
+    createdBy,
     createdAt: new Date().toISOString(),
     failureCount: 0,
   }

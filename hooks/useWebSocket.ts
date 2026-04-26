@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { WebSocketMessage, WebSocketStatus } from '@/types/websocket'
 
-const WS_RECONNECT_DELAY = 3000
-const WS_MAX_RECONNECT_ATTEMPTS = 5
+// SF-011: Exponential backoff delays as documented in CLAUDE.md architecture section
+const WS_RECONNECT_BACKOFF = [100, 500, 1000, 2000, 5000]
+const WS_MAX_RECONNECT_ATTEMPTS = WS_RECONNECT_BACKOFF.length
 
 interface UseWebSocketOptions {
   sessionId: string
   hostId?: string  // Host ID for remote sessions (peer mesh network)
+  socketPath?: string  // Custom tmux socket path (e.g., OpenClaw agents)
   onMessage?: (data: string) => void
   onOpen?: () => void
   onClose?: () => void
@@ -19,6 +21,7 @@ interface UseWebSocketOptions {
 export function useWebSocket({
   sessionId,
   hostId,
+  socketPath,
   onMessage,
   onOpen,
   onClose,
@@ -34,6 +37,25 @@ export function useWebSocket({
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectAttemptsRef = useRef(0)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>()
+  // BUG-FIX: Track whether ws.onerror fired before ws.onclose.
+  // Without this, onclose always overwrites status to 'disconnected',
+  // masking the 'error' status set by onerror from the UI.
+  const lastErrorRef = useRef<Error | null>(null)
+
+  // CRITICAL: Store callbacks in refs so WebSocket handlers always call the latest version.
+  // Without this, the WebSocket's onmessage closure captures a stale onMessage callback
+  // (one where terminalInstanceRef.current is still null from initial render). The terminal
+  // receives data but writes to null. Users see this as "copy/paste only works after switching
+  // agents" because switching triggers a reconnect that picks up the fresh callback.
+  const onMessageRef = useRef(onMessage)
+  const onOpenRef = useRef(onOpen)
+  const onCloseRef = useRef(onClose)
+  const onErrorRef = useRef(onError)
+
+  useEffect(() => { onMessageRef.current = onMessage }, [onMessage])
+  useEffect(() => { onOpenRef.current = onOpen }, [onOpen])
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
+  useEffect(() => { onErrorRef.current = onError }, [onError])
 
   const getWebSocketUrl = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -45,8 +67,13 @@ export function useWebSocket({
       url += `&host=${encodeURIComponent(hostId)}`
     }
 
+    // Add socket parameter for custom tmux sockets (e.g., OpenClaw)
+    if (socketPath) {
+      url += `&socket=${encodeURIComponent(socketPath)}`
+    }
+
     return url
-  }, [sessionId, hostId])
+  }, [sessionId, hostId, socketPath])
 
   const sendMessage = useCallback((data: string | WebSocketMessage) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -69,6 +96,17 @@ export function useWebSocket({
       return
     }
 
+    // MF-025: Close any WebSocket still in CONNECTING state before creating a new one.
+    // Without this, calling connect() while a previous WS is mid-handshake orphans the
+    // old instance — it stays alive, fires handlers, but wsRef no longer points to it.
+    // BUG-FIX: Null out onclose BEFORE close() to prevent the old instance's onclose from
+    // firing asynchronously and triggering duplicate reconnection logic.
+    if (wsRef.current?.readyState === WebSocket.CONNECTING) {
+      wsRef.current.onclose = null
+      wsRef.current.close()
+      wsRef.current = null
+    }
+
     setStatus('connecting')
     setConnectionError(null)
 
@@ -79,10 +117,17 @@ export function useWebSocket({
         setIsConnected(true)
         setStatus('connected')
         setConnectionError(null)
+        lastErrorRef.current = null
         reconnectAttemptsRef.current = 0
-        onOpen?.()
+        onOpenRef.current?.()
       }
 
+      // NT-010: WebSocket message type routing:
+      // This layer (useWebSocket) handles protocol-level messages:
+      //   - 'error'  → sets connectionError + errorHint state
+      //   - 'status' → sets connectionMessage (e.g., remote retry progress)
+      //   - non-JSON  → forwarded to onMessage callback (terminal data for TerminalView)
+      // TerminalView's onMessage callback handles the raw terminal data (ANSI output).
       ws.onmessage = (event) => {
         // Try to parse as JSON for error/status messages
         try {
@@ -106,20 +151,27 @@ export function useWebSocket({
           // Not JSON, treat as terminal data
         }
 
-        onMessage?.(event.data)
+        onMessageRef.current?.(event.data)
       }
 
       ws.onerror = (error) => {
         console.error('WebSocket error:', error)
-        setConnectionError(new Error('WebSocket connection error'))
+        const err = new Error(`WebSocket error: ${(error as Event).type || 'unknown'}`)
+        lastErrorRef.current = err
+        setConnectionError(err)
         setStatus('error')
-        onError?.(error)
+        onErrorRef.current?.(error)
       }
 
       ws.onclose = (event) => {
         setIsConnected(false)
-        setStatus('disconnected')
-        onClose?.()
+        // BUG-FIX: If onerror fired just before onclose, preserve 'error' status
+        // so the UI can distinguish connection errors from clean disconnects.
+        if (!lastErrorRef.current) {
+          setStatus('disconnected')
+        }
+        lastErrorRef.current = null
+        onCloseRef.current?.()
 
         // Close code 4000 = permanent failure, don't retry (e.g., remote host unreachable after retries)
         if (event.code === 4000) {
@@ -128,13 +180,15 @@ export function useWebSocket({
           return
         }
 
-        // Attempt reconnection for transient failures
+        // Attempt reconnection for transient failures with exponential backoff
         if (reconnectAttemptsRef.current < WS_MAX_RECONNECT_ATTEMPTS) {
+          // SF-011: Use exponential backoff delay from the documented backoff array
+          const delay = WS_RECONNECT_BACKOFF[reconnectAttemptsRef.current] ?? WS_RECONNECT_BACKOFF[WS_RECONNECT_BACKOFF.length - 1]
           reconnectAttemptsRef.current++
 
           reconnectTimeoutRef.current = setTimeout(() => {
             connect()
-          }, WS_RECONNECT_DELAY)
+          }, delay)
         } else {
           setConnectionError(
             new Error('Failed to connect after maximum reconnection attempts')
@@ -145,17 +199,26 @@ export function useWebSocket({
       wsRef.current = ws
     } catch (error) {
       console.error('Failed to create WebSocket:', error)
-      setConnectionError(error as Error)
+      // SF-009: Safe error coercion — WebSocket constructor can throw non-Error types
+      setConnectionError(error instanceof Error ? error : new Error(String(error)))
       setStatus('error')
     }
-  }, [getWebSocketUrl, onMessage, onOpen, onClose, onError])
+  }, [getWebSocketUrl])
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
     }
 
+    // MF-008: Reset reconnect counter so next connect() starts fresh
+    reconnectAttemptsRef.current = 0
+
     if (wsRef.current) {
+      // BUG-FIX: Null out onclose BEFORE close() so the asynchronous onclose handler
+      // cannot fire after disconnect() returns. Without this, close() triggers onclose
+      // which schedules a reconnection setTimeout that nobody clears — causing a new
+      // WebSocket to open after the component has unmounted.
+      wsRef.current.onclose = null
       wsRef.current.close()
       wsRef.current = null
     }
@@ -164,7 +227,10 @@ export function useWebSocket({
     setStatus('disconnected')
   }, [])
 
-  // Auto-connect on mount or when autoConnect changes
+  // Auto-connect on mount or when connection parameters change
+  // NT-019: Include hostId and socketPath in deps -- changing host/socket should
+  // trigger disconnect (which resets reconnectAttemptsRef) then reconnect
+  // SF-041: Include connect and disconnect in deps for React hooks exhaustive-deps correctness
   useEffect(() => {
     if (autoConnect) {
       connect()
@@ -175,8 +241,7 @@ export function useWebSocket({
     return () => {
       disconnect()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, autoConnect]) // Reconnect when session changes or visibility changes
+  }, [sessionId, hostId, socketPath, autoConnect, connect, disconnect])
 
   return {
     isConnected,

@@ -1,6 +1,12 @@
 'use client'
 
+// TODO Phase 2: Wrap in a React Context at app level so all consumers share one WebSocket connection
+
 import { useState, useEffect, useCallback, useRef } from 'react'
+
+// Exponential backoff delays for WebSocket reconnection (matches useWebSocket pattern)
+const RECONNECT_BACKOFF_MS = [2000, 4000, 8000, 16000, 30000]
+const MAX_RECONNECT_RETRIES = 5
 
 export type SessionActivityStatus = 'active' | 'idle' | 'waiting'
 
@@ -8,6 +14,20 @@ export interface SessionActivityInfo {
   lastActivity: string
   status: SessionActivityStatus
   hookStatus?: string
+  /**
+   * The type of prompt Claude Code is currently displaying, reported by
+   * the session-tracking hook running inside each tmux session.
+   *
+   * Values:
+   *   - 'idle_prompt': Claude finished processing and shows its input prompt
+   *     (the ">" or similar). This is the safe state where Stop/Restart can
+   *     be sent without interrupting work. The agent badge shows "Waiting" (amber).
+   *   - 'permission_prompt': Claude is blocked asking the user to approve a
+   *     tool use (file write, bash command, etc.). The Approve button becomes
+   *     active. The agent badge shows "Permission" (orange).
+   *   - undefined: No prompt detected yet — Claude is either actively processing
+   *     or the hook hasn't reported. The badge falls through to 'Active' or 'Idle'.
+   */
   notificationType?: string
 }
 
@@ -31,6 +51,42 @@ export function useSessionActivity() {
   const [connected, setConnected] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  // Track reconnect attempt count for exponential backoff (reset on successful connect)
+  const reconnectAttemptRef = useRef(0)
+
+  // Polling control via refs (avoids circular deps with connect)
+  const startPollingRef = useRef<() => void>(() => {})
+  const stopPollingRef = useRef<() => void>(() => {})
+
+  // Fallback: Poll API if WebSocket fails
+  const fetchActivity = useCallback(async () => {
+    try {
+      const response = await fetch('/api/sessions/activity')
+      if (response.ok) {
+        const data = await response.json()
+        setActivity(data.activity || {})
+        setLoading(false)
+      }
+    } catch (err) {
+      console.error('[useSessionActivity] Poll failed:', err)
+      setError(err instanceof Error ? err : new Error('Fetch failed'))
+      setLoading(false)
+    }
+  }, [])
+
+  // Set up polling functions
+  startPollingRef.current = () => {
+    if (!pollIntervalRef.current) {
+      pollIntervalRef.current = setInterval(fetchActivity, 30000) // 30s safety net
+    }
+  }
+  stopPollingRef.current = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+  }
 
   const connect = useCallback(() => {
     // Clean up existing connection
@@ -47,6 +103,12 @@ export function useSessionActivity() {
         console.log('[useSessionActivity] WebSocket connected')
         setConnected(true)
         setError(null)
+        // Ensure loading is cleared even if no initial_status message arrives
+        setLoading(false)
+        // Reset retry counter on successful connection
+        reconnectAttemptRef.current = 0
+        // Stop aggressive polling — WebSocket handles real-time updates
+        stopPollingRef.current()
       }
 
       ws.onmessage = (event) => {
@@ -54,18 +116,33 @@ export function useSessionActivity() {
           const data = JSON.parse(event.data)
 
           if (data.type === 'initial_status') {
-            // Initial status from server
-            setActivity(data.activity || {})
+            // Initial status from server — validate activity is a plain object
+            const activityPayload = data.activity
+            if (activityPayload && typeof activityPayload === 'object' && !Array.isArray(activityPayload)) {
+              setActivity(activityPayload)
+            } else {
+              setActivity({})
+            }
             setLoading(false)
-          } else if (data.type === 'status_update') {
-            // Real-time status update
+          } else if (
+            data.type === 'status_update' &&
+            typeof data.sessionName === 'string' &&
+            data.sessionName &&
+            // Reject __proto__ / constructor / prototype keys to prevent prototype pollution
+            !['__proto__', 'constructor', 'prototype'].includes(data.sessionName)
+          ) {
+            // Validate status is one of the allowed values
+            const validStatuses: readonly string[] = ['active', 'idle', 'waiting']
+            const status: SessionActivityStatus = validStatuses.includes(data.status) ? data.status : 'idle'
+
+            // Real-time status update — only extract known fields
             setActivity(prev => ({
               ...prev,
               [data.sessionName]: {
-                lastActivity: data.timestamp,
-                status: data.status,
-                hookStatus: data.hookStatus,
-                notificationType: data.notificationType
+                lastActivity: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString(),
+                status,
+                hookStatus: typeof data.hookStatus === 'string' ? data.hookStatus : undefined,
+                notificationType: typeof data.notificationType === 'string' ? data.notificationType : undefined,
               }
             }))
           }
@@ -77,12 +154,19 @@ export function useSessionActivity() {
       ws.onclose = () => {
         console.log('[useSessionActivity] WebSocket disconnected')
         setConnected(false)
+        // Resume polling as fallback
+        startPollingRef.current()
 
-        // Reconnect after 2 seconds
-        reconnectTimeoutRef.current = setTimeout(() => {
-          console.log('[useSessionActivity] Reconnecting...')
-          connect()
-        }, 2000)
+        // Exponential backoff reconnect — give up after MAX_RECONNECT_RETRIES and rely on polling permanently
+        const attempt = reconnectAttemptRef.current
+        if (attempt < MAX_RECONNECT_RETRIES) {
+          const delay = RECONNECT_BACKOFF_MS[Math.min(attempt, RECONNECT_BACKOFF_MS.length - 1)]
+          reconnectAttemptRef.current = attempt + 1
+          console.log(`[useSessionActivity] Reconnecting in ${delay}ms (attempt ${attempt + 1}/${MAX_RECONNECT_RETRIES})...`)
+          reconnectTimeoutRef.current = setTimeout(() => connect(), delay)
+        } else {
+          console.log('[useSessionActivity] Max reconnect retries reached — falling back to polling permanently')
+        }
       }
 
       ws.onerror = (err) => {
@@ -96,21 +180,7 @@ export function useSessionActivity() {
     }
   }, [])
 
-  // Fallback: Poll API if WebSocket fails
-  const fetchActivity = useCallback(async () => {
-    try {
-      const response = await fetch('/api/sessions/activity')
-      if (response.ok) {
-        const data = await response.json()
-        setActivity(data.activity || {})
-        setLoading(false)
-      }
-    } catch (err) {
-      console.error('[useSessionActivity] Poll failed:', err)
-    }
-  }, [])
-
-  // Connect on mount and poll as fallback
+  // Connect on mount, poll as fallback until WebSocket is up
   useEffect(() => {
     // Initial fetch immediately
     fetchActivity()
@@ -118,11 +188,11 @@ export function useSessionActivity() {
     // Try WebSocket connection
     connect()
 
-    // Poll every 2s as fallback (WebSocket updates will override if connected)
-    const pollInterval = setInterval(fetchActivity, 2000)
+    // Start polling as fallback until WebSocket connects
+    startPollingRef.current()
 
     return () => {
-      clearInterval(pollInterval)
+      stopPollingRef.current()
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
       }

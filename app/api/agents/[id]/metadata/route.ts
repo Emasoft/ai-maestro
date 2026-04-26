@@ -1,16 +1,26 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getAgent, updateAgent } from '@/lib/agent-registry'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
+import { isValidUuid } from '@/lib/validation'
 
 /**
  * GET /api/agents/[id]/metadata
  * Get agent metadata (custom key-value pairs)
+ *
+ * NOTE: No service function exists for metadata yet.
+ * This route uses agent-registry directly until a service is created.
  */
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const agent = getAgent(params.id)
+    const { id: agentId } = await params
+    if (!isValidUuid(agentId)) {
+      return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
+    const agent = getAgent(agentId)
 
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
@@ -28,13 +38,50 @@ export async function GET(
  * Update agent metadata (merges with existing metadata)
  */
 export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const metadata = await request.json()
+    const { id: agentId } = await params
+    if (!isValidUuid(agentId)) {
+      return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', agentId)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
+    let metadata
+    try { metadata = await request.json() } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    // Validate metadata is a plain object with depth/size limits
+    if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+      return NextResponse.json({ error: 'Metadata must be a plain object' }, { status: 400 })
+    }
+    const metadataStr = JSON.stringify(metadata)
+    if (metadataStr.length > 65536) {
+      return NextResponse.json({ error: 'Metadata exceeds maximum size (64KB)' }, { status: 400 })
+    }
+    // Check nesting depth (max 5 levels)
+    const checkDepth = (obj: unknown, depth: number): boolean => {
+      if (depth > 5) return false
+      if (obj !== null && typeof obj === 'object') {
+        for (const val of Object.values(obj as Record<string, unknown>)) {
+          if (!checkDepth(val, depth + 1)) return false
+        }
+      }
+      return true
+    }
+    if (!checkDepth(metadata, 1)) {
+      return NextResponse.json({ error: 'Metadata exceeds maximum nesting depth (5)' }, { status: 400 })
+    }
 
-    const agent = updateAgent(params.id, { metadata })
+    const agent = await updateAgent(agentId, { metadata })
 
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
@@ -42,9 +89,12 @@ export async function PATCH(
 
     return NextResponse.json({ metadata: agent.metadata })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to update metadata'
+    // Differentiate validation errors (400) from internal errors (500)
     console.error('Failed to update agent metadata:', error)
-    return NextResponse.json({ error: message }, { status: 400 })
+    if (error instanceof TypeError || (error instanceof Error && error.message.includes('Invalid'))) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -53,11 +103,36 @@ export async function PATCH(
  * Clear all agent metadata
  */
 export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const agent = updateAgent(params.id, { metadata: {} })
+    const { id: agentId } = await params
+    if (!isValidUuid(agentId)) {
+      return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', agentId)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
+    // MF-001 fix: Read current metadata keys and set each to undefined,
+    // because updateAgent merges via spread (empty object is a no-op)
+    const existing = getAgent(agentId)
+    if (!existing) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    }
+    const nulledMetadata: Record<string, undefined> = {}
+    if (existing.metadata) {
+      for (const key of Object.keys(existing.metadata)) {
+        nulledMetadata[key] = undefined
+      }
+    }
+    const agent = await updateAgent(agentId, { metadata: nulledMetadata as Record<string, unknown> })
 
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })

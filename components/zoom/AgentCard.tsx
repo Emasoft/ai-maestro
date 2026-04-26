@@ -42,7 +42,7 @@ export default function AgentCard({
   const [isShuttingDown, setIsShuttingDown] = useState(false)
   const [showEmailPopup, setShowEmailPopup] = useState(false)
 
-  const displayName = agent.label || agent.name || agent.alias || 'Unnamed Agent'
+  const displayName = agent.label || agent.name || 'Unnamed Agent'
   const initials = displayName
     .split(/[\s-_]+/)
     .map(word => word[0])
@@ -87,17 +87,18 @@ export default function AgentCard({
     setIsShuttingDown(true)
     try {
       const baseUrl = agent.hostUrl || ''
-      const response = await fetch(`${baseUrl}/api/agents/${agent.id}/shutdown`, {
+      // Use hibernate endpoint (shutdown doesn't exist)
+      const response = await fetch(`${baseUrl}/api/agents/${agent.id}/hibernate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })
 
       if (!response.ok) {
-        throw new Error('Failed to shutdown agent')
+        throw new Error('Failed to hibernate agent')
       }
       onShutdown?.()
     } catch (error) {
-      console.error('Failed to shutdown agent:', error)
+      console.error('Failed to hibernate agent:', error)
     } finally {
       setIsShuttingDown(false)
     }
@@ -167,7 +168,7 @@ export default function AgentCard({
                 onClick={handleShutdown}
                 disabled={isShuttingDown}
                 className="text-red-400 hover:text-red-300 disabled:text-red-600 transition-colors"
-                title="Shutdown Agent"
+                title="Hibernate Agent"
               >
                 {isShuttingDown ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

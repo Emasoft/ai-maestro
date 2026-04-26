@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# post-commit — project-scoped git hook
+# Delegates to Git LFS post-commit (preserves LFS locking post-commit logic).
+
+if command -v git-lfs >/dev/null 2>&1; then
+  exec git lfs post-commit "$@"
+else
+  printf '\n%s\n\n' "This repository is configured for Git LFS but 'git-lfs' was not found on your PATH." >&2
+  exit 2
+fi

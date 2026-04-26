@@ -1,48 +1,39 @@
-import { NextResponse } from 'next/server'
-import {
-  listAgentInboxMessages,
-  listAgentSentMessages,
-  sendAgentMessage,
-  getAgentMessageStats
-} from '@/lib/agent-messaging'
+import { NextRequest, NextResponse } from 'next/server'
+import { listMessages, sendMessage } from '@/services/agents-messaging-service'
+import { isValidUuid } from '@/lib/validation'
+import { enforceAuth } from '@/lib/route-auth'
 
 /**
  * GET /api/agents/[id]/messages
- * List messages for an agent (inbox or sent)
+ * List messages for an agent (inbox, sent, or stats)
  */
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const { searchParams } = new URL(request.url)
-    const box = searchParams.get('box') || 'inbox'
-    const status = searchParams.get('status') as any
-    const priority = searchParams.get('priority') as any
-    const from = searchParams.get('from') || undefined
-    const to = searchParams.get('to') || undefined
-
-    if (box === 'sent') {
-      const messages = await listAgentSentMessages(params.id, {
-        priority,
-        to
-      })
-      return NextResponse.json({ messages })
-    } else if (box === 'stats') {
-      const stats = await getAgentMessageStats(params.id)
-      return NextResponse.json({ stats })
-    } else {
-      const messages = await listAgentInboxMessages(params.id, {
-        status,
-        priority,
-        from
-      })
-      return NextResponse.json({ messages })
+    const { id } = await params
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
+    // SF-001 fix: Use NextRequest.nextUrl.searchParams instead of new URL(request.url)
+    const searchParams = request.nextUrl.searchParams
+
+    const result = await listMessages(id, {
+      box: searchParams.get('box') || undefined,
+      status: searchParams.get('status') || undefined,
+      priority: searchParams.get('priority') || undefined,
+      from: searchParams.get('from') || undefined,
+      to: searchParams.get('to') || undefined,
+    })
+
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data)
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to list messages'
-    console.error('Failed to list messages:', error)
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error('[Messages GET] Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -51,31 +42,32 @@ export async function GET(
  * Send a message from this agent to another agent
  */
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  try {
-    const { to, subject, content, priority, inReplyTo } = await request.json()
+  // AMP send-message mutation — authenticate before any dispatch.
+  // Agents use their AID bearer token; the web UI uses the session cookie.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
 
-    if (!to || !subject || !content) {
-      return NextResponse.json(
-        { error: 'Missing required fields: to, subject, content' },
-        { status: 400 }
-      )
+  try {
+    const { id } = await params
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
+    let body
+    try { body = await request.json() } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    const message = await sendAgentMessage(
-      params.id,
-      to,
-      subject,
-      content,
-      { priority, inReplyTo }
-    )
+    const result = await sendMessage(id, body)
 
-    return NextResponse.json({ message }, { status: 201 })
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to send message'
-    console.error('Failed to send message:', error)
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error('[Messages POST] Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

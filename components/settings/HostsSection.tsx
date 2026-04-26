@@ -1,9 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Server, Plus, Trash2, Edit2, CheckCircle, X, AlertCircle, Loader2, ArrowUpCircle, Package, Users, Wifi, RefreshCw, Link2 } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Server, Plus, Trash2, Edit2, CheckCircle, X, AlertCircle, Loader2, ArrowUpCircle, Package, Users, Wifi, RefreshCw, Link2, Building2, User, Smartphone, Copy, Check, LogOut, Image as ImageIcon } from 'lucide-react'
 import type { Host } from '@/types/host'
 import localVersion from '@/version.json'
+import GovernancePasswordDialog from '@/components/governance/GovernancePasswordDialog'
+import HostToolsSection from './HostToolsSection'
+import AvatarPicker from '@/components/AvatarPicker'
+
+interface OrganizationInfo {
+  organization: string | null
+  setAt: string | null
+  setBy: string | null
+  isSet: boolean
+}
 
 interface SyncResult {
   localAdd: boolean
@@ -39,6 +49,36 @@ export default function HostsSection() {
   const [healthStatus, setHealthStatus] = useState<Record<string, 'checking' | 'online' | 'offline'>>({})
   const [hostVersions, setHostVersions] = useState<Record<string, string>>({})
   const [hostSessionCounts, setHostSessionCounts] = useState<Record<string, number>>({})
+  const [organizationInfo, setOrganizationInfo] = useState<OrganizationInfo | null>(null)
+
+  // Mobile access URL copy feedback
+  const [copiedHostId, setCopiedHostId] = useState<string | null>(null)
+
+  // Governance state for local host user + password section
+  const [governanceUserName, setGovernanceUserName] = useState<string | null>(null)
+  const [governanceUserAvatar, setGovernanceUserAvatar] = useState<string | null>(null)
+  const [governanceHasPassword, setGovernanceHasPassword] = useState(false)
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false)
+  const [passwordDialogMode, setPasswordDialogMode] = useState<'setup' | 'confirm'>('setup')
+  const [editingUserName, setEditingUserName] = useState(false)
+  const [userNameDraft, setUserNameDraft] = useState('')
+  const [savingUserName, setSavingUserName] = useState(false)
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  // Passkey state
+  interface PasskeyCredential {
+    credentialID: string
+    label: string
+    createdAt: string
+    transports: string[]
+    counter: number
+  }
+  const [passkeys, setPasskeys] = useState<PasskeyCredential[]>([])
+  const [loadingPasskeys, setLoadingPasskeys] = useState(false)
+  const [registeringPasskey, setRegisteringPasskey] = useState(false)
+  const [passkeyError, setPasskeyError] = useState<string | null>(null)
+  const [deletingPasskeyId, setDeletingPasskeyId] = useState<string | null>(null)
 
   // Form state
   const [formData, setFormData] = useState<Partial<Host>>({
@@ -51,10 +91,224 @@ export default function HostsSection() {
     tailscale: false,
   })
 
-  // Load hosts on mount
+  // Load hosts, organization, governance, and passkeys on mount
   useEffect(() => {
     fetchHosts()
+    fetchOrganization()
+    fetchGovernance()
+    fetchPasskeys()
   }, [])
+
+  const fetchGovernance = async () => {
+    try {
+      const response = await fetch('/api/governance')
+      if (response.ok) {
+        const data = await response.json()
+        setGovernanceUserName(data.userName ?? null)
+        setGovernanceUserAvatar(data.userAvatar ?? null)
+        setGovernanceHasPassword(!!data.hasPassword)
+      }
+    } catch (err) {
+      console.error('Failed to fetch governance:', err)
+    }
+  }
+
+  const saveUserName = async () => {
+    const trimmed = userNameDraft.trim()
+    if (!trimmed || trimmed === governanceUserName) {
+      setEditingUserName(false)
+      return
+    }
+    setSavingUserName(true)
+    try {
+      const res = await fetch('/api/governance/user', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userName: trimmed }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setGovernanceUserName(data.userName ?? trimmed)
+        setEditingUserName(false)
+      } else {
+        const err = await res.json().catch(() => ({ error: 'Save failed' }))
+        console.error('[HostsSection] saveUserName failed:', err.error)
+      }
+    } catch (err) {
+      console.error('[HostsSection] saveUserName error:', err)
+    } finally {
+      setSavingUserName(false)
+    }
+  }
+
+  const saveUserAvatar = async (avatarUrl: string) => {
+    try {
+      const res = await fetch('/api/governance/user', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAvatar: avatarUrl }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setGovernanceUserAvatar(data.userAvatar ?? avatarUrl)
+      }
+    } catch (err) {
+      console.error('[HostsSection] saveUserAvatar error:', err)
+    } finally {
+      setShowAvatarPicker(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+      // Hard redirect to login page to clear client state
+      window.location.href = '/'
+    } catch (err) {
+      console.error('[HostsSection] logout error:', err)
+      setLoggingOut(false)
+    }
+  }
+
+  // ── Passkey management ──────────────────────────────────────
+
+  const fetchPasskeys = async () => {
+    setLoadingPasskeys(true)
+    try {
+      const res = await fetch('/api/auth/webauthn/credentials')
+      if (res.ok) {
+        const data = await res.json()
+        setPasskeys(data.credentials ?? [])
+      }
+    } catch (err) {
+      console.error('[HostsSection] fetchPasskeys error:', err)
+    } finally {
+      setLoadingPasskeys(false)
+    }
+  }
+
+  const registerPasskey = async () => {
+    setRegisteringPasskey(true)
+    setPasskeyError(null)
+    try {
+      // 1. Get registration options from server
+      const optionsRes = await fetch('/api/auth/webauthn/register')
+      if (!optionsRes.ok) {
+        const err = await optionsRes.json().catch(() => ({ error: 'Failed to get registration options' }))
+        throw new Error(err.error || 'Failed to get registration options')
+      }
+      const options = await optionsRes.json()
+
+      // 2. Call WebAuthn browser API
+      const { startRegistration } = await import('@simplewebauthn/browser')
+      const regResponse = await startRegistration({ optionsJSON: options })
+
+      // 3. Get a sudo token (passkey registration is a privileged operation)
+      const sudoToken = await getSudoTokenForPasskey()
+      if (!sudoToken) {
+        throw new Error('Sudo authentication required to register a passkey')
+      }
+
+      // 4. Send registration response to server for verification
+      const verifyRes = await fetch('/api/auth/webauthn/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Sudo-Token': sudoToken,
+        },
+        body: JSON.stringify({
+          response: regResponse,
+          label: `Passkey ${new Date().toLocaleDateString()}`,
+        }),
+      })
+
+      if (!verifyRes.ok) {
+        const err = await verifyRes.json().catch(() => ({ error: 'Registration verification failed' }))
+        throw new Error(err.error || 'Registration verification failed')
+      }
+
+      // 5. Refresh the passkeys list
+      await fetchPasskeys()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Passkey registration failed'
+      // WebAuthn user cancellation is not an error
+      if (msg.includes('NotAllowedError') || msg.includes('AbortError')) {
+        setPasskeyError(null) // User cancelled, not an error
+      } else {
+        setPasskeyError(msg)
+        console.error('[HostsSection] registerPasskey error:', err)
+      }
+    } finally {
+      setRegisteringPasskey(false)
+    }
+  }
+
+  const deletePasskey = async (credentialID: string) => {
+    setDeletingPasskeyId(credentialID)
+    setPasskeyError(null)
+    try {
+      const sudoToken = await getSudoTokenForPasskey()
+      if (!sudoToken) {
+        throw new Error('Sudo authentication required to delete a passkey')
+      }
+
+      const res = await fetch('/api/auth/webauthn/credentials', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Sudo-Token': sudoToken,
+        },
+        body: JSON.stringify({ credentialID }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Delete failed' }))
+        throw new Error(err.error || 'Delete failed')
+      }
+
+      await fetchPasskeys()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete passkey'
+      setPasskeyError(msg)
+      console.error('[HostsSection] deletePasskey error:', err)
+    } finally {
+      setDeletingPasskeyId(null)
+    }
+  }
+
+  /**
+   * Get a sudo token by prompting the user for the governance password.
+   * Uses the existing sudo-password API endpoint.
+   */
+  const getSudoTokenForPasskey = async (): Promise<string | null> => {
+    const password = window.prompt('Enter governance password to confirm:')
+    if (!password) return null
+    try {
+      const res = await fetch('/api/auth/sudo-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      return data.token ?? null
+    } catch {
+      return null
+    }
+  }
+
+  const fetchOrganization = async () => {
+    try {
+      const response = await fetch('/api/organization')
+      if (response.ok) {
+        const data = await response.json()
+        setOrganizationInfo(data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch organization:', err)
+    }
+  }
 
   // Function to refresh all hosts health/version
   const refreshAllHosts = () => {
@@ -112,17 +366,20 @@ export default function HostsSection() {
       } else {
         setHealthStatus(prev => ({ ...prev, [host.id]: 'offline' }))
       }
-    } catch {
+    } catch (err) {
+      console.error(`Health check failed for ${host.id}:`, err)
       setHealthStatus(prev => ({ ...prev, [host.id]: 'offline' }))
     }
   }
 
-  // Auto-check health for all hosts on mount to get versions
+  // Auto-check health for all hosts once after first load
+  const healthCheckedRef = useRef(false)
   useEffect(() => {
-    if (hosts.length > 0) {
+    if (hosts.length > 0 && !healthCheckedRef.current) {
+      healthCheckedRef.current = true
       refreshAllHosts()
     }
-  }, [hosts]) // Run when hosts change (not just length)
+  }, [hosts])
 
   const fetchHosts = async () => {
     try {
@@ -280,8 +537,49 @@ export default function HostsSection() {
     )
   }
 
+  // Format date for display
+  const formatDate = (isoString: string | null) => {
+    if (!isoString) return 'Unknown'
+    try {
+      return new Date(isoString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      })
+    } catch {
+      return 'Unknown'
+    }
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
+      {/* Organization Banner */}
+      {organizationInfo?.isSet && (
+        <div className="p-4 bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-500/30 rounded-xl">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-blue-500/20 rounded-lg">
+              <Building2 className="w-5 h-5 text-blue-400" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-lg font-semibold text-white">Organization</h2>
+                <span className="px-2 py-0.5 text-xs bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded">
+                  Permanent
+                </span>
+              </div>
+              <p className="text-xl font-mono text-blue-300 mb-2">{organizationInfo.organization}</p>
+              <p className="text-xs text-gray-500">
+                Set by <span className="text-gray-400">{organizationInfo.setBy}</span> on{' '}
+                <span className="text-gray-400">{formatDate(organizationInfo.setAt)}</span>
+              </p>
+              <p className="text-xs text-gray-600 mt-2">
+                Agents are addressed as: <code className="text-blue-400">name@{organizationInfo.organization}.aimaestro.local</code>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -466,6 +764,177 @@ export default function HostsSection() {
                       </>
                     )}
                   </div>
+
+                  {/* User sub-section — only for the local host */}
+                  {host.isSelf && (
+                    <div className="mt-3 p-3 bg-gray-900/60 border border-gray-700/60 rounded-lg">
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2">
+                          <User className="w-3.5 h-3.5 text-gray-400" />
+                          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">User</span>
+                        </div>
+                        <button
+                          onClick={handleLogout}
+                          disabled={loggingOut}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-red-700/30 hover:bg-red-700/50 text-red-300 rounded transition-colors disabled:opacity-50"
+                          title="End session and return to login"
+                        >
+                          {loggingOut ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogOut className="w-3 h-3" />}
+                          Logout
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        {/* Avatar */}
+                        <button
+                          onClick={() => setShowAvatarPicker(true)}
+                          className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-800 border-2 border-gray-700 hover:border-emerald-500/60 transition-colors flex-shrink-0 group"
+                          title="Change avatar"
+                        >
+                          {governanceUserAvatar ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={governanceUserAvatar}
+                              alt="User avatar"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-700 to-gray-800">
+                              <User className="w-5 h-5 text-gray-400" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/50 transition-opacity">
+                            <ImageIcon className="w-4 h-4 text-white" />
+                          </div>
+                        </button>
+
+                        {/* Name + password */}
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          {editingUserName ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                value={userNameDraft}
+                                onChange={(e) => setUserNameDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveUserName()
+                                  if (e.key === 'Escape') setEditingUserName(false)
+                                }}
+                                autoFocus
+                                disabled={savingUserName}
+                                className="flex-1 px-2 py-1 text-sm bg-gray-800 border border-gray-700 rounded text-gray-200 focus:outline-none focus:border-emerald-500"
+                                maxLength={64}
+                              />
+                              <button
+                                onClick={saveUserName}
+                                disabled={savingUserName}
+                                className="p-1 text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
+                                title="Save"
+                              >
+                                {savingUserName ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                              </button>
+                              <button
+                                onClick={() => setEditingUserName(false)}
+                                disabled={savingUserName}
+                                className="p-1 text-gray-400 hover:text-gray-300 disabled:opacity-50"
+                                title="Cancel"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-200 font-mono truncate">
+                                {governanceUserName ?? '…'}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  setUserNameDraft(governanceUserName ?? '')
+                                  setEditingUserName(true)
+                                }}
+                                className="p-0.5 text-gray-500 hover:text-gray-300"
+                                title="Edit name"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2">
+                            {governanceHasPassword ? (
+                              <>
+                                <span className="text-xs text-gray-500">Password: ●●●●●●</span>
+                                <button
+                                  onClick={() => { setPasswordDialogMode('confirm'); setShowPasswordDialog(true) }}
+                                  className="px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+                                >
+                                  Change
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-xs text-gray-500">Password: Not set</span>
+                                <button
+                                  onClick={() => { setPasswordDialogMode('setup'); setShowPasswordDialog(true) }}
+                                  className="px-2 py-0.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded transition-colors"
+                                >
+                                  Set Password
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Mobile Access URL — shown for all hosts with a Tailscale URL */}
+                  {host.url && /\/\/100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host.url) && (
+                    <div className="mt-3 p-3 bg-gray-900/60 border border-gray-700/60 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Smartphone className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+                          Mobile / Remote Access
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 text-sm text-blue-300 bg-gray-800 px-3 py-1.5 rounded font-mono truncate select-all">
+                          {host.url}
+                        </code>
+                        <button
+                          onClick={async () => {
+                            try {
+                              if (navigator.clipboard) {
+                                await navigator.clipboard.writeText(host.url)
+                              } else {
+                                // Fallback for non-secure contexts (HTTP over Tailscale)
+                                const textarea = document.createElement('textarea')
+                                textarea.value = host.url
+                                textarea.style.position = 'fixed'
+                                textarea.style.opacity = '0'
+                                document.body.appendChild(textarea)
+                                textarea.select()
+                                document.execCommand('copy')
+                                document.body.removeChild(textarea)
+                              }
+                              setCopiedHostId(host.id)
+                              setTimeout(() => setCopiedHostId(null), 2000)
+                            } catch { /* copy failed silently */ }
+                          }}
+                          className="p-1.5 text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 rounded transition-colors flex-shrink-0"
+                          title="Copy URL"
+                        >
+                          {copiedHostId === host.id
+                            ? <Check className="w-3.5 h-3.5 text-green-400" />
+                            : <Copy className="w-3.5 h-3.5" />
+                          }
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-1.5">
+                        Open in Safari or Chrome on any device with Tailscale VPN connected
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -513,6 +982,11 @@ export default function HostsSection() {
         </div>
       )}
 
+      {/* Host Tools — install/update scripts for this machine */}
+      <div className="mt-2 pt-6 border-t border-gray-700/50">
+        <HostToolsSection />
+      </div>
+
       {/* Add Host Wizard */}
       {showWizard && (
         <AddHostWizard
@@ -523,6 +997,28 @@ export default function HostsSection() {
           }}
         />
       )}
+
+      {/* Governance password dialog — for local host user section */}
+      <GovernancePasswordDialog
+        isOpen={showPasswordDialog}
+        onClose={() => setShowPasswordDialog(false)}
+        mode={passwordDialogMode}
+        initialUserName={governanceUserName ?? undefined}
+        onPasswordConfirmed={async () => {
+          setShowPasswordDialog(false)
+          // Re-fetch governance so the UI reflects the updated state (userName + hasPassword)
+          await fetchGovernance()
+        }}
+      />
+
+      {/* Avatar picker for the local user */}
+      <AvatarPicker
+        isOpen={showAvatarPicker}
+        onClose={() => setShowAvatarPicker(false)}
+        onSelect={saveUserAvatar}
+        currentAvatar={governanceUserAvatar ?? undefined}
+        usedAvatars={[]}
+      />
     </div>
   )
 }

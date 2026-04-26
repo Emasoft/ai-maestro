@@ -26,6 +26,13 @@ export interface Session {
   hostName?: string             // Human-readable host name (e.g., "Mac Mini")
   remote?: boolean              // true if session is on a remote host
   version?: string              // AI Maestro version (e.g., "0.9.2")
+
+  // Docker container metadata
+  containerAgent?: boolean      // true if this session runs in a Docker container
+  containerPort?: number        // Host port mapped to container's 23000
+
+  // Custom tmux socket (e.g., OpenClaw agents)
+  socketPath?: string           // Custom tmux socket path for -S flag
 }
 
 export type SessionStatus = Session['status']

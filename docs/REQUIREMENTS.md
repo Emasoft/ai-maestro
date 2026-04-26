@@ -1,7 +1,7 @@
 # Requirements: Claude Code Dashboard
 
-**Version:** 1.0.0
-**Last Updated:** 2025-10-09
+**Version:** 0.27.3
+**Last Updated:** 2026-04-16
 **Platform:** macOS (Local Development)
 
 ---
@@ -84,7 +84,7 @@ yarn --version  # Should show v1.22.x or v3.x.x
 3. Run installer
 4. Verify installation
 
-### 2.2 tmux
+### 3.2 tmux
 
 tmux is required for session management.
 
@@ -104,12 +104,12 @@ tmux -V  # Should show tmux 3.3a or later
 **Minimum Version:** tmux 3.0a
 **Recommended:** tmux 3.3a or later
 
-### 2.3 Claude Code CLI
+### 3.3 Claude Code CLI
 
 **Installation:**
 ```bash
 # Install Claude Code CLI (check official docs for latest method)
-npm install -g @anthropics/claude-code
+npm install -g @anthropic-ai/claude-code
 
 # Or via curl (if available)
 curl -fsSL https://claude.ai/install.sh | sh
@@ -137,19 +137,20 @@ claude
 
 ---
 
-## 3. Network and Port Requirements
+## 4. Network and Port Requirements
 
 ### Required Ports
 
-**Port 3000** - Next.js application (HTTP + WebSocket)
-- Bound to `localhost` (127.0.0.1) only
-- Not accessible from network
-- No firewall configuration needed
+**Port 23000** - Next.js application (HTTP + WebSocket)
+- Bound to `localhost` (127.0.0.1) by default (`server.mjs` reads `HOSTNAME || '127.0.0.1'`)
+- When Tailscale is installed and a CGNAT IP is detected, the server dual-binds (`::`) and the `isAllowedSource()` TCP filter rejects every non-Tailscale, non-localhost source IP
+- Not accessible from LAN or public Internet
+- No firewall configuration needed for localhost-only use
 
 **Verify port is available:**
 ```bash
-# Check if port 3000 is in use
-lsof -i :3000
+# Check if port 23000 is in use
+lsof -i :23000
 
 # If something is using it, you'll see output
 # If empty, port is available
@@ -158,15 +159,15 @@ lsof -i :3000
 ### Firewall Settings
 
 **macOS Firewall:** No changes required
-- Application only listens on localhost
-- Not accessible from network interfaces
+- Application listens on localhost only (LAN is blocked even if you change `HOSTNAME`)
+- Tailscale peers reach the dashboard over the VPN, not through macOS firewall rules
 - Safe for development use
 
 ---
 
-## 4. Development Tools (Optional but Recommended)
+## 5. Development Tools (Optional but Recommended)
 
-### 4.1 iTerm2 (Enhanced Terminal)
+### 5.1 iTerm2 (Enhanced Terminal)
 
 **Installation:**
 ```bash
@@ -178,7 +179,7 @@ brew install --cask iterm2
 - Split panes and tabs
 - Customizable themes
 
-### 4.2 Git
+### 5.2 Git
 
 **Check if installed:**
 ```bash
@@ -192,7 +193,7 @@ brew install git
 
 ---
 
-## 5. Verification Checklist
+## 6. Verification Checklist
 
 Run this script to verify all requirements:
 
@@ -234,11 +235,11 @@ else
     echo "❌ Claude Code: NOT INSTALLED"
 fi
 
-# Check port 3000
-if lsof -i :3000 &> /dev/null; then
-    echo "⚠️  Port 3000: IN USE (you'll need to stop the process or use a different port)"
+# Check port 23000
+if lsof -i :23000 &> /dev/null; then
+    echo "⚠️  Port 23000: IN USE (you'll need to stop the process or use a different port)"
 else
-    echo "✅ Port 3000: AVAILABLE"
+    echo "✅ Port 23000: AVAILABLE"
 fi
 
 echo ""
@@ -255,7 +256,7 @@ chmod +x check-requirements.sh
 
 ---
 
-## 6. macOS Specific Notes
+## 7. macOS Specific Notes
 
 ### Xcode Command Line Tools
 
@@ -286,13 +287,13 @@ When you first run the dashboard, macOS may ask for permissions:
 
 ---
 
-## 7. Quick Start Installation
+## 8. Quick Start Installation
 
 Once all requirements are met:
 
 ```bash
 # Navigate to the project directory
-cd /Users/juanpelaez/23blocks/webApps/agents-web
+cd ~/ai-maestro
 
 # Install dependencies
 yarn install
@@ -301,12 +302,12 @@ yarn install
 yarn dev
 
 # Open browser
-open http://localhost:3000
+open http://localhost:23000
 ```
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 ### "Command not found: node"
 
@@ -330,32 +331,32 @@ brew reinstall tmux
 
 ```bash
 # Check if installed globally
-npm list -g @anthropics/claude-code
+npm list -g @anthropic-ai/claude-code
 # or
 yarn global list
 
 # Reinstall if needed
-npm install -g @anthropics/claude-code
+npm install -g @anthropic-ai/claude-code
 # or
-yarn global add @anthropics/claude-code
+yarn global add @anthropic-ai/claude-code
 ```
 
-### Port 3000 Already in Use
+### Port 23000 Already in Use
 
 ```bash
 # Find what's using the port
-lsof -i :3000
+lsof -i :23000
 
 # Kill the process (replace PID with actual process ID)
 kill -9 PID
 
 # Or run the dashboard on a different port
-PORT=3001 yarn dev
+PORT=23001 yarn dev
 ```
 
 ---
 
-## 9. Next Steps
+## 10. Next Steps
 
 After completing all requirements:
 
@@ -370,7 +371,7 @@ After completing all requirements:
 
 If you encounter issues:
 - Check [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for common problems
-- Review [TECHNICAL-SPECS.md](./TECHNICAL-SPECS.md) for architecture details
+- Review the architecture notes in the project root `CLAUDE.md` and `docs/GOVERNANCE-RULES.md`
 - Open an issue in the project repository
 
 ---

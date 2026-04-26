@@ -1,0 +1,1168 @@
+/**
+ * Agent Local Config Service
+ *
+ * Scans an agent's .claude/ directory to discover all locally installed
+ * elements (skills, agents, hooks, rules, commands, MCP, LSP, plugins).
+ *
+ * Used by:
+ *   GET /api/agents/[id]/local-config (Next.js route)
+ *   Headless router equivalent
+ */
+
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+import semver from 'semver'
+import {
+  LOCAL_MARKETPLACE_NAME,
+  getLocalMarketplacePath,
+} from '@/lib/ecosystem-constants'
+import { getAgent } from '@/lib/agent-registry'
+import type { ServiceResult } from '@/types/service'
+import type {
+  AgentLocalConfig,
+  LocalSkill,
+  LocalAgent,
+  LocalHook,
+  LocalRule,
+  LocalCommand,
+  LocalMcpServer,
+  LocalLspServer,
+  LocalOutputStyle,
+  LocalPlugin,
+  RolePlugin,
+  GlobalDependencies,
+} from '@/types/agent-local-config'
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export function scanAgentLocalConfig(agentId: string): ServiceResult<AgentLocalConfig> {
+  try {
+    const agent = getAgent(agentId)
+    if (!agent) {
+      return { error: 'Agent not found', status: 404 }
+    }
+
+    const workDir = agent.workingDirectory || agent.sessions?.[0]?.workingDirectory
+    if (!workDir) {
+      return { error: 'Agent has no working directory configured', status: 422 }
+    }
+
+    // Resolve to absolute path and validate it exists as a directory
+    const resolvedWorkDir = path.resolve(workDir)
+    if (!fs.existsSync(resolvedWorkDir) || !fs.statSync(resolvedWorkDir).isDirectory()) {
+      return { error: 'Agent working directory does not exist', status: 422 }
+    }
+
+    const claudeDir = path.join(resolvedWorkDir, '.claude')
+    const codexInstalledDir = path.join(resolvedWorkDir, '.codex', 'installed-plugins')
+
+    // BUG-001 FIX (SCEN-013): For non-Claude clients (Codex/Gemini/OpenCode/Kiro),
+    // .claude/ may not exist OR may exist but be empty — the agent DOES have
+    // plugins installed at client-native paths (e.g. .codex/installed-plugins/,
+    // .codex-plugin/). Previously this path returned an empty config, causing
+    // the Config tab to show "Plugins 0" even when R17 core plugin IS installed.
+    //
+    // Priority: if .codex/installed-plugins/ exists, use the Codex scanner.
+    // Otherwise, fall through to the Claude scanner (empty .claude/ returns empty).
+    if (fs.existsSync(codexInstalledDir)) {
+      return { data: scanCodexDirectory(resolvedWorkDir), status: 200 }
+    }
+
+    if (!fs.existsSync(claudeDir)) {
+      return {
+        data: {
+          workingDirectory: resolvedWorkDir,
+          skills: [],
+          agents: [],
+          hooks: [],
+          rules: [],
+          commands: [],
+          mcpServers: [],
+          lspServers: [],
+          outputStyles: [],
+          plugins: [],
+          rolePlugin: null,
+          globalDependencies: null,
+          settings: {},
+          userGlobalSettings: readJsonSafe(path.join(os.homedir(), '.claude', 'settings.json')) ?? null,
+          keybindings: null,
+          lastScanned: new Date().toISOString(),
+        },
+        status: 200,
+      }
+    }
+
+    return { data: scanClaudeDirectory(claudeDir, resolvedWorkDir), status: 200 }
+  } catch (error) {
+    console.error('[agent-local-config] Scan error:', error)
+    return { error: 'Failed to scan agent local config', status: 500 }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Scanner implementation
+// ---------------------------------------------------------------------------
+
+/**
+ * Codex-client scanner (BUG-001 FIX, SCEN-013 2026-04-21).
+ *
+ * Codex agents do NOT have a .claude/ directory. Their plugin layout is:
+ *   <agentDir>/.codex-plugin/plugin.json                   core plugin manifest
+ *   <agentDir>/.codex/installed-plugins/<name>.json        install-tracking manifest
+ *   <agentDir>/.agents/skills/<name>/SKILL.md              converted skill content
+ *
+ * Each file in .codex/installed-plugins/ describes one installed plugin:
+ *   { "name": "ai-maestro-plugin", "clientType": "codex",
+ *     "installedAt": "...", "paths": [".agents/skills/...", ".codex-plugin/plugin.json"] }
+ *
+ * This scanner reads that directory to build a LocalPlugin list and scans
+ * .agents/skills/ to surface skills to the profile panel.
+ */
+function scanCodexDirectory(workDir: string): AgentLocalConfig {
+  const installedDir = path.join(workDir, '.codex', 'installed-plugins')
+  const plugins: LocalPlugin[] = []
+  const skills: LocalSkill[] = []
+  const seenSkills = new Set<string>()
+  let rolePlugin: RolePlugin | null = null
+  let globalDependencies: GlobalDependencies | null = null
+
+  const manifestFiles = safeReaddir(installedDir)
+    .filter(name => name.endsWith('.json'))
+
+  for (const file of manifestFiles) {
+    const manifestPath = path.join(installedDir, file)
+    const manifest = readJsonSafe(manifestPath)
+    if (!manifest || typeof manifest !== 'object') continue
+    const m = manifest as Record<string, unknown>
+    const pluginName = typeof m.name === 'string' ? m.name : path.basename(file, '.json')
+
+    // Try to read the plugin's own manifest (.codex-plugin/plugin.json) for
+    // richer metadata (version, description). For the R17 core plugin this
+    // lives at <workDir>/.codex-plugin/plugin.json.
+    let pluginMeta: { description?: string; version?: string; author?: string } = {}
+    const pluginManifestPath = path.join(workDir, '.codex-plugin', 'plugin.json')
+    const pluginManifest = readJsonSafe(pluginManifestPath)
+    if (pluginManifest && typeof pluginManifest === 'object') {
+      const pm = pluginManifest as Record<string, unknown>
+      if (typeof pm.description === 'string') pluginMeta.description = pm.description
+      if (typeof pm.version === 'string') pluginMeta.version = pm.version
+      if (typeof pm.author === 'string') pluginMeta.author = pm.author
+      else if (pm.author && typeof pm.author === 'object') {
+        const a = pm.author as Record<string, unknown>
+        if (typeof a.name === 'string') pluginMeta.author = a.name
+      }
+    }
+
+    // PROP-P0-001 FIX (SCEN-016 2026-04-21): Quad-match against the source
+    // folder's .agent.toml to identify this plugin as a ROLE plugin. Without
+    // this, GET /api/agents/:id/local-config returns rolePlugin:null for any
+    // Codex agent, making the UI show "No role plugin" even when
+    // ai-maestro-autonomous-agent is correctly installed.
+    //
+    // Source resolution order (mirrors R18.3d in ChangeClient):
+    //   1. ~/agents/role-plugins/<name>/<name>.agent.toml            (authoritative local marketplace)
+    //   2. ~/.codex/plugins/cache/<marketplace>/<name>/<version>/<name>.agent.toml  (Codex native cache)
+    //   3. ~/agents/role-plugins/<name>-codex/<name>-codex.agent.toml  (Codex-emitted target, some flows)
+    const quadMatch = resolveRolePluginForCodex(pluginName)
+    if (quadMatch && !rolePlugin) {
+      rolePlugin = quadMatch.rolePlugin
+      globalDependencies = extractTomlDependencies(quadMatch.profilePath)
+    }
+
+    plugins.push({
+      name: pluginName,
+      key: `${pluginName}@ai-maestro-plugins`,
+      path: workDir,
+      marketplace: 'ai-maestro-plugins',
+      enabled: true,
+      ...pluginMeta,
+    })
+
+    // Collect skills from the manifest's paths (converted for Codex at .agents/skills/)
+    const paths = Array.isArray(m.paths) ? m.paths : []
+    for (const p of paths) {
+      if (typeof p !== 'string') continue
+      const skillMatch = p.match(/^\.agents\/skills\/([^/]+)\/SKILL\.md$/)
+      if (!skillMatch) continue
+      const skillName = skillMatch[1]
+      if (seenSkills.has(skillName)) continue
+      seenSkills.add(skillName)
+      const fullSkillPath = path.join(workDir, p)
+      if (!fs.existsSync(fullSkillPath)) continue
+      const { description, frontmatter } = extractAllFrontmatter(fullSkillPath)
+      skills.push({
+        name: skillName,
+        path: fullSkillPath,
+        description: description ?? undefined,
+        frontmatter,
+        sourcePlugin: pluginName,
+      })
+    }
+  }
+
+  // Attach the skills to each plugin's elements so the UI can show them
+  // under the "Plugins" section as well as at the top level.
+  for (const p of plugins) {
+    p.elements = {
+      skills: skills.filter(s => s.sourcePlugin === p.name),
+      agents: [],
+      commands: [],
+      hooks: [],
+      rules: [],
+      mcpServers: [],
+      lspServers: [],
+      outputStyles: [],
+    }
+  }
+
+  return {
+    workingDirectory: workDir,
+    skills,
+    agents: [],
+    hooks: [],
+    rules: [],
+    commands: [],
+    mcpServers: [],
+    lspServers: [],
+    outputStyles: [],
+    plugins,
+    rolePlugin,
+    globalDependencies,
+    settings: {},
+    userGlobalSettings: readJsonSafe(path.join(os.homedir(), '.claude', 'settings.json')) ?? null,
+    keybindings: null,
+    lastScanned: new Date().toISOString(),
+  }
+}
+
+/**
+ * PROP-P0-001 (SCEN-016 2026-04-21): Resolve a Codex plugin name to its
+ * source folder + .agent.toml and run the quad-match rule that identifies it
+ * as a role plugin. Returns the constructed RolePlugin object if the quad
+ * matches, or null otherwise (meaning this is a normal plugin).
+ *
+ * Quad-match rule (must all be satisfied):
+ *   1. <name>.agent.toml exists at plugin root
+ *   2. [agent].name inside the TOML === pluginName
+ *   3. agents/<name>-main-agent.md exists at plugin root
+ *   4. frontmatter `name:` in that .md === <name>-main-agent
+ *
+ * SCEN-016 RE-RUN FIX (2026-04-21): The original fix used deprecated path
+ * shape `~/agents/role-plugins/<name>/` which NO LONGER EXISTS post R20.28
+ * (role-plugins/ is now a CONTAINER with per-client marketplace subfolders).
+ * After R20.28, the authoritative quad-match source for any Codex agent's
+ * role plugin is the Claude cache — because Codex emissions are DERIVED
+ * from the Claude plugin via conversion, and the Codex emission toml name
+ * is `<name>-codex.agent.toml` (not `<name>.agent.toml`), so it fails the
+ * canonical quad-match. The Claude cache holds the canonical name.
+ *
+ * Source search order (richest-first; first match wins):
+ *   a. ~/.claude/plugins/cache/<marketplace>/<name>/<version>/   — canonical source
+ *   b. ~/.codex/plugins/cache/<marketplace>/<name>/<version>/   — Codex native cache
+ *   c. ~/agents/role-plugins/.abstract/<name>/                   — IR hub with canonical name
+ *   d. ~/agents/role-plugins/<name>/                             — legacy, still supported
+ */
+function resolveRolePluginForCodex(
+  pluginName: string,
+): { rolePlugin: RolePlugin; profilePath: string } | null {
+  const homeDir = os.homedir()
+
+  // Candidate source folders, in priority order
+  const candidates: { dir: string; marketplace: string }[] = []
+
+  // (a) Claude native cache (canonical quad-match target — this is where
+  // 'ai-maestro-autonomous-agent' keeps name = "ai-maestro-autonomous-agent"
+  // in its TOML, unlike the Codex emission which uses "-codex" suffix).
+  const claudeCacheRoot = path.join(homeDir, '.claude', 'plugins', 'cache')
+  if (fs.existsSync(claudeCacheRoot)) {
+    for (const marketplaceName of safeReaddir(claudeCacheRoot)) {
+      const nameDir = path.join(claudeCacheRoot, marketplaceName, pluginName)
+      if (!fs.existsSync(nameDir)) continue
+      const versions = safeReaddir(nameDir)
+      if (versions.length === 0) continue
+      const semverVersions = versions.filter(v => semver.valid(v))
+      let picked: string
+      if (semverVersions.length > 0) {
+        semverVersions.sort(semver.rcompare)
+        picked = semverVersions[0]
+      } else {
+        versions.sort()
+        picked = versions[versions.length - 1]
+      }
+      candidates.push({
+        dir: path.join(nameDir, picked),
+        marketplace: marketplaceName,
+      })
+    }
+  }
+
+  // (b) Codex native cache: ~/.codex/plugins/cache/<marketplace>/<name>/<version>/
+  const codexCacheRoot = path.join(homeDir, '.codex', 'plugins', 'cache')
+  if (fs.existsSync(codexCacheRoot)) {
+    for (const marketplaceName of safeReaddir(codexCacheRoot)) {
+      const nameDir = path.join(codexCacheRoot, marketplaceName, pluginName)
+      if (!fs.existsSync(nameDir)) continue
+      const versions = safeReaddir(nameDir)
+      if (versions.length === 0) continue
+      const semverVersions = versions.filter(v => semver.valid(v))
+      let picked: string
+      if (semverVersions.length > 0) {
+        semverVersions.sort(semver.rcompare)
+        picked = semverVersions[0]
+      } else {
+        versions.sort()
+        picked = versions[versions.length - 1]
+      }
+      candidates.push({
+        dir: path.join(nameDir, picked),
+        marketplace: marketplaceName,
+      })
+    }
+  }
+
+  // (c) .abstract/ IR hub: ~/agents/role-plugins/.abstract/<name>/
+  // This is a post-R20.28 canonical location for the canonical-named toml
+  // across all clients. Note the main-agent is typically stored WITHOUT the
+  // .md extension in this hub (as a bare file), so the quad-match may still
+  // fail here — but we include it for completeness.
+  candidates.push({
+    dir: path.join(homeDir, 'agents', 'role-plugins', '.abstract', pluginName),
+    marketplace: LOCAL_MARKETPLACE_NAME,
+  })
+
+  // (d) Legacy local role-plugins layout: ~/agents/role-plugins/<name>/
+  // Pre-R20.28 this was the main local source. Kept for backward compat
+  // with agents whose role-plugins still live at the container root.
+  candidates.push({
+    dir: path.join(getLocalMarketplacePath(), pluginName),
+    marketplace: LOCAL_MARKETPLACE_NAME,
+  })
+
+  for (const cand of candidates) {
+    if (!fs.existsSync(cand.dir)) continue
+
+    const profilePath = path.join(cand.dir, `${pluginName}.agent.toml`)
+    if (!fs.existsSync(profilePath)) continue
+
+    const tomlAgentName = extractTomlAgentName(profilePath)
+    if (tomlAgentName !== pluginName) continue
+
+    const mainAgentName = `${pluginName}-main-agent`
+    const mainAgentPath = path.join(cand.dir, 'agents', `${mainAgentName}.md`)
+    if (!fs.existsSync(mainAgentPath)) continue
+
+    const mainAgentFrontmatterName = extractFrontmatterField(mainAgentPath, 'name')
+    if (mainAgentFrontmatterName !== mainAgentName) continue
+
+    const compat = extractTomlCompatibility(profilePath)
+    return {
+      rolePlugin: {
+        name: pluginName,
+        profilePath,
+        mainAgentName,
+        mainAgentPath,
+        marketplace: cand.marketplace,
+        ...compat,
+      },
+      profilePath,
+    }
+  }
+
+  return null
+}
+
+// TODO (PROP-P0-001 follow-up): scanGeminiDirectory / scanOpenCodeDirectory /
+// scanKiroDirectory do not exist yet. When they are added, each should call
+// its own equivalent resolveRolePluginFor<Client>() that searches the matching
+// client's cache path (e.g. ~/.gemini/plugins/, ~/.opencode/plugins/) plus
+// ~/agents/role-plugins/<name>/ and ~/agents/role-plugins/<name>-<client>/.
+// The quad-match rule is identical across clients.
+
+function scanClaudeDirectory(claudeDir: string, workDir: string): AgentLocalConfig {
+  const settingsData = readJsonSafe(path.join(claudeDir, 'settings.local.json'))
+  const { plugins, pluginEntries, rolePlugin, globalDependencies } = scanPlugins(claudeDir, settingsData, workDir)
+
+  // Scan .claude/ subfolders for directly-installed elements
+  const skills = scanSkills(claudeDir)
+  const agents = scanAgents(claudeDir)
+  const hooks = scanHooks(claudeDir)
+  const rules = scanRules(claudeDir)
+  const commands = scanCommands(claudeDir)
+  const mcpServers = scanMcpServers(workDir)
+  // LSP servers only exist inside plugins — no standalone scanning
+  const lspServers: LocalLspServer[] = []
+  const outputStyles = scanOutputStyles(claudeDir)
+
+  // Also scan inside each plugin for bundled elements, tagging with sourcePlugin
+  // Keep per-plugin element lists for the Plugins section in the profile panel
+  const seenSkills = new Set(skills.map(s => s.name))
+  const seenAgents = new Set(agents.map(a => a.name))
+  const seenHooks = new Set(hooks.map(h => `${h.name}:${h.eventType || ''}`))
+  const seenRules = new Set(rules.map(r => r.name))
+  const seenCommands = new Set(commands.map(c => c.name))
+  const seenMcpServers = new Set(mcpServers.map(m => m.name))
+  const seenLspServers = new Set(lspServers.map(l => l.name))
+  const seenOutputStyles = new Set(outputStyles.map(o => o.name))
+  const pluginElementsMap = new Map<string, NonNullable<LocalPlugin['elements']>>()
+
+  for (const { path: pluginDir, name: pluginName } of pluginEntries) {
+    const pe: NonNullable<LocalPlugin['elements']> = { skills: [], agents: [], commands: [], hooks: [], rules: [], mcpServers: [], lspServers: [], outputStyles: [] }
+
+    for (const s of scanSkills(pluginDir)) {
+      const tagged = { ...s, sourcePlugin: pluginName }
+      pe.skills.push(tagged)
+      if (!seenSkills.has(s.name)) { skills.push(tagged); seenSkills.add(s.name) }
+    }
+    for (const a of scanAgents(pluginDir)) {
+      const tagged = { ...a, sourcePlugin: pluginName }
+      pe.agents.push(tagged)
+      if (!seenAgents.has(a.name)) { agents.push(tagged); seenAgents.add(a.name) }
+    }
+    for (const h of scanHooks(pluginDir)) {
+      const tagged = { ...h, sourcePlugin: pluginName }
+      pe.hooks.push(tagged)
+      // Slug already includes event+matcher+type+command fingerprint; adding
+      // the plugin name keeps same-slug-different-plugin entries distinct.
+      const key = `${pluginName}::${h.name}`
+      if (!seenHooks.has(key)) { hooks.push(tagged); seenHooks.add(key) }
+    }
+    for (const r of scanRules(pluginDir)) {
+      const tagged = { ...r, sourcePlugin: pluginName }
+      pe.rules.push(tagged)
+      if (!seenRules.has(r.name)) { rules.push(tagged); seenRules.add(r.name) }
+    }
+    for (const c of scanCommands(pluginDir)) {
+      const tagged = { ...c, sourcePlugin: pluginName }
+      pe.commands.push(tagged)
+      if (!seenCommands.has(c.name)) { commands.push(tagged); seenCommands.add(c.name) }
+    }
+    for (const m of scanPluginMcpServers(pluginDir)) {
+      const tagged = { ...m, sourcePlugin: pluginName }
+      pe.mcpServers.push(tagged)
+      if (!seenMcpServers.has(m.name)) { mcpServers.push(tagged); seenMcpServers.add(m.name) }
+    }
+    for (const l of scanPluginLspServers(pluginDir)) {
+      const tagged = { ...l, sourcePlugin: pluginName }
+      pe.lspServers.push(tagged)
+      if (!seenLspServers.has(l.name)) { lspServers.push(tagged); seenLspServers.add(l.name) }
+    }
+    for (const o of scanOutputStyles(pluginDir)) {
+      const tagged = { ...o, sourcePlugin: pluginName }
+      pe.outputStyles.push(tagged)
+      if (!seenOutputStyles.has(o.name)) { outputStyles.push(tagged); seenOutputStyles.add(o.name) }
+    }
+
+    pluginElementsMap.set(pluginName, pe)
+  }
+
+  // Attach element lists to plugin objects
+  for (const p of plugins) {
+    const pe = pluginElementsMap.get(p.name)
+    if (pe) p.elements = pe
+  }
+
+  // TRDD-7123d51a §3.2 — user-global + keybinding sub-trees for the
+  // subconscious config-change tracker. Both are `null` when the file is
+  // absent so the tracker can treat "missing" distinctly from "empty".
+  const userGlobalSettings = readJsonSafe(path.join(os.homedir(), '.claude', 'settings.json')) ?? null
+  const keybindings = readJsonSafe(path.join(claudeDir, 'keybindings.json')) ?? null
+
+  return {
+    workingDirectory: workDir,
+    skills,
+    agents,
+    hooks,
+    rules,
+    commands,
+    mcpServers,
+    lspServers,
+    outputStyles,
+    plugins,
+    rolePlugin,
+    globalDependencies,
+    settings: settingsData || {},
+    userGlobalSettings,
+    keybindings,
+    lastScanned: new Date().toISOString(),
+  }
+}
+
+function scanSkills(claudeDir: string): LocalSkill[] {
+  const skillsDir = path.join(claudeDir, 'skills')
+  if (!fs.existsSync(skillsDir)) return []
+
+  const results: LocalSkill[] = []
+  for (const entry of safeReaddir(skillsDir)) {
+    const entryPath = path.join(skillsDir, entry)
+    if (!fs.statSync(entryPath).isDirectory()) continue
+
+    const skillMd = path.join(entryPath, 'SKILL.md')
+    if (!fs.existsSync(skillMd)) continue
+
+    const fm = extractAllFrontmatter(skillMd)
+    results.push({
+      name: entry, path: entryPath, description: fm.description || undefined,
+      frontmatter: Object.keys(fm.frontmatter).length > 0 ? fm.frontmatter : undefined,
+    })
+  }
+  return results
+}
+
+function scanAgents(claudeDir: string): LocalAgent[] {
+  const agentsDir = path.join(claudeDir, 'agents')
+  if (!fs.existsSync(agentsDir)) return []
+
+  const results: LocalAgent[] = []
+  for (const entry of safeReaddir(agentsDir)) {
+    if (!entry.endsWith('.md')) continue
+    const filePath = path.join(agentsDir, entry)
+    const name = entry.replace(/\.md$/, '')
+    const fm = extractAllFrontmatter(filePath)
+    results.push({
+      name, path: filePath, description: fm.description || undefined,
+      frontmatter: Object.keys(fm.frontmatter).length > 0 ? fm.frontmatter : undefined,
+    })
+  }
+  return results
+}
+
+/**
+ * Build a human-readable kebab slug from the hook's discriminating fields so
+ * that every hook has a stable, greppable identifier even though Claude Code
+ * doesn't give hooks a `name` field.
+ *
+ * Example: PreToolUse + matcher "Bash" + type "command" + command "echo hi"
+ *   → "pre-tool-use-bash-command-echo-hi"
+ */
+function hookSlug(eventType: string, matcher: string | undefined, hookType: string | undefined, command: string | undefined): string {
+  const slugify = (s: string) => s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60)
+  const parts: string[] = []
+  if (eventType) parts.push(slugify(eventType.replace(/([a-z])([A-Z])/g, '$1-$2')))
+  if (matcher) parts.push(slugify(matcher).slice(0, 20))
+  if (hookType) parts.push(slugify(hookType))
+  if (command) parts.push(slugify(command).slice(0, 40))
+  const slug = parts.filter(Boolean).join('-')
+  return slug || 'unnamed-hook'
+}
+
+/**
+ * Walk the nested Claude Code hooks.json structure:
+ *
+ *   { "description": "...",
+ *     "hooks": {
+ *       "<EventName>": [
+ *         { "matcher": "<regex>", "hooks": [ { "type": "command", "command": "...", "timeout": 5 } ] }
+ *       ]
+ *     }
+ *   }
+ *
+ * Also supports the older flat shape `{ "<EventName>": [...] }` at the top
+ * level (no wrapping "hooks" key) and the legacy standalone-file shape where
+ * each file in hooks/ is a script.
+ */
+function scanHooks(claudeDir: string): LocalHook[] {
+  const hooksDir = path.join(claudeDir, 'hooks')
+  if (!fs.existsSync(hooksDir)) return []
+
+  const hooksJsonPath = path.join(hooksDir, 'hooks.json')
+  const hooksJson = readJsonSafe(hooksJsonPath) as Record<string, unknown> | null
+
+  if (hooksJson && typeof hooksJson === 'object') {
+    // The spec shape uses top-level { "hooks": { <event>: [...] } }; fall
+    // back to treating the whole file as the events map for legacy plugins.
+    const eventsMap = (hooksJson.hooks && typeof hooksJson.hooks === 'object')
+      ? hooksJson.hooks as Record<string, unknown>
+      : hooksJson
+
+    const results: LocalHook[] = []
+    for (const [eventType, rawEntries] of Object.entries(eventsMap)) {
+      if (eventType === 'description') continue
+      if (!Array.isArray(rawEntries)) continue
+
+      for (const entry of rawEntries) {
+        if (!entry || typeof entry !== 'object') continue
+        const matcherStr = typeof (entry as Record<string, unknown>).matcher === 'string'
+          ? (entry as Record<string, unknown>).matcher as string
+          : undefined
+        const innerHooks = (entry as Record<string, unknown>).hooks
+        if (!Array.isArray(innerHooks)) continue
+
+        for (const h of innerHooks) {
+          if (!h || typeof h !== 'object') continue
+          const hookType = typeof (h as Record<string, unknown>).type === 'string'
+            ? (h as Record<string, unknown>).type as string
+            : 'command'
+          const command = typeof (h as Record<string, unknown>).command === 'string'
+            ? (h as Record<string, unknown>).command as string
+            : undefined
+          const timeout = typeof (h as Record<string, unknown>).timeout === 'number'
+            ? (h as Record<string, unknown>).timeout as number
+            : undefined
+          results.push({
+            name: hookSlug(eventType, matcherStr, hookType, command),
+            path: hooksJsonPath,
+            eventType,
+            matcher: matcherStr,
+            hookType,
+            command,
+            timeout,
+          })
+        }
+      }
+    }
+    return results
+  }
+
+  // Legacy: standalone script files inside hooks/
+  const results: LocalHook[] = []
+  for (const entry of safeReaddir(hooksDir)) {
+    const filePath = path.join(hooksDir, entry)
+    if (fs.statSync(filePath).isDirectory()) continue
+    results.push({ name: entry, path: filePath, hookType: 'command' })
+  }
+  return results
+}
+
+function scanRules(claudeDir: string): LocalRule[] {
+  const rulesDir = path.join(claudeDir, 'rules')
+  if (!fs.existsSync(rulesDir)) return []
+
+  const results: LocalRule[] = []
+  for (const entry of safeReaddir(rulesDir)) {
+    if (!entry.endsWith('.md')) continue
+    const filePath = path.join(rulesDir, entry)
+    const name = entry.replace(/\.md$/, '')
+    const preview = readFirstLine(filePath)
+    results.push({ name, path: filePath, preview: preview || undefined })
+  }
+  return results
+}
+
+function scanCommands(claudeDir: string): LocalCommand[] {
+  const commandsDir = path.join(claudeDir, 'commands')
+  if (!fs.existsSync(commandsDir)) return []
+
+  const results: LocalCommand[] = []
+  for (const entry of safeReaddir(commandsDir)) {
+    if (!entry.endsWith('.md')) continue
+    const filePath = path.join(commandsDir, entry)
+    const name = entry.replace(/\.md$/, '')
+    const fm = extractAllFrontmatter(filePath)
+    results.push({
+      name, path: filePath, trigger: `/${name}`,
+      frontmatter: Object.keys(fm.frontmatter).length > 0 ? fm.frontmatter : undefined,
+    })
+  }
+  return results
+}
+
+function scanOutputStyles(claudeDir: string): LocalOutputStyle[] {
+  const osDir = path.join(claudeDir, 'output-styles')
+  if (!fs.existsSync(osDir)) return []
+  const results: LocalOutputStyle[] = []
+  for (const entry of safeReaddir(osDir)) {
+    if (entry.startsWith('.')) continue
+    const filePath = path.join(osDir, entry)
+    if (fs.statSync(filePath).isDirectory()) continue
+    results.push({ name: entry.replace(/\.[^.]+$/, ''), path: filePath })
+  }
+  return results
+}
+
+function scanMcpServers(workDir: string): LocalMcpServer[] {
+  // Local-scoped MCP servers are stored in ~/.claude.json under projects[workDir].mcpServers
+  // Read directly for performance (polled every 4s). Modifications use `claude mcp` CLI.
+  const claudeJson = readJsonSafe(path.join(os.homedir(), '.claude.json'))
+  if (!claudeJson || typeof claudeJson !== 'object') return []
+
+  const projects = (claudeJson as Record<string, unknown>).projects as Record<string, unknown> | undefined
+  if (!projects || typeof projects !== 'object') return []
+
+  const projectData = projects[workDir] as Record<string, unknown> | undefined
+  if (!projectData || typeof projectData !== 'object') return []
+
+  const servers = projectData.mcpServers as Record<string, unknown> | undefined
+  if (!servers || typeof servers !== 'object') return []
+
+  const results: LocalMcpServer[] = []
+  for (const [name, config] of Object.entries(servers)) {
+    if (!config || typeof config !== 'object') continue
+    const cfg = config as Record<string, unknown>
+    results.push({
+      name,
+      command: typeof cfg.command === 'string' ? cfg.command : undefined,
+      args: Array.isArray(cfg.args) ? cfg.args.map(String) : undefined,
+    })
+  }
+  return results
+}
+
+// No scanLspServers() — LSP servers only exist inside plugins (.lsp.json at plugin root)
+
+/** Scan .mcp.json at plugin root for bundled MCP servers */
+function scanPluginMcpServers(pluginDir: string): LocalMcpServer[] {
+  const data = readJsonSafe(path.join(pluginDir, '.mcp.json'))
+  if (!data || typeof data !== 'object') return []
+
+  const servers = (data as Record<string, unknown>).mcpServers as Record<string, unknown> | undefined
+  if (!servers || typeof servers !== 'object') return []
+
+  const results: LocalMcpServer[] = []
+  for (const [name, config] of Object.entries(servers)) {
+    if (!config || typeof config !== 'object') continue
+    const cfg = config as Record<string, unknown>
+    results.push({
+      name,
+      command: typeof cfg.command === 'string' ? cfg.command : undefined,
+      args: Array.isArray(cfg.args) ? cfg.args.map(String) : undefined,
+    })
+  }
+  return results
+}
+
+/** Scan .lsp.json at plugin root for bundled LSP servers */
+function scanPluginLspServers(pluginDir: string): LocalLspServer[] {
+  const data = readJsonSafe(path.join(pluginDir, '.lsp.json'))
+  if (!data || typeof data !== 'object') return []
+
+  const results: LocalLspServer[] = []
+  for (const [name, config] of Object.entries(data as Record<string, unknown>)) {
+    if (!config || typeof config !== 'object') continue
+    const cfg = config as Record<string, unknown>
+    const command = typeof cfg.command === 'string' ? cfg.command : ''
+    const extToLang = cfg.extensionToLanguage as Record<string, string> | undefined
+    const languages = extToLang ? Object.values(extToLang) : []
+    results.push({ name, command, languages })
+  }
+  return results
+}
+
+function scanPlugins(
+  claudeDir: string,
+  settingsData: Record<string, unknown> | null,
+  workDir: string,
+): { plugins: LocalPlugin[]; pluginEntries: { path: string; name: string }[]; rolePlugin: RolePlugin | null; globalDependencies: GlobalDependencies | null } {
+  const plugins: LocalPlugin[] = []
+  const pluginEntries: { path: string; name: string }[] = []
+  let rolePlugin: RolePlugin | null = null
+  let globalDependencies: GlobalDependencies | null = null
+
+  // Build a map of plugin key → enabled state from settings.local.json
+  const enabledMap = new Map<string, boolean>()
+  if (settingsData) {
+    const ep = settingsData.enabledPlugins as Record<string, boolean> | undefined
+    if (ep && typeof ep === 'object') {
+      for (const [key, enabled] of Object.entries(ep)) {
+        enabledMap.set(key, !!enabled)
+      }
+    }
+  }
+
+  const allPluginPaths = collectPluginPaths(claudeDir, settingsData, workDir)
+  const seenPluginPaths = new Set<string>()
+
+  for (const pluginPath of allPluginPaths) {
+    if (!fs.existsSync(pluginPath)) continue
+    seenPluginPaths.add(pluginPath)
+
+    const manifestPath = path.join(pluginPath, '.claude-plugin', 'plugin.json')
+    let pluginName = path.basename(pluginPath)
+    let pluginMeta: { description?: string; version?: string; author?: string; authorEmail?: string; license?: string; homepage?: string; repository?: string; keywords?: string[] } = {}
+
+    const manifest = readJsonSafe(manifestPath)
+    if (manifest && typeof manifest === 'object') {
+      const m = manifest as Record<string, unknown>
+      if (typeof m.name === 'string') pluginName = path.basename(m.name)
+      if (typeof m.description === 'string') pluginMeta.description = m.description
+      if (typeof m.version === 'string') pluginMeta.version = m.version
+      if (typeof m.author === 'string') pluginMeta.author = m.author
+      if (typeof m.authorEmail === 'string') pluginMeta.authorEmail = m.authorEmail
+      if (typeof m.license === 'string') pluginMeta.license = m.license
+      if (typeof m.homepage === 'string') pluginMeta.homepage = m.homepage
+      if (typeof m.repository === 'string') pluginMeta.repository = m.repository
+      if (Array.isArray(m.keywords)) pluginMeta.keywords = m.keywords.filter((k): k is string => typeof k === 'string')
+    }
+
+    // Find the plugin key from the enabledMap and extract marketplace
+    const pluginKey = findPluginKey(enabledMap, pluginName) || undefined
+    const marketplace = pluginKey?.includes('@') ? pluginKey.split('@').slice(1).join('@') : undefined
+
+    // Role-Plugin: quad-match rule (all 4 must be satisfied)
+    //   1. plugin.json name == pluginName
+    //   2. <plugin-name>.agent.toml exists at plugin root
+    //   3. [agent].name inside TOML == pluginName
+    //   4. agents/<plugin-name>-main-agent.md exists with matching frontmatter name
+    const agentTomlPath = path.join(pluginPath, `${pluginName}.agent.toml`)
+    if (fs.existsSync(agentTomlPath)) {
+      const tomlAgentName = extractTomlAgentName(agentTomlPath)
+      const mainAgentName = `${pluginName}-main-agent`
+      const mainAgentPath = path.join(pluginPath, 'agents', `${mainAgentName}.md`)
+      const mainAgentExists = fs.existsSync(mainAgentPath)
+      const mainAgentFrontmatterName = mainAgentExists ? extractFrontmatterField(mainAgentPath, 'name') : null
+
+      if (
+        tomlAgentName === pluginName &&
+        mainAgentExists &&
+        mainAgentFrontmatterName === mainAgentName
+      ) {
+        if (!rolePlugin) {
+          // First Role-Plugin found becomes the official one
+          // Extract marketplace from plugin key (part after @), default to local roles marketplace
+          const roleMarketplace = pluginKey?.includes('@')
+            ? pluginKey.split('@').slice(1).join('@')
+            : LOCAL_MARKETPLACE_NAME
+          const compat = extractTomlCompatibility(agentTomlPath)
+          rolePlugin = {
+            name: pluginName,
+            profilePath: agentTomlPath,
+            mainAgentName,
+            mainAgentPath,
+            marketplace: roleMarketplace,
+            ...compat,
+          }
+          globalDependencies = extractTomlDependencies(agentTomlPath)
+          // Also scan role plugin's bundled elements (skills, agents, hooks, etc.)
+          pluginEntries.push({ path: pluginPath, name: pluginName })
+        } else {
+          // Additional Role-Plugins are conflicts — show in Plugins tab with warning
+          plugins.push({ name: pluginName, key: pluginKey, path: pluginPath, ...pluginMeta, marketplace, enabled: true, isConflictingRolePlugin: true })
+          pluginEntries.push({ path: pluginPath, name: pluginName })
+        }
+        continue
+      }
+    }
+
+    plugins.push({ name: pluginName, key: pluginKey, path: pluginPath, ...pluginMeta, marketplace, enabled: true })
+    pluginEntries.push({ path: pluginPath, name: pluginName })
+  }
+
+  // Also collect DISABLED plugins from enabledPlugins (enabled: false) so the UI can show toggles
+  for (const [key, enabled] of enabledMap.entries()) {
+    if (enabled) continue
+    const pluginPath = resolvePluginKeyToPath(key)
+    if (!pluginPath || seenPluginPaths.has(pluginPath)) continue
+    if (!fs.existsSync(pluginPath)) continue
+
+    const manifestPath = path.join(pluginPath, '.claude-plugin', 'plugin.json')
+    let pluginName = path.basename(pluginPath)
+    let disabledMeta: { description?: string; version?: string; author?: string; authorEmail?: string; license?: string; homepage?: string; repository?: string; keywords?: string[] } = {}
+
+    const manifest = readJsonSafe(manifestPath)
+    if (manifest && typeof manifest === 'object') {
+      const m = manifest as Record<string, unknown>
+      if (typeof m.name === 'string') pluginName = path.basename(m.name)
+      if (typeof m.description === 'string') disabledMeta.description = m.description
+      if (typeof m.version === 'string') disabledMeta.version = m.version
+      if (typeof m.author === 'string') disabledMeta.author = m.author
+      if (typeof m.authorEmail === 'string') disabledMeta.authorEmail = m.authorEmail
+      if (typeof m.license === 'string') disabledMeta.license = m.license
+      if (typeof m.homepage === 'string') disabledMeta.homepage = m.homepage
+      if (typeof m.repository === 'string') disabledMeta.repository = m.repository
+      if (Array.isArray(m.keywords)) disabledMeta.keywords = m.keywords.filter((k): k is string => typeof k === 'string')
+    }
+    const disabledMkt = key.includes('@') ? key.split('@').slice(1).join('@') : undefined
+
+    plugins.push({ name: pluginName, key, path: pluginPath, ...disabledMeta, marketplace: disabledMkt, enabled: false })
+    // Do NOT add to pluginEntries — disabled plugins should not have their elements scanned
+  }
+
+  return { plugins, pluginEntries, rolePlugin, globalDependencies }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function collectPluginPaths(claudeDir: string, settingsData: Record<string, unknown> | null, workDir: string): string[] {
+  const paths = new Set<string>()
+
+  if (settingsData) {
+    extractPluginPathsFromSettings(settingsData, claudeDir, workDir, paths)
+    extractEnabledPluginPaths(settingsData, paths)
+  }
+
+  const projectSettings = readJsonSafe(path.join(claudeDir, 'settings.json'))
+  if (projectSettings) {
+    extractPluginPathsFromSettings(projectSettings as Record<string, unknown>, claudeDir, workDir, paths)
+    extractEnabledPluginPaths(projectSettings as Record<string, unknown>, paths)
+  }
+
+  return Array.from(paths)
+}
+
+/**
+ * Handle the `enabledPlugins` format used by Haephestos / role-plugin-service.
+ * Keys are `<pluginName>@<marketplaceName>`, values are boolean.
+ * Resolves the local marketplace name to `~/agents/role-plugins/<name>/`.
+ */
+function extractEnabledPluginPaths(settings: Record<string, unknown>, paths: Set<string>) {
+  const ep = settings.enabledPlugins as Record<string, boolean> | undefined
+  if (!ep || typeof ep !== 'object') return
+
+  for (const [key, enabled] of Object.entries(ep)) {
+    if (!enabled) continue
+    // Use resolvePluginKeyToPath which handles ALL marketplace types
+    // (local role-plugins, global cache, and any future marketplace formats)
+    const resolved = resolvePluginKeyToPath(key)
+    if (resolved && fs.existsSync(resolved)) {
+      paths.add(resolved)
+    }
+  }
+}
+
+/** Find the enabledPlugins key matching a plugin name */
+function findPluginKey(enabledMap: Map<string, boolean>, pluginName: string): string | null {
+  for (const key of enabledMap.keys()) {
+    const atIdx = key.lastIndexOf('@')
+    const name = atIdx > 0 ? key.substring(0, atIdx) : key
+    if (name === pluginName) return key
+  }
+  return null
+}
+
+/** Resolve a plugin key (name@marketplace) to a filesystem path */
+function resolvePluginKeyToPath(key: string): string | null {
+  const atIdx = key.lastIndexOf('@')
+  if (atIdx <= 0) return null
+  const pluginName = key.substring(0, atIdx)
+  const marketplaceName = key.substring(atIdx + 1)
+
+  const homeDir = os.homedir()
+
+  // Local marketplace for custom Haephestos-generated role-plugins (from ecosystem-constants)
+  if (marketplaceName === LOCAL_MARKETPLACE_NAME) {
+    return path.join(getLocalMarketplacePath(), pluginName)
+  }
+
+  // Try the global cache directory
+  const cachePath = path.join(homeDir, '.claude', 'plugins', 'cache', marketplaceName, pluginName)
+  if (fs.existsSync(cachePath)) {
+    // Return latest version
+    const allVersions = safeReaddir(cachePath).filter(e => !e.startsWith('.'))
+    if (allVersions.length > 0) {
+      const semverVersions = allVersions.filter(e => semver.valid(e))
+      if (semverVersions.length > 0) {
+        semverVersions.sort(semver.rcompare)
+        return path.join(cachePath, semverVersions[0])
+      }
+      // Fallback for non-semver version dirs (git hashes, timestamps)
+      allVersions.sort()
+      return path.join(cachePath, allVersions[allVersions.length - 1])
+    }
+  }
+
+  return null
+}
+
+function extractPluginPathsFromSettings(
+  settings: Record<string, unknown>,
+  claudeDir: string,
+  workDir: string,
+  paths: Set<string>,
+) {
+  const plugins = settings.plugins as Array<{ path?: string }> | undefined
+  if (!Array.isArray(plugins)) return
+
+  const homeDir = os.homedir()
+  const resolvedWorkDir = path.resolve(workDir)
+
+  for (const plugin of plugins) {
+    if (typeof plugin?.path === 'string') {
+      // CP-3: Expand tilde to home directory before resolving
+      const expanded = plugin.path.startsWith('~/')
+        ? path.join(homeDir, plugin.path.slice(2))
+        : plugin.path
+      const resolved = path.isAbsolute(expanded)
+        ? expanded
+        : path.resolve(path.dirname(claudeDir), expanded)
+      // IS-5: Scope validation — only allow paths within workDir or homedir
+      if (!resolved.startsWith(resolvedWorkDir) && !resolved.startsWith(homeDir)) {
+        console.warn(`[agent-local-config] Skipping out-of-scope plugin path: ${resolved}`)
+        continue
+      }
+      paths.add(resolved)
+    }
+  }
+}
+
+function extractTomlAgentName(tomlPath: string): string | null {
+  try {
+    const content = fs.readFileSync(tomlPath, 'utf-8')
+    const agentMatch = content.match(/\[agent\]\s*\n([\s\S]*?)(?=\n\[|\n*$)/)
+    if (!agentMatch) return null
+    const nameMatch = agentMatch[1].match(/^\s*name\s*=\s*"([^"]+)"/m)
+    return nameMatch ? nameMatch[1] : null
+  } catch {
+    return null
+  }
+}
+
+function extractTomlCompatibility(tomlPath: string): { compatibleTitles?: string[]; compatibleClients?: string[] } {
+  try {
+    const content = fs.readFileSync(tomlPath, 'utf-8')
+    const agentMatch = content.match(/\[agent\]\s*\n([\s\S]*?)(?=\n\[|\n*$)/)
+    if (!agentMatch) return {}
+    const section = agentMatch[1]
+    const result: { compatibleTitles?: string[]; compatibleClients?: string[] } = {}
+    // Parse compatible-titles = ["MEMBER", "AUTONOMOUS"] or "MEMBER, AUTONOMOUS"
+    const titlesMatch = section.match(/^\s*compatible-titles\s*=\s*\[([^\]]*)\]/m)
+      || section.match(/^\s*compatible-titles\s*=\s*"([^"]*)"/m)
+    if (titlesMatch) {
+      result.compatibleTitles = titlesMatch[1]
+        .split(',')
+        .map(s => s.trim().replace(/^"|"$/g, '').trim().toUpperCase())
+        .filter(Boolean)
+    }
+    // Parse compatible-clients = ["claude-code", "codex"] or "claude-code, codex"
+    const clientsMatch = section.match(/^\s*compatible-clients\s*=\s*\[([^\]]*)\]/m)
+      || section.match(/^\s*compatible-clients\s*=\s*"([^"]*)"/m)
+    if (clientsMatch) {
+      result.compatibleClients = clientsMatch[1]
+        .split(',')
+        .map(s => s.trim().replace(/^"|"$/g, '').trim().toLowerCase())
+        .filter(Boolean)
+    }
+    return result
+  } catch {
+    return {}
+  }
+}
+
+function extractTomlDependencies(tomlPath: string): GlobalDependencies | null {
+  try {
+    const content = fs.readFileSync(tomlPath, 'utf-8')
+    const depsMatch = content.match(/\[dependencies\]\s*\n([\s\S]*?)(?=\n\[|\n*$)/)
+    if (!depsMatch) return null
+
+    const section = depsMatch[1]
+    const parseTOMLArray = (key: string): string[] => {
+      const match = section.match(new RegExp(`^\\s*${escapeRegex(key)}\\s*=\\s*\\[([^\\]]*)]`, 'm'))
+      if (!match) return []
+      return match[1]
+        .split(',')
+        .map(s => s.trim().replace(/^"|"$/g, '').trim())
+        .filter(Boolean)
+    }
+
+    return {
+      plugins: parseTOMLArray('plugins'),
+      skills: parseTOMLArray('skills'),
+      mcpServers: parseTOMLArray('mcp_servers'),
+      scripts: parseTOMLArray('scripts'),
+      hooks: parseTOMLArray('hooks'),
+      tools: parseTOMLArray('tools'),
+      output_styles: parseTOMLArray('output_styles'),
+    }
+  } catch {
+    return null
+  }
+}
+
+// IS-3/IS-4: Escape special regex characters to prevent ReDoS
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function readJsonSafe(filePath: string): Record<string, unknown> | null {
+  try {
+    if (!fs.existsSync(filePath)) return null
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+  } catch {
+    return null
+  }
+}
+
+function safeReaddir(dirPath: string): string[] {
+  try {
+    return fs.readdirSync(dirPath).filter(e => !e.startsWith('.'))
+  } catch {
+    return []
+  }
+}
+
+/** Extract all YAML frontmatter fields from a .md file */
+function extractAllFrontmatter(filePath: string): { description: string | null; frontmatter: Record<string, string | string[]> } {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    const lines = content.split('\n')
+    if (lines[0]?.trim() !== '---') {
+      // No frontmatter — first non-empty non-heading line as description
+      for (const line of lines.slice(0, 10)) {
+        const t = line.trim()
+        if (t && !t.startsWith('#') && !t.startsWith('---')) return { description: t.substring(0, 200), frontmatter: {} }
+      }
+      return { description: null, frontmatter: {} }
+    }
+    const endIdx = lines.findIndex((l, i) => i > 0 && l.trim() === '---')
+    if (endIdx <= 0) return { description: null, frontmatter: {} }
+    const result: Record<string, string | string[]> = {}
+    let currentKey: string | null = null
+    let currentList: string[] | null = null
+    for (const line of lines.slice(1, endIdx)) {
+      const kvMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_-]*):\s*(.*)/)
+      if (kvMatch) {
+        if (currentKey && currentList) result[currentKey] = currentList
+        currentKey = kvMatch[1]; currentList = null
+        const val = kvMatch[2].trim()
+        if (!val) { currentList = [] }
+        else if (val.startsWith('[') && val.endsWith(']')) {
+          result[currentKey] = val.slice(1, -1).split(',').map(s => s.trim().replace(/^['"]|['"]$/g, ''))
+          currentKey = null
+        } else {
+          result[currentKey] = val.replace(/^['"]|['"]$/g, '')
+          currentKey = null
+        }
+      } else if (currentList !== null) {
+        const listItem = line.match(/^\s+-\s+(.+)/)
+        if (listItem) currentList.push(listItem[1].trim().replace(/^['"]|['"]$/g, ''))
+        else if (line.trim()) { if (currentKey) result[currentKey] = currentList; currentKey = null; currentList = null }
+      }
+    }
+    if (currentKey && currentList) result[currentKey] = currentList
+    // Sanitize
+    const safe: Record<string, string | string[]> = {}
+    for (const [k, v] of Object.entries(result)) {
+      const sk = k.replace(/[^a-zA-Z0-9_ -]/g, '').substring(0, 50)
+      if (!sk) continue
+      safe[sk] = Array.isArray(v) ? v.map(s => s.substring(0, 500)) : String(v).substring(0, 500)
+    }
+    const desc = typeof safe.description === 'string' ? safe.description : null
+    return { description: desc, frontmatter: safe }
+  } catch { return { description: null, frontmatter: {} } }
+}
+
+function readFirstLine(filePath: string): string | null {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      if (trimmed.startsWith('#')) return trimmed.replace(/^#+\s*/, '')
+      return trimmed
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+function extractFrontmatterField(filePath: string, field: string): string | null {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    if (!content.startsWith('---')) return null
+    const endIdx = content.indexOf('---', 3)
+    if (endIdx === -1) return null
+    const frontmatter = content.slice(3, endIdx)
+    const match = frontmatter.match(new RegExp(`^\\s*${escapeRegex(field)}:\\s*(.+)$`, 'm'))
+    return match ? match[1].trim().replace(/^['"]|['"]$/g, '') : null
+  } catch {
+    return null
+  }
+}

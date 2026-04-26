@@ -1,0 +1,60 @@
+import { NextRequest, NextResponse } from 'next/server'
+
+/**
+ * GET /api/teams/[id]/composition-check
+ *
+ * Checks if a team satisfies R12 (Minimum Team Composition).
+ * Returns which required titles are present and which are missing.
+ *
+ * Required titles (R12.1): chief-of-staff, architect, orchestrator, integrator, member
+ */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const { getTeam } = await import('@/lib/team-registry')
+    const { getAgent } = await import('@/lib/agent-registry')
+
+    const team = getTeam(id)
+    if (!team) {
+      return NextResponse.json({ error: 'Team not found' }, { status: 404 })
+    }
+
+    const REQUIRED_TITLES = ['chief-of-staff', 'architect', 'orchestrator', 'integrator', 'member'] as const
+
+    // Collect titles present in the team
+    const presentTitles = new Set<string>()
+    const agentDetails: { id: string; name: string; title: string }[] = []
+
+    for (const agentId of team.agentIds || []) {
+      const agent = getAgent(agentId)
+      if (agent) {
+        const title = (agent.governanceTitle || agent.role || 'unknown').toLowerCase()
+        presentTitles.add(title)
+        agentDetails.push({ id: agent.id, name: agent.name, title })
+      }
+    }
+
+    const missing = REQUIRED_TITLES.filter(t => !presentTitles.has(t))
+    const present = REQUIRED_TITLES.filter(t => presentTitles.has(t))
+
+    return NextResponse.json({
+      teamId: team.id,
+      teamName: team.name,
+      complete: missing.length === 0,
+      agentCount: (team.agentIds || []).length,
+      requiredTitles: [...REQUIRED_TITLES],
+      presentTitles: present,
+      missingTitles: missing,
+      agents: agentDetails,
+    })
+  } catch (error) {
+    console.error('[CompositionCheck] Error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}

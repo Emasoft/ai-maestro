@@ -7,8 +7,8 @@ import { useAgents } from '@/hooks/useAgents'
 import { TerminalProvider } from '@/contexts/TerminalContext'
 import { ArrowLeft, Loader2, RefreshCw, AlertCircle, X, ExternalLink, Search, Mail } from 'lucide-react'
 import { VersionChecker } from '@/components/VersionChecker'
+import { agentToSession } from '@/lib/agent-utils'
 import type { Agent } from '@/types/agent'
-import type { Session } from '@/types/session'
 import './zoom.css'
 
 // Dynamic import for AgentCard to reduce initial bundle
@@ -35,28 +35,54 @@ const AgentCardView = dynamic(
   }
 )
 
-// Helper: Convert agent to session-like object for TerminalView compatibility
-function agentToSession(agent: Agent): Session {
-  // CRITICAL: session.id must be the tmux session name for WebSocket to connect
-  // Use tmuxSessionName if available, otherwise fall back to agent.id (matching main dashboard)
-  const sessionId = agent.session?.tmuxSessionName || agent.id
-
-  return {
-    id: sessionId,
-    name: agent.label || agent.name || agent.alias || '',
-    workingDirectory: agent.session?.workingDirectory || agent.preferences?.defaultWorkingDirectory || '',
-    status: 'active' as const,
-    createdAt: agent.createdAt,
-    lastActivity: agent.lastActive || agent.createdAt,
-    windows: 1,
-    agentId: agent.id,
-    hostId: agent.hostId,
-  }
-}
-
 // Helper: Check if agent has a valid terminal session
 function hasValidTerminalSession(agent: Agent): boolean {
   return !!agent.session?.tmuxSessionName
+}
+
+/**
+ * Compact user tile for the zoom screen. Always "online" (the user is either
+ * here or logged out). Clicking navigates back to the dashboard with the
+ * human-user card selected.
+ */
+function HumanZoomTile() {
+  const [userName, setUserName] = useState<string | null>(null)
+  const [userAvatar, setUserAvatar] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/governance')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return
+        setUserName(data.userName ?? null)
+        setUserAvatar(data.userAvatar ?? null)
+      })
+      .catch(() => {})
+  }, [])
+
+  return (
+    <Link
+      href="/?human=self"
+      className="flex items-center gap-4 p-4 rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-900/20 to-cyan-900/10 hover:from-emerald-900/30 hover:to-cyan-900/20 transition-all group"
+      title="Open your chat view"
+    >
+      <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-800 border-2 border-emerald-500/50 flex-shrink-0 group-hover:border-emerald-400">
+        {userAvatar ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={userAvatar} alt="You" className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-600/40 to-cyan-600/40">
+            <Mail className="w-6 h-6 text-emerald-300" />
+          </div>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-lg font-semibold text-gray-100 truncate">{userName ?? '…'}</p>
+        <p className="text-xs text-emerald-400/80">You · chat only · always online</p>
+      </div>
+      <ExternalLink className="w-5 h-5 text-emerald-400/60 group-hover:text-emerald-400 flex-shrink-0" />
+    </Link>
+  )
 }
 
 export default function ZoomPage() {
@@ -65,6 +91,9 @@ export default function ZoomPage() {
   const [flippingCardId, setFlippingCardId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
+  // Default to online-only — user asked for this explicitly. Toggle to "all"
+  // shows hibernated agents too (they appear dimmed in the card).
+  const [showAll, setShowAll] = useState(false)
 
   // Fetch unread message counts for all agents
   useEffect(() => {
@@ -96,10 +125,17 @@ export default function ZoomPage() {
     }
   }, [agents])
 
-  // Compute selectable agents: online + hibernated (offline with session config)
+  // Compute selectable agents based on the showAll toggle:
+  //  - showAll=false (default): only ONLINE agents (with a live tmux session)
+  //  - showAll=true: online + hibernated (offline with session config)
   const selectableAgents = useMemo(
-    () => agents.filter(a => a.session?.status === 'online' || (a.sessions && a.sessions.length > 0)),
-    [agents]
+    () => agents.filter(a => {
+      const isOnline = a.session?.status === 'online'
+      if (!showAll) return isOnline
+      const hasSessionConfig = !!(a.sessions && a.sessions.length > 0)
+      return isOnline || hasSessionConfig
+    }),
+    [agents, showAll]
   )
 
   // Filter agents by search query
@@ -110,13 +146,11 @@ export default function ZoomPage() {
     return selectableAgents.filter(agent => {
       const name = (agent.name || '').toLowerCase()
       const label = (agent.label || '').toLowerCase()
-      const alias = (agent.alias || '').toLowerCase()
       const tags = (agent.tags || []).join(' ').toLowerCase()
       const hostId = (agent.hostId || '').toLowerCase()
 
       return name.includes(query) ||
              label.includes(query) ||
-             alias.includes(query) ||
              tags.includes(query) ||
              hostId.includes(query)
     })
@@ -167,7 +201,7 @@ export default function ZoomPage() {
   }
 
   const displayName = selectedAgent
-    ? selectedAgent.label || selectedAgent.name || selectedAgent.alias || 'Agent'
+    ? selectedAgent.label || selectedAgent.name || 'Agent'
     : ''
 
   const isAvatarUrl = selectedAgent?.avatar &&
@@ -182,7 +216,7 @@ export default function ZoomPage() {
 
   return (
     <TerminalProvider>
-      <div className="min-h-screen bg-gray-900 flex flex-col">
+      <div className="h-screen bg-gray-900 flex flex-col">
         {/* Header */}
         <header className="border-b border-gray-800 bg-gray-950 px-4 py-3 flex-shrink-0 z-10">
           <div className="flex items-center justify-between max-w-7xl mx-auto">
@@ -198,6 +232,33 @@ export default function ZoomPage() {
               <h1 className="text-lg font-semibold text-white">Zoom View</h1>
             </div>
             <div className="flex items-center gap-3">
+              {/* Online / All filter toggle (default: Online) */}
+              <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1" role="group" aria-label="Agent visibility filter">
+                <button
+                  onClick={() => setShowAll(false)}
+                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                    !showAll
+                      ? 'bg-violet-600 text-white'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                  aria-pressed={!showAll}
+                  title="Show only online agents"
+                >
+                  Online
+                </button>
+                <button
+                  onClick={() => setShowAll(true)}
+                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                    showAll
+                      ? 'bg-violet-600 text-white'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                  aria-pressed={showAll}
+                  title="Show online + hibernated agents"
+                >
+                  All
+                </button>
+              </div>
               <span className="text-sm text-gray-400">
                 {selectableAgents.length} agent{selectableAgents.length !== 1 ? 's' : ''}
               </span>
@@ -212,8 +273,8 @@ export default function ZoomPage() {
           </div>
         </header>
 
-        {/* Main Content */}
-        <main className="flex-1 p-6 overflow-auto">
+        {/* Main Content — min-h-0 + overflow-y-auto guarantees wheel/trackpad scroll */}
+        <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-6">
           <div className="max-w-7xl mx-auto">
             {/* Loading State */}
             {loading && agents.length === 0 && (
@@ -292,6 +353,13 @@ export default function ZoomPage() {
                     Try a different search term
                   </p>
                 </div>
+              </div>
+            )}
+
+            {/* Human user tile — always visible, always "online" */}
+            {(!searchQuery.trim() || 'you'.includes(searchQuery.toLowerCase())) && (
+              <div className="mb-6">
+                <HumanZoomTile />
               </div>
             )}
 

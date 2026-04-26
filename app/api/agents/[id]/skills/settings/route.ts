@@ -1,123 +1,80 @@
+/**
+ * Agent Skill Settings API
+ *
+ * GET /api/agents/:id/skills/settings — Get skill settings
+ * PUT /api/agents/:id/skills/settings — Save skill settings
+ *
+ * Thin wrapper — business logic in services/agents-skills-service.ts
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
-import { agentRegistry } from '@/lib/agent'
-import fs from 'fs/promises'
-import path from 'path'
+import { getSkillSettings, saveSkillSettings } from '@/services/agents-skills-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
+import { isValidUuid } from '@/lib/validation'
 
-/**
- * Skill settings are stored per-agent in ~/.aimaestro/agents/<id>/skill-settings.json
- */
-
-async function getSettingsPath(agentId: string): Promise<string> {
-  const homeDir = process.env.HOME || process.env.USERPROFILE || ''
-  return path.join(homeDir, '.aimaestro', 'agents', agentId, 'skill-settings.json')
-}
-
-/**
- * GET /api/agents/:id/skills/settings
- * Get skill settings for an agent
- */
+// Auth required via the global /api/* middleware. The handler also
+// verifies the caller via authenticateFromRequest for defense in depth.
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: agentId } = await params
-
-    // Verify agent exists
-    const agent = await agentRegistry.getAgent(agentId)
-    if (!agent) {
-      return NextResponse.json(
-        { success: false, error: 'Agent not found' },
-        { status: 404 }
-      )
+    if (!isValidUuid(agentId)) {
+      return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
-
-    const settingsPath = await getSettingsPath(agentId)
-
-    try {
-      const content = await fs.readFile(settingsPath, 'utf-8')
-      const settings = JSON.parse(content)
-      return NextResponse.json({
-        success: true,
-        settings
-      })
-    } catch {
-      // Settings file doesn't exist, return defaults
-      return NextResponse.json({
-        success: true,
-        settings: null
-      })
+    const result = await getSkillSettings(agentId)
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
+    return NextResponse.json(result.data)
   } catch (error) {
     console.error('[Skill Settings API] GET Error:', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
 
-/**
- * PUT /api/agents/:id/skills/settings
- * Save skill settings for an agent
- */
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: agentId } = await params
-    const body = await request.json()
-    const { settings } = body
-
-    if (!settings) {
-      return NextResponse.json(
-        { success: false, error: 'Settings are required' },
-        { status: 400 }
-      )
+    if (!isValidUuid(agentId)) {
+      return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
-
-    // Verify agent exists
-    const agent = await agentRegistry.getAgent(agentId)
-    if (!agent) {
-      return NextResponse.json(
-        { success: false, error: 'Agent not found' },
-        { status: 404 }
-      )
+    // CC-P2-007: Guard against malformed JSON body
+    let body
+    try { body = await request.json() } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-
-    const settingsPath = await getSettingsPath(agentId)
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(settingsPath), { recursive: true })
-
-    // Save settings
-    await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8')
-
-    // If memory settings changed, update the subconscious
-    if (settings.memory) {
-      const subconscious = agent.getSubconscious()
-      if (subconscious) {
-        // Update subconscious configuration
-        // The subconscious will pick up these settings on next consolidation
-        console.log(`[Skill Settings API] Updated memory settings for agent ${agentId.substring(0, 8)}`)
-      }
+    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Settings saved'
-    })
+    const authz = authorize(auth, 'manage-skills', agentId)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
+    }
+    const requestingAgentId = auth.agentId || null
+    // SF-044: Type guard for body.settings before passing to service
+    if (!body.settings || typeof body.settings !== 'object' || Array.isArray(body.settings)) {
+      return NextResponse.json({ error: 'body.settings must be a non-null object' }, { status: 400 })
+    }
+    const result = await saveSkillSettings(agentId, body.settings, requestingAgentId)
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data)
   } catch (error) {
     console.error('[Skill Settings API] PUT Error:', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

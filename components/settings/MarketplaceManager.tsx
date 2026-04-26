@@ -1,0 +1,869 @@
+'use client'
+
+import { useState, useEffect, useCallback, useRef } from 'react'
+import {
+  Store, Loader2, ChevronDown, ChevronRight,
+  ToggleLeft, ToggleRight,
+  ExternalLink, Wand2, Bot, Terminal, Webhook,
+  Server, FileCode, ScrollText, Palette,
+  Trash2, RefreshCw, Search, Download,
+  AlertTriangle, Shield, Plus, Copy, X,
+} from 'lucide-react'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
+import { MAIN_PLUGIN_NAME, MARKETPLACE_NAME, PLUGIN_COMPATIBLE_TITLES } from '@/lib/ecosystem-constants'
+
+interface PluginStatus {
+  name: string
+  key: string
+  installed: boolean
+  enabled: boolean
+  version: string | null
+  availableVersion: string | null
+  outdated: boolean
+  description: string | null
+  author: string | null
+  authorEmail: string | null
+  license: string | null
+  homepage: string | null
+  repository: string | null
+  keywords: string[] | null
+  sourceUrl: string | null
+  errors: string[]
+  elementCounts: {
+    skills: number; agents: number; commands: number; hooks: number
+    rules: number; mcp: number; lsp: number; outputStyles: number
+  } | null
+}
+
+interface MarketplaceInfo {
+  name: string
+  version: string | null
+  description: string | null
+  author: string | null
+  authorEmail: string | null
+  sourceType: 'github' | 'directory' | 'unknown'
+  sourceUrl: string | null
+  sourceRepo: string | null
+  pluginCount: number
+  enabledCount: number
+  installedCount: number
+  plugins: PluginStatus[]
+}
+
+interface Totals {
+  marketplaces: number
+  withPlugins: number
+  totalPlugins: number
+  installedPlugins: number
+  enabledPlugins: number
+}
+
+interface MarketplaceManagerProps {
+  expandMarketplace?: string | null
+  onNavigateComplete?: () => void
+  onGoToPlugin?: (pluginKey: string) => void
+}
+
+export default function MarketplaceManager({ expandMarketplace, onNavigateComplete, onGoToPlugin }: MarketplaceManagerProps = {}) {
+  const { requestSudoToken } = useSudo()
+  const [marketplaces, setMarketplaces] = useState<MarketplaceInfo[]>([])
+  const [totals, setTotals] = useState<Totals>({ marketplaces: 0, withPlugins: 0, totalPlugins: 0, installedPlugins: 0, enabledPlugins: 0 })
+  const [loading, setLoading] = useState(true)
+  const [expandedMkt, setExpandedMkt] = useState<string | null>(null)
+  const [loadingExpand, setLoadingExpand] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [pluginSearch, setPluginSearch] = useState('')
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{ action: string; target: string; label: string } | null>(null)
+  const [selectedPlugin, setSelectedPlugin] = useState<string | null>(null)
+  const [errorPopup, setErrorPopup] = useState<{ name: string; errors: string[] } | null>(null)
+  const [securityReport, setSecurityReport] = useState<{ name: string; summary: string; report: string } | null>(null)
+  const [addUrl, setAddUrl] = useState('')
+  const [addingMkt, setAddingMkt] = useState(false)
+  // Lazy version + metadata check state
+  const [updateChecks, setUpdateChecks] = useState<Record<string, {
+    checking: boolean
+    remoteVersion: string | null
+    marketplaceOutdated: boolean
+    pluginUpdates: Record<string, { remote: string; outdated: boolean }>
+    pluginMetadata: Record<string, {
+      description: string | null; author: string | null; authorEmail: string | null
+      license: string | null; homepage: string | null; repository: string | null; keywords: string[] | null
+    }>
+  }>>({})
+
+  const [orphanPlugins, setOrphanPlugins] = useState<{ name: string; key: string; errors: string[] }[]>([])
+  const [updatingAll, setUpdatingAll] = useState(false)
+  const mktRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  // Ref holding the latest updateChecks so checkUpdates can read it without being
+  // recreated on every state update (avoids circular dependency in useCallback).
+  const updateChecksRef = useRef(updateChecks)
+  useEffect(() => { updateChecksRef.current = updateChecks }, [updateChecks])
+
+  // Scroll to the expanded marketplace after the re-render that sets expandedMkt completes
+  useEffect(() => {
+    if (expandedMkt) {
+      requestAnimationFrame(() => {
+        const el = mktRefs.current[expandedMkt]
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    }
+  }, [expandedMkt])
+
+  const fetchMarketplaces = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings/marketplaces')
+      if (!res.ok) return
+      const data = await res.json()
+      setMarketplaces(data.marketplaces || [])
+      setOrphanPlugins(data.orphanPlugins || [])
+      setTotals(data.totals || { marketplaces: 0, withPlugins: 0, totalPlugins: 0, installedPlugins: 0, enabledPlugins: 0 })
+    } catch (err) { console.error('[MarketplaceManager] fetchMarketplaces failed:', err) }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchMarketplaces() }, [fetchMarketplaces])
+
+  const executeAction = async (action: string, payload: Record<string, string>) => {
+    const key = payload.pluginKey || payload.marketplaceName || ''
+    setActionInProgress(key)
+    setConfirmAction(null)
+    try {
+      const res = await sudoFetch(
+        '/api/settings/marketplaces',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, ...payload }),
+        },
+        (reason) => requestSudoToken(reason),
+      )
+      if (res.ok) {
+        // Invalidate version check cache for updated marketplace
+        if (action === 'update-marketplace' && payload.marketplaceName) {
+          setUpdateChecks(prev => { const next = { ...prev }; delete next[payload.marketplaceName]; return next })
+        }
+        await fetchMarketplaces()
+      } else {
+        const errorText = await res.text()
+        console.error(`Action '${action}' failed for '${key}':`, errorText)
+      }
+    } catch (err) { console.error('[MarketplaceManager] executeAction failed:', err) }
+    finally { setActionInProgress(null) }
+  }
+
+  const handleToggle = async (key: string, currentEnabled: boolean) => {
+    setActionInProgress(key)
+    try {
+      const res = await sudoFetch(
+        '/api/settings/marketplaces',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: currentEnabled ? 'disable' : 'enable', pluginKey: key }),
+        },
+        (reason) => requestSudoToken(reason),
+      )
+      // Only proceed if server accepted the request
+      if (!res.ok) {
+        const errorText = await res.text()
+        console.error('Toggle failed:', errorText)
+        return
+      }
+      // Refresh all data from the server so that per-marketplace enabledCount and
+      // the global totals.enabledPlugins summary are both kept in sync.
+      await fetchMarketplaces()
+    } catch (err) { console.error('[MarketplaceManager] handleToggle failed:', err) }
+    finally { setActionInProgress(null) }
+  }
+
+  // Lazy-check updates from GitHub for a marketplace.
+  // force=true bypasses the 5min server cache (used when user explicitly expands).
+  // Uses updateChecksRef (not state directly) to read the latest value without
+  // needing updateChecks in the dependency array, which would cause an infinite loop
+  // because checkUpdates itself updates updateChecks state.
+  // pluginUpdates and pluginMetadata are keyed by plugin.key (not plugin.name) so that
+  // two plugins in the same marketplace with the same display name never collide.
+  const checkUpdates = useCallback(async (mktName: string, force = false) => {
+    if (!force && updateChecksRef.current[mktName]) return // already checked or checking (unless forced)
+    setUpdateChecks(prev => ({ ...prev, [mktName]: { checking: true, remoteVersion: null, marketplaceOutdated: false, pluginUpdates: {}, pluginMetadata: {} } }))
+    try {
+      const res = await sudoFetch(
+        '/api/settings/marketplaces',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'check-updates', marketplaceName: mktName, force }),
+        },
+        (reason) => requestSudoToken(reason),
+      )
+      if (res.ok) {
+        const data = await res.json()
+        // Key by plugin.key (not plugin.name) to avoid collisions when two plugins share
+        // the same display name within the same marketplace.
+        // The API returns pluginUpdates already as a Record<pluginKey, {remote, outdated}>,
+        // not an array — assign it directly instead of iterating over it.
+        const plugUpdates: Record<string, { remote: string; outdated: boolean }> = data.pluginUpdates || {}
+        // Sync the authoritative outdated flag from the remote check back into the
+        // marketplaces state so that plugin.outdated is always current, not stale
+        // from the initial fetch.
+        setMarketplaces(prevMarketplaces => prevMarketplaces.map(mkt => {
+          if (mkt.name !== mktName) return mkt
+          return {
+            ...mkt,
+            plugins: mkt.plugins.map(plugin => {
+              const updatedPluginInfo = plugUpdates[plugin.key]
+              if (updatedPluginInfo) return { ...plugin, outdated: updatedPluginInfo.outdated }
+              return plugin
+            }),
+          }
+        }))
+        // pluginMetadata from the API is already a Record<pluginKey, metadata>
+        setUpdateChecks(prev => ({ ...prev, [mktName]: {
+          checking: false, remoteVersion: data.remoteVersion,
+          marketplaceOutdated: data.marketplaceOutdated, pluginUpdates: plugUpdates,
+          pluginMetadata: data.pluginMetadata || {},
+        }}))
+      } else {
+        const errorText = await res.text()
+        console.error(`Check updates for marketplace '${mktName}' failed:`, errorText)
+        setUpdateChecks(prev => ({ ...prev, [mktName]: { checking: false, remoteVersion: null, marketplaceOutdated: false, pluginUpdates: {}, pluginMetadata: {} } }))
+      }
+    } catch (err) {
+      console.error('[MarketplaceManager] checkUpdates failed:', err)
+      setUpdateChecks(prev => ({ ...prev, [mktName]: { checking: false, remoteVersion: null, marketplaceOutdated: false, pluginUpdates: {}, pluginMetadata: {} } }))
+    }
+  }, [requestSudoToken]) // requestSudoToken from useSudo is stable; reads updateChecks via ref; all state updates use functional form
+
+  // Auto-expand marketplace when navigated from another tab.
+  // Placed after checkUpdates declaration so the stable memoized reference is available.
+  useEffect(() => {
+    if (expandMarketplace && marketplaces.length > 0) {
+      setExpandedMkt(expandMarketplace)
+      checkUpdates(expandMarketplace, true)
+      onNavigateComplete?.()
+    }
+  }, [expandMarketplace, marketplaces.length, checkUpdates, onNavigateComplete])
+
+  const handleExpandMkt = (name: string) => {
+    if (expandedMkt === name) {
+      setExpandedMkt(null)
+      setPluginSearch('')
+      setLoadingExpand(false)
+    } else {
+      setLoadingExpand(true)
+      setExpandedMkt(name)
+      setPluginSearch('')
+      setTimeout(() => setLoadingExpand(false), 100)
+      // Trigger fresh update check for expanded marketplace (force bypasses cache)
+      checkUpdates(name, true)
+    }
+  }
+
+  const handleAddMarketplace = async () => {
+    if (!addUrl.trim()) return
+    setAddingMkt(true)
+    try {
+      const res = await sudoFetch(
+        '/api/settings/marketplaces',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'add-marketplace', url: addUrl.trim() }),
+        },
+        (reason) => requestSudoToken(reason),
+      )
+      if (res.ok) {
+        setAddUrl('')
+        await fetchMarketplaces()
+      } else {
+        const errorText = await res.text()
+        console.error('Add marketplace failed:', errorText)
+      }
+    } catch (err) { console.error('[MarketplaceManager] handleAddMarketplace failed:', err) }
+    finally { setAddingMkt(false) }
+  }
+
+  const totalElements = (counts: PluginStatus['elementCounts']) => {
+    if (!counts) return 0
+    return counts.skills + counts.agents + counts.commands + counts.hooks + counts.rules + counts.mcp + counts.lsp + counts.outputStyles
+  }
+
+  // Filter marketplaces by search
+  const filtered = marketplaces.filter(m => {
+    if (!searchQuery.trim()) return true
+    const q = searchQuery.toLowerCase()
+    return m.name.toLowerCase().includes(q) ||
+      (m.description || '').toLowerCase().includes(q) ||
+      m.plugins.some(p => p.name.toLowerCase().includes(q))
+  })
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-3 p-6">
+        <Loader2 className="w-5 h-5 text-gray-500 animate-spin" />
+        <span className="text-sm text-gray-500">Scanning marketplaces...</span>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {/* Summary */}
+      <p className="text-xs text-gray-500 mb-3">
+        {totals.marketplaces} marketplaces, {totals.totalPlugins} plugins ({totals.installedPlugins} installed, {totals.enabledPlugins} enabled)
+        {orphanPlugins.length > 0 && <span className="text-red-400 ml-2">{orphanPlugins.length} error{orphanPlugins.length > 1 ? 's' : ''}</span>}
+      </p>
+
+      {/* Orphan plugins — enabled but not found in any marketplace */}
+      {orphanPlugins.length > 0 && (
+        <div className="mb-3 rounded-xl border border-red-800/50 overflow-hidden">
+          <div className="px-3 py-2 bg-red-900/20 flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+            <span className="text-xs font-medium text-red-400">Plugin Errors</span>
+            <span className="text-[10px] text-red-400/60">{orphanPlugins.length}</span>
+          </div>
+          <div className="divide-y divide-red-800/20">
+            {orphanPlugins.map(p => (
+              <div key={p.key} className="px-3 py-2 flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-[11px] font-medium text-gray-300">{p.name}</span>
+                  <span className="text-[9px] text-gray-600 ml-1.5">{p.key}</span>
+                </div>
+                <button
+                  onClick={() => setErrorPopup({ name: p.name, errors: p.errors })}
+                  className="text-[9px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded hover:bg-red-500/20 flex-shrink-0"
+                >
+                  {p.errors[0] || 'Details'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Add marketplace */}
+      <div className="flex items-center gap-2 mb-3">
+        <div className="relative flex-1">
+          <Plus className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+          <input
+            type="text"
+            placeholder="Add marketplace from GitHub URL..."
+            value={addUrl}
+            onChange={e => setAddUrl(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAddMarketplace()}
+            className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-800/50 border border-gray-700 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+        {addUrl.trim() && (
+          <button
+            onClick={handleAddMarketplace}
+            disabled={addingMkt}
+            className="px-2.5 py-1.5 text-[10px] font-medium rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/20 hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+          >
+            {addingMkt ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Add'}
+          </button>
+        )}
+      </div>
+
+      {/* Search + Update All */}
+      <div className="flex items-center gap-2 mb-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+          <input
+            type="text"
+            placeholder="Filter marketplaces..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-8 pr-8 py-1.5 text-xs bg-gray-800/50 border border-gray-700 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+          />
+          {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-700"><X className="w-3 h-3 text-gray-500" /></button>}
+        </div>
+        <button
+          onClick={async () => {
+            setUpdatingAll(true)
+            for (const mkt of marketplaces) {
+              await executeAction('update-marketplace', { marketplaceName: mkt.name })
+            }
+            setUpdatingAll(false)
+          }}
+          disabled={updatingAll || !!actionInProgress}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition-colors disabled:opacity-40 flex-shrink-0"
+          title="Update all marketplaces (git pull)"
+        >
+          {updatingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+          Update All
+        </button>
+      </div>
+
+      {/* Marketplace list */}
+      <div className="space-y-1.5">
+        {filtered.map(mkt => {
+          const isExpanded = expandedMkt === mkt.name
+          const isActioning = actionInProgress === mkt.name
+          const uc = updateChecks[mkt.name]
+
+          // Filter plugins by plugin search
+          const filteredPlugins = isExpanded && pluginSearch.trim()
+            ? mkt.plugins.filter(p => p.name.toLowerCase().includes(pluginSearch.toLowerCase()) || (p.description || '').toLowerCase().includes(pluginSearch.toLowerCase()))
+            : mkt.plugins
+
+          return (
+            <div key={mkt.name} ref={el => { mktRefs.current[mkt.name] = el }} className="rounded-xl border border-gray-800 overflow-hidden">
+              {/* Marketplace header — darker bg than plugin rows */}
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-800/70 hover:bg-gray-800/90 transition-colors">
+                <button onClick={() => handleExpandMkt(mkt.name)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                  {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />}
+                  <Store className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                  <span className="text-[8px] text-amber-400/50 uppercase tracking-wider flex-shrink-0">Mkt</span>
+                  <span className="text-xs font-medium text-gray-200 min-w-0 truncate" title={mkt.name}>{mkt.name}</span>
+                  <span className="text-[9px] text-gray-600 flex-shrink-0">{mkt.version ? `v${mkt.version}` : '-'}</span>
+                  {/* Remote version check indicator */}
+                  {uc?.checking && <Loader2 className="w-2.5 h-2.5 text-gray-500 animate-spin flex-shrink-0" />}
+                  {uc && !uc.checking && uc.marketplaceOutdated && (
+                    <span className="text-[9px] text-red-400 bg-red-500/10 px-1 py-0.5 rounded flex-shrink-0" title={uc.remoteVersion ? `Remote: v${uc.remoteVersion}` : 'Remote: unknown'}>
+                      {uc.remoteVersion ? `v${uc.remoteVersion}` : 'update'} available
+                    </span>
+                  )}
+                </button>
+
+                {/* Counts: enabled/installed/total — always show all three for consistency */}
+                <span className="text-[10px] text-gray-500 flex-shrink-0 tabular-nums">
+                  <span className={mkt.enabledCount > 0 ? 'text-emerald-400' : undefined}>{mkt.enabledCount}</span>
+                  /{mkt.installedCount}/{mkt.pluginCount}
+                </span>
+
+                {/* Open source URL — works for any URL (http, file://) */}
+                {mkt.sourceUrl && (
+                  <a
+                    href={mkt.sourceUrl.startsWith('/') ? `file://${mkt.sourceUrl}` : mkt.sourceUrl}
+                    target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                    className="p-1 rounded hover:bg-gray-700 transition-colors flex-shrink-0" title={mkt.sourceUrl}
+                  >
+                    <ExternalLink className="w-3 h-3 text-gray-500 hover:text-gray-300" />
+                  </a>
+                )}
+
+                {/* Update marketplace (git pull) */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); executeAction('update-marketplace', { marketplaceName: mkt.name }) }}
+                  disabled={isActioning}
+                  className="p-0.5 rounded hover:bg-blue-500/20 transition-colors" title="Update marketplace (git pull)"
+                >
+                  {actionInProgress === mkt.name ? <Loader2 className="w-3 h-3 text-blue-400 animate-spin" /> : <RefreshCw className="w-3 h-3 text-gray-500 hover:text-blue-400" />}
+                </button>
+
+                {/* Delete marketplace — protect the ai-maestro-plugins marketplace
+                    because it hosts the R17 core plugin. Cascade delete would uninstall
+                    the core plugin, which must never happen through the UI. SCEN-017 */}
+                {mkt.name === MARKETPLACE_NAME ? (
+                  <span className="text-[9px] text-amber-400/70 px-1.5 py-0.5 rounded border border-amber-400/30 bg-amber-400/5 flex-shrink-0" title={`Protected — hosts the core ${MAIN_PLUGIN_NAME} (R17)`}>core</span>
+                ) : (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmAction({ action: 'delete-marketplace', target: mkt.name, label: `Delete marketplace "${mkt.name}"? This will uninstall all its plugins and remove the marketplace.` }) }}
+                    disabled={isActioning}
+                    className="p-0.5 rounded hover:bg-red-500/20 transition-colors" title="Delete marketplace"
+                  >
+                    <Trash2 className="w-3 h-3 text-gray-600 hover:text-red-400" />
+                  </button>
+                )}
+              </div>
+
+              {/* Marketplace metadata — always shown when expanded */}
+              {isExpanded && (
+                <div className="px-3 py-1.5 bg-gray-900/40 text-[9px] text-gray-600 border-b border-gray-800/50 space-y-0.5">
+                  <div>Description: <span className="text-gray-500">{mkt.description || '-'}</span></div>
+                  <div>Author: <span className="text-gray-500">{mkt.author || '-'}</span></div>
+                  <div>Email: <span className="text-gray-500">{mkt.authorEmail || '-'}</span></div>
+                  <div>Source: {mkt.sourceUrl ? (
+                    <a href={mkt.sourceUrl.startsWith('/') ? `file://${mkt.sourceUrl}` : mkt.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline break-all" title={mkt.sourceUrl}>{mkt.sourceUrl}</a>
+                  ) : <span className="text-gray-500">-</span>}</div>
+                </div>
+              )}
+
+              {/* Plugin search (inside expanded marketplace) */}
+              {isExpanded && mkt.plugins.length > 0 && (
+                <div className="px-3 py-1.5 bg-gray-900/30 border-b border-gray-800/50">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-600" />
+                    <input
+                      type="text"
+                      placeholder="Filter plugins..."
+                      value={pluginSearch}
+                      onChange={e => setPluginSearch(e.target.value)}
+                      className="w-full pl-7 pr-7 py-1 text-[10px] bg-gray-800/50 border border-gray-700/50 rounded text-gray-300 placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                    />
+                    {pluginSearch && <button onClick={() => setPluginSearch('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-700"><X className="w-2.5 h-2.5 text-gray-500" /></button>}
+                  </div>
+                </div>
+              )}
+
+              {/* Loading spinner */}
+              {isExpanded && loadingExpand && (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
+                </div>
+              )}
+
+              {/* Plugin list */}
+              {isExpanded && !loadingExpand && filteredPlugins.length > 0 && (
+                <div className="divide-y divide-gray-800/30">
+                  {filteredPlugins.map(plugin => {
+                    const elCount = totalElements(plugin.elementCounts)
+                    const isPluginActioning = actionInProgress === plugin.key
+                    const isSelected = selectedPlugin === plugin.key
+                    const hasErrors = plugin.errors.length > 0
+                    // Remote version from lazy check — keyed by plugin.key to avoid collisions
+                    const plugUc = uc?.pluginUpdates?.[plugin.key]
+
+                    return (
+                      <div key={plugin.key}>
+                        <div
+                          className={`pl-6 pr-3 py-2 transition-colors cursor-pointer hover:bg-gray-800/30 ${isSelected ? 'bg-gray-800/40' : ''}`}
+                          onClick={() => setSelectedPlugin(isSelected ? null : plugin.key)}
+                        >
+                          <div className="flex items-center gap-2">
+                            {/* Expand chevron */}
+                            {isSelected ? <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" /> : <ChevronRight className="w-3 h-3 text-gray-400 flex-shrink-0" />}
+                            {/* Status dot */}
+                            <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${plugin.installed ? (plugin.enabled ? 'bg-emerald-400' : 'bg-gray-500') : 'bg-gray-700'}`} />
+
+                            {/* Name + version + elements */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`text-[11px] font-medium min-w-0 truncate ${plugin.installed ? 'text-gray-200 hover:text-blue-400 cursor-pointer' : 'text-gray-500'}`}
+                                  onClick={plugin.installed && onGoToPlugin ? (e) => { e.stopPropagation(); onGoToPlugin(plugin.key) } : undefined}
+                                  title={plugin.installed && onGoToPlugin ? `${plugin.name} — View in Plugins tab` : plugin.name}
+                                >
+                                  {plugin.name}
+                                </span>
+                                {/* Version number */}
+                                <span className="text-[9px] text-gray-600 tabular-nums flex-shrink-0">
+                                  {plugin.installed
+                                    ? (plugin.version ? `v${plugin.version}` : '-')
+                                    : (plugUc?.remote || plugin.availableVersion)
+                                      ? `v${plugUc?.remote || plugin.availableVersion}`
+                                      : '-'}
+                                </span>
+                                {/* Update status label — always visible once checked */}
+                                {uc?.checking ? (
+                                  <Loader2 className="w-2.5 h-2.5 text-gray-500 animate-spin flex-shrink-0" />
+                                ) : (plugin.outdated || plugUc?.outdated) ? (
+                                  <span className="text-[9px] text-red-400 bg-red-500/10 px-1 py-0.5 rounded flex-shrink-0" title={`Update: v${(plugUc?.remote || plugin.availableVersion) ?? 'unknown'}`}>
+                                    {(plugUc?.remote || plugin.availableVersion) ?? 'update available'}
+                                  </span>
+                                ) : plugUc && plugin.installed ? (
+                                  <span className="text-[9px] text-emerald-500/70 flex-shrink-0">up to date</span>
+                                ) : null}
+                                {elCount > 0 && <span className="text-[9px] text-gray-600"><span className="hidden sm:inline">{elCount} elements</span><span className="sm:hidden">({elCount})</span></span>}
+                                {/* #240 (TRDD-c7a81642 §7, 2026-04-20): role-plugin
+                                    badge. Shows which governance title(s) this
+                                    plugin can serve, sourced from the TOML's
+                                    compatible-titles (mirrored in ecosystem-
+                                    constants PLUGIN_COMPATIBLE_TITLES). When the
+                                    plugin is compatible with MULTIPLE titles we
+                                    render "Compatible — multiple options" so
+                                    the user sees that uninstalling it won't
+                                    orphan agents who could fall back to
+                                    another installed role-plugin. */}
+                                {PLUGIN_COMPATIBLE_TITLES[plugin.name] && (() => {
+                                  const compat = PLUGIN_COMPATIBLE_TITLES[plugin.name] as readonly string[]
+                                  const label = compat.length > 1
+                                    ? `Role-plugin · ${compat.length} titles`
+                                    : `Role-plugin · ${compat[0].toUpperCase()}`
+                                  const tooltip = compat.length > 1
+                                    ? `Compatible — multiple options: ${compat.join(', ').toUpperCase()}`
+                                    : `Compatible with ${compat[0].toUpperCase()}`
+                                  return (
+                                    <span
+                                      className="text-[9px] text-indigo-300/80 bg-indigo-500/10 border border-indigo-500/30 px-1 py-0.5 rounded flex-shrink-0"
+                                      title={tooltip}
+                                    >
+                                      {label}
+                                    </span>
+                                  )
+                                })()}
+                                {hasErrors && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setErrorPopup({ name: plugin.name, errors: plugin.errors }) }}
+                                    className="flex items-center gap-0.5 text-[9px] text-red-400 bg-red-500/10 px-1 py-0.5 rounded hover:bg-red-500/20"
+                                  >
+                                    <AlertTriangle className="w-2.5 h-2.5" />
+                                    {plugin.errors.length}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Action buttons — mini style */}
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              {plugin.installed ? (
+                                plugin.name === MAIN_PLUGIN_NAME ? (
+                                  /* R17 core plugin — show badge instead of destructive controls.
+                                     SCEN-017 found that MarketplaceManager had zero core-plugin
+                                     gating and exposed Toggle/Update/Uninstall on the core row. */
+                                  <span className="text-[9px] text-amber-400/70 px-1.5 py-0.5 rounded border border-amber-400/30 bg-amber-400/5" title="Core plugin — protected by R17 (cannot disable, update, or uninstall from Settings)">core</span>
+                                ) : (
+                                  <>
+                                    {/* Enable/disable toggle */}
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleToggle(plugin.key, plugin.enabled) }}
+                                      disabled={isPluginActioning}
+                                      className="flex-shrink-0" title={plugin.enabled ? 'Disable plugin' : 'Enable plugin'}
+                                    >
+                                      {isPluginActioning ? <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
+                                        : plugin.enabled ? <ToggleRight className="w-5 h-5 text-emerald-400" />
+                                        : <ToggleLeft className="w-5 h-5 text-gray-600" />}
+                                    </button>
+                                    {/* Update */}
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setConfirmAction({ action: 'update', target: plugin.key, label: `Update "${plugin.name}"? This will re-copy from the marketplace.` }) }}
+                                      disabled={isPluginActioning}
+                                      className="p-0.5 rounded hover:bg-blue-500/20 transition-colors" title="Update"
+                                    >
+                                      <RefreshCw className="w-3 h-3 text-gray-500 hover:text-blue-400" />
+                                    </button>
+                                    {/* Uninstall */}
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setConfirmAction({ action: 'uninstall', target: plugin.key, label: `Uninstall "${plugin.name}"?` }) }}
+                                      disabled={isPluginActioning}
+                                      className="p-0.5 rounded hover:bg-red-500/20 transition-colors" title="Uninstall"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-gray-500 hover:text-red-400" />
+                                    </button>
+                                  </>
+                                )
+                              ) : (
+                                /* Install button for uninstalled plugins */
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); executeAction('install', { pluginKey: plugin.key }) }}
+                                  disabled={isPluginActioning}
+                                  className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-medium rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                                >
+                                  {isPluginActioning ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Download className="w-2.5 h-2.5" />}
+                                  Install
+                                </button>
+                              )}
+
+                              {/* Security check */}
+                              {plugin.installed && (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation()
+                                    setActionInProgress(plugin.key + ':sec')
+                                    try {
+                                      const res = await sudoFetch(
+                                        '/api/settings/marketplaces',
+                                        {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ action: 'security-check', pluginKey: plugin.key }),
+                                        },
+                                        (reason) => requestSudoToken(reason),
+                                      )
+                                      // Check res.ok before parsing JSON — a non-2xx response may
+                                      // return plain text, causing res.json() to throw silently.
+                                      if (!res.ok) {
+                                        const errorText = await res.text()
+                                        setErrorPopup({ name: plugin.name, errors: [errorText] })
+                                        return
+                                      }
+                                      const data = await res.json()
+                                      if (data.summary || data.report) {
+                                        setSecurityReport({ name: plugin.name, summary: data.summary || '', report: data.report || '' })
+                                      } else if (data.error) {
+                                        setErrorPopup({ name: plugin.name, errors: [data.error] })
+                                      }
+                                    } catch (err) { console.error('[MarketplaceManager] security check failed:', err) }
+                                    // Only clear the specific ':sec' action this handler set,
+                                    // so a concurrently-running install/uninstall action is not
+                                    // prematurely reset by the security-check finally block.
+                                    finally { setActionInProgress(prev => prev === plugin.key + ':sec' ? null : prev) }
+                                  }}
+                                  disabled={actionInProgress === plugin.key + ':sec'}
+                                  className="p-0.5 rounded hover:bg-amber-500/20 transition-colors" title="Security check"
+                                >
+                                  {actionInProgress === plugin.key + ':sec'
+                                    ? <Loader2 className="w-3 h-3 text-amber-400 animate-spin" />
+                                    : <Shield className="w-3 h-3 text-gray-600 hover:text-amber-400" />}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Detail panel — merge local metadata with lazy-fetched remote metadata */}
+                        {isSelected && (() => {
+                          const lm = uc?.pluginMetadata?.[plugin.key] // lazy metadata, keyed by plugin.key
+                          const desc = plugin.description || lm?.description || '-'
+                          const auth = plugin.author || lm?.author || '-'
+                          const email = plugin.authorEmail || lm?.authorEmail || '-'
+                          const lic = plugin.license || lm?.license || '-'
+                          const hp = plugin.homepage || lm?.homepage || null
+                          const repo = plugin.repository || lm?.repository || null
+                          const kws = plugin.keywords || lm?.keywords || null
+                          return (
+                          <div className="pl-9 pr-3 py-2 bg-gray-900/50 border-t border-gray-800/30 text-[9px] text-gray-500 space-y-0.5">
+                            <div>Description: <span className="text-gray-400">{desc}</span></div>
+                            <div>Author: <span className="text-gray-400">{auth}</span></div>
+                            <div>Email: <span className="text-gray-400">{email}</span></div>
+                            <div>License: <span className="text-gray-400">{lic}</span></div>
+                            <div>Key: <span className="text-gray-400 font-mono break-all" title={plugin.key}>{plugin.key}</span></div>
+                            <div>Installed: <span className="text-gray-400">{plugin.version ? `v${plugin.version}` : '-'}</span></div>
+                            {(() => {
+                              const availableVer = plugUc?.remote || plugin.availableVersion || null
+                              const isOutdated = plugUc?.outdated || plugin.outdated
+                              return (
+                                <>
+                                  <div>Available: <span className={isOutdated ? 'text-amber-400' : 'text-gray-400'}>{availableVer ? `v${availableVer}` : '-'}</span>{isOutdated && <span className="text-amber-400 ml-2">Update available</span>}</div>
+                                </>
+                              )
+                            })()}
+                            <div>Status: <span className={plugin.installed ? (plugin.enabled ? 'text-emerald-400' : 'text-gray-400') : 'text-gray-600'}>{plugin.installed ? (plugin.enabled ? 'enabled' : 'disabled') : 'not installed'}</span></div>
+                            <div>Source: {plugin.sourceUrl ? (
+                              <a href={plugin.sourceUrl.startsWith('/') ? `file://${plugin.sourceUrl}` : plugin.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline break-all" title={plugin.sourceUrl}>{plugin.sourceUrl}</a>
+                            ) : <span className="text-gray-400">-</span>}</div>
+                            {hp && <div>Homepage: <a href={hp} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline break-all">{hp}</a></div>}
+                            {repo && <div>Repo: <a href={repo} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline break-all">{repo}</a></div>}
+                            {/* Keywords */}
+                            {kws && kws.length > 0 && (
+                              <div className="flex flex-wrap gap-1 text-[8px]">
+                                {kws.map((kw, i) => (
+                                  <span key={i} className="px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-500 border border-gray-700/30">{kw}</span>
+                                ))}
+                              </div>
+                            )}
+                            {/* Element breakdown */}
+                            {plugin.elementCounts && elCount > 0 && (
+                              <div className="flex flex-wrap items-center gap-2 text-[9px]">
+                                {plugin.elementCounts.skills > 0 && <span className="text-purple-400 flex items-center gap-0.5"><Wand2 className="w-2.5 h-2.5" />{plugin.elementCounts.skills}</span>}
+                                {plugin.elementCounts.agents > 0 && <span className="text-blue-400 flex items-center gap-0.5"><Bot className="w-2.5 h-2.5" />{plugin.elementCounts.agents}</span>}
+                                {plugin.elementCounts.commands > 0 && <span className="text-cyan-400 flex items-center gap-0.5"><Terminal className="w-2.5 h-2.5" />{plugin.elementCounts.commands}</span>}
+                                {plugin.elementCounts.hooks > 0 && <span className="text-amber-400 flex items-center gap-0.5"><Webhook className="w-2.5 h-2.5" />{plugin.elementCounts.hooks}</span>}
+                                {plugin.elementCounts.rules > 0 && <span className="text-orange-400 flex items-center gap-0.5"><ScrollText className="w-2.5 h-2.5" />{plugin.elementCounts.rules}</span>}
+                                {plugin.elementCounts.mcp > 0 && <span className="text-green-400 flex items-center gap-0.5"><Server className="w-2.5 h-2.5" />{plugin.elementCounts.mcp}</span>}
+                                {plugin.elementCounts.lsp > 0 && <span className="text-teal-400 flex items-center gap-0.5"><FileCode className="w-2.5 h-2.5" />{plugin.elementCounts.lsp}</span>}
+                                {plugin.elementCounts.outputStyles > 0 && <span className="text-pink-400 flex items-center gap-0.5"><Palette className="w-2.5 h-2.5" />{plugin.elementCounts.outputStyles}</span>}
+                              </div>
+                            )}
+                          </div>
+                          )
+                        })()}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Empty expanded state */}
+              {isExpanded && !loadingExpand && filteredPlugins.length === 0 && (
+                <div className="px-3 py-3 text-[10px] text-gray-600 italic">
+                  {pluginSearch.trim() ? 'No plugins match filter' : 'No plugins found in this marketplace'}
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        {filtered.length === 0 && (
+          <p className="text-xs text-gray-500 italic py-4 text-center">
+            {searchQuery.trim() ? 'No marketplaces match your search' : 'No marketplaces installed'}
+          </p>
+        )}
+      </div>
+
+      {/* Confirmation dialog */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setConfirmAction(null)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 max-w-sm mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-gray-200 mb-2">Confirm Action</h3>
+            <p className="text-xs text-gray-400 mb-2">{confirmAction.label}</p>
+            {(confirmAction.action === 'uninstall' || confirmAction.action === 'delete-marketplace') && (
+              <p className="text-[10px] text-red-400 mb-3">This operation is not reversible.</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmAction(null)} autoFocus className="px-3 py-1.5 text-xs rounded-lg bg-gray-800 text-gray-400 hover:bg-gray-700 transition-colors">Cancel</button>
+              <button
+                onClick={() => {
+                  if (confirmAction.action === 'delete-marketplace') {
+                    executeAction('delete-marketplace', { marketplaceName: confirmAction.target })
+                  } else {
+                    executeAction(confirmAction.action, { pluginKey: confirmAction.target })
+                  }
+                }}
+                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
+                  confirmAction.action === 'uninstall' || confirmAction.action === 'delete-marketplace'
+                    ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                    : 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
+                }`}
+              >
+                {confirmAction.action === 'delete-marketplace' ? 'Delete' : confirmAction.action === 'uninstall' ? 'Uninstall' : 'Update'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error popup */}
+      {errorPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setErrorPopup(null)}>
+          <div className="bg-gray-900 border border-red-800/50 rounded-xl p-5 max-w-md mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-red-400 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" />
+                Errors in {errorPopup.name}
+              </h3>
+              <button onClick={() => setErrorPopup(null)} className="p-1 rounded hover:bg-gray-800"><X className="w-3.5 h-3.5 text-gray-500" /></button>
+            </div>
+            <ul className="space-y-1.5 mb-3">
+              {errorPopup.errors.map((err, i) => (
+                <li key={i} className="text-xs text-gray-400 bg-red-900/10 px-2 py-1.5 rounded border border-red-800/20">{err}</li>
+              ))}
+            </ul>
+            <button
+              onClick={() => { navigator.clipboard.writeText(errorPopup.errors.join('\n')); setErrorPopup(null) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-gray-800 text-gray-400 hover:bg-gray-700 transition-colors"
+            >
+              <Copy className="w-3 h-3" /> Copy errors
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Security report modal */}
+      {securityReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setSecurityReport(null)}>
+          <div className="bg-gray-900 border border-amber-800/50 rounded-xl p-5 max-w-lg mx-4 shadow-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-amber-400 flex items-center gap-2">
+                <Shield className="w-4 h-4" />
+                Security Report: {securityReport.name}
+              </h3>
+              <button onClick={() => setSecurityReport(null)} className="p-1 rounded hover:bg-gray-800"><X className="w-3.5 h-3.5 text-gray-500" /></button>
+            </div>
+            {securityReport.summary && (
+              <div className="text-xs text-gray-300 bg-gray-800/50 px-3 py-2 rounded mb-3 font-mono whitespace-pre-wrap">
+                {securityReport.summary}
+              </div>
+            )}
+            {securityReport.report && (
+              <div className="flex-1 overflow-y-auto text-[10px] text-gray-400 bg-gray-950/50 px-3 py-2 rounded border border-gray-800/50 font-mono whitespace-pre-wrap mb-3">
+                {securityReport.report}
+              </div>
+            )}
+            <button
+              onClick={() => { navigator.clipboard.writeText(securityReport.report || securityReport.summary); setSecurityReport(null) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-gray-800 text-gray-400 hover:bg-gray-700 transition-colors self-start"
+            >
+              <Copy className="w-3 h-3" /> Copy report
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

@@ -1,51 +1,104 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  X, User, Building2, Briefcase, Code2, Cpu, Tag,
-  Activity, MessageSquare, CheckCircle, Clock, Zap,
-  DollarSign, Database, BookOpen, Link2, Edit2, Save,
+  X, User, Briefcase, Code2, Cpu, Tag,
+  Activity, MessageSquare, CheckCircle, Clock, Zap, Square,
+  DollarSign, Database, BookOpen, Link2, Edit2,
   ChevronDown, ChevronRight, Plus, Trash2, TrendingUp, TrendingDown,
-  Cloud, Monitor, Server, Play, Wifi, WifiOff, Folder, Download, Send,
-  GitBranch, FolderGit2, RefreshCw, ExternalLink, AlertTriangle, Brain,
-  FolderTree
+  Cloud, Monitor, Server, Play, Wifi, WifiOff, Folder, Download, Send, RotateCcw,
+  GitBranch, FolderGit2, RefreshCw, AlertTriangle,
+  Terminal, Shield, Webhook, ScrollText, Users, Puzzle, Palette,
+  ToggleLeft, ToggleRight, Loader2
 } from 'lucide-react'
-import type { Agent, AgentDocumentation, AgentSessionStatus, Repository } from '@/types/agent'
+import type { Agent, AgentDocumentation, LiveAgentSessionStatus, Repository } from '@/types/agent'
 import TransferAgentDialog from './TransferAgentDialog'
 import ExportAgentDialog from './ExportAgentDialog'
 import DeleteAgentDialog from './DeleteAgentDialog'
-import MemoryViewer from './MemoryViewer'
-import SkillsSection from './SkillsSection'
-import { AgentSkillEditor } from './marketplace'
+// AgentSkillEditor (marketplace skills) moved to Settings → Global Elements
 import AvatarPicker from './AvatarPicker'
 import EmailAddressesSection from './EmailAddressesSection'
+import { useGovernance } from '@/hooks/useGovernance'
+import { useSessionActivity } from '@/hooks/useSessionActivity'
+import { useRestartQueue } from '@/hooks/useRestartQueue'
+import { useAgentLocalConfig } from '@/hooks/useAgentLocalConfig'
+import TitleBadge from '@/components/governance/TitleBadge'
+import TitleAssignmentDialog from '@/components/governance/TitleAssignmentDialog'
+import TeamMembershipSection from '@/components/governance/TeamMembershipSection'
+import GroupSubscriptionSection from '@/components/governance/GroupSubscriptionSection'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface AgentProfileProps {
   isOpen: boolean
   onClose: () => void
   agentId: string
-  sessionStatus?: AgentSessionStatus  // Session status from unified API
+  sessionStatus?: LiveAgentSessionStatus  // Session status from unified API
   onStartSession?: () => void         // Callback to start a session for offline agents
   onDeleteAgent?: (agentId: string) => Promise<void>  // Callback to delete agent
   scrollToDangerZone?: boolean        // Whether to auto-scroll to danger zone
   hostUrl?: string                    // Base URL for remote hosts
+  embedded?: boolean                  // When true, renders inline (no fixed overlay/backdrop)
+  renderMode?: 'full' | 'overview' | 'advanced'  // Which sections to render (default: 'full')
+  renderAfterHeader?: () => React.ReactNode  // Content injected between header and body
+  renderAfterGovernanceTitle?: () => React.ReactNode  // Content injected after the Governance Title row (used for Role Plugin selector)
+  onDataChanged?: () => void           // Notify parent to refresh sidebar agent list after governance changes
 }
 
-export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, onStartSession, onDeleteAgent, scrollToDangerZone, hostUrl }: AgentProfileProps) {
+/** Inline toggle for local plugin enable/disable */
+function PluginToggle({ agentId, pluginKey, enabled, onToggled }: { agentId: string; pluginKey: string; enabled: boolean; onToggled: () => void }) {
+  const [toggling, setToggling] = React.useState(false)
+  const toggle = async () => {
+    setToggling(true)
+    try {
+      const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/local-plugins`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: pluginKey, enabled: !enabled }),
+      })
+      if (res.ok) onToggled()
+    } catch { /* ignore */ }
+    finally { setToggling(false) }
+  }
+  return (
+    <button onClick={toggle} disabled={toggling} className="flex-shrink-0" title={enabled ? 'Disable plugin' : 'Enable plugin'}>
+      {toggling ? <Loader2 className="w-5 h-5 text-gray-500 animate-spin" /> : enabled ? <ToggleRight className="w-6 h-6 text-emerald-400" /> : <ToggleLeft className="w-6 h-6 text-gray-600" />}
+    </button>
+  )
+}
+
+export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, onStartSession, onDeleteAgent, scrollToDangerZone, hostUrl, embedded, renderMode = 'full', renderAfterHeader, renderAfterGovernanceTitle, onDataChanged }: AgentProfileProps) {
+  const { requestSudoToken } = useSudo()
   // Base URL for API calls - empty for local, full URL for remote hosts
   const baseUrl = hostUrl || ''
+  // Stable ref for onDataChanged to avoid recreating autoSave on every parent re-render
+  const onDataChangedRef = useRef(onDataChanged)
+  onDataChangedRef.current = onDataChanged
   const [agent, setAgent] = useState<Agent | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [hasChanges, setHasChanges] = useState(false)
-  const [editingField, setEditingField] = useState<string | null>(null)
+
+  // Restart queue: deferred restart after title changes that install/uninstall plugins
+  const { queueRestart } = useRestartQueue()
+
+  // Per-field debounce timers for auto-save — typing in one field doesn't cancel another field's save
+  const debounceTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  // Track which field labels should flash green on successful auto-save
+  const [flashFields, setFlashFields] = useState<Set<string>>(new Set())
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [newTagValue, setNewTagValue] = useState('')
   const [showTransferDialog, setShowTransferDialog] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showTitleDialog, setShowRoleDialog] = useState(false)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
   const [usedAvatars, setUsedAvatars] = useState<string[]>([])
+
+  const governance = useGovernance(agentId || null)
+  const { config: localConfig, refetch: refetchLocalConfig } = useAgentLocalConfig(agentId || null)
+  // Note: AgentSkillEditor also calls useGovernance. In Phase 2, consider a GovernanceContext
+  // provider to avoid duplicate API calls. Acceptable for Phase 1 with localhost-only architecture.
+
+  // Marketplace skills management moved to Settings → Global Elements
 
   // Repository state
   const [repositories, setRepositories] = useState<Repository[]>([])
@@ -62,7 +115,12 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
     repositories: false,
     memory: false,
     installedSkills: false,
-    skillSettings: false,
+    localAgents: false,
+    localRules: false,
+    localCommands: false,
+    localHooks: false,
+    localMcp: false,
+    localLsp: false,
     metrics: true,
     documentation: false,
     customMetadata: false,
@@ -71,6 +129,50 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
 
   // Ref for danger zone scrolling
   const dangerZoneRef = useRef<HTMLElement>(null)
+
+  // Debounced auto-save: PATCHes the specific field to the API after 300ms of inactivity per field
+  // SCEN-016 BUG-001: strict-route PATCHes (e.g. program change → ChangeClient R18 pipeline)
+  // must go through sudoFetch so the 403 sudo_required retry loop opens the password modal.
+  const autoSave = useCallback((field: string, value: any) => {
+    // Clear any existing timer for THIS field only — other fields' timers are unaffected
+    if (debounceTimersRef.current[field]) {
+      clearTimeout(debounceTimersRef.current[field])
+    }
+    debounceTimersRef.current[field] = setTimeout(async () => {
+      try {
+        const response = await sudoFetch(`${baseUrl}/api/agents/${agentId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [field]: value })
+        }, requestSudoToken)
+        if (response.ok) {
+          // Brief green flash on the field label to confirm auto-save succeeded
+          setFlashFields(prev => new Set(prev).add(field))
+          setTimeout(() => {
+            setFlashFields(prev => {
+              const next = new Set(prev)
+              next.delete(field)
+              return next
+            })
+          }, 600)
+          // NOTE: Sidebar refresh happens automatically via broadcastAgentUpdate →
+          // /status WebSocket → useAgents listener. No prop-drilling needed.
+        } else {
+          console.error(`Auto-save failed for ${field}:`, response.statusText)
+        }
+      } catch (error) {
+        console.error(`Auto-save failed for ${field}:`, error)
+      }
+      delete debounceTimersRef.current[field]
+    }, 300)
+  }, [baseUrl, agentId, requestSudoToken])
+
+  // Cleanup debounce timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(debounceTimersRef.current).forEach(clearTimeout)
+    }
+  }, [])
 
   // Auto-scroll to danger zone when requested
   useEffect(() => {
@@ -108,7 +210,8 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
     }
 
     fetchAgent()
-  }, [isOpen, agentId])
+
+  }, [isOpen, agentId, baseUrl])
 
   // Fetch repositories lazily - only when section is expanded
   useEffect(() => {
@@ -131,7 +234,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
     }
 
     fetchRepos()
-  }, [isOpen, agentId, expandedSections.repositories, reposLoaded])
+  }, [isOpen, agentId, expandedSections.repositories, reposLoaded, baseUrl])
 
   // Fetch used avatars (all avatars from other agents on this host)
   useEffect(() => {
@@ -181,54 +284,192 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }))
   }
 
-  const handleSave = async () => {
-    if (!agent || !hasChanges) return
-
-    setSaving(true)
+  // Send a command string to the agent's tmux session via the command API
+  const sendCommandToSession = async (command: string) => {
+    const sessionName = sessionStatus?.tmuxSessionName || agent?.name
+    if (!sessionName) return
     try {
-      const response = await fetch(`${baseUrl}/api/agents/${agentId}`, {
-        method: 'PATCH',
+      await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(sessionName)}/command`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: agent.name || agent.alias,
-          label: agent.label,
-          avatar: agent.avatar,
-          owner: agent.owner,
-          team: agent.team,
-          model: agent.model,
-          taskDescription: agent.taskDescription,
-          tags: agent.tags,
-          documentation: agent.documentation,
-          metadata: agent.metadata
-        })
+        body: JSON.stringify({ command, addNewline: true, requireIdle: false }),
       })
-
-      if (response.ok) {
-        setHasChanges(false)
-        setTimeout(() => setSaving(false), 500)
-      }
     } catch (error) {
-      console.error('Failed to save agent:', error)
-      setSaving(false)
+      console.error('Failed to send command to session:', error)
     }
   }
 
-  const updateField = (field: string, value: any) => {
+  // Launch a new Claude session inside the agent's existing tmux shell
+  // Buttons are disabled only when program is actively running in the tmux pane.
+  // When tmux is alive but showing a shell prompt (Claude exited), buttons are enabled.
+  const isProgramRunning = sessionStatus?.status === 'online' && sessionStatus?.programRunning !== false
+
+  // Session activity: detect idle prompt vs permission prompt for Stop/Restart/Approve buttons
+  const { getSessionActivity } = useSessionActivity()
+  const sessionName = sessionStatus?.tmuxSessionName || agent?.name
+  const activityInfo = sessionName ? getSessionActivity(sessionName) : null
+  const notificationType = activityInfo?.notificationType
+
+  /**
+   * Safe-state concept for session control buttons:
+   *
+   * Claude Code sessions cycle through states detected via WebSocket activity hooks:
+   *   - 'idle_prompt': Claude finished processing and displays its input prompt.
+   *     This is the ONLY state where Stop and Restart are safe because sending
+   *     /exit won't interrupt a running tool or corrupt output.
+   *   - 'permission_prompt': Claude is blocked asking the user to approve a tool
+   *     use (e.g. file write, bash command). The Approve button becomes active.
+   *   - 'active' / undefined: Claude is processing — buttons must stay disabled
+   *     to prevent data loss from mid-operation interruption.
+   *
+   * `isSafeToCommand` gates Stop and Restart.
+   * `isPermissionPrompt` gates Approve.
+   * Both require `isProgramRunning` to be true (the AI program is still alive).
+   */
+  const isIdlePrompt = isProgramRunning && notificationType === 'idle_prompt'
+  const isPermissionPrompt = isProgramRunning && notificationType === 'permission_prompt'
+  // Safe to send commands when: hook reported idle_prompt, OR hook state is stale/missing.
+  // After fresh startup, Claude sits at prompt but idle_prompt hasn't fired yet (only fires
+  // after first turn completes). We treat idle/active with no notificationType as safe when
+  // the program is running — the worst case is the user clicks Stop while Claude is processing,
+  // and Ctrl+C/Ctrl+D will cleanly interrupt it.
+  // hookStatus carries the raw status from the hook (including 'subagents_running')
+  const isIdleNoHook = isProgramRunning && !notificationType && activityInfo?.hookStatus !== 'subagents_running'
+  const isNoActivityData = isProgramRunning && !activityInfo
+  const isSafeToCommand = isIdlePrompt || isIdleNoHook || isNoActivityData
+  const [restarting, setRestarting] = useState(false)
+
+  // Resolve display program name (e.g. "claude-code", "Claude Code") to CLI binary name
+  const resolveProgram = (program: string): string => {
+    const p = program.toLowerCase()
+    if (p.includes('claude')) return 'claude'
+    if (p.includes('codex')) return 'codex'
+    if (p.includes('aider')) return 'aider'
+    if (p.includes('gemini')) return 'gemini'
+    if (p.includes('opencode')) return 'opencode'
+    return 'claude'
+  }
+
+  // Ensure --name <persona> is always in args; insert before any -- divider
+  const ensureNameArg = (args: string, personaName: string): string => {
+    if (args.includes('--name ')) return args
+    const dividerIdx = args.indexOf(' -- ')
+    if (dividerIdx !== -1) {
+      return args.slice(0, dividerIdx) + ` --name ${personaName}` + args.slice(dividerIdx)
+    }
+    return `${args} --name ${personaName}`.trim()
+  }
+
+  const handleNewSession = async () => {
+    if (isProgramRunning) return
+    const program = resolveProgram(agent?.program || 'claude')
+    const personaName = agent?.label || agent?.name || sessionName || 'agent'
+    const args = ensureNameArg(agent?.programArgs || '', personaName)
+    const cmd = `${program} ${args}`.trim()
+    await sendCommandToSession(cmd)
+  }
+
+  // Resume the previous Claude conversation with --continue
+  const handleResumeSession = async () => {
+    if (isProgramRunning) return
+    const program = resolveProgram(agent?.program || 'claude')
+    const personaName = agent?.label || agent?.name || sessionName || 'agent'
+    const args = ensureNameArg(agent?.programArgs || '', personaName)
+    const cmd = `${program} --continue ${args}`.trim()
+    await sendCommandToSession(cmd)
+  }
+
+  /**
+   * Gracefully stop the running Claude Code session.
+   *
+   * Calls the Stop API which sends Ctrl+C (clear input) then /exit as literal
+   * text via tmux send-keys -l. Ctrl+D does NOT exit Claude Code — only /exit
+   * works. Fires the SessionEnd hook on exit. After exit, the tmux pane drops
+   * back to a shell prompt and the session transitions to "Exited" state.
+   */
+  const handleStop = async () => {
+    if (!isSafeToCommand || !sessionName) return
+    // Use the Stop API (Ctrl+C + Ctrl+D) instead of sending /exit as text
+    try {
+      await sudoFetch(
+        `${baseUrl}/api/sessions/${encodeURIComponent(sessionName)}/stop`,
+        { method: 'POST' },
+        (reason) => requestSudoToken(reason),
+      )
+    } catch (error) {
+      console.error('Failed to stop session:', error)
+    }
+  }
+
+  /**
+   * Accept a pending permission request by sending 'y' to the terminal.
+   *
+   * When Claude Code asks the user to approve a tool use (file write, bash
+   * command, etc.), it enters the 'permission_prompt' state and waits for
+   * input. This handler sends 'y' (yes/approve) to unblock Claude and let
+   * it proceed with the requested tool invocation.
+   *
+   * Only enabled when `isPermissionPrompt` is true — i.e. the WebSocket
+   * activity hook detected a permission_prompt notification from Claude.
+   */
+  const handleApprove = async () => {
+    if (!isPermissionPrompt || !sessionName) return
+    await sendCommandToSession('y')
+  }
+
+  /**
+   * Restart the Claude Code session: exit, wait for shell prompt, relaunch.
+   *
+   * This calls POST /api/sessions/{id}/restart which orchestrates a 3-step
+   * sequence: (1) send /exit, (2) poll until the tmux pane shows a shell
+   * command (zsh/bash), (3) relaunch the program with the same arguments.
+   * The full cycle takes approximately 15 seconds.
+   *
+   * Only enabled when `isSafeToCommand` is true (Claude at idle prompt)
+   * and no restart is already in progress (`restarting` state guard).
+   * Useful after plugin installs or configuration changes that require
+   * Claude to reload its environment.
+   */
+  const handleRestart = async () => {
+    if (!isSafeToCommand || restarting || !sessionName) return
+    setRestarting(true)
+    try {
+      const res = await sudoFetch(
+        `${baseUrl}/api/sessions/${encodeURIComponent(sessionName)}/restart`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            program: agent?.program || 'claude',
+            programArgs: agent?.programArgs || '',
+          }),
+        },
+        (reason) => requestSudoToken(reason),
+      )
+      if (!res.ok) console.error('Restart failed:', await res.text())
+    } catch (err) {
+      console.error('Restart failed:', err)
+    } finally {
+      setRestarting(false)
+    }
+  }
+
+  // CC-P1-701: Restrict value type to the actual union of types used by callers
+  // Auto-saves on change
+  const updateField = (field: string, value: string | string[] | undefined) => {
     if (!agent) return
+    // Update local React state immediately for responsive UI
     setAgent({ ...agent, [field]: value })
-    setHasChanges(true)
+    // Debounced auto-save to API (per-field, 300ms)
+    autoSave(field, value)
   }
 
   const updateDocField = (field: keyof AgentDocumentation, value: string) => {
     if (!agent) return
-    setAgent({
-      ...agent,
-      documentation: {
-        ...agent.documentation,
-        [field]: value
-      }
-    })
-    setHasChanges(true)
+    const newDoc = { ...agent.documentation, [field]: value }
+    setAgent({ ...agent, documentation: newDoc })
+    // Auto-save the entire documentation object since the API expects it as one field
+    autoSave('documentation', newDoc)
   }
 
   const addTag = (tag: string) => {
@@ -252,21 +493,26 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
     updateField('tags', agent.tags?.filter(t => t !== tag) || [])
   }
 
-  if (!isOpen) return null
+  if (!embedded && !isOpen) return null
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
-        onClick={onClose}
-      />
+      {/* Backdrop — overlay mode only */}
+      {!embedded && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+          onClick={onClose}
+        />
+      )}
 
-      {/* Panel */}
+      {/* Panel — fixed overlay vs. inline depending on embedded prop */}
       <div
-        className={`fixed inset-y-0 right-0 w-full md:w-[480px] bg-gray-900 border-l border-gray-800 shadow-2xl z-50 overflow-y-auto transform transition-transform duration-300 ease-in-out ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
+        className={embedded
+          ? 'flex-1 overflow-y-auto bg-gray-900'
+          : `fixed inset-y-0 right-0 w-full md:w-[480px] bg-gray-900 border-l border-gray-800 shadow-2xl z-50 overflow-y-auto transform transition-transform duration-300 ease-in-out ${
+              isOpen ? 'translate-x-0' : 'translate-x-full'
+            }`
+        }
       >
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
@@ -279,9 +525,13 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
           </div>
         ) : (
           <>
-            {/* Header */}
-            <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-100">Agent Profile</h2>
+            {/* Header — hidden in advanced mode (parent provides its own header) */}
+            {renderMode !== 'advanced' && <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-bold text-gray-100">Agent Profile</h2>
+                {/* Read-only title label — the clickable control is in the identity section below */}
+                <TitleBadge title={governance.agentTitle} size="sm" />
+              </div>
               <div className="flex items-center gap-2">
                 {/* Export Button */}
                 <button
@@ -299,48 +549,25 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                 >
                   <Send className="w-5 h-5" />
                 </button>
-                {/* Divider */}
-                <div className="w-px h-6 bg-gray-700 mx-1" />
-                {/* Save Button */}
-                <button
-                  onClick={handleSave}
-                  disabled={!hasChanges || saving}
-                  className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-                    hasChanges
-                      ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg hover:shadow-blue-500/25'
-                      : 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  {saving ? (
-                    <span className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Saving
-                    </span>
-                  ) : hasChanges ? (
-                    <span className="flex items-center gap-2">
-                      <Save className="w-4 h-4" />
-                      Save
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4" />
-                      Saved
-                    </span>
-                  )}
-                </button>
-                <button
-                  onClick={onClose}
-                  className="p-2 rounded-lg hover:bg-gray-800 transition-all text-gray-400 hover:text-gray-200"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                {/* Close button — only in overlay mode, parent handles closing in embedded */}
+                {!embedded && (
+                  <button
+                    onClick={onClose}
+                    className="p-2 rounded-lg hover:bg-gray-800 transition-all text-gray-400 hover:text-gray-200"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
               </div>
-            </div>
+            </div>}
+
+            {/* Injected content after header (e.g. Role Plugin selector) */}
+            {renderMode !== 'advanced' && renderAfterHeader?.()}
 
             {/* Content */}
             <div className="p-6 space-y-8">
-              {/* Session Status Section - Shows at top for quick access */}
-              {sessionStatus && (
+              {/* Session Status Section - Shows at top for quick access — hidden in advanced mode */}
+              {renderMode !== 'advanced' && sessionStatus && (
                 <div className={`rounded-xl p-4 border ${
                   sessionStatus.status === 'online'
                     ? 'bg-green-500/10 border-green-500/30'
@@ -387,6 +614,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                     )}
                   </div>
 
+
                   {/* Session details when online */}
                   {sessionStatus.status === 'online' && sessionStatus.workingDirectory && (
                     <div className="mt-3 pt-3 border-t border-green-500/20">
@@ -399,7 +627,8 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                 </div>
               )}
 
-              {/* Identity Section */}
+              {/* Identity through Memory — hidden in advanced mode (shown in overview and full) */}
+              {renderMode !== 'advanced' && (<>
               <section>
                 <button
                   onClick={() => toggleSection('identity')}
@@ -436,50 +665,98 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                         </div>
                       </button>
                       <div className="flex-1 space-y-3">
-                        {/* Agent Name - Primary identifier */}
+                        {/* Agent ID - Technical identifier */}
                         <div>
                           <EditableField
-                            label="Agent Name"
-                            value={agent.name || agent.alias || ''}
+                            label="Agent ID"
+                            value={agent.name || ''}
                             onChange={(value) => updateField('name', value)}
                             icon={<User className="w-4 h-4" />}
+                            flashActive={flashFields.has('name')}
                           />
                           <p className="text-xs text-gray-500 mt-1">
-                            Used for tmux session. Changing this will require restarting the agent.
+                            Technical identifier used for tmux session. Changing requires restart.
                           </p>
                         </div>
-                        {/* Display Label - Optional override */}
+                        {/* Persona Name - The agent's display name */}
                         <div>
                           <EditableField
-                            label="Display Label"
+                            label="Persona Name"
                             value={agent.label || ''}
                             onChange={(value) => updateField('label', value)}
                             icon={<Tag className="w-4 h-4" />}
-                            placeholder={agent.name || agent.alias || 'Same as agent name'}
+                            placeholder={agent.name || 'Same as agent ID'}
+                            flashActive={flashFields.has('label')}
                           />
                           <p className="text-xs text-gray-500 mt-1">
-                            Optional friendly name shown in the sidebar instead of agent name.
+                            The agent&apos;s personal name, shown capitalized in the UI.
                           </p>
                         </div>
                       </div>
                     </div>
-                    {/* Owner and Team */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <EditableField
-                        label="Owner"
-                        value={agent.owner || ''}
-                        onChange={(value) => updateField('owner', value)}
-                        icon={<User className="w-4 h-4" />}
-                        placeholder="Owner name"
-                      />
-                      <EditableField
-                        label="Team"
-                        value={agent.team || ''}
-                        onChange={(value) => updateField('team', value)}
-                        icon={<Building2 className="w-4 h-4" />}
-                        placeholder="Team name"
+                    {/* Owner */}
+                    <EditableField
+                      label="Owner"
+                      value={agent.owner || ''}
+                      onChange={(value) => updateField('owner', value)}
+                      icon={<User className="w-4 h-4" />}
+                      placeholder="Owner name"
+                      flashActive={flashFields.has('owner')}
+                    />
+
+                    {/* Governance Title */}
+                    <div className="flex items-center justify-between py-1">
+                      <div className="flex items-center gap-2 text-sm text-gray-400">
+                        <Shield className="w-4 h-4" />
+                        <span>Governance Title</span>
+                      </div>
+                      <TitleBadge
+                        title={governance.agentTitle}
+                        onClick={() => setShowRoleDialog(true)}
                       />
                     </div>
+
+                    {/* GitHub Repo — shown only for MAINTAINER agents (R19). Immutable once set. */}
+                    {governance.agentTitle === 'maintainer' && agent.githubRepo && (
+                      <div className="flex items-center justify-between py-1" data-testid="profile-github-repo">
+                        <div className="flex items-center gap-2 text-sm text-gray-400">
+                          <GitBranch className="w-4 h-4" />
+                          <span>GitHub Repo</span>
+                        </div>
+                        <a
+                          href={`https://github.com/${agent.githubRepo}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-mono text-emerald-400 hover:text-emerald-300 hover:underline"
+                          title="MAINTAINER is bound to this repository (immutable)"
+                        >
+                          {agent.githubRepo}
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Role Plugin selector (injected by AgentProfilePanel) */}
+                    {renderAfterGovernanceTitle?.()}
+
+                    {/* Team Membership (replaces free-text Team field) */}
+                    <TeamMembershipSection
+                      agentId={agent.id}
+                      agentTitle={governance.agentTitle}
+                      memberTeam={governance.memberTeam}
+                      allTeams={governance.allTeams}
+                      onJoinTeam={(teamId) => governance.addAgentToTeam(teamId, agent.id)}
+                      onLeaveTeam={(teamId) => governance.removeAgentFromTeam(teamId, agent.id)}
+                      pendingTransfers={governance.pendingTransfers}
+                      onRequestTransfer={(aid, from, to) => governance.requestTransfer(aid, from, to)}
+                      onResolveTransfer={(tid, action) => governance.resolveTransfer(tid, action)}
+                      onDataChanged={onDataChanged}
+                    />
+
+                    {/* Group Subscriptions (broadcast messaging groups) */}
+                    <GroupSubscriptionSection
+                      agentId={agent.id}
+                      onDataChanged={onDataChanged}
+                    />
                   </div>
                 )}
               </section>
@@ -506,6 +783,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                         value={agent.program}
                         onChange={(value) => updateField('program', value)}
                         icon={<Briefcase className="w-4 h-4" />}
+                        flashActive={flashFields.has('program')}
                       />
                       <EditableField
                         label="Model"
@@ -513,6 +791,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                         onChange={(value) => updateField('model', value)}
                         icon={<Cpu className="w-4 h-4" />}
                         placeholder="Model version"
+                        flashActive={flashFields.has('model')}
                       />
                     </div>
 
@@ -522,14 +801,84 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                       onChange={(value) => updateField('taskDescription', value)}
                       icon={<Code2 className="w-4 h-4" />}
                       multiline
+                      flashActive={flashFields.has('taskDescription')}
+                    />
+
+                    {/* Session action buttons — inject command into terminal, wait 500ms, send Enter */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={handleNewSession}
+                        disabled={isProgramRunning}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-all shadow-lg hover:shadow-emerald-500/25"
+                        title="Launch a new Claude Code session (previous conversation not resumed)"
+                      >
+                        <Plus className="w-4 h-4" />
+                        New Session
+                      </button>
+                      <button
+                        onClick={handleResumeSession}
+                        disabled={isProgramRunning}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-all shadow-lg hover:shadow-blue-500/25"
+                        title="Resume the last Claude Code conversation with --continue"
+                      >
+                        <Play className="w-4 h-4" />
+                        Resume Session
+                      </button>
+
+                      {/* Stop button — red, only when Claude is in safe idle state */}
+                      {isProgramRunning && (
+                        <button
+                          onClick={handleStop}
+                          disabled={!isSafeToCommand}
+                          className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-all"
+                          title={isSafeToCommand ? 'Send /exit to gracefully stop Claude Code' : 'Stop is available when Claude finishes processing and waits for input (idle_prompt state)'}
+                        >
+                          <Square className="w-4 h-4" />
+                          Stop
+                        </button>
+                      )}
+
+                      {/* Restart button — orange, only when Claude is in safe idle state */}
+                      {isProgramRunning && (
+                        <button
+                          onClick={handleRestart}
+                          disabled={!isSafeToCommand || restarting}
+                          className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-all"
+                          title={isSafeToCommand ? 'Exit Claude and relaunch with the same arguments. Takes ~15s.' : 'Restart is available when Claude finishes processing and waits for input (idle_prompt state)'}
+                        >
+                          {restarting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                          {restarting ? 'Restarting...' : 'Restart'}
+                        </button>
+                      )}
+
+                      {/* Approve permission — green, only when permission prompt active */}
+                      {isPermissionPrompt && (
+                        <button
+                          onClick={handleApprove}
+                          className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-all"
+                          title="Accept the current permission request by sending 'y'. This approves the tool use Claude is asking about."
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Approve
+                        </button>
+                      )}
+                    </div>
+
+                    <EditableField
+                      label="Program Arguments (e.g. --continue)"
+                      value={agent.programArgs || ''}
+                      onChange={(value) => updateField('programArgs', value)}
+                      icon={<Terminal className="w-4 h-4" />}
+                      flashActive={flashFields.has('programArgs')}
                     />
 
                     {/* Tags - Control sidebar tree position */}
                     <div className="space-y-3">
                       <div>
-                        <label className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-2">
+                        <label className={`text-xs font-medium mb-2 flex items-center gap-2 transition-colors duration-300 ${flashFields.has('tags') ? 'text-emerald-400' : 'text-gray-400'}`}>
                           <Tag className="w-4 h-4" />
                           Sidebar Organization (Tags)
+                          {flashFields.has('tags') && <CheckCircle className="w-3 h-3 text-emerald-400" />}
                         </label>
                         <p className="text-xs text-gray-500 mb-3">
                           Tags determine where the agent appears in the sidebar tree. First tag = folder, second tag = subfolder.
@@ -563,27 +912,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                         </div>
                       </div>
 
-                      {/* Tree Location Preview */}
-                      <div className="p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
-                        <div className="flex items-center gap-2 text-xs font-medium text-gray-400 mb-2">
-                          <FolderTree className="w-4 h-4" />
-                          Sidebar Location Preview
-                        </div>
-                        <div className="font-mono text-sm text-gray-300 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <Folder className="w-4 h-4 text-purple-400" />
-                            <span className="text-purple-300">{agent.tags?.[0] || 'ungrouped'}</span>
-                          </div>
-                          <div className="flex items-center gap-2 pl-4">
-                            <Folder className="w-4 h-4 text-blue-400" />
-                            <span className="text-blue-300">{agent.tags?.[1] || 'default'}</span>
-                          </div>
-                          <div className="flex items-center gap-2 pl-8">
-                            <span className="text-green-400">{'>'}</span>
-                            <span className="text-green-300 font-semibold">{agent.label || agent.name || agent.alias}</span>
-                          </div>
-                        </div>
-                      </div>
+                      {/* Sidebar Location Preview removed — tags are self-explanatory */}
                     </div>
                   </div>
                 )}
@@ -742,9 +1071,10 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                     ) : (
                       <>
                         {/* Repository list */}
+                        {/* SF-019: Use stable key from repo identity instead of array index */}
                         {repositories.map((repo, idx) => (
                           <div
-                            key={idx}
+                            key={repo.remoteUrl || repo.localPath || idx}
                             className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-all"
                           >
                             <div className="flex items-start gap-3">
@@ -804,67 +1134,167 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                 )}
               </section>
 
-              {/* Long-Term Memory Section */}
-              <section>
-                <button
-                  onClick={() => toggleSection('memory')}
-                  className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 hover:text-gray-400 transition-all"
-                >
-                  {expandedSections.memory ? (
-                    <ChevronDown className="w-4 h-4" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4" />
+              {/* Long-Term Memory section fully removed 2026-04-20 (RAG + LTM UI gone per TRDD-70a521d9 Phase 2). */}
+
+              </>)}
+
+              {/* User-level skills are managed in Settings → Global Elements */}
+
+              {/* ── Local elements & plugins — hidden in overview/advanced mode (moved to Config tab) ── */}
+              {renderMode === 'full' && localConfig && localConfig.plugins.length > 0 && (
+                <section>
+                  <button
+                    onClick={() => toggleSection('localPlugins')}
+                    className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 hover:text-gray-400 transition-all"
+                  >
+                    {expandedSections.localPlugins ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                    <Puzzle className="w-4 h-4" />
+                    Plugins
+                    <span className="ml-1 text-gray-600">
+                      ({localConfig.plugins.filter(p => p.enabled).length}/{localConfig.plugins.length})
+                    </span>
+                  </button>
+                  {expandedSections.localPlugins && (
+                    <div className="space-y-1.5 mb-6">
+                      {localConfig.plugins.map(plugin => (
+                        <div
+                          key={plugin.key || plugin.name}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors ${
+                            plugin.enabled ? 'bg-emerald-500/5' : 'bg-gray-900/30'
+                          }`}
+                        >
+                          <Puzzle className={`w-3.5 h-3.5 flex-shrink-0 ${plugin.enabled ? 'text-emerald-400' : 'text-gray-600'}`} />
+                          <div className="flex-1 min-w-0">
+                            <span className={`text-xs truncate block ${plugin.enabled ? 'text-gray-200' : 'text-gray-500'}`}>
+                              {plugin.name}
+                            </span>
+                            {plugin.description && (
+                              <span className="text-[10px] text-gray-600 truncate block">{plugin.description}</span>
+                            )}
+                          </div>
+                          {plugin.isConflictingRolePlugin && (
+                            <span className="text-[9px] text-amber-400/70 bg-amber-500/10 rounded px-1.5 py-0.5 flex-shrink-0">conflict</span>
+                          )}
+                          {plugin.key && (
+                            <PluginToggle agentId={agent.id} pluginKey={plugin.key} enabled={plugin.enabled} onToggled={() => { refetchLocalConfig(); onDataChangedRef.current?.() }} />
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
-                  <Brain className="w-4 h-4" />
-                  Long-Term Memory
-                </button>
+                </section>
+              )}
 
-                {expandedSections.memory && (
-                  <MemoryViewer agentId={agent.id} hostUrl={hostUrl} />
-                )}
-              </section>
+              {/* ── Local Elements Sections — hidden in overview/advanced mode (moved to Config tab) ── */}
+              {renderMode === 'full' && (() => {
+                const rpName = localConfig?.rolePlugin?.name
+                const isFromRP = (sourcePlugin?: string) => !!rpName && sourcePlugin === rpName
 
-              {/* Installed Skills Section */}
-              <section>
-                <button
-                  onClick={() => toggleSection('installedSkills')}
-                  className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 hover:text-gray-400 transition-all"
-                >
-                  {expandedSections.installedSkills ? (
-                    <ChevronDown className="w-4 h-4" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4" />
-                  )}
-                  <Zap className="w-4 h-4" />
-                  Skills
-                </button>
+                // Helper: render an element item with role-plugin vs extra styling
+                const renderItem = (name: string, icon: React.ReactNode, sourcePlugin?: string, detail?: string) => {
+                  const fromRP = isFromRP(sourcePlugin)
+                  return (
+                    <div
+                      key={name}
+                      className={`flex items-start gap-2 px-3 py-2 rounded-lg border ${
+                        fromRP
+                          ? 'border-emerald-500/30'
+                          : 'bg-gray-800/40 border-gray-700/30'
+                      }`}
+                      style={fromRP ? { backgroundColor: 'rgba(16,185,129,0.18)' } : undefined}
+                    >
+                      {icon}
+                      <div className="flex-1 min-w-0">
+                        <span className={`text-xs truncate block ${fromRP ? 'text-emerald-200' : 'text-gray-200'}`}>{name}</span>
+                        {detail && <span className="text-[10px] text-gray-500 truncate block mt-0.5">{detail}</span>}
+                      </div>
+                      {fromRP && (
+                        <span className="text-[9px] text-emerald-400/70 bg-emerald-500/10 border border-emerald-500/15 rounded px-1.5 py-0.5 flex-shrink-0">role-plugin</span>
+                      )}
+                      {sourcePlugin && !fromRP && (
+                        <span className="text-[9px] text-blue-400/70 bg-blue-500/10 rounded px-1.5 py-0.5 flex-shrink-0 truncate max-w-[120px]">plugin: {sourcePlugin}</span>
+                      )}
+                    </div>
+                  )
+                }
 
-                {expandedSections.installedSkills && (
-                  <AgentSkillEditor agentId={agent.id} hostUrl={hostUrl} />
-                )}
-              </section>
+                const emptyState = <p className="text-[11px] text-gray-600 italic px-1">None</p>
 
-              {/* Skill Settings Section */}
-              <section>
-                <button
-                  onClick={() => toggleSection('skillSettings')}
-                  className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 hover:text-gray-400 transition-all"
-                >
-                  {expandedSections.skillSettings ? (
-                    <ChevronDown className="w-4 h-4" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4" />
-                  )}
-                  <Cpu className="w-4 h-4" />
-                  Skill Settings
-                </button>
+                const sections: { key: string; label: string; icon: React.ReactNode; items: React.ReactNode }[] = [
+                  {
+                    key: 'localAgents', label: 'Sub-Agents', icon: <Users className="w-4 h-4" />,
+                    items: localConfig && localConfig.agents.length > 0
+                      ? <div className="space-y-2">{localConfig.agents.map(a => renderItem(a.name, <Users className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0 mt-0.5" />, a.sourcePlugin, a.description !== '---' ? a.description : undefined))}</div>
+                      : emptyState,
+                  },
+                  {
+                    key: 'localRules', label: 'Rules', icon: <ScrollText className="w-4 h-4" />,
+                    items: localConfig && localConfig.rules.length > 0
+                      ? <div className="space-y-2">{localConfig.rules.map(r => renderItem(r.name, <ScrollText className="w-3.5 h-3.5 text-gray-400 flex-shrink-0 mt-0.5" />, r.sourcePlugin, r.preview))}</div>
+                      : emptyState,
+                  },
+                  {
+                    key: 'localCommands', label: 'Commands', icon: <Terminal className="w-4 h-4" />,
+                    items: localConfig && localConfig.commands.length > 0
+                      ? <div className="space-y-2">{localConfig.commands.map(c => renderItem(`/${c.name}`, <Terminal className="w-3.5 h-3.5 text-violet-400 flex-shrink-0 mt-0.5" />, c.sourcePlugin))}</div>
+                      : emptyState,
+                  },
+                  {
+                    key: 'localHooks', label: 'Hooks', icon: <Webhook className="w-4 h-4" />,
+                    items: localConfig && localConfig.hooks.length > 0
+                      ? <div className="space-y-2">{localConfig.hooks.map(h => renderItem(h.name, <Webhook className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />, h.sourcePlugin, h.eventType))}</div>
+                      : emptyState,
+                  },
+                  {
+                    key: 'localMcp', label: 'MCP Servers', icon: <Server className="w-4 h-4" />,
+                    items: localConfig && localConfig.mcpServers.length > 0
+                      ? <div className="space-y-2">{localConfig.mcpServers.map(m => renderItem(m.name, <Server className="w-3.5 h-3.5 text-purple-400 flex-shrink-0 mt-0.5" />, m.sourcePlugin, m.command ? `${m.command} ${m.args?.join(' ') || ''}` : undefined))}</div>
+                      : emptyState,
+                  },
+                  {
+                    key: 'localLsp', label: 'LSP Servers', icon: <Cpu className="w-4 h-4" />,
+                    items: localConfig && localConfig.lspServers.length > 0
+                      ? <div className="space-y-2">{localConfig.lspServers.map(l => renderItem(l.name, <Cpu className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 mt-0.5" />, l.sourcePlugin, l.languages.join(', ')))}</div>
+                      : emptyState,
+                  },
+                  {
+                    key: 'localOutputStyles', label: 'Output Styles', icon: <Palette className="w-4 h-4" />,
+                    items: localConfig && localConfig.outputStyles && localConfig.outputStyles.length > 0
+                      ? <div className="space-y-2">{localConfig.outputStyles.map(o => renderItem(o.name, <Palette className="w-3.5 h-3.5 text-pink-400 flex-shrink-0 mt-0.5" />, o.sourcePlugin))}</div>
+                      : emptyState,
+                  },
+                ]
 
-                {expandedSections.skillSettings && (
-                  <SkillsSection agentId={agent.id} hostUrl={hostUrl} />
-                )}
-              </section>
+                return sections.map(s => (
+                  <section key={s.key}>
+                    <button
+                      onClick={() => toggleSection(s.key)}
+                      className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 hover:text-gray-400 transition-all"
+                    >
+                      {expandedSections[s.key] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      {s.icon}
+                      {s.label}
+                      {localConfig && (
+                        <span className="ml-1 text-gray-600">
+                          ({
+                            s.key === 'localAgents' ? localConfig.agents.length :
+                            s.key === 'localRules' ? localConfig.rules.length :
+                            s.key === 'localCommands' ? localConfig.commands.length :
+                            s.key === 'localHooks' ? localConfig.hooks.length :
+                            s.key === 'localMcp' ? localConfig.mcpServers.length :
+                            s.key === 'localLsp' ? localConfig.lspServers.length :
+                            (localConfig.outputStyles?.length || 0)
+                          })
+                        </span>
+                      )}
+                    </button>
+                    {expandedSections[s.key] && s.items}
+                  </section>
+                ))
+              })()}
 
-              {/* Metrics Section */}
+              {/* Metrics/Documentation/Danger — hidden in overview mode. Long-Term Memory Options section removed 2026-04-20 (TRDD-70a521d9 Phase-2 cleanup; RAG gone). */}
+              {renderMode !== 'overview' && (<>
               <section>
                 <button
                   onClick={() => toggleSection('metrics')}
@@ -947,6 +1377,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                       icon={<BookOpen className="w-4 h-4" />}
                       multiline
                       placeholder="Detailed description of the agent's purpose"
+                      flashActive={flashFields.has('documentation')}
                     />
                     <EditableField
                       label="Runbook URL"
@@ -954,6 +1385,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                       onChange={(value) => updateDocField('runbook', value)}
                       icon={<Link2 className="w-4 h-4" />}
                       placeholder="https://..."
+                      flashActive={flashFields.has('documentation')}
                     />
                     <EditableField
                       label="Wiki URL"
@@ -961,6 +1393,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                       onChange={(value) => updateDocField('wiki', value)}
                       icon={<Link2 className="w-4 h-4" />}
                       placeholder="https://..."
+                      flashActive={flashFields.has('documentation')}
                     />
                     <EditableField
                       label="Notes"
@@ -969,6 +1402,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                       icon={<Edit2 className="w-4 h-4" />}
                       multiline
                       placeholder="Free-form notes about the agent"
+                      flashActive={flashFields.has('documentation')}
                     />
                   </div>
                 )}
@@ -1012,6 +1446,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                   </div>
                 )}
               </section>
+              </>)}
             </div>
           </>
         )}
@@ -1077,7 +1512,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
       {showTransferDialog && agent && (
         <TransferAgentDialog
           agentId={agent.id}
-          agentAlias={agent.name || agent.alias || ''}
+          agentAlias={agent.name || ''}
           agentDisplayName={agent.label}
           currentHostId={agent.hostId}
           onClose={() => setShowTransferDialog(false)}
@@ -1098,7 +1533,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
           isOpen={showExportDialog}
           onClose={() => setShowExportDialog(false)}
           agentId={agent.id}
-          agentAlias={agent.name || agent.alias || ''}
+          agentAlias={agent.name || ''}
           agentDisplayName={agent.label}
           hostUrl={hostUrl}
         />
@@ -1115,8 +1550,32 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
             }
           }}
           agentId={agent.id}
-          agentAlias={agent.name || agent.alias || ''}
+          agentAlias={agent.name || ''}
           agentDisplayName={agent.label}
+          workingDirectory={agent.workingDirectory || agent.preferences?.defaultWorkingDirectory}
+          hostUrl={hostUrl}
+        />
+      )}
+
+      {/* Role Assignment Dialog */}
+      {agent && (
+        <TitleAssignmentDialog
+          isOpen={showTitleDialog}
+          onClose={() => setShowRoleDialog(false)}
+          agentId={agent.id}
+          agentName={agent.label || agent.name || ''}
+          currentTitle={governance.agentTitle}
+          governance={governance}
+          onTitleChanged={() => { governance.refresh(); onDataChangedRef.current?.() }}
+          onRestartNeeded={() => {
+            // Enqueue deferred restart after title change installs/uninstalls plugins
+            const sn = sessionStatus?.tmuxSessionName || agent?.name
+            if (sn) {
+              const program = agent?.program || 'claude'
+              const args = agent?.programArgs || ''
+              queueRestart(sn, program, args)
+            }
+          }}
         />
       )}
 
@@ -1134,7 +1593,10 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
   )
 }
 
-// Editable Field Component
+// ---------------------------------------------------------------------------
+// EditableField
+// ---------------------------------------------------------------------------
+
 interface EditableFieldProps {
   label: string
   value: string
@@ -1142,9 +1604,10 @@ interface EditableFieldProps {
   icon?: React.ReactNode
   placeholder?: string
   multiline?: boolean
+  flashActive?: boolean  // Brief green flash on label when auto-save succeeds
 }
 
-function EditableField({ label, value, onChange, icon, placeholder, multiline }: EditableFieldProps) {
+function EditableField({ label, value, onChange, icon, placeholder, multiline, flashActive }: EditableFieldProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [localValue, setLocalValue] = useState(value)
   const fieldId = `editable-${label.toLowerCase().replace(/\s+/g, '-')}`
@@ -1162,9 +1625,10 @@ function EditableField({ label, value, onChange, icon, placeholder, multiline }:
 
   return (
     <div>
-      <label htmlFor={fieldId} className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-2">
+      <label htmlFor={fieldId} className={`text-xs font-medium mb-2 flex items-center gap-2 transition-colors duration-300 ${flashActive ? 'text-emerald-400' : 'text-gray-400'}`}>
         {icon}
         {label}
+        {flashActive && <CheckCircle className="w-3 h-3 text-emerald-400" />}
       </label>
       {isEditing ? (
         multiline ? (
@@ -1197,7 +1661,7 @@ function EditableField({ label, value, onChange, icon, placeholder, multiline }:
           onClick={() => setIsEditing(true)}
           className="px-3 py-2 rounded-lg hover:bg-gray-700/50 cursor-text transition-all group hover:ring-2 hover:ring-gray-600 min-h-[40px]"
         >
-          <span className="text-gray-200">{value || placeholder || 'Click to edit'}</span>
+          <span className={value ? 'text-gray-200' : 'text-gray-500'}>{value || placeholder || 'Click to edit'}</span>
           <Edit2 className="w-3 h-3 ml-2 inline opacity-0 group-hover:opacity-100 transition-opacity text-gray-400" />
         </div>
       )}

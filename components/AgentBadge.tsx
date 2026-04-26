@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Image from 'next/image'
 import {
   MoreVertical,
   Terminal,
@@ -11,14 +12,20 @@ import {
   Power,
   Copy,
   Mail,
+  Box,
+  Lock,
+  AlertTriangle,
 } from 'lucide-react'
-import { Agent, AgentSession } from '@/types/agent'
+import { Agent } from '@/types/agent'
 import { SessionActivityStatus } from '@/hooks/useSessionActivity'
+import { resolveAgentStatus } from '@/lib/agent-status'
 
 interface AgentBadgeProps {
   agent: Agent
   isSelected: boolean
   activityStatus?: SessionActivityStatus
+  notificationType?: string
+  programRunning?: boolean
   unreadCount?: number
   onSelect: (agent: Agent) => void
   onRename?: (agent: Agent) => void
@@ -29,11 +36,17 @@ interface AgentBadgeProps {
   onSendMessage?: (agent: Agent) => void
   onCopyId?: (agent: Agent) => void
   showActions?: boolean
+  /** 'normal' = full-image card, 'compact' = circle avatar card (default) */
+  variant?: 'normal' | 'compact'
 }
 
 // Generate a consistent unique avatar URL from agent ID using RandomUser.me
 // RandomUser.me has 100 men + 100 women = 200 unique portraits
 function getAvatarUrl(agentId: string): string {
+  // Guard against empty IDs — fallback to a deterministic default rather than
+  // mapping every empty-id agent to the same hash-0 avatar.
+  if (!agentId) return '/avatars/men_00.jpg'
+
   // Hash the agent ID to get a consistent number
   let hash = 0
   for (let i = 0; i < agentId.length; i++) {
@@ -48,7 +61,7 @@ function getAvatarUrl(agentId: string): string {
   // Alternate between men and women based on another bit of the hash
   const gender = (Math.abs(hash >> 8) % 2 === 0) ? 'men' : 'women'
 
-  return `/avatars/${gender}_${index.toString().padStart(2, '0')}.png`
+  return `/avatars/${gender}_${index.toString().padStart(2, '0')}.jpg`
 }
 
 // Generate a consistent color from a string (for avatar ring/fallback)
@@ -75,43 +88,65 @@ function stringToRingColor(str: string): string {
 }
 
 // Check if string is an emoji (not a URL or other text)
-// Note: \p{Emoji} matches digits, so we need a stricter check
+// Note: \p{Emoji} and \p{Extended_Pictographic} both match digit characters (0-9),
+// so we need an explicit guard to prevent single digits from being treated as emojis.
 function isEmoji(str: string): boolean {
   // Emojis are short (1-8 chars with modifiers) and don't start with http or /
   if (!str || str.length > 8 || str.startsWith('http') || str.startsWith('/')) return false
+  // Explicitly exclude lone digit characters — \p{Extended_Pictographic} covers keycap
+  // sequences like "1️⃣" which are multi-char, so a single digit is never a real emoji.
+  if (str.length === 1 && /\d/.test(str)) return false
   // Match actual emoji presentations, not just emoji components like digits
   return /\p{Emoji_Presentation}|\p{Extended_Pictographic}/u.test(str)
 }
 
-// Get status info from agent state
+/**
+ * Resolve the visual status indicator for an agent badge.
+ *
+ * Returns a color, ring highlight, label, and pulse flag used by both
+ * AgentBadge and AgentStatusIndicator to render the colored dot next to
+ * each agent in the sidebar.
+ *
+ * The 5 online sub-states are checked in strict priority order so that
+ * higher-priority states always win when multiple conditions overlap:
+ *
+ * | Priority | State        | Color   | Pulse | When it occurs                                         |
+ * |----------|------------- |---------|-------|--------------------------------------------------------|
+ * | 1        | Exited       | gray    | no    | tmux session alive but the AI program (Claude) stopped |
+ * | 2        | Permission   | orange  | yes   | Claude is blocked asking the user to approve a tool    |
+ * | 3        | Waiting      | amber   | yes   | Claude finished processing, shows its input prompt     |
+ * | 4        | Active       | green   | yes   | Claude is running a tool or generating output          |
+ * | 5        | Idle         | green   | no    | Session online but no recent terminal activity         |
+ *
+ * Two additional states apply when the session is NOT online:
+ *   - Hibernated (slate, no pulse): tmux session suspended
+ *   - Offline (gray, no pulse): no tmux session found
+ *
+ * Thin wrapper around the shared resolveAgentStatus() utility.
+ * Kept as a local function so callers inside this file don't change.
+ *
+ * @param isOnline       Whether the tmux session exists and is running
+ * @param isHibernated   Whether the agent has a suspended tmux session
+ * @param activityStatus Terminal activity level from useSessionActivity hook
+ * @param notificationType Hook-reported prompt type: 'idle_prompt' | 'permission_prompt'
+ * @param programRunning Whether the AI program is running inside tmux (false = shell prompt)
+ */
 function getStatusInfo(
-  session: AgentSession | undefined,
+  isOnline: boolean,
   isHibernated: boolean,
-  activityStatus?: SessionActivityStatus
-): { color: string; bgColor: string; label: string; pulse?: boolean } {
-  const isOnline = session?.status === 'online'
-
-  if (isOnline) {
-    if (activityStatus === 'waiting') {
-      return { color: 'bg-amber-400', bgColor: 'bg-amber-400/20', label: 'Waiting', pulse: true }
-    }
-    if (activityStatus === 'active') {
-      return { color: 'bg-green-400', bgColor: 'bg-green-400/20', label: 'Active', pulse: true }
-    }
-    return { color: 'bg-green-400', bgColor: 'bg-green-400/20', label: 'Idle' }
-  }
-
-  if (isHibernated) {
-    return { color: 'bg-yellow-400', bgColor: 'bg-yellow-400/20', label: 'Hibernated' }
-  }
-
-  return { color: 'bg-slate-500', bgColor: 'bg-slate-500/20', label: 'Offline' }
+  activityStatus?: SessionActivityStatus,
+  notificationType?: string,
+  programRunning?: boolean,
+): { color: string; ringColor: string; label: string; pulse: boolean } {
+  return resolveAgentStatus(isOnline, isHibernated, activityStatus, notificationType, programRunning)
 }
 
 export default function AgentBadge({
   agent,
   isSelected,
   activityStatus,
+  notificationType,
+  programRunning,
   unreadCount,
   onSelect,
   onRename,
@@ -122,16 +157,17 @@ export default function AgentBadge({
   onSendMessage,
   onCopyId,
   showActions = true,
+  variant = 'compact',
 }: AgentBadgeProps) {
   const [showMenu, setShowMenu] = React.useState(false)
   const menuRef = React.useRef<HTMLDivElement>(null)
 
-  // Get the primary session
-  const session = agent.sessions?.[0]
-  const isOnline = session?.status === 'online'
+  // Check both agent.session (live runtime) and agent.sessions[0] (stored config)
+  // because the API may populate one or the other depending on the endpoint
+  const isOnline = agent.session?.status === 'online' || agent.sessions?.[0]?.status === 'online'
   const isHibernated = !isOnline && agent.sessions && agent.sessions.length > 0
 
-  const statusInfo = getStatusInfo(session, isHibernated, activityStatus)
+  const statusInfo = getStatusInfo(isOnline, isHibernated, activityStatus, notificationType, programRunning)
   const ringColor = stringToRingColor(agent.name)
 
   // Avatar priority: stored URL > stored emoji > computed from ID
@@ -139,6 +175,22 @@ export default function AgentBadge({
   const hasStoredAvatarUrl = agent.avatar && !hasEmojiAvatar && (agent.avatar.startsWith('http') || agent.avatar.startsWith('/'))
   const avatarUrl = hasStoredAvatarUrl ? agent.avatar : getAvatarUrl(agent.id)
   const [imageError, setImageError] = React.useState(false)
+
+  // Working directory for the secondary row (replaces the legacy agent-ID display).
+  // Cards show workdir so the user can see at a glance which project each agent
+  // belongs to. Home-relative paths are abbreviated to ~ for readability.
+  const rawWorkdir = agent.workingDirectory || agent.sessions?.[0]?.workingDirectory || ''
+  const displayWorkdir = rawWorkdir
+    ? rawWorkdir.replace(/^\/Users\/[^/]+/, '~').replace(/\/$/, '')
+    : ''
+
+  // Reset imageError whenever avatarUrl changes so a new image is always attempted.
+  // Without this, a previous load failure keeps imageError true across re-renders
+  // (e.g. when agent.avatar is updated dynamically), causing the fallback to show
+  // indefinitely without ever trying the updated URL.
+  React.useEffect(() => {
+    setImageError(false)
+  }, [avatarUrl])
 
   // Close menu when clicking outside
   React.useEffect(() => {
@@ -172,8 +224,8 @@ export default function AgentBadge({
         }
       `}
     >
-      {/* Status indicator - top right corner */}
-      <div className="absolute top-2 right-2 flex items-center gap-1.5">
+      {/* Status indicator — top-right in normal, bottom-right in compact */}
+      <div className={`absolute ${variant === 'normal' ? 'top-2' : 'bottom-2'} right-2 flex items-center gap-1.5 z-20`}>
         {/* Unread messages counter */}
         {unreadCount && unreadCount > 0 && (
           <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-600/50" title={`${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`}>
@@ -182,44 +234,57 @@ export default function AgentBadge({
           </div>
         )}
 
-        {/* Status indicator - dot for online/offline, Power icon for hibernated */}
-        {isHibernated ? (
-          <div className="flex items-center" title="Hibernated - Click to wake">
-            <Power className="w-4 h-4 text-slate-500" />
-          </div>
-        ) : (
-          <div className="relative flex items-center justify-center" title={statusInfo.label}>
-            {statusInfo.pulse && (
-              <span className={`absolute w-4 h-4 rounded-full ${statusInfo.color} animate-ping opacity-50`} />
-            )}
-            <span
-              className={`relative w-3.5 h-3.5 rounded-full ${statusInfo.color} ring-2 ring-slate-800`}
-              style={{
-                boxShadow: statusInfo.pulse
-                  ? `0 0 8px 2px ${statusInfo.color === 'bg-green-400' ? '#4ade80' : statusInfo.color === 'bg-amber-400' ? '#fbbf24' : '#64748b'}`
-                  : 'none'
-              }}
-            />
+        {/* Health warnings — R17 core plugin + P002 AMP identity.
+            Badge is visible only when at least one health check is failing.
+            Single amber triangle, tooltip lists all active issues. */}
+        {(agent.corePluginMissing || agent.ampIdentityMissing) && (
+          <div
+            className="flex items-center justify-center p-1 rounded-full bg-amber-900/60 ring-1 ring-amber-500/60"
+            title={[
+              agent.corePluginMissing
+                ? 'ai-maestro-plugin is missing (R17) — agent has no hooks, no state detection, no messaging. Wake the agent or use the Config tab to reinstall.'
+                : null,
+              agent.ampIdentityMissing
+                ? 'AMP identity not initialized (P002) — agent cannot send or receive messages. POST /api/agents/{id}/amp-init to reinitialize.'
+                : null,
+            ].filter(Boolean).join('\n\n')}
+          >
+            <AlertTriangle className="w-3 h-3 text-amber-400" />
           </div>
         )}
+
+        {/* Status LED — exact same style as compact view, scaled up */}
+        <div className="flex items-center justify-center gap-1" title={statusInfo.label}>
+          <div className={`w-3 h-3 rounded-full ${statusInfo.color} ring-[3px] ${statusInfo.ringColor} ${statusInfo.pulse ? 'animate-pulse' : ''}`} />
+          {/* Lock icon shown when agent is blocked on a permission prompt */}
+          {statusInfo.label === 'Permission' && (
+            <Lock className="w-3 h-3 text-orange-500" />
+          )}
+        </div>
       </div>
 
-      {/* Actions menu - top left */}
+      {/* Actions menu — top-left in normal, bottom-left in compact, always visible */}
       {showActions && (
-        <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity" ref={menuRef}>
+        <div className={`absolute ${variant === 'normal' ? 'top-2' : 'bottom-2'} left-2 z-20`} ref={menuRef}>
           <button
             onClick={(e) => {
               e.stopPropagation()
               setShowMenu(!showMenu)
             }}
-            className="p-1 rounded-md bg-slate-700/50 hover:bg-slate-600 transition-colors"
+            className={`p-1 rounded-md transition-colors ${
+              variant === 'normal'
+                ? 'bg-black/20 hover:bg-black/30 shadow-[0_0_6px_rgba(0,0,0,0.4)]'
+                : 'bg-slate-700/50 hover:bg-slate-600'
+            }`}
           >
-            <MoreVertical className="w-3.5 h-3.5 text-slate-400" />
+            <MoreVertical className={`w-3.5 h-3.5 ${variant === 'normal' ? 'text-white/80' : 'text-slate-400'}`} />
           </button>
 
-          {/* Dropdown menu */}
+          {/* Dropdown menu — opens upward in compact (button at bottom), downward in normal */}
           {showMenu && (
-            <div className="absolute left-0 top-full mt-1 w-40 py-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
+            <div className={`absolute left-0 w-40 py-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 ${
+              variant === 'normal' ? 'top-full mt-1' : 'bottom-full mb-1'
+            }`}>
               {isOnline && onOpenTerminal && (
                 <button
                   onClick={(e) => {
@@ -318,62 +383,150 @@ export default function AgentBadge({
         </div>
       )}
 
-      {/* Badge content */}
-      <div className="p-3 pt-10 flex flex-col items-center text-center">
-        {/* Avatar - Photo or Emoji */}
-        <div
-          className={`
-            relative w-20 h-20 rounded-full overflow-hidden
-            ring-4 ${ringColor} shadow-lg
-            ${isHibernated ? 'opacity-50 grayscale' : ''}
-          `}
-        >
+      {/* Badge content — two variants */}
+      {variant === 'normal' ? (
+        /* Normal variant: full background image with overlaid text */
+        <div className={`relative z-0 w-full aspect-square overflow-hidden rounded-[10px] ${isHibernated ? 'grayscale opacity-70' : ''}`}>
+          {/* Background image */}
           {hasEmojiAvatar ? (
-            <div className="w-full h-full bg-slate-700 flex items-center justify-center">
-              <span className="text-4xl">{agent.avatar}</span>
+            <div className="absolute inset-0 bg-slate-700 flex items-center justify-center">
+              <span className="text-6xl">{agent.avatar}</span>
             </div>
           ) : imageError ? (
-            <div className="w-full h-full bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center">
-              <span className="text-2xl font-bold text-white/70">
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center">
+              <span className="text-4xl font-bold text-white/40">
                 {(agent.label || agent.name || '??').slice(0, 2).toUpperCase()}
               </span>
             </div>
           ) : (
-            <img
-              src={avatarUrl}
-              alt={agent.label || agent.name}
-              className="w-full h-full object-cover"
+            <Image
+              src={avatarUrl || ''}
+              alt={agent.label || agent.name || ''}
+              fill
+              className="object-cover"
               onError={() => setImageError(true)}
+              unoptimized
             />
           )}
+
+          {/* Gradient overlay for text readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+
+          {/* Text overlay — bottom of card */}
+          <div className="absolute bottom-0 left-0 right-0 p-2.5 text-center">
+            {/* Prioritize agent.label (persona name); fall back to agent.name (agent ID) */}
+            {(agent.label || agent.name) && (
+              <h3
+                className="font-bold text-sm leading-tight text-white"
+                style={{
+                  textShadow: '0 0 8px rgba(0,0,0,0.9), 0 0 16px rgba(0,0,0,0.6), 0 1px 3px rgba(0,0,0,0.8)',
+                }}
+              >
+                {agent.label || agent.name}
+              </h3>
+            )}
+            {/* Row 2 — working directory (replaces the legacy agent-ID row). Shows
+                where the agent is doing its work so the user can tell a project agent
+                from a test agent at a glance. Falls back silently if workdir is unset. */}
+            {displayWorkdir && (
+              <p
+                className="text-[10px] leading-tight text-slate-300 mt-0.5 truncate"
+                style={{
+                  textShadow: '0 0 6px rgba(0,0,0,0.9), 0 1px 2px rgba(0,0,0,0.8)',
+                }}
+                title={rawWorkdir}
+              >
+                {displayWorkdir}
+              </p>
+            )}
+            {/* Row 3 — host, always shown when present */}
+            {agent.hostId && (
+              <p
+                className="text-[9px] text-slate-400 mt-0.5"
+                style={{
+                  textShadow: '0 0 6px rgba(0,0,0,0.9), 0 1px 2px rgba(0,0,0,0.8)',
+                }}
+              >
+                @{agent.hostId}
+              </p>
+            )}
+          </div>
         </div>
+      ) : (
+        /* Compact variant: circle avatar with text below */
+        <div className="p-3 pt-10 flex flex-col items-center text-center">
+          {/* Avatar - Photo or Emoji */}
+          <div
+            className={`
+              relative w-20 h-20 rounded-full overflow-hidden
+              ring-4 ${ringColor} shadow-lg
+              ${isHibernated ? 'opacity-50 grayscale' : ''}
+            `}
+          >
+            {hasEmojiAvatar ? (
+              <div className="w-full h-full bg-slate-700 flex items-center justify-center">
+                <span className="text-4xl">{agent.avatar}</span>
+              </div>
+            ) : imageError ? (
+              <div className="w-full h-full bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center">
+                <span className="text-2xl font-bold text-white/70">
+                  {(agent.label || agent.name || '??').slice(0, 2).toUpperCase()}
+                </span>
+              </div>
+            ) : (
+              <Image
+                src={avatarUrl || ''}
+                alt={agent.label || agent.name || ''}
+                fill
+                className="object-cover"
+                onError={() => setImageError(true)}
+                unoptimized
+              />
+            )}
+          </div>
 
-        {/* Alias - Prominent display */}
-        {(agent.label || agent.alias) && (
-          <h3 className={`
-            mt-3 font-bold text-base leading-tight
-            ${isHibernated ? 'text-slate-500' : 'text-slate-100'}
-          `}>
-            {agent.label || agent.alias}
-          </h3>
-        )}
-
-        {/* Full name and host - Secondary info */}
-        <div className={`${(agent.label || agent.alias) ? 'mt-1' : 'mt-3'} w-full`}>
-          <p className={`
-            text-[11px] leading-tight
-            ${isHibernated ? 'text-slate-600' : 'text-slate-400'}
-          `}>
-            {agent.name}
-          </p>
-
-          {agent.hostId && (
-            <p className="text-[10px] text-slate-500 mt-0.5">
-              @{agent.hostId}
-            </p>
+          {/* Persona name — Prominent display, centered */}
+          {/* Prioritize agent.label (persona name); fall back to agent.name (agent ID) */}
+          {(agent.label || agent.name) && (
+            <h3 className={`
+              mt-3 font-bold text-base leading-tight text-center
+              ${isHibernated ? 'text-slate-500' : 'text-slate-100'}
+            `}>
+              {agent.label || agent.name}
+            </h3>
           )}
+
+          {/* Row 2 — working directory (replaces the legacy agent-ID row).
+              Shows where the agent is doing its work so project agents are
+              distinguishable from test agents at a glance. Docker icon is
+              appended when applicable. */}
+          <div className={`${(agent.label || agent.name) ? 'mt-1' : 'mt-3'} w-full`}>
+            {(displayWorkdir || agent.deployment?.cloud?.provider === 'local-container') && (
+              <p
+                className={`
+                  text-[11px] leading-tight flex items-center justify-center gap-1 truncate px-1
+                  ${isHibernated ? 'text-slate-600' : 'text-slate-400'}
+                `}
+                title={rawWorkdir || ''}
+              >
+                {displayWorkdir && <span className="truncate">{displayWorkdir}</span>}
+                {agent.deployment?.cloud?.provider === 'local-container' && (
+                  <span className="flex-shrink-0" aria-label="Docker container">
+                    <Box className="w-3 h-3 text-blue-400" />
+                  </span>
+                )}
+              </p>
+            )}
+
+            {/* Row 3 — host, always shown when present */}
+            {agent.hostId && (
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                @{agent.hostId}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

@@ -15,67 +15,18 @@ import { Host, HostsConfig } from '@/types/host'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-
-// File lock state
-let lockHeld = false
-const lockQueue: Array<{ resolve: () => void; reject: (err: Error) => void }> = []
-const LOCK_TIMEOUT = 5000 // 5 second timeout for acquiring lock
-
-/**
- * Acquire a lock for file operations
- */
-async function acquireLock(): Promise<void> {
-  if (!lockHeld) {
-    lockHeld = true
-    return
-  }
-
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      const index = lockQueue.findIndex(item => item.resolve === resolve)
-      if (index !== -1) {
-        lockQueue.splice(index, 1)
-      }
-      reject(new Error('Lock acquisition timeout'))
-    }, LOCK_TIMEOUT)
-
-    lockQueue.push({
-      resolve: () => {
-        clearTimeout(timeout)
-        resolve()
-      },
-      reject: (err: Error) => {
-        clearTimeout(timeout)
-        reject(err)
-      },
-    })
-  })
-}
+// MF-010: Use the shared file-lock instead of a duplicate local lock implementation.
+// The shared lock has 30s timeout (vs the old 5s), consistent naming, and is visible
+// to other modules that also use file-lock.ts to prevent cross-module races.
+import { withLock as sharedWithLock } from '@/lib/file-lock'
+import { statePath } from '@/lib/ecosystem-constants'
 
 /**
- * Release the lock and process next in queue
- */
-function releaseLock(): void {
-  if (lockQueue.length > 0) {
-    const next = lockQueue.shift()
-    if (next) {
-      next.resolve()
-    }
-  } else {
-    lockHeld = false
-  }
-}
-
-/**
- * Execute a function with lock protection
+ * Execute a function with 'hosts' lock protection.
+ * MF-010: Wraps the shared file-lock with the 'hosts' lock name.
  */
 async function withLock<T>(fn: () => T | Promise<T>): Promise<T> {
-  await acquireLock()
-  try {
-    return await fn()
-  } finally {
-    releaseLock()
-  }
+  return sharedWithLock('hosts', fn)
 }
 
 // ============================================================================
@@ -178,8 +129,8 @@ export function isSelf(hostId: string): boolean {
   const selfId = getSelfHostId()
   const hostIdLower = hostId.toLowerCase()
 
-  // Direct hostname match
-  if (hostIdLower === selfId.toLowerCase()) return true
+  // Direct hostname match (NT-015: selfId is already lowercase from getSelfHostId)
+  if (hostIdLower === selfId) return true
 
   // Legacy 'local' value (DEPRECATED)
   if (hostId === 'local') return true
@@ -192,7 +143,8 @@ export function isSelf(hostId: string): boolean {
   try {
     const url = new URL(hostId)
     const urlHost = url.hostname.toLowerCase()
-    if (urlHost === selfId.toLowerCase() || selfIPs.includes(urlHost)) return true
+    // NT-015: selfId is already lowercase from getSelfHostId
+    if (urlHost === selfId || selfIPs.includes(urlHost)) return true
   } catch {
     // Not a URL, that's fine
   }
@@ -231,9 +183,11 @@ function getDefaultSelfHost(): Host {
 
 const HOSTS_ENV_VAR = 'AIMAESTRO_HOSTS'
 // Use user's home directory for hosts.json - shared across all projects
-const HOSTS_CONFIG_PATH = path.join(os.homedir(), '.aimaestro', 'hosts.json')
+const HOSTS_CONFIG_PATH = statePath('hosts.json')
 
 let cachedHosts: Host[] | null = null
+// SF-026: Track file mtime so the cache is invalidated when hosts.json is edited externally
+let cachedHostsMtimeMs: number | null = null
 
 /**
  * Migrate and normalize host config
@@ -243,19 +197,22 @@ let cachedHosts: Host[] | null = null
 function migrateHost(host: Host): Host {
   const selfId = getSelfHostId() // Already lowercase
 
+  // NT-017: Strip deprecated `type` field during migration -- no longer meaningful in mesh network
+  const { type: _deprecatedType, ...hostWithoutType } = host
+
   // Migrate id:'local' to actual hostname
-  if (host.id === 'local') {
+  if (hostWithoutType.id === 'local') {
     return {
-      ...host,
+      ...hostWithoutType,
       id: selfId,
-      name: host.name || selfId,
+      name: hostWithoutType.name || selfId,
     }
   }
 
   // Normalize host ID to lowercase for case-insensitive consistency
   return {
-    ...host,
-    id: host.id.toLowerCase(),
+    ...hostWithoutType,
+    id: hostWithoutType.id.toLowerCase(),
   }
 }
 
@@ -264,6 +221,20 @@ function migrateHost(host: Host): Host {
  * Priority: AIMAESTRO_HOSTS env var > .aimaestro/hosts.json > default self host
  */
 export function loadHostsConfig(): Host[] {
+  // SF-026: Invalidate cache when hosts.json file mtime has changed
+  if (cachedHosts !== null) {
+    try {
+      if (fs.existsSync(HOSTS_CONFIG_PATH)) {
+        const currentMtime = fs.statSync(HOSTS_CONFIG_PATH).mtimeMs
+        if (currentMtime !== cachedHostsMtimeMs) {
+          cachedHosts = null // File changed on disk -- reload
+        }
+      }
+    } catch {
+      // stat failed -- fall through to reload
+      cachedHosts = null
+    }
+  }
   if (cachedHosts !== null) {
     return cachedHosts
   }
@@ -282,15 +253,23 @@ export function loadHostsConfig(): Host[] {
     }
   }
 
-  // Try file
-  if (hosts.length === 0 && fs.existsSync(HOSTS_CONFIG_PATH)) {
+  // Try file — only fall through to default for ENOENT; rethrow corruption/permission errors
+  if (hosts.length === 0) {
     try {
       const fileContent = fs.readFileSync(HOSTS_CONFIG_PATH, 'utf-8')
       const config = JSON.parse(fileContent) as HostsConfig
       hosts = validateHosts(config.hosts)
       console.log(`[Hosts] Loaded ${hosts.length} host(s) from ${HOSTS_CONFIG_PATH}`)
-    } catch (error) {
-      console.error(`[Hosts] Failed to load hosts config from file:`, error)
+    } catch (error: unknown) {
+      const code = error instanceof Error && 'code' in error ? (error as NodeJS.ErrnoException).code : undefined
+      if (code === 'ENOENT') {
+        // File doesn't exist — fall through to default self host
+      } else {
+        // Corruption (bad JSON), permission denied, etc. — surface the error
+        throw new Error(
+          `[Hosts] Failed to load hosts config from ${HOSTS_CONFIG_PATH}: ${error instanceof Error ? error.message : error}`
+        )
+      }
     }
   }
 
@@ -301,6 +280,12 @@ export function loadHostsConfig(): Host[] {
   }
 
   cachedHosts = hosts
+  // SF-026: Record file mtime at cache-fill time for later invalidation
+  try {
+    if (fs.existsSync(HOSTS_CONFIG_PATH)) {
+      cachedHostsMtimeMs = fs.statSync(HOSTS_CONFIG_PATH).mtimeMs
+    }
+  } catch { /* stat failed -- no mtime to cache */ }
   return hosts
 }
 
@@ -355,7 +340,8 @@ export function getHostById(hostId: string): Host | undefined {
   if (hostId === 'local') {
     return hosts.find(host => isSelf(host.id))
   }
-  return hosts.find(host => host.id === hostId || host.id.toLowerCase() === hostId.toLowerCase())
+  // NT-022: Simplified to just the case-insensitive check (subsumes the exact match)
+  return hosts.find(host => host.id.toLowerCase() === hostId.toLowerCase())
 }
 
 /**
@@ -477,7 +463,7 @@ export function createExampleConfig(): HostsConfig {
         id: selfId,
         name: selfId,
         url: selfHost.url,
-        type: 'local',
+        // NT-020: Removed deprecated 'type: local' field -- use isSelf(host.id) instead
         enabled: true,
         description: 'This machine',
       },
@@ -517,8 +503,22 @@ export function saveHosts(hosts: Host[]): { success: boolean; error?: string } {
       fs.mkdirSync(configDir, { recursive: true })
     }
 
-    const config: HostsConfig = { hosts }
-    fs.writeFileSync(HOSTS_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+    // Read existing config to preserve non-hosts fields (organization, etc.)
+    let existing: HostsConfig = { hosts: [] }
+    if (fs.existsSync(HOSTS_CONFIG_PATH)) {
+      try {
+        existing = JSON.parse(fs.readFileSync(HOSTS_CONFIG_PATH, 'utf-8')) as HostsConfig
+      } catch {
+        // Corrupted file — start fresh but log it
+        console.warn('[Hosts] Could not parse existing hosts.json, preserving only hosts array')
+      }
+    }
+
+    const config: HostsConfig = { ...existing, hosts }
+    // MF-009: Atomic write -- write to temp file then rename to avoid data loss on crash
+    const tmpFile = `${HOSTS_CONFIG_PATH}.tmp.${process.pid}`
+    fs.writeFileSync(tmpFile, JSON.stringify(config, null, 2), 'utf-8')
+    fs.renameSync(tmpFile, HOSTS_CONFIG_PATH)
     clearHostsCache()
 
     return { success: true }
@@ -539,17 +539,73 @@ export async function saveHostsAsync(hosts: Host[]): Promise<{ success: boolean;
 }
 
 /**
- * Add a new host
+ * Extract hostname/IP from a URL for duplicate detection
  */
-export function addHost(host: Host): { success: boolean; host?: Host; error?: string } {
+function extractHostFromUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url)
+    return parsed.hostname.toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Check if two hosts are the same machine based on URL/IP
+ * This prevents duplicate hosts when hostname changes but IP stays the same
+ */
+function isSameHost(host1: Host, host2: Host): boolean {
+  // Same ID is obviously the same
+  if (host1.id.toLowerCase() === host2.id.toLowerCase()) return true
+
+  // Same URL is the same host
+  if (host1.url && host2.url) {
+    const url1 = host1.url.toLowerCase()
+    const url2 = host2.url.toLowerCase()
+    if (url1 === url2) return true
+
+    // Same IP in URL is the same host
+    const ip1 = extractHostFromUrl(host1.url)
+    const ip2 = extractHostFromUrl(host2.url)
+    if (ip1 && ip2 && ip1 === ip2) return true
+  }
+
+  // Check aliases overlap
+  const aliases1 = new Set((host1.aliases || []).map(a => a.toLowerCase()))
+  const aliases2 = host2.aliases || []
+  for (const alias of aliases2) {
+    if (aliases1.has(alias.toLowerCase())) return true
+  }
+
+  return false
+}
+
+/**
+ * Add a new host
+ * Includes duplicate detection by URL/IP to prevent same machine with different hostnames
+ */
+export function addHost(host: Host): { success: boolean; host?: Host; error?: string; existingHost?: Host } {
   try {
     const currentHosts = getHosts()
 
-    const existingHost = currentHosts.find(h => h.id === host.id)
-    if (existingHost) {
+    // Check for duplicate by ID
+    const existingById = currentHosts.find(h => h.id.toLowerCase() === host.id.toLowerCase())
+    if (existingById) {
       return {
         success: false,
         error: `Host with ID '${host.id}' already exists`,
+        existingHost: existingById,
+      }
+    }
+
+    // Check for duplicate by URL/IP (prevents same machine with different hostname)
+    const existingByUrl = currentHosts.find(h => isSameHost(h, host))
+    if (existingByUrl) {
+      console.warn(`[Hosts] Duplicate detected: '${host.id}' has same URL/IP as '${existingByUrl.id}'`)
+      return {
+        success: false,
+        error: `Host '${host.id}' appears to be the same machine as '${existingByUrl.id}' (same URL: ${host.url}). Use the existing host or remove it first.`,
+        existingHost: existingByUrl,
       }
     }
 
@@ -586,7 +642,8 @@ export function updateHost(
   try {
     const currentHosts = getHosts()
 
-    const hostIndex = currentHosts.findIndex(h => h.id === hostId)
+    // SF-035: Use case-insensitive ID comparison, consistent with addHost() at line 636
+    const hostIndex = currentHosts.findIndex(h => h.id.toLowerCase() === hostId.toLowerCase())
     if (hostIndex === -1) {
       return {
         success: false,
@@ -594,7 +651,7 @@ export function updateHost(
       }
     }
 
-    if (updates.id && updates.id !== hostId) {
+    if (updates.id && updates.id.toLowerCase() !== hostId.toLowerCase()) {
       return {
         success: false,
         error: 'Cannot change host ID',
@@ -636,7 +693,8 @@ export function deleteHost(hostId: string): { success: boolean; error?: string }
   try {
     const currentHosts = getHosts()
 
-    const host = currentHosts.find(h => h.id === hostId)
+    // SF-036: Use case-insensitive comparison, consistent with addHost()
+    const host = currentHosts.find(h => h.id.toLowerCase() === hostId.toLowerCase())
     if (!host) {
       return {
         success: false,
@@ -652,7 +710,7 @@ export function deleteHost(hostId: string): { success: boolean; error?: string }
       }
     }
 
-    const updatedHosts = currentHosts.filter(h => h.id !== hostId)
+    const updatedHosts = currentHosts.filter(h => h.id.toLowerCase() !== hostId.toLowerCase())
     const result = saveHosts(updatedHosts)
     if (!result.success) {
       return result
@@ -666,4 +724,226 @@ export function deleteHost(hostId: string): { success: boolean; error?: string }
       error: error instanceof Error ? error.message : 'Failed to delete host',
     }
   }
+}
+
+// ============================================================================
+// ORGANIZATION MANAGEMENT
+// ============================================================================
+
+/**
+ * Validation regex for organization name
+ * Must be 1-63 characters, lowercase alphanumeric + hyphens
+ * Must start with letter, cannot start/end with hyphen
+ */
+const ORGANIZATION_REGEX = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$|^[a-z]$/
+
+/**
+ * Validate organization name format
+ */
+export function isValidOrganizationName(name: string): boolean {
+  return ORGANIZATION_REGEX.test(name)
+}
+
+/**
+ * Get the current organization name from hosts config
+ * Returns null if not set
+ */
+export function getOrganization(): string | null {
+  try {
+    if (!fs.existsSync(HOSTS_CONFIG_PATH)) {
+      return null
+    }
+    const fileContent = fs.readFileSync(HOSTS_CONFIG_PATH, 'utf-8')
+    const config = JSON.parse(fileContent) as HostsConfig
+    return config.organization || null
+  } catch (error) {
+    console.error('[Hosts] Failed to read organization:', error)
+    return null
+  }
+}
+
+/**
+ * Get full organization info (name, when set, who set it)
+ */
+export function getOrganizationInfo(): {
+  organization: string | null
+  setAt: string | null
+  setBy: string | null
+} {
+  try {
+    if (!fs.existsSync(HOSTS_CONFIG_PATH)) {
+      return { organization: null, setAt: null, setBy: null }
+    }
+    const fileContent = fs.readFileSync(HOSTS_CONFIG_PATH, 'utf-8')
+    const config = JSON.parse(fileContent) as HostsConfig
+    return {
+      organization: config.organization || null,
+      setAt: config.organizationSetAt || null,
+      setBy: config.organizationSetBy || null,
+    }
+  } catch (error) {
+    console.error('[Hosts] Failed to read organization info:', error)
+    return { organization: null, setAt: null, setBy: null }
+  }
+}
+
+/**
+ * Check if organization is set
+ */
+export function hasOrganization(): boolean {
+  return getOrganization() !== null
+}
+
+/**
+ * Set the organization name
+ * Can only be set once - returns error if already set
+ *
+ * @param name - Organization name (1-63 chars, lowercase alphanumeric + hyphens)
+ * @param setBy - Host ID that is setting the organization (optional, defaults to self)
+ */
+export function setOrganization(
+  name: string,
+  setBy?: string
+): { success: boolean; error?: string } {
+  // MF-011: TOCTOU risk acknowledged -- two concurrent calls could both read organization: null
+  // and both proceed to write. Mitigation: setOrganizationAsync() wraps this in a lock.
+  // Sync version preserved for backward compatibility with callers that cannot await.
+  try {
+    // Validate name format
+    if (!isValidOrganizationName(name)) {
+      return {
+        success: false,
+        error: 'Invalid organization name. Must be 1-63 lowercase characters (letters, numbers, hyphens). Must start with a letter and cannot start/end with a hyphen.',
+      }
+    }
+
+    // Read existing config
+    let config: HostsConfig = { hosts: [] }
+    if (fs.existsSync(HOSTS_CONFIG_PATH)) {
+      const fileContent = fs.readFileSync(HOSTS_CONFIG_PATH, 'utf-8')
+      config = JSON.parse(fileContent) as HostsConfig
+    }
+
+    // Check if already set
+    if (config.organization) {
+      return {
+        success: false,
+        error: `Organization already set to "${config.organization}". Cannot change organization name.`,
+      }
+    }
+
+    // Set organization
+    config.organization = name.toLowerCase()
+    config.organizationSetAt = new Date().toISOString()
+    config.organizationSetBy = setBy || getSelfHostId()
+
+    // Ensure directory exists
+    const configDir = path.dirname(HOSTS_CONFIG_PATH)
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true })
+    }
+
+    // Save config -- MF-009: Atomic write to prevent data loss on crash
+    const tmpFile = `${HOSTS_CONFIG_PATH}.tmp.${process.pid}`
+    fs.writeFileSync(tmpFile, JSON.stringify(config, null, 2), 'utf-8')
+    fs.renameSync(tmpFile, HOSTS_CONFIG_PATH)
+    clearHostsCache()
+
+    console.log(`[Hosts] Organization set to "${name}" by ${config.organizationSetBy}`)
+    return { success: true }
+  } catch (error) {
+    console.error('[Hosts] Failed to set organization:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to set organization',
+    }
+  }
+}
+
+/**
+ * MF-011: Lock-protected version of setOrganization to prevent TOCTOU race.
+ * Callers should prefer this async version when possible.
+ */
+export async function setOrganizationAsync(
+  name: string,
+  setBy?: string
+): Promise<{ success: boolean; error?: string }> {
+  return withLock(() => setOrganization(name, setBy))
+}
+
+/**
+ * Adopt organization from a peer during mesh sync
+ * Only succeeds if local organization is NOT set
+ *
+ * @param organization - Organization name from peer
+ * @param setAt - When the peer set it (ISO timestamp)
+ * @param setBy - Which host originally set it
+ */
+export function adoptOrganization(
+  organization: string,
+  setAt: string,
+  setBy: string
+): { success: boolean; adopted: boolean; error?: string } {
+  // MF-011: TOCTOU risk acknowledged -- see adoptOrganizationAsync() for lock-protected version.
+  try {
+    // Read existing config
+    let config: HostsConfig = { hosts: [] }
+    if (fs.existsSync(HOSTS_CONFIG_PATH)) {
+      const fileContent = fs.readFileSync(HOSTS_CONFIG_PATH, 'utf-8')
+      config = JSON.parse(fileContent) as HostsConfig
+    }
+
+    // If we already have an organization, check for conflict
+    if (config.organization) {
+      if (config.organization === organization) {
+        // Same organization, nothing to do
+        return { success: true, adopted: false }
+      }
+      // Different organization - this is a conflict
+      return {
+        success: false,
+        adopted: false,
+        error: `Organization mismatch: local is "${config.organization}", peer is "${organization}". Cannot join incompatible networks.`,
+      }
+    }
+
+    // Adopt the peer's organization
+    config.organization = organization.toLowerCase()
+    config.organizationSetAt = setAt
+    config.organizationSetBy = setBy
+
+    // Ensure directory exists
+    const configDir = path.dirname(HOSTS_CONFIG_PATH)
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true })
+    }
+
+    // Save config -- MF-009: Atomic write to prevent data loss on crash
+    const tmpFile = `${HOSTS_CONFIG_PATH}.tmp.${process.pid}`
+    fs.writeFileSync(tmpFile, JSON.stringify(config, null, 2), 'utf-8')
+    fs.renameSync(tmpFile, HOSTS_CONFIG_PATH)
+    clearHostsCache()
+
+    console.log(`[Hosts] Adopted organization "${organization}" from ${setBy}`)
+    return { success: true, adopted: true }
+  } catch (error) {
+    console.error('[Hosts] Failed to adopt organization:', error)
+    return {
+      success: false,
+      adopted: false,
+      error: error instanceof Error ? error.message : 'Failed to adopt organization',
+    }
+  }
+}
+
+/**
+ * MF-011: Lock-protected version of adoptOrganization to prevent TOCTOU race.
+ * Callers should prefer this async version when possible.
+ */
+export async function adoptOrganizationAsync(
+  organization: string,
+  setAt: string,
+  setBy: string
+): Promise<{ success: boolean; adopted: boolean; error?: string }> {
+  return withLock(() => adoptOrganization(organization, setAt, setBy))
 }

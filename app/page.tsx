@@ -1,23 +1,30 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import AgentList from '@/components/AgentList'
+import { HUMAN_SELF_ID } from '@/components/sidebar/HumanUserCard'
+import HumanUserPanel from '@/components/HumanUserPanel'
+import HaephestosEmbeddedView from '@/components/HaephestosEmbeddedView'
 import TerminalView from '@/components/TerminalView'
-import TerminalViewNew from '@/components/TerminalViewNew'
 import ChatView from '@/components/ChatView'
 import MessageCenter from '@/components/MessageCenter'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import WorkTree from '@/components/WorkTree'
 import Header from '@/components/Header'
 import MobileDashboard from '@/components/MobileDashboard'
+import { useDeviceType } from '@/hooks/useDeviceType'
 import { AgentSubconsciousIndicator } from '@/components/AgentSubconsciousIndicator'
 import MigrationBanner from '@/components/MigrationBanner'
 import { VersionChecker } from '@/components/VersionChecker'
+import AgentSearch from '@/components/AgentSearch'
+import TranscriptExport from '@/components/TranscriptExport'
 import { useAgents } from '@/hooks/useAgents'
 import { TerminalProvider } from '@/contexts/TerminalContext'
-import { Terminal, Mail, User, GitBranch, MessageSquare, Sparkles, Share2, FileText, Moon, Power, Loader2, Brain, Plus } from 'lucide-react'
-import type { Agent } from '@/types/agent'
-import type { Session } from '@/types/session'
+import { useHelpPanel } from '@/contexts/HelpPanelContext'
+import { Terminal, Mail, User, GitBranch, MessageSquare, Moon, Power, Loader2, Plus, Search, Download, ExternalLink } from 'lucide-react'
+import { agentToSession } from '@/lib/agent-utils'
+import type { Agent, AgentRole } from '@/types/agent'
 
 // Dynamic imports for heavy components that are conditionally rendered
 // This reduces initial bundle size by ~100KB+
@@ -28,11 +35,15 @@ const OnboardingFlow = dynamic(
   { ssr: false }
 )
 
-// Only shown when help button is clicked
-const HelpPanel = dynamic(
-  () => import('@/components/HelpPanel'),
+// Only shown when organization not set
+const OrganizationSetup = dynamic(
+  () => import('@/components/OrganizationSetup'),
   { ssr: false }
 )
+
+// Help Panel is owned by HelpPanelProvider (see contexts/HelpPanelContext.tsx):
+// the provider is mounted once in app/layout.tsx and renders the panel itself,
+// so page.tsx only needs `useHelpPanel()` to open it.
 
 // Only shown when import button is clicked
 const ImportAgentDialog = dynamic(
@@ -40,21 +51,9 @@ const ImportAgentDialog = dynamic(
   { ssr: false }
 )
 
-// Only shown when profile is opened
-const AgentProfile = dynamic(
-  () => import('@/components/AgentProfile'),
-  { ssr: false }
-)
-
-// Heavy component with canvas/graph - only shown on memory tab
-const MemoryViewer = dynamic(
-  () => import('@/components/MemoryViewer'),
-  { ssr: false }
-)
-
-// Heavy component using cytoscape - only shown on graph tab
-const AgentGraph = dynamic(
-  () => import('@/components/AgentGraph'),
+// Right panel — Profile (Overview + Config tabs)
+const AgentProfilePanel = dynamic(
+  () => import('@/components/AgentProfilePanel'),
   { ssr: false }
 )
 
@@ -64,99 +63,203 @@ const WakeAgentDialog = dynamic(
   { ssr: false }
 )
 
-// Only shown on docs tab
-const DocumentationPanel = dynamic(
-  () => import('@/components/DocumentationPanel'),
-  { ssr: false }
-)
-
-// Helper: Convert agent to session-like object for TerminalView compatibility
-function agentToSession(agent: Agent): Session {
-  return {
-    id: agent.session?.tmuxSessionName || agent.id,
-    name: agent.label || agent.name || agent.alias || '',
-    workingDirectory: agent.session?.workingDirectory || agent.preferences?.defaultWorkingDirectory || '',
-    status: 'active' as const,
-    createdAt: agent.createdAt,
-    lastActivity: agent.lastActive || agent.createdAt,
-    windows: 1,
-    agentId: agent.id,
-    hostId: agent.hostId,  // Now directly on agent
-  }
-}
-
 export default function DashboardPage() {
   // Agent-centric: Primary hook is useAgents
-  const { agents, stats: agentStats, loading: agentsLoading, error: agentsError, refreshAgents, onlineAgents } = useAgents()
+  const { agents, unregisteredSessions, stats: agentStats, loading: agentsLoading, error: agentsError, refreshAgents, onlineAgents, hostErrors } = useAgents()
 
   // PRIMARY STATE: Agent ID (no longer session-driven)
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
+  // Track whether we've already processed the ?agent=haephestos query param
+  const haephestosQueryHandled = useRef(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const resizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     if (typeof window === 'undefined') return 320
     const saved = localStorage.getItem('sidebar-width')
     return saved ? parseInt(saved, 10) : 320
   })
   const [isResizing, setIsResizing] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
-  const [activeTab, setActiveTab] = useState<'terminal' | 'terminal-new' | 'chat' | 'messages' | 'worktree' | 'graph' | 'memory' | 'docs'>('terminal')
+  const { deviceType } = useDeviceType()
+  const isMobile = deviceType === 'phone'
+  const [activeTab, setActiveTab] = useState<'terminal' | 'chat' | 'messages' | 'worktree' | 'search' | 'export'>('terminal')
   const [unreadCount, setUnreadCount] = useState(0)
-  const [isProfileOpen, setIsProfileOpen] = useState(false)
-  const [profileAgent, setProfileAgent] = useState<Agent | null>(null)
+  // profileScrollToDangerZone — forwarded to AgentProfilePanel → AgentProfile (embedded)
   const [profileScrollToDangerZone, setProfileScrollToDangerZone] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showOrganizationSetup, setShowOrganizationSetup] = useState(false)
+  const [organizationChecked, setOrganizationChecked] = useState(false)
   const [showImportDialog, setShowImportDialog] = useState(false)
-  const [isHelpOpen, setIsHelpOpen] = useState(false)
+  // Help panel state lives in HelpPanelContext (mounted in app/layout.tsx).
+  // We only need `open` here to wire up the header button.
+  const { open: openHelp } = useHelpPanel()
   const [subconsciousRefreshTrigger, setSubconsciousRefreshTrigger] = useState(0)
+  const [showProfilePanel, setShowProfilePanel] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('aimaestro-profile-panel') === 'true'
+  })
 
   // Derive active agent from state
   const activeAgent = agents.find(a => a.id === activeAgentId) || null
 
-  // Compute selectable agents: online + hibernated (offline with session config)
+  // Compute selectable agents: ALL registered agents (online, hibernated, or offline)
+  // Profile panel reads from the API/registry and works regardless of session status
   const selectableAgents = useMemo(
-    () => agents.filter(a => a.session?.status === 'online' || (a.sessions && a.sessions.length > 0)),
+    () => agents,
     [agents]
   )
 
-  // Check for onboarding completion on mount
+  // Auto-hibernate Haephestos on browser/tab close — prevents zombie sessions
   useEffect(() => {
-    const completed = localStorage.getItem('aimaestro-onboarding-completed')
-    if (!completed) {
-      setShowOnboarding(true)
+    const killHaephestos = () => {
+      // Only kill if haephestos is the currently active agent (= user was using it)
+      const haephestos = agents.find(a => a.name === '_aim-creation-helper')
+      if (haephestos?.session?.status === 'online') {
+        navigator.sendBeacon('/api/agents/creation-helper/kill')
+      }
     }
+    window.addEventListener('beforeunload', killHaephestos)
+    return () => window.removeEventListener('beforeunload', killHaephestos)
+  }, [agents])
+
+  // Check for organization and onboarding completion on mount
+  // Auto-detects GitHub identity via gh CLI if organization is not set (skips onboarding wizard)
+  useEffect(() => {
+    const checkOrganization = async () => {
+      try {
+        const response = await fetch('/api/organization')
+        const data = await response.json()
+
+        if (!data.isSet) {
+          // Auto-detect GitHub identity from gh CLI — skip manual organization setup
+          try {
+            const ghRes = await fetch('/api/github/auth')
+            if (ghRes.ok) {
+              const ghData = await ghRes.json()
+              const activeUser = ghData.accounts?.find((a: { active: boolean }) => a.active)
+              if (activeUser?.username) {
+                // Auto-set organization from GitHub username
+                await fetch('/api/organization', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name: activeUser.username }),
+                })
+                // Auto-complete onboarding since gh identity is the only required thing
+                localStorage.setItem('aimaestro-onboarding-completed', 'true')
+                // Skip both organization setup and onboarding wizard
+                setOrganizationChecked(true)
+                return
+              }
+            }
+          } catch {
+            // gh auto-detect failed — fall through to manual setup
+          }
+          // No gh identity found — show organization setup
+          setShowOrganizationSetup(true)
+        } else {
+          // Organization is set, check onboarding
+          const onboardingCompleted = localStorage.getItem('aimaestro-onboarding-completed')
+          if (!onboardingCompleted) {
+            // Auto-complete onboarding — the wizard is optional, gh identity is enough
+            localStorage.setItem('aimaestro-onboarding-completed', 'true')
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check organization:', error)
+        // On error, skip onboarding entirely — don't block the user
+        localStorage.setItem('aimaestro-onboarding-completed', 'true')
+      } finally {
+        setOrganizationChecked(true)
+      }
+    }
+
+    checkOrganization()
   }, [])
 
-  // Read agent from URL parameter on mount (changed from ?session= to ?agent=)
+  // Read agent from URL parameter ONCE on mount, then strip from URL.
+  // The ?agent= param is only used for deep-linking (e.g., from immersive → dashboard).
+  // After reading, we remove it so it doesn't interfere with future navigation.
+  const urlParamProcessedRef = useRef(false)
+
   useEffect(() => {
+    if (urlParamProcessedRef.current) return
+
     const params = new URLSearchParams(window.location.search)
     const agentParam = params.get('agent')
-    if (agentParam) {
-      setActiveAgentId(decodeURIComponent(agentParam))
-    }
-    // Also support legacy ?session= param for backwards compatibility
     const sessionParam = params.get('session')
-    if (sessionParam && !agentParam) {
-      // Find agent by session name
-      const agent = agents.find(a => a.session?.tmuxSessionName === decodeURIComponent(sessionParam))
-      if (agent) {
-        setActiveAgentId(agent.id)
+    const humanParam = params.get('human')
+
+    if (humanParam === 'self') {
+      setActiveAgentId(HUMAN_SELF_ID)
+      window.history.replaceState({}, '', window.location.pathname)
+      urlParamProcessedRef.current = true
+      return
+    }
+
+    if (agentParam) {
+      // Proposal 18 (2026-04-20): "haephestos" is a sentinel, not a real id.
+      // The dedicated Haephestos useEffect below resolves it to the real
+      // agent id (a.name === '_aim-creation-helper') and strips the URL
+      // only after a successful resolution. If we strip here, a race with
+      // the async agents fetch leaves activeAgentId="haephestos" forever
+      // (no agent.id matches) and the purple card click appears to do
+      // nothing.
+      if (agentParam === 'haephestos') {
+        urlParamProcessedRef.current = true
+        return
       }
+      setActiveAgentId(decodeURIComponent(agentParam))
+      window.history.replaceState({}, '', window.location.pathname)
+      urlParamProcessedRef.current = true
+    } else if (sessionParam) {
+      // Legacy ?session= param - needs agents loaded to resolve
+      if (agents.length > 0) {
+        const agent = agents.find(a => a.session?.tmuxSessionName === decodeURIComponent(sessionParam))
+        if (agent) {
+          setActiveAgentId(agent.id)
+        }
+        window.history.replaceState({}, '', window.location.pathname)
+        urlParamProcessedRef.current = true
+      } else {
+        // Agents not loaded yet — strip param immediately to prevent stale URL (#57)
+        // Set raw value; it will resolve when agents load via other effects
+        setActiveAgentId(decodeURIComponent(sessionParam))
+        window.history.replaceState({}, '', window.location.pathname)
+        urlParamProcessedRef.current = true
+      }
+    } else {
+      // No URL params — nothing to do
+      urlParamProcessedRef.current = true
     }
   }, [agents])
 
-  // Detect mobile screen size
+  // Collapse sidebar on phone/tablet
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768)
-      if (window.innerWidth < 768) {
-        setSidebarCollapsed(true)
+    if (deviceType !== 'desktop') {
+      setSidebarCollapsed(true)
+    }
+  }, [deviceType])
+
+  // Clean up sidebar toggle resize timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current)
+    }
+  }, [])
+
+  // Keyboard shortcuts for Phase 5 features
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle shortcuts when not in input fields
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return
       }
+
+      // Ctrl/Cmd + E - Export (reserved for future use)
     }
 
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
-  }, [])
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [activeAgentId])
 
   // Sidebar resize handler
   useEffect(() => {
@@ -201,73 +304,47 @@ export default function DashboardPage() {
     }
   }, [hasOnlineAgents, activeAgentId, firstOnlineAgentId])
 
-  // Initialize agent memories for all agents on load
+  // Handle ?agent=haephestos query param (redirected from /agent-creation)
+  // If the Haephestos agent does not yet exist in the registry, register it
+  // first via /api/agents/creation-helper/session (BUG-001 SCEN-004 fix). The
+  // session endpoint returns the new agentId; we set it as active immediately
+  // so HaephestosEmbeddedView mounts even before the next polling refresh.
   useEffect(() => {
+    if (haephestosQueryHandled.current) return
     if (agents.length === 0) return
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const agentParam = params.get('agent')
+    if (agentParam !== 'haephestos') return
 
-    const initKey = 'aimaestro-agents-initialized'
-    const lastInit = sessionStorage.getItem(initKey)
-    const now = Date.now()
-
-    if (lastInit && (now - parseInt(lastInit)) < 3600000) {
-      console.log('[Dashboard] Agent memories already initialized in this session')
+    haephestosQueryHandled.current = true
+    const haephestos = agents.find(a => a.name === '_aim-creation-helper')
+    if (haephestos) {
+      setActiveAgentId(haephestos.id)
+      window.history.replaceState({}, '', '/')
       return
     }
 
-    // Timeout for memory initialization - 15s for local, 20s for remote
-    const INIT_TIMEOUT_LOCAL = 15000
-    const INIT_TIMEOUT_REMOTE = 20000
+    // Agent missing — bootstrap via creation-helper session API.
+    // The HaephestosEmbeddedView wake button will then transition it online.
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/agents/creation-helper/session', { method: 'POST' })
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled || !data?.agentId) return
+        setActiveAgentId(data.agentId)
+        refreshAgents()
+        window.history.replaceState({}, '', '/')
+      } catch {
+        /* ignore — wake button can be retried manually */
+      }
+    })()
+    return () => { cancelled = true }
+  }, [agents, refreshAgents])
 
-    const initializeAgentMemories = async () => {
-      console.log(`[Dashboard] Initializing memory for ${agents.length} agents...`)
-
-      const initPromises = agents.map(async (agent) => {
-        const baseUrl = agent.hostUrl || ''
-        const timeout = baseUrl ? INIT_TIMEOUT_REMOTE : INIT_TIMEOUT_LOCAL
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), timeout)
-
-        try {
-          // Use agent's hostUrl to route to correct host for remote agents
-          const checkResponse = await fetch(`${baseUrl}/api/agents/${agent.id}/memory`, {
-            signal: controller.signal
-          })
-          clearTimeout(timeoutId)
-          const checkData = await checkResponse.json()
-
-          if (!checkData.success || (!checkData.sessions?.length && !checkData.projects?.length)) {
-            console.log(`[Dashboard] Initializing memory for agent ${agent.id}`)
-            const initController = new AbortController()
-            const initTimeoutId = setTimeout(() => initController.abort(), timeout)
-            await fetch(`${baseUrl}/api/agents/${agent.id}/memory`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ populateFromSessions: true }),
-              signal: initController.signal
-            })
-            clearTimeout(initTimeoutId)
-          }
-          return { agent: agent.id, success: true }
-        } catch (error) {
-          clearTimeout(timeoutId)
-          const errorMsg = error instanceof Error && error.name === 'AbortError'
-            ? `Timed out after ${timeout / 1000}s`
-            : error
-          console.error(`[Dashboard] Failed to initialize agent ${agent.id}:`, errorMsg)
-          return { agent: agent.id, success: false, error: errorMsg }
-        }
-      })
-
-      // Use Promise.allSettled so one slow/failed agent doesn't block others
-      const results = await Promise.allSettled(initPromises)
-      const successful = results.filter(r => r.status === 'fulfilled' && r.value?.success).length
-      console.log(`[Dashboard] Agent memory initialization complete: ${successful}/${agents.length} succeeded`)
-      sessionStorage.setItem(initKey, now.toString())
-    }
-
-    initializeAgentMemories()
-  }, [agents])
-
+  // Initialize agent memories for all agents on load
   // Fetch unread message count for active agent
   useEffect(() => {
     if (!activeAgentId || !activeAgent) return
@@ -293,43 +370,46 @@ export default function DashboardPage() {
 
   // Agent-centric handlers
   const handleAgentSelect = (agent: Agent) => {
-    // Can select any agent (online or offline)
+    // If switching AWAY from Haephestos, auto-hibernate it to prevent zombie sessions
+    if (activeAgent?.name === '_aim-creation-helper' && agent.name !== '_aim-creation-helper') {
+      // Fire-and-forget hibernate — kill the tmux session
+      fetch('/api/agents/creation-helper/kill', { method: 'POST' }).catch(() => {})
+    }
     setActiveAgentId(agent.id)
-    setIsProfileOpen(false)
   }
 
   const handleShowAgentProfile = (agent: Agent) => {
-    // Also set active agent so main view reflects the selection
+    // Set active agent and open the right profile panel
     setActiveAgentId(agent.id)
-    setProfileAgent(agent)
+    if (!showProfilePanel) {
+      setShowProfilePanel(true)
+      localStorage.setItem('aimaestro-profile-panel', 'true')
+    }
     setProfileScrollToDangerZone(false)
-    setIsProfileOpen(true)
   }
 
-  const handleShowAgentProfileDangerZone = (agent: Agent) => {
-    // Also set active agent so main view reflects the selection
-    setActiveAgentId(agent.id)
-    setProfileAgent(agent)
-    setProfileScrollToDangerZone(true)
-    setIsProfileOpen(true)
+  // Proposal 31 (2026-04-20) — DATA-LOSS near-miss fix.
+  // The wizard hands us the new agent id; we switch activeAgentId so the
+  // terminal AND the (possibly still-open) profile panel track the new agent.
+  // Without this handoff, the next profile click (Delete, Hibernate, etc.)
+  // would still target the pre-wizard agent — SCEN-005 nearly destroyed a
+  // real MANAGER this way.
+  const handleAgentCreated = (newAgentId: string) => {
+    setActiveAgentId(newAgentId)
+    setProfileScrollToDangerZone(false)
   }
+
+  // handleShowAgentProfileDangerZone removed — sidebar delete shortcut was removed (ISSUE-002).
+  // The Danger Zone is only accessible via Profile → Advanced → Danger Zone.
 
   const handleDeleteAgent = async (agentId: string) => {
     try {
-      // Use profileAgent's hostUrl to route to correct host for remote agents
-      const baseUrl = profileAgent?.hostUrl || ''
-      const response = await fetch(`${baseUrl}/api/agents/${agentId}`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to delete agent')
-      }
+      // API DELETE call is now made by DeleteAgentDialog directly (supports deleteFolder param).
+      // This handler only does UI cleanup.
 
       // Close profile panel
-      setIsProfileOpen(false)
-      setProfileAgent(null)
+      setShowProfilePanel(false)
+      localStorage.setItem('aimaestro-profile-panel', 'false')
       setProfileScrollToDangerZone(false)
 
       // Clear active agent if it was the deleted one
@@ -350,26 +430,26 @@ export default function DashboardPage() {
 
   const handleStartSession = async (agent: Agent) => {
     try {
-      // Use agent name as session name (new schema)
-      const sessionName = agent.name || agent.alias || `${(agent.tags || []).join('-')}-unnamed`.replace(/^-/, '')
-      const workingDirectory = agent.workingDirectory || agent.sessions?.[0]?.workingDirectory || agent.preferences?.defaultWorkingDirectory
-
-      const response = await fetch('/api/sessions/create', {
+      // Use wakeAgent API — this ensures the R17 gate runs (installs ai-maestro-plugin
+      // if missing, blocks wake if install fails, handles trust auto-accept).
+      // NEVER call /api/sessions/create directly — it bypasses the R17 enforcement chain.
+      const response = await fetch(`/api/agents/${agent.id}/wake`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: sessionName,
-          workingDirectory,
+          startProgram: true,
+          program: agent.program || undefined,
         }),
       })
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to create session')
+        const data = await response.json().catch(() => ({}))
+        // P007: Include HTTP status + full error body + stack trace for diagnostics
+        const errorText = data.error || 'Failed to wake agent'
+        const statusLine = `HTTP ${response.status} ${response.statusText}`
+        throw new Error(`${statusLine}\n\n${errorText}`)
       }
 
-      setIsProfileOpen(false)
-      setProfileAgent(null)
       refreshAgents()
 
       // Select the agent after session starts
@@ -377,9 +457,14 @@ export default function DashboardPage() {
         setActiveAgentId(agent.id)
       }, 500)
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to start session')
+      const msg = error instanceof Error ? error.message : 'Failed to start session'
+      const stack = error instanceof Error && error.stack ? `\n\nStack trace:\n${error.stack}` : ''
+      setWakeError(`${msg}${stack}`)
     }
   }
+
+  // P007: Expandable error modal for R17 wake failures (replaces alert())
+  const [wakeError, setWakeError] = useState<string | null>(null)
 
   const [wakingAgentId, setWakingAgentId] = useState<string | null>(null)
   const [wakeDialogAgent, setWakeDialogAgent] = useState<Agent | null>(null)
@@ -426,7 +511,27 @@ export default function DashboardPage() {
   }
 
   const toggleSidebar = () => {
-    setSidebarCollapsed(!sidebarCollapsed)
+    setSidebarCollapsed(prev => !prev)
+    // Trigger terminal refit after the CSS transition completes (300ms duration + 50ms buffer)
+    // This dispatches a synthetic resize event that the global handler in TerminalContext picks up,
+    // calling fitAddon.fit() on all registered terminals so they fill the new available width
+    if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current)
+    resizeTimeoutRef.current = setTimeout(() => {
+      window.dispatchEvent(new Event('resize'))
+    }, 350)
+  }
+
+  const toggleProfilePanel = () => {
+    setShowProfilePanel(prev => {
+      const next = !prev
+      localStorage.setItem('aimaestro-profile-panel', String(next))
+      // Trigger terminal refit after layout change
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current)
+      resizeTimeoutRef.current = setTimeout(() => {
+        window.dispatchEvent(new Event('resize'))
+      }, 350)
+      return next
+    })
   }
 
   const handleOnboardingComplete = () => {
@@ -439,13 +544,38 @@ export default function DashboardPage() {
     setShowOnboarding(false)
   }
 
+  const handleOrganizationComplete = () => {
+    setShowOrganizationSetup(false)
+    // After organization is set, check if onboarding is needed
+    const onboardingCompleted = localStorage.getItem('aimaestro-onboarding-completed')
+    if (!onboardingCompleted) {
+      setShowOnboarding(true)
+    }
+  }
+
+  // Show loading while checking organization status
+  if (!organizationChecked) {
+    return (
+      <div className="fixed inset-0 bg-gray-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 mx-auto mb-4 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show organization setup if not set
+  if (showOrganizationSetup) {
+    return <OrganizationSetup onComplete={handleOrganizationComplete} />
+  }
+
   // Show onboarding flow if not completed
   if (showOnboarding) {
     return <OnboardingFlow onComplete={handleOnboardingComplete} onSkip={handleOnboardingSkip} />
   }
 
-  // Render mobile-specific dashboard for small screens
-  // Agent-centric: MobileDashboard now accepts agents directly
+  // Render mobile-specific dashboard for phones
   if (isMobile) {
     return (
       <TerminalProvider key="mobile-dashboard">
@@ -462,13 +592,13 @@ export default function DashboardPage() {
   // Desktop dashboard - AGENT-CENTRIC
   return (
     <TerminalProvider key="desktop-dashboard">
-      <div className="flex flex-col h-screen bg-gray-900" style={{ overflow: 'hidden', position: 'fixed', inset: 0 }}>
+      <div className="flex flex-col bg-gray-900" style={{ overflow: 'hidden', position: 'fixed', inset: 0 }}>
         {/* Header */}
         <Header
           onToggleSidebar={toggleSidebar}
           sidebarCollapsed={sidebarCollapsed}
           activeAgentId={activeAgentId}
-          onOpenHelp={() => setIsHelpOpen(true)}
+          onOpenHelp={openHelp}
         />
 
         {/* Migration Banner */}
@@ -485,20 +615,25 @@ export default function DashboardPage() {
             `}
             style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
           >
-            <AgentList
-              agents={agents}
-              activeAgentId={activeAgentId}
-              onAgentSelect={handleAgentSelect}
-              onShowAgentProfile={handleShowAgentProfile}
-              onShowAgentProfileDangerZone={handleShowAgentProfileDangerZone}
-              onImportAgent={() => setShowImportDialog(true)}
-              loading={agentsLoading}
-              error={agentsError}
-              onRefresh={refreshAgents}
-              stats={agentStats}
-              subconsciousRefreshTrigger={subconsciousRefreshTrigger}
-              sidebarWidth={sidebarWidth}
-            />
+            <ErrorBoundary fallbackLabel="Agent List">
+              <AgentList
+                agents={agents}
+                unregisteredSessions={unregisteredSessions}
+                activeAgentId={activeAgentId}
+                onAgentSelect={handleAgentSelect}
+                onHumanSelect={() => setActiveAgentId(HUMAN_SELF_ID)}
+                onShowAgentProfile={handleShowAgentProfile}
+                onImportAgent={() => setShowImportDialog(true)}
+                loading={agentsLoading}
+                error={agentsError}
+                onRefresh={refreshAgents}
+                stats={agentStats}
+                subconsciousRefreshTrigger={subconsciousRefreshTrigger}
+                sidebarWidth={sidebarWidth}
+                hostErrors={hostErrors}
+                onAgentCreated={handleAgentCreated}
+              />
+            </ErrorBoundary>
           </aside>
 
           {/* Resize Handle */}
@@ -514,7 +649,14 @@ export default function DashboardPage() {
           )}
 
           {/* Main Content */}
-          <main className="flex-1 flex flex-col relative">
+          <main className="flex-1 flex flex-col relative overflow-hidden isolate">
+            {/* Human user chat view — absolute overlay when the local user card is selected */}
+            {activeAgentId === HUMAN_SELF_ID && (
+              <div className="absolute inset-0 z-20 flex flex-col">
+                <HumanUserPanel allAgents={agents} />
+              </div>
+            )}
+
             {/* Empty State - shown when no agents */}
             {agents.length === 0 && !agentsLoading && (
               <div className="flex-1 flex items-center justify-center text-gray-400">
@@ -538,46 +680,45 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Truly offline agent (no session config) - show profile prompt */}
-            {activeAgent && activeAgent.session?.status === 'offline' && !(activeAgent.sessions && activeAgent.sessions.length > 0) && (
-              <div className="flex-1 flex items-center justify-center text-gray-400">
-                <div className="text-center max-w-md">
-                  <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-800 flex items-center justify-center">
-                    <User className="w-10 h-10 text-gray-500" />
-                  </div>
-                  <p className="text-xl mb-2 text-gray-300">{activeAgent.label || activeAgent.name || activeAgent.alias}</p>
-                  <p className="text-sm mb-4 text-gray-500">This agent is offline</p>
-                  <button
-                    onClick={() => handleStartSession(activeAgent)}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-all"
-                  >
-                    Start Session
-                  </button>
-                  <button
-                    onClick={() => handleShowAgentProfile(activeAgent)}
-                    className="ml-3 px-6 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-all"
-                  >
-                    View Profile
-                  </button>
-                </div>
+            {/* Offline agent placeholder removed — offline agents now render the full
+                agent page layout with toolbar + profile panel. The terminal tab shows
+                an offline placeholder instead. Profile panel reads from API/registry. */}
+
+            {/* Haephestos creation helper — shows the forge UI instead of normal terminal */}
+            {/* When hibernated: shows "Ask Haephestos Help" wake button */}
+            {/* When online: shows the full forge layout (TOML + terminal + raw materials) */}
+            {activeAgent && activeAgent.name === '_aim-creation-helper' && (
+              <div className="absolute inset-0">
+                <HaephestosEmbeddedView
+                  agent={activeAgent}
+                  onAgentCreated={(newAgentId) => {
+                    // Switch to the newly created agent — this auto-hibernates haephestos
+                    setActiveAgentId(newAgentId)
+                    // Trigger agent list refresh to pick up the new agent
+                    refreshAgents()
+                  }}
+                />
               </div>
             )}
 
-            {/* All Selectable Agents (Online + Hibernated) Mounted as Tabs - toggle visibility with CSS */}
-            {selectableAgents.map(agent => {
-              const isActive = agent.id === activeAgentId
+            {/* Only render the active agent - no need to mount all 40+ agents */}
+            {(() => {
+              const agent = selectableAgents.find(a => a.id === activeAgentId)
+              if (!agent) return null
+
+              // Haephestos has its own embedded view above — skip normal rendering
+              if (agent.name === '_aim-creation-helper') return null
+
+              const isActive = true  // We only render the active agent
               const isHibernated = agent.session?.status !== 'online' && (agent.sessions && agent.sessions.length > 0)
+              // Truly offline: no session config at all (not hibernated, just never started or fully removed)
+              const isOffline = agent.session?.status !== 'online' && !(agent.sessions && agent.sessions.length > 0)
               const session = agentToSession(agent)
 
               return (
                 <div
                   key={agent.id}
                   className="absolute inset-0 flex flex-col"
-                  style={{
-                    visibility: isActive ? 'visible' : 'hidden',
-                    pointerEvents: isActive ? 'auto' : 'none',
-                    zIndex: isActive ? 10 : 0
-                  }}
                 >
                   {/* Tab Navigation - Responsive with flex-wrap */}
                   <div className="flex flex-wrap border-b border-gray-800 bg-gray-900 flex-shrink-0">
@@ -591,17 +732,6 @@ export default function DashboardPage() {
                     >
                       <Terminal className="w-4 h-4" />
                       Terminal
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('terminal-new')}
-                      className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
-                        activeTab === 'terminal-new'
-                          ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50'
-                          : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/30'
-                      }`}
-                    >
-                      <Sparkles className="w-4 h-4" />
-                      Terminal New
                     </button>
                     <button
                       onClick={() => setActiveTab('chat')}
@@ -642,62 +772,96 @@ export default function DashboardPage() {
                       WorkTree
                     </button>
                     <button
-                      onClick={() => setActiveTab('graph')}
+                      onClick={() => setActiveTab('search')}
                       className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
-                        activeTab === 'graph'
+                        activeTab === 'search'
                           ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50'
                           : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/30'
                       }`}
+                      title="Search (Ctrl+K)"
                     >
-                      <Share2 className="w-4 h-4" />
-                      Graph
+                      <Search className="w-4 h-4" />
+                      Search
                     </button>
                     <button
-                      onClick={() => setActiveTab('memory')}
+                      onClick={() => setActiveTab('export')}
                       className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
-                        activeTab === 'memory'
+                        activeTab === 'export'
                           ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50'
                           : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/30'
                       }`}
+                      title="Export (Ctrl+E)"
                     >
-                      <Brain className="w-4 h-4" />
-                      Memory
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('docs')}
-                      className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
-                        activeTab === 'docs'
-                          ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50'
-                          : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/30'
-                      }`}
-                    >
-                      <FileText className="w-4 h-4" />
-                      Docs
+                      <Download className="w-4 h-4" />
+                      Export
                     </button>
                     <div className="flex-1" />
                     <div className="flex items-center">
                       <AgentSubconsciousIndicator agentId={agent.id} hostUrl={agent.hostUrl} />
                       <button
-                        onClick={() => handleShowAgentProfile(agent)}
-                        className="flex items-center gap-2 px-6 py-3 text-sm font-medium transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-gray-800/30"
-                        title="View Agent Profile"
+                        onClick={toggleProfilePanel}
+                        className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all duration-200 ${
+                          showProfilePanel
+                            ? 'text-amber-400 bg-amber-500/10'
+                            : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/30'
+                        }`}
+                        title="Toggle Profile Panel"
                       >
                         <User className="w-4 h-4" />
-                        Agent Profile
+                        Profile
+                      </button>
+                      <button
+                        onClick={() => {
+                          const url = `/zoom/agent?id=${encodeURIComponent(agent.id)}`
+                          window.open(url, `agent-${agent.id}`, 'width=1200,height=800,menubar=no,toolbar=no')
+                        }}
+                        className="flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all duration-200 text-gray-400 hover:text-violet-400 hover:bg-gray-800/30"
+                        title="Open in new window"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Pop Out
                       </button>
                     </div>
                   </div>
 
                   {/* Tab Content */}
                   <div className="flex-1 flex overflow-hidden min-h-0">
+                    {/* Content area — min-w-0 lets it shrink when profile panel is open */}
+                    <div className="flex-1 flex min-w-0 overflow-hidden">
                     {activeTab === 'terminal' ? (
-                      isHibernated ? (
+                      isOffline ? (
+                        <div className="flex-1 flex items-center justify-center text-gray-400">
+                          <div className="text-center max-w-md">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gray-800 flex items-center justify-center">
+                              <User className="w-10 h-10 text-gray-500" />
+                            </div>
+                            <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name}</p>
+                            <p className="text-sm mb-4 text-gray-500">This agent is offline</p>
+                            <div className="flex items-center justify-center gap-3">
+                              <button
+                                onClick={() => handleStartSession(agent)}
+                                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-all"
+                              >
+                                Start Session
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (!showProfilePanel) toggleProfilePanel()
+                                }}
+                                className="px-6 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-all"
+                              >
+                                View Profile
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : isHibernated ? (
                         <div className="flex-1 flex items-center justify-center text-gray-400">
                           <div className="text-center max-w-md">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-yellow-900/30 flex items-center justify-center">
                               <Moon className="w-10 h-10 text-yellow-500" />
                             </div>
-                            <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name || agent.alias}</p>
+                            <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name}</p>
                             <p className="text-sm mb-4 text-gray-500">This agent is hibernating</p>
                             <button
                               onClick={() => handleWakeAgent(agent)}
@@ -719,121 +883,166 @@ export default function DashboardPage() {
                           </div>
                         </div>
                       ) : (
-                        <TerminalView session={session} isVisible={isActive && activeTab === 'terminal'} />
+                        <ErrorBoundary fallbackLabel="Terminal">
+                          <TerminalView session={session} isVisible={isActive && activeTab === 'terminal'} />
+                        </ErrorBoundary>
                       )
-                    ) : activeTab === 'terminal-new' ? (
-                      isHibernated ? (
-                        <div className="flex-1 flex items-center justify-center text-gray-400">
-                          <div className="text-center max-w-md">
-                            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-yellow-900/30 flex items-center justify-center">
-                              <Moon className="w-10 h-10 text-yellow-500" />
-                            </div>
-                            <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name || agent.alias}</p>
-                            <p className="text-sm mb-4 text-gray-500">This agent is hibernating</p>
-                            <button
-                              onClick={() => handleWakeAgent(agent)}
-                              disabled={wakingAgentId === agent.id}
-                              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
-                            >
-                              {wakingAgentId === agent.id ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                  Waking...
-                                </>
-                              ) : (
-                                <>
-                                  <Power className="w-4 h-4" />
-                                  Wake Agent
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <TerminalViewNew session={session} isVisible={isActive && activeTab === 'terminal-new'} />
-                      )
+                    ) : !isActive ? (
+                      // For inactive agents, don't mount heavy components - just show placeholder
+                      <div className="flex-1 flex items-center justify-center text-gray-500">
+                        <Loader2 className="w-6 h-6 animate-spin" />
+                      </div>
                     ) : activeTab === 'chat' ? (
-                      isHibernated ? (
+                      (isHibernated || isOffline) ? (
                         <div className="flex-1 flex items-center justify-center text-gray-400">
                           <div className="text-center max-w-md">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-yellow-900/30 flex items-center justify-center">
                               <Moon className="w-10 h-10 text-yellow-500" />
                             </div>
-                            <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name || agent.alias}</p>
+                            <p className="text-xl mb-2 text-gray-300">{agent.label || agent.name}</p>
                             <p className="text-sm mb-4 text-gray-500">Wake this agent to use the chat interface</p>
-                            <button
-                              onClick={() => handleWakeAgent(agent)}
-                              disabled={wakingAgentId === agent.id}
-                              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
-                            >
-                              {wakingAgentId === agent.id ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                  Waking...
-                                </>
-                              ) : (
-                                <>
-                                  <Power className="w-4 h-4" />
-                                  Wake Agent
-                                </>
-                              )}
-                            </button>
+                            {isOffline ? (
+                              <button
+                                onClick={() => handleStartSession(agent)}
+                                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-all"
+                              >
+                                Start Session
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleWakeAgent(agent)}
+                                disabled={wakingAgentId === agent.id}
+                                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
+                              >
+                                {wakingAgentId === agent.id ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Waking...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Power className="w-4 h-4" />
+                                    Wake Agent
+                                  </>
+                                )}
+                              </button>
+                            )}
                           </div>
                         </div>
                       ) : (
-                        <ChatView agent={agent} isVisible={isActive && activeTab === 'chat'} />
+                        <ErrorBoundary fallbackLabel="Chat">
+                          <ChatView agent={agent} isActive={true} />
+                        </ErrorBoundary>
                       )
                     ) : activeTab === 'messages' ? (
-                      <MessageCenter
-                        sessionName={session.id}
-                        agentId={agent.id}
-                        allAgents={onlineAgents.map(a => ({
-                          id: a.id,
-                          name: a.name || a.alias || a.id,  // Technical name for lookups
-                          alias: a.label || a.name || a.alias || a.id,  // Display name for UI
-                          tmuxSessionName: a.session?.tmuxSessionName,
-                          hostId: a.hostId
-                        }))}
-                        isVisible={isActive && activeTab === 'messages'}
-                        hostUrl={agent.hostUrl}
-                      />
+                      <ErrorBoundary fallbackLabel="Messages">
+                        <MessageCenter
+                          sessionName={session.id}
+                          agentId={agent.id}
+                          allAgents={onlineAgents.map(a => ({
+                            id: a.id,
+                            name: a.name || a.id,  // Technical name for lookups
+                            alias: a.label || a.name || a.id,  // Display name for UI
+                            tmuxSessionName: a.session?.tmuxSessionName,
+                            hostId: a.hostId
+                          }))}
+                          hostUrl={agent.hostUrl}
+                          isActive={true}
+                        />
+                      </ErrorBoundary>
                     ) : activeTab === 'worktree' ? (
                       <WorkTree
                         sessionName={session.id}
                         agentId={agent.id}
-                        agentAlias={agent.alias}
+                        agentAlias={agent.label || agent.name}
                         hostId={agent.hostId}
-                        isVisible={isActive && activeTab === 'worktree'}
+                        isActive={true}
                       />
-                    ) : activeTab === 'graph' ? (
-                      <AgentGraph
-                        sessionName={session.id}
+                    ) : activeTab === 'search' ? (
+                      <div className="flex-1 overflow-auto p-4">
+                        <AgentSearch
+                          agentId={agent.id}
+                          className="max-w-4xl mx-auto"
+                        />
+                      </div>
+                    ) : activeTab === 'export' ? (
+                      <div className="flex-1 overflow-auto p-4">
+                        <TranscriptExport
+                          agentId={agent.id}
+                          agentName={agent.label || agent.name}
+                          className="max-w-4xl mx-auto"
+                        />
+                      </div>
+                    ) : null}
+                    </div>
+
+                    {/* Right Panel — Profile (Overview + Config tabs) */}
+                    {showProfilePanel && (
+                      <AgentProfilePanel
                         agentId={agent.id}
-                        isVisible={isActive && activeTab === 'graph'}
-                        workingDirectory={session.workingDirectory}
-                        hostUrl={agent.hostUrl}
-                      />
-                    ) : activeTab === 'memory' ? (
-                      <MemoryViewer
-                        agentId={agent.id}
-                        hostUrl={agent.hostUrl}
-                        isVisible={isActive && activeTab === 'memory'}
-                      />
-                    ) : (
-                      <DocumentationPanel
-                        sessionName={session.id}
-                        agentId={agent.id}
-                        isVisible={isActive && activeTab === 'docs'}
-                        workingDirectory={session.workingDirectory}
+                        agentName={agent.label || agent.name}
+                        agentInfo={{
+                          name: agent.label || agent.name,
+                          // Prefer explicit governanceTitle (architect/integrator/orchestrator) over raw role field
+                          // BUG: agent.role stays 'member' when governanceTitle is set — useGovernance derives the correct title
+                          title: (agent.governanceTitle || agent.role) as AgentRole | undefined,
+                          program: agent.program,
+                          tags: agent.tags,
+                          // TRDD-c7a81642: forward the R9.13 invariant flag so
+                          // the Config tab can render the recovery banner.
+                          roleMissing: agent.roleMissing,
+                        }}
+                        onClose={toggleProfilePanel}
+                        onAgentDataChanged={refreshAgents}
+                        sessionStatus={agent.session}
+                        onStartSession={() => handleStartSession(agent)}
+                        onDeleteAgent={handleDeleteAgent}
+                        scrollToDangerZone={profileScrollToDangerZone}
                         hostUrl={agent.hostUrl}
                       />
                     )}
                   </div>
                 </div>
               )
-            })}
+            })()}
           </main>
         </div>
+
+        {/* P007: Wake Error Modal — expandable/collapsable for R17 failures */}
+        {wakeError && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+            <div className="bg-gray-900 border border-red-500/40 rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl">
+              <h3 className="text-red-400 font-bold text-sm mb-2">Agent Wake Failed</h3>
+              <p className="text-gray-300 text-xs mb-3">
+                {wakeError.split('\n')[0]}
+              </p>
+              {wakeError.includes('\n') && (
+                <details className="mb-3">
+                  <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-300">
+                    Technical details
+                  </summary>
+                  <pre className="mt-2 text-[10px] text-gray-400 bg-gray-950 rounded-lg p-3 overflow-auto max-h-48 font-mono whitespace-pre-wrap">
+                    {wakeError}
+                  </pre>
+                </details>
+              )}
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => { navigator.clipboard.writeText(wakeError); }}
+                  className="px-3 py-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition-colors"
+                >
+                  Copy
+                </button>
+                <button
+                  onClick={() => setWakeError(null)}
+                  className="px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <footer className="border-t border-gray-800 bg-gray-950 px-4 py-2 flex-shrink-0">
@@ -865,24 +1074,6 @@ export default function DashboardPage() {
           </div>
         </footer>
 
-        {/* Agent Profile Panel */}
-        {profileAgent && (
-          <AgentProfile
-            isOpen={isProfileOpen}
-            onClose={() => {
-              setIsProfileOpen(false)
-              setProfileAgent(null)
-              setProfileScrollToDangerZone(false)
-            }}
-            agentId={profileAgent.id}
-            sessionStatus={profileAgent.session}
-            onStartSession={() => handleStartSession(profileAgent)}
-            onDeleteAgent={handleDeleteAgent}
-            scrollToDangerZone={profileScrollToDangerZone}
-            hostUrl={profileAgent.hostUrl}
-          />
-        )}
-
         {/* Import Agent Dialog */}
         <ImportAgentDialog
           isOpen={showImportDialog}
@@ -899,14 +1090,10 @@ export default function DashboardPage() {
           onClose={() => setWakeDialogAgent(null)}
           onConfirm={handleWakeConfirm}
           agentName={wakeDialogAgent?.name || wakeDialogAgent?.id || ''}
-          agentAlias={wakeDialogAgent?.alias}
+          agentAlias={wakeDialogAgent?.label || wakeDialogAgent?.name}
         />
 
-        {/* Help Panel */}
-        <HelpPanel
-          isOpen={isHelpOpen}
-          onClose={() => setIsHelpOpen(false)}
-        />
+        {/* Help Panel is rendered globally by HelpPanelProvider in app/layout.tsx */}
       </div>
     </TerminalProvider>
   )

@@ -71,14 +71,14 @@ export default function ExportAgentDialog({
       setProgress(prev => Math.min(prev + 8, 40))
     }, 150)
 
-    try {
-      // Transition to zipping
-      setTimeout(() => {
-        clearInterval(packingInterval)
-        setPhase('zipping')
-        setProgress(50)
-      }, 1200)
+    // Schedule transition to zipping phase — keep timer ID so we can cancel on error
+    const zippingTimeout = setTimeout(() => {
+      clearInterval(packingInterval)
+      setPhase('zipping')
+      setProgress(50)
+    }, 1200)
 
+    try {
       const response = await fetch(`${baseUrl}/api/agents/${agentId}/export`)
 
       if (!response.ok) {
@@ -89,6 +89,10 @@ export default function ExportAgentDialog({
       const url = URL.createObjectURL(blob)
       setDownloadUrl(url)
 
+      // Ensure packingInterval is cleared on the success path too
+      // (the setTimeout may not have fired yet if fetch was fast)
+      clearInterval(packingInterval)
+
       // Complete zipping animation
       setProgress(90)
       await new Promise(resolve => setTimeout(resolve, 500))
@@ -97,6 +101,7 @@ export default function ExportAgentDialog({
       setProgress(100)
 
     } catch (err) {
+      clearTimeout(zippingTimeout)
       clearInterval(packingInterval)
       setPhase('error')
       setError(err instanceof Error ? err.message : 'Export failed')

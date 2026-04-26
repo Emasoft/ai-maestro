@@ -9,52 +9,30 @@
 
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { getSkillById } from '@/lib/marketplace-skills'
+import { getMarketplaceSkillById } from '@/services/marketplace-service'
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
+  const { id } = await params
+  // Validate skill ID: reject excessively long or control-character-containing IDs
+  if (!id || id.length > 200 || /[\x00-\x1f]/.test(id)) {
+    return NextResponse.json({ error: 'Invalid skill ID format' }, { status: 400 })
+  }
+
   try {
-    const { id } = await params
+    const result = await getMarketplaceSkillById(id)
 
-    // Decode the skill ID (may be URL encoded)
-    const skillId = decodeURIComponent(id)
-
-    // Validate format
-    const parts = skillId.split(':')
-    if (parts.length !== 3) {
+    if (result.error) {
       return NextResponse.json(
-        {
-          error: 'Invalid skill ID format',
-          details: 'Skill ID must be in format: marketplace:plugin:skill',
-        },
-        { status: 400 }
+        { error: result.error },
+        { status: result.status || 500 }
       )
     }
-
-    // Get the skill with full content
-    const skill = await getSkillById(skillId, true)
-
-    if (!skill) {
-      return NextResponse.json(
-        {
-          error: 'Skill not found',
-          skillId,
-        },
-        { status: 404 }
-      )
-    }
-
-    return NextResponse.json(skill)
+    return NextResponse.json(result.data)
   } catch (error) {
-    console.error('Error fetching skill:', error)
-    return NextResponse.json(
-      {
-        error: 'Failed to fetch skill',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
-    )
+    console.error('[MarketplaceSkill] GET error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

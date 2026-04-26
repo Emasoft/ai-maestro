@@ -1,0 +1,168 @@
+/**
+ * Plugin Builder Types
+ * Types for the visual plugin builder that composes Claude Code plugins
+ * from multiple sources (marketplace, git repos, core skills).
+ */
+
+// ============================================================================
+// Build Configuration
+// ============================================================================
+
+/**
+ * Configuration for building a plugin
+ * Submitted by the UI to POST /api/plugin-builder/build
+ */
+export interface PluginBuildConfig {
+  name: string                         // Plugin name (e.g., "my-backend-agent")
+  version: string                      // Semver (e.g., "1.0.0")
+  description?: string                 // Human-readable description
+  author?: { name: string }            // Author metadata — maps to PluginManifestMetadata.author
+  homepage?: string                    // Project homepage URL — maps to PluginManifestMetadata.homepage
+  skills: PluginSkillSelection[]       // Selected skills from various sources
+  includeHooks?: boolean               // Include default hooks (default: true)
+}
+
+/**
+ * A skill selected for inclusion in the plugin.
+ * Tagged union — the UI sends one of these per selected skill.
+ */
+export type PluginSkillSelection =
+  | { type: 'core'; name: string }
+  | { type: 'marketplace'; id: string; marketplace: string; plugin: string; name: string; description?: string }
+  | { type: 'repo'; url: string; ref: string; skillPath: string; name: string }  // name = skill folder name (from RepoSkillInfo.name), used as the output directory name in the manifest (skills/<name>)
+
+/**
+ * Generate a unique key for a skill selection (used for deduplication and
+ * React list keys). Defined here alongside the type it operates on so both
+ * SkillPicker and PluginComposer can import it from a single source of truth
+ * without cross-component coupling.
+ */
+export function getSkillKey(skill: PluginSkillSelection): string {
+  switch (skill.type) {
+    case 'core':
+      return `core:${skill.name}`
+    case 'marketplace':
+      // Include marketplace and plugin so skills with the same id from different
+      // marketplaces or plugins are never treated as the same skill.
+      return `marketplace:${skill.marketplace}:${skill.plugin}:${skill.id}`
+    case 'repo':
+      return `repo:${skill.url}:${skill.skillPath}`
+  }
+}
+
+// ============================================================================
+// Build Results
+// ============================================================================
+
+/**
+ * Result of a plugin build (returned from the API).
+ * Discriminated union on `status` so that a completed build always carries
+ * outputPath, manifest, and stats — eliminating unnecessary null checks for
+ * the success path while keeping those fields optional for in-progress or
+ * failed builds.
+ */
+export interface PluginBuildResult {
+  buildId: string
+  status: 'building' | 'complete' | 'failed'
+  outputPath?: string                  // Where the built plugin lives (set on completion)
+  logs: string[]                       // Build output lines
+  manifest: PluginManifest             // Generated manifest — always present (set at creation)
+  stats?: PluginBuildStats
+  createdAt: string                    // ISO timestamp
+  buildDir?: string                    // Temp directory created by mkdtemp; used for cleanup
+}
+
+export interface PluginBuildStats {
+  skills: number
+  scripts: number
+  hooks: number
+}
+
+// ============================================================================
+// Manifest Types (mirrors plugin.manifest.json structure)
+// ============================================================================
+
+/**
+ * The plugin.manifest.json format used by build-plugin.sh.
+ * All plugin identity fields (name, version, description) live inside
+ * the `plugin` object (PluginManifestMetadata) — there is no duplication
+ * at the top level.
+ */
+export interface PluginManifest {
+  output: string                       // Output directory (relative)
+  plugin: PluginManifestMetadata
+  sources: PluginManifestSource[]
+}
+
+export interface PluginManifestMetadata {
+  name: string
+  version: string
+  description?: string                 // Human-readable description
+  author?: { name: string }
+  homepage?: string
+  license?: string
+}
+
+/**
+ * Discriminated union — enforces that `path` is only present for local
+ * sources and `repo` is only present for git sources, eliminating the
+ * invalid state where both (or neither) could be set simultaneously.
+ */
+export type PluginManifestSource =
+  | {
+      name: string
+      description?: string
+      type: 'local'
+      path: string                     // Required for local sources
+      map: Record<string, string>      // Source pattern -> output pattern
+    }
+  | {
+      name: string
+      description?: string
+      type: 'git'
+      repo: string                     // Required for git sources
+      ref?: string                     // Git branch/tag
+      map: Record<string, string>      // Source pattern -> output pattern
+    }
+
+// ============================================================================
+// Repo Scanner
+// ============================================================================
+
+/**
+ * Result of scanning a GitHub repo for skills
+ */
+export interface RepoScanResult {
+  url: string
+  ref: string
+  skills: RepoSkillInfo[]
+  scripts: RepoScriptInfo[]
+}
+
+export interface RepoSkillInfo {
+  name: string                         // Skill folder name
+  path: string                         // Relative path within repo (e.g., "skills/deploy")
+  description?: string                 // From SKILL.md frontmatter (may be absent)
+}
+
+export interface RepoScriptInfo {
+  name: string                         // Script filename
+  path: string                         // Relative path within repo
+}
+
+// ============================================================================
+// Push to GitHub
+// ============================================================================
+
+export interface PluginPushConfig {
+  forkUrl: string                      // User's fork URL
+  manifest: PluginManifest             // Generated manifest to push
+  branch?: string                      // Target branch (default: "main")
+  token?: string                       // GitHub PAT for HTTPS authentication (write access)
+}
+
+export interface PluginPushResult {
+  status: 'pushed' | 'failed'
+  message: string
+  commitUrl?: string
+}

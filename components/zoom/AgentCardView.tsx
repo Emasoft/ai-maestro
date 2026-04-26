@@ -6,7 +6,6 @@ import {
   Terminal,
   Mail,
   User,
-  Brain,
   Moon,
   Power,
   Loader2
@@ -39,18 +38,6 @@ const MessageCenter = dynamic(
   }
 )
 
-const MemoryViewer = dynamic(
-  () => import('@/components/MemoryViewer'),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-violet-500 animate-spin" />
-      </div>
-    )
-  }
-)
-
 const AgentProfileTab = dynamic(
   () => import('@/components/zoom/AgentProfileTab'),
   {
@@ -63,7 +50,7 @@ const AgentProfileTab = dynamic(
   }
 )
 
-type TabType = 'terminal' | 'messages' | 'profile' | 'memory'
+type TabType = 'terminal' | 'messages' | 'profile'
 
 interface AgentCardViewProps {
   agent: Agent
@@ -88,6 +75,7 @@ export default function AgentCardView({
 }: AgentCardViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>('terminal')
   const [containerReady, setContainerReady] = useState(false)
+  const containerReadyRef = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Wait for container to have valid dimensions before rendering terminal
@@ -96,9 +84,11 @@ export default function AgentCardView({
     let observerDisconnected = false
 
     const checkDimensions = () => {
+      if (containerReadyRef.current) return true
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect()
         if (rect.width > 0 && rect.height > 0) {
+          containerReadyRef.current = true
           setContainerReady(true)
           return true
         }
@@ -109,9 +99,10 @@ export default function AgentCardView({
     // Use ResizeObserver for reliable dimension detection
     if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
       const observer = new ResizeObserver((entries) => {
-        if (observerDisconnected) return
+        if (observerDisconnected || containerReadyRef.current) return
         for (const entry of entries) {
           if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+            containerReadyRef.current = true
             setContainerReady(true)
             observer.disconnect()
             observerDisconnected = true
@@ -147,10 +138,9 @@ export default function AgentCardView({
     { id: 'terminal', label: 'Terminal', icon: <Terminal className="w-4 h-4" /> },
     { id: 'messages', label: 'Messages', icon: <Mail className="w-4 h-4" />, badge: unreadCount },
     { id: 'profile', label: 'Profile', icon: <User className="w-4 h-4" /> },
-    { id: 'memory', label: 'Memory', icon: <Brain className="w-4 h-4" /> },
   ]
 
-  const displayName = agent.label || agent.name || agent.alias || 'Unnamed Agent'
+  const displayName = agent.label || agent.name || 'Unnamed Agent'
 
   // Hibernated state view
   if (isHibernated) {
@@ -251,13 +241,13 @@ export default function AgentCardView({
             agentId={agent.id}
             allAgents={allAgents.map(a => ({
               id: a.id,
-              name: a.name || a.alias || a.id,
-              alias: a.label || a.name || a.alias || a.id,
+              name: a.name || a.id,
+              alias: a.label || a.name || a.id,
               tmuxSessionName: a.session?.tmuxSessionName,
               hostId: a.hostId
             }))}
-            isVisible={activeTab === 'messages'}
             hostUrl={agent.hostUrl}
+            isActive={activeTab === 'messages'}
           />
         </div>
 
@@ -277,21 +267,6 @@ export default function AgentCardView({
           />
         </div>
 
-        {/* Memory Tab */}
-        <div
-          className="absolute inset-0 overflow-hidden"
-          style={{
-            visibility: activeTab === 'memory' ? 'visible' : 'hidden',
-            pointerEvents: activeTab === 'memory' ? 'auto' : 'none',
-            zIndex: activeTab === 'memory' ? 10 : 0
-          }}
-        >
-          <MemoryViewer
-            agentId={agent.id}
-            hostUrl={agent.hostUrl}
-            isVisible={activeTab === 'memory'}
-          />
-        </div>
       </div>
     </div>
   )

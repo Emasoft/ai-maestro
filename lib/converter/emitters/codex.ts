@@ -1,0 +1,257 @@
+/**
+ * Codex Emitter — emit skills, agents, instructions, MCP, hooks to Codex format.
+ *
+ * Key format differences:
+ * - Skills: argument-hint frontmatter, $ARGNAME body syntax
+ * - Agents: TOML files with developer_instructions, sandbox_mode
+ * - Instructions: AGENTS.md (merged from multiple sources)
+ * - MCP: config.toml [mcp_servers.X] sections
+ * - Hooks: hooks.json
+ *
+ * Ported from crucible emitters/codex.js + agents/emitters/codex.js + acplugin converter/mcp.ts.
+ */
+
+import type { Emitter, ProjectIR, ConvertedFile, ConversionProvenance, SkillIR } from '../types'
+import { emitSkill, emitSkillAuxFiles, buildArgumentHint, transformMCPServerPaths } from './shared'
+import { parseFrontmatter as parseFrontmatterUtil } from '../utils/frontmatter'
+import { stringifyToml } from '../utils/toml'
+import { WarningCollector } from '../utils/warnings'
+
+/** Sanitize a name for safe use in file paths — prevent path traversal */
+function safePathName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_@.\-]/g, '')
+}
+
+/** Claude-specific frontmatter fields not supported by Codex */
+const CODEX_STRIP_FIELDS = ['allowed-tools', 'compatibility', 'metadata', 'context', 'agent', 'effort', 'model', 'hooks', 'user-invocable', 'args', 'paths']
+
+/** Permission mode mapping: Claude → Codex */
+const PERMISSION_TO_SANDBOX: Record<string, string> = {
+  'plan': 'read-only',
+  'dontAsk': 'workspace-write',
+  'bypassPermissions': 'danger-full-access',
+}
+
+function getProvenance(sourceProvider: string): ConversionProvenance {
+  return { from: sourceProvider as ConversionProvenance['from'], date: new Date().toISOString() }
+}
+
+/** Transform {{argname}} → $ARGNAME in body text */
+function transformBodyToCodex(body: string): string {
+  return body.replace(/\{\{([^}]+)\}\}/g, (_match, argName: string) => {
+    return `$${argName.trim().toUpperCase()}`
+  })
+}
+
+/** Warn about lossy fields when converting to Codex */
+function warnLossySkill(skill: SkillIR, warnings: WarningCollector): void {
+  if (skill.allowedTools) warnings.lossyField(skill.name, 'allowed-tools', 'Codex does not support tool whitelists')
+  if (skill.compatibility) warnings.lossyField(skill.name, 'compatibility', 'Codex does not support compatibility field')
+  if (skill.metadata) warnings.lossyField(skill.name, 'metadata', 'Codex does not support metadata field')
+  if (skill.paths) warnings.lossyField(skill.name, 'paths', 'Codex does not support paths globs')
+}
+
+const codexEmitter: Emitter = {
+  providerId: 'codex',
+
+  emit(project: ProjectIR): ConvertedFile[] {
+    const files: ConvertedFile[] = []
+    const warnings = new WarningCollector()
+    const provenance = project.sourceProvider !== 'codex'
+      ? getProvenance(project.sourceProvider)
+      : undefined
+
+    // ═══ Skills ═══
+    for (const skill of project.skills) {
+      warnLossySkill(skill, warnings)
+
+      // Build Codex-specific frontmatter
+      const extraFm: Record<string, unknown> = {}
+      if (skill.userInvokable && skill.args.length > 0) {
+        extraFm['argument-hint'] = buildArgumentHint(skill.args)
+      }
+
+      // Transform body: {{argname}} → $ARGNAME
+      const transformedSkill: SkillIR = {
+        ...skill,
+        body: skill.userInvokable ? transformBodyToCodex(skill.body) : skill.body,
+      }
+
+      const safeDirName = safePathName(skill.dirName)
+      if (!safeDirName) continue // skip skills with entirely unsafe dir names
+      const skillPath = `.agents/skills/${safeDirName}/SKILL.md`
+      files.push(emitSkill(transformedSkill, skillPath, {
+        fieldsToStrip: CODEX_STRIP_FIELDS,
+        extraFrontmatter: extraFm,
+        provenance,
+      }))
+      files.push(...emitSkillAuxFiles(skill, `.agents/skills/${safeDirName}`))
+    }
+
+    // ═══ Agents (TOML) ═══
+    for (const agent of project.agents) {
+      const tomlData: Record<string, unknown> = {
+        name: agent.name,
+        description: agent.description,
+      }
+
+      if (agent.body) tomlData.developer_instructions = agent.body
+      if (agent.model) tomlData.model = agent.model
+      if (agent.reasoningEffort) tomlData.model_reasoning_effort = agent.reasoningEffort
+      if (agent.permissionMode) {
+        tomlData.sandbox_mode = PERMISSION_TO_SANDBOX[agent.permissionMode] ?? 'workspace-write'
+      }
+
+      // Warn about unsupported agent fields
+      if (agent.temperature !== null) warnings.lossyField(agent.name, 'temperature', 'Codex agents do not support temperature')
+      if (agent.tools) warnings.lossyField(agent.name, 'tools', 'Codex agents do not support tool whitelists')
+      if (agent.maxTurns !== null) warnings.lossyField(agent.name, 'maxTurns', 'Codex agents do not support maxTurns')
+      if (agent.hooks) warnings.lossyField(agent.name, 'hooks', 'Codex agents: inline hooks not supported, use hooks.json')
+      if (agent.mcpServers) warnings.lossyField(agent.name, 'mcpServers', 'Codex agents: inline MCP not supported, use config.toml')
+
+      const safeAgentFileName = safePathName(agent.fileName)
+      if (!safeAgentFileName) continue // skip agents with entirely unsafe file names
+      try {
+        files.push({
+          path: `.codex/agents/${safeAgentFileName}.toml`,
+          content: stringifyToml(tomlData),
+          type: 'agents',
+          warnings: [],
+        })
+      } catch {
+        warnings.add(`Agent "${agent.name}": TOML serialization failed`)
+      }
+    }
+
+    // ═══ Instructions → AGENTS.md ═══
+    if (project.instructions.length > 0) {
+      const sections: string[] = []
+      for (const inst of project.instructions) {
+        if (inst.isRule) {
+          sections.push(`## Rule: ${inst.fileName.replace(/\.md$/, '')}\n\n${inst.content}`)
+        } else {
+          sections.push(inst.content)
+        }
+      }
+      files.push({
+        path: 'AGENTS.md',
+        content: sections.join('\n\n---\n\n'),
+        type: 'instructions',
+        warnings: [],
+      })
+    }
+
+    // ═══ MCP → config.toml section ═══
+    if (project.mcp && project.mcp.servers.length > 0) {
+      const transformedServers = project.mcp.servers.map(transformMCPServerPaths)
+      const mcpSection: Record<string, Record<string, unknown>> = {}
+      for (const server of transformedServers) {
+        const def: Record<string, unknown> = {}
+        if (server.command) def.command = server.command
+        if (server.args) def.args = server.args
+        if (server.env) def.env = server.env
+        if (server.url) def.url = server.url
+        if (server.headers) def.http_headers = server.headers
+        mcpSection[server.name] = def
+      }
+
+      try {
+        const tomlContent = stringifyToml({ mcp_servers: mcpSection })
+        files.push({
+          path: '.codex/config.toml',
+          content: `# MCP servers converted from ${project.sourceProvider}\n${tomlContent}`,
+          type: 'mcp',
+          warnings: ['MCP config written to .codex/config.toml — merge manually with existing config'],
+        })
+      } catch {
+        warnings.add('MCP TOML serialization failed')
+      }
+    }
+
+    // ═══ Plugin Resource Files ═══
+    if (project.resources) {
+      for (const res of project.resources) {
+        files.push({ path: res.relativePath, content: res.content, type: 'resource' as const, warnings: [] })
+      }
+    }
+
+    // ═══ Commands → Skills (Codex has no commands, convert to skills) ═══
+    for (const cmd of project.commands) {
+      // Sanitize command name for safe use in file path — prevent path traversal
+      const safeCmdName = safePathName(cmd.name)
+      if (!safeCmdName) continue // skip commands with entirely unsafe names
+      warnings.lossyElement('commands', cmd.name, 'Codex does not support slash commands — converted to skill')
+      // Strip original frontmatter from command content to avoid double frontmatter
+      const parsed = parseFrontmatterUtil(cmd.content)
+      const desc = String(parsed.data.description || `Converted from command /${safeCmdName}`)
+      const body = parsed.body || cmd.content
+      files.push({
+        path: `.agents/skills/${safeCmdName}/SKILL.md`,
+        content: `---\nname: ${safeCmdName}\ndescription: "${desc.replace(/"/g, '\\"')}"\n---\n\n${body}`,
+        type: 'commands',
+        warnings: [`Command "/${safeCmdName}" converted to skill (Codex has no native commands)`],
+      })
+    }
+
+    // ═══ Hooks → hooks.json ═══
+    if (project.hooks.length > 0) {
+      const hooksConfig: Record<string, Array<{ matcher?: string; hooks: Array<{ type: string; command?: string }> }>> = {}
+      for (const hook of project.hooks) {
+        // Codex only supports 'command' type hooks — skip others with warning
+        if (hook.type !== 'command') {
+          warnings.add(`Hook ${hook.event}: type "${hook.type}" not supported by Codex (command only) — skipped`)
+          continue
+        }
+        if (!hooksConfig[hook.event]) hooksConfig[hook.event] = []
+        let group = hooksConfig[hook.event].find(g => g.matcher === hook.matcher)
+        if (!group) {
+          group = { matcher: hook.matcher, hooks: [] }
+          hooksConfig[hook.event].push(group)
+        }
+        group.hooks.push({ type: hook.type, command: hook.command })
+      }
+      // Only emit hooks.json if there are any surviving command hooks
+      if (Object.keys(hooksConfig).length > 0) {
+        files.push({
+          path: '.codex/hooks.json',
+          content: JSON.stringify({ hooks: hooksConfig }, null, 2),
+          type: 'hooks',
+          warnings: ['Hooks converted to .codex/hooks.json — verify event names match Codex conventions'],
+        })
+      }
+    }
+
+    // ═══ Codex plugin manifest ═══
+    if (project.pluginMeta) {
+      const manifest: Record<string, unknown> = {
+        name: project.pluginMeta.name,
+        version: project.pluginMeta.version || '1.0.0',
+        description: project.pluginMeta.description || '',
+      }
+      if (project.pluginMeta.author) manifest.author = project.pluginMeta.author
+      if (project.pluginMeta.interface) manifest.interface = project.pluginMeta.interface
+      files.push({ path: '.codex-plugin/plugin.json', content: JSON.stringify(manifest, null, 2), type: 'manifest' as const, warnings: [] })
+    }
+
+    // ═══ Apps (.app.json) ═══
+    if (project.apps && project.apps.length > 0) {
+      const appConfig: Record<string, unknown> = {}
+      for (const app of project.apps) {
+        appConfig[app.name] = app.config
+      }
+      files.push({ path: '.app.json', content: JSON.stringify(appConfig, null, 2), type: 'resource' as const, warnings: [] })
+    }
+
+    // Attach global warnings to the first file (or create a warnings file)
+    if (warnings.hasWarnings()) {
+      const w = warnings.getWarnings()
+      if (files.length > 0) {
+        files[0].warnings.push(...w)
+      }
+    }
+
+    return files
+  },
+}
+
+export default codexEmitter

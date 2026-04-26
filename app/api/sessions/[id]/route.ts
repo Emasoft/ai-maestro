@@ -1,10 +1,6 @@
-import { NextResponse } from 'next/server'
-import { exec } from 'child_process'
-import { promisify } from 'util'
-import { unpersistSession } from '@/lib/session-persistence'
-import { deleteAgentBySession, getAgentBySession } from '@/lib/agent-registry'
-
-const execAsync = promisify(exec)
+import { NextRequest, NextResponse } from 'next/server'
+import { deleteSession } from '@/services/sessions-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,50 +8,33 @@ export const dynamic = 'force-dynamic'
  * @deprecated Use /api/agents/[id]/session?kill=true&deleteAgent=true instead.
  * This endpoint uses tmux session names directly, while the agent endpoint
  * uses agent IDs for proper multi-host support.
+ * Removal target: v0.28.0
  */
+// NT-011: warn-once guard to avoid flooding logs on every request
+let _deprecationWarned = false
 function logDeprecation() {
+  if (_deprecationWarned) return
+  _deprecationWarned = true
   console.warn('[DEPRECATED] DELETE /api/sessions/[id] - Use DELETE /api/agents/[id]/session?kill=true&deleteAgent=true instead')
 }
 
 export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   logDeprecation()
   try {
-    const { id: sessionName } = await params
+    const { id: sessionName } = params
+    const result = await deleteSession(sessionName)
 
-    // Look up the agent associated with this session
-    const agent = getAgentBySession(sessionName)
-    const isCloudAgent = agent?.deployment?.type === 'cloud'
-
-    if (isCloudAgent) {
-      // Delete the agent (this will clean up messages, data directories, etc.)
-      deleteAgentBySession(sessionName)
-
-      return NextResponse.json({ success: true, name: sessionName, type: 'cloud' })
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    // Handle local tmux session
-    // Check if session exists
-    const { stdout: existingCheck } = await execAsync(
-      `tmux has-session -t "${sessionName}" 2>&1 || echo "not_found"`
-    )
-
-    if (existingCheck.includes('not_found')) {
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
-    }
-
-    // Kill the tmux session
-    await execAsync(`tmux kill-session -t "${sessionName}"`)
-
-    // Remove from persistence
-    unpersistSession(sessionName)
-
-    // Also delete from registry (if agent exists there)
-    deleteAgentBySession(sessionName)
-
-    return NextResponse.json({ success: true, name: sessionName })
+    return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
     console.error('Failed to delete session:', error)
     return NextResponse.json({ error: 'Failed to delete session' }, { status: 500 })

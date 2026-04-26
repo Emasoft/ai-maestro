@@ -1,9 +1,11 @@
 # AI Maestro - Product Backlog
 
+> **Note:** Section headers below reference legacy planning milestones (v0.5.0-v0.8.0). The project is currently at v0.26.0.
+
 **Purpose:** This document tracks planned features, improvements, and ideas for AI Maestro. Items are prioritized into three categories: Now (next release), Next (upcoming releases), and Later (future considerations).
 
 **Last Updated:** 2026-01-03
-**Current Version:** v0.19.36
+**Current Version:** v0.27.3
 
 ---
 
@@ -1519,8 +1521,8 @@ Currently one-to-one messaging only. No way to notify multiple agents simultaneo
 Add group/channel support:
 
 ```bash
-send-aimaestro-message.sh @all-frontend-agents "Style guide updated"
-send-aimaestro-message.sh @project-team "Stand-up in 5 minutes"
+amp-send @all-frontend-agents "Style guide updated"
+amp-send @project-team "Stand-up in 5 minutes"
 ```
 
 **Benefits:**
@@ -1543,7 +1545,7 @@ Messages are text-only. Can't share code snippets, logs, or screenshots directly
 Add attachment support:
 
 ```bash
-send-aimaestro-message.sh frontend-dev \
+amp-send frontend-dev \
   "API error details" \
   "Getting 500 errors, here's the stack trace" \
   urgent \
@@ -2771,7 +2773,7 @@ Before building a native app, answer:
 **Solution:** Add scheduling support:
 
 ```bash
-send-aimaestro-message.sh backend-architect \
+amp-send backend-architect \
   "Don't forget to run migrations" \
   "Reminder: run npm run db:migrate before deploying" \
   normal \

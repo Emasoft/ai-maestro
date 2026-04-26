@@ -1,0 +1,56 @@
+/**
+ * AMP v1 Route Endpoint
+ *
+ * POST /api/v1/route
+ *
+ * Routes a message to the recipient agent within the local mesh network.
+ * Thin wrapper - business logic in services/amp-service.ts
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { routeMessage } from '@/services/amp-service'
+import type { AMPRouteRequest, AMPRouteResponse, AMPError } from '@/lib/types/amp'
+
+export async function POST(request: NextRequest): Promise<NextResponse<AMPRouteResponse | AMPError>> {
+  try {
+    const authHeader = request.headers.get('Authorization')
+    const forwardedFrom = request.headers.get('X-Forwarded-From')
+    const envelopeIdHeader = request.headers.get('X-AMP-Envelope-Id')
+    const signatureHeader = request.headers.get('X-AMP-Signature')
+    const contentLength = request.headers.get('Content-Length')
+
+    let body: AMPRouteRequest
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'invalid_request', message: 'Invalid JSON body' } as AMPError, { status: 400 })
+    }
+
+    const result = await routeMessage(body, authHeader, forwardedFrom, envelopeIdHeader, signatureHeader, contentLength, {
+      senderRole: request.headers.get('X-AMP-Sender-Role'),
+      senderAgentId: request.headers.get('X-AMP-Sender-Agent-Id'),
+      senderRoleAttestation: request.headers.get('X-AMP-Sender-Role-Attestation'),
+    })
+    if (result.error) {
+      return NextResponse.json({ error: result.error, message: result.error } as AMPError, { status: result.status })
+    }
+    // Guard against null/undefined data -- service should always return data on success
+    if (!result.data) {
+      return NextResponse.json({ error: 'internal_error', message: 'Route response missing' } as AMPError, { status: 500 })
+    }
+    return NextResponse.json(result.data as AMPRouteResponse, {
+      status: result.status,
+      headers: result.headers
+    })
+  } catch (error) {
+    // CC-P4-002: Top-level catch for unhandled service throws (consistent with agents/route.ts pattern)
+    console.error('[AMP Route] Unhandled error in route endpoint:', error)
+    if (error instanceof Error && error.stack) {
+      console.error('[AMP Route] Stack:', error.stack)
+    }
+    return NextResponse.json(
+      { error: 'internal_error', message: 'Internal server error' } as AMPError,
+      { status: 500 }
+    )
+  }
+}

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# post-merge — project-scoped git hook
+# Delegates to Git LFS post-merge (preserves LFS behavior after merges).
+
+if command -v git-lfs >/dev/null 2>&1; then
+  exec git lfs post-merge "$@"
+else
+  printf '\n%s\n\n' "This repository is configured for Git LFS but 'git-lfs' was not found on your PATH." >&2
+  exit 2
+fi

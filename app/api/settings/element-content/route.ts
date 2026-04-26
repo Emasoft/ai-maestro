@@ -1,0 +1,118 @@
+/**
+ * Element Content API
+ *
+ * GET /api/settings/element-content?path=<filepath>
+ *   Returns the text content of a plugin element file.
+ *
+ * GET /api/settings/element-content?path=<.mcp.json>&server=<name>&action=mcp-tools
+ *   Discovers MCP server tools by running the mcp_discovery.py script.
+ *
+ * Path must be under ~/.claude/plugins/ for security.
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { readFile, stat, realpath } from 'fs/promises'
+import { existsSync } from 'fs'
+import { join, resolve } from 'path'
+import os from 'os'
+
+export const dynamic = 'force-dynamic'
+
+const PLUGINS_BASE = `${os.homedir()}/.claude/plugins`
+const PROJECT_ROOT = process.cwd()
+
+export async function GET(req: NextRequest) {
+  const filePath = req.nextUrl.searchParams.get('path')
+  const action = req.nextUrl.searchParams.get('action')
+  const serverName = req.nextUrl.searchParams.get('server')
+
+  if (!filePath) {
+    return NextResponse.json({ error: 'path parameter required' }, { status: 400 })
+  }
+
+  // Security: use realpath to resolve symlinks and ".." before containment check
+  // (the old .replace(/\.\./g, '') was insufficient — e.g. "....//" bypasses it)
+  const resolved = resolve(filePath)
+  if (!existsSync(resolved)) {
+    return NextResponse.json({ error: 'File not found' }, { status: 404 })
+  }
+  let realResolved: string
+  try {
+    realResolved = await realpath(resolved)
+  } catch {
+    return NextResponse.json({ error: 'File not accessible' }, { status: 404 })
+  }
+  if (!realResolved.startsWith(PLUGINS_BASE + '/')) {
+    return NextResponse.json({ error: 'Access denied — path must be under ~/.claude/plugins/' }, { status: 403 })
+  }
+
+  // MCP tools discovery mode
+  if (action === 'mcp-tools') {
+    if (!serverName) {
+      return NextResponse.json({ error: 'server parameter required for mcp-tools action' }, { status: 400 })
+    }
+    // Sanitize server name — strip unsafe chars and block path traversal
+    const safeName = serverName.replace(/[^a-zA-Z0-9._@:+-]/g, '')
+    if (!safeName || safeName.includes('..')) {
+      return NextResponse.json({ error: 'Invalid server name' }, { status: 400 })
+    }
+    const scriptPath = join(PROJECT_ROOT, 'scripts_dev', 'mcp_discovery.py')
+    if (!existsSync(scriptPath)) {
+      return NextResponse.json({ error: 'MCP discovery script not found' }, { status: 500 })
+    }
+    try {
+      const { dirname, join: pathJoin } = await import('path')
+      const { writeFileSync, unlinkSync } = await import('fs')
+      const pluginRoot = dirname(resolved)
+
+      // Resolve ${CLAUDE_PLUGIN_ROOT} and other Claude plugin variables in .mcp.json
+      // before passing to the discovery script, since node/python won't expand shell vars in JSON
+      let mcpJsonContent = await readFile(resolved, 'utf-8')
+      mcpJsonContent = mcpJsonContent.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, pluginRoot)
+      const tmpMcpJson = pathJoin(os.tmpdir(), `mcp-resolved-${Date.now()}.json`)
+      writeFileSync(tmpMcpJson, mcpJsonContent)
+
+      let output: string
+      try {
+        const { execFileSync } = await import('child_process')
+        output = execFileSync(
+          'uv',
+          ['run', scriptPath, tmpMcpJson, safeName, '--json'],
+          { timeout: 30000, maxBuffer: 1024 * 1024, stdio: ['pipe', 'pipe', 'ignore'], env: { ...process.env, CLAUDE_PLUGIN_ROOT: pluginRoot } }
+        ).toString()
+      } finally {
+        try { unlinkSync(tmpMcpJson) } catch { /* ignore */ }
+      }
+      const data = JSON.parse(output)
+      return NextResponse.json({ tools: data.tools || [], serverInfo: data.serverInfo || null, capabilities: data.capabilities || null })
+    } catch (err) {
+      const errStr = String(err)
+      // Try to extract JSON error from stderr
+      return NextResponse.json({ error: `MCP discovery failed: ${errStr.substring(0, 500)}`, tools: [] }, { status: 500 })
+    }
+  }
+
+  // Standard file content mode
+  try {
+    const s = await stat(resolved)
+    let actualPath = resolved
+    if (s.isDirectory()) {
+      const skillMd = join(resolved, 'SKILL.md')
+      if (existsSync(skillMd)) {
+        actualPath = skillMd
+      } else {
+        return NextResponse.json({ error: 'Directory does not contain a readable file (no SKILL.md found)' }, { status: 404 })
+      }
+    }
+
+    const content = await readFile(actualPath, 'utf-8')
+    const truncated = content.length > 50000
+    return NextResponse.json({
+      content: truncated ? content.slice(0, 50000) : content,
+      truncated,
+      size: content.length,
+    })
+  } catch {
+    return NextResponse.json({ error: 'Failed to read file' }, { status: 500 })
+  }
+}

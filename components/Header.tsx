@@ -1,6 +1,7 @@
 'use client'
 
-import { Menu, HelpCircle, Grid3X3 } from 'lucide-react'
+import Link from 'next/link'
+import { Menu, HelpCircle, Grid3X3, Users, FolderKanban, UserCircle, Puzzle, Monitor } from 'lucide-react'
 
 interface HeaderProps {
   onToggleSidebar?: () => void
@@ -11,6 +12,7 @@ interface HeaderProps {
 
 export default function Header({ onToggleSidebar, sidebarCollapsed, activeAgentId, onOpenHelp }: HeaderProps) {
   const immersiveUrl = activeAgentId ? `/immersive?agent=${encodeURIComponent(activeAgentId)}` : '/immersive'
+  const companionUrl = activeAgentId ? `/companion?agent=${encodeURIComponent(activeAgentId)}` : '/companion'
   const zoomUrl = '/zoom'
 
   return (
@@ -21,8 +23,8 @@ export default function Header({ onToggleSidebar, sidebarCollapsed, activeAgentI
             <button
               onClick={onToggleSidebar}
               className="p-1 rounded-lg hover:bg-gray-800 transition-all duration-200 text-gray-400 hover:text-gray-300"
-              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={(sidebarCollapsed ?? false) ? "Expand sidebar" : "Collapse sidebar"}
+              title={(sidebarCollapsed ?? false) ? "Expand sidebar" : "Collapse sidebar"}
             >
               <Menu className="w-4 h-4" />
             </button>
@@ -40,19 +42,54 @@ export default function Header({ onToggleSidebar, sidebarCollapsed, activeAgentI
               Help
             </button>
           )}
+          <Link
+            href="/teams"
+            className="text-sm px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded transition-colors flex items-center gap-1.5"
+            title="Manage Teams"
+          >
+            <FolderKanban className="w-3.5 h-3.5" />
+            Teams
+          </Link>
+          <Link
+            href="/team-meeting"
+            className="text-sm px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors flex items-center gap-1.5"
+            title="Team Meeting"
+          >
+            <Users className="w-3.5 h-3.5" />
+            Meeting
+          </Link>
+          <Link
+            href="/plugin-builder"
+            className="text-sm px-3 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded transition-colors flex items-center gap-1.5"
+            title="Plugin Builder"
+          >
+            <Puzzle className="w-3.5 h-3.5" />
+            Plugin Builder
+          </Link>
           <a
             href={zoomUrl}
             className="text-sm px-3 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded transition-colors flex items-center gap-1.5"
+            title="Zoom View"
           >
             <Grid3X3 className="w-3.5 h-3.5" />
             Zoom
           </a>
-          <a
+          <Link
+            href={companionUrl}
+            className="text-sm px-3 py-1 bg-pink-600 hover:bg-pink-700 text-white rounded transition-colors flex items-center gap-1.5"
+            title="Companion Mode"
+          >
+            <UserCircle className="w-3.5 h-3.5" />
+            Companion
+          </Link>
+          <Link
             href={immersiveUrl}
             className="text-sm px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+            title="Immersive Experience"
           >
+            <Grid3X3 className="w-3.5 h-3.5" />
             Immersive Experience
-          </a>
+          </Link>
         </div>
       </div>
     </header>

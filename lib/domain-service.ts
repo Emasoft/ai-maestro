@@ -1,10 +1,10 @@
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { v4 as uuidv4 } from 'uuid'
 import type { EmailDomain, CreateDomainRequest } from '@/types/agent'
+import { getStateDir } from '@/lib/ecosystem-constants'
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const DOMAINS_FILE = path.join(AIMAESTRO_DIR, 'domains.json')
 
 // ============================================================================
@@ -123,7 +123,9 @@ export function createDomain(request: CreateDomainRequest): EmailDomain {
   }
 
   domains.push(domain)
-  saveDomains(domains)
+  if (!saveDomains(domains)) {
+    throw new Error('Failed to persist domain to disk')
+  }
 
   return domain
 }
@@ -147,7 +149,9 @@ export function deleteDomain(id: string): boolean {
     domains[0].isDefault = true
   }
 
-  saveDomains(domains)
+  if (!saveDomains(domains)) {
+    throw new Error('Failed to persist domain deletion to disk')
+  }
   return true
 }
 
@@ -175,7 +179,9 @@ export function updateDomain(id: string, updates: Partial<Pick<EmailDomain, 'des
     domain.isDefault = updates.isDefault
   }
 
-  saveDomains(domains)
+  if (!saveDomains(domains)) {
+    throw new Error('Failed to persist domain update to disk')
+  }
   return domain
 }
 

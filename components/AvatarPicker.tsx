@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, User, Users } from 'lucide-react'
+import { X, User, Users, Bot } from 'lucide-react'
 
 interface AvatarPickerProps {
   isOpen: boolean
@@ -11,7 +11,21 @@ interface AvatarPickerProps {
   usedAvatars: string[]
 }
 
-type Gender = 'men' | 'women'
+type AvatarCategory = 'men' | 'women' | 'robots'
+
+// Number of avatars available for each category
+const AVATAR_COUNTS: Record<AvatarCategory, number> = {
+  men: 100,
+  women: 100,
+  robots: 55
+}
+
+// File extension per category (all converted to JPG at 95% quality)
+const AVATAR_EXT: Record<AvatarCategory, string> = {
+  men: 'jpg',
+  women: 'jpg',
+  robots: 'jpg'
+}
 
 export default function AvatarPicker({
   isOpen,
@@ -20,7 +34,7 @@ export default function AvatarPicker({
   currentAvatar,
   usedAvatars
 }: AvatarPickerProps) {
-  const [activeTab, setActiveTab] = useState<Gender>('men')
+  const [activeTab, setActiveTab] = useState<AvatarCategory>('men')
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null)
 
   // Reset selection when opening
@@ -30,6 +44,8 @@ export default function AvatarPicker({
       // Default to the tab matching current avatar
       if (currentAvatar?.includes('/women') || currentAvatar?.includes('women_')) {
         setActiveTab('women')
+      } else if (currentAvatar?.includes('/robots') || currentAvatar?.includes('robots_')) {
+        setActiveTab('robots')
       } else {
         setActiveTab('men')
       }
@@ -44,7 +60,8 @@ export default function AvatarPicker({
     // Convert randomuser.me URL to local path format for comparison
     const match = avatar.match(/portraits\/(men|women)\/(\d+)\.jpg/)
     if (match) {
-      return `/avatars/${match[1]}_${match[2].padStart(2, '0')}.png`
+      const cat = match[1] as AvatarCategory
+      return `/avatars/${cat}_${match[2].padStart(2, '0')}.${AVATAR_EXT[cat] || 'png'}`
     }
     return avatar
   }
@@ -52,9 +69,10 @@ export default function AvatarPicker({
   const usedAvatarsNormalized = new Set(usedAvatars.map(a => normalizeAvatarPath(a)))
   const currentAvatarNormalized = normalizeAvatarPath(currentAvatar)
 
-  // Generate avatar URLs for the selected gender (0-99) using local library
-  const avatars = Array.from({ length: 100 }, (_, i) => {
-    const url = `/avatars/${activeTab}_${i.toString().padStart(2, '0')}.png`
+  // Generate avatar URLs for the selected category using local library
+  const avatarCount = AVATAR_COUNTS[activeTab]
+  const avatars = Array.from({ length: avatarCount }, (_, i) => {
+    const url = `/avatars/${activeTab}_${i.toString().padStart(2, '0')}.${AVATAR_EXT[activeTab]}`
     return {
       url,
       index: i,
@@ -108,6 +126,17 @@ export default function AvatarPicker({
             <Users className="w-4 h-4" />
             Women
           </button>
+          <button
+            onClick={() => setActiveTab('robots')}
+            className={`flex-1 py-3 px-4 flex items-center justify-center gap-2 transition-colors ${
+              activeTab === 'robots'
+                ? 'bg-emerald-600/20 text-emerald-400 border-b-2 border-emerald-500'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            }`}
+          >
+            <Bot className="w-4 h-4" />
+            Robots
+          </button>
         </div>
 
         {/* Avatar Grid */}
@@ -143,7 +172,6 @@ export default function AvatarPicker({
                     src={url}
                     alt={`Avatar ${index + 1}`}
                     className="w-full h-full object-cover"
-                    loading="lazy"
                   />
                   {isDisabled && (
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">

@@ -2,26 +2,27 @@
  * Agent - The core abstraction for autonomous agents
  *
  * An Agent is a cognitive entity that:
- * - Maintains its own memory (database)
- * - Has a subconscious that maintains awareness (indexing, messages)
- * - Can search its own history autonomously
+ * - Maintains its own database (legacy CozoDB — being retired with TRDD-70a521d9)
+ * - Has a subconscious that tracks activity state and writes a status file
  * - Operates independently without central coordination
  *
  * Philosophy:
- * - Database is a property of agent memory, not the agent itself
- * - Subconscious runs in the background, maintaining memory without conscious effort
- * - Each agent is truly autonomous and self-sufficient
+ * - Subconscious runs in the background, mirroring lifecycle + activity without
+ *   conscious effort. It no longer drives the RAG memory subsystem.
+ * - Each agent is truly autonomous and self-sufficient.
  */
 
-import { AgentDatabase, AgentDatabaseConfig } from './cozo-db'
 import { hostHints } from './host-hints'
 import { getAgent as getAgentFromRegistry } from './agent-registry'
 import { getSelfHost } from './hosts-config'
 import { computeSessionName } from '@/types/agent'
+import { Cerebellum } from './cerebellum/cerebellum'
+import { SubconsciousSubsystem } from './cerebellum/subconscious-subsystem'
+import { VoiceSubsystem } from './cerebellum/voice-subsystem'
 
 import * as fs from 'fs'
 import * as path from 'path'
-import * as os from 'os'
+import { statePath } from '@/lib/ecosystem-constants'
 
 // Get this host's API base URL from configuration
 // NEVER returns localhost - getSelfHost() already handles IP detection
@@ -43,18 +44,17 @@ interface AgentConfig {
 }
 
 interface SubconsciousConfig {
-  memoryCheckInterval?: number  // How often to check for new conversations (default: 5 minutes)
   messageCheckInterval?: number // How often to check for messages (default: 5 minutes) - DEPRECATED
   messagePollingEnabled?: boolean // Enable message polling (default: false - use push notifications instead)
-  consolidationEnabled?: boolean // Enable long-term memory consolidation (default: true)
-  consolidationHour?: number    // Hour of day to run consolidation (default: 2 = 2 AM)
-}
-
-// Activity-based interval configuration
-const ACTIVITY_INTERVALS = {
-  active: 5 * 60 * 1000,        // 5 min when actively used
-  idle: 30 * 60 * 1000,         // 30 min when idle
-  disconnected: 60 * 60 * 1000  // 60 min when no session connected
+  /**
+   * TRDD-7123d51a — cadence of the config-change tracker (ms).
+   * Default 30_000 (30s). The tracker scans the agent's `.claude/`
+   * directory + `~/.claude/settings.json`, diffs against the last
+   * snapshot, and emits ledger entries for drift not already recorded
+   * by the API. Set to 0 to DISABLE the tracker entirely (not
+   * recommended — silences drift from client-internal installs).
+   */
+  configTrackerInterval?: number
 }
 
 // Type for host hints (optional optimization from AI Maestro host)
@@ -69,54 +69,36 @@ export interface HostHint {
 /**
  * Agent Subconscious
  *
- * Runs in the background for each agent, maintaining:
- * 1. Memory (indexes new conversation content)
- * 2. Awareness (checks for messages from other agents)
+ * Runs in the background for each agent, tracking activity state,
+ * writing a status file the dashboard can read without loading the agent
+ * into memory, and (optionally, deprecated) polling for new messages.
+ *
+ * TRDD-70a521d9 Phase 1 detached the RAG memory callbacks — no more
+ * maintainMemory, scheduleConsolidation, runConsolidation. The timer
+ * infrastructure remains for message polling + lifecycle.
  */
 interface SubconsciousStatus {
   isRunning: boolean
   startedAt: number | null
-  memoryCheckInterval: number
   messageCheckInterval: number
   messagePollingEnabled: boolean  // false = using push notifications (default)
   activityState: 'active' | 'idle' | 'disconnected'
   staggerOffset: number
-  lastMemoryRun: number | null
   lastMessageRun: number | null
-  lastMemoryResult: {
-    success: boolean
-    messagesProcessed?: number
-    conversationsDiscovered?: number
-    error?: string
-  } | null
   lastMessageResult: {
     success: boolean
     unreadCount?: number
     error?: string
   } | null
-  totalMemoryRuns: number
   totalMessageRuns: number
-  // Cumulative stats (accumulated across this session)
-  cumulativeMessagesIndexed: number
-  cumulativeConversationsIndexed: number
-  // Long-term memory consolidation
-  consolidation: {
-    enabled: boolean
-    scheduledHour: number
-    lastRun: number | null
-    nextRun: number | null
-    lastResult: {
-      success: boolean
-      memoriesCreated?: number
-      memoriesReinforced?: number
-      memoriesLinked?: number
-      conversationsProcessed?: number
-      durationMs?: number
-      providerUsed?: string
-      error?: string
-    } | null
-    totalRuns: number
-  }
+  /** TRDD-7123d51a — config-change tracker status (null when interval=0). */
+  configTracker: {
+    intervalMs: number
+    lastScanAt: number | null
+    driftCountSinceStart: number
+    lastDriftAt: number | null
+    lastDriftPaths: string[]
+  } | null
 }
 
 // Static counter for staggering initial runs across all agents
@@ -125,55 +107,52 @@ let subconsciousInstanceCount = 0
 class AgentSubconscious {
   private agentId: string
   private agent: Agent
-  private memoryTimer: NodeJS.Timeout | null = null
   private messageTimer: NodeJS.Timeout | null = null
-  private consolidationTimer: NodeJS.Timeout | null = null
-  private initialDelayTimer: NodeJS.Timeout | null = null
   private isRunning = false
-  private memoryCheckInterval: number
   private messageCheckInterval: number
-  private instanceNumber: number
   private staggerOffset: number
 
-  // Activity state for adaptive intervals
+  // Activity state (purely informational after Phase 1 — no interval impact)
   private activityState: 'active' | 'idle' | 'disconnected' = 'disconnected'
 
   // Status tracking
   private startedAt: number | null = null
-  private lastMemoryRun: number | null = null
   private lastMessageRun: number | null = null
-  private lastMemoryResult: SubconsciousStatus['lastMemoryResult'] = null
   private lastMessageResult: SubconsciousStatus['lastMessageResult'] = null
-  private totalMemoryRuns = 0
   private totalMessageRuns = 0
-  // Cumulative stats (accumulated across this session)
-  private cumulativeMessagesIndexed = 0
-  private cumulativeConversationsIndexed = 0
 
   // Message polling (deprecated - use push notifications instead)
   private messagePollingEnabled: boolean
 
-  // Long-term memory consolidation
-  private consolidationEnabled: boolean
-  private consolidationHour: number
-  private lastConsolidationRun: number | null = null
-  private nextConsolidationRun: number | null = null
-  private lastConsolidationResult: SubconsciousStatus['consolidation']['lastResult'] = null
-  private totalConsolidationRuns = 0
+  // TRDD-7123d51a — config-change tracker state
+  private configTimer: NodeJS.Timeout | null = null
+  private configTrackerInterval: number   // 0 = disabled
+  /**
+   * Stringified per-sub-tree snapshots from the most recent scan.
+   * Comparing serialized strings is cheap (single V8 intern + eq) and
+   * avoids the cost of a full structural deep-diff 2× per minute per
+   * agent. We trade a little CPU on JSON.stringify for a lot of CPU
+   * saved on diff walk.
+   */
+  private lastConfigSnapshotJson: Map<string, string> = new Map()
+  private configTrackerHasBaseline = false
+  private configLastScanAt: number | null = null
+  private configDriftCountSinceStart = 0
+  private configLastDriftAt: number | null = null
+  private configLastDriftPaths: string[] = []
 
   constructor(agentId: string, agent: Agent, config: SubconsciousConfig = {}) {
     this.agentId = agentId
     this.agent = agent
-    // Default interval (will be adjusted based on activity)
-    this.memoryCheckInterval = config.memoryCheckInterval || ACTIVITY_INTERVALS.disconnected
     this.messageCheckInterval = config.messageCheckInterval || 5 * 60 * 1000  // 5 minutes (deprecated)
     // Message polling is DISABLED by default - use push notifications instead (RFC: Message Delivery Notifications)
-    this.messagePollingEnabled = config.messagePollingEnabled === true  // Default: disabled
-    // Long-term memory consolidation config
-    this.consolidationEnabled = config.consolidationEnabled !== false  // Default: enabled
-    this.consolidationHour = config.consolidationHour ?? 2  // Default: 2 AM
-    // Assign instance number for staggering initial runs
-    this.instanceNumber = subconsciousInstanceCount++
+    // Explicitly requires config.messagePollingEnabled === true to enable; any other value (undefined, false) keeps it disabled.
+    this.messagePollingEnabled = config.messagePollingEnabled === true
+    // TRDD-7123d51a — default 30s; `0` disables. Using `??` (not `||`) so
+    // `0` is preserved as "disabled" instead of falling through to the default.
+    this.configTrackerInterval = config.configTrackerInterval ?? 30_000
+    // Bump the static counter (kept for logging symmetry with older logs)
+    subconsciousInstanceCount++
     // Calculate stagger offset based on agentId hash (consistent across restarts)
     this.staggerOffset = this.calculateStaggerOffset()
   }
@@ -203,7 +182,6 @@ class AgentSubconscious {
 
     console.log(`[Agent ${this.agentId.substring(0, 8)}] 🧠 Starting subconscious...`)
     console.log(`[Agent ${this.agentId.substring(0, 8)}]   - Stagger offset: ${Math.round(this.staggerOffset / 1000)}s`)
-    console.log(`[Agent ${this.agentId.substring(0, 8)}]   - Memory interval: ${this.memoryCheckInterval / 60000} min (${this.activityState})`)
     console.log(`[Agent ${this.agentId.substring(0, 8)}]   - Message polling: ${this.messagePollingEnabled ? 'enabled (legacy)' : 'disabled (using push notifications)'}`)
 
     // Message polling is DEPRECATED - push notifications handle this at delivery time
@@ -224,22 +202,6 @@ class AgentSubconscious {
       }, this.messageCheckInterval)
     }
 
-    // Start memory maintenance with stagger offset
-    // First run is delayed by staggerOffset, then runs on interval
-    this.initialDelayTimer = setTimeout(() => {
-      // Run first memory maintenance
-      this.maintainMemory().catch(err => {
-        console.error(`[Agent ${this.agentId.substring(0, 8)}] Initial memory maintenance failed:`, err)
-      })
-
-      // Start the regular interval timer
-      this.memoryTimer = setInterval(() => {
-        this.maintainMemory().catch(err => {
-          console.error(`[Agent ${this.agentId.substring(0, 8)}] Memory maintenance failed:`, err)
-        })
-      }, this.memoryCheckInterval)
-    }, this.staggerOffset)
-
     this.isRunning = true
     this.startedAt = Date.now()
 
@@ -253,139 +215,28 @@ class AgentSubconscious {
       console.log(`[Agent ${this.agentId.substring(0, 8)}] Host hints not available - running autonomously`)
     }
 
-    // Schedule long-term memory consolidation
-    if (this.consolidationEnabled) {
-      this.scheduleConsolidation()
-    }
+    // TRDD-7123d51a — start the config-change tracker last so the other
+    // subsystems are already initialized when the first scan runs.
+    this.startConfigChangeTracker()
 
-    console.log(`[Agent ${this.agentId.substring(0, 8)}] ✓ Subconscious running (first memory check in ${Math.round(this.staggerOffset / 1000)}s)`)
+    console.log(`[Agent ${this.agentId.substring(0, 8)}] ✓ Subconscious running`)
 
     // Write initial status file
     this.writeStatusFile()
   }
 
   /**
-   * Schedule next consolidation run
-   */
-  private scheduleConsolidation() {
-    // Calculate time until next scheduled consolidation
-    const now = new Date()
-    const nextRun = new Date(now)
-    nextRun.setHours(this.consolidationHour, 0, 0, 0)
-
-    // If we've already passed the scheduled hour today, schedule for tomorrow
-    if (now >= nextRun) {
-      nextRun.setDate(nextRun.getDate() + 1)
-    }
-
-    // Add stagger offset to prevent all agents from running at once
-    const staggerMinutes = Math.abs(this.agentId.split('').reduce(
-      (acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0
-    )) % 30  // Spread across 30 minutes
-    nextRun.setMinutes(staggerMinutes)
-
-    const timeUntilRun = nextRun.getTime() - now.getTime()
-    this.nextConsolidationRun = nextRun.getTime()
-
-    console.log(`[Agent ${this.agentId.substring(0, 8)}] 📚 Consolidation scheduled for ${nextRun.toLocaleTimeString()} (in ${Math.round(timeUntilRun / 60000)} min)`)
-
-    // Clear existing timer
-    if (this.consolidationTimer) {
-      clearTimeout(this.consolidationTimer)
-    }
-
-    // Set timer for consolidation
-    this.consolidationTimer = setTimeout(() => {
-      this.runConsolidation().catch(err => {
-        console.error(`[Agent ${this.agentId.substring(0, 8)}] Consolidation failed:`, err)
-      }).finally(() => {
-        // Schedule next run after this one completes
-        if (this.isRunning && this.consolidationEnabled) {
-          this.scheduleConsolidation()
-        }
-      })
-    }, timeUntilRun)
-  }
-
-  /**
-   * Run memory consolidation
-   * Extracts long-term memories from recent conversations
-   */
-  private async runConsolidation() {
-    this.totalConsolidationRuns++
-    this.lastConsolidationRun = Date.now()
-    const startTime = Date.now()
-
-    console.log(`[Agent ${this.agentId.substring(0, 8)}] 📚 Running memory consolidation...`)
-
-    try {
-      // Call the consolidation API endpoint
-      const response = await fetch(`${getSelfApiBase()}/api/agents/${this.agentId}/memory/consolidate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-
-      if (!response.ok) {
-        this.lastConsolidationResult = { success: false, error: `HTTP ${response.status}` }
-        console.error(`[Agent ${this.agentId.substring(0, 8)}] Consolidation failed: ${response.status}`)
-        return
-      }
-
-      const result = await response.json()
-
-      this.lastConsolidationResult = {
-        success: result.status !== 'failed',
-        memoriesCreated: result.memories_created || 0,
-        memoriesReinforced: result.memories_reinforced || 0,
-        memoriesLinked: result.memories_linked || 0,
-        conversationsProcessed: result.conversations_processed || 0,
-        durationMs: Date.now() - startTime,
-        providerUsed: result.provider_used || 'unknown',
-        error: result.errors?.length > 0 ? result.errors.join('; ') : undefined
-      }
-
-      console.log(`[Agent ${this.agentId.substring(0, 8)}] ✓ Consolidation complete: ${result.memories_created} created, ${result.memories_reinforced} reinforced (${result.provider_used})`)
-    } catch (error) {
-      this.lastConsolidationResult = {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        durationMs: Date.now() - startTime
-      }
-      console.error(`[Agent ${this.agentId.substring(0, 8)}] Consolidation error:`, error)
-    }
-
-    // Update status file after consolidation
-    this.writeStatusFile()
-  }
-
-  /**
-   * Manually trigger consolidation (for testing or on-demand)
-   */
-  async triggerConsolidation(): Promise<SubconsciousStatus['consolidation']['lastResult']> {
-    await this.runConsolidation()
-    return this.lastConsolidationResult
-  }
-
-  /**
    * Stop the subconscious
    */
   stop() {
-    if (this.memoryTimer) {
-      clearInterval(this.memoryTimer)
-      this.memoryTimer = null
-    }
     if (this.messageTimer) {
       clearInterval(this.messageTimer)
       this.messageTimer = null
     }
-    if (this.consolidationTimer) {
-      clearTimeout(this.consolidationTimer)
-      this.consolidationTimer = null
-    }
-    if (this.initialDelayTimer) {
-      clearTimeout(this.initialDelayTimer)
-      this.initialDelayTimer = null
-    }
+
+    // TRDD-7123d51a — stop the config-change tracker before unsubscribing
+    // from host hints so an in-flight scan can still find its host config.
+    this.stopConfigChangeTracker()
 
     // Unsubscribe from host hints
     try {
@@ -398,52 +249,6 @@ class AgentSubconscious {
     console.log(`[Agent ${this.agentId.substring(0, 8)}] Subconscious stopped`)
 
     // Write final status file (marks as not running)
-    this.writeStatusFile()
-  }
-
-  /**
-   * Maintain memory by indexing new conversation content
-   */
-  private async maintainMemory() {
-    this.totalMemoryRuns++
-    this.lastMemoryRun = Date.now()
-
-    try {
-      // Call the index-delta API - it handles checking if indexing is needed
-      const response = await fetch(`${getSelfApiBase()}/api/agents/${this.agentId}/index-delta`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-
-      if (!response.ok) {
-        this.lastMemoryResult = { success: false, error: `HTTP ${response.status}` }
-        console.error(`[Agent ${this.agentId.substring(0, 8)}] Index failed: ${response.status}`)
-        return
-      }
-
-      const result = await response.json()
-      const messagesProcessed = result.total_messages_processed || 0
-      const conversationsDiscovered = result.new_conversations_discovered || 0
-
-      // Accumulate cumulative totals
-      this.cumulativeMessagesIndexed += messagesProcessed
-      this.cumulativeConversationsIndexed += conversationsDiscovered
-
-      this.lastMemoryResult = {
-        success: true,
-        messagesProcessed,
-        conversationsDiscovered
-      }
-
-      if (result.success && messagesProcessed > 0) {
-        console.log(`[Agent ${this.agentId.substring(0, 8)}] ✓ Indexed ${messagesProcessed} new message(s) (cumulative: ${this.cumulativeMessagesIndexed})`)
-      }
-    } catch (error) {
-      this.lastMemoryResult = { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
-      console.error(`[Agent ${this.agentId.substring(0, 8)}] Memory maintenance error:`, error)
-    }
-
-    // Update status file after memory run
     this.writeStatusFile()
   }
 
@@ -624,28 +429,16 @@ class AgentSubconscious {
   }
 
   /**
-   * Set activity state and adjust intervals accordingly
-   * Called by the host when session activity changes
+   * Set activity state. Called by the host when session activity changes.
+   * After TRDD-70a521d9 Phase 1 this only tracks the state value for
+   * reporting; it no longer drives any memory-maintenance interval.
    */
   setActivityState(state: 'active' | 'idle' | 'disconnected') {
     const prevState = this.activityState
+    if (prevState !== state) {
+      console.log(`[Agent ${this.agentId.substring(0, 8)}] Activity: ${prevState} -> ${state}`)
+    }
     this.activityState = state
-
-    // Trigger immediate index on idle transition (good time to catch up)
-    if (prevState === 'active' && state === 'idle') {
-      console.log(`[Agent ${this.agentId.substring(0, 8)}] Session went idle - triggering memory maintenance`)
-      this.maintainMemory().catch(err => {
-        console.error(`[Agent ${this.agentId.substring(0, 8)}] Idle transition maintenance failed:`, err)
-      })
-    }
-
-    // Update interval based on new activity state
-    const newInterval = ACTIVITY_INTERVALS[state]
-    if (newInterval !== this.memoryCheckInterval) {
-      console.log(`[Agent ${this.agentId.substring(0, 8)}] Activity: ${prevState} -> ${state}, interval: ${newInterval / 60000} min`)
-      this.memoryCheckInterval = newInterval
-      this.rescheduleMemoryTimer()
-    }
   }
 
   /**
@@ -653,26 +446,6 @@ class AgentSubconscious {
    */
   getActivityState(): 'active' | 'idle' | 'disconnected' {
     return this.activityState
-  }
-
-  /**
-   * Reschedule memory timer with new interval
-   */
-  private rescheduleMemoryTimer() {
-    if (!this.isRunning) return
-
-    // Clear existing timer
-    if (this.memoryTimer) {
-      clearInterval(this.memoryTimer)
-      this.memoryTimer = null
-    }
-
-    // Start new timer with updated interval
-    this.memoryTimer = setInterval(() => {
-      this.maintainMemory().catch(err => {
-        console.error(`[Agent ${this.agentId.substring(0, 8)}] Memory maintenance failed:`, err)
-      })
-    }, this.memoryCheckInterval)
   }
 
   /**
@@ -684,23 +457,18 @@ class AgentSubconscious {
 
     switch (hint.type) {
       case 'idle_transition':
-        // Session just went idle - good time to index
+        // Session just went idle
         console.log(`[Agent ${this.agentId.substring(0, 8)}] Host hint: idle_transition`)
         this.setActivityState('idle')
+        // Propagate idle to cerebellum so voice subsystem can trigger
+        this.agent.getCerebellum()?.setActivityState('idle')
         break
 
       case 'run_now':
-        // Host says it's a good time to run
-        console.log(`[Agent ${this.agentId.substring(0, 8)}] Host hint: run_now`)
-        this.maintainMemory().catch(err => {
-          console.error(`[Agent ${this.agentId.substring(0, 8)}] Hint-triggered maintenance failed:`, err)
-        })
-        break
-
       case 'skip':
-        // Host is busy - we'll just wait for next interval
-        // (no action needed, just don't run)
-        console.log(`[Agent ${this.agentId.substring(0, 8)}] Host hint: skip (will wait for next interval)`)
+        // Memory maintenance used to react to these hints. After TRDD-70a521d9
+        // Phase 1 they are ignored — kept in the switch so the enum is
+        // exhaustive and future non-memory subsystems can opt in.
         break
     }
   }
@@ -712,27 +480,201 @@ class AgentSubconscious {
     return {
       isRunning: this.isRunning,
       startedAt: this.startedAt,
-      memoryCheckInterval: this.memoryCheckInterval,
       messageCheckInterval: this.messageCheckInterval,
       messagePollingEnabled: this.messagePollingEnabled,
       activityState: this.activityState,
       staggerOffset: this.staggerOffset,
-      lastMemoryRun: this.lastMemoryRun,
       lastMessageRun: this.lastMessageRun,
-      lastMemoryResult: this.lastMemoryResult,
       lastMessageResult: this.lastMessageResult,
-      totalMemoryRuns: this.totalMemoryRuns,
       totalMessageRuns: this.totalMessageRuns,
-      cumulativeMessagesIndexed: this.cumulativeMessagesIndexed,
-      cumulativeConversationsIndexed: this.cumulativeConversationsIndexed,
-      consolidation: {
-        enabled: this.consolidationEnabled,
-        scheduledHour: this.consolidationHour,
-        lastRun: this.lastConsolidationRun,
-        nextRun: this.nextConsolidationRun,
-        lastResult: this.lastConsolidationResult,
-        totalRuns: this.totalConsolidationRuns
+      configTracker: this.configTrackerInterval > 0 ? {
+        intervalMs: this.configTrackerInterval,
+        lastScanAt: this.configLastScanAt,
+        driftCountSinceStart: this.configDriftCountSinceStart,
+        lastDriftAt: this.configLastDriftAt,
+        lastDriftPaths: [...this.configLastDriftPaths],
+      } : null,
+    }
+  }
+
+  // ── Config-change tracker (TRDD-7123d51a) ─────────────────────────
+
+  /**
+   * Sub-trees of `AgentLocalConfig` we watch for drift. Each maps to the
+   * best-matching extended `LedgerOp` so an external audit tool can
+   * group tracker-emitted entries by element kind.
+   */
+  private static readonly CONFIG_SUBTREES: ReadonlyArray<{
+    key: keyof import('@/types/agent-local-config').AgentLocalConfig
+    op: import('@/types/ledger').LedgerOp
+  }> = [
+    { key: 'skills', op: 'change_skill' },
+    { key: 'agents', op: 'change_agent_def' },
+    { key: 'hooks', op: 'change_hook' },
+    { key: 'rules', op: 'change_rule' },
+    { key: 'commands', op: 'change_command' },
+    { key: 'mcpServers', op: 'change_mcp' },
+    { key: 'lspServers', op: 'change_lsp' },
+    { key: 'outputStyles', op: 'change_output_style' },
+    { key: 'plugins', op: 'change_plugin' },
+    { key: 'rolePlugin', op: 'change_plugin' },
+    { key: 'settings', op: 'update' },
+    { key: 'userGlobalSettings', op: 'update' },
+    { key: 'keybindings', op: 'update' },
+  ]
+
+  /**
+   * Start the config-change tracker (if enabled). Idempotent.
+   * The first tick runs ~1s after start() so the dashboard sees the
+   * baseline quickly without hammering disk at boot; subsequent ticks
+   * run every `configTrackerInterval` ms.
+   */
+  startConfigChangeTracker() {
+    if (this.configTrackerInterval <= 0) return
+    if (this.configTimer) return  // Already running
+    console.log(`[Agent ${this.agentId.substring(0, 8)}]   - Config tracker: ${this.configTrackerInterval / 1000}s cadence`)
+    // First tick after a short warmup; failures are swallowed so a
+    // transient registry-read error never breaks the timer chain.
+    setTimeout(() => {
+      this.runConfigScan().catch(err => {
+        console.error(`[Agent ${this.agentId.substring(0, 8)}] Initial config scan failed:`, err)
+      })
+    }, 1_000)
+    this.configTimer = setInterval(() => {
+      this.runConfigScan().catch(err => {
+        console.error(`[Agent ${this.agentId.substring(0, 8)}] Config scan failed:`, err)
+      })
+    }, this.configTrackerInterval)
+  }
+
+  /** Stop the config-change tracker and clear the baseline. */
+  stopConfigChangeTracker() {
+    if (this.configTimer) {
+      clearInterval(this.configTimer)
+      this.configTimer = null
+    }
+  }
+
+  /**
+   * One scan cycle. First tick sets the baseline WITHOUT emitting
+   * ledger entries; later ticks diff against baseline, emit for any
+   * sub-tree that drifted AND is not covered by a fresh API-path
+   * ledger entry (see {@link wasRecentlyRecordedByApi}). Silent on
+   * "agent not found / workdir missing" to avoid log spam when an
+   * agent is being deleted mid-scan.
+   */
+  private async runConfigScan(): Promise<void> {
+    // Dynamic import — breaks the lib/agent.ts ↔ services/ cycle that
+    // would otherwise pull half of next.js into cerebellum's load path.
+    const { scanAgentLocalConfig } = await import('@/services/agent-local-config-service')
+    const result = scanAgentLocalConfig(this.agentId)
+    this.configLastScanAt = Date.now()
+    if (!result.data) {
+      // Agent deleted, or workdir moved — write status and exit silently.
+      this.writeStatusFile()
+      return
+    }
+    const snapshot = result.data
+
+    if (!this.configTrackerHasBaseline) {
+      // First tick — baseline only, no emits.
+      for (const { key } of AgentSubconscious.CONFIG_SUBTREES) {
+        this.lastConfigSnapshotJson.set(key, JSON.stringify(snapshot[key] ?? null))
       }
+      this.configTrackerHasBaseline = true
+      this.writeStatusFile()
+      return
+    }
+
+    const driftPaths: string[] = []
+    for (const { key, op } of AgentSubconscious.CONFIG_SUBTREES) {
+      const newJson = JSON.stringify(snapshot[key] ?? null)
+      const oldJson = this.lastConfigSnapshotJson.get(key) ?? 'null'
+      if (newJson === oldJson) continue
+      // Drift detected. Skip if a matching API-emitted entry is already
+      // on the ledger within the last 10s (dedup, per TRDD §3.3).
+      if (this.wasRecentlyRecordedByApi(String(key))) {
+        this.lastConfigSnapshotJson.set(key, newJson)
+        continue
+      }
+      driftPaths.push(String(key))
+      this.emitConfigDrift(op, String(key), snapshot[key])
+      this.lastConfigSnapshotJson.set(key, newJson)
+    }
+
+    if (driftPaths.length > 0) {
+      this.configDriftCountSinceStart += driftPaths.length
+      this.configLastDriftAt = Date.now()
+      // Cap to 32 to bound the status-file size; newest N win.
+      this.configLastDriftPaths = driftPaths.slice(-32)
+    }
+    this.writeStatusFile()
+  }
+
+  /**
+   * Scan the last 50 agents-ledger entries for one with
+   * `signerHostId === this host` AND timestamp within the last 10s
+   * that touches `/agents/<this agent id>/<subtreeKey>`.
+   *
+   * Mis-fires are acceptable (TRDD §3.3):
+   * - False positive → a real drift gets dropped; next tick catches it.
+   * - False negative → duplicate ledger entry; harmless to the chain.
+   */
+  private wasRecentlyRecordedByApi(subtreeKey: string): boolean {
+    try {
+      // Delayed `require` — same circular-import reason as runConfigScan.
+      const { registryLedger } = require('@/lib/agent-registry')
+      const { getSelfHostId } = require('@/lib/hosts-config')
+      const selfHostId = getSelfHostId()
+      const tenSecondsAgo = Date.now() - 10_000
+      const entries = registryLedger.getEntries().slice(-50)
+      for (const e of entries) {
+        if (new Date(e.ts).getTime() < tenSecondsAgo) continue
+        if (e.signerHostId && e.signerHostId.toLowerCase() !== selfHostId) continue
+        if (e.authActor !== 'user' && e.authActor !== 'system') continue
+        if (!Array.isArray(e.diff)) continue
+        for (const patchOp of e.diff) {
+          if (typeof patchOp?.path !== 'string') continue
+          if (patchOp.path.includes(`/agents/${this.agentId}`) &&
+              patchOp.path.includes(subtreeKey)) {
+            return true
+          }
+        }
+      }
+    } catch {
+      // Ledger unavailable — fail open (emit instead of dedup).
+    }
+    return false
+  }
+
+  /**
+   * Append a per-subtree ledger entry with `authActor='agent'` and
+   * a JSON-Patch diff pointing at `/agents/<id>/config/<key>`. Uses
+   * `replace` because the tracker can't reconstruct the old value as
+   * a structural patch — it has only a string snapshot. `replace` is
+   * correct for a "we observed the new state" semantic and matches
+   * how `ledger-replay.mjs` (#233) applies entries.
+   */
+  private emitConfigDrift(op: import('@/types/ledger').LedgerOp, subtreeKey: string, newValue: unknown): void {
+    try {
+      const { emitAgentOp } = require('@/lib/ledger-emit')
+      emitAgentOp(
+        op,
+        [{
+          op: 'replace',
+          path: `/agents/${this.agentId}/config/${subtreeKey}`,
+          value: newValue ?? null,
+        }],
+        {
+          action: `config-tracker-${subtreeKey}`,
+          agentId: this.agentId,
+          actor: 'agent',
+        },
+      )
+    } catch (err) {
+      // Fire-and-forget — at worst we miss one tick's drift, next
+      // tick will still see the old snapshot vs new state and retry.
+      console.error(`[Agent ${this.agentId.substring(0, 8)}] Config drift emit failed for ${subtreeKey}:`, err)
     }
   }
 
@@ -742,7 +684,7 @@ class AgentSubconscious {
    */
   private writeStatusFile(): void {
     try {
-      const statusDir = path.join(os.homedir(), '.aimaestro', 'agents', this.agentId)
+      const statusDir = statePath('agents', this.agentId)
       const statusPath = path.join(statusDir, 'status.json')
 
       // Ensure directory exists
@@ -756,24 +698,19 @@ class AgentSubconscious {
         isRunning: this.isRunning,
         activityState: this.activityState,
         startedAt: this.startedAt,
-        memoryCheckInterval: this.memoryCheckInterval,
         messageCheckInterval: this.messageCheckInterval,
-        lastMemoryRun: this.lastMemoryRun,
         lastMessageRun: this.lastMessageRun,
-        lastMemoryResult: this.lastMemoryResult,
         lastMessageResult: this.lastMessageResult,
-        totalMemoryRuns: this.totalMemoryRuns,
         totalMessageRuns: this.totalMessageRuns,
-        cumulativeMessagesIndexed: this.cumulativeMessagesIndexed,
-        cumulativeConversationsIndexed: this.cumulativeConversationsIndexed,
-        consolidation: {
-          enabled: this.consolidationEnabled,
-          scheduledHour: this.consolidationHour,
-          lastRun: this.lastConsolidationRun,
-          nextRun: this.nextConsolidationRun,
-          lastResult: this.lastConsolidationResult,
-          totalRuns: this.totalConsolidationRuns
-        }
+        // TRDD-7123d51a — so the Diagnostics panel can show drift counts
+        // without loading the agent into memory.
+        configTracker: this.configTrackerInterval > 0 ? {
+          intervalMs: this.configTrackerInterval,
+          lastScanAt: this.configLastScanAt,
+          driftCountSinceStart: this.configDriftCountSinceStart,
+          lastDriftAt: this.configLastDriftAt,
+          lastDriftPaths: this.configLastDriftPaths,
+        } : null,
       }
 
       fs.writeFileSync(statusPath, JSON.stringify(status, null, 2))
@@ -793,8 +730,8 @@ export type { SubconsciousStatus }
 export class Agent {
   private agentId: string
   private config: AgentConfig
-  private database: AgentDatabase | null = null
   private subconscious: AgentSubconscious | null = null
+  private cerebellum: Cerebellum | null = null
   private initialized = false
 
   constructor(config: AgentConfig) {
@@ -803,7 +740,7 @@ export class Agent {
   }
 
   /**
-   * Initialize the agent (database + subconscious)
+   * Initialize the agent (database + cerebellum with subsystems)
    */
   async initialize(subconsciousConfig?: SubconsciousConfig): Promise<void> {
     if (this.initialized) {
@@ -813,58 +750,58 @@ export class Agent {
 
     console.log(`[Agent ${this.agentId.substring(0, 8)}] Initializing...`)
 
-    // Initialize database (agent's memory)
-    this.database = new AgentDatabase({
-      agentId: this.agentId,
-      workingDirectory: this.config.workingDirectory
-    })
-    await this.database.initialize()
+    // Create cerebellum (orchestrates subsystems)
+    this.cerebellum = new Cerebellum(this.agentId)
 
-    // Start subconscious (background awareness)
-    this.subconscious = new AgentSubconscious(this.agentId, this, subconsciousConfig)
-    this.subconscious.start()
+    // Register memory subsystem (wraps existing AgentSubconscious unchanged)
+    const agent = this
+    const subconsciousSubsystem = new SubconsciousSubsystem(
+      () => new AgentSubconscious(this.agentId, agent, subconsciousConfig)
+    )
+    this.cerebellum.registerSubsystem(subconsciousSubsystem)
+
+    // Register voice subsystem (LLM-powered speech summarization)
+    this.cerebellum.registerSubsystem(new VoiceSubsystem())
+
+    // Start all subsystems
+    this.cerebellum.start()
+
+    // Backward compat: expose subconscious from subconscious subsystem
+    this.subconscious = subconsciousSubsystem.getSubconscious()
 
     this.initialized = true
     console.log(`[Agent ${this.agentId.substring(0, 8)}] ✓ Initialized`)
   }
 
   /**
-   * Shutdown the agent (stop subconscious, close database)
+   * Shutdown the agent (stop cerebellum + subsystems, close database)
    */
   async shutdown(): Promise<void> {
     console.log(`[Agent ${this.agentId.substring(0, 8)}] Shutting down...`)
 
-    // Stop subconscious
-    if (this.subconscious) {
-      this.subconscious.stop()
-      this.subconscious = null
+    // Stop cerebellum (stops all subsystems including memory/voice)
+    if (this.cerebellum) {
+      this.cerebellum.stop()
+      this.cerebellum = null
     }
-
-    // Close database
-    if (this.database) {
-      await this.database.close()
-      this.database = null
-    }
+    this.subconscious = null
 
     this.initialized = false
     console.log(`[Agent ${this.agentId.substring(0, 8)}] ✓ Shutdown complete`)
   }
 
   /**
-   * Get the agent's database
-   */
-  async getDatabase(): Promise<AgentDatabase> {
-    if (!this.database) {
-      throw new Error(`Agent ${this.agentId} not initialized`)
-    }
-    return this.database
-  }
-
-  /**
-   * Get the agent's subconscious
+   * Get the agent's subconscious (backward compat)
    */
   getSubconscious(): AgentSubconscious | null {
     return this.subconscious
+  }
+
+  /**
+   * Get the agent's cerebellum (subsystem coordinator)
+   */
+  getCerebellum(): Cerebellum | null {
+    return this.cerebellum
   }
 
   /**
@@ -881,8 +818,8 @@ export class Agent {
     return {
       agentId: this.agentId,
       initialized: this.initialized,
-      database: this.database ? 'connected' : 'disconnected',
-      subconscious: this.subconscious?.getStatus() || null
+      subconscious: this.subconscious?.getStatus() || null,
+      cerebellum: this.cerebellum?.getStatus() || null,
     }
   }
 
@@ -905,6 +842,8 @@ export class Agent {
  */
 class AgentRegistry {
   private agents = new Map<string, Agent>()
+  // Tracks agents currently being initialized to prevent duplicate concurrent initialization
+  private initializingAgents = new Map<string, Promise<Agent>>()
   private accessOrder: string[] = []  // Most recently accessed at the end
   private maxAgents: number
 
@@ -928,8 +867,24 @@ class AgentRegistry {
    * Evict least recently used agent if at capacity
    */
   private async evictIfNeeded(): Promise<void> {
+    // Track how many candidates we've skipped due to initialization — if we cycle
+    // through the entire accessOrder without finding an evictable agent, stop.
+    let skippedInitializing = 0
     while (this.agents.size >= this.maxAgents && this.accessOrder.length > 0) {
       const lruAgentId = this.accessOrder.shift()!
+      // Do not evict an agent that is currently being initialized — it hasn't been
+      // added to this.agents yet, so evicting would leave us over capacity anyway.
+      if (this.initializingAgents.has(lruAgentId)) {
+        // Put it back so the next iteration can try a different candidate.
+        this.accessOrder.push(lruAgentId)
+        skippedInitializing++
+        // If every entry is initializing we cannot evict; break to avoid an infinite loop.
+        if (skippedInitializing >= this.accessOrder.length) {
+          break
+        }
+        continue
+      }
+      skippedInitializing = 0
       const agent = this.agents.get(lruAgentId)
       if (agent) {
         console.log(`[AgentRegistry] Evicting LRU agent ${lruAgentId.substring(0, 8)} (${this.agents.size}/${this.maxAgents})`)
@@ -946,29 +901,47 @@ class AgentRegistry {
   /**
    * Get or create an agent
    */
-  async getAgent(agentId: string, config?: AgentConfig): Promise<Agent> {
-    let agent = this.agents.get(agentId)
-
-    if (agent) {
+  async getAgent(agentId: string, config?: AgentConfig, subconsciousConfig?: SubconsciousConfig): Promise<Agent> {
+    const existing = this.agents.get(agentId)
+    if (existing) {
       // Update access order (touch = mark as recently used)
       this.touch(agentId)
-      return agent
+      return existing
+    }
+
+    // If initialization is already in progress for this agentId, wait for it instead
+    // of creating a second Agent instance — this prevents the race condition where
+    // concurrent callers each run agent.initialize() for the same logical agent.
+    const inFlight = this.initializingAgents.get(agentId)
+    if (inFlight) {
+      return inFlight
     }
 
     // Evict LRU agent if at capacity before creating new one
     await this.evictIfNeeded()
 
-    // Create new agent
+    // Create new agent and register the initialization promise immediately so that
+    // any concurrent callers arriving while we await initialize() get the same promise.
     console.log(`[AgentRegistry] Loading agent ${agentId.substring(0, 8)} (${this.agents.size + 1}/${this.maxAgents})`)
-    agent = new Agent({
+    const agent = new Agent({
       agentId,
       workingDirectory: config?.workingDirectory
     })
-    await agent.initialize()
-    this.agents.set(agentId, agent)
-    this.touch(agentId)
 
-    return agent
+    // Pass subconsciousConfig so callers can control memory/consolidation intervals
+    const initPromise: Promise<Agent> = agent.initialize(subconsciousConfig).then(() => {
+      this.agents.set(agentId, agent)
+      this.touch(agentId)
+      this.initializingAgents.delete(agentId)
+      return agent
+    }).catch(err => {
+      // Clean up so a subsequent call can retry cleanly
+      this.initializingAgents.delete(agentId)
+      throw err
+    })
+
+    this.initializingAgents.set(agentId, initPromise)
+    return initPromise
   }
 
   /**
@@ -987,6 +960,8 @@ class AgentRegistry {
    * Shutdown an agent
    */
   async shutdownAgent(agentId: string): Promise<void> {
+    // Cancel any in-flight initialization (callers awaiting it will get the rejection)
+    this.initializingAgents.delete(agentId)
     const agent = this.agents.get(agentId)
     if (agent) {
       await agent.shutdown()
@@ -1003,6 +978,8 @@ class AgentRegistry {
    */
   async shutdownAll(): Promise<void> {
     console.log('[AgentRegistry] Shutting down all agents...')
+    // Cancel all pending initializations before shutting down initialized agents
+    this.initializingAgents.clear()
     const shutdownPromises = Array.from(this.agents.values()).map(agent => agent.shutdown())
     await Promise.all(shutdownPromises)
     this.agents.clear()
@@ -1041,21 +1018,15 @@ class AgentRegistry {
       .filter(s => s.status !== null)
 
     const runningCount = subconsciousStatuses.filter(s => s.status?.isRunning).length
-    const totalMemoryRuns = subconsciousStatuses.reduce((sum, s) => sum + (s.status?.totalMemoryRuns || 0), 0)
     const totalMessageRuns = subconsciousStatuses.reduce((sum, s) => sum + (s.status?.totalMessageRuns || 0), 0)
 
-    // Find the most recent runs across all agents
-    let lastMemoryRun: number | null = null
+    // Find the most recent message run across all agents
     let lastMessageRun: number | null = null
-    let lastMemoryResult: SubconsciousStatus['lastMemoryResult'] = null
     let lastMessageResult: SubconsciousStatus['lastMessageResult'] = null
 
     for (const s of subconsciousStatuses) {
-      if (s.status?.lastMemoryRun && (!lastMemoryRun || s.status.lastMemoryRun > lastMemoryRun)) {
-        lastMemoryRun = s.status.lastMemoryRun
-        lastMemoryResult = s.status.lastMemoryResult
-      }
-      if (s.status?.lastMessageRun && (!lastMessageRun || s.status.lastMessageRun > lastMessageRun)) {
+      // Use !== null instead of truthiness so a zero timestamp (edge case) is not skipped
+      if (s.status?.lastMessageRun !== null && s.status?.lastMessageRun !== undefined && (lastMessageRun === null || s.status.lastMessageRun > lastMessageRun)) {
         lastMessageRun = s.status.lastMessageRun
         lastMessageResult = s.status.lastMessageResult
       }
@@ -1064,11 +1035,8 @@ class AgentRegistry {
     return {
       activeAgents: this.agents.size,
       runningSubconscious: runningCount,
-      totalMemoryRuns,
       totalMessageRuns,
-      lastMemoryRun,
       lastMessageRun,
-      lastMemoryResult,
       lastMessageResult,
       agents: subconsciousStatuses
     }

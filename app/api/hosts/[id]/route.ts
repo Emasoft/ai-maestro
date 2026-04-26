@@ -1,8 +1,11 @@
-import { NextResponse } from 'next/server'
-import { updateHost, deleteHost } from '@/lib/hosts-config'
-import type { Host } from '@/types/host'
+import { NextRequest, NextResponse } from 'next/server'
+import { updateExistingHost, deleteExistingHost } from '@/services/hosts-service'
+import { enforceSystemOwner } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
+
+/** NT-040: Hostname format validation for path params (alphanumeric start/end, dots/hyphens/underscores, 1-253 chars) */
+const HOSTNAME_RE = /^[a-zA-Z0-9]([a-zA-Z0-9._-]{0,251}[a-zA-Z0-9])?$/
 
 /**
  * PUT /api/hosts/[id]
@@ -10,32 +13,30 @@ export const dynamic = 'force-dynamic'
  * Update an existing host configuration.
  */
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
-    const host: Partial<Host> = await request.json()
-
-    // Validate URL if provided
-    if (host.url) {
-      try {
-        new URL(host.url)
-      } catch {
-        return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 })
-      }
+    if (!HOSTNAME_RE.test(id)) {
+      return NextResponse.json({ error: 'Invalid host id format' }, { status: 400 })
     }
 
-    // Update host
-    const result = updateHost(id, host)
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: result.error?.includes('not found') ? 404 : 400 })
+    let hostData
+    try { hostData = await request.json() } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    return NextResponse.json({ success: true, host: result.host })
-  } catch (error) {
-    console.error(`[Hosts API] Failed to update host:`, error)
-    return NextResponse.json({ error: 'Failed to update host' }, { status: 500 })
+    const result = await updateExistingHost(id, hostData)
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data, { status: result.status })
+  } catch (err) {
+    return NextResponse.json({ error: `Internal server error: ${(err as Error).message}` }, { status: 500 })
   }
 }
 
@@ -45,21 +46,24 @@ export async function PUT(
  * Delete a host from the configuration.
  */
 export async function DELETE(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
-
-    // Delete host
-    const result = deleteHost(id)
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: result.error?.includes('not found') ? 404 : 400 })
+    if (!HOSTNAME_RE.test(id)) {
+      return NextResponse.json({ error: 'Invalid host id format' }, { status: 400 })
     }
 
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error(`[Hosts API] Failed to delete host:`, error)
-    return NextResponse.json({ error: 'Failed to delete host' }, { status: 500 })
+    const result = await deleteExistingHost(id)
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data, { status: result.status })
+  } catch (err) {
+    return NextResponse.json({ error: `Internal server error: ${(err as Error).message}` }, { status: 500 })
   }
 }

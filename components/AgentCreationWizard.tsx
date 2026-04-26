@@ -1,0 +1,1534 @@
+'use client'
+
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { X, ArrowLeft, ChevronRight, Check, Lock, FolderOpen } from 'lucide-react'
+import Image from 'next/image'
+import CreateAgentAnimation, { getPreviewAvatarUrl } from './CreateAgentAnimation'
+import type { Team } from '@/types/team'
+import type { AgentRole } from '@/types/agent'
+import type { RolePlugin } from '@/services/role-plugin-service'
+// Plugin compatibility is resolved dynamically via /api/agents/role-plugins
+
+// --- Types ---
+
+type WizardStep = 'client' | 'avatar' | 'team' | 'title' | 'github-repo' | 'folder' | 'role-plugin' | 'summary' | 'creating' | 'done'
+
+interface ChatMessage {
+  id: string
+  role: 'robot' | 'user'
+  text: string
+  step: WizardStep
+  widget?: 'client-picker' | 'avatar-picker' | 'team-picker' | 'title-picker' | 'github-repo-picker' | 'folder-picker' | 'role-plugin-picker' | 'summary'
+  widgetData?: Record<string, unknown>
+}
+
+// --- Constants ---
+
+// Titles available when an agent is assigned to a team
+const TEAM_TITLES: Array<{ value: AgentRole; label: string; description: string }> = [
+  { value: 'member', label: 'MEMBER', description: 'Default team member' },
+  { value: 'chief-of-staff', label: 'CHIEF-OF-STAFF', description: 'Coordinates the team on behalf of the MANAGER' },
+  { value: 'architect', label: 'ARCHITECT', description: 'Designs technical solutions' },
+  { value: 'orchestrator', label: 'ORCHESTRATOR', description: 'Manages tasks and kanban' },
+  { value: 'integrator', label: 'INTEGRATOR', description: 'Handles integrations and APIs' },
+]
+
+// Titles available when an agent has no team (standalone)
+const STANDALONE_TITLES: Array<{ value: AgentRole; label: string; description: string }> = [
+  { value: 'autonomous', label: 'AUTONOMOUS', description: 'Independent agent, no team assigned' },
+  { value: 'manager', label: 'MANAGER', description: 'Oversees the entire multi-agent system (singleton)' },
+  { value: 'maintainer', label: 'MAINTAINER', description: 'Polls a single GitHub repo, triages issues, fixes autonomously' },
+]
+
+// Title colors matching TitleBadge conventions
+const TITLE_COLORS: Record<AgentRole, string> = {
+  manager: 'border-red-500/60 bg-red-500/10 text-red-400',
+  'chief-of-staff': 'border-yellow-500/60 bg-yellow-500/10 text-yellow-400',
+  architect: 'border-purple-500/60 bg-purple-500/10 text-purple-400',
+  orchestrator: 'border-blue-500/60 bg-blue-500/10 text-blue-400',
+  integrator: 'border-cyan-500/60 bg-cyan-500/10 text-cyan-400',
+  member: 'border-gray-500/60 bg-gray-500/10 text-gray-400',
+  autonomous: 'border-gray-500/60 bg-gray-500/10 text-gray-400',
+  maintainer: 'border-emerald-500/60 bg-emerald-500/10 text-emerald-400',
+}
+
+// Plugin compatibility is now determined dynamically by scanning .agent.toml compatible-titles
+// and compatible-clients fields via the /api/agents/role-plugins API. The wizard fetches
+// compatible plugins at runtime and skips the picker if there's only 0-1 choice.
+
+// Avatar category helpers
+const AVATAR_COUNTS = { men: 100, women: 100, robots: 55 }
+type AvatarCategory = 'men' | 'women' | 'robots'
+
+function getAvatarUrl(category: AvatarCategory, index: number): string {
+  return `/avatars/${category}_${index.toString().padStart(2, '0')}.jpg`
+}
+
+// --- Step order (visible navigation steps only) ---
+
+// Step order — role-plugin step only shown if client supports plugins
+// Step order varies by: plugin support (client) AND title (AUTONOMOUS gets folder step)
+const STEP_ORDER_AUTONOMOUS_PLUGINS: WizardStep[] = ['client', 'avatar', 'team', 'title', 'folder', 'role-plugin', 'summary']
+const STEP_ORDER_AUTONOMOUS_NO_PLUGINS: WizardStep[] = ['client', 'avatar', 'team', 'title', 'folder', 'summary']
+const STEP_ORDER_TEAM_PLUGINS: WizardStep[] = ['client', 'avatar', 'team', 'title', 'role-plugin', 'summary']
+const STEP_ORDER_TEAM_NO_PLUGINS: WizardStep[] = ['client', 'avatar', 'team', 'title', 'summary']
+// MAINTAINER step order — no folder step (CreateAgent enforces ~/agents/<name>/),
+// no role-plugin step (MAINTAINER title binds to ai-maestro-maintainer-agent automatically).
+// The extra 'github-repo' step captures the required R19.2 githubRepo attribute.
+const STEP_ORDER_MAINTAINER: WizardStep[] = ['client', 'avatar', 'team', 'title', 'github-repo', 'summary']
+
+let msgCounter = 0
+function makeMsg(
+  role: 'robot' | 'user',
+  text: string,
+  step: WizardStep,
+  widget?: ChatMessage['widget'],
+  widgetData?: Record<string, unknown>
+): ChatMessage {
+  return { id: `msg-${++msgCounter}-${Math.random().toString(36).slice(2, 6)}`, role, text, step, widget, widgetData }
+}
+
+function robotQuestion(step: WizardStep): ChatMessage {
+  switch (step) {
+    case 'client':
+      return makeMsg('robot', 'What AI client will this agent use?', step, 'client-picker')
+    case 'avatar':
+      return makeMsg('robot', "Let's start! Pick an avatar and give this agent a persona name.", step, 'avatar-picker')
+    case 'team':
+      return makeMsg('robot', 'Should this agent belong to a team?', step, 'team-picker')
+    case 'title':
+      return makeMsg('robot', 'What governance title should this agent hold?', step, 'title-picker')
+    case 'github-repo':
+      return makeMsg('robot', 'Which GitHub repository should this MAINTAINER watch? Enter in owner/repo format.', step, 'github-repo-picker')
+    case 'folder':
+      return makeMsg('robot', 'Where should this agent work? Choose a project folder or let me create one.', step, 'folder-picker')
+    case 'role-plugin':
+      return makeMsg('robot', "Choose a role plugin to define this agent's specialization.", step, 'role-plugin-picker')
+    case 'summary':
+      return makeMsg('robot', "Here's your new agent — ready to bring it to life?", step, 'summary')
+    default:
+      return makeMsg('robot', '', step)
+  }
+}
+
+// --- Props ---
+
+interface AgentCreationWizardProps {
+  onClose: () => void
+  /**
+   * Proposal 31 (2026-04-20) — DATA-LOSS near-miss fix.
+   * The wizard MUST forward the newly-created agent id so the parent can
+   * switch activeAgentId + the profile panel to the new agent. Without this,
+   * the pre-wizard agent stays "active" and a subsequent Delete click
+   * destroys the wrong agent (SCEN-005 near-miss on a real MANAGER).
+   */
+  onComplete: (newAgentId: string | null) => void
+}
+
+// --- Component ---
+
+export default function AgentCreationWizard({ onClose, onComplete }: AgentCreationWizardProps) {
+  const [robotAvatarIndex] = useState(() => Math.floor(Math.random() * 55))
+  const robotAvatarUrl = `/avatars/robots_${robotAvatarIndex.toString().padStart(2, '0')}.jpg`
+
+  const chatEndRef = useRef<HTMLDivElement>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [step, setStep] = useState<WizardStep>('client')
+
+  // Wizard state
+  const [selectedClient, setSelectedClient] = useState<string>('claude')  // AI client program
+  const [selectedAvatar, setSelectedAvatar] = useState<string>('')
+  const [personaName, setPersonaName] = useState('')
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)  // null = no team
+  const [selectedTitle, setSelectedTitle] = useState<AgentRole>('autonomous')
+  const [selectedPlugin, setSelectedPlugin] = useState<RolePlugin | null>(null)
+  const [selectedFolder, setSelectedFolder] = useState<string>('')  // empty = auto ~/agents/<name>/
+  const [folderInput, setFolderInput] = useState('')  // text input for custom folder path
+  const [githubRepo, setGithubRepo] = useState<string>('')  // R19.2: required when title === 'maintainer'
+
+  // Dynamic step order: plugin support (client) + non-team agents (AUTONOMOUS/MANAGER/MAINTAINER) get their own flows
+  const clientSupportsPlugins = selectedClient === 'claude' || selectedClient === 'codex'
+  const isMaintainer = !selectedTeamId && selectedTitle === 'maintainer'
+  const isAutonomous = !selectedTeamId && (selectedTitle === 'autonomous' || selectedTitle === 'manager' || selectedTitle === 'maintainer')
+  const STEP_ORDER = isMaintainer
+    ? STEP_ORDER_MAINTAINER
+    : isAutonomous
+      ? (clientSupportsPlugins ? STEP_ORDER_AUTONOMOUS_PLUGINS : STEP_ORDER_AUTONOMOUS_NO_PLUGINS)
+      : (clientSupportsPlugins ? STEP_ORDER_TEAM_PLUGINS : STEP_ORDER_TEAM_NO_PLUGINS)
+
+  // Teams & plugins data
+  const [teams, setTeams] = useState<Team[]>([])
+  const [teamsLoading, setTeamsLoading] = useState(false)
+  const [plugins, setPlugins] = useState<RolePlugin[]>([])
+  const [pluginsLoading, setPluginsLoading] = useState(false)
+
+  // Creation animation state
+  const [isCreating, setIsCreating] = useState(false)
+  const [animationPhase, setAnimationPhase] = useState<'preparing' | 'creating' | 'ready' | 'error'>('preparing')
+  const [animationProgress, setAnimationProgress] = useState(0)
+  const [creationSuccess, setCreationSuccess] = useState(false)
+  // Proposal 31 (2026-04-20) — DATA-LOSS fix. Capture the created agent id
+  // from the POST /api/agents response so we can hand it to the parent on
+  // "Let's Go!" and prevent a stale profile-panel selection.
+  const [createdAgentId, setCreatedAgentId] = useState<string | null>(null)
+  const [showLetsGo, setShowLetsGo] = useState(false)
+  const [creationError, setCreationError] = useState('')
+
+  // Input state for avatar step
+  const [nameInput, setNameInput] = useState('')
+  const [nameError, setNameError] = useState('')
+  const [activeAvatarCategory, setActiveAvatarCategory] = useState<AvatarCategory>('men')
+  const [avatarPage, setAvatarPage] = useState(0)
+
+  // Only the latest step gets an interactive widget
+  const [activeWidgetStep, setActiveWidgetStep] = useState<WizardStep | null>(null)
+
+  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current)
+    }
+  }, [])
+
+  // Initialize first question on mount
+  const [initialized, setInitialized] = useState(false)
+  useEffect(() => {
+    if (initialized) return
+    setInitialized(true)
+    setTimeout(() => {
+      setMessages([
+        makeMsg('robot', "Hey! I'm here to help you set up a new agent.", 'client'),
+        robotQuestion('client'),
+      ])
+      setActiveWidgetStep('client')
+    }, 200)
+  }, [initialized])
+
+  // Fetch teams when team step becomes active
+  useEffect(() => {
+    if (step !== 'team') return
+    setTeamsLoading(true)
+    fetch('/api/teams')
+      .then(r => r.ok ? r.json() : { teams: [] })
+      .then(data => setTeams(Array.isArray(data.teams) ? data.teams : []))
+      .catch(() => setTeams([]))
+      .finally(() => setTeamsLoading(false))
+  }, [step])
+
+  // Fetch plugins when role-plugin step becomes active (plugins may already be set by checkPluginChoices)
+  useEffect(() => {
+    if (step !== 'role-plugin') return
+    if (plugins.length > 0) return  // Already loaded by checkPluginChoices
+    setPluginsLoading(true)
+    fetch(`/api/agents/role-plugins?title=${encodeURIComponent(selectedTitle.toUpperCase())}&client=${encodeURIComponent(selectedClient)}`)
+      .then(r => r.ok ? r.json() : { plugins: [] })
+      .then(data => setPlugins(Array.isArray(data.plugins) ? data.plugins : []))
+      .catch(() => setPlugins([]))
+      .finally(() => setPluginsLoading(false))
+  }, [step, selectedTitle, selectedClient])
+
+  // Auto-scroll on new messages
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [messages, showLetsGo, isCreating])
+
+  // Advance to next step with user answer bubble + delayed robot question
+  const advance = useCallback((userText: string, nextStep: WizardStep) => {
+    const userMsg = makeMsg('user', userText, step)
+    setMessages(prev => [...prev, userMsg])
+    setActiveWidgetStep(null)
+
+    if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current)
+    transitionTimerRef.current = setTimeout(() => {
+      transitionTimerRef.current = null
+      setStep(nextStep)
+      setActiveWidgetStep(nextStep)
+      setMessages(prev => [...prev, robotQuestion(nextStep)])
+    }, 400)
+  }, [step])
+
+  // Go back one step
+  const goBack = useCallback(() => {
+    if (transitionTimerRef.current) {
+      clearTimeout(transitionTimerRef.current)
+      transitionTimerRef.current = null
+    }
+
+    const idx = STEP_ORDER.indexOf(step)
+    if (idx <= 0) return
+
+    const prevStep = STEP_ORDER[idx - 1]
+
+    // Remove current step messages + previous step's user answer
+    setMessages(msgs => msgs.filter(m => m.step !== step && !(m.step === prevStep && m.role === 'user')))
+    setStep(prevStep)
+    setActiveWidgetStep(prevStep)
+  }, [step, STEP_ORDER])
+
+  // --- Handlers ---
+
+  const handleAvatarSubmit = useCallback(() => {
+    const trimmed = nameInput.trim()
+    if (!trimmed) return
+    if (!/^[a-zA-Z0-9_\-\s]+$/.test(trimmed)) {
+      setNameError('Only letters, numbers, spaces, dashes, and underscores')
+      return
+    }
+    const avatar = selectedAvatar || getPreviewAvatarUrl(trimmed)
+    setPersonaName(trimmed)
+    setSelectedAvatar(avatar)
+    setNameError('')
+    advance(trimmed, 'team')
+  }, [nameInput, selectedAvatar, advance])
+
+  const handleTeamSelect = useCallback((teamId: string | null) => {
+    setSelectedTeamId(teamId)
+    // Set default title based on team context
+    const defaultTitle: AgentRole = teamId ? 'member' : 'autonomous'
+    setSelectedTitle(defaultTitle)
+    const label = teamId
+      ? (teams.find(t => t.id === teamId)?.name ?? teamId)
+      : 'No team (Autonomous)'
+    advance(label, 'title')
+  }, [teams, advance])
+
+  // Fetch compatible plugins for a title+client and pre-load them.
+  // Auto-assigns plugin when there's exactly 1 choice (locked title).
+  // Always returns 'show-step' when client supports plugins so the role-plugin step
+  // is never skipped (consistent step numbering). Returns 'skip' only when client
+  // has no plugin support at all.
+  const checkPluginChoices = useCallback(async (title: AgentRole, client: string): Promise<'show-step' | 'skip'> => {
+    if (client !== 'claude' && client !== 'codex') {
+      // No plugin support → skip
+      setSelectedPlugin(null)
+      return 'skip'
+    }
+    try {
+      const res = await fetch(`/api/agents/role-plugins?title=${encodeURIComponent(title.toUpperCase())}&client=${encodeURIComponent(client)}`)
+      if (!res.ok) { setSelectedPlugin(null); setPlugins([]); return 'show-step' }
+      const data = await res.json()
+      const compatiblePlugins: RolePlugin[] = Array.isArray(data.plugins) ? data.plugins : []
+
+      // For AUTONOMOUS: "No plugin" is also a valid choice, so count = compatiblePlugins.length + 1
+      // For team titles: plugin is required, so count = compatiblePlugins.length
+      const isAuto = title === 'autonomous'
+      const choiceCount = isAuto ? compatiblePlugins.length + 1 : compatiblePlugins.length
+
+      if (choiceCount <= 1) {
+        // 0 or 1 choice → auto-assign (the step will show as read-only)
+        setSelectedPlugin(compatiblePlugins.length === 1 ? compatiblePlugins[0] : null)
+      }
+
+      setPlugins(compatiblePlugins)
+      return 'show-step'
+    } catch {
+      setSelectedPlugin(null)
+      setPlugins([])
+      return 'show-step'
+    }
+  }, [])
+
+  const handleTitleSelect = useCallback(async (title: AgentRole) => {
+    setSelectedTitle(title)
+    const isFolderTitle = title === 'autonomous' || title === 'manager'
+
+    if (title === 'maintainer') {
+      // MAINTAINER: R19.2 requires githubRepo → go straight to the github-repo step.
+      // The title binds the role-plugin automatically and CreateAgent enforces ~/agents/<name>/.
+      advance(title.toUpperCase(), 'github-repo')
+    } else if (isFolderTitle) {
+      // AUTONOMOUS or MANAGER: go to folder selection step first
+      advance(title.toUpperCase(), 'folder')
+    } else {
+      // Team agent: skip folder (auto ~/agents/<name>/)
+      // Pre-load plugins; always show role-plugin step when client supports plugins
+      const pluginDecision = await checkPluginChoices(title, selectedClient)
+      if (pluginDecision === 'show-step') {
+        advance(title.toUpperCase(), 'role-plugin')
+      } else {
+        advance(title.toUpperCase(), 'summary')
+      }
+    }
+  }, [advance, selectedClient, checkPluginChoices])
+
+  // MAINTAINER: advance from github-repo step to summary, capturing the repo
+  const handleGithubRepoSelect = useCallback((repo: string) => {
+    setGithubRepo(repo)
+    advance(repo, 'summary')
+  }, [advance])
+
+  const handleFolderSelect = useCallback(async (folder: string) => {
+    setSelectedFolder(folder)
+    const agentName = personaName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '')
+    const label = folder || `~/agents/${agentName}/`
+
+    // Pre-load plugins; always show role-plugin step when client supports plugins
+    const pluginDecision = await checkPluginChoices(selectedTitle, selectedClient)
+    if (pluginDecision === 'show-step') {
+      advance(label, 'role-plugin')
+    } else {
+      advance(label, 'summary')
+    }
+  }, [advance, personaName, selectedClient, selectedTitle, checkPluginChoices])
+
+  const handlePluginSelect = useCallback((plugin: RolePlugin | null) => {
+    setSelectedPlugin(plugin)
+    const label = plugin ? plugin.name : 'Default (Programmer)'
+    advance(label, 'summary')
+  }, [advance])
+
+  // --- Create agent ---
+  // Single API call to CreateAgent AIO — handles registration, folder creation,
+  // team assignment, title, plugin install, and tmux session in one atomic operation.
+  const handleCreate = useCallback(async () => {
+    setIsCreating(true)
+    setStep('creating')
+    setMessages(prev => [...prev, makeMsg('user', "Let's do it!", 'summary')])
+
+    // Derive slug-style internal agent name from persona name
+    const agentName = personaName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '')
+    const avatar = selectedAvatar || getPreviewAvatarUrl(personaName)
+    // Plugin name comes from selectedPlugin (set by picker or auto-assigned by checkPluginChoices)
+    const pluginName = selectedPlugin?.name
+
+    try {
+      // Single call to CreateAgent AIO — replaces the old 4-step creation
+      // Working directory: CreateAgent enforces ~/agents/<name>/ for non-AUTONOMOUS agents.
+      // For AUTONOMOUS agents, workingDirectory is only sent if user chose an existing folder.
+      const response = await fetch('/api/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: agentName,
+          label: personaName,
+          avatar,
+          client: selectedClient,
+          governanceTitle: selectedTitle || 'autonomous',
+          teamId: selectedTeamId || undefined,
+          pluginName: pluginName || undefined,
+          createSession: true,
+          // Only send workingDirectory if user chose a specific folder (AUTONOMOUS only)
+          workingDirectory: selectedFolder || undefined,
+          // allowExternalFolder: true ONLY when user explicitly browsed for an existing folder
+          allowExternalFolder: selectedFolder ? true : undefined,
+          // R19.2: MAINTAINER requires githubRepo in "owner/repo" format (Gate 9a)
+          githubRepo: selectedTitle === 'maintainer' ? githubRepo : undefined,
+        }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to create agent')
+      }
+
+      // Proposal 31: capture new agent id for DATA-LOSS-safe handoff on "Let's Go!"
+      const body = await response.json().catch(() => null) as { agent?: { id?: string } } | null
+      if (body?.agent?.id) setCreatedAgentId(body.agent.id)
+      setCreationSuccess(true)
+    } catch (err) {
+      setCreationError(err instanceof Error ? err.message : 'Failed to create agent')
+      setAnimationPhase('error')
+      // BUG-019 fix: Do NOT set isCreating=false here — the error display is inside the
+      // isCreating branch. The "Go Back" button in the error UI handles the reset.
+    }
+  }, [personaName, selectedAvatar, selectedTitle, selectedTeamId, selectedPlugin, selectedClient, selectedFolder, githubRepo])
+
+  // Animation timer sequence
+  // SF-061 fix: creationSuccess removed from deps to prevent cleanup/restart of
+  // animation timers mid-flight. The guard ensures we only run when actively creating
+  // and not yet finished. The "Let's Go" button is handled by the separate effect below.
+  useEffect(() => {
+    if (!isCreating || creationSuccess) return
+    setAnimationPhase('preparing')
+    setAnimationProgress(5)
+
+    const timers = [
+      setTimeout(() => setAnimationProgress(12), 500),
+      setTimeout(() => setAnimationProgress(20), 1000),
+      setTimeout(() => setAnimationProgress(28), 1800),
+      setTimeout(() => { setAnimationPhase('creating'); setAnimationProgress(35) }, 2500),
+      setTimeout(() => setAnimationProgress(45), 3200),
+      setTimeout(() => setAnimationProgress(55), 3900),
+      setTimeout(() => setAnimationProgress(65), 4600),
+      setTimeout(() => setAnimationProgress(78), 5300),
+      setTimeout(() => setAnimationProgress(90), 6000),
+      setTimeout(() => { setAnimationPhase('ready'); setAnimationProgress(100) }, 6500),
+    ]
+    return () => timers.forEach(clearTimeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCreating])
+
+  useEffect(() => {
+    if (creationSuccess && animationPhase === 'ready') {
+      const timer = setTimeout(() => setShowLetsGo(true), 1500)
+      return () => clearTimeout(timer)
+    }
+  }, [creationSuccess, animationPhase])
+
+  // --- Computed ---
+  const stepIndex = STEP_ORDER.indexOf(step)
+  const totalSteps = STEP_ORDER.length
+  const stepNumber = stepIndex >= 0 ? stepIndex + 1 : 1
+  const canGoBack = step !== 'creating' && step !== 'done' && STEP_ORDER.indexOf(step) > 0
+
+  // --- Render ---
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={isCreating ? undefined : onClose}>
+      <div
+        className="bg-gray-900 rounded-xl w-full max-w-3xl shadow-2xl border border-gray-700 overflow-hidden flex flex-col"
+        style={{ maxHeight: '85vh' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700/50">
+          <h3 className="text-base font-semibold text-gray-100">New Agent Setup</h3>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body: Left (robot) + Right (chat) */}
+        <div className="flex flex-1 min-h-0">
+          {/* Left panel - Robot avatar */}
+          <div className="hidden md:flex w-[45%] items-center justify-center bg-gray-950/60 p-6 relative overflow-hidden">
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-56 h-56 rounded-full bg-blue-500/10 blur-3xl" />
+            </div>
+            <div className="relative">
+              <motion.div
+                className="absolute -inset-3 rounded-full bg-gradient-to-br from-blue-500/30 via-purple-500/20 to-cyan-500/30 blur-md"
+                animate={{ opacity: [0.4, 0.7, 0.4], scale: [0.98, 1.02, 0.98] }}
+                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+              />
+              <Image
+                src={robotAvatarUrl}
+                alt="Robot assistant"
+                width={176}
+                height={176}
+                className="w-44 h-44 rounded-full object-cover ring-2 ring-blue-500/40 relative z-10"
+              />
+            </div>
+          </div>
+
+          {/* Right panel - Chat */}
+          <div className="flex-1 flex flex-col min-h-0 min-w-0">
+            {isCreating ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-6">
+                <div className="text-center mb-2">
+                  {/* P0-018-003: gate celebration on success. creationError (truthy) is
+                      the single source of failure truth — it's set atomically with
+                      setAnimationPhase('error') at line 419-420 and is immune to the
+                      animation timer race that can flip animationPhase back to 'ready'. */}
+                  <h3 className={`text-lg font-semibold ${creationError ? 'text-red-400' : 'text-gray-100'}`}>
+                    {creationError
+                      ? 'Could Not Create Agent'
+                      : animationPhase === 'ready'
+                        ? 'Your Agent is Ready!'
+                        : 'Creating Your Agent'}
+                  </h3>
+                  {animationPhase !== 'ready' && !creationError && <p className="text-sm text-gray-400">{personaName}</p>}
+                </div>
+                <CreateAgentAnimation
+                  // P0-018-003: when creationError is set, force the animation into
+                  // its 'error' phase so the celebratory ReadyAnimation (avatar +
+                  // confetti) can't render even if the background timer race still
+                  // flips animationPhase to 'ready' after the error handler fired.
+                  phase={creationError ? 'error' : animationPhase}
+                  agentName={personaName.toLowerCase().replace(/\s+/g, '-')}
+                  agentAlias={personaName}
+                  avatarUrl={selectedAvatar || getPreviewAvatarUrl(personaName)}
+                  progress={animationProgress}
+                  showNextSteps={showLetsGo}
+                  teamName={selectedTeamId ? (teams.find(t => t.id === selectedTeamId)?.name ?? selectedTeamId) : null}
+                />
+                {showLetsGo && (
+                  <div className="mt-6 flex justify-center">
+                    <button
+                      onClick={() => onComplete(createdAgentId)}
+                      className="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold rounded-xl shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all duration-300 transform hover:scale-105 flex items-center gap-2"
+                    >
+                      Let&apos;s Go! 🚀
+                    </button>
+                  </div>
+                )}
+                {creationError && (
+                  <div className="mt-4 text-center">
+                    <p className="text-red-400 text-sm mb-3">{creationError}</p>
+                    <button
+                      onClick={() => {
+                        setIsCreating(false)
+                        setCreationError('')
+                        setStep('summary')
+                        setActiveWidgetStep('summary')
+                      }}
+                      className="px-4 py-2 text-sm bg-gray-800 text-gray-200 rounded-lg hover:bg-gray-700 transition-colors"
+                    >
+                      Go Back
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                <AnimatePresence initial={false}>
+                  {messages.map((msg) => (
+                    <ChatBubble
+                      key={msg.id}
+                      message={msg}
+                      robotAvatarUrl={robotAvatarUrl}
+                      isActiveWidget={msg.role === 'robot' && msg.widget !== undefined && msg.step === activeWidgetStep}
+                      // Client step props
+                      selectedClient={selectedClient}
+                      onClientSelect={(clientId) => { setSelectedClient(clientId); advance(`${clientId}`, 'avatar') }}
+                      // Avatar step props
+                      nameInput={nameInput}
+                      nameError={nameError}
+                      selectedAvatar={selectedAvatar}
+                      activeAvatarCategory={activeAvatarCategory}
+                      avatarPage={avatarPage}
+                      onNameChange={(v) => { setNameInput(v); setNameError('') }}
+                      onAvatarSelect={setSelectedAvatar}
+                      onAvatarCategoryChange={setActiveAvatarCategory}
+                      onAvatarPageChange={setAvatarPage}
+                      onAvatarSubmit={handleAvatarSubmit}
+                      // Team step props
+                      teams={teams}
+                      teamsLoading={teamsLoading}
+                      onTeamSelect={handleTeamSelect}
+                      // Title step props
+                      selectedTeamId={selectedTeamId}
+                      onTitleSelect={handleTitleSelect}
+                      // Folder step props (AUTONOMOUS only)
+                      personaName={personaName}
+                      onFolderSelect={handleFolderSelect}
+                      folderInput={folderInput}
+                      setFolderInput={setFolderInput}
+                      // GitHub repo step props (MAINTAINER only — R19.2)
+                      githubRepo={githubRepo}
+                      onGithubRepoSelect={handleGithubRepoSelect}
+                      // Role-plugin step props
+                      plugins={plugins}
+                      pluginsLoading={pluginsLoading}
+                      selectedTitle={selectedTitle}
+                      onPluginSelect={handlePluginSelect}
+                      // Summary props
+                      state={{ personaName, selectedTeamId, selectedTitle, selectedPlugin, selectedAvatar, selectedFolder, githubRepo, teams }}
+                      onCreate={handleCreate}
+                    />
+                  ))}
+                </AnimatePresence>
+                <div ref={chatEndRef} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        {!isCreating && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-700/50">
+            <div>
+              {canGoBack && (
+                <button
+                  onClick={goBack}
+                  className="text-sm text-gray-400 hover:text-gray-200 transition-colors flex items-center gap-1"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  Back
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">
+                Step {stepNumber} of {totalSteps}
+              </span>
+              <div className="flex gap-1">
+                {Array.from({ length: totalSteps }, (_, i) => (
+                  <div
+                    key={i}
+                    className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                      i < stepNumber ? 'bg-blue-500' : 'bg-gray-700'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// --- Chat Bubble ---
+
+interface ChatBubbleProps {
+  message: ChatMessage
+  robotAvatarUrl: string
+  isActiveWidget: boolean
+  // Client step
+  selectedClient: string
+  onClientSelect: (clientId: string) => void
+  // Avatar step
+  nameInput: string
+  nameError: string
+  selectedAvatar: string
+  activeAvatarCategory: AvatarCategory
+  avatarPage: number
+  onNameChange: (v: string) => void
+  onAvatarSelect: (url: string) => void
+  onAvatarCategoryChange: (cat: AvatarCategory) => void
+  onAvatarPageChange: (page: number) => void
+  onAvatarSubmit: () => void
+  // Team step
+  teams: Team[]
+  teamsLoading: boolean
+  onTeamSelect: (teamId: string | null) => void
+  // Title step
+  selectedTeamId: string | null
+  onTitleSelect: (title: AgentRole) => void
+  // Folder step (AUTONOMOUS only)
+  personaName: string
+  onFolderSelect: (folder: string) => void
+  folderInput: string
+  setFolderInput: (val: string) => void
+  // GitHub repo step (MAINTAINER only — R19.2)
+  githubRepo: string
+  onGithubRepoSelect: (repo: string) => void
+  // Role-plugin step
+  plugins: RolePlugin[]
+  pluginsLoading: boolean
+  selectedTitle: AgentRole
+  onPluginSelect: (plugin: RolePlugin | null) => void
+  // Summary
+  state: {
+    personaName: string
+    selectedTeamId: string | null
+    selectedTitle: AgentRole
+    selectedPlugin: RolePlugin | null
+    selectedAvatar: string
+    selectedFolder: string
+    githubRepo: string
+    teams: Team[]
+  }
+  onCreate: () => void
+}
+
+function ChatBubble({
+  message,
+  robotAvatarUrl,
+  isActiveWidget,
+  selectedClient,
+  onClientSelect,
+  nameInput,
+  nameError,
+  selectedAvatar,
+  activeAvatarCategory,
+  avatarPage,
+  onNameChange,
+  onAvatarSelect,
+  onAvatarCategoryChange,
+  onAvatarPageChange,
+  onAvatarSubmit,
+  teams,
+  teamsLoading,
+  onTeamSelect,
+  selectedTeamId,
+  onTitleSelect,
+  personaName,
+  onFolderSelect,
+  folderInput,
+  setFolderInput,
+  githubRepo,
+  onGithubRepoSelect,
+  plugins,
+  pluginsLoading,
+  selectedTitle,
+  onPluginSelect,
+  state,
+  onCreate,
+}: ChatBubbleProps) {
+  const isRobot = message.role === 'robot'
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      className={`flex ${isRobot ? 'justify-start' : 'justify-end'}`}
+    >
+      {isRobot && (
+        <div className="flex-shrink-0 mr-2 mt-1">
+          <Image src={robotAvatarUrl} alt="" width={28} height={28} className="w-7 h-7 rounded-full object-cover ring-1 ring-gray-700" />
+        </div>
+      )}
+      <div className="max-w-[90%]">
+        <div
+          className={`rounded-xl px-3.5 py-2.5 text-sm ${
+            isRobot
+              ? 'bg-gray-800 text-gray-200 rounded-tl-sm'
+              : 'bg-blue-600 text-white rounded-tr-sm'
+          }`}
+        >
+          {message.text}
+        </div>
+
+        {/* Widget area — only rendered for the active robot message */}
+        {isRobot && message.widget && isActiveWidget && (
+          <div className="mt-2">
+            {message.widget === 'client-picker' && (
+              <div className="grid grid-cols-2 gap-2 max-w-md">
+                {[
+                  { id: 'claude', label: 'Claude Code', desc: 'Full plugin support', icon: '🟣' },
+                  { id: 'codex', label: 'Codex', desc: 'Plugin support', icon: '🟢' },
+                  { id: 'gemini', label: 'Gemini CLI', desc: 'No plugin support', icon: '🔵' },
+                  { id: 'opencode', label: 'OpenCode', desc: 'No plugin support', icon: '⚪' },
+                ].map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => onClientSelect(c.id)}
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all text-left ${
+                      selectedClient === c.id
+                        ? 'border-blue-500 bg-blue-500/10 text-blue-300'
+                        : 'border-gray-700 bg-gray-800/50 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
+                    }`}
+                  >
+                    <span className="text-lg">{c.icon}</span>
+                    <div>
+                      <div className="text-sm font-medium">{c.label}</div>
+                      <div className="text-[10px] text-gray-500">{c.desc}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {message.widget === 'avatar-picker' && (
+              <AvatarPickerWidget
+                nameInput={nameInput}
+                nameError={nameError}
+                selectedAvatar={selectedAvatar}
+                activeCategory={activeAvatarCategory}
+                page={avatarPage}
+                onNameChange={onNameChange}
+                onAvatarSelect={onAvatarSelect}
+                onCategoryChange={onAvatarCategoryChange}
+                onPageChange={onAvatarPageChange}
+                onSubmit={onAvatarSubmit}
+              />
+            )}
+
+            {message.widget === 'team-picker' && (
+              <TeamPickerWidget
+                teams={teams}
+                loading={teamsLoading}
+                onSelect={onTeamSelect}
+              />
+            )}
+
+            {message.widget === 'title-picker' && (
+              <TitlePickerWidget
+                selectedTeamId={selectedTeamId}
+                onSelect={onTitleSelect}
+              />
+            )}
+
+            {message.widget === 'github-repo-picker' && (
+              <GithubRepoPickerWidget
+                value={githubRepo}
+                onConfirm={onGithubRepoSelect}
+              />
+            )}
+
+            {message.widget === 'folder-picker' && (
+              <FolderPickerWidget
+                agentName={personaName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '')}
+                folderInput={folderInput}
+                setFolderInput={setFolderInput}
+                onSelect={onFolderSelect}
+              />
+            )}
+
+            {message.widget === 'role-plugin-picker' && (
+              <RolePluginPickerWidget
+                plugins={plugins}
+                loading={pluginsLoading}
+                selectedTitle={selectedTitle}
+                onSelect={onPluginSelect}
+              />
+            )}
+
+            {message.widget === 'summary' && (
+              <SummaryCard
+                state={state}
+                onCreate={onCreate}
+              />
+            )}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
+// --- Widgets ---
+
+// Step 1: Avatar + Persona Name
+function AvatarPickerWidget({
+  nameInput,
+  nameError,
+  selectedAvatar,
+  activeCategory,
+  page,
+  onNameChange,
+  onAvatarSelect,
+  onCategoryChange,
+  onPageChange,
+  onSubmit,
+}: {
+  nameInput: string
+  nameError: string
+  selectedAvatar: string
+  activeCategory: AvatarCategory
+  page: number
+  onNameChange: (v: string) => void
+  onAvatarSelect: (url: string) => void
+  onCategoryChange: (cat: AvatarCategory) => void
+  onPageChange: (p: number) => void
+  onSubmit: () => void
+}) {
+  const AVATARS_PER_PAGE = 12
+  const total = AVATAR_COUNTS[activeCategory]
+  const totalPages = Math.ceil(total / AVATARS_PER_PAGE)
+  const startIndex = page * AVATARS_PER_PAGE
+  const avatarIndices = Array.from(
+    { length: Math.min(AVATARS_PER_PAGE, total - startIndex) },
+    (_, i) => startIndex + i
+  )
+
+  const categories: Array<{ key: AvatarCategory; label: string }> = [
+    { key: 'men', label: 'Men' },
+    { key: 'women', label: 'Women' },
+    { key: 'robots', label: 'Robots' },
+  ]
+
+  return (
+    <div className="rounded-xl bg-gray-800/60 border border-gray-700 p-3 space-y-3">
+      {/* Persona name input */}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">Persona Name</label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={nameInput}
+            onChange={(e) => onNameChange(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') onSubmit() }}
+            placeholder="e.g. Alex-Bot"
+            autoFocus
+            className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <button
+            onClick={onSubmit}
+            disabled={!nameInput.trim()}
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+        {nameError && <p className="text-xs text-red-400 mt-1">{nameError}</p>}
+        {!nameError && (
+          <p className="text-xs text-gray-500 mt-1">Letters, numbers, spaces, dashes, and underscores</p>
+        )}
+      </div>
+
+      {/* Avatar grid */}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">
+          Avatar <span className="text-gray-600">(optional)</span>
+        </label>
+        <div className="flex gap-1 mb-2">
+          {categories.map(cat => (
+            <button
+              key={cat.key}
+              onClick={() => { onCategoryChange(cat.key); onPageChange(0) }}
+              className={`px-3 py-1 text-xs rounded-lg transition-colors ${
+                activeCategory === cat.key
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-6 gap-1.5">
+          {avatarIndices.map((idx) => {
+            const url = getAvatarUrl(activeCategory, idx)
+            const isSelected = selectedAvatar === url
+            return (
+              <div
+                key={url}
+                onClick={() => onAvatarSelect(isSelected ? '' : url)}
+                className={`relative cursor-pointer rounded-lg overflow-hidden ring-2 transition-all ${
+                  isSelected ? 'ring-blue-500 scale-105' : 'ring-transparent hover:ring-gray-500'
+                }`}
+              >
+                <Image
+                  src={url}
+                  alt=""
+                  width={48}
+                  height={48}
+                  className="w-full aspect-square object-cover"
+                />
+                {isSelected && (
+                  <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
+                    <Check className="w-3 h-3 text-white" />
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-2">
+            <button
+              onClick={() => onPageChange(Math.max(0, page - 1))}
+              disabled={page === 0}
+              className="text-xs text-gray-400 hover:text-gray-200 disabled:opacity-30 transition-colors"
+            >
+              ← Prev
+            </button>
+            <span className="text-xs text-gray-500">{page + 1} / {totalPages}</span>
+            <button
+              onClick={() => onPageChange(Math.min(totalPages - 1, page + 1))}
+              disabled={page === totalPages - 1}
+              className="text-xs text-gray-400 hover:text-gray-200 disabled:opacity-30 transition-colors"
+            >
+              Next →
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Step 2: Team picker
+function TeamPickerWidget({
+  teams,
+  loading,
+  onSelect,
+}: {
+  teams: Team[]
+  loading: boolean
+  onSelect: (teamId: string | null) => void
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 text-sm text-gray-400">
+        <div className="w-4 h-4 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+        Loading teams...
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {/* Autonomous / no-team option */}
+      <button
+        onClick={() => onSelect(null)}
+        className="w-full text-left px-3 py-2.5 rounded-lg bg-gray-800/80 border border-gray-600 hover:border-blue-500 hover:bg-gray-700 transition-all text-sm"
+      >
+        <div className="font-medium text-gray-200">No team (Autonomous)</div>
+        <div className="text-xs text-gray-500">Agent works independently, not assigned to any team</div>
+      </button>
+
+      {teams.map(team => (
+        <button
+          key={team.id}
+          onClick={() => onSelect(team.id)}
+          className="w-full text-left px-3 py-2.5 rounded-lg bg-gray-800/80 border border-gray-600 hover:border-blue-500 hover:bg-gray-700 transition-all text-sm"
+        >
+          <div className="font-medium text-gray-200">{team.name}</div>
+          {team.description && (
+            <div className="text-xs text-gray-500">{team.description}</div>
+          )}
+          <div className="text-xs text-gray-600 mt-0.5">
+            {team.agentIds.length} agent{team.agentIds.length !== 1 ? 's' : ''}
+          </div>
+        </button>
+      ))}
+
+      {teams.length === 0 && (
+        <p className="text-xs text-gray-500 px-1 pt-1">
+          No teams yet — you can create one from the teams panel after setting up this agent.
+        </p>
+      )}
+    </div>
+  )
+}
+
+// Step: GitHub repo input — shown only when MAINTAINER title is selected (R19.2)
+// Validates the "owner/repo" format client-side using the same regex Gate 9a uses.
+// Uniqueness (R19.3 — one MAINTAINER per repo per host) is enforced by the backend.
+function GithubRepoPickerWidget({
+  value,
+  onConfirm,
+}: {
+  value: string
+  onConfirm: (repo: string) => void
+}) {
+  // Same regex as services/element-management-service.ts Gate 9a
+  const REPO_REGEX = /^[\w.-]+\/[\w.-]+$/
+  const [input, setInput] = useState(value)
+  const trimmed = input.trim()
+  const isValid = REPO_REGEX.test(trimmed)
+  const showError = trimmed.length > 0 && !isValid
+
+  return (
+    <div className="space-y-2 w-full max-w-md">
+      <label className="block text-xs font-medium text-gray-300">
+        GitHub Repository
+      </label>
+      <input
+        type="text"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && isValid) onConfirm(trimmed)
+        }}
+        placeholder="Emasoft/my-project"
+        autoFocus
+        className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-100 font-mono text-sm focus:border-emerald-500 focus:outline-none"
+      />
+      {showError && (
+        <p className="text-xs text-red-400">
+          Invalid format. Must be &quot;owner/repo&quot; (e.g. &quot;Emasoft/my-project&quot;).
+        </p>
+      )}
+      <p className="text-xs text-gray-500">
+        One MAINTAINER per repository per host (R19.3). The agent will poll this repo for new issues and fix them autonomously.
+      </p>
+      <button
+        onClick={() => onConfirm(trimmed)}
+        disabled={!isValid}
+        className="w-full px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
+      >
+        <Check className="w-3.5 h-3.5" />
+        Confirm
+      </button>
+    </div>
+  )
+}
+
+// Step 3: Title picker — context-filtered by team assignment
+interface FolderEntry {
+  name: string
+  path: string
+  selectable: boolean
+  reason: string | null
+  agentName: string | null
+}
+
+function FolderPickerWidget({
+  agentName,
+  folderInput: _folderInput,
+  setFolderInput: _setFolderInput,
+  onSelect,
+}: {
+  agentName: string
+  folderInput: string
+  setFolderInput: (val: string) => void
+  onSelect: (folder: string) => void
+}) {
+  const autoFolder = `~/agents/${agentName}/`
+  const [mode, setMode] = useState<'auto' | 'custom'>('auto')
+  const [browsePath, setBrowsePath] = useState('~')
+  const [entries, setEntries] = useState<FolderEntry[]>([])
+  const [currentSelectable, setCurrentSelectable] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  // Fetch directory listing when browsePath changes
+  useEffect(() => {
+    if (mode !== 'custom') return
+    setLoading(true)
+    fetch(`/api/agents/folders?path=${encodeURIComponent(browsePath)}`)
+      .then(r => r.ok ? r.json() : { entries: [], selectable: false })
+      .then(data => {
+        setEntries(data.entries || [])
+        setCurrentSelectable(data.selectable ?? false)
+      })
+      .catch(() => { setEntries([]); setCurrentSelectable(false) })
+      .finally(() => setLoading(false))
+  }, [browsePath, mode])
+
+  const reasonLabel = (reason: string | null, agent: string | null): string => {
+    if (reason === 'system') return 'System folder'
+    if (reason === 'exact') return `Used by ${agent}`
+    if (reason === 'child') return `Inside ${agent}'s folder`
+    if (reason === 'parent') return `Contains ${agent}'s folder`
+    return ''
+  }
+
+  return (
+    <div className="space-y-2 w-full">
+      {/* Option 1: Auto-create */}
+      <button
+        onClick={() => { setMode('auto'); onSelect('') }}
+        className={`w-full text-left px-3 py-2.5 rounded-lg border transition-all duration-200 ${
+          mode === 'auto' ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-gray-700 hover:border-gray-600 bg-gray-800/50'
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <FolderOpen className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <div>
+            <div className="text-sm text-white font-medium">Auto-create agent folder</div>
+            <div className="text-xs text-gray-400 font-mono">{autoFolder}</div>
+          </div>
+        </div>
+      </button>
+
+      {/* Option 2: Browse existing folder */}
+      <button
+        onClick={() => setMode('custom')}
+        className={`w-full text-left px-3 py-2.5 rounded-lg border transition-all duration-200 ${
+          mode === 'custom' ? 'border-blue-500/50 bg-blue-500/10' : 'border-gray-700 hover:border-gray-600 bg-gray-800/50'
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <FolderOpen className="w-4 h-4 text-blue-400 flex-shrink-0" />
+          <div className="text-sm text-white font-medium">Browse existing project folder</div>
+        </div>
+      </button>
+
+      {/* Directory browser */}
+      {mode === 'custom' && (
+        <div className="mt-2 rounded-lg border border-gray-700 bg-gray-800/50 overflow-hidden">
+          {/* Current path + back button */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-700/50 bg-gray-900/50">
+            <button
+              onClick={() => {
+                const parent = browsePath.replace(/\/[^/]+\/?$/, '') || '/'
+                setBrowsePath(parent)
+              }}
+              disabled={browsePath === '/'}
+              className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </button>
+            <span className="text-xs text-gray-300 font-mono truncate flex-1">{browsePath}</span>
+            {currentSelectable && (
+              <button
+                onClick={() => onSelect(browsePath)}
+                className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors flex-shrink-0"
+              >
+                Select this folder
+              </button>
+            )}
+          </div>
+
+          {/* Folder list */}
+          <div className="max-h-48 overflow-y-auto">
+            {loading ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-500">Loading...</div>
+            ) : entries.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-500">No subdirectories</div>
+            ) : (
+              entries.map(entry => (
+                <div
+                  key={entry.path}
+                  className={`flex items-center gap-2 px-3 py-1.5 border-b border-gray-800/50 cursor-pointer transition-colors ${
+                    entry.selectable
+                      ? 'hover:bg-gray-700/50 text-gray-200'
+                      : 'text-gray-500'
+                  }`}
+                  onClick={() => setBrowsePath(entry.path)}
+                >
+                  <FolderOpen className={`w-3.5 h-3.5 flex-shrink-0 ${
+                    entry.selectable ? 'text-blue-400' : 'text-gray-600'
+                  }`} />
+                  <span className={`text-xs font-mono flex-1 truncate ${
+                    entry.selectable ? '' : 'line-through opacity-60'
+                  }`}>
+                    {entry.name}
+                  </span>
+                  {!entry.selectable && (
+                    <span className="text-[10px] text-red-400/70 flex-shrink-0">
+                      {reasonLabel(entry.reason, entry.agentName)}
+                    </span>
+                  )}
+                  {entry.selectable && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onSelect(entry.path) }}
+                      className="text-[10px] px-1.5 py-0.5 bg-blue-600/80 hover:bg-blue-600 text-white rounded flex-shrink-0"
+                    >
+                      Select
+                    </button>
+                  )}
+                  <ChevronRight className="w-3 h-3 text-gray-600 flex-shrink-0" />
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TitlePickerWidget({
+  selectedTeamId,
+  onSelect,
+}: {
+  selectedTeamId: string | null
+  onSelect: (title: AgentRole) => void
+}) {
+  const titles = selectedTeamId ? TEAM_TITLES : STANDALONE_TITLES
+
+  // Check MANAGER singleton: fetch current manager to disable option if taken
+  const [managerInfo, setManagerInfo] = useState<{ id: string; name: string } | null>(null)
+  useEffect(() => {
+    fetch('/api/governance')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.managerId) {
+          // Fetch manager agent name
+          fetch(`/api/agents/${encodeURIComponent(data.managerId)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(agentData => {
+              if (agentData?.agent) {
+                setManagerInfo({ id: data.managerId, name: agentData.agent.label || agentData.agent.name || data.managerId })
+              }
+            })
+            .catch(() => {})
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  return (
+    <div className="space-y-1.5">
+      {titles.map((t) => {
+        const isManagerTaken = t.value === 'manager' && managerInfo !== null
+        return (
+          <button
+            key={t.value}
+            onClick={() => !isManagerTaken && onSelect(t.value)}
+            disabled={isManagerTaken}
+            className={`w-full text-left px-3 py-2.5 rounded-lg border transition-all text-sm ${
+              isManagerTaken
+                ? 'bg-gray-800/40 border-gray-700 opacity-50 cursor-not-allowed'
+                : 'bg-gray-800/80 border-gray-600 hover:border-blue-500 hover:bg-gray-700'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-bold tracking-wider px-1.5 py-0.5 rounded border ${TITLE_COLORS[t.value]}`}>
+                {t.label}
+              </span>
+              {t.value !== 'autonomous' && (
+                <span className="text-xs text-gray-500 flex items-center gap-1">
+                  <Lock className="w-3 h-3" />
+                  auto-assigns plugin
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-gray-500 mt-0.5">
+              {isManagerTaken
+                ? `Only one Manager allowed. "${managerInfo.name}" already holds this title.`
+                : t.description}
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Step 6: Role plugin picker — shown for all titles when client supports plugins.
+// For locked titles (0-1 compatible plugin), shows a read-only card with a confirm button
+// so the step count stays consistent (no gaps in step numbering).
+function RolePluginPickerWidget({
+  plugins,
+  loading,
+  selectedTitle,
+  onSelect,
+}: {
+  plugins: RolePlugin[]
+  loading: boolean
+  selectedTitle: AgentRole
+  onSelect: (plugin: RolePlugin | null) => void
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 text-sm text-gray-400">
+        <div className="w-4 h-4 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+        Loading plugins...
+      </div>
+    )
+  }
+
+  // R9.13: role-plugin is mandatory for every title (including AUTONOMOUS),
+  // so there is no "+1 no-plugin" bonus slot. isLocked fires whenever there
+  // is exactly one compatible plugin — the picker auto-selects it and shows
+  // a read-only confirm card.
+  const isLocked = plugins.length === 1
+
+  // Locked: show read-only card with the auto-assigned plugin. Zero plugins
+  // is a backend error and shouldn't reach this component, but we render a
+  // defensive message so the user sees what's wrong.
+  if (isLocked || plugins.length === 0) {
+    const autoPlugin = plugins.length === 1 ? plugins[0] : null
+    return (
+      <div className="space-y-2">
+        <div className="w-full text-left px-3 py-2.5 rounded-lg bg-gray-800/80 border border-gray-600 text-sm">
+          <div className="flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+            <div>
+              <div className="font-medium text-gray-200">
+                {autoPlugin ? autoPlugin.name : 'No compatible plugin — cannot continue'}
+              </div>
+              <div className="text-xs text-gray-500">
+                {autoPlugin
+                  ? `Auto-assigned for ${selectedTitle.toUpperCase()} title (R9.13: mandatory)`
+                  : `R9.13 violation — ${selectedTitle.toUpperCase()} must resolve to a role-plugin`}
+              </div>
+              {autoPlugin?.description && (
+                <div className="text-xs text-gray-500 mt-0.5">{autoPlugin.description}</div>
+              )}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={() => onSelect(autoPlugin)}
+          disabled={!autoPlugin}
+          className="w-full px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
+        >
+          <Check className="w-3.5 h-3.5" />
+          Continue
+        </button>
+      </div>
+    )
+  }
+
+  // Multiple choices: show interactive picker
+  return (
+    <div className="space-y-1.5">
+      {/* Default programmer option — recommended for MEMBER */}
+      {selectedTitle === 'member' && (
+        <button
+          onClick={() => onSelect(null)}
+          className="w-full text-left px-3 py-2.5 rounded-lg bg-gray-800/80 border border-blue-500/50 bg-blue-500/5 hover:border-blue-500 hover:bg-blue-500/10 transition-all text-sm"
+        >
+          <div className="font-medium text-gray-200">Default (Programmer)</div>
+          <div className="text-xs text-gray-500">General-purpose AI programmer agent</div>
+          <span className="text-xs text-blue-400">Recommended</span>
+        </button>
+      )}
+
+      {/* Custom plugins with compatible-titles match */}
+      {plugins.map(plugin => (
+        <button
+          key={plugin.name}
+          onClick={() => onSelect(plugin)}
+          className="w-full text-left px-3 py-2.5 rounded-lg bg-gray-800/80 border border-gray-600 hover:border-blue-500 hover:bg-gray-700 transition-all text-sm"
+        >
+          <div className="font-medium text-gray-200">{plugin.name}</div>
+          {plugin.description && (
+            <div className="text-xs text-gray-500">{plugin.description}</div>
+          )}
+          {plugin.source && (
+            <span className="text-xs text-gray-600">{plugin.source}</span>
+          )}
+        </button>
+      ))}
+      {/* R9.13: No "bare agent" option — every title has a mandatory default
+          plugin. If multiple plugins are compatible the user picks one; if
+          only one is compatible the isLocked branch above auto-selects it. */}
+    </div>
+  )
+}
+
+// Step 5: Summary + Create
+function SummaryCard({
+  state,
+  onCreate,
+}: {
+  state: {
+    personaName: string
+    selectedTeamId: string | null
+    selectedTitle: AgentRole
+    selectedPlugin: RolePlugin | null
+    selectedAvatar: string
+    selectedFolder: string
+    githubRepo: string
+    teams: Team[]
+  }
+  onCreate: () => void
+}) {
+  const team = state.teams.find(t => t.id === state.selectedTeamId)
+  const pluginDisplay = state.selectedPlugin ? state.selectedPlugin.name : 'None'
+  const agentName = state.personaName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '')
+  const folderDisplay = state.selectedFolder || `~/agents/${agentName}/`
+  const isMaintainerSummary = state.selectedTitle === 'maintainer'
+
+  return (
+    <div className="rounded-xl bg-gray-800/60 border border-gray-700 p-4 space-y-2.5">
+      {/* Avatar + name preview */}
+      <div className="flex items-center gap-3 pb-2 border-b border-gray-700/50">
+        <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-gray-600 flex-shrink-0">
+          {state.selectedAvatar ? (
+            <Image
+              src={state.selectedAvatar}
+              alt=""
+              width={48}
+              height={48}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-gray-700 flex items-center justify-center text-gray-400 text-lg font-bold">
+              {state.personaName.charAt(0).toUpperCase()}
+            </div>
+          )}
+        </div>
+        <div>
+          <div className="font-semibold text-gray-100">{state.personaName}</div>
+          <span
+            className={`text-xs font-bold tracking-wider px-1.5 py-0.5 rounded border ${TITLE_COLORS[state.selectedTitle]}`}
+          >
+            {state.selectedTitle.toUpperCase()}
+          </span>
+        </div>
+      </div>
+
+      <SummaryRow label="Team" value={team ? team.name : 'Autonomous (no team)'} />
+      <SummaryRow label="Folder" value={folderDisplay} />
+      <SummaryRow label="Role Plugin" value={pluginDisplay} />
+      {isMaintainerSummary && (
+        <SummaryRow label="GitHub Repo" value={state.githubRepo || '(missing)'} />
+      )}
+
+      <button
+        onClick={onCreate}
+        className="w-full mt-3 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold rounded-lg shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all duration-300 transform hover:scale-[1.02] text-sm"
+      >
+        Create Agent!
+      </button>
+    </div>
+  )
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-gray-400">{label}</span>
+      <span className="text-gray-200 font-medium">{value}</span>
+    </div>
+  )
+}

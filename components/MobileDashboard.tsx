@@ -2,13 +2,16 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import TerminalView from './TerminalView'
+import MobileChatView from './MobileChatView'
 import MobileMessageCenter from './MobileMessageCenter'
 import MobileWorkTree from './MobileWorkTree'
 import MobileHostsList from './MobileHostsList'
 import MobileConversationDetail from './MobileConversationDetail'
-import { Terminal, Mail, RefreshCw, Activity, Server, FileText } from 'lucide-react'
+import { Terminal, Mail, RefreshCw, Activity, Server, MessageSquare, Phone, PlusCircle, User, ChevronDown } from 'lucide-react'
+import AgentCreationWizard from './AgentCreationWizard'
+import AgentProfilePanel from './AgentProfilePanel'
+import { agentToSession } from '@/lib/agent-utils'
 import type { Agent } from '@/types/agent'
-import type { Session } from '@/types/session'
 import { useHosts } from '@/hooks/useHosts'
 import versionInfo from '@/version.json'
 
@@ -19,21 +22,6 @@ interface MobileDashboardProps {
   onRefresh: () => void
 }
 
-// Helper: Convert agent to session-like object for TerminalView compatibility
-function agentToSession(agent: Agent): Session {
-  return {
-    id: agent.session?.tmuxSessionName || agent.id,
-    name: agent.label || agent.name || agent.alias || '',
-    workingDirectory: agent.session?.workingDirectory || agent.preferences?.defaultWorkingDirectory || '',
-    status: 'active' as const,
-    createdAt: agent.createdAt,
-    lastActivity: agent.lastActive || agent.createdAt,
-    windows: 1,
-    agentId: agent.id,
-    hostId: agent.hostId,
-  }
-}
-
 export default function MobileDashboard({
   agents,
   loading,
@@ -42,13 +30,16 @@ export default function MobileDashboard({
 }: MobileDashboardProps) {
   const { hosts } = useHosts()
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'terminal' | 'messages' | 'work' | 'hosts' | 'notes'>('terminal')
+  const [activeTab, setActiveTab] = useState<'terminal' | 'messages' | 'work' | 'hosts'>('terminal')
+  const [viewMode, setViewMode] = useState<'terminal' | 'chat'>('terminal')
   const [selectedConversation, setSelectedConversation] = useState<{
     file: string
     projectPath: string
   } | null>(null)
-  const [notes, setNotes] = useState('')
   const [connectionStatus, setConnectionStatus] = useState<{ [agentId: string]: boolean }>({})
+  const [showCreationWizard, setShowCreationWizard] = useState(false)
+  const [showProfilePanel, setShowProfilePanel] = useState(false)
+  const [showAgentDrawer, setShowAgentDrawer] = useState(false)
 
   // Filter to only online agents for terminal tabs
   const onlineAgents = useMemo(
@@ -64,26 +55,6 @@ export default function MobileDashboard({
   }, [onlineAgents, activeAgentId])
 
   const activeAgent = agents.find((a) => a.id === activeAgentId)
-
-  // Storage ID for notes
-  const storageId = activeAgentId
-
-  // Load notes from localStorage when active agent changes
-  useEffect(() => {
-    if (storageId) {
-      const notesKey = `agent-notes-${storageId}`
-      const savedNotes = localStorage.getItem(notesKey)
-      setNotes(savedNotes || '')
-    }
-  }, [storageId])
-
-  // Save notes to localStorage when they change
-  useEffect(() => {
-    if (storageId && notes !== undefined) {
-      const notesKey = `agent-notes-${storageId}`
-      localStorage.setItem(notesKey, notes)
-    }
-  }, [notes, storageId])
 
   const handleAgentSelect = (agentId: string) => {
     setActiveAgentId(agentId)
@@ -101,7 +72,7 @@ export default function MobileDashboard({
 
   // Get display name for an agent
   const getAgentDisplayName = (agent: Agent) => {
-    return agent.label || agent.name || agent.alias || agent.id
+    return agent.label || agent.name || agent.id
   }
 
   // Format display as agent@host
@@ -135,8 +106,12 @@ export default function MobileDashboard({
       {/* Top Bar */}
       <header className="flex-shrink-0 border-b border-gray-800 bg-gray-950">
         <div className="flex items-center px-4 py-3">
-          {/* Current Agent Display with Connection Status */}
-          <div className="flex items-center gap-2 min-w-0 flex-1">
+          {/* Current Agent Display — tap name to open agent drawer, tap profile icon for profile panel */}
+          <button
+            onClick={() => setShowAgentDrawer(true)}
+            className="flex items-center gap-2 min-w-0 flex-1 text-left"
+            aria-label="Select agent"
+          >
             {/* Connection indicator - green/red dot */}
             <div
               className={`w-2 h-2 rounded-full flex-shrink-0 ${
@@ -147,9 +122,30 @@ export default function MobileDashboard({
             <span className="text-sm font-medium text-white truncate">
               {getAgentHostDisplay()}
             </span>
-          </div>
+            <ChevronDown className="w-3 h-3 text-gray-500 flex-shrink-0" />
+          </button>
 
-          {/* Refresh Button - Centered */}
+          {/* Profile Button — opens agent profile panel */}
+          {activeAgent && (
+            <button
+              onClick={() => setShowProfilePanel(true)}
+              className="p-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 transition-colors flex-shrink-0 flex items-center justify-center mr-1"
+              aria-label="Agent profile"
+            >
+              <User className="w-5 h-5 text-blue-400" />
+            </button>
+          )}
+
+          {/* Create Agent Button */}
+          <button
+            onClick={() => setShowCreationWizard(true)}
+            className="p-2 rounded-lg bg-green-600/20 hover:bg-green-600/30 transition-colors flex-shrink-0 flex items-center justify-center mr-1"
+            aria-label="Create agent"
+          >
+            <PlusCircle className="w-5 h-5 text-green-400" />
+          </button>
+
+          {/* Refresh Button */}
           <button
             onClick={onRefresh}
             disabled={loading}
@@ -175,9 +171,16 @@ export default function MobileDashboard({
           <div className="flex flex-col items-center justify-center h-full px-6 text-center bg-gray-900">
             <Terminal className="w-16 h-16 text-gray-600 mb-4" />
             <p className="text-lg font-medium text-gray-300 mb-2">No Online Agents</p>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 mb-4">
               Start an agent&apos;s tmux session to connect
             </p>
+            <button
+              onClick={() => setShowCreationWizard(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-xl text-sm font-medium transition-colors"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Create Agent
+            </button>
           </div>
         )}
 
@@ -197,20 +200,71 @@ export default function MobileDashboard({
               }}
             >
               {activeTab === 'terminal' ? (
-                <TerminalView
-                  session={session}
-                  hideFooter={true}
-                  hideHeader={true}
-                  onConnectionStatusChange={(isConnected) => handleConnectionStatusChange(agent.id, isConnected)}
-                />
+                <>
+                  {/* View mode toggle */}
+                  <div className="absolute top-2 right-2 z-20 flex rounded-lg overflow-hidden border border-gray-700 bg-gray-900/80 backdrop-blur-sm">
+                    <button
+                      onClick={() => setViewMode('terminal')}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${
+                        viewMode === 'terminal'
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      <Terminal className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('chat')}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${
+                        viewMode === 'chat'
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Terminal (always mounted, visibility toggled) */}
+                  {/* BUG-001 fix: wrapper MUST be flex column so TerminalView's root
+                      `flex-1 flex flex-col bg-terminal-bg` actually expands to fill the
+                      parent. Without `flex flex-col` here, `flex-1` has no anchor and the
+                      terminal container collapses to height:0, leaving the UI stuck on the
+                      "Initializing terminal..." spinner forever (init retries fail because
+                      rect.height === 0). */}
+                  <div
+                    className="absolute inset-0 flex flex-col"
+                    style={{
+                      visibility: viewMode === 'terminal' ? 'visible' : 'hidden',
+                      pointerEvents: viewMode === 'terminal' ? 'auto' : 'none'
+                    }}
+                  >
+                    <TerminalView
+                      session={session}
+                      hideFooter={true}
+                      hideHeader={true}
+                      onConnectionStatusChange={(isConnected) => handleConnectionStatusChange(agent.id, isConnected)}
+                    />
+                  </div>
+
+                  {/* Chat view (mounted/unmounted) */}
+                  {viewMode === 'chat' && (
+                    <div className="absolute inset-0 pt-10">
+                      <MobileChatView
+                        agentId={agent.id}
+                        agentName={getAgentDisplayName(agent)}
+                      />
+                    </div>
+                  )}
+                </>
               ) : (
                 <MobileMessageCenter
                   sessionName={session.id}
                   agentId={agent.id}
                   allAgents={onlineAgents.map(a => ({
                     id: a.id,
-                    name: a.name || a.alias || a.id,  // Technical name for lookups
-                    alias: a.label || a.name || a.alias || a.id,  // Display name for UI
+                    name: a.name || a.id,  // Technical name for lookups
+                    alias: a.label || a.name || a.id,  // Display name for UI
                     tmuxSessionName: a.session?.tmuxSessionName,
                     hostId: a.hostId
                   }))}
@@ -244,46 +298,11 @@ export default function MobileDashboard({
           </div>
         )}
 
-        {/* Notes Tab - Shows notes for active agent */}
-        {activeTab === 'notes' && activeAgent && (
-          <div className="absolute inset-0 flex flex-col bg-gray-900">
-            {/* Notes Header */}
-            <div className="flex-shrink-0 px-4 py-3 border-b border-gray-800 bg-gray-950">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-400" />
-                <h2 className="text-sm font-semibold text-white">Agent Notes</h2>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                {getAgentDisplayName(activeAgent)}
-              </p>
-            </div>
-
-            {/* Notes Content */}
-            <div className="flex-1 overflow-hidden">
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Take notes while working with your agent...&#10;&#10;• Your notes are saved automatically&#10;• Each agent has separate notes&#10;• Full markdown support"
-                className="w-full h-full px-4 py-3 bg-gray-900 text-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset font-mono"
-                style={{
-                  WebkitOverflowScrolling: 'touch'
-                }}
-              />
-            </div>
-
-            {/* Notes Footer Info */}
-            <div className="flex-shrink-0 px-4 py-2 border-t border-gray-800 bg-gray-950">
-              <p className="text-xs text-gray-400">
-                {notes.length} character{notes.length === 1 ? '' : 's'} • Auto-saved to browser
-              </p>
-            </div>
-          </div>
-        )}
       </main>
 
       {/* Bottom Navigation */}
       <nav className="flex-shrink-0 border-t border-gray-800 bg-gray-950">
-        <div className="flex items-center justify-around">
+        <div className="flex items-center justify-around relative">
           <button
             onClick={() => setActiveTab('terminal')}
             className={`flex flex-col items-center justify-center py-2.5 px-3 flex-1 transition-colors ${
@@ -293,7 +312,7 @@ export default function MobileDashboard({
             }`}
           >
             <Terminal className="w-5 h-5 mb-0.5" />
-            <span className="text-xs font-medium">Terminal</span>
+            <span className="text-xs font-medium">Agent</span>
           </button>
 
           <button
@@ -307,6 +326,21 @@ export default function MobileDashboard({
             <Mail className="w-5 h-5 mb-0.5" />
             <span className="text-xs font-medium">Messages</span>
           </button>
+
+          {/* Central Call Button */}
+          <div className="flex flex-col items-center justify-center px-2 flex-1">
+            <button
+              onClick={() => {
+                if (activeAgentId) {
+                  window.location.href = `/companion?agent=${encodeURIComponent(activeAgentId)}&popup=1`
+                }
+              }}
+              disabled={!activeAgentId || !isActiveAgentConnected}
+              className="w-14 h-14 -mt-7 rounded-full bg-green-500 hover:bg-green-400 disabled:bg-gray-700 disabled:opacity-50 text-white flex items-center justify-center shadow-lg shadow-green-500/30 transition-all active:scale-95"
+            >
+              <Phone className="w-6 h-6" />
+            </button>
+          </div>
 
           <button
             onClick={() => setActiveTab('work')}
@@ -331,18 +365,6 @@ export default function MobileDashboard({
             <Server className="w-5 h-5 mb-0.5" />
             <span className="text-xs font-medium">Hosts</span>
           </button>
-
-          <button
-            onClick={() => setActiveTab('notes')}
-            className={`flex flex-col items-center justify-center py-2.5 px-3 flex-1 transition-colors ${
-              activeTab === 'notes'
-                ? 'text-blue-400 bg-gray-800/50'
-                : 'text-gray-400 hover:text-gray-300'
-            }`}
-          >
-            <FileText className="w-5 h-5 mb-0.5" />
-            <span className="text-xs font-medium">Notes</span>
-          </button>
         </div>
       </nav>
 
@@ -353,6 +375,83 @@ export default function MobileDashboard({
           projectPath={selectedConversation.projectPath}
           onClose={handleConversationClose}
         />
+      )}
+
+      {/* Agent Drawer — slide-up list of ALL agents (not just online) */}
+      {showAgentDrawer && (
+        <div className="fixed inset-0 z-40 flex flex-col justify-end" onClick={() => setShowAgentDrawer(false)}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div
+            className="relative bg-gray-900 border-t border-gray-700 rounded-t-2xl max-h-[70vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-gray-900 px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+              <span className="text-sm font-medium text-white">All Agents ({agents.length})</span>
+              <button onClick={() => setShowAgentDrawer(false)} className="text-gray-400 text-sm">Done</button>
+            </div>
+            {agents.length === 0 ? (
+              <div className="px-4 py-8 text-center text-gray-500 text-sm">No agents registered</div>
+            ) : (
+              <div className="divide-y divide-gray-800">
+                {agents.map(agent => {
+                  const isOnline = agent.session?.status === 'online'
+                  const displayName = agent.label || agent.name || agent.id
+                  return (
+                    <button
+                      key={agent.id}
+                      onClick={() => { handleAgentSelect(agent.id); setShowAgentDrawer(false) }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                        agent.id === activeAgentId ? 'bg-blue-600/10' : 'hover:bg-gray-800'
+                      }`}
+                    >
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isOnline ? 'bg-green-500' : 'bg-gray-500'}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm text-white truncate">{displayName}</div>
+                        <div className="text-xs text-gray-500">{agent.governanceTitle || 'AUTONOMOUS'} • {isOnline ? 'online' : 'offline'}</div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Agent Profile Panel (full-screen overlay) */}
+      {showProfilePanel && activeAgent && (
+        <div className="fixed inset-0 z-50 bg-gray-900 overflow-y-auto">
+          <div className="sticky top-0 bg-gray-950 border-b border-gray-800 px-4 py-3 flex items-center justify-between z-10">
+            <span className="text-sm font-medium text-white">Agent Profile</span>
+            <button
+              onClick={() => setShowProfilePanel(false)}
+              className="text-blue-400 text-sm font-medium"
+            >
+              Done
+            </button>
+          </div>
+          <AgentProfilePanel
+            agentId={activeAgent.id}
+            onClose={() => setShowProfilePanel(false)}
+          />
+        </div>
+      )}
+
+      {/* Agent Creation Wizard (full-screen overlay) */}
+      {showCreationWizard && (
+        <div className="fixed inset-0 z-50 bg-gray-900 overflow-y-auto">
+          <AgentCreationWizard
+            onClose={() => setShowCreationWizard(false)}
+            onComplete={(newAgentId) => {
+              // Proposal 31 (2026-04-20): switch the mobile active agent to the
+              // freshly-created one so the next profile action targets the
+              // right agent (DATA-LOSS near-miss fix).
+              setShowCreationWizard(false)
+              onRefresh()
+              if (newAgentId) setActiveAgentId(newAgentId)
+            }}
+          />
+        </div>
       )}
 
       {/* Footer */}

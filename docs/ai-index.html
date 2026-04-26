@@ -32,7 +32,7 @@
         "priceCurrency": "USD"
       },
       "description": "Browser-based dashboard for orchestrating multiple AI coding agents (Claude Code, Aider, Cursor, GitHub Copilot) from one unified interface. Features agent-to-agent communication, Slack integration, email identity, persistent memory, and code graph visualization.",
-      "softwareVersion": "0.19.36",
+      "softwareVersion": "0.27.3",
       "releaseNotes": "https://github.com/23blocks-OS/ai-maestro/releases",
       "url": "https://ai-maestro.23blocks.com",
       "downloadUrl": "https://github.com/23blocks-OS/ai-maestro",
@@ -59,10 +59,12 @@
         "Peer mesh network across multiple machines",
         "Docker containerized agents (local and cloud)",
         "Portable agents (export, import, clone, transfer)",
-        "Webhook subscriptions for external integrations"
+        "Webhook subscriptions for external integrations",
+        "Team Meetings with multi-agent war room sessions",
+        "Kanban Board with 5-column drag-and-drop task management"
       ],
       "installUrl": "https://github.com/23blocks-OS/ai-maestro#installation",
-      "requirements": "Node.js 18.17+/20.x, tmux 3.0+, macOS 12.0+ or Windows 10/11 (WSL2) or Linux"
+      "requirements": "Node.js 20+, tmux 3.0+, macOS 12.0+ or Windows 10/11 (WSL2) or Linux"
     }
     </script>
 </head>
@@ -86,7 +88,7 @@
             <h2>What is AI Maestro?</h2>
             <p>AI Maestro is an open-source, browser-based dashboard for orchestrating multiple AI coding agents from one unified interface. It provides persistent memory, code understanding, and four ways for agents to communicate (internal messaging, Slack, email, external APIs).</p>
 
-            <p><strong>Version:</strong> 0.19.26 (January 2026)</p>
+            <p><strong>Version:</strong> 0.27.3 (February 2026)</p>
             <p><strong>License:</strong> MIT (Free and Open Source)</p>
             <p><strong>GitHub:</strong> https://github.com/23blocks-OS/ai-maestro</p>
             <p><strong>Website:</strong> https://ai-maestro.23blocks.com</p>
@@ -131,6 +133,8 @@
                 <li><strong>Peer Mesh Network:</strong> Control agents across multiple computers and cloud servers.</li>
                 <li><strong>Mobile Access:</strong> Touch-optimized interface with secure Tailscale VPN.</li>
                 <li><strong>Portable Agents:</strong> Export/import agents as .zip files for cross-host transfer and cloning.</li>
+                <li><strong>Team Meetings:</strong> Assemble agents into a war room with shared terminal views, task lists, and meeting chat.</li>
+                <li><strong>Kanban Board:</strong> Full-screen drag-and-drop board with 5 columns (Backlog, To Do, In Progress, Review, Done) and task dependency tracking.</li>
             </ul>
         </section>
 
@@ -138,15 +142,17 @@
             <h2>Agent Communication (4 Channels)</h2>
             <p>AI Maestro provides four ways for agents to communicate:</p>
 
-            <h3>1. Internal Messaging</h3>
-            <p>Direct agent-to-agent communication within AI Maestro.</p>
+            <h3>1. Internal Messaging (AMP Protocol)</h3>
+            <p>Direct agent-to-agent communication using the <a href="https://agentmessaging.org">Agent Messaging Protocol (AMP)</a>.</p>
             <ul>
                 <li>Persistent inbox/outbox for each agent</li>
+                <li>Ed25519 cryptographic signatures for message authenticity</li>
                 <li>Priority levels (urgent, high, normal, low)</li>
                 <li>Message types (request, response, notification, update)</li>
                 <li>Natural language interface via Claude Code skills</li>
-                <li>CLI tools for universal agent support</li>
+                <li>CLI tools: amp-send, amp-inbox, amp-reply, amp-read</li>
                 <li>Push notifications via tmux</li>
+                <li>Federation with external AMP providers (CrabMail, etc.)</li>
             </ul>
 
             <h3>2. Slack Integration</h3>
@@ -168,13 +174,50 @@
                 <li>Email lookup API to resolve agent from address</li>
             </ul>
 
-            <h3>4. External Agents</h3>
-            <p>Any AI agent on your network can communicate with AI Maestro agents.</p>
+            <h3>4. External Agents (AMP API)</h3>
+            <p>Any AI agent on your network can communicate with AI Maestro agents using the AMP protocol.</p>
             <ul>
                 <li>Works with agents not running inside AI Maestro</li>
                 <li>CI/CD pipelines, IDE agents, standalone scripts</li>
-                <li>Identity resolution via environment variable or git repo</li>
-                <li>Visual indicator distinguishes external vs verified agents</li>
+                <li>Register via /api/v1/register, get API key for messaging</li>
+                <li>Ed25519 key pair for cryptographic message signing</li>
+                <li>Full AMP API: /api/v1/route, /api/v1/messages/pending</li>
+                <li>Python/Node.js integration examples available</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Team Meetings & Kanban Board</h2>
+            <p>Assemble agents into a "war room" for coordinated multi-agent sessions with shared task management.</p>
+
+            <h3>Team Meetings</h3>
+            <ul>
+                <li>Select agents and start a meeting with split-pane terminal views</li>
+                <li>Grid or list sidebar to switch between agent terminals</li>
+                <li>Save and load team configurations for quick re-assembly</li>
+                <li>Add agents to an active meeting on the fly</li>
+                <li>Meeting chat using AMP messaging between participants</li>
+            </ul>
+
+            <h3>Kanban Board</h3>
+            <ul>
+                <li>Full-screen overlay with 5 status columns: Backlog, To Do, In Progress, Review, Done</li>
+                <li>HTML5 drag-and-drop to move tasks between columns</li>
+                <li>Task dependency chains with automatic unblocking</li>
+                <li>Assign tasks to specific agents</li>
+                <li>Quick-add tasks from any column</li>
+                <li>Click any card to open detailed task editor</li>
+                <li>Keyboard shortcut (Escape) to close overlays</li>
+                <li>Tasks persist per team in file-based storage</li>
+            </ul>
+
+            <h3>Task Statuses</h3>
+            <ul>
+                <li><strong>Backlog:</strong> Ideas and future work items</li>
+                <li><strong>To Do (Pending):</strong> Ready to be picked up</li>
+                <li><strong>In Progress:</strong> Currently being worked on</li>
+                <li><strong>Review:</strong> Waiting for review or validation</li>
+                <li><strong>Done (Completed):</strong> Finished work</li>
             </ul>
         </section>
 
@@ -182,7 +225,7 @@
             <h2>Installation Options</h2>
 
             <h3>Option 1: Full Installation (Recommended)</h3>
-            <p>Installs the AI Maestro service, web dashboard, CLI scripts, and all 5 Claude Code skills.</p>
+            <p>Installs the AI Maestro service, web dashboard, CLI scripts, and all 7 Claude Code skills.</p>
             <pre>
 # One command installs everything
 curl -fsSL https://raw.githubusercontent.com/23blocks-OS/ai-maestro/main/scripts/remote-install.sh | sh
@@ -193,7 +236,7 @@ cd ai-maestro && yarn install && yarn dev
             </pre>
 
             <h3>Option 2: Claude Code Plugin Only</h3>
-            <p>Installs 5 skills via the Claude Code plugin marketplace. <strong>IMPORTANT: Only the planning skill works standalone.</strong> The other 4 skills require the AI Maestro service running on localhost:23000.</p>
+            <p>Installs 7 skills via the Claude Code plugin marketplace. <strong>IMPORTANT: Only the planning skill works standalone.</strong> The other 6 skills require the AI Maestro service running on localhost:23000.</p>
             <pre>
 /plugin marketplace add 23blocks-OS/ai-maestro
 /plugin install ai-maestro@ai-maestro-marketplace
@@ -206,11 +249,13 @@ cd ai-maestro && yarn install && yarn dev
                 <li><strong>docs-search</strong> - Requires AI Maestro service</li>
                 <li><strong>graph-query</strong> - Requires AI Maestro service</li>
                 <li><strong>agent-messaging</strong> - Requires AI Maestro service</li>
+                <li><strong>ai-maestro-agents-management</strong> - Requires AI Maestro service</li>
+                <li><strong>team-governance</strong> - Requires AI Maestro service</li>
             </ul>
 
             <p><strong>Requirements:</strong></p>
             <ul>
-                <li>Node.js 18.17+ or 20.x</li>
+                <li>Node.js 20+</li>
                 <li>tmux 3.0+</li>
                 <li>macOS 12.0+ OR Windows 10/11 (WSL2) OR Linux</li>
             </ul>
@@ -336,6 +381,7 @@ cd ai-maestro && yarn install && yarn dev
                 <li><strong>Agent Intelligence:</strong> https://ai-maestro.23blocks.com/agent-intelligence.html</li>
                 <li><strong>Mobile Access:</strong> https://ai-maestro.23blocks.com/mobile.html</li>
                 <li><strong>Peer Network:</strong> https://ai-maestro.23blocks.com/peers.html</li>
+                <li><strong>Plugin Builder:</strong> https://ai-maestro.23blocks.com/plugin-builder.html</li>
                 <li><strong>GitHub:</strong> https://github.com/23blocks-OS/ai-maestro</li>
                 <li><strong>Issues:</strong> https://github.com/23blocks-OS/ai-maestro/issues</li>
             </ul>
@@ -344,7 +390,7 @@ cd ai-maestro && yarn install && yarn dev
         <section>
             <h2>Quick Facts for LLMs</h2>
             <ul>
-                <li><strong>Current Version:</strong> 0.19.26 (January 2026)</li>
+                <li><strong>Current Version:</strong> 0.27.3 (February 2026)</li>
                 <li><strong>License:</strong> MIT (completely free)</li>
                 <li><strong>Primary Use Case:</strong> Orchestrate Claude Code + other AI agents</li>
                 <li><strong>Installation Time:</strong> 5 minutes for basic setup</li>

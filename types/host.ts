@@ -52,16 +52,34 @@ export interface Host {
   /** Last sync error message */
   lastSyncError?: string
 
-  // DEPRECATED: type field is no longer meaningful
-  // In a mesh network, all hosts are equal. Use isSelf for self-detection.
-  // Kept for backward compatibility during migration - will be removed.
+  /** @deprecated Use 'role' field instead. Removal: v1.0.0
+   *  In a mesh network, all hosts are equal. Use isSelf for self-detection.
+   *  Kept for backward compatibility during migration. */
   type?: 'local' | 'remote'
 
   /** Whether this host is the current machine (set by API, not stored) */
   isSelf?: boolean
+
+  /** Runtime capabilities detected on this host */
+  capabilities?: {
+    docker?: boolean
+    dockerVersion?: string
+  }
+
+  /** Ed25519 public key hex for role attestation verification (Layer 2) */
+  publicKeyHex?: string
 }
 
 export interface HostsConfig {
+  /** Organization/network name - used as tenant in AMP addresses */
+  organization?: string
+
+  /** ISO timestamp when organization was first set */
+  organizationSetAt?: string
+
+  /** Host ID that first set the organization (leader) */
+  organizationSetBy?: string
+
   /** List of configured hosts */
   hosts: Host[]
 }

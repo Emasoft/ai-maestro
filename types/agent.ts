@@ -10,6 +10,73 @@
  * - An agent can have multiple sessions (multi-brain support)
  */
 
+// Skills types - canonical definitions live in types/marketplace.ts
+// Re-exported here for backward compatibility (agent-registry, API routes import from here)
+// AgentSkillsConfig is also used locally by the Agent interface below
+export type { AgentSkillsConfig, AgentMarketplaceSkill, AgentCustomSkill } from './marketplace'
+import type { AgentSkillsConfig } from './marketplace'
+
+// ============================================================================
+// AMP Identity Types (Cryptographic Identity for Messaging)
+// ============================================================================
+
+/**
+ * Agent's cryptographic identity for AMP (Agent Messaging Protocol)
+ * Each agent owns their keypair - keys travel WITH the agent when transferred.
+ */
+export interface AMPAgentIdentity {
+  /** SHA256 fingerprint of public key (e.g., "SHA256:xK4f2jQ...") */
+  fingerprint: string
+
+  /** Public key in hex format (32 bytes for Ed25519) */
+  publicKeyHex: string
+
+  /** Key algorithm (always Ed25519 for now) */
+  keyAlgorithm: 'Ed25519'
+
+  /** When the keypair was generated */
+  createdAt: string
+
+  /** AMP address: name@tenant.aimaestro.local */
+  ampAddress?: string
+
+  /** Default tenant for this agent */
+  tenant?: string
+}
+
+/**
+ * External AMP provider registration (e.g., Crabmail)
+ * Stored in ~/.aimaestro/agents/{id}/registrations/{provider}.json
+ */
+export interface AMPExternalRegistration {
+  /** Provider identifier (e.g., "crabmail") */
+  provider: string
+
+  /** Provider API URL (e.g., "https://api.crabmail.ai") */
+  apiUrl: string
+
+  /** Agent name on this provider (may differ from local name) */
+  agentName: string
+
+  /** Tenant on this provider */
+  tenant: string
+
+  /** Full external address: agent@tenant.provider.tld */
+  address: string
+
+  /** API key for authentication */
+  apiKey: string
+
+  /** Agent ID assigned by provider */
+  providerAgentId: string
+
+  /** Fingerprint (must match agent's fingerprint) */
+  fingerprint: string
+
+  /** When registered */
+  registeredAt: string
+}
+
 // ============================================================================
 // Session Name Helpers
 // ============================================================================
@@ -24,6 +91,10 @@
  *   "23blocks-apps-backend_2" → { agentName: "23blocks-apps-backend", index: 2 }
  */
 export function parseSessionName(tmuxName: string): { agentName: string; index: number } {
+  // NT-015: guard against empty string input (tmux never produces empty names, but callers might)
+  if (!tmuxName) {
+    return { agentName: '', index: 0 }
+  }
   const match = tmuxName.match(/^(.+)_(\d+)$/)
   if (match) {
     return { agentName: match[1], index: parseInt(match[2], 10) }
@@ -79,6 +150,32 @@ export interface AgentSession {
 }
 
 // ============================================================================
+// Agent Metadata
+// ============================================================================
+
+/** AMP registration metadata stored under agent.metadata.amp */
+export interface AgentAmpMetadata {
+  address?: string
+  tenant?: string
+  fingerprint?: string
+  registeredAt?: string
+  registeredVia?: string
+  apiKeyHash?: string
+  delivery?: Record<string, unknown>
+  [key: string]: unknown  // Forward-compatible with future AMP fields
+}
+
+/**
+ * Typed agent metadata with known sub-objects.
+ * Uses index signature for user-defined keys while preserving
+ * type safety on the known `amp` sub-object.
+ */
+export interface AgentMetadata {
+  amp?: AgentAmpMetadata
+  [key: string]: unknown  // User-defined key-value pairs
+}
+
+// ============================================================================
 // Agent Interface
 // ============================================================================
 
@@ -89,13 +186,16 @@ export interface Agent {
   label?: string                // Optional display override (rarely used)
   avatar?: string               // Avatar URL or emoji (e.g., "🤖", "https://...")
 
+  // AMP Identity (cryptographic identity for messaging)
+  ampIdentity?: AMPAgentIdentity
+
   // Working Directory (agent-level default)
   workingDirectory?: string     // Default working directory for sessions
 
   // Sessions (zero or more, Phase 1: max 1)
   sessions: AgentSession[]      // Active/historical sessions for this agent
 
-  // DEPRECATED: alias - use 'name' instead (kept temporarily for migration)
+  /** @deprecated Use 'name' instead. Kept temporarily for migration. */
   alias?: string
 
   // Host (where the agent lives)
@@ -107,11 +207,15 @@ export interface Agent {
   program: string               // AI program (e.g., "Claude Code", "Aider", "Cursor")
   model?: string                // Model version (e.g., "Opus 4.1", "GPT-4")
   taskDescription: string       // What this agent is working on
+  programArgs?: string          // CLI arguments passed to the program on launch (e.g., "--continue --chrome")
+  launchCount?: number          // Number of times agent has been woken/launched (0 = never launched)
   tags?: string[]               // Optional tags (e.g., ["backend", "api", "typescript"])
   capabilities?: string[]       // Technical capabilities (e.g., ["typescript", "postgres"])
 
-  // Ownership & Team
+  // Ownership, Role & Team
   owner?: string                // Owner name or email
+  role?: AgentRole              // Messaging role: 'manager' | 'chief-of-staff' | 'architect' | 'orchestrator' | 'integrator' | 'member' | 'autonomous' | 'maintainer' (default: 'autonomous')
+  governanceTitle?: AgentRole | null   // Explicit governance title (null = cleared/unset)
   team?: string                 // Team name (e.g., "Backend Team", "23blocks")
 
   // Documentation
@@ -121,7 +225,7 @@ export interface Agent {
   metrics?: AgentMetrics
 
   // Custom flexible metadata
-  metadata?: Record<string, any>  // User-defined key-value pairs
+  metadata?: AgentMetadata  // Typed metadata with known sub-objects (amp, etc.)
 
   // Deployment configuration
   deployment: AgentDeployment
@@ -143,51 +247,45 @@ export interface Agent {
   // Hooks (event-triggered scripts)
   hooks?: Record<string, string>  // event -> script path
 
+  // Runtime type (default: 'tmux') — future: 'docker' | 'api' | 'direct'
+  runtime?: 'tmux' | 'docker' | 'api' | 'direct'
+
   // Runtime state (set by API, not persisted)
-  session?: AgentSessionStatus   // Live tmux session status
+  session?: LiveAgentSessionStatus   // Live tmux session status
   isOrphan?: boolean             // True if session exists but agent was auto-registered
   _cached?: boolean              // True if loaded from cache (remote host unreachable)
-}
 
-/**
- * Skills configuration for an agent
- * Agents can have skills from marketplaces, AI Maestro, and custom skills
- */
-export interface AgentSkillsConfig {
-  // Skills from Claude Code marketplaces
-  marketplace: AgentMarketplaceSkill[]
+  // AMP Registration Status (Phase 2: AMP Protocol)
+  ampRegistered?: boolean        // True if agent was registered via AMP protocol
 
-  // AI Maestro built-in skills
-  aiMaestro: {
-    enabled: boolean              // Include AI Maestro skills?
-    skills: string[]              // Which skills (default: all)
-  }
+  // Core Plugin Status (R17 — Governance)
+  corePluginMissing?: boolean    // True if ai-maestro-plugin failed to install at creation/import time
 
-  // Custom skills specific to this agent
-  custom: AgentCustomSkill[]
-}
+  // AMP Identity Status (P002 — CreateAgent G12)
+  // True if `amp-init.sh --force --name <name>` failed during CreateAgent G12
+  // (script missing, non-zero exit, or unexpected error). Agent is usable but
+  // cannot send or receive AMP messages until amp-init is re-run successfully.
+  // The dashboard shows a warning badge; POST /api/agents/{id}/amp-init clears
+  // the flag on success.
+  ampIdentityMissing?: boolean
 
-/**
- * A marketplace skill installed on an agent
- */
-export interface AgentMarketplaceSkill {
-  id: string                      // Full skill ID (marketplace:plugin:skill)
-  marketplace: string             // Source marketplace
-  plugin: string                  // Source plugin
-  name: string                    // Skill name
-  version?: string                // Installed version
-  installedAt: string             // When installed (ISO timestamp)
-}
+  // MAINTAINER title properties (R19)
+  // Required when governanceTitle === 'maintainer'. Immutable once set.
+  githubRepo?: string             // Format: 'owner/repo'. One MAINTAINER per repo per host.
 
-/**
- * A custom skill created for a specific agent
- */
-export interface AgentCustomSkill {
-  name: string                    // Skill name
-  path: string                    // Relative path within agent folder
-  description?: string            // Optional description
-  createdAt: string               // When created
-  updatedAt?: string              // When last modified
+  // TRDD-c7a81642 (2026-04-20) — Universal role-plugin-or-hibernate invariant
+  // extension of R9.13. True iff the agent is currently persisted with NO
+  // role-plugin (default is absent when the invariant is satisfied). The
+  // only path to this flag is through PG04 in ChangePlugin (post-uninstall
+  // repair failed) OR the server-startup scan. The agent MUST be
+  // simultaneously hibernated — a `roleMissing=true` agent can never be in
+  // `status: 'online'` state. `POST /api/agents/{id}/wake` returns 409
+  // role_plugin_required while this flag is set. Cleared by a successful
+  // ChangePlugin install from the Profile → Config tab recovery flow.
+  roleMissing?: boolean
+
+  // Soft-delete: when set, agent is marked as deleted but data is preserved for restore
+  deletedAt?: string             // ISO timestamp when soft-deleted, undefined = active
 }
 
 export type DeploymentType = 'local' | 'cloud'
@@ -222,6 +320,9 @@ export interface AgentTools {
 
   // Email tool (for async communication)
   email?: EmailTool
+
+  // AMP tool (inter-agent messaging via AMP protocol)
+  amp?: AMPTool
 
   // Cloud tool (for autonomous work)
   cloud?: CloudTool
@@ -278,9 +379,42 @@ export interface EmailTool {
   addresses: EmailAddress[]
 
   // DEPRECATED: Legacy single-address fields (kept for migration)
-  // Remove after all agents migrated to addresses[]
-  address?: string              // @deprecated Use addresses[] instead
-  provider?: 'local' | 'smtp'   // @deprecated Gateway concern, not identity
+  // NT-018: Removal tracked as backlog task. Migration plan:
+  // 1. Registry loader auto-migrates address/provider into addresses[] on read
+  // 2. After all agents have been loaded at least once, these fields can be removed
+  // 3. Target removal: Phase 2 (next breaking schema change)
+  /** @deprecated Use addresses[] instead. Removal: Phase 2. */
+  address?: string
+  /** @deprecated No direct replacement. Provider information should be stored in EmailAddress.metadata if needed by a gateway. Removal: Phase 2. */
+  provider?: 'local' | 'smtp'
+}
+
+// ============================================================================
+// AMP Address Types
+// ============================================================================
+
+/**
+ * An AMP address identity for an agent
+ * Like email addresses but for inter-agent messaging via AMP protocol
+ */
+export interface AMPAddress {
+  address: string              // "alice@acme.aimaestro.local"
+  provider: string             // "aimaestro.local" or "crabmail.ai"
+  type: 'local' | 'cloud'     // UI marker: local (free) vs cloud (paid provider)
+  primary?: boolean
+  tenant?: string
+  registeredAt?: string
+  displayName?: string
+  metadata?: Record<string, string>
+}
+
+/**
+ * AMP tool configuration for an agent
+ * Supports multiple AMP addresses per agent (local + external providers)
+ */
+export interface AMPTool {
+  enabled: boolean
+  addresses: AMPAddress[]
 }
 
 export interface CloudTool {
@@ -294,6 +428,8 @@ export interface AgentPreferences {
   defaultWorkingDirectory?: string
   autoStart?: boolean           // Auto-start session on AI Maestro startup
   notificationLevel?: 'all' | 'urgent' | 'none'
+  autoContinue?: boolean        // Auto-send "continue" when idle at prompt for 4 minutes
+  autoContinueDelayMs?: number  // Custom delay in ms (default: 240000 = 4 minutes)
 }
 
 export interface AgentDocumentation {
@@ -326,7 +462,30 @@ export interface AgentMetrics {
   customMetrics?: Record<string, number | string>
 }
 
-export type AgentStatus = 'active' | 'idle' | 'offline'
+export type AgentStatus = 'active' | 'idle' | 'offline' | 'deleted'
+
+/**
+ * Agent governance title for messaging policy and team hierarchy.
+ *
+ * NOTE: This is the agent's TITLE (governance level), not their ROLE (specialization).
+ * - TITLE = manager | chief-of-staff | architect | orchestrator | integrator | member (controls permissions)
+ * - ROLE = Role-Plugin name (e.g., "ai-maestro-architect") — stored separately
+ *
+ * Values:
+ * - manager: Unrestricted messaging, one per host. Interface with the user.
+ * - chief-of-staff: Gateway for a closed team. Routes messages in/out.
+ * - architect: Senior technical authority. Can propose and approve architecture decisions.
+ * - orchestrator: Primary kanban manager for a team. Direct MANAGER communication.
+ * - integrator: System integrator. Responsible for cross-service wiring and deployment coordination.
+ * - member: In closed teams, can only message teammates + COS + manager.
+ * - autonomous: Default. Agent operates independently, not assigned to any team.
+ *
+ * Kept as "AgentRole" type name for backward compatibility with existing API/DB schema.
+ * The semantic meaning is "title" — a future migration may rename this.
+ */
+export type AgentRole = 'manager' | 'chief-of-staff' | 'architect' | 'orchestrator' | 'integrator' | 'member' | 'autonomous' | 'maintainer'
+
+export const VALID_GOVERNANCE_TITLES: readonly AgentRole[] = ['manager', 'chief-of-staff', 'architect', 'orchestrator', 'integrator', 'member', 'autonomous', 'maintainer'] as const
 
 /**
  * Simplified agent for listings
@@ -336,16 +495,21 @@ export interface AgentSummary {
   name: string                  // Agent identity (was alias)
   label?: string                // Optional display override (was displayName)
   avatar?: string               // Avatar URL or emoji
+  role?: AgentRole              // Messaging role
   hostId: string                // Host where agent lives
   hostUrl?: string              // Host URL for API calls
   status: AgentStatus
   lastActive: string
   sessions: AgentSession[]      // Session(s) with their status
   deployment?: AgentDeployment  // Deployment configuration (needed for icon display)
-  // DEPRECATED: for backward compatibility during migration
+  // Soft-delete: when set, agent is marked as deleted but data is preserved
+  deletedAt?: string            // ISO timestamp when soft-deleted, undefined = active
+  /** @deprecated Use 'name' instead. Kept for backward compatibility during migration. */
   alias?: string
+  /** @deprecated Use 'label' instead. Kept for backward compatibility during migration. */
   displayName?: string
-  currentSession?: string       // First online session name (deprecated, use sessions[0])
+  /** @deprecated Use sessions[0] instead. First online session name. */
+  currentSession?: string
 }
 
 /**
@@ -358,6 +522,7 @@ export interface CreateAgentRequest {
   program: string
   model?: string
   taskDescription: string
+  programArgs?: string          // CLI arguments passed to the program on launch
   tags?: string[]
   workingDirectory?: string
   createSession?: boolean       // Auto-create tmux session
@@ -365,11 +530,16 @@ export interface CreateAgentRequest {
   deploymentType?: DeploymentType // Where to deploy (local or cloud)
   hostId?: string               // Target host for agent creation (defaults to 'local')
   owner?: string
+  role?: AgentRole              // Messaging role (default: 'autonomous')
   team?: string
   documentation?: AgentDocumentation
-  metadata?: Record<string, any>
+  metadata?: AgentMetadata
+  // MAINTAINER title properties (R19)
+  githubRepo?: string             // Required when role === 'maintainer'. Format: 'owner/repo'.
   // DEPRECATED: for backward compatibility
+  /** @deprecated Use 'name' instead. */
   alias?: string
+  /** @deprecated Use 'label' instead. */
   displayName?: string
 }
 
@@ -382,15 +552,32 @@ export interface UpdateAgentRequest {
   avatar?: string
   model?: string
   taskDescription?: string
+  programArgs?: string          // CLI arguments passed to the program on launch
+  program?: string              // AI client: 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro'
   tags?: string[]
   owner?: string
+  role?: AgentRole              // Update messaging role
+  governanceTitle?: AgentRole | null   // Explicit governance title (undefined = no change; null = clear)
   team?: string
   workingDirectory?: string     // Update default working directory
   documentation?: Partial<AgentDocumentation>
-  metadata?: Record<string, any>
+  metadata?: AgentMetadata
   preferences?: Partial<AgentPreferences>
+  // Core Plugin Status (R17)
+  corePluginMissing?: boolean    // True if ai-maestro-plugin failed to install
+  // AMP Identity Status (P002)
+  ampIdentityMissing?: boolean   // True if amp-init.sh failed during CreateAgent G12
+  // R9.13 extension (TRDD-c7a81642) — role-plugin-or-hibernate invariant.
+  // Set to true by PG04 fallback or the server-startup scan when the agent
+  // cannot maintain a compatible role-plugin. Cleared by the Profile →
+  // Config tab "Assign role-plugin" recovery flow.
+  roleMissing?: boolean
+  // MAINTAINER title properties (R19) — set via ChangeTitle, immutable after
+  githubRepo?: string             // Format: 'owner/repo'. One MAINTAINER per repo per host.
   // DEPRECATED: for backward compatibility
+  /** @deprecated Use 'name' instead. */
   alias?: string
+  /** @deprecated Use 'label' instead. */
   displayName?: string
 }
 
@@ -411,18 +598,22 @@ export interface UpdateAgentMetricsRequest {
 
 /**
  * Live session status (runtime tmux state)
- * Note: hostId/hostName/hostUrl are now on Agent directly
+ * Note: hostId/hostName/hostUrl are already on Agent directly — not repeated here.
  */
-export interface AgentSessionStatus {
+export interface LiveAgentSessionStatus {
   status: 'online' | 'offline'
   tmuxSessionName?: string        // Actual tmux session name if online
   workingDirectory?: string       // Current working directory
   lastActivity?: string           // Last activity timestamp (ISO)
   windows?: number                // Number of tmux windows
-  // GAP6 FIX: Include host context for distributed agents
-  hostId?: string                 // Host ID where session runs (e.g., 'local', 'mac-mini')
-  hostName?: string               // Human-readable host name
+  hostId?: string                 // Host context for distributed agents
+  hostName?: string               // Host display name for distributed agents
+  paneCommand?: string            // Current process in tmux pane (e.g., "claude", "zsh", "node")
+  programRunning?: boolean        // true = AI program is running; false = shell prompt (program exited)
 }
+
+/** @deprecated Use LiveAgentSessionStatus instead. */
+export type AgentSessionStatus = LiveAgentSessionStatus
 
 /**
  * @deprecated Use Agent instead. UnifiedAgent is now just an alias.
@@ -437,8 +628,7 @@ export interface AgentStats {
   total: number
   online: number
   offline: number
-  orphans: number
-  newlyRegistered: number
+  unregistered: number  // tmux sessions not linked to any agent (was: orphans + newlyRegistered)
 }
 
 /**
@@ -459,6 +649,19 @@ export interface AgentHostInfo {
  */
 export interface AgentsApiResponse {
   agents: UnifiedAgent[]
+  unregisteredSessions?: Array<{
+    tmuxSessionName: string
+    workingDirectory: string
+    createdAt: string
+    windows: number
+    paneCommand?: string
+    programRunning?: boolean
+    originalAgentName?: string
+    originalAgentLabel?: string
+    originalAgentId?: string
+    originalProgram?: string
+    originalProgramArgs?: string
+  }>
   stats: AgentStats
   hostInfo: AgentHostInfo
 }
@@ -526,6 +729,37 @@ export interface EmailConflictError {
 }
 
 // ============================================================================
+// AMP Address API Types
+// ============================================================================
+
+/**
+ * Request to add an AMP address to an agent
+ * POST /api/agents/:id/amp/addresses
+ */
+export interface AddAMPAddressRequest {
+  address: string
+  provider: string
+  type: 'local' | 'cloud'
+  tenant?: string
+  primary?: boolean
+  displayName?: string
+  metadata?: Record<string, string>
+}
+
+/**
+ * Entry in the AMP address index - maps AMP address to agent identity
+ */
+export interface AMPAddressIndexEntry {
+  agentId: string
+  agentName: string
+  hostId: string
+  provider: string
+  type: 'local' | 'cloud'
+  /** When the AMP address was registered (ISO timestamp) — mirrors AMPAddress.registeredAt */
+  registeredAt?: string
+}
+
+// ============================================================================
 // Webhook Subscription Types
 // ============================================================================
 
@@ -548,6 +782,7 @@ export interface WebhookSubscription {
   secret: string                    // For HMAC signature verification (hidden in API responses)
   description?: string              // Optional user description
   status?: 'active' | 'inactive'    // Webhook status based on delivery health
+  createdBy?: string                // Agent ID of the creator (undefined = system-owner / web UI)
   createdAt: string
   lastDeliveryAt?: string
   lastDeliveryStatus?: 'success' | 'failed'

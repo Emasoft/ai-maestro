@@ -1,0 +1,39 @@
+{
+  "uid": "bfb2d5",
+  "status": "running",
+  "created": "2026-03-23T07:54:57.039511",
+  "updated": "2026-03-23T08:32:46.049951",
+  "current_loop": 4,
+  "current_iter": 1,
+  "loops": {
+    "1": {
+      "status": "completed",
+      "files_done": [],
+      "files_clean": []
+    },
+    "2": {
+      "status": "completed",
+      "iter": 13,
+      "files_done": [
+        "FID00001"
+      ],
+      "files_clean": [
+        "FID00001"
+      ]
+    },
+    "3": {
+      "status": "completed",
+      "iter": 1,
+      "files_done": [],
+      "files_clean": [
+        "FID00001"
+      ]
+    },
+    "4": {
+      "status": "completed",
+      "files_done": [],
+      "files_clean": []
+    }
+  },
+  "committed": false
+}

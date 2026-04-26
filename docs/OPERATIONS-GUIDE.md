@@ -1,8 +1,8 @@
 # Operations Guide: AI Maestro
 
-**Version:** 1.0.0
-**Last Updated:** 2025-10-09
-**Phase:** 1 - Local Agents with Full UI Management
+**Version:** 0.27.3
+**Last Updated:** 2026-04-16
+**Phase:** Multi-host agents with AMP messaging, team governance, and kanban
 
 ---
 
@@ -67,15 +67,15 @@ cursor              # Cursor AI
 
 ```bash
 # In a new terminal window, navigate to the dashboard
-cd /Users/juanpelaez/23blocks/webApps/agents-web
+cd ~/ai-maestro  # Replace with your actual AI Maestro installation path
 
 # Start the dashboard
 yarn dev
 
-# Wait for: "ready - started server on 0.0.0.0:23000"
+# Wait for: "ready - started server on http://127.0.0.1:23000"
 ```
 
-**⚠️ Network Access Warning:** By default, AI Maestro is accessible on your local network at port 23000. This means anyone on your WiFi can access it. See the [Security](#security) section for important information.
+**Network Access:** AI Maestro binds to `127.0.0.1` (localhost) by default, so it is reachable only from the machine itself. If Tailscale is installed and a CGNAT IP (`100.64.0.0/10`) is detected, the server dual-binds and accepts traffic **only** from localhost + Tailscale ranges — LAN and public IPs are rejected at the TCP layer by `isAllowedSource()` in `server.mjs`. See the [Security](#security) section for details.
 
 ### Step 5: Open the Dashboard
 
@@ -85,9 +85,9 @@ open http://localhost:23000
 
 # Or manually visit: http://localhost:23000
 
-# From another device on your network (tablet, phone, etc.)
-# Visit: http://YOUR-LOCAL-IP:23000
-# To find your local IP: ifconfig | grep "inet " | grep -v 127.0.0.1
+# From another device: Tailscale only (LAN IPs are blocked).
+# On the host: tailscale ip -4  (e.g. 100.99.233.43)
+# On the remote device: visit http://<tailscale-ip>:23000
 ```
 
 **🎉 Success!** You should see "my-app-dev" in the sidebar. Click it to view the terminal.
@@ -227,7 +227,7 @@ tmux rename-session -t "old-name" "new-name"
 
 ---
 
-## 4. Working with Multiple Agents
+## 5. Working with Multiple Agents
 
 ### Create Multiple Agents
 
@@ -260,7 +260,7 @@ tmux send-keys -t db-migration 'copilot' C-m
 
 ---
 
-## 5. Agent Lifecycle
+## 6. Agent Lifecycle
 
 ### Agent States
 
@@ -287,7 +287,7 @@ cd ~/projects/app-a && tmux new -s app-a -d && tmux send-keys -t app-a 'claude' 
 cd ~/projects/app-b && tmux new -s app-b -d && tmux send-keys -t app-b 'aider' C-m
 
 # Start dashboard
-cd ~/agents-web && yarn dev
+cd ~/ai-maestro && yarn dev
 
 # Work throughout the day using the dashboard
 
@@ -302,7 +302,7 @@ tmux kill-session -t app-b
 
 ---
 
-## 6. Automation Scripts
+## 7. Automation Scripts
 
 ### Helper: Start Agent with AI Tool
 
@@ -438,7 +438,7 @@ chmod +x ~/bin/cleanup-ai-agents
 
 ---
 
-## 7. Agent Notes Feature
+## 8. Agent Notes Feature
 
 Each agent has a built-in notes area for capturing important information while working with your AI agent.
 
@@ -461,27 +461,26 @@ Each agent has a built-in notes area for capturing important information while w
 
 ---
 
-## 8. Dashboard Operations
+## 9. Dashboard Operations
 
 ### Starting the Dashboard
 
 ```bash
 # Navigate to dashboard directory
-cd /Users/juanpelaez/23blocks/webApps/agents-web
+cd ~/ai-maestro  # Replace with your actual AI Maestro installation path
 
 # Development mode (with hot reload)
 yarn dev
 
 # Production mode (with PM2 for auto-restart)
 yarn build
-pm2 start server.mjs --name ai-maestro
+pm2 start ecosystem.config.js
 
-# Custom port and hostname
-PORT=3001 yarn dev
-HOSTNAME=localhost PORT=3001 yarn dev  # Localhost-only for better security
+# Custom port (defaults to 23000)
+PORT=23001 yarn dev
 
-# Run localhost-only (more secure, not accessible on network)
-HOSTNAME=localhost yarn dev
+# Explicitly set the bind address (the default is already 127.0.0.1)
+HOSTNAME=127.0.0.1 PORT=23000 yarn dev
 ```
 
 ### Accessing the Dashboard
@@ -490,40 +489,39 @@ HOSTNAME=localhost yarn dev
 # Default URL (from same machine)
 open http://localhost:23000
 
-# From another device on your local network
-# 1. Find your local IP address:
-ifconfig | grep "inet " | grep -v 127.0.0.1
-# Example output: inet 10.0.0.87 ...
+# From another device: Tailscale only — LAN IPs are rejected at the TCP layer.
+# 1. On the host running AI Maestro:
+tailscale ip -4
+# Example output: 100.99.233.43
 
-# 2. On your other device (tablet, phone, another computer):
-# Visit: http://10.0.0.87:23000
-# (Replace 10.0.0.87 with your actual local IP)
+# 2. On the remote device (must also be on the same Tailscale network):
+# Visit: http://100.99.233.43:23000
+# (Use the raw Tailscale IPv4; MagicDNS *.ts.net hostnames do NOT work on iOS.)
 
 # Custom port
-open http://localhost:3001
+open http://localhost:23001
 ```
 
 ### Security
 
-**⚠️ Important:** By default, AI Maestro is accessible from any device on your local network:
-- ✅ **Convenient** - Access from tablets, phones, other computers
-- ⚠️ **No authentication** - Anyone on your WiFi can access it
-- ⚠️ **Unencrypted** - WebSocket connections use ws:// (not wss://)
-- ⚠️ **Full terminal access** - Anyone connected can run commands
+AI Maestro defaults to a **localhost-only** bind (`127.0.0.1`). The server never exposes itself to the LAN:
+
+- ✅ **Localhost-only by default** — binds to `127.0.0.1`, no LAN exposure
+- ✅ **Tailscale VPN gate** — if `tailscale ip -4` reports a CGNAT address the server also accepts traffic from `100.64.0.0/10` and `fd7a:115c:a1e0::/48`; every other source IP is dropped at the TCP layer by `isAllowedSource()` (`server.mjs`)
+- ⚠️ **No authentication for human users yet** — Phase 1 trusts the operating-system user. Add a login page before exposing the port to untrusted Tailscale peers.
+- ⚠️ **Unencrypted on localhost** — WebSocket is `ws://` on localhost; use HTTPS termination at the Tailscale Funnel / reverse proxy layer if remote exposure is required.
 
 **Safe for:**
-- Home networks (trusted WiFi)
-- Private office networks
-- Development on trusted LANs
+- Localhost-only development (the default)
+- Tailscale-only access from your own devices (iPad, laptop, remote host)
 
 **NOT safe for:**
-- Public WiFi (coffee shops, airports)
-- Shared office WiFi with untrusted users
-- Exposing to the internet
+- Public Internet exposure without a front-end auth layer
+- Shared Tailscale networks with untrusted peers (every peer can reach the dashboard)
 
-**To run localhost-only (more secure):**
+**To change the bind address** (still restricted to localhost or Tailscale by the IP filter):
 ```bash
-HOSTNAME=localhost PORT=3000 yarn dev
+HOSTNAME=127.0.0.1 PORT=23000 yarn dev
 ```
 
 See [SECURITY.md](../SECURITY.md) for full security details.
@@ -544,7 +542,7 @@ kill -9 <PID>
 
 ---
 
-## 8. SSH Configuration for Git Operations
+## 10. SSH Configuration for Git Operations
 
 ### The Problem
 
@@ -702,7 +700,7 @@ git remote set-url origin git@github.com:user/repo.git
 
 ---
 
-## 9. Troubleshooting
+## 11. Troubleshooting
 
 ### Services Not Running After Restart (MOST COMMON)
 
@@ -801,7 +799,7 @@ launchctl list | grep pm2
 
 Now after every restart, both tmux and your dashboard will start automatically!
 
-**⚠️ Important:** After setting up auto-start, also configure SSH for git operations. See [Section 8: SSH Configuration](#8-ssh-configuration-for-git-operations) for detailed setup to avoid "Permission denied (publickey)" errors.
+**⚠️ Important:** After setting up auto-start, also configure SSH for git operations. See [Section 10: SSH Configuration](#10-ssh-configuration-for-git-operations) for detailed setup to avoid "Permission denied (publickey)" errors.
 
 ---
 
@@ -809,7 +807,7 @@ Now after every restart, both tmux and your dashboard will start automatically!
 
 **Problem:** Getting `git@gitlab.com: Permission denied (publickey)` errors in tmux sessions.
 
-**Solution:** This is an SSH configuration issue. Follow the comprehensive guide in [Section 8: SSH Configuration for Git Operations](#8-ssh-configuration-for-git-operations).
+**Solution:** This is an SSH configuration issue. Follow the comprehensive guide in [Section 10: SSH Configuration for Git Operations](#10-ssh-configuration-for-git-operations).
 
 Quick fix for existing agents:
 ```bash
@@ -890,10 +888,10 @@ rm -rf node_modules yarn.lock
 yarn install
 
 # 3. Check Node.js version
-node --version  # Should be v18.17+ or v20.x
+node --version  # Should be v20.x or later
 
 # 4. Try a different port
-PORT=3001 yarn dev
+PORT=23001 yarn dev
 ```
 
 ### Agent Names Look Weird
@@ -910,7 +908,7 @@ tmux rename-session -t old-name new-clean-name
 
 ---
 
-## 9. Best Practices
+## 12. Best Practices
 
 ### Agent Organization
 
@@ -952,7 +950,7 @@ tmux capture-pane -pt <agent-name> -S - > ~/backups/agent-backup.txt
 
 ```bash
 # Morning routine
-cd ~/agents-web && yarn dev &           # Start dashboard
+cd ~/ai-maestro && yarn dev &           # Start dashboard
 start-ai-session main-work claude ~/projects
 start-ai-session experiments aider ~/tests
 open http://localhost:23000             # Open dashboard
@@ -965,13 +963,13 @@ cleanup-ai-agents                       # Kill all agents (optional)
 
 ---
 
-## 10. Advanced Tips
+## 13. Advanced Tips
 
 ### Auto-start Services on Boot
 
 **⚠️ Important:** After a system restart, both tmux and the dashboard need to be running for AI Maestro to work.
 
-For comprehensive setup instructions, see the **"Services Not Running After Restart"** section in [Troubleshooting (Section 8)](#8-troubleshooting).
+For comprehensive setup instructions, see the **"Services Not Running After Restart"** section in [Troubleshooting (Section 11)](#11-troubleshooting).
 
 Quick summary:
 - **tmux auto-start**: Create a LaunchAgent to start tmux server on login
@@ -1001,7 +999,7 @@ echo "✅ Agents restored"
 
 ---
 
-## 11. Quick Reference Card
+## 14. Quick Reference Card
 
 ### Essential Commands
 
@@ -1021,7 +1019,7 @@ Ctrl+D                        # Exit AI tool (closes agent)
 yarn dev                      # Start dashboard
 open http://localhost:23000   # Open dashboard
 Ctrl+C                        # Stop dashboard
-pm2 start server.mjs --name ai-maestro  # Start with PM2
+pm2 start ecosystem.config.js            # Start with PM2
 
 # Helper Scripts (if created)
 start-ai-session name agent   # Create agent with AI tool
@@ -1031,7 +1029,7 @@ cleanup-ai-agents             # Kill all agents
 
 ---
 
-## 12. Next Steps
+## 15. Next Steps
 
 After mastering basic operations:
 

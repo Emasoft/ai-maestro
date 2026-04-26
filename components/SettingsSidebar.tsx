@@ -1,14 +1,22 @@
 'use client'
 
-import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store } from 'lucide-react'
+import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store, Puzzle, Bot, TerminalSquare, Archive, Shield, Activity } from 'lucide-react'
+
+type SectionId = 'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery' | 'diagnostics'
 
 interface SettingsSidebarProps {
-  activeSection: 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace'
-  onSectionChange: (section: 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace') => void
+  activeSection: SectionId
+  onSectionChange: (section: SectionId) => void
 }
 
 export default function SettingsSidebar({ activeSection, onSectionChange }: SettingsSidebarProps) {
   const sections = [
+    {
+      id: 'security' as const,
+      label: 'Security',
+      icon: Shield,
+      description: 'Auth, encryption & policies',
+    },
     {
       id: 'hosts' as const,
       label: 'Hosts',
@@ -29,9 +37,48 @@ export default function SettingsSidebar({ activeSection, onSectionChange }: Sett
     },
     {
       id: 'marketplace' as const,
-      label: 'Marketplace',
+      label: 'Skills',
       icon: Store,
-      description: 'Browse skills',
+      description: 'Browse & convert skills per client',
+    },
+    {
+      id: 'agents' as const,
+      label: 'Agents',
+      icon: Bot,
+      description: 'Browse agents per client',
+    },
+    {
+      id: 'commands' as const,
+      label: 'Commands',
+      icon: TerminalSquare,
+      description: 'Slash commands per client',
+    },
+    {
+      id: 'global-elements' as const,
+      label: 'Extensions',
+      // "Extensions" is the umbrella term per the Add-Ons → Extensions decision
+      // (2026-04-22). It covers components, plugins, and marketplaces — all
+      // three subtabs of the page. The URL/state key stays `global-elements`
+      // for now so existing links in docs, scenarios, and bookmarks keep
+      // working. A future commit adds `tab=extensions` as an alias.
+      icon: Puzzle,
+      description: 'Components, plugins, marketplaces',
+    },
+    {
+      id: 'cemetery' as const,
+      label: 'Cemetery',
+      icon: Archive,
+      description: 'Revive deleted agents',
+    },
+    {
+      // #234 (2026-04-20): Ledger-health diagnostics panel. Fits here
+      // between Cemetery and Experiments because it's an operator-
+      // visibility tool sitting right next to the other "inspect the
+      // system" entries (Cemetery + Hosts + Plugins).
+      id: 'diagnostics' as const,
+      label: 'Diagnostics',
+      icon: Activity,
+      description: 'Ledger health + integrity',
     },
     {
       id: 'experiments' as const,
@@ -60,11 +107,13 @@ export default function SettingsSidebar({ activeSection, onSectionChange }: Sett
   ]
 
   return (
-    <div className="w-64 border-r border-gray-800 bg-gray-900/50 p-4 flex flex-col">
-      <h2 className="text-lg font-semibold text-white mb-1 px-2">Settings</h2>
-      <p className="text-xs text-gray-400 mb-6 px-2">Configure AI Maestro</p>
+    <div className="w-64 border-r border-gray-800 bg-gray-900/50 flex flex-col min-h-0">
+      <div className="p-4 pb-2 flex-shrink-0">
+        <h2 className="text-lg font-semibold text-white mb-1 px-2">Settings</h2>
+        <p className="text-xs text-gray-400 px-2">Configure AI Maestro</p>
+      </div>
 
-      <nav className="space-y-1">
+      <nav className="flex-1 min-h-0 overflow-y-auto space-y-1 px-4 pb-4">
         {sections.map((section) => {
           const Icon = section.icon
           const isActive = activeSection === section.id

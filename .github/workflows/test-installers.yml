@@ -4,24 +4,23 @@ on:
   push:
     paths:
       - 'install-*.sh'
-      - 'messaging_scripts/**'
-      - 'memory_scripts/**'
-      - 'docs_scripts/**'
-      - 'graph_scripts/**'
-      - 'portable_scripts/**'
+      - 'update-*.sh'
+      - 'verify-installation.sh'
+      - 'plugin/scripts/**'
+      - 'plugin/skills/**'
       - 'scripts/shell-helpers/**'
-      - 'skills/**'
+      - 'scripts/claude-hooks/**'
       - '.github/workflows/test-installers.yml'
   pull_request:
     paths:
       - 'install-*.sh'
-      - 'messaging_scripts/**'
-      - 'memory_scripts/**'
-      - 'docs_scripts/**'
-      - 'graph_scripts/**'
-      - 'portable_scripts/**'
+      - 'update-*.sh'
+      - 'verify-installation.sh'
+      - 'plugin/scripts/**'
+      - 'plugin/skills/**'
       - 'scripts/shell-helpers/**'
-      - 'skills/**'
+      - 'scripts/claude-hooks/**'
+      - '.github/workflows/test-installers.yml'
 
 jobs:
   test-installers:
@@ -44,8 +43,8 @@ jobs:
         run: |
           echo "=== Testing install-messaging.sh ==="
 
-          # Run installer with option 1 (scripts only, non-interactive)
-          echo "1" | ./install-messaging.sh
+          # Run installer in non-interactive mode
+          ./install-messaging.sh -y
 
           # Verify common.sh was installed
           if [ ! -f ~/.local/share/aimaestro/shell-helpers/common.sh ]; then
@@ -54,8 +53,8 @@ jobs:
           fi
           echo "✓ common.sh installed"
 
-          # Verify messaging scripts were installed
-          for script in check-aimaestro-messages.sh send-aimaestro-message.sh read-aimaestro-message.sh messaging-helper.sh; do
+          # Verify AMP messaging scripts were installed
+          for script in amp-init.sh amp-send.sh amp-inbox.sh amp-read.sh amp-reply.sh amp-status.sh amp-register.sh amp-fetch.sh amp-delete.sh amp-identity.sh amp-helper.sh amp-security.sh; do
             if [ ! -x ~/.local/bin/$script ]; then
               echo "ERROR: $script not installed or not executable"
               exit 1
@@ -63,138 +62,56 @@ jobs:
             echo "✓ $script installed"
           done
 
-          # Verify docs scripts were installed
-          for script in docs-search.sh docs-helper.sh; do
-            if [ ! -x ~/.local/bin/$script ]; then
-              echo "ERROR: $script not installed or not executable"
-              exit 1
-            fi
-            echo "✓ $script installed"
-          done
-
-      - name: Test install-memory-tools.sh
+      - name: Test install-agent-cli.sh
         run: |
-          echo "=== Testing install-memory-tools.sh ==="
+          echo "=== Testing install-agent-cli.sh ==="
 
-          ./install-memory-tools.sh
+          ./install-agent-cli.sh -y
 
-          # Verify common.sh was installed (may already exist from messaging)
-          if [ ! -f ~/.local/share/aimaestro/shell-helpers/common.sh ]; then
-            echo "ERROR: common.sh not installed"
+          # Verify agent CLI was installed
+          if [ ! -x ~/.local/bin/aimaestro-agent.sh ]; then
+            echo "ERROR: aimaestro-agent.sh not installed or not executable"
             exit 1
           fi
-          echo "✓ common.sh installed"
+          echo "✓ aimaestro-agent.sh installed"
 
-          # Verify memory scripts were installed
-          for script in memory-search.sh memory-helper.sh; do
-            if [ ! -x ~/.local/bin/$script ]; then
-              echo "ERROR: $script not installed or not executable"
+          # Verify agent-helper.sh in share dir
+          if [ ! -f ~/.local/share/aimaestro/shell-helpers/agent-helper.sh ]; then
+            echo "ERROR: agent-helper.sh not installed to share dir"
+            exit 1
+          fi
+          echo "✓ agent-helper.sh installed to share dir"
+
+          # Verify skill was installed (requires claude CLI to be present)
+          if command -v claude &> /dev/null; then
+            if [ ! -f ~/.claude/skills/ai-maestro-agents-management/SKILL.md ]; then
+              echo "ERROR: ai-maestro-agents-management skill not installed"
               exit 1
             fi
-            echo "✓ $script installed"
-          done
-
-          # Verify skill was installed
-          if [ ! -f ~/.claude/skills/memory-search/SKILL.md ]; then
-            echo "ERROR: memory-search skill not installed"
-            exit 1
+            echo "✓ ai-maestro-agents-management skill installed"
+          else
+            echo "⚠ Claude Code not installed - skill installation skipped (expected)"
           fi
-          echo "✓ memory-search skill installed"
-
-      - name: Test install-graph-tools.sh
-        run: |
-          echo "=== Testing install-graph-tools.sh ==="
-
-          ./install-graph-tools.sh
-
-          # Verify common.sh was installed
-          if [ ! -f ~/.local/share/aimaestro/shell-helpers/common.sh ]; then
-            echo "ERROR: common.sh not installed"
-            exit 1
-          fi
-          echo "✓ common.sh installed"
-
-          # Verify graph scripts were installed
-          for script in graph-helper.sh graph-describe.sh graph-find-callers.sh graph-find-callees.sh graph-find-related.sh graph-find-by-type.sh; do
-            if [ ! -x ~/.local/bin/$script ]; then
-              echo "ERROR: $script not installed or not executable"
-              exit 1
-            fi
-            echo "✓ $script installed"
-          done
-
-          # Verify skill was installed
-          if [ ! -f ~/.claude/skills/graph-query/SKILL.md ]; then
-            echo "ERROR: graph-query skill not installed"
-            exit 1
-          fi
-          echo "✓ graph-query skill installed"
-
-      - name: Test install-doc-tools.sh
-        run: |
-          echo "=== Testing install-doc-tools.sh ==="
-
-          ./install-doc-tools.sh
-
-          # Verify common.sh was installed
-          if [ ! -f ~/.local/share/aimaestro/shell-helpers/common.sh ]; then
-            echo "ERROR: common.sh not installed"
-            exit 1
-          fi
-          echo "✓ common.sh installed"
-
-          # Verify docs-helper.sh was installed to share dir
-          if [ ! -f ~/.local/share/aimaestro/shell-helpers/docs-helper.sh ]; then
-            echo "ERROR: docs-helper.sh not installed to share dir"
-            exit 1
-          fi
-          echo "✓ docs-helper.sh installed to share dir"
-
-          # Verify doc scripts were installed
-          for script in docs-search.sh docs-index.sh docs-index-delta.sh docs-stats.sh docs-list.sh docs-get.sh docs-find-by-type.sh; do
-            if [ ! -x ~/.local/bin/$script ]; then
-              echo "ERROR: $script not installed or not executable"
-              exit 1
-            fi
-            echo "✓ $script installed"
-          done
-
-          # Verify skill was installed
-          if [ ! -f ~/.claude/skills/docs-search/SKILL.md ]; then
-            echo "ERROR: docs-search skill not installed"
-            exit 1
-          fi
-          echo "✓ docs-search skill installed"
 
       - name: Test scripts can source common.sh
         run: |
           echo "=== Testing scripts can source dependencies ==="
 
-          # Test that messaging-helper.sh can source common.sh
-          bash -n ~/.local/bin/messaging-helper.sh
-          echo "✓ messaging-helper.sh syntax OK"
+          # Test that agent-helper.sh can source dependencies
+          bash -n ~/.local/share/aimaestro/shell-helpers/agent-helper.sh
+          echo "✓ agent-helper.sh syntax OK"
 
-          # Test that memory-helper.sh can source common.sh
-          bash -n ~/.local/bin/memory-helper.sh
-          echo "✓ memory-helper.sh syntax OK"
-
-          # Test that graph-helper.sh can source common.sh
-          bash -n ~/.local/bin/graph-helper.sh
-          echo "✓ graph-helper.sh syntax OK"
-
-          # Test that docs-helper.sh can source common.sh (in share dir)
-          bash -n ~/.local/share/aimaestro/shell-helpers/docs-helper.sh
-          echo "✓ docs-helper.sh syntax OK"
+          # Test that aimaestro-agent.sh syntax is valid
+          bash -n ~/.local/bin/aimaestro-agent.sh
+          echo "✓ aimaestro-agent.sh syntax OK"
 
       - name: Test scripts show help (no tmux session)
         run: |
           echo "=== Testing script help output ==="
 
           # These should show help or error gracefully (not crash)
-          ~/.local/bin/memory-search.sh --help || true
-          ~/.local/bin/docs-search.sh --help || true
-          ~/.local/bin/send-aimaestro-message.sh --help || true
-          ~/.local/bin/graph-describe.sh --help || true
+          ~/.local/bin/amp-send.sh --help || true
+          ~/.local/bin/aimaestro-agent.sh --help || true
 
           echo "✓ Scripts handle missing tmux session gracefully"
 
@@ -244,18 +161,22 @@ jobs:
             fi
           done
 
+      - name: Test verify-installation.sh
+        run: |
+          echo "=== Testing verify-installation.sh ==="
+          ./verify-installation.sh || true
+          echo "✓ verify-installation.sh completed"
+
       - name: Summary
         run: |
           echo ""
           echo "==========================================="
-          echo "  All 4 Installer Tests Passed!"
+          echo "  All Installer Tests Passed!"
           echo "==========================================="
           echo ""
           echo "Tested installers:"
           echo "  ✓ install-messaging.sh"
-          echo "  ✓ install-memory-tools.sh"
-          echo "  ✓ install-graph-tools.sh"
-          echo "  ✓ install-doc-tools.sh"
+          echo "  ✓ install-agent-cli.sh"
           echo ""
           echo "Installed scripts:"
           ls -1 ~/.local/bin/*.sh | wc -l | xargs echo "  Total:"

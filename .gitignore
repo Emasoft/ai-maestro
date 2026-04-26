@@ -8,17 +8,17 @@ coverage
 *.lcov
 .nyc_output
 
-# Next.js
+# Next.js build output — root-level only, so we don't accidentally
+# match app/api/plugin-builder/build/ or other nested build/ directories
 .next
+.next.broken-*
+.next.stale-*
+.next.stale2-*
 out
-build
+/build
 dist
 
-# Production
-/build
-
 # Misc
-.DS_Store
 *.pem
 
 # Debug
@@ -107,6 +107,30 @@ task_plan.md
 findings.md
 progress.md
 
+# Agent reports — reports/ and reports_dev/ are both gitignored per the
+# 2026-04-20 rule "all agents save reports to project-root ./reports/
+# (private data — never committed)". See SCENARIOS_TESTS_RULES.md Rule 14
+# and the rollout TRDD for the universal report-directory contract.
+reports/
+reports_dev/
+
+# Rechecker reports and pending merge files
+.rechecker/
+rck-*.md
+
+# Dev folders (local only, not published)
+docs_dev/
+scripts_dev/
+samples_dev/
+examples_dev/
+tests_dev/
+downloads_dev/
+libs_dev/
+builds_dev/
+
+# SERENA MCP state
+.serena/
+
 # Benchmark and competitive analysis (internal use only)
 docs/benchmark/
 
@@ -123,6 +147,10 @@ agent-container/.env.local
 agent-container/.env.*.local
 *.token
 secrets/
+
+# Maestro credentials (NEVER commit — contains plaintext passwords)
+maestro-credentials.yaml
+maestro-credentials.yml
 # But allow .env.example files
 !agent-container/.env.example
 
@@ -149,3 +177,66 @@ docs/BACKLOG-AGENTS-MARKETPLACE.md
 
 # Agent-specific avatar files (only library files should be committed)
 public/avatars/*_enhanced.png
+
+# Claude Code local data — ignore specific session/cache subdirs only
+# so project-scoped rules / agents / scripts can still be committed.
+.claude/.DS_Store
+.claude/cache/
+.claude/chat_history/
+.claude/projects/
+.claude/todos/
+.claude/settings.local.json
+.claude/worktrees/
+.claude/agent-memory/
+CLAUDE.local.md
+
+# External backup files
+*.externbak
+
+# TLDR CLI cache/stats
+.tldr/
+.tldrignore
+# TLDR artifacts (added by rechecker)
+.tldr_session_*
+
+# Nested plugin repos (not submodules — standalone clones for dev)
+plugins/amp-messaging
+.infographic/
+
+# LLM Externalizer analysis reports (intermediate artifacts — regeneratable)
+llm_externalizer_output/
+
+# TRDD-1222f06a rate-limit experiment leftovers (superseded by CronCreate
+# architecture — kept gitignored so any stale runtime artifact never lands
+# in a commit)
+resume_needed_alert.md
+
+# Claude Code CronCreate lock file — ephemeral runtime artifact
+.claude/scheduled_tasks.lock
+# Claude Code CronCreate state file — per-session, contains local cron refs
+.claude/scheduled_tasks.json
+
+# ai-maestro-janitor plugin state + logs (project-local, see janitor README)
+.janitor/
+
+# Next.js smoke-test / broken backup build dirs
+.next.bak-*/
+
+# resume-handoff + create-handoff workspace (user scratch, not project code)
+thoughts/
+
+# Scenario test outputs — runtime ephemeral (state + backups)
+tests/scenarios/state-backups/
+tests/scenarios/state/
+state-backups/
+playwright-report/
+# Legacy scenario output paths (migrated 2026-04-19 to reports/scenarios-runner/)
+tests/scenarios/reports/
+tests/scenarios/screenshots/
+
+# Dev workspace for throwaway files
+tests_dev/
+
+# rust-tools/ — lives on feature/jsonl-session-browser only; keep untracked
+# on other branches so branch switches don't pollute the working tree.
+rust-tools/

@@ -1,0 +1,132 @@
+/**
+ * Document Registry - File-based CRUD for team document persistence
+ *
+ * Storage: ~/.aimaestro/teams/docs-{teamId}.json (one per team)
+ * Mirrors the pattern from lib/task-registry.ts
+ */
+
+import fs from 'fs'
+import path from 'path'
+import { v4 as uuidv4 } from 'uuid'
+import { withLock } from '@/lib/file-lock'
+import { isValidUuid } from '@/lib/validation'
+import type { TeamDocument, TeamDocumentsFile } from '@/types/document'
+import { statePath } from '@/lib/ecosystem-constants'
+
+const TEAMS_DIR = statePath('teams')
+
+function ensureTeamsDir() {
+  if (!fs.existsSync(TEAMS_DIR)) {
+    fs.mkdirSync(TEAMS_DIR, { recursive: true })
+  }
+}
+
+function docsFilePath(teamId: string): string {
+  // NT-020: Use shared isValidUuid instead of duplicating UUID regex
+  if (!isValidUuid(teamId)) throw new Error('Invalid team ID')
+  // path.basename() as defense-in-depth against directory traversal
+  return path.join(TEAMS_DIR, path.basename(`docs-${teamId}.json`))
+}
+
+export function loadDocuments(teamId: string): TeamDocument[] {
+  try {
+    ensureTeamsDir()
+    const filePath = docsFilePath(teamId)
+    if (!fs.existsSync(filePath)) {
+      return []
+    }
+    const data = fs.readFileSync(filePath, 'utf-8')
+    const parsed: TeamDocumentsFile = JSON.parse(data)
+    return Array.isArray(parsed.documents) ? parsed.documents : []
+  } catch (error: unknown) {
+    // Only return [] for missing file (first use). All other errors (corruption,
+    // permissions, etc.) must propagate -- otherwise saveDocuments() overwrites
+    // the real data with an empty array = permanent data loss.
+    if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return []
+    }
+    throw error
+  }
+}
+
+// SF-029: Throws on error instead of returning false -- callers already ignore the return value.
+// The previous boolean return masked write failures silently.
+export function saveDocuments(teamId: string, documents: TeamDocument[]): void {
+  ensureTeamsDir()
+  const file: TeamDocumentsFile = { version: 1, documents }
+  const filePath = docsFilePath(teamId)
+  // MF-024: Atomic write -- write to temp file then rename to avoid corruption on crash
+  const tmpPath = `${filePath}.tmp.${process.pid}`
+  fs.writeFileSync(tmpPath, JSON.stringify(file, null, 2), 'utf-8')
+  try {
+    fs.renameSync(tmpPath, filePath)
+  } catch (err) {
+    // NT-026: Clean up temp file if rename fails (e.g., cross-device rename)
+    try { fs.unlinkSync(tmpPath) } catch { /* best-effort cleanup */ }
+    throw err
+  }
+}
+
+export function getDocument(teamId: string, docId: string): TeamDocument | null {
+  const documents = loadDocuments(teamId)
+  return documents.find(d => d.id === docId) || null
+}
+
+export function createDocument(data: {
+  teamId: string
+  title: string
+  content: string
+  pinned?: boolean
+  tags?: string[]
+}): Promise<TeamDocument> {
+  return withLock('documents-' + data.teamId, () => {
+    const documents = loadDocuments(data.teamId)
+    const now = new Date().toISOString()
+
+    const doc: TeamDocument = {
+      id: uuidv4(),
+      teamId: data.teamId,
+      title: data.title,
+      content: data.content,
+      pinned: data.pinned ?? false,
+      tags: data.tags ?? [],
+      createdAt: now,
+      updatedAt: now,
+    }
+
+    documents.push(doc)
+    saveDocuments(data.teamId, documents)
+    return doc
+  })
+}
+
+export function updateDocument(
+  teamId: string,
+  docId: string,
+  updates: Partial<Pick<TeamDocument, 'title' | 'content' | 'pinned' | 'tags'>>
+): Promise<TeamDocument | null> {
+  return withLock('documents-' + teamId, () => {
+    const documents = loadDocuments(teamId)
+    const index = documents.findIndex(d => d.id === docId)
+    if (index === -1) return null
+
+    documents[index] = {
+      ...documents[index],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    }
+
+    saveDocuments(teamId, documents)
+    return documents[index]
+  })
+}
+
+export function deleteDocument(teamId: string, docId: string): Promise<boolean> {
+  return withLock('documents-' + teamId, () => {
+    const documents = loadDocuments(teamId)
+    const filtered = documents.filter(d => d.id !== docId)
+    if (filtered.length === documents.length) return false
+    saveDocuments(teamId, filtered)
+    return true
+  })
+}

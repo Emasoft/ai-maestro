@@ -18,8 +18,52 @@
  *   ./scripts/register-agent-from-session.mjs --all -y --program claude
  */
 
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
+import fs from 'fs'
+import os from 'os'
 import * as readline from 'readline'
+
+/**
+ * Validate a tmux session name against allowed characters.
+ * tmux session names must match: ^[a-zA-Z0-9_@.-]+$
+ * Rejects shell metacharacters (;, $, `, |, &, etc.) to prevent command injection.
+ */
+function validateSessionName(name) {
+  if (typeof name !== 'string' || !/^[a-zA-Z0-9_@.-]+$/.test(name)) {
+    throw new Error(`Invalid session name: "${name}" — must match /^[a-zA-Z0-9_@.-]+$/`)
+  }
+  return name
+}
+
+/**
+ * Validate an agent ID (UUID or kebab-case identifier).
+ * Allows alphanumeric, hyphens, underscores, dots, and @ for structured names.
+ */
+function validateAgentId(id) {
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9_@.-]+$/.test(id)) {
+    throw new Error(`Invalid agent ID: "${id}" — must match /^[a-zA-Z0-9_@.-]+$/`)
+  }
+  return id
+}
+
+/**
+ * Validate and resolve a working directory path.
+ * Prevents symlink attacks and execution in arbitrary directories by:
+ * 1. Resolving symlinks to the real path
+ * 2. Verifying it exists and is a directory
+ * 3. Verifying it is under the user's home directory
+ */
+function validateWorkingDir(workingDir) {
+  const resolvedDir = fs.realpathSync(workingDir)
+  if (!fs.statSync(resolvedDir).isDirectory()) {
+    throw new Error(`workingDir is not a directory: "${resolvedDir}"`)
+  }
+  const homeDir = os.homedir()
+  if (!resolvedDir.startsWith(homeDir + '/') && resolvedDir !== homeDir) {
+    throw new Error(`workingDir outside home directory: "${resolvedDir}"`)
+  }
+  return resolvedDir
+}
 
 const API_BASE = 'http://localhost:23000'
 
@@ -67,7 +111,8 @@ async function createAgentAPI(agentData) {
  * Link session to agent via API
  */
 async function linkSessionAPI(agentId, sessionName, workingDirectory) {
-  const response = await fetch(`${API_BASE}/api/agents/${agentId}/session`, {
+  validateAgentId(agentId)
+  const response = await fetch(`${API_BASE}/api/agents/${encodeURIComponent(agentId)}/session`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -89,9 +134,13 @@ async function linkSessionAPI(agentId, sessionName, workingDirectory) {
  * This embeds the agent ID in the session name so scripts don't need lookups
  */
 function renameSessionToStructured(oldName, agentId, hostId = 'local') {
+  validateSessionName(oldName)
+  validateAgentId(agentId)
+  validateSessionName(hostId)
   const newName = `${agentId}@${hostId}`
   try {
-    execSync(`tmux rename-session -t "${oldName}" "${newName}"`, { encoding: 'utf-8' })
+    // Use execFileSync to avoid shell parsing entirely — prevents command injection
+    execFileSync('tmux', ['rename-session', '-t', oldName, newName], { encoding: 'utf-8' })
     return newName
   } catch (error) {
     console.warn(`⚠️  Could not rename session: ${error.message}`)
@@ -104,7 +153,7 @@ function renameSessionToStructured(oldName, agentId, hostId = 'local') {
  */
 function getCurrentSession() {
   try {
-    return execSync('tmux display-message -p "#S"', { encoding: 'utf-8' }).trim()
+    return execFileSync('tmux', ['display-message', '-p', '#S'], { encoding: 'utf-8' }).trim()
   } catch (error) {
     return null
   }
@@ -115,7 +164,7 @@ function getCurrentSession() {
  */
 function getAllSessions() {
   try {
-    const output = execSync('tmux list-sessions -F "#{session_name}"', { encoding: 'utf-8' })
+    const output = execFileSync('tmux', ['list-sessions', '-F', '#{session_name}'], { encoding: 'utf-8' })
     return output.trim().split('\n').filter(Boolean)
   } catch (error) {
     return []
@@ -126,8 +175,10 @@ function getAllSessions() {
  * Get session working directory
  */
 function getSessionWorkingDir(sessionName) {
+  validateSessionName(sessionName)
   try {
-    return execSync(`tmux display-message -p -t "${sessionName}" -F "#{pane_current_path}"`, {
+    // Use execFileSync to avoid shell parsing entirely — prevents command injection
+    return execFileSync('tmux', ['display-message', '-p', '-t', sessionName, '-F', '#{pane_current_path}'], {
       encoding: 'utf-8'
     }).trim()
   } catch (error) {
@@ -173,6 +224,7 @@ function parseSessionName(sessionName) {
  * @param {object} options - optional overrides { program, model }
  */
 async function registerSession(sessionName, interactive = true, options = {}) {
+  validateSessionName(sessionName)
   // Check if already registered
   const existing = await getAgentBySession(sessionName)
   if (existing) {
@@ -190,7 +242,8 @@ async function registerSession(sessionName, interactive = true, options = {}) {
     return null
   }
 
-  const workingDir = getSessionWorkingDir(sessionName)
+  const rawWorkingDir = getSessionWorkingDir(sessionName)
+  const workingDir = validateWorkingDir(rawWorkingDir)
   const parsed = parseSessionName(sessionName)
 
   console.log(`\n📝 Registering session: ${sessionName}`)
@@ -258,6 +311,31 @@ async function registerSession(sessionName, interactive = true, options = {}) {
     console.log(`   Old Session: ${sessionName}`)
     console.log(`   New Session: ${newSessionName}`)
 
+    // R17: Install ai-maestro-plugin with --scope local
+    console.log(`\n🔌 Installing ai-maestro-plugin (scope=local)...`)
+    try {
+      // Use execFileSync to avoid shell parsing — the command and args are static constants
+      execFileSync('claude', ['plugin', 'install', 'ai-maestro-plugin@ai-maestro-plugins', '--scope', 'local'], {
+        cwd: workingDir,
+        timeout: 30000,
+        stdio: 'pipe'
+      })
+      console.log(`   ✅ ai-maestro-plugin installed locally`)
+    } catch (plugErr) {
+      console.warn(`   ⚠️  ai-maestro-plugin install failed: ${plugErr.message}`)
+      console.warn(`   Agent will be flagged as corePluginMissing. Retry with:`)
+      console.warn(`   cd ${workingDir} && claude plugin install ai-maestro-plugin@ai-maestro-plugins --scope local`)
+      // Flag the agent via API
+      try {
+        validateAgentId(agent.id)
+        await fetch(`${API_BASE}/api/agents/${encodeURIComponent(agent.id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ corePluginMissing: true })
+        })
+      } catch { /* non-fatal */ }
+    }
+
     return agent
   } catch (error) {
     console.error(`❌ Failed to register agent: ${error.message}`)
@@ -286,6 +364,7 @@ async function main() {
   let sessions = []
 
   if (specificSession) {
+    validateSessionName(specificSession)
     sessions = [specificSession]
     console.log(`Registering specific session: ${specificSession}`)
   } else if (isAll) {

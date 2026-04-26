@@ -7,7 +7,7 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Zap,
@@ -21,16 +21,21 @@ import {
   ChevronDown,
   ChevronRight,
   Brain,
-  X
+  X,
+  Clock,
+  XCircle
 } from 'lucide-react'
 import type { MarketplaceSkill, AgentSkillsConfig } from '@/types/marketplace'
+import { useGovernance } from '@/hooks/useGovernance'
 import SkillBrowser from './SkillBrowser'
-import SkillDetailModal from './SkillDetailModal'
+// SF-020: SkillDetailModal import removed — selectedSkill was never set to non-null (dead code)
 
 interface AgentSkillEditorProps {
   agentId: string
   hostUrl?: string
   onSkillsChange?: () => void
+  /** Governance password required for approving/rejecting config requests */
+  governancePassword?: string
 }
 
 // Default AI Maestro skills
@@ -45,7 +50,8 @@ const AI_MAESTRO_SKILLS = [
 export default function AgentSkillEditor({
   agentId,
   hostUrl = '',
-  onSkillsChange
+  onSkillsChange,
+  governancePassword
 }: AgentSkillEditorProps) {
   // State
   const [skills, setSkills] = useState<AgentSkillsConfig | null>(null)
@@ -54,14 +60,54 @@ export default function AgentSkillEditor({
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
 
+  // Track save-success timeout for cleanup on unmount
+  const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => { if (saveSuccessTimerRef.current) clearTimeout(saveSuccessTimerRef.current) }
+  }, [])
+
   // UI State
   const [showBrowser, setShowBrowser] = useState(false)
-  const [selectedSkill, setSelectedSkill] = useState<MarketplaceSkill | null>(null)
+  // SF-020: Removed dead selectedSkill state and SkillDetailModal (selectedSkill was never set to non-null)
   const [expandedSections, setExpandedSections] = useState({
     marketplace: true,
     aiMaestro: true,
     custom: true
   })
+
+  // Governance: pending config requests for this agent
+  const { pendingConfigRequests, resolveConfigRequest, managerId } = useGovernance(agentId)
+  const agentPendingConfigs = pendingConfigRequests.filter(r => r.payload.agentId === agentId)
+  // SF-046 / SF-059: Phase 1 localhost: canApprove always true (single-user mode).
+  // TODO Phase 2 (governance-title-check): Replace with actual title check:
+  //   const canApprove = agentTitle === 'manager' || agentTitle === 'chief-of-staff'
+  // This requires passing the current user's governance title from the governance context.
+  const canApprove = true
+
+  // Track which config requests are currently being resolved (for loading/disabled state)
+  const [resolvingIds, setResolvingIds] = useState<Set<string>>(new Set())
+
+  // Handle approve/reject with error feedback and loading state
+  const handleResolve = async (requestId: string, approved: boolean) => {
+    if (!governancePassword) {
+      console.error('Cannot resolve config request: governance password not provided')
+      setError('Governance password is required to approve/reject config requests')
+      return
+    }
+    const resolverAgent = managerId || agentId // Use manager if available, else self
+    setResolvingIds(prev => new Set(prev).add(requestId))
+    try {
+      const result = await resolveConfigRequest(requestId, approved, governancePassword, resolverAgent)
+      if (!result.success) {
+        setError(result.error || 'Failed to resolve configuration request')
+      }
+    } catch (err) {
+      console.error('Failed to resolve config request:', err)
+      setError(err instanceof Error ? err.message : 'Failed to resolve configuration request')
+    } finally {
+      setResolvingIds(prev => { const next = new Set(prev); next.delete(requestId); return next })
+    }
+  }
 
   // Load skills
   const loadSkills = useCallback(async () => {
@@ -71,7 +117,8 @@ export default function AgentSkillEditor({
       const res = await fetch(`${hostUrl}/api/agents/${agentId}/skills`)
       if (!res.ok) {
         if (res.status === 404) {
-          // No skills configured yet, use defaults
+          // No skills configured yet, use defaults: populate all AI Maestro skill IDs
+          // so that enabled:true and skills array are consistent (all skills on by default)
           setSkills({
             marketplace: [],
             aiMaestro: { enabled: true, skills: AI_MAESTRO_SKILLS.map(s => s.id) },
@@ -97,6 +144,8 @@ export default function AgentSkillEditor({
 
   // Add marketplace skill
   const handleAddSkill = async (skill: MarketplaceSkill) => {
+    // SF-025: Skip PATCH if skill is already installed
+    if (skills?.marketplace?.some(s => s.id === skill.id || s.name === skill.name)) return
     setSaving(true)
     setError(null)
     try {
@@ -113,7 +162,8 @@ export default function AgentSkillEditor({
       onSkillsChange?.()
       setSaveSuccess(true)
       setShowBrowser(false) // Close the modal after successful add
-      setTimeout(() => setSaveSuccess(false), 2000)
+      if (saveSuccessTimerRef.current) clearTimeout(saveSuccessTimerRef.current)
+      saveSuccessTimerRef.current = setTimeout(() => setSaveSuccess(false), 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add skill')
     } finally {
@@ -134,7 +184,8 @@ export default function AgentSkillEditor({
       await loadSkills()
       onSkillsChange?.()
       setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 2000)
+      if (saveSuccessTimerRef.current) clearTimeout(saveSuccessTimerRef.current)
+      saveSuccessTimerRef.current = setTimeout(() => setSaveSuccess(false), 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove skill')
     } finally {
@@ -144,7 +195,7 @@ export default function AgentSkillEditor({
 
   // Toggle AI Maestro skill
   const handleToggleAiMaestroSkill = async (skillId: string, enabled: boolean) => {
-    if (!skills) return
+    if (!skills || !skills.aiMaestro) return
 
     const currentSkills = skills.aiMaestro.skills
     const newSkills = enabled
@@ -177,7 +228,7 @@ export default function AgentSkillEditor({
 
   // Toggle all AI Maestro skills
   const handleToggleAllAiMaestro = async (enabled: boolean) => {
-    if (!skills) return
+    if (!skills || !skills.aiMaestro) return
 
     setSaving(true)
     setError(null)
@@ -259,6 +310,52 @@ export default function AgentSkillEditor({
             <div className="flex items-center gap-2 text-red-400 text-xs">
               <AlertCircle className="w-3 h-3" />
               {error}
+            </div>
+          </div>
+        )}
+
+        {/* Pending Configuration Changes */}
+        {agentPendingConfigs.length > 0 && (
+          <div className="px-4 py-3 border-b border-gray-800">
+            <h4 className="text-xs font-medium text-amber-400 uppercase tracking-wider mb-2">
+              Pending Configuration Changes
+            </h4>
+            <div className="space-y-2">
+              {agentPendingConfigs.map(req => (
+                <div key={req.id} className="flex items-center gap-2 px-3 py-2 rounded bg-amber-500/5 border border-amber-500/20">
+                  <Clock className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm text-amber-300">
+                      {req.payload?.configuration?.operation || (req.type === 'configure-agent' ? 'Configuration change' : req.type)}
+                    </span>
+                    <span className="text-xs text-amber-400/60 ml-2">
+                      {req.status === 'pending' ? 'Awaiting approval' : req.status}
+                    </span>
+                  </div>
+                  {canApprove && req.status === 'pending' && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleResolve(req.id, true)}
+                        disabled={resolvingIds.has(req.id)}
+                        className="p-1 rounded text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Approve"
+                        aria-label="Approve configuration request"
+                      >
+                        <Check className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleResolve(req.id, false)}
+                        disabled={resolvingIds.has(req.id)}
+                        className="p-1 rounded text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Reject"
+                        aria-label="Reject configuration request"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -346,7 +443,7 @@ export default function AgentSkillEditor({
                 <Brain className="w-4 h-4 text-purple-400" />
                 <span className="text-sm font-medium text-gray-300">AI Maestro Skills</span>
                 <span className="text-xs text-gray-500">
-                  ({skills?.aiMaestro.enabled ? skills.aiMaestro.skills.length : 0} of {AI_MAESTRO_SKILLS.length})
+                  ({skills?.aiMaestro?.enabled ? skills.aiMaestro.skills.length : 0} of {AI_MAESTRO_SKILLS.length})
                 </span>
               </div>
               <div
@@ -356,7 +453,7 @@ export default function AgentSkillEditor({
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={skills?.aiMaestro.enabled}
+                    checked={skills?.aiMaestro?.enabled ?? false}
                     onChange={e => handleToggleAllAiMaestro(e.target.checked)}
                     className="sr-only peer"
                     disabled={saving}
@@ -366,7 +463,7 @@ export default function AgentSkillEditor({
               </div>
             </button>
 
-            {expandedSections.aiMaestro && skills?.aiMaestro.enabled && (
+            {expandedSections.aiMaestro && skills?.aiMaestro?.enabled && (
               <div className="px-4 pb-4">
                 <div className="space-y-2 pl-6">
                   {AI_MAESTRO_SKILLS.map(skill => {
@@ -435,7 +532,7 @@ export default function AgentSkillEditor({
                   <div className="space-y-2 pl-6">
                     {skills?.custom.map(skill => (
                       <div
-                        key={skill.name}
+                        key={skill.path || skill.name}
                         className="flex items-center justify-between p-2 bg-gray-800/50 rounded-md group"
                       >
                         <div className="flex items-center gap-2 min-w-0">
@@ -450,7 +547,7 @@ export default function AgentSkillEditor({
                           </div>
                         </div>
                         <button
-                          onClick={() => handleRemoveSkill(`custom:${skill.name}`)}
+                          onClick={() => handleRemoveSkill(skill.path)}
                           disabled={saving}
                           className="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-50"
                           title="Remove skill"
@@ -497,9 +594,12 @@ export default function AgentSkillEditor({
                 onSkillInstall={async (skill) => {
                   await handleAddSkill(skill)
                 }}
-                onSkillsChange={() => {
-                  loadSkills()
-                  onSkillsChange?.()
+                onSkillsChange={async () => {
+                  // SF-024: Await loadSkills so errors propagate instead of being swallowed
+                  await loadSkills()
+                  // Do not call onSkillsChange here: handleAddSkill (the caller via onSkillInstall)
+                  // already calls onSkillsChange after loadSkills completes. Calling it here too
+                  // would trigger a redundant double-call on every skill install.
                 }}
                 hostUrl={hostUrl}
                 mode="select"
@@ -520,15 +620,6 @@ export default function AgentSkillEditor({
         document.body
       )}
 
-      {/* Skill Detail Modal */}
-      <SkillDetailModal
-        skill={selectedSkill}
-        isOpen={!!selectedSkill}
-        onClose={() => setSelectedSkill(null)}
-        onInstall={handleAddSkill}
-        isInstalled={selectedSkill ? (skills?.marketplace.some(s => s.id === selectedSkill.id) ?? false) : false}
-        hostUrl={hostUrl}
-      />
     </div>
   )
 }

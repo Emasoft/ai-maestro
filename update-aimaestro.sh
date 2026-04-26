@@ -4,6 +4,14 @@
 
 set -e
 
+# Source ecosystem constants (single source of truth for marketplace/plugin names)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/scripts/ecosystem-config.sh" ]; then
+    source "$SCRIPT_DIR/scripts/ecosystem-config.sh"
+elif [ -f "$SCRIPT_DIR/ecosystem-config.sh" ]; then
+    source "$SCRIPT_DIR/ecosystem-config.sh"
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -24,6 +32,8 @@ RESTART="🔄"
 
 # Parse command line arguments
 NON_INTERACTIVE=false
+SKIP_HOOKS=false
+SKIP_AGENT_CLI=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         -y|--yes|--non-interactive)
@@ -38,6 +48,14 @@ while [[ $# -gt 0 ]]; do
             echo "  -h, --help                    Show this help message"
             exit 0
             ;;
+        --skip-hooks)
+            SKIP_HOOKS=true
+            shift
+            ;;
+        --skip-agent-cli)
+            SKIP_AGENT_CLI=true
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
             echo "Use --help for usage information"
@@ -49,7 +67,7 @@ done
 echo ""
 echo "╔════════════════════════════════════════════════════════════════╗"
 echo "║                                                                ║"
-echo "║                 AI Maestro - Full Updater                      ║"
+echo "║                   AI Maestro - Full Updater                    ║"
 echo "║                                                                ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
@@ -91,7 +109,7 @@ echo "Current version: ${CYAN}${CURRENT_VERSION}${NC}"
 echo ""
 
 # Check for uncommitted changes
-if [ -n "$(git status --porcelain)" ]; then
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     print_warning "You have uncommitted changes in your working directory"
     echo ""
     echo "Options:"
@@ -108,7 +126,7 @@ if [ -n "$(git status --porcelain)" ]; then
 
     if [ "$STASH_CHOICE" = "1" ]; then
         print_info "Stashing changes..."
-        git stash
+        git stash push -m "ai-maestro-update-$(date +%Y%m%d-%H%M%S)"
         print_success "Changes stashed (use 'git stash pop' to restore)"
     else
         print_warning "Update cancelled"
@@ -119,6 +137,26 @@ fi
 echo ""
 print_step "$DOWNLOAD" "Fetching latest changes from GitHub..."
 echo ""
+
+# SF-042: Verify we are on the main branch before pulling from origin/main.
+# Running `git pull origin main` on a feature branch would merge main into it.
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+if [ "$CURRENT_BRANCH" != "main" ]; then
+    print_warning "You are on branch '${CURRENT_BRANCH}', not 'main'."
+    echo "         This updater pulls from origin/main. Switching branches automatically."
+    echo ""
+    if [ "$NON_INTERACTIVE" = true ]; then
+        git checkout main
+    else
+        read -p "Switch to main and continue? (y/n): " SWITCH_CONFIRM
+        if [[ "$SWITCH_CONFIRM" =~ ^[Yy]$ ]]; then
+            git checkout main
+        else
+            print_warning "Update cancelled -- please switch to main manually."
+            exit 0
+        fi
+    fi
+fi
 
 # Fetch and show what's new
 git fetch origin main
@@ -159,8 +197,14 @@ else
 
     echo ""
     print_step "$DOWNLOAD" "Pulling latest changes..."
+    BEFORE_SHA=$(git rev-parse HEAD)
     git pull origin main
     print_success "Code updated"
+
+    # Detect ecosystem.config.js changes that require PM2 config reload
+    if ! git diff --quiet "$BEFORE_SHA" HEAD -- ecosystem.config.js ecosystem.config.cjs 2>/dev/null; then
+        ECOSYSTEM_CHANGED=true
+    fi
 fi
 
 # Get new version
@@ -168,92 +212,132 @@ NEW_VERSION=$(grep '"version"' package.json | head -1 | sed 's/.*"version": "\([
 
 echo ""
 print_step "$BUILD" "Installing dependencies..."
-yarn install --frozen-lockfile 2>/dev/null || yarn install
+# Issue 7.1: Don't let yarn install failure abort the entire update under set -e
+yarn install --frozen-lockfile 2>/dev/null || yarn install || { print_warning "yarn install had warnings but continuing..."; }
 print_success "Dependencies installed"
+
+# Issue 7.2: Track build failure so tool reinstallation still proceeds under set -e
+BUILD_FAILED=false
+VERIFICATION_WARNINGS=false
+ECOSYSTEM_CHANGED=${ECOSYSTEM_CHANGED:-false}
 
 echo ""
 print_step "$BUILD" "Building application..."
-yarn build
-print_success "Build complete"
+if yarn build; then
+    print_success "Build complete"
+else
+    print_warning "Build failed - continuing with tool reinstallation"
+    BUILD_FAILED=true
+fi
 
 echo ""
-print_step "$ROCKET" "Installing scripts and skills..."
+print_step "$ROCKET" "Updating AI Maestro plugin and reinstalling scripts..."
 
-# Install messaging scripts
-if [ -d "messaging_scripts" ]; then
-    print_info "Installing messaging scripts..."
-    mkdir -p ~/.local/bin
-    for script in messaging_scripts/*.sh; do
-        if [ -f "$script" ]; then
-            SCRIPT_NAME=$(basename "$script")
-            cp "$script" ~/.local/bin/
-            chmod +x ~/.local/bin/"$SCRIPT_NAME"
-        fi
-    done
-    print_success "Messaging scripts installed"
+# ── v0.26.0: Skills are now bundled in the ai-maestro plugin ────────────
+# The plugin is installed from the ${MARKETPLACE_REPO:-Emasoft/ai-maestro-plugins} marketplace.
+# No standalone skills in ~/.claude/skills/ anymore.
+# Component installers still handle CLI scripts (amp-*.sh, etc.) in ~/.local/bin/.
+# ─────────────────────────────────────────────────────────────────────────
+
+# 0. Update the AI Maestro plugin (marketplace: see scripts/ecosystem-config.sh)
+print_info "Updating AI Maestro plugin from marketplace..."
+claude plugin marketplace update "${MARKETPLACE_NAME:-ai-maestro-plugins}" 2>/dev/null || true
+claude plugin update "${MAIN_PLUGIN_NAME:-ai-maestro-plugin}" 2>/dev/null || true
+print_success "AI Maestro plugin updated"
+
+# 1. AMP messaging scripts + all plugin/scripts/* tools
+if [ -f "install-messaging.sh" ]; then
+    print_info "Reinstalling AMP messaging & CLI tools..."
+    ./install-messaging.sh -y
+    print_success "Messaging & CLI tools reinstalled"
+else
+    print_warning "install-messaging.sh not found - skipping messaging tools"
 fi
 
-# Install docs scripts
-if [ -d "docs_scripts" ]; then
-    print_info "Installing docs scripts..."
-    mkdir -p ~/.local/bin
-    for script in docs_scripts/*.sh; do
-        if [ -f "$script" ]; then
-            SCRIPT_NAME=$(basename "$script")
-            cp "$script" ~/.local/bin/
-            chmod +x ~/.local/bin/"$SCRIPT_NAME"
-        fi
-    done
-    print_success "Docs scripts installed"
+# 2. Agent CLI (optional — skip with --skip-agent-cli)
+if [ "$SKIP_AGENT_CLI" != true ] && [ -f "install-agent-cli.sh" ]; then
+    print_info "Reinstalling agent management CLI..."
+    ./install-agent-cli.sh -y
+    print_success "Agent CLI reinstalled"
 fi
 
-# Install skills
-if [ -d "skills" ]; then
-    print_info "Installing Claude Code skills..."
-    for skill_dir in skills/*/; do
-        if [ -d "$skill_dir" ]; then
-            SKILL_NAME=$(basename "$skill_dir")
-            # Remove old version if exists
-            if [ -d ~/.claude/skills/"$SKILL_NAME" ]; then
-                rm -rf ~/.claude/skills/"$SKILL_NAME"
-            fi
-            mkdir -p ~/.claude/skills
-            cp -r "$skill_dir" ~/.claude/skills/
-            print_success "Installed skill: $SKILL_NAME"
-        fi
-    done
+# 3. Claude Code hooks — now provided by ai-maestro-plugin (v2.4.0+)
+# The plugin's hooks/hooks.json handles all events via ${CLAUDE_PLUGIN_ROOT}.
+# No settings.json modification needed.
+if [ "$SKIP_HOOKS" != true ]; then
+    print_info "Claude Code hooks: provided by ai-maestro-plugin (no settings.json changes)"
+fi
+
+# 4. Marketplace plugin already updated in step 0 above
+
+# Issue 7.12: Capture verification exit code instead of piping to || true
+if [ -f "verify-installation.sh" ]; then
+    echo ""
+    print_info "Running installation verification..."
+    if ! ./verify-installation.sh; then
+        print_warning "Some verification checks failed. Review the output above."
+        VERIFICATION_WARNINGS=true
+    fi
 fi
 
 # Check if PM2 is managing ai-maestro
 echo ""
 if command -v pm2 &> /dev/null; then
     if pm2 list | grep -q "ai-maestro"; then
-        print_step "$RESTART" "Restarting AI Maestro via PM2..."
-        pm2 restart ai-maestro
-        print_success "AI Maestro restarted"
+        if [[ "$BUILD_FAILED" != "true" ]]; then
+            if [ "$ECOSYSTEM_CHANGED" = true ]; then
+                print_warning "ecosystem.config.js changed — reloading PM2 config..."
+                pm2 delete ai-maestro 2>/dev/null || true
+                pm2 start ecosystem.config.js 2>/dev/null || pm2 start ecosystem.config.cjs 2>/dev/null || {
+                    print_error "Failed to start with ecosystem config — falling back to pm2 restart"
+                    pm2 start "yarn start" --name ai-maestro
+                }
+            else
+                print_step "$RESTART" "Restarting AI Maestro via PM2..."
+                pm2 restart ai-maestro
+            fi
+            print_success "AI Maestro restarted"
 
-        # Wait a moment for startup
-        sleep 2
+            # Wait a moment for startup
+            sleep 2
 
-        # Check status
-        if pm2 list | grep "ai-maestro" | grep -q "online"; then
-            print_success "AI Maestro is running"
+            # Check status
+            if pm2 list | grep "ai-maestro" | grep -q "online"; then
+                print_success "AI Maestro is running"
+            else
+                print_warning "AI Maestro may not have started correctly"
+                echo "         Check logs with: pm2 logs ai-maestro"
+            fi
         else
-            print_warning "AI Maestro may not have started correctly"
-            echo "         Check logs with: pm2 logs ai-maestro"
+            print_warning "Skipping PM2 restart due to build failure"
+            echo "         Fix the build errors and run: pm2 restart ai-maestro"
         fi
     else
         print_info "AI Maestro not found in PM2 process list"
-        echo "         Start it with: pm2 start ecosystem.config.cjs"
+        echo "         Start it with: pm2 start ecosystem.config.js"
     fi
 else
     print_info "PM2 not installed - skipping automatic restart"
     echo "         Start manually with: yarn start"
 fi
 
+# Report accumulated warnings from build/verification at the end
+if [ "$BUILD_FAILED" = true ]; then
+    echo ""
+    print_error "Build failed during update - please check TypeScript errors and run 'yarn build' manually"
+fi
+if [ "$VERIFICATION_WARNINGS" = true ]; then
+    echo ""
+    print_warning "Installation verification reported issues - review the warnings above"
+fi
+
 echo ""
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║                     Update Complete!                           ║"
+if [ "$BUILD_FAILED" = true ] || [ "$VERIFICATION_WARNINGS" = true ]; then
+echo "║                Update Complete (with warnings)                 ║"
+else
+echo "║                        Update Complete!                        ║"
+fi
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -265,9 +349,12 @@ fi
 
 echo ""
 print_info "What's updated:"
-echo "   • Application code and dependencies"
-echo "   • CLI scripts (messaging, docs, etc.)"
-echo "   • Claude Code skills"
+echo "   • Application code and dependencies (git pull + yarn build)"
+echo "   • AI Maestro plugin (skills bundled from ${MARKETPLACE_REPO:-Emasoft/ai-maestro-plugins})"
+echo "   • AMP messaging scripts (amp-*.sh)"
+echo "   • Agent CLI (aimaestro-agent.sh, agent-helper.sh)"
+echo "   • Memory, graph, and docs CLI tools"
+echo "   • Claude Code hooks"
 echo ""
 
 print_warning "IMPORTANT: Restart your Claude Code sessions to reload updated skills"

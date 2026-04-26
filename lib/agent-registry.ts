@@ -2,13 +2,38 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { v4 as uuidv4 } from 'uuid'
+import { compare as jsonPatchCompare } from 'fast-json-patch'
 import type { Agent, AgentSummary, AgentSession, CreateAgentRequest, UpdateAgentRequest, UpdateAgentMetricsRequest, DeploymentType } from '@/types/agent'
 import { parseSessionName, computeSessionName } from '@/types/agent'
 import { getSelfHost, getSelfHostId } from '@/lib/hosts-config'
+import { renameInIndex, removeFromIndex } from '@/lib/amp-inbox-writer'
+import { invalidateAgentCache } from '@/lib/messageQueue'
+import { sessionExistsSync, killSessionSync, renameSessionSync } from '@/lib/agent-runtime'
+import { withLock } from '@/lib/file-lock'
+import { getStateDir } from '@/lib/ecosystem-constants'
+import { SignedLedger } from '@/lib/signed-ledger'
+import type { JsonPatch } from '@/types/json-patch'
 
-const AIMAESTRO_DIR = path.join(os.homedir(), '.aimaestro')
+const AIMAESTRO_DIR = getStateDir()
 const AGENTS_DIR = path.join(AIMAESTRO_DIR, 'agents')
 const REGISTRY_FILE = path.join(AGENTS_DIR, 'registry.json')
+
+/**
+ * Per-file signed ledger for agents/registry.json. Exported so that
+ * element-management-service can emit per-operation audit entries
+ * (TRDD-eac02238) in addition to the coarse save-level entries
+ * emitted by saveAgents() below.
+ */
+export const registryLedger = new SignedLedger(REGISTRY_FILE)
+
+// System helper names that must never be registered as agents, assigned to teams,
+// or receive/send AMP messages.  These are ephemeral UI-only helpers (e.g. the
+// agent creation wizard persona).
+export const SYSTEM_HELPER_NAMES: ReadonlySet<string> = new Set([
+  'haephestos',
+  'haephestos-creation-helper',
+  'creation-helper',
+])
 
 // Real names containing "IA" (feminine) or "AI" (masculine) to match avatar gender
 const FEMALE_NAMES = [
@@ -56,14 +81,14 @@ function generateAvatarUrl(agentId: string): string {
   const hash = computeHash(agentId)
   const index = Math.abs(hash) % 100
   const gender = getGenderFromId(agentId) === 'male' ? 'men' : 'women'
-  return `/avatars/${gender}_${index.toString().padStart(2, '0')}.png`
+  return `/avatars/${gender}_${index.toString().padStart(2, '0')}.jpg`
 }
 
 /**
  * Get all used labels and avatars for a specific host
  */
 function getUsedLabelsAndAvatars(hostId: string): { labels: Set<string>, avatars: Set<string> } {
-  const agents = loadAgents()
+  const agents = loadAgents().filter(a => !a.deletedAt)
   const labels = new Set<string>()
   const avatars = new Set<string>()
 
@@ -95,7 +120,15 @@ function generateUniquePersonaName(agentId: string, usedLabels: Set<string>): st
     attempts++
   }
 
-  return names[index]
+  // NT-005: If all names are exhausted, append a numeric suffix to ensure uniqueness
+  let result = names[index]
+  if (usedLabels.has(result)) {
+    let suffix = 2
+    while (usedLabels.has(`${result}-${suffix}`)) suffix++
+    result = `${result}-${suffix}`
+  }
+
+  return result
 }
 
 /**
@@ -111,7 +144,7 @@ function generateUniqueAvatarUrl(agentId: string, usedAvatars: Set<string>): str
   let attempts = 0
 
   while (attempts < 100) {
-    const url = `/avatars/${gender}_${index.toString().padStart(2, '0')}.png`
+    const url = `/avatars/${gender}_${index.toString().padStart(2, '0')}.jpg`
     if (!usedAvatars.has(url)) {
       return url
     }
@@ -120,7 +153,7 @@ function generateUniqueAvatarUrl(agentId: string, usedAvatars: Set<string>): str
   }
 
   // Fallback if all 100 are used (unlikely)
-  return `/avatars/${gender}_${(Math.abs(hash) % 100).toString().padStart(2, '0')}.png`
+  return `/avatars/${gender}_${(Math.abs(hash) % 100).toString().padStart(2, '0')}.jpg`
 }
 
 /**
@@ -134,19 +167,53 @@ function ensureAgentsDir() {
 
 /**
  * Load all agents from registry
+ *
+ * Reads are safe without locks when all writes go through saveAgents() (which uses
+ * atomic temp + renameSync). renameSync is atomic on POSIX — reads always see either
+ * the old or new complete file, never a partial write.
  */
+// mtime-based cache to avoid redundant disk reads within the same tick
+let _cachedAgents: Agent[] | null = null
+let _cachedMtimeMs: number = 0
+
 export function loadAgents(): Agent[] {
   try {
     ensureAgentsDir()
 
     if (!fs.existsSync(REGISTRY_FILE)) {
+      _cachedAgents = null
+      _cachedMtimeMs = 0
       return []
+    }
+
+    // Return cached data if file hasn't changed
+    const stat = fs.statSync(REGISTRY_FILE)
+    if (_cachedAgents && stat.mtimeMs === _cachedMtimeMs) {
+      return _cachedAgents
     }
 
     const data = fs.readFileSync(REGISTRY_FILE, 'utf-8')
     const agents = JSON.parse(data)
 
-    return Array.isArray(agents) ? agents : []
+    if (!Array.isArray(agents)) return []
+
+    // Migrate claudeArgs → programArgs (field was renamed)
+    let needsMigration = false
+    for (const agent of agents) {
+      if ((agent as any).claudeArgs && !agent.programArgs) {
+        agent.programArgs = (agent as any).claudeArgs
+        delete (agent as any).claudeArgs
+        needsMigration = true
+      }
+    }
+    if (needsMigration) {
+      saveAgents(agents)
+      console.log('[Agent Registry] Migrated claudeArgs → programArgs')
+    }
+
+    _cachedAgents = agents
+    _cachedMtimeMs = stat.mtimeMs
+    return agents
   } catch (error) {
     console.error('Failed to load agents:', error)
     return []
@@ -160,8 +227,31 @@ export function saveAgents(agents: Agent[]): boolean {
   try {
     ensureAgentsDir()
 
+    const prevAgents = _cachedAgents ?? []
+    const diff = jsonPatchCompare(prevAgents, agents) as JsonPatch
+    const op = prevAgents.length === 0 && agents.length > 0
+      ? 'create' as const
+      : agents.length < prevAgents.length
+        ? 'delete' as const
+        : 'update' as const
+
     const data = JSON.stringify(agents, null, 2)
-    fs.writeFileSync(REGISTRY_FILE, data, 'utf-8')
+    // MF-024: Atomic write -- write to temp file then rename to avoid corruption on crash
+    const tmpPath = `${REGISTRY_FILE}.tmp.${process.pid}`
+    fs.writeFileSync(tmpPath, data, 'utf-8')
+    fs.renameSync(tmpPath, REGISTRY_FILE)
+
+    // SF-006: Eagerly populate cache with the agents just saved to prevent
+    // concurrent loadAgents() from using stale mtime within the same tick
+    const stat = fs.statSync(REGISTRY_FILE)
+    _cachedAgents = agents
+    _cachedMtimeMs = stat.mtimeMs
+
+    if (diff.length > 0) {
+      registryLedger.append(op, 'agents/registry.json', diff).catch(err => {
+        console.error('[signed-ledger] AUDIT GAP: registry mutation NOT recorded in ledger:', err instanceof Error ? err.message : err)
+      })
+    }
 
     return true
   } catch (error) {
@@ -171,11 +261,15 @@ export function saveAgents(agents: Agent[]): boolean {
 }
 
 /**
- * Get agent by ID
+ * Get agent by ID.
+ * By default excludes soft-deleted agents. Pass includeDeleted=true to include them.
  */
-export function getAgent(id: string): Agent | null {
+export function getAgent(id: string, includeDeleted: boolean = false): Agent | null {
   const agents = loadAgents()
-  return agents.find(a => a.id === id) || null
+  const agent = agents.find(a => a.id === id) || null
+  // If the agent is soft-deleted and caller didn't ask for deleted agents, return null
+  if (agent && agent.deletedAt && !includeDeleted) return null
+  return agent
 }
 
 /**
@@ -190,16 +284,18 @@ export function getAgentByName(name: string, hostId?: string): Agent | null {
   const normalizedName = name.toLowerCase()
 
   if (hostId) {
-    // Scoped to specific host
+    // Scoped to specific host; exclude soft-deleted agents
     return agents.find(a =>
+      !a.deletedAt &&
       a.name?.toLowerCase() === normalizedName &&
       a.hostId?.toLowerCase() === hostId.toLowerCase()
     ) || null
   }
 
-  // Default: search on self host only
+  // Default: search on self host only; exclude soft-deleted agents
   const selfHostId = getSelfHostId().toLowerCase()
   return agents.find(a =>
+    !a.deletedAt &&
     a.name?.toLowerCase() === normalizedName &&
     a.hostId?.toLowerCase() === selfHostId
   ) || null
@@ -211,7 +307,8 @@ export function getAgentByName(name: string, hostId?: string): Agent | null {
  */
 export function getAgentByNameAnyHost(name: string): Agent | null {
   const agents = loadAgents()
-  return agents.find(a => a.name?.toLowerCase() === name.toLowerCase()) || null
+  // Exclude soft-deleted agents from name lookups
+  return agents.find(a => !a.deletedAt && a.name?.toLowerCase() === name.toLowerCase()) || null
 }
 
 /**
@@ -228,8 +325,9 @@ export function getAgentByAlias(alias: string, hostId?: string): Agent | null {
   // Determine which host to search on
   const targetHostId = hostId?.toLowerCase() || getSelfHostId().toLowerCase()
 
-  // Try name first (on specific host), then deprecated alias field
+  // Try name first (on specific host), then deprecated alias field; exclude soft-deleted
   return agents.find(a =>
+    !a.deletedAt &&
     (a.name?.toLowerCase() === normalizedAlias ||
      a.alias?.toLowerCase() === normalizedAlias) &&
     a.hostId?.toLowerCase() === targetHostId
@@ -243,10 +341,61 @@ export function getAgentByAlias(alias: string, hostId?: string): Agent | null {
 export function getAgentByAliasAnyHost(alias: string): Agent | null {
   const agents = loadAgents()
   const normalizedAlias = alias.toLowerCase()
+  // Exclude soft-deleted agents from alias lookups
   return agents.find(a =>
-    a.name?.toLowerCase() === normalizedAlias ||
-    a.alias?.toLowerCase() === normalizedAlias
+    !a.deletedAt &&
+    (a.name?.toLowerCase() === normalizedAlias ||
+     a.alias?.toLowerCase() === normalizedAlias)
   ) || null
+}
+
+/**
+ * Get agent by label (Persona Name) on a specific host.
+ * Labels are the user-facing persona names (e.g. "Peter-Parker").
+ * Case-insensitive comparison since labels are stored capitalized but
+ * messaging addresses are lowercase.
+ */
+export function getAgentByLabel(label: string, hostId?: string): Agent | null {
+  const agents = loadAgents()
+  const normalizedLabel = label.toLowerCase()
+  const targetHostId = (hostId || getSelfHostId()).toLowerCase()
+  return agents.find(a =>
+    !a.deletedAt &&
+    a.label?.toLowerCase() === normalizedLabel &&
+    a.hostId?.toLowerCase() === targetHostId
+  ) || null
+}
+
+/**
+ * Get agent by label (Persona Name) from ANY host.
+ */
+export function getAgentByLabelAnyHost(label: string): Agent | null {
+  const agents = loadAgents()
+  const normalizedLabel = label.toLowerCase()
+  return agents.find(a => !a.deletedAt && a.label?.toLowerCase() === normalizedLabel) || null
+}
+
+/**
+ * Get agent by partial last-segment match.
+ * E.g., "rag" matches "23blocks-api-rag", "crm" matches "23blocks-api-crm".
+ * If multiple matches exist, prefers the agent on self host.
+ */
+export function getAgentByPartialName(partialName: string): Agent | null {
+  const agents = loadAgents()
+  const lower = partialName.toLowerCase()
+  // Exclude soft-deleted agents from partial name lookups
+  const matches = agents.filter(a => {
+    if (a.deletedAt) return false
+    const agentName = a.name || a.alias || ''
+    const segments = agentName.split(/[-_]/)
+    return segments.length > 1 && segments[segments.length - 1].toLowerCase() === lower
+  })
+  if (matches.length === 0) return null
+  if (matches.length === 1) return matches[0]
+  // Prefer agent on self host to reduce ambiguity
+  const selfId = getSelfHostId()?.toLowerCase()
+  const selfHostMatch = selfId ? matches.find(a => (a.hostId || '').toLowerCase() === selfId) : null
+  return selfHostMatch || matches[0]
 }
 
 /**
@@ -258,13 +407,30 @@ export function getAgentByAliasAnyHost(alias: string): Agent | null {
  */
 export function getAgentBySession(sessionName: string, hostId?: string): Agent | null {
   const { agentName } = parseSessionName(sessionName)
-  return getAgentByName(agentName, hostId)
+  // First try matching by agent name (the common case)
+  const byName = getAgentByName(agentName, hostId)
+  if (byName) return byName
+
+  // BUG-018 fix: Session names may be <uuid>@<hostId> format (created by CreateAgent AIO).
+  // Extract the UUID part and try matching by agent ID.
+  const atIdx = sessionName.indexOf('@')
+  if (atIdx > 0) {
+    const possibleId = sessionName.substring(0, atIdx)
+    // Quick UUID format check (8-4-4-4-12)
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(possibleId)) {
+      return getAgent(possibleId) || null
+    }
+  }
+
+  return null
 }
 
 /**
  * Create a new agent
+ * MF-003: Wrapped with file lock to prevent read-modify-write races
  */
-export function createAgent(request: CreateAgentRequest): Agent {
+export async function createAgent(request: CreateAgentRequest): Promise<Agent> {
+  return withLock('agents', () => {
   const agents = loadAgents()
 
   // Support both new 'name' and deprecated 'alias'
@@ -273,15 +439,23 @@ export function createAgent(request: CreateAgentRequest): Agent {
   if (!agentName) {
     throw new Error('Agent name is required')
   }
+  // Block system helper names from being registered as real agents
+  if (SYSTEM_HELPER_NAMES.has(agentName)) {
+    throw new Error(`"${agentName}" is a reserved system helper name and cannot be registered as an agent`)
+  }
 
   // Determine deployment type
   const deploymentType: DeploymentType = request.deploymentType || 'local'
 
   // Get host information FIRST (needed for uniqueness check)
   // Use hostname as hostId for cross-host compatibility
+  // ALWAYS normalize hostId to canonical format (lowercase, no .local suffix)
   const selfHost = getSelfHost()
   const selfHostIdValue = getSelfHostId()
-  const hostId = request.hostId || selfHost?.id || selfHostIdValue
+  // Normalize any provided hostId, or use self host
+  const hostId = request.hostId
+    ? request.hostId.toLowerCase().replace(/\.local$/, '')
+    : (selfHost?.id || selfHostIdValue)
   const hostName = selfHost?.name || selfHostIdValue
   // NEVER use localhost - use actual IP from selfHost or hostname
   const hostUrl = selfHost?.url || `http://${selfHostIdValue}:23000`
@@ -336,9 +510,13 @@ export function createAgent(request: CreateAgentRequest): Agent {
     program: request.program,
     model: request.model,
     taskDescription: request.taskDescription,
+    // Default --dangerously-skip-permissions for Claude agents (required for auto-continue, standard for managed agents)
+    programArgs: request.programArgs || (request.program?.toLowerCase().includes('claude') ? '--dangerously-skip-permissions' : ''),
+    launchCount: 0,
     tags: normalizeTags(request.tags),
     capabilities: [],
     owner: request.owner,
+    role: request.role || 'autonomous',
     team: request.team,
     documentation: request.documentation,
     metadata: request.metadata,
@@ -375,14 +553,18 @@ export function createAgent(request: CreateAgentRequest): Agent {
 
   agents.push(agent)
   saveAgents(agents)
+  invalidateAgentCache()
 
   return agent
+  }) // end withLock('agents')
 }
 
 /**
  * Update an agent
+ * MF-003: Wrapped with file lock to prevent read-modify-write races
  */
-export function updateAgent(id: string, updates: UpdateAgentRequest): Agent | null {
+export async function updateAgent(id: string, updates: UpdateAgentRequest): Promise<Agent | null> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === id)
 
@@ -403,22 +585,22 @@ export function updateAgent(id: string, updates: UpdateAgentRequest): Agent | nu
       throw new Error(`Agent "${newName}" already exists on host "${agentHostId}"`)
     }
 
-    // Also rename the tmux session if it exists
+    // SF-040: Rename tmux sessions using computed session names (with _N suffix),
+    // not the bare agent name. Each session in the sessions array has an index.
     if (currentName) {
-      try {
-        const { execSync } = require('child_process')
-        // Check if tmux session exists
+      const sessions = agents[index].sessions || []
+      for (const session of sessions) {
+        const oldSessionName = computeSessionName(currentName, session.index)
+        const newSessionName = computeSessionName(newName, session.index)
         try {
-          execSync(`tmux has-session -t "${currentName}" 2>/dev/null`)
-          // Session exists, rename it
-          execSync(`tmux rename-session -t "${currentName}" "${newName}"`)
-          console.log(`[Agent Registry] Renamed tmux session: ${currentName} -> ${newName}`)
-        } catch {
-          // Session doesn't exist, that's fine
+          if (sessionExistsSync(oldSessionName)) {
+            renameSessionSync(oldSessionName, newSessionName)
+            console.log(`[Agent Registry] Renamed tmux session: ${oldSessionName} -> ${newSessionName}`)
+          }
+        } catch (err) {
+          console.error(`[Agent Registry] Failed to rename tmux session ${oldSessionName}:`, err)
+          // Don't fail the agent update if tmux rename fails
         }
-      } catch (err) {
-        console.error(`[Agent Registry] Failed to rename tmux session:`, err)
-        // Don't fail the agent update if tmux rename fails
       }
     }
   }
@@ -441,32 +623,40 @@ export function updateAgent(id: string, updates: UpdateAgentRequest): Agent | nu
   delete (updateData as any).displayName
 
   // Update agent
+  // MF-001: When updates.metadata is an empty object {}, replace instead of merging.
+  // Spreading {} over existing metadata is a no-op and prevents metadata clearing.
+  // Same logic applies to documentation and preferences for consistency.
+  const mergedMetadata = (updates.metadata && Object.keys(updates.metadata).length === 0)
+    ? {} // Explicit clear: replace entirely
+    : { ...agents[index].metadata, ...updates.metadata }
+  const mergedDocumentation = (updates.documentation && Object.keys(updates.documentation).length === 0)
+    ? {}
+    : { ...agents[index].documentation, ...updates.documentation }
+  const mergedPreferences = (updates.preferences && Object.keys(updates.preferences).length === 0)
+    ? {}
+    : { ...agents[index].preferences, ...updates.preferences }
+
   agents[index] = {
     ...agents[index],
     ...updateData,
-    documentation: {
-      ...agents[index].documentation,
-      ...updates.documentation
-    },
-    metadata: {
-      ...agents[index].metadata,
-      ...updates.metadata
-    },
-    preferences: {
-      ...agents[index].preferences,
-      ...updates.preferences
-    },
+    documentation: mergedDocumentation,
+    metadata: mergedMetadata,
+    preferences: mergedPreferences,
     lastActive: new Date().toISOString()
   }
 
   saveAgents(agents)
+  invalidateAgentCache()
   return agents[index]
+  }) // end withLock('agents')
 }
 
 /**
  * Update agent metrics
+ * MF-003: Wrapped with file lock to prevent read-modify-write races
  */
-export function updateAgentMetrics(id: string, metrics: UpdateAgentMetricsRequest): Agent | null {
+export async function updateAgentMetrics(id: string, metrics: UpdateAgentMetricsRequest): Promise<Agent | null> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === id)
 
@@ -484,16 +674,18 @@ export function updateAgentMetrics(id: string, metrics: UpdateAgentMetricsReques
 
   saveAgents(agents)
   return agents[index]
+  }) // end withLock('agents')
 }
 
 /**
  * Increment agent metric by a specific amount
  */
-export function incrementAgentMetric(
+export async function incrementAgentMetric(
   id: string,
   metric: keyof Omit<UpdateAgentMetricsRequest, 'customMetrics'>,
   amount: number = 1
-): boolean {
+): Promise<boolean> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === id)
 
@@ -505,20 +697,119 @@ export function incrementAgentMetric(
     agents[index].metrics = {}
   }
 
-  // Type-safe assignment for numeric metrics only
-  const currentValue = (agents[index].metrics![metric] as number) || 0
-  ;(agents[index].metrics! as any)[metric] = currentValue + amount
+  // Type-safe assignment for numeric metrics only — only increment fields that are
+  // already numeric or don't yet exist (undefined). Never overwrite non-numeric fields.
+  const metrics = agents[index].metrics!
+  const existing = (metrics as Record<string, unknown>)[metric]
+  if (existing === undefined || typeof existing === 'number') {
+    const currentValue = (typeof existing === 'number' ? existing : 0)
+    ;(metrics as Record<string, number>)[metric] = currentValue + amount
+  }
   agents[index].metrics!.lastCostUpdate = new Date().toISOString()
   agents[index].lastActive = new Date().toISOString()
 
   return saveAgents(agents)
+  }) // end withLock('agents')
 }
 
 /**
- * Delete an agent and clean up associated data
- * Also kills any tmux sessions belonging to this agent
+ * Kill all tmux sessions belonging to an agent.
+ * Extracted from deleteAgent() so it can be reused by both soft-delete and hard-delete paths.
  */
-export function deleteAgent(id: string): boolean {
+function killAgentSessions(agent: Agent): void {
+  const agentName = agent.name || agent.alias
+  if (!agentName) return
+
+  // Kill sessions for all indices in the sessions array
+  const sessions = agent.sessions || []
+  for (const session of sessions) {
+    const sessionName = computeSessionName(agentName, session.index)
+    killSessionSync(sessionName)
+    console.log(`[Agent Registry] Killed tmux session: ${sessionName}`)
+  }
+
+  // Also try to kill the base session name (in case sessions array is empty)
+  if (sessions.length === 0) {
+    killSessionSync(agentName)
+    console.log(`[Agent Registry] Killed tmux session: ${agentName}`)
+  }
+}
+
+/**
+ * Create a backup of all agent data before permanent deletion.
+ * Backup location: ~/.aimaestro/backups/agents/{id}-{timestamp}/
+ * Backs up: agent data dir, legacy message dirs, AMP dir, registry entry, AMP index entry.
+ */
+function backupAgentData(agent: Agent): string | null {
+  const agentName = agent.name || agent.alias
+  const backupBaseDir = path.join(AIMAESTRO_DIR, 'backups', 'agents')
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backupDir = path.join(backupBaseDir, `${agent.id}-${timestamp}`)
+
+  try {
+    fs.mkdirSync(backupDir, { recursive: true })
+
+    // Backup agent data directory (~/.aimaestro/agents/{id}/)
+    const agentDir = path.join(AGENTS_DIR, agent.id)
+    if (fs.existsSync(agentDir)) {
+      const backupAgentDir = path.join(backupDir, 'agent-data')
+      fs.cpSync(agentDir, backupAgentDir, { recursive: true, dereference: true })
+    }
+
+    // Backup legacy message directories (~/.aimaestro/messages/{inbox,sent,archived}/{id}/)
+    const messagesDir = path.join(AIMAESTRO_DIR, 'messages')
+    for (const folder of ['inbox', 'sent', 'archived']) {
+      const msgDir = path.join(messagesDir, folder, agent.id)
+      if (fs.existsSync(msgDir)) {
+        const backupMsgDir = path.join(backupDir, 'messages', folder)
+        fs.cpSync(msgDir, backupMsgDir, { recursive: true, dereference: true })
+      }
+    }
+
+    // Backup AMP directory (~/.agent-messaging/agents/{id}/)
+    const ampAgentsDir = path.join(os.homedir(), '.agent-messaging', 'agents')
+    const ampUuidDir = path.join(ampAgentsDir, agent.id)
+    if (fs.existsSync(ampUuidDir)) {
+      const backupAmpDir = path.join(backupDir, 'amp-data')
+      fs.cpSync(ampUuidDir, backupAmpDir, { recursive: true, dereference: true })
+    }
+
+    // Save registry entry as JSON (for restore)
+    fs.writeFileSync(
+      path.join(backupDir, 'registry-entry.json'),
+      JSON.stringify(agent, null, 2)
+    )
+
+    // Save AMP name-to-UUID index entry (for restore)
+    const ampIndexEntry = {
+      agentName: agentName,
+      agentId: agent.id,
+      backedUpAt: new Date().toISOString(),
+    }
+    fs.writeFileSync(
+      path.join(backupDir, 'amp-index-entry.json'),
+      JSON.stringify(ampIndexEntry, null, 2)
+    )
+
+    console.log(`[Agent Registry] Backed up agent ${agentName} to ${backupDir}`)
+    return backupDir
+  } catch (backupError) {
+    console.warn(`[Agent Registry] Could not create pre-delete backup for ${agentName}:`, backupError)
+    // Return null but do NOT block deletion — backup is best-effort
+    return null
+  }
+}
+
+/**
+ * Delete an agent.
+ *
+ * @param id - Agent UUID
+ * @param hard - If false (default), soft-delete: kill tmux sessions and mark agent as deleted
+ *               in the registry but preserve all data on disk for potential restore.
+ *               If true, hard-delete: create a backup first, then permanently remove all data.
+ */
+export async function deleteAgent(id: string, hard: boolean = false): Promise<boolean> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const agentToDelete = agents.find(a => a.id === id)
 
@@ -526,38 +817,31 @@ export function deleteAgent(id: string): boolean {
     return false // Agent not found
   }
 
-  // Get agent name (use new name field, fallback to deprecated alias)
   const agentName = agentToDelete.name || agentToDelete.alias
 
-  // Kill all tmux sessions belonging to this agent
-  if (agentName) {
-    const { execSync } = require('child_process')
+  // Kill all tmux sessions belonging to this agent (both soft and hard delete)
+  killAgentSessions(agentToDelete)
 
-    // Kill sessions for all indices in the sessions array
-    const sessions = agentToDelete.sessions || []
-    for (const session of sessions) {
-      const sessionName = computeSessionName(agentName, session.index)
-      try {
-        execSync(`tmux kill-session -t "${sessionName}" 2>/dev/null || true`, { encoding: 'utf-8' })
-        console.log(`[Agent Registry] Killed tmux session: ${sessionName}`)
-      } catch (error) {
-        console.log(`[Agent Registry] Could not kill tmux session ${sessionName} (may not exist)`)
-      }
-    }
-
-    // Also try to kill the base session name (in case sessions array is empty)
-    if (sessions.length === 0) {
-      try {
-        execSync(`tmux kill-session -t "${agentName}" 2>/dev/null || true`, { encoding: 'utf-8' })
-        console.log(`[Agent Registry] Killed tmux session: ${agentName}`)
-      } catch (error) {
-        console.log(`[Agent Registry] Could not kill tmux session ${agentName} (may not exist)`)
-      }
-    }
+  if (!hard) {
+    // --- Soft-delete path: mark as deleted, preserve all data on disk ---
+    const agentIndex = agents.findIndex(a => a.id === id)
+    agents[agentIndex].deletedAt = new Date().toISOString()
+    agents[agentIndex].status = 'deleted'
+    saveAgents(agents)
+    invalidateAgentCache()
+    console.log(`[Agent Registry] Soft-deleted agent ${agentName} (id: ${id})`)
+    return true
   }
 
+  // --- Hard-delete path: backup first, then permanently remove all data ---
+
+  // Create automatic backup before any destructive operation
+  backupAgentData(agentToDelete)
+
+  // Remove agent from registry
   const filtered = agents.filter(a => a.id !== id)
   saveAgents(filtered)
+  invalidateAgentCache()
 
   // Clean up agent-specific directory (database, etc.)
   const agentDir = path.join(AGENTS_DIR, id)
@@ -569,7 +853,7 @@ export function deleteAgent(id: string): boolean {
     }
   }
 
-  // Clean up message directories for this agent
+  // Clean up message directories for this agent (legacy location)
   const messageBaseDir = path.join(AIMAESTRO_DIR, 'messages')
   const messageBoxes = ['inbox', 'sent', 'archived']
 
@@ -585,16 +869,43 @@ export function deleteAgent(id: string): boolean {
     }
   }
 
+  // Clean up AMP directory (UUID dir) and remove from index
+  try {
+    const ampAgentsDir = path.join(os.homedir(), '.agent-messaging', 'agents')
+    const uuidDir = path.join(ampAgentsDir, id)
+
+    // Remove UUID directory
+    if (fs.existsSync(uuidDir)) {
+      fs.rmSync(uuidDir, { recursive: true })
+      console.log(`[Agent Registry] Cleaned up AMP UUID dir for agent ${id}`)
+    }
+
+    // Remove from name→UUID index (fire-and-forget — don't block deletion)
+    if (agentName && typeof removeFromIndex === 'function') {
+      const p = removeFromIndex(agentName)
+      if (p && typeof p.catch === 'function') {
+        p.catch((err: unknown) =>
+          console.warn(`[Agent Registry] Failed to remove ${agentName} from AMP index:`, err)
+        )
+      }
+    }
+  } catch (ampError) {
+    console.warn(`[Agent Registry] Could not clean up AMP directories for agent ${id}:`, ampError)
+  }
+
   return true
+  }) // end withLock('agents')
 }
 
 /**
  * List all agents (summary view)
+ * By default excludes soft-deleted agents. Pass includeDeleted=true to include them.
  */
-export function listAgents(): AgentSummary[] {
+export function listAgents(includeDeleted: boolean = false): AgentSummary[] {
   const agents = loadAgents()
+  const filtered = includeDeleted ? agents : agents.filter(a => !a.deletedAt)
 
-  return agents.map(a => {
+  return filtered.map(a => {
     const agentName = a.name || a.alias || 'unknown'
     const sessions: AgentSession[] = a.sessions || []
 
@@ -613,6 +924,7 @@ export function listAgents(): AgentSummary[] {
       lastActive: a.lastActive,
       sessions,
       deployment: a.deployment,
+      deletedAt: a.deletedAt,
       // DEPRECATED: for backward compatibility
       alias: agentName,
       currentSession,
@@ -623,7 +935,8 @@ export function listAgents(): AgentSummary[] {
 /**
  * Update agent status
  */
-export function updateAgentStatus(id: string, status: Agent['status']): boolean {
+export async function updateAgentStatus(id: string, status: Agent['status']): Promise<boolean> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === id)
 
@@ -631,17 +944,27 @@ export function updateAgentStatus(id: string, status: Agent['status']): boolean 
     return false
   }
 
+  // Prevent accidentally resurrecting soft-deleted agents
+  if (agents[index].deletedAt && status !== 'deleted') {
+    return false
+  }
+
   agents[index].status = status
   agents[index].lastActive = new Date().toISOString()
 
-  return saveAgents(agents)
+  const saved = saveAgents(agents)
+  if (saved) invalidateAgentCache()
+  return saved
+  }) // end withLock('agents')
 }
 
 /**
  * Link a session to an agent
  * Uses parseSessionName to determine session index from tmux session name
+ * MF-003: Wrapped with file lock to prevent read-modify-write races
  */
-export function linkSession(agentId: string, sessionName: string, workingDirectory: string): boolean {
+export async function linkSession(agentId: string, sessionName: string, workingDirectory: string): Promise<boolean> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -681,14 +1004,19 @@ export function linkSession(agentId: string, sessionName: string, workingDirecto
   agents[index].status = 'active'
   agents[index].lastActive = new Date().toISOString()
 
-  return saveAgents(agents)
+  const saved = saveAgents(agents)
+  if (saved) invalidateAgentCache()
+  return saved
+  }) // end withLock('agents')
 }
 
 /**
  * Update just the working directory for an agent's session
  * Used when the live tmux pwd differs from the stored workingDirectory
+ * MF-003: Wrapped with file lock to prevent read-modify-write races
  */
-export function updateAgentWorkingDirectory(agentId: string, workingDirectory: string, sessionIndex: number = 0): boolean {
+export async function updateAgentWorkingDirectory(agentId: string, workingDirectory: string, sessionIndex: number = 0): Promise<boolean> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -724,14 +1052,17 @@ export function updateAgentWorkingDirectory(agentId: string, workingDirectory: s
   }
 
   return saveAgents(agents)
+  }) // end withLock('agents')
 }
 
 /**
  * Unlink session from agent (mark as offline)
  * If sessionIndex provided, only marks that session offline
  * If no sessionIndex, marks all sessions offline
+ * MF-003: Wrapped with file lock to prevent read-modify-write races
  */
-export function unlinkSession(agentId: string, sessionIndex?: number): boolean {
+export async function unlinkSession(agentId: string, sessionIndex?: number): Promise<boolean> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -762,7 +1093,10 @@ export function unlinkSession(agentId: string, sessionIndex?: number): boolean {
   agents[index].status = hasOnlineSession ? 'active' : 'offline'
   agents[index].lastActive = new Date().toISOString()
 
-  return saveAgents(agents)
+  const saved = saveAgents(agents)
+  if (saved) invalidateAgentCache()
+  return saved
+  }) // end withLock('agents')
 }
 
 /**
@@ -781,6 +1115,7 @@ export function searchAgents(query: string): Agent[] {
   const lowerQuery = query.toLowerCase()
 
   return agents.filter(a => {
+    if (a.deletedAt) return false
     const agentName = a.name || a.alias || ''
     const agentLabel = a.label || ''
     return (
@@ -801,9 +1136,11 @@ export function searchAgents(query: string): Agent[] {
  * @param defaultHostId - Optional default host if not specified in nameOrId
  */
 export function resolveAlias(nameOrId: string, defaultHostId?: string): string | null {
-  // Check for name@host format
+  // SF-007: Use indexOf to split on first '@' only, so hostIds containing '@' are preserved
   if (nameOrId.includes('@')) {
-    const [name, hostId] = nameOrId.split('@')
+    const atIndex = nameOrId.indexOf('@')
+    const name = nameOrId.substring(0, atIndex)
+    const hostId = nameOrId.substring(atIndex + 1)
     const agent = getAgentByName(name, hostId)
     return agent?.id || null
   }
@@ -824,7 +1161,8 @@ export function resolveAlias(nameOrId: string, defaultHostId?: string): string |
  * Rename agent
  * Updates the agent name (which affects all derived session names)
  */
-export function renameAgent(agentId: string, newName: string): boolean {
+export async function renameAgent(agentId: string, newName: string): Promise<boolean> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -848,19 +1186,82 @@ export function renameAgent(agentId: string, newName: string): boolean {
   const oldName = agents[index].name || agents[index].alias
   console.log(`[Agent Registry] Renaming agent from "${oldName}" to "${normalizedNewName}"`)
 
+  // SF-041: Rename tmux sessions before updating the registry name.
+  // Each session in the sessions array is named via computeSessionName(agentName, index).
+  if (oldName) {
+    const sessions = agents[index].sessions || []
+    for (const session of sessions) {
+      const oldSessionName = computeSessionName(oldName, session.index)
+      const newSessionName = computeSessionName(normalizedNewName, session.index)
+      try {
+        if (sessionExistsSync(oldSessionName)) {
+          renameSessionSync(oldSessionName, newSessionName)
+          console.log(`[Agent Registry] Renamed tmux session: ${oldSessionName} -> ${newSessionName}`)
+        }
+      } catch (err) {
+        console.error(`[Agent Registry] Failed to rename tmux session ${oldSessionName}:`, err)
+        // Best-effort: don't block agent rename if tmux rename fails
+      }
+    }
+  }
+
   agents[index].name = normalizedNewName
   // Clear deprecated alias
   delete agents[index].alias
   agents[index].lastActive = new Date().toISOString()
 
-  return saveAgents(agents)
+  const saved = saveAgents(agents)
+  if (saved) invalidateAgentCache(oldName || undefined)
+
+  // Update AMP name→UUID index and config.json (fire-and-forget)
+  if (saved && oldName && typeof renameInIndex === 'function') {
+    const p = renameInIndex(oldName, normalizedNewName, agentId)
+    if (p && typeof p.then === 'function') {
+      p.then(() => {
+        console.log(`[Agent Registry] Updated AMP index: ${oldName} -> ${normalizedNewName} (${agentId})`)
+      }).catch((err: unknown) => {
+        console.warn(`[Agent Registry] Failed to update AMP index:`, err)
+      })
+    }
+    try {
+
+      // Update config.json name field inside the UUID dir
+      const ampAgentsDir = path.join(os.homedir(), '.agent-messaging', 'agents')
+      const configPath = path.join(ampAgentsDir, agentId, 'config.json')
+      if (fs.existsSync(configPath)) {
+        try {
+          const configData = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+          if (configData.agent) {
+            configData.agent.name = normalizedNewName
+            if (configData.agent.address && typeof configData.agent.address === 'string') {
+              const atIdx = configData.agent.address.indexOf('@')
+              if (atIdx !== -1) {
+                configData.agent.address = `${normalizedNewName}${configData.agent.address.substring(atIdx)}`
+              }
+            }
+          }
+          // NT-025: Atomic write for config.json to prevent corruption on crash
+          const tmpConfigPath = `${configPath}.tmp.${process.pid}`
+          fs.writeFileSync(tmpConfigPath, JSON.stringify(configData, null, 2))
+          fs.renameSync(tmpConfigPath, configPath)
+        } catch {
+          // Best-effort config update
+        }
+      }
+    } catch (ampError) {
+      console.warn(`[Agent Registry] Could not update AMP index for rename:`, ampError)
+    }
+  }
+
+  return saved
+  }) // end withLock('agents')
 }
 
 /**
  * @deprecated Use renameAgent instead
  * Kept for backward compatibility
  */
-export function renameAgentSession(oldSessionName: string, newSessionName: string): boolean {
+export async function renameAgentSession(oldSessionName: string, newSessionName: string): Promise<boolean> {
   // Parse old session name to find agent
   const { agentName: oldAgentName } = parseSessionName(oldSessionName)
   const { agentName: newAgentName } = parseSessionName(newSessionName)
@@ -881,21 +1282,23 @@ export function renameAgentSession(oldSessionName: string, newSessionName: strin
 /**
  * Delete agent by session name
  * Parses session name to find agent, then deletes it
+ * @param hard - If true, permanently delete (with backup). Default false (soft-delete).
  */
-export function deleteAgentBySession(sessionName: string): boolean {
+export async function deleteAgentBySession(sessionName: string, hard: boolean = false): Promise<boolean> {
   const agent = getAgentBySession(sessionName)
   if (!agent) {
     return false
   }
 
-  return deleteAgent(agent.id)
+  return deleteAgent(agent.id, hard)
 }
 
 /**
  * Add a session to an existing agent (for multi-session support)
  * Returns the new session index
  */
-export function addSessionToAgent(agentId: string, workingDirectory?: string, role?: string): number | null {
+export async function addSessionToAgent(agentId: string, workingDirectory?: string, role?: string): Promise<number | null> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -928,12 +1331,15 @@ export function addSessionToAgent(agentId: string, workingDirectory?: string, ro
   saveAgents(agents)
 
   return nextIndex
+  }) // end withLock('agents')
 }
 
 /**
  * Remove a session from an agent
+ * MF-003: Wrapped with file lock to prevent read-modify-write races
  */
-export function removeSessionFromAgent(agentId: string, sessionIndex: number): boolean {
+export async function removeSessionFromAgent(agentId: string, sessionIndex: number): Promise<boolean> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -955,8 +1361,7 @@ export function removeSessionFromAgent(agentId: string, sessionIndex: number): b
   if (agentName) {
     const sessionName = computeSessionName(agentName, sessionIndex)
     try {
-      const { execSync } = require('child_process')
-      execSync(`tmux kill-session -t "${sessionName}" 2>/dev/null || true`, { encoding: 'utf-8' })
+      killSessionSync(sessionName)
       console.log(`[Agent Registry] Killed tmux session: ${sessionName}`)
     } catch (error) {
       // Session might not exist
@@ -968,13 +1373,14 @@ export function removeSessionFromAgent(agentId: string, sessionIndex: number): b
   agents[index].lastActive = new Date().toISOString()
 
   return saveAgents(agents)
+  }) // end withLock('agents')
 }
 
 // ============================================================================
 // Email Identity Management
 // ============================================================================
 
-import type { EmailAddress, EmailIndexEntry, EmailIndexResponse, EmailConflictError } from '@/types/agent'
+import type { EmailAddress, EmailIndexResponse, EmailConflictError, AMPAddress, AMPAddressIndexEntry } from '@/types/agent'
 
 /**
  * Normalize email address for case-insensitive comparison
@@ -1000,6 +1406,7 @@ export function getEmailIndex(): EmailIndexResponse {
   const index: EmailIndexResponse = {}
 
   for (const agent of agents) {
+    if (agent.deletedAt) continue
     const agentName = agent.name || agent.alias || 'unknown'
     const addresses = agent.tools?.email?.addresses || []
 
@@ -1040,6 +1447,7 @@ export function findAgentByEmail(email: string): string | null {
   const agents = loadAgents()
 
   for (const agent of agents) {
+    if (agent.deletedAt) continue
     // Check legacy single-address format
     if (agent.tools?.email?.address) {
       if (normalizeEmail(agent.tools.email.address) === normalizedEmail) {
@@ -1074,10 +1482,11 @@ export function isEmailAddressAvailableLocally(email: string, excludeAgentId?: s
  * Add an email address to an agent
  * Returns the updated agent or throws an error if address is already claimed
  */
-export function addEmailAddress(
+export async function addEmailAddress(
   agentId: string,
   emailAddress: EmailAddress
-): Agent {
+): Promise<Agent> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -1154,14 +1563,18 @@ export function addEmailAddress(
 
   agents[index].lastActive = new Date().toISOString()
   saveAgents(agents)
+  invalidateAgentCache()
 
   return agents[index]
+  }) // end withLock('agents')
 }
 
 /**
  * Remove an email address from an agent
+ * MF-003: Wrapped with file lock to prevent read-modify-write races
  */
-export function removeEmailAddress(agentId: string, email: string): Agent {
+export async function removeEmailAddress(agentId: string, email: string): Promise<Agent> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -1195,8 +1608,10 @@ export function removeEmailAddress(agentId: string, email: string): Agent {
 
   agents[index].lastActive = new Date().toISOString()
   saveAgents(agents)
+  invalidateAgentCache()
 
   return agents[index]
+  }) // end withLock('agents')
 }
 
 /**
@@ -1227,11 +1642,12 @@ export function getAgentEmailAddresses(agentId: string): EmailAddress[] {
 /**
  * Update an existing email address on an agent
  */
-export function updateEmailAddress(
+export async function updateEmailAddress(
   agentId: string,
   email: string,
   updates: Partial<Omit<EmailAddress, 'address'>>
-): Agent {
+): Promise<Agent> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -1268,8 +1684,317 @@ export function updateEmailAddress(
 
   agents[index].lastActive = new Date().toISOString()
   saveAgents(agents)
+  invalidateAgentCache()
 
   return agents[index]
+  }) // end withLock('agents')
+}
+
+// ============================================================================
+// AMP Address Identity Management
+// ============================================================================
+
+/**
+ * Normalize AMP address for case-insensitive comparison
+ */
+function normalizeAMPAddress(address: string): string {
+  return address.toLowerCase().trim()
+}
+
+/**
+ * Validate AMP address format (name@domain)
+ */
+function isValidAMPAddress(address: string): boolean {
+  const ampRegex = /^[a-z0-9][a-z0-9._-]*@[a-z0-9][a-z0-9.-]+$/
+  return ampRegex.test(address.toLowerCase()) && address.length <= 254
+}
+
+/**
+ * Get AMP address index - mapping of all AMP addresses to agent identity
+ */
+export function getAMPAddressIndex(): Record<string, AMPAddressIndexEntry> {
+  const agents = loadAgents()
+  const index: Record<string, AMPAddressIndexEntry> = {}
+
+  for (const agent of agents) {
+    if (agent.deletedAt) continue
+    const agentName = agent.name || agent.alias || 'unknown'
+    const addresses = agent.tools?.amp?.addresses || []
+
+    // Handle legacy single-address in metadata
+    if (agent.metadata?.amp?.address && addresses.length === 0) {
+      const legacyAddr = normalizeAMPAddress(agent.metadata.amp.address)
+      index[legacyAddr] = {
+        agentId: agent.id,
+        agentName,
+        hostId: agent.hostId || getSelfHostId(),
+        provider: 'aimaestro.local',
+        type: 'local',
+      }
+    }
+
+    for (const addr of addresses) {
+      const ampAddr = normalizeAMPAddress(addr.address)
+      index[ampAddr] = {
+        agentId: agent.id,
+        agentName,
+        hostId: agent.hostId || getSelfHostId(),
+        provider: addr.provider,
+        type: addr.type,
+        // Preserve temporal registration metadata from the source AMPAddress
+        registeredAt: addr.registeredAt,
+      }
+    }
+  }
+
+  return index
+}
+
+/**
+ * Find agent by AMP address (local lookup only)
+ * Returns agent ID if found, null otherwise
+ */
+export function findAgentByAMPAddress(address: string): string | null {
+  const normalizedAddr = normalizeAMPAddress(address)
+  const agents = loadAgents()
+
+  for (const agent of agents) {
+    if (agent.deletedAt) continue
+    // Check legacy single-address in metadata
+    if (agent.metadata?.amp?.address) {
+      if (normalizeAMPAddress(agent.metadata.amp.address) === normalizedAddr) {
+        return agent.id
+      }
+    }
+
+    // Check new multi-address format
+    const addresses = agent.tools?.amp?.addresses || []
+    for (const addr of addresses) {
+      if (normalizeAMPAddress(addr.address) === normalizedAddr) {
+        return agent.id
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Get all AMP addresses for an agent
+ */
+export function getAgentAMPAddresses(agentId: string): AMPAddress[] {
+  const agent = getAgent(agentId)
+  if (!agent) return []
+
+  const addresses: AMPAddress[] = []
+
+  // Handle legacy single-address in metadata
+  if (agent.metadata?.amp?.address && (!agent.tools?.amp?.addresses || agent.tools.amp.addresses.length === 0)) {
+    addresses.push({
+      address: agent.metadata.amp.address,
+      provider: 'aimaestro.local',
+      type: 'local',
+      primary: true,
+      tenant: agent.metadata.amp.tenant,
+      registeredAt: agent.metadata.amp.registeredAt,
+    })
+  }
+
+  // Handle new multi-address format
+  if (agent.tools?.amp?.addresses) {
+    addresses.push(...agent.tools.amp.addresses)
+  }
+
+  return addresses
+}
+
+/**
+ * Add an AMP address to an agent
+ * Returns the updated agent or throws an error if address is already claimed
+ */
+export async function addAMPAddress(
+  agentId: string,
+  ampAddress: AMPAddress
+): Promise<Agent> {
+  return withLock('agents', () => {
+  const agents = loadAgents()
+  const index = agents.findIndex(a => a.id === agentId)
+
+  if (index === -1) {
+    throw new Error(`Agent not found: ${agentId}`)
+  }
+
+  const normalizedAddr = normalizeAMPAddress(ampAddress.address)
+
+  // Validate address format
+  if (!isValidAMPAddress(normalizedAddr)) {
+    throw new Error(`Invalid AMP address format: ${ampAddress.address}`)
+  }
+
+  // Check uniqueness locally
+  const existingOwnerId = findAgentByAMPAddress(normalizedAddr)
+  if (existingOwnerId && existingOwnerId !== agentId) {
+    const existingOwner = getAgent(existingOwnerId)
+    throw new Error(`AMP address ${normalizedAddr} is already claimed by ${existingOwner?.name || 'unknown'}`)
+  }
+
+  // Initialize tools.amp if needed
+  if (!agents[index].tools) {
+    agents[index].tools = {}
+  }
+  if (!agents[index].tools.amp) {
+    agents[index].tools.amp = {
+      enabled: true,
+      addresses: [],
+    }
+  }
+  if (!agents[index].tools.amp.addresses) {
+    agents[index].tools.amp.addresses = []
+  }
+
+  // Check max addresses limit (10)
+  if (agents[index].tools.amp.addresses.length >= 10) {
+    throw new Error('Maximum of 10 AMP addresses per agent')
+  }
+
+  // Check if address already exists on this agent
+  const existingIdx = agents[index].tools.amp.addresses.findIndex(
+    a => normalizeAMPAddress(a.address) === normalizedAddr
+  )
+  if (existingIdx >= 0) {
+    // Update existing address instead of throwing
+    agents[index].tools.amp.addresses[existingIdx] = {
+      ...agents[index].tools.amp.addresses[existingIdx],
+      ...ampAddress,
+      address: normalizedAddr,
+    }
+    agents[index].lastActive = new Date().toISOString()
+    saveAgents(agents)
+    invalidateAgentCache()
+    return agents[index]
+  }
+
+  // If this is marked as primary, unmark other primaries
+  if (ampAddress.primary) {
+    agents[index].tools.amp.addresses.forEach(a => {
+      a.primary = false
+    })
+  }
+
+  // Add the address (normalized)
+  agents[index].tools.amp.addresses.push({
+    ...ampAddress,
+    address: normalizedAddr,
+  })
+
+  // If this is the first address, make it primary
+  if (agents[index].tools.amp.addresses.length === 1) {
+    agents[index].tools.amp.addresses[0].primary = true
+  }
+
+  agents[index].lastActive = new Date().toISOString()
+  saveAgents(agents)
+  invalidateAgentCache()
+
+  return agents[index]
+  }) // end withLock('agents')
+}
+
+/**
+ * Remove an AMP address from an agent
+ * MF-003: Wrapped with file lock to prevent read-modify-write races
+ */
+export async function removeAMPAddress(agentId: string, address: string): Promise<Agent> {
+  return withLock('agents', () => {
+  const agents = loadAgents()
+  const index = agents.findIndex(a => a.id === agentId)
+
+  if (index === -1) {
+    throw new Error(`Agent not found: ${agentId}`)
+  }
+
+  const normalizedAddr = normalizeAMPAddress(address)
+
+  if (!agents[index].tools?.amp?.addresses) {
+    throw new Error(`Agent has no AMP addresses`)
+  }
+
+  const addrIndex = agents[index].tools.amp.addresses.findIndex(
+    a => normalizeAMPAddress(a.address) === normalizedAddr
+  )
+
+  if (addrIndex === -1) {
+    throw new Error(`AMP address not found: ${address}`)
+  }
+
+  const wasRemovePrimary = agents[index].tools.amp.addresses[addrIndex].primary
+
+  // Remove the address
+  agents[index].tools.amp.addresses.splice(addrIndex, 1)
+
+  // If we removed the primary, make the first remaining address primary
+  if (wasRemovePrimary && agents[index].tools.amp.addresses.length > 0) {
+    agents[index].tools.amp.addresses[0].primary = true
+  }
+
+  agents[index].lastActive = new Date().toISOString()
+  saveAgents(agents)
+  invalidateAgentCache()
+
+  return agents[index]
+  }) // end withLock('agents')
+}
+
+/**
+ * Update an existing AMP address on an agent
+ * MF-003: Wrapped with file lock to prevent read-modify-write races
+ */
+export async function updateAMPAddress(
+  agentId: string,
+  address: string,
+  updates: Partial<Omit<AMPAddress, 'address'>>
+): Promise<Agent> {
+  return withLock('agents', () => {
+  const agents = loadAgents()
+  const index = agents.findIndex(a => a.id === agentId)
+
+  if (index === -1) {
+    throw new Error(`Agent not found: ${agentId}`)
+  }
+
+  const normalizedAddr = normalizeAMPAddress(address)
+
+  if (!agents[index].tools?.amp?.addresses) {
+    throw new Error(`Agent has no AMP addresses`)
+  }
+
+  const addrIndex = agents[index].tools.amp.addresses.findIndex(
+    a => normalizeAMPAddress(a.address) === normalizedAddr
+  )
+
+  if (addrIndex === -1) {
+    throw new Error(`AMP address not found: ${address}`)
+  }
+
+  // If setting this as primary, unmark other primaries
+  if (updates.primary) {
+    agents[index].tools.amp.addresses.forEach(a => {
+      a.primary = false
+    })
+  }
+
+  // Update the address
+  agents[index].tools.amp.addresses[addrIndex] = {
+    ...agents[index].tools.amp.addresses[addrIndex],
+    ...updates,
+  }
+
+  agents[index].lastActive = new Date().toISOString()
+  saveAgents(agents)
+  invalidateAgentCache()
+
+  return agents[index]
+  }) // end withLock('agents')
 }
 
 // ============================================================================
@@ -1313,7 +2038,7 @@ export function getAgentSkills(agentId: string): AgentSkillsConfig | null {
  * @param skillsToAdd - Array of skill objects to add
  * @returns Updated agent or null if agent not found
  */
-export function addMarketplaceSkills(
+export async function addMarketplaceSkills(
   agentId: string,
   skillsToAdd: Array<{
     id: string
@@ -1322,7 +2047,8 @@ export function addMarketplaceSkills(
     name: string
     version?: string
   }>
-): Agent | null {
+): Promise<Agent | null> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -1370,6 +2096,7 @@ export function addMarketplaceSkills(
   saveAgents(agents)
 
   return agents[index]
+  }) // end withLock('agents')
 }
 
 /**
@@ -1378,7 +2105,8 @@ export function addMarketplaceSkills(
  * @param skillIds - Array of skill IDs to remove
  * @returns Updated agent or null if agent not found
  */
-export function removeMarketplaceSkills(agentId: string, skillIds: string[]): Agent | null {
+export async function removeMarketplaceSkills(agentId: string, skillIds: string[]): Promise<Agent | null> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -1398,6 +2126,7 @@ export function removeMarketplaceSkills(agentId: string, skillIds: string[]): Ag
   saveAgents(agents)
 
   return agents[index]
+  }) // end withLock('agents')
 }
 
 /**
@@ -1407,14 +2136,15 @@ export function removeMarketplaceSkills(agentId: string, skillIds: string[]): Ag
  * @param skill - Custom skill to add
  * @returns Updated agent or null if agent not found
  */
-export function addCustomSkill(
+export async function addCustomSkill(
   agentId: string,
   skill: {
     name: string
     content: string
     description?: string
   }
-): Agent | null {
+): Promise<Agent | null> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -1474,6 +2204,7 @@ export function addCustomSkill(
   saveAgents(agents)
 
   return agents[index]
+  }) // end withLock('agents')
 }
 
 /**
@@ -1483,7 +2214,8 @@ export function addCustomSkill(
  * @param skillName - Name of the custom skill to remove
  * @returns Updated agent or null if agent not found
  */
-export function removeCustomSkill(agentId: string, skillName: string): Agent | null {
+export async function removeCustomSkill(agentId: string, skillName: string): Promise<Agent | null> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -1524,6 +2256,7 @@ export function removeCustomSkill(agentId: string, skillName: string): Agent | n
   saveAgents(agents)
 
   return agents[index]
+  }) // end withLock('agents')
 }
 
 /**
@@ -1532,13 +2265,14 @@ export function removeCustomSkill(agentId: string, skillName: string): Agent | n
  * @param config - New AI Maestro config
  * @returns Updated agent or null if agent not found
  */
-export function updateAiMaestroSkills(
+export async function updateAiMaestroSkills(
   agentId: string,
   config: {
     enabled?: boolean
     skills?: string[]
   }
-): Agent | null {
+): Promise<Agent | null> {
+  return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
 
@@ -1570,4 +2304,365 @@ export function updateAiMaestroSkills(
   saveAgents(agents)
 
   return agents[index]
+  }) // end withLock('agents')
+}
+
+// ============================================================================
+// HOST ID NORMALIZATION (Phase 1: AMP Protocol Fix)
+// ============================================================================
+
+/**
+ * Normalize a hostId to canonical format for AMP compatibility
+ * - Lowercase for case-insensitive consistency
+ * - Strip .local suffix (macOS Bonjour/mDNS)
+ * - Convert legacy 'local' to actual hostname
+ *
+ * @param hostId - Raw host ID (could be 'local', 'Juans-MacBook-Pro.local', etc.)
+ * @returns Canonical hostId (lowercase, no .local suffix)
+ */
+export function normalizeHostId(hostId: string | undefined): string {
+  const selfHostId = getSelfHostId()
+
+  // Handle undefined or empty
+  if (!hostId || hostId === '' || hostId === 'local') {
+    return selfHostId
+  }
+
+  // Normalize: lowercase and strip .local suffix
+  return hostId.toLowerCase().replace(/\.local$/, '')
+}
+
+/**
+ * Check if a hostId needs normalization
+ * @param hostId - Host ID to check
+ * @returns true if hostId is not in canonical format
+ */
+export function needsHostIdNormalization(hostId: string | undefined): boolean {
+  if (!hostId) return true
+  if (hostId === 'local') return true
+  if (hostId !== hostId.toLowerCase()) return true
+  if (hostId.endsWith('.local')) return true
+  return false
+}
+
+/**
+ * Normalize all agent hostIds to canonical format
+ * Fixes agents with:
+ * - Legacy 'local' hostId
+ * - Mixed case hostIds (e.g., 'Juans-MacBook-Pro')
+ * - .local suffix (e.g., 'juans-macbook-pro.local')
+ *
+ * @returns { updated: number, skipped: number, agents: { id: string, name: string, oldHostId: string, newHostId: string }[] }
+ */
+export async function normalizeAllAgentHostIds(): Promise<{
+  updated: number
+  skipped: number
+  agents: { id: string, name: string, oldHostId: string, newHostId: string }[]
+}> {
+  return withLock('agents', () => {
+  const agents = loadAgents()
+  const result = {
+    updated: 0,
+    skipped: 0,
+    agents: [] as { id: string, name: string, oldHostId: string, newHostId: string }[]
+  }
+
+  let hasChanges = false
+
+  for (const agent of agents) {
+    const oldHostId = agent.hostId || 'local'
+    const newHostId = normalizeHostId(agent.hostId)
+
+    if (oldHostId !== newHostId) {
+      agent.hostId = newHostId
+      // Also normalize hostName and hostUrl if they reference this host
+      if (agent.hostName) {
+        agent.hostName = normalizeHostId(agent.hostName)
+      }
+      result.updated++
+      result.agents.push({
+        id: agent.id,
+        name: agent.name || agent.alias || 'unknown',
+        oldHostId,
+        newHostId
+      })
+      hasChanges = true
+    } else {
+      result.skipped++
+    }
+  }
+
+  if (hasChanges) {
+    saveAgents(agents)
+    console.log(`[Agent Registry] Normalized ${result.updated} agent hostIds`)
+  }
+
+  return result
+  }) // end withLock('agents')
+}
+
+/**
+ * Get agents grouped by hostId for mesh directory
+ * @returns Map of hostId -> array of agents
+ */
+export function getAgentsByHost(includeDeleted: boolean = false): Map<string, Agent[]> {
+  const agents = loadAgents()
+  const byHost = new Map<string, Agent[]>()
+
+  for (const agent of agents) {
+    // Skip soft-deleted agents unless caller explicitly requests them
+    if (!includeDeleted && agent.deletedAt) continue
+    const hostId = normalizeHostId(agent.hostId)
+    if (!byHost.has(hostId)) {
+      byHost.set(hostId, [])
+    }
+    byHost.get(hostId)!.push(agent)
+  }
+
+  return byHost
+}
+
+/**
+ * Get a summary of hostId inconsistencies for diagnosis
+ * @returns Summary of all unique hostIds and agent counts
+ */
+export function diagnoseHostIds(): {
+  canonical: string
+  hostIds: { hostId: string, count: number, needsNormalization: boolean }[]
+  totalAgents: number
+  agentsNeedingNormalization: number
+} {
+  const agents = loadAgents()
+  const canonical = getSelfHostId()
+  const hostIdCounts = new Map<string, number>()
+
+  for (const agent of agents) {
+    const hostId = agent.hostId || 'local'
+    hostIdCounts.set(hostId, (hostIdCounts.get(hostId) || 0) + 1)
+  }
+
+  const hostIds = Array.from(hostIdCounts.entries()).map(([hostId, count]) => ({
+    hostId,
+    count,
+    needsNormalization: needsHostIdNormalization(hostId)
+  }))
+
+  const agentsNeedingNormalization = hostIds
+    .filter(h => h.needsNormalization)
+    .reduce((sum, h) => sum + h.count, 0)
+
+  return {
+    canonical,
+    hostIds,
+    totalAgents: agents.length,
+    agentsNeedingNormalization
+  }
+}
+
+// ============================================================================
+// MESH-WIDE AGENT OPERATIONS (Phase 2: AMP Registration Enforcement)
+// ============================================================================
+
+/**
+ * Check if an agent name exists locally (on this host)
+ * @param name - Agent name to check
+ * @returns Agent if found, null otherwise
+ */
+export function checkLocalAgentExists(name: string): Agent | null {
+  const selfHostId = getSelfHostId()
+  return getAgentByName(name, selfHostId)
+}
+
+/**
+ * Check if an agent name exists anywhere in the mesh
+ * This queries all known peer hosts to ensure mesh-wide uniqueness
+ *
+ * @param name - Agent name to check
+ * @param timeout - Timeout in ms for peer queries (default: 5000)
+ * @returns { exists: boolean, host?: string, agent?: AgentSummary }
+ */
+export async function checkMeshAgentExists(
+  name: string,
+  timeout: number = 5000
+): Promise<{
+  exists: boolean
+  host?: string
+  agent?: AgentSummary
+  checkedHosts: string[]
+  failedHosts: string[]
+}> {
+  const { getPeerHosts } = await import('./hosts-config')
+
+  const result = {
+    exists: false,
+    host: undefined as string | undefined,
+    agent: undefined as AgentSummary | undefined,
+    checkedHosts: [] as string[],
+    failedHosts: [] as string[]
+  }
+
+  // Check locally first — exact name, then alias, then partial match
+  const selfHostId = getSelfHostId()
+  const localAgent = getAgentByName(name, selfHostId)
+    || getAgentByAlias(name, selfHostId)
+    || getAgentByNameAnyHost(name)
+    || getAgentByAliasAnyHost(name)
+    || getAgentByPartialName(name)
+  if (localAgent) {
+    result.exists = true
+    result.host = selfHostId
+    result.agent = {
+      id: localAgent.id,
+      name: localAgent.name || localAgent.alias || '',
+      label: localAgent.label,
+      hostId: localAgent.hostId || selfHostId,
+      status: localAgent.status,
+      lastActive: localAgent.lastActive,
+      sessions: localAgent.sessions || [],
+      deployment: localAgent.deployment
+    }
+    result.checkedHosts.push(selfHostId)
+    return result
+  }
+  result.checkedHosts.push(selfHostId)
+
+  // Check peer hosts in parallel
+  const peerHosts = getPeerHosts()
+  const normalizedName = name.toLowerCase()
+
+  const checks = peerHosts.map(async (host) => {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+      const response = await fetch(`${host.url}/api/agents/by-name/${encodeURIComponent(normalizedName)}`, {
+        signal: controller.signal
+      })
+      clearTimeout(timeoutId)
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.agent) {
+          return { host: host.id, agent: data.agent, success: true }
+        }
+      }
+      return { host: host.id, success: true }
+    } catch (error) {
+      return { host: host.id, success: false, error }
+    }
+  })
+
+  const results = await Promise.all(checks)
+
+  for (const checkResult of results) {
+    if (checkResult.success) {
+      result.checkedHosts.push(checkResult.host)
+      if (checkResult.agent) {
+        result.exists = true
+        result.host = checkResult.host
+        result.agent = checkResult.agent
+        // Found a match, but continue to build full list of checked hosts
+      }
+    } else {
+      result.failedHosts.push(checkResult.host)
+    }
+  }
+
+  return result
+}
+
+/**
+ * Mark an agent as AMP-registered
+ * Sets the ampRegistered flag and stores AMP metadata
+ *
+ * @param agentId - Agent ID
+ * @param ampData - AMP registration data
+ */
+export async function markAgentAsAMPRegistered(
+  agentId: string,
+  ampData: {
+    address: string
+    tenant: string
+    fingerprint: string
+    registeredAt: string
+    apiKeyHash?: string
+  }
+): Promise<Agent | null> {
+  return withLock('agents', () => {
+  const agents = loadAgents()
+  const index = agents.findIndex(a => a.id === agentId)
+
+  if (index === -1) {
+    return null
+  }
+
+  // Set AMP-registered flag and metadata
+  agents[index].ampRegistered = true
+  agents[index].metadata = {
+    ...agents[index].metadata,
+    amp: {
+      ...agents[index].metadata?.amp,
+      address: ampData.address,
+      tenant: ampData.tenant,
+      fingerprint: ampData.fingerprint,
+      registeredAt: ampData.registeredAt,
+      apiKeyHash: ampData.apiKeyHash
+    }
+  }
+  agents[index].lastActive = new Date().toISOString()
+
+  // Backfill: also add the address to the AMP addresses collection if not already present
+  if (ampData.address) {
+    if (!agents[index].tools) {
+      agents[index].tools = {}
+    }
+    if (!agents[index].tools.amp) {
+      agents[index].tools.amp = { enabled: true, addresses: [] }
+    }
+    if (!agents[index].tools.amp.addresses) {
+      agents[index].tools.amp.addresses = []
+    }
+
+    const normalizedAddr = ampData.address.toLowerCase().trim()
+    const alreadyExists = agents[index].tools.amp.addresses.some(
+      a => a.address.toLowerCase().trim() === normalizedAddr
+    )
+    if (!alreadyExists) {
+      // Determine provider from address domain
+      const domain = normalizedAddr.split('@')[1] || 'aimaestro.local'
+      const isLocal = domain.includes('aimaestro.local')
+
+      // If this is the first address, make it primary
+      const isPrimary = agents[index].tools.amp.addresses.length === 0
+
+      agents[index].tools.amp.addresses.push({
+        address: normalizedAddr,
+        provider: domain,
+        type: isLocal ? 'local' : 'cloud',
+        primary: isPrimary,
+        tenant: ampData.tenant,
+        registeredAt: ampData.registeredAt,
+      })
+    }
+  }
+
+  saveAgents(agents)
+  return agents[index]
+  }) // end withLock('agents')
+}
+
+/**
+ * Get all AMP-registered agents
+ */
+export function getAMPRegisteredAgents(): Agent[] {
+  const agents = loadAgents()
+  return agents.filter(a => !a.deletedAt && a.ampRegistered === true)
+}
+
+/**
+ * Get all non-AMP-registered agents (legacy agents)
+ */
+export function getLegacyAgents(): Agent[] {
+  const agents = loadAgents()
+  return agents.filter(a => !a.deletedAt && a.ampRegistered !== true)
 }

@@ -1,8 +1,16 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # AI Maestro - Complete Installation Script
 # Installs all prerequisites and sets up AI Maestro from scratch
 
 set -e
+
+# Source ecosystem constants (single source of truth for marketplace/plugin names)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/scripts/ecosystem-config.sh" ]; then
+    source "$SCRIPT_DIR/scripts/ecosystem-config.sh"
+elif [ -f "$SCRIPT_DIR/ecosystem-config.sh" ]; then
+    source "$SCRIPT_DIR/ecosystem-config.sh"
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -25,9 +33,18 @@ PACKAGE="📦"
 # Parse command line arguments
 SKIP_TOOLS=false
 NON_INTERACTIVE=false
+FROM_REMOTE=false
+
+SKIP_HOOKS=false
+SKIP_AGENT_CLI=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --from-remote)
+            FROM_REMOTE=true
+            NON_INTERACTIVE=true
+            shift
+            ;;
         --skip-tools)
             SKIP_TOOLS=true
             shift
@@ -36,12 +53,52 @@ while [[ $# -gt 0 ]]; do
             NON_INTERACTIVE=true
             shift
             ;;
-        *)
+        --skip-hooks)
+            SKIP_HOOKS=true
             shift
+            ;;
+        --skip-agent-cli)
+            SKIP_AGENT_CLI=true
+            shift
+            ;;
+        -h|--help)
+            echo "AI Maestro - Complete Installation Script"
+            echo ""
+            echo "Usage: ./install.sh [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  -y, --non-interactive  Non-interactive mode (auto-accept all prompts)"
+            echo "  --from-remote          Called from remote-install.sh (internal)"
+            echo "  --skip-tools           Skip agent tools installation"
+            echo "  --skip-hooks           Skip Claude Code hooks"
+            echo "  --skip-agent-cli       Skip agent management CLI"
+            echo "  -h, --help             Show this help message"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}${CROSS} Unknown option: $1${NC}"
+            echo "Run with --help for usage information."
+            exit 1
             ;;
     esac
 done
 
+# ── Detect installed AI clients ──────────────────────────────────────────────
+CLAUDE_INSTALLED=false
+CODEX_INSTALLED=false
+GEMINI_INSTALLED=false
+command -v claude &>/dev/null && CLAUDE_INSTALLED=true
+command -v codex &>/dev/null && CODEX_INSTALLED=true
+command -v gemini &>/dev/null && GEMINI_INSTALLED=true
+
+if [ "$CLAUDE_INSTALLED" = false ]; then
+    echo ""
+    echo -e "${YELLOW}${WARN} WARNING: Claude Code not found. Plugin installation will be skipped.${NC}"
+    echo -e "${BLUE}${INFO}Only scripts and skills (for Codex/Gemini) will be installed.${NC}"
+    echo ""
+fi
+
+if [ "$FROM_REMOTE" != true ]; then
 echo ""
 echo "╔════════════════════════════════════════════════════════════════╗"
 echo "║                                                                ║"
@@ -51,26 +108,35 @@ echo "║         From zero to orchestrating AI agents in minutes       ║"
 echo "║                                                                ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
+fi
 
 # Function to print colored messages
-print_success() {
-    echo -e "${GREEN}${CHECK} $1${NC}"
-}
+# When called from remote-install.sh, redirect non-error output to a log file
+# instead of suppressing it entirely, so warnings are preserved for debugging.
+# INSTALL_DIR is not yet set at definition time, but bash evaluates variables
+# at call time, so ${INSTALL_DIR:-.} resolves correctly when functions are invoked.
+if [ "$FROM_REMOTE" = true ]; then
+    LOG_FILE=""
+    _get_log_file() {
+        if [ -z "$LOG_FILE" ]; then
+            LOG_FILE="${INSTALL_DIR:-.}/install.log"
+        fi
+        echo "$LOG_FILE"
+    }
+    print_success() { echo "[SUCCESS] $1" >> "$(_get_log_file)" 2>/dev/null || true; }
+    print_warning() { echo "[WARNING] $1" >> "$(_get_log_file)" 2>/dev/null || true; }
+    print_info() { echo "[INFO] $1" >> "$(_get_log_file)" 2>/dev/null || true; }
+    print_step() { echo "[STEP] $1" >> "$(_get_log_file)" 2>/dev/null || true; }
+else
+    print_success() { echo -e "${GREEN}${CHECK} $1${NC}"; }
+    print_warning() { echo -e "${YELLOW}${WARN} $1${NC}"; }
+    print_info() { echo -e "${BLUE}${INFO}$1${NC}"; }
+    print_step() { echo -e "${PURPLE}${ROCKET} $1${NC}"; }
+fi
 
+# Errors always print regardless of mode
 print_error() {
     echo -e "${RED}${CROSS} $1${NC}"
-}
-
-print_warning() {
-    echo -e "${YELLOW}${WARN} $1${NC}"
-}
-
-print_info() {
-    echo -e "${BLUE}${INFO}$1${NC}"
-}
-
-print_step() {
-    echo -e "${PURPLE}${ROCKET} $1${NC}"
 }
 
 print_header() {
@@ -79,6 +145,35 @@ print_header() {
     echo -e "${CYAN}  $1${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
     echo ""
+}
+
+# sed that works on both macOS and Linux
+_portable_sed() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "$@"
+    else
+        sed -i "$@"
+    fi
+}
+
+# Install a system package on any Linux distro
+_install_pkg() {
+    local pkg="$1"
+    if command -v apt-get &>/dev/null; then
+        sudo apt-get update -qq && sudo apt-get install -y -qq "$pkg"
+    elif command -v dnf &>/dev/null; then
+        sudo dnf install -y "$pkg"
+    elif command -v pacman &>/dev/null; then
+        sudo pacman -S --noconfirm "$pkg"
+    elif command -v zypper &>/dev/null; then
+        sudo zypper install -y "$pkg"
+    elif command -v apk &>/dev/null; then
+        sudo apk add "$pkg"
+    else
+        print_error "No supported package manager found (apt, dnf, pacman, zypper, apk)"
+        print_info "Please install '$pkg' manually and re-run the installer."
+        return 1
+    fi
 }
 
 # Detect OS and WSL
@@ -151,6 +246,9 @@ check_root() {
     fi
 }
 
+# Skip prerequisite checks when called from remote-install.sh (already done)
+if [ "$FROM_REMOTE" != true ]; then
+
 print_header "STEP 1: System Check"
 
 check_root
@@ -168,6 +266,7 @@ NEED_CLAUDE=false
 NEED_YARN=false
 NEED_GIT=false
 NEED_JQ=false
+NEED_TAILSCALE=false
 
 # Check Homebrew (macOS only)
 if [ "$OS" = "macos" ]; then
@@ -196,7 +295,7 @@ print_info "Checking for Node.js..."
 if command -v node &> /dev/null; then
     NODE_VERSION=$(node --version)
     # Check if version is >= 18
-    NODE_MAJOR=$(echo $NODE_VERSION | cut -d'.' -f1 | sed 's/v//')
+    NODE_MAJOR=$(echo "$NODE_VERSION" | cut -d'.' -f1 | sed 's/v//')
     if [ "$NODE_MAJOR" -ge 18 ]; then
         print_success "Node.js installed ($NODE_VERSION)"
     else
@@ -244,18 +343,30 @@ else
     NEED_CLAUDE=true
 fi
 
-# Check jq (optional but recommended)
+# Check Tailscale (recommended for multi-machine mesh network)
+print_info "Checking for Tailscale..."
+if command -v tailscale &> /dev/null; then
+    TS_VERSION=$(tailscale version 2>/dev/null | head -n1 || echo "unknown")
+    print_success "Tailscale installed ($TS_VERSION)"
+else
+    print_warning "Tailscale not found (recommended for multi-machine setup)"
+    NEED_TAILSCALE=true
+fi
+
+# Check jq (required for agent CLI tools)
 print_info "Checking for jq..."
 if command -v jq &> /dev/null; then
-    print_success "jq installed (optional)"
+    print_success "jq installed"
 else
-    print_warning "jq not found (optional but recommended)"
+    print_warning "jq not found (required for agent CLI)"
     NEED_JQ=true
 fi
 
 # Check curl (should be pre-installed on macOS)
+NEED_CURL=false
 if ! command -v curl &> /dev/null; then
-    print_error "curl not found (should be pre-installed)"
+    print_warning "curl not found"
+    NEED_CURL=true
 fi
 
 echo ""
@@ -268,16 +379,18 @@ if [ "$NEED_NODE" = true ]; then MISSING_COUNT=$((MISSING_COUNT + 1)); fi
 if [ "$NEED_YARN" = true ]; then MISSING_COUNT=$((MISSING_COUNT + 1)); fi
 if [ "$NEED_TMUX" = true ]; then MISSING_COUNT=$((MISSING_COUNT + 1)); fi
 if [ "$NEED_CLAUDE" = true ]; then MISSING_COUNT=$((MISSING_COUNT + 1)); fi
+if [ "$NEED_TAILSCALE" = true ]; then MISSING_COUNT=$((MISSING_COUNT + 1)); fi
 if [ "$NEED_JQ" = true ]; then MISSING_COUNT=$((MISSING_COUNT + 1)); fi
+if [ "$NEED_CURL" = true ]; then MISSING_COUNT=$((MISSING_COUNT + 1)); fi
 
-if [ $MISSING_COUNT -eq 0 ]; then
+if [ "$MISSING_COUNT" -eq 0 ]; then
     print_success "All prerequisites are installed!"
 else
     print_warning "Found $MISSING_COUNT missing prerequisite(s)"
 fi
 
 # Ask user if they want to install missing items
-if [ $MISSING_COUNT -gt 0 ]; then
+if [ "$MISSING_COUNT" -gt 0 ]; then
     echo ""
     print_header "STEP 2: Install Missing Prerequisites"
 
@@ -302,8 +415,14 @@ if [ $MISSING_COUNT -gt 0 ]; then
     if [ "$NEED_CLAUDE" = true ]; then
         echo "  ${PACKAGE} Claude Code - AI coding assistant (optional)"
     fi
+    if [ "$NEED_TAILSCALE" = true ]; then
+        echo "  ${PACKAGE} Tailscale - Secure mesh VPN for multi-machine setup (recommended)"
+    fi
     if [ "$NEED_JQ" = true ]; then
         echo "  ${PACKAGE} jq - JSON processor (optional)"
+    fi
+    if [ "$NEED_CURL" = true ]; then
+        echo "  ${PACKAGE} curl - HTTP client (required)"
     fi
 
     echo ""
@@ -329,9 +448,21 @@ if [ $MISSING_COUNT -gt 0 ]; then
         # Add Homebrew to PATH for this session
         if [ -f /opt/homebrew/bin/brew ]; then
             eval "$(/opt/homebrew/bin/brew shellenv)"
+        elif [ -f /usr/local/bin/brew ]; then
+            eval "$(/usr/local/bin/brew shellenv)"
         fi
 
         print_success "Homebrew installed"
+    fi
+
+    # Install curl (needed for Homebrew, nvm, Tailscale)
+    if [ "$NEED_CURL" = true ]; then
+        echo ""
+        print_step "Installing curl..."
+        if [ "$OS" = "linux" ] || [ "$OS" = "wsl" ]; then
+            _install_pkg curl
+        fi
+        print_success "curl installed"
     fi
 
     # Install Git
@@ -341,8 +472,7 @@ if [ $MISSING_COUNT -gt 0 ]; then
         if [ "$OS" = "macos" ]; then
             brew install git
         elif [ "$OS" = "linux" ] || [ "$OS" = "wsl" ]; then
-            sudo apt-get update
-            sudo apt-get install -y git
+            _install_pkg git
         fi
         print_success "Git installed"
     fi
@@ -353,12 +483,13 @@ if [ $MISSING_COUNT -gt 0 ]; then
         print_step "Installing Node.js 20 LTS..."
         if [ "$OS" = "macos" ]; then
             brew install node@20
-            brew link node@20
+            brew link --force --overwrite node@20 || true
         elif [ "$OS" = "linux" ] || [ "$OS" = "wsl" ]; then
             print_info "Installing Node.js via nvm (Node Version Manager)..."
             # Check if nvm is already installed
             if [ ! -d "$HOME/.nvm" ]; then
-                curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+                # Use nvm's latest install URL (auto-resolves to current stable release)
+                curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
                 # Load nvm for current session
                 export NVM_DIR="$HOME/.nvm"
                 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
@@ -377,7 +508,7 @@ if [ $MISSING_COUNT -gt 0 ]; then
     if [ "$NEED_YARN" = true ]; then
         echo ""
         print_step "Installing Yarn..."
-        npm install -g yarn
+        npm install -g yarn || print_warning "Could not install Yarn — install manually with: npm install -g yarn"
         print_success "Yarn installed"
     fi
 
@@ -388,8 +519,7 @@ if [ $MISSING_COUNT -gt 0 ]; then
         if [ "$OS" = "macos" ]; then
             brew install tmux
         elif [ "$OS" = "linux" ] || [ "$OS" = "wsl" ]; then
-            sudo apt-get update
-            sudo apt-get install -y tmux
+            _install_pkg tmux
         fi
         print_success "tmux installed"
     fi
@@ -401,8 +531,7 @@ if [ $MISSING_COUNT -gt 0 ]; then
         if [ "$OS" = "macos" ]; then
             brew install jq
         elif [ "$OS" = "linux" ] || [ "$OS" = "wsl" ]; then
-            sudo apt-get update
-            sudo apt-get install -y jq
+            _install_pkg jq
         fi
         print_success "jq installed"
     fi
@@ -423,13 +552,120 @@ if [ $MISSING_COUNT -gt 0 ]; then
             read -p "Press Enter to continue without Claude Code..."
         fi
     fi
+
+    # Install Tailscale (optional — always ask, even in non-interactive mode)
+    # Tailscale requires sudo on Linux, so we let the user decide to avoid unnecessary privilege escalation
+    if [ "$NEED_TAILSCALE" = true ]; then
+        echo ""
+        print_info "Tailscale enables secure remote access to AI Maestro from any device (iPad, phone, laptop)."
+        echo "  It creates an encrypted VPN mesh — no port forwarding, no public IP needed."
+        echo "  AI Maestro auto-detects Tailscale and only accepts connections from VPN devices."
+        echo ""
+        echo "  Install links:"
+        echo "    macOS:     brew install --cask tailscale"
+        echo "    Linux:     curl -fsSL https://tailscale.com/install.sh | sh"
+        echo "    Windows:   https://tailscale.com/download/windows"
+        echo "    iOS/iPad:  https://apps.apple.com/app/tailscale/id1470499037"
+        echo "    Android:   https://play.google.com/store/apps/details?id=com.tailscale.ipn"
+        echo ""
+        if [ "$NON_INTERACTIVE" = true ]; then
+            INSTALL_TS="y"
+        else
+            read -p "Install Tailscale now? (y/N): " INSTALL_TS
+        fi
+
+        if [[ "$INSTALL_TS" =~ ^[Yy]$ ]]; then
+            print_step "Installing Tailscale..."
+            TS_INSTALL_OK=false
+            if [ "$OS" = "macos" ]; then
+                if command -v brew &>/dev/null; then
+                    print_info "Installing via Homebrew (this may take a few minutes if Homebrew needs to update itself)..."
+                    brew install --cask tailscale && TS_INSTALL_OK=true
+                else
+                    # Fallback: download the .pkg installer directly
+                    print_info "Homebrew not found — downloading Tailscale installer..."
+                    PKG_URL="https://pkgs.tailscale.com/stable/Tailscale-latest-macos.pkg"
+                    PKG_PATH="/tmp/Tailscale-latest.pkg"
+                    if curl -fsSL -o "$PKG_PATH" "$PKG_URL"; then
+                        print_info "Installing Tailscale.pkg (may require password)..."
+                        if sudo installer -pkg "$PKG_PATH" -target / 2>/dev/null; then
+                            TS_INSTALL_OK=true
+                        else
+                            print_warning "Installer failed. Install from Mac App Store or:"
+                            echo "  https://tailscale.com/download/mac"
+                        fi
+                        rm -f "$PKG_PATH"
+                    else
+                        print_warning "Download failed. Install from Mac App Store or:"
+                        echo "  https://tailscale.com/download/mac"
+                    fi
+                fi
+            elif [ "$OS" = "wsl" ]; then
+                # WSL: recommend installing Tailscale on the Windows HOST instead
+                # WSL2 shares the Windows network stack, so installing inside WSL
+                # is unnecessary and can conflict with the Windows Tailscale app.
+                print_warning "On WSL, install Tailscale on the WINDOWS host instead (not inside WSL)."
+                echo "  WSL2 shares the Windows network stack — the host's Tailscale covers WSL too."
+                echo ""
+                echo "  Download for Windows: https://tailscale.com/download/windows"
+                echo ""
+                echo "  After installing on Windows, WSL2 can reach Tailscale IPs automatically."
+                if [ "${WSL_VERSION:-2}" = "1" ]; then
+                    print_warning "WSL1 detected — upgrade to WSL2 for Tailscale support."
+                    echo "  Run in PowerShell: wsl --set-version <distro> 2"
+                fi
+            elif [ "$OS" = "linux" ]; then
+                echo "  Note: the Tailscale installer requires sudo for the system service."
+                # Check if systemd is available (required for tailscaled service)
+                if ! command -v systemctl &>/dev/null && ! [ -d /run/systemd/system ]; then
+                    print_warning "systemd not detected. Tailscale requires systemd for its background service."
+                    echo "  On systems without systemd (Alpine, some containers), use userspace mode:"
+                    echo "  tailscaled --tun=userspace-networking &"
+                    echo "  See: https://tailscale.com/kb/1112/userspace-networking"
+                    echo ""
+                fi
+                if curl -fsSL https://tailscale.com/install.sh | sh; then
+                    TS_INSTALL_OK=true
+                else
+                    print_warning "Tailscale install script failed. Install manually:"
+                    echo "  https://tailscale.com/kb/1031/install-linux"
+                fi
+            else
+                print_warning "Unsupported platform for auto-install. Install manually:"
+                echo "  https://tailscale.com/download"
+            fi
+            if [ "$TS_INSTALL_OK" = true ]; then
+                print_success "Tailscale installed"
+                echo ""
+                print_info "To activate: tailscale up (then sign in with your Tailscale account)"
+                print_info "Install Tailscale on your other devices and sign in with the same account."
+                # Verify it's actually working
+                if command -v tailscale &>/dev/null; then
+                    TS_VER=$(tailscale version 2>/dev/null | head -1)
+                    print_success "Verified: tailscale $TS_VER"
+                fi
+            fi
+        else
+            print_info "Skipping Tailscale — install later for remote access from mobile/other machines"
+        fi
+    fi
 fi
 
+fi  # end FROM_REMOTE != true
+
 # Check if we're already in an AI Maestro directory
-print_header "STEP 3: Install AI Maestro"
+if [ "$FROM_REMOTE" != true ]; then
+    print_header "STEP 3: Install AI Maestro"
+fi
 
 INSTALL_DIR=""
 IN_AI_MAESTRO=false
+
+# When called from remote-install.sh, we're already in the right directory
+if [ "$FROM_REMOTE" = true ]; then
+    IN_AI_MAESTRO=true
+    INSTALL_DIR=$(pwd)
+fi
 
 if [ -f "package.json" ] && grep -q "ai-maestro" package.json 2>/dev/null; then
     IN_AI_MAESTRO=true
@@ -490,8 +726,20 @@ if [ -n "$INSTALL_DIR" ]; then
     if [ -d "$INSTALL_DIR" ] && [ "$IN_AI_MAESTRO" = false ]; then
         print_warning "Directory already exists: $INSTALL_DIR"
         if [ "$NON_INTERACTIVE" = true ]; then
-            print_info "Non-interactive mode: deleting existing directory..."
-            DELETE_DIR="y"
+            # Safety: only auto-delete paths under $HOME
+            if [[ "$INSTALL_DIR" == "$HOME"/* ]]; then
+                # Only delete if this is actually an AI Maestro installation
+                if [ -f "$INSTALL_DIR/package.json" ] && grep -q '"name": "ai-maestro"' "$INSTALL_DIR/package.json" 2>/dev/null; then
+                    print_info "Non-interactive mode: replacing existing AI Maestro installation..."
+                    DELETE_DIR="y"
+                else
+                    print_error "Directory exists but is not an AI Maestro installation. Aborting."
+                    exit 1
+                fi
+            else
+                print_error "Refusing to auto-delete $INSTALL_DIR (not under \$HOME)"
+                exit 1
+            fi
         else
             read -p "Delete and reinstall? (y/n): " DELETE_DIR
         fi
@@ -509,10 +757,16 @@ if [ -n "$INSTALL_DIR" ]; then
         print_success "Repository cloned"
     fi
 
+    cd "$INSTALL_DIR"
+
+    # Initialize git submodules (AMP messaging plugin, etc.)
+    print_step "Initializing git submodules..."
+    git submodule update --init --recursive || print_warning "Some submodules failed to initialize"
+    print_success "Git submodules initialized"
+
     echo ""
     print_step "Installing dependencies..."
-    cd "$INSTALL_DIR"
-    yarn install
+    yarn install || print_warning "yarn install had errors — continuing"
     print_success "Dependencies installed"
 
     # Configure tmux
@@ -548,24 +802,30 @@ if [ -n "$INSTALL_DIR" ]; then
     fi
 
     if [[ "$SETUP_SSH" =~ ^[Yy]$ ]]; then
-        # Add to ~/.tmux.conf
-        echo "" >> ~/.tmux.conf
-        echo "# SSH Agent Configuration - AI Maestro" >> ~/.tmux.conf
-        echo "set-option -g update-environment \"DISPLAY SSH_ASKPASS SSH_AGENT_PID SSH_CONNECTION WINDOWID XAUTHORITY\"" >> ~/.tmux.conf
-        echo "set-environment -g 'SSH_AUTH_SOCK' ~/.ssh/ssh_auth_sock" >> ~/.tmux.conf
-
-        # Add to shell config
-        SHELL_RC="$HOME/.zshrc"
-        if [ -f "$HOME/.bashrc" ]; then
-            SHELL_RC="$HOME/.bashrc"
+        # Add to ~/.tmux.conf (skip if already present)
+        if ! grep -q "SSH Agent Configuration - AI Maestro" ~/.tmux.conf 2>/dev/null; then
+            echo "" >> ~/.tmux.conf
+            echo "# SSH Agent Configuration - AI Maestro" >> ~/.tmux.conf
+            echo "set-option -g update-environment \"DISPLAY SSH_ASKPASS SSH_AGENT_PID SSH_CONNECTION WINDOWID XAUTHORITY\"" >> ~/.tmux.conf
+            echo "set-environment -g 'SSH_AUTH_SOCK' ~/.ssh/ssh_auth_sock" >> ~/.tmux.conf
         fi
 
-        echo "" >> "$SHELL_RC"
-        echo "# SSH Agent for tmux - AI Maestro" >> "$SHELL_RC"
-        echo "if [ -S \"\$SSH_AUTH_SOCK\" ] && [ ! -h \"\$SSH_AUTH_SOCK\" ]; then" >> "$SHELL_RC"
-        echo "    mkdir -p ~/.ssh" >> "$SHELL_RC"
-        echo "    ln -sf \"\$SSH_AUTH_SOCK\" ~/.ssh/ssh_auth_sock" >> "$SHELL_RC"
-        echo "fi" >> "$SHELL_RC"
+        # Add to shell config (skip if already present)
+        # Use $SHELL to detect the user's login shell (not file existence)
+        if [[ "$SHELL" == */bash ]]; then
+            SHELL_RC="$HOME/.bashrc"
+        else
+            SHELL_RC="$HOME/.zshrc"
+        fi
+
+        if ! grep -q "SSH Agent for tmux - AI Maestro" "$SHELL_RC" 2>/dev/null; then
+            echo "" >> "$SHELL_RC"
+            echo "# SSH Agent for tmux - AI Maestro" >> "$SHELL_RC"
+            echo "if [ -S \"\$SSH_AUTH_SOCK\" ] && [ ! -h \"\$SSH_AUTH_SOCK\" ]; then" >> "$SHELL_RC"
+            echo "    mkdir -p ~/.ssh" >> "$SHELL_RC"
+            echo "    ln -sf \"\$SSH_AUTH_SOCK\" ~/.ssh/ssh_auth_sock" >> "$SHELL_RC"
+            echo "fi" >> "$SHELL_RC"
+        fi
 
         # Create initial symlink
         mkdir -p ~/.ssh
@@ -580,79 +840,203 @@ if [ -n "$INSTALL_DIR" ]; then
     fi
 fi
 
-# Install agent tools (messaging, memory, graph, docs)
+# Install agent tools (messaging, hooks, agent CLI)
 if [ -n "$INSTALL_DIR" ] && [ "$SKIP_TOOLS" != true ]; then
     echo ""
-    print_header "STEP 4: Install Agent Tools"
-
-    echo "AI Maestro includes powerful tools for agent collaboration and intelligence:"
-    echo ""
-    echo "  📨 Messaging    - Agent-to-agent communication"
-    echo "  🧠 Memory       - Search conversation history for context"
-    echo "  🔗 Graph        - Query code relationships and dependencies"
-    echo "  📚 Docs         - Search auto-generated documentation"
-    echo "  🪝 Hooks        - Claude Code integration for Chat interface"
-    echo ""
-    if command -v claude &> /dev/null; then
-        echo "  Claude Code skills will be installed for natural language access."
+    if [ "$FROM_REMOTE" != true ]; then
+        print_header "STEP 4: Install Agent Tools"
     fi
-    echo ""
 
-    INSTALL_TOOLS_ANSWER="y"
+    # Component selection — all enabled by default, --skip-* flags can disable
+    INSTALL_MESSAGING=true
+    INSTALL_HOOKS=true
+    INSTALL_AGENT_CLI=true
+
+    # Gateway selection — all disabled by default
+    INSTALL_GW_SLACK=false
+    INSTALL_GW_DISCORD=false
+    INSTALL_GW_EMAIL=false
+    INSTALL_GW_WHATSAPP=false
+    GATEWAYS_REPO="https://github.com/23blocks-OS/aimaestro-gateways.git"
+
+    # Apply per-component skip flags from CLI arguments
+    if [ "$SKIP_HOOKS" = true ]; then INSTALL_HOOKS=false; fi
+    if [ "$SKIP_AGENT_CLI" = true ]; then INSTALL_AGENT_CLI=false; fi
+
+    # Helper to display toggle state
+    _check() { if [ "$1" = true ]; then echo "✓"; else echo " "; fi; }
+
     if [ "$NON_INTERACTIVE" != true ]; then
-        read -p "Install agent tools? (y/n): " INSTALL_TOOLS_ANSWER
+        # Interactive component selection menu
+        while true; do
+            echo ""
+            echo "  Agent tools to install:"
+            echo ""
+            echo "    1) [$(_check $INSTALL_MESSAGING)]  AMP Messaging     Agent-to-agent communication"
+            echo "    2) [$(_check $INSTALL_HOOKS)]  Claude Hooks      Claude Code integration"
+            echo "    3) [$(_check $INSTALL_AGENT_CLI)]  Agent CLI         Agent management from terminal"
+            echo ""
+            echo "  Messaging gateways (configured after install):"
+            echo ""
+            echo "    4) [$(_check $INSTALL_GW_SLACK)]  Slack Gateway     Slack workspace bridge"
+            echo "    5) [$(_check $INSTALL_GW_DISCORD)]  Discord Gateway   Discord server bridge"
+            echo "    6) [$(_check $INSTALL_GW_EMAIL)]  Email Gateway     Email (Mandrill) bridge"
+            echo "    7) [$(_check $INSTALL_GW_WHATSAPP)]  WhatsApp Gateway  WhatsApp Web bridge (beta)"
+            echo ""
+            echo "  Type a number (1-7) to toggle  |  a) All  n) None"
+            echo "  Press Enter when ready to install selected components"
+            read -p "  > " choice
+            case $choice in
+                1) if [ "$INSTALL_MESSAGING" = true ]; then INSTALL_MESSAGING=false; else INSTALL_MESSAGING=true; fi ;;
+                2) if [ "$INSTALL_HOOKS" = true ]; then INSTALL_HOOKS=false; else INSTALL_HOOKS=true; fi ;;
+                3) if [ "$INSTALL_AGENT_CLI" = true ]; then INSTALL_AGENT_CLI=false; else INSTALL_AGENT_CLI=true; fi ;;
+                4) if [ "$INSTALL_GW_SLACK" = true ]; then INSTALL_GW_SLACK=false; else INSTALL_GW_SLACK=true; fi ;;
+                5) if [ "$INSTALL_GW_DISCORD" = true ]; then INSTALL_GW_DISCORD=false; else INSTALL_GW_DISCORD=true; fi ;;
+                6) if [ "$INSTALL_GW_EMAIL" = true ]; then INSTALL_GW_EMAIL=false; else INSTALL_GW_EMAIL=true; fi ;;
+                7) if [ "$INSTALL_GW_WHATSAPP" = true ]; then INSTALL_GW_WHATSAPP=false; else INSTALL_GW_WHATSAPP=true; fi ;;
+                a|A) INSTALL_MESSAGING=true; INSTALL_HOOKS=true; INSTALL_AGENT_CLI=true; INSTALL_GW_SLACK=true; INSTALL_GW_DISCORD=true; INSTALL_GW_EMAIL=true; INSTALL_GW_WHATSAPP=true ;;
+                n|N) INSTALL_MESSAGING=false; INSTALL_HOOKS=false; INSTALL_AGENT_CLI=false; INSTALL_GW_SLACK=false; INSTALL_GW_DISCORD=false; INSTALL_GW_EMAIL=false; INSTALL_GW_WHATSAPP=false ;;
+                "") break ;;
+                *) echo "  Invalid choice. Use 1-7, a, n, or Enter." ;;
+            esac
+        done
     fi
 
-    if [[ "$INSTALL_TOOLS_ANSWER" =~ ^[Yy]$ ]]; then
-        cd "$INSTALL_DIR"
+    cd "$INSTALL_DIR"
+    TOOLS_INSTALLED=0
 
-        # Install messaging
-        if [ -f "install-messaging.sh" ]; then
-            echo ""
-            print_step "Installing messaging tools..."
-            if [ "$NON_INTERACTIVE" = true ]; then
-                ./install-messaging.sh -y
-            else
-                ./install-messaging.sh
-            fi
+    # Install messaging (AMP scripts to ~/.local/bin + ai-maestro plugin from marketplace)
+    # The plugin bundles ALL skills (messaging, planning, governance, etc.)
+    if [ "$INSTALL_MESSAGING" = true ] && [ -f "install-messaging.sh" ]; then
+        echo ""
+        print_step "Installing messaging tools + AI Maestro plugin..."
+        if [ "$NON_INTERACTIVE" = true ]; then
+            ./install-messaging.sh -y
+        else
+            ./install-messaging.sh
         fi
+        TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
+    fi
 
-        # Install memory tools
-        if [ -f "install-memory-tools.sh" ]; then
-            echo ""
-            print_step "Installing memory tools..."
-            ./install-memory-tools.sh
+    # Claude Code hooks — now provided by ai-maestro-plugin (v2.4.0+)
+    # The plugin's hooks/hooks.json registers all events using ${CLAUDE_PLUGIN_ROOT}.
+    # No settings.json modification needed.
+    if [ "$INSTALL_HOOKS" = true ]; then
+        echo ""
+        print_step "Claude Code hooks: provided by ai-maestro-plugin (skipping settings.json)"
+        TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
+    fi
+
+    # Install agent management CLI
+    if [ "$INSTALL_AGENT_CLI" = true ] && [ -f "install-agent-cli.sh" ]; then
+        echo ""
+        print_step "Installing agent management CLI..."
+        if [ "$NON_INTERACTIVE" = true ]; then
+            ./install-agent-cli.sh -y
+        else
+            ./install-agent-cli.sh
         fi
+        TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
+    fi
 
-        # Install graph tools
-        if [ -f "install-graph-tools.sh" ]; then
-            echo ""
-            print_step "Installing graph tools..."
-            ./install-graph-tools.sh
+    # Install selected gateways
+    SELECTED_GW=""
+    [ "$INSTALL_GW_SLACK" = true ] && SELECTED_GW="slack"
+    if [ "$INSTALL_GW_DISCORD" = true ]; then
+        [ -n "$SELECTED_GW" ] && SELECTED_GW="$SELECTED_GW,"
+        SELECTED_GW="${SELECTED_GW}discord"
+    fi
+    if [ "$INSTALL_GW_EMAIL" = true ]; then
+        [ -n "$SELECTED_GW" ] && SELECTED_GW="$SELECTED_GW,"
+        SELECTED_GW="${SELECTED_GW}email"
+    fi
+    if [ "$INSTALL_GW_WHATSAPP" = true ]; then
+        [ -n "$SELECTED_GW" ] && SELECTED_GW="$SELECTED_GW,"
+        SELECTED_GW="${SELECTED_GW}whatsapp"
+    fi
+
+    if [ -n "$SELECTED_GW" ]; then
+        echo ""
+        print_step "Installing messaging gateways..."
+        if [ ! -d "$INSTALL_DIR/services" ]; then
+            git clone --depth 1 "$GATEWAYS_REPO" "$INSTALL_DIR/services" 2>/dev/null || {
+                print_warning "Could not clone gateways repo — skipping"
+                SELECTED_GW=""
+            }
         fi
-
-        # Install doc tools
-        if [ -f "install-doc-tools.sh" ]; then
-            echo ""
-            print_step "Installing doc tools..."
-            ./install-doc-tools.sh
+        if [ -n "$SELECTED_GW" ]; then
+            IFS=',' read -ra GW_LIST <<< "$SELECTED_GW"
+            for gw in "${GW_LIST[@]}"; do
+                gw_dir="$INSTALL_DIR/services/${gw}-gateway"
+                if [ -d "$gw_dir" ]; then
+                    cd "$gw_dir"
+                    npm install --silent 2>/dev/null || npm install
+                    if [ -f ".env.example" ] && [ ! -f ".env" ]; then
+                        cp .env.example .env
+                        _portable_sed 's|AIMAESTRO_API=.*|AIMAESTRO_API=http://127.0.0.1:23000|' .env 2>/dev/null || true
+                        _portable_sed 's|DEFAULT_AGENT=.*|DEFAULT_AGENT=mailman|' .env 2>/dev/null || true
+                        if ! grep -q 'AIMAESTRO_API' .env 2>/dev/null; then
+                            echo "AIMAESTRO_API=http://127.0.0.1:23000" >> .env
+                        fi
+                        if ! grep -q 'DEFAULT_AGENT' .env 2>/dev/null; then
+                            echo "DEFAULT_AGENT=mailman" >> .env
+                        fi
+                    fi
+                    cd "$INSTALL_DIR"
+                    print_success "  ${gw}-gateway installed"
+                fi
+            done
+            TOOLS_INSTALLED=$((TOOLS_INSTALLED + 1))
         fi
+    fi
 
-        # Install Claude Code hooks
-        if [ -f "scripts/claude-hooks/install-hooks.sh" ]; then
+    if [ "$TOOLS_INSTALLED" -gt 0 ]; then
+        print_success "$TOOLS_INSTALLED agent tool(s) installed"
+
+        # Verify installation
+        if [ -f "verify-installation.sh" ]; then
             echo ""
-            print_step "Installing Claude Code hooks..."
-            ./scripts/claude-hooks/install-hooks.sh
+            print_step "Verifying installation..."
+            ./verify-installation.sh || true
         fi
-
-        print_success "All agent tools installed"
     else
-        print_info "Skipping agent tools (you can install later with individual install-*.sh scripts)"
+        print_info "No agent tools selected"
     fi
 elif [ "$SKIP_TOOLS" = true ]; then
     print_info "Skipping agent tools (--skip-tools flag set)"
 fi
 
+# ── Install Claude Code plugins (only if Claude is available) ────────────────
+if [ -n "$INSTALL_DIR" ] && [ "$CLAUDE_INSTALLED" = true ]; then
+    echo ""
+    print_step "Installing Claude Code plugins..."
+
+    # Core AI Maestro plugins (user-scope)
+    claude plugin marketplace add "${MARKETPLACE_REPO:-Emasoft/ai-maestro-plugins}" 2>/dev/null || true
+    claude plugin install "${MAIN_PLUGIN_NAME:-ai-maestro-plugin}" --scope user 2>/dev/null || print_warning "Could not install ai-maestro-plugin"
+
+    # External dependency plugins from emasoft-plugins marketplace
+    claude plugin marketplace add Emasoft/emasoft-plugins 2>/dev/null || true
+    claude plugin install claude-plugins-validation --scope user 2>/dev/null || print_warning "Could not install claude-plugins-validation"
+    claude plugin install perfect-skill-suggester --scope user 2>/dev/null || print_warning "Could not install perfect-skill-suggester"
+    claude plugin install code-auditor-agent --scope user 2>/dev/null || print_warning "Could not install code-auditor-agent"
+    claude plugin install llm-externalizer-plugin --scope user 2>/dev/null || print_warning "Could not install llm-externalizer-plugin"
+
+    # Serena from official marketplace
+    claude plugin marketplace add anthropic/claude-plugins-official 2>/dev/null || true
+    claude plugin install serena --scope user 2>/dev/null || true
+
+    # Agentika
+    claude plugin marketplace add agentika-labs/agentika-plugins-marketplace 2>/dev/null || true
+    claude plugin install agentika --scope user 2>/dev/null || true
+
+    print_success "Claude Code plugins installed"
+elif [ -n "$INSTALL_DIR" ] && [ "$CLAUDE_INSTALLED" = false ]; then
+    print_info "Skipping Claude Code plugin installation (claude not found)"
+    print_info "Scripts and skills were still installed for use with Codex/Gemini"
+fi
+
+if [ "$FROM_REMOTE" != true ]; then
 # Final steps
 print_header "Installation Complete!"
 
@@ -663,7 +1047,7 @@ if [ -n "$INSTALL_DIR" ]; then
     echo ""
     echo "1️⃣  Start AI Maestro:"
     echo ""
-    echo "   cd $INSTALL_DIR"
+    echo "   cd \"$INSTALL_DIR\""
     echo "   yarn dev"
     echo ""
 
@@ -719,3 +1103,4 @@ fi
 echo ""
 print_success "Happy orchestrating! 🎉"
 echo ""
+fi  # end FROM_REMOTE != true

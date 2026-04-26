@@ -1,50 +1,69 @@
 import { NextResponse } from 'next/server'
+import { proxyHealthCheck } from '@/services/agents-core-service'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * POST /api/agents/health
+ * Proxy health check to a remote agent (avoids CORS).
+ */
 export async function POST(request: Request) {
   try {
-    const { url } = await request.json()
-
+    let body: { url?: string }
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    const { url } = body
+    // Validate url is present and is a string before proxying
     if (!url || typeof url !== 'string') {
-      return NextResponse.json({ error: 'URL is required' }, { status: 400 })
+      return NextResponse.json({ error: 'url is required and must be a string' }, { status: 400 })
     }
-
-    // Fetch health check from the agent (server-side, no CORS issues)
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'Accept': 'application/json'
+    // Validate URL scheme and hostname to prevent SSRF
+    try {
+      const parsed = new URL(url)
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return NextResponse.json({ error: 'Only http/https URLs are allowed' }, { status: 400 })
       }
-    })
-    clearTimeout(timeoutId)
+      // SF-013 fix: Block private/internal IPs to prevent SSRF probing
+      const hostname = parsed.hostname.toLowerCase()
+      // SEC: Block all private, loopback, link-local, and reserved IP ranges.
+      // Covers 127.0.0.0/8, 0.0.0.0/8, 10.0.0.0/8, 172.16-31.x.x, 192.168.x.x,
+      // 169.254.x.x, fc00::/7 (fc + fd prefixes), fe80::/10, ::1, and
+      // special hostnames (.local, .internal, localhost).
+      const isPrivateHost =
+        hostname === 'localhost' ||
+        hostname === '[::1]' ||
+        hostname === '::1' ||
+        hostname.startsWith('127.') ||
+        hostname.startsWith('0.') ||
+        hostname === '0.0.0.0' ||
+        hostname.startsWith('10.') ||
+        hostname.startsWith('192.168.') ||
+        hostname.startsWith('169.254.') ||
+        hostname.startsWith('fc') ||
+        hostname.startsWith('fd') ||
+        hostname.startsWith('fe80:') ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+        hostname.endsWith('.local') ||
+        hostname.endsWith('.internal')
+      if (isPrivateHost) {
+        return NextResponse.json({ error: 'Requests to private/internal addresses are not allowed' }, { status: 400 })
+      }
+    } catch {
+      return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 })
+    }
+    const result = await proxyHealthCheck(url)
 
-    if (!response.ok) {
+    if (result.error) {
       return NextResponse.json(
-        { error: `Agent returned HTTP ${response.status}` },
-        { status: response.status }
+        { error: result.error },
+        { status: result.status }
       )
     }
-
-    const data = await response.json()
-    return NextResponse.json(data)
+    return NextResponse.json(result.data)
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      return NextResponse.json(
-        { error: 'Timeout connecting to agent' },
-        { status: 504 }
-      )
-    }
-
-    return NextResponse.json(
-      {
-        error: 'Failed to connect to agent',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal server error' }, { status: 500 })
   }
 }

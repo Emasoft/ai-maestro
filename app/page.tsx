@@ -689,15 +689,7 @@ export default function DashboardPage() {
             {/* When online: shows the full forge layout (TOML + terminal + raw materials) */}
             {activeAgent && activeAgent.name === '_aim-creation-helper' && (
               <div className="absolute inset-0">
-                <HaephestosEmbeddedView
-                  agent={activeAgent}
-                  onAgentCreated={(newAgentId) => {
-                    // Switch to the newly created agent — this auto-hibernates haephestos
-                    setActiveAgentId(newAgentId)
-                    // Trigger agent list refresh to pick up the new agent
-                    refreshAgents()
-                  }}
-                />
+                <HaephestosEmbeddedView agent={activeAgent} />
               </div>
             )}
 

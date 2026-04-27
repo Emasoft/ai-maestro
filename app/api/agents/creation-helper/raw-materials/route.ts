@@ -2,11 +2,16 @@
  * Raw Materials State API
  *
  * POST /api/agents/creation-helper/raw-materials
- *   Writes the current Raw Materials panel state to ~/agents/haephestos/raw-materials-state.json
- *   so the Haephestos agent can read it and be aware of user choices.
+ *   Writes the uploaded-files state to ~/agents/haephestos/raw-materials-state.json
+ *   so the Haephestos agent can discover what the user uploaded.
  *
  * GET /api/agents/creation-helper/raw-materials
  *   Reads the current raw materials state (for Haephestos or debugging).
+ *
+ * NOTE: Haephestos creates a ROLE-PLUGIN, not a persona. Persona name and
+ * avatar are NOT part of this state — they are handled separately by the
+ * agent creation wizard. Any persona/avatar fields in the request body
+ * are silently ignored.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -28,9 +33,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const state = {
-      personaName: body.personaName || '',
-      avatarUrl: body.avatarUrl || '',
-      avatarIndex: body.avatarIndex ?? -1,
+      files: Array.isArray(body.files) ? body.files : [],
       uploadedFiles: body.uploadedFiles || [],
       updatedAt: new Date().toISOString(),
     }
@@ -54,9 +57,7 @@ export async function GET() {
     // Return default state only when the file does not exist yet
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return NextResponse.json({
-        personaName: '',
-        avatarUrl: '',
-        avatarIndex: -1,
+        files: [],
         uploadedFiles: [],
         updatedAt: '',
       })

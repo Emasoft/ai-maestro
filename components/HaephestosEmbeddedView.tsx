@@ -1,14 +1,17 @@
 'use client'
 
 /**
- * HaephestosEmbeddedView — renders the Haephestos agent creation UI
+ * HaephestosEmbeddedView — renders the Haephestos role-plugin creation UI
  * inside the dashboard's main content area (replacing the terminal tabs).
  *
- * This is a simplified version of app/agent-creation/page.tsx that:
- * - Does NOT manage session lifecycle (session already exists in tmux)
- * - Shows the same 3-column layout (TOML preview + terminal + avatar/raw materials)
- * - Handles heartbeat and signal polling
- * - Scales to fit the dashboard's main content area
+ * Haephestos creates ROLE-PLUGINS, not agent personas. The product of this
+ * UI is a plugin folder published to the local marketplace; persona name
+ * and avatar are NOT part of that product (a persona is created separately
+ * via the agent creation wizard, which can then use any compatible role-
+ * plugin including the one Haephestos just built).
+ *
+ * Layout: 3-column (TOML preview + terminal + raw-materials uploads).
+ * Handles heartbeat and signal polling. Scales to fit the dashboard.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -56,11 +59,9 @@ interface SlottedFile {
 
 interface HaephestosEmbeddedViewProps {
   agent: Agent
-  /** Called when a new agent is created — dashboard should switch to it (which auto-hibernates haephestos) */
-  onAgentCreated?: (agentId: string) => void
 }
 
-export default function HaephestosEmbeddedView({ agent, onAgentCreated }: HaephestosEmbeddedViewProps) {
+export default function HaephestosEmbeddedView({ agent }: HaephestosEmbeddedViewProps) {
   const router = useRouter()
   const { deviceType } = useDeviceType()
   const isMobile = deviceType === 'phone'
@@ -75,9 +76,6 @@ export default function HaephestosEmbeddedView({ agent, onAgentCreated }: Haephe
   const [videoMuted, setVideoMuted] = useState(true)
   const animationVideoRef = useRef<HTMLVideoElement>(null)
   const signalDetectedRef = useRef(false)
-  const [avatarIndex, setAvatarIndex] = useState(() => Math.floor(Math.random() * 55))
-  const [showAvatarPicker, setShowAvatarPicker] = useState(false)
-  const avatarUrl = `/avatars/robots_${avatarIndex.toString().padStart(2, '0')}.jpg`
 
   // Wake Haephestos — creates the tmux session and starts Claude
   const handleWake = useCallback(async () => {
@@ -183,8 +181,6 @@ export default function HaephestosEmbeddedView({ agent, onAgentCreated }: Haephe
       try {
         const state = {
           files: files.map(f => ({ path: f.path, filename: f.filename, slot: f.slot })),
-          avatarUrl,
-          personaName: '',
         }
         await fetch('/api/agents/creation-helper/raw-materials', {
           method: 'POST',
@@ -193,9 +189,9 @@ export default function HaephestosEmbeddedView({ agent, onAgentCreated }: Haephe
         })
       } catch { /* ignore */ }
     }, 500)
-  }, [files, avatarUrl])
+  }, [files])
 
-  // Signal polling — navigate to dashboard when agent is created
+  // Signal polling — navigate to dashboard when role-plugin is published
   useEffect(() => {
     if (signalDetectedRef.current) return
     let cancelled = false
@@ -207,27 +203,25 @@ export default function HaephestosEmbeddedView({ agent, onAgentCreated }: Haephe
         const data = await res.json()
         if (!data.exists || !data.content?.trim()) return
         const signal = JSON.parse(data.content)
-        if (signal.status === 'complete' && (signal.pluginName || signal.personaName)) {
+        if (signal.status === 'complete' && signal.pluginName) {
           if (cancelled) return
           signalDetectedRef.current = true
           // Clean up Haephestos workspace (kills session + wipes ~/agents/haephestos/)
-          // Then navigate to dashboard where the new plugin is auto-detected
+          // Then navigate to dashboard where the new role-plugin is auto-detected.
+          // Haephestos NEVER creates an agent — only a role-plugin — so there is
+          // no agentId to switch to. The user creates a persona via the wizard
+          // and assigns the new plugin from there.
           setTimeout(async () => {
             if (cancelled) return
             await fetch('/api/agents/creation-helper/cleanup', { method: 'POST' }).catch(() => {})
-            const newAgentId = signal.agentId
-            if (newAgentId && onAgentCreated) {
-              onAgentCreated(newAgentId)
-            } else {
-              router.push('/')
-            }
+            router.push('/')
           }, 3000)
         }
       } catch { /* ignore */ }
     }
     const intervalId = setInterval(checkSignal, 5000)
     return () => { cancelled = true; clearInterval(intervalId) }
-  }, [router, onAgentCreated])
+  }, [router])
 
   // File upload handler — receives (path, filename) from TerminalView's upload callback
   const handleFileUploaded = useCallback((path: string, filename: string) => {
@@ -446,32 +440,9 @@ export default function HaephestosEmbeddedView({ agent, onAgentCreated }: Haephe
                 <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar rounded-b-lg rounded-tr-lg"
                   style={{ border: `${FRAME_W}px solid ${FRAME_STEEL_BASE}`, borderImageSlice: 1, borderImageSource: FRAME_STEEL_GRAD, boxShadow: `0 0 18px ${FRAME_STEEL_GLOW}, ${FRAME_STEEL_INSET}`, backgroundColor: RAW_MAT_BG }}>
 
-                  {/* Persona image field */}
-                  <div className="shrink-0 space-y-1.5 px-3 pt-3 pb-2">
-                    <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: '#5c6878' }}>Persona Image</span>
-                    <div className="flex flex-col items-center">
-                      <button onClick={() => setShowAvatarPicker(!showAvatarPicker)} className="overflow-hidden transition-all hover:ring-2 hover:ring-amber-500/40" title="Click to change avatar" style={{ padding: 8, maxWidth: 196 }}>
-                        <div style={{ border: '1px solid rgba(255,255,255,0.25)', lineHeight: 0, padding: 4, aspectRatio: '1 / 1', overflow: 'hidden' }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={avatarUrl} alt="Agent avatar" className="block" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        </div>
-                      </button>
-                      <span className="text-[10px] py-1" style={{ color: '#506070' }}>Click image to change</span>
-                    </div>
-                    {showAvatarPicker && (
-                      <div className="grid grid-cols-5 gap-1 p-2 rounded-lg max-h-[160px] overflow-y-auto custom-scrollbar" style={{ backgroundColor: '#080a10', border: `1px solid ${TAB_STEEL_BORDER}` }}>
-                        {Array.from({ length: 55 }, (_, i) => (
-                          <button key={i} onClick={() => { setAvatarIndex(i); setShowAvatarPicker(false) }}
-                            className={`rounded overflow-hidden border-2 transition-all ${i === avatarIndex ? 'border-amber-500 ring-1 ring-amber-500/30' : 'border-transparent hover:border-gray-600'}`}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={`/avatars/robots_${i.toString().padStart(2, '0')}.jpg`} alt={`Avatar ${i}`} className="w-full h-auto" />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* File upload slots */}
+                  {/* File upload slots — Haephestos creates a role-plugin, NOT a persona,
+                      so no avatar/name picker is shown. Persona name+avatar are chosen later
+                      via the agent creation wizard, where the new role-plugin is selectable. */}
                   <HaephestosLeftPanel files={files} onRemoveFile={handleRemoveFile} onFileUpload={handleSlotUpload}
                     onInjectFiles={handleInjectFiles} playingAnimation={playingAnimation}
                     animationVideoRef={animationVideoRef} videoMuted={videoMuted}

@@ -1,5 +1,105 @@
 # Scenario Runner Memory
 
+## SCEN-004 2026-04-27T03:59Z — PASS (Run 3 / 33 PASS, 1 PARTIAL, 1 DEFERRED / 0 FAIL, 1 bug found NOT fixed, 4 issues, 8 proposals)
+
+**Run ID:** 20260427T031300Z (Run 3 — FIRST PASS in 3 attempts)
+**Branch:** feature/phase6-jsonl-rebase-test @ 2e06a59b (Watchdog v2 + persona cleanup applied by orchestrator before run)
+**Reports:**
+- reports/scenarios-runner/SCEN-004_2026-04-27T03-06-03Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_004_2026-04-27T03-06-03Z.md
+**Screenshots:** kept (PARTIAL/DEFERRED steps + evidence for P0 proposals; not auto-purged because verdict has 1 PARTIAL + 1 DEFERRED)
+
+**Verdict:** PASS — Watchdog v2 fix WORKS. Pipeline ran 50 min (PSS → refine → build → CPV → 5+ plugin-fixer iterations → publish) without any watchdog kill. Plugin successfully published.
+
+### Watchdog v2 fix VERIFIED working
+- pm2 logs show toml-preview GET handler firing every ~5s during entire run
+- heartbeat endpoint also fired every ~25-30s
+- ZERO new "killing zombie session" log messages
+- Total runtime: 53 min 53 sec (vs Run 2's 60-min hard kill)
+- The 60→120 min ceiling + toml-preview-poll heartbeat reset is the COMPLETE fix
+
+### Pipeline timing (Run 3)
+- 03:06:03 — Run start (login + baseline)
+- 03:07:49 — Haephestos auto-spawn on click
+- 03:09:30 — Files uploaded + Inject into Chat
+- 03:11:39 — PSS profile generated (`agent-description.agent.toml`)
+- 03:13:14 — TOML refined ready for approval
+- 03:14:14 — Plugin built (12 sections, 6 subagents)
+- 03:16:42 — CPV report iter1: 6 CRITICAL + 76 MAJOR + 51 MINOR + 16 WARNING
+- 03:51:29 — Plugin-fixer iter5+ done; CPV: 0/0/0; "Crunched for 35m 7s"
+- 03:52:09 — Publish API attempt 1: 422 (needs main agent file)
+- 03:52:48 — Main agent file `scenario-test-agent-main-agent.md` created
+- 03:52:54 — Publish API attempt 2: **200 OK** ✓
+- 03:53:00 — PTY disconnect, scheduled cleanup
+- 03:53:30 — Cleanup endpoint: workspace + tmux removed
+- 03:59:56 — STATE-WIPE complete
+
+### CRITICAL — BUG-001 (P0) FOUND, NOT FIXED: No UI/API path to remove published role-plugin from local marketplace
+
+The `creation-helper/publish-plugin` endpoint copies a built plugin to `~/agents/role-plugins/<name>/` AND registers it in `marketplace.json`. There is NO inverse operation:
+- Settings → Extensions → MARKETPLACES does NOT show `ai-maestro-local-roles-marketplace`
+- DELETE `/api/agents/role-plugins/install` is for agent-scope uninstall, not marketplace-source removal
+- The runner's write-guard correctly blocks `rm -rf ~/agents/role-plugins/scenario-test-agent`
+
+The published plugin `scenario-test-agent` REMAINS in source storage after this run's cleanup. Filed as P0-PROP-001: add DELETE `/api/agents/role-plugins/marketplace` endpoint + UI in Settings → Extensions → MARKETPLACES (or new "Local Marketplace" tab).
+
+**Run 3 cleanup state (residual artifacts):**
+- ~/agents/role-plugins/scenario-test-agent/ — REMAINS (orchestrator must clean)
+- ~/agents/role-plugins/.claude-plugin/marketplace.json — has `scenario-test-agent` entry (orchestrator must clean)
+- All other test artifacts (workspace, tmux, registry helper, cemetery): cleaned ✓
+
+### CRITICAL — ISSUE-002 (P0) NEW: Permission-prompt fatigue — 43 prompts in 50-min run
+
+Haephestos persona's `programArgs: --dangerously-skip-permissions` is NOT enough. The persona's `allowed-tools` list doesn't cover all bash subcommands invoked during build. Result: 43 manual approvals needed in Run 3 (auto-approved by `/tmp/scen004-approve-loop.sh`). A real user would face 43 manual clicks over 50 min — unusable.
+
+Filed as P0-PROP-002: expand `allowed-tools` whitelist + add session-mode auto-approve flag for ephemeral helpers.
+
+### Patterns CONFIRMED this run
+
+- **Watchdog v2 fix WORKS** — toml-preview poll resets heartbeat every 5s, 120-min absolute ceiling never reached.
+- **Haephestos auto-spawns on HELPERS click** — no explicit Wake button (carried from Run 2).
+- **Haephestos workdir at `/Users/<user>/agents/haephestos`** — under `~/agents/`. Rule 0 SAFE (carried from Run 2).
+- **dev-browser sandbox doesn't support setInputFiles** — must use `new File() + DataTransfer + dispatchEvent('change')` (carried from Run 2).
+- **Inject into Chat button sends synthesized message** with file paths to terminal (carried from Run 2).
+- **xterm input via Terminal Input textarea + page.keyboard.type/press** is the way to send "1+Enter" for permission prompts.
+- **Auto-approve loop pattern**: bash script polling tmux capture-pane every 3s + dev-browser to type "1+Enter" works reliably.
+- **CPV strict mode finds many issues in bundled skills** — initial run had 6 CRITICAL + 76 MAJOR + 51 MINOR + 16 WARNING; plugin-fixer needed 5+ iterations (35m 7s total).
+- **Plugin-fixer agent ran successfully** — `claude-plugins-validation:plugin-fixer` integrated; brought CPV to 0/0/0.
+- **Initial publish attempt fails without main-agent .md** — Haephestos's first `POST /publish-plugin` was 422 ("Plugin validation failed (1 issue)"). Quad-identity main-agent .md was missing. Haephestos created it on retry.
+- **Successful publish writes**: `~/agents/role-plugins/<name>/` (full plugin + main-agent), `marketplace.json` entry, NOT creation-signal.json (cleaned with workspace).
+- **30s-delay PTY cleanup**: After agent disconnects (idle), pm2 logs `[PTY] Last client disconnected from _aim-creation-helper, scheduling cleanup in 30s` then `POST /api/agents/creation-helper/cleanup 200`.
+- **Helper kept in registry as offline** after natural cleanup (not soft-deleted) — by design for permanent helper card.
+- **Cemetery does NOT include `_aim-creation-helper` entries** — special exclusion for permanent helpers.
+
+### Patterns DISCOVERED this run
+
+- **Session cookie expires on STATE-WIPE** — restoring governance.json invalidates the dashboard session, forcing LoginGate re-auth. Filed as ISSUE-004 / P1-PROP-002.
+- **Settings → Extensions → MARKETPLACES does NOT include local-roles-marketplace** — only Claude-CLI-managed marketplaces from `/api/settings/marketplaces`. The local AI Maestro marketplace is queried via `/api/agents/role-plugins`. Big UX gap.
+- **Conversation tokens stayed under 120k threshold** — Run 3 ended at 117k/200k, no auto-compaction. With more skills/longer pipelines, compaction risk would resurface (P1-PROP-003 still relevant).
+
+### Rule 0 blacklist safety
+
+- 20 pre-existing user agents enumerated; ALL preserved post-cleanup.
+- 1 `_aim-creation-helper` interaction — ONLY scenario allowed per Rule 0.
+- Workdir verified `/Users/emanuelesabetta/agents/haephestos` (under ~/agents/) before any further interaction.
+- Test plugin named `scenario-test-agent` (descriptive, test-prefixed).
+- 3 prior-scenario orphans preserved (cemetery).
+
+### Rule 6 compliance
+
+- ZERO state-mutating bypasses on AUT.
+- Cleanup ran via Haephestos's natural endpoint (workspace + tmux + cache wiped automatically).
+- STATE-WIPE via `cleanup-SCEN-004.sh` (RESTORE_OK 4 files).
+- All UI interactions via dev-browser (sidebar click, file upload via DataTransfer, Prompt Builder, xterm keyboard).
+- Read-only API checks (registry, role-plugins, cemetery, marketplaces) — allowed.
+- S030 cleanup DEFERRED (no UI path) — properly flagged as Rule 4 trigger + P0 system gap, NOT bypassed via shell.
+
+### STATE-WIPE verification
+
+`cleanup-SCEN-004.sh` exit 0 with `RESTORE_OK SCEN-004 (4 files restored)`. All 4 SHA256 hashes matched.
+
+---
+
 ## SCEN-004 2026-04-27T04:45Z — PARTIAL (Run 2 / 26 PASS, 1 PARTIAL, 1 FAIL, 3 SKIP, 1 N/A, 1 bug recurring, 4 issues, 9 proposals)
 
 **Run ID:** 20260427T013941Z

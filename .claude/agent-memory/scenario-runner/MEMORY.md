@@ -1,5 +1,49 @@
 # Scenario Runner Memory
 
+## SCEN-006 2026-04-27T07:08Z — PASS (Run 1 / 34 PASS, 0 FAIL, 0 bugs, 2 issues, 8 proposals)
+
+**Run ID:** 20260427T063930Z (FIRST PASS — clean run)
+**Branch:** feature/phase6-jsonl-rebase-test @ b9b7fee2
+**Reports:**
+- reports/scenarios-runner/SCEN-006_2026-04-27T06-39-30Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_006_2026-04-27T06-39-30Z.md
+
+**Verdict:** PASS — All 34 steps passed first time. Tests MANAGER governance lifecycle for Codex-client team member with cross-client plugin conversion. Zero bugs, zero fix commits. Auto-purge: screenshots moved to /tmp.
+
+### Key learnings
+
+- **Codex agent wizard is 6 steps (vs 7 for Claude)** — Skips folder step because Codex agent folders auto-created.
+- **Cross-client plugin conversion VERIFIED working** — `~/agents/<name>/.codex-plugin/plugin.json` shows `ai-maestro-plugin-codex` v2.5.6, `.codex/installed-plugins/` has manifest, `.agents/skills/` has converted skills.
+- **MANAGER successfully woke COS via Prompt Builder** — Sent `Wake up the agent named "cos-scen006-governance-team"...` via Prompt Builder, MANAGER's Claude session ran `aimaestro-agent.sh wake cos-scen006-governance-team` within 30s, COS sessions=1 status=active.
+- **Wizard "Create Team" button NOT disabled when hasManager:false** — Block fires only at submit time. UX issue (P1-PROP-001 filed).
+- **DeleteAgent "Also delete agent folder" leaves stale config dirs** — `.claude/`, `.codex/`, `.amcos-logs/`, `.agents/`, `.janitor/` remain after delete. Filed P1-PROP-002.
+- **R4.7 COS Immutability VERIFIED** — No "Leave team" button on COS profile, only "Reassign" (which is allowed - moving COS to different team).
+- **Sudo modal for sensitive ops** — Leave team, ChangeTitle, DeleteAgent all trigger `Confirm with password` modal. Use `input[placeholder="••••••••"]` selector (8 bullets - fragile, P3-PROP-008 filed).
+
+### Critical workflow patterns confirmed
+
+- **Title Assignment Dialog filtering** — When agent in team: AUTONOMOUS/MANAGER/MAINTAINER show as disabled "Requires team membership" or "Singleton already exists". When teamless: Standalone titles enabled, team titles disabled. MANAGER disabled when singleton exists.
+- **Auto-COS persona name is RANDOM** — `cos-scen006-governance-team` (agent name) → label "Acacia" (random robot). Sidebar shows persona LABEL not agent name. Cleanup must look up via API.
+- **Sidebar `Create Agent` button popover** — Click `+` (e55) → popover shows {Create Agent, Switch view, Import, Refresh}. Click "Create Agent" (e60) → opens wizard. The popover stays for the click.
+- **Profile Advanced tab** — DIVs not buttons (cursor-pointer). Click via `div[class*="cursor-pointer"]` matching trim() === 'Advanced'.
+
+### Cleanup state
+
+- **All 3 test agents deleted via UI** with sudo password — registry clean.
+- **Test team deleted** via DeleteTeam dialog (no "Delete Agents Too" - just standard delete with password, agents revert to AUTONOMOUS).
+- **STATE-WIPE successful** — 4 files SHA256-matched.
+- **3 pre-existing teams preserved**: Test Kanban Team, scen003-test-wizard-team, scen8-noplugin-team.
+- **Pre-existing scenario orphans noted**: scen013-codex-r17-test, scen021-alpha, scen021-beta (not from this run, P2-PROP-003 filed).
+- **Folder cleanup ISSUE**: agent folders still have `.claude/`, `.codex/` etc. directories even after "Also delete folder" checked.
+
+### dev-browser detection quirks
+
+- **`getByRole('button', { name: 'Delete team' }).all()` returns nth() works** — Use `[N]` index after array.
+- **Direct DOM eval more reliable** for buttons inside scoped dialogs — `b.closest('[role="dialog"]')` filter.
+- **Page reload before tricky interactions** — Clean slate for stale popovers.
+
+---
+
 ## SCEN-005 2026-04-27T06:30Z — PASS (Run 2 / 76 PASS, 2 SKIP, 0 FAIL, 0 bugs, 4 issues, 9 proposals)
 
 **Run ID:** 20260427T052243Z (Run 2 after Run 1 rate-limit at S069/S070)

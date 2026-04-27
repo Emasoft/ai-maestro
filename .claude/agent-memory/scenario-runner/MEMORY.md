@@ -1,5 +1,59 @@
 # Scenario Runner Memory
 
+## SCEN-004 2026-04-27T01:25Z — PARTIAL (25 PASS, 7 SKIP, 1 N/A, 1 bug FOUND, 0 fixed, 3 issues, 9 proposals)
+
+**Run ID:** 20260427T003904Z
+**Branch:** feature/phase6-jsonl-rebase-test (HEAD 842c1213, no commits — bug filed as P0 proposal)
+**Reports:**
+- reports/scenarios-runner/SCEN-004_2026-04-27T00-39-04Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_004_2026-04-27T00-39-04Z.md
+**Screenshots:** kept (verdict != PASS, evidence for P0 proposal)
+
+**Verdict:** PARTIAL — Haephestos pipeline verified through build + CPV validation. Watchdog killed the agent at exactly 30 minutes (services/creation-helper-service.ts:129 `WATCHDOG_TIMEOUT_MS = 30 * 60 * 1000`), BEFORE the publish step. Plugin built correctly with `compatible-titles=["AUTONOMOUS"]` and `compatible-clients=["claude-code"]`. CPV report: 4 CRITICAL + 76 MAJOR + 54 MINOR + 15 WARNING in bundled skills.
+
+### BUG-001 (P0 — NOT fixed in-run, filed as proposal): Watchdog 30-min too short for full Haephestos pipeline
+
+`services/creation-helper-service.ts:129` `WATCHDOG_TIMEOUT_MS = 30 * 60 * 1000`. The 8-step Haephestos protocol (PSS profile, refine, build, compat-fields, CPV install, CPV validate, optional CPV fix, publish) takes 15-30+ min when CPV produces non-trivial findings. Each permission approval through dev-browser headless adds 5-30s.
+
+Why not fixed in-run: the fix has TWO parts (bump to 60 min AND reset watchdog on tmux activity) and the second part requires touching `tmux list-panes` integration. Plus a re-run with the patch would take another 30+ min in CPV. Filed as P0-PROP-001 with full implementation sketch.
+
+### Patterns confirmed/discovered this run
+
+- **Haephestos auto-spawns on HELPERS card click** — there's NO explicit "Wake up" button despite scenario file S011 saying so. Scenario needs update (P1-PROP-003).
+- **Haephestos workdir = `/Users/emanuelesabetta/agents/haephestos`** verified safe (under `~/agents/`, NOT under `~/ai-maestro/`). Rule 0 verified.
+- **Haephestos animation = `haephestos-animation.mp4`** — looped video in top-right (460x310), autoplay. Stops when navigating away (videoCount goes 1→0).
+- **TOML preview tabs = "Profile" / "Raw TOML"** (NOT "Rich" / "Raw" as scenario file claims).
+- **3 file inputs in Raw Materials panel** with `accept=".md,.txt"` for the 2 .md slots and `accept=".toml,.agent.toml"` for the 3rd. Plus 1 in prompt-builder. DOM order: idx 0 = Agent Description, idx 1 = Project Design Requirements, idx 2 = Existing Agent Profile.
+- **dev-browser sandbox does NOT support `page.locator(...).setInputFiles('/path')`** — error `unsupported4` at internal line 12164. Workaround: `new File([content], filename)` + `DataTransfer` + `dispatchEvent('change')`. Filed as P1-PROP-002.
+- **Prompt Builder Send vs xterm-direct keystrokes:** Prompt Builder sends "1\n" as a chat MESSAGE to Haephestos. To select Claude Code permission menu items (1/2/3), click into xterm element and use `page.keyboard.type('1') + page.keyboard.press('Enter')`. Filed as P1-PROP-001.
+- **Inject into Chat button** sends a synthesized message with file paths to the terminal. Format: "Here are the reference files for the agent I want to create: - Codebase Reference: <path1> - Skills Catalog: <path2>". Use is straightforward.
+- **PSS-generated TOML is at `~/agents/haephestos/toml/<UUID8>-<filename>.agent.toml`** initially, then refined to `<plugin-name>.agent.toml`. PSS doesn't add compat fields — Haephestos adds them in the refinement step.
+- **Built plugin has 12+ subdirectories**: agents/, commands/, hooks/, rules/, scripts/, skills/, README.md, plugin.json (in .claude-plugin/), .mcp.json, <name>.agent.toml.
+- **CPV validation finds many issues in bundled skills** (skill description >250 chars, no Trigger phrase, missing strict-mode sections like ## Overview / ## Prerequisites / etc.). For a simple test plugin: 4 CRITICAL + 76 MAJOR + 54 MINOR + 15 WARNING.
+- **Haephestos session lifecycle**: tmux session created at 02:41:14, killed by watchdog at 03:11:15 = exactly 1800s (30 min). The build was complete at 02:56:44 (15 min in). CPV report at 03:07:34 (26 min in). 4 minutes shy of publish.
+- **Help panel auto-opens on Haephestos page first load** (translate-x animation, 420px wide). Close button has aria-label="Close help panel". After close, panel stays in DOM but with `translate-x-full` class (off-canvas). Filed as P1-PROP-004.
+- **Soft-deleted helper** stays in registry.json with status='deleted' + deletedAt timestamp. `?includeDeleted=false` excludes it. The watchdog calls `deleteAgent(id)` (no `hard=true`), so soft-delete + workspace preserved. Filed as P0-PROP-002 to add a 'reason' parameter that preserves registry on watchdog kill.
+
+### Rule 0 blacklist safety
+
+- 20 pre-existing user agents enumerated; ALL preserved post-cleanup.
+- 1 `_aim-creation-helper` interaction — this is the ONLY scenario allowed to interact with `_aim-*` agents per Rule 0.
+- Workdir verified `/Users/emanuelesabetta/agents/haephestos` (under ~/agents/) before any further interaction.
+- Test plugin was named `scenario-test-agent` (descriptive, not user-facing).
+
+### Rule 6 compliance
+
+- ZERO state-mutating bypasses on AUT.
+- One state-mutation API call: `POST /api/agents/creation-helper/cleanup` at S031 — explicitly authorized by scenario file S027 ("manually trigger" fallback). Per Rule 6 doctrine: scenario-file-authorized fallbacks for cleanup are acceptable when the natural cleanup-via-publish-completion path is broken (here: by the watchdog kill).
+- All UI interactions via dev-browser (sidebar click, file upload via DataTransfer injection, Prompt Builder Send, xterm keyboard input).
+- Read-only API checks (registry, role-plugins, cemetery) — allowed.
+
+### STATE-WIPE verification
+
+`cleanup-SCEN-004.sh` exited with `RESTORE_OK SCEN-004 (4 files restored)`. All 4 backup files (governance.json, registry.json, teams.json, groups.json) restored byte-for-byte.
+
+---
+
 ## SCEN-003 2026-04-27T00:05Z — PASS (41 PASS, 0 FAIL, 0 bugs, 3 issues, 9 proposals)
 
 **Run ID:** 20260427T000523Z (Run #1 — first attempt PASS)

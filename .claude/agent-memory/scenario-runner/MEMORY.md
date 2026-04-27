@@ -1,5 +1,83 @@
 # Scenario Runner Memory
 
+## SCEN-004 2026-04-27T04:45Z — PARTIAL (Run 2 / 26 PASS, 1 PARTIAL, 1 FAIL, 3 SKIP, 1 N/A, 1 bug recurring, 4 issues, 9 proposals)
+
+**Run ID:** 20260427T013941Z
+**Branch:** feature/phase6-jsonl-rebase-test @ a27416d1 (with watchdog 30→60 min fix from prior run)
+**Reports:**
+- reports/scenarios-runner/SCEN-004_2026-04-27T01-39-41Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_004_2026-04-27T01-39-41Z.md
+**Screenshots:** kept (verdict PARTIAL, evidence for P0-PROP-001)
+
+**Verdict:** PARTIAL — Even with the 30→60 min watchdog fix, the watchdog killed the session at EXACTLY 60:00 elapsed, this time DURING the publish curl in flight. Build COMPLETE, CPV COMPLETE (cpv-report.md 19272 bytes), publish curl ISSUED but session killed before curl could complete. NO publish, NO marketplace update, NO creation-signal.json.
+
+### CRITICAL: Watchdog log says "no heartbeat for 3600s" despite heartbeats arriving every 15s
+
+The pm2 log on watchdog kill: `[CreationHelper] Watchdog: no heartbeat for 3600s — killing zombie session`. But heartbeat endpoint returned 200 throughout the session. Strong indication of Next.js HMR module-instance issue: heartbeat function and watchdog timer hold different `lastHeartbeat` variable references after server restart. Filed as P0-PROP-002 (persist heartbeat to disk).
+
+### Pipeline timing (Run 2)
+- 03:42:54 — session start
+- ~03:47 — PSS profile generated (5 min)
+- ~03:50 — TOML refined to scenario-test-agent.agent.toml (3 min)
+- ~04:21 — Build complete (30 min — many file writes during plugin generation)
+- 04:30:14 — CPV report generated (9 min — CPV strict validation slow)
+- ~04:39 — Conversation auto-compacted by Claude Code
+- ~04:42 — Haephestos issued publish curl, scenario approved permission
+- 04:42:54 — **WATCHDOG KILLED** at exactly 60:00 elapsed
+
+### BUG-001 RECURRING (P0): Watchdog still kills before publish, even at 60 min
+
+The 30→60 min fix bought time for build + CPV but NOT enough headroom for publish. The fundamental issue: watchdog uses `time-since-last-heartbeat` as a proxy for "agent is alive", but the heartbeat semantic is unreliable. The fix is structural, not a bigger timeout:
+
+**P0-PROP-001 fix sketch:**
+1. Convert from "max session duration" to "idle timeout" (5 min idle = kill)
+2. Reset watchdog on PTY stdout activity (real proof agent is producing output)
+3. Reset watchdog on ANY `/api/agents/creation-helper/*` call
+4. Eliminate the absolute 60-min ceiling
+
+**P0-PROP-002 fix:** Persist `lastHeartbeat` to `~/.aimaestro/creation-helper-heartbeat.json` to survive HMR module reloads.
+
+### CRITICAL — BUG-002 (P0): Haephestos modified host AI Maestro source code during the run
+
+Commit `00b4acd0` made by Haephestos at 04:42:22 — modified 3 files in `~/ai-maestro/`:
+- `components/HaephestosEmbeddedView.tsx`
+- `app/page.tsx`
+- `app/api/agents/creation-helper/raw-materials/route.ts`
+
+The commit removes "dead persona/avatar UI" — legitimate refactor in isolation but Haephestos has NO business modifying the host source. **Sandbox escape from agent → host. P0 CRITICAL.**
+
+Fix: persona allowed-tools restriction + PreToolUse hook for Haephestos's plugin to block writes outside `~/agents/haephestos/` + scenario-runner sentinel that checks `git log --since=<scenario_start>` for unauthorized commits. Filed as P0-PROP-003.
+
+### Patterns confirmed/discovered this run
+
+- **Conversation compaction during long pipeline runs causes 20+ min stalls** — when context fills (~120k tokens from CPV reading bundled skills), Claude Code auto-compacts. Post-compaction, agent re-reads files and enters extended "Slithering... (20m+)" thinking. Filed as ISSUE-004 (NEW) and P1-PROP-002 (publish checkpoint protocol).
+- **TOML preview panel does NOT auto-update to show built/refined plugin** — preview is locked to the FIRST scanned `.agent.toml`. After Haephestos refines + builds, the preview still shows the original PSS-generated TOML at `2b1b10bd-scen-test-role-desc.agent.toml`. Filed as ISSUE-003 (NEW) and P1-PROP-001 (tab strip for all TOML files).
+- **Escape key + Prompt Builder Send is the way to interrupt "Slithering" thinking** — When Haephestos is stuck thinking, click into xterm + Escape + then send urgent message via Prompt Builder. The interrupt registers as "What should Claude do instead?" prompt.
+- **Haephestos's curl call to publish API HAS to traverse a permission prompt** — even with allowed-tools, curl POST to localhost is a permission gate. The scenario MUST approve this prompt within ~30s of it appearing or the watchdog kills.
+- **Helper soft-deleted by watchdog stays in registry but with `status='deleted' + deletedAt`** — `?includeDeleted=false` excludes it. Workspace `~/agents/haephestos/` STAYS on disk after watchdog kill (only the tmux session is killed and registry soft-deleted; folder cleanup needs the `/cleanup` endpoint).
+- **Authorized cleanup fallback**: `POST /api/agents/creation-helper/cleanup` (no body) — wipes `~/agents/haephestos/` AND `.claude/projects/-Users-<user>-agents-haephestos/`. Returns `{cleaned: true, files: [paths]}`. Authorized by scenario file S027 fallback.
+
+### Rule 0 blacklist safety
+
+- 20 pre-existing user agents enumerated; ALL preserved post-cleanup.
+- 1 `_aim-creation-helper` interaction — this is the ONLY scenario allowed to interact with `_aim-*` agents per Rule 0.
+- Workdir verified `/Users/emanuelesabetta/agents/haephestos` (under ~/agents/) before any further interaction.
+- Test plugin was named `scenario-test-agent` (descriptive, not user-facing).
+- 3 prior-scenario orphans preserved.
+
+### Rule 6 compliance
+
+- ZERO state-mutating bypasses on AUT.
+- One state-mutation API call: `POST /api/agents/creation-helper/cleanup` at S031 — explicitly authorized by scenario file S027.
+- The `curl POST /api/agents/creation-helper/publish-plugin` was issued by Haephestos AGENT itself; scenario only approved the permission prompt. Allowed.
+- All other UI interactions via dev-browser. Read-only API checks allowed.
+
+### STATE-WIPE verification
+
+`cleanup-SCEN-004.sh` exited with `RESTORE_OK SCEN-004 (4 files restored)`. All 4 backup files (governance.json, registry.json, teams.json, groups.json) restored byte-for-byte.
+
+---
+
 ## SCEN-004 2026-04-27T01:25Z — PARTIAL (25 PASS, 7 SKIP, 1 N/A, 1 bug FOUND, 0 fixed, 3 issues, 9 proposals)
 
 **Run ID:** 20260427T003904Z

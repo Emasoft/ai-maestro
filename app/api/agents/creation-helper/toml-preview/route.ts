@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { readFile, readdir } from 'fs/promises'
 import { realpathSync, statSync } from 'fs'
 import { join, normalize } from 'path'
+import { heartbeatCreationHelper } from '@/services/creation-helper-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,12 +10,21 @@ export const dynamic = 'force-dynamic'
  * GET /api/agents/creation-helper/toml-preview?path=<encoded-path>
  * Returns the raw content of a .agent.toml file for preview.
  * If `path` is a directory, finds the first *.agent.toml file inside it.
+ *
+ * Side-effect: this endpoint is polled every 5s by the dashboard while the
+ * user is on the Haephestos page, so we treat the poll as a heartbeat.
+ * This guards the watchdog against the case where document.visibilitychange
+ * suspends the dedicated 15s heartbeat scheduler in headless browsers
+ * (SCEN-004 BUG-001 RECURRING).
  */
 export async function GET(req: NextRequest) {
   let tomlPath = req.nextUrl.searchParams.get('path')
   if (!tomlPath) {
     return NextResponse.json({ exists: false, content: '' })
   }
+
+  // Reset the watchdog — the dashboard is alive and polling.
+  heartbeatCreationHelper()
 
   // Resolve ~ to HOME directory
   if (tomlPath.startsWith('~/') && process.env.HOME) {

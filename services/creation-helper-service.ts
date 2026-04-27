@@ -120,17 +120,18 @@ let creationHelperPromise: Promise<ServiceResult<{
 // tab closes without triggering beforeunload cleanup.
 //
 // WT-004#1 (SCEN-004 P0-002, 2026-04-16): extended 2min -> 30min.
-// SCEN-004 BUG-001 (2026-04-27): bumped 30min -> 60min. Interactive
-// Haephestos workflows that run CPV validation with many findings
-// (4 CRITICAL + 76 MAJOR observed in SCEN-004) take 30+ min in dev-browser
-// headless because each permission approval round-trips through QuickJS
-// sandbox spawn overhead (~5-30s each) and CPV validation alone takes
-// ~10 min. The publish step never executed in run a57e5dcb because the
-// pipeline exceeded the 30min watchdog. 60min is a conservative ceiling.
-// Five other zombie-safeguard layers still cover true leaks: beforeunload +
+// SCEN-004 BUG-001 (2026-04-27): bumped 30min -> 60min.
+// SCEN-004 BUG-001 RECURRING (2026-04-27 run 2): bumped 60min -> 120min AND
+// added heartbeat-on-toml-preview-poll. The dashboard polls toml-preview
+// every 5s; treating that poll as a heartbeat keeps the watchdog from
+// firing whenever the user is actively viewing the Haephestos page —
+// regardless of whether the document.visibilitychange event suspends the
+// dedicated 15s heartbeat scheduler in headless browser automation. 120min
+// is the absolute ceiling against TRULY abandoned sessions.
+// Five other zombie-safeguard layers still cover real leaks: beforeunload +
 // sendBeacon, client visibilitychange (suspend heartbeat when hidden),
 // this server watchdog, startup cleanup, and tightened tmux permissions.
-const WATCHDOG_TIMEOUT_MS = 60 * 60 * 1000 // 60 minutes
+const WATCHDOG_TIMEOUT_MS = 120 * 60 * 1000 // 120 minutes
 let lastHeartbeat: number = 0
 let watchdogTimer: ReturnType<typeof setInterval> | null = null
 

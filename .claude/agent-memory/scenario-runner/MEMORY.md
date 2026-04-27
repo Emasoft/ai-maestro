@@ -1,5 +1,50 @@
 # Scenario Runner Memory
 
+## SCEN-005 2026-04-27T06:30Z — PASS (Run 2 / 76 PASS, 2 SKIP, 0 FAIL, 0 bugs, 4 issues, 9 proposals)
+
+**Run ID:** 20260427T052243Z (Run 2 after Run 1 rate-limit at S069/S070)
+**Branch:** feature/phase6-jsonl-rebase-test @ a2cfc3d7
+**Reports:**
+- reports/scenarios-runner/SCEN-005_2026-04-27T05-22-43Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_005_2026-04-27T05-22-43Z.md
+
+**Verdict:** PASS — All 78 steps either passed or skipped (2 SKIP for kanban requiring GitHub Project link). Zero bugs found, zero fix commits. Scenario successfully verified MANAGER governance lifecycle, team auto-COS, MEMBER auto-transition, COS immutability (R4.7), AUTONOMOUS reversion (R11.5), DeleteTeam pipeline, blocking cascade (R9.8).
+
+### Key learnings (Run 2)
+
+- **Sidebar `+` popover renders off-viewport-left** — `right-0` class with sidebar at left edge places popover at x=-17. Workaround: page reload BEFORE opening + Playwright force-click. Filed as P2-PROP-007.
+- **Auto-COS persona names are random robot names** — Aindrea = cos-scen-test-blocking-team, Lydia = cos-scen-test-governance-team. Sidebar shows persona LABEL not agent NAME. Cleanup logic must API-map persona → agent name, then scroll into view (y=5728+ with 22 agents). Filed as P1-PROP-002.
+- **Sidebar form Create Team requires ≥1 agent** — full wizard at /teams supports auto-COS-only, sidebar form does not. Filed as P1-PROP-003.
+- **Kanban tasks now require GitHub Project link** — local task storage was removed. POST /tasks → 400. SCEN-005 Phase 7 (S041-S042) skipped. Filed as P1-PROP-001.
+- **AUTONOMOUS now has mandatory plugin (R9.13)** — plugin SWAPS not REMOVES on team-leave. SCEN-005 S047 assertion outdated. Filed as P2-PROP-005.
+- **DeleteTeam dialog has no "Delete Agents Too" checkbox** — only Keep-Agents semantics. Cleanup needs separate per-agent delete loop. Filed as P1-PROP-004.
+
+### Critical workflow patterns confirmed
+
+- **Title Assignment Dialog uses z-[70] overlay** (different from wizard z-50) — dialog text contains "Assign Governance Title" + 9 cards, team-titles show "Requires team membership" disable text. Standalone titles (AUTONOMOUS/MAINTAINER) always enabled, MANAGER disabled when singleton already exists.
+- **Sudo password modal pattern**: After Confirm in title dialog → password input appears with placeholder "Enter governance password" → Confirm submits. Must wait ~4s after Confirm for ChangeTitle pipeline to complete.
+- **Profile Advanced tab**: tabs are DIVs (not buttons) inside `flex border-b border-gray-800`. Click via React onClick on parent div with cursor:pointer. Then expand "Danger Zone" accordion → "Delete Agent" button → checkbox + name confirmation + Delete Forever → password modal.
+- **Hibernated agents**: `sessions.length === 0` indicates hibernated. After R9.8 cascade, COS sessions=[] confirms hibernation.
+- **Wake-denied error**: `403: "Cannot wake team agent: no MANAGER exists on this host. Assign a MANAGER first."` — clear UX message.
+
+### Run 2 cleanup state
+
+- **All 4 test agents deleted with folders**: scen-test-manager, scen-test-team-member, cos-scen-test-blocking-team, cos-scen-test-governance-team. Verified via API (registry empty for these names).
+- **Both test teams deleted**: scen-test-governance-team, scen-test-blocking-team gone.
+- **STATE-WIPE successful**: 4 files restored (governance.json, registry.json, teams.json, groups.json) — all SHA256 matched.
+- **3 pre-existing teams preserved**: Test Kanban Team, scen003-test-wizard-team, scen8-noplugin-team (all blocked:true post-restore — expected since hasManager:false).
+- **20 pre-existing user agents preserved**: alexandre, genny-bot, jvs-*, swift-*, etc. — none touched.
+- **Cemetery has 28 prior-run archives** — none of MY 4 agents (deleted with folder, not exported).
+
+### dev-browser detection quirks
+
+- **`querySelectorAll('div.fixed.inset-0.bg-black\\/60')` doesn't always work** — the `\/` escape in class selectors is fragile. Use `Array.from(document.querySelectorAll('div')).find(d => d.className?.includes('bg-black/60') && d.className.includes('inset-0'))` instead.
+- **`elementFromPoint(x, y)` is the most reliable detector** — bypasses class-selector fragility, returns the actual rendered element.
+- **Playwright force-click works when normal click fails** — typical pattern: page renders overlay that intercepts pointer events, force-click bypasses interception check.
+- **page.reload() before tricky interactions** — clean slate for stale popovers.
+
+---
+
 ## SCEN-004 2026-04-27T03:59Z — PASS (Run 3 / 33 PASS, 1 PARTIAL, 1 DEFERRED / 0 FAIL, 1 bug found NOT fixed, 4 issues, 8 proposals)
 
 **Run ID:** 20260427T031300Z (Run 3 — FIRST PASS in 3 attempts)

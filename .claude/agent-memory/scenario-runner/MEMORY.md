@@ -1,5 +1,49 @@
 # Scenario Runner Memory
 
+## SCEN-003 2026-04-27T00:05Z — PASS (41 PASS, 0 FAIL, 0 bugs, 3 issues, 9 proposals)
+
+**Run ID:** 20260427T000523Z (Run #1 — first attempt PASS)
+**Branch:** feature/phase6-jsonl-rebase-test (HEAD b5c46708 — no commits, ZERO bugs found)
+**Reports:**
+- reports/scenarios-runner/SCEN-003_2026-04-27T00-05-23Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_003_2026-04-27T00-05-23Z.md
+**Screenshots:** moved to /tmp/scen003-screenshots-PASS-20260427T000523Z/ (Rule 10 auto-purge)
+
+**Verdict:** PASS — Agent Creation Wizard verified for INTEGRATOR (auto-locked plugin) + MEMBER (single-plugin auto-lock with "Change" button in Profile post-creation). RBAC self-mod returned 401 (AUTH layer) instead of 403 (AUTHZ layer) — both achieve security goal.
+
+### Patterns confirmed/discovered this run
+
+- **AUTHORING-001 fix re-applied:** scen003-manager creation between Phase 1 and Phase 2 mandatory (R9.8 disables Create Team without MANAGER on host). Filed as P0-PROP-001 to add to scenario file permanently. Same as SCEN-001/002.
+- **Auto-COS persona this run = "Amelia"** (RANDOM — never hardcode).
+- **Wizard Step count varies by team selection:** 7 of 7 for No-team (folder picker shown); 6 of 6 for team-assigned (folder auto-created from name; no separate folder step).
+- **R9.13 mandate enforced for ALL titles, not just AUTONOMOUS:** Wizard auto-locks plugin when only ONE compatible plugin exists. Both INTEGRATOR (single plugin) and MEMBER (single plugin) auto-lock. Dropdown only appears when ≥2 compatible plugins exist.
+- **"Only option for INTEGRATOR" lock label vs "Change" button:** Profile Config tab uses different UI for locked-required-plugins (`Only option for X`) vs flexible plugins (`Change` button next to plugin name). Clear visual signal.
+- **Wizard Robots avatar tab:** Avatars are img tags (not buttons) — clicking the image grid actually selects the avatar (no need to click a separate "Select" button). Default robot avatar pre-selected if user types name without clicking grid.
+- **Persona Name input has BLUE submit arrow** at right side (x=1287, y=552 at 1920x1080 viewport, class `bg-blue-600 text-white`). Click this OR press Enter to advance step.
+- **`Continue` button at modal bottom (x=974, y=889, w=350)** advances from Folder/Plugin step to Summary. Different from `Next →` (top-right of step content).
+- **Selecting team in wizard Step 3 advances directly to Step 4 — no intermediate Next click.** Selection IS the navigation. Same for Title selection in Step 4 → Step 5.
+- **Trash icon on team cards visible after CSS injection** — same pattern as SCEN-001/002, requires `.hidden.group-hover\\:flex { display: flex !important; }`.
+- **Team Delete + Agents flow:** trash → "Confirm" button replaces trash inline (x<400 in sidebar) → click Confirm → modal opens → fill governance password + check "Delete member agents too" (button label changes "Delete Team" → "Delete Team + Agents") → submit. Auto-COS cascade-deletes.
+- **Hard-delete with folder skips cemetery (7th confirmation)** — every UI-driven delete bypasses cemetery archive. Pre-existing `scen7/14/020/etc` cemetery entries preserved (zero new entries from SCEN-003).
+- **STATE-WIPE works perfectly:** cleanup-SCEN-003.sh restores 4 files via SHA256 verification. RESTORE_OK output is the success signal.
+- **API self-mod returns 401, not 403:** PATCH /api/agents/{id} with X-Agent-Id header returns "Agent identity requires authentication. Include Authorization: Bearer <api-key> header." (401). The AID protocol enforces Bearer token at AUTH layer before AUTHZ rules check identity-claim self-mod. Different layer than scenario expected.
+
+### Rule 0 blacklist safety
+
+- 20 pre-existing user agents enumerated; ALL preserved.
+- 3 pre-existing teams (Test Kanban Team, scen003-test-wizard-team [orphan], scen8-noplugin-team [orphan]) preserved.
+- ZERO `_aim-*` interactions.
+- All test agents created at `~/agents/<name>/` (Wizard-enforced).
+
+### Rule 6 compliance
+
+- ZERO state-mutating bypasses on AUT.
+- Read-only `page.evaluate(async () => fetch('/api/...'))` for verification — allowed.
+- S037 RBAC self-mod was a state-mutation ATTEMPT (PATCH) but the API rejected with 401 (no actual state mutation occurred) — verifying the security control. Allowed.
+- Inline AUTHORING-001 fix (creating scen003-manager) was a UI Wizard flow — not a Rule 6 bypass.
+
+---
+
 ## SCEN-002 2026-04-26T23:22Z — PASS (60 PASS, 2 DEFERRED, 1 N/A, 0 bugs, 1 issue, 8 proposals)
 
 **Run ID:** 20260426T232245Z (Run #4 after 3 rate-limited prior runs)

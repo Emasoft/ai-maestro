@@ -253,7 +253,146 @@ export async function getConversationMessages(
 }
 
 /**
+ * SCEN-014 P0-003: Detect whether the agent is currently in a TUI permission
+ * menu (e.g. "Do you want to proceed? 1. Yes / 2. No (Esc)").
+ *
+ * Why this matters — the chat-to-terminal bridge below uses tmux send-keys to
+ * forward the user's chat message to the agent's pane. When Claude Code is on
+ * a TUI menu, those keystrokes are interpreted as menu navigation: the typed
+ * text becomes a literal answer (a "1", "y", or random characters) and the
+ * user's actual prompt is silently lost. The result is a misleading "Working…"
+ * spinner with nothing actually delivered to Claude.
+ *
+ * We refuse the send (HTTP 409) with a clear error explaining how to recover.
+ * The user's choices are: (a) answer the menu in the terminal section, or
+ * (b) press Esc in the terminal to dismiss the menu, then re-send the chat.
+ *
+ * We do NOT silently auto-Esc — that would be a fragile workaround: a different
+ * prompt might be open underneath, or the menu might re-open immediately, or
+ * Esc might cancel a long-running operation the user actually wanted. Refusing
+ * is safer and more transparent.
+ *
+ * Detection has two layers (both must pass to allow send):
+ *   1. chat-state file (~/.aimaestro/chat-state/<cwdHash>.json) — the hook
+ *      records `notificationType="permission_prompt"` (canonical) and/or
+ *      `status="permission_request"` (legacy) when Claude is blocked on a
+ *      tool-approval prompt.
+ *   2. tmux capture-pane sniff — fallback for menus that don't trigger the
+ *      hook (Rewind, Settings, manual /approve commands). Look for the same
+ *      separator-bracketed permission signature already used by getConversation
+ *      Messages above.
+ *
+ * If capture-pane fails (tmux not installed, session race) we DO NOT block —
+ * better to deliver the message than to refuse on infrastructure flakiness.
+ */
+async function detectTuiMenu(
+  workingDir: string | undefined,
+  sessionName: string
+): Promise<{ inMenu: true; reason: string } | { inMenu: false }> {
+  // Layer 1: check the hook's chat-state file
+  if (workingDir) {
+    try {
+      const stateDir = statePath('chat-state')
+      const cwdHash = hashCwd(workingDir)
+      const stateFile = path.join(stateDir, `${cwdHash}.json`)
+
+      if (fs.existsSync(stateFile)) {
+        const stateContent = fs.readFileSync(stateFile, 'utf-8')
+        const hookState = JSON.parse(stateContent) as {
+          status?: string
+          notificationType?: string
+          updatedAt?: string
+        }
+
+        // Permission-class state. Treat anything < 60s old as authoritative
+        // so a stale "permission" lingering from a kill is not held against
+        // the next session that reuses the same cwd.
+        const stateAgeMs = hookState.updatedAt
+          ? Date.now() - new Date(hookState.updatedAt).getTime()
+          : 0
+        const isFreshOrPermissionState =
+          stateAgeMs < 60_000 ||
+          hookState.status === 'permission_request' ||
+          hookState.notificationType === 'permission_prompt'
+
+        if (
+          isFreshOrPermissionState &&
+          (hookState.notificationType === 'permission_prompt' ||
+            hookState.status === 'permission_request')
+        ) {
+          return {
+            inMenu: true,
+            reason:
+              'Agent is blocked on a permission prompt. Answer the menu in the terminal (or press Esc there to dismiss it) before sending a chat message.',
+          }
+        }
+      }
+    } catch {
+      // Ignore — fall through to layer 2
+    }
+  }
+
+  // Layer 2: capture-pane sniff for TUI menu signatures
+  try {
+    const runtime = getRuntime()
+    const stdout = await runtime.capturePane(sessionName, 40)
+    const tmuxLines = stdout.trim().split('\n')
+    const recentLines = tmuxLines.slice(-15)
+
+    // Look for the most recent block bracketed by separator lines (Claude
+    // renders menus inside a box drawn with ─/═/╌). If the bracketed content
+    // contains a permission-style choice list, we're in a menu.
+    const separators: number[] = []
+    for (let i = recentLines.length - 1; i >= 0; i--) {
+      if (recentLines[i].trim().match(/^[─╌═]{10,}$/)) {
+        separators.push(i)
+        if (separators.length === 2) break
+      }
+    }
+
+    if (separators.length === 2) {
+      const [bottomSep, topSep] = separators
+      const promptContent = recentLines
+        .slice(topSep + 1, bottomSep)
+        .map((l) => l.trim())
+        .filter((l) => l)
+
+      const hasPermissionIndicator = promptContent.some(
+        (line) =>
+          line.startsWith('Do you want to') ||
+          line.match(/^❯\s*\d+\./) ||
+          line.match(/^\d+\.\s+(Yes|No|Type|Skip)/) ||
+          line.startsWith('Esc to cancel')
+      )
+
+      if (hasPermissionIndicator && promptContent.length > 0) {
+        return {
+          inMenu: true,
+          reason:
+            'Agent is showing a TUI menu in the terminal. Answer the menu (or press Esc to dismiss it) before sending a chat message.',
+        }
+      }
+    }
+  } catch {
+    // capture-pane failures are non-fatal — never block on infra flakiness.
+  }
+
+  return { inMenu: false }
+}
+
+/**
  * Send a message to the agent's Claude session via tmux.
+ *
+ * Contract (SCEN-014 P0-003 regression contract — DO NOT REGRESS):
+ *   - HTTP 200 + delivery: agent is online and NOT in a permission menu.
+ *   - HTTP 404: agent not found in registry.
+ *   - HTTP 400: agent has no session name OR session is not live.
+ *   - HTTP 409: agent IS live but currently in a TUI permission menu — the
+ *     keystrokes would be eaten by the menu. The caller must surface the
+ *     `error` string in the chat panel so the user knows to answer or
+ *     dismiss the menu in the terminal first.
+ *
+ * Tested in tests/services/agents-chat-service.test.ts.
  */
 export async function sendChatMessage(
   agentId: string,
@@ -282,6 +421,14 @@ export async function sendChatMessage(
   const sessionIsLive = await runtime.sessionExists(sessionName)
   if (!sessionIsLive) {
     return { error: 'Agent session is not online', status: 400 }
+  }
+
+  // SCEN-014 P0-003: refuse to send when the agent is in a TUI menu.
+  // See detectTuiMenu() above for the full rationale.
+  const tuiCheck = await detectTuiMenu(agent.workingDirectory, sessionName)
+  if (tuiCheck.inMenu) {
+    console.log(`[Chat Service] Refusing send for ${sessionName}: ${tuiCheck.reason}`)
+    return { error: tuiCheck.reason, status: 409 }
   }
 
   await runtime.sendKeys(sessionName, message, { literal: true, enter: true })

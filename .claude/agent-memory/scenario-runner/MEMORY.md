@@ -1,5 +1,71 @@
 # Scenario Runner Memory
 
+## SCEN-007 2026-04-30T03:56Z — PARTIAL (Run 4 / 30 PASS, 1 PARTIAL, 2 SKIP, 0 FAIL, 0 bugs, 5 issues, 9 proposals)
+
+**Run ID:** 20260430T014106Z (Run 4 after 3 prior failures: rate-limit @ S030, runner death @ S007, watchdog stall @ team creation)
+**Branch:** feature/phase6-jsonl-rebase-test @ c956ae263
+**Reports:**
+- reports/scenarios-runner/SCEN-007_2026-04-30T03-56-13Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_007_2026-04-30T03-56-13Z.md
+
+**Verdict:** PARTIAL — All 30 verifiable steps PASS. S023 PARTIAL (UI has no "Leave team" path), S021/S022 SKIP (kanban requires GitHub Project link). All test artifacts cleaned, STATE-WIPE 4 files SHA256-matched.
+
+### Critical learning Run 4
+
+- **Wizard Loading teams... stalls** when default agent's PTY is being evicted (slow API: 16s/36s) — pm2 restart cleared the slow calls. Filed P0-PROP-002.
+- **Codex agent step 4 needs Continue button** (Claude advances on click). Filed P2.
+- **No UI path "Leave team"** — Profile only has "Reassign", Team detail only has Add Agent. Title Dialog AUTONOMOUS disabled with "Remove this agent from its team first" tooltip referencing nonexistent action. Filed P0-PROP-001.
+- **dev-browser default 1280x720 viewport** collapses sidebar agent cards to 0-width. Resize to 1920x1080 fixes. Filed P1-PROP-004.
+- **Two-modal pattern for ChangeTitle**: inline "Enter Governance Password" + sudo "Confirm with password" — annoying. Filed P1-PROP-002.
+- **DeleteTeam dialog has both options visible** (Run 4): "Delete member agents too" checkbox UNCHECKED = Keep Agents path. Different from MEMORY note from SCEN-005.
+- **Cemetery purge** uses Purge button → "Purge Forever" confirmation → sudo modal. NOT a single-click op.
+
+### Critical workflow patterns confirmed
+
+- **Wizard 7 steps for Claude / 6 for Codex** — Codex skips folder.
+- **Wizard step 2 submit button**: blue button with `type="submit"` + `bg-blue-600` + `font-medium` (NO text, just SVG arrow). Position varies — find dynamically.
+- **Cross-client conversion VERIFIED** — Claude got `ai-maestro-orchestrator-agent` (native), Codex got `ai-maestro-architect-agent` (Codex-converted automatically).
+- **Auto-COS persona name is RANDOM** — `cos-scen7-mixed-team` agent → label "Gloria" (random robot). Sidebar shows persona LABEL not agent name. Cleanup must look up via API.
+- **R4.7 COS Immutability VERIFIED** — PUT /api/teams/:id with agentIds=[] returns 400 "Cannot remove the Chief-of-Staff..."
+- **R11.5 transitions VERIFIED** — DeleteTeam (Keep Agents) reverts all members to AUTONOMOUS automatically.
+- **Profile Advanced tab DIVs** — Click via `div[cursor:pointer]` matching trim() === 'Advanced'.
+- **Danger Zone is BUTTON not section header** — has `text-red-500 font-bold uppercase` + cursor:pointer. Search lowercase 'Danger Zone' (the UPPERCASE is CSS transform).
+- **Delete Agent confirmation dialog** has 2 inputs: checkbox "Also delete agent folder" + text input with placeholder=agent.name + "Delete Forever" button + sudo modal.
+
+### Cleanup state
+
+- **All 4 test agents deleted via UI** with "Also delete agent folder" + sudo password.
+- **Test team deleted via DeleteTeam** with governance password (Keep Agents path).
+- **STATE-WIPE successful** — 4 files SHA256-matched.
+- **3 pre-existing teams preserved**: Test Kanban Team, scen003-test-wizard-team, scen8-noplugin-team.
+- **Cemetery cleaned** — 4 zip archives purged.
+- **20 pre-existing user agents preserved** — none touched (alexandre, jvs-*, swift-*, jack-bot, jhonny-bot, ecos-chief-of-staff-one, etc.).
+- **3 prior-scenario orphans noted but not touched** (scen013-codex-r17-test, scen021-alpha, scen021-beta).
+
+### dev-browser quirks confirmed Run 4
+
+- **Daemon hangs when wizard stuck on "Loading teams"** — restart daemon + pm2 to recover.
+- **page.evaluate(async fetch)** can hang indefinitely if page main thread blocked.
+- **Sidebar card width 0** at 1280x720 — set viewport to 1920x1080.
+- **Force-click via Playwright** for offscreen-left popovers (Create Agent menu at x=-12).
+
+---
+
+## SCEN-006 2026-04-27T07:08Z — PASS (Run 1 / 34 PASS, 0 FAIL, 0 bugs, 2 issues, 8 proposals)
+**Recommendations applied:** Minimal screenshot polling, ONE waitFor at end of long ops, memory checkpoint every 10 steps, Rule 4 ONLY for genuine bugs.
+
+### Critical learning Run 4 — Wizard "Loading teams..." stalls when default agent's session is being evicted (slow API calls 16-36s). pm2 restart cleared the slow calls and wizard worked normally. ISSUE filed.
+
+### Wizard navigation patterns confirmed
+- Step 1 client: click Claude Code DIV (climb to cursor:pointer parent)
+- Step 2 avatar: fill `e.g. Alex-Bot` input, click blue submit button (type=submit + bg-blue-600 + font-medium)
+- Step 3 team: click button text-prefix matching "No team (Autonomous)" 
+- Step 4 title: click button text-prefix matching "AUTONOMOUS" / "MANAGER" etc
+- Step 5 folder: click BUTTON (not DIV) text-prefix "Auto-create agent folder"
+- Step 6 plugin: click BUTTON text-prefix "ai-maestro-autonomous-agent"
+- Step 7 summary: click "Create Agent!" button
+- Animation: wait ~12s, then click "Let's Go!" button
+
 ## SCEN-006 2026-04-27T07:08Z — PASS (Run 1 / 34 PASS, 0 FAIL, 0 bugs, 2 issues, 8 proposals)
 
 **Run ID:** 20260427T063930Z (FIRST PASS — clean run)

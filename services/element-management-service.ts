@@ -4732,10 +4732,27 @@ export async function DeleteTeam(
       ])
       for (const agentId of agentsToRevert) {
         let currentTitle: string | null = null
+        let agentExists = false
         try {
           const a = getAgentFromRegistry(agentId)
-          currentTitle = a?.governanceTitle || null
+          if (a) {
+            agentExists = true
+            currentTitle = a.governanceTitle || null
+          }
         } catch { /* best effort */ }
+
+        // SCEN-008 BUG-001 fix (2026-04-30): If an agent ID is in team.agentIds
+        // but the agent no longer exists in the registry (orphan reference from
+        // prior failed cleanup, manual JSON edits, etc.), skip the title-revert
+        // and hibernate gracefully. Returning a "not found" error here would
+        // permanently brick the team (DeleteTeam aborts on revert failures to
+        // preserve consistency, but the consistency we're protecting is between
+        // EXISTING agents — orphan IDs already represent broken state and
+        // blocking on them prevents the cleanup the operator is trying to do).
+        if (!agentExists) {
+          ops.push(`G03: Agent ${agentId.substring(0, 8)} not found in registry (orphan reference) — skipped`)
+          continue
+        }
 
         const shouldRevertTitle = currentTitle
           ? TEAM_SCOPED_TITLES.has(currentTitle)
@@ -4920,9 +4937,21 @@ export async function DeleteTeam(
     // fail. Every successful DeleteAgent emits its own ledger entry
     // (see TRDD-eac02238).
     if (options?.deleteAgents && agentsToRevert.length > 0) {
+      const { getAgent: getAgentForCascade } = await import('@/lib/agent-registry')
       const deleteFailures: Array<{ agentId: string; error: string }> = []
       let deletedCount = 0
       for (const agentId of agentsToRevert) {
+        // SCEN-008 BUG-001 fix (2026-04-30): Skip orphan IDs in cascade delete
+        // for the same reason as the G03 revert path — the agent already
+        // doesn't exist, so calling DeleteAgent would just produce a
+        // misleading "not found" failure. Treat it as already deleted.
+        try {
+          const exists = !!getAgentForCascade(agentId)
+          if (!exists) {
+            ops.push(`G07: Agent ${agentId.substring(0, 8)} not in registry (orphan) — skipped`)
+            continue
+          }
+        } catch { /* if registry read throws, fall through and let DeleteAgent surface */ }
         try {
           const delResult = await DeleteAgent(agentId, {
             authContext: options.authContext,

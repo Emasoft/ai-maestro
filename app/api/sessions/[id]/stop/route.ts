@@ -3,8 +3,16 @@
  *
  * Gracefully stop the AI program running inside a tmux session.
  *
- * Sends Ctrl+C (clear any partial input) then `/exit` as literal text.
- * Chrome testing confirmed: Ctrl+D does NOT exit Claude Code — only /exit works.
+ * Client-aware exit sequence (SCEN-013 fix, 2026-04-30):
+ *
+ * - **Claude Code**: Ctrl+C (clear partial input) then `/exit` as literal text.
+ *   Chrome testing confirmed: Ctrl+D does NOT exit Claude Code — only /exit works.
+ * - **Codex**: Ctrl+C twice — Codex CLI exits on a double Ctrl+C. `/exit` would
+ *   be interpreted as a regular message inside Codex's interactive prompt.
+ * - **Other clients (gemini, opencode, kiro)**: fall back to the Claude sequence
+ *   for backward compatibility, since most CLIs accept Ctrl+C + something to
+ *   confirm. Per-client refinement can land as those clients are exercised.
+ *
  * The `-l` flag on tmux send-keys sends literal characters, avoiding key-name
  * interpretation that could corrupt the command.
  *
@@ -53,16 +61,31 @@ export async function POST(
     }
   }
 
+  // SCEN-013 fix: choose exit sequence based on the AI client. Claude Code uses
+  // /exit; Codex uses double Ctrl+C; others fall back to Claude semantics.
+  const program = (targetAgent?.program || 'claude').toLowerCase()
+
   try {
     const { execFileSync } = require('child_process')
-    // Ctrl+C clears any partial input, then /exit as literal text exits Claude Code
-    // Note: Ctrl+D does NOT exit Claude Code. Only /exit works.
-    // The -l flag sends literal text (not key names), Enter is a key name so sent separately.
     // CC-GOV-001: Use execFileSync (no shell) to prevent injection even with validated names.
-    execFileSync('tmux', ['send-keys', '-t', sessionName, 'C-c'], { timeout: 5000, stdio: 'ignore' })
-    execFileSync('tmux', ['send-keys', '-t', sessionName, '-l', '/exit'], { timeout: 5000, stdio: 'ignore' })
-    execFileSync('tmux', ['send-keys', '-t', sessionName, 'Enter'], { timeout: 5000, stdio: 'ignore' })
-    return NextResponse.json({ success: true, sessionName })
+    if (program === 'codex') {
+      // Codex exits on two consecutive Ctrl+C — first one clears partial input,
+      // second one terminates the CLI. A small sleep between gives the TUI time
+      // to redraw and accept the second signal.
+      execFileSync('tmux', ['send-keys', '-t', sessionName, 'C-c'], { timeout: 5000, stdio: 'ignore' })
+      // Wait briefly so Codex sees two distinct C-c events, not a held signal.
+      execFileSync('sleep', ['0.4'], { timeout: 5000, stdio: 'ignore' })
+      execFileSync('tmux', ['send-keys', '-t', sessionName, 'C-c'], { timeout: 5000, stdio: 'ignore' })
+    } else {
+      // Claude Code (and current fallback for gemini/opencode/kiro):
+      // Ctrl+C clears any partial input, then /exit as literal text exits the CLI.
+      // Note: Ctrl+D does NOT exit Claude Code. Only /exit works.
+      // The -l flag sends literal text (not key names); Enter is a key name so sent separately.
+      execFileSync('tmux', ['send-keys', '-t', sessionName, 'C-c'], { timeout: 5000, stdio: 'ignore' })
+      execFileSync('tmux', ['send-keys', '-t', sessionName, '-l', '/exit'], { timeout: 5000, stdio: 'ignore' })
+      execFileSync('tmux', ['send-keys', '-t', sessionName, 'Enter'], { timeout: 5000, stdio: 'ignore' })
+    }
+    return NextResponse.json({ success: true, sessionName, program })
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json({ error: msg }, { status: 500 })

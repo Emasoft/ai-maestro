@@ -1,5 +1,183 @@
 # Scenario Runner Memory
 
+## SCEN-013 2026-04-30T07:55Z — PARTIAL (21 PASS, 6 DEFERRED, 0 FAIL, 1 app bug fixed, 2 authoring bugs fixed, 5 issues, 8 proposals)
+
+**Run ID:** 20260430T072243Z
+**Branch:** feature/phase6-jsonl-rebase-test @ 244e4c99
+**Reports:**
+- reports/scenarios-runner/SCEN-013_2026-04-30T07-22-43Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_013_2026-04-30T07-22-43Z.md
+
+**Verdict:** PARTIAL — Phases 1-3 (R17.3 Codex install, R17.16 UI core label, API uninstall rejection) PASS for Codex. Phases 4-6 DEFERRED — wake-gate reconciliation tested via settings.local.json edits is Claude-specific; Codex stores install state in `.codex/installed-plugins/`. Filed P1-PROP-001 (split into SCEN-013b) + P1-PROP-003 (extend wakeAgent for Codex). Cleanup successful with 19 user agents preserved.
+
+### Critical learning SCEN-013
+
+- **BUG-001 found+fixed (P0)**: `app/api/sessions/[id]/stop/route.ts` hardcoded `/exit` literal text — Codex doesn't recognize that. Fixed by reading `agent.program` and sending double Ctrl+C for codex (with 0.4s sleep between). Diff ~30 lines added. Type-checks + builds clean. Same pattern still broken in 4 other call sites — filed P0-PROP-002.
+- **CODEX FILE LAYOUT** — Codex agents have `.codex/installed-plugins/<plugin>.json` (install marker, with paths array), `.codex-plugin/plugin.json` (manifest with `-codex` suffix in name e.g. `ai-maestro-plugin-codex`), `.agents/skills/...` (converted skills). NO `.claude/settings.local.json`. NO Claude-style enabledPlugins map.
+- **AUTHORING BUG: rewipe-list registry.json restoration restores ORPHANS** — Rule 3 says don't restore registry.json/teams.json (UI cleanup handles them) but most scenarios still have them in rewipe-list. SCEN-013 fixed; P0-PROP-001 to audit all scenarios.
+- **Hibernate UI hidden when Codex CLI exited but tmux alive** — programRunning=false + status=online shows New/Resume but NO Hibernate. Forces Rule 6 violation if user tries to fully hibernate. Filed P1-PROP-002.
+- **Stop button click sends 3-cmd Claude sequence even for Codex** — first Ctrl+C kills Codex; subsequent `/exit` text gets typed at zsh prompt → "no such file or directory: /exit". Confusing UX even though it "works".
+- **Pre-existing orphan deleted via UI as safe-setup** — scen013-codex-r17-test from prior failed run had registry entry but no folder. Cleaned via Profile → Advanced → Delete Agent before scenario S007. STATE-WIPE later restored it (because of authoring bug above) and required re-deletion.
+- **STATE-WIPE 2-file SHA256 match confirmed** — governance.json + groups.json (after rewipe-list trim).
+- **Skill count differs between clients** — Codex inflates from 12 (Claude) to 24 (Codex) because reference files become separate items. Filed P3-PROP-001.
+
+### Workflow patterns confirmed SCEN-013
+
+- **Wizard 7 steps for Codex AUTONOMOUS** — client (Codex) → name → team (No Team) → title (AUTONOMOUS) → folder (Auto-create) → plugin (ai-maestro-autonomous-agent) → summary. Step 6 has explicit Continue button.
+- **Profile button toggle** — Single click on Profile (1711, 59) opens panel; tabs (Overview, Config, Sessions, Advanced) appear at right side around y=152.
+- **"Plugins 1" expand row** — at (1501, 432) for this run. Clicking expands to show ai-maestro-plugin entry.
+- **R17.16 UI confirmation for Codex** — SPAN with text="core" + title="Core plugin — cannot be uninstalled (R17)" at (1862, 523). NO uninstall buttons across ANY plugin entries.
+- **DELETE Agent flow** — Profile → Advanced → click "Danger Zone" header to expand → Delete Agent button at (1594, 966) — needs scrollIntoView. Dialog has checkbox + name input + Delete Forever button (gated until both filled). Then sudo modal.
+- **Cemetery purge requires 2-stage** — Click Purge button → opens an inline dialog with "Purge Forever" button (NOT a role=dialog, but visible as a button) → click that → THEN sudo modal opens.
+- **PM2 restart clears dashboard session** — re-login required after `pm2 restart ai-maestro` (governance password input + Sign In button at (801,533)+(centered)).
+
+### Cleanup state SCEN-013
+
+- **scen013-codex-r17-test deleted via UI** — Stop (sudo, BUG-001 partial-effect) → Profile→Advanced→Danger Zone→Delete Agent → checkbox + name + Delete Forever (sudo). Folder removed at OS level.
+- **STATE-WIPE successful** — 2 files SHA256-matched (governance.json + groups.json). registry.json + teams.json removed from rewipe-list per AUTHORING-BUG-002 fix.
+- **Cemetery -1** — 24→23 archives, no scen013 entries.
+- **Pre-existing 19 user agents preserved**: alexandre, apps-svgplayer-development, backend-infrastructure-engineer, claude-skills-factory, claude-svgskills-writer, default, ecos-chief-of-staff-one, genny-bot, jack-bot, jhonny-bot, lib-svg-svg2fbf, libs-svg-svgbbox, libs-svg-svgmatrix, libs-svg-text2path, luckas-bot, scen021-alpha, scen021-beta, tmux-test-audit, utils-media-smartmediamanager. (Note: previously had 20 incl orphan scen013, now correctly 19.)
+- **Re-deletion required** because STATE-WIPE restored the orphan registry entry. AUTHORING-BUG-002 fix prevents this on future runs.
+
+### dev-browser quirks SCEN-013
+
+- **+ button uses `button[title="Create new agent"]` locator** — Playwright's `page.locator()` works reliably; `mouse.click()` at coords sometimes fails because the button needs a real React click event.
+- **"Create Agent" popover has TEXT in DIV but actual click target is BUTTON child** — same as SCEN-012 — use `text === 'Create Agent'` filter on `<button>` elements.
+- **Cemetery purge "Purge Forever" confirm is plain BUTTON, not role=dialog** — searches for `[role="dialog"]` will miss it. Search for `text === 'Purge Forever'`.
+- **Sidebar text input + wizard text input both visible** — same as SCEN-012, filter by placeholder pattern (`'Alex-Bot'` for persona name).
+- **scrollIntoView({block:'center'})` required for Delete Agent button** — at y=1072 normally, off-screen.
+
+### Architectural notes SCEN-013
+
+- **R17 enforcement code path** for Codex flows through `services/element-management-service.ts` CreateAgent G11 (auto-installs core plugin). The wake-gate at `services/agents-core-service.ts:1703` ONLY checks Claude's enabledPlugins map — NOT Codex's `.codex/installed-plugins/`. R17.18 (wake-gate reconciliation) is a Claude-only path until P1-PROP-003 lands.
+- **`POST /api/sessions/[id]/stop`** is now client-aware (BUG-001 fix). Other paths (restart, agents-core-service, headless-router) still hardcoded — P0-PROP-002.
+- **CodexInstallMarker file structure** at `.codex/installed-plugins/<plugin>.json`:
+  ```json
+  { "name": "ai-maestro-plugin", "clientType": "codex", "installedAt": "...", "paths": [...] }
+  ```
+  41 paths for Codex-converted ai-maestro-plugin v2.5.7.
+
+### Active run cleared
+
+(none — SCEN-013 completed cleanly with PARTIAL verdict)
+
+---
+
+## SCEN-012 2026-04-30T07:15Z — PARTIAL (27 PASS, 7 PARTIAL, 0 FAIL, 0 app bugs, 1 authoring bug fixed, 6 issues, 8 proposals)
+
+**Run ID:** 20260430T065556Z
+**Branch:** feature/phase6-jsonl-rebase-test @ 8dbc7f67
+**Reports:**
+- reports/scenarios-runner/SCEN-012_2026-04-30T07-15-00Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_012_2026-04-30T07-15-00Z.md
+
+**Verdict:** PARTIAL — R17.3 (G11 auto-install at creation) and R17.16 (UI core label) PASS. Phase 4-6 (startup audit + periodic enforcement) DEPRECATED — scenario file edited to match current architecture (Rule 4 authoring-bug fix). Cleanup completed cleanly with all 20 pre-existing user agents preserved and STATE-WIPE 4-file SHA256 match.
+
+### Critical learning SCEN-012
+
+- **R17 architectural drift confirmed** — server.mjs:1529-1534 says "No startup audit, no periodic loop". R17 is now wake-time-only. Scenario's S023/S027/S028/S029 expectations were OUTDATED. Filed P0-PROP-001 for read-only WARN log at startup.
+- **Wizard input ambiguity** — typed "scen012-r17-test" into sidebar search bar instead of wizard Persona Name field on first try (both visible, similar dimensions). Filed P0-PROP-002 for `data-testid` + auto-focus.
+- **Stop+New Session BYPASSES wakeAgent R17 gate** — handleNewSession sends `claude --name X` to existing tmux via /command, doesn't call /wake. Filed P1-PROP-002.
+- **Hibernate/Wake button hidden when sessions[] empty AND status=offline** — `isHibernated` requires `sessions.length > 0`. After pm2 restart, registry shows sessions:[] but tmux session exists at OS level. Both buttons hidden = limbo state. Filed P1-PROP-001.
+- **PM2 restart kills PTYs but registry sessions[] becomes empty** — orphan tmux session at OS level not in registry. Filed P1-PROP-003.
+- **Hard-delete bypasses Cemetery — 5th confirmation** — old 2026-04-14 scen012 archive preserved (Rule 2 0-IMPACT). No new entry from this run.
+- **STATE-WIPE perfect** — 4 files SHA256-matched. Pre-existing 20 user agents fully preserved.
+
+### Workflow patterns confirmed SCEN-012
+
+- **Wizard 7 steps for Claude AUTONOMOUS** — client → name → team → title → folder → plugin → summary. AUTONOMOUS gets `ai-maestro-autonomous-agent` plugin (R9.13 mandatory).
+- **Plugin step (Step 6) advances on click** — no explicit Continue button when there's only 1 compatible plugin OR clicking the plugin card directly advances.
+- **"Create Agent!" → "Your Agent is Ready!" → "Let's Go!"** — wizard's success path takes ~8s for backend agent creation + folder/settings.local.json write.
+- **Profile panel toggle** — clicking Profile button opens panel; tabs (Overview, Config, Advanced) appear at right side around y=152.
+- **"Plugins 1" row in Config tab** — at (1501, 752). Click to expand → reveals plugin entries with "core" labels.
+- **R17.16 UI confirmation** — SPAN with text="core" + title="Core plugin — cannot be uninstalled (R17)" at (1862, 843). NO uninstall button.
+- **Stop+Sudo → New Session sequence** — Stop: red button bottom-right of profile, requires sudo. New Session: green button enabled when isProgramRunning=false.
+- **Delete Agent dialog has 3 visible inputs** — search bar (sidebar leftover), checkbox "Also delete agent folder", text input with placeholder=agentname. "Delete Forever" button enabled only after typing the exact name + checkbox checked.
+
+### Cleanup state SCEN-012
+
+- **scen012-r17-test deleted via UI** — Stop (sudo) → Profile→Advanced→Danger Zone→Delete Agent → checkbox + name + Delete Forever (sudo). Folder deleted at OS level.
+- **STATE-WIPE successful** — 4 files SHA256-matched.
+- **Pre-existing 20 user agents preserved**: alexandre, apps-svgplayer-development, backend-infrastructure-engineer, claude-skills-factory, claude-svgskills-writer, default, ecos-chief-of-staff-one, genny-bot, jack-bot, jhonny-bot, lib-svg-svg2fbf, libs-svg-svgbbox, libs-svg-svgmatrix, libs-svg-text2path, luckas-bot, scen013-codex-r17-test, scen021-alpha, scen021-beta, tmux-test-audit, utils-media-smartmediamanager.
+- **3 pre-existing teams preserved**: Test Kanban Team, scen003-test-wizard-team, scen8-noplugin-team.
+- **Cemetery 24 archives** — old scen012 from 2026-04-14 preserved; no new entry (hard-delete bypassed).
+
+### dev-browser quirks SCEN-012
+
+- **Two visible text inputs at Step 2** — sidebar search "Search by name, label, host..." (271×34 at x=24,y=139) AND wizard "e.g. Alex-Bot" (268×38 at x=987,y=533). DOM selectors match both. Always FILTER by placeholder pattern, e.g. find input where `(i.placeholder || '').includes('Alex-Bot')`.
+- **+ button popover requires click on BUTTON not just text** — popover SPAN/DIV with text="Create Agent" exists but the actual click target is the BUTTON child with `cursor:pointer`. Use `cls.includes('hover:bg-gray-700')` filter to find it.
+- **Hover with mouse.move not enough** — for `group-hover:` reveal, need to first move away (e.g. (800, 500)) then move TO the card center. Even then sometimes the conditional render is on `isOnline` not hover state, so hover does nothing.
+- **Profile button is BUTTON not DIV** — at (1711, 59). Single click opens Profile panel.
+- **Plugin section "Plugins 1" row** — DIV with text="Plugins1" (no space). Click to expand. Plugins are listed below as `<P>` elements.
+
+### Architectural notes SCEN-012
+
+- **R17 enforcement code path:** ONLY in (1) services/element-management-service.ts InstallElement PG02 post-gate, (2) services/agents-core-service.ts wakeAgent at line 1703, (3) services/sessions-service.ts createSession defense-in-depth at line 606. NO startup audit. NO periodic loop.
+- **wakeAgent triggered ONLY by:** POST /api/agents/[id]/wake. Stop+New Session DOES NOT call this — it sends a /command directly.
+- **createSession R17 defense-in-depth fires** when actually creating a tmux session for a NEW agent — not relaunching Claude in an existing tmux session.
+- **corePluginMissing flag** is set/cleared by InstallElement PG02 only. File-edit + restart does NOT update the flag.
+- **R17.17 user-scope guard** runs at startup (server.mjs:1457-1490) — but only mutates `~/.claude/settings.json` (user scope), never touches per-agent local-scope settings.
+
+### Active run cleared
+
+(none — SCEN-012 completed cleanly)
+
+---
+
+## SCEN-011 2026-04-30T06:44Z — PARTIAL (17 PASS, 3 PARTIAL, 4 SKIP/STUCK/DEFERRED, 0 FAIL, 0 bugs, 4 issues, 8 proposals)
+
+**Run ID:** 20260430T062207Z
+**Branch:** feature/phase6-jsonl-rebase-test @ 8dbc7f676975
+**Reports:**
+- reports/scenarios-runner/SCEN-011_2026-04-30T06-44-54Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_011_2026-04-30T06-44-54Z.md
+
+**Verdict:** PARTIAL — Phase 6 (R15 paper-trail core) STUCK on MANAGER API rate-limit retry loop (same as SCEN-009). All artifacts cleaned, baseline preserved 100%. STATE-WIPE 4 files SHA256-matched.
+
+### Critical learning SCEN-011
+
+- **API rate-limit blocks MANAGER autonomy AGAIN** — Confirmed for the 2nd time (SCEN-009 + SCEN-011). MANAGER stuck at `attempt 4/50 · API_TIMEOUT_MS=19000000ms` after 5+ min. Filed P0-PROP-002 (consolidate w/ SCEN-009 P0-PROP-001).
+- **Kanban-no-GitHub-Project — 6th scenario in a row** — SCEN-005/006/007/009/010/011. Filed P0-PROP-001 (consolidate w/ existing P0).
+- **Two-stage password (inline + sudo) for ChangeTitle — 5th time** — Filed P1-PROP-001.
+- **Hard-delete bypasses Cemetery — 4th time** — Filed P1-PROP-002 for tombstone. Cemetery has 24 archives, 0 from this run.
+- **Auth-before-RBAC (S010 → 401, S011 → 401)** — Same as SCEN-009/010. Filed P1-PROP-003 with concrete fix using `~/agents/<name>/.aimaestro/secret`.
+- **R4.7 COS Immutability VERIFIED** — PUT /api/teams/:id with agentIds excluding COS → 400 "Cannot remove the Chief-of-Staff..."
+- **R12 composition complete VERIFIED** — 5 members, all 5 required titles present (chief-of-staff/architect/orchestrator/integrator/member).
+- **R16 password leak check — vacuously verified** — grep for `mYkri1-xoxrap-gogtan` in agent dirs/conversations/AMP messages all returned no matches. MANAGER never produced output to leak.
+- **STATE-WIPE perfect** — 4 files SHA256-matched. Pre-existing 20 user agents + 3 user teams fully preserved.
+
+### Workflow patterns confirmed SCEN-011
+
+- **DeleteTeam dialog "Delete Agents Too" path** — Checking the box changes button text from "Delete Team" to "Delete Team + Agents". 10-15s for cascade. Removes all 5 team agents (including auto-COS) including folders.
+- **Profile button single-click activation worked this time** — but `text-purple` class indicator was inconsistent (still false sometimes when active). Use Overview/Config/Advanced tabs visibility instead.
+- **MANAGER badge in profile panel** — at x=1778, y=825 — clicking opens Title Assignment Dialog directly.
+- **Wizard step 5 (folder) auto-skipped for in-team Claude agents** — but step counter shows "Step N of 7" not "Step N of 6" (ISSUE filed in SCEN-008/SCEN-011).
+- **Sidebar Create Team form requires only `name` field after BUG-001 fix** — empty agentIds is allowed (auto-COS created).
+- **Sidebar `+` button at (167, 85) green** — popover at (2, 122) shows "Create Agent" option.
+
+### Cleanup state SCEN-011
+
+- **All 5 team agents deleted via DeleteTeam cascade** — cos-r15-test-team (Laetitia), scen-r15-arch, scen-r15-orch, scen-r15-integ, scen-r15-mem. All folders removed.
+- **scen-r15-mgr deleted via Title→AUTONOMOUS+DeleteAgent** — folder deleted, sudo password used twice (title change + delete).
+- **STATE-WIPE successful** — 4 files SHA256-matched.
+- **Pre-existing 20 user agents preserved**: alexandre, apps-svgplayer-development, backend-infrastructure-engineer, claude-skills-factory, claude-svgskills-writer, default, ecos-chief-of-staff-one, genny-bot, jack-bot, jhonny-bot, lib-svg-svg2fbf, libs-svg-svgbbox, libs-svg-svgmatrix, libs-svg-text2path, luckas-bot, scen013-codex-r17-test, scen021-alpha, scen021-beta, tmux-test-audit, utils-media-smartmediamanager.
+- **3 pre-existing teams preserved**: Test Kanban Team, scen003-test-wizard-team, scen8-noplugin-team.
+- **Cemetery 24 archives** — none from this run (hard-delete bypasses).
+
+### dev-browser quirks SCEN-011
+
+- **`grep -qF "$HOME/ai-maestro/"` write-guard** still blocks absolute paths in mkdir/rm — use relative paths `mkdir -p reports/...`.
+- **Wizard step 2 blue submit button** at fixed (1263, 533) for 1920x1080 viewport. Always use `bg-blue-600 + svg + type=submit + !disabled` filter, not coords.
+- **Profile button toggle** can be in indeterminate state — clicking once doesn't always activate; use the Overview/Config/Advanced tab visibility test as a fallback.
+- **Hover on team card** activates Edit/Delete buttons revealed via `group-hover:` — use `page.mouse.move(centerX, centerY)` then 1-1.5s wait.
+- **Cookie auth in fetch from Bash** — extract `aim_session` cookie from page.context().cookies() and pass via `Cookie: aim_session=<value>` header.
+
+### Active run cleared
+
+(none — SCEN-011 completed cleanly)
+
+---
+
 ## SCEN-010 2026-04-30T06:08Z — PASS (27 PASS, 1 PARTIAL, 2 DEFERRED, 0 FAIL, 1 bug fixed, 4 issues, 8 proposals)
 
 **Run ID:** 20260430T053903Z

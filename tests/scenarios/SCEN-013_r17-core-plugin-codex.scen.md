@@ -47,9 +47,10 @@ prerequisites:
   - Codex CLI installed (`which codex` succeeds)
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:
+  # Rule 3: STATE-WIPE only restores config files modified by side effects.
+  # Do NOT include registry.json or teams.json — UI delete + cleanup already handles those,
+  # and restoring them re-creates orphan registry entries for already-deleted agents.
   - ~/.aimaestro/governance.json
-  - ~/.aimaestro/agents/registry.json
-  - ~/.aimaestro/teams/teams.json
   - ~/.aimaestro/teams/groups.json
 git-fixtures: []
 dir-fixtures: []

@@ -10,7 +10,7 @@ import {
 import MarketplaceManager from './MarketplaceManager'
 import { sudoFetch } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
-import { MAIN_PLUGIN_NAME } from '@/lib/ecosystem-constants'
+import { MAIN_PLUGIN_NAME, isCorePlugin } from '@/lib/ecosystem-constants'
 import {
   getVisibleExtensionsSubtabs,
   type ClientType,
@@ -425,8 +425,11 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
     if (activeOnly) items = items.filter(e => e.pluginEnabled)
     // elementTypeFilter holds the plural ELEMENT_SECTIONS key (e.g. 'skills'), while e.type is singular
     // (e.g. 'skill'). Use typeInfo() to map the singular type to its section key for comparison.
-    // 'ai-maestro' is a special source-plugin filter, not an element-type filter
-    if (elementTypeFilter === 'ai-maestro') items = items.filter(e => e.sourcePlugin === 'ai-maestro')
+    // 'ai-maestro' is a special source-plugin filter, not an element-type filter.
+    // SCEN-017 P2-PROP-001: was a stale literal compare ('ai-maestro') that the
+    // backend never emits — actual sourcePlugin is 'ai-maestro-plugin'. Route
+    // through isCorePlugin() so the filter actually matches the core plugin.
+    if (elementTypeFilter === 'ai-maestro') items = items.filter(e => isCorePlugin(e.sourcePlugin, e.sourceMarketplace))
     else if (elementTypeFilter !== 'all') items = items.filter(e => typeInfo(e.type).key === elementTypeFilter)
     if (elementSearch.trim()) {
       const q = elementSearch.trim().toLowerCase()
@@ -707,8 +710,10 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
                     enabled/disabled at user scope. It MUST live in each agent's local scope
                     (R17.17). SCEN-017 found this guard was comparing to the wrong name
                     ('ai-maestro' instead of MAIN_PLUGIN_NAME) which let the UI expose a
-                    destructive toggle that bypassed ChangePlugin Gate 7. */}
-                {plugin.name !== MAIN_PLUGIN_NAME ? (
+                    destructive toggle that bypassed ChangePlugin Gate 7. P2-PROP-001 then
+                    consolidated the check into isCorePlugin() so a single helper governs
+                    every "is this R17?" decision across the codebase. */}
+                {!isCorePlugin(plugin.name, plugin.marketplace) ? (
                   <button
                     onClick={(e) => { e.stopPropagation(); togglePlugin(plugin.key, plugin.enabled) }}
                     disabled={isToggling}
@@ -831,7 +836,10 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
         })}
         {/* AI Maestro source-plugin filter — separate from element-type badges */}
         {(() => {
-          const aiMaestroCount = flatElements.filter(e => e.sourcePlugin === 'ai-maestro').length
+          // SCEN-017 P2-PROP-001: was a stale literal compare ('ai-maestro') that the
+          // backend never emits — actual sourcePlugin is 'ai-maestro-plugin'. Routed
+          // through isCorePlugin() so the count actually reflects core elements.
+          const aiMaestroCount = flatElements.filter(e => isCorePlugin(e.sourcePlugin, e.sourceMarketplace)).length
           if (aiMaestroCount === 0) return null
           return (
             <button
@@ -957,7 +965,7 @@ export default function GlobalElementsSection({ initialSubtab, initialMarketplac
               <div key={elKey} ref={ref => { elementRefs.current[elKey] = ref }} className={`rounded-lg border overflow-hidden ${
                 el.sourcePlugin === '(standalone)'
                   ? 'border-pink-500/25 bg-pink-500/10'
-                  : el.sourcePlugin === 'ai-maestro'
+                  : isCorePlugin(el.sourcePlugin, el.sourceMarketplace)
                     ? 'border-amber-500/25 bg-amber-500/5'
                     : el.pluginEnabled ? 'border-blue-500/15 bg-blue-500/[0.04]' : 'border-gray-800/30 bg-gray-800/10 opacity-60'
               }`}>

@@ -231,6 +231,30 @@ export function getLocalMarketplacePath(): string {
 /** Main AI Maestro plugin (skills, hooks, commands) */
 export const MAIN_PLUGIN_NAME = 'ai-maestro-plugin'
 
+/**
+ * Single source-of-truth check for "is this the core ai-maestro-plugin?".
+ *
+ * Per R17 the core plugin is non-removable. Any UI guard, pipeline gate, or
+ * audit that asks "should I block uninstall / hide a button / surface a
+ * warning?" because of R17 MUST go through this helper rather than comparing
+ * the plugin name as a string literal. Centralizing the check means a future
+ * rename of MAIN_PLUGIN_NAME or marketplace alias automatically propagates
+ * everywhere.
+ *
+ * Semantics:
+ *  - When `marketplaceName` is omitted, the helper returns true purely on the
+ *    plugin name match. This is the right call when the caller already knows
+ *    the plugin came from a trusted source (e.g. an agent's installed-plugin
+ *    list).
+ *  - When `marketplaceName` is provided, it must equal the canonical
+ *    `MARKETPLACE_NAME` (`ai-maestro-plugins`). A plugin called
+ *    `ai-maestro-plugin` shipped from a third-party marketplace is NOT the
+ *    core — it is a name collision and must not inherit R17 protection.
+ */
+export function isCorePlugin(pluginName: string, marketplaceName?: string): boolean {
+  return pluginName === MAIN_PLUGIN_NAME && (marketplaceName === undefined || marketplaceName === MARKETPLACE_NAME)
+}
+
 /** AMP messaging plugin */
 export const AMP_PLUGIN_NAME = 'claude-plugin'
 export const AMP_PLUGIN_REPO = 'https://github.com/Emasoft/claude-plugin.git'

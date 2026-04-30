@@ -104,7 +104,25 @@ export default function RoleTab({
   // 1 compatible → locked label; 2+ → dropdown with Change; 0 → free choice
   const selectorEl = (
     <div className="mb-3">
-      <SectionLabel text="Role Plugin" />
+      <div className="flex items-center gap-2 mb-1">
+        <SectionLabel text="Role Plugin" />
+        {/* SCEN-017 P1-PROP-003: surface a "required" badge so the user
+            can see at a glance that the role-plugin is non-removable per
+            R9.13 (every agent MUST have exactly one role-plugin — uninstall
+            without a replacement is rejected by ChangePlugin Gate 7). The
+            badge uses a different color than R17's "core" badge (R17 amber,
+            R9.13 blue) to make clear the two rules are distinct: R17 protects
+            ai-maestro-plugin specifically, R9.13 protects whichever plugin
+            currently fills the role-plugin slot. */}
+        {config.rolePlugin && (
+          <span
+            title="Role plugin — required for agent operation (R9.13)"
+            className="text-[9px] text-blue-400/70 px-1.5 py-0.5 rounded border border-blue-400/30 bg-blue-400/5"
+          >
+            required
+          </span>
+        )}
+      </div>
       {isSingleLocked ? (
         // Single compatible plugin: show fixed label with lock icon
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5">

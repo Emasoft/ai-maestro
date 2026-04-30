@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { sudoFetch } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
-import { MAIN_PLUGIN_NAME, MARKETPLACE_NAME, PLUGIN_COMPATIBLE_TITLES } from '@/lib/ecosystem-constants'
+import { MAIN_PLUGIN_NAME, MARKETPLACE_NAME, PLUGIN_COMPATIBLE_TITLES, isCorePlugin } from '@/lib/ecosystem-constants'
 
 interface PluginStatus {
   name: string
@@ -458,8 +458,13 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
 
                 {/* Delete marketplace — protect the ai-maestro-plugins marketplace
                     because it hosts the R17 core plugin. Cascade delete would uninstall
-                    the core plugin, which must never happen through the UI. SCEN-017 */}
-                {mkt.name === MARKETPLACE_NAME ? (
+                    the core plugin, which must never happen through the UI. SCEN-017
+                    P1-PROP-001: explicit defense-in-depth — block when the marketplace
+                    is the canonical one OR when it actually hosts the core plugin
+                    (covers a future where the canonical marketplace is renamed but
+                    still vendors the core plugin). The check is: does any plugin in
+                    this marketplace satisfy isCorePlugin? */}
+                {(mkt.name === MARKETPLACE_NAME || mkt.plugins.some(p => isCorePlugin(p.name, mkt.name))) ? (
                   <span className="text-[9px] text-amber-400/70 px-1.5 py-0.5 rounded border border-amber-400/30 bg-amber-400/5 flex-shrink-0" title={`Protected — hosts the core ${MAIN_PLUGIN_NAME} (R17)`}>core</span>
                 ) : (
                   <button
@@ -602,10 +607,13 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
                             {/* Action buttons — mini style */}
                             <div className="flex items-center gap-1 flex-shrink-0">
                               {plugin.installed ? (
-                                plugin.name === MAIN_PLUGIN_NAME ? (
+                                isCorePlugin(plugin.name, mkt.name) ? (
                                   /* R17 core plugin — show badge instead of destructive controls.
-                                     SCEN-017 found that MarketplaceManager had zero core-plugin
-                                     gating and exposed Toggle/Update/Uninstall on the core row. */
+                                     SCEN-017 P1-PROP-001 made this guard explicit via isCorePlugin
+                                     (single source-of-truth helper from ecosystem-constants). The
+                                     helper checks BOTH the plugin name AND the marketplace identity
+                                     so a third-party marketplace cannot squat the core plugin name
+                                     to inherit R17 protection. */
                                   <span className="text-[9px] text-amber-400/70 px-1.5 py-0.5 rounded border border-amber-400/30 bg-amber-400/5" title="Core plugin — protected by R17 (cannot disable, update, or uninstall from Settings)">core</span>
                                 ) : (
                                   <>

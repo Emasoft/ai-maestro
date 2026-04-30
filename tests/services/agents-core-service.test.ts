@@ -713,6 +713,43 @@ describe('wakeAgent', () => {
     expect(result.status).toBe(200)
     expect(mockAuthorization.authorize).not.toHaveBeenCalled()
   })
+
+  // SCEN-013 013.05: per-client wake-gate behaviour
+  it('returns 501 when waking an unsupported client (gemini)', async () => {
+    /** R17 wake-gate refuses unsupported clients up-front because they
+     * have no validated InstallElement adapter coverage. */
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', program: 'gemini', workingDirectory: '/home' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(false)
+
+    const result = await wakeAgent('agent-1', { startProgram: false })
+
+    expect(result.status).toBe(501)
+    expect(result.error).toMatch(/not yet implemented for client "gemini"/i)
+    expect(mockInstallElement).not.toHaveBeenCalled()
+    expect(mockRuntime.createSession).not.toHaveBeenCalled()
+  })
+
+  it('returns 400 with role_missing_core when InstallElement fails', async () => {
+    /** When the R17 gate's auto-install attempt fails, wakeAgent returns
+     * the role_missing_core sentinel so the route can render a unified
+     * "core dependency missing" alert (parity with R9.13's role_plugin_required). */
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', program: 'codex', workingDirectory: '/nonexistent-path' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(false)
+    mockInstallElement.mockResolvedValueOnce({
+      success: false,
+      operations: ['G07: failed to create dir'],
+      stdout: '',
+      stderr: 'permission denied',
+    })
+
+    const result = await wakeAgent('agent-1', { startProgram: false })
+
+    expect(result.status).toBe(400)
+    expect(result.error).toBe('role_missing_core')
+    expect(mockRuntime.createSession).not.toHaveBeenCalled()
+  })
 })
 
 // ============================================================================
@@ -782,9 +819,17 @@ describe('hibernateAgent', () => {
 
     await hibernateAgent('agent-1', {})
 
-    // Should send Ctrl-C then "exit" before kill
+    // SCEN-013 013.03: hibernate now uses per-client cancel + exit verbs
+    // from client-capabilities.ts. For Claude (the test fixture default):
+    //   1. C-c   — cancel any in-flight turn (key name, non-literal)
+    //   2. /exit — typed in literal mode + Enter, the proper Claude slash
+    //              command to leave the client cleanly
+    // The previous behaviour sent literal '"exit"' (with quotes) in
+    // non-literal mode, which only worked by accident: C-c left Claude
+    // running, then '"exit"' rendered as keystrokes Claude treated as
+    // user input, and the killSession at the bottom did the actual work.
     expect(mockRuntime.sendKeys).toHaveBeenCalledWith('my-agent', 'C-c')
-    expect(mockRuntime.sendKeys).toHaveBeenCalledWith('my-agent', '"exit"', { enter: true })
+    expect(mockRuntime.sendKeys).toHaveBeenCalledWith('my-agent', '/exit', { literal: true, enter: true })
   })
 
   // Gate 0: Authorization tests
@@ -825,6 +870,51 @@ describe('hibernateAgent', () => {
     await hibernateAgent('agent-1', {})
 
     expect(mockAuthorization.authorize).not.toHaveBeenCalled()
+  })
+
+  // SCEN-013 013.03: per-client hibernate behaviour
+  it('hibernates a Codex agent gracefully (parity with Claude)', async () => {
+    /** Codex agents must hibernate using the same C-c + /exit + killSession
+     * sequence Claude uses. Codex has no hooks to tear down so the path is
+     * identical apart from being routed through client-capabilities. */
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', program: 'codex' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockAgentRegistry.loadAgents.mockReturnValue([agent])
+
+    const result = await hibernateAgent('agent-1', {})
+
+    expect(result.status).toBe(200)
+    expect(result.data?.hibernated).toBe(true)
+    expect(mockRuntime.sendKeys).toHaveBeenCalledWith('my-agent', 'C-c')
+    expect(mockRuntime.sendKeys).toHaveBeenCalledWith('my-agent', '/exit', { literal: true, enter: true })
+    expect(mockRuntime.killSession).toHaveBeenCalledWith('my-agent')
+  })
+
+  it('returns 501 when hibernating an unsupported client (gemini)', async () => {
+    /** Hibernate refuses to silently produce a half-baked offline state for
+     * clients that have no validated graceful-exit path yet. */
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', program: 'gemini' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+
+    const result = await hibernateAgent('agent-1', {})
+
+    expect(result.status).toBe(501)
+    expect(result.error).toMatch(/not yet implemented for client "gemini"/i)
+    expect(mockRuntime.sendKeys).not.toHaveBeenCalled()
+    expect(mockRuntime.killSession).not.toHaveBeenCalled()
+  })
+
+  it('returns 501 when hibernating an unknown client', async () => {
+    /** detectClientType returns "unknown" for empty/unrecognised program
+     * names. Hibernate must refuse rather than guess. */
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', program: '' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+
+    const result = await hibernateAgent('agent-1', {})
+
+    expect(result.status).toBe(501)
+    expect(result.error).toMatch(/not yet implemented for client "unknown"/i)
   })
 })
 

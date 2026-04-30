@@ -1671,37 +1671,63 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
     // An agent without ai-maestro-plugin cannot exist in a functional state (R17.5).
     // This gate runs BEFORE session creation so the plugin is ready when the client starts.
     // Delegates to the unified InstallElement AIO function.
+    //
+    // SCEN-013 PROP-P0-002 FIX (013.05): Make the R17 wake-gate client-aware.
+    // Previously this block read ONLY .claude/settings.local.json to determine
+    // whether the core plugin was installed. For Codex agents that file does
+    // not exist (their manifest lives at .codex/installed-plugins/), so
+    // hasPlugin was always false and InstallElement re-fired on every wake.
+    // We now use scanAgentLocalConfig (the same scanner the UI Config tab uses)
+    // — which dispatches to the correct per-client scanner — and isCorePlugin()
+    // from ecosystem-constants for the boundary-aware identity check (single
+    // source of truth, no literal name compare).
+    //
+    // Unsupported clients (gemini/opencode/kiro/aider/unknown) bail with HTTP
+    // 501 instead of silently succeeding. We refuse rather than pretend the
+    // gate passed because these clients have no validated plugin install path
+    // yet — running them headless would skip R17 entirely.
     {
       const { detectClientType } = await import('@/lib/client-capabilities')
       const clientType = detectClientType(agent.program || '')
-      const { InstallElement } = await import('@/services/element-management-service')
 
-      // Check if plugin is already installed and enabled
-      const { existsSync: existsR17, readFileSync: readR17, mkdirSync: mkdirR17 } = await import('fs')
+      // Refuse unsupported clients up-front. Only Claude and Codex have
+      // validated InstallElement adapter coverage today (R18.3d). Gemini /
+      // OpenCode / Kiro need their own wake-gate validation before they can
+      // be enabled here.
+      if (clientType !== 'claude' && clientType !== 'codex') {
+        return {
+          error: `Wake is not yet implemented for client "${clientType}". ` +
+            `Only Claude and Codex agents are supported. ` +
+            `Implement an InstallElement adapter for "${clientType}" and update wakeAgent before enabling this client.`,
+          status: 501,
+        }
+      }
+
+      const { InstallElement } = await import('@/services/element-management-service')
+      const { scanAgentLocalConfig } = await import('@/services/agent-local-config-service')
+      const { isCorePlugin } = await import('@/lib/ecosystem-constants')
+
+      // Ensure .claude/ exists so the (legacy) Claude install path can write
+      // settings.local.json without falling over. Harmless for Codex since
+      // its install path uses .codex/.
+      const { mkdirSync: mkdirR17 } = await import('fs')
       const { join: joinR17 } = await import('path')
       mkdirR17(joinR17(workingDirectory, '.claude'), { recursive: true })
-      const localSettingsPath = joinR17(workingDirectory, '.claude', 'settings.local.json')
+
+      // Client-aware presence check via the unified scanner. Returns true
+      // when ai-maestro-plugin is present and enabled at the client-native
+      // path (Claude → .claude/settings.local.json, Codex → .codex/installed-plugins/).
       let hasPlugin = false
-      if (existsR17(localSettingsPath)) {
-        try {
-          const ls = JSON.parse(readR17(localSettingsPath, 'utf-8'))
-          const plugins = ls.enabledPlugins || {}
-          // SCEN-012 FIX: Boundary-aware match. `k.includes('ai-maestro-plugin')`
-          // false-positive matched on ai-maestro-autonomous-agent@ai-maestro-plugins
-          // because the marketplace name contains the core plugin name as a
-          // substring. R17 wake-gate would skip the repair, leaving disabled
-          // plugins disabled. Require exact name match before "@".
-          const pluginKey = Object.keys(plugins).find((k: string) => {
-            const at = k.indexOf('@')
-            const pluginPart = at >= 0 ? k.substring(0, at) : k
-            return pluginPart === 'ai-maestro-plugin'
-          })
-          hasPlugin = !!pluginKey && plugins[pluginKey] !== false
-        } catch { /* corrupt — treat as missing */ }
+      const scanResult = scanAgentLocalConfig(agentId)
+      if (scanResult.data) {
+        const corePlugin = scanResult.data.plugins.find(p =>
+          isCorePlugin(p.name, p.marketplace) && p.enabled !== false
+        )
+        hasPlugin = !!corePlugin
       }
 
       if (!hasPlugin) {
-        console.log(`[Wake] R17: ai-maestro-plugin missing or disabled for "${agentName}" — installing before wake...`)
+        console.log(`[Wake] R17: ai-maestro-plugin missing or disabled for "${agentName}" (client=${clientType}) — installing before wake...`)
         const installResult = await InstallElement({
           name: 'ai-maestro-plugin',
           marketplace: 'ai-maestro-plugins',
@@ -1714,22 +1740,19 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
 
         if (!installResult.success) {
           // Reject the wake — agent cannot function without the plugin.
+          // Status 400 with sentinel error="role_missing_core" mirrors the
+          // R9.13 roleMissing rejection (role_plugin_required, 409) so the
+          // UI can render a single "core dependency missing" alert surface
+          // for both R9.13 (role-plugin) and R17 (core-plugin) violations.
+          // The route handler expands "role_missing_core" into a rich JSON
+          // body with profileDeepLink and remediation hints — see
+          // app/api/agents/[id]/wake/route.ts. PG02 in InstallElement
+          // already set corePluginMissing=true on the registry, so the next
+          // wake will be caught by the route-level check before we even
+          // hit this gate.
           return {
-            error: `Cannot wake agent "${agentName}": ai-maestro-plugin installation failed (R17).\n\n` +
-              `Without this plugin, the agent has no hooks, no state detection, and no messaging — it cannot function.\n\n` +
-              `Installation details:\n` +
-              `  Agent: ${agentName} (${agentId})\n` +
-              `  Client: ${clientType}\n` +
-              `  Working directory: ${workingDirectory}\n` +
-              `  Marketplace: Emasoft/ai-maestro-plugins\n\n` +
-              `InstallElement operations:\n${installResult.operations.map(o => `  ${o}`).join('\n')}\n\n` +
-              (installResult.stdout ? `CLI stdout:\n${installResult.stdout.slice(0, 500)}\n\n` : '') +
-              (installResult.stderr ? `CLI stderr:\n${installResult.stderr.slice(0, 500)}\n\n` : '') +
-              `To fix manually:\n` +
-              `  cd ${workingDirectory}\n` +
-              `  claude plugin marketplace add Emasoft/ai-maestro-plugins\n` +
-              `  claude plugin install ai-maestro-plugin@ai-maestro-plugins --scope local`,
-            status: 503,
+            error: 'role_missing_core',
+            status: 400,
           }
         }
         console.log(`[Wake] R17: ai-maestro-plugin installed for "${agentName}" (${installResult.operations.length} gates)`)
@@ -1917,6 +1940,32 @@ export async function hibernateAgent(agentId: string, params: HibernateAgentPara
       return { error: 'Agent has no name configured', status: 400 }
     }
 
+    // SCEN-013 PROP-P0-002 FIX (013.03): Make hibernate client-aware.
+    // Previously this function sent Claude-specific keystrokes (C-c then
+    // literal `"exit"`). For Codex the same keystrokes happen to fall
+    // through to the tmux killSession at the bottom — so hibernate "worked"
+    // by accident — but the graceful-shutdown phase did nothing useful and
+    // any logs that watch for `/exit` would never see it. We now look up
+    // the per-client cancel + exit verbs from client-capabilities.ts and
+    // refuse outright for clients that have no validated hibernate path
+    // yet (gemini / opencode / kiro / aider / unknown) so we never silently
+    // produce a half-baked offline state.
+    const { detectClientType, getClientCapabilities } = await import('@/lib/client-capabilities')
+    const clientType = detectClientType(agent.program || '')
+
+    if (clientType !== 'claude' && clientType !== 'codex') {
+      return {
+        error: `Hibernate is not yet implemented for client "${clientType}". ` +
+          `Only Claude and Codex agents are supported. ` +
+          `Implement a graceful-exit path for "${clientType}" before enabling this client.`,
+        status: 501,
+      }
+    }
+
+    const caps = getClientCapabilities(agent.program || clientType)
+    const cancelKey = caps.cli.cancel || 'C-c'   // tmux key — e.g. 'C-c'
+    const exitCommand = caps.cli.exit || '/exit' // typed-in-client command — e.g. '/exit'
+
     const runtime = getRuntime()
     const sessionName = computeSessionName(agentName, sessionIndex)
 
@@ -1941,14 +1990,20 @@ export async function hibernateAgent(agentId: string, params: HibernateAgentPara
       }
     }
 
-    // Try to gracefully stop Claude Code first
+    // Try to gracefully stop the AI client first (per-client). Both Claude
+    // and Codex accept C-c to cancel any in-flight turn, then `/exit` (typed
+    // literally with Enter) to leave the client. Codex has no hooks to
+    // tear down, so the sequence is identical for both — only the verbs
+    // differ in principle (Claude:/exit, Codex:/exit — but read from caps
+    // so future clients can override). The killSession below is the
+    // belt-and-braces fallback if the graceful path fails.
     try {
-      await runtime.sendKeys(sessionName, 'C-c')
+      await runtime.sendKeys(sessionName, cancelKey)
       await new Promise(resolve => setTimeout(resolve, 500))
-      await runtime.sendKeys(sessionName, '"exit"', { enter: true })
+      await runtime.sendKeys(sessionName, exitCommand, { literal: true, enter: true })
       await new Promise(resolve => setTimeout(resolve, 1000))
     } catch (e) {
-      console.log(`[Hibernate] Graceful shutdown attempt failed for ${sessionName}, will force kill`)
+      console.log(`[Hibernate] Graceful shutdown attempt failed for ${sessionName} (client=${clientType}), will force kill`)
     }
 
     // Kill the tmux session

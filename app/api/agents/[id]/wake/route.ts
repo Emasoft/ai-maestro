@@ -51,6 +51,22 @@ export async function POST(
       }, { status: 409 })
     }
 
+    // SCEN-013 PROP-P0-002 FIX (013.05): refuse wake when the core plugin
+    // (ai-maestro-plugin / R17) is missing. Same shape as R9.13 above so
+    // the UI can render a single "core dependency missing" alert. PG02 in
+    // InstallElement sets corePluginMissing=true after every failed install
+    // attempt (and clears it on success), so this check covers all paths
+    // through which the registry can drift out of sync with reality.
+    if (agent?.corePluginMissing) {
+      return NextResponse.json({
+        error: 'role_missing_core',
+        message: `Agent "${agent.label ?? agent.name}" cannot be awakened: the core ai-maestro-plugin is missing or disabled. ` +
+          `Without this plugin, the agent has no hooks, no state detection, and no messaging — it cannot function. ` +
+          `The wake endpoint will retry installation automatically; if it keeps failing, install manually via Profile → Config → Plugins.`,
+        profileDeepLink: `/?agent=${encodeURIComponent(id)}&tab=config`,
+      }, { status: 400 })
+    }
+
     // Parse optional body
     let startProgram = true
     let sessionIndex = 0
@@ -85,6 +101,21 @@ export async function POST(
     })
 
     if (result.error) {
+      // SCEN-013 013.05: expand the role_missing_core sentinel from
+      // wakeAgent's R17 gate into the same rich JSON body the route-level
+      // pre-check above produces, so callers see one consistent shape
+      // regardless of whether the violation was detected before or after
+      // the InstallElement attempt.
+      if (result.error === 'role_missing_core') {
+        const a = getAgent(id)
+        return NextResponse.json({
+          error: 'role_missing_core',
+          message: `Agent "${a?.label ?? a?.name ?? id}" cannot be awakened: automatic install of the core ai-maestro-plugin failed. ` +
+            `Without this plugin, the agent has no hooks, no state detection, and no messaging — it cannot function. ` +
+            `Open Profile → Config → Plugins and install ai-maestro-plugin manually, or check pm2 logs for the underlying install error.`,
+          profileDeepLink: `/?agent=${encodeURIComponent(id)}&tab=config`,
+        }, { status: result.status })
+      }
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
     return NextResponse.json(result.data)

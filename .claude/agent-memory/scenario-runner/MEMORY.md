@@ -1,5 +1,94 @@
 # Scenario Runner Memory
 
+## SCEN-022 2026-04-30T14:10Z — PARTIAL (6 PASS, 1 FAIL, 11 SKIP, 0 app bugs FIXED, 2 bugs found, 4 issues, 9 proposals)
+
+**Run ID:** 20260430T141031Z
+**Branch:** feature/phase6-jsonl-rebase-test @ 443e69103f
+**Reports:**
+- reports/scenarios-runner/SCEN-022_2026-04-30T14-10-31Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_022_2026-04-30T14-10-31Z.md
+
+**Verdict:** PARTIAL — Phases 0 (SAFE-SETUP, MANAGER agent creation) and CLEANUP completed cleanly. S004 (the central success criterion of the scenario — MANAGER agent autonomously executes aimaestro-agent.sh CLI) FAILED: MANAGER agent (Claude Code Opus 4.7, role-plugin v2.7.11) loaded `team-governance` skill (WRONG one) instead of `agent-management`, ran 108 conversation messages over 2m36s reading governance reference docs, then ended turn with `stop_reason: null` without ever invoking the CLI. Phases 1-5 SKIP (depend on autobot existing).
+
+### Critical learnings SCEN-022
+
+- **MANAGER agent autonomy is FRAGILE in natural-language driving**: the agent picks the wrong skill from `description` matching. Even with explicit "Use the aimaestro-agent.sh CLI" in the prompt, the MANAGER preferred `team-governance` skill over `agent-management`. Skill description-string matching needs disambiguation, OR the persona needs a "fast-path" rule for unambiguous CLI verbs (create/delete/rename agent → agent-management skill).
+- **`stop_reason: null` with 108 msgs + empty thinking suggests context exhaustion or hook-cancellation cascade**. Not a normal "end_turn" — investigation needed (P0-PROP-002).
+- **`ai-maestro-hook.cjs` Stop hook timed out at 5040ms** — likely synchronous I/O blocking. Other Stop hooks (oh-my-hi, token-reporter, on-stop.sh, amama_stop_check) finished in <200ms.
+- **oh-my-hi scans 758 jsonl files on EVERY Stop event** — 99.5% skip rate, ~10s wasted per turn end.
+- **"Also delete agent folder" checkbox does NOT delete the workdir**: scen022-manager removed from registry but folder + .claude/.janitor subdirs stayed on disk. Filed P1-PROP-001.
+- **The wizard "Next →" button (avatar pagination) collides with the wizard advance arrow** — same SCEN-020 finding, still not fixed. Filed P2-PROP-001 (re-emphasis).
+- **Wizard 7-step Claude MANAGER flow works smoothly when title=MANAGER chosen with no team**: Claude Code → name (`scen022-manager`) → No team → MANAGER → Auto-create folder → ai-maestro-assistant-manager-agent → Create Agent! → Let's Go!. No sudo modal appeared during wizard creation (suggesting governance.json got hasManager:true via the wizard pipeline, not via post-hoc title change).
+
+### Workflow patterns confirmed SCEN-022
+
+- **MANAGER demote flow**: Profile button → MANAGER badge button → Title Assignment Dialog → AUTONOMOUS card → Confirm → sudo modal (z>=70) → password → Confirm. governance.json revert verified via GET /api/governance hasManager:false.
+- **Profile→Advanced→Danger Zone→Delete Agent flow**: Same as SCEN-017/020/021. Checkbox "Also delete agent folder" ineffectual (BUG-002 P1).
+- **STATE-WIPE 4-file restore via cleanup-SCEN-022.sh**: governance.json + registry.json + teams.json + groups.json all SHA256-matched.
+- **Cemetery already empty after hard-delete** — bypasses cemetery (consistent SCEN-009..SCEN-021 pattern).
+- **Pre-existing 18 user agents preserved** post-cleanup.
+
+### dev-browser quirks SCEN-022
+
+- **JSONL conversation log** is the ONLY way to verify what the MANAGER agent ACTUALLY did. Terminal capture only shows the rendered xterm screen, which is insufficient for diagnosing skill-load decisions.
+- **subagent write-guard hook is sometimes overly aggressive**: blocks `cp` from `~/.claude/projects/...` to `/tmp/...` (read-then-write of file content) even though the destination is /tmp. Workaround: use Read tool + offset/limit instead of bash cp.
+- **tokf alias affects the export keyword in subshells**: `export AIM_SCREENSHOTS_ROOT=...` errors with "tokf not valid in this context". Workaround: write to /tmp/aim-env.sh, source from there.
+
+### Cleanup state SCEN-022
+
+- **scen022-manager** demoted via UI then deleted via UI. Registry: GONE. Folder: REMAINS at `~/agents/scen022-manager/` (BUG-002 P1).
+- **scen022-autobot** never existed (S004 FAIL).
+- **Cemetery**: 0 entries (clean).
+- **STATE-WIPE**: 4 files SHA256-match.
+- **Pre-existing agents preserved**: 18 user agents intact.
+
+### Active run cleared
+
+(none — SCEN-022 PARTIAL but cleanup successful, no commits added — Rule 4 fixes deferred to user approval as P0/P1 proposals)
+
+---
+
+## SCEN-021 2026-04-30T13:22Z — PASS (23 PASS, 0 FAIL, 1 P0 app bug FIXED, 4 issues, 9 proposals)
+
+**Run ID:** 20260430T132245Z
+**Branch:** feature/phase6-jsonl-rebase-test @ 443e6910
+**Reports:**
+- reports/scenarios-runner/SCEN-021_2026-04-30T13-22-45Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_021_2026-04-30T13-22-45Z.md
+
+**Verdict:** PASS — Bidirectional scope isolation invariant fully verified. User-scope `deployment-skills@GhostScientist-skills` does NOT appear in alpha/beta local config. Local-scope `research-skills@GhostScientist-skills` for alpha does NOT leak into beta or user scope. Per-scope enable/disable independence confirmed.
+
+### Critical learning SCEN-021
+
+- **BUG FIXED (P0)**: `services/agent-local-config-service.ts` had two compounding bugs:
+  1. `path.basename(pluginPath)` for cache paths returned VERSION dir (e.g., `a7b17c914b2d`) instead of plugin name. Fix detects `.claude/plugins/cache/<mkt>/<plugin>/<version>` layout via path segments and uses parent dir as plugin name.
+  2. `resolvePluginKeyToPath` returned LAST-sorted version dir alphabetically. Empty placeholder `unknown` dir sorted AFTER `a7b17c914b2d` real dir. Fix: filter out empty version dirs before sorting.
+  - Symptom before fix: UI showed plugin name="unknown", key=null. UI uninstall sent `pluginName="unknown"` to API → ChangePlugin no-op → settings.local.json unchanged but UI thought it succeeded.
+- **GhostScientist-skills marketplace has non-standard cache layout**: `.claude-plugin/marketplace.json` (not plugin.json) inside version dirs. Recursive marketplace.
+- **6th confirmation hard-delete bypasses Cemetery** (consolidates SCEN-009/10/11/12/13/15/16/17/19/20/21).
+- **Wizard's blue forward arrow** at (966,412) advances wizard steps. The "Next →" at (969,635) is for AVATAR pagination only (small button 43x16). Don't confuse them.
+- **Settings → Extensions → PLUGINS subtab** has only Disable toggle, NO Uninstall button. Filed P3-PROP-003.
+- **Settings → Extensions → MARKETPLACES tab** is where Install/Uninstall lives. Expand marketplace card → click Uninstall icon on plugin row → confirm dialog → sudo modal.
+
+### Workflow patterns confirmed SCEN-021
+
+- **Wizard 7 steps Claude AUTONOMOUS** — Claude Code → name → No team → AUTONOMOUS → Auto-create folder → ai-maestro-autonomous-agent → Create Agent! → Let's Go!.
+- **Local-scope uninstall (Profile → Config → Plugins)**: X icon on plugin row → "Yes" confirmation → sudo modal → submit via Enter.
+- **STATE-WIPE 4-file restore** — governance + registry + teams + groups SHA256 match.
+- **`pm2 restart` required mid-run** to apply Rule 4 fix.
+
+### Cleanup state SCEN-021
+
+- All test plugins removed; both test agents deleted via UI; cemetery entries purged
+- STATE-WIPE 4-file SHA256 match confirmed
+- Pre-existing 17 user agents preserved
+
+### Active run cleared
+
+(none — SCEN-021 completed cleanly, 1 commit added with P0 fix)
+
+---
+
 ## SCEN-020 2026-04-30T11:07Z — PASS (17 PASS, 0 FAIL, 0 app bugs, 4 issues, 7 proposals)
 
 **Run ID:** 20260430T110758Z

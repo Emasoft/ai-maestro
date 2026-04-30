@@ -34,8 +34,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { User, Shield, Crown, Megaphone, X, AlertTriangle, Compass, GitMerge, Bot, Wrench } from 'lucide-react'
 import GovernancePasswordDialog from './GovernancePasswordDialog'
 import type { GovernanceState, GovernanceTitle } from '@/hooks/useGovernance'
-import { sudoFetch } from '@/lib/sudo-fetch'
-import { useSudo } from '@/contexts/SudoContext'
+import { mintSudoToken, sudoFetchWithToken } from '@/lib/sudo-fetch'
 
 interface TitleAssignmentDialogProps {
   isOpen: boolean
@@ -144,7 +143,6 @@ export default function TitleAssignmentDialog({
   onTitleChanged,
   onRestartNeeded,
 }: TitleAssignmentDialogProps) {
-  const { requestSudoToken } = useSudo()
   const [selectedTitle, setSelectedTitle] = useState<GovernanceTitle>(currentTitle)
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([])
   const [phase, setPhase] = useState<Phase>('select')
@@ -371,31 +369,67 @@ export default function TitleAssignmentDialog({
     // On failure, the error propagates back to the password dialog for retry.
     setError(null)
 
+    // SCEN-007/009/010/011 fix: mint sudo tokens from the inline password
+    // on demand (each is one-shot, consumed on first strict call) so the
+    // user sees exactly ONE password prompt — the inline
+    // GovernancePasswordDialog. Without this helper every strict-route
+    // PATCH triggered by sudoFetch's 403 retry would surface a second
+    // SudoContext modal stacked on top, making it look like the inline
+    // password was wrong.
+    //
+    // We mint a "discovery" token upfront so a wrong password fails fast
+    // (before any side-effects) and the error is surfaced inline by the
+    // password dialog. After that, freshSudoToken() returns either the
+    // unused discovery token or mints a new one for each subsequent
+    // strict request — sudo tokens are one-shot per SEC-PHASE-3..5.
+    //
+    // On wrong password, mintSudoToken throws "invalid password" — we
+    // turn that into a friendly inline error so the password dialog
+    // stays open for a retry, matching pre-existing UX.
+    let cachedToken: string | null
+    try {
+      cachedToken = await mintSudoToken(password)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      throw new Error(msg === 'invalid password' ? 'Invalid governance password' : msg)
+    }
+
+    // Pop the cached token if available, otherwise mint a fresh one.
+    // Each strict-route call consumes one token.
+    const freshSudoToken = async (): Promise<string> => {
+      if (cachedToken) {
+        const t = cachedToken
+        cachedToken = null
+        return t
+      }
+      return mintSudoToken(password)
+    }
+
     try {
       // Helper: clear a simple governanceTitle (architect/integrator) via PATCH
       const clearGovernanceTitle = async () => {
-        const res = await sudoFetch(
+        const res = await sudoFetchWithToken(
           `/api/agents/${agentId}`,
           {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ governanceTitle: null }),
           },
-          (reason) => requestSudoToken(reason),
+          await freshSudoToken(),
         )
         if (!res.ok) throw new Error('Failed to clear governance title')
       }
 
       // Helper: set a simple governanceTitle (architect/integrator) via PATCH
       const setGovernanceTitle = async (t: GovernanceTitle) => {
-        const res = await sudoFetch(
+        const res = await sudoFetchWithToken(
           `/api/agents/${agentId}`,
           {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ governanceTitle: t }),
           },
-          (reason) => requestSudoToken(reason),
+          await freshSudoToken(),
         )
         if (!res.ok) throw new Error(`Failed to assign ${t} title`)
       }
@@ -439,14 +473,14 @@ export default function TitleAssignmentDialog({
           }
         }
         // Set autonomous title explicitly via PATCH
-        const res = await sudoFetch(
+        const res = await sudoFetchWithToken(
           `/api/agents/${agentId}`,
           {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ governanceTitle: null, role: 'autonomous' }),
           },
-          (reason) => requestSudoToken(reason),
+          await freshSudoToken(),
         )
         if (!res.ok) throw new Error('Failed to set autonomous title')
       } else if (selectedTitle === 'member') {
@@ -615,7 +649,7 @@ export default function TitleAssignmentDialog({
         // Gate 9a enforces R19.2 (format) and R19.3 (uniqueness). Client-side
         // validation in isConfirmDisabled means we only reach here with a valid
         // owner/repo string, but the backend gate is still the authoritative check.
-        const res = await sudoFetch(
+        const res = await sudoFetchWithToken(
           `/api/agents/${agentId}`,
           {
             method: 'PATCH',
@@ -625,7 +659,7 @@ export default function TitleAssignmentDialog({
               githubRepo: githubRepo.trim(),
             }),
           },
-          (reason) => requestSudoToken(reason),
+          await freshSudoToken(),
         )
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))

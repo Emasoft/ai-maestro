@@ -381,20 +381,26 @@ export async function InstallElement(
     }
 
     // ── G08: Core plugin guard (R17.14–R17.17) ────────────────
-    if (name === 'ai-maestro-plugin') {
+    // SCEN-017 P1-PROP-002 hardening: use the MAIN_PLUGIN_NAME constant
+    // (single source of truth in ecosystem-constants) instead of a literal
+    // string, and reject BOTH install AND enable at user scope. Enable is
+    // equivalent to install once a plugin is in settings.json — without
+    // this, an attacker (or a stale settings file) could leave the plugin
+    // disabled at user scope and then re-enable it, bypassing R17.17.
+    if (name === MAIN_PLUGIN_NAME) {
       if (action === 'uninstall' || action === 'disable') {
         // Use explicit past-tense to avoid grammar error on 'uninstall' (would
         // become 'uninstalld' with naive `${action}d` template expansion).
         const pastTense = action === 'uninstall' ? 'uninstalled' : 'disabled'
-        result.error = `The ai-maestro-plugin is a core system plugin and cannot be ${pastTense} (R17.14–R17.15). ` +
+        result.error = `The ${MAIN_PLUGIN_NAME} is a core system plugin and cannot be ${pastTense} (R17.14–R17.15). ` +
           `Without this plugin, the agent has no hooks, no state detection, no messaging — it cannot function.`
         ops.push(`G08: DENIED — core plugin ${action} blocked by R17`)
         return result
       }
-      if (action === 'install' && scope === 'user') {
-        result.error = 'The ai-maestro-plugin must be installed with local scope, not user scope (R17.17). ' +
-          'User-scope installation would load it in ALL Claude Code projects, not just AI Maestro agents.'
-        ops.push(`G08: DENIED — core plugin user-scope blocked by R17.17`)
+      if ((action === 'install' || action === 'enable') && scope === 'user') {
+        result.error = `The ${MAIN_PLUGIN_NAME} must NOT be ${action === 'enable' ? 'enabled' : 'installed'} at user scope (R17.17). ` +
+          `User-scope ${action === 'enable' ? 'enabling' : 'installation'} would load it in ALL Claude Code projects, not just AI Maestro agents.`
+        ops.push(`G08: DENIED — core plugin user-scope ${action} blocked by R17.17`)
         return result
       }
       ops.push(`G08: Core plugin — action "${action}" allowed`)
@@ -5319,6 +5325,52 @@ export async function DeleteAgent(
             ops.push(`EXE: Deleted agent folder ${resolvedDir}`)
           } else {
             ops.push(`EXE: Folder ${resolvedDir} not found — skipped`)
+          }
+
+          // SCEN-014 P0-002: purge Claude Code conversation history for this
+          // workdir. Without this, ~/.claude/projects/-Users-<u>-agents-<n>/*.jsonl
+          // survives the agent deletion. Two consequences:
+          //   1) Re-creating an agent with the SAME workingDirectory loads the
+          //      previous agent's transcript on first launch (`claude --continue`
+          //      / `--resume` look up by workdir slug).
+          //   2) Privacy leak: transcripts are full-fidelity logs of prior
+          //      conversations and persist on disk after the user thinks the
+          //      agent is gone.
+          // SAFETY: the slug we derive must match Claude Code's encoding for
+          // `resolvedDir` exactly (slashes -> '-', leading slash kept). We work
+          // off `resolvedDir` (not `agent.workingDirectory`) so symlinks and
+          // ~ expansion are normalised before slugging — otherwise an agent
+          // whose registry workdir is `/Users/foo/agents/bar` and another
+          // whose workdir is `/Users/foo//agents/bar` would derive different
+          // slugs even though Claude resolved them to the same project. The
+          // outer `startsWith(agentsRoot)` guard already proves resolvedDir
+          // is inside ~/agents/, so the slug cannot accidentally target an
+          // unrelated project (e.g. ~/Code/<name>).
+          // TODO (per-client): also handle ~/.codex/sessions/<...> via
+          // lib/client-plugin-adapters/codex.ts. For now Claude-only is OK.
+          try {
+            const workdirSlug = '-' + resolvedDir.replace(/\//g, '-').replace(/^-/, '')
+            const claudeProjectsDir = resolve(HOME, '.claude', 'projects', workdirSlug)
+            const claudeProjectsRoot = resolve(HOME, '.claude', 'projects')
+            // Defensive: derived slug must actually live under ~/.claude/projects/
+            // and must not equal the projects root itself. If both checks pass and
+            // the dir exists, it is safe to remove.
+            if (
+              claudeProjectsDir.startsWith(claudeProjectsRoot + '/') &&
+              claudeProjectsDir !== claudeProjectsRoot
+            ) {
+              const histStat = await stat(claudeProjectsDir).catch(() => null)
+              if (histStat?.isDirectory()) {
+                await rm(claudeProjectsDir, { recursive: true, force: true })
+                ops.push(`EXE: Purged Claude conversation history ${claudeProjectsDir}`)
+              } else {
+                ops.push(`EXE: No Claude conversation history at ${claudeProjectsDir}`)
+              }
+            } else {
+              ops.push(`EXE: REFUSED — derived Claude history slug outside ~/.claude/projects/: ${claudeProjectsDir}`)
+            }
+          } catch (histErr) {
+            ops.push(`EXE: WARN — Claude history purge failed: ${histErr instanceof Error ? histErr.message : histErr}`)
           }
         } else {
           ops.push(`EXE: REFUSED — folder outside ~/agents/: ${resolvedDir}`)

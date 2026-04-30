@@ -11,6 +11,12 @@ interface CemeteryEntry {
   archivedAt: string
   sizeBytes: number
   sizeHuman: string
+  // Hard-delete audit record. When true: not revivable, not downloadable, only purgeable.
+  tombstone?: boolean
+  alsoDeletedFolder?: boolean
+  ampHomeRemoved?: boolean
+  deletedBy?: string
+  reason?: string
 }
 
 export default function CemeterySection() {
@@ -196,47 +202,79 @@ export default function CemeterySection() {
 
       {archives.length > 0 && (
         <div className="space-y-3">
-          {archives.map(archive => (
+          {archives.map(archive => {
+            // Tombstone rows are visually distinct and expose ONLY a Purge action.
+            // No Revive (no data to restore), no Download (no zip to send to another host).
+            // The badge plus the metadata strip below the name make the row's read-only
+            // nature obvious so the user is not misled into expecting an undo path.
+            const isTombstone = !!archive.tombstone
+            return (
             <div
               key={archive.filename}
-              className="bg-gray-900 border border-gray-800 rounded-lg p-4 flex items-center justify-between gap-4"
+              className={`border rounded-lg p-4 flex items-center justify-between gap-4 ${
+                isTombstone
+                  ? 'bg-gray-950 border-gray-700'
+                  : 'bg-gray-900 border-gray-800'
+              }`}
             >
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-white truncate">{archive.agentName}</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  Archived: {new Date(archive.archivedAt).toLocaleString()} &middot; {archive.sizeHuman}
+                <div className="font-medium text-white truncate flex items-center gap-2">
+                  {archive.agentName}
+                  {isTombstone && (
+                    <span
+                      className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-semibold"
+                      title="Hard-delete audit record. Not revivable."
+                    >
+                      Tombstone
+                    </span>
+                  )}
                 </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {isTombstone ? 'Deleted' : 'Archived'}: {new Date(archive.archivedAt).toLocaleString()} &middot; {archive.sizeHuman}
+                </div>
+                {isTombstone && (
+                  <div className="text-xs text-gray-600 mt-1 space-x-3">
+                    {archive.deletedBy && <span>by: {archive.deletedBy}</span>}
+                    {archive.alsoDeletedFolder && <span>folder removed</span>}
+                    {archive.ampHomeRemoved && <span>AMP cleared</span>}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  onClick={() => handleDownload(archive.filename)}
-                  className="p-2 text-gray-400 hover:text-blue-400 hover:bg-gray-800 rounded-lg transition-colors"
-                  title="Download archive (for transfer)"
-                >
-                  <Download className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setConfirmAction({ type: 'revive', filename: archive.filename, agentName: archive.agentName })}
-                  disabled={actionInProgress === archive.filename}
-                  className="px-3 py-1.5 bg-green-900/30 text-green-400 hover:bg-green-900/50 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                  title="Revive agent"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Revive
-                </button>
+                {!isTombstone && (
+                  <>
+                    <button
+                      onClick={() => handleDownload(archive.filename)}
+                      className="p-2 text-gray-400 hover:text-blue-400 hover:bg-gray-800 rounded-lg transition-colors"
+                      title="Download archive (for transfer)"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setConfirmAction({ type: 'revive', filename: archive.filename, agentName: archive.agentName })}
+                      disabled={actionInProgress === archive.filename}
+                      className="px-3 py-1.5 bg-green-900/30 text-green-400 hover:bg-green-900/50 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                      title="Revive agent"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Revive
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={() => setConfirmAction({ type: 'purge', filename: archive.filename, agentName: archive.agentName })}
                   disabled={actionInProgress === archive.filename}
                   className="px-3 py-1.5 bg-red-900/30 text-red-400 hover:bg-red-900/50 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                  title="Permanently delete archive"
+                  title={isTombstone ? 'Delete tombstone record' : 'Permanently delete archive'}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   Purge
                 </button>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

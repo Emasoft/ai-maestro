@@ -23,6 +23,14 @@ interface CemeteryEntry {
   archivedAt: string
   sizeBytes: number
   sizeHuman: string
+  // tombstone === true means this is a hard-delete audit record (JSON, no zip).
+  // It is NOT revivable. UI shows only Purge.
+  tombstone?: boolean
+  // Hard-delete metadata captured by DeleteAgent G03 — only present when tombstone===true.
+  alsoDeletedFolder?: boolean
+  ampHomeRemoved?: boolean
+  deletedBy?: string
+  reason?: string
 }
 
 /**
@@ -44,20 +52,64 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ archives: [], count: 0 })
     }
 
+    // Cemetery now holds two artifact kinds:
+    //   <name>-export-<ts>.zip    → soft-delete archive (revivable)
+    //   <name>-tombstone-<ts>.json → hard-delete audit record (NOT revivable)
+    // List both so the UI can show a unified history.
     const files = fs.readdirSync(CEMETERY_DIR)
-      .filter(f => f.endsWith('.zip'))
+      .filter(f => f.endsWith('.zip') || f.endsWith('.json'))
       .sort()
       .reverse() // newest first
 
     const archives: CemeteryEntry[] = files.map(filename => {
       const filePath = path.join(CEMETERY_DIR, filename)
       const stat = fs.statSync(filePath)
+      const isTombstone = filename.endsWith('.json')
 
+      let agentName: string
+      let archivedAt: string
+
+      if (isTombstone) {
+        // Tombstone: parse name + timestamp from filename, then enrich with JSON contents.
+        // Filename: <name>-tombstone-<ISO-with-hyphens>.json
+        const tMatch = filename.match(/^(.+?)-tombstone-(.+)\.json$/)
+        agentName = tMatch ? tMatch[1] : filename.replace('.json', '')
+        archivedAt = stat.mtime.toISOString()  // fall-back; overridden below if JSON parses
+
+        const entry: CemeteryEntry = {
+          filename,
+          agentName,
+          archivedAt,
+          sizeBytes: stat.size,
+          sizeHuman: stat.size < 1024 ? `${stat.size}B`
+            : stat.size < 1024 * 1024 ? `${Math.round(stat.size / 1024)}KB`
+            : `${(stat.size / (1024 * 1024)).toFixed(1)}MB`,
+          tombstone: true,
+        }
+
+        try {
+          const raw = fs.readFileSync(filePath, 'utf-8')
+          const data = JSON.parse(raw) as Record<string, unknown>
+          if (typeof data.name === 'string' && data.name) entry.agentName = data.name
+          if (typeof data.deletedAt === 'string') entry.archivedAt = data.deletedAt
+          if (typeof data.alsoDeletedFolder === 'boolean') entry.alsoDeletedFolder = data.alsoDeletedFolder
+          if (typeof data.ampHomeRemoved === 'boolean') entry.ampHomeRemoved = data.ampHomeRemoved
+          if (typeof data.deletedBy === 'string') entry.deletedBy = data.deletedBy
+          if (typeof data.reason === 'string') entry.reason = data.reason
+        } catch {
+          // Corrupt/partial tombstone — still surface the row using the filename-derived
+          // fields above. Do NOT 500: a single bad file must not hide the rest of the cemetery.
+        }
+
+        return entry
+      }
+
+      // Zip archive (soft-delete) — original behavior.
       // Parse agent name and timestamp from filename: <name>-export-<timestamp>.zip
       const match = filename.match(/^(.+?)-export-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})\.zip$/)
-      const agentName = match ? match[1] : filename.replace('.zip', '')
+      agentName = match ? match[1] : filename.replace('.zip', '')
       // CC-GOV-006: Proper regex to convert timestamp hyphens to colons after T
-      const archivedAt = match
+      archivedAt = match
         ? match[2].replace(/(\d{2})-(\d{2})-(\d{2})$/, '$1:$2:$3')
         : stat.mtime.toISOString()
 
@@ -68,7 +120,7 @@ export async function GET(request: NextRequest) {
         sizeBytes: stat.size,
         sizeHuman: stat.size < 1024 ? `${stat.size}B`
           : stat.size < 1024 * 1024 ? `${Math.round(stat.size / 1024)}KB`
-          : `${(stat.size / (1024 * 1024)).toFixed(1)}MB`
+          : `${(stat.size / (1024 * 1024)).toFixed(1)}MB`,
       }
     })
 
@@ -110,7 +162,19 @@ export async function POST(request: NextRequest) {
 
     // Sanitize filename — prevent path traversal
     const sanitized = path.basename(body.filename)
-    if (sanitized !== body.filename || !sanitized.endsWith('.zip')) {
+    if (sanitized !== body.filename) {
+      return NextResponse.json({ error: 'Invalid filename' }, { status: 400 })
+    }
+    // Hard-delete tombstones (JSON) cannot be revived: there is no agent data
+    // to import, only an audit record. Reject explicitly so the UI message
+    // is clear instead of failing later inside importAgent().
+    if (sanitized.endsWith('.json')) {
+      return NextResponse.json(
+        { error: 'Tombstones from hard-delete are audit records and cannot be revived. Use Purge to remove the record.' },
+        { status: 400 },
+      )
+    }
+    if (!sanitized.endsWith('.zip')) {
       return NextResponse.json({ error: 'Invalid filename' }, { status: 400 })
     }
 
@@ -206,7 +270,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     const sanitized = path.basename(body.filename)
-    if (sanitized !== body.filename || !sanitized.endsWith('.zip')) {
+    // Cemetery holds .zip (soft-delete archives) and .json (hard-delete tombstones).
+    // Both must be purgeable. Anything else is rejected to prevent path-confusion attacks.
+    if (sanitized !== body.filename || (!sanitized.endsWith('.zip') && !sanitized.endsWith('.json'))) {
       return NextResponse.json({ error: 'Invalid filename' }, { status: 400 })
     }
 

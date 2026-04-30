@@ -1021,14 +1021,46 @@ async function handleDeleteMarketplace(marketplaceName?: string) {
   // We need to clean up under BOTH names — the UI name AND the CLI name — so
   // neither the cache dir nor the settings.json entry is orphaned.
   //
+  // SCEN-019 BUG-003 (2026-04-30): handleAddMarketplace stamps
+  // `extraKnownMarketplaces` under the OWNER-REPO derived name (e.g.,
+  // `petems-petems-claude-marketplace`), while Claude CLI stamps it under
+  // the manifest's `name` field (e.g., `petems`). On DELETE we therefore
+  // need to look up EVERY extraKnownMarketplaces key whose `source.repo`
+  // matches the marketplace being removed and clean ALL of them — otherwise
+  // the owner-repo derived key stays orphaned in settings.json forever.
+  //
   // DeleteMarketplace removes ONE name per call (CLI + cache + settings), so
-  // we iterate over both name candidates. Its internal cache-cleanup covers
+  // we iterate over all name candidates. Its internal cache-cleanup covers
   // `~/.claude/plugins/marketplaces/<name>/`; we still sweep
   // `~/.claude/plugins/cache/<name>/` and the enabledPlugins orphan keys
   // here because the pipeline today is focused on marketplace state, not
   // downstream plugin-key cleanup.
   const cliName = await resolveCliMarketplaceName(marketplaceName)
-  const nameCandidates = Array.from(new Set([marketplaceName, cliName]))
+  const nameCandidates: string[] = Array.from(new Set([marketplaceName, cliName]))
+
+  // Find any extraKnownMarketplaces orphan keys whose source.repo matches
+  // the repo of the marketplace being removed. We resolve repo from either
+  // (a) the existing extraKnownMarketplaces entry under marketplaceName, or
+  // (b) the existing entry under cliName.
+  try {
+    const settingsPre = await readJsonSafe(SETTINGS_PATH) || {}
+    const ekmPre = (settingsPre.extraKnownMarketplaces || {}) as Record<string, { source?: { repo?: string } }>
+    const repos = new Set<string>()
+    for (const k of nameCandidates) {
+      const src = ekmPre[k]?.source
+      if (src?.repo) repos.add(src.repo)
+    }
+    if (repos.size > 0) {
+      for (const [key, value] of Object.entries(ekmPre)) {
+        const src = value?.source
+        if (src?.repo && repos.has(src.repo) && !nameCandidates.includes(key)) {
+          nameCandidates.push(key)
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[marketplaces] orphan-key scan failed', err)
+  }
 
   for (const name of nameCandidates) {
     const result = await DeleteMarketplace({ name }, { isSystemOwner: true as const })

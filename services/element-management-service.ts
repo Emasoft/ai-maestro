@@ -34,6 +34,7 @@ import {
   LOCAL_MARKETPLACE_NAME,
   LOCAL_MARKETPLACE_DIR_NAME,
   CUSTOM_MARKETPLACE_NAME,
+  MAIN_PLUGIN_NAME,
   PREDEFINED_ROLE_PLUGIN_NAMES,
   ROLE_PLUGIN_MAIN_AGENTS,
   TITLE_PLUGIN_MAP as ECOSYSTEM_TITLE_PLUGIN_MAP,
@@ -3105,8 +3106,25 @@ export async function ChangeMarketplace(desired: {
       await execFileAsync('claude', ['plugin', 'marketplace', 'add', sourceArg], { timeout: 120000 })
       ops.push(`G03: Added marketplace "${desired.name}" from ${sourceArg}`)
     } else if (desired.action === 'remove') {
-      await execFileAsync('claude', ['plugin', 'marketplace', 'remove', desired.name], { timeout: 120000 })
-      ops.push(`G03: Removed marketplace "${desired.name}"`)
+      // SCEN-019 BUG-004 (2026-04-30): the CLI returns non-zero with
+      // "not found" if the marketplace name isn't registered with Claude
+      // CLI itself. That is NOT a fatal error for the pipeline — the
+      // caller may be cleaning up an orphan key in settings.json (e.g.
+      // a derived owner-repo name that the route stamped but the CLI
+      // never registered). Treat "not found" as a no-op for G03 and
+      // proceed to G04 (cache cleanup) and G05 (settings cleanup), so
+      // an orphan extraKnownMarketplaces key can still be reaped.
+      try {
+        await execFileAsync('claude', ['plugin', 'marketplace', 'remove', desired.name], { timeout: 120000 })
+        ops.push(`G03: Removed marketplace "${desired.name}"`)
+      } catch (cliErr) {
+        const msg = cliErr instanceof Error ? cliErr.message : String(cliErr)
+        if (msg.includes('not found')) {
+          ops.push(`G03: CLI did not know "${desired.name}" — proceeding to file cleanup (orphan path)`)
+        } else {
+          throw cliErr
+        }
+      }
 
       // Clean up cached plugins
       const cacheDir = join(HOME, '.claude', 'plugins', 'marketplaces', desired.name)

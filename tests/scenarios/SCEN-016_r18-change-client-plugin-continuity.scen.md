@@ -55,9 +55,13 @@ prerequisites:
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:
   - ~/.aimaestro/governance.json
-  - ~/.aimaestro/agents/registry.json
-  - ~/.aimaestro/teams/teams.json
   - ~/.aimaestro/teams/groups.json
+# NOTE: registry.json and teams.json removed (authoring fix per SCEN-013/SCEN-015 lesson):
+# UI cleanup already removes the agent from registry.json. If the scenario partially fails
+# AFTER agent creation but BEFORE delete, restoring registry.json from backup would
+# RESTORE the orphan into the registry (because the backup was taken at S002, before
+# creation). Better: trust UI cleanup, only restore files genuinely modified by side effects
+# (governance.json, groups.json — though those are unlikely to drift in this scenario).
 git-fixtures: []
 dir-fixtures: []
 commit: TBD
@@ -136,11 +140,11 @@ author: AI Maestro Team
 - **Verify:** Step 3 visible (team picker). Screenshot: SCEN-016/S009-name-avatar.png
 
 #### S010: Fill wizard steps 3-6 with defaults
-- **Action:** Step 3 (team): leave unselected for AUTONOMOUS, click Next. Step 4 (title): pick AUTONOMOUS, click Next. Step 5 (folder): accept default `~/agents/scen016-r18-test/`, click Next. Step 6 (role-plugin): pick "none", click Next.
+- **Action:** Step 3 (team): click "No team (Autonomous)" card. Step 4 (title): click "AUTONOMOUS" card. Step 5 (folder): click "Auto-create agent folder" (default `~/agents/scen016-r18-test/`). Step 6 (role-plugin): pick "ai-maestro-autonomous-agent" (the only marketplace plugin compatible with AUTONOMOUS per R9.13 — no "none" option exists for AUTONOMOUS).
 - **Goal:** Reach step 7 (summary / confirm)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Summary page shown listing Claude / scen016-r18-test / AUTONOMOUS / no role-plugin. Screenshot: SCEN-016/S010-confirm-page.png
+- **Verify:** Summary page shown listing Claude / scen016-r18-test / AUTONOMOUS / ai-maestro-autonomous-agent role-plugin. Screenshot: SCEN-016/S010-confirm-page.png
 
 #### S011: Complete wizard — create agent
 - **Action:** Click "Create Agent" button
@@ -177,12 +181,12 @@ author: AI Maestro Team
 - **Modifies:** nothing (UI state)
 - **Verify:** Profile panel shows "scen016-r18-test". Screenshot: SCEN-016/S013-profile-open.png
 
-#### S014: Navigate to Config tab → Work Configuration
-- **Action:** Click "Config" tab in profile panel, scroll to Work Configuration section
-- **Goal:** Config tab open with Program field visible
+#### S014: Navigate to Overview tab → Work Configuration
+- **Action:** Click "Overview" tab in profile panel (default tab), scroll to "WORK CONFIGURATION" collapsed section header and click it to expand. NOTE: The Program EditableField lives in the Overview tab WORK CONFIGURATION section, NOT the Config tab. The Config tab in v0.29+ shows the Role Plugin selector but does NOT contain a Program/Client selector. Authoring fix applied via Rule 4.
+- **Goal:** Overview tab Work Configuration section expanded with Program EditableField visible
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Program dropdown visible showing "claude". Screenshot: SCEN-016/S014-config-tab.png
+- **Verify:** Program EditableField visible showing "claude". Screenshot: SCEN-016/S014-config-tab.png
 
 #### S015: Record pre-change snapshot (for R18.2 verification)
 - **Action:** Run API GET `/api/agents/{id}/local-config` and save JSON output to `tests/scenarios/reports/SCEN-016_pre_change_snapshot.json`. Count plugins, note role plugin.

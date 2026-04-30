@@ -1,5 +1,117 @@
 # Scenario Runner Memory
 
+## SCEN-010 2026-04-30T06:08Z — PASS (27 PASS, 1 PARTIAL, 2 DEFERRED, 0 FAIL, 1 bug fixed, 4 issues, 8 proposals)
+
+**Run ID:** 20260430T053903Z
+**Branch:** feature/phase6-jsonl-rebase-test @ b7afb968
+**Reports:**
+- reports/scenarios-runner/SCEN-010_2026-04-30T06-08-52Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_010_2026-04-30T06-08-52Z.md
+
+**Verdict:** PASS — All test artifacts created and removed via UI. STATE-WIPE 4 files SHA256-matched. Phase 8 (Kanban S020/S021) DEFERRED — local task storage was removed in Phase 6, requires GitHub Project link.
+
+### Critical learning SCEN-010
+
+- **BUG-001 found+fixed (P0)**: CreateTeamDialog blocks empty agentIds despite backend auto-COS support. Fix at `components/sidebar/TeamListView.tsx:367, 472, 411-413`. Commit `b7afb968`.
+- **Phase 6 task storage removal breaks SCEN-006/007/009/010 kanban steps** — 4 scenarios all hit "Cannot create task: team has no GitHub Project linked" at services/teams-service.ts:697. Filed P0-PROP-001/002.
+- **Two-stage password (inline + sudo modal) confirmed AGAIN** — 4th time. Filed in SCEN-007/008/009/010. P1-PROP-001 to consolidate.
+- **Hard-delete (with folder) bypasses Cemetery — confirmed AGAIN (4th time)** — Pattern: cemetery only stores soft-deletes. Filed P1-PROP-002 for tombstone.
+- **Auth before RBAC (S015) + Sudo before RBAC (S016)** — Same as SCEN-009. Both prevent action but error code differs. Filed P1-PROP-003.
+- **STATE-WIPE perfect** — 4 files SHA256-matched. Pre-existing 20 user agents + 3 user teams fully preserved.
+- **R12 composition-check works perfectly** — API + UI badge ("Incomplete team (R12): missing X, Y") both correctly identify missing titles.
+- **R4.7 COS Immutability VERIFIED** — PUT /api/teams/:id with agentIds=[] (excluding COS) → 400 "Cannot remove the Chief-of-Staff..."
+- **R14 Deletion Recovery Detection VERIFIED** — After deleting ORCHESTRATOR via UI, composition-check correctly reports `complete:false missing:[orchestrator]`.
+
+### Workflow patterns confirmed SCEN-010
+
+- **Auto-COS persona name pattern**: `cos-<teamslug>` agent → label is RANDOM robot. e.g. "cos-scen-r12-incomplete" → label "Dailey", avatar `robots_34.jpg`.
+- **Wizard 6 steps for in-team Claude agents** — Folder step (S5) is skipped because folder auto-determined. Plugin step is auto-assigned based on title (e.g. ARCHITECT gets ai-maestro-architect-agent). Need to click "Continue" to advance from auto-assigned plugin.
+- **Wizard 7 steps for AUTONOMOUS Claude** — All steps shown. Plugin selection requires choosing ai-maestro-autonomous-agent.
+- **Team card Delete button is two-stage hover-only** — `components/sidebar/TeamCard.tsx:128-144`: click "Delete team" first (Trash2 icon), then "Confirm" appears in same spot. `onMouseLeave` resets state. Must keep mouse in card area between clicks.
+- **DeleteTeam dialog has both options visible** (this run) — "Delete member agents too" checkbox UNCHECKED = Keep Agents path; CHECKED = "Delete Team + Agents". Different from SCEN-008's run where only Keep Agents was visible. Possibly depends on agent count or governance state.
+- **DeleteTeam button transitions to "Deleting team + agents…" during operation** — wait 10-20s.
+- **Restart triggered by manager assignment** — Same as SCEN-009. Going from autonomous → manager triggers session reset.
+- **Cemetery API uses key `archives` not `entries`** — `await fetch('/api/agents/cemetery').then(r => r.json())` returns `{archives: [...], count: N}`. Check `data.archives.length` not `data.entries.length`.
+
+### Cleanup state SCEN-010
+
+- **All 5 test agents deleted via UI**: cos-scen-r12-incomplete + scen-r12-architect + scen-r12-integ + scen-r12-member (via DeleteTeam cascade) + scen-r12-mgr (separate delete after MANAGER removal). All "Also delete agent folder" + sudo password.
+- **scen-r12-orch deleted in S022** (test step, not cleanup) with folder + sudo.
+- **Test team deleted via DeleteTeam** with governance password (Delete Agents Too path) → all 4 member agents removed.
+- **STATE-WIPE successful** — 4 files SHA256-matched.
+- **Pre-existing 20 user agents preserved**: alexandre, apps-svgplayer-development, backend-infrastructure-engineer, claude-skills-factory, claude-svgskills-writer, default, ecos-chief-of-staff-one, genny-bot, jack-bot, jhonny-bot, lib-svg-svg2fbf, libs-svg-svgbbox, libs-svg-svgmatrix, libs-svg-text2path, luckas-bot, scen013-codex-r17-test, scen021-alpha, scen021-beta, tmux-test-audit, utils-media-smartmediamanager.
+- **3 pre-existing teams preserved**: Test Kanban Team, scen003-test-wizard-team, scen8-noplugin-team.
+- **Cemetery 24 archives** — none from this run (hard-delete bypasses).
+
+### dev-browser quirks SCEN-010
+
+- **Server restart after build CLEARS dashboard session** — re-login required after `pm2 restart ai-maestro`.
+- **`+` button x-coordinate shifts** between sidebar refreshes (171 vs 167) — use `text-green-400` class match instead of fixed coords.
+- **Hover-state reveal on team card** — Use Playwright `page.locator('text="<name>"').first().hover()` then `await new Promise(r => setTimeout(r, 800))` before clicking exposed buttons. Without hover, the buttons are `display:none`.
+- **WARNING: Multiple team cards with same hover** — if mouse hovers near `Test Kanban Team` (y=571), the Delete-Team button there also activates. Always pinpoint mouse to the EXACT card by its bounding rect (centerX, centerY).
+- **CreateTeam form requires "name" only after fix** — empty agentIds is now allowed (BUG-001 fix).
+
+### Active run cleared
+
+(none — SCEN-010 completed cleanly)
+
+---
+
+## SCEN-009 2026-04-30T05:25Z — STUCK (12 PASS, 13 SKIP, 0 FAIL, 0 bugs, 4 issues, 9 proposals)
+
+**Run ID:** 20260430T045527Z
+**Branch:** feature/phase6-jsonl-rebase-test @ 25417f20f5
+**Reports:**
+- reports/scenarios-runner/SCEN-009_2026-04-30T05-25-00Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_009_2026-04-30T05-25-00Z.md
+
+**Verdict:** STUCK — MANAGER agent stuck in API retry loop ("attempt 11/50 · API_TIMEOUT_MS=19000000ms") for 25+ min after task delivery. Scenario fundamentally requires autonomous MANAGER behavior which couldn't be exercised. Cleanup completed perfectly; baseline restored 100%.
+
+### Critical learning SCEN-009
+
+- **API rate-limit blocks MANAGER autonomy** — When the runner agent and the MANAGER agent share Claude API quota, the MANAGER's retries hit `attempt N/50` and never produce output. Filed P0-PROP-001 for `manager_ack_timeout_min` field.
+- **Scenarios depending on agent autonomy are fragile** — Test must abort early if MANAGER doesn't acknowledge within 5 min instead of waiting 25+ min.
+- **S019 expects 403, API returns 401** — Both prevent self-mod. Auth layer fires before RBAC. Filed P1-PROP-002 for assertion update.
+- **Two-stage password (inline + sudo modal) confirmed AGAIN** — Filed in SCEN-007/008/009. P1-PROP-001 to consolidate. When changing title, fill `Enter governance password` first, then sudo modal `••••••••`.
+- **Hard-delete with folder bypasses Cemetery** — Confirmed AGAIN (same as SCEN-008). MANAGER agent deleted with "Also delete folder" did NOT appear in cemetery's 24-archive list.
+- **STATE-WIPE perfect** — 4 files SHA256-matched. Pre-existing teams + 20 user agents + 3 prior-scen orphans untouched.
+- **Restart button is a strict route** — Triggers sudo modal. Use aim_sudo_modal helper.
+
+### Workflow patterns confirmed SCEN-009
+
+- **Wizard 7 steps for Claude** — Client→Persona→Team→Title→Folder→Plugin→Summary. Agent count goes from 20 to 21 after Create Agent! → Let's Go!
+- **AUTONOMOUS title gets `ai-maestro-autonomous-agent` plugin** by default (R9.13: every agent must have a plugin).
+- **Title change uses inline password + sudo modal** (2-stage). aim_sudo_modal handles only the sudo modal; the inline must be filled by hand BEFORE clicking the first Confirm.
+- **MANAGER assignment recreates session** — Going from autonomous → manager triggered a session restart. tmux session re-launches with same name, Claude Code starts fresh.
+- **Restart button enabled even when New Session disabled** — Use Restart to relaunch Claude when session shows offline.
+- **Prompt Builder textarea selector**: `textarea[placeholder*="Compose your prompt"]`. Click `Send` button to deliver to terminal.
+- **Profile DOM**: Profile button toggles. Inside profile: Advanced tab is a DIV (cursor-pointer), Danger Zone is a BUTTON (cursor-pointer), Delete Agent is a BUTTON.
+- **Delete Agent dialog**: checkbox "Also delete agent folder" + text input placeholder=agent.name + "Delete Forever" button (disabled until name typed) + sudo modal.
+- **AIM_SCREENSHOTS_ROOT** env var: defaults to `tests/scenarios/screenshots`, override to `reports/scenarios-runner/screenshots` per Rule 14.
+
+### Cleanup state SCEN-009
+
+- **MANAGER agent (scen-mgr-jsonl) deleted via UI** with "Also delete agent folder" + sudo password.
+- **No team created** (MANAGER stuck in API retry — never produced output) — cleanup S025 SKIP.
+- **No scen9-* agents created** — cleanup S028 nothing to do.
+- **STATE-WIPE successful** — 4 files SHA256-matched.
+- **Pre-existing 20 user agents preserved**: alexandre, apps-svgplayer-development, backend-infrastructure-engineer, claude-skills-factory, claude-svgskills-writer, default, ecos-chief-of-staff-one, genny-bot, jack-bot, jhonny-bot, lib-svg-svg2fbf, libs-svg-svgbbox, libs-svg-svgmatrix, libs-svg-text2path, luckas-bot, scen013-codex-r17-test, scen021-alpha, scen021-beta, tmux-test-audit, utils-media-smartmediamanager.
+- **3 pre-existing teams preserved**: Test Kanban Team, scen003-test-wizard-team, scen8-noplugin-team.
+- **Cemetery 24 archives** — none from this run (hard-delete bypasses).
+
+### dev-browser quirks SCEN-009
+
+- **`page.goto()` already on http://localhost:23000/** when daemon was already up from previous scenarios — no fresh login needed; aim_dashboard_snapshot confirmed has_sidebar=true upfront.
+- **Screenshot helper saves to AIM_SCREENSHOTS_ROOT** which defaults to `tests/scenarios/screenshots`. Set explicitly to `${PWD}/reports/scenarios-runner/screenshots` for Rule 14 compliance.
+- **`AUTONOMOUS` button vs span**: title badge can be either SPAN (`cursor:default`, just a label) or BUTTON (`cursor:pointer`, clickable). Search for BUTTON specifically.
+- **MANAGER badge in profile** is at x>1700 (right-side panel). Use simple `find b => b.textContent.trim()==='MANAGER' && cursor==='pointer'` to disambiguate from any heading text.
+
+### Active run cleared
+
+(none — SCEN-009 completed cleanly)
+
+---
+
 ## SCEN-008 2026-04-30T04:36Z — PASS (23 PASS, 1 PARTIAL, 3 DEFERRED, 0 FAIL, 1 bug fixed, 4 issues, 5 proposals)
 
 **Run ID:** 20260430T040548Z
@@ -2680,3 +2792,4 @@ SCEN-002 uses `scen-test-*` and `cos-scen-test-*` prefixes. Master overnight cle
 
 ### Kanban board location
 NOT accessible from Teams tab team cards. Lives in `/team-meeting?team=<id>` overlay, BUT (SCEN-005 finding) the team binding via URL param does NOT actually work in the current build — the meeting is always ad-hoc "Hyper Squad" with no team. Scenarios that say "click Kanban tab on team card" are outdated. **Until P0-KAN-1 lands, skip kanban steps as DEFERRED.**
+

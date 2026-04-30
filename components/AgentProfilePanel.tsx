@@ -31,7 +31,8 @@ import { type TabId, type TabDef, type AgentInfo } from './agent-profile/shared'
 import TabContent from './agent-profile/TabContent'
 import FolderBrowser from './agent-profile/FolderBrowser'
 import RolePluginModal from './agent-profile/RolePluginModal'
-import { detectClientType, getClientCapabilities, isTabSupported, clientTypeLabel } from '@/lib/client-capabilities'
+import ClientSection from './agent-profile/ClientSection'
+import { detectClientType, getClientCapabilities, isTabSupported, clientTypeLabel, type ClientType } from '@/lib/client-capabilities'
 import { TITLE_PLUGIN_MAP as ECOSYSTEM_TITLE_MAP, ROLE_PLUGIN_PROGRAMMER } from '@/lib/ecosystem-constants'
 import { sudoFetch } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
@@ -184,6 +185,32 @@ export default function AgentProfilePanel({
   const capabilities = getClientCapabilities(agentInfo?.program || '')
   const visibleTabs = TABS.filter(tab => isTabSupported(tab.id, capabilities))
 
+  // SCEN-016.04 (2026-04-30): client-mismatch banner.
+  // Compare agent.program (registry's "what this agent should be running")
+  // vs sessionStatus.paneCommand (tmux's "what is actually running"). If
+  // both resolve to a non-unknown ClientType AND they differ, surface a
+  // dismissible amber banner so the user knows the agent's plugins were
+  // emitted for X but the session was relaunched as Y.
+  // We compare ClientType (not raw strings) because paneCommand may say
+  // "kiro-cli" while agent.program is "kiro" — both detect to 'kiro'.
+  const runningClientType = sessionStatus?.programRunning && sessionStatus.paneCommand
+    ? detectClientType(sessionStatus.paneCommand)
+    : null
+  const mismatchActive =
+    sessionStatus?.status === 'online' &&
+    sessionStatus.programRunning === true &&
+    runningClientType !== null &&
+    runningClientType !== 'unknown' &&
+    clientType !== 'unknown' &&
+    runningClientType !== clientType
+  const [mismatchDismissed, setMismatchDismissed] = useState(false)
+  // Reset dismissal whenever the mismatch identity changes — if the user
+  // dismissed for (claude vs codex) and the system later flips to
+  // (claude vs gemini), they should see the new banner.
+  useEffect(() => {
+    setMismatchDismissed(false)
+  }, [agentId, clientType, runningClientType])
+
   // Cross-section navigation: expand section + scroll to it
   const handleSwitchSection = useCallback((tab: TabId) => {
     setActiveTab(tab)
@@ -311,6 +338,30 @@ export default function AgentProfilePanel({
     }
   }, [refetch, sessionStatus, agentInfo, queueRestart])
 
+  // SCEN-016.03 (2026-04-30): handler for the Config tab's Program dropdown.
+  // PATCHes /api/agents/{id} { program } via sudoFetch. The strict-route
+  // PATCH dispatches to ChangeClient (R18 pipeline) on the server side —
+  // we do NOT touch the registry directly here. After it succeeds, we
+  // refresh local config and notify the sidebar.
+  const handleProgramChange = useCallback(async (newClient: ClientType) => {
+    if (!agentId) return
+    const res = await sudoFetch(`/api/agents/${agentId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ program: newClient }),
+    }, requestSudoToken)
+    if (!res.ok) {
+      // Surface the server's error message in console; the dialog closes
+      // either way and the user sees the unchanged dropdown value.
+      const body = await res.text().catch(() => '')
+      console.error('Failed to change program:', res.status, body)
+      throw new Error(`PATCH program failed: ${res.status}`)
+    }
+    // Reload Config (so plugin list / IR re-emission state is fresh) and
+    // bump the sidebar (so the program badge updates in the agent card).
+    await refetch()
+  }, [agentId, requestSudoToken, refetch])
+
   if (!agentId) {
     return (
       <div className="flex w-[420px] flex-shrink-0 items-center justify-center bg-gray-900 border-l border-gray-800" style={{ overscrollBehavior: 'contain' }}>
@@ -381,6 +432,42 @@ export default function AgentProfilePanel({
           </div>
         )}
       </div>
+
+      {/* SCEN-016.04 (2026-04-30): client-mismatch banner.
+          Visible across all top-tabs (Overview / Config / Sessions / Advanced)
+          because mismatched program ↔ tmux state affects every surface in
+          the profile. Dismissible — but the dismissal resets when the
+          mismatched pair changes (see useEffect above). */}
+      {mismatchActive && !mismatchDismissed && (
+        <div className="flex items-start gap-2 px-4 py-2.5 bg-amber-500/15 border-b border-amber-500/40">
+          <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold text-amber-200">
+              Client mismatch detected
+            </p>
+            <p className="text-[10px] text-amber-300/90 mt-0.5">
+              This agent is configured for{' '}
+              <span className="font-mono text-amber-200">
+                {clientTypeLabel(clientType)}
+              </span>
+              , but the running session is{' '}
+              <span className="font-mono text-amber-200">
+                {clientTypeLabel(runningClientType ?? 'unknown')}
+              </span>
+              . Restart the session to align with the configured client, or
+              change the program in Config.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMismatchDismissed(true)}
+            className="p-0.5 rounded text-amber-300 hover:text-amber-100 hover:bg-amber-500/20 flex-shrink-0"
+            title="Dismiss"
+          >
+            <XCircle className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Top-level tabs */}
       <div className="flex border-b border-gray-800">
@@ -571,6 +658,22 @@ export default function AgentProfilePanel({
                   <span className="text-[10px] text-amber-300">
                     {pendingCount} agent{pendingCount > 1 ? 's' : ''} waiting to restart…
                   </span>
+                </div>
+              )}
+
+              {/* SCEN-016.02 + 016.03 (2026-04-30): Program (AI client) selector.
+                  Moved here from the Overview tab because changing program
+                  triggers the R18 ChangeClient pipeline (plugin re-emission),
+                  which is a configuration concern, not a "work setting".
+                  See: components/agent-profile/ClientSection.tsx */}
+              {agentInfo && (
+                <div className="px-4 py-3 border-b border-gray-800/30 bg-gray-900/40">
+                  <ClientSection
+                    currentProgram={agentInfo.program}
+                    pluginCount={config?.plugins?.length ?? 0}
+                    onChange={handleProgramChange}
+                    disabled={sessionStatus?.status === 'online' && sessionStatus?.programRunning !== false}
+                  />
                 </div>
               )}
 

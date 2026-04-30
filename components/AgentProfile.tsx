@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  X, User, Briefcase, Code2, Cpu, Tag,
+  X, User, Code2, Cpu, Tag,
   Activity, MessageSquare, CheckCircle, Clock, Zap, Square,
   DollarSign, Database, BookOpen, Link2, Edit2,
   ChevronDown, ChevronRight, Plus, Trash2, TrendingUp, TrendingDown,
@@ -777,23 +777,22 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
 
                 {expandedSections.work && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <EditableField
-                        label="Program"
-                        value={agent.program}
-                        onChange={(value) => updateField('program', value)}
-                        icon={<Briefcase className="w-4 h-4" />}
-                        flashActive={flashFields.has('program')}
-                      />
-                      <EditableField
-                        label="Model"
-                        value={agent.model || ''}
-                        onChange={(value) => updateField('model', value)}
-                        icon={<Cpu className="w-4 h-4" />}
-                        placeholder="Model version"
-                        flashActive={flashFields.has('model')}
-                      />
-                    </div>
+                    {/* SCEN-016.02 (2026-04-30): the Program field used to live
+                        here as a free-text EditableField. It is now a typed
+                        dropdown on the Config tab → Client section, because
+                        changing program triggers the R18 ChangeClient pipeline
+                        (re-emits all plugins for the new client) — that is a
+                        configuration concern, not a "work setting" like the
+                        model name or task description.
+                        See: components/agent-profile/ClientSection.tsx */}
+                    <EditableField
+                      label="Model"
+                      value={agent.model || ''}
+                      onChange={(value) => updateField('model', value)}
+                      icon={<Cpu className="w-4 h-4" />}
+                      placeholder="Model version"
+                      flashActive={flashFields.has('model')}
+                    />
 
                     <EditableField
                       label="Task Description"

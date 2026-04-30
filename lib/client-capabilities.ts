@@ -9,6 +9,27 @@
 
 export type ClientType = 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'aider' | 'unknown'
 
+/**
+ * Single source of truth for the supported AI client list shown in any UI
+ * dropdown that lets the user pick or change an agent's program (e.g. the
+ * Program field in the Config tab — see SCEN-016.03).
+ *
+ * Order matters — it controls dropdown ordering. Excludes 'aider' (deprecated,
+ * kept only for backward-compat detection) and 'unknown' (sentinel for
+ * detection misses).
+ *
+ * IMPORTANT: this list MUST stay in sync with CAPABILITIES below and with
+ * lib/converter/types.ts ProviderId. Adding a client here without adding
+ * its capabilities entry will break getClientCapabilities() at runtime.
+ */
+export const SUPPORTED_CLIENTS: readonly ClientType[] = [
+  'claude',
+  'codex',
+  'gemini',
+  'opencode',
+  'kiro',
+] as const
+
 import type { ProviderId } from '@/lib/converter/types'
 
 /** Map ClientType to converter ProviderId (null if no converter support) */

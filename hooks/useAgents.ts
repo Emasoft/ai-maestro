@@ -275,9 +275,14 @@ export function useAgents() {
       hasLoadedOnce.current = true
 
       // Log summary
+      // P3 polish (2026-04-30): downgraded from console.log to console.debug
+      // because this fires every REFRESH_INTERVAL (10s) and dominates the
+      // browser console during normal operation. Keep it discoverable for
+      // operators who want it (Chrome DevTools "Verbose" level) without
+      // drowning out genuine warnings/errors.
       const successCount = allResults.filter(r => r.success).length
       const fromCacheCount = allResults.filter(r => r.fromCache).length
-      console.log(`[useAgents] Loaded ${allAgents.length} agent(s) from ${successCount}/${hosts.length} host(s) (${fromCacheCount} from cache)`)
+      console.debug(`[useAgents] Loaded ${allAgents.length} agent(s) from ${successCount}/${hosts.length} host(s) (${fromCacheCount} from cache)`)
 
     } catch (err) {
       console.error('[useAgents] Failed to load agents:', err)

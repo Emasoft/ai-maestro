@@ -1,5 +1,57 @@
 # Scenario Runner Memory
 
+## SCEN-020 2026-04-30T11:07Z — PASS (17 PASS, 0 FAIL, 0 app bugs, 4 issues, 7 proposals)
+
+**Run ID:** 20260430T110758Z
+**Branch:** feature/phase6-jsonl-rebase-test @ c72ba3b9
+**Reports:**
+- reports/scenarios-runner/SCEN-020_2026-04-30T11-07-58Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_020_2026-04-30T11-07-58Z.md
+
+**Verdict:** PASS — R17 core-plugin protection + ChangeTitle Gate 15 plugin swap verified end-to-end. Fresh hardening commits a25cf0d0 + ef11111b work correctly across all surfaces. 19 pre-existing user agents preserved.
+
+### Critical learning SCEN-020
+
+- **R17 protection holds at agent-profile-side too** (SCEN-017 was settings-side). `title="Core plugin — cannot be uninstalled (R17)"` on the row, 0 buttons rendered. New "REQUIRED" badge from a25cf0d0 visible on ROLE PLUGIN section with `title="Role plugin — required for agent operation (R9.13)"`.
+- **Pre-flight pm2 restart was REQUIRED** (not Rule 4) — Next.js dev server stuck under concurrent Phase 3 implementer agent edits. `_next/static/chunks/main-app.js` + `app-pages-internals.js` returning 404 with "Compiled in NNNms (1082 modules)" loop in logs but no client output. Dashboard frozen on "Verifying session...". Filed P1-PROP-001 for auto-recovery probe.
+- **MAINTAINER title requires GitHub repo input** (R19.3) — Confirm button stays disabled until `owner/repo` filled. Authoring gap in S012 — filed P2-PROP-002 + P1-PROP-002 (silent disable feedback).
+- **ChangeTitle Gate 15 swap verified** for AUTONOMOUS↔MAINTAINER — settings.local.json correctly transitions: autonomous-agent uninstalled, maintainer-agent installed; ai-maestro-plugin (R17 core) preserved across the swap.
+- **Two AUTONOMOUS elements in profile** — one SPAN at (1010,267) (header indicator) and one BUTTON at (1107,876) (clickable badge). Filter by `tagName === 'BUTTON'` to find the right one.
+- **Wizard "+/Create Agent" is 2-step** — "+" button → dropdown → "Create Agent" (only one option since advanced wizard removed). Filed P3-PROP-001 for collapse.
+- **6th confirmation hard-delete bypasses Cemetery** (consolidates SCEN-009/10/11/12/13/15/16/17/19/20).
+- **2 of 3 parallel implementer agents NOT a concern** — they edit `app/api/teams/`, `services/agents-chat-service.ts`, `services/teams-service.ts` (disjoint from R17 surfaces). Single pre-flight pm2 restart was sufficient.
+
+### Workflow patterns confirmed SCEN-020
+
+- **Wizard 7 steps Claude AUTONOMOUS** — Claude Code → name → No team → AUTONOMOUS → Auto-create folder → ai-maestro-autonomous-agent → Create Agent! → Let's Go!. Same as SCEN-012/013/015/016/017.
+- **Title change flow** — Profile → scroll right panel → click TITLE BUTTON (e.g., AUTONOMOUS at y=876) → Title Assignment Dialog (z=70) → click target title → Confirm → sudo modal (z=70) → password → Confirm → ~10-15s ChangeTitle pipeline → file-system + registry both updated.
+- **Sudo modal pattern (z=70)** — `dialog.locator('input[type="password"]').first().fill(pwd)` works UNLESS modal is at z>=70. Use direct `page.fill('input[type="password"]', pwd)` and find the LAST visible Confirm button via `Array.from(document.querySelectorAll('button')).filter(visible).find(b => b.innerText.trim() === 'Confirm')[count-1]`.
+- **Profile button title="Toggle Profile Panel"** is the cleanest selector.
+- **Tab clicks via `page.mouse.click(x, 152)`** — Overview=861, Config=966, Sessions=1071, Advanced=1175.
+- **Plugins section expand** — click `<span>Plugins</span>` (children.length === 0) at the section header.
+
+### dev-browser quirks SCEN-020
+
+- **Confirm button disabled silent** — ChangeTitle Title Assignment Dialog disables Confirm if MAINTAINER title selected without GitHub repo. No tooltip, no inline error. Have to inspect button.disabled to detect.
+- **z=50 help panel always in DOM** — `bodyText.includes("X")` may match against the AI Maestro Help panel content even when collapsed. Use `dialogs.filter(d => z >= 70)` or `display: none` workaround.
+- **Sudo modal locator approach failed** — `page.locator('[role="dialog"]').last()` returned `count=0` because the AIMaestro sudo modal doesn't use `role="dialog"`. Find via z-index instead: `Array.from(document.querySelectorAll('div')).find(d => parseInt(window.getComputedStyle(d).zIndex) >= 70 && d.innerText.includes('Enter Governance Password'))`.
+- **Two text inputs in dialog** — sidebar search vs wizard. Always filter by placeholder pattern.
+- **MAINTAINER GitHub repo placeholder** — `owner/repo` exact string.
+- **dev-browser CLI standard flags** — `--browser ai-maestro-scenarios --headless --timeout 60` work for all SCEN-020 steps. Daemon reused across all ~30 invocations.
+
+### Cleanup state SCEN-020
+
+- **scen020-autonomous-test deleted via UI** — Profile → Advanced → Danger Zone → Delete Agent → checkbox + name + Delete Forever (sudo). Folder removed. tmux session gone.
+- **Cemetery 0 scen020 entries** — hard-delete bypass.
+- **STATE-WIPE successful** — 4 files SHA256-matched (governance.json + registry.json + teams.json + groups.json).
+- **Pre-existing 19 user agents preserved**.
+
+### Active run cleared
+
+(none — SCEN-020 completed cleanly, 0 commits added — no application bugs, all proposals deferred for user approval)
+
+---
+
 ## SCEN-019 2026-04-30T10:22Z — PASS (20 PASS, 0 FAIL, 1 P0 app bug FIXED, 3 authoring fixes applied/reverted-by-parent, 4 issues, 11 proposals)
 
 **Run ID:** 20260430T102201Z

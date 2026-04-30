@@ -47,7 +47,7 @@ prerequisites:
   - Chrome browser with DevTools accessible
   - Internet access for cloning marketplace from GitHub
   - "'which gh && gh auth status' succeeds"
-  - Marketplace used for testing: https://github.com/cblecker/claude-plugins
+  - Marketplace used for testing must NOT be already registered. Default choice is https://github.com/petems/petems-claude-marketplace (small, 2 plugins, no runtime deps). NOTE 2026-04-30 — this scenario originally used cblecker/claude-plugins, but that marketplace is now pre-registered in the dev user's `~/.claude/settings.json`, so a Rule 4 authoring fix swapped to petems' marketplace which is unregistered.
 governance_password: "mYkri1-xoxrap-gogtan"
 rewipe-list:
   - ~/.aimaestro/governance.json
@@ -137,7 +137,7 @@ commit: TBD
 
 ### S009: Paste test marketplace URL
 - **Action:** `fill` the URL input with
-  `https://github.com/cblecker/claude-plugins`.
+  `https://github.com/petems/petems-claude-marketplace`.
 - **Goal:** URL is in the input ready to submit.
 - **Creates:** nothing
 - **Modifies:** form state
@@ -150,10 +150,10 @@ commit: TBD
   the `CreateMarketplace` pipeline in element-management-service (not a
   direct CLI call), ensuring the pipeline's gates (name validation,
   duplicate detection, cache setup) are enforced.
-- **Creates:** `claude-plugins` marketplace registered globally via
+- **Creates:** `petems` marketplace registered globally via
   CreateMarketplace pipeline
 - **Modifies:** `~/.claude/settings.json` `extraKnownMarketplaces`, CLI
-  cache under `~/.claude/plugins/cache/cblecker-claude-plugins/`
+  cache under `~/.claude/plugins/cache/petems-petems-claude-marketplace/`
 - **Verify:** Wait for the new card to appear (may take a few seconds while
   the CLI clones the repo). Screenshot. Verify PM2 logs show a
   `CreateMarketplace` pipeline invocation (e.g. `[CreateMarketplace] G*`
@@ -161,7 +161,7 @@ commit: TBD
   the pipeline wrapper.
 
 ### S011: Expand the new marketplace card
-- **Action:** Click the card for `claude-plugins`.
+- **Action:** Click the card for `petems`.
 - **Goal:** Card expands, showing the list of plugins inside.
 - **Creates:** nothing
 - **Modifies:** expandedMkt state
@@ -171,14 +171,15 @@ commit: TBD
 
 ## Phase 3: Install a plugin at user scope
 
-### S012: Install the `github` plugin
-- **Action:** Find the `github` plugin card in the expanded marketplace card.
-  Click its "Install" button. The marketplace as of 2026-04 exposes 3 plugins:
-  `git`, `github`, `gws`. We pick `github` because it is the smallest and has
-  no external runtime dependency (unlike `gws` which needs a Go workspace).
+### S012: Install the `git-commit-push` plugin
+- **Action:** Find the `git-commit-push` plugin card in the expanded marketplace card.
+  Click its "Install" button. The petems marketplace exposes 2 plugins:
+  `content` (blog tools) and `git-commit-push` (git helper). We pick
+  `git-commit-push` because it is small and has no external runtime
+  dependency.
 - **Goal:** Plugin installs at user scope via Claude CLI.
-- **Creates:** Plugin cache under `~/.claude/plugins/cache/cblecker-claude-plugins/github/`
-- **Modifies:** `~/.claude/settings.json` `plugins` field (adds `github@claude-plugins` key)
+- **Creates:** Plugin cache under `~/.claude/plugins/cache/petems-petems-claude-marketplace/git-commit-push/`
+- **Modifies:** `~/.claude/settings.json` `enabledPlugins` field (adds `git-commit-push@petems` key)
 - **Verify:** Plugin card shows an "Installed" badge and the Install button
   is replaced with Uninstall + Disable.
 
@@ -235,7 +236,7 @@ commit: TBD
 
 ### S018: Remove the test marketplace (Rule 12 sudo password + DeleteMarketplace pipeline)
 - **Action:** Switch to Marketplaces subtab. Click Remove on the
-  `claude-plugins` marketplace card. When the sudo password modal
+  `petems` marketplace card. When the sudo password modal
   appears (Rule 12 — DELETE /api/settings/marketplaces is classified
   strict), enter governance password `mYkri1-xoxrap-gogtan` and click
   Confirm. Then confirm the removal dialog.
@@ -247,7 +248,7 @@ commit: TBD
   so removal should succeed).
 - **Removes:** The registered marketplace
 - **Verify:** Card no longer appears; `~/.claude/settings.json` no longer
-  references `claude-plugins` in `extraKnownMarketplaces`. The sudo
+  references `petems` in `extraKnownMarketplaces`. The sudo
   modal appeared exactly once. PM2 logs show a `DeleteMarketplace`
   pipeline invocation.
 

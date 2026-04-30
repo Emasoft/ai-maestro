@@ -364,7 +364,11 @@ function TeamFormModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim() || selectedIds.size === 0) return
+    // Allow empty agentIds: server-side createNewTeam auto-creates a COS
+    // when no agents (and no chiefOfStaffId) are provided. The team must
+    // have a COS, but the COS does not need to be selected by the user
+    // — the backend will spawn one with a random robot persona.
+    if (!name.trim()) return
     setError(null)
     setSaving(true)
     const err = await onSave(name.trim(), description.trim(), Array.from(selectedIds), team?.id)
@@ -410,7 +414,7 @@ function TeamFormModal({
 
           <div>
             <label className="block text-xs text-gray-400 mb-1">
-              Agents * <span className="text-gray-600">({selectedIds.size} selected)</span>
+              Agents <span className="text-gray-600">({selectedIds.size} selected · optional, COS auto-created if empty)</span>
             </label>
             <div className="max-h-48 overflow-y-auto space-y-1 border border-gray-700 rounded-lg p-2 bg-gray-800/50 custom-scrollbar">
               {agents.length === 0 ? (
@@ -469,7 +473,7 @@ function TeamFormModal({
             </button>
             <button
               type="submit"
-              disabled={!name.trim() || selectedIds.size === 0 || saving}
+              disabled={!name.trim() || saving}
               className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               {saving ? 'Saving...' : team ? 'Save Changes' : 'Create Team'}

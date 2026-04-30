@@ -36,6 +36,13 @@ export default function TeamMembershipSection({
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState<string | null>(null) // tracks teamId being acted on
   const [resolvingTransferId, setResolvingTransferId] = useState<string | null>(null)
+  // SCEN-007/008 P0-PROP-001: confirmation dialog for the explicit "Leave team"
+  // button. Without a confirmation step the destructive action would fire on
+  // a single click, and the underlying ChangeTeam pipeline triggers a sudo
+  // modal anyway — making the user re-enter the password without context.
+  // The confirmation dialog is the user-visible "are you sure" gate that
+  // SCEN-007 P0-PROP-001 specifically requested.
+  const [confirmLeaveTeamId, setConfirmLeaveTeamId] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Close dropdown when clicking outside
@@ -196,7 +203,7 @@ export default function TeamMembershipSection({
       {!memberTeam ? (
         <div className="text-sm text-gray-500 italic px-1">No team</div>
       ) : (
-        <div className="flex items-center gap-2 group px-1 py-1 rounded hover:bg-gray-800/50 transition-colors">
+        <div className="flex items-center gap-2 px-1 py-1 rounded">
           <span className="text-sm text-gray-200 truncate">{memberTeam.name}</span>
           {/* Show COS badge if this agent is chief-of-staff of this team */}
           {memberTeam.chiefOfStaffId === agentId && (
@@ -204,22 +211,75 @@ export default function TeamMembershipSection({
               COS
             </span>
           )}
-          {/* Leave button — disabled for COS (COS must have a team) */}
+          {/* SCEN-007/008 P0-PROP-001: persistent labeled "Leave team" button.
+              Replaces the previous hover-only X-icon affordance which was
+              undiscoverable — both SCEN-007 and SCEN-008 listed this as a
+              blocking UI gap. COS cannot leave their own team (R11.12
+              mandatory-COS invariant), so the button is hidden for COS
+              and a "locked" hint is shown instead. Clicking opens the
+              inline confirmation dialog rendered below; the actual
+              backend call (sudo-protected via useGovernance.removeAgentFromTeam)
+              fires only after the user confirms. */}
           {canLeaveTeam && (
             <button
-              onClick={() => handleLeave(memberTeam.id)}
+              onClick={() => setConfirmLeaveTeamId(memberTeam.id)}
               disabled={loading === memberTeam.id}
-              className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity ml-auto disabled:opacity-50"
-              title="Leave team"
+              className="ml-auto text-xs px-2 py-0.5 rounded border border-red-700/50 text-red-400 hover:bg-red-900/30 hover:border-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Leave this team and become AUTONOMOUS"
             >
-              <X className="w-3.5 h-3.5" />
+              Leave team
             </button>
           )}
           {isCOS && (
-            <span className="ml-auto text-xs text-gray-600" title="COS cannot leave their team">
+            <span
+              className="ml-auto text-xs text-gray-600"
+              title="Chief-of-Staff cannot leave their own team. Reassign the COS role or delete the team first."
+            >
               locked
             </span>
           )}
+        </div>
+      )}
+
+      {/* SCEN-007/008 P0-PROP-001: confirmation dialog for "Leave team".
+          Two-stage UX: button click opens this inline dialog (not a window.confirm
+          which is intrusive and styled inconsistently); user must explicitly
+          click "Yes, leave team" before the destructive action fires.
+          The actual call is made via the parent-supplied onLeaveTeam, which is
+          wired to useGovernance.removeAgentFromTeam — that hook already wraps
+          the strict ChangeTitle and role-plugin DELETE calls with sudoFetch,
+          so the sudo password modal will appear AFTER this confirmation. */}
+      {confirmLeaveTeamId && memberTeam && confirmLeaveTeamId === memberTeam.id && (
+        <div className="mt-2 p-3 rounded-lg border border-red-800/50 bg-red-950/20 space-y-2">
+          <div className="text-sm text-red-300">
+            Leave team &quot;{memberTeam.name}&quot;?
+          </div>
+          <div className="text-xs text-gray-400">
+            This agent will revert to AUTONOMOUS, its role-plugin will be uninstalled,
+            and you will be asked for the governance password to confirm.
+          </div>
+          <div className="flex items-center gap-2 justify-end">
+            <button
+              onClick={() => {
+                setConfirmLeaveTeamId(null)
+                setError(null)
+              }}
+              disabled={loading === memberTeam.id}
+              className="text-xs px-3 py-1 rounded border border-gray-600 text-gray-300 hover:bg-gray-800 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                setConfirmLeaveTeamId(null)
+                await handleLeave(memberTeam.id)
+              }}
+              disabled={loading === memberTeam.id}
+              className="text-xs px-3 py-1 rounded bg-red-700 text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Yes, leave team
+            </button>
+          </div>
         </div>
       )}
 

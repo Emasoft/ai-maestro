@@ -773,7 +773,19 @@ function scanPlugins(
     seenPluginPaths.add(pluginPath)
 
     const manifestPath = path.join(pluginPath, '.claude-plugin', 'plugin.json')
+    // Default pluginName to path basename (the version dir or plugin dir).
+    // For paths from the global cache (.claude/plugins/cache/<marketplace>/<plugin>/<version>),
+    // the basename is the VERSION — which is wrong. Prefer the parent dir name when the
+    // path layout matches that pattern. This restores the proper plugin name when the
+    // plugin's plugin.json doesn't have a 'name' field (e.g. marketplaces nested as plugins).
     let pluginName = path.basename(pluginPath)
+    const cachePathSegments = pluginPath.split(path.sep)
+    const cacheIdx = cachePathSegments.indexOf('cache')
+    if (cacheIdx > 0 && cachePathSegments[cacheIdx - 1] === 'plugins' && cachePathSegments[cacheIdx - 2] === '.claude' && cacheIdx + 3 < cachePathSegments.length) {
+      // Path layout: .claude/plugins/cache/<marketplace>/<plugin>/<version>
+      // The plugin name is at cachePathSegments[cacheIdx + 2]
+      pluginName = cachePathSegments[cacheIdx + 2]
+    }
     let pluginMeta: { description?: string; version?: string; author?: string; authorEmail?: string; license?: string; homepage?: string; repository?: string; keywords?: string[] } = {}
 
     const manifest = readJsonSafe(manifestPath)
@@ -944,17 +956,28 @@ function resolvePluginKeyToPath(key: string): string | null {
   // Try the global cache directory
   const cachePath = path.join(homeDir, '.claude', 'plugins', 'cache', marketplaceName, pluginName)
   if (fs.existsSync(cachePath)) {
-    // Return latest version
+    // Return latest version. Skip empty dirs (placeholder leftovers like 'unknown'
+    // created by past failed installs would otherwise be picked as 'latest' since
+    // they sort after a7b17c914b2d alphabetically).
     const allVersions = safeReaddir(cachePath).filter(e => !e.startsWith('.'))
-    if (allVersions.length > 0) {
-      const semverVersions = allVersions.filter(e => semver.valid(e))
+    const nonEmptyVersions = allVersions.filter(v => {
+      const versionDir = path.join(cachePath, v)
+      try {
+        return fs.readdirSync(versionDir).filter(e => !e.startsWith('.') || e === '.claude-plugin').length > 0
+      } catch {
+        return false
+      }
+    })
+    const validVersions = nonEmptyVersions.length > 0 ? nonEmptyVersions : allVersions
+    if (validVersions.length > 0) {
+      const semverVersions = validVersions.filter(e => semver.valid(e))
       if (semverVersions.length > 0) {
         semverVersions.sort(semver.rcompare)
         return path.join(cachePath, semverVersions[0])
       }
       // Fallback for non-semver version dirs (git hashes, timestamps)
-      allVersions.sort()
-      return path.join(cachePath, allVersions[allVersions.length - 1])
+      validVersions.sort()
+      return path.join(cachePath, validVersions[validVersions.length - 1])
     }
   }
 

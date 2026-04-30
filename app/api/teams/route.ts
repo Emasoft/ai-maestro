@@ -3,6 +3,14 @@ import { z } from 'zod'
 import { listAllTeams, createNewTeam } from '@/services/teams-service'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 
+// SCEN-005.03 + SCEN-010.02 (second option, 2026-04-30): allow the user to
+// OPTIONALLY link an existing GitHub Projects v2 board to the team at create
+// time. The team's kanban then syncs with that GitHub Project (existing
+// behaviour for teams that already have `team.githubProject` set). The
+// `safeOwnerRepo` regex prevents shell-injection through the gh CLI; it
+// matches the pattern used by `app/api/teams/create-with-project/route.ts`.
+const safeOwnerRepo = /^[a-zA-Z0-9_.-]+$/
+
 const CreateTeamSchema = z.object({
   name: z.string().min(1).max(128),
   description: z.string().max(512).optional(),
@@ -10,6 +18,15 @@ const CreateTeamSchema = z.object({
   type: z.literal('closed').optional(),
   chiefOfStaffId: z.string().uuid().optional(),
   governancePassword: z.string().max(256).optional(),
+  // Optional link to an existing GitHub Projects v2 board. Server-side this
+  // is forwarded to createNewTeam, which persists it via team-registry and
+  // best-effort calls configureProjectTemplate (gh CLI) — failure to reach
+  // GitHub is logged but does NOT block team creation.
+  githubProject: z.object({
+    owner: z.string().min(1).max(64).regex(safeOwnerRepo, 'Must be alphanumeric with _.-'),
+    repo: z.string().min(1).max(64).regex(safeOwnerRepo, 'Must be alphanumeric with _.-'),
+    number: z.number().int().min(1),
+  }).strict().optional(),
 }).strict()
 
 // NT-009: Force dynamic -- reads runtime filesystem state (team registry)
@@ -68,9 +85,9 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const { name, description, agentIds, type, chiefOfStaffId } = body
+  const { name, description, agentIds, type, chiefOfStaffId, githubProject } = body
 
-  const result = await createNewTeam({ name, description, agentIds, type, chiefOfStaffId, requestingAgentId })
+  const result = await createNewTeam({ name, description, agentIds, type, chiefOfStaffId, githubProject, requestingAgentId })
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }

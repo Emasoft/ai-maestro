@@ -56,6 +56,11 @@ export interface CreateTeamParams {
   type?: TeamType
   chiefOfStaffId?: string
   orchestratorId?: string
+  // SCEN-005.03 + SCEN-010.02 (second option, 2026-04-30): optional link to
+  // an existing GitHub Projects v2 board. When set, the team's kanban will
+  // sync with this project (the pre-existing behaviour for teams that have
+  // `team.githubProject` set is preserved). LINK only — no project creation.
+  githubProject?: { owner: string; repo: string; number: number }
   requestingAgentId?: string
 }
 
@@ -297,7 +302,35 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
       }
     }
 
-    // Reload team to get the latest state (COS/orchestrator may have been added)
+    // SCEN-005.03 + SCEN-010.02 (second option, 2026-04-30): optionally link
+    // an existing GitHub Project at create time. We MIRROR the post-creation
+    // pattern from `app/api/teams/create-with-project/route.ts` (lines 73-91)
+    // so the simple sidebar dialog and the full wizard share the same
+    // failure-tolerant behaviour:
+    //   - persist `githubProject` via team-registry updateTeam
+    //   - best-effort configureProjectTemplate (requires gh CLI authed with
+    //     the `project` scope); failure is logged but does NOT block team
+    //     creation. The team is fully usable; the user just needs to retry
+    //     the project linkage later (or run `gh auth refresh -s project`).
+    if (params.githubProject) {
+      try {
+        await updateTeam(team.id, { githubProject: params.githubProject }, managerId)
+        try {
+          const { configureProjectTemplate } = await import('@/lib/github-cli')
+          configureProjectTemplate(params.githubProject.owner, params.githubProject.number)
+          console.log(`[teams] GitHub Project linked and template configured for team "${name}"`)
+        } catch (err) {
+          // Non-fatal — gh might not be authed, or scope might be missing.
+          console.warn('[teams] Failed to configure GitHub Project template (linkage saved):', err instanceof Error ? err.message : err)
+        }
+      } catch (err) {
+        // updateTeam shouldn't fail on a freshly-created team, but if it
+        // does the team is still usable — log and continue.
+        console.warn('[teams] Failed to persist githubProject linkage:', err instanceof Error ? err.message : err)
+      }
+    }
+
+    // Reload team to get the latest state (COS/orchestrator/githubProject may have been added)
     const finalTeam = getTeam(team.id) || team
     return { data: { team: finalTeam, needsChiefOfStaff: false }, status: 201 }
   } catch (error) {
@@ -422,6 +455,21 @@ export async function updateTeamById(id: string, params: UpdateTeamParams): Prom
             console.warn(`[teams] Failed to auto-title added agent ${addedId}:`, err instanceof Error ? err.message : err)
           }
         }
+      }
+    }
+
+    // SCEN-005.03 + SCEN-010.02 (second option, 2026-04-30): if the caller
+    // SET (not cleared) a GitHub Project link on this update, mirror the
+    // create-flow behaviour and try to configure the project template
+    // (single-select fields used by the kanban). Best-effort — if `gh`
+    // isn't authed or the scope is missing we just log a warning. The
+    // linkage itself is already persisted by `updateTeam` above.
+    if (ghProj) {
+      try {
+        const { configureProjectTemplate } = await import('@/lib/github-cli')
+        configureProjectTemplate(ghProj.owner, ghProj.number)
+      } catch (err) {
+        console.warn('[teams] Failed to configure GitHub Project template on update (linkage saved):', err instanceof Error ? err.message : err)
       }
     }
 

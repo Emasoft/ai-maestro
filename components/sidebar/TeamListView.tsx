@@ -138,13 +138,32 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
     }
   }
 
-  const handleSave = async (name: string, description: string, agentIds: string[], teamId?: string): Promise<string | null> => {
+  // SCEN-005.03 + SCEN-010.02 (second option, 2026-04-30): forward the
+  // optional `githubProject` from the form to the API.
+  //   - undefined  → field omitted from request body (no change in edit mode)
+  //   - null       → unlink the Project (edit mode only — POST schema doesn't
+  //                  accept null since "no link" = field absent)
+  //   - object     → link to that Project
+  // The POST endpoint silently ignores `null` because the create-mode form
+  // never produces it; we still guard at the call site to keep the request
+  // body minimal.
+  const handleSave = async (
+    name: string,
+    description: string,
+    agentIds: string[],
+    githubProject: { owner: string; repo: string; number: number } | null | undefined,
+    teamId?: string,
+  ): Promise<string | null> => {
     try {
       if (teamId) {
+        const body: Record<string, unknown> = { name, description, agentIds }
+        // For PUT: undefined means "no change"; null means "unlink";
+        // object means "link/replace". The PUT schema accepts null.
+        if (githubProject !== undefined) body.githubProject = githubProject
         const res = await fetch(`/api/teams/${teamId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, description, agentIds }),
+          body: JSON.stringify(body),
         })
         const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
         if (!res.ok) return data.error || 'Failed to update team'
@@ -152,10 +171,13 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
           setTeams(prev => prev.map(t => t.id === teamId ? data.team : t))
         }
       } else {
+        const body: Record<string, unknown> = { name, description, agentIds }
+        // For POST: only include when an actual link is provided. null/undefined → omit.
+        if (githubProject) body.githubProject = githubProject
         const res = await fetch('/api/teams', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, description, agentIds }),
+          body: JSON.stringify(body),
         })
         const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
         if (!res.ok) return data.error || 'Failed to create team'
@@ -336,6 +358,36 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
   )
 }
 
+// SCEN-005.03 + SCEN-010.02 (second option, 2026-04-30): pure client-side
+// parser for GitHub Projects v2 URLs. Accepts the three URL forms the gh
+// CLI knows about:
+//   - https://github.com/orgs/<owner>/projects/<n>      (org-scoped)
+//   - https://github.com/users/<owner>/projects/<n>     (user-scoped)
+//   - https://github.com/<owner>/<repo>/projects/<n>    (repo-scoped, legacy)
+// For org/user URLs the gh CLI doesn't have a repo concept, but downstream
+// `lib/github-project.ts` requires a `repo` (it's used as `-R owner/repo`
+// in `createTask`); we mirror the wizard's fallback (`repo = owner`) for
+// those cases. Returns null on a URL that doesn't match — the UI then
+// shows an inline "invalid format" message and prevents submission.
+type ParsedGitHubProject = { owner: string; repo: string; number: number }
+function parseGitHubProjectUrl(url: string): ParsedGitHubProject | null {
+  const trimmed = url.trim()
+  if (!trimmed) return null
+  // Accept /orgs/<owner>/projects/<n> and /users/<owner>/projects/<n> and
+  // /<owner>/<repo>/projects/<n>. Group 1=owner, group 2=optional repo, group 3=number.
+  const m = /^https?:\/\/github\.com\/(?:(?:orgs|users)\/)?([^/]+)(?:\/([^/]+))?\/projects\/(\d+)\/?$/i.exec(trimmed)
+  if (!m) return null
+  const owner = m[1]
+  const repo = m[2] || m[1]  // org/user-scoped projects don't have a repo — fall back to owner.
+  const num = Number(m[3])
+  if (!Number.isFinite(num) || num < 1) return null
+  // Mirror the server-side z.string().regex(/^[a-zA-Z0-9_.-]+$/) check so the
+  // user sees the validation error inline instead of after the round-trip.
+  const safe = /^[a-zA-Z0-9_.-]+$/
+  if (!safe.test(owner) || !safe.test(repo)) return null
+  return { owner, repo, number: num }
+}
+
 function TeamFormModal({
   team,
   agents,
@@ -344,7 +396,13 @@ function TeamFormModal({
 }: {
   team: Team | null
   agents: Agent[]
-  onSave: (name: string, description: string, agentIds: string[], teamId?: string) => Promise<string | null>
+  onSave: (
+    name: string,
+    description: string,
+    agentIds: string[],
+    githubProject: ParsedGitHubProject | null | undefined,
+    teamId?: string,
+  ) => Promise<string | null>
   onClose: () => void
 }) {
   const [name, setName] = useState(team?.name || '')
@@ -352,6 +410,14 @@ function TeamFormModal({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(team?.agentIds || []))
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // SCEN-005.03 + SCEN-010.02 (second option): optional GitHub Project link.
+  // Prefilled from team.githubProject so edit-mode shows the current value.
+  // Empty string = no link (or "clear link" in edit mode).
+  const [githubProjectUrl, setGithubProjectUrl] = useState(() => {
+    const ghp = team?.githubProject
+    return ghp ? `https://github.com/orgs/${ghp.owner}/projects/${ghp.number}` : ''
+  })
+  const initialGithubProject = team?.githubProject ?? null
 
   const toggleAgent = (id: string) => {
     setSelectedIds(prev => {
@@ -362,6 +428,14 @@ function TeamFormModal({
     })
   }
 
+  // Inline parse of the optional GitHub Project URL. The empty string is
+  // valid (= "no link"). Anything else must parse via parseGitHubProjectUrl
+  // — failure is surfaced as a non-blocking warning under the input, AND
+  // submission is blocked (the user shouldn't be able to save junk).
+  const trimmedGithubUrl = githubProjectUrl.trim()
+  const parsedGithubProject = trimmedGithubUrl ? parseGitHubProjectUrl(trimmedGithubUrl) : null
+  const githubUrlInvalid = trimmedGithubUrl !== '' && parsedGithubProject === null
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     // Allow empty agentIds: server-side createNewTeam auto-creates a COS
@@ -369,9 +443,38 @@ function TeamFormModal({
     // have a COS, but the COS does not need to be selected by the user
     // — the backend will spawn one with a random robot persona.
     if (!name.trim()) return
+    if (githubUrlInvalid) {
+      setError('GitHub Project URL is not in a recognized format. Use one of: https://github.com/orgs/<owner>/projects/<n>, /users/<owner>/projects/<n>, or /<owner>/<repo>/projects/<n>. Leave empty to skip linking.')
+      return
+    }
     setError(null)
     setSaving(true)
-    const err = await onSave(name.trim(), description.trim(), Array.from(selectedIds), team?.id)
+    // For edit mode, only send `githubProject` when the user actually
+    // changed it: setting same → omit (undefined). Setting different or
+    // clearing the field → send the new value (object) or `null` to unlink.
+    // For create mode we pass the parsed value (or undefined if empty).
+    let ghpToSend: ParsedGitHubProject | null | undefined
+    if (team) {
+      // Edit mode: detect change against `initialGithubProject`.
+      const sameAsBefore =
+        (initialGithubProject === null && parsedGithubProject === null) ||
+        (initialGithubProject !== null &&
+          parsedGithubProject !== null &&
+          initialGithubProject.owner === parsedGithubProject.owner &&
+          initialGithubProject.repo === parsedGithubProject.repo &&
+          initialGithubProject.number === parsedGithubProject.number)
+      if (sameAsBefore) {
+        ghpToSend = undefined  // omit from PUT body — leaves field unchanged
+      } else if (parsedGithubProject === null) {
+        ghpToSend = null       // clear the link
+      } else {
+        ghpToSend = parsedGithubProject
+      }
+    } else {
+      // Create mode: include only when user supplied a URL.
+      ghpToSend = parsedGithubProject ?? undefined
+    }
+    const err = await onSave(name.trim(), description.trim(), Array.from(selectedIds), ghpToSend, team?.id)
     setSaving(false)
     if (err) setError(err)
   }
@@ -410,6 +513,46 @@ function TeamFormModal({
               placeholder="API and infrastructure team"
               className="w-full px-3 py-2 text-sm bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
+          </div>
+
+          {/* SCEN-005.03 + SCEN-010.02 (second option, 2026-04-30): optional
+              GitHub Projects v2 link. When set, the team's kanban syncs
+              with the linked Project (existing behaviour for teams that
+              already have `team.githubProject` set). LINK only — no
+              project creation here. Validation is inline so the user gets
+              feedback before submitting. */}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">
+              GitHub Project <span className="text-gray-600">(optional · enables kanban sync)</span>
+            </label>
+            <input
+              type="url"
+              value={githubProjectUrl}
+              onChange={e => setGithubProjectUrl(e.target.value)}
+              placeholder="https://github.com/orgs/<owner>/projects/<n>"
+              className={`w-full px-3 py-2 text-sm bg-gray-800 border rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 ${
+                githubUrlInvalid
+                  ? 'border-red-700 focus:ring-red-500'
+                  : 'border-gray-700 focus:ring-blue-500'
+              }`}
+            />
+            {githubUrlInvalid && (
+              <p className="text-[11px] text-red-400 mt-1">
+                URL must match one of: <code>github.com/orgs/&lt;owner&gt;/projects/&lt;n&gt;</code>,
+                {' '}<code>/users/&lt;owner&gt;/projects/&lt;n&gt;</code>, or
+                {' '}<code>/&lt;owner&gt;/&lt;repo&gt;/projects/&lt;n&gt;</code>.
+              </p>
+            )}
+            {!githubUrlInvalid && parsedGithubProject && (
+              <p className="text-[11px] text-emerald-400 mt-1">
+                Linked: <code>{parsedGithubProject.owner}/#{parsedGithubProject.number}</code>
+              </p>
+            )}
+            {!githubUrlInvalid && !trimmedGithubUrl && team?.githubProject && (
+              <p className="text-[11px] text-amber-400 mt-1">
+                Cleared — saving will unlink the GitHub Project from this team.
+              </p>
+            )}
           </div>
 
           <div>
@@ -473,7 +616,7 @@ function TeamFormModal({
             </button>
             <button
               type="submit"
-              disabled={!name.trim() || saving}
+              disabled={!name.trim() || saving || githubUrlInvalid}
               className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               {saving ? 'Saving...' : team ? 'Save Changes' : 'Create Team'}

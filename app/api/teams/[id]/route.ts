@@ -6,6 +6,13 @@ import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { isValidUuid } from '@/lib/validation'
 
+// SCEN-005.03 + SCEN-010.02 (second option, 2026-04-30): allow editing the
+// linked GitHub Project on an existing team. `null` clears the link;
+// `undefined` (omitted) leaves it unchanged. The shape mirrors the
+// `create-with-project` schema so the same `gh CLI` shell-injection guard
+// applies on update.
+const safeOwnerRepo = /^[a-zA-Z0-9_.-]+$/
+
 const UpdateTeamSchema = z.object({
   name: z.string().min(1).max(128).optional(),
   description: z.string().max(512).optional(),
@@ -22,6 +29,14 @@ const UpdateTeamSchema = z.object({
   // at governanceTitle=null. The orchestratorId slot is a team-level property,
   // not a governance-gated field, so accepting it here is safe.
   orchestratorId: z.string().uuid().nullable().optional(),
+  githubProject: z.union([
+    z.object({
+      owner: z.string().min(1).max(64).regex(safeOwnerRepo, 'Must be alphanumeric with _.-'),
+      repo: z.string().min(1).max(64).regex(safeOwnerRepo, 'Must be alphanumeric with _.-'),
+      number: z.number().int().min(1),
+    }).strict(),
+    z.null(),
+  ]).optional(),
 }).strict()
 
 const DeleteTeamSchema = z.object({

@@ -228,10 +228,14 @@ author: AI Maestro Team
 
 ---
 
-## Phase 4: Verify Re-Enable on Startup
+## Phase 4: Verify Re-Enable on Wake (R17 wakeAgent gate)
 
-> This phase tests R17.15 + R17.18: if the plugin is manually disabled in settings.local.json,
-> the server re-enables it on next startup.
+> ARCHITECTURAL UPDATE (2026-04-30): Per `server.mjs:1529-1534`, R17 compliance
+> is no longer enforced via a startup audit or periodic loop — those were
+> removed. R17 enforcement happens EXCLUSIVELY through the AIO Change* pipelines
+> (InstallElement post-gates, wakeAgent R17 gate, createSession defense-in-depth).
+> This phase therefore tests the wakeAgent R17 gate (the canonical enforcement
+> trigger) rather than a startup audit.
 
 #### S022: Manually disable the plugin in settings.local.json
 - **Action:** Read `~/agents/scen012-r17-test/.claude/settings.local.json`, edit the `ai-maestro-plugin@ai-maestro-plugins` value from `true` to `false`, write back
@@ -240,19 +244,19 @@ author: AI Maestro Team
 - **Modifies:** settings.local.json (ai-maestro-plugin set to false)
 - **Verify:** File content shows `"ai-maestro-plugin@ai-maestro-plugins": false`. Screenshot: SCEN-012/S022-manually-disabled.png
 
-#### S023: Restart server to trigger R17 startup audit
-- **Action:** `pm2 restart ai-maestro`, wait 4s
-- **Goal:** Server restarts and R17 audit re-enables the disabled plugin
+#### S023: Restart server (no R17 startup audit; plugin remains disabled)
+- **Action:** `pm2 restart ai-maestro`, wait 4s, re-login
+- **Goal:** Server restarts cleanly. The plugin remains disabled because no startup audit exists in the current architecture (R17 is wake-gated only).
 - **Creates:** nothing
-- **Modifies:** PM2 process state, settings.local.json (plugin re-enabled)
-- **Verify:** PM2 logs show `[Startup] R17:` with re-enabled count > 0. Screenshot: SCEN-012/S023-server-restarted.png
+- **Modifies:** PM2 process state
+- **Verify:** PM2 logs show `[Startup] Marketplaces registered`. Screenshot: SCEN-012/S023-server-restarted.png
 
-#### S024: Verify plugin was re-enabled
+#### S024: Verify plugin remains disabled after restart
 - **Action:** Read `~/agents/scen012-r17-test/.claude/settings.local.json`
-- **Goal:** The plugin value is back to `true` — the server forced it back on
+- **Goal:** The plugin value is still `false` — startup audits were removed; wake-time enforcement is now the only path.
 - **Creates:** nothing
-- **Modifies:** nothing (already modified by server)
-- **Verify:** File content shows `"ai-maestro-plugin@ai-maestro-plugins": true`. Screenshot: SCEN-012/S024-re-enabled.png
+- **Modifies:** nothing
+- **Verify:** File content shows `"ai-maestro-plugin@ai-maestro-plugins": false`. Screenshot: SCEN-012/S024-still-disabled-no-startup-audit.png
 
 ---
 
@@ -273,9 +277,15 @@ author: AI Maestro Team
 
 ---
 
-## Phase 6: Verify corePluginMissing Flag
+## Phase 6: Verify corePluginMissing Flag (architectural change)
 
-> This phase tests R17.9 + R17.18: the corePluginMissing flag behavior.
+> ARCHITECTURAL UPDATE (2026-04-30): Per `server.mjs:1529-1534`, `corePluginMissing`
+> is no longer set by a startup audit (audit was removed). The flag is set/cleared
+> exclusively by the AIO Change* pipelines (`InstallElement` PG02 post-gate writes
+> `corePluginMissing` based on the post-state plugin presence). Periodic
+> enforcement was also removed. R17 wake-time enforcement happens in
+> `wakeAgent` (services/agents-core-service.ts:1703) only when an agent
+> session is being CREATED (i.e. the tmux session does not yet exist).
 
 #### S026: Remove plugin from settings.local.json entirely
 - **Action:** Read `~/agents/scen012-r17-test/.claude/settings.local.json`, remove the `ai-maestro-plugin@ai-maestro-plugins` key entirely from enabledPlugins, write back
@@ -284,26 +294,26 @@ author: AI Maestro Team
 - **Modifies:** settings.local.json (plugin entry removed)
 - **Verify:** File content shows enabledPlugins without any ai-maestro-plugin key. Screenshot: SCEN-012/S026-plugin-removed.png
 
-#### S027: Restart server to trigger R17 audit flagging
-- **Action:** `pm2 restart ai-maestro`, wait 4s
-- **Goal:** Server flags the agent with corePluginMissing=true
+#### S027: Restart server (no R17 audit, plugin remains missing)
+- **Action:** `pm2 restart ai-maestro`, wait 4s, re-login
+- **Goal:** Server restarts without auto-fixing settings.local.json (no startup audit exists). The flag `corePluginMissing` is NOT auto-set from a file scan.
 - **Creates:** nothing
-- **Modifies:** PM2 process state, registry (corePluginMissing flag)
-- **Verify:** PM2 logs show `[Startup] R17:` with flagged count including this agent. Screenshot: SCEN-012/S027-flagged.png
+- **Modifies:** PM2 process state
+- **Verify:** PM2 logs show only marketplace registration (no R17 audit messages). Screenshot: SCEN-012/S027-restart-no-audit.png
 
-#### S028: Verify corePluginMissing flag in registry
-- **Action:** Read agent from API: `GET /api/agents/<agentId>` (use agent ID from S015)
-- **Goal:** Agent has `corePluginMissing: true` in the response
+#### S028: Verify corePluginMissing flag (architectural drift)
+- **Action:** Read agent from API: `GET /api/agents/<agentId>`
+- **Goal:** Document that `corePluginMissing` remains `false` because no startup audit exists. The flag is only updated by InstallElement PG02 post-gate.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** API response shows corePluginMissing=true for this agent. Screenshot: SCEN-012/S028-flag-set.png
+- **Verify:** API response shows corePluginMissing=false (architectural: not auto-set by file edit). Screenshot: SCEN-012/S028-flag-unset.png
 
-#### S029: Wait for periodic R17 enforcement to detect and reinstall
-- **Action:** Wait up to 6 minutes for the periodic R17 enforcement (runs every 5 minutes) to detect the missing plugin and reinstall it. Alternatively, login and wake the agent to trigger the wakeAgent R17 gate.
-- **Goal:** The server's periodic enforcement or wakeAgent R17 gate detects the missing plugin and reinstalls it automatically
+#### S029: Document wake-gate R17 enforcement (PARTIAL — UI path not fully reachable)
+- **Action:** Note that the R17 wake gate fires in `wakeAgent` only when there is NO existing tmux session for the agent. From the current UI state (Stop+New Session keeps tmux alive), the gate cannot be triggered without first hibernating (killing tmux). The Hibernate UI button is conditional on `isOnline` — when sessions[] is empty in registry, neither button appears.
+- **Goal:** Verify the R17 wake gate code exists at agents-core-service.ts:1703 (read-only inspection).
 - **Creates:** nothing
-- **Modifies:** settings.local.json (plugin reinstalled), registry (corePluginMissing cleared)
-- **Verify:** Read `~/agents/scen012-r17-test/.claude/settings.local.json` — ai-maestro-plugin is back and set to true. PM2 logs show `[R17] Periodic enforcement: repaired 1 agent(s)` OR `[Wake] R17:`. Screenshot: SCEN-012/S029-reinstalled.png
+- **Modifies:** nothing
+- **Verify:** Read agents-core-service.ts:1700-1740 — `if (!hasPlugin) { console.log('[Wake] R17: ...'); InstallElement({...}) }` exists. Screenshot: SCEN-012/S029-wake-gate-code.png
 
 ---
 

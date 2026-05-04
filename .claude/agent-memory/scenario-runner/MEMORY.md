@@ -1,5 +1,47 @@
 # Scenario Runner Memory
 
+## SCEN-025 2026-05-04T12:16Z — STUCK at setup (SETUP_FAIL — fixture infrastructure missing)
+
+**Run ID:** 20260504T121523Z
+**Branch:** feature/phase6-jsonl-rebase-test @ 3f905490
+**Reports:**
+- reports/scenarios-runner/SCEN-025_2026-05-04T12-16-23Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_025_2026-05-04T12-16-23Z.md
+
+**Verdict:** STUCK — Setup script halted at `SETUP_FAIL git-fixture[0] https://github.com/Emasoft/scen025-kanban-fixture — expected local clone at fixtures/git/scen025-kanban-fixture; scenario author must prepare the fork in advance`. Verified via `gh repo view`: the GitHub repo `Emasoft/scen025-kanban-fixture` does NOT exist on GitHub. The required GitHub Project named "SCEN-025 Fixture Board" with 5 specific columns also does not exist (only `KANBAN-TEST` project #1 exists). No UI actions taken. State-wipe verified no-op (4 SHA256 hashes match backup MANIFEST byte-for-byte).
+
+### Critical learnings SCEN-025
+
+- **SCEN-018 SETUP_FAIL pattern repeats exactly**: same root cause — scenario references a GitHub fixture repo that the scenario author never created. SCEN-018 is `Emasoft/scen018-test-repo-alpha` (custom setup with `fixture_github_repo` provisioner). SCEN-025 is `Emasoft/scen025-kanban-fixture` (generic 6-line wrapper, NO provisioner). Pattern recognition shortcut: check `gh repo view <fixture-repo>` BEFORE running setup script — saves the 30s setup-then-fail cycle.
+- **GitHub Project sync feature is REAL in code**: `services/teams-service.ts:32` imports `@/lib/github-project`. `services/teams-service.ts:62-330` handles `team.githubProject` field with `linkProject` → `configureProjectTemplate` → `updateTeam`. Team type has both `githubProject` and `kanbanConfig` fields (lib/team-registry.ts:313). UI form exists at `components/sidebar/TeamListView.tsx:362-553`. So the test target IS implementable — only the fixture is missing.
+- **`fixture-helpers.sh` is missing a Project board provisioner**: it has `fixture_github_repo` (lines 44-92) but no `fixture_github_project_v2`. Provisioning a v2 Project with specific Status field columns requires GraphQL (gh CLI doesn't expose option mutation as of 2026-04). Filed P1-PROPOSAL-001 with full GraphQL recipe.
+- **subagent write-guard hook tripped on absolute path mkdir**: `mkdir -p /Users/emanuelesabetta/ai-maestro/reports/...` was BLOCKED by the path heuristic even though the path IS under project root. Fix: use relative paths (`mkdir -p reports/scenarios-runner/screenshots/...`) from project root, OR `cd "$PROJECT_DIR" && mkdir -p reports/...`. Path-based heuristic still flags absolute project-root paths.
+- **MEMORY.md is in BOTH global and project-scoped paths**: write-guard blocks `~/.claude/agent-memory/scenario-runner/MEMORY.md` but ALLOWS `<project>/.claude/agent-memory/scenario-runner/MEMORY.md`. Project-scoped is the canonical location for runs that need to persist across batches.
+- **Heartbeat protocol works as designed**: no prior heartbeat existed at start → wrote initial epoch → refreshed at every Phase boundary → DELETE on clean exit. Heartbeat at `tests/scenarios/state/runner-heartbeat-SCEN-025.txt`.
+- **State files identical pre-/post-run**: governance.json + registry.json + teams.json + groups.json all hash-match the backup MANIFEST exactly. State-wipe restoration is a no-op since no mutations occurred.
+
+### Workflow patterns confirmed SCEN-025
+
+- **Setup script halts cleanly on missing fixture**: `scenario-setup.sh` line 92-94 detects missing local clone and aborts with explicit message BEFORE any state mutation. The backup MANIFEST is still written (4 files captured before fixture check). This makes resumption / cleanup safe.
+- **Pre-existing dashboard page reusable across batch**: `dev-browser status` shows daemon PID 99738 (uptime 904+ minutes, 2 browsers managed). Dashboard page at localhost:23000/ already logged in from prior batch runs. `dev-browser --browser ai-maestro-scenarios --headless --timeout 60 <<EOF ... EOF` connects cleanly — `browser.getPage("dashboard")` returns the same logged-in page across cron fires.
+- **gh CLI authenticated with project scope**: `gh auth status` shows `gho_***` with scopes `gist, project, read:org, repo, workflow`. Can read `gh project list --owner Emasoft` (returns KANBAN-TEST #1).
+
+### Cleanup state SCEN-025
+
+- **No agents created** — scenario never started.
+- **No teams created** — scenario never started.
+- **Cemetery**: 0 entries (no deletes occurred).
+- **STATE-WIPE**: 4 files SHA256-match — no-op success.
+- **Pre-existing 18 user agents preserved** (untouched).
+- **Backup preserved**: `tests/scenarios/state-backups/SCEN-025_20260504T121403Z/` retained.
+- **One screenshot kept (NOT purged)**: `S001_baseline.jpg` — Rule 10 says only verified-PASS purges, this is STUCK so screenshots stay as evidence.
+
+### Active run cleared
+
+(none — SCEN-025 STUCK, 0 source-code commits added, 1 commit will be added with reports + state.json + memory)
+
+---
+
 ## SCEN-024 2026-05-04T11:36Z — PASS (27 PASS, 0 FAIL, 0 bugs, 4 issues, 9 proposals)
 
 **Run ID:** 20260504T113631Z

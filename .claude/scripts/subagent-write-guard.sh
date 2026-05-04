@@ -126,6 +126,21 @@ is_allowed_path() {
         # so the private tmp coverage above is enough
     esac
 
+    # 3. Test-agent workdirs created during a scenario run.
+    #    Scenarios that need to simulate user-level edits to a test
+    #    agent's settings (e.g. SCEN-023 Phase 6/7 — wake-gate auto-repair
+    #    test) must be allowed to write into the test agent's own
+    #    workdir. The naming pattern $HOME/agents/scen<digits>-* is
+    #    enforced by the wizard — only test agents created during a
+    #    scenario run match this pattern. Real user agents (alexandre,
+    #    luckas-bot, etc.) are NOT scen-prefixed and remain blocked.
+    case "$abs" in
+        "$HOME"/agents/scen[0-9]*) return 0 ;;
+        "$HOME"/agents/scen[0-9]*/*) return 0 ;;
+        "$HOME"/agents/scen-[0-9]*) return 0 ;;
+        "$HOME"/agents/scen-[0-9]*/*) return 0 ;;
+    esac
+
     return 1
 }
 

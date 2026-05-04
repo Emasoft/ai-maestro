@@ -139,7 +139,17 @@ The parent harness's master setup (per Rule 13) has already provisioned fixtures
 
 1. `git status` to record `commit_start`
 2. Generate a `RUN_ID` in ISO 8601 basic format: `RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)`
-3. **Run the per-scenario setup script (MANDATORY):** invoke
+3. **Heartbeat self-check (MANDATORY — added 2026-05-04):** before doing anything else, look for a stale prior-run heartbeat at `${CLAUDE_PROJECT_DIR}/tests/scenarios/state/runner-heartbeat-SCEN-${NNN}.txt`. If the file exists:
+   - **Fresh heartbeat (< 10 min old):** another runner is actively processing this scenario right now. Exit immediately with `[DUPLICATE-RUNNER-DETECTED] another runner heartbeat is fresh, refusing to double-dispatch`. Do NOT touch state.json. Do NOT proceed to setup.
+   - **Stale heartbeat (≥ 10 min old):** a prior runner died. Per Rule 6 (state-mutating bypass invalidates the run), the prior run is INVALIDATED. Delete the stale heartbeat file, log "RECOVERY <SCEN-NNN> resumed from stale-heartbeat" to `state/recovery.log`, and proceed to a fresh setup starting from S001 — never attempt to "resume" the prior run mid-step. Restart from the beginning, per Rule 6's invalidation semantics.
+4. **Initial heartbeat write:** write the current epoch to the heartbeat file in this exact format (first-line `epoch=` is what `state-machine-tick.sh` parses):
+   ```
+   epoch=$(date +%s)
+   scenario=SCEN-${NNN}
+   phase=phase_b
+   started_at=${RUN_ID}
+   ```
+5. **Run the per-scenario setup script (MANDATORY):** invoke
    ```
    bash "${CLAUDE_PROJECT_DIR}/tests/scenarios/scripts/setup-SCEN-${NNN}.sh"
    ```
@@ -165,6 +175,16 @@ For each numbered step in the scenario file:
 3. **Verify** via another snapshot OR a read-only state check (`curl GET` on a health/state endpoint — reads are allowed, writes are not — Rule 6).
 4. **Screenshot** via `page.screenshot()` + `saveScreenshot()`, then move the file from `~/.dev-browser/tmp/` to the canonical Rule 10 path `reports/scenarios-runner/screenshots/SCEN-${NNN}_${RUN_ID}/S<step>_${RUN_ID}_<short-desc>.jpg`.
 5. **Append a row** to the in-progress report including the screenshot's relative path.
+6. **Heartbeat refresh (MANDATORY — added 2026-05-04):** at every step boundary AND before any long-running operation (any wait > 60s, any sub-process call > 60s, any inter-agent message wait), refresh the heartbeat file:
+   ```
+   cat > "${CLAUDE_PROJECT_DIR}/tests/scenarios/state/runner-heartbeat-SCEN-${NNN}.txt" <<HBEOF
+   epoch=$(date +%s)
+   scenario=SCEN-${NNN}
+   phase=phase_c
+   step=S<NNN>
+   HBEOF
+   ```
+   Atomic write is fine — partial-line risk is acceptable because the cron's stale-detection is forgiving (>90 min default). The point is a freshness signal, not bullet-proof transactional state.
 
 For the API specifics (which methods to call, how to pass selectors, how to use `track`), refer to the dev-browser skill loaded at the start. This agent definition deliberately does NOT duplicate that documentation.
 
@@ -223,6 +243,14 @@ Improvements: reports/scenarios-runner/scenario_proposed-improvements_NNN_<times
 ```
 
 No code blocks, no step tables, no screenshots inline — just the summary lines. The parent (run-scenarios-batch skill or main Claude) reads the report file if it needs details.
+
+**Before returning (MANDATORY — added 2026-05-04): clear the heartbeat file.**
+
+```bash
+rm -f "${CLAUDE_PROJECT_DIR}/tests/scenarios/state/runner-heartbeat-SCEN-${NNN}.txt"
+```
+
+Removing the heartbeat is the signal that the run reached a clean terminus. If the file remains after you return, the autonomous-batch state machine treats that as a dead/stuck run and may schedule recovery. **Only clear the heartbeat on a clean (PASS/FAIL/PARTIAL with full reports written) return — never clear if you crash, hit a rate limit mid-run, or are killed mid-step.** A leftover stale heartbeat is the desired signal so the recovery layer can act.
 
 ## Rate-limit resilience
 

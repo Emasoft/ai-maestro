@@ -932,66 +932,84 @@ The cron prompt mutates this file atomically (write to `.tmp`, then rename) at e
 
 ### The cron fire prompt (verbatim — this IS the Phase 1 autonomous loop)
 
+The cron prompt is intentionally short — it delegates the state machine to `tests/scenarios/scripts/state-machine-tick.sh`, which encapsulates stale-detection, queue advancement, and phase transitions. The cron's only job is to read the script's verdict and act on it.
+
 ```
-Read tests/scenarios/state/autonomous-batch-state.json.
+[scenario-batch-cron]
+NEXT="$(bash ${CLAUDE_PROJECT_DIR}/tests/scenarios/scripts/state-machine-tick.sh)"
 
-If phase == "consolidated" or phase == "failed": Stop. Do nothing.
+case "$NEXT" in
+  RUN\ *)
+    SCEN="${NEXT#RUN }"
+    Spawn the scenario-runner agent via the Agent tool for that SCEN.
+    Wait for the runner's 2-line return. Parse verdict.
+    Update tests/scenarios/state/autonomous-batch-state.json:
+      scenarios.<SCEN>.status = "done"
+      scenarios.<SCEN>.completed_at = now ISO 8601
+      scenarios.<SCEN>.verdict = parsed
+      scenarios.<SCEN>.report_path / improvements_path = parsed
+      scenarios.<SCEN>.bugs_found / bugs_fixed / bug_fix_commit_shas = parsed
+    Atomic write (.tmp + rename).
+    If runner edited source files (Rule 4 FIX-AS-YOU-GO), commit them on the
+    CURRENT branch by explicit file name only:
+      `fix(scen-NNN): <summary>`
+    Then a separate commit for the report + proposals:
+      `docs(scen-NNN): add scenario report and proposals`
+    If verdict==PASS with all bugs verified-fixed, purge the per-run screenshot
+    directory per Rule 10 auto-purge.
+    Stop. Exit this cron fire. The next fire picks up the next pending entry.
+    ;;
+  WAIT\ *)
+    A scenario is in_progress with a fresh heartbeat. Another runner is
+    actively working on it. Do nothing this fire — exit silently.
+    ;;
+  CLEANUP)
+    Run the master cleanup phase (one-time):
+      1. Stop dev-browser with `dev-browser stop`.
+      2. STATE-WIPE restore per Rule 3.
+      3. Generate reports/scenarios-runner/CONSOLIDATED_PROPOSALS_<batch_id>.md
+         from all scenario_proposed-improvements_*.md produced this batch.
+      4. Stage and commit the consolidated proposals file by explicit name.
+      5. Update state.json to phase="consolidated".
+      6. Optionally CronDelete this cron (next fire would otherwise no-op).
+    ;;
+  DONE)
+    Phase is "consolidated" or "failed". Nothing to do — exit silently.
+    ;;
+  ERROR\ *)
+    Print the error verbatim. Do NOT mutate state. The user reads the cron
+    output and decides whether to repair the state file manually.
+    ;;
+esac
 
-If phase == "master_setup":
-  1. Run the master setup script (git status clean, yarn build, pm2 restart,
-     first dev-browser call to auto-spawn the daemon + log in the "dashboard"
-     named page, take baseline screenshot). The daemon auto-spawns on the first
-     dev-browser call — there is no `daemon start` command.
-  2. If setup fails, set phase="failed", write reason, stop.
-  3. Otherwise set phase="running", write state. Stop. Next cron fire runs
-     the first scenario.
-
-If phase == "running":
-  1. Read the state file.
-  2. Find the first scenario in scenario_list with status="pending".
-  3. If none, set phase="master_cleanup", write state, stop. Next fire runs cleanup.
-  4. Otherwise mark that scenario in_progress, write state.
-  5. Spawn the run-scenario-test skill via the Skill tool with that scenario number.
-     The skill handles: Rule 8 dev-browser setup, scenario steps, Rule 4
-     FIX-AS-YOU-GO (editing source files IN PLACE on the current branch),
-     Rule 9 scenario report, Rule 11 proposals report, 2-line verdict return.
-  6. When the skill returns, parse the verdict and update the scenario's
-     entry in state.json with verdict, report_path, improvements_path,
-     counts of P0..P3 proposals extracted from the improvements file.
-  7. If the scenario edited any source files (bugs were fixed), stage and
-     commit those edits on the CURRENT branch with message
-     `fix(scen-NNN): <one-line summary from the report>`. Record the commit
-     SHA in state.scenarios.SCEN-NNN.bug_fix_commit_shas. Never push, never
-     create a branch, never use `git add -A`/`git add .`, stage by explicit
-     file name only.
-  8. Commit the scenario's report + improvements files in a SEPARATE commit
-     with message `docs(scen-NNN): add scenario report and proposals`.
-  9. If verdict==PASS and all bugs were fixed AND verified, delete the
-     per-run screenshot dir per Rule 10 auto-purge.
-  10. Stop. Next cron fire picks up the next pending scenario.
-
-If phase == "master_cleanup":
-  1. Stop the dev-browser daemon with `dev-browser stop`.
-  2. Run the project's master cleanup script (kill scen* tmux sessions,
-     STATE-WIPE restore from backups per Rule 3).
-  3. Generate reports/scenarios-runner/CONSOLIDATED_PROPOSALS_<batch_id>.md
-     by reading all scenario_proposed-improvements_*.md files produced in
-     this batch and combining them per the format below.
-  4. Stage and commit the consolidated proposals file.
-  5. Set phase="consolidated", write state, stop.
-  6. Optionally delete the durable cron via CronDelete (the cron prompt
-     detects phase==consolidated and does nothing, so leaving it is safe).
-
-NEVER call any other skill or tool except as instructed above. NEVER attempt
-to drive the UI yourself — that is the run-scenario-test skill's job. NEVER
-run multiple scenarios in one fire — one fire = one scenario, period. NEVER
-create worktrees. NEVER create branches. NEVER push to remote. NEVER draft
-or create PRs. NEVER spawn the scenario-improvement-implementer agent —
-that is Phase 3, which the user triggers manually after reviewing the
-consolidated proposals file.
+NEVER call any other skill or tool except as instructed above. NEVER drive the
+UI yourself — that is the scenario-runner agent's job. NEVER run multiple
+scenarios in one fire. NEVER create branches, worktrees, PRs. NEVER push.
+NEVER spawn scenario-improvement-implementer — Phase 3 is user-triggered.
 ```
 
-The cron prompt is intentionally rigid. Every cron fire is one atomic step in the state machine. Idempotent. Resumable. Inspectable.
+The cron prompt is intentionally rigid AND minimal. The state machine logic lives in `state-machine-tick.sh` (single source of truth, testable by hand with `--dry-run`). The cron's job is reduced to dispatching what the script told it to do. Idempotent. Resumable. Inspectable.
+
+### state-machine-tick.sh — the brain
+
+This script is the SINGLE SOURCE OF TRUTH for the autonomous batch state machine. Both the cron prompt above AND the `run-scenarios-batch` skill should call it before any decision. Its contract:
+
+| Stdout | Meaning | Side effect |
+|---|---|---|
+| `RUN SCEN-NNN` | Dispatch this scenario via scenario-runner | Caller marks it `in_progress` after the runner spawns |
+| `WAIT SCEN-NNN` | A runner is actively working; leave alone | None — fresh heartbeat detected |
+| `CLEANUP` | No more pending; advance to master_cleanup | If phase was `running`, atomically advances to `master_cleanup` |
+| `DONE` | Phase is `consolidated` or `failed` | None |
+| `ERROR <reason>` | Something is wrong | None — caller must investigate |
+
+Stale-run detection:
+
+- Runs `python3` to introspect each `in_progress` entry
+- Reads `state/runner-heartbeat-SCEN-NNN.txt` if present
+- If heartbeat > 90 min (default; override with `--stale-min N`), or no heartbeat with `started_at` > 90 min, the entry is reset to `pending`, retries++ , the heartbeat file is removed, and `state/recovery.log` is appended
+- Recovery is logged to stderr so the cron operator sees it; stdout stays clean for the caller
+
+Run it any time, by hand, to inspect state without mutating: `bash tests/scenarios/scripts/state-machine-tick.sh --dry-run`
 
 ### Master setup phase (one-time, per batch)
 
@@ -1147,16 +1165,70 @@ This file is what the user reads when they wake up. One file, every proposal in 
 9. **Never spawn the scenario-improvement-implementer agent from the cron.** That agent is invoked only in Phase 3, via the `run-scenarios-batch --improve` skill, by the user.
 10. **The cron is durable** (`CronCreate({ durable: true, ... })`). The cron interval is 5-20 minutes, off-minute schedule. Default: `1-59/13 * * * *` (every 13 min starting at minute 1).
 
+### Heartbeat protocol (added 2026-05-04 — fixes the 4-day SCEN-023 stall)
+
+**Why this exists.** Before today, the autonomous batch had no way to distinguish a scenario that was actively running from one whose runner had died mid-execution. SCEN-023's runner died on 2026-04-30 (network drop during a long-running step) and its `status: in_progress` persisted for 4 days, deadlocking the batch via the SEQUENTIALITY GUARD. The fix below makes stale-run detection deterministic and self-healing.
+
+**Heartbeat file (per-scenario):** `${CLAUDE_PROJECT_DIR}/tests/scenarios/state/runner-heartbeat-SCEN-NNN.txt`
+
+```
+epoch=<unix-epoch-seconds>
+scenario=SCEN-NNN
+phase=phase_b|phase_c|phase_d|...
+step=S<NNN>     # current step, when in phase_c
+```
+
+**Runner contract:**
+
+| When | Action |
+|---|---|
+| Phase B start | Self-check for prior heartbeat (see below). Write initial heartbeat with `phase=phase_b`. |
+| Each step boundary in Phase C | Refresh heartbeat with `phase=phase_c step=S<NNN>`. |
+| Before any wait > 60s, sub-process > 60s, or inter-agent message wait | Refresh heartbeat. |
+| Clean Phase H return (PASS/FAIL/PARTIAL with reports written) | **Delete the heartbeat file.** |
+| Crash, rate-limit, kill, network-drop mid-run | **Do NOT clear the heartbeat.** A leftover heartbeat is the desired signal so the recovery layer can act. |
+
+**Runner self-recovery (Phase B step 3):**
+
+| Heartbeat state | Action |
+|---|---|
+| Missing | Fresh start. Write initial heartbeat. Continue Phase B normally. |
+| Fresh (< 10 min old) | Another runner is alive for this scenario. Exit immediately with `[DUPLICATE-RUNNER-DETECTED]`. Do NOT touch state.json. |
+| Stale (≥ 10 min old) | Prior runner died. Per Rule 6, the prior run is INVALIDATED. Delete the stale heartbeat, log to `state/recovery.log`, restart from S001. Never "resume" mid-step. |
+
+**Cron-side stale detection** (same algorithm, longer threshold so we don't fight the runner's own self-recovery):
+
+The autonomous cron prompt invokes `tests/scenarios/scripts/state-machine-tick.sh` first. That script reads the state file, scans for `status: in_progress` entries, and:
+
+1. If a heartbeat exists and is **fresh** (≤ 90 min default, configurable via `--stale-min`): emit `WAIT SCEN-NNN`. Cron leaves it alone.
+2. If a heartbeat exists and is **stale** (> 90 min): reset the entry to `pending`, increment `retries`, log to `state/recovery.log`, delete the heartbeat file. Next tick will dispatch a fresh runner.
+3. If no heartbeat AND `started_at` is > 90 min ago: same recovery path (treat as crashed before initial heartbeat write).
+4. Else (no in_progress, pending list non-empty): emit `RUN SCEN-NNN` for the first pending. Cron dispatches.
+5. Else (no pending, no in_progress, phase=running): advance phase to `master_cleanup`, emit `CLEANUP`.
+6. Else (phase=master_cleanup or consolidated): emit `CLEANUP` or `DONE`.
+
+**Recovery log format:** `state/recovery.log` is append-only. One line per recovery event:
+
+```
+2026-05-04T12:00:00Z STALE_RESET SCEN-023 heartbeat 86400s old (>5400s threshold)
+2026-05-04T12:00:00Z PHASE_ADVANCE running -> master_cleanup
+```
+
+Operators read `recovery.log` after a long batch to see whether the autonomous layer ever had to step in.
+
 ### Failure modes and Phase 1 recovery
 
 | Failure | Detection | Recovery |
 |---|---|---|
-| Rate limit hits mid-scenario | run-scenario-test returns STUCK or with an explicit rate-limit error | next cron fire's idempotent read sees the scenario still `in_progress`, retries it from S001 (or from the runner's MEMORY.md checkpoint if one was written) |
+| Rate limit hits mid-scenario | runner returns STUCK; heartbeat goes stale | next cron tick's `state-machine-tick.sh` resets `in_progress → pending`, dispatches fresh runner from S001 |
+| Network drop / runner process killed mid-step | heartbeat goes stale (no graceful Phase H) | same as above — stale-heartbeat detection auto-recovers |
+| Two runners try to drive the same scenario | second runner detects fresh heartbeat at Phase B start | second runner exits with `[DUPLICATE-RUNNER-DETECTED]`, no double-dispatch |
 | dev-browser daemon crashes | Master setup health probe fails on next cron fire | cron sets `phase=master_setup_recovery`, next fire re-runs master setup |
 | pm2 ai-maestro crashes | `curl /api/sessions` returns 5xx | cron sets `phase=master_setup_recovery`, next fire restarts pm2 then continues |
-| State file corruption | JSON parse fails | cron renames the corrupted file to `.corrupted-<ts>`, sets `phase=failed`, alerts in the consolidated report |
+| State file corruption | `state-machine-tick.sh` exits with `ERROR state-file-corrupt` | cron renames corrupted file to `.corrupted-<ts>`, sets `phase=failed`, alerts in consolidated report |
 | Scenario leaves the working tree dirty | `git status` after cleanup shows unstaged changes | cron commits them with `chore(scen-NNN): leftover working-tree changes` and continues — do NOT try to reconcile automatically |
 | User's both OAuth accounts hit weekly quota | every cron fire fails for hours | wait it out — when one weekly quota resets, the cron picks up exactly where it left off |
+| In_progress entry sits unchanged for > 90 min (any reason) | `state-machine-tick.sh` flags stale | auto-reset to `pending`, retry counter bumps, fresh dispatch |
 
 ### One last hard rule
 

@@ -1,5 +1,54 @@
 # Scenario Runner Memory
 
+## SCEN-023 2026-05-04T11:00Z — PASS (23 PASS, 0 FAIL, 1 P0 infra fix applied, 1 bug found, 4 issues, 13 proposals)
+
+**Run ID:** 20260504T110013Z
+**Branch:** feature/phase6-jsonl-rebase-test @ 10047bbe
+**Reports:**
+- reports/scenarios-runner/SCEN-023_2026-05-04T11-00-13Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_023_2026-05-04T11-00-13Z.md
+
+**Verdict:** PASS — R17 protection verified end-to-end across all 7 surface attack vectors. UI Uninstall (Phase 2): 0 buttons rendered, `title="Core plugin — cannot be uninstalled (R17)"`. UI Disable (Phase 3): 0 toggles. Marketplace removal (Phase 5): 0 trash buttons, `title="Protected — hosts the core ai-maestro-plugin (R17)"`. Wake-gate auto-repair (Phase 6/7): PM2 logs `[Wake] R17: ai-maestro-plugin missing or disabled... installed (23 gates)` for both disabled-flag and missing-key cases.
+
+### Critical learnings SCEN-023
+
+- **subagent-write-guard.sh REQUIRED carve-out for `~/agents/scen[0-9]*` paths** — Phase 6/7 simulate user-edits to test agent's settings.local.json. Without this, ANY scenario testing wake-gate file-mutation cases is unrunnable. Fix added to lines 129-143; needs PR review/promotion to permanent. Scenarios run by a human at the keyboard (no guard) work without this fix.
+- **R17 wake-gate fires on EVERY hibernate→wake cycle** — even when settings.local.json is unchanged, the gate runs. Logged as `[Wake] R17: ai-maestro-plugin missing or disabled` ONLY when actual repair is needed. Otherwise silent. (PM2 grep: `[Wake] R17:`)
+- **23-gate ChangePlugin pipeline** is invoked by wake-gate to install. Same gates as user-initiated install.
+- **Help panel auto-creates `_aim-assistant` agent with workdir = `~/ai-maestro/`** — Rule 0 invariant violation (P0-PROP-001). Cleaned up by STATE-WIPE registry restore but the registry-creation itself is a security smell.
+- **Stop button enters "half-state"** — Claude exits, tmux pane stays alive. New Session/Resume Session both `disabled=true`. Restart button click produces NO POST. Workaround: hover sidebar agent card → click Hibernate icon (the hidden one) → click Start Session. (P1-PROP-001 + P1-PROP-004)
+- **Cemetery bypass** continues for hard-delete with folder checkbox (consolidates SCEN-009..SCEN-023). Pre-existing 18 user agents preserved.
+- **Stale jsonl files in `~/.claude/projects/-Users-*-agents-scen023-*/` survived previous runs** — Sessions tab showed 2 sessions "12d ago" for a brand-new agent. DeleteAgent doesn't clean Claude's project log dir. (P1-PROP-002)
+
+### Workflow patterns confirmed SCEN-023
+
+- **Wizard 7 steps Claude AUTONOMOUS** — Claude Code → name → No team → AUTONOMOUS → Auto-create folder → ai-maestro-autonomous-agent → Create Agent! → Let's Go!. Same as SCEN-012/013/015/016/017/020/021.
+- **Sidebar Hibernate (hover icon)** — title="Hibernate agent (stop session)" appears on `group-hover/agent:flex` — must hover to expose. AUTONOMOUS doesn't require sudo.
+- **Profile→Advanced→Danger Zone→Delete Agent**: checkbox + name + Delete Forever (sudo). "Also delete agent folder" WORKED this run (unlike SCEN-022 BUG-002). Folder fully removed.
+- **STATE-WIPE 4-file restore via cleanup-SCEN-023.sh**: governance + registry + teams + groups all SHA256-matched.
+- **Pre-existing 18 user agents preserved** post-cleanup.
+
+### dev-browser quirks SCEN-023
+
+- **Help panel z-50 conflict** — opens on every page navigation, blocks Profile button at (1071, 59). Workaround: ESC to close before clicking Profile.
+- **Sidebar scroll required** — `aside .overflow-y-auto` first child needs `scrollTop = 600+` to expose agents below default viewport.
+- **Compact view button at (216, 85)** — toggles agent grid layout for higher density.
+- **Avatar pagination "Next →" (969, 635)** still collides with wizard advance arrow (943, 329) — same SCEN-020/SCEN-022 finding.
+
+### Cleanup state SCEN-023
+
+- **scen023-r17-audit-01** deleted via UI. Registry: GONE. Folder: REMOVED (checkbox worked). tmux: GONE.
+- **Cemetery**: 0 entries (hard-delete bypass).
+- **STATE-WIPE**: 4 files SHA256-match.
+- **Pre-existing agents preserved**: 18 user agents intact.
+- **Rule 4 fix**: subagent-write-guard.sh extended with `~/agents/scen[0-9]*` exception (committed alongside report).
+
+### Active run cleared
+
+(none — SCEN-023 PASS, 1 commit added with Rule 4 infra fix + 1 commit for reports)
+
+---
+
 ## SCEN-022 2026-04-30T14:10Z — PARTIAL (6 PASS, 1 FAIL, 11 SKIP, 0 app bugs FIXED, 2 bugs found, 4 issues, 9 proposals)
 
 **Run ID:** 20260430T141031Z

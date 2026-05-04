@@ -1,5 +1,59 @@
 # Scenario Runner Memory
 
+## SCEN-024 2026-05-04T11:36Z — PASS (27 PASS, 0 FAIL, 0 bugs, 4 issues, 9 proposals)
+
+**Run ID:** 20260504T113631Z
+**Branch:** feature/phase6-jsonl-rebase-test @ babaf59d
+**Reports:**
+- reports/scenarios-runner/SCEN-024_2026-05-04T11-36-31Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_024_2026-05-04T11-36-31Z.md
+
+**Verdict:** PASS — BUG-002 from SCEN-005 (DeleteTeam revert path) regression-locked. Created MANAGER + auto-COS team with 2 MEMBER agents, deleted team WITHOUT "Delete agents too" checkbox, verified: (a) auto-COS reverted CHIEF-OF-STAFF→AUTONOMOUS with COS plugin uninstalled, (b) both former MEMBERs reverted to AUTONOMOUS with autonomous-agent plugin installed, (c) MANAGER (R18 standalone title) preserved untouched. PR #11 (`p0-001-authcontext-v2`) holds.
+
+### Critical learnings SCEN-024
+
+- **Delete Team uses 2-step inline confirm with `onMouseLeave` reset** — `components/sidebar/TeamCard.tsx:128-145`. The Confirm button (replaces Trash icon) resets `confirmDelete` state when mouse leaves. Standard `page.mouse.click(coords)` fails because the cursor moves before the click registers. **Must use direct DOM `.click()` chained in same JS turn** to delete teams via automation. Filed P0-PROP-001.
+- **DeleteTeam revert is fully working** — 4 invariants verified in one run: (1) team gone from teams.json, (2) auto-COS reverts to AUTONOMOUS + plugin swapped to autonomous-agent, (3) all former MEMBERs revert to AUTONOMOUS, (4) MANAGER preserved (R18 standalone title). No bugs found.
+- **6th cleanup confirmation: hard-delete-with-folder bypasses Cemetery** (consolidates SCEN-009..SCEN-024). When "Also delete agent folder" is checked, no cemetery entry is created. Filed P2-PROP-002 to document.
+- **Wizard MANAGER path now installs role-plugin during wizard** — no separate post-creation title-change step needed. The wizard step 4 MANAGER selection auto-installs `ai-maestro-assistant-manager-agent` + R17 core. Same pattern in SCEN-022.
+- **Sidebar Delete Team has NO main-area workflow** — only accessible via hover icons in sidebar card. No Team Profile Panel exists. Filed P1-PROP-002.
+- **Auto-COS persona is RANDOM ROBOT label** — `cos-scen024-team` got persona name "Kairo". Tests must use AGENT NAME (deterministic) for delete confirmation, not the LABEL. Documented in scenario authoring rule.
+
+### Workflow patterns confirmed SCEN-024
+
+- **Wizard 7 steps Claude MANAGER + AUTONOMOUS** — same as SCEN-022/023. Claude Code → name → No team → MANAGER/AUTONOMOUS → Auto-create folder → role-plugin → Create Agent! → Let's Go!. MANAGER path installs assistant-manager-agent. AUTONOMOUS path installs autonomous-agent.
+- **Wizard advance arrow at (943, 329, 48x38)** — LARGEST SVG-only button in wizard dialog. Smaller (979, 67, 24x24) is X close button — DO NOT click.
+- **Step 6 role-plugin auto-advance for AUTONOMOUS** — when only one compatible plugin exists, the click on plugin card auto-advances to step 7 (no separate Continue click). MANAGER step 6 has Continue button.
+- **Team Create dialog**: name + agentIds (multi-select divs) + Create Team button. CreateTeam pipeline auto-creates `cos-<teamslug>` agent with `chief-of-staff` title. agentIds field auto-includes the auto-COS.
+- **Delete Team flow**: Hover team card → click Trash icon → button changes to "Confirm" → click Confirm → DeleteTeamDialog modal opens with inline password + "Delete agents too" checkbox → enter password → click Delete Team → Rule 12 sudo modal appears → enter password → confirms.
+- **Profile→Advanced→Danger Zone→Delete Agent** flow same as SCEN-017/020/021/022/023. Checkbox "Also delete agent folder" WORKS this run (folder removed). Sudo modal appears once per delete.
+
+### dev-browser quirks SCEN-024
+
+- **Confirm button onMouseLeave reset** is the most important automation gotcha — covered above as P0-PROP-001.
+- **`aim_create_agent` helper needs longer timeout (90+ s)** — wizard creation animation alone is 18s. Filed P1-PROP-001.
+- **Cookie persistence**: Login from SCEN-023 still valid 30+ minutes later in `--browser ai-maestro-scenarios`. `aim_login` returns `already_logged_in: true`.
+- **Title Assignment Dialog**: For demoting MANAGER, the AUTONOMOUS card may scroll above viewport (y=-36). Must use direct DOM `.click()` (no mouse coords). Confirm button stays disabled until a different title is selected.
+- **Profile panel selection**: Clicking agent in sidebar selects but doesn't open Profile. Must click "Profile" button OR "View Profile" button (when agent is offline). Profile button at (1071, 59).
+
+### Cleanup state SCEN-024
+
+- **scen024-mgr-01** deleted via UI (demote first then delete). Registry: GONE. Folder: REMOVED. tmux: GONE.
+- **scen024-cos-01** deleted via UI. Registry: GONE. Folder: REMOVED.
+- **scen024-mbr-01** deleted via UI. Registry: GONE. Folder: REMOVED.
+- **cos-scen024-team** (auto-COS, label "Kairo") deleted via UI. Registry: GONE. Folder: REMOVED.
+- **scen024-team** deleted via UI in S014. teams.json: GONE.
+- **Cemetery**: 0 entries (hard-delete bypass, consistent with SCEN-009..023).
+- **STATE-WIPE successful**: 4 files SHA256-matched (governance.json + registry.json + teams.json + groups.json).
+- **Pre-existing 18 user agents preserved**.
+- **Pre-existing 3 teams preserved** (Test Kanban Team, scen003-test-wizard-team, scen8-noplugin-team).
+
+### Active run cleared
+
+(none — SCEN-024 PASS, 0 commits with bug fixes, 1 commit added with reports + memory)
+
+---
+
 ## SCEN-023 2026-05-04T11:00Z — PASS (23 PASS, 0 FAIL, 1 P0 infra fix applied, 1 bug found, 4 issues, 13 proposals)
 
 **Run ID:** 20260504T110013Z

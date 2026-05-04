@@ -1,5 +1,48 @@
 # Scenario Runner Memory
 
+## SCEN-026 2026-05-04T12:26Z — STUCK at setup (4 fixtures missing + Phase 4-5 architectural gap)
+
+**Run ID:** 20260504T122652Z
+**Branch:** feature/phase6-jsonl-rebase-test @ 2912f4d8
+**Reports:**
+- reports/scenarios-runner/SCEN-026_2026-05-04T12-26-52Z.report.md
+- reports/scenarios-runner/scenario_proposed-improvements_026_2026-05-04T12-26-52Z.md
+
+**Verdict:** STUCK — Setup script halted at `SETUP_FAIL git-fixture[0] https://github.com/openai/plugins — expected local clone at tests/scenarios/fixtures/git/plugins`. Beyond the missing 4 fixture clones, deeper code-side gaps make Phases 4-5 fundamentally untestable as written. State files all match backup MANIFEST byte-for-byte (5 SHA256 hashes).
+
+### Critical learnings SCEN-026
+
+- **3rd consecutive SETUP_FAIL pattern**: SCEN-018 → SCEN-025 → SCEN-026. Pattern: scenario references fixtures the author never prepared. SCEN-026 is by far the worst case — 4 fixture clones missing AND name-collision in the path scheme (two `codex-plugin` repos collide on the basename derived by scenario-setup.sh:90).
+- **handleAddMarketplace is GitHub-URL-only**: `app/api/settings/marketplaces/route.ts:1295-1338` rejects any non-GitHub URL with HTTP 400. The UI placeholder `Add marketplace from GitHub URL...` confirms no Local-directory option exists. Underlying pipeline `CreateMarketplace` already supports `source: { path }` (services/element-management-service.ts:3066-3083) — the route just doesn't expose it. P0-PROP-001 detailed fix.
+- **Codex role-plugin name has unwanted `-codex` suffix**: `~/agents/role-plugins/codex-roles-marketplace/ai-maestro-programmer-agent-codex/` exists with full quad-match identity using the suffix, but CLAUDE.md states "PRESERVES the original plugin name (no suffix)" for role-plugin conversion. Either implementation diverged from spec OR doc is stale. P0-PROP-002.
+- **Local Codex marketplace name disagrees with constant**: `~/agents/role-plugins/codex-roles-marketplace/marketplace.json:name` = `ai-maestro-local-codex-roles-marketplace` (with `-codex-` infix). `lib/ecosystem-constants.ts:106` = `ai-maestro-local-roles-marketplace` (without infix). Three places, two values. P1-PROP-001.
+- **scenario-setup.sh fixture path collision**: line 90 uses `basename "$url" .git` which collides for two same-name repos under different publishers. Scenario file at lines 359-362 prescribes publisher-prefixed paths (`__` delimiter) but setup script never updated. P1-PROP-002.
+- **Codex's user-global `~/.agents/plugins/marketplace.json` doesn't exist on this system** — setup output: `BACKUP_SKIP /Users/emanuelesabetta/.agents/plugins/marketplace.json (not present)`. Scenario assumes it exists and is mutated by AI Maestro's install flow. AI Maestro should bootstrap an empty manifest. P2-PROP-001.
+- **Heartbeat protocol functioning correctly**: no prior run → wrote initial epoch → refreshed at every Phase boundary → will DELETE on clean exit. Heartbeat at `tests/scenarios/state/runner-heartbeat-SCEN-026.txt`.
+- **All 4 GitHub repos referenced by SCEN-026 actually exist on GitHub** (verified via `gh repo view`): openai/plugins (28.5MB), hashgraph-online/awesome-codex-plugins (17.2MB), remotion-dev/codex-plugin (89KB), supabase-community/codex-plugin (64KB). So unlike SCEN-025, the upstream sources are real — just never cloned to per-publisher fixture paths.
+
+### Workflow patterns confirmed SCEN-026
+
+- **State files identical pre-/post-run**: governance.json + registry.json + teams.json + groups.json + ~/.codex/config.toml all hash-match the backup MANIFEST byte-for-byte. State-wipe restoration is a no-op since no mutations occurred.
+- **Pre-existing dashboard page reusable**: `dev-browser status` shows daemon PID 99738 (uptime 915m+, 2 browsers). Dashboard page logged in from prior batch runs.
+- **Setup creates backup BEFORE checking fixtures**: `state-backups/SCEN-026_20260504T122420Z/` exists with full MANIFEST.sha256 even though setup aborted at fixture stage. P3-PROP-001 proposes `--validate` mode to defer state mutations.
+
+### Cleanup state SCEN-026
+
+- **No agents created** — scenario never started.
+- **No teams created** — scenario never started.
+- **No marketplaces added** — scenario never started.
+- **STATE-WIPE**: 5 files SHA256-match — no-op success.
+- **Pre-existing 18 user agents preserved** (untouched).
+- **Backup preserved**: `tests/scenarios/state-backups/SCEN-026_20260504T122420Z/` retained.
+- **One screenshot kept (NOT purged)**: `S001_baseline_setup_failed.jpg` — Rule 10 says only verified-PASS purges, this is STUCK so screenshots stay as evidence.
+
+### Active run cleared
+
+(none — SCEN-026 STUCK, 0 source-code commits added, 1 commit will be added with reports + state.json + memory)
+
+---
+
 ## SCEN-025 2026-05-04T12:16Z — STUCK at setup (SETUP_FAIL — fixture infrastructure missing)
 
 **Run ID:** 20260504T121523Z

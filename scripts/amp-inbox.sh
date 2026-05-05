@@ -12,7 +12,7 @@
 #
 # =============================================================================
 
-set -eo pipefail
+set -euo pipefail
 
 # Pre-source: extract --id to set agent identity before helper resolves it
 _amp_prev=""

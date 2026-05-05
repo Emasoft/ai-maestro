@@ -18,7 +18,7 @@
 #
 # =============================================================================
 
-set -e
+set -euo pipefail
 
 # Source AID helper for identity, keys, and signing
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

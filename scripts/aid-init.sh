@@ -15,7 +15,7 @@
 #
 # =============================================================================
 
-set -e
+set -euo pipefail
 
 # Source AID helper
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -103,10 +103,54 @@ echo "  Name: ${AGENT_NAME}"
 echo ""
 
 # =============================================================================
+# Resolve Agent UUID
+# =============================================================================
+#
+# SH-MAJOR-04 fix: agent directories are keyed by an immutable UUID, not
+# the mutable human-readable name. The name→UUID mapping lives in
+# .index.json. This protects the agent's identity (private key, fingerprint,
+# tokens) across rename operations.
+#
+# Resolution order for the UUID:
+#   1. If .index.json maps AGENT_NAME → UUID, reuse that UUID.
+#   2. If a legacy name-based directory exists (pre-SH-MAJOR-04 install)
+#      and has config.json, MIGRATE it: rename dir to UUID, update index.
+#   3. Otherwise, generate a fresh UUID.
+
+INDEX_FILE="${AID_AGENTS_BASE}/.index.json"
+LEGACY_AGENT_DIR="${AID_AGENTS_BASE}/${AGENT_NAME}"
+AGENT_UUID=""
+
+# Step 1: existing index entry?
+if [ -f "$INDEX_FILE" ]; then
+    EXISTING_UUID=$(jq -r --arg name "$AGENT_NAME" '.[$name] // empty' "$INDEX_FILE" 2>/dev/null || echo "")
+    # If the index entry IS already a UUID (post-SH-MAJOR-04 install) reuse it.
+    # If it's still the legacy name (== AGENT_NAME), fall through to step 2.
+    if [ -n "$EXISTING_UUID" ] && [ "$EXISTING_UUID" != "$AGENT_NAME" ]; then
+        AGENT_UUID="$EXISTING_UUID"
+    fi
+fi
+
+# Step 2: migrate legacy name-based directory (transparent upgrade)
+if [ -z "$AGENT_UUID" ] && [ -d "$LEGACY_AGENT_DIR" ] && [ -f "${LEGACY_AGENT_DIR}/config.json" ]; then
+    AGENT_UUID=$(generate_uuid)
+    NEW_AGENT_DIR="${AID_AGENTS_BASE}/${AGENT_UUID}"
+    echo "  Migrating legacy name-based directory to UUID..." >&2
+    echo "    From: ${LEGACY_AGENT_DIR}" >&2
+    echo "    To:   ${NEW_AGENT_DIR}" >&2
+    mv "$LEGACY_AGENT_DIR" "$NEW_AGENT_DIR"
+fi
+
+# Step 3: brand-new agent — generate UUID
+if [ -z "$AGENT_UUID" ]; then
+    AGENT_UUID=$(generate_uuid)
+fi
+
+# =============================================================================
 # Check Existing Identity
 # =============================================================================
 
-AGENT_DIR="${AID_AGENTS_BASE}/${AGENT_NAME}"
+AGENT_DIR="${AID_AGENTS_BASE}/${AGENT_UUID}"
 
 if [ -f "${AGENT_DIR}/config.json" ] && [ "$FORCE" != true ]; then
     echo "Agent identity already exists at ${AGENT_DIR}" >&2
@@ -114,6 +158,7 @@ if [ -f "${AGENT_DIR}/config.json" ] && [ "$FORCE" != true ]; then
     echo "  Use --force to overwrite, or use the existing identity." >&2
     echo "  Current identity:" >&2
     echo "    Name:        $(jq -r '.agent.name // .name // "?"' "${AGENT_DIR}/config.json" 2>/dev/null)" >&2
+    echo "    UUID:        ${AGENT_UUID}" >&2
     echo "    Address:     $(jq -r '.agent.address // .address // "?"' "${AGENT_DIR}/config.json" 2>/dev/null)" >&2
     echo "    Fingerprint: $(jq -r '.agent.fingerprint // .fingerprint // "?"' "${AGENT_DIR}/config.json" 2>/dev/null)" >&2
     exit 1
@@ -143,10 +188,12 @@ jq -n \
     --arg tenant "$TENANT" \
     --arg address "$ADDRESS" \
     --arg fingerprint "$FINGERPRINT" \
+    --arg uuid "$AGENT_UUID" \
     --arg created "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{
-        version: "1.0",
+        version: "1.1",
         agent: {
+            id: $uuid,
             name: $name,
             tenant: $tenant,
             address: $address,
@@ -155,13 +202,17 @@ jq -n \
         }
     }' > "${AGENT_DIR}/config.json"
 
-# Update index file for multi-agent resolution
-INDEX_FILE="${AID_AGENTS_BASE}/.index.json"
+# Update index file for multi-agent resolution.
+# SH-MAJOR-04 fix: index now maps AGENT_NAME → AGENT_UUID (not name → name).
+# This is what aid-helper.sh::_aid_index_lookup expects: it returns the UUID,
+# the resolver builds the path AID_AGENTS_BASE/<uuid>. A name-only index
+# would have caused the resolver to point at a path that doesn't exist
+# under the new UUID-keyed layout.
 if [ -f "$INDEX_FILE" ]; then
-    jq --arg name "$AGENT_NAME" --arg dir "$AGENT_NAME" '. + {($name): $dir}' "$INDEX_FILE" > "${INDEX_FILE}.tmp"
+    jq --arg name "$AGENT_NAME" --arg uuid "$AGENT_UUID" '. + {($name): $uuid}' "$INDEX_FILE" > "${INDEX_FILE}.tmp"
     mv "${INDEX_FILE}.tmp" "$INDEX_FILE"
 else
-    jq -n --arg name "$AGENT_NAME" --arg dir "$AGENT_NAME" '{($name): $dir}' > "$INDEX_FILE"
+    jq -n --arg name "$AGENT_NAME" --arg uuid "$AGENT_UUID" '{($name): $uuid}' > "$INDEX_FILE"
 fi
 
 # Write human-readable identity file
@@ -184,6 +235,7 @@ EOF
 echo "  Identity created."
 echo ""
 echo "  Agent:       ${AGENT_NAME}"
+echo "  UUID:        ${AGENT_UUID}"
 echo "  Address:     ${ADDRESS}"
 echo "  Fingerprint: ${FINGERPRINT}"
 echo "  Directory:   ${AGENT_DIR}"

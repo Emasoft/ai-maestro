@@ -13,7 +13,7 @@
 # Storage: ~/.agent-messaging/
 # =============================================================================
 
-set -eo pipefail
+set -euo pipefail
 
 # Source security module
 SCRIPT_DIR_HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -1063,17 +1063,91 @@ sanitize_address_for_path() {
     echo "$address" | sed 's/[@.]/_/g' | sed 's/[^a-zA-Z0-9_-]//g'
 }
 
+# =============================================================================
+# resolve_sender_public_key — find an external sender's public key on disk
+# =============================================================================
+#
+# Used by save_to_inbox() (SH-MAJOR-05) to verify signatures on incoming
+# external messages. We look in the conventional locations where local
+# AID/AMP installations keep keys for KNOWN agents, in priority order:
+#
+#   1. ${AMP_AGENTS_BASE}/<sender_dir>/keys/public.pem
+#      (a co-located AMP agent on this same host — likely if the sender
+#       is another local agent in this AMP install)
+#   2. ${HOME}/.agent-messaging/known_keys/<sender_address>.pem
+#      (manual key drop — used by ops when bootstrapping a new external
+#       peer; out of band)
+#
+# Returns the path to the public key file via stdout, or empty string +
+# nonzero exit if no key is found.
+resolve_sender_public_key() {
+    local sender_address="$1"
+    local sender_dir
+    sender_dir=$(sanitize_address_for_path "$sender_address")
+
+    # Path 1: co-located agent on same host
+    local local_agent_key="${AMP_AGENTS_BASE}/${sender_dir}/keys/public.pem"
+    if [ -f "$local_agent_key" ]; then
+        echo "$local_agent_key"
+        return 0
+    fi
+
+    # Path 2: manual key drop
+    local manual_key="${HOME}/.agent-messaging/known_keys/${sender_address}.pem"
+    if [ -f "$manual_key" ]; then
+        echo "$manual_key"
+        return 0
+    fi
+
+    return 1
+}
+
 # Save message to inbox (organized by sender)
 save_to_inbox() {
     local message_json="$1"
     local apply_security="${2:-true}"
 
-    local id=$(echo "$message_json" | jq -r '.envelope.id')
-    local from=$(echo "$message_json" | jq -r '.envelope.from')
-    local sender_dir=$(sanitize_address_for_path "$from")
+    local id
+    id=$(echo "$message_json" | jq -r '.envelope.id')
+    local from
+    from=$(echo "$message_json" | jq -r '.envelope.from')
+    local sender_dir
+    sender_dir=$(sanitize_address_for_path "$from")
 
-    # Replay protection (Section 07: Recipients MUST track message IDs)
+    # =========================================================================
+    # Atomic replay protection (SH-MAJOR-03 fix)
+    # =========================================================================
+    # Old code did: grep replay_db; if not present, append. Two concurrent
+    # deliveries could both pass the grep (TOCTOU), both succeed, both append.
+    # New code: serialize the entire delivery via an mkdir-based lock.
+    # mkdir is atomic on POSIX filesystems — only ONE caller succeeds; any
+    # concurrent caller gets EEXIST and waits behind the loop.
     local replay_db="${AMP_DIR}/replay_db"
+    local lock_dir="${replay_db}.lock"
+
+    # Spin briefly waiting for the lock. We cap retries so a stuck lockdir
+    # (e.g. crashed delivery) cannot deadlock forever — after ~3 s we
+    # break the lock. Conservatively short because save_to_inbox itself
+    # runs in well under a second.
+    local _lock_tries=0
+    until mkdir "$lock_dir" 2>/dev/null; do
+        _lock_tries=$((_lock_tries + 1))
+        if [ "$_lock_tries" -ge 30 ]; then
+            # Stale lock: forcibly clear and retry once.
+            rmdir "$lock_dir" 2>/dev/null || rm -rf "$lock_dir" 2>/dev/null || true
+            mkdir "$lock_dir" 2>/dev/null && break
+            echo "Error: Could not acquire replay-db lock at ${lock_dir}" >&2
+            return 1
+        fi
+        sleep 0.1
+    done
+    # Release the lock on every exit path from this function.
+    # 'RETURN' fires when the function returns, including via 'return N'.
+    # shellcheck disable=SC2064
+    trap "rmdir '$lock_dir' 2>/dev/null || true" RETURN
+
+    # Inside the critical section: replay check is now atomic with the
+    # subsequent append.
     if [ -f "$replay_db" ] && grep -qF "${id}" "$replay_db" 2>/dev/null; then
         echo "Warning: Replay detected - message ${id} already received, skipping" >&2
         return 1
@@ -1083,35 +1157,83 @@ save_to_inbox() {
     local inbox_sender_dir="${AMP_INBOX_DIR}/${sender_dir}"
     mkdir -p "$inbox_sender_dir"
 
-    # Apply content security if enabled and security module loaded
+    # =========================================================================
+    # Signature verification + content security (SH-MAJOR-05 fix)
+    # =========================================================================
     if [ "$apply_security" = "true" ] && type apply_content_security &>/dev/null; then
         # Load local config for tenant
         load_config 2>/dev/null || true
         local local_tenant="${AMP_TENANT:-default}"
 
-        # Check if signature is present (assume valid for local, need verification for external)
-        local signature=$(echo "$message_json" | jq -r '.envelope.signature // empty')
+        local signature
+        signature=$(echo "$message_json" | jq -r '.envelope.signature // empty')
         local sig_valid="false"
 
-        # For local messages (same provider domain), trust them
-        # Use parse_address for proper provider extraction (prevents trusting arbitrary .local domains)
+        # Determine sender provider (lower-cased, validated form)
         local _save_from_provider=""
         parse_address "$from"
         _save_from_provider="$ADDR_PROVIDER"
 
         if [ "$_save_from_provider" = "${AMP_PROVIDER_DOMAIN}" ] || \
            [ "$_save_from_provider" = "aimaestro.local" ]; then
+            # Local provider domain — implicit trust (filesystem-delivered).
             sig_valid="true"
         elif [ -n "$signature" ]; then
-            # External messages: default to unverified (SEC-03)
-            # TODO: Attempt sender key lookup via provider API when available.
-            # Currently, external messages default to untrusted because we lack
-            # the sender's public key locally. A future version should query
-            # the sender's provider for their public key and verify the signature.
-            sig_valid="false"
+            # SH-MAJOR-05: External message. Verify the Ed25519 signature
+            # against a known sender public key. The canonical signing
+            # input is RECONSTRUCTED (not extracted) — it MUST match
+            # the exact byte-for-byte form produced by amp-send.sh:
+            #
+            #   PAYLOAD_HASH = base64(sha256(jq -cS '.payload' | tr -d '\n'))
+            #   SIGN_DATA    = "${FROM}|${TO}|${SUBJ}|${PRIORITY}|${REPLY_TO}|${PAYLOAD_HASH}"
+            #
+            # See amp-send.sh:330-343 (sender side) and sign_message in
+            # this file. The previous version of this branch passed
+            # `jq -c '.envelope | del(.signature)'` which is a different
+            # canonical form and would reject every legitimate external
+            # message.
+            local sender_pub_key
+            sender_pub_key=$(resolve_sender_public_key "$from" 2>/dev/null || true)
+
+            if [ -n "$sender_pub_key" ] && [ -f "$sender_pub_key" ]; then
+                # Extract envelope fields exactly as the sender did.
+                local _v_from _v_to _v_subj _v_prio _v_reply _v_payload_hash
+                _v_from=$(echo "$message_json"  | jq -r '.envelope.from        // ""' 2>/dev/null)
+                _v_to=$(echo "$message_json"    | jq -r '.envelope.to          // ""' 2>/dev/null)
+                _v_subj=$(echo "$message_json"  | jq -r '.envelope.subject     // ""' 2>/dev/null)
+                _v_prio=$(echo "$message_json"  | jq -r '.envelope.priority    // ""' 2>/dev/null)
+                _v_reply=$(echo "$message_json" | jq -r '.envelope.in_reply_to // ""' 2>/dev/null)
+                _v_payload_hash=$(echo "$message_json" \
+                    | jq -cS '.payload' 2>/dev/null \
+                    | tr -d '\n' \
+                    | $OPENSSL_BIN dgst -sha256 -binary 2>/dev/null \
+                    | base64 \
+                    | tr -d '\n')
+
+                local canonical="${_v_from}|${_v_to}|${_v_subj}|${_v_prio}|${_v_reply}|${_v_payload_hash}"
+
+                if [ -n "$_v_payload_hash" ] && \
+                   verify_signature "$canonical" "$signature" "$sender_pub_key"; then
+                    sig_valid="true"
+                else
+                    # Known sender, signature DOES NOT verify → REJECT.
+                    # Do NOT write to the inbox. Forging messages from a
+                    # known peer is a hard-fail per audit recommendation.
+                    echo "Error: Signature verification FAILED for known sender ${from} (msg ${id}) — REJECTING" >&2
+                    return 1
+                fi
+            else
+                # Unknown sender (no on-disk public key) — first-contact
+                # bootstrap path. We deliver as untrusted ("flag and
+                # deliver") so the recipient can read the message and
+                # decide whether to register the sender. apply_content_security
+                # wraps untrusted content with a visible warning header.
+                echo "Warning: Unknown external sender ${from}; signature unverified, delivering as UNTRUSTED" >&2
+                sig_valid="false"
+            fi
         fi
 
-        # Apply security
+        # Apply security wrapper (banner + injection scan)
         message_json=$(apply_content_security "$message_json" "$local_tenant" "$sig_valid")
     fi
 
@@ -1120,17 +1242,35 @@ save_to_inbox() {
         --arg received "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         '.local = (.local // {}) + {received_at: $received, status: "unread"}')
 
+    # =========================================================================
+    # Atomic inbox file write (SH-MAJOR-03 fix, second half)
+    # =========================================================================
+    # Old code: `echo "$message_json" > "$inbox_file"` truncates the
+    # destination then writes; two concurrent writers could interleave
+    # bytes (and a kill between truncate and write would zero the file).
+    # New code: write to tempfile, then atomic rename. mv on the same
+    # filesystem is atomic on POSIX, so a reader either sees the old
+    # content or the new content, never a torn state.
     local inbox_file="${inbox_sender_dir}/${id}.json"
-    echo "$message_json" > "$inbox_file"
+    local _tmp_inbox
+    _tmp_inbox=$(mktemp "${inbox_sender_dir}/.${id}.json.XXXXXX")
+    printf '%s\n' "$message_json" > "$_tmp_inbox"
+    mv -f "$_tmp_inbox" "$inbox_file"
 
-    # Record message ID for replay protection
+    # Record message ID for replay protection (atomic via lock).
+    # We're still inside the critical section that the mkdir-lock at the
+    # top of this function established. The append + prune happen here.
     echo "${id}|$(date +%s)" >> "$replay_db"
 
-    # Prune replay_db entries older than 24 hours (best-effort)
+    # Prune replay_db entries older than 24 hours (best-effort, atomic via mv)
     if [ -f "$replay_db" ]; then
         local _cutoff=$(( $(date +%s) - 86400 ))
         local _tmp_db="${replay_db}.tmp.$$"
-        awk -F'|' -v c="$_cutoff" '$2+0 >= c' "$replay_db" > "$_tmp_db" 2>/dev/null && mv "$_tmp_db" "$replay_db" || rm -f "$_tmp_db"
+        if awk -F'|' -v c="$_cutoff" '$2+0 >= c' "$replay_db" > "$_tmp_db" 2>/dev/null; then
+            mv -f "$_tmp_db" "$replay_db"
+        else
+            rm -f "$_tmp_db"
+        fi
     fi
 
     echo "$inbox_file"

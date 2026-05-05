@@ -16,6 +16,8 @@
 # agent directory structure for interoperability.
 # =============================================================================
 
+set -euo pipefail
+
 # =============================================================================
 # OpenSSL Auto-Detection
 # =============================================================================
@@ -214,6 +216,24 @@ AMP_AGENT_NAME=""
 AMP_ADDRESS=""
 AMP_FINGERPRINT=""
 AMP_CONFIG=""
+
+# =============================================================================
+# generate_uuid — Generate a UUIDv4 (matches amp-helper.sh:generate_uuid)
+# =============================================================================
+#
+# Each agent's directory MUST be keyed by a stable UUID, not its
+# human-readable name. Names are mutable (rename), UUIDs are not. Storing
+# under the name was the cause of SH-MAJOR-04 — a rename orphaned the keys
+# and silently created a fresh agent under the new name.
+
+generate_uuid() {
+    if command -v uuidgen &>/dev/null; then
+        uuidgen | tr '[:upper:]' '[:lower:]'
+    else
+        # Fallback: synthesize a v4-shaped UUID from /dev/urandom
+        od -x /dev/urandom | head -1 | awk '{print $2$3"-"$4"-4"substr($5,2)"-"substr($6,1,1)"a"substr($6,2)"-"$7$8$9}'
+    fi
+}
 
 # =============================================================================
 # is_initialized — Check if an agent identity exists

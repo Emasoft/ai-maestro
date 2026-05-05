@@ -13,7 +13,7 @@
 #
 # =============================================================================
 
-set -eo pipefail
+set -euo pipefail
 
 # Source helper functions
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

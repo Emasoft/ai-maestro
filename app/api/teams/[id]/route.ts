@@ -102,6 +102,17 @@ export async function PUT(
     // Both layers strip independently so neither can be bypassed if the other is refactored.
     const { type: _type, chiefOfStaffId: _cos, ...safeBody } = parsed.data
 
+    // ── API-MAJ-01 fix (2026-05-04) — sudo on membership changes ──
+    // Membership updates trigger ChangeTeam → ChangeTitle, which is a
+    // governance-level operation. The DELETE handler below already runs
+    // requireSudoToken; PUT must do the same when the body carries
+    // `agentIds`. Plain renames or description edits (no agentIds) stay
+    // sudo-free so the user is not nagged for trivial changes.
+    if (safeBody.agentIds !== undefined) {
+      const sudoErr = requireSudoToken(request, 'PUT', '/api/teams/[id]')
+      if (sudoErr) return sudoErr
+    }
+
     // Phase 3: Snapshot agentIds before update to detect membership changes for auto-title transitions
     // Use getTeam (no ACL check) — ACL is checked inside updateTeamById
     const oldAgentIds: string[] = (() => {

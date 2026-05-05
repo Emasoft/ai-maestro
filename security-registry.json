@@ -29,6 +29,7 @@
   "entries": {
     "DELETE_/api/agents/[id]": "strict",
     "DELETE_/api/teams/[id]": "strict",
+    "PUT_/api/teams/[id]": "strict",
     "DELETE_/api/agents/cemetery": "strict",
     "POST_/api/governance/password": "strict",
     "DELETE_/api/settings/marketplaces": "strict",

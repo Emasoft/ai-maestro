@@ -174,7 +174,29 @@ export async function POST(
     // Step 4: Build and send the relaunch command into the tmux pane
     const bin = resolveBin(program)
     // Ensure --name <persona> is always present in the args
-    const personaName = agent?.label || agent?.name || sessionName
+    const personaNameRaw = agent?.label || agent?.name || sessionName
+    // ── API-MAJ-03 fix (2026-05-04) — strict allowlist for personaName ──
+    // The previous version interpolated the registry-stored label/name
+    // directly into a double-quoted shell argument:
+    //   ` --name "${personaName}"`
+    // tmux's `send-keys -l` is literal-mode (no shell), but the receiving
+    // shell process inside the tmux pane parses the argument string when
+    // the user (or the trailing Enter we send below) submits it. A label
+    // containing an embedded `"`, `\`, `$`, or backtick would break out
+    // of the quoted region and the shell would interpret the rest as
+    // additional CLI flags — including, in the worst case,
+    // `--dangerously-skip-permissions`.
+    //
+    // ChangeName already validates `name` against `[a-zA-Z0-9][a-zA-Z0-9_-]*`,
+    // but `label` (the persona display name) is more permissive. Apply
+    // an explicit defensive allowlist HERE so even a permissive label
+    // cannot break the quoting. Characters allowed:
+    //   - alphanumerics
+    //   - space, underscore, hyphen, dot
+    // Anything else gets stripped. Empty result falls back to sessionName,
+    // which is itself constrained by tmux's session-name regex.
+    const personaName =
+      personaNameRaw.replace(/[^a-zA-Z0-9 _.\-]/g, '').trim() || sessionName
     let finalArgs = programArgs
     if (!finalArgs.includes('--name ')) {
       // Insert --name before any -- divider (raw prompt passthrough), or at the end

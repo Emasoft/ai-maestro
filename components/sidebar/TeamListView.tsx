@@ -7,6 +7,8 @@ import type { Team } from '@/types/team'
 import type { Agent } from '@/types/agent'
 import TeamCard from './TeamCard'
 import { useGovernance } from '@/hooks/useGovernance'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface TeamListViewProps {
   agents: Agent[]
@@ -26,6 +28,13 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
   // disable the Create Team button and surface an amber banner
   // explaining the blocker before the user wastes time in the wizard.
   const governance = useGovernance(null)
+
+  // API-MAJ-01 (2026-05-04): PUT /api/teams/[id] is now sudo-gated
+  // when the body carries `agentIds` (membership changes trigger
+  // governance pipelines). sudoFetch handles the 403→retry-with-token
+  // loop transparently; pure-rename PUTs return 200 directly with no
+  // sudo prompt because the route handler skips the guard.
+  const { requestSudoToken } = useSudo()
 
   const mountedRef = useRef(true)
 
@@ -160,11 +169,13 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
         // For PUT: undefined means "no change"; null means "unlink";
         // object means "link/replace". The PUT schema accepts null.
         if (githubProject !== undefined) body.githubProject = githubProject
-        const res = await fetch(`/api/teams/${teamId}`, {
+        // sudoFetch transparently handles the 403 sudo_required path the
+        // server returns when `agentIds` is in the body (API-MAJ-01).
+        const res = await sudoFetch(`/api/teams/${teamId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
-        })
+        }, requestSudoToken)
         const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
         if (!res.ok) return data.error || 'Failed to update team'
         if (data.team) {

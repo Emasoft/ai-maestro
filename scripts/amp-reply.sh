@@ -11,7 +11,18 @@
 #
 # =============================================================================
 
-# Note: set -e is inherited from amp-helper.sh; read_message failure handled via || true
+# SH-CRIT-01 fix (2026-05-04): apply error-handling flags BEFORE sourcing
+# amp-helper.sh. The previous comment claimed that set -e was inherited
+# from amp-helper.sh, but amp-helper.sh only sets `-eo pipefail` (no -u),
+# and set options take effect at the lexical position where they're set —
+# they do not retroactively affect lines that have already executed. The
+# `--id` extraction loop above ran without any safety flags, and any
+# unset variable in this script silently expanded to empty, hiding bugs.
+# Apply the flags here so every subsequent command (sourced or local)
+# fails loudly on unset variables, pipeline errors, or command failures.
+set -euo pipefail
+
+# Allow read_message failure to be handled inline via || true
 
 # Pre-source: extract --id to set agent identity before helper resolves it
 _amp_prev=""

@@ -281,66 +281,75 @@ When working with terminal components:
 - PTY errors (session not found, tmux crashed) must close WebSocket gracefully
 - Terminal dimensions (cols/rows) must sync on window resize
 
-### 4. Tab-Based Multi-Terminal Architecture
+### 4. Single-Active-Agent Rendering (UI-CRIT-01 corrected, 2026-05-04)
 
-**Critical architectural pattern (v0.3.0+):** All agents are mounted simultaneously as "virtual tabs" with CSS visibility toggling.
+**Actual pattern in `app/page.tsx`:** only the agent whose id matches
+`activeAgentId` is mounted at any time. Switching agents unmounts the
+previous `TerminalView` (and its WebSocket) and mounts a new one. There
+are NO "virtual tabs", NO `visibility: hidden` toggling, NO simultaneous
+mount of every agent.
 
-**Why this architecture:**
-- Eliminates complex agent-switching logic (was 85+ lines of race condition handling)
-- Terminals initialize once on mount, never re-initialize on agent switch
-- Instant agent switching (no unmount/remount cycle)
-- Preserves terminal state, scrollback, and WebSocket connections
-- Agent notes stay in memory (no localStorage reload on switch)
+The earlier version of this section claimed the opposite — describing
+an aspirational tab-based architecture that was never implemented. A
+2026-05-04 audit (UI-CRIT-01) caught the drift: the code carried
+`const isActive = true` and an unreachable `!isActive` branch, while
+this doc described a fully different design. The constant + the dead
+branch have been removed; this paragraph now matches what the code does.
 
 **Implementation:**
 ```tsx
-// app/page.tsx - All sessions rendered, toggle visibility
-{sessions.map(session => {
-  const isActive = session.id === activeSessionId
-  return (
-    <div
-      key={session.id}
-      className="absolute inset-0 flex flex-col"
-      style={{
-        visibility: isActive ? 'visible' : 'hidden',
-        pointerEvents: isActive ? 'auto' : 'none',
-        zIndex: isActive ? 10 : 0
-      }}
-    >
-      <TerminalView session={session} />
-    </div>
-  )
-})}
+// app/page.tsx — only the active agent is rendered
+const agent = selectableAgents.find(a => a.id === activeAgentId)
+if (!agent) return null
+return (
+  <div key={agent.id} className="absolute inset-0 flex flex-col">
+    {/* tab bar (terminal/chat/messages/worktree/search/export/profile) */}
+    {activeTab === 'terminal' ? (
+      <TerminalView session={agentToSession(agent)} isVisible={activeTab === 'terminal'} />
+    ) : activeTab === 'chat' ? (
+      <AgentChat ... />
+    ) : ...}
+  </div>
+)
 ```
 
-**Why visibility:hidden instead of display:none:**
-- `display: none` removes element from layout → getBoundingClientRect() returns 0 dimensions → terminal initializes with incorrect width
-- `visibility: hidden` keeps element in layout → correct dimensions → proper terminal sizing
-- `pointerEvents: none` prevents hidden tabs from capturing mouse events
-- Text selection works immediately without agent switching
+**Consequences (state on switch):**
+- `TerminalView` unmounts → its `useEffect` cleanup runs → WebSocket
+  closes → tmux pane is detached but tmux session keeps running
+- xterm scrollback held in JS memory is lost on unmount; the next mount
+  re-attaches and re-captures via `tmux capture-pane`
+- Agent notes are persisted to localStorage on every keystroke, so a
+  switch does not lose them
+- Multi-tab dashboards (multiple browser tabs, one per agent) are the
+  recommended way to keep more than one agent live at once
 
-**Terminal initialization pattern:**
+**If you want to revisit the original aspirational design** (mount-all,
+visibility:hidden, instant switch, no WebSocket churn): it is a real
+refactor — terminal init lifecycle, WebSocket connection pooling, the
+xterm dimension-vs-display gotcha (`visibility: hidden` keeps layout,
+`display: none` returns 0×0). Do not assume the doc above describes
+shipped behavior. It described a never-shipped design until 2026-05-04.
+
+**Terminal initialization pattern (current):**
 ```typescript
-// components/TerminalView.tsx
+// components/TerminalView.tsx — initializes on every mount,
+// disposes on every unmount.
 useEffect(() => {
-  // Initialize ONCE on mount, never cleanup until unmount
+  let cleanup: (() => void) | undefined
   const init = async () => {
     cleanup = await initializeTerminal(containerElement)
     setIsReady(true)
   }
   init()
-
-  return () => {
-    if (cleanup) cleanup()
-  }
-}, []) // Empty deps = mount once, no session.id dependency
+  return () => { if (cleanup) cleanup() }
+}, [])
 ```
 
-**What was removed:**
-- Agent change detection (currentSessionRef, sessionChanged checks)
-- Race condition handling (initializingRef, duplicate initialization prevention)
-- Stale initialization cleanup verification
-- Notes/logging re-sync on agent change (loaded once on mount)
+The empty dependency array makes the effect run on every fresh mount
+(once per `key={agent.id}` instance), and the cleanup runs when the
+agent is switched away. With single-active rendering, "fresh mount on
+every switch" IS the lifecycle — the empty deps array does not magically
+make initialization happen-once-forever.
 
 ### 5. React State Management Pattern
 
@@ -1290,29 +1299,24 @@ window.addEventListener('resize', () => fitAddon.fit())
 
 Without this, terminal dimensions won't match the container, causing ugly scrollbars.
 
-### 2. Hidden Terminals Must Use visibility:hidden, NOT display:none
+### 2. xterm dimension gotcha — `display: none` returns 0×0
 
-**CRITICAL (v0.3.0+):** When hiding inactive terminal tabs, use `visibility: hidden` instead of `display: none`.
+**Future relevance only.** AI Maestro currently renders only the active
+agent (see "Single-Active-Agent Rendering" earlier). This gotcha matters
+the day someone implements the multi-agent mount design — at which
+point inactive terminals MUST use `visibility: hidden` rather than
+`display: none`:
 
-```tsx
-// ✅ CORRECT - Keeps element in layout
-style={{
-  visibility: isActive ? 'visible' : 'hidden',
-  pointerEvents: isActive ? 'auto' : 'none',
-  zIndex: isActive ? 10 : 0
-}}
+- `display: none` removes element from layout → `getBoundingClientRect()`
+  returns width/height = 0 → xterm initializes with minimum columns (2)
+- `visibility: hidden` keeps element in layout → correct dimensions
+- Pair with `pointerEvents: none` to prevent hidden tabs from stealing
+  mouse events while keeping the layout intact
 
-// ❌ WRONG - Removes from layout
-style={{
-  display: isActive ? 'flex' : 'none'
-}}
-```
-
-**Why this matters:**
-- `display: none` removes element from layout → `getBoundingClientRect()` returns width/height = 0
-- Terminal initializes with 0 dimensions → gets minimum columns (2) instead of full width
-- Hidden elements don't receive mouse events → selection/copy doesn't work
-- Using `visibility: hidden` + `pointerEvents: none` keeps correct dimensions while preventing interaction
+If you find yourself writing this pattern, also re-read the
+"Single-Active-Agent Rendering" section — the rest of the codebase
+(WebSocket lifecycle, init effects with empty deps) assumes single-mount
+semantics, and a switch to mount-all needs coordinated changes.
 
 ### 3. WebSocket Lifecycle vs React Lifecycle
 
@@ -1591,8 +1595,8 @@ When implementing features:
 - **Don't add LAN IP access paths** - Network model is localhost + Tailscale only (`isAllowedSource()`). LAN/public IPs are dropped at TCP level.
 - **Don't nest interactive elements** - Causes React hydration errors (use div with onClick instead).
 - **Don't hardcode category colors** - Use the hash-based dynamic color system.
-- **Don't use display:none for hidden terminals** - Use visibility:hidden to maintain correct dimensions and enable selection (v0.3.0+).
-- **Don't add session.id to terminal initialization useEffect** - Terminals initialize once with empty dependency array in tab architecture (v0.3.0+).
+- **Don't assume agents stay mounted across tab switches.** AI Maestro renders only the active agent (UI-CRIT-01 corrected 2026-05-04). Switching tears down `TerminalView` + WebSocket and remounts the new agent. Plans built on "all agents mounted" semantics need to revisit the lifecycle first.
+- **If you ever implement mount-all** (visibility:hidden style) — pair `visibility: hidden` with `pointerEvents: none` and audit every WebSocket-bearing effect for unmount safety. xterm needs non-zero layout (`display: none` returns 0×0 from `getBoundingClientRect`), so use `visibility`, not `display`.
 
 ## Key Files to Understand
 
@@ -1631,9 +1635,9 @@ When implementing features:
 **Read these in order** to understand agents and data flow.
 
 **Key UI patterns:**
-- Tab-based multi-terminal architecture (v0.3.0+) - all agents mounted, visibility toggling
+- Single-active-agent rendering — only the agent matching `activeAgentId` is mounted; switch unmounts/remounts (UI-CRIT-01 corrected 2026-05-04)
 - Dynamic color assignment (hash-based, no hardcoding)
 - Hierarchical grouping (3-level: category/subcategory/agent)
 - Agent notes (per-agent localStorage)
 - Avoid nested buttons (use div with cursor-pointer)
-- Use visibility:hidden for inactive tabs (not display:none)
+- xterm: if/when mounting many terminals at once, use `visibility: hidden`, never `display: none` (the latter forces 0×0 layout)

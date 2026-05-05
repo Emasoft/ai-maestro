@@ -701,7 +701,14 @@ export default function DashboardPage() {
               // Haephestos has its own embedded view above — skip normal rendering
               if (agent.name === '_aim-creation-helper') return null
 
-              const isActive = true  // We only render the active agent
+              // UI-CRIT-01 fix (2026-05-04): only the active agent is rendered.
+              // CLAUDE.md previously documented a "tab-based architecture" where
+              // every agent was mounted simultaneously and toggled via
+              // `visibility: hidden`. That design was never implemented — only
+              // the active agent is mounted, and switching tears down the
+              // previous agent's TerminalView/WebSocket and remounts the new
+              // one. The `isActive = true` constant and the `!isActive` branch
+              // below have been removed; the doc has been updated to match.
               const isHibernated = agent.session?.status !== 'online' && (agent.sessions && agent.sessions.length > 0)
               // Truly offline: no session config at all (not hibernated, just never started or fully removed)
               const isOffline = agent.session?.status !== 'online' && !(agent.sessions && agent.sessions.length > 0)
@@ -876,14 +883,9 @@ export default function DashboardPage() {
                         </div>
                       ) : (
                         <ErrorBoundary fallbackLabel="Terminal">
-                          <TerminalView session={session} isVisible={isActive && activeTab === 'terminal'} />
+                          <TerminalView session={session} isVisible={activeTab === 'terminal'} />
                         </ErrorBoundary>
                       )
-                    ) : !isActive ? (
-                      // For inactive agents, don't mount heavy components - just show placeholder
-                      <div className="flex-1 flex items-center justify-center text-gray-500">
-                        <Loader2 className="w-6 h-6 animate-spin" />
-                      </div>
                     ) : activeTab === 'chat' ? (
                       (isHibernated || isOffline) ? (
                         <div className="flex-1 flex items-center justify-center text-gray-400">

@@ -469,15 +469,40 @@ function startAutoContinueTimer(sessionName, delayMs) {
         return // no state file means we can't confirm it's safe
       }
 
+      // SRV-MAJOR-04 fix (2026-05-04) — replace execSync with the async
+      // execFile + Promise wrapper. execSync blocks the Node event loop
+      // for the duration of the tmux send-keys command (typically a few
+      // ms but can stack with many concurrent sessions). execFile with
+      // an explicit argv bypasses the shell entirely, so even if the
+      // sessionName regex were ever loosened the only consequence is
+      // tmux receiving a literal arg — no shell injection possible.
+      const { execFile } = await import('child_process')
+      const { promisify } = await import('util')
+      const execFileAsync = promisify(execFile)
+
       // Step 1: Send Escape to dismiss any choice menu or question
-      const { execSync } = await import('child_process')
-      execSync(`tmux send-keys -t "${sessionName}" Escape`, { timeout: 5000 })
+      try {
+        await execFileAsync(
+          'tmux',
+          ['send-keys', '-t', sessionName, 'Escape'],
+          { timeout: 5000 }
+        )
+      } catch (escErr) {
+        // Treat as non-fatal — tmux may already be at idle prompt
+        console.log(`[AutoContinue] ${sessionName}: Escape send failed (non-fatal): ${escErr.message}`)
+      }
 
       // Step 2: Wait 500ms for prompt to stabilize after Escape
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      // Step 3: Send "continue" + Enter
-      execSync(`tmux send-keys -t "${sessionName}" "continue" Enter`, { timeout: 5000 })
+      // Step 3: Send "continue" + Enter (one execFile call so the two
+      // keystrokes land in the same tmux command — preserves prior
+      // ordering semantics).
+      await execFileAsync(
+        'tmux',
+        ['send-keys', '-t', sessionName, 'continue', 'Enter'],
+        { timeout: 5000 }
+      )
       console.log(`[AutoContinue] ${sessionName}: sent Escape + "continue" after ${delayMs / 1000}s idle`)
     } catch (err) {
       console.error(`[AutoContinue] ${sessionName}: failed —`, err.message)
@@ -1114,7 +1139,33 @@ async function startServer(handleRequest) {
       // tmux may still be detaching. Retrying after a short delay resolves this.
       const PTY_SPAWN_MAX_RETRIES = 3
       const PTY_SPAWN_RETRY_DELAY_MS = 500
-      const socketPath = query.socket || undefined
+
+      // ── SRV-MAJOR-01 fix (2026-05-04) — sanitize query.socket ──
+      // The socket query parameter comes from the WebSocket URL and
+      // flows directly into getAttachCommand() which builds the tmux
+      // CLI args. Without validation an authenticated caller could
+      // pass an arbitrary path (`/tmp/evil/sock`, `../../etc/passwd`,
+      // shell-quoted strings) and either point tmux at an attacker-
+      // controlled socket OR break out of the safe argv shape.
+      // Allowlist: only the standard tmux per-uid socket directory
+      // pattern. Reject anything containing `..`, shell metachars, or
+      // a leading non-/ character.
+      let socketPath = query.socket || undefined
+      if (socketPath) {
+        const SAFE_SOCKET_RE = /^\/tmp\/(tmux-\d+|tmate-[\w-]+)\/[a-zA-Z0-9._-]+$/
+        if (typeof socketPath !== 'string' || !SAFE_SOCKET_RE.test(socketPath)) {
+          console.warn(`[WS] Rejecting unsafe socket path: ${String(socketPath)}`)
+          try {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Invalid socket path',
+              details: 'socket query parameter must match /tmp/tmux-<uid>/<name>',
+            }))
+          } catch { /* ignore */ }
+          ws.close(1008, 'unsafe socket path')
+          return
+        }
+      }
 
       for (let attempt = 1; attempt <= PTY_SPAWN_MAX_RETRIES; attempt++) {
         try {
@@ -1771,6 +1822,40 @@ async function startServer(handleRequest) {
     // Clear the terminal sessions map
     terminalSessions.clear()
     console.log(`[Server] PTY cleanup complete`)
+
+    // ── SRV-MAJOR-02 fix (2026-05-04) — close every WebSocket server ──
+    // Previous shutdown only called `server.close()` which stops the
+    // HTTP listener. WebSocket clients (browser terminals, AMP clients,
+    // status feed, voice pipeline) stayed connected to a half-dead
+    // server, never receiving a close frame and never reconnecting to
+    // the new instance during a rolling restart.
+    //
+    // Walk every wss instance: terminate each open connection with a
+    // 1001 "going away" close frame so clients trigger their normal
+    // reconnection logic, then close() the server itself so it stops
+    // accepting upgrades.
+    const wsServers = [
+      { name: 'wss', server: wss },
+      { name: 'ampWss', server: ampWss },
+      { name: 'statusWss', server: statusWss },
+      { name: 'companionWss', server: companionWss },
+    ]
+    for (const { name, server: wsServer } of wsServers) {
+      try {
+        for (const client of wsServer.clients) {
+          try {
+            client.close(1001, 'server shutting down')
+          } catch (e) {
+            // Force-terminate stuck clients
+            try { client.terminate() } catch { /* ignore */ }
+          }
+        }
+        wsServer.close()
+        console.log(`[Server] Closed ${name} (${wsServer.clients.size} client(s))`)
+      } catch (e) {
+        console.error(`[Server] Failed to close ${name}:`, e.message)
+      }
+    }
 
     // Now close the server
     server.close(() => {

@@ -3224,6 +3224,39 @@ function matchRoute(method: string, pathname: string): { handler: RouteHandler; 
   return null
 }
 
+// ── SRV-MAJOR-03 fix (2026-05-04) — middleware.ts parity for headless ──
+// Mirrors the WHITELIST + structural credential gate from middleware.ts
+// so headless mode enforces the same "no anonymous /api/* requests"
+// invariant. Per-route handlers below still call authenticateAgent for
+// full token verification — this gate just rejects requests that carry
+// NO credential at all (the same defence-in-depth layer middleware.ts
+// provides in full mode). Without this, headless mode silently relied
+// on every route handler remembering to call authenticateAgent.
+const HEADLESS_AUTH_WHITELIST: ReadonlyArray<RegExp> = [
+  /^\/api\/auth\/login(\/|$)/,
+  /^\/api\/auth\/logout(\/|$)/,
+  /^\/api\/auth\/session(\/|$)/,
+  /^\/api\/auth\/setup-init(\/|$)/,
+  /^\/api\/auth\/setup-verify(\/|$)/,
+  /^\/api\/v1\/health(\/|$)/,
+  /^\/api\/v1\/info(\/|$)/,
+  /^\/api\/v1\/register(\/|$)/,
+]
+
+function _headlessHasCredential(req: IncomingMessage, pathname: string): boolean {
+  const cookieHdr = (req.headers.cookie as string | undefined) || ''
+  if (/(^|;\s*)aim_session=[A-Za-z0-9_+/=\-]+/.test(cookieHdr)) return true
+  const authHdr = (req.headers.authorization as string | undefined) || ''
+  if (/^Bearer\s+(aim_tk_|amp_live_sk_|mst_|eyJ)[A-Za-z0-9_\-\.]{10,}$/.test(authHdr.trim())) return true
+  // X-Forwarded-From is pathname-scoped to /api/v1/route only, mirroring
+  // SRV-CRIT-02's middleware.ts fix. The route handler still does
+  // Ed25519 verification on the forwarded identity.
+  if (pathname === '/api/v1/route' && (req.headers['x-forwarded-from'] as string | undefined)) {
+    return true
+  }
+  return false
+}
+
 export function createHeadlessRouter() {
   return {
     async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
@@ -3233,6 +3266,22 @@ export function createHeadlessRouter() {
       const method = req.method || 'GET'
       const query: Record<string, string> = {}
       urlObj.searchParams.forEach((v, k) => { query[k] = v })
+
+      // ── Structural credential gate (SRV-MAJOR-03) ─────────────
+      // Only enforce on /api/* — health / info / static assets pass through.
+      // Whitelisted bootstrap routes pass through without credentials.
+      // Everything else requires at least one recognized credential shape.
+      if (pathname.startsWith('/api/')) {
+        const whitelisted = HEADLESS_AUTH_WHITELIST.some(rx => rx.test(pathname))
+        if (!whitelisted && !_headlessHasCredential(req, pathname)) {
+          sendJson(res, 401, {
+            error: 'auth_required',
+            message: 'Authentication required. Log in at /api/auth/login or provide a Bearer token.',
+            hint: 'No credentials found on the request (cookie or Authorization header).',
+          })
+          return true
+        }
+      }
 
       const matched = matchRoute(method, pathname)
       if (!matched) {

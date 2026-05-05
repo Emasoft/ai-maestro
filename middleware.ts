@@ -50,8 +50,16 @@ const WHITELIST: ReadonlyArray<RegExp> = [
  * verify that the token is valid — that's the route handler's job. It
  * only confirms the request LOOKS authenticated, so completely anonymous
  * requests are rejected without reaching the handler.
+ *
+ * SRV-CRIT-02 fix (2026-05-04): the X-Forwarded-From branch is now
+ * pathname-scoped. Previous version returned true for ANY request that
+ * carried this header (even an empty value), which let any caller bypass
+ * the credential check on every protected /api/* route. The header is
+ * only meaningful for mesh-forwarded AMP traffic, which exclusively lands
+ * on /api/v1/route, and that handler does its own Ed25519 signature
+ * verification before trusting the forwarded identity.
  */
-function hasCredential(req: NextRequest): boolean {
+function hasCredential(req: NextRequest, pathname: string): boolean {
   // Session cookie
   const cookie = req.headers.get('cookie') || ''
   if (/(^|;\s*)aim_session=[A-Za-z0-9_+/=\-]+/.test(cookie)) {
@@ -62,9 +70,16 @@ function hasCredential(req: NextRequest): boolean {
   if (/^Bearer\s+(aim_tk_|amp_live_sk_|mst_|eyJ)[A-Za-z0-9_\-\.]{10,}$/.test(auth.trim())) {
     return true
   }
-  // X-Forwarded-From (mesh-forwarded, only for /api/v1/route — but that
-  // endpoint requires additional signature verification in the handler)
-  if (req.headers.get('x-forwarded-from')) {
+  // X-Forwarded-From — pathname-scoped to /api/v1/route ONLY.
+  // The header by itself is not a credential; it just declares the
+  // forwarded identity. The /api/v1/route handler verifies the
+  // accompanying Ed25519 signature before trusting it. On any other
+  // path, this header is ignored and the request must produce a real
+  // credential (cookie or bearer).
+  if (
+    pathname === '/api/v1/route' &&
+    req.headers.get('x-forwarded-from')
+  ) {
     return true
   }
   return false
@@ -86,7 +101,7 @@ export function middleware(req: NextRequest): NextResponse {
   }
 
   // Credential presence check
-  if (!hasCredential(req)) {
+  if (!hasCredential(req, pathname)) {
     return NextResponse.json(
       {
         error: 'auth_required',

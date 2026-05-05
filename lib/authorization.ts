@@ -51,7 +51,21 @@ export function authorize(
   action: AuthAction,
   targetAgentId?: string
 ): AuthorizationResult {
-  // System-owner (web UI) → always allowed
+  // ── AUTH-CRIT-01 fix (2026-05-04) — fail-closed on errored auth result ──
+  // BUG: previous version returned { allowed: true } for any auth result with
+  // !auth.agentId, including failures where agentId is undefined because the
+  // token was rejected. The error path coexisted with the system-owner path:
+  // an `AgentAuthResult` from a failed authenticate() (e.g. malformed token)
+  // would set { error: 'token_invalid', agentId: undefined } and slip into the
+  // system-owner branch, granting unrestricted access to any caller that
+  // forwarded the failed result. Verified by the comm-graph review agent.
+  // FIX: check auth.error FIRST. Only when there is no error AND no agentId
+  // is the caller a legitimate system-owner (web UI without agent identity).
+  if (auth.error) {
+    return { allowed: false, reason: auth.error }
+  }
+
+  // System-owner (web UI) → always allowed (no error AND no agentId)
   if (!auth.agentId) {
     return { allowed: true }
   }

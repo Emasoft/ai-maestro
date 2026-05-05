@@ -560,8 +560,25 @@ async function startServer(handleRequest) {
       }
 
       // Internal endpoint for PTY debug info - served directly from server.mjs
-      // This allows access to the in-memory sessions map
+      // This allows access to the in-memory sessions map.
+      //
+      // SRV-CRIT-01 fix (2026-05-04): require a credential (session cookie OR
+      // bearer token). The endpoint is bypassed by Next.js middleware because
+      // it's handled here in server.mjs before req hand-off, so we replicate
+      // the same structural credential check inline. Full token validation
+      // remains the job of downstream consumers; this is a presence gate to
+      // keep unauthenticated localhost / Tailscale-peer probes out.
       if (parsedUrl.pathname === '/api/internal/pty-sessions') {
+        const cookieHdr = req.headers.cookie || ''
+        const authHdr = req.headers.authorization || ''
+        const hasSessionCookie = /(^|;\s*)aim_session=[A-Za-z0-9_+/=\-]+/.test(cookieHdr)
+        const hasBearer = /^Bearer\s+(aim_tk_|amp_live_sk_|mst_|eyJ)[A-Za-z0-9_\-\.]{10,}$/.test(authHdr.trim())
+        if (!hasSessionCookie && !hasBearer) {
+          res.statusCode = 401
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: 'Authentication required' }))
+          return
+        }
         res.setHeader('Content-Type', 'application/json')
         const sessionInfo = []
         terminalSessions.forEach((state, name) => {
@@ -966,12 +983,45 @@ async function startServer(handleRequest) {
     })
   })
 
+  // SRV-CRIT-03 fix (2026-05-04): structural credential gate for ALL
+  // WebSocket upgrades. Previous version accepted any TCP connection from
+  // an allow-listed IP and proceeded to attach a PTY (for /term), broadcast
+  // status (/status), stream AMP messages (/v1/ws), or relay companion
+  // voice I/O (/companion-ws) without any auth check. The IP filter was the
+  // only gate, which meant any localhost process or Tailscale peer could
+  // open a terminal to any agent's tmux session and read/write commands.
+  //
+  // We replicate the same structural credential check used by middleware.ts
+  // hasCredential() — the request must carry an aim_session cookie OR a
+  // Bearer token in a recognized format. This is a presence gate; deeper
+  // token validation and per-session ACL are downstream responsibilities,
+  // tracked separately. Untracked paths still hit socket.destroy() below.
+  const wsHasCredential = (request) => {
+    const cookieHdr = request.headers.cookie || ''
+    if (/(^|;\s*)aim_session=[A-Za-z0-9_+/=\-]+/.test(cookieHdr)) return true
+    const authHdr = request.headers.authorization || ''
+    if (/^Bearer\s+(aim_tk_|amp_live_sk_|mst_|eyJ)[A-Za-z0-9_\-\.]{10,}$/.test(authHdr.trim())) return true
+    return false
+  }
+
   server.on('upgrade', (request, socket, head) => {
     // Use WHATWG URL API instead of deprecated url.parse().
     // Convert searchParams to a plain object so downstream handlers can use query.name, query.host, etc.
     const _upgradeUrl = new URL(request.url, `http://${request.headers.host || 'localhost'}`)
     const pathname = _upgradeUrl.pathname
     const query = Object.fromEntries(_upgradeUrl.searchParams)
+
+    // Auth gate — reject anonymous upgrades for known WS routes before
+    // the handshake completes. Unknown paths still fall through to
+    // socket.destroy() below.
+    const knownPaths = new Set(['/term', '/status', '/v1/ws', '/companion-ws'])
+    if (knownPaths.has(pathname) && !wsHasCredential(request)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n' +
+                   'Content-Length: 0\r\n' +
+                   'Connection: close\r\n\r\n')
+      socket.destroy()
+      return
+    }
 
     if (pathname === '/term') {
       wss.handleUpgrade(request, socket, head, (ws) => {

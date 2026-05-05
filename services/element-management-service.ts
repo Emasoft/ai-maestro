@@ -3701,6 +3701,19 @@ export async function ChangeTeam(
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
   try {
+    // ── GATE 0: authContext is MANDATORY (security invariant) ──
+    // Recovered from a07b0972 (worktree, EnterWorktree-bug-tainted, never merged).
+    // Every other mutation function (ChangeTitle, ChangeName, ChangeFolder,
+    // ChangeAvatar, ChangeCLIArgs, ChangeClient, DeleteTeam, DeleteAgent) has
+    // this guard. ChangeTeam was the lone gap — auto-team-add cascading into
+    // ChangeTitle without an authContext was the original SCEN-001 BUG-002
+    // surface. If a future refactor passes null/undefined here, this guard
+    // prevents silent authorization bypass.
+    if (!authContext) {
+      result.error = 'authContext is mandatory for ChangeTeam (security invariant)'
+      return result
+    }
+
     // ── G01: Validate agent exists ────────────────────────────
     const { getAgent } = await import('@/lib/agent-registry')
     const agent = getAgent(agentId)

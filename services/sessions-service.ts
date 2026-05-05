@@ -606,10 +606,18 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
   // R17 defense-in-depth: ensure ai-maestro-plugin is installed before session creation.
   // This catches callers that bypass wakeAgent (e.g., POST /api/sessions/create).
   // The plugin must be in settings.local.json BEFORE the client launches so hooks load on first run.
+  //
+  // 2026-05-04: InstallElement now mandates authContext (CRIT-07 fix). Since
+  // createSession is called from many surfaces (route handlers via wakeAgent,
+  // CreateAgent G09, etc.), we build a typed system-owner context here for
+  // the defense-in-depth path. The route handlers already enforced their own
+  // auth at the upstream gate; this internal install is a recovery action,
+  // not a user-facing operation, so a system context is the correct shape.
   if (resolvedCwd) {
     try {
       const { InstallElement } = await import('@/services/element-management-service')
       const { detectClientType } = await import('@/lib/client-capabilities')
+      const { buildSystemAuthContext } = await import('@/lib/agent-auth')
       const clientType = detectClientType(program || '')
       const installResult = await InstallElement({
         name: 'ai-maestro-plugin',
@@ -619,7 +627,7 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
         agentDir: resolvedCwd,
         agentId: agentId || undefined,
         clientType: clientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
-      })
+      }, buildSystemAuthContext('sessions-service-r17-defense'))
       if (!installResult.success) {
         console.warn(`[Sessions] R17: Core plugin install failed for "${name}": ${installResult.error}`)
         // Don't block session creation — the plugin may install on next wake via R17 gate.

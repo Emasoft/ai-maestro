@@ -255,11 +255,30 @@ export async function InstallElement(
     /** Bypass role-plugin guard (for ChangeTitle pipeline calling internally) */
     rolePluginSwap?: boolean
   },
+  authContext: AuthContext,
 ): Promise<InstallElementResult> {
   const ops: string[] = []
   const result: InstallElementResult = { success: false, operations: ops }
 
   try {
+    // ── G-AUTH: Authorization (CRIT-07 fix, 2026-05-04) ──────
+    // InstallElement was previously the WIDEST hole in the auth surface:
+    // it had no authContext parameter at all, so any caller — internal,
+    // external, route handler, background task — could install or uninstall
+    // any plugin (including the role-plugin) on any agent. Hard-reject on
+    // missing authContext, then run gate0Auth('manage-skills'). Internal
+    // callers (server startup, ChangeTitle pipeline, wake-on-R17) must
+    // pass either the real route authContext or buildSystemAuthContext().
+    if (!authContext) {
+      result.error = 'authContext is mandatory for InstallElement (security invariant)'
+      ops.push('G-AUTH: DENIED — missing authContext')
+      return result
+    }
+    {
+      const g0err = await gate0Auth('manage-skills', desired.agentId || '', authContext, ops)
+      if (g0err) { result.error = g0err; return result }
+    }
+
     const { name, marketplace, action, scope } = desired
     let agentDir = desired.agentDir
     let clientType = desired.clientType || 'claude'
@@ -1022,7 +1041,7 @@ export async function InstallElement(
         agentDir,
         agentId: desired.agentId,
         clientType,
-      })
+      }, authContext)
       ops.push(reinstallResult.success
         ? `PG05: Core plugin force-reinstalled`
         : `PG05: CRITICAL — Force-reinstall FAILED: ${reinstallResult.error}`)
@@ -2700,13 +2719,27 @@ export async function ChangePlugin(
   }
 
   try {
-    // ── G00: IBCT scope enforcement ────────────────────────────
-    if (authContext) {
+    // ── G00: Authorization (CRIT-04 fix, 2026-05-04) ──────────
+    // Plugins ship code that runs in agent context (skills, agents, hooks,
+    // MCPs, LSPs, role-personas). Anyone who can mutate the plugin set can
+    // inject code into a target agent. The previous version had a
+    // conditional `if (authContext) { ibctScopeCheck }` — internal callers
+    // that forgot to pass authContext bypassed the check entirely. Hard-
+    // reject now, then run gate0Auth, THEN the IBCT scope check.
+    if (!authContext) {
+      result.error = 'authContext is mandatory for ChangePlugin (security invariant)'
+      return result
+    }
+    const g0err = await gate0Auth('manage-skills', agentId || '', authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
+    // ── G00b: IBCT scope enforcement ──────────────────────────
+    {
       const { checkIbctScope } = await import('@/lib/ibct-scope-check')
       const scopeOp = desired.action === 'uninstall' ? 'UninstallPlugin' : 'ChangePlugin'
       const scopeErr = checkIbctScope(authContext, scopeOp)
       if (scopeErr) { result.error = scopeErr; return result }
-      ops.push('G00: IBCT scope check passed')
+      ops.push('G00b: IBCT scope check passed')
     }
 
     // ── G01: Validate plugin name format ──────────────────────
@@ -3086,11 +3119,26 @@ export async function ChangeMarketplace(desired: {
   action: 'add' | 'remove' | 'update'
   name: string
   source?: { repo: string } | { path: string }
-}, _authContext: AuthContext): Promise<ChangeResult> {
+}, authContext: AuthContext): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
   try {
+    // ── G00: Authorization (CRIT-05 fix, 2026-05-04) ──────────
+    // Marketplace add/remove/update changes which plugins are installable
+    // on this host. Every agent that later installs a plugin from this
+    // marketplace inherits anything that lives in it. Hard-reject on
+    // missing authContext, then run gate0Auth('manage-skills'). Previously
+    // the parameter was prefixed `_authContext`, signalling "ignored" —
+    // which it literally was, an unauthenticated caller could swap a
+    // marketplace under every agent on the host.
+    if (!authContext) {
+      result.error = 'authContext is mandatory for ChangeMarketplace (security invariant)'
+      return result
+    }
+    const g0err = await gate0Auth('manage-skills', '', authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
     // ── G01: Validate marketplace name format ─────────────────
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(desired.name)) {
       result.error = `Invalid marketplace name "${desired.name}". Must match /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/`
@@ -3179,11 +3227,25 @@ export async function ChangeSkill(agentId: string | null, desired: {
   sourcePath?: string
   targetClient?: string
   agentDir?: string
-}, _authContext: AuthContext): Promise<ChangeResult> {
+}, authContext: AuthContext): Promise<ChangeResult> {
   const ops: string[] = []
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
   try {
+    // ── G00: Authorization (CRIT-06 fix, 2026-05-04) ──────────
+    // Skills ship code that runs in agent context. The previous parameter
+    // name `_authContext` signalled "ignored" and the function literally
+    // never authenticated the caller — anyone could install or remove a
+    // skill in any agent's local scope (or in user scope, affecting every
+    // agent on the host). Hard-reject on missing authContext, then run
+    // gate0Auth('manage-skills').
+    if (!authContext) {
+      result.error = 'authContext is mandatory for ChangeSkill (security invariant)'
+      return result
+    }
+    const g0err = await gate0Auth('manage-skills', agentId || '', authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
     // ── G01: Validate skill name ──────────────────────────────
     if (!isSafePathComponent(desired.name)) {
       result.error = `Invalid skill name "${desired.name}". Must not contain ".." or "/" characters`
@@ -3264,7 +3326,7 @@ export async function ChangeSkill(agentId: string | null, desired: {
       await tryEmitLedgerOp(
         'change_skill',
         [{ op: 'replace', path: scopePath, value: { action: desired.action, scope: desired.scope } }],
-        _authContext,
+        authContext,
         `change-skill-${desired.action}`,
         ops,
       )
@@ -3440,6 +3502,17 @@ export async function ChangeMCP(agentId: string | null, desired: {
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
   try {
+    // ── G00: Authorization (CRIT-01 fix, 2026-05-04) ──────────
+    // MCP servers run code in agent context. Anyone who can mutate the MCP
+    // list can inject a malicious tool into a target agent. Hard-reject on
+    // missing authContext, then run gate0Auth('manage-skills').
+    if (!authContext) {
+      result.error = 'authContext is mandatory for ChangeMCP (security invariant)'
+      return result
+    }
+    const g0err = await gate0Auth('manage-skills', agentId || '', authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
     // ── G01: Validate server name ─────────────────────────────
     if (!isSafePathComponent(desired.name)) {
       result.error = `Invalid MCP server name "${desired.name}". Must not contain ".." or "/" characters`
@@ -3507,6 +3580,16 @@ export async function ChangeLSP(agentId: string | null, desired: {
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
   try {
+    // ── G00: Authorization (CRIT-02 fix, 2026-05-04) ──────────
+    // LSP servers run as child processes in agent context. Same threat model
+    // as MCP. Hard-reject on missing authContext, then run gate0Auth.
+    if (!authContext) {
+      result.error = 'authContext is mandatory for ChangeLSP (security invariant)'
+      return result
+    }
+    const g0err = await gate0Auth('manage-skills', agentId || '', authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
     // ── G01: Validate name ────────────────────────────────────
     if (!isSafePathComponent(desired.name)) {
       result.error = `Invalid LSP server name "${desired.name}". Must not contain ".." or "/" characters`
@@ -3595,6 +3678,19 @@ export async function ChangeHook(agentId: string | null, desired: {
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
   try {
+    // ── G00: Authorization (CRIT-03 fix, 2026-05-04) ──────────
+    // Hooks run arbitrary shell commands when matched events fire. This is
+    // the highest-impact code-injection vector in the entire pipeline:
+    // anyone who can call ChangeHook without auth can land a Bash command
+    // that runs whenever the agent uses any tool. Hard-reject on missing
+    // authContext, then run gate0Auth.
+    if (!authContext) {
+      result.error = 'authContext is mandatory for ChangeHook (security invariant)'
+      return result
+    }
+    const g0err = await gate0Auth('manage-skills', agentId || '', authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
     // ── G01: Validate event name ──────────────────────────────
     if (!isSafePathComponent(desired.event) || !VALID_HOOK_EVENTS.has(desired.event)) {
       result.error = `Invalid hook event "${desired.event}". Must be one of: ${[...VALID_HOOK_EVENTS].join(', ')}`
@@ -3713,6 +3809,14 @@ export async function ChangeTeam(
       result.error = 'authContext is mandatory for ChangeTeam (security invariant)'
       return result
     }
+    // MAJ-09 fix (2026-05-04): the null-guard is not enough. The earlier
+    // recovery commit (abb185c9) added the null-guard but skipped the
+    // actual authorization check, which meant any agent with a
+    // fabricated non-null authContext (correct shape, wrong title) could
+    // perform team mutations. Add gate0Auth so the action-vs-title check
+    // fires here, matching every other Change* function.
+    const g0err = await gate0Auth('manage-team', agentId, authContext, ops)
+    if (g0err) { result.error = g0err; return result }
 
     // ── G01: Validate agent exists ────────────────────────────
     const { getAgent } = await import('@/lib/agent-registry')
@@ -5999,7 +6103,7 @@ export async function CreateAgent(
                 agentDir: workDir,
                 agentId: agent.id,
                 clientType: clientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
-              })
+              }, desired.authContext)
               if (installResult.success) {
                 ops.push(`G08: Role-plugin installed via ${clientType}-adapter`)
               } else {
@@ -6086,7 +6190,7 @@ export async function CreateAgent(
           agentDir: workDir,
           agentId: agent.id,
           clientType: clientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
-        })
+        }, desired.authContext)
         if (installResult.success) {
           ops.push(`G11: ${installResult.operations.filter(o => o.startsWith('G05') || o.startsWith('G06')).join('; ') || 'ai-maestro-plugin installed'}`)
         } else {

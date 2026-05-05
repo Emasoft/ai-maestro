@@ -119,6 +119,16 @@ vi.mock('@/lib/ecosystem-constants', async () => {
   }
 })
 
+// 2026-05-04: InstallElement now requires an explicit AuthContext
+// (CRIT-07 fix). Build a typed system-owner context for tests so the
+// Gate 0 hard-reject does not block the assertions about adapter routing.
+const TEST_AUTH = {
+  isSystemOwner: true,
+  agentId: undefined,
+  governanceTitle: 'system' as const,
+  teamId: null,
+}
+
 describe('InstallElement — Codex adapter routing (SCEN-013 P0-001)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -169,7 +179,7 @@ describe('InstallElement — Codex adapter routing (SCEN-013 P0-001)', () => {
       scope: 'local',
       agentDir: '/tmp/test-codex-agent',
       clientType: 'codex',
-    })
+    }, TEST_AUTH)
 
     // 1. The codex adapter was resolved
     expect(mockGetAdapter).toHaveBeenCalledWith('codex')
@@ -229,7 +239,7 @@ describe('InstallElement — Codex adapter routing (SCEN-013 P0-001)', () => {
       scope: 'local',
       agentDir: '/tmp/test-codex-agent',
       clientType: 'codex',
-    })
+    }, TEST_AUTH)
 
     expect(mockAdapterInstall).toHaveBeenCalledTimes(1)
     const [storedPlugin] = mockAdapterInstall.mock.calls[0]
@@ -249,7 +259,7 @@ describe('InstallElement — Codex adapter routing (SCEN-013 P0-001)', () => {
       scope: 'local',
       agentDir: '/tmp/test-codex-agent',
       clientType: 'codex',
-    })
+    }, TEST_AUTH)
 
     expect(mockConvertAndStore).toHaveBeenCalled()
     const convertCall = mockConvertAndStore.mock.calls.find(
@@ -274,7 +284,7 @@ describe('InstallElement — Codex adapter routing (SCEN-013 P0-001)', () => {
       scope: 'local',
       agentDir: '/tmp/test-codex-agent',
       clientType: 'codex',
-    })
+    }, TEST_AUTH)
 
     // detectState was invoked on the codex adapter
     expect(mockAdapterDetectState).toHaveBeenCalledWith('ai-maestro-plugin', '/tmp/test-codex-agent')
@@ -302,7 +312,7 @@ describe('InstallElement — Codex adapter routing (SCEN-013 P0-001)', () => {
       scope: 'local',
       agentDir: '/tmp/test-codex-agent',
       clientType: 'codex',
-    })
+    }, TEST_AUTH)
 
     expect(result.success).toBe(false)
     const pg01Op = result.operations.find(op => op.startsWith('PG01:'))
@@ -338,7 +348,7 @@ describe('InstallElement — Codex adapter routing (SCEN-013 P0-001)', () => {
       scope: 'local',
       agentDir: '/tmp/test-codex-agent',
       clientType: 'codex',
-    })
+    }, TEST_AUTH)
 
     expect(mockGetAdapter).toHaveBeenCalledWith('codex')
     expect(mockAdapterUninstall).toHaveBeenCalledTimes(1)
@@ -368,7 +378,7 @@ describe('InstallElement — Codex adapter routing (SCEN-013 P0-001)', () => {
       scope: 'local',
       agentDir: '/tmp/test-claude-agent',
       clientType: 'claude',
-    })
+    }, TEST_AUTH)
 
     // Adapter must NOT have been consulted for Claude — this is the
     // core claude-parity invariant: the pre-adapter-fix behaviour is

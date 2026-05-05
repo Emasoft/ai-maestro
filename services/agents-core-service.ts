@@ -1728,6 +1728,14 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
 
       if (!hasPlugin) {
         console.log(`[Wake] R17: ai-maestro-plugin missing or disabled for "${agentName}" (client=${clientType}) — installing before wake...`)
+        // R17 reinstall: prefer the route's authContext when available; fall
+        // back to a typed system-owner context for background callers (e.g.
+        // server startup health-check waking an agent that was hibernated
+        // because its core plugin was missing). Without this fallback,
+        // background reconciliation would fail Gate 0 even when the call
+        // is legitimate.
+        const { buildSystemAuthContext } = await import('@/lib/agent-auth')
+        const installAuth = params.authContext || buildSystemAuthContext('wake-agent-r17-reinstall')
         const installResult = await InstallElement({
           name: 'ai-maestro-plugin',
           marketplace: 'ai-maestro-plugins',
@@ -1736,7 +1744,7 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
           agentDir: workingDirectory,
           agentId,
           clientType: clientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
-        })
+        }, installAuth)
 
         if (!installResult.success) {
           // Reject the wake — agent cannot function without the plugin.

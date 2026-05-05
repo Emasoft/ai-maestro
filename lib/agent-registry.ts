@@ -175,6 +175,15 @@ function ensureAgentsDir() {
 // mtime-based cache to avoid redundant disk reads within the same tick
 let _cachedAgents: Agent[] | null = null
 let _cachedMtimeMs: number = 0
+// REG-MAJ-01 fix (2026-05-04) — one-shot guard so the claudeArgs →
+// programArgs migration cannot race with concurrent createAgent /
+// updateAgent writes. Once the migration save is launched (or
+// observed unnecessary) on this process, every subsequent loadAgents()
+// call skips the migration block entirely. Combined with the
+// withLock('agents') wrapper around the actual save below, the
+// migration is now serialized against every other registry mutation
+// even though loadAgents() itself remains synchronous.
+let _claudeArgsMigrationDone = false
 
 export function loadAgents(): Agent[] {
   try {
@@ -197,18 +206,29 @@ export function loadAgents(): Agent[] {
 
     if (!Array.isArray(agents)) return []
 
-    // Migrate claudeArgs → programArgs (field was renamed)
-    let needsMigration = false
-    for (const agent of agents) {
-      if ((agent as any).claudeArgs && !agent.programArgs) {
-        agent.programArgs = (agent as any).claudeArgs
-        delete (agent as any).claudeArgs
-        needsMigration = true
+    // Migrate claudeArgs → programArgs (field was renamed). Run once
+    // per process and behind the 'agents' lock — REG-MAJ-01 closure.
+    if (!_claudeArgsMigrationDone) {
+      let needsMigration = false
+      for (const agent of agents) {
+        if ((agent as any).claudeArgs && !agent.programArgs) {
+          agent.programArgs = (agent as any).claudeArgs
+          delete (agent as any).claudeArgs
+          needsMigration = true
+        }
       }
-    }
-    if (needsMigration) {
-      saveAgents(agents)
-      console.log('[Agent Registry] Migrated claudeArgs → programArgs')
+      if (needsMigration) {
+        // Schedule a locked save without making loadAgents async. The
+        // caller does not need to await the migration — readers see
+        // the in-memory `agents` array which already carries the
+        // renamed field, and any racing writer will block on
+        // 'agents' lock. If this save fails, the migration retries
+        // on the next process restart.
+        void withLock('agents', async () => { saveAgents(agents) })
+          .then(() => console.log('[Agent Registry] Migrated claudeArgs → programArgs (locked)'))
+          .catch((err) => console.error('[Agent Registry] Migration save failed:', err))
+      }
+      _claudeArgsMigrationDone = true
     }
 
     _cachedAgents = agents

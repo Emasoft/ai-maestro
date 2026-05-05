@@ -2197,7 +2197,10 @@ export async function ChangeTitle(
       // MANAGER assigned → unblock all teams (agents stay hibernated, manual wake required)
       try {
         const { unblockAllTeams } = await import('@/lib/team-registry')
-        unblockAllTeams()
+        // REG-MAJ-03 fix (2026-05-04): unblockAllTeams is now async +
+        // takes the 'teams' lock. Await it so a racing createTeam can't
+        // interleave with the unblock save.
+        await unblockAllTeams()
         ops.push(`G13: Unblocked all teams — agents remain hibernated until manually woken`)
       } catch (err) {
         ops.push(`G13: WARN — unblockAllTeams failed: ${err instanceof Error ? err.message : err}`)

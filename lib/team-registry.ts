@@ -386,19 +386,28 @@ export async function deleteTeam(id: string): Promise<boolean> {
  * Returns the list of agent IDs that were hibernated.
  */
 export async function blockAllTeams(): Promise<string[]> {
-  const teams = loadTeams()
-  if (teams.length === 0) return []
-
-  // Set blocked flag on all teams
-  let anyChanged = false
-  for (const team of teams) {
-    if (!team.blocked) {
-      team.blocked = true
-      team.updatedAt = new Date().toISOString()
-      anyChanged = true
+  // REG-MAJ-02 fix (2026-05-04) — wrap the read-modify-write cycle in
+  // withLock('teams') so a concurrent createTeam/updateTeam cannot
+  // interleave between loadTeams() and saveTeams() and silently lose
+  // the new team. The hibernate loop runs OUTSIDE the lock — it does
+  // not write the teams file, only kills tmux sessions, and holding
+  // the lock through dozens of execSync calls would block every
+  // other team mutation for the duration.
+  const teams = await withLock('teams', () => {
+    const t = loadTeams()
+    if (t.length === 0) return t
+    let anyChanged = false
+    for (const team of t) {
+      if (!team.blocked) {
+        team.blocked = true
+        team.updatedAt = new Date().toISOString()
+        anyChanged = true
+      }
     }
-  }
-  if (anyChanged) saveTeams(teams)
+    if (anyChanged) saveTeams(t)
+    return t
+  })
+  if (teams.length === 0) return []
 
   // Collect all unique agent IDs across all teams
   const teamAgentIds = new Set<string>()
@@ -438,21 +447,30 @@ export async function blockAllTeams(): Promise<string[]> {
 /**
  * Unblock all teams on this host. Called when a MANAGER is assigned.
  * Clears `blocked` flag. Does NOT wake agents — user/MANAGER must do that manually.
+ *
+ * REG-MAJ-03 fix (2026-05-04) — the previous version was a synchronous
+ * read-modify-write that did not hold the 'teams' lock. A concurrent
+ * deleteTeam/createTeam (both properly locked) could clobber the
+ * unblock. Now `async` and wrapped in withLock('teams', ...). Every
+ * caller in the codebase already `await`s this function, so the
+ * sync→async signature change is binary-compatible.
  */
-export function unblockAllTeams(): void {
-  const teams = loadTeams()
-  let anyChanged = false
-  for (const team of teams) {
-    if (team.blocked) {
-      team.blocked = false
-      team.updatedAt = new Date().toISOString()
-      anyChanged = true
+export async function unblockAllTeams(): Promise<void> {
+  await withLock('teams', () => {
+    const teams = loadTeams()
+    let anyChanged = false
+    for (const team of teams) {
+      if (team.blocked) {
+        team.blocked = false
+        team.updatedAt = new Date().toISOString()
+        anyChanged = true
+      }
     }
-  }
-  if (anyChanged) {
-    saveTeams(teams)
-    console.log(`[unblockAllTeams] Unblocked ${teams.length} team(s) — agents remain hibernated until manually woken`)
-  }
+    if (anyChanged) {
+      saveTeams(teams)
+      console.log(`[unblockAllTeams] Unblocked ${teams.length} team(s) — agents remain hibernated until manually woken`)
+    }
+  })
 }
 
 /**

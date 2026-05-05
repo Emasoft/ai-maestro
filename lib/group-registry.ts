@@ -71,8 +71,22 @@ let migrationChecked = false
  *
  * Both files are written atomically (temp + rename) to avoid corruption.
  * The marker file (~/.aimaestro/teams/.groups-migrated) is the durable guard.
+ *
+ * REG-MAJ-04 fix (2026-05-04) — wrapped in `withLock('teams', ...)` →
+ * `withLock('groups', ...)` so concurrent createTeam/updateTeam (which
+ * hold 'teams') and concurrent group writes (which hold 'groups')
+ * cannot interleave with the migration's read-modify-write cycle on
+ * either file. Lock ordering convention established here: TEAMS BEFORE
+ * GROUPS. Future code that takes both locks must follow the same order
+ * to avoid deadlock.
  */
-function migrateOpenTeamsToGroups(): void {
+async function migrateOpenTeamsToGroups(): Promise<void> {
+  await withLock('teams', () =>
+    withLock('groups', () => migrateOpenTeamsToGroupsLocked())
+  )
+}
+
+function migrateOpenTeamsToGroupsLocked(): void {
   // Fast check: skip if marker file already exists
   if (fs.existsSync(MIGRATION_MARKER)) return
 
@@ -178,17 +192,21 @@ export function loadGroups(): Group[] {
     ensureTeamsDir()
 
     // Lazy one-time migration: convert legacy open teams to groups (locked to prevent races).
-    // withLock is async but intentionally not awaited here: loadGroups() is sync,
-    // and migration runs fire-and-forget on first call — subsequent calls see
-    // migrationChecked=true and skip. The lock still serializes concurrent callers.
+    // REG-MAJ-04 fix (2026-05-04): the migration now acquires BOTH the
+    // 'teams' and 'groups' locks (in that order) inside the function
+    // body. The previous version acquired only 'groups-migration' which
+    // no other code uses, so concurrent createTeam/updateTeam could
+    // race the migration's teams.json write. The fire-and-forget shape
+    // here is preserved (loadGroups stays sync) but the returned
+    // Promise's rejection is now properly handled instead of
+    // discarded — an unhandled rejection on migration failure would
+    // crash the process under Node's strict mode.
     if (!migrationChecked) {
       migrationChecked = true
-      try {
-        withLock('groups-migration', () => { migrateOpenTeamsToGroups() })
-      } catch (err) {
+      void migrateOpenTeamsToGroups().catch((err) => {
         // Migration failure must not block normal group loading
         console.error('[group-registry] Migration failed (non-fatal):', err)
-      }
+      })
     }
 
     if (!fs.existsSync(GROUPS_FILE)) {

@@ -25,7 +25,7 @@ import type { AgentRole } from '@/types/agent'
 import { join } from 'path'
 import { homedir } from 'os'
 import { statePath } from '@/lib/ecosystem-constants'
-import { mkdir, writeFile, readFile, rm, copyFile, readdir, stat } from 'fs/promises'
+import { mkdir, writeFile, readFile, rm, copyFile, readdir, stat, rename } from 'fs/promises'
 import { existsSync } from 'fs'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -155,16 +155,91 @@ async function loadJsonSafe(path: string): Promise<Record<string, unknown>> {
 }
 
 async function saveJsonSafe(path: string, data: Record<string, unknown>): Promise<void> {
+  // MAJ-01 fix (2026-05-04) — atomic write via tmp + rename.
+  // Previous version wrote directly to `path`. A crash mid-write
+  // (OOM kill, SIGKILL, power cut) left the JSON file partially
+  // written, which is unrecoverable for downstream loaders that
+  // strict-parse it (registry.json, teams.json, settings.local.json).
+  // The write-tmp + rename pattern is atomic on POSIX same-filesystem
+  // moves: a reader either sees the old content or the new content,
+  // never a torn file. The tmp filename embeds pid + a counter so
+  // two saveJsonSafe calls for different files (or the same file
+  // serialised by withSettingsLock) cannot collide on the tmp slot.
   const dir = join(path, '..')
   await mkdir(dir, { recursive: true })
-  await writeFile(path, JSON.stringify(data, null, 2) + '\n', 'utf-8')
+  const tmpPath = `${path}.tmp.${process.pid}.${++_atomicWriteCounter}`
+  const payload = JSON.stringify(data, null, 2) + '\n'
+  try {
+    await writeFile(tmpPath, payload, 'utf-8')
+    await rename(tmpPath, path)
+  } catch (err) {
+    // Best-effort cleanup of the orphan tmp file; ignore errors here
+    // because the caller already knows the rename failed.
+    try { await rm(tmpPath, { force: true }) } catch {}
+    throw err
+  }
 }
 
+// Module-local counter for atomic-write tmp filenames. Combined with
+// process.pid this is unique per write within a single process.
+let _atomicWriteCounter = 0
+
 // ── Settings mutex ────────────────────────────────────────────
+//
+// MAJ-02 fix (2026-05-04) — cross-process exclusion via a sibling
+// lockfile (`.lock` directory next to the target file). The previous
+// version was a process-local Promise queue, which serialises within
+// a single Node process but cannot prevent two processes (PM2 cluster
+// mode, simultaneous full + headless servers, test harness + dev
+// server) from interleaving writes to the same JSON file. mkdir is
+// atomic on POSIX — only the first concurrent process wins; others
+// poll for release. A stale-lock recovery valve breaks lockdirs older
+// than STALE_LOCK_MS so a crashed process cannot deadlock writers
+// indefinitely.
 
 const settingsLocks = new Map<string, Promise<void>>()
+const STALE_LOCK_MS = 30_000
+const LOCK_POLL_MS = 50
+const LOCK_MAX_WAIT_MS = 10_000
+
+async function _acquireFileLock(filePath: string): Promise<() => Promise<void>> {
+  const lockDir = `${filePath}.lock`
+  const start = Date.now()
+  while (true) {
+    try {
+      // mkdir without `recursive` is atomic — fails with EEXIST if dir
+      // already exists. That's the lock-held signal.
+      await mkdir(lockDir, { recursive: false })
+      // Acquired. Return a releaser that removes the lockdir.
+      return async () => { try { await rm(lockDir, { recursive: true, force: true }) } catch {} }
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException)?.code
+      if (code !== 'EEXIST') throw err
+      // Already held — check if it's stale.
+      try {
+        const st = await stat(lockDir)
+        if (Date.now() - st.mtimeMs > STALE_LOCK_MS) {
+          // Break the stale lock; another caller may have done the
+          // same in parallel — that's fine, mkdir below will sort it.
+          try { await rm(lockDir, { recursive: true, force: true }) } catch {}
+          continue
+        }
+      } catch {
+        // stat failed (lock disappeared) — retry mkdir
+        continue
+      }
+      if (Date.now() - start > LOCK_MAX_WAIT_MS) {
+        throw new Error(`withSettingsLock: timeout waiting for ${lockDir}`)
+      }
+      await new Promise(r => setTimeout(r, LOCK_POLL_MS))
+    }
+  }
+}
 
 async function withSettingsLock<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
+  // In-process queue keeps the existing within-process serialisation
+  // semantics (so concurrent withSettingsLock calls from the same Node
+  // process don't compete for the cross-process lock).
   const key = filePath
   const prev = settingsLocks.get(key) ?? Promise.resolve()
   let resolve: () => void
@@ -172,7 +247,15 @@ async function withSettingsLock<T>(filePath: string, fn: () => Promise<T>): Prom
   settingsLocks.set(key, next)
   try {
     await prev
-    return await fn()
+    // Also acquire the cross-process file lock so other Node
+    // processes (PM2 cluster, headless + full mode, tests) cannot
+    // interleave with us.
+    const release = await _acquireFileLock(filePath)
+    try {
+      return await fn()
+    } finally {
+      await release()
+    }
   } finally {
     resolve!()
     if (settingsLocks.get(key) === next) settingsLocks.delete(key)
@@ -1144,11 +1227,16 @@ export async function InstallElement(
 
 /** Resolve marketplace shorthand to the name Claude CLI expects */
 function resolveMarketplaceName(marketplace: MarketplaceRef): string {
+  // MAJ-03 fix (2026-05-04) — drop the inline `require()`. The
+  // CUSTOM_MARKETPLACE_NAME constant is already imported at the top of
+  // the file (the same import block that brings GITHUB_MARKETPLACE_NAME_IMPORT
+  // and LOCAL_MARKETPLACE_NAME into scope), so the dynamic require was
+  // redundant AND broken under strict ESM execution / bundlers that
+  // don't polyfill `require`.
   if (marketplace === 'ai-maestro-plugins') return GITHUB_MARKETPLACE_NAME_IMPORT
   if (marketplace === 'ai-maestro-local-roles-marketplace') return LOCAL_MARKETPLACE_NAME
   if (marketplace === 'ai-maestro-local-custom-marketplace') {
-    const { CUSTOM_MARKETPLACE_NAME: CMN } = require('@/lib/ecosystem-constants')
-    return CMN
+    return CUSTOM_MARKETPLACE_NAME
   }
   // GitHub org/repo format → extract basename
   if (marketplace.includes('/') && !marketplace.includes(' ')) {
@@ -4602,7 +4690,9 @@ export async function ChangeClient(
     // (~/agents/custom-plugins/ with a marketplace.json manifest). For Claude
     // targets the adapter needs to know this marketplace name to build the
     // correct plugin key. Role-plugins use the local roles marketplace instead.
-    const { CUSTOM_MARKETPLACE_NAME } = await import('@/lib/ecosystem-constants')
+    // MIN-03 fix (2026-05-04): drop the redundant `await import()` —
+    // CUSTOM_MARKETPLACE_NAME is already imported statically at the top
+    // of the file. Same rationale as MAJ-03.
     const newAdapter = await getAdapter(normalized)
     const newProviderId = clientTypeToProviderId(normalized)
     if (!newAdapter || !newProviderId) {

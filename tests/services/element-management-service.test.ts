@@ -52,6 +52,12 @@ vi.mock('fs/promises', () => ({
   readdir: vi.fn().mockResolvedValue([]),
   rm: vi.fn().mockResolvedValue(undefined),
   stat: vi.fn().mockRejectedValue(new Error('ENOENT')),
+  // 2026-05-04: saveJsonSafe and the cross-process settings lock
+  // (MAJ-01 + MAJ-02 fixes) now use rename + copyFile from fs/promises.
+  // The mock must resolve them so the test path doesn't throw
+  // "rename is not a function" before the assertion runs.
+  rename: vi.fn().mockResolvedValue(undefined),
+  copyFile: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('fs', () => ({

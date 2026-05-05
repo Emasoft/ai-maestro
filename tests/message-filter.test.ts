@@ -99,8 +99,11 @@ describe('checkMessageAllowed', () => {
     expect(result.reason).toBeUndefined()
   })
 
-  it('allows messages when sender is MANAGER regardless of teams', () => {
-    /** MANAGER can message anyone — step 3 (R6.3) */
+  it('blocks MANAGER → in-team MEMBER (R6 2026-05-04 — COS is sole team gateway)', () => {
+    /** 2026-05-04 update: MANAGER may NOT directly contact in-team agents
+     * (other than COS) — must route through COS. Real-world test showed
+     * great confusion when MANAGER bypassed COS to issue directives
+     * directly; COS or ORCHESTRATOR ended up uninformed or contradicting. */
     const teamAlpha = makeClosedTeam('alpha', [COS_ALPHA, MEMBER_A1], COS_ALPHA)
 
     mockLoadTeams.mockReturnValue([teamAlpha])
@@ -109,6 +112,22 @@ describe('checkMessageAllowed', () => {
     const result = checkMessageAllowed({
       senderAgentId: MANAGER,
       recipientAgentId: MEMBER_A1,
+    })
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toMatch(/MANAGER cannot send.*closed team/i)
+  })
+
+  it('allows MANAGER → COS of any closed team (the SOLE team gateway)', () => {
+    /** MANAGER → COS remains a fully allowed edge — COS IS the gateway.
+     * All MANAGER-initiated team work fans out through this single edge. */
+    const teamAlpha = makeClosedTeam('alpha', [COS_ALPHA, MEMBER_A1], COS_ALPHA)
+
+    mockLoadTeams.mockReturnValue([teamAlpha])
+    mockLoadGovernance.mockReturnValue({ version: 1 as const, managerId: MANAGER, passwordHash: null, passwordSetAt: null })
+
+    const result = checkMessageAllowed({
+      senderAgentId: MANAGER,
+      recipientAgentId: COS_ALPHA,
     })
     expect(result.allowed).toBe(true)
     expect(result.reason).toBeUndefined()
@@ -409,11 +428,31 @@ describe('Layer 2: attestation-aware mesh messages', () => {
     mockLoadTeams.mockReturnValue([teamAlpha])
   })
 
-  it('allows attested MANAGER mesh message to closed-team recipient (R6.3 cross-host)', () => {
-    /** Attested MANAGER from remote host can reach any agent, even inside closed teams */
+  it('blocks attested MANAGER mesh message to in-team MEMBER (R6 2026-05-04 — COS is sole team gateway)', () => {
+    /** 2026-05-04 update: MANAGER may NOT directly contact in-team agents
+     * (other than COS) regardless of attestation or hop. The closed-team
+     * gateway is the COS; MANAGER must route through COS. Even cross-host
+     * MANAGER traffic is rejected at the title-graph layer before any
+     * team-membership check. Real-world test showed great confusion when
+     * MANAGER bypassed COS — COS or ORCHESTRATOR ended up uninformed or
+     * issuing contradictory instructions on the same task. */
     const result = checkMessageAllowed({
       senderAgentId: null,
       recipientAgentId: MEMBER_A1,
+      senderRole: 'manager',
+      senderHostId: REMOTE_HOST,
+    })
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toMatch(/cannot send messages to MEMBER/i)
+  })
+
+  it('allows attested MANAGER mesh message to in-team COS (the sole team gateway)', () => {
+    /** Even with the 2026-05-04 tightening, MANAGER → COS remains a fully
+     * allowed edge — COS IS the gateway. All MANAGER-initiated team work
+     * fans out through this single edge. */
+    const result = checkMessageAllowed({
+      senderAgentId: null,
+      recipientAgentId: COS_ALPHA,
       senderRole: 'manager',
       senderHostId: REMOTE_HOST,
     })

@@ -323,10 +323,12 @@ All teams are closed. Messaging between agents is governed by a title-based dire
 
 **2026-04-22 v2 update** — the HUMAN USER (**H**) is now a first-class node in the graph. H has unconditional outbound access to every node (including other humans). Inbound to H from team agents (COS, ORCHESTRATOR, ARCHITECT, INTEGRATOR, MEMBER) is `1` — reply-only. Inbound to H from governance-layer titles (MANAGER, MAINTAINER, AUTONOMOUS) is `Y` — they may initiate messages to the user.
 
+**2026-05-04 v3 update** — MANAGER → in-team-non-COS edges (ORCHESTRATOR, ARCHITECT, INTEGRATOR, MEMBER) flipped from `Y` to blank. Real-world test on 2026-05-03 showed great confusion when MANAGER bypassed COS to issue directives directly to team agents — COS or ORCHESTRATOR ended up uninformed or issued contradictory instructions on the same task. **The CHIEF-OF-STAFF is now the SOLE inbound and outbound gateway for closed-team agents.** MANAGER still freely reaches COS, peer MANAGERs, MAINTAINER (out-of-team), AUTONOMOUS (out-of-team), and the HUMAN user. The user (HUMAN) remains exempt — full `Y` to every node, can do everything.
+
 | Sender \ Recipient | HUMAN | MANAGER | COS | ORCHESTRATOR | ARCHITECT | INTEGRATOR | MEMBER | MAINTAINER | AUTONOMOUS |
 |---------------------|:-----:|:-------:|:---:|:------------:|:---------:|:----------:|:------:|:----------:|:----------:|
 | **HUMAN**           |   Y   |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |     Y      |     Y      |
-| **MANAGER**         |   Y   |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |     Y      |     Y      |
+| **MANAGER**         |   Y   |    Y    |  Y  |              |           |            |        |     Y      |     Y      |
 | **CHIEF-OF-STAFF**  |   1   |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |            |            |
 | **ORCHESTRATOR**    |   1   |         |  Y  |              |     Y     |     Y      |   Y    |            |            |
 | **ARCHITECT**       |   1   |         |  Y  |      Y       |           |            |        |            |            |
@@ -338,8 +340,8 @@ All teams are closed. Messaging between agents is governed by a title-based dire
 | ID | Rule | Source |
 |----|------|--------|
 | R6.1 | Communication rules are defined by the directed graph above — each (sender, recipient) pair must be explicitly listed with its edge type (`Y` = allow, `1` = reply-only, blank = deny). | Explicit |
-| R6.2 | **MANAGER** has full graph access — can freely message every node, including the human user, MAINTAINER, and AUTONOMOUS. MANAGER is the sole bridge between the team layer and the governance layer. | Explicit |
-| R6.3 | **CHIEF-OF-STAFF** is strictly the team gateway — can message MANAGER, COS peers, and the team roles (ORCHESTRATOR, ARCHITECT, INTEGRATOR, MEMBER). Cannot initiate messages to MAINTAINER, AUTONOMOUS, or the human user (H-edge is reply-only). | Explicit |
+| R6.2 | **MANAGER** can freely message: COS (the sole team gateway), peer MANAGERs, MAINTAINER, AUTONOMOUS, and the HUMAN user. **MANAGER cannot directly contact in-team non-COS agents** (ORCHESTRATOR, ARCHITECT, INTEGRATOR, MEMBER) — must route through COS. The 2026-05-03 field test showed MANAGER's direct in-team directives caused confusion (COS/ORCHESTRATOR uninformed or contradicting); v3 of the graph (2026-05-04) corrects this. | Explicit |
+| R6.3 | **CHIEF-OF-STAFF** is the SOLE inbound and outbound team gateway — every directive from MANAGER fans into the team through COS, and every team-internal escalation fans out through COS. COS can message MANAGER, COS peers, and the team roles (ORCHESTRATOR, ARCHITECT, INTEGRATOR, MEMBER). Cannot initiate messages to MAINTAINER, AUTONOMOUS, or the human user (H-edge is reply-only). | Explicit |
 | R6.4 | **ORCHESTRATOR** can message COS, ARCHITECT, INTEGRATOR, MEMBER. Cannot initiate to MANAGER, MAINTAINER, AUTONOMOUS, or the human user (H-edge is reply-only). | Explicit |
 | R6.5 | **ARCHITECT**, **INTEGRATOR**, **MEMBER** can only freely message COS and ORCHESTRATOR. H-edge is reply-only (may answer a user message once; cannot initiate). | Explicit |
 | R6.5a | **AUTONOMOUS** can freely message MANAGER, other AUTONOMOUS agents, AND the human user. Cannot reach COS, team roles, or MAINTAINER. The H-edge is `Y` (not reply-only) — AUTONOMOUS operates outside teams and may initiate user-directed messages. | Explicit |

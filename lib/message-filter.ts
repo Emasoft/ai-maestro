@@ -57,8 +57,26 @@ export function checkMessageAllowed(input: MessageFilterInput): MessageFilterRes
 
     // Layer 2: If sender has a verified role attestation, apply governance rules
     if (input.senderRole && input.senderHostId) {
-      // Attested MANAGER: always allowed (R6.3 cross-host)
+      // 2026-05-04: Attested MANAGER may reach the COS of any closed team
+      // (the SOLE team gateway), peer MANAGERs (none in mesh today, future),
+      // open-world agents (not in any closed team), AUTONOMOUS, MAINTAINER,
+      // and the human user. MANAGER may NOT directly contact in-team
+      // non-COS agents — the COS is the team gateway. This matches
+      // lib/communication-graph.ts ALLOW_EDGES['manager'].
       if (input.senderRole === 'manager') {
+        // MANAGER → COS of any closed team: gateway edge, allowed
+        if (closedTeams.some(t => t.chiefOfStaffId === recipientAgentId)) {
+          return { allowed: true }
+        }
+        // MANAGER → in-team-non-COS: denied (route through COS)
+        if (recipientInClosedTeam) {
+          return {
+            allowed: false,
+            reason: 'MANAGER cannot send messages to MEMBER inside a closed team — route through chief-of-staff (COS is the sole team gateway, R6 2026-05-04)',
+          }
+        }
+        // MANAGER → out-of-team agent (open-world / AUTONOMOUS / MAINTAINER /
+        // peer MANAGER / human): allowed.
         return { allowed: true }
       }
       // Attested COS: can reach MANAGER, other COS, open-world agents
@@ -117,8 +135,28 @@ export function checkMessageAllowed(input: MessageFilterInput): MessageFilterRes
     return { allowed: true }
   }
 
-  // Step 3: MANAGER can message anyone (R6.3)
+  // Step 3: MANAGER routing — 2026-05-04 update
+  // MANAGER may freely reach the COS of any closed team (the SOLE team
+  // gateway), peer MANAGERs, AUTONOMOUS, MAINTAINER, the human user, and
+  // any agent not in a closed team. MANAGER may NOT directly contact
+  // in-team non-COS agents (orchestrator, architect, integrator, member)
+  // — must route through COS. Real-world test 2026-05-03 showed great
+  // confusion when MANAGER bypassed COS to issue directives directly.
+  // This matches lib/communication-graph.ts ALLOW_EDGES['manager'].
   if (agentIsManager(senderAgentId)) {
+    // MANAGER → COS of any closed team: gateway edge, allowed
+    if (agentIsCOS(recipientAgentId)) {
+      return { allowed: true }
+    }
+    // MANAGER → in-team-non-COS recipient: denied (route through COS)
+    if (recipientInClosed) {
+      return {
+        allowed: false,
+        reason: 'MANAGER cannot send messages to MEMBER inside a closed team — route through chief-of-staff (COS is the sole team gateway, R6 2026-05-04)',
+      }
+    }
+    // MANAGER → out-of-team agent (open world, AUTONOMOUS, MAINTAINER,
+    // peer MANAGER, human user): allowed.
     return { allowed: true }
   }
 

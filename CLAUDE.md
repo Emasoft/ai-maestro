@@ -631,10 +631,12 @@ AMP messaging is governed by a title-based directed communication graph. Each go
 
 **2026-04-22 v2 update** — HUMAN USER (H) is now a first-class node. H has full outbound `Y` to every node including self (user-to-user). Team-agent edges to H are reply-only (`1`); governance-title edges to H (M/T/A) are `Y`.
 
+**2026-05-04 v3 update** — MANAGER → in-team-non-COS edges (ORCHESTRATOR, ARCHITECT, INTEGRATOR, MEMBER) flipped from `Y` to blank. Real-world test showed great confusion when MANAGER bypassed COS to issue directives directly to team agents — COS or ORCHESTRATOR ended up uninformed or issued contradictory instructions. **The CHIEF-OF-STAFF is now the SOLE inbound/outbound gateway for closed-team agents.** MANAGER still freely reaches COS, peer MANAGERs, MAINTAINER (out-of-team), AUTONOMOUS (out-of-team), and the HUMAN user. The user (HUMAN) remains exempt — full `Y` to every node.
+
 | Sender \ Recipient | HUMAN | MANAGER | COS | ORCHESTRATOR | ARCHITECT | INTEGRATOR | MEMBER | MAINTAINER | AUTONOMOUS |
 |---------------------|:-----:|:-------:|:---:|:------------:|:---------:|:----------:|:------:|:----------:|:----------:|
 | **HUMAN**           |   Y   |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |     Y      |     Y      |
-| **MANAGER**         |   Y   |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |     Y      |     Y      |
+| **MANAGER**         |   Y   |    Y    |  Y  |              |           |            |        |     Y      |     Y      |
 | **CHIEF-OF-STAFF**  |   1   |    Y    |  Y  |      Y       |     Y     |     Y      |   Y    |            |            |
 | **ORCHESTRATOR**    |   1   |         |  Y  |              |     Y     |     Y      |   Y    |            |            |
 | **ARCHITECT**       |   1   |         |  Y  |      Y       |           |            |        |            |            |

@@ -43,9 +43,21 @@ export type EdgeType = 'allow' | 'deny' | 'reply-only'
  *   - AUTONOMOUS narrowed to MANAGER + peer AUTONOMOUS + H.
  *   - H (HUMAN USER) is now a first-class node with 'allow' outbound to every
  *     other node including self (user-to-user human messaging).
+ *
+ * 2026-05-04 update — MANAGER → in-team-non-COS edges flipped from allow
+ * to deny (orchestrator, architect, integrator, member). Real-world test
+ * showed great confusion when MANAGER bypassed COS to issue directives
+ * directly to team agents — COS or ORCHESTRATOR ended up uninformed or
+ * issued contradictory instructions on the same task. The COS is now
+ * the SOLE inbound/outbound gateway for closed-team agents. MANAGER
+ * still freely reaches COS (the gateway), peer MANAGERs, AUTONOMOUS
+ * (out-of-team), MAINTAINER (out-of-team), and the HUMAN user. The user
+ * (HUMAN) remains exempt — H still has unconditional allow to every node.
  */
 const ALLOW_EDGES: Record<GraphNode, ReadonlySet<GraphNode>> = {
-  'manager':        new Set<GraphNode>(['human', 'manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member', 'autonomous', 'maintainer']),
+  // 2026-05-04: removed orchestrator/architect/integrator/member — MANAGER
+  // routes team-directed traffic exclusively through COS now.
+  'manager':        new Set<GraphNode>(['human', 'manager', 'chief-of-staff', 'autonomous', 'maintainer']),
   'chief-of-staff': new Set<GraphNode>(['manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member']),
   'orchestrator':   new Set<GraphNode>(['chief-of-staff', 'architect', 'integrator', 'member']),
   'architect':      new Set<GraphNode>(['chief-of-staff', 'orchestrator']),
@@ -133,8 +145,19 @@ export function getAllowedRecipients(senderRole: AgentRole): AgentRole[] {
  *  now governance-layer titles that only speak to/from MANAGER (and each
  *  other, for AUTONOMOUS peers). COS is strictly a team gateway — it no
  *  longer reaches MAINTAINER or AUTONOMOUS. All cross-layer routing goes
- *  through MANAGER. */
+ *  through MANAGER.
+ *
+ *  Updated 2026-05-04: MANAGER → in-team-non-COS now denied. The COS is
+ *  the SOLE gateway for both inbound to closed-team agents AND outbound
+ *  directives from MANAGER. Cross-team coordination, top-down directives,
+ *  and any MANAGER-initiated task all route through COS. The HUMAN user
+ *  remains the only node exempt from this rule. */
 const ROUTING_SUGGESTIONS: Record<string, string> = {
+  // 2026-05-04: MANAGER → in-team-non-COS — go through COS
+  'manager->orchestrator':   'Route through chief-of-staff (COS is the sole team gateway)',
+  'manager->architect':      'Route through chief-of-staff (COS is the sole team gateway)',
+  'manager->integrator':     'Route through chief-of-staff (COS is the sole team gateway)',
+  'manager->member':         'Route through chief-of-staff (COS is the sole team gateway)',
   // Workers → MANAGER: go through COS
   'orchestrator->manager':   'Route through chief-of-staff',
   'architect->manager':      'Route through chief-of-staff',

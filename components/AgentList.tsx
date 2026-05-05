@@ -208,6 +208,14 @@ export default function AgentList({
   // Drag-and-drop state
   const [draggedAgent, setDraggedAgent] = useState<Agent | null>(null)
 
+  // UI-MAJ-01 / UI-MAJ-02 (2026-05-05): track mount status so that fetch
+  // resolutions arriving AFTER unmount don't call setState on a dead
+  // component. Same pattern as `TeamListView.tsx` (lines 39-43).
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    return () => { mountedRef.current = false }
+  }, [])
+
   /**
    * Proposal 30 (2026-04-20): the HELPERS Haephestos card is rendered in
    * two places (normal sidebar + compact sidebar). Single handler so a
@@ -290,12 +298,25 @@ export default function AgentList({
 
   // Teams data for team-based grouping — re-fetched when agents change (team membership may have changed)
   const [teams, setTeams] = useState<Array<{ id: string; name: string; agentIds: string[] }>>([])
+  // UI-MAJ-01 (2026-05-05): guard setState behind mountedRef so a fetch
+  // resolving after unmount doesn't trigger React's "setState on
+  // unmounted component" warning. The catch is no longer silent — log
+  // to the console to avoid swallowing real network errors.
   const fetchTeams = useCallback(() => {
     fetch('/api/teams').then(r => r.ok ? r.json() : { teams: [] }).then(data => {
+      if (!mountedRef.current) return
       setTeams(data.teams || [])
-    }).catch(() => {})
+    }).catch(err => {
+      if (!mountedRef.current) return
+      console.error('[AgentList] fetchTeams failed:', err)
+    })
   }, [])
-  useEffect(() => { fetchTeams() }, [agents, fetchTeams])
+  // The agents prop is a freshly-constructed array on every poll cycle so
+  // adding it as a dep would refetch every 10s. Team membership is
+  // already refreshed by the parent's `subconsciousRefreshTrigger` /
+  // explicit refresh paths — fetching once on mount + on fetchTeams
+  // identity (stable) is enough.
+  useEffect(() => { fetchTeams() }, [fetchTeams])
 
   // State for team accordion panels — all expanded by default
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set())
@@ -408,7 +429,14 @@ export default function AgentList({
 
   // Fetch unread message counts for all agents (using agent ID for storage)
   // OPTIMIZED: Use Promise.all for parallel fetching instead of sequential loop
+  // UI-MAJ-02 (2026-05-05): per-cycle AbortController + mountedRef guard.
+  // Without this, fast navigation (sidebar unmount mid-cycle) caused a
+  // setState-on-unmounted-component warning, and individual fetches
+  // continued executing after clearInterval. The controller cancels
+  // every in-flight per-agent fetch on cleanup; the mountedRef gates
+  // the setState that runs after the parallel batch resolves.
   useEffect(() => {
+    const controller = new AbortController()
     const fetchUnreadCounts = async () => {
       // Fetch for all agents in parallel (not just online ones) since messages persist
       const results = await Promise.all(
@@ -416,15 +444,20 @@ export default function AgentList({
           try {
             // Use agent's hostUrl to route to the correct host for remote agents
             const baseUrl = agent.hostUrl || ''
-            const response = await fetch(`${baseUrl}/api/messages?agent=${encodeURIComponent(agent.id)}&action=unread-count`)
+            const response = await fetch(
+              `${baseUrl}/api/messages?agent=${encodeURIComponent(agent.id)}&action=unread-count`,
+              { signal: controller.signal }
+            )
             const data = await response.json()
             return { agentId: agent.id, count: data.count || 0 }
           } catch {
-            // Silently fail - return 0 count
+            // Silently fail (includes AbortError on unmount) - return 0 count
             return { agentId: agent.id, count: 0 }
           }
         })
       )
+
+      if (!mountedRef.current || controller.signal.aborted) return
 
       // Build counts object from parallel results
       const counts: Record<string, number> = {}
@@ -439,7 +472,10 @@ export default function AgentList({
 
     fetchUnreadCounts()
     const interval = setInterval(fetchUnreadCounts, 10000)
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      controller.abort()
+    }
   }, [agents])
 
   // Persist view mode
@@ -1201,9 +1237,24 @@ export default function AgentList({
                                     <li key={agent.id} className="group/agent relative">
                                       <div
                                         draggable
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-label={agent.label || agent.name}
                                         onDragStart={(e) => handleDragStart(e, agent)}
                                         onDragEnd={handleDragEnd}
                                         onClick={() => handleAgentClick(agent)}
+                                        onKeyDown={(e) => {
+                                          // UI-MAJ-05 (2026-05-05): keyboard activation
+                                          // for compact-view rows. Native <button> would
+                                          // be ideal but draggable buttons interact
+                                          // poorly with HTML5 D&D in some browsers, so we
+                                          // keep the draggable <div> and add the missing
+                                          // button semantics (role/tabIndex/onKeyDown).
+                                          if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault()
+                                            handleAgentClick(agent)
+                                          }
+                                        }}
                                         className={`w-full py-2.5 px-3 ${indentClass} text-left transition-all duration-200 cursor-pointer rounded-lg relative overflow-hidden ${
                                           isActive
                                             ? 'shadow-sm'

@@ -97,6 +97,22 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
     setCascadeDeleteAgents(false)
   }
 
+  // UI-MAJ-06 (2026-05-05): close the delete-team modal on Escape.
+  // Only attach the global keydown listener while the modal is open,
+  // and detach it in cleanup. We don't close mid-request — pressing
+  // Escape while `deleting` is true is a no-op (the user can still
+  // wait for the request to complete and then close the modal).
+  useEffect(() => {
+    if (!deleteTarget) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !deleting) {
+        resetDeleteModal()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [deleteTarget, deleting])
+
   const handleDelete = async () => {
     if (!deleteTarget) return
     setDeleting(true)
@@ -156,6 +172,14 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
   // The POST endpoint silently ignores `null` because the create-mode form
   // never produces it; we still guard at the call site to keep the request
   // body minimal.
+  // UI-MAJ-03 (2026-05-05): guard every parent setState behind
+  // mountedRef.current so a save completing AFTER unmount (e.g. user
+  // closed the modal mid-request) doesn't trigger React's
+  // "setState on unmounted component" warning. The pattern mirrors
+  // the existing `fetchTeams` above. The function still returns the
+  // error string normally — TeamFormModal owns its own saving/error
+  // state and is responsible for guarding its own setSaving/setError
+  // calls (which it does indirectly by being unmounted at that point).
   const handleSave = async (
     name: string,
     description: string,
@@ -177,6 +201,7 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
           body: JSON.stringify(body),
         }, requestSudoToken)
         const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        if (!mountedRef.current) return null
         if (!res.ok) return data.error || 'Failed to update team'
         if (data.team) {
           setTeams(prev => prev.map(t => t.id === teamId ? data.team : t))
@@ -191,15 +216,18 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
           body: JSON.stringify(body),
         })
         const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        if (!mountedRef.current) return null
         if (!res.ok) return data.error || 'Failed to create team'
         if (data.team) {
           setTeams(prev => [...prev, data.team])
         }
       }
+      if (!mountedRef.current) return null
       setShowCreate(false)
       setEditingTeam(null)
       return null
     } catch (err) {
+      if (!mountedRef.current) return null
       return err instanceof Error ? err.message : 'Network error'
     }
   }

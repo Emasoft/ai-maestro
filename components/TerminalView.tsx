@@ -172,12 +172,27 @@ export default function TerminalView({ session, isVisible = true, hideFooter = f
 
   // Copy/paste handlers defined after useTerminal below
 
-  // Fetch global logging configuration on mount
+  // Fetch global logging configuration on mount.
+  // UI-MAJ-04 (2026-05-05): guard the setter behind a `mounted` flag
+  // and put a 30s timeout on the fetch (same pattern as
+  // `hooks/useRestartQueue.ts`). The TerminalView remounts on every
+  // agent switch in the current single-render architecture, so an
+  // unmount can easily race ahead of a slow `/api/config`. Without
+  // the guard React logs a "setState on unmounted component" warning
+  // and the timeout prevents the fetch from hanging forever.
   useEffect(() => {
-    fetch('/api/config')
+    let mounted = true
+    fetch('/api/config', { signal: AbortSignal.timeout(30_000) })
       .then(res => res.json())
-      .then(data => setGlobalLoggingEnabled(data.loggingEnabled))
-      .catch(err => console.error('Failed to fetch config:', err))
+      .then(data => {
+        if (!mounted) return
+        setGlobalLoggingEnabled(data.loggingEnabled)
+      })
+      .catch(err => {
+        if (!mounted) return
+        console.error('Failed to fetch config:', err)
+      })
+    return () => { mounted = false }
   }, [])
 
   const { registerTerminal, unregisterTerminal, reportActivity } = useTerminalRegistry()

@@ -423,13 +423,15 @@ export default function AgentProfilePanel({
           </div>
         )}
         {onClose && (
-          <div
+          <button
+            type="button"
             onClick={onClose}
+            aria-label="Close profile panel"
             className="p-1 rounded-md cursor-pointer hover:bg-gray-700/60 transition-colors flex-shrink-0"
             title="Close profile panel"
           >
             <XCircle className="w-4 h-4 text-gray-500 hover:text-gray-300" />
-          </div>
+          </button>
         )}
       </div>
 
@@ -469,11 +471,19 @@ export default function AgentProfilePanel({
         </div>
       )}
 
-      {/* Top-level tabs */}
-      <div className="flex border-b border-gray-800">
+      {/* Top-level tabs.
+          UI-MAJ-07 (2026-05-05): tabs are now <button role="tab"> with
+          aria-selected, wrapped in a role="tablist" container, so
+          keyboard users can Tab into the bar and Enter/Space to switch
+          tabs. The native <button> also gets focus-visible outlines for
+          free. Styling preserved verbatim. */}
+      <div role="tablist" aria-label="Profile sections" className="flex border-b border-gray-800">
         {([['overview', 'Overview'], ['config', 'Config'], ['sessions', 'Sessions'], ['advanced', 'Advanced']] as [TopTab, string][]).map(([t, label]) => (
-          <div
+          <button
             key={t}
+            type="button"
+            role="tab"
+            aria-selected={topTab === t}
             onClick={() => setTopTab(t)}
             className={`flex-1 text-center py-2 text-xs font-medium cursor-pointer transition-colors ${
               topTab === t
@@ -487,7 +497,7 @@ export default function AgentProfilePanel({
                 ({sessionCount})
               </span>
             )}
-          </div>
+          </button>
         ))}
       </div>
 

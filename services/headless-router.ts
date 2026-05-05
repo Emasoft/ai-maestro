@@ -638,6 +638,11 @@ const routes: Route[] = [
     }
   }},
   { method: 'POST', pattern: /^\/api\/sessions\/([^/]+)\/command$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // SVC2-CRIT-01 fix (2026-05-06): authenticate the caller before forwarding
+    // arbitrary tmux send-keys text — previously this route had NO auth check
+    // and trusted the structural credential gate alone.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
     // BUG-1 fix: sendCommand expects (sessionName, command, options), not the raw body object
     if (!body.command || typeof body.command !== 'string') {
@@ -647,6 +652,7 @@ const routes: Route[] = [
     sendServiceResult(res, await sendCommand(params.id, body.command, {
       requireIdle: body.requireIdle,
       addNewline: body.addNewline,
+      authContext: buildAuthContext(auth),
     }))
   }},
   { method: 'PATCH', pattern: /^\/api\/sessions\/([^/]+)\/rename$/, paramNames: ['id'], handler: async (req, res, params) => {
@@ -769,8 +775,13 @@ const routes: Route[] = [
     sendServiceResult(res, await proxyHealthCheck(body.url))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/register$/, paramNames: [], handler: async (req, res) => {
+    // SVC2-CRIT-04 fix (2026-05-06): authenticate the caller before letting them
+    // overwrite ~/.aimaestro/agents/<id>.json. Internal `/api/agents/register` is
+    // NOT the v1 mesh-bootstrap route — that one mints credentials on its own.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await registerAgent(body))
+    sendServiceResult(res, await registerAgent({ ...body, authContext: buildAuthContext(auth) }))
   }},
   { method: 'GET', pattern: /^\/api\/agents\/by-name\/([^/]+)$/, paramNames: ['name'], handler: async (_req, res, params) => {
     sendServiceResult(res, lookupAgentByName(params.name))
@@ -885,18 +896,30 @@ const routes: Route[] = [
     sendServiceResult(res, await getAgentSessionStatus(params.id))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/session$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // SVC2-CRIT-02 fix (2026-05-06): authenticate before linking arbitrary
+    // tmux session names to agent records — registry pollution / impersonation.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await linkAgentSession(params.id, body))
+    sendServiceResult(res, await linkAgentSession(params.id, body, buildAuthContext(auth)))
   }},
   { method: 'PATCH', pattern: /^\/api\/agents\/([^/]+)\/session$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // SVC2-CRIT-02 fix (2026-05-06): authenticate before forwarding arbitrary
+    // tmux send-keys text — same vector as SVC2-CRIT-01 via the agents API.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await sendAgentSessionCommand(params.id, body))
+    sendServiceResult(res, await sendAgentSessionCommand(params.id, body, buildAuthContext(auth)))
   }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/session$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
+  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/session$/, paramNames: ['id'], handler: async (req, res, params, query) => {
+    // SVC2-CRIT-02 fix (2026-05-06): authenticate before killing/unlinking
+    // sessions or deleting agents.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     sendServiceResult(res, await unlinkOrDeleteAgentSession(params.id, {
       kill: query.kill === 'true',
       deleteAgent: query.deleteAgent === 'true',
-    }))
+    }, buildAuthContext(auth)))
   }},
 
   // Wake / Hibernate — auth delegated to Gate 0 inside the service functions
@@ -1163,8 +1186,12 @@ const routes: Route[] = [
     }))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/messages$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // SVC2-MAJ-06 fix (2026-05-06): authenticate, then forward AuthContext so
+    // the service can verify caller identity matches the path agentId.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await sendAgentMessage(params.id, body))
+    sendServiceResult(res, await sendAgentMessage(params.id, body, buildAuthContext(auth)))
   }},
 
   // Metadata (uses agents-core-service getAgentById/updateAgentById)
@@ -1438,8 +1465,12 @@ const routes: Route[] = [
     sendServiceResult(res, await getMessages(msgParams))
   }},
   { method: 'POST', pattern: /^\/api\/messages$/, paramNames: [], handler: async (req, res) => {
+    // SVC2-CRIT-03 (related): authenticate + forward AuthContext to the
+    // SendMessage AIO so the G04.AUTH gate can verify caller identity.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await sendGlobalMessage(body))
+    sendServiceResult(res, await sendGlobalMessage({ ...body, authContext: buildAuthContext(auth) }))
   }},
   { method: 'PATCH', pattern: /^\/api\/messages$/, paramNames: [], handler: async (_req, res, _params, query) => {
     // Normalise empty strings to null so downstream service receives null for absent optional params
@@ -1767,7 +1798,8 @@ const routes: Route[] = [
       sendJson(res, auth.status || 401, { error: auth.error })
       return
     }
-    sendServiceResult(res, await getTeamTask(params.id, params.taskId, auth.agentId))
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    sendServiceResult(res, await getTeamTask(params.id, params.taskId, auth.agentId, buildAuthContext(auth)))
   }},
   { method: 'PUT', pattern: /^\/api\/teams\/([^/]+)\/tasks\/([^/]+)$/, paramNames: ['id', 'taskId'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
@@ -1809,6 +1841,8 @@ const routes: Route[] = [
       ...(body.prUrl !== undefined && { prUrl: String(body.prUrl) }),
       ...(body.reviewResult !== undefined && { reviewResult: String(body.reviewResult) }),
       requestingAgentId: auth.agentId,
+      // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+      authContext: buildAuthContext(auth),
     }
     sendServiceResult(res, await updateTeamTask(params.id, params.taskId, safeParams as any))
   }},
@@ -1823,7 +1857,8 @@ const routes: Route[] = [
       return
     }
     const requestingAgentId = auth.agentId
-    sendServiceResult(res, await deleteTeamTask(params.id, params.taskId, requestingAgentId))
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    sendServiceResult(res, await deleteTeamTask(params.id, params.taskId, requestingAgentId, buildAuthContext(auth)))
   }},
   { method: 'GET', pattern: /^\/api\/teams\/([^/]+)\/tasks$/, paramNames: ['id'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
@@ -1844,7 +1879,8 @@ const routes: Route[] = [
     if (url.searchParams.has('label')) filters.label = url.searchParams.get('label')!
     if (url.searchParams.has('taskType')) filters.taskType = url.searchParams.get('taskType')!
     const hasFilters = Object.keys(filters).length > 0
-    sendServiceResult(res, await listTeamTasks(params.id, requestingAgentId, hasFilters ? filters : undefined))
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    sendServiceResult(res, await listTeamTasks(params.id, requestingAgentId, hasFilters ? filters : undefined, buildAuthContext(auth)))
   }},
   { method: 'POST', pattern: /^\/api\/teams\/([^/]+)\/tasks$/, paramNames: ['id'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
@@ -1884,6 +1920,8 @@ const routes: Route[] = [
       ...(body.handoffDoc !== undefined && { handoffDoc: String(body.handoffDoc) }),
       ...(body.prUrl !== undefined && { prUrl: String(body.prUrl) }),
       requestingAgentId: auth.agentId,
+      // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+      authContext: buildAuthContext(auth),
     }
     sendServiceResult(res, await createTeamTask(params.id, safeParams as any))
   }},
@@ -1898,7 +1936,8 @@ const routes: Route[] = [
       sendJson(res, auth.status || 401, { error: auth.error })
       return
     }
-    sendServiceResult(res, await getKanbanConfig(params.id, auth.agentId))
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    sendServiceResult(res, await getKanbanConfig(params.id, auth.agentId, buildAuthContext(auth)))
   }},
   { method: 'PUT', pattern: /^\/api\/teams\/([^/]+)\/kanban-config$/, paramNames: ['id'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
@@ -1930,7 +1969,8 @@ const routes: Route[] = [
       sendJson(res, 400, { error: 'Each column must have string fields: id, label, color (icon is optional string)' })
       return
     }
-    sendServiceResult(res, await setKanbanConfig(params.id, body.columns as KanbanColumnConfig[], auth.agentId))
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    sendServiceResult(res, await setKanbanConfig(params.id, body.columns as KanbanColumnConfig[], auth.agentId, buildAuthContext(auth)))
   }},
   { method: 'GET', pattern: /^\/api\/teams\/([^/]+)\/documents\/([^/]+)$/, paramNames: ['id', 'docId'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
@@ -1943,7 +1983,8 @@ const routes: Route[] = [
       return
     }
     const requestingAgentId = auth.agentId
-    sendServiceResult(res, getTeamDocument(params.id, params.docId, requestingAgentId))
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    sendServiceResult(res, getTeamDocument(params.id, params.docId, requestingAgentId, buildAuthContext(auth)))
   }},
   { method: 'PUT', pattern: /^\/api\/teams\/([^/]+)\/documents\/([^/]+)$/, paramNames: ['id', 'docId'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
@@ -1957,7 +1998,8 @@ const routes: Route[] = [
       return
     }
     const requestingAgentId = auth.agentId
-    sendServiceResult(res, await updateTeamDocument(params.id, params.docId, { ...body, requestingAgentId }))
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    sendServiceResult(res, await updateTeamDocument(params.id, params.docId, { ...body, requestingAgentId, authContext: buildAuthContext(auth) }))
   }},
   { method: 'DELETE', pattern: /^\/api\/teams\/([^/]+)\/documents\/([^/]+)$/, paramNames: ['id', 'docId'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
@@ -1970,7 +2012,8 @@ const routes: Route[] = [
       return
     }
     const requestingAgentId = auth.agentId
-    sendServiceResult(res, await deleteTeamDocument(params.id, params.docId, requestingAgentId))
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    sendServiceResult(res, await deleteTeamDocument(params.id, params.docId, requestingAgentId, buildAuthContext(auth)))
   }},
   { method: 'GET', pattern: /^\/api\/teams\/([^/]+)\/documents$/, paramNames: ['id'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
@@ -1983,7 +2026,8 @@ const routes: Route[] = [
       return
     }
     const requestingAgentId = auth.agentId
-    sendServiceResult(res, listTeamDocuments(params.id, requestingAgentId))
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    sendServiceResult(res, listTeamDocuments(params.id, requestingAgentId, buildAuthContext(auth)))
   }},
   { method: 'POST', pattern: /^\/api\/teams\/([^/]+)\/documents$/, paramNames: ['id'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
@@ -1997,7 +2041,8 @@ const routes: Route[] = [
       return
     }
     const requestingAgentId = auth.agentId
-    sendServiceResult(res, await createTeamDocument(params.id, { ...body, requestingAgentId }))
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    sendServiceResult(res, await createTeamDocument(params.id, { ...body, requestingAgentId, authContext: buildAuthContext(auth) }))
   }},
   // Chief-of-Staff assignment/removal -- mirrors app/api/teams/[id]/chief-of-staff/route.ts
   { method: 'POST', pattern: /^\/api\/teams\/([^/]+)\/chief-of-staff$/, paramNames: ['id'], handler: async (req, res, params) => {
@@ -2136,7 +2181,8 @@ const routes: Route[] = [
       return
     }
     const requestingAgentId = auth.agentId
-    sendServiceResult(res, getTeamById(params.id, requestingAgentId))
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    sendServiceResult(res, getTeamById(params.id, requestingAgentId, buildAuthContext(auth)))
   }},
   { method: 'PUT', pattern: /^\/api\/teams\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
     const body = await readJsonBody(req)
@@ -2150,7 +2196,8 @@ const routes: Route[] = [
       return
     }
     const requestingAgentId = auth.agentId
-    sendServiceResult(res, await updateTeamById(params.id, { ...body, requestingAgentId }))
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    sendServiceResult(res, await updateTeamById(params.id, { ...body, requestingAgentId, authContext: buildAuthContext(auth) }))
   }},
   { method: 'DELETE', pattern: /^\/api\/teams\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
     const auth = authenticateAgent(
@@ -2333,8 +2380,12 @@ const routes: Route[] = [
     sendServiceResult(res, await deleteCreationHelper())
   }},
   { method: 'POST', pattern: /^\/api\/agents\/creation-helper\/chat$/, paramNames: [], handler: async (req, res) => {
+    // SVC2-MAJ-09 fix (2026-05-06): authenticate before driving the
+    // creation-helper Claude session (which runs with --permission-mode acceptEdits).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await sendCreationHelperMessage(body?.message || ''))
+    sendServiceResult(res, await sendCreationHelperMessage(body?.message || '', buildAuthContext(auth)))
   }},
   { method: 'GET', pattern: /^\/api\/agents\/creation-helper\/response$/, paramNames: [], handler: async (_req, res) => {
     sendServiceResult(res, await captureCreationHelperResponse())

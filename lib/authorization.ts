@@ -25,6 +25,9 @@ export type AuthAction =
   | 'restart-session'   // Restart agent session
   | 'hibernate-agent'   // Hibernate agent
   | 'wake-agent'        // Wake agent
+  | 'link-session'      // Link a tmux session name to an agent record (registry write)
+  | 'delete-session'    // Kill an agent's tmux session and/or unlink it (no agent delete)
+  | 'register-agent'    // Register/overwrite an agent record (filesystem write primitive)
   | 'manage-team'       // Create/modify/delete teams
   | 'manage-skills'     // Install/remove skills on an agent
   | 'view-agent'        // Read agent data (currently open, for future lockdown)
@@ -126,6 +129,15 @@ export function authorize(
       return { allowed: true }
     }
     return { allowed: false, reason: 'Only MANAGER can manage teams' }
+  }
+
+  // ── Special rule: register-agent ───────────────────────────
+  // SVC2-CRIT-04 fix (2026-05-06): registerAgent writes ~/.aimaestro/agents/<id>.json
+  // and creates tmux sessions under arbitrary names. Only system-owner is permitted —
+  // not even MANAGER, because registerAgent is the bootstrap primitive that mints
+  // agent records. Use createAgent + ChangeTitle pipelines for in-band agent creation.
+  if (action === 'register-agent') {
+    return { allowed: false, reason: 'Only the system owner can register agent records' }
   }
 
   // ── Universal rule: no agent can modify itself via API ──────

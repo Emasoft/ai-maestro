@@ -7,6 +7,7 @@
 
 import type { GovernanceRequest } from '@/types/governance-request'
 import { getAgent } from '@/lib/agent-registry'
+import { buildSystemAuthContext } from '@/lib/agent-auth'
 
 const LOG_PREFIX = '[config-notify]'
 
@@ -83,6 +84,7 @@ async function sendAmpNotification(
     content: { type: 'notification', message },
     priority: 'high',
     skipGraphCheck: true, // System notifications bypass R6 graph
+    authContext: buildSystemAuthContext('config-notification'),
   })
   if (!result.success) {
     throw new Error(result.error || 'SendMessage failed')

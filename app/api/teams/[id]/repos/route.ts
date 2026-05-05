@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 import { getTeam } from '@/lib/team-registry'
 import { checkTeamAccess } from '@/lib/team-acl'
@@ -23,7 +23,9 @@ export async function GET(
   const auth = authenticateFromRequest(request)
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
 
-  const access = checkTeamAccess({ teamId: id, requestingAgentId: auth.agentId })
+  // LIB2-CRIT-02 (2026-05-06): pass AuthContext so the system-owner
+  // bypass is gated on a verified web-UI session, not a missing header.
+  const access = checkTeamAccess({ teamId: id, requestingAgentId: auth.agentId, authContext: buildAuthContext(auth) })
   if (!access.allowed) return NextResponse.json({ error: access.reason }, { status: 403 })
 
   const team = getTeam(id)

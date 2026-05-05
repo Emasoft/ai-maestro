@@ -442,10 +442,24 @@ export async function blockAllTeams(): Promise<string[]> {
       if (!agent) continue
       const sessionName = agent.name
       if (!sessionName) continue
-      // Kill tmux session (hibernate)
-      const { execSync } = await import('child_process')
+      // LIB2-CRIT-01 fix (2026-05-06): the previous version interpolated
+      // `sessionName` directly into a shell command string via `execSync`.
+      // Agent.name is normally regex-validated at creation time, but a
+      // corrupted registry / future code path that bypasses validation
+      // could store a name with shell metachars and trigger arbitrary
+      // command execution. Defence-in-depth: refuse names that contain
+      // anything outside the tmux session-name regex, then call
+      // `execFile` with explicit argv (no shell at all) so the value
+      // lands as a literal arg even if validation drifts.
+      if (!/^[a-zA-Z0-9_@.-]+$/.test(sessionName)) {
+        console.warn(`[blockAllTeams] Refusing to kill session with unsafe name: ${sessionName}`)
+        continue
+      }
+      const { execFile } = await import('child_process')
+      const { promisify } = await import('util')
+      const execFileAsync = promisify(execFile)
       try {
-        execSync(`tmux kill-session -t "${sessionName}" 2>/dev/null`, { timeout: 5000 })
+        await execFileAsync('tmux', ['kill-session', '-t', sessionName], { timeout: 5000 })
         hibernated.push(agentId)
         console.log(`[blockAllTeams] Hibernated team agent "${sessionName}" (${agentId})`)
       } catch {

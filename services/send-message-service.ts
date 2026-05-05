@@ -34,7 +34,8 @@
  *   PG02: Send tmux push notification to recipient (if online)
  */
 
-// No external type imports — this module is self-contained
+// AuthContext type — typed via `import type` to avoid runtime cycle
+import type { AuthContext } from '@/lib/agent-auth'
 
 export interface SendMessageInput {
   from: string                // Sender: agent name, ID, or "user"
@@ -51,6 +52,13 @@ export interface SendMessageInput {
   senderAgentId?: string
   /** Optional: skip R6 graph check (for system/user messages) */
   skipGraphCheck?: boolean
+  /**
+   * SVC2-CRIT-03 fix (2026-05-06): the verified identity of the caller.
+   * If isSystemOwner=false, the pipeline rejects when authContext.agentId
+   * does not match input.senderAgentId — closes the agent-impersonation
+   * vector where any caller could pretend to be any other agent.
+   */
+  authContext: AuthContext
 }
 
 export interface SendMessageResult {
@@ -132,6 +140,30 @@ export async function SendMessage(
       ops.push(`G04: Sender is "${from}" — no agent resolution needed`)
     }
 
+    // ── G04.AUTH: Verify caller identity matches claimed sender ──
+    // SVC2-CRIT-03 fix (2026-05-06): without this gate, ANY authenticated agent
+    // could pass `senderAgentId: <victim>` and have the message delivered as
+    // the victim — bypassing R6 graph rules that depend on the sender's title.
+    // System-owner (web UI) and pure user/system messages skip the check.
+    if (!input.authContext) {
+      result.error = 'forbidden_no_auth_context'
+      ops.push(`G04.AUTH: DENIED — no auth context provided`)
+      return result
+    }
+    if (!input.authContext.isSystemOwner && from !== 'user' && from !== 'system') {
+      // The caller is an authenticated agent. The resolved senderAgentId MUST
+      // equal the verified caller agentId. Use a non-disclosing reason so an
+      // attacker cannot enumerate valid sender IDs.
+      if (!senderAgentId || senderAgentId !== input.authContext.agentId) {
+        result.error = 'forbidden_sender_mismatch'
+        ops.push(`G04.AUTH: DENIED — caller ${input.authContext.agentId ?? '?'} cannot send as ${senderAgentId ?? from}`)
+        return result
+      }
+      ops.push(`G04.AUTH: Caller identity matches sender (${senderAgentId})`)
+    } else {
+      ops.push(`G04.AUTH: System/user origin — auth-match check skipped`)
+    }
+
     // ── G05: Resolve recipient agent ──────────────────────────
     let recipientTitle = 'unknown'
     let recipientAgentId: string | null = null
@@ -159,6 +191,11 @@ export async function SendMessage(
     // when the target is the user, and `inReplyToMessageId` when this is
     // a reply to a prior H→agent message. validateMessageRoute rejects
     // reply-only edges without the reply context.
+    //
+    // SVC2-MAJ-19 fix (2026-05-06): the previous catch block silently logged
+    // a WARN and let the message through. A broken import path or transient
+    // throw became a silent governance bypass. Now fail-CLOSED with a 503-style
+    // error so the failure is observable.
     if (!input.skipGraphCheck && senderTitle !== 'user' && senderTitle !== 'system') {
       try {
         const { validateMessageRoute } = await import('@/lib/communication-graph')
@@ -178,15 +215,23 @@ export async function SendMessage(
           return result
         }
         ops.push(`G06: R6 graph allows ${senderTitle} → ${recipientTitle ?? 'unknown'}${graphResult.edgeType === 'reply-only' ? ' (reply-only)' : ''}`)
-      } catch {
-        // Communication graph module not available — allow (fail-open for local messages)
-        ops.push(`G06: WARN — Communication graph check skipped (module not available)`)
+      } catch (graphErr) {
+        // FAIL-CLOSED: surface the failure rather than silently allowing.
+        // R6 is a documented governance gate; a missing/broken module must
+        // never pass-through as "allowed".
+        result.error = 'graph_check_unavailable'
+        ops.push(`G06: DENIED — graph module unavailable (${graphErr instanceof Error ? graphErr.message : 'unknown error'})`)
+        console.error('[SendMessage] G06 graph check failed (fail-closed):', graphErr)
+        return result
       }
     } else {
       ops.push(`G06: Graph check skipped (${input.skipGraphCheck ? 'explicitly' : `sender is ${senderTitle}`})`)
     }
 
     // ── G07: Team isolation check ─────────────────────────────
+    // SVC2-MAJ-20 fix (2026-05-06): same fail-OPEN pattern as G06. A throw
+    // inside checkMessageAllowed used to leak cross-team messages. Now
+    // fail-CLOSED.
     if (!input.skipGraphCheck && senderAgentId && recipientAgentId) {
       try {
         const { checkMessageAllowed } = await import('@/lib/message-filter')
@@ -200,8 +245,11 @@ export async function SendMessage(
           return result
         }
         ops.push(`G07: Team isolation check passed`)
-      } catch {
-        ops.push(`G07: WARN — Team isolation check skipped (module not available)`)
+      } catch (teamErr) {
+        result.error = 'team_isolation_check_unavailable'
+        ops.push(`G07: DENIED — team-isolation module unavailable (${teamErr instanceof Error ? teamErr.message : 'unknown error'})`)
+        console.error('[SendMessage] G07 team isolation check failed (fail-closed):', teamErr)
+        return result
       }
     } else {
       ops.push(`G07: Team isolation check skipped (no agent IDs resolved)`)

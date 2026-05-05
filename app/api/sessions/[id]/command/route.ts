@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendCommand, checkIdleStatus } from '@/services/sessions-service'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
 
 /**
@@ -65,6 +65,7 @@ export async function POST(
     const result = await sendCommand(sessionName, body.command, {
       requireIdle: body.requireIdle,
       addNewline: body.addNewline,
+      authContext: buildAuthContext(auth),
     })
 
     if (result.error && !result.data) {

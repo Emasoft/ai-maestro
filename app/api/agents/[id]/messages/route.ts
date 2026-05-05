@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listMessages, sendMessage } from '@/services/agents-messaging-service'
 import { isValidUuid } from '@/lib/validation'
-import { enforceAuth } from '@/lib/route-auth'
+import { enforceAuth, requireAuth } from '@/lib/route-auth'
 
 /**
  * GET /api/agents/[id]/messages
@@ -47,8 +47,10 @@ export async function POST(
 ) {
   // AMP send-message mutation — authenticate before any dispatch.
   // Agents use their AID bearer token; the web UI uses the session cookie.
-  const authErr = enforceAuth(request)
-  if (authErr) return authErr
+  // SVC2-MAJ-06 fix (2026-05-06): forward AuthContext so the service can
+  // verify caller identity matches the path agentId.
+  const auth = requireAuth(request)
+  if (!auth.ok) return auth.error
 
   try {
     const { id } = await params
@@ -60,7 +62,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    const result = await sendMessage(id, body)
+    const result = await sendMessage(id, body, auth.context)
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })

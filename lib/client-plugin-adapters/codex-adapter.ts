@@ -33,6 +33,40 @@ function resolveAgentDir(targetDir: string): string {
   return targetDir.startsWith('~') ? targetDir.replace('~', HOME) : targetDir
 }
 
+// LIB2-CRIT-03 fix (2026-05-06) — defence-in-depth helpers for the
+// uninstall-fallback `rm -rf` paths. Two attack surfaces existed
+// previously:
+//   (a) `plugin.name` was interpolated into a `path.join` and then
+//       `rm({recursive:true})`. `path.join` does NOT block `..`
+//       segments — a `plugin.name` of `"../../etc"` resolved outside
+//       the intended legacy directory and the `rm` deleted whatever
+//       was there.
+//   (b) `agentDir` was assumed to live under `~/agents/<name>/` per
+//       the Rule-0 invariant, but no check enforced it. Stale legacy
+//       `_aim-*` agents whose workdir is `~/ai-maestro/` (registry
+//       drift) would have had `.codex-plugin`, `.agents`, etc.
+//       wiped from the source tree.
+// The two helpers below clamp those inputs:
+//   - `safePluginName` rejects anything outside [A-Za-z0-9._-] and any
+//     literal `..` segment.
+//   - `safeAgentDir` requires the resolved path to live strictly under
+//     `~/agents/`. Anything else (the project source, the user's
+//     home, the codex cache) is refused.
+const SAFE_PLUGIN_NAME_RE = /^[a-zA-Z0-9._-]+$/
+
+function isSafePluginName(name: string): boolean {
+  if (!name) return false
+  if (!SAFE_PLUGIN_NAME_RE.test(name)) return false
+  if (name === '.' || name === '..') return false
+  if (name.includes('/') || name.includes('\\')) return false
+  return true
+}
+
+function isAgentDirInsideAgentsRoot(absPath: string): boolean {
+  const root = path.resolve(HOME, 'agents') + path.sep
+  return path.resolve(absPath).startsWith(root)
+}
+
 const codexAdapter: ClientPluginAdapter = {
   clientType: 'codex',
   supportsEnableDisable: false,
@@ -66,18 +100,44 @@ const codexAdapter: ClientPluginAdapter = {
     const elementResult = await elementAdapter.uninstall(plugin, targetDir, options)
     if (elementResult.success) return elementResult
 
-    // Legacy cleanup: pre-fix installs lived in ~/.codex/plugins/cache/ai-maestro-converted/
-    const legacyDir = path.join(HOME, '.codex', 'plugins', 'cache', 'ai-maestro-converted', plugin.name)
-    if (existsSync(legacyDir)) {
-      try { await rm(legacyDir, { recursive: true }) } catch { /* best effort */ }
+    // LIB2-CRIT-03 (2026-05-06) — `plugin.name` is untrusted user input.
+    // Refuse anything outside the safe-id regex BEFORE building the
+    // legacyDir path. Without this guard, `plugin.name = "../../etc"`
+    // would resolve outside the intended cache and the `rm` would
+    // delete an arbitrary subtree.
+    if (!isSafePluginName(plugin.name)) {
+      console.warn(`[codex-adapter] Refusing legacy cleanup: unsafe plugin name "${plugin.name}"`)
+    } else {
+      const legacyDir = path.join(HOME, '.codex', 'plugins', 'cache', 'ai-maestro-converted', plugin.name)
+      // Belt-and-braces: even after the regex check, verify the
+      // resolved legacyDir is still under the legacy cache root.
+      const legacyRoot = path.resolve(HOME, '.codex', 'plugins', 'cache', 'ai-maestro-converted') + path.sep
+      const resolvedLegacy = path.resolve(legacyDir) + path.sep
+      if (!resolvedLegacy.startsWith(legacyRoot)) {
+        console.warn(`[codex-adapter] Refusing legacy cleanup: resolved path escapes cache root: ${legacyDir}`)
+      } else if (existsSync(legacyDir)) {
+        try { await rm(legacyDir, { recursive: true }) } catch { /* best effort */ }
+      }
     }
 
-    // And wipe any partial .codex-plugin / .agents / .codex dirs that the
-    // element adapter couldn't clean up due to the missing manifest.
+    // LIB2-CRIT-03 (2026-05-06) — `agentDir` is untrusted relative to
+    // Rule-0. Per CLAUDE.md every agent dir MUST live under ~/agents/<name>/.
+    // Refuse the bulk-cleanup if it doesn't, so a stale `_aim-*` registry
+    // entry pointing at `~/ai-maestro/` cannot have its `.codex-plugin`
+    // / `.agents` folders wiped from the project source tree.
     const agentDir = resolveAgentDir(targetDir)
+    if (!isAgentDirInsideAgentsRoot(agentDir)) {
+      console.warn(`[codex-adapter] Refusing bulk uninstall: agentDir "${agentDir}" is not under ~/agents/`)
+      return { success: true }
+    }
     const candidates = ['.codex-plugin', '.agents', '.codex/installed-plugins']
     for (const rel of candidates) {
       const abs = path.join(agentDir, rel)
+      // Final defence: re-resolve and confirm the abs path is still
+      // inside agentDir (path.join could in theory be subverted by a
+      // user-controlled `targetDir` containing `..` segments).
+      const insideAgentDir = path.resolve(abs).startsWith(path.resolve(agentDir) + path.sep)
+      if (!insideAgentDir) continue
       if (existsSync(abs)) {
         try { await rm(abs, { recursive: true }) } catch { /* best effort */ }
       }

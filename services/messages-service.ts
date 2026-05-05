@@ -51,6 +51,7 @@ import type { SidebarMode } from '@/types/team'
 // ---------------------------------------------------------------------------
 
 import { ServiceResult } from '@/types/service'
+import type { AuthContext } from '@/lib/agent-auth'
 // ServiceResult imported directly from canonical source
 
 // ---------------------------------------------------------------------------
@@ -202,10 +203,16 @@ export interface SendMessageParams {
   fromLabel?: string
   toLabel?: string
   fromVerified?: boolean
+  /** SVC2-CRIT-03 fix: caller's verified identity, forwarded to SendMessage.G04.AUTH */
+  authContext: AuthContext
 }
 
 export async function sendMessage(params: SendMessageParams): Promise<ServiceResult<any>> {
   const { from, to, subject, content } = params
+
+  if (!params.authContext) {
+    return { error: 'Auth context required', status: 401 }
+  }
 
   // Delegate to the unified SendMessage AIO pipeline
   const { SendMessage } = await import('@/services/send-message-service')
@@ -218,6 +225,7 @@ export async function sendMessage(params: SendMessageParams): Promise<ServiceRes
     inReplyTo: params.inReplyTo,
     // User/UI messages skip graph check (R6.6: user is exempt)
     skipGraphCheck: true,
+    authContext: params.authContext,
   })
 
   if (!result.success) {

@@ -934,13 +934,43 @@ export async function renameSession(oldName: string, newName: string): Promise<S
 export async function sendCommand(
   sessionName: string,
   command: string,
-  options: { requireIdle?: boolean; addNewline?: boolean } = {}
+  options: { requireIdle?: boolean; addNewline?: boolean; authContext: import('@/lib/agent-auth').AuthContext }
 ): Promise<ServiceResult<{ success: boolean; sessionName: string; commandSent?: string; method?: string; wasIdle?: boolean; idle?: boolean; timeSinceActivity?: number; idleThreshold?: number }>> {
   const requireIdle = options.requireIdle !== false
   const addNewline = options.addNewline !== false
+  const authContext = options.authContext
 
   if (!command || typeof command !== 'string') {
     return { error: 'Command is required', status: 400, data: undefined }
+  }
+
+  // ── Gate 0: Authorization (SVC2-CRIT-01 fix, 2026-05-06) ──────
+  // Previously this function had NO auth check, and the headless-router
+  // route at /api/sessions/[id]/command also did NOT call authenticateAgent —
+  // so any caller passing the structural credential gate could drive any
+  // tmux pane. Now every caller MUST pass an AuthContext, and non-system
+  // callers go through authorize('send-command', targetAgentId).
+  if (!authContext) {
+    return { error: 'Auth context required for sendCommand', status: 401, data: undefined }
+  }
+  if (!authContext.isSystemOwner) {
+    // Resolve the target agentId from the session name. If the session is
+    // orphan (no agent linked) we still require system-owner — non-owners
+    // have no addressable target to authorize against.
+    const targetAgent = getAgentBySession(sessionName)
+    if (!targetAgent) {
+      return { error: 'Agent not found for session', status: 404, data: undefined }
+    }
+    const { authorize } = await import('@/lib/authorization')
+    const authResult: import('@/lib/agent-auth').AgentAuthResult = {
+      agentId: authContext.agentId,
+      governanceTitle: authContext.governanceTitle,
+      teamId: authContext.teamId,
+    }
+    const authz = authorize(authResult, 'send-command', targetAgent.id)
+    if (!authz.allowed) {
+      return { error: authz.reason || 'Not authorized to send command to this session', status: 403, data: undefined }
+    }
   }
 
   const runtime = getRuntime()

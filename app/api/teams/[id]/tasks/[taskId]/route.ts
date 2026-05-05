@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { updateTeamTask, deleteTeamTask, UpdateTaskParams } from '@/services/teams-service'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 
 const UpdateTaskSchema = z.object({
@@ -73,6 +73,8 @@ export async function PUT(
     ...(body.prUrl !== undefined && { prUrl: body.prUrl }),
     ...(body.reviewResult !== undefined && { reviewResult: body.reviewResult }),
     requestingAgentId,
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    authContext: buildAuthContext(auth),
   }
 
   const result = await updateTeamTask(id, taskId, safeParams)
@@ -101,7 +103,8 @@ export async function DELETE(
   }
   const requestingAgentId = auth.agentId
 
-  const result = await deleteTeamTask(id, taskId, requestingAgentId)
+  // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+  const result = await deleteTeamTask(id, taskId, requestingAgentId, buildAuthContext(auth))
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }

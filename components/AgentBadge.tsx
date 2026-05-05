@@ -211,13 +211,38 @@ export default function AgentBadge({
     setShowMenu(false)
   }
 
+  // UI2-CRIT-01 fix (2026-05-06) — keyboard-accessible card surface.
+  // The root <div> was previously click-only; keyboard users couldn't
+  // select an agent at all because Tab skipped over the card and only
+  // landed on the inner MoreVertical menu button. The fix adds:
+  //   - role="button"           — exposes as an interactive control to AT
+  //   - tabIndex={0}            — puts the card in the tab order
+  //   - aria-label              — names the card for screen readers
+  //   - onKeyDown               — Enter / Space activates onSelect
+  // The `e.target === e.currentTarget` guard on the keyboard handler
+  // prevents double-firing when an inner button is keyboard-activated
+  // (the inner button's own handler already runs; we don't want the
+  // card-select to also fire).
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={agent.label || agent.name}
       onClick={() => onSelect(agent)}
+      onKeyDown={(e) => {
+        if (
+          (e.key === 'Enter' || e.key === ' ') &&
+          e.target === e.currentTarget
+        ) {
+          e.preventDefault()
+          onSelect(agent)
+        }
+      }}
       className={`
         relative group cursor-pointer
         rounded-xl border-2 transition-all duration-200
         hover:shadow-lg hover:scale-[1.02]
+        focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-slate-900
         ${isSelected
           ? 'border-blue-500 bg-blue-500/10 shadow-md shadow-blue-500/20'
           : 'border-slate-700/50 bg-slate-800/50 hover:border-slate-600'

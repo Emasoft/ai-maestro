@@ -125,6 +125,8 @@ export interface RegisterAgentParams {
   }
   // NT-006: Replaced index signature with explicit field for cloud-specific extras
   cloudConfig?: Record<string, unknown>
+  /** SVC2-CRIT-04 fix (2026-05-06): caller must prove identity before any registry write */
+  authContext: AuthContext
 }
 
 export interface WakeAgentParams {
@@ -969,6 +971,42 @@ export async function registerAgent(body: RegisterAgentParams): Promise<ServiceR
   registryAgent: { id: string; name: string } | null
 }>> {
   try {
+    // ── Gate 0: Authorization (SVC2-CRIT-04 fix, 2026-05-06) ──────
+    // registerAgent writes ~/.aimaestro/agents/<id>.json with caller-supplied
+    // payloads. Previously NO auth — any caller passing the structural
+    // credential gate could create / overwrite arbitrary agent records.
+    //
+    // Rules:
+    //   • body.id supplied  → only system-owner allowed (bootstrap primitive)
+    //   • body.sessionName  → either system-owner OR caller's agentId matches
+    //                         the existing-by-session lookup result.
+    if (!body.authContext) {
+      return { error: 'Auth context required for registerAgent', status: 401 }
+    }
+    if (body.id !== undefined && !body.authContext.isSystemOwner) {
+      // Use the dedicated 'register-agent' action — denied for everyone except system-owner.
+      const { authorize } = await import('@/lib/authorization')
+      const authResult: import('@/lib/agent-auth').AgentAuthResult = {
+        agentId: body.authContext.agentId,
+        governanceTitle: body.authContext.governanceTitle,
+        teamId: body.authContext.teamId,
+      }
+      const authz = authorize(authResult, 'register-agent')
+      if (!authz.allowed) {
+        return { error: authz.reason || 'Not authorized to register an agent record with explicit id', status: 403 }
+      }
+    } else if (!body.id && body.sessionName && !body.authContext.isSystemOwner) {
+      // Session-only path: caller's agentId must own the existing record (if any).
+      const existing = getAgentBySession(body.sessionName)
+      if (existing && existing.id !== body.authContext.agentId) {
+        return { error: 'Not authorized to bind to another agent\'s session', status: 403 }
+      }
+      if (!existing) {
+        // Creating a brand-new agent from a session name is reserved for system-owner.
+        return { error: 'Only the system owner can register a new agent from a session name', status: 403 }
+      }
+    }
+
     let agentId: string
     let agentConfig: any
     let registryAgent: Agent | null = null
@@ -1345,9 +1383,30 @@ export async function getAgentSessionStatus(agentId: string): Promise<ServiceRes
 // POST /api/agents/[id]/session -- link session to agent
 // ---------------------------------------------------------------------------
 
-export async function linkAgentSession(agentId: string, params: LinkSessionParams): Promise<ServiceResult<{ success: boolean }>> {
+export async function linkAgentSession(agentId: string, params: LinkSessionParams, authContext: AuthContext): Promise<ServiceResult<{ success: boolean }>> {
   try {
     const { sessionName, workingDirectory } = params
+
+    // ── Gate 0: Authorization (SVC2-CRIT-02 fix, 2026-05-06) ──────
+    // Previously this function had NO auth check, allowing arbitrary tmux
+    // session names to be linked to agent records (registry pollution +
+    // impersonation surface). Now require authContext, and non-system
+    // callers must satisfy authorize('link-session', agentId).
+    if (!authContext) {
+      return { error: 'Auth context required for linkAgentSession', status: 401 }
+    }
+    if (!authContext.isSystemOwner) {
+      const { authorize } = await import('@/lib/authorization')
+      const authResult: import('@/lib/agent-auth').AgentAuthResult = {
+        agentId: authContext.agentId,
+        governanceTitle: authContext.governanceTitle,
+        teamId: authContext.teamId,
+      }
+      const authz = authorize(authResult, 'link-session', agentId)
+      if (!authz.allowed) {
+        return { error: authz.reason || 'Not authorized to link session to this agent', status: 403 }
+      }
+    }
 
     if (!sessionName) {
       return { error: 'sessionName is required', status: 400 }
@@ -1375,7 +1434,8 @@ export async function linkAgentSession(agentId: string, params: LinkSessionParam
 
 export async function sendAgentSessionCommand(
   agentId: string,
-  params: AgentSessionCommandParams
+  params: AgentSessionCommandParams,
+  authContext: AuthContext
 ): Promise<ServiceResult<{
   success: boolean
   agentId?: string
@@ -1389,6 +1449,25 @@ export async function sendAgentSessionCommand(
 }>> {
   try {
     const { command, requireIdle = true, addNewline = true } = params
+
+    // ── Gate 0: Authorization (SVC2-CRIT-02 fix, 2026-05-06) ──────
+    // Same threat as SVC2-CRIT-01 but reached via /api/agents/:id/session —
+    // arbitrary command bytes into a tmux pane unless gated.
+    if (!authContext) {
+      return { error: 'Auth context required for sendAgentSessionCommand', status: 401 }
+    }
+    if (!authContext.isSystemOwner) {
+      const { authorize } = await import('@/lib/authorization')
+      const authResult: import('@/lib/agent-auth').AgentAuthResult = {
+        agentId: authContext.agentId,
+        governanceTitle: authContext.governanceTitle,
+        teamId: authContext.teamId,
+      }
+      const authz = authorize(authResult, 'send-command', agentId)
+      if (!authz.allowed) {
+        return { error: authz.reason || 'Not authorized to send command to this agent', status: 403 }
+      }
+    }
 
     if (!command || typeof command !== 'string') {
       return { error: 'Command is required', status: 400 }
@@ -1457,7 +1536,8 @@ export async function sendAgentSessionCommand(
 
 export async function unlinkOrDeleteAgentSession(
   agentId: string,
-  params: UnlinkSessionParams
+  params: UnlinkSessionParams,
+  authContext: AuthContext
 ): Promise<ServiceResult<{
   success: boolean
   agentId: string
@@ -1467,6 +1547,28 @@ export async function unlinkOrDeleteAgentSession(
 }>> {
   try {
     const { kill: killSession = false, deleteAgent: shouldDeleteAgent = false, sessionIndex = 0 } = params
+
+    // ── Gate 0: Authorization (SVC2-CRIT-02 fix, 2026-05-06) ──────
+    // The deleteAgent: true branch destroys an agent record; the kill branch
+    // tears down a tmux pane. Both must be gated. Use 'delete-agent' when
+    // deleting (matches the existing delete-agent rule which only allows
+    // system-owner / MANAGER), otherwise 'delete-session'.
+    if (!authContext) {
+      return { error: 'Auth context required for unlinkOrDeleteAgentSession', status: 401 }
+    }
+    if (!authContext.isSystemOwner) {
+      const { authorize } = await import('@/lib/authorization')
+      const authResult: import('@/lib/agent-auth').AgentAuthResult = {
+        agentId: authContext.agentId,
+        governanceTitle: authContext.governanceTitle,
+        teamId: authContext.teamId,
+      }
+      const action = shouldDeleteAgent ? 'delete-agent' : 'delete-session'
+      const authz = authorize(authResult, action, agentId)
+      if (!authz.allowed) {
+        return { error: authz.reason || 'Not authorized to unlink or delete this agent session', status: 403 }
+      }
+    }
 
     const agent = getAgent(agentId)
     if (!agent) {

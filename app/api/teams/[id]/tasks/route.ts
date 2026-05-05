@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { listTeamTasks, createTeamTask, CreateTaskParams } from '@/services/teams-service'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 
 const CreateTaskSchema = z.object({
@@ -44,7 +44,8 @@ export async function GET(
   if (url.searchParams.has('taskType')) filters.taskType = url.searchParams.get('taskType')!
 
   const hasFilters = Object.keys(filters).length > 0
-  const result = await listTeamTasks(id, requestingAgentId, hasFilters ? filters : undefined)
+  // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+  const result = await listTeamTasks(id, requestingAgentId, hasFilters ? filters : undefined, buildAuthContext(auth))
 
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })
@@ -97,6 +98,8 @@ export async function POST(
     ...(body.handoffDoc !== undefined && { handoffDoc: body.handoffDoc }),
     ...(body.prUrl !== undefined && { prUrl: body.prUrl }),
     requestingAgentId,
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    authContext: buildAuthContext(auth),
   }
   const result = await createTeamTask(id, safeParams)
 

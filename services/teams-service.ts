@@ -41,6 +41,7 @@ import { checkAndRecordAttempt, resetRateLimit } from '@/lib/rate-limit'
 import { checkTeamAccess } from '@/lib/team-acl'
 import { isValidUuid } from '@/lib/validation'
 import type { TeamType } from '@/types/governance'
+import type { AuthContext } from '@/lib/agent-auth'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,6 +63,13 @@ export interface CreateTeamParams {
   // `team.githubProject` set is preserved). LINK only — no project creation.
   githubProject?: { owner: string; repo: string; number: number }
   requestingAgentId?: string
+  // LIB2-CRIT-02 follow-up (2026-05-06): callers MUST forward the AuthContext
+  // built from authenticateFromRequest(request) so checkTeamAccess can
+  // distinguish a verified web-UI session from an anonymous request that
+  // simply omitted X-Agent-Id. Optional only because the existing API
+  // signature accepts an optional requestingAgentId; downstream Change*
+  // calls will reject if it's missing.
+  authContext?: AuthContext
 }
 
 export interface UpdateTeamParams {
@@ -76,6 +84,7 @@ export interface UpdateTeamParams {
   orchestratorId?: string | null
   githubProject?: { owner: string; repo: string; number: number } | null
   requestingAgentId?: string
+  authContext?: AuthContext
 }
 
 export interface CreateTaskParams {
@@ -94,6 +103,7 @@ export interface CreateTaskParams {
   handoffDoc?: string
   prUrl?: string
   requestingAgentId?: string
+  authContext?: AuthContext
 }
 
 export interface UpdateTaskParams {
@@ -114,6 +124,7 @@ export interface UpdateTaskParams {
   prUrl?: string
   reviewResult?: string
   requestingAgentId?: string
+  authContext?: AuthContext
 }
 
 export interface CreateDocumentParams {
@@ -122,6 +133,7 @@ export interface CreateDocumentParams {
   pinned?: boolean
   tags?: string[]
   requestingAgentId?: string
+  authContext?: AuthContext
 }
 
 export interface UpdateDocumentParams {
@@ -130,6 +142,7 @@ export interface UpdateDocumentParams {
   pinned?: boolean
   tags?: string[]
   requestingAgentId?: string
+  authContext?: AuthContext
 }
 
 export interface NotifyTeamParams {
@@ -347,7 +360,7 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
  * Get a single team by ID.
  * Governance: validates UUID format, enforces team ACL for closed teams.
  */
-export function getTeamById(id: string, requestingAgentId?: string): ServiceResult<{ team: any }> {
+export function getTeamById(id: string, requestingAgentId?: string, authContext?: AuthContext): ServiceResult<{ team: any }> {
   // Validate UUID format to prevent path traversal and invalid lookups
   if (!isValidUuid(id)) {
     return { error: 'Invalid team ID format', status: 400 }
@@ -358,9 +371,10 @@ export function getTeamById(id: string, requestingAgentId?: string): ServiceResu
     return { error: 'Team not found', status: 404 }
   }
 
-  // Governance ACL: closed teams restrict access to manager, COS, and members
-  // Always call checkTeamAccess -- it handles undefined requestingAgentId (returns allowed: true)
-  const access = checkTeamAccess({ teamId: id, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): pass authContext so checkTeamAccess can
+  // distinguish a verified system-owner web-UI session from a request
+  // that merely omitted X-Agent-Id.
+  const access = checkTeamAccess({ teamId: id, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
@@ -389,11 +403,11 @@ export async function updateTeamById(id: string, params: UpdateTeamParams): Prom
     // Destructure requestingAgentId, type, and chiefOfStaffId out so they do not leak
     // into the lib update call. Governance type/COS changes must go through dedicated
     // endpoints, not the general update path (CC-007 defense-in-depth).
-    const { requestingAgentId, type: _type, chiefOfStaffId: _cos, githubProject: ghProj, ...updateFields } = params
+    const { requestingAgentId, authContext, type: _type, chiefOfStaffId: _cos, githubProject: ghProj, ...updateFields } = params
 
-    // Governance ACL: closed teams restrict mutations to manager, COS, and members
-    // Always call checkTeamAccess -- it handles undefined requestingAgentId (returns allowed: true)
-    const access = checkTeamAccess({ teamId: id, requestingAgentId })
+    // LIB2-CRIT-02 (2026-05-06): forward authContext so the ACL bypass
+    // is gated on a verified system-owner session, not a missing header.
+    const access = checkTeamAccess({ teamId: id, requestingAgentId, authContext })
     if (!access.allowed) {
       return { error: access.reason || 'Access denied', status: 403 }
     }
@@ -489,7 +503,7 @@ export async function updateTeamById(id: string, params: UpdateTeamParams): Prom
  * This function is dead code — all callers now use the DeleteTeam pipeline.
  * Kept temporarily for reference during migration; will be removed.
  */
-export async function deleteTeamById(id: string, requestingAgentId?: string, password?: string, deleteAgents: boolean = false): Promise<ServiceResult<{ success: boolean }>> {
+export async function deleteTeamById(id: string, requestingAgentId?: string, password?: string, deleteAgents: boolean = false, authContext?: AuthContext): Promise<ServiceResult<{ success: boolean }>> {
   // Validate UUID format for consistency with getTeamById (CC-008)
   if (!isValidUuid(id)) {
     return { error: 'Invalid team ID', status: 400 }
@@ -500,9 +514,8 @@ export async function deleteTeamById(id: string, requestingAgentId?: string, pas
     return { error: 'Team not found', status: 404 }
   }
 
-  // Governance ACL: closed teams restrict mutations to manager, COS, and members
-  // Always call checkTeamAccess -- it handles undefined requestingAgentId (returns allowed: true)
-  const access = checkTeamAccess({ teamId: id, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): forward authContext.
+  const access = checkTeamAccess({ teamId: id, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
@@ -616,15 +629,14 @@ export function getTeamsBulkStats(): ServiceResult<Record<string, { taskCount: n
  * List all tasks for a team, with resolved dependencies.
  * Governance: enforces team ACL for closed teams.
  */
-export async function listTeamTasks(teamId: string, requestingAgentId?: string, filters?: { assignee?: string; status?: string; label?: string; taskType?: string }): Promise<ServiceResult<{ tasks: TaskWithDeps[] }>> {
+export async function listTeamTasks(teamId: string, requestingAgentId?: string, filters?: { assignee?: string; status?: string; label?: string; taskType?: string }, authContext?: AuthContext): Promise<ServiceResult<{ tasks: TaskWithDeps[] }>> {
   const team = getTeam(teamId)
   if (!team) {
     return { error: 'Team not found', status: 404 }
   }
 
-  // Governance ACL: closed teams restrict access to manager, COS, and members
-  // Always call checkTeamAccess -- it handles undefined requestingAgentId (returns allowed: true)
-  const access = checkTeamAccess({ teamId, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): forward authContext.
+  const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
@@ -680,13 +692,14 @@ export async function listTeamTasks(teamId: string, requestingAgentId?: string, 
  * Governance: enforces team ACL for closed teams.
  * SF-010: Added to support GET /api/teams/[id]/tasks/[taskId]
  */
-export async function getTeamTask(teamId: string, taskId: string, requestingAgentId?: string): Promise<ServiceResult<{ task: any }>> {
+export async function getTeamTask(teamId: string, taskId: string, requestingAgentId?: string, authContext?: AuthContext): Promise<ServiceResult<{ task: any }>> {
   const team = getTeam(teamId)
   if (!team) {
     return { error: 'Team not found', status: 404 }
   }
 
-  const access = checkTeamAccess({ teamId, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): forward authContext.
+  const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
@@ -720,10 +733,9 @@ export async function createTeamTask(teamId: string, params: CreateTaskParams): 
     return { error: 'Team not found', status: 404 }
   }
 
-  // Governance ACL: closed teams restrict mutations to manager, COS, and members
-  // Always call checkTeamAccess -- it handles undefined requestingAgentId (returns allowed: true)
-  const { requestingAgentId, ...taskFields } = params
-  const access = checkTeamAccess({ teamId, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): forward authContext.
+  const { requestingAgentId, authContext, ...taskFields } = params
+  const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
@@ -782,10 +794,9 @@ export async function updateTeamTask(
     return { error: 'Team not found', status: 404 }
   }
 
-  // Governance ACL: closed teams restrict mutations to manager, COS, and members
-  // Always call checkTeamAccess -- it handles undefined requestingAgentId (returns allowed: true)
-  const { requestingAgentId, ...taskFields } = params
-  const access = checkTeamAccess({ teamId, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): forward authContext.
+  const { requestingAgentId, authContext, ...taskFields } = params
+  const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
@@ -839,15 +850,14 @@ export async function updateTeamTask(
  * Delete a task from a team.
  * Governance: enforces team ACL for closed teams.
  */
-export async function deleteTeamTask(teamId: string, taskId: string, requestingAgentId?: string): Promise<ServiceResult<{ success: boolean }>> {
+export async function deleteTeamTask(teamId: string, taskId: string, requestingAgentId?: string, authContext?: AuthContext): Promise<ServiceResult<{ success: boolean }>> {
   const team = getTeam(teamId)
   if (!team) {
     return { error: 'Team not found', status: 404 }
   }
 
-  // Governance ACL: closed teams restrict mutations to manager, COS, and members
-  // Always call checkTeamAccess -- it handles undefined requestingAgentId (returns allowed: true)
-  const access = checkTeamAccess({ teamId, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): forward authContext.
+  const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
@@ -881,15 +891,14 @@ export async function deleteTeamTask(teamId: string, taskId: string, requestingA
  * List all documents for a team.
  * Governance: enforces team ACL for closed teams.
  */
-export function listTeamDocuments(teamId: string, requestingAgentId?: string): ServiceResult<{ documents: TeamDocument[] }> {
+export function listTeamDocuments(teamId: string, requestingAgentId?: string, authContext?: AuthContext): ServiceResult<{ documents: TeamDocument[] }> {
   const team = getTeam(teamId)
   if (!team) {
     return { error: 'Team not found', status: 404 }
   }
 
-  // Governance ACL: closed teams restrict access to manager, COS, and members
-  // Always call checkTeamAccess -- it handles undefined requestingAgentId (returns allowed: true)
-  const access = checkTeamAccess({ teamId, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): forward authContext.
+  const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
@@ -908,10 +917,9 @@ export async function createTeamDocument(teamId: string, params: CreateDocumentP
     return { error: 'Team not found', status: 404 }
   }
 
-  // Governance ACL: closed teams restrict mutations to manager, COS, and members
-  // Always call checkTeamAccess -- it handles undefined requestingAgentId (returns allowed: true)
-  const { requestingAgentId, ...docFields } = params
-  const access = checkTeamAccess({ teamId, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): forward authContext.
+  const { requestingAgentId, authContext, ...docFields } = params
+  const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
@@ -941,15 +949,14 @@ export async function createTeamDocument(teamId: string, params: CreateDocumentP
  * Get a single document by ID.
  * Governance: enforces team ACL for closed teams.
  */
-export function getTeamDocument(teamId: string, docId: string, requestingAgentId?: string): ServiceResult<{ document: any }> {
+export function getTeamDocument(teamId: string, docId: string, requestingAgentId?: string, authContext?: AuthContext): ServiceResult<{ document: any }> {
   const team = getTeam(teamId)
   if (!team) {
     return { error: 'Team not found', status: 404 }
   }
 
-  // Governance ACL: closed teams restrict access to manager, COS, and members
-  // Always call checkTeamAccess -- it handles undefined requestingAgentId (returns allowed: true)
-  const access = checkTeamAccess({ teamId, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): forward authContext.
+  const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
@@ -977,10 +984,9 @@ export async function updateTeamDocument(
     return { error: 'Team not found', status: 404 }
   }
 
-  // Governance ACL: closed teams restrict mutations to manager, COS, and members
-  // Always call checkTeamAccess -- it handles undefined requestingAgentId (returns allowed: true)
-  const { requestingAgentId, ...docFields } = params
-  const access = checkTeamAccess({ teamId, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): forward authContext.
+  const { requestingAgentId, authContext, ...docFields } = params
+  const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
@@ -1010,15 +1016,14 @@ export async function updateTeamDocument(
  * Delete a document by ID.
  * Governance: enforces team ACL for closed teams.
  */
-export async function deleteTeamDocument(teamId: string, docId: string, requestingAgentId?: string): Promise<ServiceResult<{ success: boolean }>> {
+export async function deleteTeamDocument(teamId: string, docId: string, requestingAgentId?: string, authContext?: AuthContext): Promise<ServiceResult<{ success: boolean }>> {
   const team = getTeam(teamId)
   if (!team) {
     return { error: 'Team not found', status: 404 }
   }
 
-  // Governance ACL: closed teams restrict mutations to manager, COS, and members
-  // Always call checkTeamAccess -- it handles undefined requestingAgentId (returns allowed: true)
-  const access = checkTeamAccess({ teamId, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): forward authContext.
+  const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
@@ -1093,12 +1098,13 @@ export async function notifyTeamAgents(params: NotifyTeamParams): Promise<Servic
  * Get kanban column configuration for a team.
  * Returns team's custom config or DEFAULT_KANBAN_COLUMNS.
  */
-export async function getKanbanConfig(teamId: string, requestingAgentId?: string): Promise<ServiceResult<{ columns: KanbanColumnConfig[] }>> {
+export async function getKanbanConfig(teamId: string, requestingAgentId?: string, authContext?: AuthContext): Promise<ServiceResult<{ columns: KanbanColumnConfig[] }>> {
   const team = getTeam(teamId)
   if (!team) {
     return { error: 'Team not found', status: 404 }
   }
-  const access = checkTeamAccess({ teamId, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): forward authContext.
+  const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
@@ -1121,12 +1127,13 @@ export async function getKanbanConfig(teamId: string, requestingAgentId?: string
 /**
  * Set kanban column configuration for a team.
  */
-export async function setKanbanConfig(teamId: string, columns: KanbanColumnConfig[], requestingAgentId?: string): Promise<ServiceResult<{ columns: KanbanColumnConfig[] }>> {
+export async function setKanbanConfig(teamId: string, columns: KanbanColumnConfig[], requestingAgentId?: string, authContext?: AuthContext): Promise<ServiceResult<{ columns: KanbanColumnConfig[] }>> {
   const team = getTeam(teamId)
   if (!team) {
     return { error: 'Team not found', status: 404 }
   }
-  const access = checkTeamAccess({ teamId, requestingAgentId })
+  // LIB2-CRIT-02 (2026-05-06): forward authContext.
+  const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }

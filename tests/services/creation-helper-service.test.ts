@@ -74,6 +74,13 @@ import {
   sendMessage,
   captureResponse,
 } from '@/services/creation-helper-service'
+import type { AuthContext } from '@/lib/agent-auth'
+
+// SVC2-MAJ-09 (2026-05-06): creation-helper sendMessage now requires AuthContext.
+const SYSTEM_OWNER_CTX: AuthContext = {
+  isSystemOwner: true,
+  governanceTitle: 'system',
+}
 
 // ============================================================================
 // Setup
@@ -290,7 +297,7 @@ describe('sendMessage', () => {
   it('sends sanitized text to tmux session', async () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
 
-    const result = await sendMessage('Hello Haephestos!')
+    const result = await sendMessage('Hello Haephestos!', SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(200)
     expect(result.data?.success).toBe(true)
@@ -304,7 +311,7 @@ describe('sendMessage', () => {
   it('rejects empty messages', async () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
 
-    const result = await sendMessage('')
+    const result = await sendMessage('', SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(400)
     expect(result.error).toContain('Empty message')
@@ -313,7 +320,7 @@ describe('sendMessage', () => {
   it('rejects when session not running', async () => {
     mockRuntime.sessionExists.mockResolvedValue(false)
 
-    const result = await sendMessage('Hello')
+    const result = await sendMessage('Hello', SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(404)
     expect(result.error).toContain('not running')
@@ -322,7 +329,7 @@ describe('sendMessage', () => {
   it('strips null bytes and control characters', async () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
 
-    await sendMessage('Hello\x00World\x07!')
+    await sendMessage('Hello\x00World\x07!', SYSTEM_OWNER_CTX)
 
     expect(mockRuntime.sendKeys).toHaveBeenCalledWith(
       '_aim-creation-helper',
@@ -334,7 +341,7 @@ describe('sendMessage', () => {
   it('strips bidi override characters', async () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
 
-    await sendMessage('Hello\u202AWorld\u202E!')
+    await sendMessage('Hello\u202AWorld\u202E!', SYSTEM_OWNER_CTX)
 
     expect(mockRuntime.sendKeys).toHaveBeenCalledWith(
       '_aim-creation-helper',

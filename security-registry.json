@@ -28,6 +28,7 @@
   ],
   "entries": {
     "DELETE_/api/agents/[id]": "strict",
+    "DELETE_/api/agents/[id]/session": "strict",
     "DELETE_/api/teams/[id]": "strict",
     "PUT_/api/teams/[id]": "strict",
     "DELETE_/api/agents/cemetery": "strict",

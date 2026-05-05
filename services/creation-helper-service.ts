@@ -24,6 +24,7 @@ import { getAgentByName, createAgent, deleteAgent } from '@/lib/agent-registry'
 import { parseNameForDisplay } from '@/types/agent'
 import { getRuntime } from '@/lib/agent-runtime'
 import type { ServiceResult } from '@/types/service'
+import type { AuthContext } from '@/lib/agent-auth'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -730,9 +731,21 @@ export async function getCreationHelperStatus(): Promise<ServiceResult<{
 
 /**
  * Send a user message to the creation helper Claude session.
+ *
+ * SVC2-MAJ-09 fix (2026-05-06): the helper session runs Claude with
+ * --permission-mode acceptEdits (auto-accepts every Edit/Write). Driving
+ * it from any caller other than the web UI is an arbitrary-edit primitive.
+ * Require system-owner.
  */
-export async function sendMessage(text: string): Promise<ServiceResult<{ success: boolean }>> {
+export async function sendMessage(text: string, authContext: AuthContext): Promise<ServiceResult<{ success: boolean }>> {
   try {
+    if (!authContext) {
+      return { error: 'Auth context required for creation-helper sendMessage', status: 401 }
+    }
+    if (!authContext.isSystemOwner) {
+      return { error: 'Only the system owner may drive the creation helper session', status: 403 }
+    }
+
     const exists = await sessionExists()
     if (!exists) {
       return {

@@ -176,6 +176,14 @@ import {
   getStartupInfo,
   proxyHealthCheck,
 } from '@/services/agents-core-service'
+import type { AuthContext } from '@/lib/agent-auth'
+
+// SVC2-CRIT-* (2026-05-06): every Change* / register / link / send-command
+// service now requires an AuthContext. Tests use a typed system-owner ctx.
+const SYSTEM_OWNER_CTX: AuthContext = {
+  isSystemOwner: true,
+  governanceTitle: 'system',
+}
 
 // ============================================================================
 // Setup
@@ -433,7 +441,7 @@ describe('registerAgent', () => {
     mockAgentRegistry.createAgent.mockReturnValue(makeAgent({ id: 'new-id', name: 'my-agent' }))
     mockFs.default.existsSync.mockReturnValue(false)
 
-    const result = await registerAgent({ sessionName: 'my-agent', workingDirectory: '/home' })
+    const result = await registerAgent({ sessionName: 'my-agent', workingDirectory: '/home', authContext: SYSTEM_OWNER_CTX })
 
     expect(result.status).toBe(200)
     expect(result.data?.success).toBe(true)
@@ -446,7 +454,7 @@ describe('registerAgent', () => {
     mockAgentRegistry.getAgentBySession.mockReturnValue(existing)
     mockFs.default.existsSync.mockReturnValue(false)
 
-    const result = await registerAgent({ sessionName: 'my-agent' })
+    const result = await registerAgent({ sessionName: 'my-agent', authContext: SYSTEM_OWNER_CTX })
 
     expect(result.status).toBe(200)
     expect(mockAgentRegistry.linkSession).toHaveBeenCalledWith('existing-id', 'my-agent', expect.any(String))
@@ -459,6 +467,7 @@ describe('registerAgent', () => {
     const result = await registerAgent({
       id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
       deployment: { cloud: { websocketUrl: 'wss://agent.cloud.com/term' } },
+      authContext: SYSTEM_OWNER_CTX,
     })
 
     expect(result.status).toBe(200)
@@ -466,7 +475,7 @@ describe('registerAgent', () => {
   })
 
   it('returns 400 when session name is missing (worktree format)', async () => {
-    const result = await registerAgent({ sessionName: '' })
+    const result = await registerAgent({ sessionName: '', authContext: SYSTEM_OWNER_CTX })
 
     // The code checks `!body.sessionName` which is falsy for empty string
     // It falls through to the cloud path and fails there
@@ -474,7 +483,7 @@ describe('registerAgent', () => {
   })
 
   it('returns 400 when cloud agent missing required fields', async () => {
-    const result = await registerAgent({ id: 'cloud', deployment: {} as any })
+    const result = await registerAgent({ id: 'cloud', deployment: {} as any, authContext: SYSTEM_OWNER_CTX })
 
     expect(result.status).toBe(400)
     expect(result.error).toMatch(/missing/i)
@@ -485,7 +494,7 @@ describe('registerAgent', () => {
     mockAgentRegistry.createAgent.mockReturnValue(makeAgent())
     mockFs.default.existsSync.mockReturnValue(false)
 
-    await registerAgent({ sessionName: 'agent' })
+    await registerAgent({ sessionName: 'agent', authContext: SYSTEM_OWNER_CTX })
 
     expect(mockFs.default.writeFileSync).toHaveBeenCalled()
   })
@@ -928,7 +937,7 @@ describe('sendAgentSessionCommand', () => {
     mockAgentRegistry.getAgent.mockReturnValue(agent)
     mockRuntime.sessionExists.mockResolvedValue(true)
 
-    const result = await sendAgentSessionCommand('agent-1', { command: 'ls -la' })
+    const result = await sendAgentSessionCommand('agent-1', { command: 'ls -la' }, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(200)
     expect(result.data?.success).toBe(true)
@@ -942,7 +951,7 @@ describe('sendAgentSessionCommand', () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockSharedState.sessionActivity.set('my-agent', Date.now())
 
-    const result = await sendAgentSessionCommand('agent-1', { command: 'ls' })
+    const result = await sendAgentSessionCommand('agent-1', { command: 'ls' }, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(409)
     expect(result.error).toMatch(/not idle/i)
@@ -954,7 +963,7 @@ describe('sendAgentSessionCommand', () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockSharedState.sessionActivity.set('my-agent', Date.now())
 
-    const result = await sendAgentSessionCommand('agent-1', { command: 'ls', requireIdle: false })
+    const result = await sendAgentSessionCommand('agent-1', { command: 'ls', requireIdle: false }, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(200)
   })
@@ -962,7 +971,7 @@ describe('sendAgentSessionCommand', () => {
   it('returns 404 when agent not found', async () => {
     mockAgentRegistry.getAgent.mockReturnValue(null)
 
-    const result = await sendAgentSessionCommand('nonexistent', { command: 'ls' })
+    const result = await sendAgentSessionCommand('nonexistent', { command: 'ls' }, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(404)
   })
@@ -971,7 +980,7 @@ describe('sendAgentSessionCommand', () => {
     const agent = makeAgent({ id: 'agent-1', name: 'my-agent' })
     mockAgentRegistry.getAgent.mockReturnValue(agent)
 
-    const result = await sendAgentSessionCommand('agent-1', { command: '' })
+    const result = await sendAgentSessionCommand('agent-1', { command: '' }, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(400)
   })
@@ -981,7 +990,7 @@ describe('sendAgentSessionCommand', () => {
     mockAgentRegistry.getAgent.mockReturnValue(agent)
     mockRuntime.sessionExists.mockResolvedValue(false)
 
-    const result = await sendAgentSessionCommand('agent-1', { command: 'ls' })
+    const result = await sendAgentSessionCommand('agent-1', { command: 'ls' }, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(404)
   })
@@ -991,7 +1000,7 @@ describe('sendAgentSessionCommand', () => {
     mockAgentRegistry.getAgent.mockReturnValue(agent)
     mockRuntime.sessionExists.mockResolvedValue(true)
 
-    await sendAgentSessionCommand('agent-1', { command: 'ls' })
+    await sendAgentSessionCommand('agent-1', { command: 'ls' }, SYSTEM_OWNER_CTX)
 
     expect(mockRuntime.cancelCopyMode).toHaveBeenCalledWith('my-agent')
   })
@@ -1001,7 +1010,7 @@ describe('sendAgentSessionCommand', () => {
     mockAgentRegistry.getAgent.mockReturnValue(agent)
     mockRuntime.sessionExists.mockResolvedValue(true)
 
-    await sendAgentSessionCommand('agent-1', { command: 'ls' })
+    await sendAgentSessionCommand('agent-1', { command: 'ls' }, SYSTEM_OWNER_CTX)
 
     expect(mockSharedState.sessionActivity.get('my-agent')).toBeDefined()
   })
@@ -1010,7 +1019,7 @@ describe('sendAgentSessionCommand', () => {
     const agent = makeAgent({ id: 'agent-1', name: '' })
     mockAgentRegistry.getAgent.mockReturnValue(agent)
 
-    const result = await sendAgentSessionCommand('agent-1', { command: 'ls' })
+    const result = await sendAgentSessionCommand('agent-1', { command: 'ls' }, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(400)
     expect(result.error).toMatch(/no name/i)
@@ -1025,14 +1034,14 @@ describe('linkAgentSession', () => {
   it('links session to agent', async () => {
     mockAgentRegistry.linkSession.mockReturnValue(true)
 
-    const result = await linkAgentSession('agent-1', { sessionName: 'my-session' })
+    const result = await linkAgentSession('agent-1', { sessionName: 'my-session' }, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(200)
     expect(result.data?.success).toBe(true)
   })
 
   it('returns 400 when sessionName is missing', async () => {
-    const result = await linkAgentSession('agent-1', { sessionName: '' })
+    const result = await linkAgentSession('agent-1', { sessionName: '' }, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(400)
   })
@@ -1040,7 +1049,7 @@ describe('linkAgentSession', () => {
   it('returns 404 when agent not found', async () => {
     mockAgentRegistry.linkSession.mockReturnValue(false)
 
-    const result = await linkAgentSession('nonexistent', { sessionName: 'my-session' })
+    const result = await linkAgentSession('nonexistent', { sessionName: 'my-session' }, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(404)
   })
@@ -1056,7 +1065,7 @@ describe('unlinkOrDeleteAgentSession', () => {
     mockAgentRegistry.getAgent.mockReturnValue(agent)
     mockAgentRegistry.unlinkSession.mockReturnValue(true)
 
-    const result = await unlinkOrDeleteAgentSession('agent-1', {})
+    const result = await unlinkOrDeleteAgentSession('agent-1', {}, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(200)
     expect(result.data?.sessionUnlinked).toBe(true)
@@ -1068,7 +1077,7 @@ describe('unlinkOrDeleteAgentSession', () => {
     mockAgentRegistry.unlinkSession.mockReturnValue(true)
     mockRuntime.sessionExists.mockResolvedValue(true)
 
-    const result = await unlinkOrDeleteAgentSession('agent-1', { kill: true })
+    const result = await unlinkOrDeleteAgentSession('agent-1', { kill: true }, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(200)
     expect(result.data?.sessionKilled).toBe(true)
@@ -1080,7 +1089,7 @@ describe('unlinkOrDeleteAgentSession', () => {
     mockAgentRegistry.getAgent.mockReturnValue(agent)
     mockAgentRegistry.deleteAgent.mockReturnValue(true)
 
-    const result = await unlinkOrDeleteAgentSession('agent-1', { deleteAgent: true })
+    const result = await unlinkOrDeleteAgentSession('agent-1', { deleteAgent: true }, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(200)
     expect(result.data?.deleted).toBe(true)
@@ -1090,7 +1099,7 @@ describe('unlinkOrDeleteAgentSession', () => {
   it('returns 404 when agent not found', async () => {
     mockAgentRegistry.getAgent.mockReturnValue(null)
 
-    const result = await unlinkOrDeleteAgentSession('nonexistent', {})
+    const result = await unlinkOrDeleteAgentSession('nonexistent', {}, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(404)
   })
@@ -1100,7 +1109,7 @@ describe('unlinkOrDeleteAgentSession', () => {
     mockAgentRegistry.getAgent.mockReturnValue(agent)
     mockAgentRegistry.unlinkSession.mockReturnValue(false)
 
-    const result = await unlinkOrDeleteAgentSession('agent-1', {})
+    const result = await unlinkOrDeleteAgentSession('agent-1', {}, SYSTEM_OWNER_CTX)
 
     expect(result.status).toBe(404)
   })

@@ -60,7 +60,10 @@ export async function GET(
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
   const requestingAgentId = auth.agentId
-  const result = getTeamById(id, requestingAgentId)
+  // LIB2-CRIT-02 (2026-05-06): forward AuthContext to teams-service so the
+  // ACL inside getTeamById can distinguish a verified web-UI session from
+  // an anonymous request.
+  const result = getTeamById(id, requestingAgentId, buildAuthContext(auth))
 
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })
@@ -119,7 +122,8 @@ export async function PUT(
       try { return getTeam(id)?.agentIds ?? [] } catch { return [] }
     })()
 
-    const result = await updateTeamById(id, { ...safeBody, requestingAgentId })
+    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
+    const result = await updateTeamById(id, { ...safeBody, requestingAgentId, authContext: buildAuthContext(auth) })
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }

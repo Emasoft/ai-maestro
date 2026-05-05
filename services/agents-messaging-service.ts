@@ -61,6 +61,7 @@ import type { AddAMPAddressRequest, AddEmailAddressRequest, EmailConflictError, 
 // ---------------------------------------------------------------------------
 
 import { ServiceResult } from '@/types/service'
+import type { AuthContext } from '@/lib/agent-auth'
 // NT-006: ServiceResult re-export removed — import directly from @/types/service
 
 // ---------------------------------------------------------------------------
@@ -238,11 +239,24 @@ export async function listMessages(
 
 export async function sendMessage(
   agentId: string,
-  body: { to: string; subject: string; content: Message['content']; priority?: Message['priority']; inReplyTo?: string }
+  body: { to: string; subject: string; content: Message['content']; priority?: Message['priority']; inReplyTo?: string },
+  authContext: AuthContext
 ): Promise<ServiceResult<any>> {
   const { to, subject, content, priority, inReplyTo } = body
 
-  // Delegate to the unified SendMessage AIO pipeline
+  // SVC2-MAJ-06 fix (2026-05-06): the path-id `agentId` was previously the only
+  // identity check — it became both `from` and `senderAgentId` and the caller's
+  // verified identity was never compared. Reject when authContext.agentId
+  // doesn't match agentId (unless the caller is system-owner).
+  if (!authContext) {
+    return { error: 'Auth context required', status: 401 }
+  }
+  if (!authContext.isSystemOwner && authContext.agentId !== agentId) {
+    return { error: 'forbidden_sender_mismatch', status: 403 }
+  }
+
+  // Delegate to the unified SendMessage AIO pipeline (which performs its own
+  // G04.AUTH check as defense-in-depth, fixing SVC2-CRIT-03).
   const { SendMessage } = await import('@/services/send-message-service')
   const result = await SendMessage({
     from: agentId,
@@ -254,6 +268,7 @@ export async function sendMessage(
     senderAgentId: agentId,
     // Agent-to-agent messages DO check the R6 graph
     skipGraphCheck: false,
+    authContext,
   })
 
   if (!result.success) {

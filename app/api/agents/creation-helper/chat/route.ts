@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { sendMessage } from '@/services/creation-helper-service'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +29,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'message is required and must be a string' }, { status: 400 })
     }
 
-    const result = await sendMessage(message)
+    // SVC2-MAJ-09 fix (2026-05-06): forward AuthContext so the service can
+    // enforce system-owner gating (creation helper runs Claude with
+    // --permission-mode acceptEdits, so non-owner access is unsafe).
+    const result = await sendMessage(message, buildAuthContext(auth))
     if (result.error) {
       return NextResponse.json(
         { success: false, error: result.error },

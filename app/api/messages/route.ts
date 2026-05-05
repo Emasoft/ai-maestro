@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getMessages, sendMessage, updateMessage, removeMessage } from '@/services/messages-service'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 
 /**
  * GET /api/messages?agent=<agentId|alias|sessionName>&status=<status>&from=<from>&box=<inbox|sent>
@@ -64,7 +64,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await sendMessage(body)
+    // SVC2-CRIT-03 fix (2026-05-06): forward AuthContext so SendMessage's
+    // G04.AUTH gate can compare caller identity to claimed sender.
+    const result = await sendMessage({ ...body, authContext: buildAuthContext(auth) })
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }

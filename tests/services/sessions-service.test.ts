@@ -113,6 +113,13 @@ import {
   deletePersistedSession,
   getActivity,
 } from '@/services/sessions-service'
+import type { AuthContext } from '@/lib/agent-auth'
+
+// SVC2-CRIT-01 (2026-05-06): sendCommand now requires AuthContext.
+const SYSTEM_OWNER_CTX: AuthContext = {
+  isSystemOwner: true,
+  governanceTitle: 'system',
+}
 
 // ============================================================================
 // Setup
@@ -483,7 +490,7 @@ describe('sendCommand', () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     // sendCommand sets activity before idle check, so requireIdle must be false
     // to test basic command-sending behavior
-    const result = await sendCommand('my-agent', 'ls -la', { requireIdle: false })
+    const result = await sendCommand('my-agent', 'ls -la', { requireIdle: false, authContext: SYSTEM_OWNER_CTX })
 
     expect(result.status).toBe(200)
     expect(result.data?.success).toBe(true)
@@ -494,13 +501,13 @@ describe('sendCommand', () => {
   it('cancels copy mode before sending command', async () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
 
-    await sendCommand('my-agent', 'test', { requireIdle: false })
+    await sendCommand('my-agent', 'test', { requireIdle: false, authContext: SYSTEM_OWNER_CTX })
 
     expect(mockRuntime.cancelCopyMode).toHaveBeenCalledWith('my-agent')
   })
 
   it('returns 400 when command is missing', async () => {
-    const result = await sendCommand('my-agent', '')
+    const result = await sendCommand('my-agent', '', { authContext: SYSTEM_OWNER_CTX })
 
     expect(result.status).toBe(400)
     expect(result.error).toMatch(/command/i)
@@ -509,7 +516,7 @@ describe('sendCommand', () => {
   it('returns 404 when session does not exist', async () => {
     mockRuntime.sessionExists.mockResolvedValue(false)
 
-    const result = await sendCommand('nonexistent', 'ls')
+    const result = await sendCommand('nonexistent', 'ls', { authContext: SYSTEM_OWNER_CTX })
 
     expect(result.status).toBe(404)
   })
@@ -518,7 +525,7 @@ describe('sendCommand', () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockSharedState.sessionActivity.set('busy-agent', Date.now()) // very recent = not idle
 
-    const result = await sendCommand('busy-agent', 'ls')
+    const result = await sendCommand('busy-agent', 'ls', { authContext: SYSTEM_OWNER_CTX })
 
     expect(result.status).toBe(409)
     expect(result.error).toMatch(/not idle/i)
@@ -528,7 +535,7 @@ describe('sendCommand', () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
     mockSharedState.sessionActivity.set('busy-agent', Date.now())
 
-    const result = await sendCommand('busy-agent', 'ls', { requireIdle: false })
+    const result = await sendCommand('busy-agent', 'ls', { requireIdle: false, authContext: SYSTEM_OWNER_CTX })
 
     expect(result.status).toBe(200)
     expect(result.data?.success).toBe(true)
@@ -537,7 +544,7 @@ describe('sendCommand', () => {
   it('respects addNewline option', async () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
 
-    await sendCommand('my-agent', 'test', { requireIdle: false, addNewline: false })
+    await sendCommand('my-agent', 'test', { requireIdle: false, addNewline: false, authContext: SYSTEM_OWNER_CTX })
 
     expect(mockRuntime.sendKeys).toHaveBeenCalledWith('my-agent', 'test', { literal: true, enter: false })
   })
@@ -545,7 +552,7 @@ describe('sendCommand', () => {
   it('updates activity timestamp after sending command', async () => {
     mockRuntime.sessionExists.mockResolvedValue(true)
 
-    await sendCommand('my-agent', 'ls')
+    await sendCommand('my-agent', 'ls', { authContext: SYSTEM_OWNER_CTX })
 
     expect(mockSharedState.sessionActivity.get('my-agent')).toBeDefined()
   })

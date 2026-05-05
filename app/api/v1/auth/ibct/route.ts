@@ -55,10 +55,25 @@ export async function POST(request: Request) {
       )
     }
 
+    // API2-CRIT-01 fix (2026-05-06) — `verifyProofWithPublicKeyHex` returns
+    // a `ProofVerificationResult` object `{ valid: boolean, error?: string }`,
+    // NOT a boolean. The previous `if (!verified)` was always false (any
+    // object is truthy) — so the 401 branch was dead code and EVERY proof
+    // value passed verification. Net effect: any caller who knew an
+    // agent's public key could mint an IBCT token with arbitrary garbage
+    // in the proof field, bypassing the entire proof-of-possession flow.
+    // Fix: check `.valid` explicitly. Cross-checked against
+    // `app/api/v1/auth/token/route.ts:119-126` which uses the correct
+    // `if (!proofResult.valid)` pattern.
     const verified = verifyProofWithPublicKeyHex(body.proof, identity.public_key, SERVER_URL)
-    if (!verified) {
+    if (!verified.valid) {
       return NextResponse.json(
-        { error: 'invalid_proof', message: 'Proof of possession failed' },
+        {
+          error: 'invalid_proof',
+          message: verified.error
+            ? `Proof of possession failed: ${verified.error}`
+            : 'Proof of possession failed',
+        },
         { status: 401 }
       )
     }

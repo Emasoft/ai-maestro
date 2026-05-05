@@ -57,8 +57,12 @@ const TOKEN_LIFETIME_SECONDS = 3600 // 1 hour
 const PROOF_TIMESTAMP_WINDOW_SECONDS = 300 // 5 minutes anti-replay
 const TOKENS_DIR = statePath('governance-tokens')
 
-// In-memory token cache (avoids disk reads on every auth request)
-const TOKEN_CACHE_TTL_MS = 30_000
+// In-memory token cache (avoids disk reads on every auth request).
+// AUTH-MIN-01 fix: TTL reduced from 30s to 5s. The previous 30-second window
+// meant a revoked token (agent deleted, key rotated) remained usable in-cache
+// for up to 30 seconds after revocation. 5s is a much smaller blind window
+// while keeping the per-request disk-read amortisation.
+const TOKEN_CACHE_TTL_MS = 5_000
 let _tokenCache: AIDTokenRecord[] | null = null
 let _tokenCacheTimestamp = 0
 

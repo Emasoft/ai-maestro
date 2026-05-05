@@ -215,7 +215,12 @@ export async function POST(
 
     return NextResponse.json({ success: true, sessionName, command: cmd })
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // API-MIN-03 fix: do not return raw error.message to client. tmux/exec
+    // errors leak internal paths (socket path, full command), OS-specific
+    // text, and absolute filesystem layout. Log full detail server-side and
+    // return a generic message to the client.
+    const detail = error instanceof Error ? error.message : 'Unknown error'
+    console.error('[Sessions restart] tmux command failed:', { detail, error })
+    return NextResponse.json({ error: 'Session restart failed' }, { status: 500 })
   }
 }

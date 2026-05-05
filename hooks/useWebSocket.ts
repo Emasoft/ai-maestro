@@ -91,6 +91,23 @@ export function useWebSocket({
     }
   }, [])
 
+  /**
+   * UI-MIN-06 documentation note (no code change required):
+   *
+   * The exponential-backoff state for reconnection (`reconnectDelay`) is held
+   * in the closure of this `useCallback`. Because the deps array is stable
+   * (effectively `[]` — only refs change inside), the closure identity is
+   * stable for the lifetime of the hook instance. The `ws.onclose` handler
+   * reads and mutates `reconnectDelay` through the same closure each time,
+   * and `ws.onopen` resets it. That's a deliberate pattern: `useRef` would
+   * also work, but the closure variable is fine and simpler here because
+   * the state never needs to be exposed to the render cycle (no UI reads
+   * `reconnectDelay`).
+   *
+   * If this hook is restructured (e.g. deps are added or `connect` becomes
+   * non-stable), convert `reconnectDelay` to a `useRef<number>` so the
+   * mutable backoff state lives in a place independent of closure identity.
+   */
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return

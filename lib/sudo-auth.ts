@@ -128,3 +128,17 @@ export function activeSudoTokenCount(): number {
   sweep()
   return tokens.size
 }
+
+// AUTH-MIN-04 fix: schedule a periodic sweep so expired tokens don't
+// accumulate in low-traffic deployments. The previous lazy-only sweep would
+// leave expired entries in memory until the next issue/validate call. Skip
+// during tests so we don't hold the event loop open.
+if (process.env.NODE_ENV !== 'test') {
+  const SUDO_SWEEP_INTERVAL_MS = 60_000 // 60s — sudo TTL is 60s, so this is a single TTL window
+  const sweepInterval = setInterval(sweep, SUDO_SWEEP_INTERVAL_MS)
+  // Don't keep the Node.js event loop alive solely for this timer — a
+  // graceful shutdown shouldn't be delayed by it.
+  if (typeof sweepInterval.unref === 'function') {
+    sweepInterval.unref()
+  }
+}

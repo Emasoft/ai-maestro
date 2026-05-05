@@ -334,8 +334,21 @@ export function validateMessageRoute(
   }
 
   if (!recipientRole) {
-    // If recipient has no title, treat as MEMBER (default, most restrictive for senders)
-    // This is safe: only MANAGER, COS, and ORCHESTRATOR can reach MEMBER.
+    // AUTH-MIN-05: deliberate "most-restrictive default" for an unknown
+    // recipient title. Rationale:
+    //   - A null/undefined recipientRole can mean: registry corruption, an
+    //     agent that lost its title due to a migration, a newly-added title
+    //     not yet mapped here, or an agent referenced before its title was
+    //     assigned.
+    //   - Treating an unknown title as MEMBER picks the recipient title with
+    //     the MOST inbound restrictions — only MANAGER, CHIEF-OF-STAFF, and
+    //     ORCHESTRATOR can reach MEMBER (see ALLOW_EDGES). Any other sender
+    //     is denied. That's strictly safer than picking AUTONOMOUS (which is
+    //     reachable from many senders) or HUMAN (reply-only).
+    //   - If a new title is added to GovernanceTitle but not added to
+    //     ALLOW_EDGES, it will fall through here and behave like MEMBER —
+    //     the same fail-closed default. Adding a real ALLOW_EDGES entry for
+    //     the new title is required, but the system stays safe in the gap.
     return canSendMessage(senderRole as AgentRole, 'member')
       ? { allowed: true, edgeType: 'allow' }
       : { allowed: false, reason: `${senderRole} cannot send messages to agents without a governance title`, suggestion: 'Route through chief-of-staff or orchestrator', edgeType: 'deny' }

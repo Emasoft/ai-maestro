@@ -210,6 +210,25 @@ export class SignedLedger {
     }
   }
 
+  // ─── Lock-free read methods (REG-MIN-01) ───────────────────────────────
+  // The three read methods below — `stats`, `getEntries`, `getEntriesForPath` —
+  // intentionally do NOT acquire `withLock(\`ledger:${this.base}\`, ...)`. They
+  // are diagnostic / audit-trail queries, not security-gating reads, and the
+  // performance cost of holding the ledger lock for every read would be
+  // significant when the ledger contains thousands of entries.
+  //
+  // Concurrent `append()` calls DO acquire the lock and rebuild
+  // `this.entries` after force-reloading. A reader that arrives during an
+  // append therefore sees one of two consistent snapshots — never a partial
+  // mutation, because `this.entries` is replaced by reference, not patched.
+  // That's good enough for stats/audit. The only cost is eventual
+  // consistency — a reader may see an entry count that is one or two behind
+  // a just-completed append. For the current use cases (admin dashboard,
+  // ledger-rotate decision, audit export) that's acceptable.
+  //
+  // The append-only invariant itself — entries are signed, hashes chain,
+  // never mutated — is enforced under the lock in `append()` and `rotateLedger()`.
+  // No reader can corrupt the ledger.
   stats(): LedgerStats {
     this.ensureLoaded()
     const last = this.entries[this.entries.length - 1]

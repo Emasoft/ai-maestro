@@ -867,7 +867,10 @@ export async function InstallElement(
         }
       }
     } catch (execErr) {
-      result.error = `G09: Action "${action}" failed: ${execErr instanceof Error ? execErr.message : execErr}`
+      // EMS-MIN-01 fix: this catch belongs to the EXE (execution) section,
+      // not Gate 9. The "G09:" prefix collides with the actual Gate 9 label
+      // (R9.13 role-plugin enforcement) and confuses pipeline log readers.
+      result.error = `EXE: Action "${action}" failed: ${execErr instanceof Error ? execErr.message : execErr}`
       ops.push(result.error)
       return result
     }
@@ -2344,7 +2347,11 @@ export async function ChangeTitle(
       ops.push(`G14b: WARN — Token revocation skipped (aid-token module error)`)
     }
 
-    // ── GATE 14c: Uninstall role-plugin bound to the OLD title ─────────
+    // ── GATE 14d: Uninstall role-plugin bound to the OLD title ─────────
+    // (EMS-MIN-02 fix: this gate was previously labeled G14c, colliding
+    // with the per-op ledger emit at line ~2304. Renamed to G14d so the
+    // sequential gate labels stay unique.)
+    //
     // Before G15 computes the target plugin, explicitly uninstall any
     // role-plugin that is incompatible with the NEW title. This is the
     // symmetric counterpart to G16's plugin install and closes the
@@ -2352,17 +2359,17 @@ export async function ChangeTitle(
     // exposed by SCEN-002 P0-002:
     //
     //   1. DeleteTeam reverts all team agents to AUTONOMOUS.
-    //   2. Without G14c, G15's `uninstallAllRolePlugins()` sweeps with
+    //   2. Without G14d, G15's `uninstallAllRolePlugins()` sweeps with
     //      the GitHub marketplace name only, and silently no-ops for any
     //      plugin whose marketplace key does not match. The agent then
     //      has governanceTitle=null while still carrying its old plugin.
-    //   3. G14c detects the plugin via its FULL settings.local.json key
+    //   3. G14d detects the plugin via its FULL settings.local.json key
     //      (`name@marketplace`) and routes it through ChangePlugin with
     //      `rolePluginSwap: true`, giving us the full uninstall pipeline
     //      (CLI uninstall + settings.local.json safeguard + final state
     //      verification) regardless of which marketplace it came from.
     //
-    // G14c only runs when:
+    // G14d only runs when:
     //   - oldTitle is set and differs from the new effectiveTitle
     //   - agent has a working directory
     //   - client supports role-plugins
@@ -2371,7 +2378,7 @@ export async function ChangeTitle(
     //
     // Compatibility is checked via getCompatiblePluginsForTitle(). If the
     // plugin IS compatible (e.g. MANAGER → ARCHITECT swap keeps a plugin
-    // that happens to be compatible with both), G14c is a no-op and G15
+    // that happens to be compatible with both), G14d is a no-op and G15
     // handles the rest.
     if (!options?.skipPluginSync && agentDir && clientSupportsRolePlugins && oldTitle && oldTitle !== effectiveTitle) {
       try {
@@ -2419,7 +2426,7 @@ export async function ChangeTitle(
           }
 
           if (roleEntries.length === 0) {
-            ops.push(`G14c: No role-plugin bound to old title "${oldTitle}" to uninstall`)
+            ops.push(`G14d: No role-plugin bound to old title "${oldTitle}" to uninstall`)
           } else {
             for (const entry of roleEntries) {
               try {
@@ -2436,10 +2443,10 @@ export async function ChangeTitle(
                   options.authContext,
                 )
                 if (cpResult.success) {
-                  ops.push(`G14c: Uninstalled "${entry.name}@${entry.marketplace}" (bound to old title "${oldTitle}")`)
+                  ops.push(`G14d: Uninstalled "${entry.name}@${entry.marketplace}" (bound to old title "${oldTitle}")`)
                   // Propagate ChangePlugin's restartNeeded into the outer ChangeTitle result.
                   // G19 below compares currentPluginName vs targetPluginName to decide whether
-                  // to mark restartNeeded. But G14c has ALREADY stripped the old plugin from
+                  // to mark restartNeeded. But G14d has ALREADY stripped the old plugin from
                   // settings.local.json, so G19 reads currentPluginName=null and, if the new
                   // title's target plugin is also absent (or matches the empty state), G19
                   // would set restartNeeded=false — yet the tmux session is STILL running
@@ -2451,27 +2458,27 @@ export async function ChangeTitle(
                     result.restartNeeded = true
                   }
                 } else {
-                  ops.push(`G14c: WARN — ChangePlugin uninstall failed for "${entry.name}": ${cpResult.error || 'unknown'}`)
+                  ops.push(`G14d: WARN — ChangePlugin uninstall failed for "${entry.name}": ${cpResult.error || 'unknown'}`)
                 }
               } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err)
-                ops.push(`G14c: WARN — ChangePlugin exception for "${entry.name}": ${msg}`)
+                ops.push(`G14d: WARN — ChangePlugin exception for "${entry.name}": ${msg}`)
               }
             }
           }
         } else {
-          ops.push(`G14c: No settings.local.json — nothing to uninstall`)
+          ops.push(`G14d: No settings.local.json — nothing to uninstall`)
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        ops.push(`G14c: WARN — settings scan failed: ${msg}`)
+        ops.push(`G14d: WARN — settings scan failed: ${msg}`)
       }
     } else if (options?.skipPluginSync) {
-      ops.push(`G14c: Skipped (skipPluginSync=true)`)
+      ops.push(`G14d: Skipped (skipPluginSync=true)`)
     } else if (!oldTitle || oldTitle === effectiveTitle) {
-      ops.push(`G14c: Skipped (no old title change to revert)`)
+      ops.push(`G14d: Skipped (no old title change to revert)`)
     } else {
-      ops.push(`G14c: Skipped (no agentDir or client has no role-plugin support)`)
+      ops.push(`G14d: Skipped (no agentDir or client has no role-plugin support)`)
     }
 
     // ── GATE 15: Determine plugin swap (N:1 compatible-plugins model) ──
@@ -6331,6 +6338,14 @@ export async function CreateAgent(
           // Also register name→UUID in the AMP index so CLI name-based lookups
           // (`amp-send bob`, `amp-inbox` from outside the agent) resolve to the
           // same UUID-keyed home.
+          //
+          // EMS-MIN-04 fix: atomic write — temp file + rename. The previous
+          // direct writeFile() call could leave .index.json half-written if
+          // the process crashed mid-write, breaking name-based AMP routing for
+          // ALL agents (next read would JSON.parse a malformed file and throw).
+          // Also handle JSON.parse errors of an existing file by treating a
+          // malformed index as empty, so a corrupted file self-heals on the
+          // next CreateAgent call.
           try {
             const { promises: fsG12 } = await import('fs')
             const indexPath = join(HOME, '.agent-messaging', 'agents', '.index.json')
@@ -6338,9 +6353,15 @@ export async function CreateAgent(
             try {
               const raw = await fsG12.readFile(indexPath, 'utf-8')
               indexData = JSON.parse(raw) as Record<string, string>
-            } catch { /* index file doesn't exist yet — create it */ }
+            } catch {
+              // Index file doesn't exist yet, OR exists but is malformed —
+              // either way, fall back to an empty index. The atomic write
+              // below will overwrite a malformed file with a clean one.
+            }
             indexData[name] = agent.id
-            await fsG12.writeFile(indexPath, JSON.stringify(indexData, null, 2))
+            const tmpIndexPath = `${indexPath}.tmp.${process.pid}.${Date.now()}`
+            await fsG12.writeFile(tmpIndexPath, JSON.stringify(indexData, null, 2))
+            await fsG12.rename(tmpIndexPath, indexPath)
           } catch (indexErr) {
             ops.push(`G12: WARN — failed to update .index.json: ${indexErr instanceof Error ? indexErr.message : indexErr}`)
           }

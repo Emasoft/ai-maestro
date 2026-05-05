@@ -186,6 +186,22 @@ const AIMAESTRO_DIR = getStateDir()
 const TEAMS_DIR = path.join(AIMAESTRO_DIR, 'teams')
 const TEAMS_FILE = path.join(TEAMS_DIR, 'teams.json')
 const teamsLedger = new SignedLedger(TEAMS_FILE)
+// REG-MIN-03: `_prevTeams` is the previous-snapshot reference used by
+// `saveTeams()` to compute the JSON-patch diff for the signed ledger. It is
+// updated at the END of both `loadTeams()` (line ~224) AND `saveTeams()`
+// (line ~252), so a load-then-save sequence on the SAME process always
+// computes the diff against the freshly-loaded snapshot.
+//
+// Cross-process / cross-fiber concern: if process A loads teams (updates its
+// own _prevTeams), then process B writes a different snapshot, then process
+// A calls saveTeams() → process A's `_prevTeams` is stale relative to the
+// real on-disk state. The diff computed will be wrong (it shows the delta
+// from process A's view, not from disk). Mitigations: (1) the ledger file
+// itself records the absolute hash chain, so a stale diff is recoverable
+// from the entry's `before` field; (2) the file-lock module serialises
+// load/save WITHIN a process — see file-lock.ts. The cross-process gap is
+// the same gap that REG-MIN-05 documents — single-process deployments are
+// the supported model, multi-process needs proper-lockfile.
 let _prevTeams: Team[] = []
 
 function ensureTeamsDir() {

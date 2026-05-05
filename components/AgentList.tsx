@@ -275,6 +275,11 @@ export default function AgentList({
   })
 
   const [deadSessionsExpanded, setDeadSessionsExpanded] = useState(false)
+  // UI-MIN-04 fix: surface errors from the kill / revive buttons that
+  // previously swallowed all errors with `catch { /* ignore */ }`. A user
+  // would click and see nothing happen, with no clue why. Now we keep a
+  // per-session error message keyed by tmux session name.
+  const [deadSessionsError, setDeadSessionsError] = useState<Record<string, string>>({})
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('')
@@ -503,12 +508,27 @@ export default function AgentList({
     localStorage.setItem('agent-sidebar-host-filter', selectedHostFilter)
   }, [selectedHostFilter])
 
-  const getCategoryColor = (category: string) => {
+  // UI-MIN-02 fix: cache category-color lookups so we don't read localStorage
+  // on every render. Without this, every render re-issued localStorage.getItem
+  // for every team — synchronous blocking I/O scaling with the team count.
+  // The cache is module-local (a useRef Map), survives re-renders, and is
+  // keyed by category so a localStorage write from elsewhere is picked up
+  // on cache miss. To bust the cache after a localStorage update, callers
+  // should either reload the page or clear the relevant entry — colour
+  // assignments are stable enough that a stale entry across renders is
+  // acceptable.
+  const categoryColorCacheRef = useRef<Map<string, ReturnType<typeof JSON.parse>>>(new Map())
+  const getCategoryColor = useCallback((category: string) => {
+    const cached = categoryColorCacheRef.current.get(category)
+    if (cached !== undefined) return cached
+
     const storageKey = `category-color-${category.toLowerCase()}`
     const savedColor = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null
     if (savedColor) {
       try {
-        return JSON.parse(savedColor)
+        const parsed = JSON.parse(savedColor)
+        categoryColorCacheRef.current.set(category, parsed)
+        return parsed
       } catch (e) {
         // Continue to default
       }
@@ -519,8 +539,10 @@ export default function AgentList({
     }, 0)
 
     const colorIndex = Math.abs(hash) % COLOR_PALETTE.length
-    return COLOR_PALETTE[colorIndex]
-  }
+    const computed = COLOR_PALETTE[colorIndex]
+    categoryColorCacheRef.current.set(category, computed)
+    return computed
+  }, [])
 
   const handleAgentClick = (agent: Agent) => {
     // Check if this is a hibernated agent (offline but has session config)
@@ -1460,8 +1482,9 @@ export default function AgentList({
               return (
                 <div
                   key={session.tmuxSessionName}
-                  className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-red-950/30 border border-red-900/20 mb-1 group"
+                  className="flex flex-col gap-1 px-2 py-1.5 rounded-md bg-red-950/30 border border-red-900/20 mb-1 group"
                 >
+                 <div className="flex items-center justify-between gap-2 w-full">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <div className="w-2 h-2 rounded-full bg-red-500/50 flex-shrink-0" />
                     <div className="min-w-0 flex-1">
@@ -1474,10 +1497,27 @@ export default function AgentList({
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                     <button
                       onClick={async () => {
+                        // UI-MIN-04 fix: surface errors instead of silently swallowing.
                         try {
-                          await fetch(`/api/sessions/${encodeURIComponent(session.tmuxSessionName)}/kill`, { method: 'POST' })
+                          const resp = await fetch(
+                            `/api/sessions/${encodeURIComponent(session.tmuxSessionName)}/kill`,
+                            { method: 'POST' },
+                          )
+                          if (!resp.ok) {
+                            const text = await resp.text().catch(() => '')
+                            throw new Error(`HTTP ${resp.status}: ${text || 'kill failed'}`)
+                          }
+                          setDeadSessionsError(prev => {
+                            const next = { ...prev }
+                            delete next[session.tmuxSessionName]
+                            return next
+                          })
                           onRefresh?.()
-                        } catch { /* ignore */ }
+                        } catch (err) {
+                          const msg = err instanceof Error ? err.message : 'kill failed'
+                          console.error('[DeadSessions] kill failed:', err)
+                          setDeadSessionsError(prev => ({ ...prev, [session.tmuxSessionName]: msg }))
+                        }
                       }}
                       className="p-1 rounded hover:bg-red-900/50 text-red-400 hover:text-red-300 transition-all"
                       title={`Kill tmux session "${session.tmuxSessionName}"`}
@@ -1486,8 +1526,9 @@ export default function AgentList({
                     </button>
                     <button
                       onClick={async () => {
+                        // UI-MIN-04 fix: surface errors instead of silently swallowing.
                         try {
-                          await fetch('/api/agents', {
+                          const resp = await fetch('/api/agents', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1500,8 +1541,21 @@ export default function AgentList({
                               createSession: false,
                             }),
                           })
+                          if (!resp.ok) {
+                            const text = await resp.text().catch(() => '')
+                            throw new Error(`HTTP ${resp.status}: ${text || 'revive failed'}`)
+                          }
+                          setDeadSessionsError(prev => {
+                            const next = { ...prev }
+                            delete next[session.tmuxSessionName]
+                            return next
+                          })
                           onRefresh?.()
-                        } catch { /* ignore */ }
+                        } catch (err) {
+                          const msg = err instanceof Error ? err.message : 'revive failed'
+                          console.error('[DeadSessions] revive failed:', err)
+                          setDeadSessionsError(prev => ({ ...prev, [session.tmuxSessionName]: msg }))
+                        }
                       }}
                       className="p-1 rounded hover:bg-green-900/50 text-green-400 hover:text-green-300 transition-all"
                       title={`Revive as "_${displayName}" (re-create agent from history)`}
@@ -1509,6 +1563,13 @@ export default function AgentList({
                       <RefreshCw className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                 </div>
+                 {/* UI-MIN-04: surface kill/revive errors inline */}
+                 {deadSessionsError[session.tmuxSessionName] && (
+                   <div className="text-[10px] text-red-300 bg-red-950/40 px-2 py-1 rounded">
+                     {deadSessionsError[session.tmuxSessionName]}
+                   </div>
+                 )}
                 </div>
               )
             })}

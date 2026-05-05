@@ -19,6 +19,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<AMPRouteR
     const signatureHeader = request.headers.get('X-AMP-Signature')
     const contentLength = request.headers.get('Content-Length')
 
+    // API-MIN-04 fix: rate-limit AMP routing per sender. Without this, a
+    // misbehaving or hostile agent can flood the endpoint and force expensive
+    // signature verification + comm-graph validation in routeMessage(). Mirror
+    // the pattern used by app/api/v1/auth/ibct/route.ts. Best-effort key:
+    // sender agent id (header) → forwarded-from → 'unknown'. The 60-attempt
+    // window is conservative for legitimate burst traffic but bounds abuse.
+    const senderAgentIdHeader = request.headers.get('X-AMP-Sender-Agent-Id')
+    const rateKey = `amp-route:${senderAgentIdHeader || forwardedFrom || 'unknown'}`
+    const { checkAndRecordAttempt } = await import('@/lib/rate-limit')
+    const rateCheck = checkAndRecordAttempt(rateKey, 60)
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'rate_limited', message: 'Too many AMP route requests. Try again later.' } as AMPError,
+        { status: 429 }
+      )
+    }
+
     let body: AMPRouteRequest
     try {
       body = await request.json()

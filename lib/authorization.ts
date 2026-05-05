@@ -183,7 +183,11 @@ function lookupGovernanceTitle(agentId: string): string {
     const { getAgent } = require('./agent-registry')
     const agent = getAgent(agentId)
     return (agent?.governanceTitle as string) || 'autonomous'
-  } catch {
+  } catch (err) {
+    // AUTH-MIN-02 fix: surface the swallowed exception in logs instead of
+    // silently falling back to 'autonomous'. A registry corruption or disk
+    // error here was previously invisible.
+    console.warn('[authorization] lookupGovernanceTitle failed, falling back to autonomous:', { agentId, err })
     return 'autonomous'
   }
 }

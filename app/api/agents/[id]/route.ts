@@ -172,9 +172,15 @@ export async function DELETE(
 
     if (!result.success) {
       const errStr = String(result.error ?? '')
+      // API-MIN-01 fix: default fallback is 500 (Internal Server Error) for
+      // unrecognised errors. 403 was incorrect — it implied the caller lacks
+      // permission, but most uncategorised failures are infrastructure errors
+      // (filesystem failure, registry corruption, unexpected service exception).
+      // Specific permission failures should be detected explicitly.
       const status = errStr.includes('not found') ? 404
         : errStr.includes('already deleted') ? 410
-        : 403
+        : (errStr.includes('forbidden') || errStr.includes('permission') || errStr.includes('not authorized')) ? 403
+        : 500
       return NextResponse.json({ error: result.error }, { status })
     }
     return NextResponse.json({ success: true, hard: result.hard })

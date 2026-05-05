@@ -1414,9 +1414,19 @@ mark_as_read() {
         return 1
     fi
 
-    # Update both old (.metadata.status) and new (.local.status) locations
-    local updated=$(jq '.metadata.status = "read" | .local.status = "read"' "$msg_file")
-    echo "$updated" > "$msg_file"
+    # Update both old (.metadata.status) and new (.local.status) locations.
+    # Use mktemp + mv so the write is atomic — if jq is killed mid-write or the
+    # process is interrupted between truncation and completion, the original
+    # file is left intact (SH-MIN-02 fix).
+    local tmp_file
+    tmp_file=$(mktemp "${msg_file}.XXXXXX")
+    if jq '.metadata.status = "read" | .local.status = "read"' "$msg_file" > "$tmp_file"; then
+        mv "$tmp_file" "$msg_file"
+    else
+        rm -f "$tmp_file"
+        echo "Error: Failed to mark message as read: ${message_id}" >&2
+        return 1
+    fi
 }
 
 # Delete a message

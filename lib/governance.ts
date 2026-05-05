@@ -24,6 +24,14 @@ const GOVERNANCE_FILE = path.join(AIMAESTRO_DIR, 'governance.json')
 const governanceLedger = new SignedLedger(GOVERNANCE_FILE)
 let _prevGovernance: GovernanceConfig | null = null
 
+// REG-MIN-04 fix: one-shot guard so the auto-userName migration save in
+// loadGovernance() can't fire repeatedly across concurrent reads. The
+// migration itself is idempotent (same userName produced each run from
+// the SAME parsed config), but redundant saves would emit duplicate
+// ledger entries and waste write IO. This mirrors the `migrationDone`
+// pattern in team-registry.ts.
+let _governanceMigrationDone = false
+
 /** Ensure ~/.aimaestro directory exists */
 function ensureAimaestroDir() {
   if (!fs.existsSync(AIMAESTRO_DIR)) {
@@ -57,10 +65,15 @@ export function loadGovernance(): GovernanceConfig {
       console.error(`[governance] Unsupported config version: ${parsed.version} (expected 1). Returning defaults. File NOT overwritten -- manual migration required: ${GOVERNANCE_FILE}`)
       return { ...DEFAULT_GOVERNANCE_CONFIG }
     }
-    // Auto-generate userName for existing configs that predate this field
+    // Auto-generate userName for existing configs that predate this field.
+    // REG-MIN-04 fix: gate the saveGovernance() call behind the one-shot flag
+    // so concurrent loadGovernance() reads can't fire redundant writes.
     if (!parsed.userName) {
       parsed.userName = generateUserName()
-      saveGovernance(parsed)
+      if (!_governanceMigrationDone) {
+        _governanceMigrationDone = true
+        saveGovernance(parsed)
+      }
     }
     _prevGovernance = parsed
     return parsed

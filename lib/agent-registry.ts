@@ -235,7 +235,13 @@ export function loadAgents(): Agent[] {
     _cachedMtimeMs = stat.mtimeMs
     return agents
   } catch (error) {
-    console.error('Failed to load agents:', error)
+    // REG-MIN-02 fix: surface the swallowed error explicitly so registry
+    // corruption / disk failure / schema mismatch is visible in logs.
+    // Returning [] here means "operate as if no agents exist", which is
+    // strictly safer than throwing (callers expect a list) but it MUST be
+    // accompanied by a log entry — otherwise the bug looks like "all my
+    // agents disappeared" with no clue why.
+    console.error('[agent-registry] loadAgents failed — returning empty list:', error)
     return []
   }
 }

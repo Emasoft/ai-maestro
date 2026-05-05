@@ -174,7 +174,11 @@ save_cache() {
     local expires_at
     expires_at=$(( $(date +%s) + expires_in ))
 
-    echo "$response" | jq --arg ea "$expires_at" '. + {expires_at: ($ea | tonumber), auth_server: "'"$AUTH_URL"'"}' \
+    # SH-MIN-03 fix: pass AUTH_URL via --arg instead of shell-interpolating into
+    # the jq filter. Direct interpolation would break if AUTH_URL ever contained
+    # a single quote, and even without that, --arg is the safer pattern.
+    echo "$response" | jq --arg ea "$expires_at" --arg au "$AUTH_URL" \
+        '. + {expires_at: ($ea | tonumber), auth_server: $au}' \
         > "$cache_file"
     chmod 600 "$cache_file"
 }
@@ -215,6 +219,24 @@ fi
 
 PUBLIC_KEY_PEM=$(cat "$PUBLIC_KEY")
 
+# SH-MIN-04 fix: portable epoch-arithmetic fallback. Previously the final
+# fallback was `date -u +%Y-%m-%dT%H:%M:%SZ` which produced the CURRENT time —
+# meaning expires_at == issued_at, immediately rejected by the auth server.
+# Compute 6 months as 15552000 seconds (180 days) and try BSD `date -u -r`,
+# GNU `date -u -d "@..."`, in that order. If both fail (extremely rare), fall
+# back to issued_at + 1 day so identity is at least valid for a short window.
+NOW_EPOCH=$(date +%s)
+EXPIRES_EPOCH=$(( NOW_EPOCH + 15552000 ))  # 6 months in seconds
+EXPIRES_AT_PORTABLE=$(date -u -r "$EXPIRES_EPOCH" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+    || date -u -d "@$EXPIRES_EPOCH" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+    || date -u -r $(( NOW_EPOCH + 86400 )) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+    || date -u -d "@$(( NOW_EPOCH + 86400 ))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+    || echo "")
+if [ -z "$EXPIRES_AT_PORTABLE" ]; then
+    echo "Error: Unable to compute expires_at — neither BSD nor GNU date arithmetic available" >&2
+    exit 1
+fi
+
 AGENT_IDENTITY=$(jq -n \
     --arg version "1.0" \
     --arg address "$AMP_ADDRESS" \
@@ -223,7 +245,7 @@ AGENT_IDENTITY=$(jq -n \
     --arg key_algorithm "Ed25519" \
     --arg fingerprint "$AMP_FINGERPRINT" \
     --arg issued_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    --arg expires_at "$(date -u -v+6m +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '+6 months' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg expires_at "$EXPIRES_AT_PORTABLE" \
     '{
         aid_version: $version,
         address: $address,

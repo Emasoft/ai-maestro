@@ -76,11 +76,16 @@ function hasCredential(req: NextRequest, pathname: string): boolean {
   // accompanying Ed25519 signature before trusting it. On any other
   // path, this header is ignored and the request must produce a real
   // credential (cookie or bearer).
-  if (
-    pathname === '/api/v1/route' &&
-    req.headers.get('x-forwarded-from')
-  ) {
-    return true
+  //
+  // SRV-MIN-03 fix: reject empty / whitespace-only header values explicitly.
+  // The previous truthy check would accept any non-undefined string —
+  // including a single space — as a valid credential signal. Now the
+  // value MUST be non-empty after trimming.
+  if (pathname === '/api/v1/route') {
+    const xff = req.headers.get('x-forwarded-from')
+    if (xff && xff.trim().length > 0) {
+      return true
+    }
   }
   return false
 }

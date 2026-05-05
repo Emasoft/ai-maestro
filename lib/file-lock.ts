@@ -7,6 +7,33 @@
  *
  * This is sufficient for Phase 1 (single Next.js process, localhost).
  * For multi-process deployments, replace with advisory file locks (e.g., proper-lockfile).
+ *
+ * REG-MIN-05 (cross-process locking gap, documented):
+ * The Map+Set machinery below is PROCESS-LOCAL. It serialises concurrent
+ * load→modify→save sequences within a single Node.js process but provides
+ * NO protection against:
+ *   - PM2 cluster mode running 2+ Node.js workers against the same files
+ *   - Headless mode + full mode running simultaneously on the same machine
+ *   - Test harnesses or CLI utilities directly importing registry modules
+ *     while a dev/prod server is running
+ *
+ * Mitigations already in place that REDUCE the impact of the gap:
+ *   - Atomic rename on every save (lib/agent-registry.ts, lib/team-registry.ts,
+ *     lib/governance.ts, services/element-management-service.ts) — even
+ *     without cross-process locks, an interrupted write never produces a
+ *     partially-written file. The worst case is "last writer wins" (a lost
+ *     update) rather than "registry file corrupted".
+ *   - Belt-and-braces lockfile-based cross-process locking has been added
+ *     for ONE specific high-traffic file (settings.local.json) via the
+ *     element-mgmt MAJ-02 fix. Doing the same across ALL registries was
+ *     deemed out of scope for the 2026-05-04 audit follow-up.
+ *
+ * Supported deployment model: single Node.js process per ~/.aimaestro/
+ * directory. Documented in CLAUDE.md and the deployment guide.
+ *
+ * Phase 2 plan: replace this Map+Set with advisory file locks (proper-lockfile
+ * or fcntl-based) so PM2 cluster mode and concurrent dev/prod servers become
+ * safe. See TRDD design folder for the cross-process locking redesign.
  */
 
 /**

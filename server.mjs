@@ -111,13 +111,23 @@ try {
 }
 
 // IP filter: when bound to 0.0.0.0, only allow localhost + Tailscale IPs
-// This prevents LAN exposure while allowing VPN access
+// This prevents LAN exposure while allowing VPN access.
+//
+// SRV-MIN-01 fix: removed the unreachable `ip === 'localhost'` branch.
+// Node.js's net.Socket#remoteAddress returns an IP string (never the hostname
+// 'localhost'), so that branch was dead code.
+//
+// SRV-MIN-02 fix: documented the Tailscale CGNAT regex below explaining the
+// 100.64.0.0/10 range it covers. The /10 prefix is 100.64.x.x through
+// 100.127.x.x. The regex captures: 64-69 (6[4-9]), 70-99 ([7-9]\d), 100-119
+// (1[01]\d), 120-127 (12[0-7]). Anything outside that band is rejected.
 function isAllowedSource(remoteAddress) {
   if (!remoteAddress) return false
   const ip = remoteAddress.replace(/^::ffff:/, '') // Strip IPv4-mapped IPv6 prefix
-  if (ip === '127.0.0.1' || ip === '::1' || ip === 'localhost') return true
-  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip)) return true // Tailscale CGNAT (100.64.0.0/10)
-  if (/^fd7a:115c:a1e0:/.test(ip)) return true // Tailscale IPv6 range
+  if (ip === '127.0.0.1' || ip === '::1') return true
+  // 100.64.0.0/10 = 100.64.x.x – 100.127.x.x (Tailscale CGNAT range, RFC 6598)
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip)) return true
+  if (/^fd7a:115c:a1e0:/.test(ip)) return true // Tailscale IPv6 ULA range
   return false
 }
 

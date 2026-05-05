@@ -19,6 +19,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { loadGovernance } from '@/lib/governance'
 import { setGovernancePassword } from '@/services/governance-service'
 import { setUserAvatar } from '@/lib/governance'
@@ -26,6 +27,18 @@ import { verifySetupCode } from '@/lib/setup-bootstrap'
 import { createSession, buildSessionCookie } from '@/lib/session-auth'
 
 export const dynamic = 'force-dynamic'
+
+// API-MIN-02 fix: replaced manual field validation with a Zod schema for
+// consistency with other routes (see app/api/auth/sudo-password/route.ts).
+// `.strict()` rejects unknown fields; the per-field constraints match the
+// audit recommendation (`z.object({ code: z.string().min(1).max(256) }).strict()`)
+// extended to cover the full body.
+const SetupVerifySchema = z.object({
+  code: z.string().min(1).max(256).regex(/^\d{6}$/, 'code must be a 6-digit string'),
+  password: z.string().min(8, 'password must be at least 8 characters'),
+  userName: z.string().min(1).max(64),
+  userAvatar: z.string().max(1024).optional(),
+}).strict()
 
 export async function POST(request: NextRequest) {
   // Refuse if already bootstrapped
@@ -37,42 +50,26 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  let body: { code?: string; password?: string; userName?: string; userAvatar?: string }
+  let raw: unknown
   try {
-    body = await request.json()
+    raw = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  // Field validation
-  if (!body.code || typeof body.code !== 'string' || !/^\d{6}$/.test(body.code)) {
+  const parsed = SetupVerifySchema.safeParse(raw)
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]
     return NextResponse.json(
-      { error: 'invalid_code', message: 'code must be a 6-digit string' },
+      { error: 'invalid_request', message: issue?.message || 'Invalid request body', issues: parsed.error.issues },
       { status: 400 }
     )
   }
-  if (!body.password || typeof body.password !== 'string' || body.password.length < 8) {
-    return NextResponse.json(
-      { error: 'invalid_password', message: 'password must be at least 8 characters' },
-      { status: 400 }
-    )
-  }
-  if (!body.userName || typeof body.userName !== 'string') {
-    return NextResponse.json(
-      { error: 'invalid_user_name', message: 'userName is required' },
-      { status: 400 }
-    )
-  }
+  const body = parsed.data
   const trimmedUserName = body.userName.trim()
-  if (trimmedUserName.length === 0 || trimmedUserName.length > 64) {
+  if (trimmedUserName.length === 0) {
     return NextResponse.json(
-      { error: 'invalid_user_name', message: 'userName must be 1-64 characters' },
-      { status: 400 }
-    )
-  }
-  if (body.userAvatar !== undefined && (typeof body.userAvatar !== 'string' || body.userAvatar.length > 1024)) {
-    return NextResponse.json(
-      { error: 'invalid_user_avatar', message: 'userAvatar must be a string under 1024 chars' },
+      { error: 'invalid_user_name', message: 'userName must not be only whitespace' },
       { status: 400 }
     )
   }

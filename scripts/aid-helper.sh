@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # AID Helper Functions
 # Agent Identity Protocol - Core utilities for all AID scripts

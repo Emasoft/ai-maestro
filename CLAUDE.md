@@ -392,7 +392,7 @@ fluidmind/agents/backend-architect  →  Level 1: "fluidmind"
 
 **Dynamic Color System:**
 - Colors assigned via hash function (same category = same color)
-- 8-color palette in `SessionList.tsx` (easily customizable)
+- 8-color palette in `AgentList.tsx` (easily customizable)
 - Supports localStorage overrides per category
 - No hardcoded category names - works with ANY category
 
@@ -545,13 +545,13 @@ Team agents cannot be woken when no MANAGER exists (even by the user — assign 
 **Current structure:**
 ```
 app/
-  page.tsx              - Main dashboard with footer (SessionList + TerminalView)
+  page.tsx              - Main dashboard with footer (AgentList + TerminalView)
   layout.tsx            - Root layout, Space Grotesk font, app title "AI Maestro"
   globals.css           - Tailwind imports + terminal scrollbar styles
   api/sessions/route.ts - GET endpoint for tmux session discovery
 
 components/
-  SessionList.tsx       - Hierarchical sidebar with icons, colors, session management
+  AgentList.tsx         - Hierarchical sidebar with icons, colors, session management
   TerminalView.tsx      - Terminal display with collapsible notes area
   [Other components]    - Keep them small, single responsibility
   team-meeting/
@@ -1605,8 +1605,8 @@ When implementing features:
 1. `lib/agent-registry.ts` - **File-based agent registry** (stores agents in `~/.aimaestro/agents/registry.json`) - THE source of truth for agent metadata including workingDirectory
 2. `lib/agent.ts` - **In-memory Agent class** for runtime operations (database, subconscious)
 3. `server.mjs` - Custom server combining HTTP and WebSocket
-4. `app/page.tsx` - Main UI composition with footer (SessionList + TerminalView)
-5. `components/SessionList.tsx` - Hierarchical sidebar with dynamic colors, icons, agent management
+4. `app/page.tsx` - Main UI composition with footer (AgentList + TerminalView)
+5. `components/AgentList.tsx` - Hierarchical sidebar with dynamic colors, icons, agent management
 6. `components/TerminalView.tsx` - Terminal display with collapsible notes feature
 7. `hooks/useWebSocket.ts` - WebSocket connection management
 8. `hooks/useTerminal.ts` - xterm.js lifecycle management

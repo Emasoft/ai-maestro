@@ -1955,14 +1955,20 @@ export default function TerminalView({ session, isVisible = true, hideFooter = f
                 <span>&#x270E;</span>
                 Notes
               </button>
-              <span
-                className={`px-3 py-1.5 text-xs cursor-pointer select-none ${
+              {/* UI-MIN-05 fix: replaced <span onClick> with <button type="button">.
+                  Spans are not keyboard-focusable, so keyboard users couldn't switch
+                  to the Prompt Builder tab. <button> is natively keyboard-accessible
+                  (Tab to focus, Enter/Space to activate) and semantically correct
+                  for a tab trigger. The visual styling is preserved verbatim. */}
+              <button
+                type="button"
+                className={`px-3 py-1.5 text-xs cursor-pointer select-none bg-transparent border-0 ${
                   footerTab === 'prompt' ? 'text-white font-medium' : 'text-gray-400'
                 }`}
                 onClick={() => setFooterTab('prompt')}
               >
                 Prompt Builder
-              </span>
+              </button>
             </div>
             <button
               onClick={() => setNotesCollapsed(true)}

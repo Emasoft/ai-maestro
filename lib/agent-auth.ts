@@ -259,6 +259,13 @@ export interface AuthContext {
   ibctScope?: string[]
   /** IBCT max delegation depth */
   ibctMaxDepth?: number
+  /**
+   * AUTH-MIN-03 fix: short audit reason (e.g. "server-startup",
+   * "scheduled-health-check", "cemetery-gc"). Set by buildSystemAuthContext()
+   * for system-initiated calls so downstream loggers can record WHY the
+   * system context was claimed without dual-logging at every call site.
+   */
+  reason?: string
 }
 
 /**
@@ -303,6 +310,11 @@ export function buildSystemAuthContext(reason: string): AuthContext {
     isSystemOwner: true,
     governanceTitle: 'system',
     teamId: null,
+    // AUTH-MIN-03 fix: store the audit reason in the context. Previously the
+    // function validated `reason` was non-empty but discarded it, so downstream
+    // audit logging that read the AuthContext could not see WHY the system
+    // context was claimed.
+    reason,
   }
 }
 
@@ -349,7 +361,13 @@ function resolveGovernanceContext(agentId: string): { title: string; teamId: str
     const agent = agentRegistry.getAgent(agentId)
     const title = (agent?.governanceTitle as string) || 'autonomous'
     return { title, teamId: resolveTeamId(agentId) }
-  } catch {
+  } catch (err) {
+    // AUTH-MIN-02 fix: surface the swallowed exception in logs instead of
+    // silently falling back to 'autonomous'. A registry corruption or disk
+    // error here was previously invisible. The fallback to 'autonomous' is
+    // still applied (so transient errors don't hard-fail the request) but
+    // operations now see why it happened.
+    console.warn('[agent-auth] resolveGovernanceContext failed, falling back to autonomous:', { agentId, err })
     return { title: 'autonomous', teamId: null }
   }
 }

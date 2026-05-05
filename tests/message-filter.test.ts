@@ -21,6 +21,16 @@ vi.mock('@/lib/team-registry', () => ({
   loadTeams: () => mockLoadTeams(),
 }))
 
+// Mock agent-registry. lookupSameHostTitle (introduced for AUTH-MAJ-01)
+// calls getAgent to look up the sender's governance title for the
+// title-graph check. The default mock returns undefined so the fallback
+// path ('autonomous') is exercised; individual tests override per agent
+// when they need to assert a specific title's edge behavior.
+const mockGetAgent = vi.fn((_id: string) => undefined as unknown as { id: string; governanceTitle?: string } | undefined)
+vi.mock('@/lib/agent-registry', () => ({
+  getAgent: (id: string) => mockGetAgent(id),
+}))
+
 // Mock validation module — isValidUuid returns true for UUID-format strings used in tests
 vi.mock('@/lib/validation', () => ({
   isValidUuid: vi.fn((id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)),
@@ -392,13 +402,42 @@ describe('checkMessageAllowed', () => {
     expect(result.reason).toBeUndefined()
   })
 
-  // SF-023: Step 5b — open-world sender can reach COS who is in a closed team
-  it('allows open-world sender to message COS even when COS is in a closed team', () => {
-    /** Step 5b: open-world agents can always reach a Chief-of-Staff (v2 Rules 62-63) */
+  // SF-023: Step 5b — AUTH-MAJ-01 fix (2026-05-04). The pre-fix v2 Rules
+  // 62-63 allowed any open-world sender to reach the COS of a closed
+  // team. After the comm-graph alignment fix, AUTONOMOUS senders (the
+  // default for an agent with no registered title) cannot reach COS —
+  // ALLOW_EDGES['autonomous'] only includes human / manager / autonomous.
+  // Test now asserts the deny path; a paired test below covers the
+  // allowed sender title (ORCHESTRATOR → COS).
+  it('denies AUTONOMOUS open-world sender from messaging COS (AUTH-MAJ-01: title graph applied)', () => {
     const teamAlpha = makeClosedTeam('alpha', [COS_ALPHA, MEMBER_A1], COS_ALPHA)
 
     mockLoadTeams.mockReturnValue([teamAlpha])
     mockLoadGovernance.mockReturnValue({ version: 1 as const, managerId: null, passwordHash: null, passwordSetAt: null })
+    // Sender is unknown to registry → lookupSameHostTitle returns null
+    // → fallback 'autonomous'. Graph denies AUTONOMOUS → COS.
+    mockGetAgent.mockReturnValue(undefined)
+
+    const result = checkMessageAllowed({
+      senderAgentId: OUTSIDE_SENDER,
+      recipientAgentId: COS_ALPHA,
+    })
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toMatch(/communication graph/i)
+  })
+
+  // Paired ALLOW: a properly-titled ORCHESTRATOR (open-world, no team)
+  // CAN reach COS — graph edge orchestrator → chief-of-staff exists.
+  it('allows ORCHESTRATOR open-world sender to message COS (graph edge orchestrator → chief-of-staff)', () => {
+    const teamAlpha = makeClosedTeam('alpha', [COS_ALPHA, MEMBER_A1], COS_ALPHA)
+
+    mockLoadTeams.mockReturnValue([teamAlpha])
+    mockLoadGovernance.mockReturnValue({ version: 1 as const, managerId: null, passwordHash: null, passwordSetAt: null })
+    mockGetAgent.mockImplementation((id: string) =>
+      id === OUTSIDE_SENDER
+        ? { id: OUTSIDE_SENDER, governanceTitle: 'orchestrator' } as { id: string; governanceTitle?: string }
+        : undefined
+    )
 
     const result = checkMessageAllowed({
       senderAgentId: OUTSIDE_SENDER,
@@ -406,6 +445,28 @@ describe('checkMessageAllowed', () => {
     })
     expect(result.allowed).toBe(true)
     expect(result.reason).toBeUndefined()
+  })
+
+  // AUTH-MAJ-01 part 2: an open-world MEMBER-titled agent CANNOT reach
+  // MANAGER per the comm graph (member → manager not in ALLOW_EDGES).
+  // Pre-fix Step 5b would have allowed this, defeating chain-of-command.
+  it('denies MEMBER open-world sender from messaging MANAGER (AUTH-MAJ-01: chain of command)', () => {
+    const teamAlpha = makeClosedTeam('alpha', [COS_ALPHA, MANAGER, MEMBER_A1], COS_ALPHA)
+
+    mockLoadTeams.mockReturnValue([teamAlpha])
+    mockLoadGovernance.mockReturnValue({ version: 1 as const, managerId: MANAGER, passwordHash: null, passwordSetAt: null })
+    mockGetAgent.mockImplementation((id: string) =>
+      id === OUTSIDE_SENDER
+        ? { id: OUTSIDE_SENDER, governanceTitle: 'member' } as { id: string; governanceTitle?: string }
+        : undefined
+    )
+
+    const result = checkMessageAllowed({
+      senderAgentId: OUTSIDE_SENDER,
+      recipientAgentId: MANAGER,
+    })
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toMatch(/communication graph/i)
   })
 })
 

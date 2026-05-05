@@ -282,14 +282,47 @@ export function validateMessageRoute(
           edgeType: 'reply-only',
         }
       }
-      // ADVISORY ONLY: this layer only checks that the caller passed SOMETHING
-      // in inReplyToMessageId. It does NOT load the referenced message, verify
-      // its sender/recipient pair, or mark it `replied=true`. The full
-      // "one-reply-per-inbound" invariant lives in the AMP inbox layer and is
-      // tracked as a follow-up in TRDD-80557822. Until that ships the
-      // reply-only edge can be unlocked by any truthy string. The path is only
-      // reachable once the human user becomes an AMP recipient (Phase 2 maestro
-      // auth) — today `recipientIsHuman` is always false so this branch is dead.
+      // ════════════════════════════════════════════════════════════════════
+      // SECURITY NOTE: AUTH-MAJ-02 (audit 2026-05-04)
+      // ════════════════════════════════════════════════════════════════════
+      // ADVISORY ONLY: this layer only checks that `inReplyToMessageId` is a
+      // non-empty string. It does NOT (yet):
+      //   - load the referenced message from the AMP inbox
+      //   - verify the original sender/recipient pair matches the requested
+      //     route (i.e. that the human user really did message THIS agent
+      //     and not some other one)
+      //   - check whether that message was already replied to (one-reply-
+      //     per-inbound is not enforced here)
+      //
+      // ANY truthy string fed to inReplyToMessageId currently unlocks the
+      // reply-only edge. The 2026-05-04 audit (auth_comm_review.md
+      // AUTH-MAJ-02) flagged this as the largest unreviewed forge surface
+      // in the comm-graph. Two mitigations are in place that keep it from
+      // being exploitable today:
+      //
+      //   1. Defensive empty-string check below — a literal "" is rejected
+      //      so a caller that simply sets the field with `|| ''` does not
+      //      unlock anything.
+      //   2. The recipient-is-human branch is currently dead code: today
+      //      `recipientIsHuman` is always false, because the human user
+      //      is not yet an AMP-routable address. This branch only goes
+      //      live with Phase 2 maestro auth.
+      //
+      // Full enforcement (load + verify + mark replied) is tracked as
+      // TRDD-80557822 and lives in the AMP inbox layer rather than this
+      // pure-data graph file. Until that ships, ANY caller that constructs
+      // a route through this branch MUST also re-validate at the inbox
+      // layer — DO NOT treat `allowed: true` returned here as proof the
+      // reply is real.
+      // ════════════════════════════════════════════════════════════════════
+      if (!options.inReplyToMessageId || options.inReplyToMessageId.trim() === '') {
+        return {
+          allowed: false,
+          reason: `${senderRole.toUpperCase()} reply-only edge requires a non-empty inReplyToMessageId`,
+          suggestion: 'Pass the original inbound message id when calling amp-reply.',
+          edgeType: 'reply-only',
+        }
+      }
       return { allowed: true, edgeType: 'reply-only' }
     }
     return {

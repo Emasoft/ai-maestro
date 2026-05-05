@@ -9,8 +9,40 @@
 
 import { loadGovernance } from './governance'
 import { loadTeams } from './team-registry'
+import { getAgent } from './agent-registry'
 import { isValidUuid } from './validation'
+import { canSendMessage, isValidRole } from './communication-graph'
 import type { AgentRole } from '@/types/agent'
+
+/**
+ * Look up a same-host agent's governance title for the title-graph
+ * pre-check. Mirrors the resolution order in
+ * `lib/agent-auth.ts::resolveGovernanceContext` but without the
+ * `require()` round-trip. Returns null when the agent is unknown to
+ * this host so the caller can decide how to fail.
+ *
+ * Resolution order:
+ *   1. governance.json — explicit MANAGER assignment wins
+ *   2. team-registry.json — chief-of-staff anywhere wins next
+ *   3. registry.json — agent.governanceTitle as the persisted source
+ *   4. fall back to 'autonomous' (the safest default; AUTONOMOUS has
+ *      a documented allow edge to MANAGER and to itself only)
+ */
+function lookupSameHostTitle(agentId: string): AgentRole | null {
+  try {
+    const gov = loadGovernance()
+    if (gov.managerId === agentId) return 'manager'
+    const teams = loadTeams()
+    if (teams.some(t => t.chiefOfStaffId === agentId)) return 'chief-of-staff'
+    const agent = getAgent(agentId)
+    if (!agent) return null
+    const raw = (agent.governanceTitle as string | undefined) || 'autonomous'
+    if (isValidRole(raw)) return raw as AgentRole
+    return 'autonomous'
+  } catch {
+    return null
+  }
+}
 
 export interface MessageFilterInput {
   senderAgentId: string | null // null = mesh-forwarded message with no attestation
@@ -213,13 +245,36 @@ export function checkMessageAllowed(input: MessageFilterInput): MessageFilterRes
     }
   }
 
-  // Step 5b: Open-world agents can reach MANAGER and COS (v2 Rules 62-63)
-  // After Steps 2–5, !senderInClosed && recipientInClosed is always true here.
-  if (agentIsManager(recipientAgentId)) {
-    return { allowed: true }
-  }
-  if (agentIsCOS(recipientAgentId)) {
-    return { allowed: true }
+  // Step 5b — open-world senders need title-graph approval (AUTH-MAJ-01 fix)
+  //
+  // Pre-2026-05-04: this step blanket-allowed any open-world sender to
+  // reach MANAGER (`agentIsManager(recipientAgentId)`) or any COS
+  // (`agentIsCOS(recipientAgentId)`). That bypassed
+  // `lib/communication-graph.ts ALLOW_EDGES`, which forbids
+  // ORCHESTRATOR / ARCHITECT / INTEGRATOR / MEMBER → MANAGER and
+  // AUTONOMOUS / MAINTAINER → COS. An open-world member-titled agent
+  // could therefore reach the MANAGER directly, defeating the
+  // chain-of-command (R6.1).
+  //
+  // Fix: consult the title graph for open-world senders against MANAGER
+  // / COS recipients. Two layers (team-membership + title graph) compose
+  // by intersection — the message is allowed only if BOTH allow it.
+  // Recipient title is `manager` when they are the MANAGER, otherwise
+  // `chief-of-staff` when they hold a COS slot anywhere. Sender title is
+  // looked up from registry + governance with a fallback to 'autonomous'
+  // (matches lib/agent-auth.ts::resolveGovernanceContext).
+  const _recipIsManager = agentIsManager(recipientAgentId)
+  const _recipIsCOS = agentIsCOS(recipientAgentId)
+  if (_recipIsManager || _recipIsCOS) {
+    const senderTitle = lookupSameHostTitle(senderAgentId) ?? 'autonomous'
+    const recipientTitle: AgentRole = _recipIsManager ? 'manager' : 'chief-of-staff'
+    if (canSendMessage(senderTitle, recipientTitle)) {
+      return { allowed: true }
+    }
+    return {
+      allowed: false,
+      reason: `${senderTitle.toUpperCase()} cannot send messages to ${recipientTitle.toUpperCase()} per the communication graph (R6, 2026-05-04)`,
+    }
   }
 
   // Step 6: Sender is NOT in any closed team but recipient IS in a closed team (R6.5)

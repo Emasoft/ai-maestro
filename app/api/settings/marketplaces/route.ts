@@ -23,7 +23,8 @@ import { requireSudoToken } from '@/lib/sudo-guard'
 // `claude plugin marketplace add/remove/update` via execSync directly,
 // which bypassed every gate. This import + the rewired handlers below
 // fix that.
-import { CreateMarketplace, DeleteMarketplace, UpdateMarketplace } from '@/services/element-management-service'
+import { CreateMarketplace, DeleteMarketplace, UpdateMarketplace, ChangePlugin } from '@/services/element-management-service'
+import { buildSystemAuthContext } from '@/lib/agent-auth'
 
 /**
  * R17 core plugin guard — rejects destructive actions targeting the
@@ -860,148 +861,182 @@ async function resolveCliMarketplaceName(dirName: string): Promise<string> {
 }
 
 /** Enable plugin via Claude CLI — tries multiple key formats */
+// R21.4 / TRDD-ef0c6c0a item 1: route ALL user-scope plugin mutations
+// through ChangePlugin AIO. The "try multiple key formats" loop is
+// preserved at the route layer because user-supplied marketplaceName
+// vs CLI-canonical name vs raw pluginKey can all differ when the user
+// added a marketplace via URL but the CLI registered it under a
+// derived name. ChangePlugin's auth + R17 + ledger gates fire on each
+// attempt; the first success returns.
+async function dispatchUserPluginAction(
+  pluginName: string,
+  marketplaceName: string,
+  pluginKey: string,
+  action: 'enable' | 'disable' | 'install' | 'uninstall' | 'update',
+): Promise<{ ok: boolean; pluginKey: string; lastError?: string }> {
+  const cliMkt = await resolveCliMarketplaceName(marketplaceName)
+  const candidateMarkets = [...new Set([cliMkt, marketplaceName])]
+  const auth = buildSystemAuthContext(`marketplaces-api-${action}`)
+  let lastErr = ''
+  for (const mkt of candidateMarkets) {
+    const r = await ChangePlugin(null, {
+      name: pluginName, marketplace: mkt, action, scope: 'user',
+    }, auth)
+    if (r.success) return { ok: true, pluginKey: `${pluginName}@${mkt}` }
+    lastErr = r.error || 'unknown'
+    console.error(`[marketplaces] ${action} attempt failed for ${pluginName}@${mkt}:`, r.error)
+  }
+  // Also try the raw pluginKey if it's a different shape (e.g. legacy "name" only)
+  if (!candidateMarkets.includes(pluginKey)) {
+    const parts = pluginKey.split('@')
+    if (parts.length === 2 && !candidateMarkets.includes(parts[1])) {
+      const r = await ChangePlugin(null, {
+        name: parts[0], marketplace: parts[1], action, scope: 'user',
+      }, auth)
+      if (r.success) return { ok: true, pluginKey }
+      lastErr = r.error || lastErr
+    }
+  }
+  return { ok: false, pluginKey, lastError: lastErr }
+}
+
 async function handleEnable(pluginName: string, marketplaceName: string, pluginKey: string) {
-  const { execSync } = await import('child_process')
-  const cliMkt = await resolveCliMarketplaceName(marketplaceName)
-  for (const key of new Set([`${pluginName}@${cliMkt}`, `${pluginName}@${marketplaceName}`, pluginKey])) {
-    try {
-      execSync(`claude plugin enable "${shellSafe(key)}" --scope user 2>&1`, { timeout: 15000 })
-      return NextResponse.json({ success: true, action: 'enable', pluginKey })
-    } catch (err) { console.error('[marketplaces] enable attempt', err) }
+  const r = await dispatchUserPluginAction(pluginName, marketplaceName, pluginKey, 'enable')
+  if (!r.ok) {
+    return NextResponse.json({ error: `Enable failed: ${r.lastError || 'plugin not found with any key format'}` }, { status: 500 })
   }
-  return NextResponse.json({ error: `Enable failed: plugin not found with any key format` }, { status: 500 })
+  return NextResponse.json({ success: true, action: 'enable', pluginKey: r.pluginKey })
 }
 
-/** Disable plugin via Claude CLI — tries multiple key formats */
+/** Disable plugin via ChangePlugin AIO — tries multiple key formats */
 async function handleDisable(pluginName: string, marketplaceName: string, pluginKey: string) {
-  const { execSync } = await import('child_process')
-  const cliMkt = await resolveCliMarketplaceName(marketplaceName)
-  for (const key of new Set([`${pluginName}@${cliMkt}`, `${pluginName}@${marketplaceName}`, pluginKey])) {
-    try {
-      execSync(`claude plugin disable "${shellSafe(key)}" --scope user 2>&1`, { timeout: 15000 })
-      return NextResponse.json({ success: true, action: 'disable', pluginKey })
-    } catch (err) { console.error('[marketplaces] disable attempt', err) }
+  const r = await dispatchUserPluginAction(pluginName, marketplaceName, pluginKey, 'disable')
+  if (!r.ok) {
+    return NextResponse.json({ error: `Disable failed: ${r.lastError || 'plugin not found with any key format'}` }, { status: 500 })
   }
-  return NextResponse.json({ error: `Disable failed: plugin not found with any key format` }, { status: 500 })
+  return NextResponse.json({ success: true, action: 'disable', pluginKey: r.pluginKey })
 }
 
-/** Update plugin via Claude CLI */
+/** Update plugin via ChangePlugin AIO (R21.4) */
 async function handleUpdate(pluginName: string, marketplaceName: string, pluginKey: string) {
-  try {
-    const { execSync } = await import('child_process')
-    const cliMkt = await resolveCliMarketplaceName(marketplaceName)
-    execSync(`claude plugin update "${shellSafe(pluginName)}@${shellSafe(cliMkt)}" --scope user 2>&1`, { timeout: 60000 })
-  } catch (err) {
-    return NextResponse.json({ error: `Update failed: ${err}` }, { status: 500 })
+  const r = await dispatchUserPluginAction(pluginName, marketplaceName, pluginKey, 'update')
+  if (!r.ok) {
+    return NextResponse.json({ error: `Update failed: ${r.lastError || 'unknown'}` }, { status: 500 })
   }
-  return NextResponse.json({ success: true, action: 'update', pluginKey })
+  return NextResponse.json({ success: true, action: 'update', pluginKey: r.pluginKey })
 }
 
-/** Install plugin via Claude CLI — cleans up stale state before retrying on failure */
+/** Install plugin via ChangePlugin AIO — with stale-state cleanup + retry (R21.4)
+ *
+ *  ChangePlugin's user-scope path already handles the basic install via CLI
+ *  (with the same write-back fallback that this route used to do). What's
+ *  unique to this handler is the "stale-state recovery" loop: when CLI
+ *  install fails locally (not a remote 404), wipe the dangling
+ *  enabledPlugins entry + cached plugin folder + retry once. That logic
+ *  remains here because it's specific to the user-scope global path and
+ *  isn't a clean fit for ChangePlugin's gate sequence. Once CHK-* gates
+ *  for "stale-state cleanup" are added to ChangePlugin (PG02 candidate),
+ *  this can fold in further.
+ */
 async function handleInstall(pluginName: string, marketplaceName: string, pluginKey: string) {
-  const { execSync } = await import('child_process')
   const cliMkt = await resolveCliMarketplaceName(marketplaceName)
-  const installKey = `${shellSafe(pluginName)}@${shellSafe(cliMkt)}`
-
-  try {
-    execSync(`claude plugin install --scope user "${installKey}" 2>&1`, { timeout: 60000 })
-    return NextResponse.json({ success: true, action: 'install', pluginKey })
-  } catch (firstErr) {
-    const errStr = String(firstErr)
-
-    // Distinguish remote errors (marketplace/plugin not found on GitHub) from local stale state
-    const isRemoteError = errStr.includes('not found in marketplace') ||
-      errStr.includes('404') ||
-      errStr.includes('Could not resolve') ||
-      errStr.includes('fatal: repository') ||
-      errStr.includes('network') ||
-      errStr.includes('timeout')
-
-    if (isRemoteError) {
-      return NextResponse.json({ error: `Install failed (remote): plugin "${pluginName}" not found in marketplace "${cliMkt}". Check the marketplace URL and plugin name.`, errorType: 'remote' }, { status: 404 })
-    }
-
-    // Local error — likely stale state from a previous file-copy install. Clean up and retry.
-    const staleKeys = [`${pluginName}@${cliMkt}`, `${pluginName}@${marketplaceName}`, pluginKey]
-    const settings = await readJsonSafe(SETTINGS_PATH) || {}
-    const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-    let cleaned = false
-    for (const key of new Set(staleKeys)) {
-      if (ep[key] !== undefined) { delete ep[key]; cleaned = true }
-    }
-    for (const mktName of [marketplaceName, cliMkt]) {
-      const cacheDir = join(CACHE_DIR, mktName, pluginName)
-      if (existsSync(cacheDir)) {
-        await rm(cacheDir, { recursive: true, force: true })
-        cleaned = true
-      }
-    }
-    if (cleaned) {
-      settings.enabledPlugins = ep
-      await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
-      // Retry after cleanup
-      try {
-        execSync(`claude plugin install --scope user "${installKey}" 2>&1`, { timeout: 60000 })
-        return NextResponse.json({ success: true, action: 'install', pluginKey, staleCleanup: true })
-      } catch (retryErr) {
-        return NextResponse.json({ error: `Install failed after stale cleanup: ${String(retryErr).substring(0, 500)}`, errorType: 'local' }, { status: 500 })
-      }
-    }
-    return NextResponse.json({ error: `Install failed: ${errStr.substring(0, 500)}`, errorType: 'unknown' }, { status: 500 })
+  const r = await dispatchUserPluginAction(pluginName, marketplaceName, pluginKey, 'install')
+  if (r.ok) {
+    return NextResponse.json({ success: true, action: 'install', pluginKey: r.pluginKey })
   }
+
+  // ChangePlugin failed. Distinguish remote (network/404) vs local stale state.
+  const errStr = r.lastError || ''
+  const isRemoteError = errStr.includes('not found in marketplace') ||
+    errStr.includes('404') ||
+    errStr.includes('Could not resolve') ||
+    errStr.includes('fatal: repository') ||
+    errStr.includes('network') ||
+    errStr.includes('timeout')
+
+  if (isRemoteError) {
+    return NextResponse.json({ error: `Install failed (remote): plugin "${pluginName}" not found in marketplace "${cliMkt}". Check the marketplace URL and plugin name.`, errorType: 'remote' }, { status: 404 })
+  }
+
+  // Local error — likely stale state from a previous file-copy install. Clean up and retry.
+  // The settings.json + cache folder cleanup below is below-AIO-line maintenance:
+  // ChangePlugin doesn't (yet) have a "wipe stale install state" gate, and the
+  // failure mode this recovers from (enabledPlugins entry without a matching
+  // cache folder, or vice versa) is server-startup / corrupted-cache territory.
+  const staleKeys = [`${pluginName}@${cliMkt}`, `${pluginName}@${marketplaceName}`, pluginKey]
+  const settings = await readJsonSafe(SETTINGS_PATH) || {}
+  const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+  let cleaned = false
+  for (const key of new Set(staleKeys)) {
+    if (ep[key] !== undefined) { delete ep[key]; cleaned = true }
+  }
+  for (const mktName of [marketplaceName, cliMkt]) {
+    const cacheDir = join(CACHE_DIR, mktName, pluginName)
+    if (existsSync(cacheDir)) {
+      await rm(cacheDir, { recursive: true, force: true })
+      cleaned = true
+    }
+  }
+  if (cleaned) {
+    settings.enabledPlugins = ep
+    await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
+    // Retry through ChangePlugin AIO after cleanup
+    const r2 = await dispatchUserPluginAction(pluginName, marketplaceName, pluginKey, 'install')
+    if (r2.ok) {
+      return NextResponse.json({ success: true, action: 'install', pluginKey: r2.pluginKey, staleCleanup: true })
+    }
+    return NextResponse.json({ error: `Install failed after stale cleanup: ${String(r2.lastError || 'unknown').substring(0, 500)}`, errorType: 'local' }, { status: 500 })
+  }
+  return NextResponse.json({ error: `Install failed: ${errStr.substring(0, 500)}`, errorType: 'unknown' }, { status: 500 })
 }
 
-/** Uninstall plugin via Claude CLI — with auto-cleanup of stale installations */
+/** Uninstall plugin via ChangePlugin AIO + idempotent cache cleanup (R21.4)
+ *
+ *  ChangePlugin handles the settings.json entry removal under proper gates.
+ *  The cache-folder cleanup below is below-AIO-line: SCEN-019 BUG-001
+ *  showed that `claude plugin uninstall` only removes the settings entry,
+ *  NOT the cache folder. So we ALWAYS run a defensive cache wipe here
+ *  regardless of whether ChangePlugin succeeded — the cleanup is
+ *  idempotent and prevents zombie state.
+ */
 async function handleUninstall(pluginName: string, marketplaceName: string, pluginKey: string) {
-  const { execSync } = await import('child_process')
-
-  let cliSucceeded = false
-
-  // Try CLI uninstall with all possible key formats
   const cliMkt = await resolveCliMarketplaceName(marketplaceName)
   const keysToTry = [
     `${pluginName}@${cliMkt}`,
     `${pluginName}@${marketplaceName}`,
     pluginKey,
   ]
-  // Deduplicate
   const uniqueKeys = [...new Set(keysToTry)]
-  for (const key of uniqueKeys) {
-    try {
-      execSync(`claude plugin uninstall "${shellSafe(key)}" --scope user 2>&1`, { timeout: 15000 })
-      cliSucceeded = true
-      break
-    } catch (err) { console.error('[marketplaces] uninstall attempt', err) }
+
+  // ChangePlugin AIO: tries the candidate key formats, returns success on
+  // the first that lands. Idempotent in the "already absent" path.
+  const r = await dispatchUserPluginAction(pluginName, marketplaceName, pluginKey, 'uninstall')
+  const cliSucceeded = r.ok
+  if (!cliSucceeded) {
+    console.error(`[marketplaces] uninstall via ChangePlugin failed: ${r.lastError || 'unknown'}`)
   }
 
-  // SCEN-019 BUG-001 FIX: claude CLI `plugin uninstall` only removes the
-  // settings.json entry — it does NOT delete the plugin cache directory.
-  // If we trust the CLI's success code, the cache dir stays on disk and the
-  // backend's next GET scan still sees the plugin as `installed: true`,
-  // creating a zombie state the user can't get out of via the UI.
-  //
-  // The fix is to ALWAYS remove the cache dir + the settings entries after
-  // uninstall, regardless of whether the CLI call succeeded. The manual
-  // cleanup is idempotent (rm -rf + delete key) so it's safe to run
-  // unconditionally.
-  //
-  // Why we must do this here: `claude plugin uninstall` is not an AI Maestro
-  // operation — it's an upstream Claude CLI command. We cannot fix the CLI.
-  // So we compensate at the API layer.
+  // Cache folder cleanup (below-AIO-line, idempotent — see comment above)
   for (const mktName of [marketplaceName, cliMkt]) {
     const cacheDir = join(CACHE_DIR, mktName, pluginName)
     if (existsSync(cacheDir)) {
       await rm(cacheDir, { recursive: true, force: true })
     }
   }
-  // Remove all settings entries for this plugin (both key formats)
+  // Belt-and-braces: ensure ALL key-format entries are gone from settings.
+  // ChangePlugin should have removed the matching one; this catches any
+  // stale duplicates (e.g. plugin installed under multiple key formats
+  // due to historical marketplace renames).
   const settings = await readJsonSafe(SETTINGS_PATH) || {}
   const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+  let dirty = false
   for (const key of uniqueKeys) {
-    delete ep[key]
+    if (ep[key] !== undefined) { delete ep[key]; dirty = true }
   }
-  settings.enabledPlugins = ep
-  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
+  if (dirty) {
+    settings.enabledPlugins = ep
+    await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
+  }
 
   return NextResponse.json({ success: true, action: 'uninstall', pluginKey, staleCleanup: !cliSucceeded })
 }
@@ -1338,7 +1373,21 @@ async function handleAddMarketplace(url?: string) {
 }
 
 /** Run CPV security check on a plugin */
-/** Disable all plugins via Claude CLI */
+/** Disable all plugins via Claude CLI.
+ *
+ *  Below the AIO line (TRDD-ef0c6c0a follow-up): bulk operation that
+ *  the CLI implements as a single command (`--all` flag). A per-plugin
+ *  loop through ChangePlugin would be slower AND would require ChangePlugin
+ *  to skip its R17 Gate 7 (which refuses disabling the core plugin) — but
+ *  the user's intent for "disable all" is exactly to wipe everything,
+ *  including the core plugin if it ended up at user scope (legacy state).
+ *  A future `ChangePluginsBulk` AIO with an explicit "ignore core guard"
+ *  flag is the correct migration target; for now the CLI shell-out is
+ *  the canonical implementation.
+ *
+ *  Authority: route is enforceSystemOwner-gated, callable only by the
+ *  human user via web UI.
+ */
 async function handleDisableAll() {
   try {
     const { execSync } = await import('child_process')
@@ -1349,7 +1398,11 @@ async function handleDisableAll() {
   }
 }
 
-/** List plugins via Claude CLI (JSON output) */
+/** List plugins via Claude CLI (JSON output).
+ *  READ-ONLY — exempt from R21.4 (no mutation, no auth gates needed beyond
+ *  the route's enforceSystemOwner). Kept as direct CLI call so we get the
+ *  authoritative CLI view of installed/enabled state.
+ */
 async function handleListPlugins(available: boolean) {
   try {
     const { execSync } = await import('child_process')
@@ -1362,7 +1415,9 @@ async function handleListPlugins(available: boolean) {
   }
 }
 
-/** Validate a plugin or marketplace manifest via Claude CLI */
+/** Validate a plugin or marketplace manifest via Claude CLI.
+ *  READ-ONLY — exempt from R21.4.
+ */
 async function handleValidate(path?: string) {
   if (!path) {
     return NextResponse.json({ error: 'path is required for validate action' }, { status: 400 })
@@ -1381,17 +1436,45 @@ async function handleValidate(path?: string) {
   }
 }
 
-/** Update all marketplaces via Claude CLI */
+/** Update all marketplaces via UpdateMarketplace AIO loop (R21.4) */
 async function handleUpdateAllMarketplaces() {
-  try {
-    const { execSync } = await import('child_process')
-    execSync('claude plugin marketplace update 2>&1', { timeout: 120000 })
-    // Invalidate all version caches
+  // Enumerate registered marketplaces from settings.json + cache, then
+  // dispatch UpdateMarketplace per name. Keeps the per-marketplace gate
+  // pipeline (cache invalidation, ledger emit, version-check side
+  // effects) consistent with single-marketplace updates. If individual
+  // updates fail, we collect errors but don't abort — partial success
+  // is better than rolling back successful updates.
+  const auth = buildSystemAuthContext('marketplaces-api-update-all')
+  const settings = await readJsonSafe(SETTINGS_PATH) || {}
+  const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
+  const names = Object.keys(ekm)
+  if (names.length === 0) {
     UPDATE_CHECK_CACHE.clear()
-    return NextResponse.json({ success: true, action: 'update-all-marketplaces' })
-  } catch (err) {
-    return NextResponse.json({ error: `Update all marketplaces failed: ${err}` }, { status: 500 })
+    return NextResponse.json({ success: true, action: 'update-all-marketplaces', updated: 0 })
   }
+  let updated = 0
+  const errors: Array<{ name: string; error: string }> = []
+  for (const name of names) {
+    const r = await UpdateMarketplace({ name }, auth)
+    if (r.success) {
+      updated++
+    } else {
+      errors.push({ name, error: r.error || 'unknown' })
+    }
+  }
+  UPDATE_CHECK_CACHE.clear()
+  if (errors.length > 0 && updated === 0) {
+    return NextResponse.json({
+      error: `Update all marketplaces failed: every marketplace returned an error`,
+      errors,
+    }, { status: 500 })
+  }
+  return NextResponse.json({
+    success: true,
+    action: 'update-all-marketplaces',
+    updated,
+    ...(errors.length > 0 ? { partialErrors: errors } : {}),
+  })
 }
 
 /** List marketplaces via Claude CLI (JSON output) */

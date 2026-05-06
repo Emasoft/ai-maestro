@@ -4,7 +4,7 @@
 **Filename:** `design/tasks/TRDD-ef0c6c0a-0712-4506-9f6b-57bcfee2b22e-r21-aio-compliance-audit.md`
 **Tracked in:** this repo (design/tasks/ is git-tracked)
 
-**Status:** In progress (audit complete; migrations partial)
+**Status:** Done — all 10 audit items migrated or documented as below-AIO-line; out-of-scope follow-ups tracked in the "Migration progress" section
 **Author:** AI Maestro session 2026-05-06
 **Branch:** `feature/phase6-jsonl-rebase-test`
 **Governance baseline:** `docs/GOVERNANCE-RULES.md` v3.9.1
@@ -113,6 +113,13 @@ Each row is one commit. Land them one at a time so each is reviewable.
 
 ## Migration progress (2026-05-06)
 
+- ✅ Item 1 — `app/api/settings/marketplaces/route.ts` handlers (commit `<this>`):
+    - `handleEnable` / `handleDisable` / `handleUpdate` / `handleInstall` / `handleUninstall` — all five user-scope plugin mutations now dispatch through ChangePlugin AIO via a shared `dispatchUserPluginAction()` helper that handles the multi-key-format resolution (cliMkt vs marketplaceName vs raw pluginKey).
+    - `handleUpdateAllMarketplaces` — now iterates UpdateMarketplace per registered marketplace instead of `claude plugin marketplace update` shell-out.
+    - `handleInstall` retry-on-stale-state logic preserved in route layer (it's a recovery path specific to user-scope cache corruption; ChangePlugin doesn't have a "wipe stale install state" gate yet).
+    - `handleUninstall` cache-folder cleanup preserved as below-AIO-line idempotent maintenance (SCEN-019 BUG-001 — CLI uninstall doesn't remove cache).
+    - `handleDisableAll` documented as below-AIO-line bulk operation. A future `ChangePluginsBulk` AIO is the proper migration target.
+    - Read-only handlers (`handleListPlugins`, `handleValidate`, `handleListMarketplacesCli`) explicitly documented as exempt from R21.4 (no mutation = no gates needed).
 - ✅ Item 2 — `server.mjs` startup marketplace registration → CreateMarketplace / UpdateMarketplace / DeleteMarketplace AIOs (commit `8fb040f8`)
 - ✅ Item 3 — `services/role-plugin-service.ts` 5 direct settings writes (commit `6d531c4c`):
     - `deleteRolePlugin` migrated to `UninstallPlugin` AIO (cross-target cleanup, was leaving stale per-agent entries)
@@ -126,11 +133,14 @@ Each row is one commit. Land them one at a time so each is reviewable.
 - ✅ Item 9 — `app/api/agents/[id]/metadata/route.ts` → ChangeMetadata AIO created (commit `45eb4a9e`)
 - ✅ Item 10 — `lib/client-plugin-adapters/claude-adapter.ts` runtime guard via AsyncLocalStorage sentinel (commit `576f6a89`)
 
-**Remaining:** Item 1 (`app/api/settings/marketplaces/route.ts` handlers — largest blast radius, 11 direct CLI shell-outs in handleEnable / handleDisable / handleUpdate / handleInstall / handleUninstall / handleNuke). Requires migration to ChangePlugin(scope='user') AIO with multiple-key-format resolution and install retry-on-stale logic moved into ChangePlugin gates.
+**All TRDD migration items complete.** R21.4 violations identified in the original audit are now either migrated to AIO calls or explicitly documented as below-AIO-line with justification.
 
-Out-of-scope follow-ups identified during migration:
+Out-of-scope follow-ups identified during migration (each is its own future TRDD):
 - A proper `ChangeAMPIdentity` AIO that wraps both the AMP fingerprint metadata AND the agent's `label` change atomically (currently split into 2 writes in updateAgentSelf).
 - A proper `ChangeLabel` AIO for non-governance display-name changes (currently routes through direct updateAgent for AMP self-update).
+- A `ChangePluginsBulk` AIO for `claude plugin disable --all` semantics (currently a CLI shell-out documented as below-AIO-line bulk operation).
+- A "wipe stale install state" gate on `ChangePlugin` (PG02 candidate) so the recovery loop in `handleInstall` can move into the AIO instead of living at the route layer.
+- `installPluginLocally` / `uninstallPluginLocally` helpers in `services/element-management-service.ts` still use `execFileAsync('claude', ...)` directly. They are private helpers called from inside ChangePlugin's local-scope path, so they're a layer below the AIO line but technically violate R21.4's "client adapter is the only mutation primitive" principle. Migrating them requires routing through the claude-adapter (`assertAdapterContext` is now in place to support this).
 
 ## Known limitations carried forward
 

@@ -23,6 +23,7 @@ export type LedgerOp =
   | 'change_title' | 'change_plugin' | 'change_client'
   | 'change_team' | 'change_name' | 'change_folder'
   | 'change_avatar' | 'change_cli_args' | 'change_model'
+  | 'change_metadata'
   | 'install_element' | 'change_skill' | 'change_agent_def'
   | 'change_command' | 'change_rule' | 'change_output_style'
   | 'change_mcp' | 'change_lsp' | 'change_hook'

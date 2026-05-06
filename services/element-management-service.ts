@@ -4739,6 +4739,129 @@ export async function ChangeAvatar(
   }
 }
 
+/**
+ * ChangeMetadata — agent-scoped AIO for the `metadata` field.
+ *
+ * Per R21.4 (AIO composition), all mutations of agent.metadata MUST go through
+ * this AIO instead of calling `updateAgent` directly. This pipeline:
+ *  - Authorises the caller (modify-agent: self / MANAGER / COS).
+ *  - Validates shape (plain object, ≤64 KB JSON, ≤5 nesting levels).
+ *  - Supports a CLEAR mode (`mode='clear'`) that nulls every existing key so
+ *    `updateAgent`'s spread-merge actually wipes the field. The DELETE route
+ *    used to assemble this map by hand — now it lives in one place.
+ *  - Emits a ledger op so metadata changes are auditable like every other AIO.
+ *
+ * No restart needed: metadata is server-only state that never reaches tmux.
+ */
+export async function ChangeMetadata(
+  agentId: string,
+  metadata: Record<string, unknown>,
+  authContext: AuthContext,
+  options?: { mode?: 'merge' | 'clear' },
+): Promise<ChangeResult> {
+  const ops: string[] = []
+  const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
+  const mode = options?.mode ?? 'merge'
+
+  try {
+    // ── G00: Authorization (modify-agent: self/MANAGER/COS) ──
+    if (!authContext) {
+      result.error = 'authContext is mandatory for ChangeMetadata (security invariant)'
+      return result
+    }
+    const g0err = await gate0Auth('modify-agent', agentId, authContext, ops)
+    if (g0err) { result.error = g0err; return result }
+
+    // ── G01: Shape validation ─────────────────────────────────
+    if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+      result.error = 'Metadata must be a plain object'
+      return result
+    }
+    ops.push('G01: Metadata is a plain object')
+
+    // ── G02: Size cap (64 KB JSON) ────────────────────────────
+    // 'clear' mode skips size check — payload is generated from existing keys.
+    if (mode === 'merge') {
+      const metadataStr = JSON.stringify(metadata)
+      if (metadataStr.length > 65536) {
+        result.error = 'Metadata exceeds maximum size (64KB)'
+        return result
+      }
+      ops.push(`G02: Metadata size ${metadataStr.length} bytes ≤ 64 KB`)
+    } else {
+      ops.push('G02: skipped (clear mode)')
+    }
+
+    // ── G03: Nesting depth cap (≤5) ──────────────────────────
+    if (mode === 'merge') {
+      const checkDepth = (obj: unknown, depth: number): boolean => {
+        if (depth > 5) return false
+        if (obj !== null && typeof obj === 'object') {
+          for (const val of Object.values(obj as Record<string, unknown>)) {
+            if (!checkDepth(val, depth + 1)) return false
+          }
+        }
+        return true
+      }
+      if (!checkDepth(metadata, 1)) {
+        result.error = 'Metadata exceeds maximum nesting depth (5)'
+        return result
+      }
+      ops.push('G03: Nesting depth ≤ 5')
+    } else {
+      ops.push('G03: skipped (clear mode)')
+    }
+
+    // ── G04: Resolve agent ────────────────────────────────────
+    const { getAgent, updateAgent } = await import('@/lib/agent-registry')
+    const agent = getAgent(agentId)
+    if (!agent) {
+      result.error = `Agent ${agentId} not found`
+      return result
+    }
+    ops.push(`G04: Agent "${agent.name}" found`)
+
+    // ── EXE: Apply update ─────────────────────────────────────
+    // 'clear' mode: build an undefined-valued map for every existing key so
+    // updateAgent's spread-merge wipes them. (See MF-001 in agent-registry.ts.)
+    let payload: Record<string, unknown>
+    if (mode === 'clear') {
+      const nulled: Record<string, undefined> = {}
+      if (agent.metadata) {
+        for (const key of Object.keys(agent.metadata)) {
+          nulled[key] = undefined
+        }
+      }
+      payload = nulled as Record<string, unknown>
+    } else {
+      payload = metadata
+    }
+    const updated = await updateAgent(agentId, { metadata: payload })
+    if (!updated) {
+      result.error = 'Failed to update metadata in registry'
+      return result
+    }
+    ops.push(`EXE: metadata ${mode === 'clear' ? 'cleared' : 'merged'} via updateAgent`)
+
+    // ── PG01: Ledger op ──────────────────────────────────────
+    await tryEmitLedgerOp(
+      'change_metadata',
+      [{ op: mode === 'clear' ? 'remove' : 'replace', path: `/agents/${agentId}/metadata`, value: mode === 'clear' ? undefined : metadata }],
+      authContext,
+      'change-metadata',
+      ops,
+    )
+
+    result.success = true
+    console.log(`[ChangeMetadata] Agent ${agentId} "${agent.name}": metadata ${mode} (${ops.length} gates)`)
+    return result
+  } catch (err) {
+    result.error = err instanceof Error ? err.message : String(err)
+    console.error(`[ChangeMetadata] FAILED for agent ${agentId}:`, result.error)
+    return result
+  }
+}
+
 export async function ChangeCLIArgs(
   agentId: string,
   newArgs: string,

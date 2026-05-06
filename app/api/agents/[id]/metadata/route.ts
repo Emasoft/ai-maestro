@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAgent, updateAgent } from '@/lib/agent-registry'
-import { authenticateFromRequest } from '@/lib/agent-auth'
-import { authorize } from '@/lib/authorization'
+import { getAgent } from '@/lib/agent-registry'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
+import { ChangeMetadata } from '@/services/element-management-service'
 
 /**
  * GET /api/agents/[id]/metadata
- * Get agent metadata (custom key-value pairs)
- *
- * NOTE: No service function exists for metadata yet.
- * This route uses agent-registry directly until a service is created.
+ * Get agent metadata (custom key-value pairs).
+ * Reads are not gated through an AIO — only mutations are.
  */
 export async function GET(
   _request: NextRequest,
@@ -35,7 +33,9 @@ export async function GET(
 
 /**
  * PATCH /api/agents/[id]/metadata
- * Update agent metadata (merges with existing metadata)
+ * Update agent metadata (merges with existing metadata).
+ * Dispatches through ChangeMetadata AIO — auth, validation, ledger emit
+ * all live there.
  */
 export async function PATCH(
   request: NextRequest,
@@ -46,61 +46,38 @@ export async function PATCH(
     if (!isValidUuid(agentId)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
-    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
     const auth = authenticateFromRequest(request)
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }
-    const authz = authorize(auth, 'modify-agent', agentId)
-    if (!authz.allowed) {
-      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
-    }
-    let metadata
-    try { metadata = await request.json() } catch {
+    let metadata: Record<string, unknown>
+    try {
+      metadata = await request.json()
+    } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-    // Validate metadata is a plain object with depth/size limits
-    if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
-      return NextResponse.json({ error: 'Metadata must be a plain object' }, { status: 400 })
-    }
-    const metadataStr = JSON.stringify(metadata)
-    if (metadataStr.length > 65536) {
-      return NextResponse.json({ error: 'Metadata exceeds maximum size (64KB)' }, { status: 400 })
-    }
-    // Check nesting depth (max 5 levels)
-    const checkDepth = (obj: unknown, depth: number): boolean => {
-      if (depth > 5) return false
-      if (obj !== null && typeof obj === 'object') {
-        for (const val of Object.values(obj as Record<string, unknown>)) {
-          if (!checkDepth(val, depth + 1)) return false
-        }
-      }
-      return true
-    }
-    if (!checkDepth(metadata, 1)) {
-      return NextResponse.json({ error: 'Metadata exceeds maximum nesting depth (5)' }, { status: 400 })
+
+    const result = await ChangeMetadata(agentId, metadata, buildAuthContext(auth), { mode: 'merge' })
+    if (!result.success) {
+      const status = /not found/i.test(result.error || '') ? 404
+        : /forbidden|authoris|authoriz/i.test(result.error || '') ? 403
+        : 400
+      return NextResponse.json({ error: result.error || 'Failed to update metadata' }, { status })
     }
 
-    const agent = await updateAgent(agentId, { metadata })
-
-    if (!agent) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
-    }
-
-    return NextResponse.json({ metadata: agent.metadata })
+    const updated = getAgent(agentId)
+    return NextResponse.json({ metadata: updated?.metadata || {} })
   } catch (error) {
-    // Differentiate validation errors (400) from internal errors (500)
     console.error('Failed to update agent metadata:', error)
-    if (error instanceof TypeError || (error instanceof Error && error.message.includes('Invalid'))) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
-    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 /**
  * DELETE /api/agents/[id]/metadata
- * Clear all agent metadata
+ * Clear all agent metadata.
+ * Dispatches through ChangeMetadata in 'clear' mode — the AIO walks the
+ * existing keys and nulls each so updateAgent's spread-merge wipes them.
  */
 export async function DELETE(
   request: NextRequest,
@@ -111,31 +88,17 @@ export async function DELETE(
     if (!isValidUuid(agentId)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
-    // SF-009: Authenticate caller (cookie for web UI, Bearer for agents)
     const auth = authenticateFromRequest(request)
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }
-    const authz = authorize(auth, 'modify-agent', agentId)
-    if (!authz.allowed) {
-      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
-    }
-    // MF-001 fix: Read current metadata keys and set each to undefined,
-    // because updateAgent merges via spread (empty object is a no-op)
-    const existing = getAgent(agentId)
-    if (!existing) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
-    }
-    const nulledMetadata: Record<string, undefined> = {}
-    if (existing.metadata) {
-      for (const key of Object.keys(existing.metadata)) {
-        nulledMetadata[key] = undefined
-      }
-    }
-    const agent = await updateAgent(agentId, { metadata: nulledMetadata as Record<string, unknown> })
 
-    if (!agent) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    const result = await ChangeMetadata(agentId, {}, buildAuthContext(auth), { mode: 'clear' })
+    if (!result.success) {
+      const status = /not found/i.test(result.error || '') ? 404
+        : /forbidden|authoris|authoriz/i.test(result.error || '') ? 403
+        : 400
+      return NextResponse.json({ error: result.error || 'Failed to clear metadata' }, { status })
     }
 
     return NextResponse.json({ success: true })

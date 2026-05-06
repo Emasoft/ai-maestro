@@ -1,8 +1,9 @@
 ---
-version: "3.7.2"
-date: 2026-04-20
-branch: feature/team-governance
+version: "3.8.0"
+date: 2026-05-06
+branch: feature/phase6-jsonl-rebase-test
 changelog:
+  - "3.8.0: Added R21 (All-In-One Pipeline Composition). Codifies the IRON rule that AIO API functions MUST call other AIOs internally when they need to perform a task another AIO already covers — never duplicate logic, never bypass gates with primitive helpers. Names matter: ChangePlugin is an agent-scoped configuration AIO (install/uninstall/enable/disable/update FOR THAT AGENT or user-scope target); UninstallPlugin (cross-agent) is the plugin-scoped AIO that cascades through ChangePlugin per agent; UninstallMarketplace cascades through UninstallPlugin per plugin. Without the cascade, agents are left with dangling enabledPlugins keys pointing at deleted marketplaces — they break. Driven by an audit that found ChangeMarketplace's remove path skipped agent cleanup and G11b in ChangePlugin called updateAgent directly instead of dispatching through ChangeCLIArgs."
   - "3.7.2: Source-vs-install-target clarification (2026-04-20). Added R20.29 and a new 'CRITICAL — source vs install target' block to the R20 intro making explicit that the 3 AI Maestro local-marketplace containers under `~/agents/{role,custom,core}-plugins/` are SOURCE STORAGE only. A plugin LIVES at its install target (the client's own plugin cache) reached via the client's own install protocol — regardless of whether the source was a GitHub URL, a local folder, a remote marketplace, or one of the 3 AI Maestro locals. AI Maestro only WRITES into local sources when it is the author or converter of the plugin. Driven by SCEN-026 authoring feedback."
   - "3.7.1: Drift-remediation pass (2026-04-16). Bumped version to match R20.25 / R20.27 / R20.28 body tags that were already labeled v3.7.1. Fixed R20.28 title count (Six → Five — enumeration has exactly five patterns). Added SCEN-023 and SCEN-024 to §0.8. Removed stale pointer to non-existent `app/api/agents/[id]/title/route.ts` (title changes dispatch via `PATCH /api/agents/[id]` per element-management-service). Clarified Overview wording: one remote marketplace + two local containers (+ one core container for non-Claude clients)."
   - "3.7.0: Added R9.13 (role-plugin mandatory for every agent, including AUTONOMOUS), R11.12 (role-plugin mandatory at every boundary), Invariant 8 rewritten. Added new §0 'Canonical source + copies' index and new §TERMINOLOGY (TITLE / ROLE / PERSONA three-layer model). AUTONOMOUS now resolves to the mandatory ai-maestro-autonomous-agent role-plugin."
@@ -840,6 +841,91 @@ These are hard invariants that the system must maintain at all times:
 20. **IR-storage-location invariant** (R20.8 + R20.9 + R20.22): converted-plugin universal IR lives at the CONTAINER level — `~/agents/custom-plugins/.abstract/<name>/` for ordinary plugins and `~/agents/role-plugins/.abstract/<name>/` for role-plugins — NEVER inside any `marketplace-<client>/` subfolder and NEVER duplicated per client
 21. **Scope-isolation invariant** (R20.20): user-scope and local-scope plugin lists are disjoint — no plugin install at one scope ever appears in the listing or affects the enable-state of the other scope
 22. **Container-marketplace separation invariant** (R20.1 + R20.21): `~/agents/role-plugins/` and `~/agents/custom-plugins/` are CONTAINERS, not marketplaces. A container holds zero or more `marketplace-<client>/` subfolders plus the shared `.abstract/` IR hub. The container folder itself is NEVER registered with any client CLI as a marketplace — only the individual `marketplace-<client>/` subfolders are
+
+---
+
+## R21. All-In-One Pipeline Composition (CRITICAL)
+
+**The user's verbatim directive (2026-05-06) — load-bearing wording, do not paraphrase:**
+
+> macro all-in-one api functions must handle the details via other all-in-one function. for example uninstall marketplace must handle internally the uninstall of all its plugins from all the agents or global scope) before actually uninstalling the marketplace, otherwise the agents will break. this meame that internally they must call the all-in-one function of the sgent, like change-plugin, and it must internally calls the all-in-ones of uninstalling plugins, changing-title, change-team, etc. since all those things are affected (change-plugin all-in-one must also directly take care of enable-disable a plugin in the agent, a task that does not have a dedicated all-in-one since it is part of change-plugin api command of any agent). in other words: you must remember the other all-in-one rule: all-in-one api commands must call internally other all-in-one commands when they need to do something, since they cannot duplicate the functionality internally ("only one way to do one thing, one single piece of code to debug in the whole codebase" is the rule). So for example if the all-in-one api command to change title is called, internally it must call the others all-in-one commands to do the changes to the agent plugins. beware of the names: the aio change-plugin is actually an api function about an agent configuration, not about plugins. uninstalling a plugin completely from all agents instead is a consequence of calling uninstall-plugin, a api function that is about plugins, not about agents. and it is needed by the aio uninstall-marketplace.
+
+### R21.1 — One way to do one thing
+
+Every sensitive mutation lives in exactly ONE all-in-one (AIO) pipeline function. No second path exists. When an AIO needs to perform a task that an existing AIO already covers, it MUST call that AIO. It MUST NOT re-implement the underlying primitive (`updateAgent`, `loadJsonSafe`, `claude plugin update`, `tmux send-keys`, …) directly, because doing so duplicates logic, skips gates, and creates a parallel debugging surface.
+
+### R21.2 — Naming convention is part of the rule
+
+Names mislead unless interpreted carefully:
+
+| AIO name | Scope | Purpose |
+|---|---|---|
+| `ChangePlugin` | one agent (or user-scope) | Configures a SINGLE target's plugin set. Actions: install / uninstall / enable / disable / update FOR THAT TARGET. NOT a global plugin operation. |
+| `UninstallPlugin` (plugin-scoped, cross-agent) | the plugin everywhere | Removes a plugin from every agent and from user-scope. Cascades through `ChangePlugin` per (target, scope). |
+| `UpdatePlugin` (plugin-scoped, cross-agent) | the plugin everywhere | Updates a plugin in every agent and user-scope where it is installed. Cascades through `ChangePlugin(action='update')`. |
+| `InstallPlugin` (plugin-scoped) | a target list | Installs a plugin into one or more targets. Cascades through `ChangePlugin(action='install')`. |
+| `UninstallMarketplace` (= `DeleteMarketplace`) | marketplace-wide | Cascades through `UninstallPlugin` per plugin in the marketplace, THEN removes the marketplace itself. |
+| `InstallMarketplace` (= `CreateMarketplace`) | marketplace-wide | Registers the marketplace; does NOT auto-install plugins (that is the user's explicit action). |
+| `UpdateMarketplace` | marketplace-wide | Refreshes the marketplace's manifest + cache. Does NOT auto-update plugins. |
+| `CheckPluginUpdates` | plugin-scoped | Detects which plugins have new versions available. Read-only. |
+| `CheckMarketplaceUpdates` | marketplace-wide | Detects whether a marketplace has new plugin versions or new plugins available. Read-only. |
+
+The "Change*" prefix means **"change the configuration of one entity"** (one agent, one user-scope config). The "Install*Plugin / Uninstall*Plugin / Update*Plugin" verbs (no "Change" prefix) mean **"operate on a plugin across every place it is installed"**. The "InstallMarketplace / UninstallMarketplace / UpdateMarketplace" verbs operate on marketplaces and, when destructive, cascade through the plugin-scoped verbs.
+
+`enable` / `disable` is intentionally NOT a separate AIO. Enable/disable is always per-target (per agent or per user-scope), so it is an action inside `ChangePlugin`'s action enum, not its own AIO.
+
+### R21.3 — Cascade requirements (mandatory)
+
+The destructive cascade chain is non-negotiable:
+
+```
+UninstallMarketplace(name)
+  └─ for each plugin in the marketplace:
+       UninstallPlugin(plugin, marketplace)        # cross-agent AIO
+        └─ for each agent that has this plugin:
+             ChangePlugin(agentId, action='uninstall')  # per-agent AIO
+              └─ may trigger ChangeTitle / ChangeTeam if invariants require
+       (then user-scope uninstall via ChangePlugin(null, scope='user'))
+  └─ then remove the marketplace itself (CLI + cache + settings)
+```
+
+A `UninstallMarketplace` that skips the cascade leaves agents with dangling `<plugin>@<deleted-marketplace>` keys in their `settings.local.json` — those keys reference a marketplace that no longer exists, the next `claude` launch fails, and the agent **breaks**. Identical reasoning applies to `UninstallPlugin` skipping its `ChangePlugin` per-agent cascade: every agent that had the plugin in its enabledPlugins map is left with a stale key.
+
+### R21.4 — `ChangeTitle` cascade
+
+`ChangeTitle` is a Change-prefixed AIO so its scope is one agent. When it transitions a title that requires a different role-plugin, it MUST call `ChangePlugin(agentId, action='install', rolePluginSwap=true)` and `ChangePlugin(agentId, action='uninstall')` for the old plugin — NOT touch settings.local.json directly. Likewise when a title transition requires a team membership change (e.g. AUTONOMOUS → CHIEF-OF-STAFF requires the agent to be a team member), `ChangeTitle` must call `ChangeTeam`, not mutate `teams.json` itself.
+
+### R21.5 — Cross-cutting six API surface
+
+The user-facing API exposes EXACTLY six plugin/marketplace operations:
+
+| API | AIO it calls |
+|---|---|
+| 1. Check plugin updates | `CheckPluginUpdates` |
+| 2. Install plugin | `InstallPlugin` |
+| 3. Update plugin | `UpdatePlugin` |
+| 4. Check marketplace updates | `CheckMarketplaceUpdates` |
+| 5. Install marketplace | `InstallMarketplace` (= `CreateMarketplace`) |
+| 6. Update marketplace | `UpdateMarketplace` |
+
+Uninstall is reachable through the same surfaces (each Install* AIO has a matching `Uninstall*` cousin reached via DELETE / `action='uninstall'`). New endpoints scattered around the codebase that mutate plugin or marketplace state outside these six pipelines are forbidden.
+
+### R21.6 — Settings-management endpoints are not plugin operations
+
+Endpoints that read or write *settings* about plugin/marketplace policy (e.g. `GET/PATCH /api/settings/auto-update`, `POST /api/settings/auto-update/run`) are NOT plugin operations and do NOT count against the six. They are configuration endpoints for the policy that drives the AIOs above. The "Run now" trigger calls into the AIOs but does not introduce a parallel mutation path.
+
+### R21.7 — Helpers must remain pure (read-only)
+
+Helper functions used by AIOs may perform reads and pure transformations only. Any write — to disk, to the registry, to `settings.json`, to `tmux`, to a remote service — must go through a full AIO pipeline. A helper that writes is a helper that bypasses Gate 0 authorization, the sudo guard, the IBCT scope check, the ledger emitter, the restart-queue notifier, etc. — and is therefore a backdoor.
+
+### R21.8 — Auditing for compliance
+
+Every PR that touches `services/element-management-service.ts` (or any file declaring an AIO) must answer:
+1. Does this AIO call other AIOs for cross-cutting work, or does it duplicate primitive code?
+2. If it removes a plugin/marketplace, does the cascade reach every agent that has the plugin?
+3. Does it call any `loadJsonSafe`/`saveJsonSafe`/`updateAgent` directly when an AIO would have done the job?
+
+A PR that fails any of those three is a R21 violation and must be refactored before merge.
 
 ---
 

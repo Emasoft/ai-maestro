@@ -184,13 +184,16 @@ export async function POST(req: NextRequest) {
       await ensureMarketplace()
       await updateMarketplaceManifest(dirName, description, version)
 
-      // G6: Tell Claude CLI to refresh the marketplace
+      // G6: Tell Claude CLI to refresh the marketplace.
+      // R21.4 — dispatch through the AIO instead of `execSync('claude plugin
+      // marketplace update ...')`. UpdateMarketplace runs the same command
+      // under its G00..G06 gate pipeline so authorization, validation, and
+      // logging all fire. Non-blocking on failure: a marketplace refresh
+      // hiccup should not undo the publish — Claude will pick up the new
+      // version on next CLI use anyway.
       try {
-        const { execSync } = await import('child_process')
-        execSync(`claude plugin marketplace update ${LOCAL_MARKETPLACE_NAME}`, {
-          timeout: 15000,
-          stdio: 'pipe',
-        })
+        const { UpdateMarketplace } = await import('@/services/element-management-service')
+        await UpdateMarketplace({ name: LOCAL_MARKETPLACE_NAME }, { isSystemOwner: true })
       } catch {
         // Non-blocking — marketplace will auto-refresh on next CLI use
       }

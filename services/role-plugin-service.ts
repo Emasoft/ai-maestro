@@ -1007,20 +1007,30 @@ export async function syncDefaultRolePlugins(_force = false): Promise<SyncDefaul
  * Also removes the deprecated 23blocks-OS marketplace from Claude CLI.
  */
 async function migrateDefaultPluginSettings(): Promise<void> {
-  // Step 1: Remove deprecated 23blocks-OS marketplace (replaced by Emasoft/ai-maestro-plugins)
+  // Step 1: Remove deprecated 23blocks-OS marketplace (replaced by
+  // Emasoft/ai-maestro-plugins). R21.4 — dispatch through the
+  // DeleteMarketplace AIO instead of `execSync('claude plugin marketplace
+  // remove …')` so the marketplace's plugin cascade runs (G02b uninstalls
+  // any installed plugin from every agent before the marketplace is
+  // removed). Both name forms are tried because Claude CLI accepted
+  // either historically.
   try {
-    const { execSync } = await import('child_process')
-    // Try both short and full URL forms — CLI may accept either
-    execSync('claude plugin marketplace remove 23blocks-OS/ai-maestro-plugins', { timeout: 10000, stdio: 'pipe' }).toString()
-    console.log('[role-plugins] Removed deprecated 23blocks-OS marketplace')
-  } catch {
-    try {
-      const { execSync } = await import('child_process')
-      execSync('claude plugin marketplace remove https://github.com/23blocks-OS/ai-maestro-plugins', { timeout: 10000, stdio: 'pipe' }).toString()
-      console.log('[role-plugins] Removed deprecated 23blocks-OS marketplace (full URL)')
-    } catch {
-      // Not registered or already removed — fine
+    const { DeleteMarketplace } = await import('./element-management-service')
+    const r1 = await DeleteMarketplace({ name: '23blocks-OS/ai-maestro-plugins' }, { isSystemOwner: true })
+    if (r1.success) {
+      console.log('[role-plugins] Removed deprecated 23blocks-OS marketplace via DeleteMarketplace AIO')
+    } else {
+      const r2 = await DeleteMarketplace({ name: 'https://github.com/23blocks-OS/ai-maestro-plugins' }, { isSystemOwner: true })
+      if (r2.success) {
+        console.log('[role-plugins] Removed deprecated 23blocks-OS marketplace (full URL form) via DeleteMarketplace AIO')
+      }
+      // If both forms fail it means the marketplace was never registered
+      // by either name — that's fine, no-op success path.
     }
+  } catch {
+    // DeleteMarketplace is best-effort here — if it crashes (e.g. the
+    // CLI exited non-zero for an unknown reason), continue to the
+    // settings-side cleanup below.
   }
 
   // Step 1b: Remove deprecated local marketplace names from global settings

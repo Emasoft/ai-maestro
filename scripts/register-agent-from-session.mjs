@@ -311,10 +311,22 @@ async function registerSession(sessionName, interactive = true, options = {}) {
     console.log(`   Old Session: ${sessionName}`)
     console.log(`   New Session: ${newSessionName}`)
 
-    // R17: Install ai-maestro-plugin with --scope local
+    // R17: Install ai-maestro-plugin with --scope local.
+    //
+    // R21.4 KNOWN VIOLATION (TRDD-ef0c6c0a item 4): this script shells out
+    // to `claude plugin install` directly instead of dispatching through
+    // ChangePlugin's AIO pipeline. Migration is deferred because the
+    // script is a Node .mjs CLI utility without the project's TypeScript
+    // import paths and without an auth token to call the API endpoint.
+    // The right migration is to POST /api/agents/role-plugins/install
+    // with a service-tier auth header — captured as TRDD item 4. For now
+    // the script keeps the direct CLI call to avoid blocking the bootstrap
+    // path while the migration is planned.
+    //
+    // execFileSync (not execSync) — command and args are static constants
+    // so there's no shell-parsing surface to defend.
     console.log(`\n🔌 Installing ai-maestro-plugin (scope=local)...`)
     try {
-      // Use execFileSync to avoid shell parsing — the command and args are static constants
       execFileSync('claude', ['plugin', 'install', 'ai-maestro-plugin@ai-maestro-plugins', '--scope', 'local'], {
         cwd: workingDir,
         timeout: 30000,

@@ -16,7 +16,15 @@ import type { ContextBreakdownResponse } from '@/types/sessions-browser'
 interface Bucket {
   key: keyof Pick<
     ContextBreakdownResponse,
-    'systemPrompt' | 'systemTools' | 'mcpTools' | 'customAgents' | 'memory' | 'messages' | 'freeSpace'
+    | 'systemPrompt'
+    | 'systemTools'
+    | 'mcpTools'
+    | 'customAgents'
+    | 'memory'
+    | 'skills'
+    | 'messages'
+    | 'autocompactBuffer'
+    | 'freeSpace'
   >
   label: string
   /** Tailwind bg color for the filled portion of the bar. */
@@ -25,14 +33,18 @@ interface Bucket {
   labelColor: string
 }
 
+// Order mirrors what `claude-code /context` prints, so users comparing
+// the two side-by-side can scan top-to-bottom without re-mapping rows.
 const BUCKETS: Bucket[] = [
-  { key: 'systemPrompt', label: 'System prompt', fillBg: 'bg-blue-500', labelColor: 'text-blue-300' },
-  { key: 'systemTools', label: 'System tools', fillBg: 'bg-cyan-500', labelColor: 'text-cyan-300' },
-  { key: 'mcpTools', label: 'MCP tools', fillBg: 'bg-violet-500', labelColor: 'text-violet-300' },
-  { key: 'customAgents', label: 'Custom agents', fillBg: 'bg-amber-500', labelColor: 'text-amber-300' },
-  { key: 'memory', label: 'Memory', fillBg: 'bg-pink-500', labelColor: 'text-pink-300' },
-  { key: 'messages', label: 'Messages', fillBg: 'bg-emerald-500', labelColor: 'text-emerald-300' },
-  { key: 'freeSpace', label: 'Free space', fillBg: 'bg-gray-500', labelColor: 'text-gray-400' },
+  { key: 'systemPrompt',      label: 'System prompt',      fillBg: 'bg-blue-500',    labelColor: 'text-blue-300' },
+  { key: 'systemTools',       label: 'System tools',       fillBg: 'bg-cyan-500',    labelColor: 'text-cyan-300' },
+  { key: 'mcpTools',          label: 'MCP tools',          fillBg: 'bg-violet-500',  labelColor: 'text-violet-300' },
+  { key: 'customAgents',      label: 'Custom agents',      fillBg: 'bg-amber-500',   labelColor: 'text-amber-300' },
+  { key: 'memory',            label: 'Memory files',       fillBg: 'bg-pink-500',    labelColor: 'text-pink-300' },
+  { key: 'skills',            label: 'Skills',             fillBg: 'bg-fuchsia-500', labelColor: 'text-fuchsia-300' },
+  { key: 'messages',          label: 'Messages',           fillBg: 'bg-emerald-500', labelColor: 'text-emerald-300' },
+  { key: 'autocompactBuffer', label: 'Autocompact buffer', fillBg: 'bg-orange-500',  labelColor: 'text-orange-300' },
+  { key: 'freeSpace',         label: 'Free space',         fillBg: 'bg-gray-500',    labelColor: 'text-gray-400' },
 ]
 
 function useIsCompactLayout(breakpoint = 1024) {
@@ -73,14 +85,17 @@ function BarRow({
 }) {
   const safeTotal = Math.max(total, 1)
   const safeLimit = Math.max(modelLimit, 1)
-  // Free space is a complement to the consumed portion of the model
-  // limit — its denominator is the model context limit, NOT the
-  // session total. Using `total` (=consumed) as the denominator
-  // produced the visible 922.5% value in the screenshot
-  // (free=902.2K / total=97.8K). For every consumption bucket
-  // (systemPrompt, messages, etc.) `total` is the right denominator
-  // because we want "share of what's been consumed".
-  const denomForBucket = bucket.key === 'freeSpace' ? safeLimit : safeTotal
+  // Different denominators per bucket so the inline percentage matches
+  // what users expect when they cross-reference Claude Code's `/context`:
+  //   - freeSpace and autocompactBuffer share denominator with the
+  //     model limit (they're complements of the consumed portion of the
+  //     window, not "share of what's been consumed").
+  //   - Every other bucket divides by `total` (the consumed portion).
+  // Without this split freeSpace shows 922.5% and the autocompact bar
+  // visually swamps every consumed bucket because the model limit
+  // dwarfs the session total on idle sessions.
+  const limitDenomBuckets = bucket.key === 'freeSpace' || bucket.key === 'autocompactBuffer'
+  const denomForBucket = limitDenomBuckets ? safeLimit : safeTotal
   const pctOfBucketDenom = (value / denomForBucket) * 100
   const pctOfLimit = (value / safeLimit) * 100
   return (
@@ -95,7 +110,7 @@ function BarRow({
       <div
         className="aim-ctx-bar-track"
         role="progressbar"
-        aria-label={`${bucket.label}: ${formatTokenNumber(value)} tokens (${pctOfBucketDenom.toFixed(1)}% of ${bucket.key === 'freeSpace' ? 'model limit' : 'session'}, ${pctOfLimit.toFixed(2)}% of model limit)`}
+        aria-label={`${bucket.label}: ${formatTokenNumber(value)} tokens (${pctOfBucketDenom.toFixed(1)}% of ${limitDenomBuckets ? 'model limit' : 'session'}, ${pctOfLimit.toFixed(2)}% of model limit)`}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(pctOfBucketDenom)}

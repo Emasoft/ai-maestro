@@ -21,7 +21,11 @@ const ContextBreakdownResponseSchema = z.object({
   mcpTools: z.number().int().nonnegative(),
   customAgents: z.number().int().nonnegative(),
   memory: z.number().int().nonnegative(),
+  // Phase 6 additions: skills tokens + autocompact buffer reservation.
+  // Allow zero so older readers (Rust binary, pre-Phase-6) still validate.
+  skills: z.number().int().nonnegative(),
   messages: z.number().int().nonnegative(),
+  autocompactBuffer: z.number().int().nonnegative(),
   freeSpace: z.number().int().nonnegative(),
   cacheRead: z.number().int().nonnegative(),
   total: z.number().int().nonnegative(),
@@ -89,7 +93,11 @@ export async function GET(
       mcpTools: resp.mcpTools,
       customAgents: resp.customAgents,
       memory: resp.memory,
+      // Defensive defaults so the route still validates when an older
+      // Rust reader is in the loop and doesn't return the new fields.
+      skills: resp.skills ?? 0,
       messages: resp.messages,
+      autocompactBuffer: resp.autocompactBuffer ?? 0,
       freeSpace: resp.freeSpace,
       cacheRead: resp.cacheRead,
       total: resp.total,

@@ -97,7 +97,17 @@ export interface ContextBreakdownResponse {
   mcpTools: number
   customAgents: number
   memory: number
+  /**
+   * Tokens contributed by enabled skills (Phase 6 addition). Older
+   * clients may receive 0 from servers that pre-date local tokenization.
+   */
+  skills: number
   messages: number
+  /**
+   * Reserved buffer Claude Code holds back for auto-compaction (~33k).
+   * Phase 6 addition; older clients may receive 0.
+   */
+  autocompactBuffer: number
   freeSpace: number
   cacheRead: number
   total: number

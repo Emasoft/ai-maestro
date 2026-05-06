@@ -475,11 +475,23 @@ export class JsonlReader extends EventEmitter {
 
   async contextBreakdown(sessionId: string): Promise<ContextBreakdownOkResponse> {
     this.touch(sessionId)
-    const resp = await this.sendRequest({ cmd: 'context_breakdown', sessionId })
-    if (isErrorResponse(resp)) {
-      throw new JsonlReaderProtocolError(String(resp.error), resp.detail)
+    // Phase 6 — local-tokenization breakdown.
+    //
+    // The Rust `context_breakdown` command was producing numbers that did
+    // not match Claude Code's `/context` output: it could only see what
+    // was in the JSONL, but Claude tokenizes on-disk skill/agent/memory
+    // files at runtime. We now compute the breakdown in Node by reading
+    // the agent's enabled plugins from settings and tokenizing the same
+    // files Claude Code itself loads. The Rust binary's `context_breakdown`
+    // remains in place for forward-compat with non-Claude clients but is
+    // no longer called from this method.
+    const entry = this.sessionsById.get(sessionId)
+    if (!entry) {
+      throw new JsonlReaderProtocolError('session_not_found', `unknown sid: ${sessionId}`)
     }
-    return resp as ContextBreakdownOkResponse
+    const { computeLocalContextBreakdown } = await import('@/services/sessions-browser/local-context-breakdown')
+    const result = await computeLocalContextBreakdown(entry.path)
+    return { ok: true, ...result }
   }
 
   /**

@@ -14,6 +14,7 @@
 import { useMemo } from 'react'
 import { User, Sparkles, Terminal as TerminalIcon } from 'lucide-react'
 import type { TranscriptLine } from '@/types/sessions-browser'
+import { parseAnsi, stripAnsi } from '@/lib/ansi'
 
 interface MessageBubbleProps {
   line: TranscriptLine
@@ -83,13 +84,63 @@ function splitOnMatches(text: string, query: string): Array<{ part: string; isMa
   return out
 }
 
+/**
+ * Render a piece of bubble text — possibly carrying ANSI escape codes
+ * from a `local-command-stdout` capture — as a list of styled spans
+ * with the search-highlight overlay applied at the top level.
+ *
+ * The pipeline:
+ *   1. `parseAnsi(text)` → segments of `{text, style}` (style = the
+ *      cumulative SGR state at that point).
+ *   2. For each segment, run `splitOnMatches(seg.text, lowerQuery)` so
+ *      the highlight survives the styling layer. Match parts wear the
+ *      `<mark>` chrome on top of the SGR style.
+ *
+ * Plain (no-ANSI) text round-trips through `parseAnsi` as a single
+ * unstyled segment, so non-tty messages render exactly the same as
+ * before this change.
+ */
+function renderBubbleText(text: string, lowerQuery: string, currentMatch: boolean) {
+  const ansiSegments = parseAnsi(text)
+  const out: React.ReactNode[] = []
+  let key = 0
+  for (const seg of ansiSegments) {
+    const parts = splitOnMatches(seg.text, lowerQuery)
+    for (const p of parts) {
+      if (!p.part) continue
+      if (p.isMatch) {
+        out.push(
+          <mark
+            key={key++}
+            style={seg.style}
+            className={currentMatch ? 'aim-match aim-match-current' : 'aim-match'}
+          >
+            {p.part}
+          </mark>,
+        )
+      } else if (Object.keys(seg.style).length > 0) {
+        out.push(<span key={key++} style={seg.style}>{p.part}</span>)
+      } else {
+        out.push(<span key={key++}>{p.part}</span>)
+      }
+    }
+  }
+  return out
+}
+
 export default function MessageBubble({ line, highlightQuery = '', currentMatch = false }: MessageBubbleProps) {
   const styles = ROLE_STYLES[line.role] ?? ROLE_STYLES.system
   const Icon = styles.icon
 
-  const segments = useMemo(
-    () => splitOnMatches(line.text, highlightQuery),
-    [line.text, highlightQuery],
+  // Render with ANSI color awareness so `/context`, `/skills`, etc.
+  // outputs appear as styled text instead of literal `\x1b[…]m`
+  // garbage. The plain-text version (used by aria-label and search
+  // matching) still strips ANSI so screen readers and the search
+  // engine see only the readable letters.
+  const ansiPlainText = useMemo(() => stripAnsi(line.text), [line.text])
+  const renderedBody = useMemo(
+    () => renderBubbleText(line.text, highlightQuery, currentMatch),
+    [line.text, highlightQuery, currentMatch],
   )
 
   // Unique id pairing role + line index for aria-labelledby.
@@ -112,23 +163,14 @@ export default function MessageBubble({ line, highlightQuery = '', currentMatch 
               </span>
             )}
           </div>
-          <div className={`whitespace-pre-wrap break-words ${styles.text}`}>
-            {segments.map((seg, i) =>
-              seg.isMatch ? (
-                <mark
-                  key={i}
-                  className={
-                    currentMatch
-                      ? 'aim-match aim-match-current'
-                      : 'aim-match'
-                  }
-                >
-                  {seg.part}
-                </mark>
-              ) : (
-                <span key={i}>{seg.part}</span>
-              ),
-            )}
+          <div
+            className={`whitespace-pre-wrap break-words font-mono text-[12px] ${styles.text}`}
+            // The aria-label gives assistive tech the plain-text view
+            // (no ANSI codes) of bubbles whose body otherwise carries
+            // colored terminal output.
+            aria-label={ansiPlainText || undefined}
+          >
+            {renderedBody}
             {line.text === '' && (
               <span className="text-gray-500 italic">(empty)</span>
             )}

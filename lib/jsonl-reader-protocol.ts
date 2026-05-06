@@ -192,7 +192,11 @@ export interface ContextBreakdownOkResponse {
   mcpTools: number
   customAgents: number
   memory: number
+  /** Tokens contributed by enabled skills (Phase 6 addition). */
+  skills: number
   messages: number
+  /** Reserved buffer Claude Code holds back for auto-compaction (Phase 6 addition). */
+  autocompactBuffer: number
   freeSpace: number
   cacheRead: number
   total: number

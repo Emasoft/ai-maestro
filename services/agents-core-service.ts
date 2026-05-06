@@ -2021,6 +2021,23 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
         // Small delay to let the session initialize
         await new Promise(resolve => setTimeout(resolve, 300))
 
+        // Install the shell guard into the pane shell BEFORE launching
+        // the AI program. The guard sources from
+        // ~/.aimaestro/agent-shell-guard.sh (which is itself written
+        // here, atomically + idempotently). The override stays alive
+        // when the AI program later exits — so the post-/exit shell
+        // prompt is also confined to AGENT_WORK_DIR + /tmp.
+        // See docs in lib/agent-shell-guard.ts for the rationale and
+        // the deliberate fail-open behaviour when AGENT_WORK_DIR is
+        // unset.
+        try {
+          const { ensureShellGuardInstalled, SHELL_GUARD_INSTALL_PATH } = await import('@/lib/agent-shell-guard-install')
+          await ensureShellGuardInstalled()
+          await runtime.sendKeys(sessionName, `source "${SHELL_GUARD_INSTALL_PATH}"`, { enter: true })
+        } catch (guardErr) {
+          console.warn(`[Wake] Shell guard install failed for ${sessionName}:`, guardErr)
+        }
+
         // Env vars (AMP_DIR, AIM_AGENT_NAME, AIM_AGENT_ID, AGENT_WORK_DIR) are
         // already in the initial pane's env via tmux -e. Just unset
         // CLAUDECODE + launch the program.

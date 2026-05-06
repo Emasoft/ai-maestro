@@ -22,7 +22,7 @@ import TranscriptExport from '@/components/TranscriptExport'
 import { useAgents } from '@/hooks/useAgents'
 import { TerminalProvider } from '@/contexts/TerminalContext'
 import { useHelpPanel } from '@/contexts/HelpPanelContext'
-import { Terminal, Mail, User, GitBranch, MessageSquare, Moon, Power, Loader2, Plus, Search, Download, ExternalLink } from 'lucide-react'
+import { Terminal, Mail, User, GitBranch, MessageSquare, Moon, Power, Loader2, Plus, Search, Download, ExternalLink, History } from 'lucide-react'
 import { agentToSession } from '@/lib/agent-utils'
 import type { Agent, AgentRole } from '@/types/agent'
 
@@ -57,6 +57,14 @@ const AgentProfilePanel = dynamic(
   { ssr: false }
 )
 
+// JSONL chat-transcript browser — peer of Terminal/Chat/Messages.
+// Was previously a sub-tab of the Profile panel; surfaced as a top-level
+// tab so the transcripts sit next to the live conversation surfaces.
+const SessionsTab = dynamic(
+  () => import('@/components/agent-profile/SessionsTab'),
+  { ssr: false }
+)
+
 // Only shown when waking an agent
 const WakeAgentDialog = dynamic(
   () => import('@/components/WakeAgentDialog'),
@@ -81,7 +89,7 @@ export default function DashboardPage() {
   const [isResizing, setIsResizing] = useState(false)
   const { deviceType } = useDeviceType()
   const isMobile = deviceType === 'phone'
-  const [activeTab, setActiveTab] = useState<'terminal' | 'chat' | 'messages' | 'worktree' | 'search' | 'export'>('terminal')
+  const [activeTab, setActiveTab] = useState<'terminal' | 'chat' | 'sessions' | 'messages' | 'worktree' | 'search' | 'export'>('terminal')
   const [unreadCount, setUnreadCount] = useState(0)
   // profileScrollToDangerZone — forwarded to AgentProfilePanel → AgentProfile (embedded)
   const [profileScrollToDangerZone, setProfileScrollToDangerZone] = useState(false)
@@ -809,6 +817,18 @@ export default function DashboardPage() {
                       Chat
                     </button>
                     <button
+                      onClick={() => setActiveTab('sessions')}
+                      className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
+                        activeTab === 'sessions'
+                          ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50'
+                          : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/30'
+                      }`}
+                      title="Browse JSONL chat transcripts for this agent"
+                    >
+                      <History className="w-4 h-4" />
+                      Sessions
+                    </button>
+                    <button
                       onClick={() => setActiveTab('messages')}
                       className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
                         activeTab === 'messages'
@@ -993,6 +1013,12 @@ export default function DashboardPage() {
                           <ChatView agent={agent} isActive={true} />
                         </ErrorBoundary>
                       )
+                    ) : activeTab === 'sessions' ? (
+                      <ErrorBoundary fallbackLabel="Sessions">
+                        <div className="flex-1 min-h-0 flex" style={{ touchAction: 'pan-y', overscrollBehavior: 'contain' }}>
+                          <SessionsTab agentId={agent.id} />
+                        </div>
+                      </ErrorBoundary>
                     ) : activeTab === 'messages' ? (
                       <ErrorBoundary fallbackLabel="Messages">
                         <MessageCenter

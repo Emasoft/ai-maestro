@@ -1,8 +1,9 @@
 ---
-version: "3.9.0"
+version: "3.9.1"
 date: 2026-05-06
 branch: feature/phase6-jsonl-rebase-test
 changelog:
+  - "3.9.1: Codified the canonical agent-address format (R6.11–R6.14). Single ID string per host, wire format `<agent-id>@<host>` or `<host>:<agent-id>`, with bare `<agent-id>` defaulting to the writer's host. Persona name may alias the agent-id when no collision exists on the target host (R6.12); on collision, the API returns 409 `disambiguation_required`. The legacy 3-level hierarchical addressing (`team/sub/name`) is now formally deprecated for messaging — it survives only as the sidebar's visual tag organization. R6.14 mandates UI + persona-prompt migration across this repo and the 8 role-plugin repos."
   - "3.9.0: Expanded R21 to be the SINGLE COMPLETE source for All-In-One pipeline architecture (IRON). Folded in every AIO rule that previously lived only in the `make-all-in-one` skill: the 3 absolute rules (one-function-per-operation, helpers-must-be-pure, auth-inside-not-outside), the full gate architecture (G00-G99 / EXE / PG01-PG99 numbering, atomic gates, error-reporting by gate code), pre-gate / post-gate canonical sequences, the variant-specific `[VariantName]` bracket convention, the idempotency-gate pattern, the protected-resource four-layer defense, the result contract, the caller contract, the anti-pattern table, and the consolidation procedure. The user's 2026-05-06 composition directive remains verbatim at the top of R21 as load-bearing. With this expansion, GOVERNANCE-RULES.md is the canonical source for governance + AIO + communication rules; only scenario rules stay separate (`tests/scenarios/SCENARIOS_TESTS_RULES.md`) because they depend on per-user tooling choices (browser stack, headless vs visible, etc.)."
   - "3.8.0: Added R21 (All-In-One Pipeline Composition). Codifies the IRON rule that AIO API functions MUST call other AIOs internally when they need to perform a task another AIO already covers — never duplicate logic, never bypass gates with primitive helpers. Names matter: ChangePlugin is an agent-scoped configuration AIO (install/uninstall/enable/disable/update FOR THAT AGENT or user-scope target); UninstallPlugin (cross-agent) is the plugin-scoped AIO that cascades through ChangePlugin per agent; UninstallMarketplace cascades through UninstallPlugin per plugin. Without the cascade, agents are left with dangling enabledPlugins keys pointing at deleted marketplaces — they break. Driven by an audit that found ChangeMarketplace's remove path skipped agent cleanup and G11b in ChangePlugin called updateAgent directly instead of dispatching through ChangeCLIArgs."
   - "3.7.2: Source-vs-install-target clarification (2026-04-20). Added R20.29 and a new 'CRITICAL — source vs install target' block to the R20 intro making explicit that the 3 AI Maestro local-marketplace containers under `~/agents/{role,custom,core}-plugins/` are SOURCE STORAGE only. A plugin LIVES at its install target (the client's own plugin cache) reached via the client's own install protocol — regardless of whether the source was a GitHub URL, a local folder, a remote marketplace, or one of the 3 AI Maestro locals. AI Maestro only WRITES into local sources when it is the author or converter of the plugin. Driven by SCEN-026 authoring feedback."
@@ -317,6 +318,38 @@ join a team.
 
 All teams are closed. Messaging between agents is governed by a title-based directed communication graph. Missing connections are forbidden.
 
+### Canonical address format (2026-05-06 update)
+
+Every agent (and every human user) is addressed by a **single unique ID string** per host. The legacy three-level hierarchical addressing (`first/second/third/agent-name` style) is **deprecated** — that format only ever applied to the sidebar's *visual* tag organization and was never load-bearing for messaging. Use the formats below for ALL new code, persona prompts, message bodies, and orchestration directives.
+
+The canonical wire format is one of:
+
+```
+<agent-id>@<host>      ← preferred for cross-host messaging
+<host>:<agent-id>      ← equivalent alternate; pick whichever reads more
+                          naturally in the surrounding sentence
+<agent-id>             ← short form; resolves to the writer's host
+                          (the sender's home host)
+```
+
+When the writer is the human user, the writer's host is the dashboard's local host (the box the user is logged into). When the writer is an agent, the writer's host is the agent's `hostId` value as recorded in the registry.
+
+The **persona name** may substitute for the agent-id whenever the substitution is unambiguous on the target host — i.e. there is no other agent on that host whose name (or label) collides with this persona name. When a collision exists, the persona name MUST be replaced by the agent-id (or the address rejected at the API layer with HTTP 409 + a `disambiguation_required` code).
+
+**Examples:**
+
+| Format | Resolves to |
+|---|---|
+| `peter-bot@mac.lan` | the agent named `peter-bot` on host `mac.lan` |
+| `mac.lan:peter-bot` | same as above, alternate spelling |
+| `peter-bot` (in a message authored by an agent on `mac.lan`) | `peter-bot@mac.lan` |
+| `peter-bot` (in a message authored by a user logged into `mac.lan`) | `peter-bot@mac.lan` |
+| `Peter Parker` (persona-name alias, no collision on mac.lan) | resolved to `peter-bot@mac.lan` |
+| `Peter Parker` (collision: two agents have label "Peter Parker") | rejected — the writer must use the agent-id |
+| `H` / `human:user@host` | the human user (single H node per host, no agent-id) |
+
+**What this replaces:** any persona prompt, doc, or orchestration rule that asks an agent to address peers using a hierarchical path like `team-x/sub-y/agent-z` is OUT OF DATE. Replace with the bare `agent-id` or the `agent-id@host` form. The 3-level sidebar visual organization (R7 family) is unaffected — it remains purely a UX feature, not an addressing scheme.
+
 **Adjacency matrix.** Cell values:
 
 - **`Y`** — sender may freely initiate a message to recipient.
@@ -353,6 +386,10 @@ All teams are closed. Messaging between agents is governed by a title-based dire
 | R6.8 | **Three layers of enforcement**: (1) API server validates sender/recipient titles before delivery via `validateMessageRoute()`, (2) Role-plugin main-agent .md files list allowed/reply-only recipients, (3) Sub-agents are forbidden from using AMP messaging entirely. | Explicit |
 | R6.9 | Sub-agents have no AMP identity and cannot authenticate — they communicate only with their spawning main-agent. | Explicit |
 | R6.10 | **Reply-only enforcement** (`1` edges): the sender MUST pass `inReplyToMessageId` when targeting a reply-only recipient. Today the graph layer only requires the field to be a truthy string; it does NOT load the referenced message, verify its sender/recipient pair, or prevent multiple replies to the same id. The "one reply per inbound message" invariant (AMP inbox sets `replied=true` on the original and rejects subsequent attempts) is planned but not yet implemented — tracked in `design/tasks/TRDD-80557822-comm-graph-downstream-sync.md`. The advisory check is latent in production because no flow currently routes messages to the human user; it becomes load-bearing the moment Phase 2 maestro auth wires H as an AMP recipient. | Explicit (enforcement partial; see TRDD-80557822) |
+| R6.11 | **Canonical address format** (2026-05-06): every agent is addressed by ONE unique id string per host. The wire format is `<agent-id>@<host>` (preferred) or `<host>:<agent-id>` (alternate). The bare `<agent-id>` resolves to the writer's host. Hierarchical/3-level addressing (`team/sub/name`) is deprecated for messaging — that pattern was only ever used by the sidebar's visual tag organization and never by the message router. | Explicit |
+| R6.12 | **Persona-name alias**: an agent's persona name (registry `label` field) MAY substitute for `<agent-id>` whenever the substitution is unambiguous on the target host (no other agent on that host has a name or label that collides). On collision, the address MUST use `<agent-id>` and the API returns HTTP 409 `disambiguation_required` if a persona-name alias is sent. | Explicit |
+| R6.13 | **Default-host resolution**: when the host is omitted from an address, it defaults to the writer's host. For agents, that is `agent.hostId` from the registry. For human users, that is the dashboard host the user is logged into. Cross-host messaging therefore REQUIRES the explicit `@<host>` (or `<host>:`) suffix; an agent on host A cannot accidentally reach an agent on host B by typing a bare id. | Explicit |
+| R6.14 | **UI and persona drift**: every UI tooltip, onboarding-guide step, agent persona prompt, role-plugin instruction, and orchestration rule that references the deprecated 3-level addressing format MUST be migrated to R6.11–R6.13 wording. The deprecation is permanent — no flag toggles, no compatibility shim. The migration is tracked across this repo (UI text + docs) and the 8 role-plugin repos under `Emasoft/ai-maestro-*` (persona prompts). | Explicit |
 
 Full spec: `docs_dev/2026-04-03-communication-graph.md`
 

@@ -26,11 +26,15 @@ export default function FirstAgentWizard({ onComplete, onCancel }: FirstAgentWiz
       return false
     }
 
-    // Should have at least 2 hyphens for proper hierarchy
+    // Optional sidebar grouping hint: hyphens split the name into visual
+    // tags for the sidebar tree (first tag = folder, second tag = subfolder).
+    // Per R6.11, this is NOT load-bearing for messaging — agents are
+    // addressed by a single id string: <agent-id>@<host>. The hyphen
+    // pattern is only a UX nicety for browsing many agents in the sidebar.
     const parts = name.split('-')
     if (parts.length < 3) {
-      setError('For best organization, use format: level1-level2-name (e.g., apps-todo-frontend)')
-      // Warning but allow
+      setError('Tip: hyphenated names like apps-todo-frontend group nicely in the sidebar. (Optional — single-word names work too.)')
+      // Hint only, not blocking
     }
 
     setError(null)

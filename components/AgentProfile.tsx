@@ -880,7 +880,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                           {flashFields.has('tags') && <CheckCircle className="w-3 h-3 text-emerald-400" />}
                         </label>
                         <p className="text-xs text-gray-500 mb-3">
-                          Tags determine where the agent appears in the sidebar tree. First tag = folder, second tag = subfolder.
+                          Tags determine where the agent appears in the sidebar tree (visual grouping only — first tag = folder, second tag = subfolder). They are NOT used for messaging or addressing. Per R6.11, agents are addressed by a single id string: <code>{'<agent-id>@<host>'}</code>.
                         </p>
                         <div className="flex flex-wrap gap-2">
                           {agent.tags?.map((tag, index) => (

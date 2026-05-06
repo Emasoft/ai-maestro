@@ -59,6 +59,14 @@ import {
 const execFileAsync = promisify(execFile)
 
 // ── Paths (derived from ecosystem-constants) ────────────────
+//
+// SVC2-MIN-14: HOME is captured at module-load time. This is fine in the
+// production server (the process never changes its $HOME) and in tests
+// that stub homedir() before importing this module. It is NOT fine if
+// any test runs `process.env.HOME = '/tmp/foo'` AFTER this module has
+// already been imported — the captured value is stale. Tests that need
+// HOME mocking must use `vi.mock('os', ...)` BEFORE the first import of
+// this file, not mid-test process.env mutation.
 const HOME = homedir()
 const ROLE_PLUGINS_DIR = getLocalMarketplacePath()
 const MARKETPLACE_META_DIR = join(ROLE_PLUGINS_DIR, '.claude-plugin')
@@ -84,6 +92,22 @@ const GITHUB_MARKETPLACE_MANIFEST = join(GITHUB_MARKETPLACE_DIR, '.claude-plugin
 export const DEFAULT_ROLE_PLUGIN_NAMES: string[] = [...PREDEFINED_ROLE_PLUGIN_NAMES]
 
 // ── AI Maestro compatibility skill content (auto-injected into generated role-plugins) ──
+//
+// SVC2-MIN-15: this skill content is embedded as a multi-kilobyte template
+// literal because it ships with EVERY generated role-plugin. Moving it to
+// a separate file (`lib/templates/aim-governance-rules.skill.md` per the
+// audit recommendation) would marginally improve maintainability — a
+// future maintainer could edit the .md without recompiling — but adds a
+// runtime dependency on file presence and a `readFile` call to every
+// plugin generation. We accept the embedded form because:
+//  (a) governance rules change infrequently (R-series version bumps);
+//  (b) editing this string forces a code review of role-plugin generation,
+//      which is the right gate for governance changes;
+//  (c) there is no other consumer — the skill is only ever read here.
+// If a future feature needs to read this content from outside role-plugin
+// generation, extract to a shared constant module first. Do NOT load it
+// from the filesystem on every plugin generate — it would couple plugin
+// production to deployment-time filesystem layout.
 
 const AIM_GOVERNANCE_RULES_SKILL = `---
 name: aim-governance-rules

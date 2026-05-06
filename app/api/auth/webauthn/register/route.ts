@@ -77,6 +77,15 @@ const RegistrationBodySchema = z.object({
       publicKey: z.string().optional(),
     }).strict(),
     authenticatorAttachment: z.string().optional(),
+    // API2-MIN-06: clientExtensionResults is a free-form record of
+    // WebAuthn extensions. A fully-typed schema would enumerate every
+    // standard extension (credProps, largeBlob, prf, etc.) but since
+    // the simplewebauthn verifier already validates extension semantics
+    // at the protocol level, the schema here only enforces "object with
+    // string keys and any values". Tightening to specific extensions
+    // would risk rejecting valid future extensions; the trade-off is
+    // intentional — leave as-is unless you're consciously adding
+    // extension-aware validation.
     clientExtensionResults: z.record(z.string(), z.unknown()),
     type: z.string(),
   }).strict(),

@@ -9,11 +9,21 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getAgentSelf, updateAgentSelf } from '@/services/amp-service'
 import { authenticateRequest } from '@/lib/amp-auth'
 import { DeleteAgent } from '@/services/element-management-service'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import type { AMPError } from '@/lib/types/amp'
+
+// API2-MIN-14: Zod schema for the PATCH body. Replaces the previous
+// untyped object cast so unexpected fields are rejected at the boundary
+// rather than silently passed to updateAgentSelf.
+const PatchBodySchema = z.object({
+  alias: z.string().min(1).max(200).optional(),
+  delivery: z.record(z.string(), z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+}).strict()
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,15 +43,25 @@ export async function PATCH(request: NextRequest) {
   try {
     const authHeader = request.headers.get('Authorization')
 
-    let body: { alias?: string; delivery?: Record<string, unknown>; metadata?: Record<string, unknown> }
+    let rawBody: unknown
     try {
-      body = await request.json()
+      rawBody = await request.json()
     } catch {
       return NextResponse.json({
         error: 'invalid_request',
         message: 'Invalid JSON body'
       } as AMPError, { status: 400 })
     }
+
+    // API2-MIN-14: validate body shape
+    const parsed = PatchBodySchema.safeParse(rawBody)
+    if (!parsed.success) {
+      return NextResponse.json({
+        error: 'invalid_request',
+        message: parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; '),
+      } as AMPError, { status: 400 })
+    }
+    const body = parsed.data
 
     const result = await updateAgentSelf(authHeader, body)
     if (result.error) {

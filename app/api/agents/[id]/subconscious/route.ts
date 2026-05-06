@@ -30,7 +30,8 @@ export async function GET(
   } catch (error) {
     console.error('[Agent Subconscious API] Error:', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      // API2-MIN-01: don't leak error.message to client; full error is logged above
+      { success: false, error: 'internal_error', code: 'agent-subconscious' },
       { status: 500 }
     )
   }
@@ -63,7 +64,8 @@ export async function POST(
   } catch (error) {
     console.error('[Agent Subconscious API] POST Error:', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      // API2-MIN-01: don't leak error.message to client; full error is logged above
+      { success: false, error: 'internal_error', code: 'agent-subconscious' },
       { status: 500 }
     )
   }

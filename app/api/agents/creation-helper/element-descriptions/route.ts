@@ -126,9 +126,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ descriptions })
   } catch (error: unknown) {
+    // API2-MIN-01: log full error server-side, return generic message to client
     console.error('Error in POST /api/agents/creation-helper/element-descriptions:', error)
     return NextResponse.json(
-      { descriptions: {}, error: error instanceof Error ? error.message : 'An unknown error occurred' },
+      { descriptions: {}, error: 'internal_error', code: 'creation-helper-element-descriptions' },
       { status: 500 }
     )
   }

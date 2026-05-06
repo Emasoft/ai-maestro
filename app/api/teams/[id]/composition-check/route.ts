@@ -51,9 +51,10 @@ export async function GET(
       agents: agentDetails,
     })
   } catch (error) {
+    // API2-MIN-01: log full error server-side, return generic message to client
     console.error('[CompositionCheck] Error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { error: 'internal_error', code: 'team-composition-check' },
       { status: 500 }
     )
   }

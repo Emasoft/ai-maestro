@@ -108,6 +108,61 @@ export function acquireLock(name: string, timeoutMs: number = DEFAULT_LOCK_TIMEO
   })
 }
 
+/* LIB2-MIN-01 — INVARIANT NOTES (do not delete, do not refactor blindly)
+ *
+ * The interplay between `timedOut`, `releaseLock`, the queue's index
+ * lookup, and the splice is intentional and load-bearing. Three invariants
+ * must hold simultaneously:
+ *
+ *   I1. After timeout fires: the waiter is OUT of the queue (splice
+ *       removed it) AND the promise has been REJECTED.
+ *   I2. After releaseLock fires (from the lock-holder): the next waiter
+ *       in the queue is CALLED. If it is the timed-out waiter, the
+ *       waiter MUST internally re-call releaseLock so the next-next
+ *       waiter can run; otherwise the lock leaks.
+ *   I3. The waiter MUST detect "I was already removed by timeout" and
+ *       behave differently from "I am being woken normally" — that's
+ *       what the `timedOut` flag is for.
+ *
+ * Race window: timeout fires and waiter runs MAY interleave. Possible
+ * orderings (T = timeout handler, W = waiter call, X = the spec moment):
+ *
+ *   T -> X: timer set, waiter still in queue
+ *   T -> Trim: handler removes waiter from queue, sets timedOut=true,
+ *              rejects promise
+ *   W -> NoOp: waiter never gets called by releaseLock because it was
+ *              already removed from the queue. No lock leak.
+ *
+ *   W -> T: waiter gets called BEFORE the timer fires
+ *           → clearTimeout(timer) prevents Trim from running
+ *           → resolve() hands the release function to the caller
+ *
+ *   T -> W (rare race, possible if timer was on the microtask boundary):
+ *           timer fires, marks timedOut, rejects promise. THEN
+ *           releaseLock from the previous holder runs and calls
+ *           waiter (the timer handler removed it from the queue, so
+ *           how? — only if the queue.shift() in releaseLock raced
+ *           with the splice). In current single-threaded JS this CAN
+ *           happen on a microtask boundary because timer callbacks and
+ *           promise resolutions interleave on the macrotask queue.
+ *           When it does, the `if (timedOut)` branch hits and
+ *           re-calls releaseLock, transferring ownership forward.
+ *
+ * If you ever:
+ *  - Move clearTimeout out of the waiter — I1 may break (timer fires
+ *    after resolve, no-op'd by !timedOut, but waiter is gone from queue).
+ *  - Add an `await` between checks and queue operations — I2 may break.
+ *  - Replace `locks.get(name)!.push(waiter)` with anything async — I1+I2
+ *    may break.
+ *
+ * The unit test for this race lives in `tests/file-lock.test.ts` (when
+ * added) — at minimum, it should:
+ *   1. Acquire a lock
+ *   2. Queue a 100ms-timeout waiter
+ *   3. Release the lock at exactly t=99ms (timer about to fire)
+ *   4. Assert: lock chain still drains, no permanent lock
+ */
+
 /**
  * Release a named lock and wake the next waiter if any.
  */

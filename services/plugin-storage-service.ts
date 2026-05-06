@@ -37,6 +37,7 @@ import { homedir } from 'os'
 import path from 'path'
 import { mkdir, writeFile, readFile, readdir, rm } from 'fs/promises'
 import { existsSync } from 'fs'
+import semver from 'semver'
 import type { ClientType } from '@/lib/client-capabilities'
 import { clientTypeToProviderId } from '@/lib/client-capabilities'
 import type { UniversalPluginIR } from '@/lib/converter/universal-ir'
@@ -478,12 +479,24 @@ async function findSourcePluginDir(pluginName: string, sourceClient: ClientType)
         if (!mp.isDirectory()) continue
         const pluginDir = path.join(cacheDir, mp.name, pluginName)
         if (existsSync(pluginDir)) {
-          // Find latest version
+          // Find latest version.
+          //
+          // SVC2-MIN-16: previously this used `b.name.localeCompare(a.name)`
+          // which is alphabetic, NOT semver. Alphabetic sort puts `0.10.0`
+          // BEFORE `0.9.0` (because '1' < '9'), so `0.10.0` would never be
+          // chosen as the latest version. The fix uses the `semver`
+          // package's `rcompare` for correct descending semver order.
+          // Falls back to localeCompare for non-semver dir names (unusual
+          // but defensive).
           const versions = await readdir(pluginDir, { withFileTypes: true })
           const versionDirs = versions.filter(v => v.isDirectory() && !v.name.startsWith('.'))
           if (versionDirs.length > 0) {
-            // Pick latest (alphabetically last for semver)
-            versionDirs.sort((a, b) => b.name.localeCompare(a.name))
+            versionDirs.sort((a, b) => {
+              const semA = semver.coerce(a.name)
+              const semB = semver.coerce(b.name)
+              if (semA && semB) return semver.rcompare(semA, semB)
+              return b.name.localeCompare(a.name)
+            })
             return path.join(pluginDir, versionDirs[0].name)
           }
         }

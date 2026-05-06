@@ -124,7 +124,21 @@ export function useGovernance(agentId: string | null): GovernanceState {
     // governance_update fires AFTER cleanup but BEFORE ws.close() takes
     // effect — we used to call setLoading(true) on the unmounted component).
     if (!isMountedRef.current) return
-    // Fetch governance state and teams in parallel
+    // Fetch governance state and teams in parallel.
+    //
+    // UI2-MIN-09: Promise.all here couples the governance UI state update
+    // to the SLOWEST of the 5 fetches. Each fetch has a per-call .catch
+    // that returns a safe default, so a single failed endpoint never
+    // bombs the whole batch — but a single SLOW endpoint still blocks
+    // every governance state update on the Profile panel. We accept
+    // this trade-off intentionally: the 5 endpoints are tightly coupled
+    // (governance, teams, transfers, config-requests, agent-record) and
+    // applying setStates progressively as each resolves would create
+    // intermediate render states where, e.g., the agent's title is
+    // updated but the team list is still stale. That intermediate state
+    // confuses the UI's "MANAGER must be set before team operations"
+    // guards. If a single endpoint becomes chronically slow, the right
+    // fix is to make THAT endpoint fast — not to decouple the batch.
     setLoading(true)
     Promise.all([
       fetch(`/api/governance?agentId=${encodeURIComponent(agentId || '')}`, { signal }).then((r) => {

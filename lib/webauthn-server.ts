@@ -40,6 +40,24 @@ import { getStateDir } from '@/lib/ecosystem-constants'
 
 const CREDENTIALS_FILENAME = 'webauthn-credentials.json'
 const RP_NAME = 'AI Maestro'
+// LIB2-MIN-04: RP_ID and ORIGIN are hardcoded to `localhost`. WebAuthn
+// REQUIRES that the relying-party ID match the page's effective domain
+// at registration AND authentication time. This means passkeys ONLY
+// work when the user accesses the dashboard via `http://localhost:23000`.
+// Tailscale-routed access (e.g. `http://100.99.233.43:23000` or a
+// `*.ts.net` MagicDNS hostname) cannot use passkeys with this config —
+// the browser will reject the credential because the RP_ID doesn't match
+// the URL's hostname.
+//
+// To enable passkeys over Tailscale, this would need to derive RP_ID
+// from `request.headers.host` (with a strict allow-list of permissible
+// hostnames to prevent RP-spoofing attacks). The allow-list MUST include
+// localhost and the user's Tailscale hostnames; arbitrary host headers
+// MUST be rejected. Given Tailscale traffic is end-to-end encrypted
+// inside the VPN, the practical risk of NOT supporting passkeys over
+// Tailscale is low — operators can use the governance password as a
+// fallback. Document the limitation; do not silently widen the allow-
+// list without security review.
 const RP_ID = 'localhost'
 const ORIGIN = 'http://localhost:23000'
 const CHALLENGE_TTL_MS = 60_000 // 60 seconds

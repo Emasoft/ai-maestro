@@ -49,6 +49,16 @@ export function useTerminal(options: UseTerminalOptions = {}) {
     safetyRefitTimersRef.current.forEach(t => clearTimeout(t))
     safetyRefitTimersRef.current = []
 
+    // UI2-MAJ-19: track whether THIS initializeTerminal call is still current.
+    // Multiple `await import(...)` checkpoints inside the function can resolve
+    // hundreds of ms after the component unmounted (slow connection / cold
+    // cache / rapid agent switching). Without a sentinel, the rest of the
+    // function attaches event listeners and creates WebGL contexts on a
+    // detached container — leaking memory and continuing to run against
+    // the now-disposed terminal. The cleanup function returned at the end
+    // sets isCurrent=false so subsequent awaits short-circuit.
+    let isCurrent = true
+
     // Clean up existing terminal
     if (terminalRef.current) {
       terminalRef.current.dispose()
@@ -65,8 +75,11 @@ export function useTerminal(options: UseTerminalOptions = {}) {
     try {
     // Dynamic imports for browser-only code
     const { Terminal } = await import('@xterm/xterm')
+    if (!isCurrent) return () => { /* superseded — cleanup is a no-op */ }
     const { FitAddon } = await import('@xterm/addon-fit')
+    if (!isCurrent) return () => { /* superseded */ }
     const { WebLinksAddon } = await import('@xterm/addon-web-links')
+    if (!isCurrent) return () => { /* superseded */ }
 
     const fontSize = optionsRef.current.fontSize || 16
     const fontFamily = optionsRef.current.fontFamily || '"SF Mono", "Monaco", "Cascadia Code", "Roboto Mono", "Courier New", monospace'
@@ -138,6 +151,11 @@ export function useTerminal(options: UseTerminalOptions = {}) {
     // Load clipboard addon for OSC 52 support (terminal programs accessing clipboard)
     try {
       const { ClipboardAddon } = await import('@xterm/addon-clipboard')
+      // UI2-MAJ-19: bail if a fresh init superseded us during the import
+      if (!isCurrent) {
+        try { terminal.dispose() } catch { /* ignore */ }
+        return () => { /* superseded */ }
+      }
       const clipboardAddon = new ClipboardAddon()
       terminal.loadAddon(clipboardAddon)
     } catch (e) {
@@ -163,6 +181,12 @@ export function useTerminal(options: UseTerminalOptions = {}) {
     if (!isTouchDevice) {
       try {
         const { WebglAddon } = await import('@xterm/addon-webgl')
+        // UI2-MAJ-19: bail if init was superseded during the dynamic import.
+        // Disposing the terminal here also tears down its addons.
+        if (!isCurrent) {
+          try { terminal.dispose() } catch { /* ignore */ }
+          return () => { /* superseded */ }
+        }
         const webglAddon = new WebglAddon()
 
         webglAddon.onContextLoss(() => {
@@ -341,8 +365,12 @@ export function useTerminal(options: UseTerminalOptions = {}) {
       }
     })
 
-    // Cleanup function
+    // Cleanup function — also flips isCurrent so any in-flight dynamic
+    // imports from a separate (now-superseded) initializeTerminal call
+    // short-circuit instead of attaching listeners to a disposed terminal.
+    // UI2-MAJ-19.
     return () => {
+      isCurrent = false
       clearTimeout(safetyRefit1)
       clearTimeout(safetyRefit2)
       safetyRefitTimersRef.current = []

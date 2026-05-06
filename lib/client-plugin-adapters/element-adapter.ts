@@ -205,7 +205,20 @@ async function copyDir(
       installedPaths.push(relPath)
     } else if (entry.isDirectory()) {
       await copyDir(srcPath, dest, relPath, installedPaths, depth + 1)
+    } else if (entry.isSymbolicLink()) {
+      // LIB2-MIN-07: explicit symlink branch. `readdir({withFileTypes:true})`
+      // returns Dirents whose `isFile()` and `isDirectory()` flags do NOT
+      // follow symlinks — a symlink Dirent has BOTH flags false. The
+      // previous "skip symlinks for safety" comment described what HAPPENED
+      // (the entry fell through both branches and was silently skipped),
+      // not the mechanism. This explicit branch documents the skip so a
+      // future maintainer doesn't think "missing isSymbolicLink branch =
+      // bug to fix" and accidentally introduce follow-symlink behaviour
+      // (which is genuinely unsafe — a malicious plugin could include a
+      // symlink to /etc and have its content copied to the agent dir).
+      // Deliberately a no-op.
     }
-    // Skip symlinks for safety
+    // Other inode types (sockets, FIFOs, char/block devices) also fall
+    // through this if-chain and are silently skipped — same rationale.
   }
 }

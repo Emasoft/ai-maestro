@@ -122,7 +122,18 @@ function loadTokens(): AIDTokenRecord[] {
     _tokenIndex = rebuildTokenIndex(validTokens)
     _tokenCacheTimestamp = now
     return validTokens
-  } catch {
+  } catch (err) {
+    // LIB2-MIN-08: don't swallow parse errors silently. A corrupt
+    // active-tokens.json file (partial write, disk pressure, manual
+    // tampering) makes EVERY token validation silently fail because
+    // we return an empty list. Logging gives operators a chance to
+    // diagnose. The behaviour (return []) is preserved — there is
+    // no recoverable action this function can take, but the failure
+    // is no longer invisible.
+    console.error(
+      '[aid-token] Failed to parse active-tokens.json — all token validations will fail until the file is repaired or removed:',
+      err instanceof Error ? err.message : err
+    )
     _tokenCache = []
     _tokenIndex = new Map()
     _tokenCacheTimestamp = now

@@ -180,8 +180,24 @@ export default function DashboardPage() {
       } catch (error) {
         if ((error as Error).name === 'AbortError') return
         console.error('Failed to check organization:', error)
-        // On error, skip onboarding entirely — don't block the user
-        localStorage.setItem('aimaestro-onboarding-completed', 'true')
+        // UI2-MIN-06: a transient network failure during the very first visit
+        // SHOULD NOT permanently mark onboarding as completed. Previously this
+        // unconditionally set the flag in localStorage, which meant a single
+        // network blip on first launch silently disabled the onboarding flow
+        // for the user forever (until they cleared site data). Now we only
+        // set the flag if it was already set (no-op confirmation) — first-
+        // visit users will retry the check on next page load. The trade-off:
+        // a definitive "no org" answer never lands here (it lands in the
+        // success branch above where the flag IS set), so the flag still
+        // reaches `true` for legitimate skip-onboarding cases.
+        const existingFlag = localStorage.getItem('aimaestro-onboarding-completed')
+        if (existingFlag) {
+          // Re-affirm the existing flag so other code paths that depend on
+          // it being explicitly set continue to see the same value.
+          localStorage.setItem('aimaestro-onboarding-completed', existingFlag)
+        }
+        // First-visit users WILL see the wizard on the next mount when the
+        // network has recovered.
       } finally {
         if (cancelled) return
         setOrganizationChecked(true)
@@ -609,7 +625,22 @@ export default function DashboardPage() {
     return <OnboardingFlow onComplete={handleOnboardingComplete} onSkip={handleOnboardingSkip} />
   }
 
-  // Render mobile-specific dashboard for phones
+  // Render mobile-specific dashboard for phones.
+  //
+  // UI2-MIN-05: the two TerminalProvider trees use DIFFERENT React `key` props
+  // (`mobile-dashboard` vs `desktop-dashboard`). When the viewport crosses the
+  // 768px breakpoint mid-session (e.g. tablet rotation, dragging the window
+  // wider on a desktop), React unmounts the entire mobile tree and mounts a
+  // fresh desktop tree (or vice-versa). All terminals in the previous tree
+  // are torn down — their WebSockets disconnect, xterm scrollback is lost,
+  // and they re-attach via `tmux capture-pane` on the next mount. This is
+  // INTENTIONAL: mobile and desktop have different component trees and
+  // sharing terminal contexts across the breakpoint would couple the two
+  // implementations. The cost is a one-time terminal re-init on resize.
+  // If this becomes a UX issue, the fix is to consolidate to one
+  // TerminalProvider at the layout level — but that requires the mobile
+  // and desktop dashboards to use the same terminal-rendering primitives,
+  // which today they do not.
   if (isMobile) {
     return (
       <TerminalProvider key="mobile-dashboard">

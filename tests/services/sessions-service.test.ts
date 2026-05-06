@@ -771,7 +771,8 @@ describe('broadcastActivityUpdate', () => {
 
 describe('deletePersistedSession', () => {
   it('deletes a persisted session successfully', async () => {
-    mockSessionPersistence.unpersistSession.mockReturnValue(true)
+    // SVC2-MIN-04: unpersistSession returns 'ok' | 'not-found' | 'failed'
+    mockSessionPersistence.unpersistSession.mockReturnValue('ok')
 
     const result = await deletePersistedSession('s1')
 
@@ -785,8 +786,16 @@ describe('deletePersistedSession', () => {
     expect(result.status).toBe(400)
   })
 
-  it('returns 500 when unpersist fails', async () => {
-    mockSessionPersistence.unpersistSession.mockReturnValue(false)
+  it('returns 404 when session was not in persistence', async () => {
+    mockSessionPersistence.unpersistSession.mockReturnValue('not-found')
+
+    const result = await deletePersistedSession('s1')
+
+    expect(result.status).toBe(404)
+  })
+
+  it('returns 500 when unpersist save fails', async () => {
+    mockSessionPersistence.unpersistSession.mockReturnValue('failed')
 
     const result = await deletePersistedSession('s1')
 

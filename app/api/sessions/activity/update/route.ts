@@ -21,6 +21,19 @@ export async function POST(request: NextRequest) {
     }
     const { sessionName, status, hookStatus, notificationType } = body
 
+    // API2-MIN-10: known limitation — `sessionName` is validated for format
+    // but not cross-checked against the authenticated caller's identity.
+    // This means any authenticated agent can broadcast a fake activity
+    // status for any session (the worst case is a misleading UI badge for
+    // a few seconds). This route is fed by the Claude Code hook
+    // (`ai-maestro-hook.cjs`) which calls it with the LOCAL session's
+    // name; cross-session impersonation requires the attacker to already
+    // have authenticated access. Tightening to "sessionName must resolve
+    // to the same agent as auth.agentId" would require an agent-registry
+    // lookup on every hook callback — currently rejected on perf grounds
+    // (the hook is invoked very frequently). If this becomes a security
+    // concern, cache the agent->session mapping in memory and check it
+    // in O(1).
     // Validate sessionName format: only alphanumeric, hyphens, underscores, @, and dots allowed
     // (tmux session names are restricted to this charset per CLAUDE.md)
     if (sessionName && (typeof sessionName !== 'string' || !/^[a-zA-Z0-9_@.-]+$/.test(sessionName))) {
@@ -67,9 +80,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
+    // API2-MIN-01: log full error server-side, return generic message to client
     console.error('[Activity Update API] Error:', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      { success: false, error: 'internal_error', code: 'sessions-activity-update' },
       { status: 500 }
     )
   }

@@ -108,9 +108,10 @@ export async function POST(
       summary: `${created.length} created, ${errors.length} failed`,
     }, { status: errors.length === 0 ? 201 : 207 })
   } catch (error) {
+    // API2-MIN-01: log full error server-side, return generic message to client
     console.error('[BatchCreateAgents] Error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { error: 'internal_error', code: 'teams-batch-create-agents' },
       { status: 500 }
     )
   }

@@ -3324,15 +3324,21 @@ function matchRoute(method: string, pathname: string): { handler: RouteHandler; 
 // NO credential at all (the same defence-in-depth layer middleware.ts
 // provides in full mode). Without this, headless mode silently relied
 // on every route handler remembering to call authenticateAgent.
+// SVC2-MIN-20: each whitelist regex now requires the END of the path
+// immediately after the literal route (or a single trailing slash). The
+// previous `(\/|$)` pattern allowed `/api/auth/login/anything` to pass
+// the gate, which would matter if Next.js (or a subrouter) ever
+// dispatched sub-paths to handlers other than the whitelisted ones.
+// `(\/?)$` permits exactly the route OR the route + trailing slash.
 const HEADLESS_AUTH_WHITELIST: ReadonlyArray<RegExp> = [
-  /^\/api\/auth\/login(\/|$)/,
-  /^\/api\/auth\/logout(\/|$)/,
-  /^\/api\/auth\/session(\/|$)/,
-  /^\/api\/auth\/setup-init(\/|$)/,
-  /^\/api\/auth\/setup-verify(\/|$)/,
-  /^\/api\/v1\/health(\/|$)/,
-  /^\/api\/v1\/info(\/|$)/,
-  /^\/api\/v1\/register(\/|$)/,
+  /^\/api\/auth\/login\/?$/,
+  /^\/api\/auth\/logout\/?$/,
+  /^\/api\/auth\/session\/?$/,
+  /^\/api\/auth\/setup-init\/?$/,
+  /^\/api\/auth\/setup-verify\/?$/,
+  /^\/api\/v1\/health\/?$/,
+  /^\/api\/v1\/info\/?$/,
+  /^\/api\/v1\/register\/?$/,
 ]
 
 /**
@@ -3368,9 +3374,18 @@ const HEADLESS_AUTH_WHITELIST: ReadonlyArray<RegExp> = [
  */
 function _headlessHasCredential(req: IncomingMessage, pathname: string): boolean {
   const cookieHdr = (req.headers.cookie as string | undefined) || ''
-  if (/(^|;\s*)aim_session=[A-Za-z0-9_+/=\-]+/.test(cookieHdr)) return true
+  // SVC2-MIN-13: tighten cookie regex. Real `aim_session=` cookies are
+  // 32+ char base64url tokens (cookie length = 16 random bytes encoded
+  // as base64url ~= 22 chars, plus optional padding). The previous
+  // pattern accepted any 1+ char value — including ``aim_session=---``
+  // and ``aim_session=AAAA``. The tighter bound is structural, not
+  // semantic (we still don't validate the token itself), but it
+  // raises the floor on what a malicious caller has to construct.
+  if (/(^|;\s*)aim_session=[A-Za-z0-9_+/=\-]{20,}(?:;|$)/.test(cookieHdr)) return true
   const authHdr = (req.headers.authorization as string | undefined) || ''
-  if (/^Bearer\s+(aim_tk_|amp_live_sk_|mst_|eyJ)[A-Za-z0-9_\-\.]{10,}$/.test(authHdr.trim())) return true
+  // Tighten bearer-payload minimum from 10 to 24 chars; real tokens are
+  // 32+ chars after the prefix.
+  if (/^Bearer\s+(aim_tk_|amp_live_sk_|mst_|eyJ)[A-Za-z0-9_\-\.]{24,}$/.test(authHdr.trim())) return true
   // X-Forwarded-From is pathname-scoped to /api/v1/route only, mirroring
   // SRV-CRIT-02's middleware.ts fix. The route handler still does
   // Ed25519 verification on the forwarded identity.

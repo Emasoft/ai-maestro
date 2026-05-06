@@ -375,9 +375,16 @@ export async function notifyGroupSubscribers(
   const safeGroupName = (group.name || '').replace(/[\x00-\x1F\x7F]/g, '')
   const safeMessage = (message || '').replace(/[\x00-\x1F\x7F]/g, '')
 
+  // SVC2-MIN-10: per-call nonce so concurrent notify calls firing within
+  // the same millisecond don't share a `messageId`. Downstream notification
+  // dedup keys off this id; collisions silently drop the second notify.
+  // 9-char base36 random suffix gives ~ 1.0e14 distinct values per ms which
+  // is ample for any realistic concurrency level.
+  const nonce = Math.random().toString(36).slice(2, 11)
+
   try {
     const results = await Promise.all(
-      group.subscriberIds.map(async (agentId: string) => {
+      group.subscriberIds.map(async (agentId: string, idx: number) => {
         const agent = getAgent(agentId)
         if (!agent) {
           return { agentId, success: false, reason: 'Agent not found' }
@@ -391,7 +398,10 @@ export async function notifyGroupSubscribers(
             agentHost: agent.hostId,
             fromName: 'AI Maestro',
             subject: safeMessage || `Group "${safeGroupName}" notification`,
-            messageId: `group-notify-${Date.now()}`,
+            // SVC2-MIN-10: messageId now includes per-call nonce + per-recipient
+            // index, eliminating Date.now()-collisions across concurrent calls
+            // and across the fan-out within a single call.
+            messageId: `group-notify-${Date.now()}-${nonce}-${idx}`,
             messageType: 'notification',
             priority: priority || 'normal',
           })

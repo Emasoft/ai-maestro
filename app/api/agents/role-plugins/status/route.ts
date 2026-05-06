@@ -197,9 +197,10 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ agents: results, summary })
   } catch (error) {
+    // API2-MIN-01: don't leak error.message to client; logged below
     console.error('[role-plugins/status] Failed:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to get role-plugin status' },
+      { error: 'internal_error', code: 'role-plugins-status' },
       { status: 500 },
     )
   }

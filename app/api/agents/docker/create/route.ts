@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createDockerAgent } from '@/services/agents-docker-service'
 import { enforceAuth } from '@/lib/route-auth'
+import { internalError } from '@/lib/error-response'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,10 +30,7 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(result.data)
   } catch (error) {
-    console.error('[Docker Create] Error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create Docker agent' },
-      { status: 500 }
-    )
+    // API2-MIN-01: log server-side, return generic error to client
+    return internalError(error, 'docker-create')
   }
 }

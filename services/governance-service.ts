@@ -28,6 +28,7 @@ import { notifyAgent } from '@/lib/notification-service'
 import { acquireLock } from '@/lib/file-lock'
 import { isValidUuid } from '@/lib/validation'
 import { ServiceResult } from '@/types/service'
+import { buildSystemAuthContext } from '@/lib/agent-auth'
 // NT-006: ServiceResult re-export removed — import directly from @/types/service
 
 // ---------------------------------------------------------------------------
@@ -88,7 +89,11 @@ export async function setManagerRole(params: {
   // Without this, ChangeTitle Gate 0 rejects with "authContext is
   // mandatory for ChangeTitle (security invariant)" and the UI shows
   // "Title change failed" even though the caller is authenticated.
-  const systemOwnerAuthContext = { isSystemOwner: true as const }
+  // SVC2-MIN-01: use the canonical helper instead of an inline literal so
+  // the audit reason is captured (`buildSystemAuthContext` requires it)
+  // and so future readers grep for the helper rather than the literal
+  // shape.
+  const systemOwnerAuthContext = buildSystemAuthContext('governance-set-manager')
 
   // agentId === null means "remove manager"
   if (agentId === null) {
@@ -231,6 +236,15 @@ export function getReachableAgents(agentId: string | null): ServiceResult<{ reac
 
   // SF-033: Evict stale entries and enforce max-size bound to prevent unbounded growth.
   // (ES6 spec guarantees safe Map deletion during for...of iteration)
+  //
+  // SVC2-MIN-02: This eviction is O(n) per cache miss, but the size cap is
+  // 1000 entries — so the worst case is 1000 iterations per miss. Given a
+  // typical AI Maestro deployment has <50 agents and the TTL is short
+  // (CACHE_TTL_MS), the actual number of entries is usually <50. A proper
+  // LRU with O(1) eviction would only matter at scales where the cap
+  // becomes the binding constraint; we are nowhere near that. If telemetry
+  // ever shows this loop dominating CPU profiles, swap to an LRU library
+  // (lru-cache or similar) or evict only when size approaches the cap.
   const now = Date.now()
   for (const [key, entry] of reachableCache) {
     if (now >= entry.expiresAt) reachableCache.delete(key)

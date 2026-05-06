@@ -41,20 +41,31 @@ export function useTranscriptExport(agentId: string) {
   }, [activeJobId])
 
   /**
-   * Load existing export jobs for the agent
+   * Reset jobs when the agent changes.
+   *
+   * UI2-MIN-07: this used to be called `loadJobs` and was documented as a
+   * stub that would later "load from database or file system". In practice
+   * AI Maestro tracks export jobs only in this hook's local state — there
+   * is no persistent backend store for export history yet — so the function
+   * is just a session-scoped reset, NOT a load. The mount-effect that calls
+   * it on agentId change is still legitimate: switching agents must clear
+   * the previous agent's optimistic job entries from the panel.
+   *
+   * If a future commit adds persistent export-job storage, RENAME this back
+   * to `loadJobs` and replace the body with a real fetch. Until then, the
+   * literal name `resetJobs` matches what the function actually does and
+   * avoids misleading future maintainers into thinking they can rely on
+   * job history being restored across page reloads.
    */
   const loadJobs = useCallback(async () => {
     try {
-      console.log(`[useTranscriptExport] Loading jobs for agent ${agentId}`)
-
-      // For now, we only track active jobs in state
-      // Future: Load from database or file system
+      console.log(`[useTranscriptExport] Resetting jobs for agent ${agentId} (no persistent store yet)`)
       setJobs([])
     } catch (err) {
       if (!isMountedRef.current) return
 
-      console.error('[useTranscriptExport] Failed to load jobs:', err)
-      setError(err instanceof Error ? err : new Error('Failed to load export jobs'))
+      console.error('[useTranscriptExport] Failed to reset jobs:', err)
+      setError(err instanceof Error ? err : new Error('Failed to reset export jobs'))
     }
   }, [agentId])
 
@@ -120,7 +131,23 @@ export function useTranscriptExport(agentId: string) {
   }, [agentId])
 
   /**
-   * Start polling for a specific export job's progress
+   * Start polling for a specific export job's progress.
+   *
+   * UI2-MAJ-21: Concurrent jobs are SUPPORTED BY DESIGN. If the user
+   * triggers job A then job B, BOTH polls run in parallel — the
+   * pollTimersRef map keys by jobId so each has its own interval. Polls
+   * stop only when (a) the job reaches `completed` / `failed`, (b) the
+   * fetch errors out, (c) the EXPORT_MAX_POLL_DURATION_MS cap is hit,
+   * or (d) the component unmounts (cleanup at line ~287 clears the
+   * whole map). `activeJobId` is single-valued and tracks only the
+   * MOST RECENTLY started job, but other jobs continue polling and
+   * updating their entry in the `jobs` state. Long-running jobs the
+   * user has navigated past therefore stay polling until they finish
+   * or hit the time cap. If concurrent-poll bookkeeping ever becomes
+   * a memory issue, add an explicit cancelOtherPolls flag to this
+   * function. Today, the user-driven export flow rarely starts more
+   * than 1-2 jobs at a time and each finishes within seconds, so the
+   * leak budget is bounded.
    */
   const startPolling = useCallback((jobId: string) => {
     if (pollTimersRef.current[jobId]) {

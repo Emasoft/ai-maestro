@@ -942,10 +942,14 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
           return { error: clientResult.error || 'Client change failed', status: 409 }
         }
         sideChannel.restartNeeded = clientResult.restartNeeded
-        // ChangeResult does not yet carry a warnings array (P0.2 follow-up);
-        // we emit an empty array so the response shape is stable and any
-        // client that reads `warnings` never sees undefined.
-        sideChannel.warnings = []
+        // SVC2-MIN-07: removed the always-empty `sideChannel.warnings = []`
+        // placeholder. ChangeResult does not yet carry a warnings array;
+        // until it does, we let the field be undefined and the response
+        // shape spread (line ~976 / ~994) skips it. Re-add this assignment
+        // once ChangeResult.warnings is populated by a downstream Change*
+        // pipeline — adding it eagerly with `[]` was misleading because
+        // a client could not distinguish "no warnings" from "warnings not
+        // implemented yet".
         anyChangeExecuted = true
       } catch (err) {
         return {
@@ -1062,10 +1066,18 @@ export async function registerAgent(body: RegisterAgentParams): Promise<ServiceR
         return { error: 'Missing required field: sessionName', status: 400 }
       }
 
-      // Check if agent already exists in registry by session name
+      // Check if agent already exists in registry by session name.
+      //
+      // SVC2-MIN-06: NEVER fall back to process.cwd() — CLAUDE.md is
+      // explicit that this would put agents in the AI Maestro source
+      // folder. The correct fallback is `~/agents/<name>/` to match
+      // sessions-service.createSession's invariant. (Path is created by
+      // createAgent on first wake; existence is not required at register
+      // time.)
+      const safeWorkdir = workingDirectory || path.join(os.homedir(), 'agents', sessionName)
       const existingAgent = getAgentBySession(sessionName)
       if (existingAgent) {
-        await linkSession(existingAgent.id, sessionName, workingDirectory || process.cwd())
+        await linkSession(existingAgent.id, sessionName, safeWorkdir)
         registryAgent = existingAgent
         // Use the existing registry agent's UUID as the canonical ID
         agentId = existingAgent.id
@@ -1084,7 +1096,7 @@ export async function registerAgent(body: RegisterAgentParams): Promise<ServiceR
             tags,
             owner: os.userInfo().username,
             createSession: true,
-            workingDirectory: workingDirectory || process.cwd()
+            workingDirectory: safeWorkdir
           })
           // createAgent always generates a UUID; use it as the canonical ID
           agentId = registryAgent.id
@@ -1098,7 +1110,7 @@ export async function registerAgent(body: RegisterAgentParams): Promise<ServiceR
       agentConfig = {
         id: agentId,
         sessionName,
-        workingDirectory: workingDirectory || process.cwd(),
+        workingDirectory: safeWorkdir,
         createdAt: Date.now(),
       }
     } else {
@@ -1455,7 +1467,10 @@ export async function linkAgentSession(agentId: string, params: LinkSessionParam
       return { error: 'sessionName is required', status: 400 }
     }
 
-    const success = await linkSession(agentId, sessionName, workingDirectory || process.cwd())
+    // SVC2-MIN-06: never fall back to process.cwd() — that puts the agent
+    // in the AI Maestro source folder. Use ~/agents/<sessionName>/.
+    const linkWorkdir = workingDirectory || path.join(os.homedir(), 'agents', sessionName)
+    const success = await linkSession(agentId, sessionName, linkWorkdir)
     if (!success) {
       return { error: 'Agent not found', status: 404 }
     }

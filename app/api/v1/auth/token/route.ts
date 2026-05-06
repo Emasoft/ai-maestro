@@ -156,6 +156,15 @@ export async function POST(request: Request) {
       }
     }
 
+    // API2-MIN-05: this route currently uses manual `if (!body.foo)` field
+    // checks instead of a Zod schema. Manual validation works but is more
+    // brittle than a `.strict()` schema — adding a new field would have
+    // to be remembered at every check site. A future refactor should
+    // migrate the body to a `z.object({...}).strict()` schema (mirroring
+    // the rest of the v1 routes); the validation gates below would then
+    // be replaced by a single `parsed.success` check at the entry point.
+    // Tracked as round-2 minor; not blocking.
+    //
     // Validate scope is a string if provided; reject non-string values to prevent injection
     const rawScope = body.scope
     if (rawScope !== undefined && typeof rawScope !== 'string') {

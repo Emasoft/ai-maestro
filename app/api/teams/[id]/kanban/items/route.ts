@@ -116,8 +116,10 @@ export async function POST(
 
     return NextResponse.json({ issue, itemId })
   } catch (error) {
+    // API2-MIN-01 / API2-MIN-11: log full error server-side, return generic message to client
+    console.error('[kanban-items-create]', error)
     return NextResponse.json(
-      { error: `Failed to create item: ${(error as Error).message}` },
+      { error: 'internal_error', code: 'kanban-items-create' },
       { status: 500 }
     )
   }

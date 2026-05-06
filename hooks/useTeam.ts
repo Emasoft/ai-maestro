@@ -68,6 +68,13 @@ export function useTeam(teamId: string | null): UseTeamResult {
     // CC-P1-709: Include 'instructions' so optimistic update applies it immediately in the UI
     // SF-044: Only include keys that match the updateTeam function signature — 'type', 'chiefOfStaffId',
     // 'managerId' are not accepted by updateTeam and should not be optimistically applied
+    // UI2-MIN-03 maintenance contract: this whitelist MUST stay in sync with
+    // the function-parameter type above (`updates: { name?, description?,
+    // agentIds?, instructions? }`). When you add a key to the type, also add
+    // it here — otherwise the optimistic update silently drops the new field
+    // until the server's authoritative response lands. The `as const` plus
+    // the function-signature pin both fail loudly at compile time if the
+    // type is changed but the array is not.
     const validKeys = ['name', 'description', 'agentIds', 'instructions'] as const
     const safeUpdates = Object.fromEntries(
       Object.entries(updates).filter(([k]) => (validKeys as readonly string[]).includes(k))

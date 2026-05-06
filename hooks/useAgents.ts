@@ -324,17 +324,45 @@ export function useAgents() {
     }
   }, [hostsLoading, hosts.length, loadAgents])
 
-  // Auto-refresh via polling
+  // Auto-refresh via polling.
+  //
+  // UI2-MIN-10: pause polling when the document is hidden (user switched
+  // tabs / minimized the window) and resume on visibility change. Browsers
+  // already throttle setInterval in background tabs, but iOS Safari can
+  // still fire reduced-frequency polls — and each poll fetches from N
+  // hosts. Skipping the work entirely while hidden saves battery and
+  // network. The visibilitychange listener triggers an immediate
+  // loadAgents() on resume so the UI catches up to any changes that
+  // happened while the tab was backgrounded.
   useEffect(() => {
     if (hostsLoading || hosts.length === 0) {
       return
     }
 
-    const interval = setInterval(() => {
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.hidden) return
       loadAgents()
-    }, REFRESH_INTERVAL)
+    }
 
-    return () => clearInterval(interval)
+    const interval = setInterval(tick, REFRESH_INTERVAL)
+
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        // Tab became visible — refresh immediately rather than waiting
+        // up to REFRESH_INTERVAL for the next polling tick.
+        loadAgents()
+      }
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange)
+    }
+
+    return () => {
+      clearInterval(interval)
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange)
+      }
+    }
   }, [hostsLoading, hosts.length, loadAgents])
 
   // Instant refresh via /status WebSocket — listens for agent_data_update

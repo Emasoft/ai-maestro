@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { Lock } from 'lucide-react'
 
 interface LoginGateProps {
@@ -17,22 +17,38 @@ export default function LoginGate({ children }: LoginGateProps) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // UI2-MAJ-18: track mount state so async setState (checkSession,
+  // 30s session-poll, handleLogin) doesn't fire on the unmounted
+  // component (e.g. when navigating between LoginGate-wrapped routes).
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false }
+  }, [])
 
-  const checkSession = useCallback(async () => {
+  const checkSession = useCallback(async (signal?: AbortSignal) => {
     try {
-      const res = await fetch('/api/auth/session')
+      const res = await fetch('/api/auth/session', signal ? { signal } : undefined)
+      if (signal?.aborted) return
+      if (!isMountedRef.current) return
       if (res.ok) {
         setStatus('authenticated')
       } else {
         setStatus('login')
       }
-    } catch {
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return
       // CC-GOV-003: Network error must NOT grant access — show login form
+      if (!isMountedRef.current) return
       setStatus('login')
     }
   }, [])
 
-  useEffect(() => { checkSession() }, [checkSession])
+  useEffect(() => {
+    const controller = new AbortController()
+    checkSession(controller.signal)
+    return () => controller.abort()
+  }, [checkSession])
 
   // Detect mid-session expiration: if the server restarts while the page is open,
   // the in-memory session store is cleared but LoginGate stays in 'authenticated' state.
@@ -40,18 +56,25 @@ export default function LoginGate({ children }: LoginGateProps) {
   // re-login when the session becomes invalid.
   useEffect(() => {
     if (status !== 'authenticated') return
+    const controller = new AbortController()
     const interval = setInterval(async () => {
       try {
-        const res = await fetch('/api/auth/session')
+        const res = await fetch('/api/auth/session', { signal: controller.signal })
+        if (controller.signal.aborted) return
+        if (!isMountedRef.current) return
         if (!res.ok) {
           setStatus('login')
         }
-      } catch {
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') return
         // Network error while authenticated — don't force logout,
         // could be a transient issue. Let the user retry.
       }
     }, 30000) // Check every 30 seconds
-    return () => clearInterval(interval)
+    return () => {
+      controller.abort()
+      clearInterval(interval)
+    }
   }, [status])
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -66,17 +89,20 @@ export default function LoginGate({ children }: LoginGateProps) {
         body: JSON.stringify({ password }),
       })
 
+      if (!isMountedRef.current) return
       if (res.ok) {
         setPassword('')
         setStatus('authenticated')
       } else {
         const data = await res.json().catch(() => ({}))
+        if (!isMountedRef.current) return
         setError(data.error || 'Login failed')
       }
     } catch (err) {
+      if (!isMountedRef.current) return
       setError(err instanceof Error ? err.message : 'Connection failed')
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) setLoading(false)
     }
   }
 

@@ -119,6 +119,29 @@ function shellSafe(value: string): string {
   return value
 }
 
+/**
+ * Sanitize a value that's expected to contain spaces (issue title, issue body).
+ * Allows printable text, internal spaces, and basic punctuation, but rejects
+ * shell metacharacters that would break out of double quotes or inject
+ * commands. API2-MIN-09: the previous all-purpose `shellSafe` rejected
+ * spaces, which made every `createIssue` call with a normal English title
+ * fail at runtime — the kanban-create endpoint was effectively unusable.
+ */
+function shellSafeText(value: string): string {
+  if (value.length > 2000) {
+    throw new Error(`Input too long (${value.length} chars, max 2000)`)
+  }
+  // Reject the dangerous subset only: backtick (command substitution),
+  // dollar (variable expansion), backslash (escape), double-quote (quote
+  // termination), newline/CR (command injection via heredoc), and pipe/
+  // semicolon/ampersand (command chaining). Allow spaces, single quotes,
+  // colons, periods, hyphens, parens, slashes, and other normal text.
+  if (/[`$\\"\n\r;|&]/.test(value)) {
+    throw new Error(`Unsafe text characters in value: "${value.substring(0, 50)}"`)
+  }
+  return value
+}
+
 /** Run a gh CLI command and return stdout as string. Throws on non-zero exit. */
 function gh(args: string, cwd?: string): string {
   const opts: { encoding: 'utf-8'; cwd?: string; timeout: number } = {
@@ -720,7 +743,15 @@ export function archiveProjectItem(owner: string, number: number, itemId: string
 // 6. Issue Operations
 // ============================================================================
 
-/** Create a GitHub issue */
+/**
+ * Create a GitHub issue.
+ *
+ * API2-MIN-09: title and body now use `shellSafeText` (allows spaces and
+ * normal English punctuation) instead of `shellSafe` (rejected spaces
+ * outright). Real-world issue titles like "Fix login bug" no longer
+ * fail at runtime. Owner, repo, and labels remain on `shellSafe` because
+ * they ARE expected to be alphanumeric-with-hyphens-only.
+ */
 export function createIssue(
   owner: string,
   repo: string,
@@ -730,8 +761,8 @@ export function createIssue(
 ): GhIssue {
   shellSafe(owner)
   shellSafe(repo)
-  shellSafe(title)
-  shellSafe(body)
+  shellSafeText(title)
+  shellSafeText(body)
   let cmd = `issue create -R "${owner}/${repo}" --title "${title}" --body "${body}"`
   if (labels?.length) {
     for (const label of labels) shellSafe(label)

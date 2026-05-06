@@ -25,7 +25,10 @@ export async function GET(
     const searchParams = request.nextUrl.searchParams
     const since = searchParams.get('since')
     // CC-P3-004: NaN guard — fall back to 100 if parseInt yields NaN
-    const limit = parseInt(searchParams.get('limit') || '100', 10) || 100
+    // API2-MIN-04: cap upper bound at 500 to prevent caller-controlled
+    // memory-DoS via huge `?limit=` values.
+    const rawLimit = parseInt(searchParams.get('limit') || '100', 10) || 100
+    const limit = Math.min(Math.max(rawLimit, 1), 500)
 
     const result = await getConversationMessages(agentId, { since, limit })
     if (result.error) {
@@ -33,9 +36,10 @@ export async function GET(
     }
     return NextResponse.json(result.data)
   } catch (error) {
+    // API2-MIN-01: log full error server-side but return generic message to client.
     console.error('[Chat API] GET Error:', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      { success: false, error: 'internal_error', code: 'agent-chat-get' },
       { status: 500 }
     )
   }
@@ -71,9 +75,10 @@ export async function POST(
     }
     return NextResponse.json(result.data)
   } catch (error) {
+    // API2-MIN-01: log full error server-side but return generic message to client.
     console.error('[Chat API] POST Error:', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      { success: false, error: 'internal_error', code: 'agent-chat-post' },
       { status: 500 }
     )
   }

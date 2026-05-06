@@ -288,11 +288,28 @@ async function fetchLocalSessions(hostId: string): Promise<Session[]> {
       console.error('Error discovering cloud agents:', error)
     }
 
-    // Discover Docker container agents
+    // Discover Docker container agents.
+    //
+    // SVC2-MIN-03: was previously execAsync(shell-string-with-||-fallback).
+    // The || echo '' fallback existed to make the missing-docker case look
+    // like an empty stdout. With execFileAsync there is no shell, so we
+    // catch the error explicitly. Inputs here are constants (no user data
+    // flows into the args), so this is purely a foot-gun cleanup — same
+    // behaviour, no shell.
     try {
-      const { stdout: dockerOutput } = await execAsync(
-        "docker ps --filter 'name=aim-' --format '{{.Names}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || echo ''"
-      )
+      let dockerOutput = ''
+      try {
+        const { stdout } = await execFileAsync('docker', [
+          'ps',
+          '--filter', 'name=aim-',
+          '--format', '{{.Names}}\t{{.Status}}\t{{.Ports}}',
+        ])
+        dockerOutput = stdout
+      } catch {
+        // docker not installed / not running — empty output, same as the
+        // previous shell-OR-fallback behaviour
+        dockerOutput = ''
+      }
       if (dockerOutput.trim()) {
         for (const line of dockerOutput.trim().split('\n')) {
           if (!line.trim()) continue
@@ -427,18 +444,27 @@ async function fetchAllSessions(): Promise<Session[]> {
 
 /**
  * List all sessions (local + remote). Cached for 3s with request deduplication.
+ *
+ * SVC2-MIN-05: Returns a SHALLOW COPY of the cached array (`[...cached]`)
+ * so callers cannot mutate `cachedSessions` cross-request. The Session
+ * objects themselves are still shared by reference; if downstream code
+ * needs to mutate session fields it should clone the individual entry
+ * first. This was changed from returning the live cache reference after
+ * an audit observation that the live reference is a foot-gun: a single
+ * `sessions[0].status = 'foo'` from any caller would silently corrupt
+ * the next request's cache hit.
  */
 export async function listSessions(): Promise<{ sessions: Session[]; fromCache: boolean }> {
   const now = Date.now()
 
   if (cachedSessions && (now - cacheTimestamp) < CACHE_TTL_MS) {
-    return { sessions: cachedSessions, fromCache: true }
+    return { sessions: [...cachedSessions], fromCache: true }
   }
 
   if (pendingRequest) {
     try {
       const sessions = await pendingRequest
-      return { sessions, fromCache: false }
+      return { sessions: [...sessions], fromCache: false }
     } catch {
       // If the pending request failed, fall through to create a new one
       pendingRequest = null
@@ -450,7 +476,7 @@ export async function listSessions(): Promise<{ sessions: Session[]; fromCache: 
     const sessions = await pendingRequest
     cachedSessions = sessions
     cacheTimestamp = Date.now()
-    return { sessions, fromCache: false }
+    return { sessions: [...sessions], fromCache: false }
   } finally {
     pendingRequest = null
   }
@@ -1155,8 +1181,14 @@ export async function deletePersistedSession(sessionId: string): Promise<Service
   if (!sessionId) {
     return { error: 'Session ID is required', status: 400, data: undefined }
   }
-  const success = await unpersistSession(sessionId)
-  if (!success) {
+  // SVC2-MIN-04: distinguish 404 (no such session) from 500 (IO failure)
+  // so the API surface can correctly return Not Found instead of always
+  // 500'ing on a perfectly idempotent delete-of-missing.
+  const result = await unpersistSession(sessionId)
+  if (result === 'not-found') {
+    return { error: `Session ${sessionId} not found in persistence`, status: 404, data: undefined }
+  }
+  if (result === 'failed') {
     return { error: 'Failed to delete session', status: 500, data: undefined }
   }
   return { data: { success: true }, status: 200 }

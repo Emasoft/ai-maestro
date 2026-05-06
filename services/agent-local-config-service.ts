@@ -38,6 +38,35 @@ import type {
 // Public API
 // ---------------------------------------------------------------------------
 
+/**
+ * SVC2-MIN-18: redact sensitive keys from user global settings before
+ * returning them to the API caller. Settings files frequently contain auth
+ * tokens, API keys, or session secrets that an agent's local-config view
+ * has no business exposing to a UI client. We walk the parsed JSON and
+ * replace values for keys whose name matches a known-sensitive pattern.
+ *
+ * The substitution is `'[REDACTED]'` (a string) regardless of original
+ * type so the response shape is identifiable in UIs and logs.
+ *
+ * Keys matched (case-insensitive substring): apiKey, token, password,
+ * secret, credential, authorization, bearer, sessionId.
+ */
+const SENSITIVE_KEY_PATTERN = /(apikey|token|password|secret|credential|authorization|bearer|sessionid)/i
+
+function redactSensitiveValues(obj: unknown): unknown {
+  if (obj === null || typeof obj !== 'object') return obj
+  if (Array.isArray(obj)) return obj.map(redactSensitiveValues)
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    if (SENSITIVE_KEY_PATTERN.test(key)) {
+      result[key] = '[REDACTED]'
+    } else {
+      result[key] = redactSensitiveValues(value)
+    }
+  }
+  return result
+}
+
 export function scanAgentLocalConfig(agentId: string): ServiceResult<AgentLocalConfig> {
   try {
     const agent = getAgent(agentId)
@@ -87,7 +116,8 @@ export function scanAgentLocalConfig(agentId: string): ServiceResult<AgentLocalC
           rolePlugin: null,
           globalDependencies: null,
           settings: {},
-          userGlobalSettings: readJsonSafe(path.join(os.homedir(), '.claude', 'settings.json')) ?? null,
+          // SVC2-MIN-18: redact known-sensitive keys before exposing to API caller
+          userGlobalSettings: redactSensitiveValues(readJsonSafe(path.join(os.homedir(), '.claude', 'settings.json')) ?? null) as Record<string, unknown> | null,
           keybindings: null,
           lastScanned: new Date().toISOString(),
         },
@@ -467,7 +497,9 @@ function scanClaudeDirectory(claudeDir: string, workDir: string): AgentLocalConf
   // TRDD-7123d51a §3.2 — user-global + keybinding sub-trees for the
   // subconscious config-change tracker. Both are `null` when the file is
   // absent so the tracker can treat "missing" distinctly from "empty".
-  const userGlobalSettings = readJsonSafe(path.join(os.homedir(), '.claude', 'settings.json')) ?? null
+  // SVC2-MIN-18: redact sensitive keys from user-global settings before
+  // exposing to the API caller (auth tokens, API keys, etc.).
+  const userGlobalSettings = redactSensitiveValues(readJsonSafe(path.join(os.homedir(), '.claude', 'settings.json')) ?? null) as Record<string, unknown> | null
   const keybindings = readJsonSafe(path.join(claudeDir, 'keybindings.json')) ?? null
 
   return {

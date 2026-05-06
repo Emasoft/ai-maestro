@@ -124,6 +124,20 @@ export async function createSession(ip?: string): Promise<string> {
 /**
  * Validate a session token from the cookie.
  * Returns true if valid and not expired.
+ *
+ * LIB2-MIN-05: NO ASYNC OPERATIONS in this function or `invalidateSession`.
+ * `createSession` is serialized via `sessionMutex` to prevent races on the
+ * sessions Map; `validateSession` and `invalidateSession` are SYNCHRONOUS
+ * AND therefore safe in JavaScript's single-threaded model — no two
+ * synchronous handlers ever interleave. If a future refactor adds an
+ * `await` inside either function (e.g. a `getRecord(hash)` that fetches
+ * from Redis), the mutex serialization assumption breaks: a second
+ * handler could run between the await and the subsequent .get/.delete,
+ * creating a TOCTOU race. If async ops become necessary, EITHER take
+ * the same `sessionMutex` here, OR migrate the entire session store to
+ * a TOCTOU-safe primitive (Redis WATCH/MULTI, Postgres SERIALIZABLE
+ * transaction, etc.). Do NOT leave this function async-tainted without
+ * one of those guards.
  */
 export function validateSession(token: string): boolean {
   if (!token) return false
@@ -142,6 +156,8 @@ export function validateSession(token: string): boolean {
 
 /**
  * Invalidate a session (logout).
+ *
+ * LIB2-MIN-05: synchronous — see `validateSession` doc-comment.
  */
 export function invalidateSession(token: string): boolean {
   if (!token) return false

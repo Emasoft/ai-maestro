@@ -87,7 +87,8 @@ export async function POST(
   } catch (error) {
     console.error('[Session Command API] Error:', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      // API2-MIN-01: don't leak error.message to client; logged above
+      { success: false, error: 'internal_error', code: 'session-command' },
       { status: 500 }
     )
   }
@@ -119,9 +120,10 @@ export async function GET(
     try {
       data = await checkIdleStatus(sessionName)
     } catch (idleError) {
+      // API2-MIN-01: don't leak idleError.message to client; logged below
       console.error('[Session Command API] checkIdleStatus error:', idleError)
       return NextResponse.json(
-        { success: false, error: idleError instanceof Error ? idleError.message : 'Failed to check idle status' },
+        { success: false, error: 'internal_error', code: 'session-command-idle-status' },
         { status: 500 }
       )
     }
@@ -130,7 +132,8 @@ export async function GET(
   } catch (error) {
     console.error('[Session Command API] Error:', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      // API2-MIN-01: don't leak error.message to client; logged above
+      { success: false, error: 'internal_error', code: 'session-command' },
       { status: 500 }
     )
   }

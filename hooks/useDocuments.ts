@@ -95,8 +95,12 @@ export function useDocuments(teamId: string | null): UseDocumentsResult {
       body: JSON.stringify(updates),
     })
     if (!res.ok) {
-      // Revert optimistic update — swallow revert errors to preserve the mutation error
-      await fetchDocuments().catch(() => {})
+      // Revert optimistic update — swallow revert errors to preserve the mutation error,
+      // but log them so a refresh-failure-after-mutation-failure isn't completely silent.
+      // UI2-MAJ-20.
+      await fetchDocuments().catch((err) => {
+        console.warn('[useDocuments] Revert after updateDocument failure also failed:', err)
+      })
       throw new Error('Failed to update document')
     }
     await fetchDocuments()
@@ -108,8 +112,11 @@ export function useDocuments(teamId: string | null): UseDocumentsResult {
     setDocuments(prev => prev.filter(d => d.id !== docId))
     const res = await fetch(`/api/teams/${teamId}/documents/${docId}`, { method: 'DELETE' })
     if (!res.ok) {
-      // Revert optimistic update — swallow revert errors to preserve the mutation error
-      await fetchDocuments().catch(() => {})
+      // Revert optimistic update — swallow revert errors to preserve the mutation error,
+      // but log them. UI2-MAJ-20.
+      await fetchDocuments().catch((err) => {
+        console.warn('[useDocuments] Revert after deleteDocument failure also failed:', err)
+      })
       throw new Error('Failed to delete document')
     }
   }, [teamId, fetchDocuments])

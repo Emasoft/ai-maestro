@@ -263,6 +263,13 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
     // Every team MUST have a COS. If the caller didn't specify one, we create a new
     // agent with a random robot persona name and assign it as COS automatically.
     if (!cosId) {
+      // SVC2-MIN-08: track whether mkdir succeeded so we can roll back on
+      // partial failure. Previously, if mkdir succeeded but createCosAgent
+      // failed, an empty `~/agents/cos-<teamslug>/` was left orphaned on
+      // disk — visible in the agent-folder picker but unbacked by any
+      // registry entry, confusing users into thinking the agent existed.
+      let cosWorkDir: string | null = null
+      let cosWorkDirCreated = false
       try {
         const { createAgent: createCosAgent } = await import('@/lib/agent-registry')
         const teamSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 30)
@@ -271,25 +278,47 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
         const robotIndex = Math.floor(Math.random() * 50) + 1
         const robotAvatar = `/avatars/robots_${robotIndex.toString().padStart(2, '0')}.jpg`
         const os = await import('os')
-        const cosWorkDir = join(os.homedir(), 'agents', cosName)
-        const { mkdir } = await import('fs/promises')
+        cosWorkDir = join(os.homedir(), 'agents', cosName)
+        const { mkdir, rm: fsRm } = await import('fs/promises')
+        const { existsSync } = await import('fs')
+        // Only mark as created if the dir was newly made; if it already
+        // existed (e.g. a leftover from a previous failed create), DO NOT
+        // mark it as ours-to-delete — rolling back would destroy unrelated
+        // user data.
+        const preexisting = existsSync(cosWorkDir)
         await mkdir(cosWorkDir, { recursive: true })
-        const cosAgent = await createCosAgent({
-          name: cosName,
-          program: 'claude',
-          avatar: robotAvatar,
-          workingDirectory: cosWorkDir,
-          taskDescription: `Chief-of-Staff for team "${name}"`,
-          role: 'chief-of-staff',
-          createSession: false,
-        })
-        cosId = cosAgent.id
-        // Add COS to team agentIds and set chiefOfStaffId
-        await updateTeam(team.id, {
-          chiefOfStaffId: cosId,
-          agentIds: [...(team.agentIds || []), cosId],
-        }, managerId)
-        console.log(`[teams] Auto-created COS agent "${cosName}" (${cosId}) for team "${name}"`)
+        cosWorkDirCreated = !preexisting
+        try {
+          const cosAgent = await createCosAgent({
+            name: cosName,
+            program: 'claude',
+            avatar: robotAvatar,
+            workingDirectory: cosWorkDir,
+            taskDescription: `Chief-of-Staff for team "${name}"`,
+            role: 'chief-of-staff',
+            createSession: false,
+          })
+          cosId = cosAgent.id
+          // Add COS to team agentIds and set chiefOfStaffId
+          await updateTeam(team.id, {
+            chiefOfStaffId: cosId,
+            agentIds: [...(team.agentIds || []), cosId],
+          }, managerId)
+          console.log(`[teams] Auto-created COS agent "${cosName}" (${cosId}) for team "${name}"`)
+        } catch (innerErr) {
+          // Rollback: createCosAgent failed AFTER we created the dir. Remove
+          // the empty dir so it doesn't pollute ~/agents/. Only delete if
+          // WE created it during this call (cosWorkDirCreated flag).
+          if (cosWorkDirCreated && cosWorkDir) {
+            try {
+              await fsRm(cosWorkDir, { recursive: true, force: true })
+              console.warn(`[teams] Rolled back orphan COS dir ${cosWorkDir} after createAgent failure`)
+            } catch (rmErr) {
+              console.warn(`[teams] Failed to roll back orphan COS dir ${cosWorkDir}:`, rmErr instanceof Error ? rmErr.message : rmErr)
+            }
+          }
+          throw innerErr
+        }
       } catch (err) {
         console.warn('[teams] Failed to auto-create COS agent:', err instanceof Error ? err.message : err)
       }
@@ -1142,6 +1171,18 @@ export async function notifyTeamAgents(params: NotifyTeamParams): Promise<Servic
 
   if (!teamName || typeof teamName !== 'string') {
     return { error: 'teamName is required', status: 400 }
+  }
+
+  // SVC2-MIN-09: cap fan-out to prevent a runaway team-notify call from
+  // flooding the notification channel. Each notifyAgent ultimately writes
+  // to the agent's tmux pane; with hundreds of agents this could DoS the
+  // system. 50 is a generous bound — real teams rarely have more than 20.
+  const MAX_FANOUT = 50
+  if (agentIds.length > MAX_FANOUT) {
+    return {
+      error: `Cannot notify more than ${MAX_FANOUT} agents in one call (got ${agentIds.length})`,
+      status: 400,
+    }
   }
 
   // Strip control characters to prevent command injection via tmux send-keys

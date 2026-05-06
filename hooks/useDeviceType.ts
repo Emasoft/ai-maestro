@@ -54,10 +54,15 @@ export function useDeviceType(): DeviceInfo {
   })
 
   useEffect(() => {
-    // Use the overrides captured at hook-call time (same as the useState initializer).
-    const { forceTouch, forceMobile } = queryOverrides
-
+    // UI2-MAJ-25: read overrides FRESH inside `update()` each time it fires
+    // so client-side navigation that changes ?touch=/?mobile= without
+    // remounting the hook re-evaluates them. Previously this captured the
+    // mount-time overrides and never refreshed. We also listen to popstate
+    // for SPA back/forward, plus a synthetic 'aimaestro:url-change' event
+    // for in-app navigation (Next.js router.push / replaceState callers
+    // can dispatch this if they want to trigger an immediate refresh).
     const update = () => {
+      const { forceTouch, forceMobile } = getQueryOverrides()
       const isTouch = forceTouch || detectTouch()
       const deviceType = forceMobile ? 'phone' : classify(window.innerWidth)
       setInfo(prev => {
@@ -68,6 +73,8 @@ export function useDeviceType(): DeviceInfo {
 
     // Listen for resize
     window.addEventListener('resize', update)
+    // UI2-MAJ-25: SPA navigation (Back/Forward) — re-read query overrides
+    window.addEventListener('popstate', update)
 
     // Listen for pointer capability changes (e.g. connecting/disconnecting mouse)
     const mql = window.matchMedia?.('(pointer: coarse)')
@@ -84,6 +91,7 @@ export function useDeviceType(): DeviceInfo {
 
     return () => {
       window.removeEventListener('resize', update)
+      window.removeEventListener('popstate', update)
       if (mql?.removeEventListener) {
         mql.removeEventListener('change', update)
       }
@@ -93,7 +101,7 @@ export function useDeviceType(): DeviceInfo {
     }
   // queryOverrides is intentionally excluded: getQueryOverrides() returns a new object each call,
   // so including it would re-run the effect on every render and re-register all listeners.
-  // The value is captured at mount time matching the useState initializer (see comment above useState).
+  // The fresh `update()` body above re-reads overrides on every fire instead.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

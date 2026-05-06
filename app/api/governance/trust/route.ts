@@ -23,8 +23,10 @@ export async function GET() {
     }
     return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
+    // API2-MIN-01: log full error server-side, return generic message to client
+    console.error('[governance-trust-list]', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { error: 'internal_error', code: 'governance-trust-list' },
       { status: 500 }
     )
   }
@@ -49,8 +51,10 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
+    // API2-MIN-01: log full error server-side, return generic message to client
+    console.error('[governance-trust-add]', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { error: 'internal_error', code: 'governance-trust-add' },
       { status: 500 }
     )
   }

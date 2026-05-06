@@ -36,6 +36,15 @@ export async function PATCH(
     const { id: oldName } = await params
     const { newName } = jsonBody
 
+    // API2-MIN-03: validate oldName matches tmux session naming constraints
+    // (alphanumeric + a few safe punctuation characters). Same regex as the
+    // session-name regex elsewhere in the codebase. This is defense-in-depth:
+    // renameSession would catch the malformed name downstream, but reject
+    // here means we don't even reach the service if the path is corrupt.
+    if (!oldName || typeof oldName !== 'string' || !/^[a-zA-Z0-9_@.-]+$/.test(oldName)) {
+      return NextResponse.json({ error: 'Invalid session name in URL' }, { status: 400 })
+    }
+
     // SF-021: Validate newName matches tmux session naming constraints
     if (!newName || typeof newName !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(newName)) {
       return NextResponse.json({ error: 'newName is required and must match ^[a-zA-Z0-9_-]+$' }, { status: 400 })

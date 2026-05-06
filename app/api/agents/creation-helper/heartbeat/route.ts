@@ -20,9 +20,10 @@ export async function POST(request: NextRequest) {
   try {
     await heartbeatCreationHelper()
   } catch (error) {
+    // API2-MIN-01: log full error server-side, return generic message to client
     console.error('[heartbeat] heartbeatCreationHelper failed:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Heartbeat failed' },
+      { error: 'internal_error', code: 'creation-helper-heartbeat' },
       { status: 500 },
     )
   }

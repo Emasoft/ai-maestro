@@ -219,13 +219,27 @@ function removeAgentFile(): void {
 
 /**
  * Sanitize user input: strip null bytes, ASCII control chars (except newline/tab),
- * and Unicode bidi-override characters.
+ * Unicode bidi-override characters, and prevent slash-command injection.
+ *
+ * SVC2-MIN-12: a message starting with `/` is interpreted by Claude Code
+ * as a slash command (`/init`, `/exit`, `/permissions`, `/clear`, etc.).
+ * If a hostile caller manages to reach the creation helper's send path,
+ * a leading slash escapes "user message" mode entirely. We prefix any
+ * message that starts with `/` with a zero-width-non-joiner + `>` so
+ * Claude treats it as a quoted message instead of a command. The
+ * leading `>` is a markdown-blockquote which Claude renders unchanged
+ * if the user's intent really was to start with a slash.
  */
 function sanitizeInput(text: string): string {
-  return text
+  const cleaned = text
     .replace(/\0/g, '')
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
     .replace(/[\u202A-\u202E\u2066-\u2069]/g, '')
+  // Prevent leading-slash slash-command injection
+  if (cleaned.startsWith('/')) {
+    return `> ${cleaned}`
+  }
+  return cleaned
 }
 
 /** Strip ANSI escape codes from captured terminal output. */
@@ -791,6 +805,18 @@ export async function sendMessage(text: string, authContext: AuthContext): Promi
  *
  * This is a single-shot capture (no internal polling).  The UI polls this
  * endpoint repeatedly until `isComplete` is true.
+ *
+ * SVC2-MIN-11: the UI's expected poll interval is approximately 500ms while
+ * a response is in flight. The route handler at
+ * `app/api/agents/creation-helper/response/route.ts` SHOULD apply a
+ * per-caller rate limit (suggested: 5 requests/sec via
+ * `checkAndRecordAttempt('creation-helper-response', 5)`) to prevent a
+ * misbehaving UI client (or hostile caller passing the structural
+ * credential gate) from running the tmux capture every millisecond.
+ * The capture itself is bounded (200 lines) but the system call rate is
+ * not. This service function does NOT enforce the rate limit because
+ * doing so would require a per-route policy decision; the rate limit
+ * belongs at the route layer.
  */
 export async function captureResponse(): Promise<ServiceResult<{
   text: string

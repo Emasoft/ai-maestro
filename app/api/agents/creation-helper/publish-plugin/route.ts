@@ -202,9 +202,10 @@ export async function POST(req: NextRequest) {
       pluginDir: targetDir,
     })
   } catch (error) {
+    // API2-MIN-01: log full error server-side, return generic message to client
     console.error('[publish-plugin] Failed:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to publish plugin' },
+      { error: 'internal_error', code: 'creation-helper-publish-plugin' },
       { status: 500 },
     )
   }

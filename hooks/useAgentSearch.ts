@@ -126,6 +126,13 @@ export function useAgentSearch(agentId: string) {
   // preventing stale results from overwriting fresher ones.
   const abortControllerRef = useRef<AbortController | null>(null)
 
+  // UI2-MIN-04: short-circuit re-fetches when the user re-submits the same
+  // query string (e.g. typing then deleting then re-typing the same word
+  // mid-debounce, or re-submitting via Enter without changing input). The
+  // debounce protects against keystroke storms; this protects against the
+  // edge case where debounce-fire is identical to the last completed query.
+  const lastFetchedQueryRef = useRef<string | null>(null)
+
   // Properly track mount/unmount lifecycle so isMountedRef guards in
   // performSearch actually prevent state updates after unmount.
   useEffect(() => {
@@ -148,6 +155,15 @@ export function useAgentSearch(agentId: string) {
       setResults(null)
       setLoading(false)
       setError(null)
+      lastFetchedQueryRef.current = null
+      return
+    }
+
+    // UI2-MIN-04: skip the fetch if the query exactly matches the last one
+    // we've already fetched — prevents duplicate backend calls from
+    // setQuery('a') / setQuery('a') re-triggers.
+    if (lastFetchedQueryRef.current === searchQuery) {
+      setLoading(false)
       return
     }
 
@@ -194,6 +210,9 @@ export function useAgentSearch(agentId: string) {
         highlights: searchTerms,
         timestamp: Date.now()
       })
+      // UI2-MIN-04: remember the last successfully-completed query so a
+      // resubmit short-circuits before incurring another backend call.
+      lastFetchedQueryRef.current = searchQuery
 
       console.log(`[useAgentSearch] Found ${data.count} results for query "${searchQuery}"`)
     } catch (err) {

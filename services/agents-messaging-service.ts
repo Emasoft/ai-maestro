@@ -153,12 +153,37 @@ async function federatedEmailLookup(
 
   const remoteHosts = hosts.filter(h => !isSelf(h.id) && h.enabled)
 
-  const remoteResults = await Promise.all(
-    remoteHosts.map(async (host) => {
-      const result = await fetchRemoteEmailIndex(host.url, addressQuery)
-      return { hostId: host.id, hostUrl: host.url, ...result }
-    })
-  )
+  // SVC2-MIN-19: cap remote-host concurrency. Without a cap, a host list
+  // of 100+ peers triggers 100+ simultaneous outbound fetches with 5s
+  // timeouts each — long-tail latency dominates the response. We chunk
+  // into batches of 10 to bound concurrent connections.
+  //
+  // Single-address lookup short-circuit: if the LOCAL index already has
+  // a match (`addressQuery` resolved locally), we already have the
+  // answer and don't need to ask remote hosts at all. Skip the remote
+  // round-trip entirely.
+  const HOST_CONCURRENCY = 10
+  const localFoundForQuery = addressQuery && Object.keys(aggregatedEmails).length > 0
+  let remoteResults: Array<{ hostId: string; hostUrl: string } & Awaited<ReturnType<typeof fetchRemoteEmailIndex>>> = []
+  if (!localFoundForQuery) {
+    for (let i = 0; i < remoteHosts.length; i += HOST_CONCURRENCY) {
+      const batch = remoteHosts.slice(i, i + HOST_CONCURRENCY)
+      const batchResults = await Promise.all(
+        batch.map(async (host) => {
+          const result = await fetchRemoteEmailIndex(host.url, addressQuery)
+          return { hostId: host.id, hostUrl: host.url, ...result }
+        })
+      )
+      remoteResults.push(...batchResults)
+      // For single-address lookups, short-circuit as soon as ANY batch
+      // returns a match. Other hosts MAY have the same address (federated
+      // duplicates) — for a lookup query the FIRST match wins.
+      if (addressQuery) {
+        const found = batchResults.some(r => r.success && r.data && Object.keys(r.data).length > 0)
+        if (found) break
+      }
+    }
+  }
 
   for (const result of remoteResults) {
     if (result.success && result.data) {

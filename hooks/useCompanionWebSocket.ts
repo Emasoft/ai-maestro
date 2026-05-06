@@ -81,6 +81,15 @@ export function useCompanionWebSocket({ agentId, onSpeech }: UseCompanionWebSock
     connect()
 
     return () => {
+      // UI2-MAJ-23: ORDER MATTERS. `mounted = false` MUST run BEFORE
+      // `ws.close()` so that if the close event fires synchronously
+      // (e.g. on macOS Safari where event.code 1005 is delivered before
+      // close() returns), the onclose handler sees mounted=false and
+      // skips the reconnect schedule. Reordering these lines re-opens
+      // a race where ws.onclose fires with mounted=true and queues a
+      // reconnect timer that the cleanup THEN clears — but only if the
+      // reconnectTimerRef.current assignment happened before cleanup
+      // runs the clearTimeout. Don't move these lines apart.
       mounted = false
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current)

@@ -6,6 +6,15 @@ import { getStateDir } from '@/lib/ecosystem-constants'
 const CONFIG_PATH = path.join(getStateDir(), 'security-config.enc')
 const ALGORITHM = 'aes-256-gcm'
 const KEY_LENGTH = 32
+// LIB2-MIN-02: IV_LENGTH is 16 bytes (NIST SP 800-38D recommends 12 bytes
+// / 96 bits for AES-GCM). Node accepts 16-byte IVs, and our IV is randomly
+// generated per encrypt so collision probability is negligible at any
+// realistic scale. The length is fixed at 16 because every existing
+// encrypted security-config.enc on disk has a 16-byte IV prefix — changing
+// to 12 would require a migration that re-encrypts the config under the
+// new IV size. If a future security review wants the standard 12-byte IV,
+// add a version field to the encrypted blob and migrate; do NOT just flip
+// this constant or every existing deployment will fail to decrypt.
 const IV_LENGTH = 16
 const SALT_LENGTH = 32
 const HKDF_INFO = 'aimaestro-security-config-v1'
@@ -247,13 +256,29 @@ export function getSecurityDefaults(): SecurityConfig {
   return structuredClone(DEFAULTS)
 }
 
-function deepMerge<T>(defaults: T, overrides: Partial<Record<string, unknown>>): T {
+// LIB2-MIN-03: cap recursion depth at 10. The encrypted security-config
+// PATCH endpoint feeds a user-controlled JSON object into this function;
+// without a depth cap, a deeply nested overrides blob (decryptable
+// because the caller knows the password) would cause stack overflow. The
+// silent try/catch upstream would then swallow the error and fall back
+// to defaults — a recoverable failure mode but harder to diagnose. The
+// REAL config is at most 4 levels deep (e.g. `agentAuth.idleAccessTokens.maxAge`),
+// so 10 levels is generous AND well below the recursion-limit ceiling.
+const DEEP_MERGE_MAX_DEPTH = 10
+
+function deepMerge<T>(defaults: T, overrides: Partial<Record<string, unknown>>, depth = 0): T {
+  if (depth > DEEP_MERGE_MAX_DEPTH) {
+    // Refuse to recurse further. Return defaults at this level — the caller
+    // sees a partially merged structure, but the program does not crash.
+    console.warn(`[security-config] deepMerge depth cap reached (${DEEP_MERGE_MAX_DEPTH}); ignoring deeper overrides`)
+    return defaults
+  }
   const result = { ...defaults } as Record<string, unknown>
   for (const key of Object.keys(result)) {
     const def = result[key]
     const ovr = overrides[key]
     if (def && typeof def === 'object' && !Array.isArray(def) && ovr && typeof ovr === 'object' && !Array.isArray(ovr)) {
-      result[key] = deepMerge(def, ovr as Partial<Record<string, unknown>>)
+      result[key] = deepMerge(def, ovr as Partial<Record<string, unknown>>, depth + 1)
     } else if (ovr !== undefined) {
       result[key] = ovr
     }

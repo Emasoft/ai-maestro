@@ -189,7 +189,13 @@ export default function TaskKanbanBoard({
       setColorPickerCol(null)
     }
     if (menuOpenCol || colorPickerCol) {
-      // Delay to avoid closing immediately on the click that opened it
+      // Delay to avoid closing immediately on the click that opened it.
+      // UI2-MIN-01: cleanup only needs to clear the pending timer — once the
+      // timer fires and addEventListener registers the listener with
+      // { once: true }, the listener auto-removes on its first invocation.
+      // The previous explicit removeEventListener was redundant and would
+      // have been a no-op anyway because we never stored a stable callback
+      // reference visible across renders.
       const timer = setTimeout(() => {
         window.addEventListener('click', handleClick, { once: true })
       }, 0)

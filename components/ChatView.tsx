@@ -80,6 +80,22 @@ export default function ChatView({ agent, isActive = false }: ChatViewProps) {
   // Track previous hookState for change detection
   const prevHookStateRef = useRef<string | null>(null)
 
+  // UI2-MAJ-24: keep refs in sync with the latest state so fetchMessages can
+  // read them without depending on the state values. Previously, fetchMessages
+  // had `messages.length`, `messages`, `pendingMessages.length` in its deps —
+  // which made the callback identity churn on every state change. The polling
+  // useEffect deps `[agent?.id, isActive]` did NOT include fetchMessages, so
+  // setInterval captured the FIRST callback at mount and reused it forever,
+  // calling a stale closure with stale `messages` for every "hasChanges"
+  // comparison — leading to false positives that fired setMessages even when
+  // the new fetched array was identical. The refs let us drop these deps;
+  // the callback is now stable across renders, and the comparison reads the
+  // current values from the refs.
+  const messagesRef = useRef(messages)
+  const pendingMessagesLengthRef = useRef(pendingMessages.length)
+  useEffect(() => { messagesRef.current = messages }, [messages])
+  useEffect(() => { pendingMessagesLengthRef.current = pendingMessages.length }, [pendingMessages.length])
+
   // Fetch messages from the JSONL-based API
   const fetchMessages = useCallback(async (showLoading = false) => {
     if (!agent?.id) return
@@ -99,15 +115,18 @@ export default function ChatView({ agent, isActive = false }: ChatViewProps) {
 
       if (data.success) {
         // Only update if messages actually changed (compare length and last timestamp)
+        // UI2-MAJ-24: read current messages from the ref, not from a stale closure.
         const newMessages = data.messages || []
-        const hasChanges = newMessages.length !== messages.length ||
-          (newMessages.length > 0 && messages.length > 0 &&
-           newMessages[newMessages.length - 1]?.timestamp !== messages[messages.length - 1]?.timestamp)
+        const currentMessages = messagesRef.current
+        const hasChanges = newMessages.length !== currentMessages.length ||
+          (newMessages.length > 0 && currentMessages.length > 0 &&
+           newMessages[newMessages.length - 1]?.timestamp !== currentMessages[currentMessages.length - 1]?.timestamp)
 
         if (hasChanges || !hasLoadedRef.current) {
           setMessages(newMessages)
-          // Clear pending messages when we get new activity
-          if (hasChanges && pendingMessages.length > 0) {
+          // Clear pending messages when we get new activity. Read length from
+          // ref so this branch isn't a dep of fetchMessages.
+          if (hasChanges && pendingMessagesLengthRef.current > 0) {
             setPendingMessages([])
           }
         }
@@ -132,7 +151,8 @@ export default function ChatView({ agent, isActive = false }: ChatViewProps) {
     } finally {
       setIsLoading(false)
     }
-  }, [agent?.id, agent?.hostUrl, messages.length, messages, pendingMessages.length])
+    // UI2-MAJ-24: stable deps — only agent identity. State values read via refs above.
+  }, [agent?.id, agent?.hostUrl])
 
   // Cleanup all pending timers on unmount
   useEffect(() => {

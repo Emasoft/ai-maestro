@@ -46,9 +46,10 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
+    // API2-MIN-01: log full error server-side, return generic message to client
     console.error('[Organization API] Error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { error: 'internal_error', code: 'organization-set' },
       { status: 500 }
     )
   }

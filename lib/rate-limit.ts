@@ -2,6 +2,23 @@
  * Simple in-memory rate limiter for governance password operations.
  * Tracks failed attempts per key with a fixed time window.
  * Phase 1 only — no distributed state needed for localhost.
+ *
+ * LIB2-MIN-06: PROCESS-LOCAL ONLY. The `limits` Map lives in this module's
+ * scope, so each Node.js process has its own counter. If AI Maestro is
+ * deployed in PM2 cluster mode (multiple worker processes), an attacker
+ * who rotates connections between workers gets `N * limit` total
+ * attempts where N = worker count. PM2 sticky-session balancing reduces
+ * this in practice (a given IP usually hits the same worker), but is
+ * not a security guarantee.
+ *
+ * For Phase 2 (multi-process deployments): migrate to a shared store
+ * (Redis SETEX/INCR pattern, Postgres counter table, or PM2's IPC
+ * pubsub). This module's interface (checkRateLimit, recordAttempt,
+ * resetRateLimit, checkAndRecordAttempt) should be preserved so callers
+ * don't change.
+ *
+ * `lib/file-lock.ts` documents the same Phase-1 limitation; both
+ * subsystems would need to migrate together.
  */
 
 const limits = new Map<string, { count: number; resetAt: number }>()

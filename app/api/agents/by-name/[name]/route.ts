@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { lookupAgentByName } from '@/services/agents-core-service'
+import { enforceAuth } from '@/lib/route-auth'
 
 /**
  * GET /api/agents/by-name/[name]
  * Check if an agent exists by name on this host (rich resolution)
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ name: string }> }
 ) {
+  // API2-MIN-02: full token verification at handler level (defense-in-depth
+  // beyond the middleware structural check). The previous code relied
+  // entirely on middleware credential-presence which doesn't validate the
+  // token itself.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { name } = await params
     // SF-051: Validate name format (alphanumeric, hyphens, underscores only)

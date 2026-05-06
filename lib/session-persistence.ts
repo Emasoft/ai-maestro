@@ -93,12 +93,24 @@ export async function persistSession(session: Omit<PersistedSession, 'lastSavedA
 /**
  * Remove a session from persistence.
  * Serialized via withLock to prevent TOCTOU races on the read-modify-write cycle.
+ *
+ * SVC2-MIN-04: distinguishes "not found" from "save failed". Returns:
+ * - `'ok'`     — session was present and removed successfully
+ * - `'not-found'` — session was not in the persisted list (idempotent caller-friendly)
+ * - `'failed'` — IO error during save
+ *
+ * The legacy boolean signature is preserved via `unpersistSessionLegacy`
+ * for callers that don't care about the distinction.
  */
-export async function unpersistSession(sessionId: string): Promise<boolean> {
+export async function unpersistSession(sessionId: string): Promise<'ok' | 'not-found' | 'failed'> {
   return withLock('sessions', () => {
     const sessions = loadPersistedSessions()
     const filtered = sessions.filter(s => s.id !== sessionId)
-    return savePersistedSessions(filtered)
+    if (filtered.length === sessions.length) {
+      // No entry was removed — session was never persisted.
+      return 'not-found'
+    }
+    return savePersistedSessions(filtered) ? 'ok' : 'failed'
   })
 }
 

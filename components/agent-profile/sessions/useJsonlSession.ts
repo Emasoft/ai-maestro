@@ -62,6 +62,35 @@ interface RawRecord {
   tool_result?: unknown
 }
 
+/**
+ * Top-level `type` values that Claude Code emits at session start (or
+ * mid-session) which carry NO user-visible content — they exist only as
+ * structural / metadata markers (custom title, agent name, permission
+ * mode, attachments, file-history snapshots, last-prompt anchor).
+ *
+ * Rendering them as "SYSTEM (empty)" rows clutters the transcript and
+ * confuses the user (the screenshot 2026-05-06 21:24 showed five of
+ * these stacked beneath the only real assistant message). They are
+ * filtered out at line-build time in `normalizeLine` — the function
+ * returns null for these records, and the caller skips null entries.
+ *
+ * IMPORTANT: lineIndex remains the raw JSONL line offset (not a
+ * post-filter index), so server-side range fetches keep working with
+ * the original line numbers. Only the rendered transcript is filtered.
+ */
+const HIDDEN_RECORD_TYPES = new Set([
+  'last-prompt',
+  'custom-title',
+  'agent-name',
+  'permission-mode',
+  'file-history-snapshot',
+  'attachment',
+  // Phase 5 stream markers — emitted by Claude Code 2.x but irrelevant
+  // to a chat transcript reader.
+  'queued-prompt',
+  'compact-summary-anchor',
+])
+
 function extractRole(raw: RawRecord): MessageRole {
   const r =
     (raw.role as string | undefined) ||
@@ -71,6 +100,31 @@ function extractRole(raw: RawRecord): MessageRole {
   if (r === 'assistant') return 'assistant'
   if (r === 'tool_use' || r === 'tool_result' || r === 'tool') return 'tool'
   return 'system'
+}
+
+/** Return true if the record is a metadata marker that should NOT render. */
+function isMetadataOnlyRecord(raw: RawRecord): boolean {
+  const t = raw.type
+  if (typeof t !== 'string') return false
+  if (HIDDEN_RECORD_TYPES.has(t)) return true
+
+  // `type: 'system'` records cover both genuine system messages (which
+  // carry text content the user wants to see) AND internal Claude Code
+  // telemetry events (hooks fired, turn duration, message counts) which
+  // have NO message body. Keep the former; hide the latter.
+  //
+  // Heuristic: a system record without any string/array content is
+  // telemetry. We look at top-level `content`, `text`, and
+  // `message.content` — if none of them yield a non-empty string after
+  // the same flattening logic `extractText` performs, the record is
+  // metadata-only. Cheap to check; precise enough for the real shapes
+  // we've seen in production sessions (subtype=hook, subtype=compact,
+  // subtype=duration emissions all match).
+  if (t === 'system') {
+    const text = extractText(raw)
+    if (text.trim().length === 0) return true
+  }
+  return false
 }
 
 function extractText(raw: RawRecord): string {
@@ -156,8 +210,18 @@ function extractToolInfo(raw: RawRecord): {
   return { isToolEvent: false }
 }
 
-export function normalizeLine(raw: unknown, lineIndex: number): TranscriptLine {
+/**
+ * Convert a raw JSONL record into a renderable TranscriptLine.
+ *
+ * Returns `null` for metadata-only records (custom-title, agent-name,
+ * etc.) so they're filtered out of the transcript at build time.
+ * Callers MUST treat null as "skip this line" — the lineIndex passed in
+ * is preserved on real records so the server-side range numbering
+ * stays consistent (the filter is purely a render-side cull).
+ */
+export function normalizeLine(raw: unknown, lineIndex: number): TranscriptLine | null {
   const r = (raw ?? {}) as RawRecord
+  if (isMetadataOnlyRecord(r)) return null
   const role = extractRole(r)
   const { isToolEvent, toolName, toolInput, toolResult, toolUseId } = extractToolInfo(r)
   return {
@@ -496,12 +560,18 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     fetchRange(selectedSessionId, 0, pageSize - 1, sessionPath, ctrl.signal)
       .then(r => {
         if (ctrl.signal.aborted) return
-        const normalized = r.lines.map((raw, i) => normalizeLine(raw, i))
+        // normalizeLine returns null for metadata-only records (custom-title,
+        // attachment, etc.) — filter them out of the rendered list. The
+        // server-side cursor (`nextFromRef`) advances by the RAW count so
+        // subsequent range requests pick up where this one left off.
+        const normalized = r.lines
+          .map((raw, i) => normalizeLine(raw, i))
+          .filter((l): l is TranscriptLine => l !== null)
         setLines(normalized)
-        nextFromRef.current = normalized.length
+        nextFromRef.current = r.lines.length
         // If the server returned fewer than pageSize lines, the file ends here.
-        if (normalized.length < pageSize) {
-          setTotalLines(prev => (prev === null ? normalized.length : prev))
+        if (r.lines.length < pageSize) {
+          setTotalLines(prev => (prev === null ? r.lines.length : prev))
         }
       })
       .catch((err: unknown) => {
@@ -533,15 +603,19 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     fetchRange(selectedSessionId, from, from + pageSize - 1, sessionPath, ctrl.signal)
       .then(r => {
         if (ctrl.signal.aborted) return
-        const normalized = r.lines.map((raw, i) => normalizeLine(raw, from + i))
-        if (normalized.length === 0) {
+        // Filter metadata-only records — see comment on the initial-load
+        // branch above. Cursor advances by raw count, list grows by visible.
+        const normalized = r.lines
+          .map((raw, i) => normalizeLine(raw, from + i))
+          .filter((l): l is TranscriptLine => l !== null)
+        if (r.lines.length === 0) {
           setTotalLines(prev => (prev === null ? from : prev))
           return
         }
         setLines(prev => [...prev, ...normalized])
-        nextFromRef.current = from + normalized.length
-        if (normalized.length < pageSize) {
-          setTotalLines(from + normalized.length)
+        nextFromRef.current = from + r.lines.length
+        if (r.lines.length < pageSize) {
+          setTotalLines(from + r.lines.length)
         }
       })
       .catch((err: unknown) => {
@@ -633,13 +707,19 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
         const r = await fetchRange(selectedSessionId, from, from + pageSize - 1, sessionPath)
         if (cancelled) return
         if (r.lines.length > 0) {
-          const normalized = r.lines.map((raw, i) => normalizeLine(raw, from + i))
-          setLines(prev => [...prev, ...normalized])
-          nextFromRef.current = from + normalized.length
+          // Filter metadata-only records (see filter comment in the initial
+          // load and loadMore paths). Cursor advances by raw count.
+          const normalized = r.lines
+            .map((raw, i) => normalizeLine(raw, from + i))
+            .filter((l): l is TranscriptLine => l !== null)
+          if (normalized.length > 0) {
+            setLines(prev => [...prev, ...normalized])
+          }
+          nextFromRef.current = from + r.lines.length
           // If we now know there are more rows than the prior totalLines hint,
           // bump the count so virtualized scrollbacks can size correctly.
           setTotalLines(prev =>
-            prev === null ? null : Math.max(prev, from + normalized.length),
+            prev === null ? null : Math.max(prev, from + r.lines.length),
           )
           // New lines arrived → token totals changed → refresh breakdown.
           setBreakdownReloadTick(t => t + 1)

@@ -72,8 +72,16 @@ function BarRow({
   modelLimit: number
 }) {
   const safeTotal = Math.max(total, 1)
-  const pctOfTotal = (value / safeTotal) * 100
   const safeLimit = Math.max(modelLimit, 1)
+  // Free space is a complement to the consumed portion of the model
+  // limit — its denominator is the model context limit, NOT the
+  // session total. Using `total` (=consumed) as the denominator
+  // produced the visible 922.5% value in the screenshot
+  // (free=902.2K / total=97.8K). For every consumption bucket
+  // (systemPrompt, messages, etc.) `total` is the right denominator
+  // because we want "share of what's been consumed".
+  const denomForBucket = bucket.key === 'freeSpace' ? safeLimit : safeTotal
+  const pctOfBucketDenom = (value / denomForBucket) * 100
   const pctOfLimit = (value / safeLimit) * 100
   return (
     <div>
@@ -81,20 +89,20 @@ function BarRow({
         <span className={`${bucket.labelColor} font-medium`}>{bucket.label}</span>
         <span className="tabular-nums text-gray-400">
           {formatTokenNumber(value)}
-          <span className="text-gray-600 ml-1.5">({pctOfTotal.toFixed(1)}%)</span>
+          <span className="text-gray-600 ml-1.5">({pctOfBucketDenom.toFixed(1)}%)</span>
         </span>
       </div>
       <div
         className="aim-ctx-bar-track"
         role="progressbar"
-        aria-label={`${bucket.label}: ${formatTokenNumber(value)} tokens (${pctOfTotal.toFixed(1)}% of session, ${pctOfLimit.toFixed(2)}% of model limit)`}
+        aria-label={`${bucket.label}: ${formatTokenNumber(value)} tokens (${pctOfBucketDenom.toFixed(1)}% of ${bucket.key === 'freeSpace' ? 'model limit' : 'session'}, ${pctOfLimit.toFixed(2)}% of model limit)`}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={Math.round(pctOfTotal)}
+        aria-valuenow={Math.round(pctOfBucketDenom)}
       >
         <div
           className={`aim-ctx-bar-fill ${bucket.fillBg}`}
-          style={{ width: `${Math.min(100, pctOfTotal)}%` }}
+          style={{ width: `${Math.min(100, pctOfBucketDenom)}%` }}
         />
       </div>
       <div className="text-[9px] text-gray-600 mt-0.5 tabular-nums">

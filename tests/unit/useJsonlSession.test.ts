@@ -10,9 +10,29 @@
 import { describe, it, expect } from 'vitest'
 
 import {
-  normalizeLine,
+  normalizeLine as normalizeLineRaw,
   sumUsage,
 } from '@/components/agent-profile/sessions/useJsonlSession'
+
+/**
+ * `normalizeLine` returns null for metadata-only records (custom-title,
+ * agent-name, attachment, etc.) so the renderer can skip them. The
+ * existing tests pre-date that filter and exercise records that always
+ * normalize to a non-null TranscriptLine. This thin wrapper asserts
+ * non-null so downstream `expect(line.X)` calls keep type-checking,
+ * and surfaces an obvious failure if a future test feeds in a record
+ * that the filter rejects.
+ *
+ * The metadata-filter behaviour is exercised by the dedicated tests in
+ * the `normalizeLine — metadata filter` describe block below.
+ */
+function normalizeLine(raw: unknown, lineIndex: number) {
+  const line = normalizeLineRaw(raw, lineIndex)
+  if (line === null) {
+    throw new Error('normalizeLine unexpectedly returned null for non-metadata input')
+  }
+  return line
+}
 
 describe('normalizeLine — role extraction', () => {
   it('marks top-level role:user records as user', () => {
@@ -219,5 +239,63 @@ describe('normalizeLine — timestamps + lineIndex', () => {
   it('drops timestamp when it is not a string', () => {
     const line = normalizeLine({ role: 'user', timestamp: 123 }, 0)
     expect(line.timestamp).toBeUndefined()
+  })
+})
+
+describe('normalizeLine — metadata filter (returns null)', () => {
+  // The filter prevents the transcript from rendering "SYSTEM (empty)"
+  // rows for metadata records that Claude Code emits at session start.
+  // Each test ensures the raw `normalizeLine` (not the wrapper above)
+  // returns null for the type, then the assertion fails the wrapper
+  // path so the test correctly distinguishes filter behaviour.
+  it.each([
+    'last-prompt',
+    'custom-title',
+    'agent-name',
+    'permission-mode',
+    'file-history-snapshot',
+    'attachment',
+    'queued-prompt',
+    'compact-summary-anchor',
+  ])('returns null for type=%s', (type) => {
+    expect(normalizeLineRaw({ type, sessionId: 's-1' }, 0)).toBeNull()
+  })
+
+  it('still returns a TranscriptLine for type=user', () => {
+    expect(normalizeLineRaw({ type: 'user', message: { role: 'user', content: 'hi' } }, 0)).not.toBeNull()
+  })
+
+  it('still returns a TranscriptLine for type=assistant', () => {
+    expect(normalizeLineRaw({ type: 'assistant', message: { role: 'assistant', content: 'ok' } }, 0)).not.toBeNull()
+  })
+
+  it('does not filter when type is missing entirely', () => {
+    expect(normalizeLineRaw({ role: 'user', content: 'hi' }, 0)).not.toBeNull()
+  })
+
+  it('filters type=system records that have no content (telemetry events)', () => {
+    // Real Claude Code emits these: hook count markers, turn-duration
+    // pings, message-count snapshots — all type=system with no message body.
+    expect(normalizeLineRaw(
+      { type: 'system', subtype: 'hook', hookCount: 0, hookInfos: [] },
+      0,
+    )).toBeNull()
+    expect(normalizeLineRaw(
+      { type: 'system', subtype: 'duration', durationMs: 12, messageCount: 5 },
+      0,
+    )).toBeNull()
+  })
+
+  it('keeps type=system records that DO carry text content', () => {
+    // Some system records (command output, errors surfaced to user) carry
+    // an actual message string. Those must still render.
+    expect(normalizeLineRaw(
+      { type: 'system', message: { role: 'system', content: 'process exited with 0' } },
+      0,
+    )).not.toBeNull()
+    expect(normalizeLineRaw(
+      { type: 'system', content: 'compaction triggered' },
+      0,
+    )).not.toBeNull()
   })
 })

@@ -1601,35 +1601,71 @@ async function startServer(handleRequest) {
       }
 
       // R17 + R20.21: Ensure all marketplaces are registered.
+      //
+      // R21.4 — dispatch through the AIO surface (CreateMarketplace /
+      // UpdateMarketplace / DeleteMarketplace) instead of `execSync(...)`
+      // shelling out to the Claude CLI directly. Going through the AIOs
+      // means each operation runs its own G00..G06 gate pipeline (auth,
+      // input validation, ledger emission, R21.6 cascade for delete) —
+      // one piece of code per concern.
+      //
+      // Best-effort semantics preserved by wrapping each call in try/
+      // catch and ignoring failures: an "already-registered" or "not-
+      // found" CLI exit is normal at boot when the user has previously
+      // started AI Maestro on this machine. A failure here MUST NOT
+      // block server startup.
       try {
-        const { execSync: execSyncMkt } = await import('child_process')
         const os = await import('os')
-        const mktOpts = { timeout: 15000, stdio: 'pipe' }
+        const { CreateMarketplace, UpdateMarketplace, DeleteMarketplace } =
+          await import('./services/element-management-service.ts')
+        const sysAuth = { isSystemOwner: true }
 
-        // Remote GitHub marketplace
-        execSyncMkt('claude plugin marketplace add Emasoft/ai-maestro-plugins 2>/dev/null || true', mktOpts)
+        const tryCall = async (label, fn) => {
+          try {
+            const r = await fn()
+            if (r && r.success === false && r.error) {
+              // Idempotent/already-exists/not-found are NORMAL on reboot;
+              // log at debug level only.
+              console.log(`[Startup/${label}] noop:`, r.error.slice(0, 80))
+            }
+          } catch (e) {
+            console.log(`[Startup/${label}] threw:`, (e?.message || String(e)).slice(0, 80))
+          }
+        }
 
-        // Local role-plugins container (holds roles-marketplace/, codex-roles-marketplace/, etc.)
+        // Remote GitHub marketplace (Emasoft/ai-maestro-plugins)
+        await tryCall('add-remote', () =>
+          CreateMarketplace({ name: 'ai-maestro-plugins', source: { repo: 'Emasoft/ai-maestro-plugins' } }, sysAuth))
+
+        // Local role-plugins container
         const rolesDir = os.homedir() + '/agents/role-plugins'
-        execSyncMkt(`claude plugin marketplace add "${rolesDir}" 2>/dev/null || true`, mktOpts)
-        execSyncMkt(`claude plugin marketplace update ai-maestro-local-roles-marketplace 2>/dev/null || true`, mktOpts)
+        await tryCall('add-roles', () =>
+          CreateMarketplace({ name: 'ai-maestro-local-roles-marketplace', source: { path: rolesDir } }, sysAuth))
+        await tryCall('update-roles', () =>
+          UpdateMarketplace({ name: 'ai-maestro-local-roles-marketplace' }, sysAuth))
 
-        // Local custom-plugins container (holds custom-marketplace/, codex-custom-marketplace/, etc.)
+        // Local custom-plugins container
         const customDir = os.homedir() + '/agents/custom-plugins'
-        execSyncMkt(`claude plugin marketplace add "${customDir}" 2>/dev/null || true`, mktOpts)
-        execSyncMkt(`claude plugin marketplace update ai-maestro-local-custom-marketplace 2>/dev/null || true`, mktOpts)
+        await tryCall('add-custom', () =>
+          CreateMarketplace({ name: 'ai-maestro-local-custom-marketplace', source: { path: customDir } }, sysAuth))
+        await tryCall('update-custom', () =>
+          UpdateMarketplace({ name: 'ai-maestro-local-custom-marketplace' }, sysAuth))
 
-        // Local core-plugins container (holds codex-core-marketplace/, gemini-core-marketplace/, etc.)
-        // R20.25 (clarified 2026-04-16): Claude installs the core plugin from the REMOTE marketplace
-        // (Emasoft/ai-maestro-plugins) — there is NO local Claude core marketplace. Non-Claude
-        // clients install via per-client adapter which copies directly from <client>-core-marketplace/
-        // — no Claude CLI marketplace registration needed for the core-plugins container.
-        //
-        // Cleanup: unregister stale ai-maestro-local-core-marketplace if a previous server run
-        // created it.
-        execSyncMkt(`claude plugin marketplace remove ai-maestro-local-core-marketplace 2>/dev/null || true`, mktOpts)
+        // R20.25 (clarified 2026-04-16): Claude installs the core plugin
+        // from the REMOTE marketplace — there is NO local Claude core
+        // marketplace. Non-Claude clients install via per-client adapter
+        // which copies directly from <client>-core-marketplace/ — no
+        // Claude CLI marketplace registration needed for the core-plugins
+        // container. Cleanup: remove the stale name if a previous server
+        // run created it. The DeleteMarketplace AIO cascades through
+        // UninstallPlugin per plugin (R21.6) — if any agent had a plugin
+        // from this deprecated marketplace, the cascade unblocks the
+        // agent (those plugins were pointing at an already-broken
+        // marketplace registration).
+        await tryCall('remove-stale-core', () =>
+          DeleteMarketplace({ name: 'ai-maestro-local-core-marketplace' }, sysAuth))
 
-        console.log('[Startup] Marketplaces registered (remote + 2 Claude containers; per-client core handled via adapters)')
+        console.log('[Startup] Marketplaces registered via AIOs (remote + 2 Claude containers; per-client core via adapters)')
       } catch (err) {
         console.warn('[Startup] Marketplace registration partial:', err?.message?.slice(0, 80))
       }

@@ -15,6 +15,8 @@ import {
   Server,
   Palette,
   Puzzle,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react'
 import type { AgentLocalConfig, LocalPlugin } from '@/types/agent-local-config'
 import { EmptyState, FilterInput, type TabId } from './shared'
@@ -49,19 +51,26 @@ const ELEMENT_CHIPS: { key: string; label: string; icon: typeof Sparkles; tabId:
 
 interface PluginsTabProps {
   config: AgentLocalConfig
+  /** Agent ID — needed for the Update endpoint
+   *  POST /api/agents/{id}/local-plugins. */
+  agentId?: string | null
   /** Callback to switch accordion section in parent (cross-section navigation) */
   onSwitchTab?: (tab: TabId) => void
   /** Callback to notify parent that plugin state changed (triggers config refetch) */
   onRefresh?: () => void
 }
 
-export default function PluginsTab({ config, onSwitchTab, onRefresh }: PluginsTabProps) {
+export default function PluginsTab({ config, agentId, onSwitchTab, onRefresh }: PluginsTabProps) {
   const router = useRouter()
   const { requestSudoToken } = useSudo()
   const [confirmUninstall, setConfirmUninstall] = useState<LocalPlugin | null>(null)
   const [uninstalling, setUninstalling] = useState(false)
   const [expandedPlugin, setExpandedPlugin] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  /** Per-plugin "currently updating" flag. Keyed by plugin.key so two
+   *  simultaneous updates on different plugins each show their own
+   *  spinner. Cleared when the update settles (success or failure). */
+  const [updatingPlugin, setUpdatingPlugin] = useState<string | null>(null)
 
   const filteredPlugins = query.trim()
     ? config.plugins.filter((p) => {
@@ -71,6 +80,38 @@ export default function PluginsTab({ config, onSwitchTab, onRefresh }: PluginsTa
           .some(v => v.toLowerCase().includes(q))
       })
     : config.plugins
+
+  /** Update a locally-installed plugin to the latest version available
+   *  in its marketplace. Server-side ChangePlugin (action='update', scope=
+   *  'local') runs `claude plugin install` which pulls the latest version
+   *  from the marketplace cache. After success, onRefresh() fires the
+   *  parent's handleElementChanged which queues a stop+restart of the
+   *  agent's session — required for claude to load the new version. */
+  const handleUpdate = async (plugin: LocalPlugin) => {
+    if (!agentId || !plugin.key) {
+      console.error('[PluginsTab] Cannot update: missing agentId or plugin.key')
+      return
+    }
+    setUpdatingPlugin(plugin.key)
+    try {
+      const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/local-plugins`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: plugin.key, action: 'update' }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Update failed' }))
+        console.error('[PluginsTab] Update failed:', err.error)
+        return
+      }
+    } catch (err) {
+      console.error('[PluginsTab] Update request failed:', err)
+      return
+    } finally {
+      setUpdatingPlugin(null)
+    }
+    onRefresh?.()
+  }
 
   const handleUninstall = async (plugin: LocalPlugin) => {
     setUninstalling(true)
@@ -184,34 +225,66 @@ export default function PluginsTab({ config, onSwitchTab, onRefresh }: PluginsTa
                   {totalElements}
                 </span>
               )}
-              {/* Role/Core/Uninstall actions */}
+              {/* Role/Core badges + Update + Uninstall actions */}
+              {/* Role and Core plugins are tagged with a non-destructive
+                  badge: role-plugins are managed via the Role tab's N:1
+                  swap dropdown (not via Update — they have their own
+                  semantics), and the core ai-maestro-plugin is protected
+                  by R17 from any uninstall/disable. Both render their
+                  badge in place of the action buttons.
+                  Every OTHER plugin gets two icon buttons: Update
+                  (RefreshCw) — pulls the latest version from its
+                  marketplace and queues a restart — and Uninstall
+                  (XCircle) — the existing flow.
+                  We render the Update button only when agentId is
+                  available (the parent must wire it through); without
+                  agentId the API call has no target. */}
               {isRole ? (
                 <span className="text-[9px] text-emerald-400/70 px-1.5 flex-shrink-0">role</span>
               ) : p.name === 'ai-maestro-plugin' ? (
                 <span className="text-[9px] text-blue-400/70 px-1.5 flex-shrink-0" title="Core plugin — cannot be uninstalled (R17)">core</span>
-              ) : p.isConflictingRolePlugin ? (
-                // UI2-MAJ-05: real <button> for uninstall — natively keyboard-accessible
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setConfirmUninstall(p) }}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
-                  className="flex-shrink-0 p-1 rounded-md cursor-pointer hover:bg-red-500/20 focus:outline-none focus:ring-1 focus:ring-red-400/70"
-                  title="Uninstall this plugin"
-                  aria-label={`Uninstall ${p.name}`}
-                >
-                  <XCircle className="w-3.5 h-3.5 text-red-400" />
-                </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setConfirmUninstall(p) }}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
-                  className="flex-shrink-0 p-1 rounded-md cursor-pointer hover:bg-gray-700/60 focus:outline-none focus:ring-1 focus:ring-gray-500/70"
-                  title="Uninstall this plugin"
-                  aria-label={`Uninstall ${p.name}`}
-                >
-                  <XCircle className="w-3.5 h-3.5 text-gray-500 hover:text-gray-300" />
-                </button>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  {agentId && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleUpdate(p) }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
+                      disabled={updatingPlugin === p.key}
+                      className="flex-shrink-0 p-1 rounded-md cursor-pointer hover:bg-blue-500/20 focus:outline-none focus:ring-1 focus:ring-blue-400/70 disabled:opacity-50"
+                      title="Update this plugin to the latest version (refreshes from marketplace, queues a session restart)"
+                      aria-label={`Update ${p.name}`}
+                    >
+                      {updatingPlugin === p.key
+                        ? <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                        : <RefreshCw className="w-3.5 h-3.5 text-gray-500 hover:text-blue-400" />}
+                    </button>
+                  )}
+                  {p.isConflictingRolePlugin ? (
+                    // UI2-MAJ-05: real <button> for uninstall — natively keyboard-accessible
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setConfirmUninstall(p) }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
+                      className="flex-shrink-0 p-1 rounded-md cursor-pointer hover:bg-red-500/20 focus:outline-none focus:ring-1 focus:ring-red-400/70"
+                      title="Uninstall this plugin"
+                      aria-label={`Uninstall ${p.name}`}
+                    >
+                      <XCircle className="w-3.5 h-3.5 text-red-400" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setConfirmUninstall(p) }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
+                      className="flex-shrink-0 p-1 rounded-md cursor-pointer hover:bg-gray-700/60 focus:outline-none focus:ring-1 focus:ring-gray-500/70"
+                      title="Uninstall this plugin"
+                      aria-label={`Uninstall ${p.name}`}
+                    >
+                      <XCircle className="w-3.5 h-3.5 text-gray-500 hover:text-gray-300" />
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 

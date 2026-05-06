@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Shield, FolderOpen, Sparkles, ExternalLink, Lock, ChevronDown } from 'lucide-react'
+import { Shield, FolderOpen, Sparkles, ExternalLink, Lock, ChevronDown, RefreshCw, Loader2 } from 'lucide-react'
 import type { AgentLocalConfig } from '@/types/agent-local-config'
 import type { GovernanceTitle } from '@/hooks/useGovernance'
 import { SectionLabel } from './shared'
@@ -20,6 +20,7 @@ interface CompatiblePlugin {
 
 export default function RoleTab({
   config,
+  agentId,
   agentTitle,
   agentClient,
   onEditInHaephestos,
@@ -27,6 +28,11 @@ export default function RoleTab({
   onRefresh,
 }: {
   config: AgentLocalConfig
+  /** Agent ID — needed for the role-plugin Update endpoint
+   *  POST /api/agents/{id}/local-plugins. Optional for legacy callers
+   *  that don't yet wire it through; in that case the Update button
+   *  is hidden. */
+  agentId?: string
   agentTitle?: GovernanceTitle
   agentClient?: string  // Agent's AI client (claude, codex, gemini, etc.)
   onEditInHaephestos?: (profilePath: string) => void
@@ -36,6 +42,7 @@ export default function RoleTab({
   const { requestSudoToken } = useSudo()
   const [showModal, setShowModal] = useState(false)
   const [switching, setSwitching] = useState(false)
+  const [updating, setUpdating] = useState(false)
   const [compatiblePlugins, setCompatiblePlugins] = useState<CompatiblePlugin[]>([])
 
   // Fetch compatible plugins for this agent's title + client. R9.13:
@@ -100,6 +107,59 @@ export default function RoleTab({
     onRefresh?.()
   }
 
+  /** Pull the latest version of the currently-installed role plugin from
+   *  its marketplace. Reuses POST /api/agents/{id}/local-plugins with
+   *  action='update' — the route hard-codes rolePluginSwap=true for
+   *  update, which is what bypasses ChangePlugin's G02 role-plugin guard.
+   *
+   *  We deliberately NOT use sudoFetch here because the local-plugins
+   *  endpoint is not currently classified strict (mirroring the existing
+   *  enable/disable toggle path next to it). If that classification ever
+   *  changes, swap to sudoFetch like the swap path does. */
+  const handleUpdate = async () => {
+    if (!agentId || !config.rolePlugin || updating) return
+    const key = `${config.rolePlugin.name}@${config.rolePlugin.marketplace || ''}`
+    setUpdating(true)
+    try {
+      const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/local-plugins`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, action: 'update' }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Update failed' }))
+        console.error('[RoleTab] Update failed:', err.error)
+        return
+      }
+    } catch (err) {
+      console.error('[RoleTab] Update request failed:', err)
+      return
+    } finally {
+      setUpdating(false)
+    }
+    onRefresh?.()
+  }
+
+  // Reusable inline Update icon button. Hidden when there's no agentId
+  // to target or no role plugin currently installed (nothing to update).
+  // Disabled while a swap is in flight to avoid races on the same
+  // settings.local.json. The blue colorway matches MarketplaceManager's
+  // per-plugin update button so users see the same visual signal in
+  // both surfaces.
+  const updateButton = agentId && config.rolePlugin ? (
+    <button
+      onClick={handleUpdate}
+      disabled={updating || switching}
+      className="p-1 rounded hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+      title="Update this role plugin to the latest version (refreshes from marketplace, queues a session restart)"
+      aria-label="Update role plugin"
+    >
+      {updating
+        ? <Loader2 className="w-3 h-3 text-blue-400 animate-spin" />
+        : <RefreshCw className="w-3 h-3 text-gray-500 hover:text-blue-400" />}
+    </button>
+  ) : null
+
   // Role plugin display — N:1 model:
   // 1 compatible → locked label; 2+ → dropdown with Change; 0 → free choice
   const selectorEl = (
@@ -130,6 +190,7 @@ export default function RoleTab({
           <span className="text-xs font-medium text-emerald-300 flex-1 truncate">
             {switching ? 'Switching…' : (config.rolePlugin?.name || compatiblePlugins[0]?.name || 'None')}
           </span>
+          {updateButton}
           <p className="text-[9px] text-emerald-400/60 flex-shrink-0">
             Only option for {agentTitle?.toUpperCase()}
           </p>
@@ -145,6 +206,7 @@ export default function RoleTab({
             )}
           </span>
           <span className="text-[9px] text-blue-400/60">{compatiblePlugins.length} options</span>
+          {updateButton}
           <button
             onClick={() => setShowModal(true)}
             disabled={switching}
@@ -163,6 +225,7 @@ export default function RoleTab({
               <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-medium">custom</span>
             )}
           </span>
+          {updateButton}
           <button
             onClick={() => setShowModal(true)}
             disabled={switching}

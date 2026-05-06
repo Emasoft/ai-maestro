@@ -30,8 +30,8 @@ export default function TabContent({
   const handlePluginClick = onSwitchTab ? () => onSwitchTab('plugins') : undefined
   const rpName = config.rolePlugin?.name
   switch (tab) {
-    case 'role': return <RoleTab config={config} agentTitle={agentInfo?.title} agentClient={agentInfo?.program} onEditInHaephestos={onEditInHaephestos} onBrowse={onBrowse} onRefresh={onRefresh} />
-    case 'plugins': return <PluginsTab config={config} onSwitchTab={onSwitchTab} onRefresh={onRefresh} />
+    case 'role': return <RoleTab config={config} agentId={agentId} agentTitle={agentInfo?.title} agentClient={agentInfo?.program} onEditInHaephestos={onEditInHaephestos} onBrowse={onBrowse} onRefresh={onRefresh} />
+    case 'plugins': return <PluginsTab config={config} agentId={agentId} onSwitchTab={onSwitchTab} onRefresh={onRefresh} />
     case 'marketplaces': return (
       <MarketplacesTab
         workingDirectory={config.workingDirectory}

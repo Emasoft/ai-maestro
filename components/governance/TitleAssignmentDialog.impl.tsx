@@ -43,7 +43,12 @@ interface TitleAssignmentDialogProps {
   agentName: string
   currentTitle: GovernanceTitle
   governance: GovernanceState
-  onTitleChanged: () => void
+  // Returns a Promise so the dialog can await side-effects (refetching the
+  // agent so the new programArgs are visible, queuing the restart from the
+  // freshly-fetched state, etc.) before it dispatches onRestartNeeded /
+  // closes. Without this await, the parent's restart-queue snapshot fires
+  // with the stale React `agent.programArgs` from before ChangeTitle ran.
+  onTitleChanged: () => void | Promise<void>
   onRestartNeeded?: () => void
 }
 
@@ -667,8 +672,13 @@ export default function TitleAssignmentDialog({
         }
       }
 
-      // Success: notify parent and close
-      onTitleChanged()
+      // Success: notify parent and close.
+      // We `await` onTitleChanged so the parent can refetch the agent and
+      // queue the restart with the FRESH programArgs that ChangeTitle's
+      // G16b just wrote to the registry. Without the await, the snapshot
+      // captured by useRestartQueue's body would be stale and the restart
+      // would relaunch claude with the OLD --agent flag.
+      await onTitleChanged()
       onRestartNeeded?.()
       handleClose()
     } catch (err: unknown) {

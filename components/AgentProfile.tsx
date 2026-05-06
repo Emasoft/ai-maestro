@@ -1565,15 +1565,45 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
           agentName={agent.label || agent.name || ''}
           currentTitle={governance.agentTitle}
           governance={governance}
-          onTitleChanged={() => { governance.refresh(); onDataChangedRef.current?.() }}
-          onRestartNeeded={() => {
-            // Enqueue deferred restart after title change installs/uninstalls plugins
-            const sn = sessionStatus?.tmuxSessionName || agent?.name
-            if (sn) {
-              const program = agent?.program || 'claude'
-              const args = agent?.programArgs || ''
-              queueRestart(sn, program, args)
+          onTitleChanged={async () => {
+            governance.refresh()
+
+            // Refetch the agent BEFORE queuing the restart. ChangeTitle's
+            // G16b rewrites programArgs in the registry to use the new
+            // role-plugin's --agent <plugin>-main-agent flag. Without this
+            // refetch:
+            //   1. The Profile panel keeps showing the old programArgs
+            //      until the user reopens it (visible bug).
+            //   2. queueRestart captures the stale React `agent.programArgs`
+            //      and the /api/sessions/[id]/restart endpoint prefers
+            //      body.programArgs over the registry value, so the
+            //      relaunched claude uses the OLD --agent flag despite the
+            //      new role-plugin being installed (silent bug — the user's
+            //      symptom that prompted this fix).
+            let freshAgent = agent
+            if (agentId) {
+              try {
+                const response = await fetch(`${baseUrl}/api/agents/${agentId}`)
+                if (response.ok) {
+                  const data = await response.json()
+                  freshAgent = data.agent
+                  setAgent(freshAgent)
+                }
+              } catch (err) {
+                console.error('[AgentProfile] Refetch after title change failed:', err)
+              }
             }
+
+            // Queue the restart with the freshly-fetched args. We pass the
+            // values from `freshAgent` (the just-fetched object) instead of
+            // the React `agent` state because setAgent's update is async —
+            // this closure still sees the pre-fetch value of `agent`.
+            const sn = sessionStatus?.tmuxSessionName || freshAgent?.name
+            if (sn && freshAgent) {
+              queueRestart(sn, freshAgent.program || 'claude', freshAgent.programArgs || '')
+            }
+
+            onDataChangedRef.current?.()
           }}
         />
       )}

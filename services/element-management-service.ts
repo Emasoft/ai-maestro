@@ -3238,6 +3238,272 @@ export async function ChangePlugin(
 }
 
 // ══════════════════════════════════════════════════════════════
+// Plugin-scoped AIOs (R21.5 naming convention):
+//
+//   InstallPlugin   — install a plugin into ONE OR MORE targets
+//   UninstallPlugin — remove a plugin from EVERY target it lives in
+//   UpdatePlugin    — update a plugin in EVERY target where it's installed
+//   CheckPluginUpdates — read-only outdated-version detection
+//
+// All four are thin orchestrators: they enumerate target locations via
+// the shared lib/plugin-enumeration helpers (which never write), then
+// cascade through ChangePlugin per (target, scope). R21.4 — one piece
+// of code per concern. The mutation always lands inside ChangePlugin,
+// so its full gate pipeline (G00..G13 + G11b + PG01..PG08) fires for
+// every target.
+// ══════════════════════════════════════════════════════════════
+
+/** Aggregate result returned by plugin-scoped + marketplace-scoped AIOs.
+ *  `targets` carries one entry per (target, scope) pair the operation
+ *  touched, in the order it was visited. The top-level `success` is true
+ *  IFF every per-target call succeeded — partial-success is reported via
+ *  a populated `targets` array with mixed `success` flags. */
+export interface PluginScopeResult {
+  success: boolean
+  operations: string[]
+  restartNeeded: boolean
+  error?: string
+  /** One entry per per-target ChangePlugin call. */
+  targets: Array<{
+    name: string
+    marketplace: string
+    scope: 'user' | 'local'
+    agentId?: string
+    success: boolean
+    restartNeeded: boolean
+    error?: string
+    /** Optional — when scope='local' and the agent has an online session,
+     *  callers may queue this for restart through useRestartQueue. */
+    sessionName?: string
+  }>
+}
+
+/**
+ * Install a plugin into ONE OR MORE targets.
+ *
+ * Targets are explicit — caller specifies (scope, agentDir?) tuples.
+ * No automatic discovery: an Install operation needs an explicit "where"
+ * decision (which agent to install for, or whether to install at user
+ * scope). The auto-update scheduler does NOT use this function — it only
+ * updates plugins that are already installed, never installs new ones.
+ *
+ * Cascades through ChangePlugin per target (R21.4).
+ */
+export async function InstallPlugin(desired: {
+  name: string
+  marketplace: string
+  /** One entry per target. Each entry must specify scope; for local scope,
+   *  also agentDir (the per-agent install location). agentId is optional
+   *  but recommended — it lets ChangePlugin's G11b find the agent without
+   *  scanning the registry by workdir. */
+  targets: Array<{ scope: 'user' | 'local'; agentId?: string; agentDir?: string }>
+  /** Bypass G02 role-plugin guard. Default false. The N:1 RoleTab swap
+   *  is the primary caller setting this true. */
+  rolePluginSwap?: boolean
+}, authContext: AuthContext): Promise<PluginScopeResult> {
+  const ops: string[] = []
+  const out: PluginScopeResult = { success: false, operations: ops, restartNeeded: false, targets: [] }
+  if (!authContext) { out.error = 'authContext is mandatory'; return out }
+  if (!desired.name || !desired.marketplace) { out.error = 'name and marketplace are required'; return out }
+  if (desired.targets.length === 0) { out.error = 'at least one target required'; return out }
+  ops.push(`InstallPlugin: ${desired.name}@${desired.marketplace} → ${desired.targets.length} target(s)`)
+  for (const t of desired.targets) {
+    const r = await ChangePlugin(t.agentId ?? null, {
+      name: desired.name,
+      marketplace: desired.marketplace,
+      action: 'install',
+      scope: t.scope,
+      agentDir: t.agentDir,
+      rolePluginSwap: desired.rolePluginSwap ?? false,
+    }, authContext)
+    out.targets.push({
+      name: desired.name,
+      marketplace: desired.marketplace,
+      scope: t.scope,
+      agentId: t.agentId,
+      success: r.success,
+      restartNeeded: r.restartNeeded,
+      error: r.error,
+    })
+    if (r.restartNeeded) out.restartNeeded = true
+  }
+  out.success = out.targets.every(t => t.success)
+  if (!out.success) out.error = `Some targets failed (${out.targets.filter(t => !t.success).length}/${out.targets.length})`
+  return out
+}
+
+/**
+ * Uninstall a plugin from EVERY target where it's currently installed.
+ *
+ * Discovers targets automatically by scanning user-scope settings.json
+ * + every agent's local-scope settings.local.json. This is the cascade
+ * that `UninstallMarketplace` calls per plugin: without it, agents are
+ * left with dangling `<plugin>@<deleted-marketplace>` keys (R21.6).
+ *
+ * Cascades through ChangePlugin per target (R21.4).
+ */
+export async function UninstallPlugin(desired: {
+  name: string
+  marketplace: string
+  /** Bypass G02 role-plugin guard. Default true because UninstallPlugin
+   *  is most often called from UninstallMarketplace's cascade where the
+   *  user has already confirmed the destructive op. */
+  rolePluginSwap?: boolean
+}, authContext: AuthContext): Promise<PluginScopeResult> {
+  const ops: string[] = []
+  const out: PluginScopeResult = { success: false, operations: ops, restartNeeded: false, targets: [] }
+  if (!authContext) { out.error = 'authContext is mandatory'; return out }
+  if (!desired.name || !desired.marketplace) { out.error = 'name and marketplace are required'; return out }
+
+  const { listInstallsOf } = await import('@/lib/plugin-enumeration')
+  const installs = await listInstallsOf(desired.name, desired.marketplace)
+  ops.push(`UninstallPlugin: ${desired.name}@${desired.marketplace} → ${installs.length} target(s) found`)
+  if (installs.length === 0) {
+    // Nothing to uninstall — that's a SUCCESS (R21.15 idempotency: target
+    // is already in the desired "absent" state). Callers (especially
+    // UninstallMarketplace) rely on this no-op behaviour.
+    out.success = true
+    return out
+  }
+
+  for (const inst of installs) {
+    const r = await ChangePlugin(inst.agentId ?? null, {
+      name: desired.name,
+      marketplace: desired.marketplace,
+      action: 'uninstall',
+      scope: inst.scope,
+      agentDir: inst.agentDir,
+      rolePluginSwap: desired.rolePluginSwap ?? true,
+    }, authContext)
+    out.targets.push({
+      name: desired.name,
+      marketplace: desired.marketplace,
+      scope: inst.scope,
+      agentId: inst.agentId,
+      success: r.success,
+      restartNeeded: r.restartNeeded,
+      error: r.error,
+      sessionName: inst.sessionName,
+    })
+    if (r.restartNeeded) out.restartNeeded = true
+  }
+  out.success = out.targets.every(t => t.success)
+  if (!out.success) out.error = `Some uninstall targets failed (${out.targets.filter(t => !t.success).length}/${out.targets.length})`
+  return out
+}
+
+/**
+ * Update a plugin in EVERY target where it's installed.
+ *
+ * Discovers targets automatically (same enumeration as UninstallPlugin).
+ * Each target gets `ChangePlugin(action='update')` which does a fresh
+ * pull from the marketplace cache.
+ *
+ * Cascades through ChangePlugin per target (R21.4). The auto-update
+ * scheduler is the primary caller. Manual UI Update buttons go through
+ * the per-agent ChangePlugin path directly (the user is opting in for
+ * one specific agent, not the whole host).
+ */
+export async function UpdatePlugin(desired: {
+  name: string
+  marketplace: string
+  rolePluginSwap?: boolean
+}, authContext: AuthContext): Promise<PluginScopeResult> {
+  const ops: string[] = []
+  const out: PluginScopeResult = { success: false, operations: ops, restartNeeded: false, targets: [] }
+  if (!authContext) { out.error = 'authContext is mandatory'; return out }
+  if (!desired.name || !desired.marketplace) { out.error = 'name and marketplace are required'; return out }
+
+  const { listInstallsOf } = await import('@/lib/plugin-enumeration')
+  const installs = await listInstallsOf(desired.name, desired.marketplace)
+  ops.push(`UpdatePlugin: ${desired.name}@${desired.marketplace} → ${installs.length} target(s)`)
+  if (installs.length === 0) {
+    // Plugin not installed anywhere → idempotent no-op success (no work
+    // to do, no error to report).
+    out.success = true
+    return out
+  }
+
+  for (const inst of installs) {
+    const r = await ChangePlugin(inst.agentId ?? null, {
+      name: desired.name,
+      marketplace: desired.marketplace,
+      action: 'update',
+      scope: inst.scope,
+      agentDir: inst.agentDir,
+      rolePluginSwap: desired.rolePluginSwap ?? true,
+    }, authContext)
+    out.targets.push({
+      name: desired.name,
+      marketplace: desired.marketplace,
+      scope: inst.scope,
+      agentId: inst.agentId,
+      success: r.success,
+      restartNeeded: r.restartNeeded,
+      error: r.error,
+      sessionName: inst.sessionName,
+    })
+    if (r.restartNeeded) out.restartNeeded = true
+  }
+  out.success = out.targets.every(t => t.success)
+  if (!out.success) out.error = `Some update targets failed (${out.targets.filter(t => !t.success).length}/${out.targets.length})`
+  return out
+}
+
+/**
+ * Read-only check: is a given plugin outdated in any target where it's
+ * installed? Returns the list of (target, currentVersion, latestVersion)
+ * for every target where current ≠ latest.
+ *
+ * Auth note: read-only ops still take authContext for consistency with
+ * the rest of the AIO surface (G00 may consult identity to decide what
+ * the caller is allowed to see). For now this returns the same data to
+ * every authenticated caller — no per-agent visibility filtering yet.
+ */
+export async function CheckPluginUpdates(desired: {
+  name: string
+  marketplace: string
+}, authContext: AuthContext): Promise<{
+  success: boolean
+  outdated: Array<{
+    scope: 'user' | 'local'
+    agentId?: string
+    agentDir?: string
+    currentVersion?: string
+    latestVersion?: string
+  }>
+  error?: string
+}> {
+  if (!authContext) return { success: false, outdated: [], error: 'authContext is mandatory' }
+  if (!desired.name || !desired.marketplace) return { success: false, outdated: [], error: 'name and marketplace required' }
+
+  // Look up the latest version from the cached marketplace manifest.
+  const { listPluginsInMarketplace, listInstallsOf } = await import('@/lib/plugin-enumeration')
+  const inMkt = await listPluginsInMarketplace(desired.marketplace)
+  if (!inMkt.find(p => p.name === desired.name)) {
+    return { success: true, outdated: [] }  // plugin not in this marketplace anymore — nothing outdated
+  }
+  // We don't have a cheap way to read installed-version per target without
+  // re-shelling claude — the user's directive said to avoid CLI shell-outs
+  // wherever an AIO already does the work. The auto-update scheduler
+  // therefore relies on `claude plugin update` being a no-op when the
+  // version matches (handled inside ChangePlugin's update path). Until we
+  // teach plugin-enumeration to also read installed versions, this
+  // check returns the install matrix and lets the caller decide which
+  // ones are outdated. Marked as a known limitation.
+  const installs = await listInstallsOf(desired.name, desired.marketplace)
+  return {
+    success: true,
+    outdated: installs.map(i => ({
+      scope: i.scope,
+      agentId: i.agentId,
+      agentDir: i.agentDir,
+      // currentVersion / latestVersion intentionally undefined for now.
+    })),
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
 // ChangeResult — Shared result type for all Change* functions
 // ══════════════════════════════════════════════════════════════
 
@@ -3370,6 +3636,49 @@ export async function ChangeMarketplace(desired: {
       await execFileAsync('claude', ['plugin', 'marketplace', 'add', sourceArg], { timeout: 120000 })
       ops.push(`G03: Added marketplace "${desired.name}" from ${sourceArg}`)
     } else if (desired.action === 'remove') {
+      // ── G02b: CASCADE through UninstallPlugin (R21.6) ────────
+      // Before tearing down the marketplace registration / cache / settings,
+      // uninstall every plugin that came from this marketplace from every
+      // target where it's installed (user-scope + every agent's local-scope).
+      // Without this cascade, agents are left with dangling
+      // `<plugin>@<deleted-marketplace>` keys in settings.local.json — the
+      // next claude launch breaks because the marketplace no longer exists.
+      //
+      // We do this BEFORE the CLI/cache/settings cleanup so:
+      //   1. The plugin enumeration helpers can still find the marketplace
+      //      manifest at ~/.claude/plugins/marketplaces/<name>/ to list
+      //      its plugins. After G04 below clears the cache directory the
+      //      manifest is gone and the cascade would have nothing to walk.
+      //   2. ChangePlugin's per-target uninstall can still verify final
+      //      state via PG01 — the marketplace registration lookup still
+      //      resolves at this point.
+      //
+      // Each cascade failure is logged but does NOT abort the marketplace
+      // removal — the user explicitly chose to delete this marketplace,
+      // and a stuck per-agent uninstall (e.g. read-only filesystem on a
+      // remote host) should not block the local cleanup. The aggregate
+      // result is reported via the operations log.
+      try {
+        const { listPluginsInMarketplace } = await import('@/lib/plugin-enumeration')
+        const plugins = await listPluginsInMarketplace(desired.name)
+        ops.push(`G02b: Cascade — ${plugins.length} plugin(s) in marketplace, dispatching UninstallPlugin per plugin`)
+        let totalTargets = 0
+        let totalFailures = 0
+        for (const p of plugins) {
+          const ur = await UninstallPlugin({
+            name: p.name,
+            marketplace: desired.name,
+            rolePluginSwap: true,
+          }, authContext)
+          totalTargets += ur.targets.length
+          totalFailures += ur.targets.filter(t => !t.success).length
+        }
+        ops.push(`G02b: Cascade complete — ${totalTargets} per-target uninstall(s), ${totalFailures} failure(s)`)
+      } catch (cascadeErr) {
+        const msg = cascadeErr instanceof Error ? cascadeErr.message : String(cascadeErr)
+        ops.push(`G02b: Cascade WARN — ${msg} (proceeding with marketplace removal anyway)`)
+      }
+
       // SCEN-019 BUG-004 (2026-04-30): the CLI returns non-zero with
       // "not found" if the marketplace name isn't registered with Claude
       // CLI itself. That is NOT a fatal error for the pipeline — the

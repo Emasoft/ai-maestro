@@ -457,6 +457,17 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
   const nextFromRef = useRef<number>(0)
   const inFlightRef = useRef<AbortController | null>(null)
 
+  // Stable ref to the latest sessions array so polling / live-tail effects
+  // can look up `summary.path` without putting `sessions` in their dep
+  // arrays. Putting `sessions` in deps causes the transcript-reset and
+  // breakdown-reset effects to fire every poll (because `setSessions`
+  // creates a new array reference even when content is unchanged), which
+  // wipes `lines` and re-loads page 0 every 2 s — the UI becomes
+  // unreadable. Reading via a ref keeps the path resolution correct
+  // without coupling these effects to the polling interval.
+  const sessionsRef = useRef(sessions)
+  useEffect(() => { sessionsRef.current = sessions }, [sessions])
+
   // Reset + load first page whenever the selected sid changes.
   useEffect(() => {
     if (inFlightRef.current) {
@@ -470,8 +481,10 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
 
     if (!selectedSessionId) return
 
-    // Resolve the session's line count if known from the list
-    const summary = sessions.find(s => s.id === selectedSessionId)
+    // Resolve the session's line count if known from the list. We read
+    // via the ref so a list-refresh (size/mtime tick) does NOT fire this
+    // effect again — fixing the "transcript clears every 2 s" bug.
+    const summary = sessionsRef.current.find(s => s.id === selectedSessionId)
     const hintedCount = summary?.messageCount ?? null
     setTotalLines(hintedCount)
     const sessionPath = summary?.path
@@ -502,7 +515,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     return () => {
       ctrl.abort()
     }
-  }, [selectedSessionId, sessions, pageSize])
+  }, [selectedSessionId, pageSize])
 
   const loadMore = useCallback(() => {
     if (!selectedSessionId) return
@@ -511,7 +524,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     // If we know we've hit end-of-file, short-circuit.
     if (totalLines !== null && from >= totalLines) return
 
-    const summary = sessions.find(s => s.id === selectedSessionId)
+    const summary = sessionsRef.current.find(s => s.id === selectedSessionId)
     const sessionPath = summary?.path
 
     const ctrl = new AbortController()
@@ -538,7 +551,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
       .finally(() => {
         if (!ctrl.signal.aborted) setTranscriptLoading(false)
       })
-  }, [selectedSessionId, pageSize, transcriptLoading, totalLines, sessions])
+  }, [selectedSessionId, pageSize, transcriptLoading, totalLines])
 
   // Context breakdown ----------------------------------------------------
   const [breakdown, setBreakdown] = useState<ContextBreakdownResponse | null>(null)
@@ -546,11 +559,18 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
   const [breakdownError, setBreakdownError] = useState<string | null>(null)
   const [breakdownReloadTick, setBreakdownReloadTick] = useState(0)
 
+  // Reset breakdown ONLY when the selected session changes. Live-tail
+  // re-fetches keep the previous breakdown visible while the new one
+  // loads (avoids the "context panel goes empty for ~500 ms every 2 s"
+  // flicker the user reported).
   useEffect(() => {
     setBreakdown(null)
     setBreakdownError(null)
+  }, [selectedSessionId])
+
+  useEffect(() => {
     if (!selectedSessionId) return
-    const summary = sessions.find(s => s.id === selectedSessionId)
+    const summary = sessionsRef.current.find(s => s.id === selectedSessionId)
     const sessionPath = summary?.path
     const ctrl = new AbortController()
     setBreakdownLoading(true)
@@ -558,30 +578,38 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
       .then(r => {
         if (ctrl.signal.aborted) return
         setBreakdown(r)
+        setBreakdownError(null)
       })
       .catch((err: unknown) => {
         if (ctrl.signal.aborted) return
         setBreakdownError((err as Error).message)
+        // Keep the previously-loaded breakdown visible if a poll-tick
+        // re-fetch fails — a transient error should NOT blank the panel.
       })
       .finally(() => {
         if (!ctrl.signal.aborted) setBreakdownLoading(false)
       })
     return () => ctrl.abort()
-  }, [selectedSessionId, sessions, breakdownReloadTick])
+  }, [selectedSessionId, breakdownReloadTick])
 
   // Live-tail polling -----------------------------------------------------
   // While a session is selected, poll every LIVE_TAIL_INTERVAL_MS to:
-  //   1. Re-fetch the sessions list (picks up size/mtime changes — the
-  //      server-side metadataCache invalidates on any change).
-  //   2. Append any new lines beyond `nextFromRef.current` (tails the .jsonl).
-  //   3. Re-fetch the context breakdown (tokens shift as new turns land).
+  //   1. Append any new lines beyond `nextFromRef.current` (tails the .jsonl).
+  //   2. Re-fetch the context breakdown ONLY when new lines actually
+  //      arrived (saves a request when the file is idle).
   //
-  // The polling is paused when the page is hidden (`document.visibilityState`)
-  // so a backgrounded tab doesn't keep hammering the reader. Resumed on the
-  // next visibilitychange. Live-tailing is the FIX for the bug where typing
-  // in the client terminal did NOT update the chat transcript view nor the
-  // context-breakdown panel — without this poll, the UI is a static snapshot
-  // taken at session-select time.
+  // We do NOT call refreshList() here. The server-side jsonl-reader.ts
+  // self-invalidates its cache via statSync on every open(), so the
+  // range fetch automatically sees fresh bytes — the sessions list
+  // re-fetch is unnecessary AND was the cause of constant React
+  // re-renders (it changed the `sessions` reference on every poll,
+  // which fired transcript-reset / breakdown-reset effects → wiped
+  // `lines` → reset scroll → unreadable UI).
+  //
+  // Polling pauses when document.visibilityState is hidden so a
+  // backgrounded tab doesn't hammer the reader. Resumes immediately on
+  // visibility change so foregrounding the tab gives fresh content
+  // without a 2 s lag.
   const LIVE_TAIL_INTERVAL_MS = 2000
   useEffect(() => {
     if (!selectedSessionId) return
@@ -592,18 +620,15 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     const tick = async () => {
       if (cancelled) return
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
-      // Refresh list silently (mtime/size update for the metadata cache).
-      // We don't await its setState — the breakdown reload below picks up
-      // the new bytes regardless of whether the list state has updated yet.
-      refreshList()
 
-      const summary = sessions.find(s => s.id === selectedSessionId)
+      const summary = sessionsRef.current.find(s => s.id === selectedSessionId)
       const sessionPath = summary?.path
       const from = nextFromRef.current
 
       // Tail: ask for `pageSize` lines starting at the current end pointer.
-      // If the file grew, we get the new lines. If it didn't, we get an
-      // empty array — no harm done, just one cheap request per tick.
+      // If the file didn't grow, we get an empty array — no setState calls,
+      // no re-render, no scroll-position disturbance. THIS is what makes
+      // the UI calm during idle periods.
       try {
         const r = await fetchRange(selectedSessionId, from, from + pageSize - 1, sessionPath)
         if (cancelled) return
@@ -644,7 +669,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
         document.removeEventListener('visibilitychange', onVisChange)
       }
     }
-  }, [selectedSessionId, sessions, pageSize, refreshList])
+  }, [selectedSessionId, pageSize])
 
   // Search ---------------------------------------------------------------
   const [query, setQueryRaw] = useState('')
@@ -670,7 +695,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
       return
     }
     searchTimerRef.current = setTimeout(() => {
-      const summary = sessions.find(s => s.id === selectedSessionId)
+      const summary = sessionsRef.current.find(s => s.id === selectedSessionId)
       const sessionPath = summary?.path
       const ctrl = new AbortController()
       searchCtrlRef.current = ctrl
@@ -695,7 +720,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     return () => {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
     }
-  }, [selectedSessionId, query, sessions])
+  }, [selectedSessionId, query])
 
   const setQuery = useCallback((q: string) => setQueryRaw(q), [])
 

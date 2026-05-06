@@ -3144,7 +3144,7 @@ export async function ChangePlugin(
       agentDir
     ) {
       try {
-        const { loadAgents, updateAgent } = await import('@/lib/agent-registry')
+        const { loadAgents } = await import('@/lib/agent-registry')
         const all = loadAgents()
         const owner = agentId
           ? all.find(a => a.id === agentId && !a.deletedAt)
@@ -3159,8 +3159,23 @@ export async function ChangePlugin(
           const oldArgs = owner.programArgs || ''
           const newArgs = setClaudeAgentFlag(oldArgs, newMainAgent)
           if (newArgs !== oldArgs) {
-            await updateAgent(owner.id, { programArgs: newArgs })
-            ops.push(`G11b: programArgs rewritten — --agent ${newMainAgent}`)
+            // AIO composition rule (IRON): when one AIO needs to perform a
+            // task that another AIO already covers, it MUST call that AIO
+            // — not duplicate the underlying primitive. programArgs
+            // mutation is owned by ChangeCLIArgs, so we dispatch through
+            // that pipeline instead of touching `updateAgent` directly.
+            // Internal callers pass the system-owner authContext (same
+            // pattern as the auto-update scheduler) so Gate 0 lets the
+            // call through without a per-agent caller identity.
+            const r = await ChangeCLIArgs(owner.id, newArgs, { isSystemOwner: true } as AuthContext)
+            if (r.success) {
+              ops.push(`G11b: programArgs rewritten via ChangeCLIArgs — --agent ${newMainAgent}`)
+            } else {
+              // Don't unwind — the plugin install already landed. Surface
+              // the failure as a WARN so the operator can correct via the
+              // Profile panel's CLI args field.
+              ops.push(`G11b: WARN — ChangeCLIArgs refused: ${r.error || 'unknown'}`)
+            }
           } else {
             ops.push(`G11b: programArgs already correct for ${desired.name}`)
           }

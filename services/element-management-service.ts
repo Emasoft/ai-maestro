@@ -2604,6 +2604,48 @@ export async function ChangeTitle(
       ops.push(`G16: Plugin "${targetPluginName}" already installed — no change`)
     }
 
+    // ── GATE 16b: Sync programArgs `--agent` flag to the new main-agent ──
+    // Without this rewrite, the agent's wake command keeps pointing at
+    // the OLD plugin's main-agent (or at no plugin at all), so Claude
+    // either loads a stale persona or falls back to the default Claude
+    // assistant — exactly the symptom witnessed 2026-05-06 with jack-bot
+    // (MANAGER plugin installed but `--agent` still
+    // `backend-infrastructure-engineer-main-agent`).
+    //
+    // Only Claude uses `--agent <name>` to load personas; for non-Claude
+    // clients the persona is loaded via per-client manifest files written
+    // by the adapter system, so we MUST NOT touch their programArgs here.
+    if (
+      agentClientType === 'claude' &&
+      currentPluginName !== targetPluginName &&
+      !options?.skipPluginSync
+    ) {
+      try {
+        const { setClaudeAgentFlag, mainAgentNameForPlugin } = await import('@/lib/program-args')
+        const desiredMainAgent = targetPluginName ? mainAgentNameForPlugin(targetPluginName) : null
+        const oldArgs = agent.programArgs || ''
+        const newArgs = setClaudeAgentFlag(oldArgs, desiredMainAgent)
+        if (newArgs !== oldArgs) {
+          const updated = await updateAgent(agentId, { programArgs: newArgs })
+          if (updated) {
+            ops.push(`G16b: Rewrote programArgs --agent flag: "${oldArgs}" → "${newArgs}"`)
+            agent.programArgs = newArgs
+          } else {
+            ops.push(`G16b: WARN — updateAgent returned null when rewriting programArgs`)
+          }
+        } else {
+          ops.push(`G16b: programArgs --agent flag already in sync`)
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        ops.push(`G16b: WARN — Failed to rewrite programArgs: ${msg}`)
+      }
+    } else if (agentClientType !== 'claude') {
+      ops.push(`G16b: Skipped (client="${agentClientType}" — persona not loaded via --agent)`)
+    } else {
+      ops.push(`G16b: Skipped (plugin unchanged or skipPluginSync)`)
+    }
+
     // ── GATE 17: Verify plugin state consistency ─────────────
     if (!options?.skipPluginSync && clientSupportsRolePlugins && agentDir) {
       try {

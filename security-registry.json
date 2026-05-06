@@ -43,6 +43,8 @@
     "POST_/api/sessions/[id]/kill": "strict",
     "DELETE_/api/sessions/[id]": "strict",
     "PATCH_/api/settings/security": "strict",
+    "PATCH_/api/settings/auto-update": "strict",
+    "POST_/api/settings/auto-update/run": "strict",
     "DELETE_/api/v1/agents/me": "strict",
     "POST_/api/agents/cemetery": "strict",
     "POST_/api/agents/import": "strict",

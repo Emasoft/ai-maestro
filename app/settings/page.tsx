@@ -20,6 +20,7 @@ import GlobalElementsSection from '@/components/settings/GlobalElementsSection'
 import CemeterySection from '@/components/settings/CemeterySection'
 import SecuritySection from '@/components/settings/SecuritySection'
 import DiagnosticsSection from '@/components/settings/DiagnosticsSection'
+import PluginUpdatesSection from '@/components/settings/PluginUpdatesSection'
 import { VersionChecker } from '@/components/VersionChecker'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
@@ -35,7 +36,7 @@ export default function SettingsPage() {
 function SettingsPageInner() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const [activeSection, setActiveSection] = useState<'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery' | 'diagnostics'>('hosts')
+  const [activeSection, setActiveSection] = useState<'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery' | 'diagnostics' | 'plugin-updates'>('hosts')
   // Navigate to section from URL params (e.g. /settings?tab=global-elements
   // or the post-rename /settings?tab=extensions alias). The internal state
   // key remains `global-elements` — the UI label changed to "Extensions"
@@ -44,7 +45,7 @@ function SettingsPageInner() {
   // below is the user-visible rename; the internal key is a stability
   // invariant.
   useEffect(() => {
-    const validTabs = ['security', 'hosts', 'domains', 'webhooks', 'help', 'about', 'onboarding', 'experiments', 'marketplace', 'global-elements', 'agents', 'commands', 'cemetery', 'diagnostics'] as const
+    const validTabs = ['security', 'hosts', 'domains', 'webhooks', 'help', 'about', 'onboarding', 'experiments', 'marketplace', 'global-elements', 'agents', 'commands', 'cemetery', 'diagnostics', 'plugin-updates'] as const
     const extensionsAlias = 'extensions'
     if (tabParam === extensionsAlias) {
       setActiveSection('global-elements')
@@ -87,6 +88,7 @@ function SettingsPageInner() {
             {activeSection === 'global-elements' && <GlobalElementsSection initialSubtab={searchParams.get('subtab') as 'plugins' | 'elements' | 'marketplaces' | null} initialMarketplace={searchParams.get('marketplace')} />}
             {activeSection === 'cemetery' && <CemeterySection />}
             {activeSection === 'diagnostics' && <div className="p-6 max-w-4xl"><DiagnosticsSection /></div>}
+            {activeSection === 'plugin-updates' && <PluginUpdatesSection />}
             {activeSection === 'experiments' && <ExperimentsSection />}
             {activeSection === 'onboarding' && <OnboardingSection />}
             {activeSection === 'help' && <HelpSection />}

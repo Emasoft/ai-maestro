@@ -1,8 +1,8 @@
 'use client'
 
-import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store, Puzzle, Bot, TerminalSquare, Archive, Shield, Activity } from 'lucide-react'
+import { Server, HelpCircle, Info, Compass, FlaskConical, Webhook, Globe, Store, Puzzle, Bot, TerminalSquare, Archive, Shield, Activity, RefreshCw } from 'lucide-react'
 
-type SectionId = 'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery' | 'diagnostics'
+type SectionId = 'security' | 'hosts' | 'domains' | 'webhooks' | 'help' | 'about' | 'onboarding' | 'experiments' | 'marketplace' | 'global-elements' | 'agents' | 'commands' | 'cemetery' | 'diagnostics' | 'plugin-updates'
 
 interface SettingsSidebarProps {
   activeSection: SectionId
@@ -69,6 +69,16 @@ export default function SettingsSidebar({ activeSection, onSectionChange }: Sett
       label: 'Cemetery',
       icon: Archive,
       description: 'Revive deleted agents',
+    },
+    {
+      // 2026-05-06: Plugin auto-update settings page. Sits next to
+      // "Extensions" because it's the policy panel for the same plugin
+      // ecosystem the Extensions tab manages by hand. Master toggle +
+      // 7 category checkboxes + interval + "Run now" + last-run log.
+      id: 'plugin-updates' as const,
+      label: 'Plugin Updates',
+      icon: RefreshCw,
+      description: 'Auto-update policy + categories',
     },
     {
       // #234 (2026-04-20): Ledger-health diagnostics panel. Fits here

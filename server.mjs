@@ -1637,6 +1637,21 @@ async function startServer(handleRequest) {
       console.error('[Startup] R17 user-scope guard failed:', error)
     }
 
+    // ── Auto-update scheduler (2026-05-06) ──────────────────────────────
+    // Periodic background scheduler that pulls plugin/marketplace updates
+    // when enabled in Settings -> Plugin Updates. Master toggle defaults
+    // OFF, so unconfigured installs never trigger surprise restarts. The
+    // service is idempotent — calling start/stop twice is a no-op — and
+    // it self-unrefs its timer so this scheduler never blocks a graceful
+    // shutdown.
+    try {
+      const { startAutoUpdateScheduler } = await import('./services/auto-update-service.ts')
+      await startAutoUpdateScheduler()
+      console.log('[Startup] Auto-update scheduler initialized (off by default; enable in Settings → Plugin Updates)')
+    } catch (err) {
+      console.warn('[Startup] Auto-update scheduler init failed (non-fatal):', err?.message || err)
+    }
+
     // R17 compliance is enforced exclusively by the AIO Change* pipelines:
     //   - InstallElement() PG01/PG02/PG05 post-gates
     //   - wakeAgent() R17 gate (services/agents-core-service.ts:1530)
@@ -1784,6 +1799,16 @@ async function startServer(handleRequest) {
   // Graceful shutdown - kill PTYs FIRST before closing server
   const gracefulShutdown = (signal) => {
     console.log(`[Server] Received ${signal}, shutting down gracefully...`)
+
+    // Stop the auto-update scheduler so its setInterval doesn't keep the
+    // event loop alive past the rest of the shutdown sequence. The
+    // scheduler's timer is also unref()'d defensively, but explicit stop
+    // is cheaper and clearer than relying on unref alone.
+    try {
+      import('./services/auto-update-service.ts')
+        .then(m => m.stopAutoUpdateScheduler())
+        .catch(() => { /* best-effort */ })
+    } catch { /* best-effort */ }
 
     // Cancel all auto-continue timers to prevent commands firing during teardown
     if (autoContinueTimers.size > 0) {

@@ -4,11 +4,12 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKe
 import { createPortal } from 'react-dom'
 import { useTerminal } from '@/hooks/useTerminal'
 import { useWebSocket } from '@/hooks/useWebSocket'
+import { usePaneStatus } from '@/hooks/usePaneStatus'
 import { createResizeMessage } from '@/lib/websocket'
 import { useTerminalRegistry } from '@/contexts/TerminalContext'
 import { useDeviceType } from '@/hooks/useDeviceType'
 import MobileKeyToolbar, { ctrlKey, altKey, shiftChar, type ModifiersHandle } from './MobileKeyToolbar'
-import { Paperclip } from 'lucide-react'
+import { Paperclip, Loader2, ShieldAlert } from 'lucide-react'
 import type { Session } from '@/types/session'
 
 const BRACKETED_PASTE_START = '\u001b[200~'
@@ -436,6 +437,25 @@ export default function TerminalView({ session, isVisible = true, hideFooter = f
     },
   })
 
+  // ── Pane-status lock (security) ─────────────────────────────────
+  // Polls /api/sessions/<id>/pane-status every 1.5s so we know whether
+  // an AI program (claude/codex) is actually running in the tmux pane.
+  // When the pane is showing a raw shell prompt — during wake-pending,
+  // post-`/exit`, or the restart gap — input is dropped and an overlay
+  // makes the lock obvious to the user. The user can lift the lock
+  // explicitly via the "Use shell anyway" button on the overlay.
+  const { status: paneStatus } = usePaneStatus(session.id)
+  const [shellOverride, setShellOverride] = useState(false)
+  // Auto-clear the override whenever an AI program comes back up — so the
+  // next exit re-engages the lock. Without this, a single click would
+  // permanently disable the gate for the lifetime of the component.
+  useEffect(() => {
+    if (paneStatus?.programRunning && shellOverride) setShellOverride(false)
+  }, [paneStatus?.programRunning, shellOverride])
+  const isLocked = !!paneStatus && !paneStatus.programRunning && !shellOverride
+  const lockedRef = useRef(isLocked)
+  useEffect(() => { lockedRef.current = isLocked }, [isLocked])
+
   // Refresh terminal: refit to correct dimensions and sync with tmux via resize.
   // Identical to pressing "Auto" — no clearing, just refit + PTY sync.
   const refreshTerminal = useCallback(() => {
@@ -706,6 +726,16 @@ export default function TerminalView({ session, isVisible = true, hideFooter = f
     }
 
     const disposable = terminal.onData((data) => {
+      // ── Pane-lock gate ────────────────────────────────────────────
+      // Drop ALL keyboard input when no AI program is running in the
+      // tmux pane (wake-pending, post-`/exit` raw shell, restart gap)
+      // unless the user has explicitly opted into shell mode via the
+      // overlay. Without this gate, a wake/restart window leaves an
+      // interactive shell at the agent's working directory exposed to
+      // the dashboard — letting a click-bystander or stale tab type
+      // arbitrary commands at the human user's privileges.
+      if (lockedRef.current) return
+
       // Apply toolbar modifier state to keyboard input (supports multi-modifier combos)
       const mods = modifiersRef.current
       if (mods && data.length === 1) {
@@ -794,6 +824,8 @@ export default function TerminalView({ session, isVisible = true, hideFooter = f
     if (!isConnected) return
 
     const handler = (e: Event) => {
+      // Pane-lock gate — same rationale as the keyboard onData gate above.
+      if (lockedRef.current) return
       const detail = (e as CustomEvent).detail
       if (!detail?.message) return
       const text = String(detail.message)
@@ -836,6 +868,8 @@ export default function TerminalView({ session, isVisible = true, hideFooter = f
   // Paste from clipboard (with user gesture - required for mobile)
   const pasteFromClipboard = useCallback(async () => {
     if (!isConnected) return
+    // Pane-lock gate — refuse paste when no AI program is running.
+    if (lockedRef.current) return
 
     try {
       const text = await navigator.clipboard.readText()
@@ -1272,6 +1306,13 @@ export default function TerminalView({ session, isVisible = true, hideFooter = f
     (mode: 'insert' | 'send') => {
       if (!isConnected) {
         console.warn('[PromptBuilder] Not connected, cannot send prompt.')
+        return
+      }
+      // Pane-lock gate — prompt builder MUST NOT be able to bypass the
+      // lock; otherwise the dashboard's "Send" button would happily ship
+      // shell commands to a raw shell prompt.
+      if (lockedRef.current) {
+        console.warn('[PromptBuilder] Pane locked — agent has no AI program running')
         return
       }
       if (!promptDraft || promptDraft.trim().length === 0) {
@@ -1856,6 +1897,62 @@ export default function TerminalView({ session, isVisible = true, hideFooter = f
             position: 'relative',
           }}
         />
+        {/* ── Pane-lock overlay (security) ─────────────────────────
+            Visible whenever the tmux pane has no AI program running
+            (wake-pending, post-`/exit` raw shell, restart gap). The
+            keyboard onData handler, paste handlers, and prompt-builder
+            submit all already drop input via lockedRef.current, so
+            this overlay is a visual + UX layer — it makes the lock
+            obvious AND captures pointer events so xterm can't steal
+            focus while the lock is active. The "Use shell anyway"
+            button is the explicit escape hatch for power users who
+            DO want to type into the bare shell (e.g. recovery).
+        */}
+        {isLocked && (
+          <div
+            className="absolute inset-0 z-30 flex items-center justify-center backdrop-blur-sm"
+            style={{
+              background: 'rgba(15, 23, 42, 0.86)',
+              cursor: 'not-allowed',
+            }}
+            // Capture clicks so the user can't accidentally focus xterm.
+            onMouseDown={e => e.preventDefault()}
+          >
+            <div className="text-center max-w-md px-6">
+              <div className="mb-4 flex items-center justify-center gap-3">
+                <ShieldAlert className="w-7 h-7 text-amber-400" />
+                <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
+              </div>
+              <h3 className="text-amber-300 text-base font-semibold mb-2">
+                Agent terminal locked
+              </h3>
+              <p className="text-gray-300 text-sm leading-relaxed mb-1">
+                No AI program is running in this pane right now —
+                the agent is in transition (waking, restarting, or
+                you typed <code className="text-gray-400">/exit</code>).
+              </p>
+              <p className="text-gray-500 text-xs leading-relaxed mb-4">
+                Input is dropped while a raw shell prompt is exposed to
+                prevent stray keystrokes from running at your login
+                privileges. The lock lifts automatically as soon as
+                the AI program comes back up.
+              </p>
+              {paneStatus?.paneCurrentPath && (
+                <p className="text-gray-600 text-[11px] mb-4 font-mono">
+                  pane cwd: {paneStatus.paneCurrentPath}
+                  {paneStatus.paneCommand && ` · ${paneStatus.paneCommand}`}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => setShellOverride(true)}
+                className="px-4 py-2 text-xs rounded border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 transition-colors"
+              >
+                Use shell anyway (this session)
+              </button>
+            </div>
+          </div>
+        )}
         {/* Touch scroll indicator for xterm — always visible on touch when scrollable */}
         {isTouch && xtermScrollInfo.visible && (
           <div

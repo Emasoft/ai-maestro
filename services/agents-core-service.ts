@@ -296,22 +296,25 @@ export interface UnregisteredSession {
  * sneaks through, it is treated as a literal string by tmux rather than
  * being parsed by /bin/sh.
  */
-function getPaneCommand(tmuxSessionName: string): { paneCommand: string; programRunning: boolean } {
+export function getPaneCommand(tmuxSessionName: string): { paneCommand: string; programRunning: boolean; paneCurrentPath: string } {
   const SHELL_COMMANDS = new Set(['zsh', 'bash', 'sh', 'fish', 'tcsh', 'csh', 'dash'])
   // Defence-in-depth: refuse pathological names before they reach any process spawn
   if (!tmuxSessionName || !/^[a-zA-Z0-9_@.-]+$/.test(tmuxSessionName)) {
-    return { paneCommand: '', programRunning: false }
+    return { paneCommand: '', programRunning: false, paneCurrentPath: '' }
   }
   try {
     const cmd = execFileSync(
       'tmux',
-      ['list-panes', '-t', tmuxSessionName, '-F', '#{pane_current_command}'],
+      ['list-panes', '-t', tmuxSessionName, '-F', '#{pane_current_command}|#{pane_current_path}'],
       { encoding: 'utf-8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'] }
     ).trim()
-    const paneCommand = cmd.split('\n')[0] || ''
-    return { paneCommand, programRunning: !SHELL_COMMANDS.has(paneCommand) }
+    const firstLine = cmd.split('\n')[0] || ''
+    const sepIdx = firstLine.indexOf('|')
+    const paneCommand = sepIdx >= 0 ? firstLine.slice(0, sepIdx) : firstLine
+    const paneCurrentPath = sepIdx >= 0 ? firstLine.slice(sepIdx + 1) : ''
+    return { paneCommand, programRunning: !SHELL_COMMANDS.has(paneCommand), paneCurrentPath }
   } catch {
-    return { paneCommand: '', programRunning: false }
+    return { paneCommand: '', programRunning: false, paneCurrentPath: '' }
   }
 }
 

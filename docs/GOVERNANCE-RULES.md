@@ -1,8 +1,9 @@
 ---
-version: "3.8.0"
+version: "3.9.0"
 date: 2026-05-06
 branch: feature/phase6-jsonl-rebase-test
 changelog:
+  - "3.9.0: Expanded R21 to be the SINGLE COMPLETE source for All-In-One pipeline architecture (IRON). Folded in every AIO rule that previously lived only in the `make-all-in-one` skill: the 3 absolute rules (one-function-per-operation, helpers-must-be-pure, auth-inside-not-outside), the full gate architecture (G00-G99 / EXE / PG01-PG99 numbering, atomic gates, error-reporting by gate code), pre-gate / post-gate canonical sequences, the variant-specific `[VariantName]` bracket convention, the idempotency-gate pattern, the protected-resource four-layer defense, the result contract, the caller contract, the anti-pattern table, and the consolidation procedure. The user's 2026-05-06 composition directive remains verbatim at the top of R21 as load-bearing. With this expansion, GOVERNANCE-RULES.md is the canonical source for governance + AIO + communication rules; only scenario rules stay separate (`tests/scenarios/SCENARIOS_TESTS_RULES.md`) because they depend on per-user tooling choices (browser stack, headless vs visible, etc.)."
   - "3.8.0: Added R21 (All-In-One Pipeline Composition). Codifies the IRON rule that AIO API functions MUST call other AIOs internally when they need to perform a task another AIO already covers — never duplicate logic, never bypass gates with primitive helpers. Names matter: ChangePlugin is an agent-scoped configuration AIO (install/uninstall/enable/disable/update FOR THAT AGENT or user-scope target); UninstallPlugin (cross-agent) is the plugin-scoped AIO that cascades through ChangePlugin per agent; UninstallMarketplace cascades through UninstallPlugin per plugin. Without the cascade, agents are left with dangling enabledPlugins keys pointing at deleted marketplaces — they break. Driven by an audit that found ChangeMarketplace's remove path skipped agent cleanup and G11b in ChangePlugin called updateAgent directly instead of dispatching through ChangeCLIArgs."
   - "3.7.2: Source-vs-install-target clarification (2026-04-20). Added R20.29 and a new 'CRITICAL — source vs install target' block to the R20 intro making explicit that the 3 AI Maestro local-marketplace containers under `~/agents/{role,custom,core}-plugins/` are SOURCE STORAGE only. A plugin LIVES at its install target (the client's own plugin cache) reached via the client's own install protocol — regardless of whether the source was a GitHub URL, a local folder, a remote marketplace, or one of the 3 AI Maestro locals. AI Maestro only WRITES into local sources when it is the author or converter of the plugin. Driven by SCEN-026 authoring feedback."
   - "3.7.1: Drift-remediation pass (2026-04-16). Bumped version to match R20.25 / R20.27 / R20.28 body tags that were already labeled v3.7.1. Fixed R20.28 title count (Six → Five — enumeration has exactly five patterns). Added SCEN-023 and SCEN-024 to §0.8. Removed stale pointer to non-existent `app/api/agents/[id]/title/route.ts` (title changes dispatch via `PATCH /api/agents/[id]` per element-management-service). Clarified Overview wording: one remote marketplace + two local containers (+ one core container for non-Claude clients)."
@@ -844,17 +845,35 @@ These are hard invariants that the system must maintain at all times:
 
 ---
 
-## R21. All-In-One Pipeline Composition (CRITICAL)
+## R21. All-In-One Pipeline Architecture (CRITICAL — IRON)
+
+This section is the **single, complete source** for the AIO architecture. Every rule that previously lived only in the `make-all-in-one` skill is folded in here, plus the user's 2026-05-06 composition directive at the top. Use this — not the skill — as the authoritative reference.
 
 **The user's verbatim directive (2026-05-06) — load-bearing wording, do not paraphrase:**
 
 > macro all-in-one api functions must handle the details via other all-in-one function. for example uninstall marketplace must handle internally the uninstall of all its plugins from all the agents or global scope) before actually uninstalling the marketplace, otherwise the agents will break. this meame that internally they must call the all-in-one function of the sgent, like change-plugin, and it must internally calls the all-in-ones of uninstalling plugins, changing-title, change-team, etc. since all those things are affected (change-plugin all-in-one must also directly take care of enable-disable a plugin in the agent, a task that does not have a dedicated all-in-one since it is part of change-plugin api command of any agent). in other words: you must remember the other all-in-one rule: all-in-one api commands must call internally other all-in-one commands when they need to do something, since they cannot duplicate the functionality internally ("only one way to do one thing, one single piece of code to debug in the whole codebase" is the rule). So for example if the all-in-one api command to change title is called, internally it must call the others all-in-one commands to do the changes to the agent plugins. beware of the names: the aio change-plugin is actually an api function about an agent configuration, not about plugins. uninstalling a plugin completely from all agents instead is a consequence of calling uninstall-plugin, a api function that is about plugins, not about agents. and it is needed by the aio uninstall-marketplace.
 
-### R21.1 — One way to do one thing
+### R21.0 — What an AIO function is
 
-Every sensitive mutation lives in exactly ONE all-in-one (AIO) pipeline function. No second path exists. When an AIO needs to perform a task that an existing AIO already covers, it MUST call that AIO. It MUST NOT re-implement the underlying primitive (`updateAgent`, `loadJsonSafe`, `claude plugin update`, `tmux send-keys`, …) directly, because doing so duplicates logic, skips gates, and creates a parallel debugging surface.
+An all-in-one (AIO) function is a **single pipeline function** that represents the **only way** to perform a specific sensitive operation in the codebase. It consists of a deterministic, linear sequence of numbered gates: pre-execution gates validate whether the operation is allowed and safe, the execution performs the mutation, and post-execution gates repair any state the operation may have broken. The guarantee: **no matter when, from where, or from whom the function is called, it ALWAYS leaves the system in a valid state consistent with the project's rules.**
 
-### R21.2 — Naming convention is part of the rule
+### R21.1 — One Function Per Operation (Rule 1)
+
+For every sensitive mutation (create, delete, update, transfer, assign, revoke, etc.), there exists EXACTLY ONE AIO function. No other code path performs the same mutation. If code elsewhere needs this operation, it calls the AIO function — it never duplicates the logic. **Thin wrappers are forbidden**; they create a second entry point that may drift from the real pipeline. Aliases like `installPluginLocally` that wrap `ChangePlugin(action='install', scope='local')` are deprecated and must be removed.
+
+### R21.2 — Helpers Must Be Pure (Rule 2)
+
+Helper functions may perform read-only checks, lookups, or transformations only. Any function that writes to storage, modifies state, calls external services, or produces side effects MUST be an AIO function with the full gate pipeline. **A helper that mutates is a backdoor that bypasses all safety gates.** This includes shell-outs to CLIs that mutate state — those must be encapsulated inside an AIO, not invoked from a helper.
+
+### R21.3 — Authorization Inside, Not Outside (Rule 3)
+
+Callers verify identity only (who is the requester?). All authorization decisions (is this requester allowed to do this specific operation on this specific target?) happen inside the AIO function at Gate 0 (`gate0Auth`). No caller duplicates authorization checks — the AIO function is the single authority. Routes call `authenticateFromRequest` for identity, then immediately delegate to the AIO. No identity-based fork in the route layer.
+
+### R21.4 — AIO Composition (the 2026-05-06 directive, codified)
+
+When an AIO needs to perform a task that an existing AIO already covers, it MUST call that AIO. It MUST NOT re-implement the underlying primitive (`updateAgent`, `loadJsonSafe`, `claude plugin update`, `tmux send-keys`, …) directly. **"Only one way to do one thing, one single piece of code to debug in the whole codebase."** Inlining a cascaded mutation in a post-gate is forbidden — call the other AIO function so its full gate pipeline runs.
+
+### R21.5 — Naming convention is part of the rule
 
 Names mislead unless interpreted carefully:
 
@@ -870,11 +889,9 @@ Names mislead unless interpreted carefully:
 | `CheckPluginUpdates` | plugin-scoped | Detects which plugins have new versions available. Read-only. |
 | `CheckMarketplaceUpdates` | marketplace-wide | Detects whether a marketplace has new plugin versions or new plugins available. Read-only. |
 
-The "Change*" prefix means **"change the configuration of one entity"** (one agent, one user-scope config). The "Install*Plugin / Uninstall*Plugin / Update*Plugin" verbs (no "Change" prefix) mean **"operate on a plugin across every place it is installed"**. The "InstallMarketplace / UninstallMarketplace / UpdateMarketplace" verbs operate on marketplaces and, when destructive, cascade through the plugin-scoped verbs.
+The "Change*" prefix means "change the configuration of one entity" (one agent, one user-scope config). The "Install*Plugin / Uninstall*Plugin / Update*Plugin" verbs (no "Change" prefix) mean "operate on a plugin across every place it is installed". The "InstallMarketplace / UninstallMarketplace / UpdateMarketplace" verbs operate on marketplaces and, when destructive, cascade through the plugin-scoped verbs. `enable` / `disable` is NOT a separate AIO — it is an action inside `ChangePlugin`'s action enum.
 
-`enable` / `disable` is intentionally NOT a separate AIO. Enable/disable is always per-target (per agent or per user-scope), so it is an action inside `ChangePlugin`'s action enum, not its own AIO.
-
-### R21.3 — Cascade requirements (mandatory)
+### R21.6 — Mandatory cascade chains
 
 The destructive cascade chain is non-negotiable:
 
@@ -889,13 +906,11 @@ UninstallMarketplace(name)
   └─ then remove the marketplace itself (CLI + cache + settings)
 ```
 
-A `UninstallMarketplace` that skips the cascade leaves agents with dangling `<plugin>@<deleted-marketplace>` keys in their `settings.local.json` — those keys reference a marketplace that no longer exists, the next `claude` launch fails, and the agent **breaks**. Identical reasoning applies to `UninstallPlugin` skipping its `ChangePlugin` per-agent cascade: every agent that had the plugin in its enabledPlugins map is left with a stale key.
+A `UninstallMarketplace` that skips the cascade leaves agents with dangling `<plugin>@<deleted-marketplace>` keys in their `settings.local.json` — those keys reference a marketplace that no longer exists, the next `claude` launch fails, and the agent **breaks**. Identical reasoning applies to `UninstallPlugin` skipping its `ChangePlugin` per-agent cascade.
 
-### R21.4 — `ChangeTitle` cascade
+`ChangeTitle` cascades into `ChangePlugin(rolePluginSwap=true)` for role-plugin transitions and into `ChangeTeam` for team-membership changes — never into direct `settings.local.json` or `teams.json` writes.
 
-`ChangeTitle` is a Change-prefixed AIO so its scope is one agent. When it transitions a title that requires a different role-plugin, it MUST call `ChangePlugin(agentId, action='install', rolePluginSwap=true)` and `ChangePlugin(agentId, action='uninstall')` for the old plugin — NOT touch settings.local.json directly. Likewise when a title transition requires a team membership change (e.g. AUTONOMOUS → CHIEF-OF-STAFF requires the agent to be a team member), `ChangeTitle` must call `ChangeTeam`, not mutate `teams.json` itself.
-
-### R21.5 — Cross-cutting six API surface
+### R21.7 — Cross-cutting six API surface
 
 The user-facing API exposes EXACTLY six plugin/marketplace operations:
 
@@ -910,22 +925,193 @@ The user-facing API exposes EXACTLY six plugin/marketplace operations:
 
 Uninstall is reachable through the same surfaces (each Install* AIO has a matching `Uninstall*` cousin reached via DELETE / `action='uninstall'`). New endpoints scattered around the codebase that mutate plugin or marketplace state outside these six pipelines are forbidden.
 
-### R21.6 — Settings-management endpoints are not plugin operations
+### R21.8 — Settings-management endpoints are not plugin operations
 
 Endpoints that read or write *settings* about plugin/marketplace policy (e.g. `GET/PATCH /api/settings/auto-update`, `POST /api/settings/auto-update/run`) are NOT plugin operations and do NOT count against the six. They are configuration endpoints for the policy that drives the AIOs above. The "Run now" trigger calls into the AIOs but does not introduce a parallel mutation path.
 
-### R21.7 — Helpers must remain pure (read-only)
+### R21.9 — Gate Architecture: numbering and naming
 
-Helper functions used by AIOs may perform reads and pure transformations only. Any write — to disk, to the registry, to `settings.json`, to `tmux`, to a remote service — must go through a full AIO pipeline. A helper that writes is a helper that bypasses Gate 0 authorization, the sudo guard, the IBCT scope check, the ledger emitter, the restart-queue notifier, etc. — and is therefore a backdoor.
+Every AIO uses this exact gate numbering — no shortcuts:
 
-### R21.8 — Auditing for compliance
+| Prefix | Meaning | Example |
+|--------|---------|---------|
+| `G00`–`G99` | Pre-execution gate (validates ONE condition) | `G06: Path traversal rejected` |
+| `EXE` | Execution (the mutation itself — unique, not a gate) | `EXE: Record written to database` |
+| `PG01`–`PG99` | Post-execution gate (repairs ONE invariant) | `PG04: Dependent entity repaired via UpdateDependency()` |
 
-Every PR that touches `services/element-management-service.ts` (or any file declaring an AIO) must answer:
-1. Does this AIO call other AIOs for cross-cutting work, or does it duplicate primitive code?
-2. If it removes a plugin/marketplace, does the cascade reach every agent that has the plugin?
-3. Does it call any `loadJsonSafe`/`saveJsonSafe`/`updateAgent` directly when an AIO would have done the job?
+The execution step uses `EXE:`, not a numbered gate, because it is unique and fundamentally different from validation/repair gates. There is exactly one execution per pipeline.
 
-A PR that fails any of those three is a R21 violation and must be refactored before merge.
+### R21.10 — Atomic Gates (one check per gate)
+
+Each gate checks EXACTLY ONE condition. If a gate validates name format AND scope AND target existence, split it into three gates. Composite conditions (NOT/AND/OR/XOR) inside a single check are allowed, but multiple distinct checks are not. This ensures:
+- The operations log pinpoints the exact failure
+- Each gate can be tested independently
+- Gate numbers are stable references in documentation and error messages
+
+**Wrong:** `G00: Validate inputs — name, scope, target all valid`
+**Right:** `G00: Validate name format / G01: Validate scope / G02: Validate target exists`
+
+### R21.11 — Pre-Execution Gates (canonical sequence)
+
+| Gate | Purpose |
+|------|---------|
+| G00 | Authorization (`gate0Auth`) |
+| G01–Gk | Validate each input field (one gate per field) |
+| Gk+1 | Resolve context (lookup target entity from registry) |
+| Gk+2 | Validate resolved context |
+| ... | Path/security checks (no traversal, allowed roots) |
+| ... | Directory/resource exists (or create) |
+| ... | Protected resource guard (e.g. R17 core plugin) |
+| ... | Permission/role guard (e.g. R3 MANAGER singleton) |
+| ... | Idempotency check (skip EXE if already in desired state, BUT post-gates still run) |
+| ... | Dependency check (parent entity exists, marketplace registered, ...) |
+| ... | Status check (system not busy / not hibernated / not reindexing / ...) |
+| Gk+m | Variant detection + variant-specific gates (see R21.14) |
+
+### R21.12 — Execution
+
+The actual mutation — the smallest possible core operation. Write to database, modify a file, call an external API, kill a process, etc. Everything before this is validation; everything after is state repair. Tagged with `EXE:` in the operations log. **Never assigned a `G##` number.**
+
+### R21.13 — Post-Execution Gates
+
+Post-gates ALWAYS run, even when the idempotency gate skipped execution — stale flags or inconsistencies may still need repair.
+
+| Gate | Purpose |
+|------|---------|
+| PG01 | Verify action took effect (read-back check) |
+| PG02 | Update flags/metadata in registry (e.g. `corePluginMissing`) |
+| PG03 | Scope consistency (deduplicate if resource exists at two levels) |
+| PG04 | Dependent entity repair → call another AIO function |
+| PG05 | Protected resource defense in depth → recursive AIO call if guard was bypassed |
+| PG06 | Composition integrity (parent group still meets minimum requirements?) |
+| PG07 | Duplicate detection (same resource at two scope levels?) |
+| PG08 | Restart/notification (set `restartNeeded`, broadcast WebSocket event, ...) |
+
+For every field the execution mutates, ask: **"What invariants in the rest of the system depend on this field?"** For each dependency, add a post-gate that either repairs the invariant or logs a warning for manual intervention. The post-gate must use other AIO functions for cascading mutations — it does not inline the logic (R21.4).
+
+### R21.14 — Variant-Specific Gates (`[VariantName]` brackets)
+
+When the system supports multiple variants of the same operation (different clients, different platforms, different formats), operations that behave differently per variant MUST use **separate sequential gates per variant** rather than a single gate with if/else branches.
+
+```
+G11: Detect client type
+G12: [Claude]  Install plugin via Claude CLI
+G13: [Codex]   Convert plugin to Codex format, then install
+G14: [Gemini]  Convert plugin to Gemini format, then install
+```
+
+Each variant-specific gate:
+- Is prefixed with the variant name in brackets: `[Claude]`, `[Codex]`, etc.
+- Runs ONLY if the detected variant matches; other variant gates are skipped with a log entry
+- Contains the complete logic for that variant — no shared mutable state between variant gates
+- Can call variant-specific helper functions or other AIO functions
+
+### R21.15 — Idempotency Gate
+
+Every AIO SHOULD include an idempotency gate (typically G09) that checks if the desired state is already achieved. If so, the execution is skipped but **post-gates still run** (to repair any stale flags or inconsistencies). This prevents wasted work and avoids duplicate-action errors while still ensuring post-gate invariants are maintained.
+
+### R21.16 — Protected Resource Pattern (four layers)
+
+Resources that must NEVER be removed or disabled (e.g. R17 core plugin, R9 MANAGER singleton, R20.10 marketplace required for core plugin) are defended at FOUR layers:
+
+1. **Pre-gate guard**: a dedicated pre-gate rejects remove/disable for the protected resource. Primary defense.
+2. **Post-gate defense-in-depth**: a post-gate checks if the protected resource was somehow removed despite the pre-gate. If so, restores it via recursive AIO call.
+3. **Startup enforcement**: a periodic server-side check audits all entities for the protected resource's presence; flags missing and attempts repair.
+4. **UI protection**: the UI hides the remove/disable button for protected resources, showing a "core" / "required" / "system" badge instead.
+
+All four layers reinforce each other — removing any one layer should not compromise the invariant.
+
+### R21.17 — Result contract
+
+Every AIO function returns this exact shape:
+
+```ts
+{
+  success: boolean         // Did the full pipeline complete?
+  error?: string           // Human-readable reason if failed (includes gate number)
+  operations: string[]     // Ordered log of every gate's outcome
+  // ... domain-specific fields (entity ID, timestamps, restartNeeded, ...)
+}
+```
+
+The `operations` array is the debug trail. On failure, the last entry shows exactly where and why:
+
+```
+["G00: Name 'user-42' valid",
+ "G05: DENIED — 'user-42' is a protected system account. Cannot delete."]
+```
+
+### R21.18 — Caller contract
+
+Code that calls an AIO function MUST:
+1. Provide identity/auth context (`authContext`) so Gate 0 can decide
+2. Trust the result — if `success=true`, all invariants hold; if `success=false`, nothing was mutated
+3. NEVER perform additional state mutations after the call — post-gates already handled everything
+
+Code that calls an AIO function MUST NOT:
+1. Duplicate gate checks before calling (the AIO checks everything)
+2. Perform cleanup after the call (post-gates did it)
+3. Catch and suppress errors (they indicate invariant violations that must be visible)
+4. Exist as a second path for the same operation (R21.1 violation)
+
+### R21.19 — Anti-Patterns (forbidden)
+
+When asked to write code, refuse these patterns. They violate the AIO architecture:
+
+| Anti-Pattern | Why It's Wrong | Correct Approach |
+|--------------|---------------|------------------|
+| "Create a helper that also writes X" | Helpers must be pure; writes bypass gates | Make it an AIO function with gates (R21.2) |
+| "Add a shortcut function that calls the AIO with defaults" | Two paths = one will drift | Callers call the AIO directly (R21.1) |
+| "Check authorization in the route AND in the function" | Duplicate checks = inconsistent rules | Auth only inside the AIO pipeline (R21.3) |
+| "Add the cleanup logic after the AIO call in the caller" | Callers must not do post-mutation work | Add it as a post-gate in the AIO (R21.18) |
+| "Skip the post-gates for performance" | Invalid state is never acceptable | Every post-gate runs, every time (R21.13) |
+| "Put all validations in one gate" | Non-atomic gates hide which check failed | One check per gate — split (R21.10) |
+| "Use a G## number for the execution step" | Execution is not a gate — it's the mutation | Use `EXE:` prefix (R21.9) |
+| "Handle multiple variants in the same if/else block" | Variant logic gets tangled and untestable | Separate variant-specific gates (R21.14) |
+| "Inline the cascaded mutation in the post-gate" | Bypasses the cascaded operation's own gates | Call the other AIO function (R21.4) |
+| "Shell out to a CLI tool that does what the AIO does" | Bypasses the full gate pipeline | Call the AIO directly (R21.4) |
+| "Add a `fetch('localhost/api/...')` loopback call" | HTTP loopback is fragile, adds latency, loses auth | Import and call the service function directly (R21.4) |
+| "Manually bump a registry flag from a route handler" | Routes do identity, not state mutation | Move the flag bump into a post-gate (R21.13) |
+
+### R21.20 — Consolidation procedure (scattered → AIO)
+
+When multiple functions perform the same operation with slight variations:
+
+1. **Catalog** all functions that perform the operation (grep for the raw mutation)
+2. **Union** all their checks into one gate sequence (no check is lost)
+3. **Union** all their cleanup steps into post-gates (no cleanup is lost)
+4. **Create** the AIO function with the complete gate pipeline
+5. **Replace** all callers to use the AIO function directly
+6. **Delete** all the old scattered functions — no wrappers, no aliases, no compatibility shims
+7. **Verify** no code path bypasses the AIO function (grep for the raw mutation — should hit only the AIO)
+
+### R21.21 — Audit checklist (every PR touching an AIO)
+
+Every PR that touches `services/element-management-service.ts` or any file declaring an AIO must answer:
+1. Does this AIO call other AIOs for cross-cutting work, or does it duplicate primitive code? (R21.4)
+2. If it removes a plugin/marketplace, does the cascade reach every agent that has the plugin? (R21.6)
+3. Does it call any `loadJsonSafe`/`saveJsonSafe`/`updateAgent` directly when an AIO would have done the job? (R21.2)
+4. Are gates atomic (one check each) and numbered consecutively? (R21.10)
+5. Does each variant get its own `[VariantName]` gate, or is the if/else still tangled? (R21.14)
+6. Do post-gates run even when the idempotency gate skipped execution? (R21.13, R21.15)
+
+A PR that fails any of those is a R21 violation and must be refactored before merge.
+
+### R21.22 — Operations that need an AIO
+
+An operation needs an AIO function if ANY of these are true:
+- It writes to persistent storage (database, file, registry)
+- It modifies system state (processes, sessions, permissions)
+- It has authorization requirements (not everyone can do it)
+- Its failure could leave the system in an inconsistent state
+- Multiple places in the code currently perform it (consolidation needed)
+- It has cleanup side effects (cascading deletes, reference updates)
+
+Read-only operations (queries, lookups, calculations) do NOT need AIO functions and SHOULD remain pure helpers (R21.2).
+
+---
+
+**Note on the `make-all-in-one` skill.** The skill at `~/.claude/skills/make-all-in-one/` predates this section. With v3.9.0 the skill is no longer the canonical source — this R21 section is. The skill remains useful as an authoring tutorial (the step-by-step process, the "create or consolidate" workflow), but the load-bearing rules that govern compliance live HERE. If the two ever drift, this section wins.
 
 ---
 

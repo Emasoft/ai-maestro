@@ -106,7 +106,11 @@ export async function POST(
         return NextResponse.json({ error: `Unknown element type: ${elementType}` }, { status: 400 })
     }
 
-    return NextResponse.json({ ok: true, removed: safeName })
+    // Every Change* dispatched above sets restartNeeded=true on success
+    // (removing a skill / agent / rule / command / output-style / MCP all
+    // change claude's loaded element set, so a restart is mandatory).
+    // Forward the flag so the UI can queue the agent for restart.
+    return NextResponse.json({ ok: true, removed: safeName, restartNeeded: true })
   } catch (error) {
     console.error('[remove-element] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

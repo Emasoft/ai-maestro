@@ -287,10 +287,14 @@ export default function AgentProfilePanel({
         throw new Error(err.error || 'Failed to update agent registry')
       }
 
-      // 4. Queue deferred restart — fires automatically when agent reaches idle_prompt safe state
+      // 4. Queue deferred restart — fires automatically when agent reaches
+      //    idle_prompt safe state. We pass NO program/programArgs because
+      //    step 3 just rewrote the registry's programArgs to `newArgs` —
+      //    the /restart endpoint will read it back from there. That's
+      //    more robust than carrying the value through the queue snapshot
+      //    (which would race with any concurrent registry update).
       if (sessionName) {
-        const program = agentInfo?.program || 'claude'
-        queueRestart(sessionName, program, newArgs)
+        queueRestart(sessionName)
       }
       // Notify parent and refresh config — role plugin change should update sidebar + panel
       await refetch()
@@ -301,17 +305,28 @@ export default function AgentProfilePanel({
     }
   }, [config, agentId, agentName, switchingPlugin, sessionStatus, queueRestart, agentInfo, refetch, requestSudoToken])
 
-  // Callback for child components (RoleTab, PluginsTab) to enqueue restart after element changes
+  // Callback for child components (RoleTab, PluginsTab, MarketplacesTab,
+  // ExpandableElementCard, McpTab) to enqueue restart after ANY plugin or
+  // standalone-element mutation. The user contract is: every change to a
+  // plugin or to a standalone element MUST be followed by a stop-and-restart
+  // of the agent's claude session, otherwise the change has no effect on
+  // the running process.
+  //
+  // We pass NO program/programArgs to queueRestart so the /restart endpoint
+  // reads them from the agent registry — which is the single source of
+  // truth after Change* pipelines run. The earlier version was passing the
+  // cached `agentInfo?.programArgs` from React state; that value is STALE
+  // for any change that touches programArgs (ChangeTitle, ChangePlugin
+  // with rolePluginSwap=true, ChangeClient) and produced the bug where
+  // the agent relaunched with the OLD --agent flag despite the new
+  // role-plugin being installed.
   const handleElementChanged = useCallback(async () => {
-    await refetch() // Reload config first
-    // Enqueue restart if agent has an active session
+    await refetch() // Reload local config (skills, agents, hooks, etc.)
     const sessionName = sessionStatus?.tmuxSessionName
     if (sessionName) {
-      const program = agentInfo?.program || 'claude'
-      const args = agentInfo?.programArgs || ''
-      queueRestart(sessionName, program, args)
+      queueRestart(sessionName)
     }
-  }, [refetch, sessionStatus, agentInfo, queueRestart])
+  }, [refetch, sessionStatus, queueRestart])
 
   // SCEN-016.03 (2026-04-30): handler for the Config tab's Program dropdown.
   // PATCHes /api/agents/{id} { program } via sudoFetch. The strict-route

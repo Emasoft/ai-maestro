@@ -1175,7 +1175,25 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                             <span className="text-[9px] text-amber-400/70 bg-amber-500/10 rounded px-1.5 py-0.5 flex-shrink-0">conflict</span>
                           )}
                           {plugin.key && (
-                            <PluginToggle agentId={agent.id} pluginKey={plugin.key} enabled={plugin.enabled} onToggled={() => { refetchLocalConfig(); onDataChangedRef.current?.() }} />
+                            <PluginToggle
+                              agentId={agent.id}
+                              pluginKey={plugin.key}
+                              enabled={plugin.enabled}
+                              onToggled={() => {
+                                refetchLocalConfig()
+                                onDataChangedRef.current?.()
+                                // Plugin enable/disable changes claude's loaded
+                                // skills/agents/hooks/MCP. Without a restart, the
+                                // toggle has no observable effect — claude keeps
+                                // running with the previous element set. Queue the
+                                // restart with no explicit args so the server uses
+                                // the registry's current programArgs (which the
+                                // ChangePlugin pipeline DID NOT need to touch —
+                                // enable/disable only flips the settings flag).
+                                const sn = sessionStatus?.tmuxSessionName || agent?.name
+                                if (sn) queueRestart(sn)
+                              }}
+                            />
                           )}
                         </div>
                       ))}
@@ -1594,14 +1612,15 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
               }
             }
 
-            // Queue the restart with the freshly-fetched args. We pass the
-            // values from `freshAgent` (the just-fetched object) instead of
-            // the React `agent` state because setAgent's update is async —
-            // this closure still sees the pre-fetch value of `agent`.
+            // Queue the restart. We pass NO program/programArgs — under
+            // the new optional-fields contract that means "use the
+            // registry as the source of truth", which is exactly what we
+            // want here: ChangeTitle's G16b just rewrote programArgs in
+            // the registry, and forwarding that fresh value through the
+            // restart endpoint is more robust than carrying it through
+            // React state (where it would be stale).
             const sn = sessionStatus?.tmuxSessionName || freshAgent?.name
-            if (sn && freshAgent) {
-              queueRestart(sn, freshAgent.program || 'claude', freshAgent.programArgs || '')
-            }
+            if (sn) queueRestart(sn)
 
             onDataChangedRef.current?.()
           }}

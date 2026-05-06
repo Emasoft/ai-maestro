@@ -56,7 +56,12 @@ export async function POST(
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
-    return NextResponse.json({ success: true, key, enabled })
+    // Forward restartNeeded so the UI can re-queue the agent's session
+    // for restart. ChangePlugin always sets it true for state mutations,
+    // but we propagate the actual value rather than hard-coding it —
+    // future pipeline gates (e.g. no-op idempotent paths) may flip it
+    // false and we want the UI to honour that.
+    return NextResponse.json({ success: true, key, enabled, restartNeeded: result.restartNeeded })
   } catch (error) {
     console.error('[local-plugins] POST failed:', error)
     return NextResponse.json({ error: 'Failed to toggle plugin' }, { status: 500 })

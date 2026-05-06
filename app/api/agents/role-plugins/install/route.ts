@@ -76,7 +76,9 @@ export async function POST(req: NextRequest) {
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
-    return NextResponse.json({ success: true })
+    // Forward restartNeeded so the caller can queue the agent for restart.
+    // ChangePlugin sets it true for any state mutation; we trust its value.
+    return NextResponse.json({ success: true, restartNeeded: result.restartNeeded })
   } catch (error) {
     console.error('[role-plugins/install]', error)
     return NextResponse.json({ error: 'internal_error', code: 'role-plugins-install' }, { status: 500 })
@@ -127,7 +129,9 @@ export async function DELETE(req: NextRequest) {
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
-    return NextResponse.json({ success: true })
+    // Forward restartNeeded — same rationale as POST: an uninstall always
+    // changes claude's loaded element set, so a restart is mandatory.
+    return NextResponse.json({ success: true, restartNeeded: result.restartNeeded })
   } catch (error) {
     console.error('[role-plugins/install] uninstall:', error)
     return NextResponse.json({ error: 'internal_error', code: 'role-plugins-uninstall' }, { status: 500 })

@@ -3118,6 +3118,61 @@ export async function ChangePlugin(
       ops.push(`G11: Final state verified`)
     }
 
+    // ── G11b: Role-plugin-swap programArgs rewrite ───────────
+    // When this is a role-plugin SWAP install (RoleTab N:1 dropdown,
+    // ChangeTitle's internal role-plugin transition, or any other path
+    // that sets rolePluginSwap=true), the agent's persisted programArgs
+    // is almost certainly carrying `--agent <old-plugin>-main-agent`
+    // from the previous role. After the swap, that main-agent file is
+    // gone — claude either falls back to the default persona or refuses
+    // to launch on the next restart, depending on the client. Rewrite
+    // the flag here so the registry's programArgs is self-consistent
+    // with the just-installed plugin. /api/sessions/[id]/restart will
+    // then read the correct value back from the registry.
+    //
+    // Bound conditions (intentionally narrow):
+    //   - rolePluginSwap === true (caller opted in to role-plugin semantics)
+    //   - action === 'install' (uninstall has no new --agent target)
+    //   - agentDir resolves an agent (lookup by id, fallback by workdir)
+    //   - target agent's client is claude (--agent is claude-specific)
+    //
+    // Skipped silently for non-claude clients — Codex/Gemini/Kiro pick
+    // the persona from per-client manifest files, not from a CLI flag.
+    if (
+      desired.rolePluginSwap === true &&
+      desired.action === 'install' &&
+      agentDir
+    ) {
+      try {
+        const { loadAgents, updateAgent } = await import('@/lib/agent-registry')
+        const all = loadAgents()
+        const owner = agentId
+          ? all.find(a => a.id === agentId && !a.deletedAt)
+          : all.find(a => a.workingDirectory === agentDir && !a.deletedAt)
+        if (!owner) {
+          ops.push(`G11b: SKIP — no agent owns ${agentDir} (was the agent deleted mid-install?)`)
+        } else if ((owner.program || 'claude') !== 'claude') {
+          ops.push(`G11b: SKIP — agent ${owner.id} runs ${owner.program}, not claude`)
+        } else {
+          const { setClaudeAgentFlag, mainAgentNameForPlugin } = await import('@/lib/program-args')
+          const newMainAgent = mainAgentNameForPlugin(desired.name)
+          const oldArgs = owner.programArgs || ''
+          const newArgs = setClaudeAgentFlag(oldArgs, newMainAgent)
+          if (newArgs !== oldArgs) {
+            await updateAgent(owner.id, { programArgs: newArgs })
+            ops.push(`G11b: programArgs rewritten — --agent ${newMainAgent}`)
+          } else {
+            ops.push(`G11b: programArgs already correct for ${desired.name}`)
+          }
+        }
+      } catch (err) {
+        // Best-effort — a registry write failure here doesn't unwind the
+        // plugin install (which already succeeded). Log and continue;
+        // the user can manually correct via the Profile panel if needed.
+        ops.push(`G11b: WARN — programArgs rewrite failed: ${err instanceof Error ? err.message : err}`)
+      }
+    }
+
     // ── G12: Determine restart needed ─────────────────────────
     // All plugin state mutations require restart
     result.restartNeeded = true

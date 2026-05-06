@@ -28,6 +28,13 @@ const {
   mockFsExistsSync: vi.fn().mockReturnValue(false),
   mockAgentRegistry: {
     getAgent: vi.fn(),
+    // 2026-05-06: ChangePlugin's G11b (rolePluginSwap programArgs rewrite)
+    // calls loadAgents() to find an agent by workingDirectory when agentId
+    // is null, and updateAgent() to persist the rewritten programArgs.
+    // Default mocks return empty/no-op so tests that don't use G11b are
+    // unaffected.
+    loadAgents: vi.fn().mockReturnValue([]),
+    updateAgent: vi.fn().mockResolvedValue(undefined),
   },
   mockClientCapabilities: {
     detectClientType: vi.fn().mockReturnValue('claude'),
@@ -860,6 +867,144 @@ describe('element-management-service', () => {
         ['plugin', 'update', 'my-plugin', 'some-marketplace', '--scope', 'user'],
         expect.objectContaining({ timeout: 120000 }),
       )
+    })
+
+    // ── G11b: rolePluginSwap programArgs rewrite ─────────────
+    // Verifies the gate added 2026-05-06 that prevents the RoleTab N:1
+    // dropdown from leaving an agent's --agent flag pointing at the OLD
+    // role-plugin's main-agent file (which no longer exists post-swap),
+    // so the next /api/sessions/[id]/restart relaunches claude with the
+    // CORRECT --agent flag without the UI having to do a separate PATCH.
+    describe('G11b: rolePluginSwap programArgs rewrite', () => {
+      it('rewrites --agent flag when rolePluginSwap=true and action=install', async () => {
+        // Set up: a claude agent currently using the old role-plugin
+        const agent = makeAgent({
+          id: 'agent-swap-1',
+          program: 'claude',
+          programArgs: '--agent old-plugin-main-agent --name my-bot',
+          workingDirectory: '/tmp/agent-swap-1',
+        })
+        mockAgentRegistry.getAgent.mockReturnValue(agent)
+        mockAgentRegistry.loadAgents.mockReturnValue([agent])
+        mockAgentRegistry.updateAgent.mockResolvedValue(undefined)
+        // Plugin install path: the current settings.local.json doesn't
+        // contain the new plugin yet, so install proceeds (no idempotent skip).
+        mockFsExistsSync.mockReturnValue(false)
+
+        const { ChangePlugin } = await import('@/services/element-management-service')
+        const result = await ChangePlugin(agent.id, {
+          name: 'new-role-plugin',
+          marketplace: 'some-marketplace',
+          action: 'install',
+          scope: 'local',
+          agentDir: agent.workingDirectory,
+          rolePluginSwap: true,
+        }, _tAuth)
+
+        expect(result.success).toBe(true)
+        expect(result.restartNeeded).toBe(true)
+        // updateAgent should have been called with the rewritten args:
+        // --agent <newPlugin>-main-agent --name my-bot
+        expect(mockAgentRegistry.updateAgent).toHaveBeenCalledWith(
+          agent.id,
+          expect.objectContaining({
+            programArgs: expect.stringContaining('--agent new-role-plugin-main-agent'),
+          }),
+        )
+      })
+
+      it('does NOT rewrite when rolePluginSwap is false (regular install)', async () => {
+        const agent = makeAgent({
+          id: 'agent-noswap-1',
+          program: 'claude',
+          programArgs: '--agent existing-main-agent --name my-bot',
+          workingDirectory: '/tmp/agent-noswap-1',
+        })
+        mockAgentRegistry.getAgent.mockReturnValue(agent)
+        mockAgentRegistry.loadAgents.mockReturnValue([agent])
+        mockAgentRegistry.updateAgent.mockResolvedValue(undefined)
+        mockFsExistsSync.mockReturnValue(false)
+
+        const { ChangePlugin } = await import('@/services/element-management-service')
+        const result = await ChangePlugin(agent.id, {
+          name: 'just-a-normal-plugin',
+          marketplace: 'some-marketplace',
+          action: 'install',
+          scope: 'local',
+          agentDir: agent.workingDirectory,
+          // rolePluginSwap omitted (default false)
+        }, _tAuth)
+
+        expect(result.success).toBe(true)
+        // Plain install must NOT touch programArgs — that flag is reserved
+        // for role-plugin swaps (RoleTab N:1) and ChangeTitle's internal
+        // role-plugin transition (which has its own G16b).
+        expect(mockAgentRegistry.updateAgent).not.toHaveBeenCalled()
+      })
+
+      it('does NOT rewrite for non-claude agents (codex, gemini, etc.)', async () => {
+        // --agent is a claude-specific CLI flag. Codex/Gemini/Kiro pick
+        // their persona from per-client manifest files installed by the
+        // adapter, so a programArgs rewrite would be both useless AND
+        // potentially harmful (mangling a codex-specific arg string).
+        const agent = makeAgent({
+          id: 'agent-codex-1',
+          program: 'codex',
+          programArgs: '--profile some-profile',
+          workingDirectory: '/tmp/agent-codex-1',
+        })
+        mockAgentRegistry.getAgent.mockReturnValue(agent)
+        mockAgentRegistry.loadAgents.mockReturnValue([agent])
+        mockAgentRegistry.updateAgent.mockResolvedValue(undefined)
+        mockFsExistsSync.mockReturnValue(false)
+
+        const { ChangePlugin } = await import('@/services/element-management-service')
+        const result = await ChangePlugin(agent.id, {
+          name: 'new-role-plugin',
+          marketplace: 'some-marketplace',
+          action: 'install',
+          scope: 'local',
+          agentDir: agent.workingDirectory,
+          rolePluginSwap: true,
+        }, _tAuth)
+
+        expect(result.success).toBe(true)
+        expect(mockAgentRegistry.updateAgent).not.toHaveBeenCalled()
+      })
+
+      it('does NOT rewrite on uninstall (no new --agent target exists)', async () => {
+        const agent = makeAgent({
+          id: 'agent-swap-uninstall-1',
+          program: 'claude',
+          programArgs: '--agent some-plugin-main-agent --name my-bot',
+          workingDirectory: '/tmp/agent-swap-uninstall-1',
+        })
+        mockAgentRegistry.getAgent.mockReturnValue(agent)
+        mockAgentRegistry.loadAgents.mockReturnValue([agent])
+        mockAgentRegistry.updateAgent.mockResolvedValue(undefined)
+        // Settings file MUST exist for the uninstall to proceed past the
+        // idempotency check (otherwise it short-circuits as "nothing to
+        // remove" and never reaches G11b).
+        mockFsExistsSync.mockReturnValue(true)
+        mockFsReadFile.mockResolvedValue(JSON.stringify({
+          enabledPlugins: { 'some-plugin@some-marketplace': true },
+        }))
+
+        const { ChangePlugin } = await import('@/services/element-management-service')
+        const result = await ChangePlugin(agent.id, {
+          name: 'some-plugin',
+          marketplace: 'some-marketplace',
+          action: 'uninstall',
+          scope: 'local',
+          agentDir: agent.workingDirectory,
+          rolePluginSwap: true,
+        }, _tAuth)
+
+        // Uninstall path doesn't have a "new" plugin to point --agent at,
+        // so G11b skips the rewrite even though rolePluginSwap=true.
+        expect(result.success).toBe(true)
+        expect(mockAgentRegistry.updateAgent).not.toHaveBeenCalled()
+      })
     })
   })
 

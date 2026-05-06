@@ -849,6 +849,12 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
         if (!titleResult.success) {
           return { error: titleResult.error || 'ChangeTitle failed', status: 409 }
         }
+        // OR-merge: any Change* signalling restartNeeded forces the
+        // PATCH response to carry the flag. Required so the UI queues
+        // a stop-and-restart for ANY plugin / element / governance
+        // mutation that lands through PATCH /api/agents/[id], not
+        // only ChangeClient (the historical asymmetry).
+        if (titleResult.restartNeeded) sideChannel.restartNeeded = true
         anyChangeExecuted = true
       } catch (err) {
         return { error: err instanceof Error ? err.message : 'ChangeTitle crashed', status: 500 }
@@ -864,6 +870,11 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
         if (!nameResult.success) {
           return { error: nameResult.error || 'ChangeName failed', status: 409 }
         }
+        // ChangeName renames the tmux session — claude is still attached
+        // to the same pane so no restart is strictly needed here, but if
+        // a future Change* gate flips this to true the OR-merge below
+        // honours it without further code changes.
+        if ((nameResult as { restartNeeded?: boolean }).restartNeeded) sideChannel.restartNeeded = true
         anyChangeExecuted = true
       } catch (err) {
         return { error: err instanceof Error ? err.message : 'ChangeName crashed', status: 500 }
@@ -879,6 +890,9 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
         if (!folderResult.success) {
           return { error: folderResult.error || 'ChangeFolder failed', status: 409 }
         }
+        // ChangeFolder sets restartNeeded=true: the agent's launch CWD
+        // changes, so claude must be relaunched in the new dir.
+        if ((folderResult as { restartNeeded?: boolean }).restartNeeded) sideChannel.restartNeeded = true
         anyChangeExecuted = true
       } catch (err) {
         return { error: err instanceof Error ? err.message : 'ChangeFolder crashed', status: 500 }
@@ -894,6 +908,9 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
         if (!avatarResult.success) {
           return { error: avatarResult.error || 'ChangeAvatar failed', status: 409 }
         }
+        // ChangeAvatar is cosmetic — no restart needed, but propagate
+        // the flag if a future gate sets it.
+        if ((avatarResult as { restartNeeded?: boolean }).restartNeeded) sideChannel.restartNeeded = true
         anyChangeExecuted = true
       } catch (err) {
         return { error: err instanceof Error ? err.message : 'ChangeAvatar crashed', status: 500 }
@@ -909,6 +926,9 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
         if (!argsResult.success) {
           return { error: argsResult.error || 'ChangeCLIArgs failed', status: 409 }
         }
+        // ChangeCLIArgs sets restartNeeded=true: the new args only take
+        // effect on the next claude launch.
+        if ((argsResult as { restartNeeded?: boolean }).restartNeeded) sideChannel.restartNeeded = true
         anyChangeExecuted = true
       } catch (err) {
         return { error: err instanceof Error ? err.message : 'ChangeCLIArgs crashed', status: 500 }
@@ -944,7 +964,11 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
         if (!clientResult.success) {
           return { error: clientResult.error || 'Client change failed', status: 409 }
         }
-        sideChannel.restartNeeded = clientResult.restartNeeded
+        // OR-merge (not override): a multi-field PATCH that includes both
+        // a title change AND a client change must report restart=true if
+        // EITHER pipeline asked for it. The previous `=` assignment
+        // silently clobbered ChangeTitle's signal.
+        if (clientResult.restartNeeded) sideChannel.restartNeeded = true
         // SVC2-MIN-07: removed the always-empty `sideChannel.warnings = []`
         // placeholder. ChangeResult does not yet carry a warnings array;
         // until it does, we let the field be undefined and the response

@@ -150,6 +150,19 @@ export class JsonlReader extends EventEmitter {
   private readonly sessionsByPath = new Map<string, OpenSessionEntry>()
   /** Map: sessionId → entry (for read/search/close). */
   private readonly sessionsById = new Map<string, OpenSessionEntry>()
+  /**
+   * Per-path open() locks. When two requests call `open(samePath)` in
+   * parallel and the cache is stale, the SECOND caller MUST wait for
+   * the FIRST to finish — otherwise both would issue close+open and
+   * the in-flight operation of the first caller (read_range,
+   * context_breakdown, search) would race against the second caller's
+   * close, surfacing as `session_not_found`.
+   *
+   * Map entry is the in-flight Promise. New callers `await` it. The
+   * entry is removed in a `finally` so subsequent callers re-enter
+   * the real open path.
+   */
+  private readonly openLocks = new Map<string, Promise<OpenOkResponse>>()
   private sweepTimer: NodeJS.Timeout | null = null
   private readonly binaryPath: string
   private readonly idleTtlMs: number
@@ -338,6 +351,25 @@ export class JsonlReader extends EventEmitter {
    * sparse-index file rather than re-scanning every line).
    */
   async open(filePath: string): Promise<OpenOkResponse> {
+    // Serialize concurrent opens on the same path. See `openLocks`
+    // doc comment — without this lock, parallel callers can race
+    // each other's close+reopen and produce a transient
+    // `session_not_found` for an in-flight read_range / context_breakdown.
+    const inFlight = this.openLocks.get(filePath)
+    if (inFlight) {
+      return inFlight
+    }
+    const promise = this._openImpl(filePath).finally(() => {
+      // Best-effort delete — even if the open threw, drop the lock
+      // so the next caller can retry. The cache entry is only written
+      // on success, so a failed open leaves no zombie state.
+      this.openLocks.delete(filePath)
+    })
+    this.openLocks.set(filePath, promise)
+    return promise
+  }
+
+  private async _openImpl(filePath: string): Promise<OpenOkResponse> {
     let currentSize: number | null = null
     let currentMtimeMs: number | null = null
     try {

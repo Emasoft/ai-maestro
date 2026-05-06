@@ -532,6 +532,17 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
   const sessionsRef = useRef(sessions)
   useEffect(() => { sessionsRef.current = sessions }, [sessions])
 
+  // Memoize the resolved absolute path for the selected session. This is
+  // stable across poll-tick re-renders (the path doesn't change once the
+  // file exists), so effects keyed on it don't fire on every list refresh —
+  // but they DO fire exactly once when the URL-direct-selected session's
+  // summary finally arrives, fixing the "load before list" race that
+  // produced `range_failed:404:session_not_found` at initial mount.
+  const selectedSessionPath = useMemo(() => {
+    if (!selectedSessionId) return undefined
+    return sessions.find(s => s.id === selectedSessionId)?.path
+  }, [sessions, selectedSessionId])
+
   // Reset + load first page whenever the selected sid changes.
   useEffect(() => {
     if (inFlightRef.current) {
@@ -545,13 +556,26 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
 
     if (!selectedSessionId) return
 
+    // If the sessions list hasn't resolved yet, defer the initial fetch
+    // until the path is known. Without `?path=` the API can't resolve the
+    // sid across Next.js dev workers (per-process `sidToPath` cache), so
+    // firing the request now would 404 and leave a permanent
+    // `range_failed:404:session_not_found` error in the UI even though
+    // the session is perfectly loadable.
+    //
+    // The exception: `listLoading === false` AND `selectedSessionPath`
+    // still undefined means the session genuinely is not in the list
+    // (deleted, or the user passed a stale URL sid) — let the request go
+    // through so the user sees a real error instead of a stuck spinner.
+    if (selectedSessionPath === undefined && listLoading) return
+
     // Resolve the session's line count if known from the list. We read
     // via the ref so a list-refresh (size/mtime tick) does NOT fire this
     // effect again — fixing the "transcript clears every 2 s" bug.
     const summary = sessionsRef.current.find(s => s.id === selectedSessionId)
     const hintedCount = summary?.messageCount ?? null
     setTotalLines(hintedCount)
-    const sessionPath = summary?.path
+    const sessionPath = selectedSessionPath
 
     const ctrl = new AbortController()
     inFlightRef.current = ctrl
@@ -585,7 +609,11 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     return () => {
       ctrl.abort()
     }
-  }, [selectedSessionId, pageSize])
+    // selectedSessionPath + listLoading are in deps so the effect re-fires
+    // exactly once when a URL-direct selection's summary arrives — without
+    // them, the initial load races the sessions list and 404s against the
+    // per-worker sidToPath cache.
+  }, [selectedSessionId, pageSize, selectedSessionPath, listLoading])
 
   const loadMore = useCallback(() => {
     if (!selectedSessionId) return
@@ -644,8 +672,12 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
 
   useEffect(() => {
     if (!selectedSessionId) return
-    const summary = sessionsRef.current.find(s => s.id === selectedSessionId)
-    const sessionPath = summary?.path
+    // Same load-before-list guard as the transcript initial-load effect:
+    // defer until either the path is resolved or the list has finished
+    // loading. Otherwise the breakdown 404s against the per-worker
+    // sidToPath cache and surfaces a transient error in the panel.
+    if (selectedSessionPath === undefined && listLoading) return
+    const sessionPath = selectedSessionPath
     const ctrl = new AbortController()
     setBreakdownLoading(true)
     fetchContextBreakdown(selectedSessionId, sessionPath, ctrl.signal)
@@ -664,7 +696,10 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
         if (!ctrl.signal.aborted) setBreakdownLoading(false)
       })
     return () => ctrl.abort()
-  }, [selectedSessionId, breakdownReloadTick])
+    // selectedSessionPath + listLoading are in deps so the effect re-fires
+    // exactly once when a URL-direct selection's summary arrives — see the
+    // transcript initial-load effect for the same race fix.
+  }, [selectedSessionId, breakdownReloadTick, selectedSessionPath, listLoading])
 
   // Live-tail polling -----------------------------------------------------
   // While a session is selected, poll every LIVE_TAIL_INTERVAL_MS to:

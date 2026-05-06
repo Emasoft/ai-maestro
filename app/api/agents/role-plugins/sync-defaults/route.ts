@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
       ...result,
     })
   } catch (error) {
+    // MIN-01: log full error server-side, return generic 500.
     console.error('[role-plugins/sync-defaults] Sync failed:', error)
-    const message = error instanceof Error ? error.message : 'Failed to sync default role plugins'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: 'internal_error', code: 'role-plugins-sync-defaults' }, { status: 500 })
   }
 }

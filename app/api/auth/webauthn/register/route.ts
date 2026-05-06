@@ -52,8 +52,9 @@ export async function GET(request: Request) {
       headers: { 'Cache-Control': 'no-store' },
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to generate registration options'
-    return NextResponse.json({ error: message }, { status: 500 })
+    // MIN-01: log full error server-side, return generic 500.
+    console.error('[webauthn/register GET]', err)
+    return NextResponse.json({ error: 'internal_error', code: 'webauthn-register-options' }, { status: 500 })
   }
 }
 
@@ -61,6 +62,8 @@ export async function GET(request: Request) {
 // POST — Verify registration response and store credential
 // ============================================================================
 
+// API2-MAJ-20: .strict() at every level — defense in depth against extra
+// fields that simplewebauthn's verifier might silently accept.
 const RegistrationBodySchema = z.object({
   response: z.object({
     id: z.string(),
@@ -72,13 +75,13 @@ const RegistrationBodySchema = z.object({
       transports: z.array(z.string()).optional(),
       publicKeyAlgorithm: z.number().optional(),
       publicKey: z.string().optional(),
-    }),
+    }).strict(),
     authenticatorAttachment: z.string().optional(),
     clientExtensionResults: z.record(z.string(), z.unknown()),
     type: z.string(),
-  }),
+  }).strict(),
   label: z.string().min(1).max(100).default('Passkey'),
-})
+}).strict()
 
 export async function POST(request: Request) {
   // Must be authenticated (system-owner session)
@@ -137,13 +140,19 @@ export async function POST(request: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Registration failed'
 
-    // Distinguish client errors from server errors
-    if (message.includes('webauthn_challenge_expired') ||
-        message.includes('webauthn_verification_failed') ||
-        message.includes('webauthn_duplicate')) {
-      return NextResponse.json({ error: message }, { status: 400 })
+    // Only expose well-known webauthn protocol error codes (not raw text).
+    if (message.includes('webauthn_challenge_expired')) {
+      return NextResponse.json({ error: 'webauthn_challenge_expired' }, { status: 400 })
+    }
+    if (message.includes('webauthn_verification_failed')) {
+      return NextResponse.json({ error: 'webauthn_verification_failed' }, { status: 400 })
+    }
+    if (message.includes('webauthn_duplicate')) {
+      return NextResponse.json({ error: 'webauthn_duplicate' }, { status: 400 })
     }
 
-    return NextResponse.json({ error: message }, { status: 500 })
+    // MIN-01: log full error server-side, return generic 500.
+    console.error('[webauthn/register POST]', err)
+    return NextResponse.json({ error: 'internal_error', code: 'webauthn-register' }, { status: 500 })
   }
 }

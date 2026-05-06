@@ -222,6 +222,15 @@ export function useAgents() {
   const [hostErrors, setHostErrors] = useState<Record<string, Error>>({})
   const hasLoadedOnce = useRef(false)
   const requestIdRef = useRef(0)
+  // UI2-MAJ-14: track mount state. The requestIdRef guard prevents stale
+  // RESPONSES from updating state, but it does NOT prevent the initial
+  // setLoading(true) flicker or the finally{} setLoading(false) call from
+  // firing on the unmounted component when navigating away during a poll.
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false }
+  }, [])
 
   const loadAgents = useCallback(async () => {
     if (hosts.length === 0) {
@@ -231,6 +240,8 @@ export function useAgents() {
     const myRequestId = ++requestIdRef.current
 
     try {
+      // UI2-MAJ-14: bail before any setState if the hook unmounted
+      if (!isMountedRef.current) return
       setLoading(true)
       setError(null)
       setHostErrors({})
@@ -248,6 +259,8 @@ export function useAgents() {
       if (remoteHosts.length > 0 && !hasLoadedOnce.current) {
         // Guard: a newer request superseded this one — abandon stale update
         if (requestIdRef.current !== myRequestId) return
+        // UI2-MAJ-14: also guard by mount state
+        if (!isMountedRef.current) return
         const { agents: localAgents, unregisteredSessions: localUnreg, stats: localStats, hostErrors: localErrors } = aggregateResults(localResults)
         setAgents(localAgents)
         setUnregisteredSessions(localUnreg)
@@ -267,6 +280,8 @@ export function useAgents() {
 
       // Guard: a newer request superseded this one — abandon stale update
       if (requestIdRef.current !== myRequestId) return
+      // UI2-MAJ-14: also guard by mount state
+      if (!isMountedRef.current) return
 
       setAgents(allAgents)
       setUnregisteredSessions(allUnreg)
@@ -286,9 +301,15 @@ export function useAgents() {
 
     } catch (err) {
       console.error('[useAgents] Failed to load agents:', err)
-      setError(err instanceof Error ? err : new Error('Unknown error'))
+      // UI2-MAJ-14: gate setError by mount
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err : new Error('Unknown error'))
+      }
     } finally {
-      setLoading(false)
+      // UI2-MAJ-14: gate the always-fires setLoading(false) by mount
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
     }
   }, [hosts])
 

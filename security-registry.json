@@ -36,9 +36,16 @@
     "DELETE_/api/settings/marketplaces": "strict",
     "DELETE_/api/agents/role-plugins": "strict",
     "DELETE_/api/agents/role-plugins/install": "strict",
+    "POST_/api/agents/role-plugins/install": "strict",
     "PATCH_/api/agents/[id]/title": "strict",
     "POST_/api/sessions/[id]/stop": "strict",
     "POST_/api/sessions/[id]/restart": "strict",
-    "PATCH_/api/settings/security": "strict"
+    "POST_/api/sessions/[id]/kill": "strict",
+    "DELETE_/api/sessions/[id]": "strict",
+    "PATCH_/api/settings/security": "strict",
+    "DELETE_/api/v1/agents/me": "strict",
+    "POST_/api/agents/cemetery": "strict",
+    "POST_/api/agents/import": "strict",
+    "POST_/api/agents/[id]/transfer": "strict"
   }
 }

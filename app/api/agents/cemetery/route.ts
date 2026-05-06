@@ -140,6 +140,11 @@ export async function GET(request: NextRequest) {
  * The agent is imported from the zip using the existing import pipeline.
  */
 export async function POST(request: NextRequest) {
+  // API2-MAJ-07: revive is the inverse of delete. It re-materializes a
+  // fully-credentialed agent from a zip on disk. Sudo gate first.
+  const sudoErr = requireSudoToken(request, 'POST', '/api/agents/cemetery')
+  if (sudoErr) return sudoErr
+
   const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
@@ -158,6 +163,17 @@ export async function POST(request: NextRequest) {
 
     if (!body.filename) {
       return NextResponse.json({ error: 'filename is required' }, { status: 400 })
+    }
+
+    // API2-MIN-15: validate targetName regex when provided to prevent
+    // creating agents with invalid names that break elsewhere.
+    if (body.targetName !== undefined) {
+      if (typeof body.targetName !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(body.targetName)) {
+        return NextResponse.json({ error: 'Invalid targetName — only alphanumeric, hyphens, and underscores allowed' }, { status: 400 })
+      }
+      if (body.targetName.length < 1 || body.targetName.length > 64) {
+        return NextResponse.json({ error: 'targetName must be 1-64 characters' }, { status: 400 })
+      }
     }
 
     // Sanitize filename — prevent path traversal

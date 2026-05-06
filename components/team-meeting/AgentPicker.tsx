@@ -48,11 +48,25 @@ export default function AgentPicker({ agents, selectedAgentIds, onToggleAgent }:
           const displayName = agent.label || agent.name || agent.id.slice(0, 8)
 
           return (
+            // UI2-MAJ-01: Multi-select grid, so use role="checkbox" + aria-checked
+            // for proper screen-reader semantics. Keyboard activation via
+            // Enter/Space toggles selection (matches mouse onClick).
             <div
               key={agent.id}
+              role="checkbox"
+              aria-checked={isSelected}
+              aria-label={`${displayName}${isSelected ? ' (selected)' : ''}${!isOnline ? ' (offline)' : ''}`}
+              tabIndex={0}
               onClick={() => onToggleAgent(agent.id)}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+                  e.preventDefault()
+                  onToggleAgent(agent.id)
+                }
+              }}
               className={`
                 relative flex flex-col items-center gap-2 p-3 rounded-xl cursor-pointer transition-all duration-200
+                focus:outline-none focus:ring-2 focus:ring-emerald-400/70 focus:ring-offset-1 focus:ring-offset-gray-900
                 ${isSelected
                   ? 'bg-emerald-500/20 border-2 border-emerald-500 ring-1 ring-emerald-500/30'
                   : 'bg-gray-800/60 border-2 border-transparent hover:border-gray-600 hover:bg-gray-800'

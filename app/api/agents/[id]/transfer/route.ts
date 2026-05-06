@@ -10,6 +10,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { transferAgent } from '@/services/agents-transfer-service'
 import { isValidUuid } from '@/lib/validation'
 import { enforceAuth } from '@/lib/route-auth'
+import { requireSudoToken } from '@/lib/sudo-guard'
+import { internalError } from '@/lib/error-response'
 
 export async function POST(
   request: NextRequest,
@@ -17,6 +19,12 @@ export async function POST(
 ) {
   const authErr = enforceAuth(request)
   if (authErr) return authErr
+
+  // API2-MAJ-18: agent transfer is destructive — the agent leaves this
+  // host and lives on the remote instance. Require sudo so a stolen
+  // session cookie can't relocate the agent.
+  const sudoErr = requireSudoToken(request, 'POST', '/api/agents/[id]/transfer')
+  if (sudoErr) return sudoErr
 
   try {
     const { id } = await params
@@ -37,10 +45,6 @@ export async function POST(
     }
     return NextResponse.json(result.data)
   } catch (error) {
-    console.error('Transfer error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Transfer failed' },
-      { status: 500 }
-    )
+    return internalError(error, 'agents-transfer')
   }
 }

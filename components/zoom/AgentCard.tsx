@@ -112,9 +112,21 @@ export default function AgentCard({
   }
 
   return (
+    // UI2-MAJ-03: Card flip is the primary zoom-view interaction. Add
+    // role + tabIndex + onKeyDown so keyboard users can flip the card.
     <div
-      className={`zoom-card-container cursor-pointer group ${isFlipped ? 'is-flipped' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-label={`Flip card for ${displayName}`}
+      aria-pressed={isFlipped}
+      className={`zoom-card-container cursor-pointer group focus:outline-none focus:ring-2 focus:ring-violet-400/70 ${isFlipped ? 'is-flipped' : ''}`}
       onClick={onFlip}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+          e.preventDefault()
+          onFlip()
+        }
+      }}
     >
       {/* Front Face */}
       <div className="zoom-card-face zoom-card-front h-full transition-all duration-300 group-hover:scale-[1.02] relative overflow-hidden">

@@ -19,10 +19,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 const mockGetHosts = vi.fn()
 const mockGetSelfHostId = vi.fn()
 const mockIsSelf = vi.fn()
+// LIB2-MAJ-09: governance-sync now resolves the peer's public key via
+// `getHostById(respHostId).publicKeyHex` and sig-verifies the response
+// body. The success test below wires this mock to return a host record
+// with a non-empty publicKeyHex; failure tests can override per-call.
+const mockGetHostById = vi.fn()
 vi.mock('@/lib/hosts-config', () => ({
   getHosts: (...args: unknown[]) => mockGetHosts(...args),
   getSelfHostId: (...args: unknown[]) => mockGetSelfHostId(...args),
   isSelf: (...args: unknown[]) => mockIsSelf(...args),
+  getHostById: (...args: unknown[]) => mockGetHostById(...args),
 }))
 
 const mockGetManagerId = vi.fn()
@@ -447,11 +453,34 @@ describe('requestPeerSync', () => {
       ttl: 300,
     }
 
+    // LIB2-MAJ-09 fix (2026-05-06): the response is now sig-verified
+    // before being trusted. The mock must:
+    //  (1) provide `text()` returning the JSON body so the verifier
+    //      can hash the raw bytes,
+    //  (2) supply X-Host-Id / X-Host-Timestamp / X-Host-Signature
+    //      headers,
+    //  (3) register a peer host record carrying `publicKeyHex` so
+    //      `getHostById` returns something usable.
+    // `verifyHostAttestation` is mocked at module scope to always
+    // return true, so the signature value itself is opaque here.
+    const peerJson = JSON.stringify(peerState)
+    const peerTimestamp = new Date().toISOString()
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue(peerState),
+      headers: {
+        get: (name: string) => {
+          const map: Record<string, string> = {
+            'X-Host-Id': 'host-remote-1',
+            'X-Host-Timestamp': peerTimestamp,
+            'X-Host-Signature': 'mock-peer-sig',
+          }
+          return map[name] ?? null
+        },
+      },
+      text: vi.fn().mockResolvedValue(peerJson),
     })
     globalThis.fetch = fetchSpy
+    mockGetHostById.mockReturnValue({ id: 'host-remote-1', publicKeyHex: 'aa'.repeat(32) })
 
     const result = await requestPeerSync('http://remote1:23000')
 

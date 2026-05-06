@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { deleteSession } from '@/services/sessions-service'
 import { enforceAuth } from '@/lib/route-auth'
+import { requireSudoToken } from '@/lib/sudo-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +25,13 @@ export async function DELETE(
 ) {
   const authErr = enforceAuth(request)
   if (authErr) return authErr
+
+  // API2-MAJ-04: deprecated route still ships and is still destructive
+  // (drops the tmux session and deletes the session record). Until the
+  // route is removed, gate it with sudo so it can't be used to bypass
+  // the new strict /api/agents/[id]/session path.
+  const sudoErr = requireSudoToken(request, 'DELETE', '/api/sessions/[id]')
+  if (sudoErr) return sudoErr
 
   logDeprecation()
   try {

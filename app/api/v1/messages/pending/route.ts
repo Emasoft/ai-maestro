@@ -9,8 +9,20 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { listPendingMessages, acknowledgePendingMessage, batchAcknowledgeMessages } from '@/services/amp-service'
 import type { AMPError, AMPPendingMessagesResponse } from '@/lib/types/amp'
+
+// API2-MAJ-21: Zod-validate the batch acknowledge body. Cap at 100 IDs and
+// 256 chars each so a malformed/oversized array can't escape into the
+// service layer.
+const BatchAckSchema = z.object({
+  ids: z.array(z.string().min(1).max(256)).min(1).max(100),
+}).strict()
+
+// Cap the GET pagination limit so a caller can't request a huge batch
+// (memory-DoS vector noted in MIN-04 / MAJ-21).
+const MAX_PENDING_LIMIT = 200
 
 // NT-011: AMPError requires both `error` (code) and `message` (human-readable) fields.
 // When a service returns only an error string, we populate both fields with the same value.
@@ -26,7 +38,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<AMPPending
   const limitParam = searchParams.get('limit')
   // CC-P3-005: NaN guard — discard non-numeric limit values
   const parsed = limitParam ? parseInt(limitParam, 10) : NaN
-  const limit = Number.isNaN(parsed) ? undefined : parsed
+  // API2-MAJ-21: cap at MAX_PENDING_LIMIT so the caller can't pull
+  // unbounded amounts of data through pagination.
+  const limit = Number.isNaN(parsed) || parsed < 1
+    ? undefined
+    : Math.min(parsed, MAX_PENDING_LIMIT)
 
   const result = listPendingMessages(authHeader, limit)
   if (result.error) {
@@ -55,9 +71,9 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<{ ackno
 export async function POST(request: NextRequest): Promise<NextResponse<{ acknowledged: number } | AMPError>> {
   const authHeader = request.headers.get('Authorization')
 
-  let body: { ids?: string[] }
+  let raw: unknown
   try {
-    body = await request.json()
+    raw = await request.json()
   } catch {
     return NextResponse.json({
       error: 'invalid_request',
@@ -65,7 +81,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<{ acknowl
     } as AMPError, { status: 400 })
   }
 
-  const result = batchAcknowledgeMessages(authHeader, body.ids)
+  // API2-MAJ-21: validate the body shape before forwarding to the service.
+  const parsedBody = BatchAckSchema.safeParse(raw)
+  if (!parsedBody.success) {
+    return NextResponse.json({
+      error: 'invalid_request',
+      message: 'ids must be a non-empty array of strings (max 100, each ≤256 chars)'
+    } as AMPError, { status: 400 })
+  }
+
+  const result = batchAcknowledgeMessages(authHeader, parsedBody.data.ids)
   if (result.error) {
     return ampError(result.error, result.status)
   }

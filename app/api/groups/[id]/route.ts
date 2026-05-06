@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getGroupById, updateGroupById, deleteGroupById } from '@/services/groups-service'
 import { enforceAuth } from '@/lib/route-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 
 const UpdateGroupSchema = z.object({
   name: z.string().min(1).max(128).optional(),
@@ -57,7 +58,12 @@ export async function PUT(
       )
     }
 
-    const result = await updateGroupById(id, parsed.data)
+    // SVC2-MAJ-07 (2026-05-06): forward authContext.
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const result = await updateGroupById(id, parsed.data, buildAuthContext(auth))
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
@@ -80,9 +86,15 @@ export async function DELETE(
   const authErr = enforceAuth(request)
   if (authErr) return authErr
 
+  // SVC2-MAJ-07 (2026-05-06): forward authContext.
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+
   try {
     const { id } = await params
-    const result = await deleteGroupById(id)
+    const result = await deleteGroupById(id, buildAuthContext(auth))
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }

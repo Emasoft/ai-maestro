@@ -39,8 +39,10 @@ export async function DELETE(
     }
     return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
+    // MIN-01: log full error server-side, return generic 500.
+    console.error('[governance/trust/[hostId]]', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { error: 'internal_error', code: 'governance-trust-delete' },
       { status: 500 }
     )
   }

@@ -17,9 +17,17 @@ import { DeleteAgent } from '@/services/element-management-service'
 
 /**
  * POST - Create or return existing assistant agent
+ *
+ * API2-MAJ-12: full handler-level auth (not just middleware) — POST is
+ * side-effecting (spawns tmux, allocates resources, may burn API quota).
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: auth.status || 401 })
+    }
+
     const result = await createAssistantAgent()
 
     if (result.error) {
@@ -68,9 +76,17 @@ export async function DELETE(request: NextRequest) {
 
 /**
  * GET - Check assistant agent status
+ *
+ * API2-MAJ-12: full handler-level auth so a stale or revoked token is
+ * caught here, not just by middleware structural cred-presence checks.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ success: false, error: auth.error }, { status: auth.status || 401 })
+    }
+
     const result = await getAssistantStatus()
 
     if (result.error) {

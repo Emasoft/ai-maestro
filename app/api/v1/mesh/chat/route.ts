@@ -12,6 +12,10 @@ import { v4 as uuidv4 } from 'uuid'
 import { appendMessage, getMessages } from '@/lib/vpn-chat-log'
 import { isValidChatMessage } from '@/types/vpn-chat'
 import { enforceAuth } from '@/lib/route-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { getSelfHostId, isSelf } from '@/lib/hosts-config'
+import { getAgent } from '@/lib/agent-registry'
+import { internalError } from '@/lib/error-response'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,18 +65,18 @@ export async function GET(request: NextRequest) {
       nextCursor: messages.length > 0 ? messages[0].timestamp : undefined,
     }, { status: 200 })
   } catch (error) {
-    console.error('[mesh/chat] GET failed:', error)
-    return NextResponse.json(
-      { error: `Failed to fetch messages: ${(error as Error).message}` },
-      { status: 500 },
-    )
+    return internalError(error, 'mesh-chat-get')
   }
 }
 
 // POST /api/v1/mesh/chat
 export async function POST(request: NextRequest) {
-  const authErr = enforceAuth(request)
-  if (authErr) return authErr
+  // API2-MAJ-09: full token verification (not just middleware) so we know
+  // the actual identity behind the call and can reject sender-spoofing.
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
 
   try {
     let raw: unknown
@@ -94,10 +98,61 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // API2-MAJ-09: derive verified senderHostId/senderName from the
+    // authenticated identity. Reject any body that claims a sender other
+    // than the caller.
+    let verifiedSenderHostId: string
+    let verifiedSenderName: string
+    if (auth.agentId) {
+      // Agent caller — must claim its own agent name and the local host
+      const agent = getAgent(auth.agentId)
+      if (!agent) {
+        return NextResponse.json(
+          { error: 'agent_not_found', message: 'Authenticated agent not in registry' },
+          { status: 401 },
+        )
+      }
+      verifiedSenderHostId = getSelfHostId()
+      verifiedSenderName = agent.name
+      // Reject if body senderName disagrees with the registered agent name
+      if (parsed.data.senderName !== agent.name) {
+        return NextResponse.json(
+          {
+            error: 'sender_mismatch',
+            message: 'senderName does not match authenticated agent identity',
+          },
+          { status: 403 },
+        )
+      }
+      // Reject if body senderHostId doesn't refer to this host. Cross-host
+      // mesh delivery requires Ed25519 attestation (not yet wired here).
+      if (!isSelf(parsed.data.senderHostId)) {
+        return NextResponse.json(
+          {
+            error: 'sender_host_mismatch',
+            message: 'Cross-host posting requires an attested federated path, not this endpoint.',
+          },
+          { status: 403 },
+        )
+      }
+    } else {
+      // System-owner / web user — sender is the local host with the
+      // body-supplied display name (which is just a label here, not a
+      // governance claim).
+      verifiedSenderHostId = getSelfHostId()
+      verifiedSenderName = parsed.data.senderName
+      if (!isSelf(parsed.data.senderHostId)) {
+        return NextResponse.json(
+          { error: 'sender_host_mismatch', message: 'Cannot post on behalf of a remote host' },
+          { status: 403 },
+        )
+      }
+    }
+
     const msg = {
       id: uuidv4(),
-      senderHostId: parsed.data.senderHostId,
-      senderName: parsed.data.senderName,
+      senderHostId: verifiedSenderHostId,
+      senderName: verifiedSenderName,
       content: parsed.data.content,
       timestamp: new Date().toISOString(),
       type: parsed.data.type,
@@ -117,10 +172,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, message: msg }, { status: 201 })
   } catch (error) {
-    console.error('[mesh/chat] POST failed:', error)
-    return NextResponse.json(
-      { error: `Failed to post message: ${(error as Error).message}` },
-      { status: 500 },
-    )
+    return internalError(error, 'mesh-chat-post')
   }
 }

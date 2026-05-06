@@ -10,9 +10,52 @@
 
 import { execFile, execFileSync as nodeExecFileSync } from 'child_process'
 import { promisify } from 'util'
+import path from 'path'
+import os from 'os'
 
 // Shell-free command execution — prevents shell injection by passing args as array
 const execFileAsync = promisify(execFile)
+
+// LIB2-MAJ-14: Defence-in-depth validation for tmux session names. Even though
+// `execFileAsync` prevents shell injection, tmux's target syntax `[session]:[window].[pane]`
+// makes session names containing `:`, `.`, or `@` semantically dangerous —
+// e.g. a name like "victim:1.0" would let a later caller using the same string
+// accidentally target a different window in a DIFFERENT session ("target
+// confusion"). We allow only safe identifier characters and explicitly reject
+// the tmux-special separators. The agent-registry name regex elsewhere is
+// `^[a-zA-Z0-9_@.-]+$` which is broader than what tmux allows safely; this
+// runtime-layer check is the last line of defence.
+const SAFE_SESSION_NAME = /^[a-zA-Z0-9_-]+$/
+
+function validateSessionName(name: string, label: string = 'session name'): void {
+  if (typeof name !== 'string' || name.length === 0) {
+    throw new Error(`[agent-runtime] Invalid ${label}: must be a non-empty string`)
+  }
+  if (name.length > 200) {
+    throw new Error(`[agent-runtime] Invalid ${label}: too long`)
+  }
+  if (!SAFE_SESSION_NAME.test(name)) {
+    throw new Error(`[agent-runtime] Invalid ${label}: ${JSON.stringify(name)} — must match ${SAFE_SESSION_NAME} (no ':', '.', '@', or other tmux target separators)`)
+  }
+}
+
+const HOME_DIR = os.homedir()
+const AGENTS_ROOT = path.join(HOME_DIR, 'agents')
+
+function validateCwd(cwd: string): void {
+  if (typeof cwd !== 'string') {
+    throw new Error('[agent-runtime] Invalid cwd: must be a string')
+  }
+  // Empty cwd is OK — tmux will use the current working directory
+  if (cwd.length === 0) return
+  // The cwd must resolve under ~/agents/. We don't allow resolution outside
+  // that root because every legitimate AI Maestro agent has its workdir
+  // inside ~/agents/<name>/ (R0 / Rule 0 invariant).
+  const resolved = path.resolve(cwd)
+  if (!resolved.startsWith(AGENTS_ROOT + path.sep) && resolved !== AGENTS_ROOT) {
+    throw new Error(`[agent-runtime] Invalid cwd: ${JSON.stringify(cwd)} — must resolve under ${AGENTS_ROOT}`)
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -180,6 +223,13 @@ export class TmuxRuntime implements AgentRuntime {
   // -- Lifecycle -----------------------------------------------------------
 
   async createSession(name: string, cwd: string, env?: Record<string, string>): Promise<void> {
+    // LIB2-MAJ-14: Validate name and cwd before invoking tmux. execFileAsync
+    // already protects from shell injection, but we still need to prevent
+    // tmux target-confusion (names containing ':', '.', '@') and the
+    // R0-violation case where cwd is somewhere other than ~/agents/.
+    validateSessionName(name, 'session name')
+    validateCwd(cwd)
+
     // Use execFileAsync (no shell) to prevent shell injection via name/cwd.
     //
     // WT-014#1 + WT-022#1: env vars MUST be passed via `tmux new-session -e KEY=VAL`
@@ -213,6 +263,12 @@ export class TmuxRuntime implements AgentRuntime {
   }
 
   async renameSession(oldName: string, newName: string): Promise<void> {
+    // LIB2-MAJ-14: Validate both names to prevent tmux target-confusion via
+    // names containing ':', '.', '@'. The renameSession call would otherwise
+    // accept a name like "victim:1.0" that subsequent calls would treat as
+    // a different session/window/pane.
+    validateSessionName(oldName, 'old session name')
+    validateSessionName(newName, 'new session name')
     // Use execFileAsync (no shell) to prevent shell injection via session names
     await execFileAsync('tmux', ['rename-session', '-t', oldName, newName])
   }

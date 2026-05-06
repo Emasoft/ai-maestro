@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { notifyGroupSubscribers } from '@/services/groups-service'
 import { enforceAuth } from '@/lib/route-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 
 const NotifyGroupSchema = z.object({
   message: z.string().min(1).max(4096),
@@ -37,8 +38,13 @@ export async function POST(
     )
   }
 
+  // SVC2-MAJ-08 (2026-05-06): forward authContext for the per-sender rate limit.
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
   try {
-    const result = await notifyGroupSubscribers(id, parsed.data.message, parsed.data.priority)
+    const result = await notifyGroupSubscribers(id, parsed.data.message, parsed.data.priority, buildAuthContext(auth))
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }

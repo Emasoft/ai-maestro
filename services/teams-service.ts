@@ -50,6 +50,30 @@ import type { AuthContext } from '@/lib/agent-auth'
 import { ServiceResult } from '@/types/service'
 // NT-006: ServiceResult re-export removed — import directly from @/types/service
 
+// SVC2-MAJ-11 fix (2026-05-06): every entry point that takes a caller-supplied
+// `requestingAgentId` MUST cross-check it against the verified `authContext`.
+// Previously a caller could spoof `requestingAgentId: <managerId>` while
+// presenting an entirely different agent's auth token (or no token at all in
+// the SRV-CRIT-02 cluster), and checkTeamAccess would happily authorize as
+// MANAGER. Now: when both are present and `authContext` is NOT system-owner,
+// they must match. System-owner is exempt — the web-UI legitimately acts on
+// behalf of any agentId in some flows.
+function rejectMismatchedRequestingAgentId(
+  requestingAgentId: string | undefined,
+  authContext: AuthContext | undefined
+): ServiceResult<never> | null {
+  if (!requestingAgentId) return null
+  if (!authContext) return null // checkTeamAccess will fail-closed for anonymous
+  if (authContext.isSystemOwner) return null
+  if (authContext.agentId && authContext.agentId !== requestingAgentId) {
+    return {
+      error: `Caller-supplied requestingAgentId (${requestingAgentId}) does not match authenticated identity (${authContext.agentId}). Spoofing the requestingAgentId field is not permitted.`,
+      status: 403,
+    }
+  }
+  return null
+}
+
 export interface CreateTeamParams {
   name: string
   description?: string
@@ -371,6 +395,10 @@ export function getTeamById(id: string, requestingAgentId?: string, authContext?
     return { error: 'Team not found', status: 404 }
   }
 
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch) return mismatch as ServiceResult<{ team: any }>
+
   // LIB2-CRIT-02 (2026-05-06): pass authContext so checkTeamAccess can
   // distinguish a verified system-owner web-UI session from a request
   // that merely omitted X-Agent-Id.
@@ -404,6 +432,10 @@ export async function updateTeamById(id: string, params: UpdateTeamParams): Prom
     // into the lib update call. Governance type/COS changes must go through dedicated
     // endpoints, not the general update path (CC-007 defense-in-depth).
     const { requestingAgentId, authContext, type: _type, chiefOfStaffId: _cos, githubProject: ghProj, ...updateFields } = params
+
+    // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+    const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+    if (mismatch) return mismatch as ServiceResult<{ team: any }>
 
     // LIB2-CRIT-02 (2026-05-06): forward authContext so the ACL bypass
     // is gated on a verified system-owner session, not a missing header.
@@ -514,12 +546,26 @@ export async function deleteTeamById(id: string, requestingAgentId?: string, pas
     return { error: 'Team not found', status: 404 }
   }
 
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch10 = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch10) return mismatch10 as ServiceResult<{ success: boolean }>
+
   // LIB2-CRIT-02 (2026-05-06): forward authContext.
   const access = checkTeamAccess({ teamId: id, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
 
+  // SVC2-MAJ-10 fix (2026-05-06): if a governance password is configured, it is
+  // ALWAYS mandatory — regardless of team shape, COS presence, or whether
+  // the caller provided a requestingAgentId. The previous flow had a
+  // password-less branch for closed teams without a COS (reachable during
+  // the transient SCEN-005.03 race) which could let an unauthenticated
+  // caller delete teams that lacked the COS chain.
+  // Fail-closed: refuse the request unless EITHER (a) a verified
+  // password was provided, OR (b) the caller is a system-owner with no
+  // password configured on the system, OR (c) the caller is a real agent
+  // whose identity satisfies the team ACL above.
   // Governance: team deletion is a destructive USER-only operation requiring governance password.
   // This prevents agents from deleting teams without human authorization.
   const config = loadGovernance()
@@ -539,6 +585,14 @@ export async function deleteTeamById(id: string, requestingAgentId?: string, pas
       return { error: 'Invalid governance password', status: 401 }
     }
     resetRateLimit(rateLimitKey)
+  } else {
+    // No governance password configured — require either a verified
+    // system-owner authContext OR a verified agent identity. Without
+    // either, the deprecated wrapper used to silently fall through to
+    // the system-owner branch, which is the SVC2-MAJ-10 bug.
+    if (!authContext?.isSystemOwner && !requestingAgentId) {
+      return { error: 'Team deletion requires authenticated identity (system-owner or agent)', status: 401 }
+    }
   }
 
   // Governance: a closed team with a COS requires agent identity for deletion,
@@ -635,6 +689,10 @@ export async function listTeamTasks(teamId: string, requestingAgentId?: string, 
     return { error: 'Team not found', status: 404 }
   }
 
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch) return mismatch as ServiceResult<{ tasks: TaskWithDeps[] }>
+
   // LIB2-CRIT-02 (2026-05-06): forward authContext.
   const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
@@ -698,6 +756,10 @@ export async function getTeamTask(teamId: string, taskId: string, requestingAgen
     return { error: 'Team not found', status: 404 }
   }
 
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch) return mismatch as ServiceResult<{ task: any }>
+
   // LIB2-CRIT-02 (2026-05-06): forward authContext.
   const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
@@ -735,6 +797,9 @@ export async function createTeamTask(teamId: string, params: CreateTaskParams): 
 
   // LIB2-CRIT-02 (2026-05-06): forward authContext.
   const { requestingAgentId, authContext, ...taskFields } = params
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch) return mismatch as ServiceResult<{ task: any }>
   const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
@@ -796,6 +861,9 @@ export async function updateTeamTask(
 
   // LIB2-CRIT-02 (2026-05-06): forward authContext.
   const { requestingAgentId, authContext, ...taskFields } = params
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch) return mismatch as ServiceResult<{ task: any; unblocked?: any[] }>
   const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
@@ -856,6 +924,10 @@ export async function deleteTeamTask(teamId: string, taskId: string, requestingA
     return { error: 'Team not found', status: 404 }
   }
 
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch) return mismatch as ServiceResult<{ success: boolean }>
+
   // LIB2-CRIT-02 (2026-05-06): forward authContext.
   const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
@@ -897,6 +969,10 @@ export function listTeamDocuments(teamId: string, requestingAgentId?: string, au
     return { error: 'Team not found', status: 404 }
   }
 
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch) return mismatch as ServiceResult<{ documents: TeamDocument[] }>
+
   // LIB2-CRIT-02 (2026-05-06): forward authContext.
   const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
@@ -919,6 +995,9 @@ export async function createTeamDocument(teamId: string, params: CreateDocumentP
 
   // LIB2-CRIT-02 (2026-05-06): forward authContext.
   const { requestingAgentId, authContext, ...docFields } = params
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch) return mismatch as ServiceResult<{ document: any }>
   const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
@@ -955,6 +1034,10 @@ export function getTeamDocument(teamId: string, docId: string, requestingAgentId
     return { error: 'Team not found', status: 404 }
   }
 
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch) return mismatch as ServiceResult<{ document: any }>
+
   // LIB2-CRIT-02 (2026-05-06): forward authContext.
   const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
@@ -986,6 +1069,9 @@ export async function updateTeamDocument(
 
   // LIB2-CRIT-02 (2026-05-06): forward authContext.
   const { requestingAgentId, authContext, ...docFields } = params
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch) return mismatch as ServiceResult<{ document: any }>
   const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
@@ -1021,6 +1107,10 @@ export async function deleteTeamDocument(teamId: string, docId: string, requesti
   if (!team) {
     return { error: 'Team not found', status: 404 }
   }
+
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch) return mismatch as ServiceResult<{ success: boolean }>
 
   // LIB2-CRIT-02 (2026-05-06): forward authContext.
   const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
@@ -1103,6 +1193,9 @@ export async function getKanbanConfig(teamId: string, requestingAgentId?: string
   if (!team) {
     return { error: 'Team not found', status: 404 }
   }
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch) return mismatch as ServiceResult<{ columns: KanbanColumnConfig[] }>
   // LIB2-CRIT-02 (2026-05-06): forward authContext.
   const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {
@@ -1132,6 +1225,9 @@ export async function setKanbanConfig(teamId: string, columns: KanbanColumnConfi
   if (!team) {
     return { error: 'Team not found', status: 404 }
   }
+  // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
+  const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
+  if (mismatch) return mismatch as ServiceResult<{ columns: KanbanColumnConfig[] }>
   // LIB2-CRIT-02 (2026-05-06): forward authContext.
   const access = checkTeamAccess({ teamId, requestingAgentId, authContext })
   if (!access.allowed) {

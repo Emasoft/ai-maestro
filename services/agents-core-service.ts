@@ -26,7 +26,7 @@
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { execSync } from 'child_process'
+import { execSync, execFileSync } from 'child_process'
 import { v4 as uuidv4 } from 'uuid'
 import type { AuthContext } from '@/lib/agent-auth'
 import type {
@@ -185,9 +185,17 @@ function isSessionIdle(sessionName: string): boolean {
   return (Date.now() - activity) > IDLE_THRESHOLD_MS
 }
 
-/** Strips unsafe characters from CLI arguments. Allows: a-z A-Z 0-9 space - _ . = / : , ~ @ */
+/**
+ * Strips unsafe characters from CLI arguments. Allows: a-z A-Z 0-9 single space - _ . = / : ~ @
+ *
+ * SVC2-MAJ-03 fix (2026-05-06): the previous regex used `\s` (which matches
+ * `\n`, `\r`, `\t`, `\v`). A newline reaching a tmux send-keys command would
+ * inject a second shell command after the legitimate claude/codex/aider
+ * invocation. Dropping `\s` for a literal space and removing the comma keeps
+ * the allowlist tight to what real CLI flags actually use.
+ */
 function sanitizeArgs(args: string): string {
-  return args.replace(/[^a-zA-Z0-9\s\-_.=/:,~@]/g, '').trim()
+  return args.replace(/[^a-zA-Z0-9 \-_.=/:~@]/g, '').trim()
 }
 
 /** Resolve program name to CLI command */
@@ -274,13 +282,31 @@ export interface UnregisteredSession {
   originalProgramArgs?: string
 }
 
-/** Check what process is running in the tmux pane (e.g., "claude", "zsh", "node") */
+/**
+ * Check what process is running in the tmux pane (e.g., "claude", "zsh", "node").
+ *
+ * SVC2-MAJ-04 fix (2026-05-06): the previous implementation interpolated
+ * `tmuxSessionName` into a template literal that was then handed to a shell
+ * via execSync. While createSession/wakeAgent enforce the
+ * `^[a-zA-Z0-9_@.-]+$` regex when minting names, restoreSessions reads
+ * persisted-session names without re-validating, and a corrupted persistence
+ * file could leak a name like `"; rm -rf /"`. We now (a) reject any name
+ * that doesn't match the canonical tmux-name regex up front, and (b) shell
+ * out via execFileSync (no shell, argv passed directly) so even if a name
+ * sneaks through, it is treated as a literal string by tmux rather than
+ * being parsed by /bin/sh.
+ */
 function getPaneCommand(tmuxSessionName: string): { paneCommand: string; programRunning: boolean } {
   const SHELL_COMMANDS = new Set(['zsh', 'bash', 'sh', 'fish', 'tcsh', 'csh', 'dash'])
+  // Defence-in-depth: refuse pathological names before they reach any process spawn
+  if (!tmuxSessionName || !/^[a-zA-Z0-9_@.-]+$/.test(tmuxSessionName)) {
+    return { paneCommand: '', programRunning: false }
+  }
   try {
-    const cmd = execSync(
-      `tmux list-panes -t "${tmuxSessionName}" -F "#{pane_current_command}" 2>/dev/null`,
-      { encoding: 'utf-8', timeout: 2000 }
+    const cmd = execFileSync(
+      'tmux',
+      ['list-panes', '-t', tmuxSessionName, '-F', '#{pane_current_command}'],
+      { encoding: 'utf-8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'] }
     ).trim()
     const paneCommand = cmd.split('\n')[0] || ''
     return { paneCommand, programRunning: !SHELL_COMMANDS.has(paneCommand) }
@@ -793,6 +819,13 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
     const newTitle = changeableFields.governanceTitle !== undefined
       ? (changeableFields.governanceTitle || null)
       : oldTitle
+    // SVC2-MAJ-05 fix (2026-05-06): Change* failures used to be silently
+    // swallowed by `try/catch { console.warn }` blocks — the PATCH still
+    // returned 200 OK with a stale agent record, mirroring the BUG-003
+    // root cause that ChangeClient already addresses below. Each Change*
+    // failure now becomes a returned ServiceResult error; throw paths get
+    // mapped to 500. The asymmetry that left non-ChangeClient mutations
+    // failing invisibly is closed.
     if (oldTitle !== newTitle) {
       try {
         const { ChangeTitle } = await import('@/services/element-management-service')
@@ -810,10 +843,12 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
           titleOptions.githubRepo = changeableFields.githubRepo.trim()
         }
         const titleResult = await ChangeTitle(id, newTitle, titleOptions)
-        if (!titleResult.success) console.warn('[agents] ChangeTitle failed:', titleResult.error)
+        if (!titleResult.success) {
+          return { error: titleResult.error || 'ChangeTitle failed', status: 409 }
+        }
         anyChangeExecuted = true
       } catch (err) {
-        console.warn('[agents] Failed ChangeTitle on PATCH:', err instanceof Error ? err.message : err)
+        return { error: err instanceof Error ? err.message : 'ChangeTitle crashed', status: 500 }
       }
     }
 
@@ -823,10 +858,12 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
         const { ChangeName } = await import('@/services/element-management-service')
         const ac = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }
         const nameResult = await ChangeName(id, changeableFields.name, ac)
-        if (!nameResult.success) console.warn('[agents] ChangeName failed:', nameResult.error)
+        if (!nameResult.success) {
+          return { error: nameResult.error || 'ChangeName failed', status: 409 }
+        }
         anyChangeExecuted = true
       } catch (err) {
-        console.warn('[agents] Failed ChangeName on PATCH:', err instanceof Error ? err.message : err)
+        return { error: err instanceof Error ? err.message : 'ChangeName crashed', status: 500 }
       }
     }
 
@@ -836,10 +873,12 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
         const { ChangeFolder } = await import('@/services/element-management-service')
         const ac2 = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }
         const folderResult = await ChangeFolder(id, changeableFields.workingDirectory, ac2)
-        if (!folderResult.success) console.warn('[agents] ChangeFolder failed:', folderResult.error)
+        if (!folderResult.success) {
+          return { error: folderResult.error || 'ChangeFolder failed', status: 409 }
+        }
         anyChangeExecuted = true
       } catch (err) {
-        console.warn('[agents] Failed ChangeFolder on PATCH:', err instanceof Error ? err.message : err)
+        return { error: err instanceof Error ? err.message : 'ChangeFolder crashed', status: 500 }
       }
     }
 
@@ -849,10 +888,12 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
         const { ChangeAvatar } = await import('@/services/element-management-service')
         const ac3 = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }
         const avatarResult = await ChangeAvatar(id, changeableFields.avatar, ac3)
-        if (!avatarResult.success) console.warn('[agents] ChangeAvatar failed:', avatarResult.error)
+        if (!avatarResult.success) {
+          return { error: avatarResult.error || 'ChangeAvatar failed', status: 409 }
+        }
         anyChangeExecuted = true
       } catch (err) {
-        console.warn('[agents] Failed ChangeAvatar on PATCH:', err instanceof Error ? err.message : err)
+        return { error: err instanceof Error ? err.message : 'ChangeAvatar crashed', status: 500 }
       }
     }
 
@@ -862,10 +903,12 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
         const { ChangeCLIArgs } = await import('@/services/element-management-service')
         const ac4 = authContext || { agentId: requestingAgentId || undefined, isSystemOwner: !requestingAgentId }
         const argsResult = await ChangeCLIArgs(id, changeableFields.programArgs, ac4)
-        if (!argsResult.success) console.warn('[agents] ChangeCLIArgs failed:', argsResult.error)
+        if (!argsResult.success) {
+          return { error: argsResult.error || 'ChangeCLIArgs failed', status: 409 }
+        }
         anyChangeExecuted = true
       } catch (err) {
-        console.warn('[agents] Failed ChangeCLIArgs on PATCH:', err instanceof Error ? err.message : err)
+        return { error: err instanceof Error ? err.message : 'ChangeCLIArgs crashed', status: 500 }
       }
     }
 

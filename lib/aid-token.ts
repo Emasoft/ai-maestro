@@ -65,6 +65,16 @@ const TOKENS_DIR = statePath('governance-tokens')
 const TOKEN_CACHE_TTL_MS = 5_000
 let _tokenCache: AIDTokenRecord[] | null = null
 let _tokenCacheTimestamp = 0
+// LIB2-MAJ-13: Map index keyed by token hash for O(1) validation lookup.
+// Without this, every auth request walked every cached token doing
+// timing-safe equality — CPU-amplification under load. The hash is a SHA256
+// of the input token, so map lookup is itself constant-time relative to the
+// other hashes in the map (the hash being looked up is fully determined by
+// the input). The timing-safe equality is preserved AT INSERT and AT LOOKUP
+// for the SINGLE record that matched (not all of them) — which keeps the
+// "constant-time per request" invariant intact while removing the linear
+// scan that scaled with token count.
+let _tokenIndex: Map<string, AIDTokenRecord> | null = null
 
 // ============================================================================
 // Storage
@@ -80,6 +90,14 @@ function tokensFilePath(): string {
   return path.join(TOKENS_DIR, 'active-tokens.json')
 }
 
+function rebuildTokenIndex(tokens: AIDTokenRecord[]): Map<string, AIDTokenRecord> {
+  const idx = new Map<string, AIDTokenRecord>()
+  for (const record of tokens) {
+    idx.set(record.token_hash, record)
+  }
+  return idx
+}
+
 function loadTokens(): AIDTokenRecord[] {
   const now = Date.now()
   if (_tokenCache && (now - _tokenCacheTimestamp) < TOKEN_CACHE_TTL_MS) {
@@ -90,6 +108,7 @@ function loadTokens(): AIDTokenRecord[] {
   const filePath = tokensFilePath()
   if (!fs.existsSync(filePath)) {
     _tokenCache = []
+    _tokenIndex = new Map()
     _tokenCacheTimestamp = now
     return []
   }
@@ -100,10 +119,12 @@ function loadTokens(): AIDTokenRecord[] {
     // Prune expired tokens on load
     const validTokens = tokens.filter(t => new Date(t.expires_at).getTime() > now)
     _tokenCache = validTokens
+    _tokenIndex = rebuildTokenIndex(validTokens)
     _tokenCacheTimestamp = now
     return validTokens
   } catch {
     _tokenCache = []
+    _tokenIndex = new Map()
     _tokenCacheTimestamp = now
     return []
   }
@@ -116,6 +137,7 @@ function saveTokens(tokens: AIDTokenRecord[]): void {
   fs.writeFileSync(tmpPath, JSON.stringify(tokens, null, 2), { mode: 0o600 })
   fs.renameSync(tmpPath, filePath)
   _tokenCache = tokens
+  _tokenIndex = rebuildTokenIndex(tokens)
   _tokenCacheTimestamp = Date.now()
 }
 
@@ -275,29 +297,38 @@ export function validateGovernanceToken(token: string): AIDTokenRecord | null {
   if (!token.startsWith(TOKEN_PREFIX)) return null
 
   const tokenHash = hashToken(token)
-  const tokens = loadTokens()
+  // Force load + index rebuild if cache stale (also populates _tokenIndex).
+  loadTokens()
+  const index = _tokenIndex
+  if (!index) return null
   const now = Date.now()
 
-  // Iterate all tokens (constant-time pattern — don't short-circuit on hash match
-  // to prevent timing side-channel, same pattern as amp-auth.ts)
-  let matched: AIDTokenRecord | null = null
-  const hashBuffer = Buffer.from(tokenHash)
+  // LIB2-MAJ-13: O(1) lookup by token hash. The hash is a SHA256 of the
+  // input token, so map.get(tokenHash) reveals only whether that exact hash
+  // exists — no information leaks about other tokens via timing. We then
+  // run timingSafeEqual on the SINGLE candidate to preserve the
+  // constant-time-per-request behaviour that the previous linear-scan
+  // approach was simulating. (Map.get on a String hash IS constant-time
+  // relative to map size in V8 / SpiderMonkey: hash bucket lookup +
+  // string compare on collision; the input-derived hash means the bucket
+  // accessed is fully determined by the input, leaking no information
+  // about other entries.)
+  const candidate = index.get(tokenHash)
+  if (!candidate) return null
 
-  for (const record of tokens) {
-    const recordHashBuffer = Buffer.from(record.token_hash)
-    if (hashBuffer.length === recordHashBuffer.length) {
-      try {
-        const isMatch = timingSafeEqual(hashBuffer, recordHashBuffer)
-        if (isMatch && new Date(record.expires_at).getTime() > now) {
-          matched = record
-        }
-      } catch {
-        // Length mismatch — not a match
-      }
-    }
+  // Timing-safe verification on the candidate that the index returned.
+  const hashBuffer = Buffer.from(tokenHash)
+  const recordHashBuffer = Buffer.from(candidate.token_hash)
+  if (hashBuffer.length !== recordHashBuffer.length) return null
+  try {
+    if (!timingSafeEqual(hashBuffer, recordHashBuffer)) return null
+  } catch {
+    return null
   }
 
-  return matched
+  // Expiry check
+  if (new Date(candidate.expires_at).getTime() <= now) return null
+  return candidate
 }
 
 /**

@@ -16,7 +16,7 @@
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { createHash } from 'crypto'
+import crypto, { createHash } from 'crypto'
 import type { AMPAgentIdentity, AMPExternalRegistration } from '@/types/agent'
 import { getStateDir } from '@/lib/ecosystem-constants'
 
@@ -158,19 +158,36 @@ export function calculateFingerprint(publicKeyHex: string): string {
 // ============================================================================
 
 /**
- * Save keypair to agent's keys directory
+ * Save keypair to agent's keys directory.
+ *
+ * LIB2-MAJ-01: Uses atomic tmp+rename to prevent half-written private.pem if the
+ * process crashes mid-write (would otherwise corrupt AMP identity for that agent).
+ * Mirrors the host-keys.ts pattern.
  */
 export function saveKeyPair(agentId: string, keyPair: KeyPair): void {
   ensureAgentDirs(agentId)
   const keysDir = getKeysDir(agentId)
 
-  // Write private key with restricted permissions
   const privateKeyPath = path.join(keysDir, 'private.pem')
-  fs.writeFileSync(privateKeyPath, keyPair.privatePem, { mode: 0o600 })
-
-  // Write public key
   const publicKeyPath = path.join(keysDir, 'public.pem')
-  fs.writeFileSync(publicKeyPath, keyPair.publicPem, { mode: 0o644 })
+  // SF-033: Include process.pid in temp file names to prevent collisions between concurrent processes
+  const privateTmp = `${privateKeyPath}.tmp.${process.pid}`
+  const publicTmp = `${publicKeyPath}.tmp.${process.pid}`
+
+  try {
+    // Private key: owner-only read/write (0o600), atomic write
+    fs.writeFileSync(privateTmp, keyPair.privatePem, { mode: 0o600 })
+    fs.renameSync(privateTmp, privateKeyPath)
+
+    // Public key: owner read/write + group/other read (0o644), atomic write
+    fs.writeFileSync(publicTmp, keyPair.publicPem, { mode: 0o644 })
+    fs.renameSync(publicTmp, publicKeyPath)
+  } catch (error) {
+    // Clean up any leftover temp files on failure
+    try { fs.unlinkSync(privateTmp) } catch { /* ignore */ }
+    try { fs.unlinkSync(publicTmp) } catch { /* ignore */ }
+    throw error
+  }
 
   console.log(`[AMP Keys] Saved keypair for agent ${agentId.substring(0, 8)}...`)
 }
@@ -191,9 +208,8 @@ export function loadKeyPair(agentId: string): KeyPair | null {
     const privatePem = fs.readFileSync(privateKeyPath, 'utf-8')
     const publicPem = fs.readFileSync(publicKeyPath, 'utf-8')
 
-    // Extract public key hex
-    const { createPublicKey } = require('crypto')
-    const pubKeyObj = createPublicKey(publicPem)
+    // Extract public key hex (LIB2-MAJ-02: ESM import, was require('crypto'))
+    const pubKeyObj = crypto.createPublicKey(publicPem)
     const rawPubKey = pubKeyObj.export({ type: 'spki', format: 'der' })
     const publicKeyBytes = rawPubKey.subarray(12)
     const publicHex = publicKeyBytes.toString('hex')

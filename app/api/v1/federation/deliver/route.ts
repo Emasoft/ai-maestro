@@ -42,9 +42,10 @@ export async function POST(request: NextRequest) {
       headers: result.headers
     })
   } catch (error) {
-    // CC-P4-003: Top-level catch for unhandled service throws (consistent with agents/route.ts pattern)
+    // MIN-01: do not leak error.message.
+    console.error('[federation/deliver]', error)
     return NextResponse.json(
-      { error: 'internal_error', message: error instanceof Error ? error.message : 'Internal server error' },
+      { error: 'internal_error', message: 'Internal server error' },
       { status: 500 }
     )
   }

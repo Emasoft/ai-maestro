@@ -3,6 +3,7 @@ import os from 'os'
 import path from 'path'
 import { createSession } from '@/services/sessions-service'
 import { enforceAuth } from '@/lib/route-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 
 // Max length for string fields to prevent DoS via oversized payloads
 const MAX_STRING_LENGTH = 500
@@ -21,6 +22,16 @@ interface CreateSessionRequestBody {
 export async function POST(request: NextRequest) {
   const authErr = enforceAuth(request)
   if (authErr) return authErr
+
+  // SVC2-MAJ-01 (2026-05-06): plumb the verified auth context into createSession.
+  // enforceAuth() already failed-closed above, so authenticateFromRequest will
+  // succeed here unless someone deletes enforceAuth — the duplicate is cheap
+  // defence-in-depth and matches the pattern used by other strict routes.
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+  const authContext = buildAuthContext(auth)
 
   try {
     let body: CreateSessionRequestBody
@@ -100,6 +111,7 @@ export async function POST(request: NextRequest) {
       avatar: body.avatar,
       programArgs: body.programArgs,
       program: body.program,
+      authContext,
     })
 
     if (result.error) {

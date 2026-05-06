@@ -27,9 +27,12 @@ export type AuthAction =
   | 'wake-agent'        // Wake agent
   | 'link-session'      // Link a tmux session name to an agent record (registry write)
   | 'delete-session'    // Kill an agent's tmux session and/or unlink it (no agent delete)
+  | 'create-session'    // SVC2-MAJ-01: createSession is a registry-write + tmux-spawn primitive
   | 'register-agent'    // Register/overwrite an agent record (filesystem write primitive)
   | 'manage-team'       // Create/modify/delete teams
   | 'manage-skills'     // Install/remove skills on an agent
+  | 'manage-group'      // SVC2-MAJ-07/08: create/update/delete groups + subscribe/notify
+  | 'manage-amp-address' // SVC2-MAJ-18: claim or remove an AMP address on an agent record
   | 'view-agent'        // Read agent data (currently open, for future lockdown)
 
 export interface AuthorizationResult {

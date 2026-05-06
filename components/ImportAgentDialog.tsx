@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Upload, Package, FolderOpen, Check, AlertCircle, Sparkles, Home, Database, Mail, GitBranch, FileText, User, Zap } from 'lucide-react'
 import type { AgentImportResult } from '@/types/portable'
@@ -148,6 +148,22 @@ export default function ImportAgentDialog({
       setSelectedFile(null)
     }, 300)
   }
+
+  // UI2-MAJ-07: Close on Escape, but only when the dialog is in a safe phase.
+  // 'unpacking' and 'setting-up' are in-flight operations — we ignore Escape
+  // so the user can't accidentally orphan a partially-imported agent.
+  useEffect(() => {
+    if (!isOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (phase === 'idle' || phase === 'ready' || phase === 'error') {
+        handleClose()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, phase])
 
   const getMessage = () => {
     const messages = phase === 'unpacking' ? UNPACKING_MESSAGES

@@ -10,10 +10,11 @@
 
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import { mkdir, readFile, writeFile } from 'fs/promises'
+import { mkdir, readFile, writeFile, rename, unlink } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import { withLock } from '@/lib/file-lock'
 import type { ClientPluginAdapter, StoredPlugin, PluginAdapterOptions, PluginInstallResult, PluginUninstallResult, PluginActionResult, PluginInstallState } from './types'
 
 const execFileAsync = promisify(execFile)
@@ -31,8 +32,33 @@ async function loadJsonSafe(filePath: string): Promise<Record<string, unknown>> 
   }
 }
 
+/**
+ * LIB2-MAJ-04: Atomic JSON write — tmp+rename to prevent half-written
+ * settings.local.json files. Mirrors the pattern in element-management-service.ts
+ * and host-keys.ts. The caller MUST wrap read-modify-write sequences in withLock
+ * to prevent two parallel enable/disable callers race-clobbering each other.
+ */
 async function saveJsonSafe(filePath: string, data: unknown): Promise<void> {
-  await writeFile(filePath, JSON.stringify(data, null, 2) + '\n', 'utf-8')
+  // SF-033: include process.pid in temp file name to prevent collisions between
+  // concurrent processes (the in-process file-lock can't coordinate across processes)
+  const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`
+  try {
+    await writeFile(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf-8')
+    await rename(tmpPath, filePath)
+  } catch (error) {
+    try { await unlink(tmpPath) } catch { /* ignore */ }
+    throw error
+  }
+}
+
+/**
+ * LIB2-MAJ-04: Lock key for settings.local.json mutations. The same key MUST be
+ * used by every caller that mutates settings.local.json on the same agent dir to
+ * prevent enable/disable race conditions. The lock is keyed on the resolved
+ * absolute path so different agents serialize independently.
+ */
+function settingsLockKey(localSettings: string): string {
+  return `claude-adapter:settings.local:${localSettings}`
 }
 
 function buildPluginKey(name: string, marketplace?: string): string {
@@ -90,13 +116,17 @@ const claudeAdapter: ClientPluginAdapter = {
     const localSettings = join(resolved, '.claude', 'settings.local.json')
 
     try {
-      await mkdir(join(resolved, '.claude'), { recursive: true })
-      const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
-      const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-      ep[pluginKey] = true
-      settings.enabledPlugins = ep
-      await saveJsonSafe(localSettings, settings)
-      return { success: true }
+      // LIB2-MAJ-04: read-modify-write sequence MUST be serialized; otherwise
+      // two parallel enable/disable callers race-clobber the JSON file.
+      return await withLock(settingsLockKey(localSettings), async () => {
+        await mkdir(join(resolved, '.claude'), { recursive: true })
+        const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+        const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+        ep[pluginKey] = true
+        settings.enabledPlugins = ep
+        await saveJsonSafe(localSettings, settings)
+        return { success: true } as PluginActionResult
+      })
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
@@ -108,13 +138,16 @@ const claudeAdapter: ClientPluginAdapter = {
     const localSettings = join(resolved, '.claude', 'settings.local.json')
 
     try {
-      await mkdir(join(resolved, '.claude'), { recursive: true })
-      const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
-      const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-      ep[pluginKey] = false
-      settings.enabledPlugins = ep
-      await saveJsonSafe(localSettings, settings)
-      return { success: true }
+      // LIB2-MAJ-04: see enable() — same locking + atomic-write requirement.
+      return await withLock(settingsLockKey(localSettings), async () => {
+        await mkdir(join(resolved, '.claude'), { recursive: true })
+        const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+        const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
+        ep[pluginKey] = false
+        settings.enabledPlugins = ep
+        await saveJsonSafe(localSettings, settings)
+        return { success: true } as PluginActionResult
+      })
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) }
     }

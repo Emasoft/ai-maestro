@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { addBlock, removeBlock, getBlocklist } from '@/lib/vpn-chat-log'
 import { enforceAuth } from '@/lib/route-auth'
+import { internalError } from '@/lib/error-response'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,11 +28,7 @@ export async function GET(request: NextRequest) {
     const blocked = getBlocklist()
     return NextResponse.json({ blocked }, { status: 200 })
   } catch (error) {
-    console.error('[vpn-chat/block] GET failed:', error)
-    return NextResponse.json(
-      { error: `Failed to get blocklist: ${(error as Error).message}` },
-      { status: 500 },
-    )
+    return internalError(error, 'vpn-chat-block-get')
   }
 }
 
@@ -63,11 +60,7 @@ export async function POST(request: NextRequest) {
     addBlock(parsed.data.userId)
     return NextResponse.json({ ok: true, blocked: parsed.data.userId }, { status: 200 })
   } catch (error) {
-    console.error('[vpn-chat/block] POST failed:', error)
-    return NextResponse.json(
-      { error: `Failed to block user: ${(error as Error).message}` },
-      { status: 500 },
-    )
+    return internalError(error, 'vpn-chat-block-post')
   }
 }
 
@@ -99,10 +92,6 @@ export async function DELETE(request: NextRequest) {
     removeBlock(parsed.data.userId)
     return NextResponse.json({ ok: true, unblocked: parsed.data.userId }, { status: 200 })
   } catch (error) {
-    console.error('[vpn-chat/block] DELETE failed:', error)
-    return NextResponse.json(
-      { error: `Failed to unblock user: ${(error as Error).message}` },
-      { status: 500 },
-    )
+    return internalError(error, 'vpn-chat-block-delete')
   }
 }

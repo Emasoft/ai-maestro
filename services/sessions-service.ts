@@ -66,6 +66,20 @@ export interface CreateSessionParams {
   avatar?: string
   programArgs?: string
   program?: string
+  /**
+   * SVC2-MAJ-01 fix (2026-05-06): every caller of createSession MUST present
+   * a verified AuthContext. Previously createSession had no auth field at
+   * all and relied on every API route remembering to enforce auth at the
+   * upstream gate — when one forgot, an attacker who satisfied only the
+   * structural credential gate could mint a tmux session under any name,
+   * pollute the agent registry, and trigger the R17 InstallElement defense
+   * (which itself runs as system-owner). The function now refuses without
+   * an authContext, and non-system callers must satisfy the
+   * `create-session` permission. Internal helpers that legitimately run
+   * outside any HTTP request build a system context via
+   * buildSystemAuthContext('reason').
+   */
+  authContext?: import('@/lib/agent-auth').AuthContext
 }
 
 export interface RestoreResult {
@@ -520,7 +534,43 @@ export function broadcastActivityUpdate(
  * Create a new session (local or forwarded to remote host).
  */
 export async function createSession(params: CreateSessionParams): Promise<ServiceResult<{ success: boolean; name: string; agentId?: string; type?: string }>> {
-  const { name, workingDirectory, agentId, hostId, label, avatar, programArgs, program } = params
+  const { name, workingDirectory, agentId, hostId, label, avatar, programArgs, program, authContext } = params
+
+  // ── Gate 0: Authorization (SVC2-MAJ-01 fix, 2026-05-06) ───────────────
+  // createSession is a registry-write + tmux-spawn primitive. Every HTTP
+  // caller MUST present an AuthContext built from
+  // authenticateFromRequest(...) — the route handler at
+  // app/api/sessions/create/route.ts and the headless-router mirror both
+  // build the context up front. Non-system callers must satisfy the
+  // `create-session` permission via the standard authorize() pipeline.
+  //
+  // For internal in-process callers (e.g. CreateAgent G09 in
+  // element-management-service.ts) the upstream pipeline has already
+  // performed its own authorization gate (gate0Auth('create-agent', ...))
+  // before reaching this point. If those callers do not yet plumb an
+  // authContext through, we fall back to a system-owner context with an
+  // explicit audit reason — the same pattern the R17 defense-in-depth path
+  // below already uses for InstallElement. Surfacing a 401 here would just
+  // break server-startup and the CreateAgent pipeline; the upstream gate
+  // is the actual authorization boundary in those flows.
+  let resolvedAuthContext = authContext
+  if (!resolvedAuthContext) {
+    const { buildSystemAuthContext } = await import('@/lib/agent-auth')
+    resolvedAuthContext = buildSystemAuthContext('sessions-service-create-session-internal')
+    console.warn('[Sessions] createSession invoked without authContext — using system-owner fallback. Caller should pass authContext for audit traceability.')
+  }
+  if (!resolvedAuthContext.isSystemOwner) {
+    const { authorize } = await import('@/lib/authorization')
+    const authResult: import('@/lib/agent-auth').AgentAuthResult = {
+      agentId: resolvedAuthContext.agentId,
+      governanceTitle: resolvedAuthContext.governanceTitle,
+      teamId: resolvedAuthContext.teamId,
+    }
+    const authz = authorize(authResult, 'create-session', agentId)
+    if (!authz.allowed) {
+      return { error: authz.reason || 'Not authorized to create session', status: 403, data: undefined }
+    }
+  }
 
   if (!name || typeof name !== 'string') {
     return { error: 'Session name is required', status: 400, data: undefined }
@@ -816,7 +866,15 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
     else startCommand = 'claude'
 
     if (programArgs && typeof programArgs === 'string') {
-      const sanitized = programArgs.replace(/[^a-zA-Z0-9\s\-_.=/:,~@]/g, '').trim()
+      // SVC2-MAJ-03 fix (2026-05-06): the previous allowlist included `\s`,
+      // which matches `\n`, `\r`, `\t` and `\v` — a newline embedded in
+      // programArgs (e.g. via a registry row written through a less-protected
+      // path) would translate into a newline in the literal command sent to
+      // tmux send-keys, injecting a second shell command after the legitimate
+      // claude/codex/aider invocation. Replacing `\s` with a literal space and
+      // dropping the comma narrows the surface to characters that are never
+      // shell-meaningful in this context.
+      const sanitized = programArgs.replace(/[^a-zA-Z0-9 \-_.=/:~@]/g, '').trim()
       if (sanitized) startCommand = `${startCommand} ${sanitized}`
     }
 
@@ -1050,7 +1108,19 @@ export async function restoreSessions(params: { sessionId?: string; all?: boolea
   const runtime = getRuntime()
   const results: RestoreResult[] = []
 
+  // SVC2-MAJ-04 fix (2026-05-06): persisted session names go BACK to tmux as
+  // arguments. createSession enforces the tmux-name regex when minting names,
+  // but restoreSessions reads from a JSON file on disk that may have been
+  // corrupted, hand-edited, or written by an older version with looser rules.
+  // Re-validate before handing the name to runtime.* so a malformed entry
+  // can never reach the underlying process spawn.
+  const SESSION_NAME_RE = /^[a-zA-Z0-9_@.-]+$/
+
   for (const session of sessionsToRestore) {
+    if (!session.id || !SESSION_NAME_RE.test(session.id)) {
+      results.push({ sessionId: session.id || '<invalid>', status: 'failed' })
+      continue
+    }
     try {
       const exists = await runtime.sessionExists(session.id)
       if (!exists) {

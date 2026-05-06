@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { setManagerRole } from '@/services/governance-service'
 import { enforceSystemOwner } from '@/lib/route-auth'
+import { internalError } from '@/lib/error-response'
 
 // NT-023 (P8): Ensure Next.js does not cache this route
 export const dynamic = 'force-dynamic'
@@ -28,10 +29,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result.data)
   } catch (error) {
-    console.error('[governance] manager POST error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to set manager' },
-      { status: 500 }
-    )
+    return internalError(error, 'governance-manager-set')
   }
 }

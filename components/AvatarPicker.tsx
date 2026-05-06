@@ -52,6 +52,18 @@ export default function AvatarPicker({
     }
   }, [isOpen, currentAvatar])
 
+  // UI2-MAJ-08: Escape closes the modal — was previously only closeable by
+  // tabbing to the X button. We listen at the document level so it works
+  // regardless of which child element has focus.
+  useEffect(() => {
+    if (!isOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [isOpen, onClose])
+
   if (!isOpen) return null
 
   // Helper to normalize avatar paths for comparison (handles both old randomuser URLs and new local paths)
@@ -89,8 +101,16 @@ export default function AvatarPicker({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="bg-gray-900 rounded-xl border border-gray-700 w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl">
+    // UI2-MAJ-08: backdrop click closes the modal (mirrors the established
+    // pattern — backdrop onClick + stopPropagation on inner card).
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-gray-900 rounded-xl border border-gray-700 w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
           <h2 className="text-xl font-semibold text-white">Choose Avatar</h2>

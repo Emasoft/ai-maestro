@@ -50,16 +50,29 @@ function loadPersistedState(): Partial<KillSwitchState> {
   return {}
 }
 
-/** Persist lockdown state to disk so it survives restarts. */
+/**
+ * Persist lockdown state to disk so it survives restarts.
+ *
+ * LIB2-MAJ-06: ATOMIC tmp+rename — critical because this file IS the
+ * kill-switch persistence. A crash mid-write would erase the lockdown,
+ * effectively bypassing the brute-force defence (an attacker who causes
+ * Node to OOM during persistence could otherwise wipe out the lockdown
+ * window). The atomic rename guarantees the file is either fully-written
+ * old state OR fully-written new state — never partial.
+ */
 function persistLockdown(): void {
+  // SF-033: include process.pid in temp file name to prevent collisions
+  const tmpPath = `${LOCKDOWN_FILE}.tmp.${process.pid}.${Date.now()}`
   try {
     const dir = path.dirname(LOCKDOWN_FILE)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(LOCKDOWN_FILE, JSON.stringify({
+    fs.writeFileSync(tmpPath, JSON.stringify({
       lockdownUntil: state.lockdownUntil,
       activatedCount: state.activatedCount,
     }), { mode: 0o600 })
+    fs.renameSync(tmpPath, LOCKDOWN_FILE)
   } catch (err) {
+    try { fs.unlinkSync(tmpPath) } catch { /* ignore */ }
     console.error('[KILL-SWITCH] Failed to persist lockdown state:', err)
   }
 }

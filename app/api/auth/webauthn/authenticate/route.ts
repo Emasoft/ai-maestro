@@ -40,8 +40,9 @@ export async function GET() {
       headers: { 'Cache-Control': 'no-store' },
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to generate authentication options'
-    return NextResponse.json({ error: message }, { status: 500 })
+    // MIN-01: do not leak error.message. Log full error server-side.
+    console.error('[webauthn/authenticate GET]', err)
+    return NextResponse.json({ error: 'internal_error', code: 'webauthn-auth-options' }, { status: 500 })
   }
 }
 
@@ -75,9 +76,22 @@ export async function POST(request: Request) {
       )
     }
 
-    // Rate-limit authentication attempts (same bucket as password login)
-    const rateCheck = checkAndRecordAttempt('auth-login')
+    // API2-MAJ-06: per-source rate-limit + global cap, matching the
+    // /api/auth/login pattern. A WebAuthn brute-forcer from one IP must
+    // not be able to lock out a legitimate user logging in from another.
+    const sourceIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || request.headers.get('x-real-ip')
+      || 'unknown'
+    const rateLimitKey = `auth-login:${sourceIp}`
+    const rateCheck = checkAndRecordAttempt(rateLimitKey)
     if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Too many authentication attempts. Try again later.' },
+        { status: 429 }
+      )
+    }
+    const globalRateCheck = checkAndRecordAttempt('auth-login:global', 200)
+    if (!globalRateCheck.allowed) {
       return NextResponse.json(
         { error: 'Too many authentication attempts. Try again later.' },
         { status: 429 }
@@ -100,8 +114,9 @@ export async function POST(request: Request) {
       response as unknown as AuthenticationResponseJSON,
     )
 
-    // Success: reset rate limits and kill switch counter
-    resetRateLimit('auth-login')
+    // Success: reset only the per-source bucket; the global bucket
+    // continues to accumulate so cross-source attempts can't be laundered.
+    resetRateLimit(rateLimitKey)
     recordAuthSuccess()
 
     // Unlock encrypted security config (passkey auth does not provide the
@@ -126,12 +141,19 @@ export async function POST(request: Request) {
     // Record auth failure for kill switch
     recordAuthFailure()
 
-    if (message.includes('webauthn_challenge_expired') ||
-        message.includes('webauthn_verification_failed') ||
-        message.includes('webauthn_unknown_credential')) {
-      return NextResponse.json({ error: message }, { status: 401 })
+    // Only expose well-known webauthn protocol error CODES (not raw text).
+    if (message.includes('webauthn_challenge_expired')) {
+      return NextResponse.json({ error: 'webauthn_challenge_expired' }, { status: 401 })
+    }
+    if (message.includes('webauthn_verification_failed')) {
+      return NextResponse.json({ error: 'webauthn_verification_failed' }, { status: 401 })
+    }
+    if (message.includes('webauthn_unknown_credential')) {
+      return NextResponse.json({ error: 'webauthn_unknown_credential' }, { status: 401 })
     }
 
-    return NextResponse.json({ error: message }, { status: 500 })
+    // MIN-01: do not leak error.message in the generic 500 path.
+    console.error('[webauthn/authenticate POST]', err)
+    return NextResponse.json({ error: 'internal_error', code: 'webauthn-auth' }, { status: 500 })
   }
 }

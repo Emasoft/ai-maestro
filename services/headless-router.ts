@@ -588,8 +588,13 @@ const routes: Route[] = [
     }
   }},
   { method: 'POST', pattern: /^\/api\/sessions\/create$/, paramNames: [], handler: async (req, res) => {
+    // SVC2-MAJ-01 fix (2026-05-06): authenticate the caller before invoking
+    // createSession (registry-write + tmux-spawn primitive). Previously the
+    // headless-router relied on the structural credential gate alone.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await createSession(body))
+    sendServiceResult(res, await createSession({ ...body, authContext: buildAuthContext(auth) }))
   }},
   // Static sub-path routes MUST come before the parameterized catch-all
   // to prevent /api/sessions/restore and /api/sessions/activity from being
@@ -599,6 +604,9 @@ const routes: Route[] = [
     sendServiceResult(res, { status: 200, data: result })
   }},
   { method: 'POST', pattern: /^\/api\/sessions\/restore$/, paramNames: [], handler: async (req, res) => {
+    // SVC2-MAJ-12 (2026-05-06): authenticate before re-spawning persisted tmux sessions.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     try {
       const body = await readJsonBody(req)
       sendServiceResult(res, await restoreSessions(body))
@@ -606,7 +614,10 @@ const routes: Route[] = [
       sendJson(res, 400, { error: error instanceof Error ? error.message : 'Invalid JSON body' })
     }
   }},
-  { method: 'DELETE', pattern: /^\/api\/sessions\/restore$/, paramNames: [], handler: async (_req, res, _params, query) => {
+  { method: 'DELETE', pattern: /^\/api\/sessions\/restore$/, paramNames: [], handler: async (req, res, _params, query) => {
+    // SVC2-MAJ-12 (2026-05-06): authenticate before deleting persisted session metadata.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     if (!query.sessionId) { sendJson(res, 400, { error: 'sessionId query param required' }); return }
     sendServiceResult(res, await deletePersistedSession(query.sessionId))
   }},
@@ -625,7 +636,10 @@ const routes: Route[] = [
     sendServiceResult(res, result)
   }},
   // Parameterized session routes AFTER all static sub-paths
-  { method: 'DELETE', pattern: /^\/api\/sessions\/([^/]+)$/, paramNames: ['id'], handler: async (_req, res, params) => {
+  { method: 'DELETE', pattern: /^\/api\/sessions\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // SVC2-MAJ-12 (2026-05-06): authenticate before killing tmux sessions.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     sendServiceResult(res, await deleteSession(params.id))
   }},
   { method: 'GET', pattern: /^\/api\/sessions\/([^/]+)\/command$/, paramNames: ['id'], handler: async (_req, res, params) => {
@@ -656,11 +670,17 @@ const routes: Route[] = [
     }))
   }},
   { method: 'PATCH', pattern: /^\/api\/sessions\/([^/]+)\/rename$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // SVC2-MAJ-12 (2026-05-06): authenticate before renaming a tmux session.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
     sendServiceResult(res, await renameSession(params.id, body.name))
   }},
   // Stop session — Ctrl+C clears partial input, then /exit as literal text exits Claude Code
-  { method: 'POST', pattern: /^\/api\/sessions\/([^/]+)\/stop$/, paramNames: ['id'], handler: async (_req, res, params) => {
+  { method: 'POST', pattern: /^\/api\/sessions\/([^/]+)\/stop$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // SVC2-MAJ-12 (2026-05-06): authenticate before sending Ctrl+C / /exit to a tmux pane.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const sessionName = decodeURIComponent(params.id)
     try {
       // BUG-3 fix: mirror the 3-command sequence from the Next.js stop route
@@ -675,6 +695,9 @@ const routes: Route[] = [
   }},
   // Restart session — /exit, poll for shell prompt, relaunch
   { method: 'POST', pattern: /^\/api\/sessions\/([^/]+)\/restart$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // SVC2-MAJ-12 (2026-05-06): authenticate before relaunching the agent client.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const sessionName = decodeURIComponent(params.id)
     const agent = getAgentBySession(sessionName)
 
@@ -830,7 +853,10 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/agents\/normalize-hosts$/, paramNames: [], handler: async (_req, res) => {
     sendServiceResult(res, diagnoseHosts())
   }},
-  { method: 'POST', pattern: /^\/api\/agents\/normalize-hosts$/, paramNames: [], handler: async (_req, res) => {
+  { method: 'POST', pattern: /^\/api\/agents\/normalize-hosts$/, paramNames: [], handler: async (req, res) => {
+    // SVC2-MAJ-12 (2026-05-06): authenticate before mutating host-id assignments.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     sendServiceResult(res, await normalizeHosts())
   }},
   // Agent list / create (must be AFTER static agent sub-paths)
@@ -2241,38 +2267,53 @@ const routes: Route[] = [
   // Groups  -- mirrors app/api/groups/ routes
   // =========================================================================
   // Parameterized routes first so /api/groups/[id]/* matches before /api/groups
+  // SVC2-MAJ-07/08 fix (2026-05-06): every group mutation now requires an
+  // authenticated caller AND forwards the AuthContext to the service so
+  // mutation ACL + per-sender rate limit can run.
   { method: 'POST', pattern: /^\/api\/groups\/([^/]+)\/notify$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
     if (!body?.message || typeof body.message !== 'string') {
       sendJson(res, 400, { error: 'message is required' })
       return
     }
-    sendServiceResult(res, await notifyGroupSubscribers(params.id, body.message, body.priority))
+    sendServiceResult(res, await notifyGroupSubscribers(params.id, body.message, body.priority, buildAuthContext(auth)))
   }},
   { method: 'POST', pattern: /^\/api\/groups\/([^/]+)\/subscribe$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await subscribeAgent(params.id, body?.agentId))
+    sendServiceResult(res, await subscribeAgent(params.id, body?.agentId, buildAuthContext(auth)))
   }},
   { method: 'POST', pattern: /^\/api\/groups\/([^/]+)\/unsubscribe$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await unsubscribeAgent(params.id, body?.agentId))
+    sendServiceResult(res, await unsubscribeAgent(params.id, body?.agentId, buildAuthContext(auth)))
   }},
   { method: 'GET', pattern: /^\/api\/groups\/([^/]+)$/, paramNames: ['id'], handler: async (_req, res, params) => {
     sendServiceResult(res, getGroupById(params.id))
   }},
   { method: 'PUT', pattern: /^\/api\/groups\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req) ?? {}
-    sendServiceResult(res, await updateGroupById(params.id, body))
+    sendServiceResult(res, await updateGroupById(params.id, body, buildAuthContext(auth)))
   }},
-  { method: 'DELETE', pattern: /^\/api\/groups\/([^/]+)$/, paramNames: ['id'], handler: async (_req, res, params) => {
-    sendServiceResult(res, await deleteGroupById(params.id))
+  { method: 'DELETE', pattern: /^\/api\/groups\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    sendServiceResult(res, await deleteGroupById(params.id, buildAuthContext(auth)))
   }},
   { method: 'GET', pattern: /^\/api\/groups$/, paramNames: [], handler: async (_req, res) => {
     sendServiceResult(res, listAllGroups())
   }},
   { method: 'POST', pattern: /^\/api\/groups$/, paramNames: [], handler: async (req, res) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req) ?? {}
-    sendServiceResult(res, await createNewGroup(body))
+    sendServiceResult(res, await createNewGroup(body, buildAuthContext(auth)))
   }},
 
   // =========================================================================
@@ -3294,6 +3335,37 @@ const HEADLESS_AUTH_WHITELIST: ReadonlyArray<RegExp> = [
   /^\/api\/v1\/register(\/|$)/,
 ]
 
+/**
+ * SVC2-MAJ-13 design note (2026-05-06)
+ *
+ * `_headlessHasCredential` is a STRUCTURAL credential check ONLY — it asserts
+ * that *some* credential-shaped header was present on the request. It does
+ * NOT verify the credential. It MUST NOT be treated as proof of identity.
+ *
+ * Why it accepts any well-formed bearer/cookie:
+ *   - This is the headless-mode equivalent of middleware.ts in full mode.
+ *   - middleware.ts also performs structural-only matching there for the
+ *     same reason: the cryptographic token verification happens later, in
+ *     authenticateAgent() inside each route handler. Mirroring the
+ *     structural shape ensures that a request which would have been
+ *     accepted by middleware.ts (and then validated by the handler) is
+ *     also accepted by the headless-router (and then validated by the
+ *     handler).
+ *   - The ONLY job of this function is to ensure unauthenticated callers
+ *     are bounced before they reach any route logic. It is not a substitute
+ *     for authenticateAgent().
+ *
+ * Why every mutation handler MUST still call authenticateAgent():
+ *   - The regex `/^Bearer\s+(aim_tk_|...)[A-Za-z0-9_\-\.]{10,}$/` matches any
+ *     10+ character payload with a known prefix. An attacker can satisfy
+ *     this gate with `aim_tk_AAAAAAAAAA`. Without authenticateAgent() in
+ *     the handler, the request gets through.
+ *   - Per the audit invariant: every POST/PATCH/DELETE handler in this
+ *     file MUST contain `authenticateAgent(`. Grep for that string when
+ *     reviewing PRs that touch this file.
+ *
+ * THIS FUNCTION IS DEFENCE-IN-DEPTH, NOT AUTHENTICATION.
+ */
 function _headlessHasCredential(req: IncomingMessage, pathname: string): boolean {
   const cookieHdr = (req.headers.cookie as string | undefined) || ''
   if (/(^|;\s*)aim_session=[A-Za-z0-9_+/=\-]+/.test(cookieHdr)) return true

@@ -10,10 +10,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { importAgent } from '@/services/agents-transfer-service'
 import type { AgentImportOptions } from '@/types/portable'
 import { enforceAuth } from '@/lib/route-auth'
+import { requireSudoToken } from '@/lib/sudo-guard'
+import { internalError } from '@/lib/error-response'
 
 export async function POST(request: NextRequest) {
   const authErr = enforceAuth(request)
   if (authErr) return authErr
+
+  // API2-MAJ-17: agent import re-creates a fully-credentialed agent
+  // (with AMP keys, AID identity, conversation history) on the host.
+  // This is essentially "create agent" — should require sudo, matching
+  // cemetery revive (MAJ-07).
+  const sudoErr = requireSudoToken(request, 'POST', '/api/agents/import')
+  if (sudoErr) return sudoErr
 
   try {
     const formData = await request.formData()
@@ -44,10 +53,6 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(result.data, { status: result.status || 200 })
   } catch (error) {
-    console.error('Failed to import agent:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    )
+    return internalError(error, 'agents-import')
   }
 }

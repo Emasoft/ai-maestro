@@ -10,8 +10,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'crypto'
 import { handleGovernanceSyncMessage, buildLocalGovernanceSnapshot } from '@/lib/governance-sync'
-import { getHosts } from '@/lib/hosts-config'
-import { verifyHostAttestation } from '@/lib/host-keys'
+import { getHosts, getSelfHostId } from '@/lib/hosts-config'
+import { verifyHostAttestation, signHostAttestation } from '@/lib/host-keys'
 import type { GovernanceSyncMessage } from '@/types/governance'
 
 // NT-031: Module-scope Set for sync type validation (avoids per-request array allocation)
@@ -112,5 +112,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Signature expired' }, { status: 403 })
   }
   const snapshot = buildLocalGovernanceSnapshot()
-  return NextResponse.json({ ...snapshot, lastSyncAt: new Date().toISOString(), ttl: 300 })
+  const responseBody = { ...snapshot, lastSyncAt: new Date().toISOString(), ttl: 300 }
+
+  // LIB2-MAJ-09: Sign the response body with this host's Ed25519 key so the
+  // requesting peer can verify authenticity (defends against a compromised
+  // peer or MITM that returns a forged governance snapshot). The peer
+  // verifies via verifyHostAttestation() using the host's publicKeyHex from
+  // its hosts-config registry.
+  const responseTimestamp = new Date().toISOString()
+  const responseHostId = getSelfHostId()
+  // Canonical signing input: combines response body hash + timestamp + hostId
+  // so a replay against a different host cannot succeed.
+  const bodyHash = createHash('sha256').update(JSON.stringify(responseBody)).digest('hex')
+  const respSignedData = `gov-sync-resp|${responseHostId}|${responseTimestamp}|${bodyHash}`
+  const responseSignature = signHostAttestation(respSignedData)
+
+  return NextResponse.json(responseBody, {
+    headers: {
+      'X-Host-Id': responseHostId,
+      'X-Host-Timestamp': responseTimestamp,
+      'X-Host-Signature': responseSignature,
+    },
+  })
 }

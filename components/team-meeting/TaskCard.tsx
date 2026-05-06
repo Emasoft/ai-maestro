@@ -33,11 +33,22 @@ export default function TaskCard({ task, onSelect, onStatusChange }: TaskCardPro
   }
 
   return (
+    // UI2-MAJ-02: Mirror the KanbanCard accessibility pattern — role + tabIndex
+    // + onKeyDown so keyboard users can open the task detail view.
     <div
+      role="button"
+      tabIndex={0}
       onClick={() => onSelect(task)}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+          e.preventDefault()
+          onSelect(task)
+        }
+      }}
       className={`
         flex items-start gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-all duration-200
         border border-transparent hover:bg-gray-800/60 hover:border-gray-700/50
+        focus:outline-none focus:ring-2 focus:ring-emerald-400/70
         ${task.isBlocked ? 'opacity-60' : ''}
       `}
     >

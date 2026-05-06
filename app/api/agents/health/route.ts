@@ -64,6 +64,8 @@ export async function POST(request: Request) {
     }
     return NextResponse.json(result.data)
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal server error' }, { status: 500 })
+    // MIN-01: log full error server-side, return generic 500.
+    console.error('[agents/health]', error)
+    return NextResponse.json({ error: 'internal_error', code: 'agents-health' }, { status: 500 })
   }
 }

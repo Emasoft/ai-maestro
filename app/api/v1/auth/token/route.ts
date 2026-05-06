@@ -20,11 +20,13 @@ import { loadTeams } from '@/lib/team-registry'
 
 export async function POST(request: Request) {
   try {
-    // Rate limit: proof-of-possession verification is cryptographic work.
-    // Limit to 30 attempts/minute to prevent brute-force attacks.
+    // API2-MAJ-05: rate limit must be keyed by sender identity AND keep a
+    // generous global cap so a single attacker can't lock out every agent.
+    // We compute the per-identity key after decoding the agent identity
+    // (further below) — an outer global cap guards against pre-decode flood.
     const { checkAndRecordAttempt, resetRateLimit } = await import('@/lib/rate-limit')
-    const rateCheck = checkAndRecordAttempt('aid-token-exchange', 30)
-    if (!rateCheck.allowed) {
+    const globalCheck = checkAndRecordAttempt('aid-token-exchange:global', 200)
+    if (!globalCheck.allowed) {
       return NextResponse.json(
         { error: 'rate_limited', message: 'Too many token exchange attempts. Try again later.' },
         { status: 429 }
@@ -72,6 +74,18 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'invalid_identity', message: 'Agent identity must contain fingerprint or alias' },
         { status: 400 }
+      )
+    }
+
+    // API2-MAJ-05: per-identity rate limit (30/min). A single attacker
+    // brute-forcing one fingerprint cannot starve other agents of token
+    // exchange, and resetRateLimit on success affects only this identity.
+    const identityKey = `aid-token-exchange:${identity.fingerprint || identity.alias || 'unknown'}`
+    const identityCheck = checkAndRecordAttempt(identityKey, 30)
+    if (!identityCheck.allowed) {
+      return NextResponse.json(
+        { error: 'rate_limited', message: 'Too many token exchange attempts for this identity. Try again later.' },
+        { status: 429 }
       )
     }
 
@@ -161,7 +175,10 @@ export async function POST(request: Request) {
       scope
     )
 
-    resetRateLimit('aid-token-exchange')
+    // Reset only the per-identity bucket on success. The global bucket
+    // intentionally is NOT reset so a successful exchange doesn't grant
+    // the laundering window the audit flagged (API2-MAJ-05).
+    resetRateLimit(identityKey)
     console.log(`[AID Token] Issued aim_tk_ token for agent "${agent.name}" (title=${governanceTitle}, team=${teamId || 'none'})`)
 
     const response = NextResponse.json(tokenResult)

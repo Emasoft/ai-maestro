@@ -13,9 +13,16 @@ import { exportAgentZip, createTranscriptExportJob } from '@/services/agents-tra
 import { isValidUuid } from '@/lib/validation'
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // API2-MAJ-15: full handler-level auth. The exported zip contains the
+  // agent's database, conversation logs, AMP keys, and AID identity —
+  // anyone passing the cheap middleware structural check used to be able
+  // to download it. The POST sibling already enforces auth; the GET must.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { id } = await params
     if (!isValidUuid(id)) {

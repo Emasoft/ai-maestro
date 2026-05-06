@@ -22,6 +22,7 @@ import { VoiceSubsystem } from './cerebellum/voice-subsystem'
 
 import * as fs from 'fs'
 import * as path from 'path'
+import * as os from 'os'
 import { statePath } from '@/lib/ecosystem-constants'
 
 // Get this host's API base URL from configuration
@@ -33,8 +34,8 @@ function getSelfApiBase(): string {
   if (selfHost?.url) {
     return selfHost.url
   }
-  // Absolute fallback - use hostname, never localhost
-  const hostname = require('os').hostname().toLowerCase()
+  // Absolute fallback - use hostname, never localhost (LIB2-MAJ-03: ESM import)
+  const hostname = os.hostname().toLowerCase()
   return `http://${hostname}:23000`
 }
 

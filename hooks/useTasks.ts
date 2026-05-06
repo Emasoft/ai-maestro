@@ -24,6 +24,15 @@ export function useTasks(teamId: string | null): UseTasksResult {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  // UI2-MAJ-09 + UI2-MAJ-10: track mount state so async callbacks (fetchTasks
+  // refresh on rapid teamId change, optimistic-update revert paths in
+  // create/update/deleteTask) don't fire setState on the unmounted component.
+  // Mirrors the pattern in useDocuments.ts and useTeam.ts.
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false }
+  }, [])
 
   const fetchTasks = useCallback(async (signal?: AbortSignal) => {
     if (!teamId) return
@@ -31,11 +40,13 @@ export function useTasks(teamId: string | null): UseTasksResult {
       const res = await fetch(`/api/teams/${teamId}/tasks`, signal ? { signal } : undefined)
       if (!res.ok) throw new Error('Failed to fetch tasks')
       const data = await res.json()
+      if (!isMountedRef.current) return
       setTasks(data.tasks || [])
       setError(null)
     } catch (err) {
       // MF-019: ignore abort errors — they are expected on teamId change
       if (err instanceof Error && err.name === 'AbortError') return
+      if (!isMountedRef.current) return
       setError(err instanceof Error ? err.message : 'Failed to fetch tasks')
     }
   }, [teamId])
@@ -48,7 +59,10 @@ export function useTasks(teamId: string | null): UseTasksResult {
     }
     const controller = new AbortController()
     setLoading(true)
-    fetchTasks(controller.signal).finally(() => setLoading(false))
+    fetchTasks(controller.signal).finally(() => {
+      if (!isMountedRef.current) return
+      setLoading(false)
+    })
     return () => { controller.abort() }
   }, [teamId, fetchTasks])
 
@@ -97,8 +111,10 @@ export function useTasks(teamId: string | null): UseTasksResult {
     if (!teamId) return { unblocked: [] as TaskWithDeps[] }
     // Filter out undefined values to avoid overwriting existing task fields during optimistic merge
     const cleanUpdates = Object.fromEntries(Object.entries(updates).filter(([, v]) => v !== undefined))
-    // Optimistic update
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...cleanUpdates, updatedAt: new Date().toISOString() } : t))
+    // Optimistic update (UI2-MAJ-10: gate by mount)
+    if (isMountedRef.current) {
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...cleanUpdates, updatedAt: new Date().toISOString() } : t))
+    }
     try {
       const res = await fetch(`/api/teams/${teamId}/tasks/${taskId}`, {
         method: 'PUT',
@@ -117,8 +133,10 @@ export function useTasks(teamId: string | null): UseTasksResult {
 
   const deleteTask = useCallback(async (taskId: string) => {
     if (!teamId) return
-    // Optimistic update
-    setTasks(prev => prev.filter(t => t.id !== taskId))
+    // Optimistic update (UI2-MAJ-10: gate by mount)
+    if (isMountedRef.current) {
+      setTasks(prev => prev.filter(t => t.id !== taskId))
+    }
     try {
       const res = await fetch(`/api/teams/${teamId}/tasks/${taskId}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Failed to delete task')

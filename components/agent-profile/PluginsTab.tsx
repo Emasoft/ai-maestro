@@ -146,10 +146,23 @@ export default function PluginsTab({ config, onSwitchTab, onRefresh }: PluginsTa
                   : 'border-gray-700/30 bg-gray-800/20'
             }`}
           >
-            {/* Plugin header — clickable to expand/collapse */}
+            {/* Plugin header — clickable to expand/collapse.
+                UI2-MAJ-05: keyboard support so a11y users can expand/collapse
+                plugin rows. The inner uninstall icon-divs are also converted
+                to real <button> elements below. */}
             <div
+              role="button"
+              tabIndex={0}
+              aria-expanded={isExpanded}
+              aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${p.name}`}
               onClick={() => setExpandedPlugin(isExpanded ? null : p.name)}
-              className="flex items-center gap-2 px-2.5 py-2 cursor-pointer hover:bg-gray-800/20 transition-colors"
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+                  e.preventDefault()
+                  setExpandedPlugin(isExpanded ? null : p.name)
+                }
+              }}
+              className="flex items-center gap-2 px-2.5 py-2 cursor-pointer hover:bg-gray-800/20 transition-colors focus:outline-none focus:bg-gray-800/40"
             >
               {isExpanded
                 ? <ChevronDown className="w-3 h-3 text-gray-500 flex-shrink-0" />
@@ -177,21 +190,28 @@ export default function PluginsTab({ config, onSwitchTab, onRefresh }: PluginsTa
               ) : p.name === 'ai-maestro-plugin' ? (
                 <span className="text-[9px] text-blue-400/70 px-1.5 flex-shrink-0" title="Core plugin — cannot be uninstalled (R17)">core</span>
               ) : p.isConflictingRolePlugin ? (
-                <div
+                // UI2-MAJ-05: real <button> for uninstall — natively keyboard-accessible
+                <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); setConfirmUninstall(p) }}
-                  className="flex-shrink-0 p-1 rounded-md cursor-pointer hover:bg-red-500/20"
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
+                  className="flex-shrink-0 p-1 rounded-md cursor-pointer hover:bg-red-500/20 focus:outline-none focus:ring-1 focus:ring-red-400/70"
                   title="Uninstall this plugin"
+                  aria-label={`Uninstall ${p.name}`}
                 >
                   <XCircle className="w-3.5 h-3.5 text-red-400" />
-                </div>
+                </button>
               ) : (
-                <div
+                <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); setConfirmUninstall(p) }}
-                  className="flex-shrink-0 p-1 rounded-md cursor-pointer hover:bg-gray-700/60"
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation() }}
+                  className="flex-shrink-0 p-1 rounded-md cursor-pointer hover:bg-gray-700/60 focus:outline-none focus:ring-1 focus:ring-gray-500/70"
                   title="Uninstall this plugin"
+                  aria-label={`Uninstall ${p.name}`}
                 >
                   <XCircle className="w-3.5 h-3.5 text-gray-500 hover:text-gray-300" />
-                </div>
+                </button>
               )}
             </div>
 

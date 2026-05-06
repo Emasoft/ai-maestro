@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { listAgents, searchAgentsByQuery } from '@/services/agents-core-service'
 import { CreateAgent } from '@/services/element-management-service'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
+import { internalError } from '@/lib/error-response'
 
 const CreateAgentSchema = z.object({
   name: z.string().min(1).max(64).regex(/^[a-zA-Z0-9_@.-]+$/, 'Agent name must be alphanumeric with _@.-'),
@@ -62,8 +63,8 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json(result.data)
   } catch (error) {
-    // CC-P3-001: Catch unexpected errors (e.g. URL parsing, service throws)
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal server error' }, { status: 500 })
+    // MIN-01: log full error server-side, return generic 500.
+    return internalError(error, 'agents-list')
   }
 }
 
@@ -107,6 +108,6 @@ export async function POST(request: NextRequest) {
     const agent = result.agentId ? getAgent(result.agentId) : null
     return NextResponse.json({ agent }, { status: 201 })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal server error' }, { status: 500 })
+    return internalError(error, 'agents-create')
   }
 }

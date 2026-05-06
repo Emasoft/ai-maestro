@@ -80,7 +80,40 @@ export async function downloadGitHubRepo(source: GitHubSource): Promise<string> 
   const nodeStream = Readable.fromWeb(body as unknown as import('stream/web').ReadableStream)
   await pipeline(nodeStream, createWriteStream(tarballPath))
 
-  // Extract
+  // LIB2-MAJ-12: Tar extraction with member-path validation. GNU tar 1.30+
+  // strips leading "/" by default and refuses ".." members, but BSD tar (macOS
+  // default) and older GNU tar versions do NOT — a malicious tarball with a
+  // member like "../../etc/passwd" could otherwise write outside tmpDir.
+  //
+  // Step 1: list all members WITHOUT extracting and validate each one. We refuse
+  //   - absolute paths (leading '/')
+  //   - paths containing '..' segments
+  //   - paths whose resolved location escapes tmpDir
+  //
+  // Step 2: only after every member is verified safe do we run the actual
+  // extract. We pass `-P` is NOT what we want (that DISABLES protection); we
+  // instead rely on the prior validation + the default --strip-components=0.
+  const { stdout: tarList } = await execFileAsync('tar', ['-tzf', tarballPath], { timeout: 60_000, maxBuffer: 32 * 1024 * 1024 })
+  const tmpDirReal = await fs.realpath(tmpDir)
+  const members = tarList.split('\n').filter(line => line.length > 0)
+  for (const member of members) {
+    if (member.startsWith('/')) {
+      await fs.rm(tmpDir, { recursive: true, force: true })
+      throw new Error(`Refusing to extract tarball: absolute member path "${member}"`)
+    }
+    // Tar member names are relative; reject any that contains a '..' segment.
+    const segments = member.split('/')
+    if (segments.some(seg => seg === '..')) {
+      await fs.rm(tmpDir, { recursive: true, force: true })
+      throw new Error(`Refusing to extract tarball: traversal member path "${member}"`)
+    }
+    // Final safety check: the resolved path must stay under tmpDir.
+    const resolved = path.resolve(tmpDirReal, member)
+    if (!resolved.startsWith(tmpDirReal + path.sep) && resolved !== tmpDirReal) {
+      await fs.rm(tmpDir, { recursive: true, force: true })
+      throw new Error(`Refusing to extract tarball: member "${member}" escapes extraction root`)
+    }
+  }
   await execFileAsync('tar', ['-xzf', tarballPath, '-C', tmpDir], { timeout: 60_000 })
 
   // Find extracted directory

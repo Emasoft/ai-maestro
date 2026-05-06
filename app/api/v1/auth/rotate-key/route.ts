@@ -19,9 +19,10 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
+    // MIN-01: do not leak error.message.
     console.error('[rotate-key] Unhandled error:', error)
     return NextResponse.json(
-      { error: 'internal_error', message: error instanceof Error ? error.message : 'Internal server error' } as AMPError,
+      { error: 'internal_error', message: 'Internal server error' } as AMPError,
       { status: 500 }
     )
   }

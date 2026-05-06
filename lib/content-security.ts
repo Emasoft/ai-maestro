@@ -100,9 +100,29 @@ function escapeXmlAttr(value: string): string {
 
 /**
  * Check if content is already wrapped by a gateway sanitizer.
+ *
+ * LIB2-MAJ-11: Use a STRICT prefix check (and trailing closing tag) instead of
+ * substring `.includes()` — the substring form was bypassable: any user-content
+ * that mentioned `<external-content ` ANYWHERE (e.g. inside a fenced code block,
+ * inside another quote, anywhere in the body) marked the WHOLE message as
+ * already-wrapped, defeating the prompt-injection backstop.
+ *
+ * The wrapper applies to the entire message: a wrapped message MUST start with
+ * the opening tag (after optional whitespace) AND end with the matching closing
+ * tag. We trim whitespace before matching so a wrapper that was emitted with
+ * trailing newlines still matches.
  */
 function isAlreadyWrapped(message: string): boolean {
-  return message.includes('<external-content ') || message.includes('<agent-message ')
+  const trimmed = message.trimStart()
+  // Match a leading opening tag at the very start AND a closing tag at the end
+  // of the trimmed message. A mention of the marker mid-text no longer matches.
+  if (trimmed.startsWith('<external-content ') && message.trimEnd().endsWith('</external-content>')) {
+    return true
+  }
+  if (trimmed.startsWith('<agent-message ') && message.trimEnd().endsWith('</agent-message>')) {
+    return true
+  }
+  return false
 }
 
 /**

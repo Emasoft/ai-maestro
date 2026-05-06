@@ -326,13 +326,20 @@ describe('deleteTeamById', () => {
     expect(result.status).toBe(404)
   })
 
-  it('returns 400 when deleting team without requestingAgentId', async () => {
+  it('returns 401 when deleting team without requestingAgentId AND without authContext (anonymous request)', async () => {
+    // SVC2-MAJ-10 / LIB2-CRIT-02 fix (2026-05-06): the previous test
+    // expected the deprecated `requestingAgentId === undefined` shortcut
+    // to fall through to a 400 "Agent identity required". After the
+    // round-2 hardening, anonymous calls (no agentId AND no
+    // system-owner authContext) fail closed at the team-acl layer,
+    // which returns 401 with an "anonymous request" reason. The 400
+    // path no longer exists by design.
     mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1', type: 'closed', chiefOfStaffId: 'cos-1' }))
 
     const result = await deleteTeamById('team-1')
 
-    expect(result.status).toBe(400)
-    expect(result.error).toMatch(/agent identity/i)
+    expect(result.status).toBe(401)
+    expect(result.error).toMatch(/authenticated|anonymous|agent identity/i)
   })
 
   it('returns 403 when unauthorized agent tries to delete team', async () => {

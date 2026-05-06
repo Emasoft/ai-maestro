@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getMessages, getMessageCount } from '@/lib/vpn-chat-log'
 import { enforceAuth } from '@/lib/route-auth'
+import { internalError } from '@/lib/error-response'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,10 +65,6 @@ export async function GET(request: NextRequest) {
       totalCount: getMessageCount(),
     }, { status: 200 })
   } catch (error) {
-    console.error('[mesh/chat/history] GET failed:', error)
-    return NextResponse.json(
-      { error: `Failed to fetch chat history: ${(error as Error).message}` },
-      { status: 500 },
-    )
+    return internalError(error, 'mesh-chat-history')
   }
 }

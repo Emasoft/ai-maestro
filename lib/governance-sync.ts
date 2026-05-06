@@ -12,8 +12,8 @@
  */
 
 import { createHash } from 'crypto'
-import { getHosts, getSelfHostId, isSelf } from '@/lib/hosts-config'
-import { signHostAttestation } from '@/lib/host-keys'
+import { getHosts, getHostById, getSelfHostId, isSelf } from '@/lib/hosts-config'
+import { signHostAttestation, verifyHostAttestation } from '@/lib/host-keys'
 import { getManagerId } from '@/lib/governance'
 import { getAgent } from '@/lib/agent-registry'
 import { loadTeams } from '@/lib/team-registry'
@@ -272,14 +272,49 @@ export async function requestPeerSync(hostUrl: string): Promise<GovernancePeerSt
       return null
     }
 
-    const data = await response.json()
+    // LIB2-MAJ-09: Read body as text first, hash it, verify signature BEFORE
+    // trusting the contents. The previous implementation only checked SHAPE —
+    // a malicious or compromised peer could return any state and we'd
+    // overwrite our peer-governance store with the forgery.
+    const respHostId = response.headers.get('X-Host-Id')
+    const respTimestamp = response.headers.get('X-Host-Timestamp')
+    const respSignature = response.headers.get('X-Host-Signature')
+    if (!respHostId || !respTimestamp || !respSignature) {
+      console.error(`[governance-sync] Response from ${hostUrl} missing signature headers — refusing to trust`)
+      return null
+    }
+    const peerHost = getHostById(respHostId)
+    if (!peerHost?.publicKeyHex) {
+      console.error(`[governance-sync] No registered public key for host ${respHostId} — refusing to trust response`)
+      return null
+    }
+    // Freshness check (5 min window, 60s clock skew)
+    const tsAge = Date.now() - new Date(respTimestamp).getTime()
+    if (isNaN(tsAge) || tsAge > 300_000 || tsAge < -60_000) {
+      console.error(`[governance-sync] Response signature timestamp out of window for ${hostUrl} (age=${tsAge}ms)`)
+      return null
+    }
+    const rawBody = await response.text()
+    const bodyHash = createHash('sha256').update(rawBody).digest('hex')
+    const respSignedData = `gov-sync-resp|${respHostId}|${respTimestamp}|${bodyHash}`
+    if (!verifyHostAttestation(respSignedData, respSignature, peerHost.publicKeyHex)) {
+      console.error(`[governance-sync] Response signature verification FAILED for ${hostUrl} — refusing to trust`)
+      return null
+    }
+    let data: unknown
+    try {
+      data = JSON.parse(rawBody)
+    } catch (err) {
+      console.error(`[governance-sync] Response from ${hostUrl} is not valid JSON: ${(err as Error).message}`)
+      return null
+    }
     // NT-022: Basic field validation before trusting the remote response
     if (
       !data ||
       typeof data !== 'object' ||
-      typeof data.hostId !== 'string' ||
-      !Array.isArray(data.teams) ||
-      typeof data.lastSyncAt !== 'string'
+      typeof (data as Record<string, unknown>).hostId !== 'string' ||
+      !Array.isArray((data as Record<string, unknown>).teams) ||
+      typeof (data as Record<string, unknown>).lastSyncAt !== 'string'
     ) {
       console.error(`[governance-sync] Invalid response structure from ${hostUrl}: missing required fields`)
       return null

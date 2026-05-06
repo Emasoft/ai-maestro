@@ -126,10 +126,21 @@ export default function AgentSearch({ agentId, onResultClick, className = '' }: 
   
   // Render result card
   const renderResult = (result: HighlightedSearchResult) => (
+    // UI2-MAJ-04: keyboard support for search-result navigation. Without this,
+    // keyboard users can focus the search input via Ctrl/Cmd+K but cannot
+    // activate any of the result cards.
     <div
       key={result.msg_id}
+      role="button"
+      tabIndex={0}
       onClick={() => onResultClick?.(result)}
-      className="p-4 bg-gray-800 rounded-lg border border-gray-700 hover:border-blue-500 cursor-pointer transition-all hover:shadow-lg"
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+          e.preventDefault()
+          onResultClick?.(result)
+        }
+      }}
+      className="p-4 bg-gray-800 rounded-lg border border-gray-700 hover:border-blue-500 cursor-pointer transition-all hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400/70"
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">

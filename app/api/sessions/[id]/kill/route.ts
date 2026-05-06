@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { killSessionSync } from '@/lib/agent-runtime'
 import { authenticateFromRequest } from '@/lib/agent-auth'
+import { requireSudoToken } from '@/lib/sudo-guard'
 
 /**
  * POST /api/sessions/[id]/kill
  * Kill a tmux session by name. Used to clean up orphan/dead sessions.
+ *
+ * API2-MAJ-03: hard tmux kill is more destructive than `stop` (which is
+ * already strict). Requires fresh sudo token via security-registry.
  */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Sudo gate FIRST (before auth) so the modal flow is consistent with
+  // other strict routes — sudo is checked before any side effect.
+  const sudoErr = requireSudoToken(request, 'POST', '/api/sessions/[id]/kill')
+  if (sudoErr) return sudoErr
+
   const auth = authenticateFromRequest(request)
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })

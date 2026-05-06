@@ -120,6 +120,10 @@ export function useGovernance(agentId: string | null): GovernanceState {
     // Early exit if signal is already aborted — avoids setLoading(true) flicker
     // when a stale refresh fires after unmount or rapid agentId change
     if (signal?.aborted) return
+    // UI2-MAJ-13: also bail if the hook unmounted (e.g. WebSocket
+    // governance_update fires AFTER cleanup but BEFORE ws.close() takes
+    // effect — we used to call setLoading(true) on the unmounted component).
+    if (!isMountedRef.current) return
     // Fetch governance state and teams in parallel
     setLoading(true)
     Promise.all([
@@ -229,6 +233,11 @@ export function useGovernance(agentId: string | null): GovernanceState {
 
     // ISSUE-001: Subscribe to /status WebSocket for instant governance_update refresh.
     // This avoids the 10s poll delay when titles change via the API.
+    // UI2-MAJ-12: Track the WebSocket-triggered AbortController so cleanup
+    // can abort any in-flight refresh that the WS handler launched. Without
+    // this, a governance_update arriving during cleanup would call refresh()
+    // with a signal that's never aborted, leaking the fetch.
+    let wsRefreshController: AbortController | null = null
     let ws: WebSocket | null = null
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -237,9 +246,10 @@ export function useGovernance(agentId: string | null): GovernanceState {
         try {
           const data = JSON.parse(event.data)
           if (data.type === 'governance_update' && isMountedRef.current) {
-            // Immediate refresh — governance title changed server-side
-            const wsAbort = new AbortController()
-            refresh(wsAbort.signal)
+            // UI2-MAJ-12: abort any prior WS-triggered refresh before launching a new one
+            wsRefreshController?.abort()
+            wsRefreshController = new AbortController()
+            refresh(wsRefreshController.signal)
           }
         } catch { /* ignore parse errors */ }
       }
@@ -252,6 +262,8 @@ export function useGovernance(agentId: string | null): GovernanceState {
       pollController?.abort() // Abort any in-flight poll fetch
       // SF-040: Also abort any in-flight mutation-triggered refreshes
       mutationAbortRef.current?.abort()
+      // UI2-MAJ-12: also abort any WS-triggered refresh
+      wsRefreshController?.abort()
       if (ws) ws.close()
       isMountedRef.current = false // SF-023: Prevent state updates after unmount
     }

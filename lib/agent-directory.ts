@@ -102,19 +102,27 @@ function loadDirectory(): AgentDirectory {
 }
 
 /**
- * Save directory to disk
+ * Save directory to disk.
+ *
+ * LIB2-MAJ-05: Atomic tmp+rename to prevent half-written agent-directory.json
+ * if the process crashes mid-write (would otherwise corrupt the directory and
+ * break agent name lookups across the mesh).
  */
 function saveDirectory(directory: AgentDirectory): boolean {
   ensureDir()
 
+  // SF-033: include process.pid in temp file name to prevent collisions
+  const tmpPath = `${DIRECTORY_FILE}.tmp.${process.pid}.${Date.now()}`
   try {
     directory.version++
     directory.lastSync = new Date().toISOString()
-    fs.writeFileSync(DIRECTORY_FILE, JSON.stringify(directory, null, 2), 'utf-8')
+    fs.writeFileSync(tmpPath, JSON.stringify(directory, null, 2), 'utf-8')
+    fs.renameSync(tmpPath, DIRECTORY_FILE)
     directoryCache = directory
     cacheTimestamp = Date.now()
     return true
   } catch (error) {
+    try { fs.unlinkSync(tmpPath) } catch { /* ignore */ }
     console.error('[Agent Directory] Failed to save directory:', error)
     return false
   }

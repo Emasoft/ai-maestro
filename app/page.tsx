@@ -123,18 +123,28 @@ export default function DashboardPage() {
 
   // Check for organization and onboarding completion on mount
   // Auto-detects GitHub identity via gh CLI if organization is not set (skips onboarding wizard)
+  // UI2-MAJ-17: AbortController + cancelled-flag prevents the chain of two
+  // fetches from calling setShowOrganizationSetup/setOrganizationChecked on
+  // an unmounted component if the user navigates away during the round-trips.
   useEffect(() => {
+    const controller = new AbortController()
+    let cancelled = false
+
     const checkOrganization = async () => {
       try {
-        const response = await fetch('/api/organization')
+        const response = await fetch('/api/organization', { signal: controller.signal })
+        if (cancelled) return
         const data = await response.json()
+        if (cancelled) return
 
         if (!data.isSet) {
           // Auto-detect GitHub identity from gh CLI — skip manual organization setup
           try {
-            const ghRes = await fetch('/api/github/auth')
+            const ghRes = await fetch('/api/github/auth', { signal: controller.signal })
+            if (cancelled) return
             if (ghRes.ok) {
               const ghData = await ghRes.json()
+              if (cancelled) return
               const activeUser = ghData.accounts?.find((a: { active: boolean }) => a.active)
               if (activeUser?.username) {
                 // Auto-set organization from GitHub username
@@ -142,7 +152,9 @@ export default function DashboardPage() {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ name: activeUser.username }),
+                  signal: controller.signal,
                 })
+                if (cancelled) return
                 // Auto-complete onboarding since gh identity is the only required thing
                 localStorage.setItem('aimaestro-onboarding-completed', 'true')
                 // Skip both organization setup and onboarding wizard
@@ -150,9 +162,11 @@ export default function DashboardPage() {
                 return
               }
             }
-          } catch {
+          } catch (e) {
+            if ((e as Error).name === 'AbortError') return
             // gh auto-detect failed — fall through to manual setup
           }
+          if (cancelled) return
           // No gh identity found — show organization setup
           setShowOrganizationSetup(true)
         } else {
@@ -164,15 +178,21 @@ export default function DashboardPage() {
           }
         }
       } catch (error) {
+        if ((error as Error).name === 'AbortError') return
         console.error('Failed to check organization:', error)
         // On error, skip onboarding entirely — don't block the user
         localStorage.setItem('aimaestro-onboarding-completed', 'true')
       } finally {
+        if (cancelled) return
         setOrganizationChecked(true)
       }
     }
 
     checkOrganization()
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
   }, [])
 
   // Read agent from URL parameter ONCE on mount, then strip from URL.
@@ -345,27 +365,41 @@ export default function DashboardPage() {
   }, [agents, refreshAgents])
 
   // Initialize agent memories for all agents on load
-  // Fetch unread message count for active agent
+  // Fetch unread message count for active agent.
+  // UI2-MAJ-16: AbortController + signal pass-through prevents in-flight
+  // fetches from calling setUnreadCount on an unmounted component when the
+  // user navigates away during a poll cycle.
   useEffect(() => {
     if (!activeAgentId || !activeAgent) return
+
+    const controller = new AbortController()
 
     const fetchUnreadCount = async () => {
       try {
         // Use agent's hostUrl to route to the correct host for remote agents
         const baseUrl = activeAgent.hostUrl || ''
-        const response = await fetch(`${baseUrl}/api/messages?agent=${encodeURIComponent(activeAgentId)}&action=unread-count`)
+        const response = await fetch(
+          `${baseUrl}/api/messages?agent=${encodeURIComponent(activeAgentId)}&action=unread-count`,
+          { signal: controller.signal }
+        )
+        if (controller.signal.aborted) return
         if (response.ok) {
           const data = await response.json()
+          if (controller.signal.aborted) return
           setUnreadCount(data.count || 0)
         }
       } catch (error) {
+        if ((error as Error).name === 'AbortError') return
         console.error('Failed to fetch unread count:', error)
       }
     }
 
     fetchUnreadCount()
     const interval = setInterval(fetchUnreadCount, 10000)
-    return () => clearInterval(interval)
+    return () => {
+      controller.abort()
+      clearInterval(interval)
+    }
   }, [activeAgentId, activeAgent])
 
   // Agent-centric handlers

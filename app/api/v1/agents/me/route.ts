@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAgentSelf, updateAgentSelf } from '@/services/amp-service'
 import { authenticateRequest } from '@/lib/amp-auth'
 import { DeleteAgent } from '@/services/element-management-service'
+import { requireSudoToken } from '@/lib/sudo-guard'
 import type { AMPError } from '@/lib/types/amp'
 
 export async function GET(request: NextRequest) {
@@ -55,6 +56,12 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    // API2-MAJ-02: Hard self-delete is irreversible (no cemetery, removes
+    // agent dir + AMP keys + messages). Require sudo, matching the
+    // operator-driven DELETE /api/agents/[id] path.
+    const sudoErr = requireSudoToken(request, 'DELETE', '/api/v1/agents/me')
+    if (sudoErr) return sudoErr
+
     const authHeader = request.headers.get('Authorization')
     // Inline the AMP auth + DeleteAgent pipeline (replaces deprecated deleteAgentSelf wrapper)
     const ampAuth = authenticateRequest(authHeader)

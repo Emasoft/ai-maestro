@@ -39,6 +39,15 @@ export function useMeetingMessages({
   const pendingTimeoutsRef = useRef<Set<NodeJS.Timeout>>(new Set())
   // Track messages length for markAsRead without causing re-creation
   const messagesLengthRef = useRef(0)
+  // UI2-MAJ-11: gate setMessages calls (in fetchMessages, sendToAgent,
+  // broadcastToAll) by mount state. The pending-timeout map already prevents
+  // queued post-send fetches from firing after unmount, but a fetch that
+  // resolves AFTER cleanup still calls setMessages from the in-flight body.
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false }
+  }, [])
 
   // Keep messagesLengthRef in sync so markAsRead can read it without deps
   useEffect(() => { messagesLengthRef.current = messages.length }, [messages.length])
@@ -67,6 +76,9 @@ export function useMeetingMessages({
       if (!res.ok) return
 
       const data = await res.json()
+      // UI2-MAJ-11: bail before any setState if the hook unmounted while
+      // the fetch was in-flight.
+      if (!isMountedRef.current) return
       const newMessages: MeetingMessage[] = (data.messages || []).map((msg: MessageSummary) => ({
         ...msg,
         isMine: msg.from === 'maestro' || msg.fromAlias === 'Maestro',
@@ -116,7 +128,11 @@ export function useMeetingMessages({
       return
     }
     setLoading(true)
-    fetchMessages().finally(() => setLoading(false))
+    fetchMessages().finally(() => {
+      // UI2-MAJ-11: gate setLoading by mount
+      if (!isMountedRef.current) return
+      setLoading(false)
+    })
   }, [meetingId, isActive, fetchMessages])
 
   // Poll every 7s
@@ -133,6 +149,8 @@ export function useMeetingMessages({
 
   // Remove optimistic message by ID (used for rollback on failure)
   const removeOptimistic = useCallback((optimisticId: string) => {
+    // UI2-MAJ-11: gate setMessages by mount
+    if (!isMountedRef.current) return
     setMessages(prev => prev.filter(m => m.id !== optimisticId))
   }, [])
 
@@ -155,7 +173,10 @@ export function useMeetingMessages({
       isMine: true,
       displayFrom: 'Maestro',
     }
-    setMessages(prev => [...prev, optimistic])
+    // UI2-MAJ-11: gate setMessages by mount
+    if (isMountedRef.current) {
+      setMessages(prev => [...prev, optimistic])
+    }
     return optimisticId
   }, [meetingId])
 

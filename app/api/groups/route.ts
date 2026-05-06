@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { listAllGroups, createNewGroup } from '@/services/groups-service'
 import { enforceAuth } from '@/lib/route-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
+import { internalError } from '@/lib/error-response'
 
 const CreateGroupSchema = z.object({
   name: z.string().min(1).max(128),
@@ -21,11 +23,7 @@ export async function GET() {
     }
     return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
-    console.error('Failed to list groups:', error)
-    return NextResponse.json(
-      { error: `Failed to list groups: ${(error as Error).message}` },
-      { status: 500 }
-    )
+    return internalError(error, 'groups-list')
   }
 }
 
@@ -35,6 +33,13 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const authErr = enforceAuth(request)
   if (authErr) return authErr
+
+  // SVC2-MAJ-07 (2026-05-06): forward authContext to the service.
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+  const authContext = buildAuthContext(auth)
 
   try {
     let raw: unknown
@@ -50,16 +55,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await createNewGroup(parsed.data)
+    const result = await createNewGroup(parsed.data, authContext)
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
     return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
-    console.error('Failed to create group:', error)
-    return NextResponse.json(
-      { error: `Failed to create group: ${(error as Error).message}` },
-      { status: 500 }
-    )
+    return internalError(error, 'groups-create')
   }
 }

@@ -80,9 +80,22 @@ async function dispatchCode(code: string): Promise<{ channel: string; hint: stri
   // macOS — osascript display notification
   if (process.platform === 'darwin') {
     try {
+      // LIB2-MAJ-07: Defensive AppleScript escape. The code field is currently
+      // generated from randomInt(0, 10) (digits only, see generateCode() above)
+      // so injection is impossible TODAY. But future maintainers MUST keep the
+      // code digits-only — if anyone ever changes it to base32, base64, or any
+      // alphanumeric form, the .replace() below is the last line of defence
+      // against AppleScript code injection.
+      //
+      // STRICT INVARIANT: if you are extending this code field beyond digits,
+      // also rewrite this dispatch path to use environment variables
+      // (osascript -e 'system attribute "AIM_CODE"') instead of inline
+      // template-literal interpolation — the .replace() below is a band-aid,
+      // not a real defence.
+      const safeCode = code.replace(/["\\]/g, '')
       await execFileAsync('osascript', [
         '-e',
-        `display notification "AI Maestro setup code: ${code}" with title "AI Maestro" sound name "Submarine"`,
+        `display notification "AI Maestro setup code: ${safeCode}" with title "AI Maestro" sound name "Submarine"`,
       ], { timeout: 5000 })
       return {
         channel: 'macOS notification',

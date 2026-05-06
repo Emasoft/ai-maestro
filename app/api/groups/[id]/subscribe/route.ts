@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { subscribeAgent } from '@/services/groups-service'
 import { enforceAuth } from '@/lib/route-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 
 const SubscribeSchema = z.object({
   agentId: z.string().uuid(),
@@ -33,7 +34,12 @@ export async function POST(
       )
     }
 
-    const result = await subscribeAgent(groupId, parsed.data.agentId)
+    // SVC2-MAJ-07 (2026-05-06): forward authContext.
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const result = await subscribeAgent(groupId, parsed.data.agentId, buildAuthContext(auth))
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }

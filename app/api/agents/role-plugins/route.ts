@@ -8,6 +8,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { enforceAuth } from '@/lib/route-auth'
+import { requireSudoToken } from '@/lib/sudo-guard'
+import { internalError } from '@/lib/error-response'
 import {
   generatePluginFromToml,
   listRolePlugins,
@@ -88,9 +90,7 @@ export async function POST(req: NextRequest) {
       mainAgentName: result.mainAgentName,
     })
   } catch (error) {
-    console.error('[role-plugins] Generate failed:', error)
-    const message = error instanceof Error ? error.message : 'Failed to generate plugin'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return internalError(error, 'role-plugins-generate')
   }
 }
 
@@ -98,6 +98,11 @@ export async function DELETE(req: NextRequest) {
   // #114: Authenticate before any side effect.
   const authErr = enforceAuth(req)
   if (authErr) return authErr
+
+  // API2-MAJ-01: route is classified strict in security-registry.json but
+  // was previously missing the sudo gate. Requires fresh sudo token.
+  const sudoErr = requireSudoToken(req, 'DELETE', '/api/agents/role-plugins')
+  if (sudoErr) return sudoErr
 
   const name = req.nextUrl.searchParams.get('name')
   if (!name) {

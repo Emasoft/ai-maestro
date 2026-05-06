@@ -16,6 +16,12 @@ import { requireSudoToken } from '@/lib/sudo-guard'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
+  // API2-MAJ-19: install is the more impactful direction (adds
+  // capabilities; the plugin's hooks/skills/agents/MCP servers gain
+  // governance over the agent). Sudo gate matches the DELETE sibling.
+  const sudoErr = requireSudoToken(req, 'POST', '/api/agents/role-plugins/install')
+  if (sudoErr) return sudoErr
+
   // Authenticate before any side effect — ChangePlugin Gate 0 will further
   // authorize the call against the agent's title + governance rules.
   const auth = requireAuth(req)
@@ -72,9 +78,8 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('[role-plugins/install] Install failed:', error)
-    const message = error instanceof Error ? error.message : 'Failed to install plugin'
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error('[role-plugins/install]', error)
+    return NextResponse.json({ error: 'internal_error', code: 'role-plugins-install' }, { status: 500 })
   }
 }
 
@@ -124,8 +129,7 @@ export async function DELETE(req: NextRequest) {
     }
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('[role-plugins/install] Uninstall failed:', error)
-    const message = error instanceof Error ? error.message : 'Failed to uninstall plugin'
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error('[role-plugins/install] uninstall:', error)
+    return NextResponse.json({ error: 'internal_error', code: 'role-plugins-uninstall' }, { status: 500 })
   }
 }

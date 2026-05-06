@@ -99,7 +99,11 @@ export function serializeAttestation(attestation: HostAttestation): string {
  * Returns null if the string is invalid.
  */
 // CC-P4-007: Allowlist of valid AgentRole values for attestation deserialization
-const VALID_AGENT_ROLES: readonly string[] = ['manager', 'chief-of-staff', 'architect', 'orchestrator', 'integrator', 'member', 'autonomous'] as const
+// LIB2-MAJ-10: Added 'maintainer' — was silently rejected on cross-host messaging
+// even though types/agent.ts:486 includes 'maintainer' in AgentRole. R9.13/R11.12
+// require every persisted agent to carry exactly one ROLE; MAINTAINER agents must
+// be able to send and receive cross-host attested messages.
+const VALID_AGENT_ROLES: readonly string[] = ['manager', 'chief-of-staff', 'architect', 'orchestrator', 'integrator', 'member', 'maintainer', 'autonomous'] as const
 
 export function deserializeAttestation(base64Json: string): HostAttestation | null {
   try {

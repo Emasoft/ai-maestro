@@ -10,6 +10,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { loadHumans, upsertHuman } from '@/lib/human-directory'
 import { enforceAuth } from '@/lib/route-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { getSelfHostId, isSelf } from '@/lib/hosts-config'
+import { internalError } from '@/lib/error-response'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,18 +34,27 @@ export async function GET() {
     const humans = loadHumans()
     return NextResponse.json({ version: 1, humans }, { status: 200 })
   } catch (error) {
-    console.error('[mesh/humans] GET failed:', error)
-    return NextResponse.json(
-      { error: `Failed to load humans directory: ${(error as Error).message}` },
-      { status: 500 },
-    )
+    return internalError(error, 'mesh-humans-get')
   }
 }
 
 // POST /api/v1/mesh/humans
 export async function POST(request: NextRequest) {
-  const authErr = enforceAuth(request)
-  if (authErr) return authErr
+  // API2-MAJ-09: full token verification + reject any upsert that claims a
+  // hostId other than this machine's. Cross-host directory sync requires
+  // an attested federated path, not this endpoint.
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+  // Only system-owner (web user) should be able to upsert human entries.
+  // Agents can read but should not be able to claim a human identity.
+  if (auth.agentId) {
+    return NextResponse.json(
+      { error: 'forbidden', message: 'Only the system owner can upsert human directory entries' },
+      { status: 403 },
+    )
+  }
 
   try {
     let raw: unknown
@@ -64,13 +76,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    upsertHuman(parsed.data)
+    // Refuse to upsert a human entry whose hostId points elsewhere — only
+    // the local entry can be modified through this endpoint.
+    if (!isSelf(parsed.data.hostId)) {
+      return NextResponse.json(
+        { error: 'host_mismatch', message: 'Can only upsert entries for the local host' },
+        { status: 403 },
+      )
+    }
+    // Pin to the canonical local hostId regardless of body case.
+    const verified = { ...parsed.data, hostId: getSelfHostId() }
+
+    upsertHuman(verified)
     return NextResponse.json({ ok: true }, { status: 200 })
   } catch (error) {
-    console.error('[mesh/humans] POST failed:', error)
-    return NextResponse.json(
-      { error: `Failed to upsert human: ${(error as Error).message}` },
-      { status: 500 },
-    )
+    return internalError(error, 'mesh-humans-post')
   }
 }

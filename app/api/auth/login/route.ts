@@ -37,9 +37,27 @@ export async function POST(request: Request) {
       )
     }
 
+    // API2-MAJ-06: rate-limit must be keyed by source so an attacker
+    // probing from one IP can't lock out a legitimate user logging in
+    // from another. Fall back to the global bucket only when the IP is
+    // unavailable (which keeps DoS protection on direct loopback).
     // CC-GOV-014: Rate-limit login attempts
-    const rateCheck = checkAndRecordAttempt('auth-login')
+    const sourceIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || request.headers.get('x-real-ip')
+      || 'unknown'
+    const rateLimitKey = `auth-login:${sourceIp}`
+    const rateCheck = checkAndRecordAttempt(rateLimitKey)
     if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Too many login attempts. Try again later.' },
+        { status: 429 }
+      )
+    }
+    // Outer global cap: even with per-IP keying, cap total login attempts
+    // across the host so an IPv6 rotation attack can't multiply effective
+    // budget. 200/min is well above legitimate usage.
+    const globalRateCheck = checkAndRecordAttempt('auth-login:global', 200)
+    if (!globalRateCheck.allowed) {
       return NextResponse.json(
         { error: 'Too many login attempts. Try again later.' },
         { status: 429 }
@@ -57,8 +75,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid password' }, { status: 401 })
     }
 
-    // Reset rate limit and kill switch counter on successful login
-    resetRateLimit('auth-login')
+    // Reset rate limit and kill switch counter on successful login.
+    // Reset only the per-source bucket — the global bucket continues to
+    // accumulate so a successful login does NOT launder attempts from
+    // other sources (API2-MAJ-06).
+    resetRateLimit(rateLimitKey)
     recordAuthSuccess()
 
     // Unlock encrypted security config with the plaintext password

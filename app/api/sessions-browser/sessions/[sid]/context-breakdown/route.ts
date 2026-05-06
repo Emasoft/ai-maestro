@@ -49,9 +49,39 @@ export async function GET(
     return NextResponse.json({ error: 'session_not_found' }, { status: 404 })
   }
 
+  // Live-tail safety: if a parallel poll-tick mtime-evicts the same
+  // path between our `ensureOpenForPath` and the actual reader call,
+  // the reader will return `session_not_found`. Retry up to
+  // MAX_ATTEMPTS times — each retry acquires a fresh sid serialised
+  // against concurrent evictions by the per-path lock in
+  // `JsonlReader.open()`. Two consecutive evictions are unusual but
+  // possible when several panes poll in parallel; three tries make
+  // that tolerant. See range/route.ts for the matching implementation.
+  const MAX_ATTEMPTS = 3
+  async function callWithRetry(): Promise<Awaited<ReturnType<ReturnType<typeof getJsonlReader>['contextBreakdown']>>> {
+    let lastErr: unknown
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const readerSid = await ensureOpenForPath(absolutePath!)
+      try {
+        return await getJsonlReader().contextBreakdown(readerSid)
+      } catch (err) {
+        lastErr = err
+        if (
+          err instanceof JsonlReaderProtocolError &&
+          err.code === 'session_not_found' &&
+          attempt < MAX_ATTEMPTS - 1
+        ) {
+          await new Promise(r => setTimeout(r, 20 + Math.floor(Math.random() * 30)))
+          continue
+        }
+        throw err
+      }
+    }
+    throw lastErr
+  }
+
   try {
-    const readerSid = await ensureOpenForPath(absolutePath)
-    const resp = await getJsonlReader().contextBreakdown(readerSid)
+    const resp = await callWithRetry()
     const validated = ContextBreakdownResponseSchema.parse({
       sessionId: sid,
       systemPrompt: resp.systemPrompt,

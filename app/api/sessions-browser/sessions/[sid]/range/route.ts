@@ -73,17 +73,48 @@ export async function POST(
     )
   }
 
+  // Live-tail safety: parallel poll-ticks may mtime-evict the path
+  // between our open and our read. Retry up to MAX_ATTEMPTS times on
+  // `session_not_found` — each retry re-acquires a fresh sid serialised
+  // against concurrent evictions by the per-path lock in
+  // `JsonlReader.open()`. Two consecutive evictions during a single
+  // request window are rare but possible when the user has a fast-tailing
+  // session with multiple panes polling — three tries makes that tolerant.
+  // Capture validated body outside the closure so TS can narrow the
+  // discriminated `parsed` union without re-checking inside the inner
+  // function (parsed.data is otherwise typed as `… | undefined` here).
+  const { fromLine, toLine } = parsed.data
+  const MAX_ATTEMPTS = 3
+  async function readRangeWithRetry() {
+    let lastErr: unknown
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const readerSid = await ensureOpenForPath(absolutePath!)
+      try {
+        return await getJsonlReader().readRange(readerSid, fromLine, toLine)
+      } catch (err) {
+        lastErr = err
+        if (
+          err instanceof JsonlReaderProtocolError &&
+          err.code === 'session_not_found' &&
+          attempt < MAX_ATTEMPTS - 1
+        ) {
+          // Brief jittered backoff lets any in-flight evictions settle
+          // before our next ensureOpenForPath tries to acquire the lock.
+          await new Promise(r => setTimeout(r, 20 + Math.floor(Math.random() * 30)))
+          continue
+        }
+        throw err
+      }
+    }
+    throw lastErr
+  }
+
   try {
-    const readerSid = await ensureOpenForPath(absolutePath)
-    const resp = await getJsonlReader().readRange(
-      readerSid,
-      parsed.data.fromLine,
-      parsed.data.toLine,
-    )
+    const resp = await readRangeWithRetry()
     const validated = RangeResponseSchema.parse({
       sessionId: sid,
-      fromLine: parsed.data.fromLine,
-      toLine: parsed.data.toLine,
+      fromLine,
+      toLine,
       lines: resp.lines,
     })
     return NextResponse.json(validated)

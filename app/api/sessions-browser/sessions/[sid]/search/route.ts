@@ -65,13 +65,40 @@ export async function POST(
     )
   }
 
+  // Live-tail safety: parallel poll-ticks may mtime-evict the path
+  // between our open and our search. Retry up to MAX_ATTEMPTS times on
+  // `session_not_found` for the same reason documented in range/route.ts
+  // and context-breakdown/route.ts.
+  const { query, kind, caseInsensitive, limit } = parsed.data
+  const MAX_ATTEMPTS = 3
+  async function searchWithRetry() {
+    let lastErr: unknown
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const readerSid = await ensureOpenForPath(absolutePath!)
+      try {
+        return await getJsonlReader().search(readerSid, query, {
+          kind,
+          caseInsensitive,
+          limit,
+        })
+      } catch (err) {
+        lastErr = err
+        if (
+          err instanceof JsonlReaderProtocolError &&
+          err.code === 'session_not_found' &&
+          attempt < MAX_ATTEMPTS - 1
+        ) {
+          await new Promise(r => setTimeout(r, 20 + Math.floor(Math.random() * 30)))
+          continue
+        }
+        throw err
+      }
+    }
+    throw lastErr
+  }
+
   try {
-    const readerSid = await ensureOpenForPath(absolutePath)
-    const resp = await getJsonlReader().search(readerSid, parsed.data.query, {
-      kind: parsed.data.kind,
-      caseInsensitive: parsed.data.caseInsensitive,
-      limit: parsed.data.limit,
-    })
+    const resp = await searchWithRetry()
     const validated = SearchResponseSchema.parse({
       sessionId: sid,
       matches: resp.matches,

@@ -1546,27 +1546,41 @@ export async function updateAgentSelf(
     }
   }
 
-  // Update allowed fields
-  const updates: Record<string, unknown> = {}
+  // R21.4 / TRDD-ef0c6c0a item 7: split the legacy single-shot
+  // updateAgent into AIO-routed writes. Metadata goes through
+  // ChangeMetadata. The `label` write stays as direct updateAgent for
+  // now — a proper ChangeLabel AIO is the broader follow-up tracked
+  // in the TRDD as "out of scope for this commit". Splitting into two
+  // writes is acceptable here because this endpoint is the agent
+  // updating ITSELF; partial state (e.g. label updated but metadata
+  // not) is recoverable by a retry from the same agent.
   if (body.alias !== undefined) {
-    updates.label = body.alias
+    await updateAgent(auth.agentId!, { label: body.alias } as any)
   }
 
-  // Merge delivery and metadata into agent's amp metadata
   if (body.delivery !== undefined || body.metadata !== undefined) {
     const existingAmpMeta = (agent.metadata?.amp || {}) as Record<string, unknown>
     if (body.delivery !== undefined) {
       existingAmpMeta.delivery = { ...(existingAmpMeta.delivery as Record<string, unknown> || {}), ...body.delivery }
     }
-    updates.metadata = {
-      ...agent.metadata,
+    const newMetadata: Record<string, unknown> = {
       amp: existingAmpMeta,
       ...(body.metadata || {})
     }
-  }
-
-  if (Object.keys(updates).length > 0) {
-    await updateAgent(auth.agentId!, updates as any)
+    const { ChangeMetadata } = await import('@/services/element-management-service')
+    const { buildAuthContext } = await import('@/lib/agent-auth')
+    const r = await ChangeMetadata(
+      auth.agentId!,
+      newMetadata,
+      buildAuthContext({ agentId: auth.agentId! }),
+      { mode: 'merge' },
+    )
+    if (!r.success) {
+      return {
+        data: { error: 'internal_error', message: r.error || 'Failed to persist metadata update' } as AMPError,
+        status: 500
+      }
+    }
   }
 
   return {
@@ -1736,15 +1750,26 @@ export async function rotateKeypair(authHeader: string | null): Promise<ServiceR
   const newKeyPair = await generateKeyPair()
   saveKeyPair(auth.agentId, newKeyPair)
 
-  // Update agent metadata with new fingerprint
+  // Update agent metadata with new fingerprint via ChangeMetadata AIO
+  // (R21.4 / TRDD-ef0c6c0a item 7). The metadata field is a "namespaced"
+  // map — { amp: {...}, ... } — so we have to read-modify-write the
+  // amp sub-key and let ChangeMetadata's spread-merge handle the rest.
   const existingAmpMeta = (agent.metadata?.amp || {}) as Record<string, unknown>
   existingAmpMeta.fingerprint = newKeyPair.fingerprint
-  await updateAgent(auth.agentId!, {
-    metadata: {
-      ...agent.metadata,
-      amp: existingAmpMeta,
+  const { ChangeMetadata } = await import('@/services/element-management-service')
+  const { buildAuthContext } = await import('@/lib/agent-auth')
+  const r = await ChangeMetadata(
+    auth.agentId!,
+    { amp: existingAmpMeta },
+    buildAuthContext({ agentId: auth.agentId! }),
+    { mode: 'merge' },
+  )
+  if (!r.success) {
+    return {
+      data: { error: 'internal_error', message: r.error || 'Failed to persist new fingerprint' } as AMPError,
+      status: 500
     }
-  } as any)
+  }
 
   return {
     data: {

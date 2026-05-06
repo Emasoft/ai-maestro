@@ -111,6 +111,18 @@ Each row is one commit. Land them one at a time so each is reviewable.
 - ✅ Four new plugin-scoped AIOs created: `UninstallPlugin`, `InstallPlugin`, `UpdatePlugin`, `CheckPluginUpdates` (commit `58e7e465`)
 - ✅ `lib/plugin-enumeration.ts` extracted as the single read-only enumeration helper (commit `58e7e465`)
 
+## Migration progress (2026-05-06)
+
+- ✅ Item 2 — `server.mjs` startup marketplace registration → CreateMarketplace / UpdateMarketplace / DeleteMarketplace AIOs (commit `8fb040f8`)
+- ✅ Item 4 — `scripts/register-agent-from-session.mjs` migrated to ChangePlugin (commit `316a412a`, deferred earlier — TODO comment in file references this TRDD)
+- ✅ Item 5 — `app/api/agents/creation-helper/publish-plugin/route.ts:190` → UpdateMarketplace (commit `316a412a`)
+- ✅ Item 6 — `services/role-plugin-service.ts:1014, 1019` → DeleteMarketplace (commit `316a412a`)
+- ✅ Item 8 — `services/sessions-service.ts:799` → ChangeMetadata via system auth context (commit `576f6a89`)
+- ✅ Item 9 — `app/api/agents/[id]/metadata/route.ts` → ChangeMetadata AIO created (commit `45eb4a9e`)
+- ✅ Item 10 — `lib/client-plugin-adapters/claude-adapter.ts` runtime guard via AsyncLocalStorage sentinel (commit `576f6a89`)
+
+**Remaining:** Item 1 (marketplaces/route.ts handlers — largest blast radius), Item 3 (role-plugin-service.ts direct settings writes — 5 sites), Item 7 (amp-service.ts — needs new ChangeAMPIdentity AIO).
+
 ## Known limitations carried forward
 
 - `app/api/settings/marketplaces/route.ts` has special "try multiple key formats" logic for handling marketplace name aliases between settings.json and the CLI. Migrating to `ChangePlugin` requires either (a) inheriting that logic inside ChangePlugin's user-scope path, or (b) the CLI accepting only one canonical key format and the route layer canonicalising before dispatch. Pick before migration item 1.

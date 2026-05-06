@@ -114,14 +114,23 @@ Each row is one commit. Land them one at a time so each is reviewable.
 ## Migration progress (2026-05-06)
 
 - ✅ Item 2 — `server.mjs` startup marketplace registration → CreateMarketplace / UpdateMarketplace / DeleteMarketplace AIOs (commit `8fb040f8`)
+- ✅ Item 3 — `services/role-plugin-service.ts` 5 direct settings writes (commit `6d531c4c`):
+    - `deleteRolePlugin` migrated to `UninstallPlugin` AIO (cross-target cleanup, was leaving stale per-agent entries)
+    - `registerMarketplaceGlobally` documented as below-AIO-line (boot-time self-heal — going through CreateMarketplace would re-trigger CLI which can refuse already-registered paths)
+    - `migrateDefaultPluginSettings` documented as below-AIO-line (boot-time data migration; ChangePlugin would issue one CLI call per legacy key)
 - ✅ Item 4 — `scripts/register-agent-from-session.mjs` migrated to ChangePlugin (commit `316a412a`, deferred earlier — TODO comment in file references this TRDD)
 - ✅ Item 5 — `app/api/agents/creation-helper/publish-plugin/route.ts:190` → UpdateMarketplace (commit `316a412a`)
 - ✅ Item 6 — `services/role-plugin-service.ts:1014, 1019` → DeleteMarketplace (commit `316a412a`)
+- ✅ Item 7 — `services/amp-service.ts:1569, 1742` → ChangeMetadata for the metadata side. Label updates remain direct (broader ChangeLabel AIO follow-up) (commit `ba96094a`)
 - ✅ Item 8 — `services/sessions-service.ts:799` → ChangeMetadata via system auth context (commit `576f6a89`)
 - ✅ Item 9 — `app/api/agents/[id]/metadata/route.ts` → ChangeMetadata AIO created (commit `45eb4a9e`)
 - ✅ Item 10 — `lib/client-plugin-adapters/claude-adapter.ts` runtime guard via AsyncLocalStorage sentinel (commit `576f6a89`)
 
-**Remaining:** Item 1 (marketplaces/route.ts handlers — largest blast radius), Item 3 (role-plugin-service.ts direct settings writes — 5 sites), Item 7 (amp-service.ts — needs new ChangeAMPIdentity AIO).
+**Remaining:** Item 1 (`app/api/settings/marketplaces/route.ts` handlers — largest blast radius, 11 direct CLI shell-outs in handleEnable / handleDisable / handleUpdate / handleInstall / handleUninstall / handleNuke). Requires migration to ChangePlugin(scope='user') AIO with multiple-key-format resolution and install retry-on-stale logic moved into ChangePlugin gates.
+
+Out-of-scope follow-ups identified during migration:
+- A proper `ChangeAMPIdentity` AIO that wraps both the AMP fingerprint metadata AND the agent's `label` change atomically (currently split into 2 writes in updateAgentSelf).
+- A proper `ChangeLabel` AIO for non-governance display-name changes (currently routes through direct updateAgent for AMP self-update).
 
 ## Known limitations carried forward
 

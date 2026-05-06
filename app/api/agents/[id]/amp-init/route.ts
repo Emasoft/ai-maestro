@@ -82,7 +82,16 @@ export async function POST(
         env: { ...process.env, AMP_DIR: ampEnvDir },
       })
 
-      // Success: clear the ampIdentityMissing flag
+      // Success: clear the ampIdentityMissing flag.
+      //
+      // Below the AIO line (R21.4 documentation): single boolean flag flip
+      // on a derived/diagnostic field. ampIdentityMissing is set by the
+      // server itself when an agent's AMP folder is missing on disk; this
+      // route is the recovery path that runs `amp-init`, so clearing the
+      // flag here mirrors a state observation, not a governance-relevant
+      // mutation. A dedicated ChangeAMPIdentity AIO would wrap this in a
+      // proper gate sequence — tracked as out-of-scope follow-up in
+      // TRDD-ef0c6c0a.
       try {
         await updateAgent(id, { ampIdentityMissing: false } as UpdateAgentRequest)
       } catch (regErr) {

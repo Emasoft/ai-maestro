@@ -864,6 +864,16 @@ async function readCustomClientMarketplacePlugins(
  * Only `claude` is registered automatically here because the Codex CLI
  * `plugin marketplace add` is still rolling out. Other clients are left
  * as pure folder scaffolding until their CLI lands.
+ *
+ * Below the AIO line (R21.4 documentation): the settings.json patch at the
+ * bottom of this function is a marketplace-registration helper, NOT a
+ * user-facing mutation. Routing through CreateMarketplace would re-trigger
+ * `claude plugin marketplace add` which CAN refuse if the path is already
+ * registered. The intent here is "fix the source.path entry if it's stale",
+ * which mirrors role-plugin-service.ts:registerMarketplaceGlobally.
+ *
+ * Authority: implicit system-owner — function is private and called only
+ * from `convertAndStorePlugin()` / `emitForClient()` during conversion.
  */
 async function ensureCustomClientMarketplace(targetClient: string): Promise<void> {
   const marketplaceDir = getCustomMarketplacePathForClient(targetClient)

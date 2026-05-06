@@ -799,7 +799,15 @@ export async function updateAgentById(id: string, body: UpdateAgentRequest, requ
     // above, so the generic updateAgent path must not see it.
     delete cleanBody.alias
 
-    // Execute simple updateAgent for remaining fields (tags, label, model, etc.)
+    // Execute simple updateAgent for remaining fields (tags, label, model, etc.).
+    //
+    // Below the AIO line (R21.4 documentation): this updateAgent IS the
+    // dispatcher — the AIO function for the PATCH /api/agents/[id] route.
+    // CHANGEABLE_FIELDS above pulls out everything that has its own AIO
+    // pipeline; what remains in cleanBody is the simple-write tail (tags,
+    // basic display fields). Routing those through their own AIOs would
+    // be circular — the dispatcher is the single chokepoint that enforces
+    // auth + ledger emit + the Change* pipeline routing.
     const agent = await updateAgent(id, cleanBody)
     if (!agent) {
       return { error: 'Agent not found', status: 404 }

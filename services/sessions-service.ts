@@ -795,10 +795,21 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
     try {
       const { generateSessionSecret } = await import('@/lib/session-secret')
       const { secret, secretHash } = generateSessionSecret()
-      const { updateAgent } = await import('@/lib/agent-registry')
-      await updateAgent(registeredAgentId, {
-        metadata: { sessionSecretHash: secretHash }
-      } as any)
+      // R21.4: route metadata mutation through ChangeMetadata AIO (auth +
+      // validation + ledger op). Session bootstrap is a privileged internal
+      // operation, so we build a system-owner auth context with a reason
+      // string for audit logging.
+      const { ChangeMetadata } = await import('@/services/element-management-service')
+      const { buildSystemAuthContext } = await import('@/lib/agent-auth')
+      const r = await ChangeMetadata(
+        registeredAgentId,
+        { sessionSecretHash: secretHash },
+        buildSystemAuthContext('session-bootstrap'),
+        { mode: 'merge' },
+      )
+      if (!r.success) {
+        throw new Error(r.error || 'ChangeMetadata failed during session bootstrap')
+      }
       initialEnv.AID_AUTH = secret
       aidAuthSet = true
       console.log(`[Sessions] Set AID_AUTH for agent ${agentName} (AID session secret)`)

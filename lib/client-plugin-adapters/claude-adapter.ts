@@ -15,6 +15,7 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import { withLock } from '@/lib/file-lock'
+import { assertAdapterContext } from './adapter-context'
 import type { ClientPluginAdapter, StoredPlugin, PluginAdapterOptions, PluginInstallResult, PluginUninstallResult, PluginActionResult, PluginInstallState } from './types'
 
 const execFileAsync = promisify(execFile)
@@ -70,6 +71,7 @@ const claudeAdapter: ClientPluginAdapter = {
   supportsEnableDisable: true,
 
   async install(plugin: StoredPlugin, targetDir: string, options?: PluginAdapterOptions): Promise<PluginInstallResult> {
+    assertAdapterContext('claudeAdapter.install')
     const marketplace = options?.marketplace || ''
     const scope = options?.scope || 'local'
 
@@ -91,6 +93,7 @@ const claudeAdapter: ClientPluginAdapter = {
   },
 
   async uninstall(plugin: StoredPlugin, targetDir: string, options?: Pick<PluginAdapterOptions, 'scope'>): Promise<PluginUninstallResult> {
+    assertAdapterContext('claudeAdapter.uninstall')
     const scope = options?.scope || 'local'
     const pluginKey = buildPluginKey(plugin.name, plugin.sourcePlugin)
 
@@ -111,6 +114,7 @@ const claudeAdapter: ClientPluginAdapter = {
   },
 
   async enable(plugin: StoredPlugin, targetDir: string): Promise<PluginActionResult> {
+    assertAdapterContext('claudeAdapter.enable')
     const pluginKey = buildPluginKey(plugin.name, plugin.sourcePlugin)
     const resolved = resolveDir(targetDir)
     const localSettings = join(resolved, '.claude', 'settings.local.json')
@@ -133,6 +137,7 @@ const claudeAdapter: ClientPluginAdapter = {
   },
 
   async disable(plugin: StoredPlugin, targetDir: string): Promise<PluginActionResult> {
+    assertAdapterContext('claudeAdapter.disable')
     const pluginKey = buildPluginKey(plugin.name, plugin.sourcePlugin)
     const resolved = resolveDir(targetDir)
     const localSettings = join(resolved, '.claude', 'settings.local.json')
@@ -154,6 +159,10 @@ const claudeAdapter: ClientPluginAdapter = {
   },
 
   async detectState(pluginName: string, targetDir: string, options?: Pick<PluginAdapterOptions, 'scope' | 'marketplace'>): Promise<PluginInstallState> {
+    // detectState is read-only — kept exempt from the AIO guard so UI
+    // status panels and CheckPluginUpdates can read installed/enabled
+    // flags without entering an inAdapterContext frame. Mutations
+    // (install/uninstall/enable/disable) remain guarded.
     const scope = options?.scope || 'local'
     const pluginKey = buildPluginKey(pluginName, options?.marketplace)
 

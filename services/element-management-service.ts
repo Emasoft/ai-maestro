@@ -45,6 +45,12 @@ const execFileAsync = promisify(execFile)
 // ── Auth context (Phase 1: optional, Phase 2: required per SF-058) ──
 import type { AuthContext } from '@/lib/agent-auth'
 
+// ── Adapter calling-context sentinel (R21.4 enforcement) ────────
+// Every adapter mutation call (install/uninstall/enable/disable) MUST
+// be wrapped in inAdapterContext('<AIO name>', () => adapter.X(...))
+// so the adapter's runtime guard recognises it as a legitimate caller.
+import { inAdapterContext } from '@/lib/client-plugin-adapters/adapter-context'
+
 // ── Per-op ledger emit helper (TRDD-eac02238) ───────────────────
 // Every Change* pipeline calls this right before returning success.
 // Wraps emitAgentOp with a try/catch + ops.push so a ledger append
@@ -676,11 +682,11 @@ export async function InstallElement(
               ops.push(result.error)
               return result
             }
-            const adapterRes = await adapter.install(
+            const adapterRes = await inAdapterContext('ChangePlugin', () => adapter.install(
               { name, clientType, storageDir, providerId },
               cwd,
               { scope: 'local' }
-            )
+            ))
             if (!adapterRes.success) {
               result.error = `EXE: ${clientType}-adapter install failed: ${adapterRes.error || 'unknown'}`
               ops.push(result.error)
@@ -748,11 +754,11 @@ export async function InstallElement(
             const adapter = await getAdapter(clientType)
             const providerId = clientTypeToProviderId(clientType)
             if (adapter && providerId) {
-              const adapterRes = await adapter.uninstall(
+              const adapterRes = await inAdapterContext('ChangePlugin', () => adapter.uninstall(
                 { name, clientType, storageDir: convertedDir || '', providerId },
                 cwd,
                 { scope: 'local' }
-              )
+              ))
               if (adapterRes.success) {
                 ops.push(`EXE: Uninstalled via ${clientType}-adapter`)
                 break
@@ -1514,11 +1520,11 @@ export async function autoAssignRolePluginForTitle(
     if (!emittedDir) throw new Error(`Failed to emit plugin "${requiredPlugin}" for ${clientType}`)
     const adapter = await getAdapter(clientType)
     if (!adapter) throw new Error(`No plugin adapter for client type: ${clientType}`)
-    await adapter.install(
+    await inAdapterContext('autoAssignRolePluginForTitle', () => adapter.install(
       { name: requiredPlugin, clientType, storageDir: emittedDir, providerId: targetProviderId },
       agentDir,
       { scope: 'local' }
-    )
+    ))
   } else {
     // Claude: install directly (existing behavior)
     await installPluginLocally(requiredPlugin, agentDir, marketplace)
@@ -2569,11 +2575,11 @@ export async function ChangeTitle(
           if (emittedDir && targetPid) {
             const adapter = await getAdapter(targetClientType)
             if (adapter) {
-              const installResult = await adapter.install(
+              const installResult = await inAdapterContext('ChangeTitle', () => adapter.install(
                 { name: targetPluginName, clientType: targetClientType, storageDir: emittedDir, providerId: targetPid },
                 agentDir,
                 { scope: 'local' }
-              )
+              ))
               if (installResult.success) {
                 result.installedPlugin = targetPluginName
                 ops.push(`G16: Converted + installed role-plugin "${targetPluginName}" for ${agentClientType} via adapter`)

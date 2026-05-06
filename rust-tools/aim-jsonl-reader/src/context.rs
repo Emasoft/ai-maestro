@@ -124,16 +124,38 @@ fn classify(v: &Value, b: &mut Buckets) {
     }
 
     // Primary dispatch: check `type` first (more specific), then `role`.
+    //
+    // Claude Code JSONL shape (verified empirically 2026-05-06):
+    //   - top-level `type` is `'user'` | `'assistant'` | `'attachment'` |
+    //     `'last-prompt'` | `'custom-title'` | `'agent-name'` |
+    //     `'permission-mode'` | `'file-history-snapshot'` | `'system'`.
+    //     It is NEVER `'system-prompt'`, `'tool_use'`, `'tool_result'`,
+    //     `'memory'`, `'agent-definition'` — those used to be matched
+    //     here but never fired against real data, leaving every bucket
+    //     at 0. Bug found in the screenshot 2026-05-06 21:24.
+    //   - `role` is at `message.role`, NOT at the top level.
+    //   - `tool_use` / `tool_result` / `thinking` / `text` blocks live
+    //     inside `message.content[]` as objects with their own `type`.
+    //   - `usage` is at `message.usage`.
     let ty = v.get("type").and_then(Value::as_str);
-    let role = v.get("role").and_then(Value::as_str);
+    let role = v.get("message")
+        .and_then(|m| m.get("role"))
+        .and_then(Value::as_str)
+        .or_else(|| v.get("role").and_then(Value::as_str));
     let source = v.get("source").and_then(Value::as_str);
 
-    // memory: either explicit type or source marker
+    // memory: explicit `source: "claude-md"` marker (legacy / non-Claude
+    // formats). Real Claude Code JSONL doesn't ship CLAUDE.md as a
+    // separate record — it's baked into the cached system prompt — but
+    // we keep the check so converted-format JSONL still classifies.
     if ty == Some("memory") || source == Some("claude-md") {
         b.memory += estimate_tokens(v, b);
         return;
     }
 
+    // Top-level legacy types — kept for forward-compat with future
+    // Claude Code shapes and for non-Claude clients (Codex, etc.) that
+    // emit `system-prompt` / `agent-definition` records directly.
     match ty {
         Some("system-prompt") => {
             b.system_prompt += estimate_tokens(v, b);
@@ -143,53 +165,40 @@ fn classify(v: &Value, b: &mut Buckets) {
             b.custom_agents += estimate_tokens(v, b);
             return;
         }
-        Some("tool_use") => {
-            let name = v.get("name").and_then(Value::as_str).unwrap_or("");
-            if name.starts_with("mcp__") {
-                b.mcp_tools += estimate_tokens(v, b);
-            } else if BUILTIN_TOOL_NAMES.iter().any(|t| *t == name) {
-                b.system_tools += estimate_tokens(v, b);
-            } else {
-                // Unknown tool — lump under systemTools so the budget
-                // isn't silently lost.
-                b.system_tools += estimate_tokens(v, b);
-            }
-            return;
-        }
-        Some("tool_result") => {
-            b.messages += estimate_tokens(v, b);
-            return;
-        }
         _ => {}
     }
 
-    // Role-based dispatch for user/assistant.
+    // Role-based dispatch for user/assistant — using the nested
+    // `message.role` we resolved above.
     match role {
         Some("user") => {
-            // User text is cheap — don't add to the token budget.
-            // If the record has explicit usage.input_tokens we still
-            // log it against messages for fidelity.
+            // For user messages, walk content[] for tool_result blocks
+            // (those are tool-output replies and DO consume context).
+            // User text itself is cheap; we don't bucket it but we
+            // count tool_result tokens against the messages budget.
+            if let Some(content) = v.get("message").and_then(|m| m.get("content")).and_then(Value::as_array) {
+                for block in content {
+                    if let Some(block_ty) = block.get("type").and_then(Value::as_str) {
+                        if block_ty == "tool_result" {
+                            // tool_result blocks may not have explicit usage;
+                            // fall back to text estimation.
+                            b.messages += estimate_tokens(block, b);
+                        }
+                    }
+                }
+            }
+            // If the record has explicit usage.input_tokens at the top
+            // level (some non-Claude formats), still log for fidelity.
             if let Some(u) = usage_field(v, "input_tokens") {
                 b.messages += u;
             }
         }
         Some("assistant") => {
-            // Phase 5 §1: deduplicateByRequestId.
-            // Assistant turns that were retried mid-stream produce multiple
-            // JSONL entries sharing the same `requestId` but with different
-            // `uuid`s. Prior to this fix the running total summed every one,
-            // overcounting tokens on any retried turn. We now keep only the
-            // FIRST entry per requestId in the running totals.
-            // Entries without a requestId continue to count individually —
-            // this preserves fidelity on older JSONL files and on edge cases
-            // where the field is absent.
+            // Phase 5 §1: deduplicateByRequestId — assistant turns that
+            // were retried mid-stream share a requestId; keep only the
+            // first occurrence in the totals.
             if let Some(rid) = v.get("requestId").and_then(Value::as_str) {
                 if !b.seen_request_ids.insert(rid.to_string()) {
-                    // Already counted a row with this requestId. Skip
-                    // entirely — do NOT add output_tokens, do NOT add
-                    // cache_read, do NOT advance `approximate` via the
-                    // estimate fallback. This matches the invariant the
-                    // reference implementation enforces.
                     return;
                 }
             }
@@ -202,11 +211,65 @@ fn classify(v: &Value, b: &mut Buckets) {
             if let Some(u) = usage_field(v, "cache_read_input_tokens") {
                 b.cache_read += u;
             }
+            // The cache_creation_input_tokens (what was sent to be
+            // cached) is a strong proxy for "what's currently in the
+            // model's view" — we attribute the FIRST cache-creation we
+            // see to system_prompt (CLAUDE.md + tools + skills + role
+            // persona, which is what Claude Code caches up-front on the
+            // first turn). Subsequent cache-creations expand the cache
+            // with new turn content; we attribute those to messages.
+            if let Some(u) = usage_field(v, "cache_creation_input_tokens") {
+                if b.system_prompt == 0 {
+                    b.system_prompt += u;
+                } else {
+                    b.messages += u;
+                }
+            }
+
+            // Walk message.content[] for tool_use / thinking blocks so
+            // tool calls land in systemTools / mcpTools. Tool inputs
+            // are typically tiny (a few hundred chars), so the
+            // estimate_tokens fallback here is intentional — these are
+            // "context cost of the tool descriptor", not output.
+            if let Some(content) = v.get("message").and_then(|m| m.get("content")).and_then(Value::as_array) {
+                for block in content {
+                    let block_ty = block.get("type").and_then(Value::as_str);
+                    match block_ty {
+                        Some("tool_use") => {
+                            let name = block.get("name").and_then(Value::as_str).unwrap_or("");
+                            // tool_use contributes the rendered input
+                            // size to system/mcp tools; it's NOT
+                            // double-counted against `messages` because
+                            // output_tokens above already accounts for
+                            // the assistant turn's total output and we
+                            // do NOT subtract here — the `freeSpace`
+                            // calculation is the only consumer that
+                            // cares, and a slight over-attribution to
+                            // tools (vs messages) is the lesser evil.
+                            let tool_cost = estimate_tokens(block, b);
+                            if name.starts_with("mcp__") {
+                                b.mcp_tools += tool_cost;
+                            } else if BUILTIN_TOOL_NAMES.iter().any(|t| *t == name) {
+                                b.system_tools += tool_cost;
+                            } else {
+                                b.system_tools += tool_cost;
+                            }
+                        }
+                        Some("thinking") => {
+                            // Extended thinking — already counted in
+                            // output_tokens at the message level. We do
+                            // NOT add it again here.
+                        }
+                        _ => {}
+                    }
+                }
+            }
         }
         _ => {
-            // Unknown record type — skip silently. The panic handler
-            // catches any real crash; we don't want to abort a huge
-            // breakdown over one weird line.
+            // Top-level types like 'attachment', 'last-prompt',
+            // 'custom-title', 'agent-name', 'permission-mode',
+            // 'file-history-snapshot' etc. — they don't directly
+            // contribute to the context window. Skip.
         }
     }
 }

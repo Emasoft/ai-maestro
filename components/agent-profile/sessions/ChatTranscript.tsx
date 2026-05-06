@@ -38,13 +38,49 @@ import type { TranscriptLine, MessageUsage } from '@/types/sessions-browser'
 import MessageBubble from './MessageBubble'
 import ToolUseRow from './ToolUseRow'
 
-const BUBBLE_HEIGHT = 96
+// Minimum heights — every row gets at least this much vertical space even
+// when its content is empty, so the role badge + timestamp stay readable.
+const BUBBLE_MIN_HEIGHT = 56
 const TOOL_ROW_HEIGHT = 40
 const OVERSCAN = 10
 const ROW_GAP = 8
 
+// Visual constants matching MessageBubble.tsx CSS:
+//   - text size 12 px, line-height ~1.5 → ~18 px per text line
+//   - container padding (py-2) + header (~14 px + mb-1) + border ≈ 38 px
+//   - text bubble width clamps wrap at roughly 80 chars on a 720-820 px center pane
+const TEXT_LINE_HEIGHT_PX = 18
+const VISIBLE_CHARS_PER_LINE = 80
+const BUBBLE_CHROME_PX = 38
+
+/**
+ * Estimate row height from the line's content. Required for the absolutely-
+ * positioned virtualizer: a fixed-height estimate (the original BUBBLE_HEIGHT
+ * = 96) caused long messages to bleed into adjacent rows because the
+ * bubble's natural HTML flow expanded beyond its allocated 96 px slot.
+ *
+ * The estimate counts wrapped lines (text length / chars-per-line) plus
+ * explicit newline breaks, then multiplies by line-height and adds bubble
+ * chrome. It's slightly conservative — we'd rather over-estimate (small
+ * gap below short messages) than under-estimate (overlap).
+ *
+ * Tool rows render a single-line summary in `ToolUseRow.tsx` so 40 px
+ * remains accurate for them.
+ */
 function rowHeight(line: TranscriptLine): number {
-  return line.isToolEvent ? TOOL_ROW_HEIGHT : BUBBLE_HEIGHT
+  if (line.isToolEvent) return TOOL_ROW_HEIGHT
+  const text = line.text || ''
+  if (text.length === 0) return BUBBLE_MIN_HEIGHT
+  const explicitBreaks = (text.match(/\n/g) || []).length
+  // wrapped lines for each natural paragraph (split on \n, ceiling on width)
+  let wrappedLineCount = 0
+  for (const para of text.split('\n')) {
+    wrappedLineCount += Math.max(1, Math.ceil(para.length / VISIBLE_CHARS_PER_LINE))
+  }
+  // explicitBreaks already added the newlines; wrappedLineCount counts
+  // paragraphs, so the total line count IS wrappedLineCount.
+  void explicitBreaks
+  return Math.max(BUBBLE_MIN_HEIGHT, wrappedLineCount * TEXT_LINE_HEIGHT_PX + BUBBLE_CHROME_PX)
 }
 
 interface ChatTranscriptProps {

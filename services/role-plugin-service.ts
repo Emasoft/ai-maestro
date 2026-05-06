@@ -679,6 +679,16 @@ export async function ensureMarketplace(): Promise<void> {
   await registerMarketplaceGlobally()
 }
 
+/**
+ * Below the AIO line (R21.4 documentation): self-heal helper that fixes
+ * a stale `extraKnownMarketplaces[<local>].source.path` entry when an
+ * older AI Maestro release left a wrong path behind. NOT a user-facing
+ * operation — runs only from `ensureMarketplace()` at server boot, with
+ * implicit system-owner authority. Going through CreateMarketplace
+ * would re-issue `claude plugin marketplace add`, which CAN refuse if
+ * the path is already registered (idempotency path varies across CLI
+ * versions). Hand-patching settings.json is the safer recovery here.
+ */
 async function registerMarketplaceGlobally(): Promise<void> {
   const settings = await loadJsonSafe(USER_GLOBAL_SETTINGS) as Record<string, Record<string, unknown>>
   const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
@@ -863,6 +873,18 @@ export async function getPluginsForTitle(title: string, clientType?: string): Pr
 /**
  * Delete a role plugin from the local marketplace.
  * Cannot delete default marketplace role plugins — those are managed by `claude plugin`.
+ *
+ * Order of operations (R21.4 / TRDD-ef0c6c0a item 3):
+ *   1. Cascade uninstall via the UninstallPlugin AIO. This walks every
+ *      install target (user-scope + every agent's local scope) and
+ *      runs ChangePlugin per target — that is, every settings file
+ *      gets its enabledPlugins entry removed under proper gates.
+ *   2. Remove the plugin directory from disk (the marketplace SOURCE).
+ *   3. Remove the plugin entry from the local marketplace.json manifest.
+ *
+ * Step 1 MUST happen first so agents observe a clean uninstall before
+ * the source disappears (otherwise a subsequent ChangePlugin would
+ * fail to find the source folder).
  */
 export async function deleteRolePlugin(pluginName: string): Promise<void> {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(pluginName)) {
@@ -874,27 +896,32 @@ export async function deleteRolePlugin(pluginName: string): Promise<void> {
     throw new Error(`Cannot delete default marketplace role plugins. Use "claude plugin uninstall ${pluginName}" instead.`)
   }
 
+  // Step 1: cross-target uninstall via UninstallPlugin AIO. This handles
+  // user-scope settings.json AND every agent's settings.local.json with
+  // proper auth/validation/ledger gates. Idempotent — if no installs
+  // exist, returns success with empty target list.
+  const { UninstallPlugin } = await import('@/services/element-management-service')
+  const { buildSystemAuthContext } = await import('@/lib/agent-auth')
+  const r = await UninstallPlugin(
+    { name: pluginName, marketplace: LOCAL_MARKETPLACE_NAME, rolePluginSwap: true },
+    buildSystemAuthContext('delete-role-plugin'),
+  )
+  if (!r.success) {
+    throw new Error(`Failed to uninstall ${pluginName} from one or more targets: ${r.error || 'unknown'}`)
+  }
+
+  // Step 2: remove plugin source from disk
   const pluginDir = join(PLUGINS_DIR, pluginName)
   if (existsSync(pluginDir)) {
     await rm(pluginDir, { recursive: true })
   }
 
-  // Remove from marketplace manifest
+  // Step 3: remove plugin entry from the local marketplace manifest
   if (existsSync(MARKETPLACE_JSON)) {
     const manifest = await loadJsonSafe(MARKETPLACE_JSON) as Record<string, unknown>
     const plugins = (manifest.plugins || []) as Array<Record<string, string>>
     manifest.plugins = plugins.filter(p => p.name !== pluginName)
     await writeFile(MARKETPLACE_JSON, JSON.stringify(manifest, null, 2) + '\n')
-  }
-
-  // Remove from global enabledPlugins
-  const pluginKey = `${pluginName}@${LOCAL_MARKETPLACE_NAME}`
-  if (existsSync(USER_GLOBAL_SETTINGS)) {
-    const settings = await loadJsonSafe(USER_GLOBAL_SETTINGS) as Record<string, Record<string, unknown>>
-    const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-    delete ep[pluginKey]
-    settings.enabledPlugins = ep
-    await saveJsonSafe(USER_GLOBAL_SETTINGS, settings)
   }
 }
 
@@ -1005,6 +1032,21 @@ export async function syncDefaultRolePlugins(_force = false): Promise<SyncDefaul
 /**
  * Migrate agent settings: change old marketplace keys to current @ai-maestro-plugins.
  * Also removes the deprecated 23blocks-OS marketplace from Claude CLI.
+ *
+ * Below the AIO line (R21.4 documentation): boot-time data migration that
+ * patches stale settings.json + per-agent settings.local.json keys after
+ * a marketplace rename. This function CANNOT route through ChangePlugin
+ * because:
+ *   - It runs BEFORE any user request, with implicit system authority.
+ *   - Routing every legacy-key migration through ChangePlugin would mean
+ *     issuing one CLI install per agent per legacy key — slow, and the
+ *     CLI would refuse most of them ("plugin already enabled at the new
+ *     key" / "plugin not found at the legacy key").
+ *   - The intent here is "fix the settings file, leave the plugin disk
+ *     state alone" — exactly what ChangePlugin would NOT do.
+ *
+ * Authority: implicit system-owner, called only from `syncDefaultRolePlugins`
+ * which runs at server startup (server.mjs `start()`).
  */
 async function migrateDefaultPluginSettings(): Promise<void> {
   // Step 1: Remove deprecated 23blocks-OS marketplace (replaced by

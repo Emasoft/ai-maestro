@@ -544,6 +544,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
   const [breakdown, setBreakdown] = useState<ContextBreakdownResponse | null>(null)
   const [breakdownLoading, setBreakdownLoading] = useState(false)
   const [breakdownError, setBreakdownError] = useState<string | null>(null)
+  const [breakdownReloadTick, setBreakdownReloadTick] = useState(0)
 
   useEffect(() => {
     setBreakdown(null)
@@ -566,7 +567,84 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
         if (!ctrl.signal.aborted) setBreakdownLoading(false)
       })
     return () => ctrl.abort()
-  }, [selectedSessionId, sessions])
+  }, [selectedSessionId, sessions, breakdownReloadTick])
+
+  // Live-tail polling -----------------------------------------------------
+  // While a session is selected, poll every LIVE_TAIL_INTERVAL_MS to:
+  //   1. Re-fetch the sessions list (picks up size/mtime changes — the
+  //      server-side metadataCache invalidates on any change).
+  //   2. Append any new lines beyond `nextFromRef.current` (tails the .jsonl).
+  //   3. Re-fetch the context breakdown (tokens shift as new turns land).
+  //
+  // The polling is paused when the page is hidden (`document.visibilityState`)
+  // so a backgrounded tab doesn't keep hammering the reader. Resumed on the
+  // next visibilitychange. Live-tailing is the FIX for the bug where typing
+  // in the client terminal did NOT update the chat transcript view nor the
+  // context-breakdown panel — without this poll, the UI is a static snapshot
+  // taken at session-select time.
+  const LIVE_TAIL_INTERVAL_MS = 2000
+  useEffect(() => {
+    if (!selectedSessionId) return
+
+    let cancelled = false
+    let intervalId: ReturnType<typeof setInterval> | null = null
+
+    const tick = async () => {
+      if (cancelled) return
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      // Refresh list silently (mtime/size update for the metadata cache).
+      // We don't await its setState — the breakdown reload below picks up
+      // the new bytes regardless of whether the list state has updated yet.
+      refreshList()
+
+      const summary = sessions.find(s => s.id === selectedSessionId)
+      const sessionPath = summary?.path
+      const from = nextFromRef.current
+
+      // Tail: ask for `pageSize` lines starting at the current end pointer.
+      // If the file grew, we get the new lines. If it didn't, we get an
+      // empty array — no harm done, just one cheap request per tick.
+      try {
+        const r = await fetchRange(selectedSessionId, from, from + pageSize - 1, sessionPath)
+        if (cancelled) return
+        if (r.lines.length > 0) {
+          const normalized = r.lines.map((raw, i) => normalizeLine(raw, from + i))
+          setLines(prev => [...prev, ...normalized])
+          nextFromRef.current = from + normalized.length
+          // If we now know there are more rows than the prior totalLines hint,
+          // bump the count so virtualized scrollbacks can size correctly.
+          setTotalLines(prev =>
+            prev === null ? null : Math.max(prev, from + normalized.length),
+          )
+          // New lines arrived → token totals changed → refresh breakdown.
+          setBreakdownReloadTick(t => t + 1)
+        }
+      } catch {
+        // Swallow — polling is best-effort. The next tick will try again.
+      }
+    }
+
+    intervalId = setInterval(tick, LIVE_TAIL_INTERVAL_MS)
+
+    const onVisChange = () => {
+      // Resume immediately when the tab returns to foreground so the user
+      // sees fresh content without waiting for the next tick boundary.
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        tick()
+      }
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisChange)
+    }
+
+    return () => {
+      cancelled = true
+      if (intervalId !== null) clearInterval(intervalId)
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisChange)
+      }
+    }
+  }, [selectedSessionId, sessions, pageSize, refreshList])
 
   // Search ---------------------------------------------------------------
   const [query, setQueryRaw] = useState('')

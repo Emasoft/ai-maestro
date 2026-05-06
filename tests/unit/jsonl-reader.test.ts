@@ -241,6 +241,51 @@ describe('JsonlReader', () => {
     expect(openRequests.length).toBe(1)
   })
 
+  it('re-opens when the file grew since the last open (live-tail support)', async () => {
+    // Use a real temp file so statSync sees actual size/mtime changes.
+    const fs = await vi.importActual<typeof import('fs')>('fs')
+    const os = await vi.importActual<typeof import('os')>('os')
+    const path = await vi.importActual<typeof import('path')>('path')
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jsonl-reader-tail-'))
+    const tmpFile = path.join(tmpDir, 'session.jsonl')
+    fs.writeFileSync(tmpFile, '{"a":1}\n')
+    onSpawn = (child) => {
+      respondWith(child, [
+        // First open
+        { ok: true, sessionId: 'sid-first', lineCount: 1, indexed: false },
+        // close (after staleness detected)
+        { ok: true, closed: true },
+        // Second open (after file grew)
+        { ok: true, sessionId: 'sid-second', lineCount: 2, indexed: false },
+      ])
+    }
+
+    const first = await reader.open(tmpFile)
+    expect(first.sessionId).toBe('sid-first')
+    expect(first.lineCount).toBe(1)
+
+    // Simulate the live agent appending a new line. mtime changes too;
+    // bump it explicitly because some filesystems have 1s mtime resolution.
+    fs.appendFileSync(tmpFile, '{"b":2}\n')
+    const future = new Date(Date.now() + 5_000)
+    fs.utimesSync(tmpFile, future, future)
+
+    const second = await reader.open(tmpFile)
+    expect(second.sessionId).toBe('sid-second')
+    expect(second.lineCount).toBe(2)
+    // Exactly TWO open commands were sent (close in the middle).
+    const openRequests = currentChildRef.current!._writtenLines.filter((l) =>
+      l.includes('"cmd":"open"'),
+    )
+    expect(openRequests.length).toBe(2)
+    const closeRequests = currentChildRef.current!._writtenLines.filter((l) =>
+      l.includes('"cmd":"close"'),
+    )
+    expect(closeRequests.length).toBe(1)
+
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
   it('readRange validates session and passes through line payload', async () => {
     onSpawn = (child) => {
       respondWith(child, [

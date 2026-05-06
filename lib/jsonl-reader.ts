@@ -17,7 +17,7 @@
  */
 
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, statSync } from 'fs'
 import path from 'path'
 import { EventEmitter } from 'events'
 
@@ -117,6 +117,10 @@ interface OpenSessionEntry {
   lineCount: number
   /** Last use timestamp (Date.now()). Updated on every request touching this session. */
   lastUsedAt: number
+  /** File size at last open, used to detect appends since the snapshot. */
+  size: number
+  /** File mtime (ms since epoch) at last open. */
+  mtimeMs: number
 }
 
 /**
@@ -317,24 +321,66 @@ export class JsonlReader extends EventEmitter {
 
   /**
    * Open (or reuse) a Rust-side session handle for `filePath`.
-   * Idempotent: repeat opens on the same file return the same sessionId
-   * and refresh its `lastUsedAt`.
+   *
+   * **Append-aware cache** (TRDD-d46b42e9 phase 6): the cached entry stores
+   * the file's size + mtime at the moment of the open call. On subsequent
+   * `open()`s, we re-stat the file and compare. If size or mtime changed
+   * (the live agent appended new lines since the snapshot), we evict the
+   * cache and tell Rust to re-open — only then will the new lines show up
+   * in `read_range` / `context_breakdown` / `search`. Without this check
+   * the UI sees a frozen transcript even though the file on disk keeps
+   * growing.
+   *
+   * Re-stat is a single `statSync` (microseconds on a hot file in the
+   * page cache) and runs once per open() — far cheaper than re-indexing
+   * the whole file on every read. The Rust binary's own sidecar cache
+   * makes the actual re-open fast (it diffs against the persistent
+   * sparse-index file rather than re-scanning every line).
    */
   async open(filePath: string): Promise<OpenOkResponse> {
+    let currentSize: number | null = null
+    let currentMtimeMs: number | null = null
+    try {
+      const st = statSync(filePath)
+      currentSize = st.size
+      currentMtimeMs = st.mtimeMs
+    } catch {
+      // File missing — let Rust raise the proper error code rather than
+      // shadowing it here. We'll send the open and propagate whatever
+      // protocol error comes back.
+    }
+
     const existing = this.sessionsByPath.get(filePath)
     if (existing) {
-      existing.lastUsedAt = this.now()
-      return {
-        ok: true,
-        sessionId: existing.sessionId,
-        lineCount: existing.lineCount,
-        // Subsequent re-opens on the server side — from the Rust process's
-        // perspective — always reuse the sparse sidecar if present, so we
-        // return `true` to reflect that the Node side is handing back a
-        // cached handle. (The raw Rust reply flag is preserved only on the
-        // first open.)
-        indexed: true,
+      const stale =
+        currentSize !== null &&
+        currentMtimeMs !== null &&
+        (existing.size !== currentSize || existing.mtimeMs !== currentMtimeMs)
+      if (!stale) {
+        existing.lastUsedAt = this.now()
+        return {
+          ok: true,
+          sessionId: existing.sessionId,
+          lineCount: existing.lineCount,
+          // Subsequent re-opens on the server side — from the Rust process's
+          // perspective — always reuse the sparse sidecar if present, so we
+          // return `true` to reflect that the Node side is handing back a
+          // cached handle. (The raw Rust reply flag is preserved only on the
+          // first open.)
+          indexed: true,
+        }
       }
+      // File grew or was rewritten. Evict the cached handle so Rust
+      // reopens against the current snapshot. We also send a `close` so
+      // the Rust side doesn't accumulate dead session entries.
+      try {
+        await this.sendRequest({ cmd: 'close', sessionId: existing.sessionId })
+      } catch {
+        // Best-effort — even if Rust never receives the close (e.g. it
+        // already evicted the session), we drop our cache anyway.
+      }
+      this.sessionsByPath.delete(filePath)
+      this.sessionsById.delete(existing.sessionId)
     }
     const resp = await this.sendRequest({ cmd: 'open', path: filePath })
     if (isErrorResponse(resp)) {
@@ -346,6 +392,12 @@ export class JsonlReader extends EventEmitter {
       path: filePath,
       lineCount: openResp.lineCount,
       lastUsedAt: this.now(),
+      // Snapshot the file stats we used for cache invalidation. If the
+      // earlier statSync threw, store 0/0 — the next open() will see the
+      // real values as "different" and force another re-open, which is
+      // safer than caching a "no info" sentinel forever.
+      size: currentSize ?? 0,
+      mtimeMs: currentMtimeMs ?? 0,
     }
     this.sessionsByPath.set(filePath, entry)
     this.sessionsById.set(openResp.sessionId, entry)

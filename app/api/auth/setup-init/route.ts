@@ -59,7 +59,6 @@ function extractSourceIp(req: NextRequest): string {
   // Next.js exposes ip via NextRequest in some adapters; fall back to a
   // string sentinel that still lets us rate-limit "all unknown sources"
   // in aggregate so a fully spoofed/empty header set still gets capped.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const maybeIp = (req as unknown as { ip?: string }).ip
   if (maybeIp) return maybeIp
   return 'unknown-source'

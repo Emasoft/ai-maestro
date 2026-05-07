@@ -265,6 +265,33 @@ function ScopeBadge({ scope }: { scope: BucketElementWire['scope'] }) {
   )
 }
 
+function StatusTag({ status }: { status: BucketElementWire['status'] }) {
+  // Phase C tag — shows whether the element's token count is the
+  // historical truth from the ledger ('normal'), an approximation
+  // from the current on-disk state ('approx'), or a placeholder for
+  // a now-uninstalled element ('missing'). Live views (no
+  // atOrBeforeLineIndex) emit no status, so we render nothing.
+  if (!status || status === 'normal') return null
+  if (status === 'approx') {
+    return (
+      <span
+        className="px-1 py-0.5 rounded border text-[8px] uppercase tracking-wider font-semibold text-amber-300 bg-amber-500/10 border-amber-500/30"
+        title="Historical view requested but no inventory ledger snapshot in scope; current on-disk size shown as an approximation."
+      >
+        approx
+      </span>
+    )
+  }
+  return (
+    <span
+      className="px-1 py-0.5 rounded border text-[8px] uppercase tracking-wider font-semibold text-rose-300 bg-rose-500/10 border-rose-500/30"
+      title="Was loaded at session time but is no longer on disk. Token count is the historical value from the ledger."
+    >
+      missing
+    </span>
+  )
+}
+
 function ElementRow({
   element,
   bucketTotal,
@@ -283,6 +310,7 @@ function ElementRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
           <ScopeBadge scope={element.scope} />
+          <StatusTag status={element.status} />
           <span className="font-mono text-[11px] text-gray-100 break-all" title={element.detail}>
             {element.name}
           </span>

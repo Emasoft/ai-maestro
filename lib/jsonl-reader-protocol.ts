@@ -252,6 +252,15 @@ export interface ContextBreakdownBucketElement {
   tokens: number
   scope: 'user' | 'project' | 'plugin' | 'builtin'
   detail?: string
+  /**
+   * Phase C provenance:
+   *   - 'normal'  — historical token count from the inventory ledger
+   *   - 'approx'  — current on-disk count used as a proxy (no ledger
+   *                 entry in scope for the requested line index)
+   *   - 'missing' — was loaded at session time but no longer on disk
+   * Absent for live-view (atOrBeforeLineIndex not set).
+   */
+  status?: 'normal' | 'approx' | 'missing'
 }
 
 export interface ContextBreakdownConstantBucket {

@@ -163,6 +163,8 @@ export interface BucketElementWire {
   tokens: number
   scope: 'user' | 'project' | 'plugin' | 'builtin'
   detail?: string
+  /** Phase C provenance — see service docstring. */
+  status?: 'normal' | 'approx' | 'missing'
 }
 
 export interface MessageElementsWire {

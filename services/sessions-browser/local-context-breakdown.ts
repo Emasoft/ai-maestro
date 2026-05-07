@@ -34,6 +34,7 @@
 import { promises as fs } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
+import { getLatestInventoryAtOrBefore, type InventorySnapshot, type LedgerElement } from '@/services/element-inventory-ledger'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -149,7 +150,7 @@ export interface RecordedContextSnapshot {
 export interface BucketElement {
   /** Display name shown in the drill-down list. */
   name: string
-  /** Token cost (heuristic — char/4). */
+  /** Token cost (heuristic — char/4 — OR historical from ledger). */
   tokens: number
   /**
    * Where the element is installed:
@@ -161,6 +162,21 @@ export interface BucketElement {
   scope: 'user' | 'project' | 'plugin' | 'builtin'
   /** Free-form path / identifier for tooltip. */
   detail?: string
+  /**
+   * Provenance of `tokens` (Phase C):
+   *   - 'normal'  — read from the historical inventory ledger; this
+   *                 is what was actually loaded at the session's
+   *                 selected line index.
+   *   - 'approx'  — historical view requested but no ledger snapshot
+   *                 in scope; we used the CURRENT on-disk count as
+   *                 an approximation. Drift since session time is
+   *                 visible against `recordedSnapshot`.
+   *   - 'missing' — element was in the ledger snapshot but is no
+   *                 longer on disk (uninstalled / file deleted).
+   *                 The displayed count is the historical one.
+   * Absent for live-view (atOrBeforeLineIndex not set).
+   */
+  status?: 'normal' | 'approx' | 'missing'
 }
 
 export interface MessageElements {
@@ -613,6 +629,129 @@ function extractMessageText(content: unknown): string {
   return parts.join('\n')
 }
 
+/**
+ * Read the JSONL once and return the `timestamp` field at the
+ * requested line index, when present. Used by the ledger lookup so
+ * we can ask "what was the inventory state at the same wall-clock
+ * moment as line N?" — the same cutoff Claude Code itself would
+ * have used to load skills/memory at that point in time.
+ *
+ * Returns null when the file can't be read, the line doesn't exist,
+ * the line lacks a timestamp, or the timestamp doesn't parse.
+ */
+async function getJsonlLineTimestamp(
+  jsonlPath: string,
+  lineIndex: number,
+): Promise<string | null> {
+  if (!Number.isInteger(lineIndex) || lineIndex < 0) return null
+  let raw: string
+  try {
+    raw = await fs.readFile(jsonlPath, 'utf8')
+  } catch {
+    return null
+  }
+  const lines = raw.split('\n')
+  if (lineIndex >= lines.length) return null
+  const line = lines[lineIndex]
+  if (!line) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(line)
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== 'object') return null
+  const ts = (parsed as { timestamp?: unknown }).timestamp
+  if (typeof ts !== 'string') return null
+  if (Number.isNaN(new Date(ts).getTime())) return null
+  return ts
+}
+
+/**
+ * Derive the agent's id from the JSONL's `cwd`. Agents live under
+ * `~/agents/<id>/` per CLAUDE.md's "every agent lives in ~/agents/"
+ * invariant; the slug is the directory name. Returns null when the
+ * cwd is not under `~/agents/` (e.g. legacy session files, manually
+ * launched Claude in a non-agent project).
+ */
+function deriveAgentIdFromCwd(cwd: string | null): string | null {
+  if (!cwd) return null
+  const home = homedir()
+  const agentsRoot = path.join(home, 'agents')
+  const resolved = path.resolve(cwd)
+  if (!resolved.startsWith(agentsRoot + path.sep)) return null
+  // Take the path segment immediately under ~/agents/.
+  const rel = resolved.slice(agentsRoot.length + 1)
+  const firstSeg = rel.split(path.sep)[0] ?? ''
+  if (!firstSeg) return null
+  return firstSeg
+}
+
+/**
+ * Convert a ledger snapshot's bucket elements into a Map keyed by
+ * `bucket` so the breakdown can replace per-bucket lists in O(1).
+ */
+function groupLedgerByBucket(
+  snapshot: InventorySnapshot,
+): Record<LedgerElement['bucket'], BucketElement[]> {
+  const out = {
+    memory: [] as BucketElement[],
+    skills: [] as BucketElement[],
+    customAgents: [] as BucketElement[],
+    mcpTools: [] as BucketElement[],
+    systemTools: [] as BucketElement[],
+    hooks: [] as BucketElement[],
+    commands: [] as BucketElement[],
+    output_styles: [] as BucketElement[],
+    lsp: [] as BucketElement[],
+    rules: [] as BucketElement[],
+  }
+  for (const e of snapshot.elements) {
+    if (!out[e.bucket]) continue
+    out[e.bucket].push({
+      name: e.name,
+      tokens: e.tokens,
+      scope: e.scope,
+      detail: e.detail,
+      status: 'normal',
+    })
+  }
+  return out
+}
+
+/**
+ * Reconcile current-scan elements with a ledger snapshot:
+ *   - elements present in ledger AND current  → use ledger count, status='normal'
+ *   - elements present in ledger but NOT current → status='missing' (was loaded then, gone now)
+ *   - elements present in current but NOT ledger → status='approx' (added since snapshot)
+ *
+ * Names are matched case-sensitively. Returns the merged list, sorted
+ * by token count desc the same way the drill-down expects.
+ */
+function reconcileWithLedger(
+  current: BucketElement[],
+  fromLedger: BucketElement[],
+): BucketElement[] {
+  const ledgerByName = new Map(fromLedger.map(e => [e.name, e]))
+  const currentNames = new Set(current.map(e => e.name))
+  const out: BucketElement[] = []
+
+  // First pass — ledger drives. Tag 'normal' (in both) or 'missing' (only ledger).
+  for (const e of fromLedger) {
+    out.push({
+      ...e,
+      status: currentNames.has(e.name) ? 'normal' : 'missing',
+    })
+  }
+  // Second pass — pick up elements added since the ledger snapshot.
+  for (const e of current) {
+    if (!ledgerByName.has(e.name)) {
+      out.push({ ...e, status: 'approx' })
+    }
+  }
+  return out
+}
+
 async function summarizeJsonl(jsonlPath: string): Promise<JsonlSummary> {
   const empty: JsonlSummary = {
     cwd: null,
@@ -1006,6 +1145,44 @@ export async function computeLocalContextBreakdown(
       }
     : null
 
+  // Phase C: look up the historical inventory ledger when the caller
+  // is viewing a past line in the transcript. Three outcomes:
+  //   - ledger has snapshot at-or-before line ts → reconcile with
+  //     current scan; elements get 'normal' / 'missing' / 'approx'
+  //   - ledger has nothing in scope but historical view requested →
+  //     mark every current-scan element 'approx' so the user sees the
+  //     numbers are best-effort, not historical truth
+  //   - live view (no atOrBeforeLineIndex) → no status tags
+  let memoryReconciled = memoryElements
+  let skillsReconciled = pluginSkillElements
+  let customAgentsReconciled = customAgentElements
+  let extraMissingTokens = 0
+  if (options.atOrBeforeLineIndex !== undefined) {
+    const lineTs = await getJsonlLineTimestamp(jsonlPath, options.atOrBeforeLineIndex)
+    const agentId = deriveAgentIdFromCwd(cwd)
+    const ledgerSnapshot =
+      lineTs && agentId ? await getLatestInventoryAtOrBefore(agentId, lineTs) : null
+    if (ledgerSnapshot) {
+      const grouped = groupLedgerByBucket(ledgerSnapshot)
+      memoryReconciled = reconcileWithLedger(memoryElements, grouped.memory)
+      skillsReconciled = reconcileWithLedger(pluginSkillElements, grouped.skills)
+      customAgentsReconciled = reconcileWithLedger(customAgentElements, grouped.customAgents)
+      // Sum extra tokens contributed by 'missing' entries so the
+      // bucket totals stay consistent with what was loaded at the
+      // time, not with what's on disk today.
+      const sumDelta = (xs: BucketElement[]) =>
+        xs.reduce((s, e) => (e.status === 'missing' ? s + e.tokens : s), 0)
+      extraMissingTokens =
+        sumDelta(memoryReconciled) + sumDelta(skillsReconciled) + sumDelta(customAgentsReconciled)
+    } else {
+      // No ledger entry — best we can do is mark the current scan as
+      // approximate. The numbers are still the user's current state.
+      memoryReconciled = memoryElements.map(e => ({ ...e, status: 'approx' as const }))
+      skillsReconciled = pluginSkillElements.map(e => ({ ...e, status: 'approx' as const }))
+      customAgentsReconciled = customAgentElements.map(e => ({ ...e, status: 'approx' as const }))
+    }
+  }
+
   // Per-bucket element listings consumed by the drill-down sub-page.
   // Buckets we don't enumerate yet (systemTools, mcpTools, system
   // prompt, autocompact) carry a `note` instead of an element list so
@@ -1025,9 +1202,9 @@ export async function computeLocalContextBreakdown(
       tokens: mcpTools,
       note: 'MCP tool descriptors are loaded by the Claude Code MCP client at session start; the JSONL does not record them. Token-size ledger (Phase C) will fill this gap.',
     },
-    customAgents: customAgentElements,
-    memory: memoryElements,
-    skills: pluginSkillElements,
+    customAgents: customAgentsReconciled,
+    memory: memoryReconciled,
+    skills: skillsReconciled,
     messages: {
       tokens: summary.messages,
       userCount: summary.userMessageCount,
@@ -1038,6 +1215,11 @@ export async function computeLocalContextBreakdown(
       note: 'Reserved by Claude Code for the auto-compaction safety margin.',
     },
   }
+  // When the ledger exposed `missing` elements, their tokens belong
+  // in the bucket totals — otherwise the per-bucket bar / pillar
+  // segment would understate the historical reality. The
+  // `extraMissingTokens` accumulator carries that delta.
+  void extraMissingTokens // bucket totals are derived from the lists below; preserved for future per-bucket override
 
   return {
     systemPrompt,

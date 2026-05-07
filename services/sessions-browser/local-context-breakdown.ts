@@ -557,12 +557,194 @@ function contextLimitForModel(modelId: string | null): number {
 }
 
 // ---------------------------------------------------------------------------
+// /context snapshot parser — when Claude itself ran the slash command
+// ---------------------------------------------------------------------------
+
+/**
+ * If the user ran `/context` during the session, Claude Code captured
+ * the slash command's stdout — including the full per-bucket breakdown
+ * and totals — into the JSONL as a `system / local_command` record.
+ * Those numbers are computed by Claude against the on-disk state AT
+ * THE TIME OF THE COMMAND, with the API's BPE tokenizer. They're the
+ * ground truth for the snapshot.
+ *
+ * This function scans the JSONL for the LATEST such record and parses
+ * out the numbers. When found, the breakdown function uses these
+ * directly instead of re-tokenizing today's on-disk state (which has
+ * almost certainly drifted in the hours since the session ran).
+ *
+ * Returns `null` when no `/context` was ever captured in this session.
+ *
+ * Future: take a `selectedMessageIndex` arg to pick the latest snapshot
+ * AT OR BEFORE that index — so navigating the transcript updates the
+ * panel to the snapshot Claude saw at that moment, not the most recent
+ * one.
+ */
+async function parseRecordedContextSnapshot(jsonlPath: string): Promise<{
+  systemPrompt: number
+  customAgents: number
+  memory: number
+  skills: number
+  messages: number
+  autocompactBuffer: number
+  freeSpace: number
+  total: number
+  modelContextLimit: number
+  modelId: string | null
+} | null> {
+  let raw: string
+  try {
+    raw = await fs.readFile(jsonlPath, 'utf8')
+  } catch {
+    return null
+  }
+
+  // Walk lines newest-first by reversing — the user-visible /context
+  // panel should show the most recent snapshot when several exist.
+  const lines = raw.split('\n').reverse()
+  for (const line of lines) {
+    if (!line) continue
+    let v: Record<string, unknown>
+    try {
+      v = JSON.parse(line) as Record<string, unknown>
+    } catch {
+      continue
+    }
+    if (v.type !== 'system') continue
+    if (v.subtype !== 'local_command') continue
+    const content = typeof v.content === 'string' ? v.content : ''
+    if (!content.includes('Context Usage')) continue
+    if (!content.includes('Estimated usage by category')) continue
+
+    // Strip ANSI escapes — same pattern as `lib/ansi.ts:stripAnsi`,
+    // duplicated here so this module stays usable from a worker
+    // without a React dep tree.
+    const stripped = content.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
+
+    const numericFields = parseContextFields(stripped)
+    if (!numericFields) continue
+    return numericFields
+  }
+  return null
+}
+
+/**
+ * Parse the per-bucket numbers out of an ANSI-stripped /context dump.
+ * Returns `null` when the format doesn't match (defensive — Claude
+ * Code's printed format changes occasionally).
+ */
+function parseContextFields(text: string): {
+  systemPrompt: number
+  customAgents: number
+  memory: number
+  skills: number
+  messages: number
+  autocompactBuffer: number
+  freeSpace: number
+  total: number
+  modelContextLimit: number
+  modelId: string | null
+} | null {
+  // Helper: parse "8.2k", "33k", "860.2k", "1m" → integer tokens.
+  const parseTokenStr = (s: string): number => {
+    const trimmed = s.trim().toLowerCase()
+    const m = /^([0-9]+(?:\.[0-9]+)?)\s*([km]?)/.exec(trimmed)
+    if (!m) return 0
+    const n = parseFloat(m[1] ?? '0')
+    if (m[2] === 'm') return Math.round(n * 1_000_000)
+    if (m[2] === 'k') return Math.round(n * 1_000)
+    return Math.round(n)
+  }
+
+  // Each bucket line follows: `<Label>: <NUM>[k|m] tokens (<pct>%)`
+  // — except Free space which omits the literal "tokens" word. We
+  // match flexibly.
+  const grab = (label: string): number | null => {
+    const re = new RegExp(`${label}\\s*:\\s*([0-9]+(?:\\.[0-9]+)?\\s*[km]?)`, 'i')
+    const m = re.exec(text)
+    return m ? parseTokenStr(m[1] ?? '') : null
+  }
+
+  const systemPrompt = grab('System prompt')
+  const customAgents = grab('Custom agents')
+  const memory = grab('Memory files')
+  const skills = grab('Skills')
+  const messages = grab('Messages')
+  const freeSpace = grab('Free space')
+  const autocompactBuffer = grab('Autocompact buffer')
+
+  // Total + model context window come from the header line:
+  //   "91.6k/1m tokens (9%)"
+  const totalRe = /([0-9]+(?:\.[0-9]+)?\s*[km]?)\s*\/\s*([0-9]+(?:\.[0-9]+)?\s*[km]?)\s*tokens/i
+  const totalMatch = totalRe.exec(text)
+  const total = totalMatch ? parseTokenStr(totalMatch[1] ?? '') : null
+  const modelContextLimit = totalMatch ? parseTokenStr(totalMatch[2] ?? '') : null
+
+  // Model id from "claude-opus-4-7[1m]" / "claude-sonnet-4-6" etc.
+  // The `[1m]` suffix is Claude's "extended-context" tag — we strip it.
+  const modelMatch = /\b(claude-(?:opus|sonnet|haiku)-[\d-]+(?:-[a-z0-9]+)?)/i.exec(text)
+  const modelId = modelMatch ? (modelMatch[1] ?? null) : null
+
+  if (
+    systemPrompt === null
+    || customAgents === null
+    || memory === null
+    || skills === null
+    || messages === null
+    || freeSpace === null
+    || autocompactBuffer === null
+    || total === null
+    || modelContextLimit === null
+  ) {
+    return null
+  }
+
+  return {
+    systemPrompt,
+    customAgents,
+    memory,
+    skills,
+    messages,
+    autocompactBuffer,
+    freeSpace,
+    total,
+    modelContextLimit,
+    modelId,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 
 export async function computeLocalContextBreakdown(
   jsonlPath: string,
 ): Promise<LocalContextBreakdown> {
+  // Fast path: if the session contains a captured `/context` output,
+  // use its numbers verbatim. They're Claude's ground truth at the
+  // time the user ran the command — same on-disk state, same BPE
+  // tokenizer. Re-tokenizing today's filesystem would drift by however
+  // much the user has since edited memory files / toggled plugins / etc.
+  const snapshot = await parseRecordedContextSnapshot(jsonlPath)
+  if (snapshot) {
+    return {
+      systemPrompt: snapshot.systemPrompt,
+      systemTools: 0,
+      mcpTools: 0,
+      customAgents: snapshot.customAgents,
+      memory: snapshot.memory,
+      skills: snapshot.skills,
+      messages: snapshot.messages,
+      autocompactBuffer: snapshot.autocompactBuffer,
+      cacheRead: 0,
+      freeSpace: snapshot.freeSpace,
+      total: snapshot.total,
+      modelContextLimit: snapshot.modelContextLimit,
+      approximate: false,
+      modelId: snapshot.modelId,
+    }
+  }
+
   const summary = await summarizeJsonl(jsonlPath)
   const cwd = summary.cwd ?? path.dirname(jsonlPath)
 

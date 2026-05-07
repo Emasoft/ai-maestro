@@ -134,6 +134,13 @@ export interface ContextBreakdownResponse {
    * char/4 heuristic is visible.
    */
   recordedSnapshot?: RecordedContextSnapshotWire | null
+  /**
+   * Per-bucket element listings for the drill-down sub-page in the
+   * Context panel. Always present once the Phase B server lands;
+   * remains optional on the wire so clients pinned to older servers
+   * keep working.
+   */
+  elements?: ContextElementsWire
 }
 
 export interface RecordedContextSnapshotWire {
@@ -149,6 +156,35 @@ export interface RecordedContextSnapshotWire {
   modelId: string | null
   capturedAtLineIndex: number
   capturedAtTimestamp: string | null
+}
+
+export interface BucketElementWire {
+  name: string
+  tokens: number
+  scope: 'user' | 'project' | 'plugin' | 'builtin'
+  detail?: string
+}
+
+export interface MessageElementsWire {
+  tokens: number
+  userCount: number
+  assistantCount: number
+}
+
+export interface ConstantBucketWire {
+  tokens: number
+  note: string
+}
+
+export interface ContextElementsWire {
+  systemPrompt: ConstantBucketWire
+  systemTools: ConstantBucketWire
+  mcpTools: ConstantBucketWire
+  customAgents: BucketElementWire[]
+  memory: BucketElementWire[]
+  skills: BucketElementWire[]
+  messages: MessageElementsWire
+  autocompactBuffer: ConstantBucketWire
 }
 
 // ---------------------------------------------------------------------------

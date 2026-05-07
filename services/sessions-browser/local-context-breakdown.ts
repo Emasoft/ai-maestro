@@ -113,6 +113,13 @@ export interface LocalContextBreakdown {
    * Absent when the session has no captured snapshot in scope.
    */
   recordedSnapshot: RecordedContextSnapshot | null
+  /**
+   * Per-bucket element listings for the drill-down sub-page. Always
+   * present (with empty arrays / notes when the bucket isn't
+   * enumerated). The drill-down UI groups elements by scope and
+   * shows total counts + percentages.
+   */
+  elements: ContextElements
 }
 
 export interface RecordedContextSnapshot {
@@ -130,6 +137,66 @@ export interface RecordedContextSnapshot {
   capturedAtLineIndex: number
   /** ISO timestamp on the captured record (when present). */
   capturedAtTimestamp: string | null
+}
+
+/**
+ * One element loaded into the context window — a single memory file,
+ * skill, agent, etc. The drill-down sub-page renders a list of these
+ * for the bucket the user clicked on. Elements are named with their
+ * plugin prefix when applicable (`pluginName:skillName`) so the user
+ * can tell which plugin a skill came from at a glance.
+ */
+export interface BucketElement {
+  /** Display name shown in the drill-down list. */
+  name: string
+  /** Token cost (heuristic — char/4). */
+  tokens: number
+  /**
+   * Where the element is installed:
+   *   - 'user'    — ~/.claude/* (CLAUDE.md, rules, agents)
+   *   - 'project' — <cwd>/.claude/* (per-project)
+   *   - 'plugin'  — bundled in an enabled plugin
+   *   - 'builtin' — Claude Code itself (system prompt etc.)
+   */
+  scope: 'user' | 'project' | 'plugin' | 'builtin'
+  /** Free-form path / identifier for tooltip. */
+  detail?: string
+}
+
+export interface MessageElements {
+  /** Total tokens across all message text (user + assistant). */
+  tokens: number
+  userCount: number
+  assistantCount: number
+}
+
+export interface ConstantBucket {
+  /** Token cost — typically a constant like CLAUDE_CODE_SYSTEM_PROMPT_TOKENS. */
+  tokens: number
+  /** Human-readable note explaining why we don't enumerate this bucket. */
+  note: string
+}
+
+/**
+ * Per-bucket element listings. The drill-down sub-page in the
+ * Context panel reads from this. Buckets we don't enumerate yet
+ * (systemTools, mcpTools) carry a `note` instead of an element list
+ * so the user sees an explicit "we don't track these yet" message.
+ *
+ * Item-12 wiring: the UI compares each bucket's enumerated element
+ * count against `recordedSnapshot[bucket]`. When the captured
+ * /context shows tokens for a bucket but our enumerator returns
+ * none, the UI flags it as `[missing]` so the gap is visible.
+ */
+export interface ContextElements {
+  systemPrompt: ConstantBucket
+  systemTools: ConstantBucket
+  mcpTools: ConstantBucket
+  customAgents: BucketElement[]
+  memory: BucketElement[]
+  skills: BucketElement[]
+  messages: MessageElements
+  autocompactBuffer: ConstantBucket
 }
 
 // ---------------------------------------------------------------------------
@@ -364,44 +431,61 @@ function extractYamlScalar(fm: string, field: string): string {
   return ''
 }
 
-async function tokenizeSkillCatalogEntries(plugin: EnabledPlugin): Promise<number> {
+async function enumerateSkillCatalogEntries(plugin: EnabledPlugin): Promise<BucketElement[]> {
   // Match `estimateSkillFrontmatterTokens(skill)` from Claude Code:
   //   roughTokenCountEstimation([name, description, whenToUse].join(' '))
   // → counts only the 3 catalog scalars, NOT the full SKILL body, and
   //   NOT every other YAML key.
+  // We return per-skill elements named `pluginName:skillName` so the
+  // drill-down sub-page can show every loaded skill individually.
   const skillsDir = path.join(plugin.installPath, 'skills')
   const entries = await readDirSafe(skillsDir)
-  let total = 0
+  const out: BucketElement[] = []
   for (const entry of entries) {
     const skillPath = path.join(skillsDir, entry, 'SKILL.md')
     const fields = await readFrontmatterFields(skillPath, ['name', 'description', 'whenToUse'])
-    total += tokenizeText(fields)
+    if (!fields) continue
+    out.push({
+      name: `${plugin.name}:${entry}`,
+      tokens: tokenizeText(fields),
+      scope: 'plugin',
+      detail: skillPath,
+    })
   }
-  return total
+  return out
 }
 
-async function tokenizeAgentCatalogEntries(plugin: EnabledPlugin): Promise<number> {
+async function enumerateAgentCatalogEntries(plugin: EnabledPlugin): Promise<BucketElement[]> {
   // Match `countCustomAgentTokens` from Claude Code:
   //   countTokensWithFallback([{role:'user', content: [agentType, whenToUse].join(' ')}])
   // → only `agentType` + `whenToUse`. The rest of the agent body is
   //   loaded on-demand when the Task tool spawns it.
   // Some plugin-shipped subagents declare `name:` instead of
-  // `agentType:` — tolerate both.
+  // `agentType:` — tolerate both. Display name uses the file stem
+  // when no `agentType`/`name` field is present so the drill-down
+  // never shows blank rows.
   const agentsDir = path.join(plugin.installPath, 'agents')
   const entries = await readDirSafe(agentsDir)
-  let total = 0
+  const out: BucketElement[] = []
   for (const entry of entries) {
     if (!entry.endsWith('.md')) continue
     const fields = await readFrontmatterFields(
       path.join(agentsDir, entry),
       ['agentType', 'name', 'whenToUse', 'description'],
     )
-    total += tokenizeText(fields)
+    if (!fields) continue
+    const agentName = entry.replace(/\.md$/, '')
+    out.push({
+      name: `${plugin.name}:${agentName}`,
+      tokens: tokenizeText(fields),
+      scope: 'plugin',
+      detail: path.join(agentsDir, entry),
+    })
   }
-  return total
+  return out
 }
 
-async function tokenizeMemoryFiles(cwd: string): Promise<number> {
+async function enumerateMemoryFiles(cwd: string): Promise<BucketElement[]> {
   // Mirror Claude Code's `getMemoryFiles()` walk:
   //   1. User scope: ~/.claude/CLAUDE.md + ~/.claude/rules/*.md
   //   2. Project scope: for EVERY ancestor directory from filesystem
@@ -412,19 +496,19 @@ async function tokenizeMemoryFiles(cwd: string): Promise<number> {
   // CLAUDE.md that's both at the cwd and a parent isn't counted twice.
   const home = homedir()
   const seen = new Set<string>()
-  const candidates: string[] = []
-  const add = (p: string) => {
+  const candidates: Array<{ p: string; scope: 'user' | 'project' }> = []
+  const add = (p: string, scope: 'user' | 'project') => {
     if (!seen.has(p)) {
       seen.add(p)
-      candidates.push(p)
+      candidates.push({ p, scope })
     }
   }
 
   // User scope
-  add(path.join(home, '.claude', 'CLAUDE.md'))
-  add(path.join(home, '.claude', 'TOKF.md'))
+  add(path.join(home, '.claude', 'CLAUDE.md'), 'user')
+  add(path.join(home, '.claude', 'TOKF.md'), 'user')
   for (const entry of await readDirSafe(path.join(home, '.claude', 'rules'))) {
-    if (entry.endsWith('.md')) add(path.join(home, '.claude', 'rules', entry))
+    if (entry.endsWith('.md')) add(path.join(home, '.claude', 'rules', entry), 'user')
   }
 
   // Project scope: walk from cwd up to filesystem root.
@@ -433,11 +517,11 @@ async function tokenizeMemoryFiles(cwd: string): Promise<number> {
   // Hard cap on depth so a malformed cwd can't loop forever.
   let safety = 32
   while (safety-- > 0) {
-    add(path.join(dir, 'CLAUDE.md'))
-    add(path.join(dir, '.claude', 'CLAUDE.md'))
-    add(path.join(dir, 'CLAUDE.local.md'))
+    add(path.join(dir, 'CLAUDE.md'), 'project')
+    add(path.join(dir, '.claude', 'CLAUDE.md'), 'project')
+    add(path.join(dir, 'CLAUDE.local.md'), 'project')
     for (const entry of await readDirSafe(path.join(dir, '.claude', 'rules'))) {
-      if (entry.endsWith('.md')) add(path.join(dir, '.claude', 'rules', entry))
+      if (entry.endsWith('.md')) add(path.join(dir, '.claude', 'rules', entry), 'project')
     }
     if (dir === root) break
     const parent = path.dirname(dir)
@@ -445,26 +529,41 @@ async function tokenizeMemoryFiles(cwd: string): Promise<number> {
     dir = parent
   }
 
-  let total = 0
+  const out: BucketElement[] = []
   for (const c of candidates) {
-    total += await tokenizeFile(c)
+    const tokens = await tokenizeFile(c.p)
+    if (tokens === 0) continue // skip files that don't exist
+    out.push({
+      name: c.p.startsWith(home) ? `~${c.p.slice(home.length)}` : c.p,
+      tokens,
+      scope: c.scope,
+      detail: c.p,
+    })
   }
-  return total
+  return out
 }
 
-async function tokenizeProjectAgents(cwd: string): Promise<number> {
+async function enumerateProjectAgents(cwd: string): Promise<BucketElement[]> {
   // .claude/agents/*.md = user-defined custom agents in the project.
   // Unlike plugin subagents, these are loaded as full personas at session
   // start (Claude Code includes the full body of each user-authored
   // agent in the cached system prompt). We tokenize the whole file.
   const agentsDir = path.join(cwd, '.claude', 'agents')
   const entries = await readDirSafe(agentsDir)
-  let total = 0
+  const out: BucketElement[] = []
   for (const entry of entries) {
     if (!entry.endsWith('.md')) continue
-    total += await tokenizeFile(path.join(agentsDir, entry))
+    const filePath = path.join(agentsDir, entry)
+    const tokens = await tokenizeFile(filePath)
+    if (tokens === 0) continue
+    out.push({
+      name: entry.replace(/\.md$/, ''),
+      tokens,
+      scope: 'project',
+      detail: filePath,
+    })
   }
-  return total
+  return out
 }
 
 // ---------------------------------------------------------------------------
@@ -481,6 +580,10 @@ interface JsonlSummary {
    * ephemeral and fall out of the window after compaction.
    */
   messages: number
+  /** How many user messages contributed to `messages`. Used by the drill-down. */
+  userMessageCount: number
+  /** How many assistant messages contributed to `messages`. */
+  assistantMessageCount: number
   /** Latest assistant turn's `cache_read_input_tokens`. */
   cacheRead: number
   /**
@@ -511,20 +614,23 @@ function extractMessageText(content: unknown): string {
 }
 
 async function summarizeJsonl(jsonlPath: string): Promise<JsonlSummary> {
+  const empty: JsonlSummary = {
+    cwd: null,
+    modelId: null,
+    messages: 0,
+    userMessageCount: 0,
+    assistantMessageCount: 0,
+    cacheRead: 0,
+    latestApiUsage: null,
+  }
   let raw: string
   try {
     raw = await fs.readFile(jsonlPath, 'utf8')
   } catch {
-    return { cwd: null, modelId: null, messages: 0, cacheRead: 0, latestApiUsage: null }
+    return empty
   }
   const lines = raw.split('\n')
-  const summary: JsonlSummary = {
-    cwd: null,
-    modelId: null,
-    messages: 0,
-    cacheRead: 0,
-    latestApiUsage: null,
-  }
+  const summary: JsonlSummary = { ...empty }
   const seenRequestIds = new Set<string>()
 
   for (const line of lines) {
@@ -554,7 +660,11 @@ async function summarizeJsonl(jsonlPath: string): Promise<JsonlSummary> {
         (v as { message?: { content?: unknown } }).message?.content
         ?? (v as { content?: unknown }).content
       const text = extractMessageText(messageContent)
-      if (text) summary.messages += tokenizeText(text)
+      if (text) {
+        summary.messages += tokenizeText(text)
+        if (role === 'user') summary.userMessageCount++
+        else summary.assistantMessageCount++
+      }
     }
     if (role !== 'assistant') continue
 
@@ -818,26 +928,32 @@ export async function computeLocalContextBreakdown(
 
   const cwd = summary.cwd ?? path.dirname(jsonlPath)
 
-  // Discover enabled plugins, then tokenize their skill + subagent
-  // *catalog* entries (frontmatter only — bodies are on-demand) and the
-  // user's project-local custom agents (full bodies — loaded at session
-  // start). Memory files are tokenized whole since they sit in the
-  // system prompt cache.
+  // Discover enabled plugins, then enumerate their skill + subagent
+  // catalog entries (frontmatter only — bodies are on-demand) and the
+  // user's project-local custom agents (full bodies — loaded at
+  // session start). Memory files are tokenized whole since they sit
+  // in the system prompt cache. Each enumerator returns
+  // BucketElement[]; we sum tokens and surface the lists in
+  // `elements` for the drill-down sub-page.
   const plugins = await findEnabledPlugins(cwd)
-  const [pluginSkillsCatalog, pluginAgentsCatalog, projectAgents, memory] = await Promise.all([
-    Promise.all(plugins.map(tokenizeSkillCatalogEntries)).then(arr => arr.reduce((a, b) => a + b, 0)),
-    Promise.all(plugins.map(tokenizeAgentCatalogEntries)).then(arr => arr.reduce((a, b) => a + b, 0)),
-    tokenizeProjectAgents(cwd),
-    tokenizeMemoryFiles(cwd),
+  const [pluginSkillElements, pluginAgentElements, projectAgentElements, memoryElements] = await Promise.all([
+    Promise.all(plugins.map(enumerateSkillCatalogEntries)).then(arrs => arrs.flat()),
+    Promise.all(plugins.map(enumerateAgentCatalogEntries)).then(arrs => arrs.flat()),
+    enumerateProjectAgents(cwd),
+    enumerateMemoryFiles(cwd),
   ])
+
+  const sumTokens = (xs: BucketElement[]) => xs.reduce((s, e) => s + e.tokens, 0)
 
   // `customAgents` mirrors what Claude Code's `/context` reports: the
   // frontmatter catalog of plugin-bundled subagents PLUS the full body
-  // of the user's `.claude/agents/*.md` files. The full bodies of
-  // plugin subagents are NOT here — they're spawned on-demand and don't
-  // sit in the cached system prompt.
-  const customAgents = pluginAgentsCatalog + projectAgents
-  const skills = pluginSkillsCatalog
+  // of the user's `.claude/agents/*.md` files. Plugin-subagent bodies
+  // are NOT here — they're spawned on-demand and don't sit in the
+  // cached system prompt.
+  const customAgentElements: BucketElement[] = [...pluginAgentElements, ...projectAgentElements]
+  const customAgents = sumTokens(customAgentElements)
+  const skills = sumTokens(pluginSkillElements)
+  const memory = sumTokens(memoryElements)
 
   const systemPrompt = CLAUDE_CODE_SYSTEM_PROMPT_TOKENS
   const systemTools = 0
@@ -890,6 +1006,39 @@ export async function computeLocalContextBreakdown(
       }
     : null
 
+  // Per-bucket element listings consumed by the drill-down sub-page.
+  // Buckets we don't enumerate yet (systemTools, mcpTools, system
+  // prompt, autocompact) carry a `note` instead of an element list so
+  // the user sees explicitly that we don't track them. Item-12: when
+  // the captured /context shows a non-zero number for one of these
+  // and our enumerator returns 0, the panel UI flags it as `[missing]`.
+  const elements: ContextElements = {
+    systemPrompt: {
+      tokens: systemPrompt,
+      note: 'Built into Claude Code itself — not loaded from disk.',
+    },
+    systemTools: {
+      tokens: systemTools,
+      note: 'Tool descriptors are baked into the system prompt by the Claude Code binary; we cannot enumerate them locally.',
+    },
+    mcpTools: {
+      tokens: mcpTools,
+      note: 'MCP tool descriptors are loaded by the Claude Code MCP client at session start; the JSONL does not record them. Token-size ledger (Phase C) will fill this gap.',
+    },
+    customAgents: customAgentElements,
+    memory: memoryElements,
+    skills: pluginSkillElements,
+    messages: {
+      tokens: summary.messages,
+      userCount: summary.userMessageCount,
+      assistantCount: summary.assistantMessageCount,
+    },
+    autocompactBuffer: {
+      tokens: autocompactBuffer,
+      note: 'Reserved by Claude Code for the auto-compaction safety margin.',
+    },
+  }
+
   return {
     systemPrompt,
     systemTools,
@@ -912,5 +1061,6 @@ export async function computeLocalContextBreakdown(
     capturedAtLineIndex: recordedSnapshot?.capturedAtLineIndex ?? null,
     capturedAtTimestamp: recordedSnapshot?.capturedAtTimestamp ?? null,
     recordedSnapshot,
+    elements,
   }
 }

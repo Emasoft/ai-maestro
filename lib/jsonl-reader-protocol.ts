@@ -224,6 +224,12 @@ export interface ContextBreakdownOkResponse {
    * primary numbers so drift between the two is visible.
    */
   recordedSnapshot?: ContextBreakdownRecordedSnapshot | null
+  /**
+   * Per-bucket element listings for the drill-down sub-page in the
+   * Context panel. Optional on the wire for backwards compatibility
+   * with pre-Phase-B servers.
+   */
+  elements?: ContextBreakdownElements
 }
 
 export interface ContextBreakdownRecordedSnapshot {
@@ -239,6 +245,35 @@ export interface ContextBreakdownRecordedSnapshot {
   modelId: string | null
   capturedAtLineIndex: number
   capturedAtTimestamp: string | null
+}
+
+export interface ContextBreakdownBucketElement {
+  name: string
+  tokens: number
+  scope: 'user' | 'project' | 'plugin' | 'builtin'
+  detail?: string
+}
+
+export interface ContextBreakdownConstantBucket {
+  tokens: number
+  note: string
+}
+
+export interface ContextBreakdownMessageElements {
+  tokens: number
+  userCount: number
+  assistantCount: number
+}
+
+export interface ContextBreakdownElements {
+  systemPrompt: ContextBreakdownConstantBucket
+  systemTools: ContextBreakdownConstantBucket
+  mcpTools: ContextBreakdownConstantBucket
+  customAgents: ContextBreakdownBucketElement[]
+  memory: ContextBreakdownBucketElement[]
+  skills: ContextBreakdownBucketElement[]
+  messages: ContextBreakdownMessageElements
+  autocompactBuffer: ContextBreakdownConstantBucket
 }
 
 /**

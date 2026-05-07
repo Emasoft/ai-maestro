@@ -114,6 +114,24 @@ export interface ContextBreakdownResponse {
   modelContextLimit: number
   approximate: boolean
   modelId: string | null
+  /**
+   * Provenance of the breakdown numbers:
+   *   - 'recorded': parsed from a captured `/context` output in the
+   *     JSONL — Claude's ground truth at the time the command ran.
+   *   - 'heuristic': computed by walking today's on-disk state.
+   * Default 'heuristic' when absent, for backwards compatibility with
+   * pre-Phase-6 servers.
+   */
+  source?: 'recorded' | 'heuristic'
+  /**
+   * 0-based JSONL line index where the snapshot was captured. Lets
+   * the UI render "Snapshot from message #N at HH:MM" in the panel
+   * header. Null when source==='heuristic' or the snapshot record
+   * had no usable line index.
+   */
+  capturedAtLineIndex?: number | null
+  /** ISO timestamp Claude wrote on the captured record, when present. */
+  capturedAtTimestamp?: string | null
 }
 
 // ---------------------------------------------------------------------------

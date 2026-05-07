@@ -61,3 +61,16 @@
   outline: 2px solid rgba(16, 185, 129, 0.7); /* emerald-500/70 */
   outline-offset: -1px;
 }
+
+/* Bubble that the right-panel breakdown is currently pinned to.
+   The transcript wraps each clickable row in a div that gets this
+   class when its lineIndex matches `pinnedLineIndex` from the host
+   hook. The visual is a thin emerald ring + a faint background tint
+   — strong enough to spot in a long transcript without competing
+   visually with the role-color borders inside MessageBubble. */
+.aim-bubble-pinned {
+  outline: 2px solid rgba(16, 185, 129, 0.6); /* emerald-500/60 */
+  outline-offset: -2px;
+  background-color: rgba(16, 185, 129, 0.04);
+  border-radius: 6px;
+}

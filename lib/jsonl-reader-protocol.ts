@@ -203,6 +203,17 @@ export interface ContextBreakdownOkResponse {
   modelContextLimit: number
   approximate: boolean
   modelId: string | null
+  /**
+   * Phase 6 additions for snapshot tracking:
+   * - 'recorded': numbers came from a captured `/context` slash output
+   *   in the JSONL (Claude's ground truth at the time it ran)
+   * - 'heuristic': computed by walking today's on-disk state.
+   */
+  source?: 'recorded' | 'heuristic'
+  /** JSONL line index of the captured snapshot, when source==='recorded'. */
+  capturedAtLineIndex?: number | null
+  /** ISO timestamp of the captured snapshot, when present. */
+  capturedAtTimestamp?: string | null
 }
 
 /**

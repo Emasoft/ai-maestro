@@ -473,7 +473,10 @@ export class JsonlReader extends EventEmitter {
     return resp as SearchOkResponse
   }
 
-  async contextBreakdown(sessionId: string): Promise<ContextBreakdownOkResponse> {
+  async contextBreakdown(
+    sessionId: string,
+    options: { atOrBeforeLineIndex?: number } = {},
+  ): Promise<ContextBreakdownOkResponse> {
     this.touch(sessionId)
     // Phase 6 — local-tokenization breakdown.
     //
@@ -490,7 +493,9 @@ export class JsonlReader extends EventEmitter {
       throw new JsonlReaderProtocolError('session_not_found', `unknown sid: ${sessionId}`)
     }
     const { computeLocalContextBreakdown } = await import('@/services/sessions-browser/local-context-breakdown')
-    const result = await computeLocalContextBreakdown(entry.path)
+    const result = await computeLocalContextBreakdown(entry.path, {
+      atOrBeforeLineIndex: options.atOrBeforeLineIndex,
+    })
     return { ok: true, ...result }
   }
 

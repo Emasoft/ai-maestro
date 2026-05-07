@@ -144,6 +144,32 @@ function PanelBody({ breakdown, loading, error }: ContextBreakdownPanelProps) {
     return <div className="text-[11px] text-gray-500 px-3 py-4">No session selected.</div>
   }
   const { total, modelContextLimit, modelId, approximate } = breakdown
+  // Snapshot provenance — when source==='recorded' we read the
+  // numbers verbatim from a captured `/context` slash-command output
+  // in the JSONL. Tell the user which message and when so they can
+  // correlate the panel with the transcript and confirm "yes this is
+  // exactly what Claude reported at that moment". When source is
+  // missing or 'heuristic', we walked today's filesystem instead;
+  // mark that visually so the user knows the numbers are an estimate.
+  const source = breakdown.source ?? 'heuristic'
+  const capturedAt = breakdown.capturedAtTimestamp
+  const capturedAtLineIndex = breakdown.capturedAtLineIndex
+  const sourceBadge =
+    source === 'recorded' ? (
+      <div className="text-[9px] text-emerald-400/80 mt-0.5 leading-tight">
+        Snapshot from <span className="font-mono">/context</span>
+        {capturedAtLineIndex !== null && capturedAtLineIndex !== undefined && (
+          <> · line #{capturedAtLineIndex}</>
+        )}
+        {capturedAt && (
+          <> · {new Date(capturedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</>
+        )}
+      </div>
+    ) : (
+      <div className="text-[9px] text-amber-400/70 mt-0.5 leading-tight">
+        Estimated from on-disk state — no <span className="font-mono">/context</span> capture in this session
+      </div>
+    )
   return (
     <div className="px-3 py-3 space-y-3">
       <div className="space-y-0.5 text-[10px] text-gray-400">
@@ -166,6 +192,7 @@ function PanelBody({ breakdown, loading, error }: ContextBreakdownPanelProps) {
             </span>
           </div>
         )}
+        {sourceBadge}
       </div>
       <div className="space-y-2.5">
         {BUCKETS.map(bucket => (

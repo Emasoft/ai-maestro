@@ -311,12 +311,19 @@ async function fetchRange(
 async function fetchContextBreakdown(
   sid: string,
   path: string | undefined,
+  atIndex: number | null,
   signal?: AbortSignal,
 ): Promise<ContextBreakdownResponse> {
-  const res = await fetch(
-    `/api/sessions-browser/sessions/${encodeURIComponent(sid)}/context-breakdown${pathQuery(path)}`,
-    { method: 'GET', credentials: 'include', signal },
-  )
+  // Compose query string with both `?path=` (cross-worker safety,
+  // see range/route.ts comment) and the optional `?atIndex=N` cursor
+  // that pins the breakdown to a captured `/context` snapshot at or
+  // before that JSONL line index.
+  const qs = new URLSearchParams()
+  if (path) qs.set('path', path)
+  if (atIndex !== null) qs.set('atIndex', String(atIndex))
+  const queryString = qs.toString()
+  const url = `/api/sessions-browser/sessions/${encodeURIComponent(sid)}/context-breakdown${queryString ? `?${queryString}` : ''}`
+  const res = await fetch(url, { method: 'GET', credentials: 'include', signal })
   if (!res.ok) {
     const detail = await safeErrorDetail(res)
     throw new Error(`context_failed:${res.status}${detail ? `:${detail}` : ''}`)
@@ -405,6 +412,15 @@ export interface UseJsonlSessionApi {
   breakdown: ContextBreakdownResponse | null
   breakdownLoading: boolean
   breakdownError: string | null
+  /**
+   * 0-based JSONL line index the right panel is pinned to. The
+   * breakdown shows the latest captured `/context` snapshot AT OR
+   * BEFORE this index. `null` = pinned to "latest" (most recent
+   * snapshot in the file).
+   */
+  pinnedLineIndex: number | null
+  /** Pin the breakdown panel to the snapshot at-or-before `lineIndex`. */
+  pinBreakdownTo: (lineIndex: number | null) => void
 
   // Search
   query: string
@@ -660,6 +676,18 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
   const [breakdownLoading, setBreakdownLoading] = useState(false)
   const [breakdownError, setBreakdownError] = useState<string | null>(null)
   const [breakdownReloadTick, setBreakdownReloadTick] = useState(0)
+  /**
+   * Pinned line-index cursor for the breakdown panel. `null` means
+   * "show the latest snapshot in the file". When the user clicks a
+   * transcript bubble the panel pins to that bubble's `lineIndex` so
+   * the right panel reflects what Claude saw at THAT message instead
+   * of always showing the most recent one. Reset to `null` whenever
+   * the selected session changes.
+   */
+  const [pinnedLineIndex, setPinnedLineIndex] = useState<number | null>(null)
+  const pinBreakdownTo = useCallback((lineIndex: number | null) => {
+    setPinnedLineIndex(lineIndex)
+  }, [])
 
   // Reset breakdown ONLY when the selected session changes. Live-tail
   // re-fetches keep the previous breakdown visible while the new one
@@ -668,6 +696,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
   useEffect(() => {
     setBreakdown(null)
     setBreakdownError(null)
+    setPinnedLineIndex(null)
   }, [selectedSessionId])
 
   useEffect(() => {
@@ -680,7 +709,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     const sessionPath = selectedSessionPath
     const ctrl = new AbortController()
     setBreakdownLoading(true)
-    fetchContextBreakdown(selectedSessionId, sessionPath, ctrl.signal)
+    fetchContextBreakdown(selectedSessionId, sessionPath, pinnedLineIndex, ctrl.signal)
       .then(r => {
         if (ctrl.signal.aborted) return
         setBreakdown(r)
@@ -698,8 +727,10 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     return () => ctrl.abort()
     // selectedSessionPath + listLoading are in deps so the effect re-fires
     // exactly once when a URL-direct selection's summary arrives — see the
-    // transcript initial-load effect for the same race fix.
-  }, [selectedSessionId, breakdownReloadTick, selectedSessionPath, listLoading])
+    // transcript initial-load effect for the same race fix. Also re-fires
+    // when the user pins the panel to a different transcript message so
+    // the displayed snapshot follows their selection.
+  }, [selectedSessionId, breakdownReloadTick, selectedSessionPath, listLoading, pinnedLineIndex])
 
   // Live-tail polling -----------------------------------------------------
   // While a session is selected, poll every LIVE_TAIL_INTERVAL_MS to:
@@ -881,6 +912,8 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     breakdown,
     breakdownLoading,
     breakdownError,
+    pinnedLineIndex,
+    pinBreakdownTo,
 
     query,
     setQuery,
@@ -908,6 +941,8 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     breakdown,
     breakdownLoading,
     breakdownError,
+    pinnedLineIndex,
+    pinBreakdownTo,
     query,
     setQuery,
     matches,

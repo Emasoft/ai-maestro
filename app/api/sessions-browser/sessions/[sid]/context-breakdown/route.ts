@@ -32,6 +32,9 @@ const ContextBreakdownResponseSchema = z.object({
   modelContextLimit: z.number().int().nonnegative(),
   approximate: z.boolean(),
   modelId: z.string().nullable(),
+  source: z.enum(['recorded', 'heuristic']).optional(),
+  capturedAtLineIndex: z.number().int().nullable().optional(),
+  capturedAtTimestamp: z.string().nullable().optional(),
 })
 
 export async function GET(
@@ -53,6 +56,17 @@ export async function GET(
     return NextResponse.json({ error: 'session_not_found' }, { status: 404 })
   }
 
+  // Phase 6 — `?atIndex=N` selects the snapshot at or before the
+  // user's currently-selected transcript message. Defaults to the
+  // most recent snapshot when omitted. Negative or non-numeric
+  // values are silently treated as omitted.
+  const atIndexRaw = url.searchParams.get('atIndex')
+  let atOrBeforeLineIndex: number | undefined
+  if (atIndexRaw !== null) {
+    const parsed = Number.parseInt(atIndexRaw, 10)
+    if (Number.isFinite(parsed) && parsed >= 0) atOrBeforeLineIndex = parsed
+  }
+
   // Live-tail safety: if a parallel poll-tick mtime-evicts the same
   // path between our `ensureOpenForPath` and the actual reader call,
   // the reader will return `session_not_found`. Retry up to
@@ -67,7 +81,7 @@ export async function GET(
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const readerSid = await ensureOpenForPath(absolutePath!)
       try {
-        return await getJsonlReader().contextBreakdown(readerSid)
+        return await getJsonlReader().contextBreakdown(readerSid, { atOrBeforeLineIndex })
       } catch (err) {
         lastErr = err
         if (
@@ -104,6 +118,9 @@ export async function GET(
       modelContextLimit: resp.modelContextLimit,
       approximate: resp.approximate,
       modelId: resp.modelId,
+      source: resp.source,
+      capturedAtLineIndex: resp.capturedAtLineIndex ?? null,
+      capturedAtTimestamp: resp.capturedAtTimestamp ?? null,
     })
     return NextResponse.json(validated)
   } catch (err) {

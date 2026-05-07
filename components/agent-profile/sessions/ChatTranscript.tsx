@@ -97,6 +97,19 @@ interface ChatTranscriptProps {
   loadingMore?: boolean
   /** Error overlay (inline) at bottom. */
   error?: string | null
+  /**
+   * Currently pinned line index for the right-panel breakdown. The
+   * matching bubble gets a subtle ring so the user can see which
+   * point-in-time the panel is showing. `null` = pinned to "latest"
+   * (no specific bubble highlighted).
+   */
+  pinnedLineIndex?: number | null
+  /**
+   * Click handler for bubbles. The transcript invokes this with the
+   * bubble's `lineIndex` to pin, or with `null` to unpin (which
+   * happens when the user clicks the already-pinned bubble).
+   */
+  onPinLineIndex?: (lineIndex: number | null) => void
 }
 
 export interface ChatTranscriptHandle {
@@ -113,6 +126,8 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
     onNearBottom,
     loadingMore = false,
     error = null,
+    pinnedLineIndex = null,
+    onPinLineIndex,
   },
   ref,
 ) {
@@ -282,6 +297,26 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
             const top = offsets[index]
             const h = rowHeight(line)
             const isCurrent = currentMatchLine !== null && currentMatchLine === line.lineIndex
+            const isPinned = pinnedLineIndex !== null && pinnedLineIndex === line.lineIndex
+            // Pin/unpin click handler — clicking a bubble that's already
+            // pinned unpins (sets pin to null), otherwise pins to that
+            // line. We swallow keyboard activations here to avoid
+            // hijacking standard text-selection behavior; the future
+            // a11y story is a dedicated "pin" button next to each
+            // bubble. For now click-to-toggle is the simplest UX.
+            const handlePinClick = onPinLineIndex
+              ? (e: React.MouseEvent) => {
+                  // Only react to plain left-clicks. Modifier-clicks
+                  // (open in new tab, copy link, etc.) and right-clicks
+                  // pass through.
+                  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+                  // Swallow when the user was selecting text (a click
+                  // that ends a drag-selection should NOT pin).
+                  const selection = window.getSelection()
+                  if (selection && selection.toString().length > 0) return
+                  onPinLineIndex(isPinned ? null : line.lineIndex)
+                }
+              : undefined
             return (
               <div
                 key={`${line.lineIndex}-${line.role}`}
@@ -292,7 +327,15 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
                   right: 0,
                   minHeight: h,
                   padding: '0 12px',
+                  cursor: handlePinClick ? 'pointer' : undefined,
                 }}
+                onClick={handlePinClick}
+                aria-label={
+                  isPinned
+                    ? 'Pinned to context breakdown panel — click to unpin'
+                    : 'Click to pin context breakdown to this message'
+                }
+                className={isPinned ? 'aim-bubble-pinned' : undefined}
               >
                 {line.isToolEvent ? (
                   <ToolUseRow line={line} />

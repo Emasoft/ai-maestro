@@ -83,6 +83,28 @@ export interface LocalContextBreakdown {
   approximate: boolean
   /** Last-seen model id from the JSONL. */
   modelId: string | null
+  /**
+   * How the breakdown was sourced:
+   *   - 'recorded': parsed from a captured `/context` slash-command
+   *     output in the JSONL. Numbers are Claude's ground truth at the
+   *     time of the command.
+   *   - 'heuristic': computed by walking today's on-disk state. Used
+   *     as a fallback when the session has no `/context` capture
+   *     before the requested position.
+   */
+  source: 'recorded' | 'heuristic'
+  /**
+   * 0-based JSONL line index of the captured snapshot, when
+   * `source === 'recorded'`. Lets the UI display "Snapshot from
+   * message #N" so the user can correlate the panel with the
+   * transcript.
+   */
+  capturedAtLineIndex: number | null
+  /**
+   * ISO timestamp Claude wrote on the captured record, when present.
+   * Useful for the user to see "snapshot taken 2h ago" in the panel.
+   */
+  capturedAtTimestamp: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -580,7 +602,7 @@ function contextLimitForModel(modelId: string | null): number {
  * panel to the snapshot Claude saw at that moment, not the most recent
  * one.
  */
-async function parseRecordedContextSnapshot(jsonlPath: string): Promise<{
+interface ParsedContextSnapshot {
   systemPrompt: number
   customAgents: number
   memory: number
@@ -591,7 +613,27 @@ async function parseRecordedContextSnapshot(jsonlPath: string): Promise<{
   total: number
   modelContextLimit: number
   modelId: string | null
-} | null> {
+  /** 0-based JSONL line index of the captured `system / local_command` record. */
+  capturedAtLineIndex: number
+  /** ISO timestamp Claude wrote on the captured record, when present. */
+  capturedAtTimestamp: string | null
+}
+
+/**
+ * Find a captured `/context` snapshot in the JSONL.
+ *
+ * When `atOrBeforeLineIndex` is provided, returns the LATEST snapshot
+ * with `lineIndex <= atOrBeforeLineIndex`. This lets the right panel
+ * reflect the breakdown the model actually saw at the moment of the
+ * selected transcript message — scrolling back through the history
+ * updates the panel to the snapshot Claude saw at THAT point in time.
+ *
+ * Without that arg, returns the latest snapshot in the entire file.
+ */
+async function parseRecordedContextSnapshot(
+  jsonlPath: string,
+  atOrBeforeLineIndex?: number,
+): Promise<ParsedContextSnapshot | null> {
   let raw: string
   try {
     raw = await fs.readFile(jsonlPath, 'utf8')
@@ -599,10 +641,15 @@ async function parseRecordedContextSnapshot(jsonlPath: string): Promise<{
     return null
   }
 
-  // Walk lines newest-first by reversing — the user-visible /context
-  // panel should show the most recent snapshot when several exist.
-  const lines = raw.split('\n').reverse()
-  for (const line of lines) {
+  const allLines = raw.split('\n')
+  // We walk the file with the original (forward) line indices so we
+  // can correctly compare each candidate's index against
+  // `atOrBeforeLineIndex`. To pick the LATEST qualifying snapshot we
+  // remember the best match as we go.
+  let best: ParsedContextSnapshot | null = null
+  for (let i = 0; i < allLines.length; i++) {
+    if (atOrBeforeLineIndex !== undefined && i > atOrBeforeLineIndex) break
+    const line = allLines[i]
     if (!line) continue
     let v: Record<string, unknown>
     try {
@@ -621,11 +668,12 @@ async function parseRecordedContextSnapshot(jsonlPath: string): Promise<{
     // without a React dep tree.
     const stripped = content.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
 
-    const numericFields = parseContextFields(stripped)
-    if (!numericFields) continue
-    return numericFields
+    const fields = parseContextFields(stripped)
+    if (!fields) continue
+    const ts = typeof v.timestamp === 'string' ? v.timestamp : null
+    best = { ...fields, capturedAtLineIndex: i, capturedAtTimestamp: ts }
   }
-  return null
+  return best
 }
 
 /**
@@ -717,15 +765,31 @@ function parseContextFields(text: string): {
 // Public entry point
 // ---------------------------------------------------------------------------
 
+export interface ComputeLocalContextBreakdownOptions {
+  /**
+   * If provided, return the latest captured `/context` snapshot at or
+   * before this line index. Lets the right panel reflect the
+   * snapshot the model saw at the moment of the user's selected
+   * transcript message instead of always showing the most recent
+   * one. Pass `undefined` (or omit) to get the most recent snapshot.
+   */
+  atOrBeforeLineIndex?: number
+}
+
 export async function computeLocalContextBreakdown(
   jsonlPath: string,
+  options: ComputeLocalContextBreakdownOptions = {},
 ): Promise<LocalContextBreakdown> {
-  // Fast path: if the session contains a captured `/context` output,
-  // use its numbers verbatim. They're Claude's ground truth at the
-  // time the user ran the command — same on-disk state, same BPE
-  // tokenizer. Re-tokenizing today's filesystem would drift by however
-  // much the user has since edited memory files / toggled plugins / etc.
-  const snapshot = await parseRecordedContextSnapshot(jsonlPath)
+  // Fast path: if the session contains a captured `/context` output
+  // at or before the requested position, use its numbers verbatim.
+  // They're Claude's ground truth at the time the user ran the
+  // command — same on-disk state, same BPE tokenizer. Re-tokenizing
+  // today's filesystem would drift by however much the user has since
+  // edited memory files / toggled plugins / etc.
+  const snapshot = await parseRecordedContextSnapshot(
+    jsonlPath,
+    options.atOrBeforeLineIndex,
+  )
   if (snapshot) {
     return {
       systemPrompt: snapshot.systemPrompt,
@@ -742,6 +806,9 @@ export async function computeLocalContextBreakdown(
       modelContextLimit: snapshot.modelContextLimit,
       approximate: false,
       modelId: snapshot.modelId,
+      source: 'recorded',
+      capturedAtLineIndex: snapshot.capturedAtLineIndex,
+      capturedAtTimestamp: snapshot.capturedAtTimestamp,
     }
   }
 
@@ -818,5 +885,8 @@ export async function computeLocalContextBreakdown(
     modelContextLimit,
     approximate: true,
     modelId: summary.modelId,
+    source: 'heuristic',
+    capturedAtLineIndex: null,
+    capturedAtTimestamp: null,
   }
 }

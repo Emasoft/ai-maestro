@@ -127,6 +127,8 @@ export default function SessionsTab({ agentId }: SessionsTabProps) {
             onNearBottom={api.loadMore}
             loadingMore={api.transcriptLoading}
             error={api.transcriptError}
+            pinnedLineIndex={api.pinnedLineIndex}
+            onPinLineIndex={api.pinBreakdownTo}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-6 text-center">

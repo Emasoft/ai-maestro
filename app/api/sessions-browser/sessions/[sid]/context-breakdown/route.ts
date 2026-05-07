@@ -14,6 +14,51 @@ import {
 
 export const dynamic = 'force-dynamic'
 
+const RecordedSnapshotSchema = z.object({
+  systemPrompt: z.number().int().nonnegative(),
+  customAgents: z.number().int().nonnegative(),
+  memory: z.number().int().nonnegative(),
+  skills: z.number().int().nonnegative(),
+  messages: z.number().int().nonnegative(),
+  autocompactBuffer: z.number().int().nonnegative(),
+  freeSpace: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+  modelContextLimit: z.number().int().nonnegative(),
+  modelId: z.string().nullable(),
+  capturedAtLineIndex: z.number().int().nonnegative(),
+  capturedAtTimestamp: z.string().nullable(),
+})
+
+const BucketElementSchema = z.object({
+  name: z.string(),
+  tokens: z.number().int().nonnegative(),
+  scope: z.enum(['user', 'project', 'plugin', 'builtin']),
+  detail: z.string().optional(),
+  status: z.enum(['normal', 'approx', 'missing']).optional(),
+})
+
+const ConstantBucketSchema = z.object({
+  tokens: z.number().int().nonnegative(),
+  note: z.string(),
+})
+
+const MessageElementsSchema = z.object({
+  tokens: z.number().int().nonnegative(),
+  userCount: z.number().int().nonnegative(),
+  assistantCount: z.number().int().nonnegative(),
+})
+
+const ContextElementsSchema = z.object({
+  systemPrompt: ConstantBucketSchema,
+  systemTools: ConstantBucketSchema,
+  mcpTools: ConstantBucketSchema,
+  customAgents: z.array(BucketElementSchema),
+  memory: z.array(BucketElementSchema),
+  skills: z.array(BucketElementSchema),
+  messages: MessageElementsSchema,
+  autocompactBuffer: ConstantBucketSchema,
+})
+
 const ContextBreakdownResponseSchema = z.object({
   sessionId: z.string(),
   systemPrompt: z.number().int().nonnegative(),
@@ -35,6 +80,12 @@ const ContextBreakdownResponseSchema = z.object({
   source: z.enum(['recorded', 'heuristic']).optional(),
   capturedAtLineIndex: z.number().int().nullable().optional(),
   capturedAtTimestamp: z.string().nullable().optional(),
+  // Phase A — captured /context snapshot surfaced as comparison
+  // overlay (UI shows Δ vs heuristic). `null` means the session has
+  // no captured /context at-or-before the requested cursor.
+  recordedSnapshot: RecordedSnapshotSchema.nullable().optional(),
+  // Phase B — per-bucket element listings for the drill-down sub-page.
+  elements: ContextElementsSchema.optional(),
 })
 
 export async function GET(
@@ -121,6 +172,8 @@ export async function GET(
       source: resp.source,
       capturedAtLineIndex: resp.capturedAtLineIndex ?? null,
       capturedAtTimestamp: resp.capturedAtTimestamp ?? null,
+      recordedSnapshot: resp.recordedSnapshot ?? null,
+      elements: resp.elements,
     })
     return NextResponse.json(validated)
   } catch (err) {

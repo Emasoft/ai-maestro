@@ -1517,6 +1517,8 @@ Changing an agent's client (e.g. `claude` → `codex`) is **NEVER** a simple fie
 - **[docs/OPERATIONS-GUIDE.md](./docs/OPERATIONS-GUIDE.md)** - Agent management, troubleshooting
 - **[docs/CEREBELLUM.md](./docs/CEREBELLUM.md)** - Cerebellum subsystem architecture, voice pipeline, TTS providers
 - **[docs/GOVERNANCE-RULES.md](./docs/GOVERNANCE-RULES.md)** - Team governance rules R1-R20 (semver v3.7.0+): titles, teams, messaging, composition, role boundaries, resilience, written orders, core plugin enforcement, client conversion (R18), marketplace governance (R20)
+- **[docs/CLAUDE-CODE-COMPATIBILITY-AUDIT.md](./docs/CLAUDE-CODE-COMPATIBILITY-AUDIT.md)** - Per-version verdict for Claude Code 2.1.113-2.1.132 changelog entries; lists repo-by-repo follow-up for items that affect role-plugins / ai-maestro-plugin separately
+- **[docs/API-CHANGES.md](./docs/API-CHANGES.md)** - Every API / governance surface change since the `governance-rules` branch was last synced. Plugins that fetch raw markdown from the fork should treat this as the change-log between branches
 
 Refer to these when users ask about setup or usage.
 

@@ -248,18 +248,25 @@ async function resolvePluginInstallPath(
 }
 
 /**
- * Extract the YAML frontmatter from a markdown file. Returns the
- * frontmatter block as plain text (excluding the leading/trailing `---`),
- * or `''` if the file has no frontmatter.
+ * Extract specific top-level YAML frontmatter scalars from a markdown
+ * file. Returns a string containing the values of every requested field
+ * concatenated with spaces — same shape Claude Code's
+ * `estimateSkillFrontmatterTokens` / `countCustomAgentTokens` use to
+ * count the catalog entries that sit in the always-on system prompt.
  *
- * Claude Code only includes the SKILL frontmatter (name + description)
- * in the system-prompt catalog at session start — the full SKILL body is
- * loaded ON DEMAND when the skill is invoked. Same model for plugin
- * subagents: their `agents/*.md` body is loaded only when the Task tool
- * spawns them. Counting the whole body would massively over-attribute
- * tokens vs. what `/context` actually reports.
+ * Why scalars only: Claude Code's `/context` accounts for skills and
+ * subagents using ONLY `name + description + whenToUse` (skills) or
+ * `agentType + whenToUse` (agents). The rest of the frontmatter
+ * (allowed-tools, auto-load flags, etc.) is metadata the renderer uses
+ * but never lands in the cached system prompt — counting the whole
+ * frontmatter inflates the estimate ~3× on skill-rich plugins.
+ *
+ * Parsing is intentionally tolerant: scalar values may be quoted,
+ * single-quoted, multi-line via `>` / `|`, or just bare strings until
+ * end of line. We do NOT parse nested keys, lists, or anchors — those
+ * never appear in catalog scalars.
  */
-async function readFrontmatter(filePath: string): Promise<string> {
+async function readFrontmatterFields(filePath: string, fields: string[]): Promise<string> {
   let txt: string
   try {
     txt = await fs.readFile(filePath, 'utf8')
@@ -267,63 +274,130 @@ async function readFrontmatter(filePath: string): Promise<string> {
     return ''
   }
   if (!txt.startsWith('---\n') && !txt.startsWith('---\r\n')) return ''
-  const after = txt.indexOf('\n---', 4)
-  if (after < 0) return ''
-  return txt.slice(0, after + 4)
+  const fmEnd = txt.indexOf('\n---', 4)
+  if (fmEnd < 0) return ''
+  const fm = txt.slice(0, fmEnd)
+  const out: string[] = []
+  for (const field of fields) {
+    const value = extractYamlScalar(fm, field)
+    if (value) out.push(value)
+  }
+  return out.join(' ')
+}
+
+/**
+ * Pull a top-level scalar value for `field` out of a YAML frontmatter
+ * block. Supports plain, single-quoted, double-quoted, and folded
+ * (`>`/`|`) scalars. Returns '' when the field is absent.
+ */
+function extractYamlScalar(fm: string, field: string): string {
+  const lines = fm.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const m = new RegExp(`^${field}\\s*:\\s*(.*)$`).exec(lines[i] ?? '')
+    if (!m) continue
+    let val = (m[1] ?? '').trim()
+    if (val === '>' || val === '|' || val === '>-' || val === '|-') {
+      // Folded multi-line scalar — collect indented continuations until
+      // the next un-indented key or end of frontmatter.
+      const buf: string[] = []
+      for (let j = i + 1; j < lines.length; j++) {
+        const next = lines[j] ?? ''
+        if (/^\S/.test(next)) break
+        buf.push(next.trim())
+      }
+      return buf.join(' ')
+    }
+    // Strip wrapping quotes if present.
+    if ((val.startsWith('"') && val.endsWith('"'))
+      || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1)
+    }
+    return val
+  }
+  return ''
 }
 
 async function tokenizeSkillCatalogEntries(plugin: EnabledPlugin): Promise<number> {
+  // Match `estimateSkillFrontmatterTokens(skill)` from Claude Code:
+  //   roughTokenCountEstimation([name, description, whenToUse].join(' '))
+  // → counts only the 3 catalog scalars, NOT the full SKILL body, and
+  //   NOT every other YAML key.
   const skillsDir = path.join(plugin.installPath, 'skills')
   const entries = await readDirSafe(skillsDir)
   let total = 0
   for (const entry of entries) {
     const skillPath = path.join(skillsDir, entry, 'SKILL.md')
-    const frontmatter = await readFrontmatter(skillPath)
-    total += tokenizeText(frontmatter)
+    const fields = await readFrontmatterFields(skillPath, ['name', 'description', 'whenToUse'])
+    total += tokenizeText(fields)
   }
   return total
 }
 
 async function tokenizeAgentCatalogEntries(plugin: EnabledPlugin): Promise<number> {
-  // Plugin-bundled subagents (`<plugin>/agents/*.md`) are loaded ON
-  // DEMAND by the Task tool — only the YAML frontmatter (name +
-  // description) sits in the always-on catalog the model sees at session
-  // start. Tokenize only the frontmatter, NOT the whole agent body.
+  // Match `countCustomAgentTokens` from Claude Code:
+  //   countTokensWithFallback([{role:'user', content: [agentType, whenToUse].join(' ')}])
+  // → only `agentType` + `whenToUse`. The rest of the agent body is
+  //   loaded on-demand when the Task tool spawns it.
+  // Some plugin-shipped subagents declare `name:` instead of
+  // `agentType:` — tolerate both.
   const agentsDir = path.join(plugin.installPath, 'agents')
   const entries = await readDirSafe(agentsDir)
   let total = 0
   for (const entry of entries) {
     if (!entry.endsWith('.md')) continue
-    const frontmatter = await readFrontmatter(path.join(agentsDir, entry))
-    total += tokenizeText(frontmatter)
+    const fields = await readFrontmatterFields(
+      path.join(agentsDir, entry),
+      ['agentType', 'name', 'whenToUse', 'description'],
+    )
+    total += tokenizeText(fields)
   }
   return total
 }
 
 async function tokenizeMemoryFiles(cwd: string): Promise<number> {
+  // Mirror Claude Code's `getMemoryFiles()` walk:
+  //   1. User scope: ~/.claude/CLAUDE.md + ~/.claude/rules/*.md
+  //   2. Project scope: for EVERY ancestor directory from filesystem
+  //      root down to cwd, look for CLAUDE.md, .claude/CLAUDE.md,
+  //      .claude/rules/*.md, and CLAUDE.local.md. Claude inlines all
+  //      of these into the cached system prompt.
+  // Each path is tokenized exactly once (de-dupe via a Set) so a
+  // CLAUDE.md that's both at the cwd and a parent isn't counted twice.
   const home = homedir()
-  // Claude Code recursively inlines `@<path>` references in CLAUDE.md
-  // into the cached system prompt — so a tiny CLAUDE.md that references
-  // `~/.claude/rules/foo.md` ends up loading the whole rules tree.
-  // Approximate that by including the user's `~/.claude/rules/` and
-  // `~/.claude/CLAUDE.md` plus the project-scope `CLAUDE.md` files.
-  const candidates: string[] = [
-    path.join(home, '.claude', 'CLAUDE.md'),
-    path.join(home, '.claude', 'TOKF.md'),
-    path.join(cwd, 'CLAUDE.md'),
-    path.join(cwd, '.claude', 'CLAUDE.md'),
-  ]
-  // Add every `*.md` under `~/.claude/rules/` — these are conventionally
-  // `@`-referenced from CLAUDE.md and live in the system prompt cache.
-  const rulesDir = path.join(home, '.claude', 'rules')
-  for (const entry of await readDirSafe(rulesDir)) {
-    if (entry.endsWith('.md')) candidates.push(path.join(rulesDir, entry))
+  const seen = new Set<string>()
+  const candidates: string[] = []
+  const add = (p: string) => {
+    if (!seen.has(p)) {
+      seen.add(p)
+      candidates.push(p)
+    }
   }
-  // Same for project-scope rules (`<cwd>/.claude/rules/*.md`).
-  const projectRulesDir = path.join(cwd, '.claude', 'rules')
-  for (const entry of await readDirSafe(projectRulesDir)) {
-    if (entry.endsWith('.md')) candidates.push(path.join(projectRulesDir, entry))
+
+  // User scope
+  add(path.join(home, '.claude', 'CLAUDE.md'))
+  add(path.join(home, '.claude', 'TOKF.md'))
+  for (const entry of await readDirSafe(path.join(home, '.claude', 'rules'))) {
+    if (entry.endsWith('.md')) add(path.join(home, '.claude', 'rules', entry))
   }
+
+  // Project scope: walk from cwd up to filesystem root.
+  let dir = path.resolve(cwd)
+  const root = path.parse(dir).root
+  // Hard cap on depth so a malformed cwd can't loop forever.
+  let safety = 32
+  while (safety-- > 0) {
+    add(path.join(dir, 'CLAUDE.md'))
+    add(path.join(dir, '.claude', 'CLAUDE.md'))
+    add(path.join(dir, 'CLAUDE.local.md'))
+    for (const entry of await readDirSafe(path.join(dir, '.claude', 'rules'))) {
+      if (entry.endsWith('.md')) add(path.join(dir, '.claude', 'rules', entry))
+    }
+    if (dir === root) break
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+
   let total = 0
   for (const c of candidates) {
     total += await tokenizeFile(c)
@@ -362,6 +436,18 @@ interface JsonlSummary {
   messages: number
   /** Latest assistant turn's `cache_read_input_tokens`. */
   cacheRead: number
+  /**
+   * Latest assistant turn's full API usage. Claude Code's `/context`
+   * uses `input + cache_creation + cache_read` of the most recent
+   * assistant turn as the displayed Total — that's the "what's
+   * actually in the window right now" number. When this is available
+   * we prefer it over the bucket sum.
+   */
+  latestApiUsage: {
+    inputTokens: number
+    cacheCreationTokens: number
+    cacheReadTokens: number
+  } | null
 }
 
 function extractMessageText(content: unknown): string {
@@ -382,10 +468,16 @@ async function summarizeJsonl(jsonlPath: string): Promise<JsonlSummary> {
   try {
     raw = await fs.readFile(jsonlPath, 'utf8')
   } catch {
-    return { cwd: null, modelId: null, messages: 0, cacheRead: 0 }
+    return { cwd: null, modelId: null, messages: 0, cacheRead: 0, latestApiUsage: null }
   }
   const lines = raw.split('\n')
-  const summary: JsonlSummary = { cwd: null, modelId: null, messages: 0, cacheRead: 0 }
+  const summary: JsonlSummary = {
+    cwd: null,
+    modelId: null,
+    messages: 0,
+    cacheRead: 0,
+    latestApiUsage: null,
+  }
   const seenRequestIds = new Set<string>()
 
   for (const line of lines) {
@@ -432,9 +524,15 @@ async function summarizeJsonl(jsonlPath: string): Promise<JsonlSummary> {
     const usage = ((v as { message?: { usage?: Record<string, unknown> } }).message?.usage)
       ?? ((v as { usage?: Record<string, unknown> }).usage)
     if (!usage) continue
-    // Overwrite (not accumulate): we want the LATEST cache_read so the
-    // panel reflects what the model is currently holding cached.
+    // Overwrite (not accumulate): the latest assistant record carries
+    // the running-window snapshot the model just saw, which is what
+    // Claude Code's `/context` displays.
     summary.cacheRead = numberOrZero(usage.cache_read_input_tokens)
+    summary.latestApiUsage = {
+      inputTokens: numberOrZero(usage.input_tokens),
+      cacheCreationTokens: numberOrZero(usage.cache_creation_input_tokens),
+      cacheReadTokens: numberOrZero(usage.cache_read_input_tokens),
+    }
   }
   return summary
 }
@@ -494,7 +592,8 @@ export async function computeLocalContextBreakdown(
   const mcpTools = 0
   const autocompactBuffer = CLAUDE_CODE_AUTOCOMPACT_BUFFER_TOKENS
 
-  const total =
+  // Bucket sum (estimated from on-disk content + JSONL message text).
+  const bucketSum =
     systemPrompt
     + systemTools
     + mcpTools
@@ -503,8 +602,24 @@ export async function computeLocalContextBreakdown(
     + skills
     + summary.messages
 
+  // Claude Code's `/context` prefers the API-reported running-window
+  // size (input + cache_creation + cache_read of the latest assistant
+  // turn) for the displayed Total — that's the actual size the model
+  // saw. When that's available we use it; otherwise fall back to the
+  // bucket sum so brand-new sessions still display something useful.
+  const total = summary.latestApiUsage
+    ? summary.latestApiUsage.inputTokens
+      + summary.latestApiUsage.cacheCreationTokens
+      + summary.latestApiUsage.cacheReadTokens
+    : bucketSum
+
   const modelContextLimit = contextLimitForModel(summary.modelId)
-  const freeSpace = Math.max(0, modelContextLimit - total - autocompactBuffer)
+  // Free space = model limit - actualUsage - reservedBuffer. We use
+  // `bucketSum` here (not `total`) because that's the per-category
+  // breakdown the user is actually looking at; the API total is shown
+  // separately in the header. Otherwise free space and the bars would
+  // disagree on a session whose API total differs from the bucket sum.
+  const freeSpace = Math.max(0, modelContextLimit - bucketSum - autocompactBuffer)
 
   return {
     systemPrompt,

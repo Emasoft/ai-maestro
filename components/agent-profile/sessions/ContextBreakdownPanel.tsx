@@ -83,21 +83,16 @@ function BarRow({
   total: number
   modelLimit: number
 }) {
-  const safeTotal = Math.max(total, 1)
   const safeLimit = Math.max(modelLimit, 1)
-  // Different denominators per bucket so the inline percentage matches
-  // what users expect when they cross-reference Claude Code's `/context`:
-  //   - freeSpace and autocompactBuffer share denominator with the
-  //     model limit (they're complements of the consumed portion of the
-  //     window, not "share of what's been consumed").
-  //   - Every other bucket divides by `total` (the consumed portion).
-  // Without this split freeSpace shows 922.5% and the autocompact bar
-  // visually swamps every consumed bucket because the model limit
-  // dwarfs the session total on idle sessions.
-  const limitDenomBuckets = bucket.key === 'freeSpace' || bucket.key === 'autocompactBuffer'
-  const denomForBucket = limitDenomBuckets ? safeLimit : safeTotal
-  const pctOfBucketDenom = (value / denomForBucket) * 100
-  const pctOfLimit = (value / safeLimit) * 100
+  // Match Claude Code's `/context`: every per-bucket percentage uses
+  // the MODEL LIMIT as denominator, not the session total. That's why
+  // `/context` shows "Memory files: 35k tokens (3.5%)" even though
+  // memory is far more than 3.5% of the consumed portion — the 3.5% is
+  // its share of the 1M-token window. `total` is kept in the closure
+  // for backwards compatibility with the old aria-label format but is
+  // not used for the displayed percentages.
+  void total // referenced to avoid an unused-arg lint
+  const pctOfBucketDenom = (value / safeLimit) * 100
   return (
     <div>
       <div className="flex items-center justify-between text-[10px] mb-1">
@@ -110,7 +105,7 @@ function BarRow({
       <div
         className="aim-ctx-bar-track"
         role="progressbar"
-        aria-label={`${bucket.label}: ${formatTokenNumber(value)} tokens (${pctOfBucketDenom.toFixed(1)}% of ${limitDenomBuckets ? 'model limit' : 'session'}, ${pctOfLimit.toFixed(2)}% of model limit)`}
+        aria-label={`${bucket.label}: ${formatTokenNumber(value)} tokens (${pctOfBucketDenom.toFixed(1)}% of model limit)`}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(pctOfBucketDenom)}
@@ -120,9 +115,12 @@ function BarRow({
           style={{ width: `${Math.min(100, pctOfBucketDenom)}%` }}
         />
       </div>
-      <div className="text-[9px] text-gray-600 mt-0.5 tabular-nums">
-        {pctOfLimit.toFixed(2)}% of model context limit
-      </div>
+      {/*
+        The earlier two-line layout showed both the per-bucket % and a
+        small "% of model context limit" footer because the two
+        denominators differed. They now match Claude Code's `/context`
+        (always vs model limit), so the footer is redundant — kept the
+        inline percentage on the value line above. */}
     </div>
   )
 }

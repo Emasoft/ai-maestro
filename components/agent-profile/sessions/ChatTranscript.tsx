@@ -298,6 +298,7 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
             const h = rowHeight(line)
             const isCurrent = currentMatchLine !== null && currentMatchLine === line.lineIndex
             const isPinned = pinnedLineIndex !== null && pinnedLineIndex === line.lineIndex
+            const anyPinned = pinnedLineIndex !== null
             // Pin/unpin click handler — clicking a bubble that's already
             // pinned unpins (sets pin to null), otherwise pins to that
             // line. We swallow keyboard activations here to avoid
@@ -317,6 +318,16 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
                   onPinLineIndex(isPinned ? null : line.lineIndex)
                 }
               : undefined
+            // Wrapper class — three mutually exclusive states:
+            //   - aim-bubble-pinned: thick emerald ring + glow + full opacity + brighter text
+            //   - aim-bubble-faded:   anyPinned && !isPinned → 0.4 opacity to push focus
+            //                        onto the pinned bubble. Hover restores opacity.
+            //   - aim-bubble-default: no pin active anywhere → hover-only glow on this row.
+            const stateClass = isPinned
+              ? 'aim-bubble-pinned'
+              : anyPinned
+                ? 'aim-bubble-faded'
+                : 'aim-bubble-default'
             return (
               <div
                 key={`${line.lineIndex}-${line.role}`}
@@ -335,7 +346,7 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
                     ? 'Pinned to context breakdown panel — click to unpin'
                     : 'Click to pin context breakdown to this message'
                 }
-                className={isPinned ? 'aim-bubble-pinned' : undefined}
+                className={stateClass}
               >
                 {line.isToolEvent ? (
                   <ToolUseRow line={line} />

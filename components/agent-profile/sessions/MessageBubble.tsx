@@ -24,27 +24,33 @@ interface MessageBubbleProps {
   currentMatch?: boolean
 }
 
+// Role-based palette. Border / fill opacities bumped so the bubble
+// reads as a defined card instead of a faint outline — previous /5
+// fill was barely visible, /20 border too thin to track in a long
+// transcript. The pin / hover / faded states layered in
+// styles/sessions-browser.css (.aim-bubble-* classes) further
+// modulate brightness without rewriting the role classes.
 const ROLE_STYLES: Record<string, { wrapper: string; label: string; text: string; icon: typeof User }> = {
   user: {
-    wrapper: 'border-blue-500/20 bg-blue-500/5',
+    wrapper: 'border-blue-500/40 bg-blue-500/[0.08]',
     label: 'text-blue-300',
     text: 'text-gray-100',
     icon: User,
   },
   assistant: {
-    wrapper: 'border-emerald-500/20 bg-emerald-500/5',
+    wrapper: 'border-emerald-500/40 bg-emerald-500/[0.08]',
     label: 'text-emerald-300',
     text: 'text-gray-100',
     icon: Sparkles,
   },
   system: {
-    wrapper: 'border-gray-700/40 bg-gray-800/30',
+    wrapper: 'border-gray-600/50 bg-gray-800/40',
     label: 'text-gray-400',
     text: 'text-gray-300',
     icon: TerminalIcon,
   },
   tool: {
-    wrapper: 'border-violet-500/20 bg-violet-500/5',
+    wrapper: 'border-violet-500/40 bg-violet-500/[0.08]',
     label: 'text-violet-300',
     text: 'text-gray-200',
     icon: TerminalIcon,
@@ -150,7 +156,13 @@ export default function MessageBubble({ line, highlightQuery = '', currentMatch 
     <div
       role="article"
       aria-labelledby={labelId}
-      className={`relative rounded-md border px-3 py-2 text-[12px] ${styles.wrapper}`}
+      // `border-[1.5px]` is a small bump from the default 1px — at the
+      // 12px text size of the bubble the extra half-pixel tightens the
+      // visual frame without crossing into "boxed-in" territory. The
+      // `aim-msg-card` hook lets the wrapper classes in
+      // styles/sessions-browser.css adjust card-level brightness
+      // (pinned vs faded) without rewriting the role-color rules.
+      className={`aim-msg-card relative rounded-md border-[1.5px] px-3 py-2 text-[12px] ${styles.wrapper}`}
     >
       <div className="flex items-start gap-2">
         <Icon className={`w-3.5 h-3.5 flex-shrink-0 mt-0.5 ${styles.label}`} />
@@ -178,13 +190,18 @@ export default function MessageBubble({ line, highlightQuery = '', currentMatch 
         </div>
         {line.usage && line.role === 'assistant' && (
           <div
-            className="aim-msg-tokens ml-2 flex-shrink-0 text-emerald-300/80"
+            className="aim-msg-tokens ml-2 flex-shrink-0"
             aria-label={`Tokens — input ${line.usage.inputTokens}, output ${line.usage.outputTokens}, cache ${line.usage.cacheReadTokens}`}
             title={`in=${line.usage.inputTokens} out=${line.usage.outputTokens} cache=${line.usage.cacheReadTokens}`}
           >
-            in: {formatTokenNumber(line.usage.inputTokens)} · out:{' '}
-            {formatTokenNumber(line.usage.outputTokens)} · cache:{' '}
-            {formatTokenNumber(line.usage.cacheReadTokens)}
+            <span className="aim-msg-tokens-label">IN</span>
+            <span className="aim-msg-tokens-value">{formatTokenNumber(line.usage.inputTokens)}</span>
+            <span className="aim-msg-tokens-sep">·</span>
+            <span className="aim-msg-tokens-label">OUT</span>
+            <span className="aim-msg-tokens-value">{formatTokenNumber(line.usage.outputTokens)}</span>
+            <span className="aim-msg-tokens-sep">·</span>
+            <span className="aim-msg-tokens-label">CACHE</span>
+            <span className="aim-msg-tokens-value">{formatTokenNumber(line.usage.cacheReadTokens)}</span>
           </div>
         )}
       </div>

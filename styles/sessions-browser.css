@@ -62,15 +62,119 @@
   outline-offset: -1px;
 }
 
-/* Bubble that the right-panel breakdown is currently pinned to.
-   The transcript wraps each clickable row in a div that gets this
-   class when its lineIndex matches `pinnedLineIndex` from the host
-   hook. The visual is a thin emerald ring + a faint background tint
-   — strong enough to spot in a long transcript without competing
-   visually with the role-color borders inside MessageBubble. */
+/* ------------------------------------------------------------------ */
+/* Bubble row states                                                  */
+/*                                                                    */
+/* The transcript wraps every row in a div that carries one of three  */
+/* mutually-exclusive classes:                                        */
+/*                                                                    */
+/*   .aim-bubble-default  — no pin active anywhere; hover glow only   */
+/*   .aim-bubble-faded    — another bubble is pinned; this one fades  */
+/*                          to 0.4 opacity to push focus onto the pin */
+/*   .aim-bubble-pinned   — this is the pinned bubble; thick emerald  */
+/*                          ring + emerald glow + full opacity +      */
+/*                          brighter card fill + brighter text        */
+/*                                                                    */
+/* The role-color border (blue/emerald/violet/gray) lives inside      */
+/* MessageBubble.tsx; these wrapper classes only adjust BRIGHTNESS    */
+/* and add the ring/glow chrome — keeps the role coloring intact      */
+/* across all three states.                                           */
+/* ------------------------------------------------------------------ */
+
+.aim-bubble-default,
+.aim-bubble-faded,
 .aim-bubble-pinned {
-  outline: 2px solid rgba(16, 185, 129, 0.6); /* emerald-500/60 */
-  outline-offset: -2px;
-  background-color: rgba(16, 185, 129, 0.04);
   border-radius: 6px;
+  /* Wrap each transition individually so adding `filter` on hover
+     doesn't ALSO transition `outline`/`background-color` (which
+     wouldn't go through their easing curves correctly otherwise). */
+  transition:
+    opacity 180ms ease-out,
+    filter 180ms ease-out,
+    background-color 180ms ease-out,
+    outline-color 180ms ease-out;
+}
+
+.aim-bubble-default:hover,
+.aim-bubble-faded:hover {
+  /* Subtle emerald glow on hover so the user sees which row their
+     mouse is over before they click. The drop-shadow chain colors
+     the bubble's actual border, not just a halo behind a flat box. */
+  filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.45));
+}
+
+.aim-bubble-faded {
+  opacity: 0.4;
+}
+.aim-bubble-faded:hover {
+  /* On hover, peek the bubble back to ~80% so the user can read it
+     without losing the visual focus on the pinned one. */
+  opacity: 0.85;
+}
+
+.aim-bubble-pinned {
+  outline: 2.5px solid rgba(16, 185, 129, 0.95); /* emerald-500/95 */
+  outline-offset: -2px;
+  background-color: rgba(16, 185, 129, 0.10);
+  /* Stronger glow so the pin is unmissable across the whole panel. */
+  filter: drop-shadow(0 0 14px rgba(16, 185, 129, 0.55));
+  /* Boost text legibility inside the pinned bubble. The MessageBubble
+     itself uses `text-gray-100` / `text-gray-300` (per role) — we
+     bring the card fill up so contrast against the ring is high
+     enough to hold attention even mid-scroll. */
+}
+
+/* Brighten everything inside a pinned card. We target the
+   `[role="article"]` element MessageBubble renders so we don't
+   accidentally restyle the surrounding row chrome. */
+.aim-bubble-pinned [role='article'] {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+.aim-bubble-pinned [role='article'] .whitespace-pre-wrap {
+  color: rgb(248, 250, 252); /* slate-50 — pure-bright body text */
+}
+
+/* ------------------------------------------------------------------ */
+/* Per-message token readout (in / out / cache).                      */
+/* Three label / value pairs separated by a soft middle dot.          */
+/* ------------------------------------------------------------------ */
+
+.aim-msg-tokens {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;  /* tabular numerals */
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.aim-msg-tokens-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: rgba(110, 231, 183, 0.6); /* emerald-300/60 */
+  text-transform: uppercase;
+}
+
+.aim-msg-tokens-value {
+  font-weight: 600;
+  color: rgb(110, 231, 183); /* emerald-300 */
+}
+
+.aim-msg-tokens-sep {
+  color: rgba(110, 231, 183, 0.35);
+  font-size: 11px;
+  margin: 0 1px;
+}
+
+/* When the bubble is pinned we boost the token readout's contrast
+   too — the pinned card has a brighter background so the default
+   emerald-300/80 starts to wash out. */
+.aim-bubble-pinned .aim-msg-tokens-value {
+  color: rgb(167, 243, 208); /* emerald-200 */
+}
+.aim-bubble-pinned .aim-msg-tokens-label {
+  color: rgba(167, 243, 208, 0.75);
 }

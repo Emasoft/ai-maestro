@@ -65,116 +65,180 @@
 /* ------------------------------------------------------------------ */
 /* Bubble row states                                                  */
 /*                                                                    */
-/* The transcript wraps every row in a div that carries one of three  */
+/* The transcript wraps every row in a div carrying ONE of three      */
 /* mutually-exclusive classes:                                        */
 /*                                                                    */
 /*   .aim-bubble-default  — no pin active anywhere; hover glow only   */
-/*   .aim-bubble-faded    — another bubble is pinned; this one fades  */
-/*                          to 0.4 opacity to push focus onto the pin */
-/*   .aim-bubble-pinned   — this is the pinned bubble; thick emerald  */
-/*                          ring + emerald glow + full opacity +      */
-/*                          brighter card fill + brighter text        */
+/*   .aim-bubble-faded    — another bubble is pinned; this one is     */
+/*                          dimmed via brightness/saturate (NOT       */
+/*                          opacity, so text stays at full alpha)     */
+/*   .aim-bubble-pinned   — this is the pinned bubble; emerald ring   */
+/*                          via box-shadow on the INNER card +        */
+/*                          stronger glow + brighter role tint        */
 /*                                                                    */
 /* The role-color border (blue/emerald/violet/gray) lives inside      */
-/* MessageBubble.tsx; these wrapper classes only adjust BRIGHTNESS    */
-/* and add the ring/glow chrome — keeps the role coloring intact      */
-/* across all three states.                                           */
+/* MessageBubble.tsx via Tailwind classes on `.aim-msg-card`. These   */
+/* wrapper classes only modulate BRIGHTNESS and add the ring/glow     */
+/* chrome on the inner card so the rounded corners stay aligned       */
+/* (was previously an outline on the wrapper, which double-ringed     */
+/* with the article's own border and produced visible "stripes"      */
+/* against the role tint at hover).                                   */
 /* ------------------------------------------------------------------ */
 
 .aim-bubble-default,
 .aim-bubble-faded,
 .aim-bubble-pinned {
   border-radius: 6px;
-  /* Wrap each transition individually so adding `filter` on hover
-     doesn't ALSO transition `outline`/`background-color` (which
-     wouldn't go through their easing curves correctly otherwise). */
   transition:
-    opacity 180ms ease-out,
     filter 180ms ease-out,
-    background-color 180ms ease-out,
-    outline-color 180ms ease-out;
+    background-color 180ms ease-out;
 }
 
-.aim-bubble-default:hover,
-.aim-bubble-faded:hover {
-  /* Subtle emerald glow on hover so the user sees which row their
-     mouse is over before they click. The drop-shadow chain colors
-     the bubble's actual border, not just a halo behind a flat box. */
-  filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.45));
+/* Default bubble — gentle emerald glow on hover so the cursor is
+   visible before clicking. drop-shadow uses the alpha-mask of the
+   subtree so it colors the actual card silhouette, not a halo
+   floating behind it. */
+.aim-bubble-default:hover .aim-msg-card {
+  box-shadow: 0 0 12px 1px rgba(16, 185, 129, 0.45);
 }
 
-.aim-bubble-faded {
-  opacity: 0.4;
+/* Faded bubble — another bubble is pinned. We dim the role tint
+   AND the body text via filter:brightness/saturate so the eye is
+   pulled to the pin, but every char remains at full opacity (so
+   captured `/context` block-art renders cleanly with no per-char
+   stripes from compositing alpha). On hover, restore brightness +
+   add the same emerald glow as default. */
+.aim-bubble-faded .aim-msg-card {
+  filter: brightness(0.55) saturate(0.7);
 }
-.aim-bubble-faded:hover {
-  /* On hover, peek the bubble back to ~80% so the user can read it
-     without losing the visual focus on the pinned one. */
-  opacity: 0.85;
-}
-
-.aim-bubble-pinned {
-  outline: 2.5px solid rgba(16, 185, 129, 0.95); /* emerald-500/95 */
-  outline-offset: -2px;
-  background-color: rgba(16, 185, 129, 0.10);
-  /* Stronger glow so the pin is unmissable across the whole panel. */
-  filter: drop-shadow(0 0 14px rgba(16, 185, 129, 0.55));
-  /* Boost text legibility inside the pinned bubble. The MessageBubble
-     itself uses `text-gray-100` / `text-gray-300` (per role) — we
-     bring the card fill up so contrast against the ring is high
-     enough to hold attention even mid-scroll. */
+.aim-bubble-faded:hover .aim-msg-card {
+  filter: brightness(0.95) saturate(0.9);
+  box-shadow: 0 0 12px 1px rgba(16, 185, 129, 0.45);
 }
 
-/* Brighten everything inside a pinned card. We target the
-   `[role="article"]` element MessageBubble renders so we don't
-   accidentally restyle the surrounding row chrome. */
-.aim-bubble-pinned [role='article'] {
-  background-color: rgba(255, 255, 255, 0.05) !important;
+/* Pinned bubble — emerald ring laid via box-shadow on the inner
+   card (NOT outline on the wrapper). Box-shadow follows the card's
+   rounded-md corners cleanly; outline+border-radius double-ringed
+   with the role border and produced visible stripes. The ring sits
+   ON the card edge; the outer glow extends 14 px beyond. */
+.aim-bubble-pinned .aim-msg-card {
+  box-shadow:
+    0 0 0 2px rgb(16, 185, 129),                 /* emerald ring */
+    0 0 18px 2px rgba(16, 185, 129, 0.55);       /* outer glow */
+  background-color: rgba(16, 185, 129, 0.14) !important;
 }
+
+/* Pinned + hover — stronger ring + larger glow halo so the pinned
+   bubble visibly reacts to the cursor (without that, hovering
+   the pin looks identical to "no hover" and the user can't tell
+   the click is registered). */
+.aim-bubble-pinned:hover .aim-msg-card {
+  box-shadow:
+    0 0 0 3px rgb(52, 211, 153),                 /* emerald-400 thicker */
+    0 0 26px 4px rgba(16, 185, 129, 0.75);       /* halo extends further */
+}
+
+/* Brighten body text inside the pinned card so it visually
+   "lights up" against the brighter role tint. We target the
+   <article> element MessageBubble renders so we don't accidentally
+   restyle the row chrome. */
 .aim-bubble-pinned [role='article'] .whitespace-pre-wrap {
-  color: rgb(248, 250, 252); /* slate-50 — pure-bright body text */
+  color: rgb(248, 250, 252); /* slate-50 */
 }
 
 /* ------------------------------------------------------------------ */
-/* Per-message token readout (in / out / cache).                      */
-/* Three label / value pairs separated by a soft middle dot.          */
+/* Per-message token readout (IN / OUT / CACHE).                      */
+/* Bigger fonts + amber-distinct labels so the credits stand out      */
+/* from the body text and emerald chrome.                             */
 /* ------------------------------------------------------------------ */
 
 .aim-msg-tokens {
   display: inline-flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 5px;
   font-feature-settings: 'tnum' 1, 'lnum' 1;  /* tabular numerals */
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
   white-space: nowrap;
 }
 
 .aim-msg-tokens-label {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: rgba(110, 231, 183, 0.6); /* emerald-300/60 */
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: rgb(252, 211, 77); /* amber-300 — distinct from body emerald */
   text-transform: uppercase;
 }
 
 .aim-msg-tokens-value {
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: rgb(110, 231, 183); /* emerald-300 */
 }
 
 .aim-msg-tokens-sep {
-  color: rgba(110, 231, 183, 0.35);
-  font-size: 11px;
-  margin: 0 1px;
+  color: rgba(110, 231, 183, 0.4);
+  font-size: 13px;
+  margin: 0 2px;
 }
 
-/* When the bubble is pinned we boost the token readout's contrast
-   too — the pinned card has a brighter background so the default
-   emerald-300/80 starts to wash out. */
+/* Pinned overrides — brighter on the bumped card fill. */
 .aim-bubble-pinned .aim-msg-tokens-value {
   color: rgb(167, 243, 208); /* emerald-200 */
 }
 .aim-bubble-pinned .aim-msg-tokens-label {
-  color: rgba(167, 243, 208, 0.75);
+  color: rgb(253, 224, 71); /* yellow-300 */
+}
+
+/* ------------------------------------------------------------------ */
+/* Slash-command pill — replaces the raw <command-name> /             */
+/* <command-message> XML-style markers Claude Code writes into the    */
+/* JSONL when a slash command runs. MessageBubble strips the wrapping */
+/* tags and renders the bare command name inside this pill.           */
+/* ------------------------------------------------------------------ */
+
+.aim-cmd-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 9999px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgb(229, 231, 235);
+}
+.aim-cmd-pill-prefix {
+  opacity: 0.55;
+  font-weight: 500;
+}
+
+/* ------------------------------------------------------------------ */
+/* Tool box indent — tool_use rows are visually shifted right inside  */
+/* the transcript so they're clearly subordinate to the assistant     */
+/* message that issued them. Margin-left only; content always wraps   */
+/* inside the scroll view (no horizontal overflow).                    */
+/* ------------------------------------------------------------------ */
+
+.aim-tool-row {
+  margin-left: 28px;
+}
+
+/* When the user does select/copy text inside a captured /context
+   block, ensure the inner spans don't introduce sub-pixel gaps that
+   read as stripes. Our ANSI parser produces many adjacent spans for
+   colored block-art; force them onto the same baseline with explicit
+   inline display, zero letter-spacing on the body, and tabular figures. */
+.aim-msg-card .whitespace-pre-wrap {
+  letter-spacing: 0;
+  font-feature-settings: 'tnum' 1;
+}
+.aim-msg-card .whitespace-pre-wrap > span,
+.aim-msg-card .whitespace-pre-wrap > mark {
+  display: inline;
+  vertical-align: baseline;
 }

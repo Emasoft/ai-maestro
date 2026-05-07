@@ -204,16 +204,41 @@ export interface ContextBreakdownOkResponse {
   approximate: boolean
   modelId: string | null
   /**
-   * Phase 6 additions for snapshot tracking:
-   * - 'recorded': numbers came from a captured `/context` slash output
-   *   in the JSONL (Claude's ground truth at the time it ran)
-   * - 'heuristic': computed by walking today's on-disk state.
+   * Provenance of the displayed numbers. As of the JSONL-primary
+   * refactor, this is ALWAYS 'heuristic' — the captured /context
+   * snapshot is now surfaced separately under `recordedSnapshot`
+   * so the UI can render a side-by-side comparison instead of a
+   * silent fallback. Older clients keyed UI off this field; the
+   * union still allows 'recorded' for wire backwards compatibility.
    */
   source?: 'recorded' | 'heuristic'
-  /** JSONL line index of the captured snapshot, when source==='recorded'. */
+  /** Deprecated. Use `recordedSnapshot.capturedAtLineIndex`. */
   capturedAtLineIndex?: number | null
-  /** ISO timestamp of the captured snapshot, when present. */
+  /** Deprecated. Use `recordedSnapshot.capturedAtTimestamp`. */
   capturedAtTimestamp?: string | null
+  /**
+   * Captured `/context` slash-command snapshot at-or-before the
+   * requested cursor, when one exists in the session. Numbers are
+   * Claude's BPE-tokenizer ground truth at the time the user ran
+   * the command. The UI shows these alongside the heuristic
+   * primary numbers so drift between the two is visible.
+   */
+  recordedSnapshot?: ContextBreakdownRecordedSnapshot | null
+}
+
+export interface ContextBreakdownRecordedSnapshot {
+  systemPrompt: number
+  customAgents: number
+  memory: number
+  skills: number
+  messages: number
+  autocompactBuffer: number
+  freeSpace: number
+  total: number
+  modelContextLimit: number
+  modelId: string | null
+  capturedAtLineIndex: number
+  capturedAtTimestamp: string | null
 }
 
 /**

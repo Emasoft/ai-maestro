@@ -115,23 +115,40 @@ export interface ContextBreakdownResponse {
   approximate: boolean
   modelId: string | null
   /**
-   * Provenance of the breakdown numbers:
-   *   - 'recorded': parsed from a captured `/context` output in the
-   *     JSONL — Claude's ground truth at the time the command ran.
-   *   - 'heuristic': computed by walking today's on-disk state.
-   * Default 'heuristic' when absent, for backwards compatibility with
-   * pre-Phase-6 servers.
+   * Always 'heuristic' as of the JSONL-primary refactor — the
+   * captured `/context` snapshot is now exposed under
+   * `recordedSnapshot` for side-by-side comparison instead of being
+   * used as a silent fallback. Old clients keyed UI off this field;
+   * the union still allows 'recorded' for wire backwards compat.
    */
   source?: 'recorded' | 'heuristic'
-  /**
-   * 0-based JSONL line index where the snapshot was captured. Lets
-   * the UI render "Snapshot from message #N at HH:MM" in the panel
-   * header. Null when source==='heuristic' or the snapshot record
-   * had no usable line index.
-   */
+  /** Deprecated. Use `recordedSnapshot.capturedAtLineIndex`. */
   capturedAtLineIndex?: number | null
-  /** ISO timestamp Claude wrote on the captured record, when present. */
+  /** Deprecated. Use `recordedSnapshot.capturedAtTimestamp`. */
   capturedAtTimestamp?: string | null
+  /**
+   * Captured `/context` slash-command snapshot at-or-before the
+   * cursor, when one exists in the session. The UI renders these
+   * numbers as a comparison overlay next to the heuristic primary
+   * numbers so drift between Claude's BPE tokenizer and our
+   * char/4 heuristic is visible.
+   */
+  recordedSnapshot?: RecordedContextSnapshotWire | null
+}
+
+export interface RecordedContextSnapshotWire {
+  systemPrompt: number
+  customAgents: number
+  memory: number
+  skills: number
+  messages: number
+  autocompactBuffer: number
+  freeSpace: number
+  total: number
+  modelContextLimit: number
+  modelId: string | null
+  capturedAtLineIndex: number
+  capturedAtTimestamp: string | null
 }
 
 // ---------------------------------------------------------------------------

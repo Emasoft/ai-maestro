@@ -54,6 +54,18 @@ const CHARS_PER_TOKEN = 4
 // Public types
 // ---------------------------------------------------------------------------
 
+/**
+ * The primary, displayed numbers ALWAYS come from the heuristic
+ * (JSONL-parse + on-disk tokenization) path — this is what the user
+ * sees in the right panel. When the session contains a captured
+ * `/context` slash-command output at-or-before the requested cursor,
+ * its numbers are surfaced separately under `recordedSnapshot` so
+ * the UI can show a per-bucket comparison badge. That way a drift
+ * between heuristic and captured numbers is VISIBLE — meaning bugs
+ * in the heuristic surface as "expected 13.5K, captured 15.2K"
+ * rather than silently masking themselves behind a "use captured
+ * when available" fallback.
+ */
 export interface LocalContextBreakdown {
   /** Built-in Claude system prompt approximation (constant). */
   systemPrompt: number
@@ -65,7 +77,7 @@ export interface LocalContextBreakdown {
   customAgents: number
   /** Sum of tokens across CLAUDE.md files (user + project + sub-dirs). */
   memory: number
-  /** Sum of tokens across enabled skills (skills/{skillName}/SKILL.md). */
+  /** Sum of tokens across enabled skills. */
   skills: number
   /** Sum of input + output + cache_creation tokens across all assistant turns. */
   messages: number
@@ -79,31 +91,44 @@ export interface LocalContextBreakdown {
   total: number
   /** Window size for the model, e.g. 1_000_000 for Opus 4.7. */
   modelContextLimit: number
-  /** Whether we used char/4 estimation anywhere. Always true for v1. */
+  /** Whether we used char/4 estimation anywhere. Always true. */
   approximate: boolean
   /** Last-seen model id from the JSONL. */
   modelId: string | null
   /**
-   * How the breakdown was sourced:
-   *   - 'recorded': parsed from a captured `/context` slash-command
-   *     output in the JSONL. Numbers are Claude's ground truth at the
-   *     time of the command.
-   *   - 'heuristic': computed by walking today's on-disk state. Used
-   *     as a fallback when the session has no `/context` capture
-   *     before the requested position.
+   * Always 'heuristic' now. Kept on the type for wire backwards
+   * compatibility — older clients keyed UI off this field. New
+   * clients should look at `recordedSnapshot` instead.
    */
-  source: 'recorded' | 'heuristic'
-  /**
-   * 0-based JSONL line index of the captured snapshot, when
-   * `source === 'recorded'`. Lets the UI display "Snapshot from
-   * message #N" so the user can correlate the panel with the
-   * transcript.
-   */
+  source: 'heuristic'
+  /** Deprecated — use `recordedSnapshot.capturedAtLineIndex`. */
   capturedAtLineIndex: number | null
+  /** Deprecated — use `recordedSnapshot.capturedAtTimestamp`. */
+  capturedAtTimestamp: string | null
   /**
-   * ISO timestamp Claude wrote on the captured record, when present.
-   * Useful for the user to see "snapshot taken 2h ago" in the panel.
+   * Captured `/context` snapshot at-or-before the requested cursor,
+   * when one exists in the session. Numbers come VERBATIM from the
+   * slash-command output Claude wrote into the JSONL — the BPE
+   * tokenizer's ground truth at the time the user ran `/context`.
+   * Absent when the session has no captured snapshot in scope.
    */
+  recordedSnapshot: RecordedContextSnapshot | null
+}
+
+export interface RecordedContextSnapshot {
+  systemPrompt: number
+  customAgents: number
+  memory: number
+  skills: number
+  messages: number
+  autocompactBuffer: number
+  freeSpace: number
+  total: number
+  modelContextLimit: number
+  modelId: string | null
+  /** 0-based JSONL line index where Claude wrote the snapshot. */
+  capturedAtLineIndex: number
+  /** ISO timestamp on the captured record (when present). */
   capturedAtTimestamp: string | null
 }
 
@@ -780,39 +805,17 @@ export async function computeLocalContextBreakdown(
   jsonlPath: string,
   options: ComputeLocalContextBreakdownOptions = {},
 ): Promise<LocalContextBreakdown> {
-  // Fast path: if the session contains a captured `/context` output
-  // at or before the requested position, use its numbers verbatim.
-  // They're Claude's ground truth at the time the user ran the
-  // command — same on-disk state, same BPE tokenizer. Re-tokenizing
-  // today's filesystem would drift by however much the user has since
-  // edited memory files / toggled plugins / etc.
-  const snapshot = await parseRecordedContextSnapshot(
-    jsonlPath,
-    options.atOrBeforeLineIndex,
-  )
-  if (snapshot) {
-    return {
-      systemPrompt: snapshot.systemPrompt,
-      systemTools: 0,
-      mcpTools: 0,
-      customAgents: snapshot.customAgents,
-      memory: snapshot.memory,
-      skills: snapshot.skills,
-      messages: snapshot.messages,
-      autocompactBuffer: snapshot.autocompactBuffer,
-      cacheRead: 0,
-      freeSpace: snapshot.freeSpace,
-      total: snapshot.total,
-      modelContextLimit: snapshot.modelContextLimit,
-      approximate: false,
-      modelId: snapshot.modelId,
-      source: 'recorded',
-      capturedAtLineIndex: snapshot.capturedAtLineIndex,
-      capturedAtTimestamp: snapshot.capturedAtTimestamp,
-    }
-  }
+  // Always run the heuristic path. The captured `/context` numbers
+  // (when available) are surfaced separately as `recordedSnapshot`
+  // so the UI can show a side-by-side comparison — that way drift
+  // between our heuristic and Claude's BPE tokenizer is VISIBLE,
+  // and bugs in the heuristic don't silently hide behind a "use
+  // captured when present" fallback.
+  const [snapshot, summary] = await Promise.all([
+    parseRecordedContextSnapshot(jsonlPath, options.atOrBeforeLineIndex),
+    summarizeJsonl(jsonlPath),
+  ])
 
-  const summary = await summarizeJsonl(jsonlPath)
   const cwd = summary.cwd ?? path.dirname(jsonlPath)
 
   // Discover enabled plugins, then tokenize their skill + subagent
@@ -870,6 +873,23 @@ export async function computeLocalContextBreakdown(
   // disagree on a session whose API total differs from the bucket sum.
   const freeSpace = Math.max(0, modelContextLimit - bucketSum - autocompactBuffer)
 
+  const recordedSnapshot: RecordedContextSnapshot | null = snapshot
+    ? {
+        systemPrompt: snapshot.systemPrompt,
+        customAgents: snapshot.customAgents,
+        memory: snapshot.memory,
+        skills: snapshot.skills,
+        messages: snapshot.messages,
+        autocompactBuffer: snapshot.autocompactBuffer,
+        freeSpace: snapshot.freeSpace,
+        total: snapshot.total,
+        modelContextLimit: snapshot.modelContextLimit,
+        modelId: snapshot.modelId,
+        capturedAtLineIndex: snapshot.capturedAtLineIndex,
+        capturedAtTimestamp: snapshot.capturedAtTimestamp,
+      }
+    : null
+
   return {
     systemPrompt,
     systemTools,
@@ -886,7 +906,11 @@ export async function computeLocalContextBreakdown(
     approximate: true,
     modelId: summary.modelId,
     source: 'heuristic',
-    capturedAtLineIndex: null,
-    capturedAtTimestamp: null,
+    // Mirror the snapshot's metadata into the legacy top-level
+    // fields for any wire consumer that still reads them. New code
+    // should use `recordedSnapshot` directly.
+    capturedAtLineIndex: recordedSnapshot?.capturedAtLineIndex ?? null,
+    capturedAtTimestamp: recordedSnapshot?.capturedAtTimestamp ?? null,
+    recordedSnapshot,
   }
 }

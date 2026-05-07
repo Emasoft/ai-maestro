@@ -42,6 +42,12 @@ import ToolUseRow from './ToolUseRow'
 // when its content is empty, so the role badge + timestamp stay readable.
 const BUBBLE_MIN_HEIGHT = 56
 const TOOL_ROW_HEIGHT = 40
+// Expanded tool rows render a max-height: 280 px scrollable body plus the
+// header button (~36 px) + 1 px border-t separator + small padding. We
+// reserve a fixed slot so virtualization stays O(1); the body itself
+// scrolls when the payload is taller. Keeps the next bubble from
+// bleeding into the expanded JSON.
+const TOOL_ROW_EXPANDED_HEIGHT = 320
 const OVERSCAN = 10
 const ROW_GAP = 8
 
@@ -134,15 +140,45 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState({ scrollTop: 0, clientHeight: 0 })
 
+  // Tool-row expansion state lives at the transcript level so the
+  // virtualizer's row offsets can react when the user opens / closes
+  // a `ToolUseRow`. Keyed by `line.lineIndex` (stable JSONL line
+  // number — doesn't shift when more rows are paged in). Local state
+  // inside ToolUseRow would have grown the DOM without telling the
+  // virtualizer, causing expanded JSON to bleed onto the next bubble.
+  const [expandedToolKeys, setExpandedToolKeys] = useState<Set<number>>(() => new Set())
+
+  const toggleTool = useCallback((lineIndex: number) => {
+    setExpandedToolKeys(prev => {
+      const next = new Set(prev)
+      if (next.has(lineIndex)) next.delete(lineIndex)
+      else next.add(lineIndex)
+      return next
+    })
+  }, [])
+
+  // Effective row height — tool rows pay attention to expansion
+  // state; everything else delegates to the cheap top-level
+  // `rowHeight` heuristic.
+  const computeRowHeight = useCallback(
+    (line: TranscriptLine): number => {
+      if (line.isToolEvent) {
+        return expandedToolKeys.has(line.lineIndex) ? TOOL_ROW_EXPANDED_HEIGHT : TOOL_ROW_HEIGHT
+      }
+      return rowHeight(line)
+    },
+    [expandedToolKeys],
+  )
+
   // Pre-compute row offsets for O(log n) binary search on scroll.
   const offsets = useMemo(() => {
     const o = new Array<number>(lines.length + 1)
     o[0] = 0
     for (let i = 0; i < lines.length; i++) {
-      o[i + 1] = o[i] + rowHeight(lines[i]) + ROW_GAP
+      o[i + 1] = o[i] + computeRowHeight(lines[i]) + ROW_GAP
     }
     return o
-  }, [lines])
+  }, [lines, computeRowHeight])
 
   const totalHeight = offsets[offsets.length - 1] ?? 0
 
@@ -295,7 +331,7 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
           {visibleLines.map((line, i) => {
             const index = startIndex + i
             const top = offsets[index]
-            const h = rowHeight(line)
+            const h = computeRowHeight(line)
             const isCurrent = currentMatchLine !== null && currentMatchLine === line.lineIndex
             const isPinned = pinnedLineIndex !== null && pinnedLineIndex === line.lineIndex
             const anyPinned = pinnedLineIndex !== null
@@ -349,7 +385,11 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
                 className={stateClass}
               >
                 {line.isToolEvent ? (
-                  <ToolUseRow line={line} />
+                  <ToolUseRow
+                    line={line}
+                    expanded={expandedToolKeys.has(line.lineIndex)}
+                    onToggle={() => toggleTool(line.lineIndex)}
+                  />
                 ) : (
                   <MessageBubble
                     line={line}

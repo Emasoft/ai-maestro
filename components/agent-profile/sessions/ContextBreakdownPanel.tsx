@@ -4,14 +4,26 @@
  * ContextBreakdownPanel — right pane (≤280 px wide desktop, drawer on tablet).
  *
  * Spec (TRDD-d46b42e9 Phase 3 §6.3.4):
- *   7 horizontal bars (systemPrompt, systemTools, mcpTools, customAgents,
- *   memory, messages, freeSpace) with absolute token counts, % of total,
- *   and % of model context limit. Free space gray.
+ *   9 horizontal bars (systemPrompt, systemTools, mcpTools, customAgents,
+ *   memory, skills, messages, autocompactBuffer, freeSpace) with absolute
+ *   token counts, % of model limit, and an optional comparison badge
+ *   showing the delta against the captured `/context` snapshot.
+ *
+ * The displayed numbers ALWAYS come from our heuristic — JSONL parse +
+ * on-disk tokenization. When a `/context` slash command was captured at
+ * or before the selected transcript message, its numbers are surfaced
+ * as a small comparison badge per row so drift between Claude's BPE
+ * tokenizer and our char/4 estimate is VISIBLE. That makes heuristic
+ * bugs surface as "expected 13.5K, captured 15.2K" instead of silently
+ * masking themselves behind a "use captured when present" fallback.
  */
 
 import { useEffect, useState } from 'react'
 import { X, PanelRightOpen, AlertTriangle } from 'lucide-react'
-import type { ContextBreakdownResponse } from '@/types/sessions-browser'
+import type {
+  ContextBreakdownResponse,
+  RecordedContextSnapshotWire,
+} from '@/types/sessions-browser'
 
 interface Bucket {
   key: keyof Pick<
@@ -26,6 +38,9 @@ interface Bucket {
     | 'autocompactBuffer'
     | 'freeSpace'
   >
+  /** Field name on the recorded snapshot, when one exists. Null when the
+   *  snapshot doesn't carry this bucket (e.g. systemTools, mcpTools). */
+  recordedKey: keyof RecordedContextSnapshotWire | null
   label: string
   /** Tailwind bg color for the filled portion of the bar. */
   fillBg: string
@@ -36,15 +51,15 @@ interface Bucket {
 // Order mirrors what `claude-code /context` prints, so users comparing
 // the two side-by-side can scan top-to-bottom without re-mapping rows.
 const BUCKETS: Bucket[] = [
-  { key: 'systemPrompt',      label: 'System prompt',      fillBg: 'bg-blue-500',    labelColor: 'text-blue-300' },
-  { key: 'systemTools',       label: 'System tools',       fillBg: 'bg-cyan-500',    labelColor: 'text-cyan-300' },
-  { key: 'mcpTools',          label: 'MCP tools',          fillBg: 'bg-violet-500',  labelColor: 'text-violet-300' },
-  { key: 'customAgents',      label: 'Custom agents',      fillBg: 'bg-amber-500',   labelColor: 'text-amber-300' },
-  { key: 'memory',            label: 'Memory files',       fillBg: 'bg-pink-500',    labelColor: 'text-pink-300' },
-  { key: 'skills',            label: 'Skills',             fillBg: 'bg-fuchsia-500', labelColor: 'text-fuchsia-300' },
-  { key: 'messages',          label: 'Messages',           fillBg: 'bg-emerald-500', labelColor: 'text-emerald-300' },
-  { key: 'autocompactBuffer', label: 'Autocompact buffer', fillBg: 'bg-orange-500',  labelColor: 'text-orange-300' },
-  { key: 'freeSpace',         label: 'Free space',         fillBg: 'bg-gray-500',    labelColor: 'text-gray-400' },
+  { key: 'systemPrompt',      recordedKey: 'systemPrompt',      label: 'System prompt',      fillBg: 'bg-blue-500',    labelColor: 'text-blue-300' },
+  { key: 'systemTools',       recordedKey: null,                label: 'System tools',       fillBg: 'bg-cyan-500',    labelColor: 'text-cyan-300' },
+  { key: 'mcpTools',          recordedKey: null,                label: 'MCP tools',          fillBg: 'bg-violet-500',  labelColor: 'text-violet-300' },
+  { key: 'customAgents',      recordedKey: 'customAgents',      label: 'Custom agents',      fillBg: 'bg-amber-500',   labelColor: 'text-amber-300' },
+  { key: 'memory',            recordedKey: 'memory',            label: 'Memory files',       fillBg: 'bg-pink-500',    labelColor: 'text-pink-300' },
+  { key: 'skills',            recordedKey: 'skills',            label: 'Skills',             fillBg: 'bg-fuchsia-500', labelColor: 'text-fuchsia-300' },
+  { key: 'messages',          recordedKey: 'messages',          label: 'Messages',           fillBg: 'bg-emerald-500', labelColor: 'text-emerald-300' },
+  { key: 'autocompactBuffer', recordedKey: 'autocompactBuffer', label: 'Autocompact buffer', fillBg: 'bg-orange-500',  labelColor: 'text-orange-300' },
+  { key: 'freeSpace',         recordedKey: 'freeSpace',         label: 'Free space',         fillBg: 'bg-gray-500',    labelColor: 'text-gray-400' },
 ]
 
 function useIsCompactLayout(breakpoint = 1024) {
@@ -66,6 +81,22 @@ function formatTokenNumber(n: number): string {
   return n.toLocaleString()
 }
 
+/** Format a Δ between heuristic and recorded. Used for the per-row
+ *  comparison badge — small enough to read at a glance, signed so the
+ *  user can see whether we're over or under. */
+function formatDelta(heuristic: number, recorded: number): { text: string; tone: 'match' | 'low' | 'high' } {
+  const diff = heuristic - recorded
+  const denom = Math.max(recorded, 1)
+  const ratio = Math.abs(diff) / denom
+  // < 5 % drift counts as a match for visual purposes.
+  if (ratio < 0.05) return { text: '✓', tone: 'match' }
+  const signed = diff > 0 ? '+' : '−'
+  return {
+    text: `${signed}${formatTokenNumber(Math.abs(diff))}`,
+    tone: diff > 0 ? 'high' : 'low',
+  }
+}
+
 interface ContextBreakdownPanelProps {
   breakdown: ContextBreakdownResponse | null
   loading: boolean
@@ -75,31 +106,48 @@ interface ContextBreakdownPanelProps {
 function BarRow({
   bucket,
   value,
-  total,
   modelLimit,
+  recorded,
 }: {
   bucket: Bucket
   value: number
-  total: number
   modelLimit: number
+  recorded: RecordedContextSnapshotWire | null
 }) {
   const safeLimit = Math.max(modelLimit, 1)
-  // Match Claude Code's `/context`: every per-bucket percentage uses
-  // the MODEL LIMIT as denominator, not the session total. That's why
-  // `/context` shows "Memory files: 35k tokens (3.5%)" even though
-  // memory is far more than 3.5% of the consumed portion — the 3.5% is
-  // its share of the 1M-token window. `total` is kept in the closure
-  // for backwards compatibility with the old aria-label format but is
-  // not used for the displayed percentages.
-  void total // referenced to avoid an unused-arg lint
   const pctOfBucketDenom = (value / safeLimit) * 100
+
+  // Comparison badge — only when both the bucket has a recorded
+  // counterpart AND the snapshot itself is in scope. Buckets without
+  // a captured equivalent (systemTools, mcpTools — Claude doesn't
+  // print them in /context) skip the badge entirely.
+  const recordedValue =
+    recorded && bucket.recordedKey !== null ? recorded[bucket.recordedKey] : null
+  const delta = recordedValue !== null && typeof recordedValue === 'number'
+    ? formatDelta(value, recordedValue)
+    : null
+  const badgeTone =
+    delta?.tone === 'match'
+      ? 'text-emerald-400/90'
+      : delta?.tone === 'high'
+        ? 'text-amber-300'
+        : 'text-rose-300'
+
   return (
     <div>
-      <div className="flex items-center justify-between text-[10px] mb-1">
+      <div className="flex items-center justify-between text-[10px] mb-1 gap-2">
         <span className={`${bucket.labelColor} font-medium`}>{bucket.label}</span>
-        <span className="tabular-nums text-gray-400">
-          {formatTokenNumber(value)}
-          <span className="text-gray-600 ml-1.5">({pctOfBucketDenom.toFixed(1)}%)</span>
+        <span className="tabular-nums text-gray-300 flex items-baseline gap-1.5">
+          <span className="font-medium">{formatTokenNumber(value)}</span>
+          <span className="text-gray-500">({pctOfBucketDenom.toFixed(1)}%)</span>
+          {delta && typeof recordedValue === 'number' && (
+            <span
+              className={`${badgeTone} text-[9px] font-mono ml-0.5`}
+              title={`Heuristic: ${formatTokenNumber(value)} · Captured /context: ${formatTokenNumber(recordedValue)}`}
+            >
+              {delta.text}
+            </span>
+          )}
         </span>
       </div>
       <div
@@ -115,12 +163,6 @@ function BarRow({
           style={{ width: `${Math.min(100, pctOfBucketDenom)}%` }}
         />
       </div>
-      {/*
-        The earlier two-line layout showed both the per-bucket % and a
-        small "% of model context limit" footer because the two
-        denominators differed. They now match Claude Code's `/context`
-        (always vs model limit), so the footer is redundant — kept the
-        inline percentage on the value line above. */}
     </div>
   )
 }
@@ -144,40 +186,53 @@ function PanelBody({ breakdown, loading, error }: ContextBreakdownPanelProps) {
     return <div className="text-[11px] text-gray-500 px-3 py-4">No session selected.</div>
   }
   const { total, modelContextLimit, modelId, approximate } = breakdown
-  // Snapshot provenance — when source==='recorded' we read the
-  // numbers verbatim from a captured `/context` slash-command output
-  // in the JSONL. Tell the user which message and when so they can
-  // correlate the panel with the transcript and confirm "yes this is
-  // exactly what Claude reported at that moment". When source is
-  // missing or 'heuristic', we walked today's filesystem instead;
-  // mark that visually so the user knows the numbers are an estimate.
-  const source = breakdown.source ?? 'heuristic'
-  const capturedAt = breakdown.capturedAtTimestamp
-  const capturedAtLineIndex = breakdown.capturedAtLineIndex
-  const sourceBadge =
-    source === 'recorded' ? (
-      <div className="text-[9px] text-emerald-400/80 mt-0.5 leading-tight">
-        Snapshot from <span className="font-mono">/context</span>
-        {capturedAtLineIndex !== null && capturedAtLineIndex !== undefined && (
-          <> · line #{capturedAtLineIndex}</>
-        )}
-        {capturedAt && (
-          <> · {new Date(capturedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</>
-        )}
-      </div>
-    ) : (
-      <div className="text-[9px] text-amber-400/70 mt-0.5 leading-tight">
-        Estimated from on-disk state — no <span className="font-mono">/context</span> capture in this session
-      </div>
-    )
+  const recorded = breakdown.recordedSnapshot ?? null
+
+  // Header note: are we able to compare against a captured /context?
+  // The badge is informational — the displayed numbers come from the
+  // heuristic regardless. When recorded is present, every row gets a
+  // small Δ vs the captured value so the user can see drift.
+  const captureBadge = recorded ? (
+    <div className="text-[9px] text-emerald-400/80 mt-0.5 leading-tight">
+      Comparing vs <span className="font-mono">/context</span> snapshot · line #
+      {recorded.capturedAtLineIndex}
+      {recorded.capturedAtTimestamp && (
+        <> · {new Date(recorded.capturedAtTimestamp).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</>
+      )}
+    </div>
+  ) : (
+    <div className="text-[9px] text-gray-500 mt-0.5 leading-tight">
+      No <span className="font-mono">/context</span> snapshot in this session — heuristic only
+    </div>
+  )
+
+  // Total comparison line — when we DO have a recorded snapshot, show
+  // both totals on the header so the user can see at a glance whether
+  // the bucket sums roll up to the right place.
+  const totalDelta = recorded ? formatDelta(total, recorded.total) : null
+
   return (
     <div className="px-3 py-3 space-y-3">
       <div className="space-y-0.5 text-[10px] text-gray-400">
         <div className="flex items-center justify-between">
           <span>Total tokens</span>
-          <span className="tabular-nums text-gray-200 font-medium">
-            {formatTokenNumber(total)}
-            {approximate && <span className="text-gray-500 ml-1">~</span>}
+          <span className="tabular-nums text-gray-200 font-medium flex items-baseline gap-1.5">
+            <span>{formatTokenNumber(total)}</span>
+            {approximate && <span className="text-gray-500">~</span>}
+            {totalDelta && recorded && (
+              <span
+                className={
+                  totalDelta.tone === 'match'
+                    ? 'text-emerald-400/90 text-[9px] font-mono ml-0.5'
+                    : totalDelta.tone === 'high'
+                      ? 'text-amber-300 text-[9px] font-mono ml-0.5'
+                      : 'text-rose-300 text-[9px] font-mono ml-0.5'
+                }
+                title={`Heuristic: ${formatTokenNumber(total)} · Captured: ${formatTokenNumber(recorded.total)}`}
+              >
+                {totalDelta.text}
+              </span>
+            )}
           </span>
         </div>
         <div className="flex items-center justify-between">
@@ -192,7 +247,7 @@ function PanelBody({ breakdown, loading, error }: ContextBreakdownPanelProps) {
             </span>
           </div>
         )}
-        {sourceBadge}
+        {captureBadge}
       </div>
       <div className="space-y-2.5">
         {BUCKETS.map(bucket => (
@@ -200,8 +255,8 @@ function PanelBody({ breakdown, loading, error }: ContextBreakdownPanelProps) {
             key={bucket.key}
             bucket={bucket}
             value={breakdown[bucket.key]}
-            total={total}
             modelLimit={modelContextLimit}
+            recorded={recorded}
           />
         ))}
       </div>

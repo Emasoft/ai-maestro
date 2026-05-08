@@ -226,15 +226,19 @@ export default function MessageBubble({
   const styles = ROLE_STYLES[line.role] ?? ROLE_STYLES.system
   const Icon = styles.icon
 
-  // Assistant gets the agent's actual avatar image (matching the
-  // sidebar badge); user/system/tool keep the role's vector icon.
-  // The avatar is rendered at the same 14×14 footprint as the icon,
-  // wrapped in a circular frame with the role-color ring so the
-  // visual identity stays consistent. eslint-disable for next/image
-  // is intentional: these are local /avatars/<gender>_NN.jpg blobs
-  // (or remote https URLs the user pasted) — no Next image
-  // optimisation is needed and adding it would force every avatar
-  // through the /next/image pipeline at SSR time.
+  // Avatar slot — same dimensions for every role so the visual weight
+  // of the conversation reads as paired turns regardless of speaker.
+  // Width was bumped 3× per user request (was w-5/w-4 → 60 px). The
+  // assistant slot renders the agent's real photo (matches the
+  // sidebar badge) inside a circular emerald-tint ring; every other
+  // role renders a stylized lucide vector glyph (head-and-shoulders
+  // for `user`, terminal for `system`/`tool`) inside an identically-
+  // sized dark circular frame so the avatars line up regardless of
+  // role. eslint-disable for next/image is intentional: these are
+  // local `/avatars/<gender>_NN.jpg` blobs (or remote https URLs the
+  // user pasted) — no Next image optimisation is needed and adding
+  // it would force every avatar through the /next/image pipeline at
+  // SSR time.
   const renderRoleIcon = (sizeClass: string) => {
     if (line.role === 'assistant' && assistantAvatarUrl) {
       return (
@@ -246,7 +250,13 @@ export default function MessageBubble({
         />
       )
     }
-    return <Icon className={`${sizeClass} flex-shrink-0 ${styles.label}`} />
+    return (
+      <div
+        className={`${sizeClass} flex-shrink-0 rounded-full bg-gray-800/60 ring-1 ring-gray-600/50 flex items-center justify-center`}
+      >
+        <Icon className={`w-1/2 h-1/2 ${styles.label}`} />
+      </div>
+    )
   }
 
   // Pre-process the body text:
@@ -366,7 +376,7 @@ export default function MessageBubble({
           {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
         </button>
         <div className="flex items-center gap-2">
-          {renderRoleIcon('w-4 h-4')}
+          {renderRoleIcon('w-[60px] h-[60px]')}
           <div
             id={labelId}
             className={`text-[10px] font-semibold uppercase tracking-wider flex items-baseline flex-wrap gap-x-2 gap-y-0 flex-1 min-w-0 ${styles.label}`}
@@ -425,7 +435,7 @@ export default function MessageBubble({
         {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
       </button>
       <div className="flex items-start gap-2">
-        <div className="mt-0.5">{renderRoleIcon('w-5 h-5')}</div>
+        <div className="mt-0.5">{renderRoleIcon('w-[60px] h-[60px]')}</div>
         <div className="flex-1 min-w-0">
           <div
             id={labelId}

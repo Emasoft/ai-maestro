@@ -24,6 +24,7 @@ import { TerminalProvider } from '@/contexts/TerminalContext'
 import { useHelpPanel } from '@/contexts/HelpPanelContext'
 import { Terminal, Mail, User, GitBranch, MessageSquare, Moon, Power, Loader2, Plus, Search, Download, ExternalLink, History } from 'lucide-react'
 import { agentToSession } from '@/lib/agent-utils'
+import { resolveAvatarUrl } from '@/lib/avatar-url'
 import type { Agent, AgentRole } from '@/types/agent'
 
 // Dynamic imports for heavy components that are conditionally rendered
@@ -1016,7 +1017,7 @@ export default function DashboardPage() {
                     ) : activeTab === 'sessions' ? (
                       <ErrorBoundary fallbackLabel="Sessions">
                         <div className="flex-1 min-h-0 flex" style={{ touchAction: 'pan-y', overscrollBehavior: 'contain' }}>
-                          <SessionsTab agentId={agent.id} />
+                          <SessionsTab agentId={agent.id} assistantAvatarUrl={resolveAvatarUrl(agent)} />
                         </div>
                       </ErrorBoundary>
                     ) : activeTab === 'messages' ? (

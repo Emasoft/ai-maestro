@@ -26,6 +26,13 @@ interface MessageBubbleProps {
   highlightQuery?: string
   /** Current match position in this line's text, if this line IS the current match. */
   currentMatch?: boolean
+  /**
+   * Resolved avatar image URL for the agent. When the bubble's role is
+   * `assistant`, this URL is rendered as the role icon (matches the
+   * sidebar badge). User / system / tool roles keep the lucide vector
+   * icons because there's no equivalent stored portrait for them.
+   */
+  assistantAvatarUrl?: string | null
 }
 
 /**
@@ -201,7 +208,12 @@ function renderBubbleText(text: string, lowerQuery: string, currentMatch: boolea
   return out
 }
 
-export default function MessageBubble({ line, highlightQuery = '', currentMatch = false }: MessageBubbleProps) {
+export default function MessageBubble({
+  line,
+  highlightQuery = '',
+  currentMatch = false,
+  assistantAvatarUrl = null,
+}: MessageBubbleProps) {
   // Slash-command markup (`<command-name>...</command-name>` etc.) is
   // detected here so the bubble renders a clean pill instead of the
   // raw XML. When the user issued the command (line.role === 'user'),
@@ -213,6 +225,29 @@ export default function MessageBubble({ line, highlightQuery = '', currentMatch 
 
   const styles = ROLE_STYLES[line.role] ?? ROLE_STYLES.system
   const Icon = styles.icon
+
+  // Assistant gets the agent's actual avatar image (matching the
+  // sidebar badge); user/system/tool keep the role's vector icon.
+  // The avatar is rendered at the same 14×14 footprint as the icon,
+  // wrapped in a circular frame with the role-color ring so the
+  // visual identity stays consistent. eslint-disable for next/image
+  // is intentional: these are local /avatars/<gender>_NN.jpg blobs
+  // (or remote https URLs the user pasted) — no Next image
+  // optimisation is needed and adding it would force every avatar
+  // through the /next/image pipeline at SSR time.
+  const renderRoleIcon = (sizeClass: string) => {
+    if (line.role === 'assistant' && assistantAvatarUrl) {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={assistantAvatarUrl}
+          alt=""
+          className={`${sizeClass} flex-shrink-0 rounded-full object-cover ring-1 ring-emerald-500/40`}
+        />
+      )
+    }
+    return <Icon className={`${sizeClass} flex-shrink-0 ${styles.label}`} />
+  }
 
   // Pre-process the body text:
   //   - command-tag records render as a pill (handled below).
@@ -331,7 +366,7 @@ export default function MessageBubble({ line, highlightQuery = '', currentMatch 
           {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
         </button>
         <div className="flex items-center gap-2">
-          <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${styles.label}`} />
+          {renderRoleIcon('w-4 h-4')}
           <div
             id={labelId}
             className={`text-[10px] font-semibold uppercase tracking-wider flex items-baseline flex-wrap gap-x-2 gap-y-0 flex-1 min-w-0 ${styles.label}`}
@@ -390,7 +425,7 @@ export default function MessageBubble({ line, highlightQuery = '', currentMatch 
         {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
       </button>
       <div className="flex items-start gap-2">
-        <Icon className={`w-3.5 h-3.5 flex-shrink-0 mt-0.5 ${styles.label}`} />
+        <div className="mt-0.5">{renderRoleIcon('w-5 h-5')}</div>
         <div className="flex-1 min-w-0">
           <div
             id={labelId}

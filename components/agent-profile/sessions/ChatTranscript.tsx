@@ -122,6 +122,13 @@ interface ChatTranscriptProps {
    * happens when the user clicks the already-pinned bubble).
    */
   onPinLineIndex?: (lineIndex: number | null) => void
+  /**
+   * Resolved avatar image URL for the agent that owns this transcript.
+   * Threaded into every assistant `MessageBubble` so the role icon
+   * renders as a real portrait matching the sidebar badge instead of
+   * the generic sparkles glyph.
+   */
+  assistantAvatarUrl?: string | null
 }
 
 export interface ChatTranscriptHandle {
@@ -140,6 +147,7 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
     error = null,
     pinnedLineIndex = null,
     onPinLineIndex,
+    assistantAvatarUrl = null,
   },
   ref,
 ) {
@@ -577,6 +585,7 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
                         line={line}
                         highlightQuery={normalisedQuery}
                         currentMatch={isCurrent}
+                        assistantAvatarUrl={assistantAvatarUrl}
                       />
                     )}
                   </div>

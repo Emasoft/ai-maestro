@@ -25,9 +25,17 @@ import '@/styles/sessions-browser.css'
 
 interface SessionsTabProps {
   agentId: string | null
+  /**
+   * Resolved avatar URL of the agent whose transcript we're viewing.
+   * Threaded down to the assistant bubbles so they show the agent's
+   * actual photo (matching the sidebar badge) instead of a generic
+   * sparkles vector icon. The user side keeps the vector User icon —
+   * we don't have a "human user" avatar in registry yet.
+   */
+  assistantAvatarUrl?: string | null
 }
 
-export default function SessionsTab({ agentId }: SessionsTabProps) {
+export default function SessionsTab({ agentId, assistantAvatarUrl = null }: SessionsTabProps) {
   const api = useJsonlSession({ agentId })
 
   const transcriptRef = useRef<ChatTranscriptHandle | null>(null)
@@ -129,6 +137,7 @@ export default function SessionsTab({ agentId }: SessionsTabProps) {
             error={api.transcriptError}
             pinnedLineIndex={api.pinnedLineIndex}
             onPinLineIndex={api.pinBreakdownTo}
+            assistantAvatarUrl={assistantAvatarUrl}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-6 text-center">

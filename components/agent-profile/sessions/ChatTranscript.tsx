@@ -333,7 +333,11 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, computeRowHeight, measuredVersion])
 
-  const totalHeight = offsets[offsets.length - 1] ?? 0
+  // Subtract one trailing ROW_GAP — the offsets-array recurrence
+  // adds ROW_GAP after every row including the last, leaving
+  // `ROW_GAP` px of phantom space below the final bubble. Cosmetic
+  // but visible when the transcript fits the viewport.
+  const totalHeight = Math.max(0, (offsets[offsets.length - 1] ?? 0) - ROW_GAP)
 
   // ResizeObserver to track container height.
   useEffect(() => {
@@ -484,7 +488,6 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
           {visibleLines.map((line, i) => {
             const index = startIndex + i
             const top = offsets[index]
-            const h = computeRowHeight(line)
             const isCurrent = currentMatchLine !== null && currentMatchLine === line.lineIndex
             const isPinned = pinnedLineIndex !== null && pinnedLineIndex === line.lineIndex
             const isSelected = selectedLineIndexes.has(line.lineIndex)
@@ -516,7 +519,17 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
                   top,
                   left: 0,
                   right: 0,
-                  minHeight: h,
+                  // Natural content height — NO `minHeight: h`. Setting
+                  // minHeight to the heuristic estimate trapped the
+                  // ResizeObserver inside the floor: even after the
+                  // wrapper rendered shorter content, offsetHeight
+                  // still reported `h`, so offsets never shrank and
+                  // empty space accumulated below short rows
+                  // (especially compact wrapper bubbles). With the
+                  // floor removed, ResizeObserver captures the true
+                  // height and the offsets recompute on
+                  // measuredVersion bumps. `h` survives only as the
+                  // first-paint estimate inside the offsets array.
                   padding: '0 12px',
                   cursor: handlePinClick ? 'pointer' : undefined,
                 }}

@@ -299,6 +299,70 @@ export default function MessageBubble({ line, highlightQuery = '', currentMatch 
     [ansiPlainText, command, line.text],
   )
 
+  // Wrapper records around tool calls (the assistant turn that emitted
+  // a tool_use, and the user turn that wrapped the tool_result) often
+  // arrive with `text === ''` — Claude Code splits each turn into
+  // multiple JSONL records and the wrapper carries metadata only.
+  // Render those as a single-line "turn header" instead of a full
+  // padded bubble: same role + timestamp + token cost, but ~24 px
+  // tall, so the transcript reads as one logical conversation flow
+  // instead of a column of half-blank cards.
+  const isCompact = !command && bodyText.trim().length === 0
+
+  if (isCompact) {
+    return (
+      <div
+        role="article"
+        aria-labelledby={labelId}
+        className={`aim-msg-card aim-msg-card-compact relative rounded-md border-[1.5px] px-3 py-1 pr-10 text-[11px] ${styles.wrapper}`}
+      >
+        {/* Compact bubbles still get a copy button so the user can
+            grab the role+timestamp+tokens header text if they want it.
+            Same component as full bubbles — keeps interactions
+            consistent. */}
+        <button
+          type="button"
+          className="aim-bubble-copy-btn"
+          onClick={handleCopy}
+          data-copied={copied || undefined}
+          aria-label={copied ? 'Copied' : 'Copy bubble content to clipboard'}
+          title={copied ? 'Copied!' : 'Copy to clipboard'}
+        >
+          {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+        </button>
+        <div className="flex items-center gap-2">
+          <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${styles.label}`} />
+          <div
+            id={labelId}
+            className={`text-[10px] font-semibold uppercase tracking-wider flex items-baseline flex-wrap gap-x-2 gap-y-0 flex-1 min-w-0 ${styles.label}`}
+          >
+            <span>{line.role}</span>
+            {formattedTs && (
+              <span className="aim-msg-time" title={line.timestamp}>
+                {formattedTs}
+              </span>
+            )}
+            {tokenReadout.kind === 'usage' ? (
+              <span
+                className="aim-msg-tokens"
+                aria-label={`Tokens — input ${tokenReadout.usage.inputTokens}, output ${tokenReadout.usage.outputTokens}, cache ${tokenReadout.usage.cacheReadTokens}`}
+              >
+                <span className="aim-msg-tokens-label">IN</span>
+                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.usage.inputTokens)}</span>
+                <span className="aim-msg-tokens-sep">·</span>
+                <span className="aim-msg-tokens-label">OUT</span>
+                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.usage.outputTokens)}</span>
+                <span className="aim-msg-tokens-sep">·</span>
+                <span className="aim-msg-tokens-label">CACHE</span>
+                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.usage.cacheReadTokens)}</span>
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       role="article"

@@ -219,6 +219,21 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* Compact bubble — single-line "turn header" used when a record has  */
+/* no displayable body text (the empty-text wrapper records that      */
+/* surround tool calls). One line: role + timestamp + tokens. Reduces */
+/* a 52 px empty bubble to ~24 px so the transcript reads as a        */
+/* logical conversation flow, not a column of half-blank cards.      */
+/* ------------------------------------------------------------------ */
+.aim-msg-card-compact {
+  /* Compact rows ride lighter than full bubbles — softer border so
+     they read as "metadata" rather than "content". The role-color
+     border still applies (via styles.wrapper); we just dial down
+     the opacity so the eye treats them as the secondary band. */
+  opacity: 0.85;
+}
+
+/* ------------------------------------------------------------------ */
 /* Copy-to-clipboard button — top-right corner of every bubble.       */
 /* Touch-sized 28×28 hit area; the icon itself is 14 px so the slop   */
 /* lets fingers tap reliably without misfiring the bubble's pin       */

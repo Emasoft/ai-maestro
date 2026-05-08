@@ -56,16 +56,24 @@ interface Bucket {
 }
 
 // Order mirrors what `claude-code /context` prints.
+//
+// Palette tuning (2026-05-08): the original Tailwind 500-tone hues read
+// as too bright when stacked side-by-side in the pillar — neighboring
+// segments visually bled into each other. The values below are darker,
+// less-saturated equivalents (roughly Tailwind 600/700 range with a
+// slate-tint mixed in) so adjacent segments stay distinct without
+// visually shouting at the user. Hue identity is preserved — what was
+// blue is still blue, what was emerald is still emerald.
 const BUCKETS: Bucket[] = [
-  { key: 'systemPrompt',      recordedKey: 'systemPrompt',      label: 'System prompt',      color: 'rgb(59, 130, 246)',   labelColor: 'text-blue-300',    drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
-  { key: 'systemTools',       recordedKey: null,                label: 'System tools',       color: 'rgb(6, 182, 212)',    labelColor: 'text-cyan-300',    drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
-  { key: 'mcpTools',          recordedKey: null,                label: 'MCP tools',          color: 'rgb(139, 92, 246)',   labelColor: 'text-violet-300',  drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
-  { key: 'customAgents',      recordedKey: 'customAgents',      label: 'Custom agents',      color: 'rgb(245, 158, 11)',   labelColor: 'text-amber-300',   drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
-  { key: 'memory',            recordedKey: 'memory',            label: 'Memory files',       color: 'rgb(236, 72, 153)',   labelColor: 'text-pink-300',    drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
-  { key: 'skills',            recordedKey: 'skills',            label: 'Skills',             color: 'rgb(217, 70, 239)',   labelColor: 'text-fuchsia-300', drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
-  { key: 'messages',          recordedKey: 'messages',          label: 'Messages',           color: 'rgb(16, 185, 129)',   labelColor: 'text-emerald-300', drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
-  { key: 'autocompactBuffer', recordedKey: 'autocompactBuffer', label: 'Autocompact buffer', color: 'rgb(249, 115, 22)',   labelColor: 'text-orange-300',  drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
-  { key: 'freeSpace',         recordedKey: 'freeSpace',         label: 'Free space',         color: 'rgb(107, 114, 128)',  labelColor: 'text-gray-400',    drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
+  { key: 'systemPrompt',      recordedKey: 'systemPrompt',      label: 'System prompt',      color: 'rgb(74, 112, 174)',   labelColor: 'text-blue-300',    drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
+  { key: 'systemTools',       recordedKey: null,                label: 'System tools',       color: 'rgb(60, 124, 138)',   labelColor: 'text-cyan-300',    drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
+  { key: 'mcpTools',          recordedKey: null,                label: 'MCP tools',          color: 'rgb(118, 96, 170)',   labelColor: 'text-violet-300',  drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
+  { key: 'customAgents',      recordedKey: 'customAgents',      label: 'Custom agents',      color: 'rgb(174, 130, 65)',   labelColor: 'text-amber-300',   drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
+  { key: 'memory',            recordedKey: 'memory',            label: 'Memory files',       color: 'rgb(170, 78, 124)',   labelColor: 'text-pink-300',    drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
+  { key: 'skills',            recordedKey: 'skills',            label: 'Skills',             color: 'rgb(150, 84, 168)',   labelColor: 'text-fuchsia-300', drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
+  { key: 'messages',          recordedKey: 'messages',          label: 'Messages',           color: 'rgb(63, 145, 119)',   labelColor: 'text-emerald-300', drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
+  { key: 'autocompactBuffer', recordedKey: 'autocompactBuffer', label: 'Autocompact buffer', color: 'rgb(170, 105, 65)',   labelColor: 'text-orange-300',  drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
+  { key: 'freeSpace',         recordedKey: 'freeSpace',         label: 'Free space',         color: 'rgb(108, 115, 128)',  labelColor: 'text-gray-400',    drillDownGradient: 'from-indigo-950 via-violet-950 to-purple-950' },
 ]
 
 type BucketKey = Bucket['key']
@@ -116,11 +124,13 @@ function BarRow({
   value,
   modelLimit,
   recorded,
+  onSelectBucket,
 }: {
   bucket: Bucket
   value: number
   modelLimit: number
   recorded: RecordedContextSnapshotWire | null
+  onSelectBucket: (k: BucketKey) => void
 }) {
   const safeLimit = Math.max(modelLimit, 1)
   const pct = (value / safeLimit) * 100
@@ -135,8 +145,23 @@ function BarRow({
       : delta?.tone === 'high' ? 'text-amber-300'
         : 'text-rose-300'
 
+  // Tooltip shown on hover for both the text label and the colored bar.
+  // Mirrors the pillar segment's tooltip so both representations carry
+  // the same context.
+  const tooltip = `${bucket.label} — ${formatTokenNumber(value)} tokens (${pct.toFixed(1)}% of model limit)${
+    typeof recordedValue === 'number'
+      ? ` · captured /context: ${formatTokenNumber(recordedValue)}`
+      : ''
+  } · click for details`
+
   return (
-    <div>
+    <button
+      type="button"
+      onClick={() => onSelectBucket(bucket.key)}
+      className="aim-bar-row-btn"
+      aria-label={`${bucket.label}: ${formatTokenNumber(value)} tokens (${pct.toFixed(1)}% of model limit) — click to drill down`}
+      title={tooltip}
+    >
       <div className="flex items-center justify-between text-[10px] mb-1 gap-2">
         <span className={`${bucket.labelColor} font-medium`}>{bucket.label}</span>
         <span className="tabular-nums text-gray-300 flex items-baseline gap-1.5">
@@ -159,13 +184,14 @@ function BarRow({
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(pct)}
+        title={tooltip}
       >
         <div
           className="aim-ctx-bar-fill"
           style={{ width: `${Math.min(100, pct)}%`, backgroundColor: bucket.color }}
         />
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -197,7 +223,7 @@ function PillarView({
   }, [breakdown, segmentTotal])
 
   return (
-    <div className="px-3 py-3 flex flex-col h-full min-h-0">
+    <div className="p-4 flex flex-col h-full min-h-0">
       <p className="text-[10px] text-gray-400 italic mb-2 leading-tight">
         Click on the colored areas to get more info
       </p>
@@ -223,8 +249,8 @@ function PillarView({
             // ~6 px via min-height. The display percentage is unchanged
             // — the user sees the exact share in the drill-down.
             style={{ height: `${seg.pct}%`, backgroundColor: seg.bucket.color, minHeight: 6 }}
-            className="w-full text-left transition-all hover:brightness-125 hover:saturate-150 focus:outline-none focus:ring-2 focus:ring-white/40 focus:z-10"
-            title={`${seg.bucket.label}: ${formatTokenNumber(seg.value)} (${seg.pct.toFixed(1)}%)`}
+            className="w-full text-left transition-all hover:brightness-110 hover:saturate-125 focus:outline-none focus:ring-2 focus:ring-white/40 focus:z-10"
+            title={`${seg.bucket.label} — ${formatTokenNumber(seg.value)} tokens (${seg.pct.toFixed(1)}% of buckets) · click for details`}
             aria-label={`${seg.bucket.label}: ${formatTokenNumber(seg.value)} tokens — click for details`}
           />
         ))}
@@ -485,7 +511,13 @@ function SegmentDetailView({
 // Bars body (header + bar list) — same layout as before, factored out
 // ---------------------------------------------------------------------------
 
-function BarsView({ breakdown }: { breakdown: ContextBreakdownResponse }) {
+function BarsView({
+  breakdown,
+  onSelectBucket,
+}: {
+  breakdown: ContextBreakdownResponse
+  onSelectBucket: (k: BucketKey) => void
+}) {
   const { total, modelContextLimit, modelId, approximate } = breakdown
   const recorded = breakdown.recordedSnapshot ?? null
 
@@ -506,7 +538,7 @@ function BarsView({ breakdown }: { breakdown: ContextBreakdownResponse }) {
   const totalDelta = recorded ? formatDelta(total, recorded.total) : null
 
   return (
-    <div className="px-3 py-3 space-y-3">
+    <div className="p-4 space-y-3">
       <div className="space-y-0.5 text-[10px] text-gray-400">
         <div className="flex items-center justify-between">
           <span>Total tokens</span>
@@ -549,6 +581,7 @@ function BarsView({ breakdown }: { breakdown: ContextBreakdownResponse }) {
             value={breakdown[bucket.key]}
             modelLimit={modelContextLimit}
             recorded={recorded}
+            onSelectBucket={onSelectBucket}
           />
         ))}
       </div>
@@ -608,7 +641,7 @@ function PanelBody({
   if (viewMode === 'pillar') {
     return <PillarView breakdown={breakdown} onSelectBucket={setDrillDownBucket} />
   }
-  return <BarsView breakdown={breakdown} />
+  return <BarsView breakdown={breakdown} onSelectBucket={setDrillDownBucket} />
 }
 
 // ---------------------------------------------------------------------------

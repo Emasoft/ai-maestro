@@ -15,8 +15,8 @@
  *   - Every bubble carries a human-readable timestamp.
  */
 
-import { useMemo } from 'react'
-import { User, Sparkles, Terminal as TerminalIcon } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { Check, Copy, User, Sparkles, Terminal as TerminalIcon } from 'lucide-react'
 import type { TranscriptLine } from '@/types/sessions-browser'
 import { parseAnsi, stripAnsi } from '@/lib/ansi'
 
@@ -26,6 +26,20 @@ interface MessageBubbleProps {
   highlightQuery?: string
   /** Current match position in this line's text, if this line IS the current match. */
   currentMatch?: boolean
+}
+
+/**
+ * Estimate the token cost of a chunk of text using the standard char/4
+ * BPE approximation. Used for user/system bubbles that carry no `usage`
+ * field on the JSONL record (only assistant turns do, and only some).
+ *
+ * The estimate matches the heuristic the rest of the dashboard uses for
+ * messages-bucket sizing — keeps the per-bubble readout consistent with
+ * the right-panel comparison overlay.
+ */
+function estimateTokens(text: string): number {
+  if (!text) return 0
+  return Math.max(1, Math.ceil(text.length / 4))
 }
 
 // Role-based palette. Tints are bumped so each role is visibly distinct
@@ -227,6 +241,64 @@ export default function MessageBubble({ line, highlightQuery = '', currentMatch 
   // Format the timestamp once; falls back to raw on parse errors.
   const formattedTs = line.timestamp ? formatTimestamp(line.timestamp) : null
 
+  // Per-bubble token readout — assistant turns use the JSONL `usage`
+  // field when present; user / system / tool / unsourced-assistant
+  // turns fall back to the char/4 BPE approximation so EVERY bubble
+  // shows what it costs. The user feedback was explicit: "even the
+  // user messages have a cost and are added to the context".
+  const tokenReadout = useMemo(() => {
+    if (line.usage && line.role === 'assistant') {
+      return {
+        kind: 'usage' as const,
+        usage: line.usage,
+      }
+    }
+    return {
+      kind: 'estimate' as const,
+      // For user / system bubbles tokens cost ≈ chars/4 of the body
+      // text. Tool events render a different component and don't reach
+      // this branch, but we estimate from `text` defensively anyway.
+      estimate: estimateTokens(line.text || ''),
+    }
+  }, [line.usage, line.role, line.text])
+
+  // Copy-to-clipboard — copies the visible text body. Falls back to
+  // the raw line text when the bubble is showing the slash-command
+  // pill (so the user gets a useful payload either way).
+  const [copied, setCopied] = useState(false)
+  const handleCopy = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation()
+      const payload = command
+        ? `/${command.name}${command.args ? ` ${command.args}` : ''}`
+        : ansiPlainText || line.text
+      try {
+        await navigator.clipboard.writeText(payload)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      } catch {
+        // Older browsers / non-secure contexts. Fall back to a hidden
+        // <textarea> + execCommand('copy'). We swallow errors silently
+        // — the worst outcome is the user copies manually.
+        const ta = document.createElement('textarea')
+        ta.value = payload
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        try {
+          document.execCommand('copy')
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        } catch {
+          /* nothing left to try */
+        }
+        document.body.removeChild(ta)
+      }
+    },
+    [ansiPlainText, command, line.text],
+  )
+
   return (
     <div
       role="article"
@@ -235,24 +307,64 @@ export default function MessageBubble({ line, highlightQuery = '', currentMatch 
       // 12 px text size the extra half-pixel tightens the visual frame
       // without crossing into "boxed-in" territory. The `aim-msg-card`
       // hook lets the wrapper classes in styles/sessions-browser.css
-      // adjust card-level brightness (pinned/faded/hover) without
-      // rewriting the role-color rules.
-      className={`aim-msg-card relative rounded-md border-[1.5px] px-3 py-2 text-[12px] ${styles.wrapper}`}
+      // adjust card-level chrome (pinned ring/glow, hover halo)
+      // without rewriting the role-color rules.
+      className={`aim-msg-card relative rounded-md border-[1.5px] px-3 py-2 pr-10 text-[12px] ${styles.wrapper}`}
     >
+      {/* Copy-to-clipboard button — top-right corner of every bubble.
+          Always visible (no hover-reveal) for touch parity, and large
+          enough (28×28) to tap reliably. Stops propagation so the
+          underlying pin-on-click handler doesn't fire. */}
+      <button
+        type="button"
+        className="aim-bubble-copy-btn"
+        onClick={handleCopy}
+        data-copied={copied || undefined}
+        aria-label={copied ? 'Copied' : 'Copy bubble content to clipboard'}
+        title={copied ? 'Copied!' : 'Copy to clipboard'}
+      >
+        {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+      </button>
       <div className="flex items-start gap-2">
         <Icon className={`w-3.5 h-3.5 flex-shrink-0 mt-0.5 ${styles.label}`} />
         <div className="flex-1 min-w-0">
           <div
             id={labelId}
-            className={`text-[10px] font-semibold uppercase tracking-wider mb-1 flex items-baseline gap-2 ${styles.label}`}
+            className={`text-[10px] font-semibold uppercase tracking-wider mb-1 flex items-baseline flex-wrap gap-x-2 gap-y-0.5 ${styles.label}`}
           >
             <span>{line.role}</span>
             {formattedTs && (
-              <span
-                className="text-gray-400 font-mono font-normal tracking-normal normal-case"
-                title={line.timestamp}
-              >
+              <span className="aim-msg-time" title={line.timestamp}>
                 {formattedTs}
+              </span>
+            )}
+            {/* Per-bubble token readout. Assistant turns with usage
+                show the full IN/OUT/CACHE breakdown; everyone else
+                shows a single ~N estimate so the user can see the
+                cost of EVERY message (including their own). */}
+            {tokenReadout.kind === 'usage' ? (
+              <span
+                className="aim-msg-tokens"
+                aria-label={`Tokens — input ${tokenReadout.usage.inputTokens}, output ${tokenReadout.usage.outputTokens}, cache ${tokenReadout.usage.cacheReadTokens}`}
+                title={`in=${tokenReadout.usage.inputTokens} out=${tokenReadout.usage.outputTokens} cache=${tokenReadout.usage.cacheReadTokens}`}
+              >
+                <span className="aim-msg-tokens-label">IN</span>
+                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.usage.inputTokens)}</span>
+                <span className="aim-msg-tokens-sep">·</span>
+                <span className="aim-msg-tokens-label">OUT</span>
+                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.usage.outputTokens)}</span>
+                <span className="aim-msg-tokens-sep">·</span>
+                <span className="aim-msg-tokens-label">CACHE</span>
+                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.usage.cacheReadTokens)}</span>
+              </span>
+            ) : (
+              <span
+                className="aim-msg-tokens"
+                aria-label={`Approximate token cost — ${tokenReadout.estimate} tokens`}
+                title="Estimate using char/4 BPE approximation"
+              >
+                <span className="aim-msg-tokens-label">~tokens</span>
+                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.estimate)}</span>
               </span>
             )}
           </div>
@@ -281,22 +393,6 @@ export default function MessageBubble({ line, highlightQuery = '', currentMatch 
             </div>
           )}
         </div>
-        {line.usage && line.role === 'assistant' && (
-          <div
-            className="aim-msg-tokens ml-2 flex-shrink-0"
-            aria-label={`Tokens — input ${line.usage.inputTokens}, output ${line.usage.outputTokens}, cache ${line.usage.cacheReadTokens}`}
-            title={`in=${line.usage.inputTokens} out=${line.usage.outputTokens} cache=${line.usage.cacheReadTokens}`}
-          >
-            <span className="aim-msg-tokens-label">IN</span>
-            <span className="aim-msg-tokens-value">{formatTokenNumber(line.usage.inputTokens)}</span>
-            <span className="aim-msg-tokens-sep">·</span>
-            <span className="aim-msg-tokens-label">OUT</span>
-            <span className="aim-msg-tokens-value">{formatTokenNumber(line.usage.outputTokens)}</span>
-            <span className="aim-msg-tokens-sep">·</span>
-            <span className="aim-msg-tokens-label">CACHE</span>
-            <span className="aim-msg-tokens-value">{formatTokenNumber(line.usage.cacheReadTokens)}</span>
-          </div>
-        )}
       </div>
     </div>
   )

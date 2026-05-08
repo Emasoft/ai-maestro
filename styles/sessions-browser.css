@@ -65,85 +65,48 @@
 /* ------------------------------------------------------------------ */
 /* Bubble row states                                                  */
 /*                                                                    */
-/* The transcript wraps every row in a div carrying ONE of three      */
-/* mutually-exclusive classes:                                        */
+/* Two visual states only:                                            */
+/*   .aim-bubble-default  — no pin or other-row pinned; the bubble    */
+/*                          renders identically to its role colors.   */
+/*                          Hover adds a soft emerald glow as a       */
+/*                          cursor-presence cue.                      */
+/*   .aim-bubble-pinned   — emerald ring via box-shadow on the        */
+/*                          inner card. Internal background and text  */
+/*                          colors are LEFT UNCHANGED — only the      */
+/*                          border decoration distinguishes the pin.  */
 /*                                                                    */
-/*   .aim-bubble-default  — no pin active anywhere; hover glow only   */
-/*   .aim-bubble-faded    — another bubble is pinned; this one is     */
-/*                          dimmed via brightness/saturate (NOT       */
-/*                          opacity, so text stays at full alpha)     */
-/*   .aim-bubble-pinned   — this is the pinned bubble; emerald ring   */
-/*                          via box-shadow on the INNER card +        */
-/*                          stronger glow + brighter role tint        */
-/*                                                                    */
-/* The role-color border (blue/emerald/violet/gray) lives inside      */
-/* MessageBubble.tsx via Tailwind classes on `.aim-msg-card`. These   */
-/* wrapper classes only modulate BRIGHTNESS and add the ring/glow     */
-/* chrome on the inner card so the rounded corners stay aligned       */
-/* (was previously an outline on the wrapper, which double-ringed     */
-/* with the article's own border and produced visible "stripes"      */
-/* against the role tint at hover).                                   */
+/* (The earlier `aim-bubble-faded` state dimmed every other bubble    */
+/* when one was pinned; user feedback rejected that — non-pinned      */
+/* rows must stay visually identical to their default appearance.)    */
 /* ------------------------------------------------------------------ */
 
 .aim-bubble-default,
-.aim-bubble-faded,
 .aim-bubble-pinned {
   border-radius: 6px;
-  transition:
-    filter 180ms ease-out,
-    background-color 180ms ease-out;
+  transition: box-shadow 180ms ease-out;
 }
 
 /* Default bubble — gentle emerald glow on hover so the cursor is
-   visible before clicking. drop-shadow uses the alpha-mask of the
-   subtree so it colors the actual card silhouette, not a halo
-   floating behind it. */
+   visible before clicking. */
 .aim-bubble-default:hover .aim-msg-card {
   box-shadow: 0 0 12px 1px rgba(16, 185, 129, 0.45);
 }
 
-/* Faded bubble — another bubble is pinned. We dim the role tint
-   AND the body text via filter:brightness/saturate so the eye is
-   pulled to the pin, but every char remains at full opacity (so
-   captured `/context` block-art renders cleanly with no per-char
-   stripes from compositing alpha). On hover, restore brightness +
-   add the same emerald glow as default. */
-.aim-bubble-faded .aim-msg-card {
-  filter: brightness(0.55) saturate(0.7);
-}
-.aim-bubble-faded:hover .aim-msg-card {
-  filter: brightness(0.95) saturate(0.9);
-  box-shadow: 0 0 12px 1px rgba(16, 185, 129, 0.45);
-}
-
-/* Pinned bubble — emerald ring laid via box-shadow on the inner
-   card (NOT outline on the wrapper). Box-shadow follows the card's
-   rounded-md corners cleanly; outline+border-radius double-ringed
-   with the role border and produced visible stripes. The ring sits
-   ON the card edge; the outer glow extends 14 px beyond. */
+/* Pinned bubble — emerald ring via box-shadow on the inner card.
+   Border-only decoration: internal background/text colors are NOT
+   changed so the pinned bubble keeps the same hue as every other
+   bubble of its role. */
 .aim-bubble-pinned .aim-msg-card {
   box-shadow:
     0 0 0 2px rgb(16, 185, 129),                 /* emerald ring */
     0 0 18px 2px rgba(16, 185, 129, 0.55);       /* outer glow */
-  background-color: rgba(16, 185, 129, 0.14) !important;
 }
 
-/* Pinned + hover — stronger ring + larger glow halo so the pinned
-   bubble visibly reacts to the cursor (without that, hovering
-   the pin looks identical to "no hover" and the user can't tell
-   the click is registered). */
+/* Pinned + hover — thicker ring and larger glow halo. */
 .aim-bubble-pinned:hover .aim-msg-card {
   box-shadow:
     0 0 0 3px rgb(52, 211, 153),                 /* emerald-400 thicker */
     0 0 26px 4px rgba(16, 185, 129, 0.75);       /* halo extends further */
-}
-
-/* Brighten body text inside the pinned card so it visually
-   "lights up" against the brighter role tint. We target the
-   <article> element MessageBubble renders so we don't accidentally
-   restyle the row chrome. */
-.aim-bubble-pinned [role='article'] .whitespace-pre-wrap {
-  color: rgb(248, 250, 252); /* slate-50 */
 }
 
 /* ------------------------------------------------------------------ */
@@ -183,13 +146,10 @@
   margin: 0 2px;
 }
 
-/* Pinned overrides — brighter on the bumped card fill. */
-.aim-bubble-pinned .aim-msg-tokens-value {
-  color: rgb(167, 243, 208); /* emerald-200 */
-}
-.aim-bubble-pinned .aim-msg-tokens-label {
-  color: rgb(253, 224, 71); /* yellow-300 */
-}
+/* (The pinned-state token color overrides were removed alongside the
+   pinned background-color override — the pinned bubble now keeps the
+   same default-state internal palette and is distinguished only by
+   the emerald ring/glow on its border.) */
 
 /* ------------------------------------------------------------------ */
 /* Slash-command pill — replaces the raw <command-name> /             */
@@ -241,4 +201,154 @@
 .aim-msg-card .whitespace-pre-wrap > mark {
   display: inline;
   vertical-align: baseline;
+}
+
+/* ------------------------------------------------------------------ */
+/* Bright timestamp — the role label is colored per role, but the     */
+/* timestamp must stand out independently so the eye finds it fast.   */
+/* Cyan-300 is bright on every role tint and not used elsewhere in    */
+/* the bubble chrome.                                                 */
+/* ------------------------------------------------------------------ */
+.aim-msg-time {
+  color: rgb(103, 232, 249);            /* cyan-300 — always bright */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Copy-to-clipboard button — top-right corner of every bubble.       */
+/* Touch-sized 28×28 hit area; the icon itself is 14 px so the slop   */
+/* lets fingers tap reliably without misfiring the bubble's pin       */
+/* click. Always visible (no hover-reveal) for touch parity.          */
+/* ------------------------------------------------------------------ */
+.aim-bubble-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: rgb(156, 163, 175);            /* gray-400 */
+  background-color: rgba(17, 24, 39, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+.aim-bubble-copy-btn:hover {
+  background-color: rgba(31, 41, 55, 0.85);
+  color: rgb(229, 231, 235);            /* gray-200 */
+}
+.aim-bubble-copy-btn[data-copied='true'] {
+  color: rgb(16, 185, 129);             /* emerald-500 — confirmation flash */
+}
+
+/* ------------------------------------------------------------------ */
+/* Selection checkbox — left of every bubble. Finger-sized 32×32 so   */
+/* it's reliably tappable on a touch device. Checked state uses the   */
+/* emerald palette to match the rest of the dashboard's "selected"    */
+/* affordance.                                                         */
+/* ------------------------------------------------------------------ */
+.aim-bubble-select {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1.5px solid rgba(156, 163, 175, 0.6);   /* gray-400/60 */
+  background-color: rgba(17, 24, 39, 0.55);
+  color: transparent;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
+  cursor: pointer;
+}
+.aim-bubble-select:hover {
+  border-color: rgba(16, 185, 129, 0.8);
+  background-color: rgba(31, 41, 55, 0.8);
+}
+.aim-bubble-select[data-checked='true'] {
+  background-color: rgb(16, 185, 129);            /* emerald-500 */
+  border-color: rgb(16, 185, 129);
+  color: rgb(17, 24, 39);                          /* near-black tick */
+}
+
+/* ------------------------------------------------------------------ */
+/* Floating Export-selected-to-Markdown button — pinned to the        */
+/* bottom-right corner of the transcript. Right offset is wide        */
+/* enough to clear the touch-friendly fat scrollbar (which sits on    */
+/* the right edge of the scroll container).                           */
+/* ------------------------------------------------------------------ */
+.aim-export-fab {
+  position: absolute;
+  bottom: 16px;
+  right: 28px;                                     /* clear of fat scrollbar */
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background-color: rgb(16, 185, 129);             /* emerald-500 */
+  color: rgb(17, 24, 39);
+  border: 1px solid rgb(5, 150, 105);              /* emerald-600 */
+  box-shadow:
+    0 8px 24px -4px rgba(16, 185, 129, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+.aim-export-fab:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 10px 28px -4px rgba(16, 185, 129, 0.7),
+    0 3px 8px rgba(0, 0, 0, 0.4);
+}
+.aim-export-fab[disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.aim-export-fab .aim-export-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 2px;
+  border-radius: 9999px;
+  background-color: rgba(17, 24, 39, 0.85);
+  color: rgb(110, 231, 183);                       /* emerald-300 */
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ */
+/* Per-bucket BarRow — clickable. The whole row is a button with no   */
+/* default chrome; hover highlights softly so the affordance reads.   */
+/* ------------------------------------------------------------------ */
+.aim-bar-row-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 4px 6px;
+  margin: -2px -6px;
+  border-radius: 6px;
+  background: transparent;
+  transition: background-color 120ms ease-out;
+  cursor: pointer;
+}
+.aim-bar-row-btn:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+.aim-bar-row-btn:focus-visible {
+  outline: 2px solid rgba(16, 185, 129, 0.7);
+  outline-offset: -1px;
 }

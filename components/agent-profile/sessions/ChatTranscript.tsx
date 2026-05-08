@@ -34,13 +34,14 @@ import {
   useRef,
   useState,
 } from 'react'
+import { Check, Download } from 'lucide-react'
 import type { TranscriptLine, MessageUsage } from '@/types/sessions-browser'
 import MessageBubble from './MessageBubble'
 import ToolUseRow from './ToolUseRow'
 
 // Minimum heights — every row gets at least this much vertical space even
 // when its content is empty, so the role badge + timestamp stay readable.
-const BUBBLE_MIN_HEIGHT = 56
+const BUBBLE_MIN_HEIGHT = 52
 const TOOL_ROW_HEIGHT = 40
 // Expanded tool rows render a max-height: 280 px scrollable body plus the
 // header button (~36 px) + 1 px border-t separator + small padding. We
@@ -49,7 +50,12 @@ const TOOL_ROW_HEIGHT = 40
 // bleeding into the expanded JSON.
 const TOOL_ROW_EXPANDED_HEIGHT = 320
 const OVERSCAN = 10
-const ROW_GAP = 8
+// Tighter inter-bubble gap. The previous 8 px reserve combined with the
+// bubble's own 8 px py + 14 px role-label header produced visibly
+// "airy" empty space between consecutive turns. 3 px lets the role
+// border still read as a discrete card while bringing the rhythm in
+// line with conventional chat UIs.
+const ROW_GAP = 3
 
 // Visual constants matching MessageBubble.tsx CSS:
 //   - text size 12 px, line-height ~1.5 → ~18 px per text line
@@ -57,7 +63,7 @@ const ROW_GAP = 8
 //   - text bubble width clamps wrap at roughly 80 chars on a 720-820 px center pane
 const TEXT_LINE_HEIGHT_PX = 18
 const VISIBLE_CHARS_PER_LINE = 80
-const BUBBLE_CHROME_PX = 38
+const BUBBLE_CHROME_PX = 34
 
 /**
  * Estimate row height from the line's content. Required for the absolutely-
@@ -156,6 +162,79 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
       return next
     })
   }, [])
+
+  // ----- Multi-select for export-to-Markdown -----
+  //
+  // Each bubble carries a finger-sized checkbox at its left edge. A
+  // user can tick any number of bubbles, then press the floating
+  // "Export selected to Markdown" button at the bottom-right corner of
+  // the transcript to download a `.md` file containing the selected
+  // turns in JSONL line-order.
+  //
+  // We keep the selection set at this level so it survives scrolling
+  // (virtualised rows are mounted/unmounted constantly — local state
+  // would reset on every viewport change). The Set is keyed by
+  // `line.lineIndex`, the stable JSONL line number.
+  const [selectedLineIndexes, setSelectedLineIndexes] = useState<Set<number>>(() => new Set())
+
+  const toggleSelected = useCallback((lineIndex: number) => {
+    setSelectedLineIndexes(prev => {
+      const next = new Set(prev)
+      if (next.has(lineIndex)) next.delete(lineIndex)
+      else next.add(lineIndex)
+      return next
+    })
+  }, [])
+
+  const clearSelected = useCallback(() => {
+    setSelectedLineIndexes(new Set())
+  }, [])
+
+  // Build the markdown payload. Each selected bubble becomes a section
+  // with a `## <ROLE> — <timestamp>` header followed by the body. Tool
+  // rows render as a single fenced code block so the JSON payload is
+  // trivially copy-pasteable. The order is the JSONL line order, which
+  // matches what the user sees on screen.
+  const exportSelectedAsMarkdown = useCallback(() => {
+    if (selectedLineIndexes.size === 0) return
+    const selected = lines.filter(l => selectedLineIndexes.has(l.lineIndex))
+    const blocks: string[] = []
+    blocks.push(`# Session transcript export`)
+    blocks.push(`*${selected.length} message${selected.length === 1 ? '' : 's'} · exported ${new Date().toISOString()}*`)
+    blocks.push('')
+    for (const line of selected) {
+      const ts = line.timestamp ?? ''
+      const header = `## ${line.role.toUpperCase()}${ts ? ` — ${ts}` : ''}  *(line #${line.lineIndex})*`
+      blocks.push(header)
+      if (line.isToolEvent) {
+        const toolName = line.toolName ?? 'tool'
+        blocks.push(`\`\`\`json`)
+        blocks.push(`{`)
+        blocks.push(`  "tool": ${JSON.stringify(toolName)},`)
+        if (line.toolInput !== undefined) {
+          blocks.push(`  "input": ${JSON.stringify(line.toolInput, null, 2).split('\n').join('\n  ')},`)
+        }
+        if (line.toolResult !== undefined) {
+          blocks.push(`  "result": ${JSON.stringify(line.toolResult, null, 2).split('\n').join('\n  ')}`)
+        }
+        blocks.push(`}`)
+        blocks.push(`\`\`\``)
+      } else {
+        blocks.push(line.text || '*(empty)*')
+      }
+      blocks.push('')
+    }
+    const md = blocks.join('\n')
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `session-export-${new Date().toISOString().replace(/[:.]/g, '-')}.md`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [lines, selectedLineIndexes])
 
   // ----- Measured row heights via ResizeObserver -----
   //
@@ -408,36 +487,26 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
             const h = computeRowHeight(line)
             const isCurrent = currentMatchLine !== null && currentMatchLine === line.lineIndex
             const isPinned = pinnedLineIndex !== null && pinnedLineIndex === line.lineIndex
-            const anyPinned = pinnedLineIndex !== null
+            const isSelected = selectedLineIndexes.has(line.lineIndex)
             // Pin/unpin click handler — clicking a bubble that's already
             // pinned unpins (sets pin to null), otherwise pins to that
-            // line. We swallow keyboard activations here to avoid
-            // hijacking standard text-selection behavior; the future
-            // a11y story is a dedicated "pin" button next to each
-            // bubble. For now click-to-toggle is the simplest UX.
+            // line. Click events that originate from the export
+            // checkbox or copy-to-clipboard button stop their own
+            // propagation, so they never reach this handler.
             const handlePinClick = onPinLineIndex
               ? (e: React.MouseEvent) => {
-                  // Only react to plain left-clicks. Modifier-clicks
-                  // (open in new tab, copy link, etc.) and right-clicks
-                  // pass through.
                   if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
-                  // Swallow when the user was selecting text (a click
-                  // that ends a drag-selection should NOT pin).
                   const selection = window.getSelection()
                   if (selection && selection.toString().length > 0) return
                   onPinLineIndex(isPinned ? null : line.lineIndex)
                 }
               : undefined
-            // Wrapper class — three mutually exclusive states:
-            //   - aim-bubble-pinned: thick emerald ring + glow + full opacity + brighter text
-            //   - aim-bubble-faded:   anyPinned && !isPinned → 0.4 opacity to push focus
-            //                        onto the pinned bubble. Hover restores opacity.
-            //   - aim-bubble-default: no pin active anywhere → hover-only glow on this row.
-            const stateClass = isPinned
-              ? 'aim-bubble-pinned'
-              : anyPinned
-                ? 'aim-bubble-faded'
-                : 'aim-bubble-default'
+            // Two visual states only: pinned (emerald ring on the
+            // inner card) or default (no chrome change). The earlier
+            // "faded" dim of every non-pinned row was rejected by user
+            // feedback — non-pinned bubbles now keep their default
+            // appearance regardless of whether another row is pinned.
+            const stateClass = isPinned ? 'aim-bubble-pinned' : 'aim-bubble-default'
             return (
               <div
                 key={`${line.lineIndex}-${line.role}`}
@@ -459,19 +528,46 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
                 }
                 className={stateClass}
               >
-                {line.isToolEvent ? (
-                  <ToolUseRow
-                    line={line}
-                    expanded={expandedToolKeys.has(line.lineIndex)}
-                    onToggle={() => toggleTool(line.lineIndex)}
-                  />
-                ) : (
-                  <MessageBubble
-                    line={line}
-                    highlightQuery={normalisedQuery}
-                    currentMatch={isCurrent}
-                  />
-                )}
+                {/* Two-column layout: left = finger-sized selection
+                    checkbox, right = the bubble. Tool rows skip the
+                    bubble's own copy button via ToolUseRow but still
+                    render the checkbox so they can be exported. */}
+                <div className="flex items-start gap-2">
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={isSelected}
+                    aria-label={
+                      isSelected
+                        ? `Unselect message at line ${line.lineIndex} from export`
+                        : `Select message at line ${line.lineIndex} for Markdown export`
+                    }
+                    title={isSelected ? 'Selected for export — click to unselect' : 'Select for Markdown export'}
+                    className="aim-bubble-select"
+                    data-checked={isSelected || undefined}
+                    onClick={e => {
+                      e.stopPropagation()
+                      toggleSelected(line.lineIndex)
+                    }}
+                  >
+                    {isSelected && <Check className="w-4 h-4" strokeWidth={3} />}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    {line.isToolEvent ? (
+                      <ToolUseRow
+                        line={line}
+                        expanded={expandedToolKeys.has(line.lineIndex)}
+                        onToggle={() => toggleTool(line.lineIndex)}
+                      />
+                    ) : (
+                      <MessageBubble
+                        line={line}
+                        highlightQuery={normalisedQuery}
+                        currentMatch={isCurrent}
+                      />
+                    )}
+                  </div>
+                </div>
               </div>
             )
           })}
@@ -485,6 +581,30 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
           <div className="sticky bottom-0 py-2 px-3 text-[11px] text-red-300 bg-red-500/10 border-t border-red-500/20">
             {error}
           </div>
+        )}
+        {/* Floating Export-to-Markdown FAB. Sits in the bottom-right
+            corner of the scrollable viewport, offset from the right
+            edge so the (touch-friendly, fat) browser scrollbar
+            doesn't overlap it. Disabled state when no rows are
+            selected; alt+click clears selection without exporting. */}
+        {selectedLineIndexes.size > 0 && (
+          <button
+            type="button"
+            className="aim-export-fab"
+            onClick={e => {
+              if (e.altKey) {
+                clearSelected()
+                return
+              }
+              exportSelectedAsMarkdown()
+            }}
+            aria-label={`Export ${selectedLineIndexes.size} selected message${selectedLineIndexes.size === 1 ? '' : 's'} as Markdown`}
+            title={`Export ${selectedLineIndexes.size} selected to Markdown · alt-click to clear selection`}
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export to .md</span>
+            <span className="aim-export-count">{selectedLineIndexes.size}</span>
+          </button>
         )}
       </div>
     </div>

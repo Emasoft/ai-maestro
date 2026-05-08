@@ -368,8 +368,8 @@ function SegmentDetailView({
       case 'freeSpace':
         return (
           <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-gray-200">
-            Unused token budget remaining in the model's context window. This is the headroom before
-            auto-compaction kicks in.
+            Unused token budget remaining in the model&apos;s context window. This is the headroom
+            before auto-compaction kicks in.
           </div>
         )
       case 'messages': {

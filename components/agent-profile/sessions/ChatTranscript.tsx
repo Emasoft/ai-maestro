@@ -157,11 +157,80 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
     })
   }, [])
 
-  // Effective row height — tool rows pay attention to expansion
-  // state; everything else delegates to the cheap top-level
-  // `rowHeight` heuristic.
+  // ----- Measured row heights via ResizeObserver -----
+  //
+  // The character-based `rowHeight()` heuristic is ~7 % off for
+  // captured `/context` output (~900 lines, 17K px actual) — enough
+  // that the next bubble's `top` is computed inside the giant
+  // bubble's natural-flow extent, causing visible content overlap.
+  //
+  // We measure each rendered wrapper's actual height with a single
+  // shared ResizeObserver and prefer the measured value when
+  // available. The heuristic stays as a first-paint estimate so
+  // long lists don't all start at offset=0 before measurements
+  // arrive. Hysteresis (>1 px tolerance) prevents render loops from
+  // sub-pixel mutations.
+  const measuredRowHeightsRef = useRef<Map<number, number>>(new Map())
+  const [measuredVersion, setMeasuredVersion] = useState(0)
+  const wrapperRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+  const resizeObserverRef = useRef<ResizeObserver | null>(null)
+
+  useEffect(() => {
+    const ro = new ResizeObserver(entries => {
+      let dirty = false
+      for (const entry of entries) {
+        const el = entry.target as HTMLDivElement
+        const idx = Number(el.dataset.lineIndex)
+        if (!Number.isInteger(idx)) continue
+        // Use offsetHeight so we include any borders/padding the
+        // wrapper carries. contentRect tracks padding-box only.
+        const h = el.offsetHeight
+        const old = measuredRowHeightsRef.current.get(idx)
+        if (old === undefined || Math.abs(old - h) > 1) {
+          measuredRowHeightsRef.current.set(idx, h)
+          dirty = true
+        }
+      }
+      if (dirty) setMeasuredVersion(v => v + 1)
+    })
+    resizeObserverRef.current = ro
+    // Re-observe any wrappers that mounted before this effect.
+    for (const el of wrapperRefs.current.values()) ro.observe(el)
+    return () => {
+      ro.disconnect()
+      resizeObserverRef.current = null
+    }
+  }, [])
+
+  const measureRef = useCallback((lineIndex: number) => (el: HTMLDivElement | null) => {
+    const ro = resizeObserverRef.current
+    const prev = wrapperRefs.current.get(lineIndex)
+    if (prev && prev !== el) {
+      ro?.unobserve(prev)
+      wrapperRefs.current.delete(lineIndex)
+    }
+    if (el) {
+      el.dataset.lineIndex = String(lineIndex)
+      wrapperRefs.current.set(lineIndex, el)
+      ro?.observe(el)
+      // Capture the initial height eagerly so the next offsets pass
+      // doesn't have to wait for the first ResizeObserver fire.
+      const h = el.offsetHeight
+      const old = measuredRowHeightsRef.current.get(lineIndex)
+      if (h > 0 && (old === undefined || Math.abs(old - h) > 1)) {
+        measuredRowHeightsRef.current.set(lineIndex, h)
+        setMeasuredVersion(v => v + 1)
+      }
+    }
+  }, [])
+
+  // Effective row height — measured wins, falling back to:
+  //   - TOOL_ROW_EXPANDED_HEIGHT / TOOL_ROW_HEIGHT for tool rows
+  //   - the char/4-derived `rowHeight()` heuristic otherwise
   const computeRowHeight = useCallback(
     (line: TranscriptLine): number => {
+      const measured = measuredRowHeightsRef.current.get(line.lineIndex)
+      if (measured !== undefined && measured > 0) return measured
       if (line.isToolEvent) {
         return expandedToolKeys.has(line.lineIndex) ? TOOL_ROW_EXPANDED_HEIGHT : TOOL_ROW_HEIGHT
       }
@@ -171,6 +240,10 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
   )
 
   // Pre-compute row offsets for O(log n) binary search on scroll.
+  // `measuredVersion` participates in deps so the array recomputes
+  // when ResizeObserver discovers a row's true height differs from
+  // the heuristic (the case that produced visible bubble overlap on
+  // the captured `/context` block).
   const offsets = useMemo(() => {
     const o = new Array<number>(lines.length + 1)
     o[0] = 0
@@ -178,7 +251,8 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
       o[i + 1] = o[i] + computeRowHeight(lines[i]) + ROW_GAP
     }
     return o
-  }, [lines, computeRowHeight])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, computeRowHeight, measuredVersion])
 
   const totalHeight = offsets[offsets.length - 1] ?? 0
 
@@ -367,6 +441,7 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
             return (
               <div
                 key={`${line.lineIndex}-${line.role}`}
+                ref={measureRef(line.lineIndex)}
                 style={{
                   position: 'absolute',
                   top,

@@ -1830,6 +1830,23 @@ async function startServer(handleRequest) {
 
     // Start periodic orphaned PTY cleanup to prevent leaks
     startOrphanedPtyCleanup()
+
+    // Auto-restore agents that were active before an unclean shutdown.
+    // pm2's LaunchAgent brings this server back after a reboot/power-loss, but
+    // the agent tmux sessions are gone — this re-wakes the personas that were
+    // running at crash time (the registry's frozen status:'active' set).
+    // Delayed ~12s so the host-id / directory-sync / peer-registration tasks
+    // above (which fire on +2s/+5s timers) settle first, and staggered inside
+    // the service so we don't spawn every client at once.
+    // Disable with AIM_DISABLE_BOOT_RESTORE=1.
+    setTimeout(async () => {
+      try {
+        const { restoreActiveAgentsOnBoot } = await import('./services/boot-restore-service.ts')
+        await restoreActiveAgentsOnBoot()
+      } catch (error) {
+        console.error('[BootRestore] Failed to run agent boot-restore:', error.message)
+      }
+    }, 12000)
   })
 
   // Graceful shutdown - kill PTYs FIRST before closing server

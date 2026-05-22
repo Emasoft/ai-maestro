@@ -1841,10 +1841,14 @@ async function startServer(handleRequest) {
     // Disable with AIM_DISABLE_BOOT_RESTORE=1.
     setTimeout(async () => {
       try {
+        // Bootstrap sessions.json from the registry if it went missing (defensive,
+        // non-destructive — no-op when the file already has entries), then restore.
+        const { ensureSessionsJsonBootstrapped } = await import('./services/session-reconcile-service.ts')
+        ensureSessionsJsonBootstrapped()
         const { restoreActiveAgentsOnBoot } = await import('./services/boot-restore-service.ts')
         await restoreActiveAgentsOnBoot()
       } catch (error) {
-        console.error('[BootRestore] Failed to run agent boot-restore:', error.message)
+        console.error('[BootRestore] Failed to run startup session bootstrap / agent restore:', error.message)
       }
     }, 12000)
   })

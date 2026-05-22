@@ -1,5 +1,11 @@
+import { existsSync } from 'fs'
+import { homedir } from 'os'
+import { join, resolve, sep } from 'path'
 import { loadAgents } from '@/lib/agent-registry'
 import { wakeAgent } from '@/services/agents-core-service'
+
+/** ~/agents — the only root an agent workdir may live under (mirrors validateCwd in lib/agent-runtime.ts). */
+const AGENTS_ROOT = join(homedir(), 'agents')
 
 /**
  * Boot restore — relaunch the agents that were active when the host went down.
@@ -83,6 +89,29 @@ export async function restoreActiveAgentsOnBoot(): Promise<BootRestoreResult> {
 
   for (const agent of activeAgents) {
     const name = agent.name || agent.id
+
+    // Path validation — never wake an agent whose working directory was deleted.
+    // wakeAgent's shell guard FAIL-OPENS when $AGENT_WORK_DIR doesn't resolve, so
+    // spawning there would create an UNGUARDED session in a dead dir. Skip + record.
+    if (!agent.workingDirectory || !existsSync(agent.workingDirectory)) {
+      result.skipped.push({ name, reason: `workingDirectory missing: ${agent.workingDirectory || '(none)'}` })
+      console.log(`[BootRestore] Skipped ${name}: workingDirectory missing (${agent.workingDirectory || 'none'})`)
+      continue
+    }
+
+    // ~/agents/ invariant — wakeAgent's validateCwd (agent-runtime.ts) REFUSES any
+    // workdir outside ~/agents/ (the R0 "every agent lives in ~/agents/" rule). An
+    // active agent here whose workdir is elsewhere (e.g. ~/Code/<proj>) was a
+    // MANUALLY-started tmux session AI Maestro discovered+linked, NOT an API-created
+    // agent — the API cannot recreate it. Skip with a clear reason rather than letting
+    // wakeAgent fail with the opaque "Failed to create tmux session".
+    const resolvedWd = resolve(agent.workingDirectory)
+    if (resolvedWd !== AGENTS_ROOT && !resolvedWd.startsWith(AGENTS_ROOT + sep)) {
+      result.skipped.push({ name, reason: `workdir outside ~/agents/ (manually-managed; migrate to ~/agents/ to enable auto-restore): ${agent.workingDirectory}` })
+      console.log(`[BootRestore] Skipped ${name}: workdir outside ~/agents/ (${agent.workingDirectory})`)
+      continue
+    }
+
     // Restore every session index the agent had. Default to [0] for the common
     // single-session case where the registry recorded no session entries.
     const indexes = Array.from(new Set((agent.sessions || []).map(s => s.index)))

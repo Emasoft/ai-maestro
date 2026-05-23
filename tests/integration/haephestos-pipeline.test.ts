@@ -76,7 +76,7 @@ vi.mock('fs', () => {
 // (before any const/let/var), so referencing plain top-level spies inside the
 // mock factory throws ReferenceError. Hoisted spies are initialized at the
 // same time as the mocks, making them safe to use inside factories.
-const { cpSpy, rmSpy, mkdirSpy, ensureMarketplaceSpy, updateMarketplaceManifestSpy } = vi.hoisted(() => ({
+const { cpSpy, rmSpy, mkdirSpy, renameSpy, ensureMarketplaceSpy, updateMarketplaceManifestSpy } = vi.hoisted(() => ({
   cpSpy: vi.fn(async (_src: string, _dest: string, _opts?: unknown) => {
     /* no-op — we only care that it was called with the right args */
   }),
@@ -84,6 +84,11 @@ const { cpSpy, rmSpy, mkdirSpy, ensureMarketplaceSpy, updateMarketplaceManifestS
     /* no-op */
   }),
   mkdirSpy: vi.fn(async (_path: string, _opts?: unknown) => {
+    /* no-op */
+  }),
+  // The G4 step now stages into a temp dir then `rename`s it onto the live
+  // target (atomic swap so a failed copy can't destroy the published plugin).
+  renameSpy: vi.fn(async (_from: string, _to: string) => {
     /* no-op */
   }),
   ensureMarketplaceSpy: vi.fn(async () => undefined),
@@ -96,6 +101,7 @@ vi.mock('fs/promises', () => ({
   cp: cpSpy,
   rm: rmSpy,
   mkdir: mkdirSpy,
+  rename: renameSpy,
 }))
 
 // role-plugin-service — marketplace registration is a spy so we can verify
@@ -118,10 +124,17 @@ vi.mock('@/lib/route-auth', () => ({
   enforceAuth: vi.fn(() => null),
 }))
 
-// child_process.execSync — used to fire `claude plugin marketplace update`.
-// We don't have `claude` on PATH in the test env, and the route wraps it in a
-// try/catch anyway, but stubbing it makes the test deterministic.
-vi.mock('child_process', () => ({
+// child_process — stub execSync (the `claude plugin marketplace update`
+// command) but PRESERVE the rest via `...importActual`. The route's G6 step
+// dynamically imports `@/services/element-management-service`, whose module
+// top-level runs `promisify(execFile)`; a no-spread mock leaves execFile
+// undefined → promisify throws at import time → the route's try/catch
+// silently swallows it → the R21.4 AIO dispatch path is NEVER exercised.
+// Spreading the real module keeps execFile defined so the dispatch actually
+// runs (the real `claude` CLI is absent, so it fails gracefully under the
+// route's non-blocking catch — but the code path is genuinely reached).
+vi.mock('child_process', async () => ({
+  ...(await vi.importActual<typeof import('child_process')>('child_process')),
   execSync: vi.fn(() => Buffer.from('')),
 }))
 
@@ -202,6 +215,7 @@ beforeEach(() => {
   cpSpy.mockClear()
   rmSpy.mockClear()
   mkdirSpy.mockClear()
+  renameSpy.mockClear()
   ensureMarketplaceSpy.mockClear()
   updateMarketplaceManifestSpy.mockClear()
 })
@@ -318,6 +332,7 @@ describe('Haephestos pipeline — POST /api/agents/creation-helper/publish-plugi
     // be fully upstream of any filesystem mutation.
     expect(cpSpy).not.toHaveBeenCalled()
     expect(rmSpy).not.toHaveBeenCalled()
+    expect(renameSpy).not.toHaveBeenCalled()
     expect(ensureMarketplaceSpy).not.toHaveBeenCalled()
     expect(updateMarketplaceManifestSpy).not.toHaveBeenCalled()
   })
@@ -338,11 +353,20 @@ describe('Haephestos pipeline — POST /api/agents/creation-helper/publish-plugi
     expect(body.pluginName).toBe('happy-path-agent')
     expect(body.pluginDir).toBe(join(ROLE_PLUGINS_DIR, 'happy-path-agent'))
 
-    // Copy happened from the build dir to the role-plugins marketplace dir.
+    // Copy happened from the build dir into a STAGING dir, then an atomic
+    // rename swapped it onto the final marketplace path — so a failed copy
+    // can never destroy the currently-published plugin (route G4).
+    const finalDir = join(ROLE_PLUGINS_DIR, 'happy-path-agent')
     expect(cpSpy).toHaveBeenCalledTimes(1)
     const [cpSrc, cpDest] = cpSpy.mock.calls[0]
     expect(cpSrc).toBe(pluginDir)
-    expect(cpDest).toBe(join(ROLE_PLUGINS_DIR, 'happy-path-agent'))
+    expect(cpDest).toMatch(/\/\.happy-path-agent\.staging-\d+$/)
+    expect((cpDest as string).startsWith(ROLE_PLUGINS_DIR)).toBe(true)
+    // The atomic swap: rename(staging → final target).
+    expect(renameSpy).toHaveBeenCalledTimes(1)
+    const [renameFrom, renameTo] = renameSpy.mock.calls[0]
+    expect(renameFrom).toBe(cpDest)
+    expect(renameTo).toBe(finalDir)
 
     // Marketplace ensured AND the manifest was updated with the values
     // extracted from plugin.json (description + version).
@@ -641,5 +665,124 @@ describe('Haephestos pipeline — POST /api/agents/creation-helper/publish-plugi
         expect.stringMatching(/rule.*missing-rule/i),
       ]),
     )
+  })
+
+  // ─── Regression: the /m-flag section-regex bug (code-review C1/C2) ──────
+  // The original extractSectionArray used a `/m`-flagged section regex whose
+  // `\n*$` lookahead matched end-of-LINE, so the body captured only the
+  // FIRST key of each section AND multi-line arrays were unparseable. That
+  // silently skipped [skills].secondary / .specialized and the canonical
+  // multi-line PSS array format — passing broken plugins through the gate
+  // (the exact issue-#5 failure mode). These tests lock the smol-toml fix.
+
+  test('G2.5 regression: a missing skill in a MULTI-LINE [skills].secondary is rejected (was silently skipped by the /m regex)', async () => {
+    const pluginName = 'multiline-secondary-plugin'
+    const pluginDir = seedValidPluginInBuildDir(pluginName)
+
+    // Canonical PSS layout: multi-line arrays, multiple skill tiers. Only
+    // the primary skill exists on disk; the secondary one is missing.
+    fsStore[join(pluginDir, `${pluginName}.agent.toml`)] =
+      `[agent]\n` +
+      `name = "${pluginName}"\n` +
+      `compatible-titles = ["AUTONOMOUS"]\n` +
+      `compatible-clients = ["claude-code"]\n` +
+      `\n[skills]\n` +
+      `primary = [\n  "present-primary"\n]\n` +
+      `secondary = [\n  "missing-secondary"\n]\n` +
+      `specialized = []\n`
+    fsStore[join(pluginDir, 'skills', 'present-primary', 'SKILL.md')] = '# present-primary'
+    // NOTE: skills/missing-secondary/SKILL.md is deliberately NOT seeded.
+
+    const res = await POST(makePublishRequest(pluginDir))
+    expect(res.status).toBe(422)
+    const body = await res.json()
+    expect(body.issues).toEqual(
+      expect.arrayContaining([expect.stringMatching(/skill.*missing-secondary/i)]),
+    )
+  })
+
+  test('G2.5 regression: canonical MULTI-LINE arrays across all tiers pass when every file exists', async () => {
+    const pluginName = 'multiline-allgood-plugin'
+    const pluginDir = seedValidPluginInBuildDir(pluginName)
+
+    fsStore[join(pluginDir, `${pluginName}.agent.toml`)] =
+      `[agent]\n` +
+      `name = "${pluginName}"\n` +
+      `compatible-titles = ["AUTONOMOUS"]\n` +
+      `compatible-clients = ["claude-code"]\n` +
+      `\n[skills]\n` +
+      `primary = [\n  "skill-a",\n  "skill-b"\n]\n` +
+      `secondary = [\n  "skill-c"\n]\n` +
+      `specialized = []\n`
+    fsStore[join(pluginDir, 'skills', 'skill-a', 'SKILL.md')] = '# a'
+    fsStore[join(pluginDir, 'skills', 'skill-b', 'SKILL.md')] = '# b'
+    fsStore[join(pluginDir, 'skills', 'skill-c', 'SKILL.md')] = '# c'
+
+    const res = await POST(makePublishRequest(pluginDir))
+    expect(res.status).toBe(200)
+  })
+
+  test('G2.5 regression: user-level ~/.claude/rules/*.md references are skipped, not rejected (code-review C5)', async () => {
+    const pluginName = 'userlevel-rules-plugin'
+    const pluginDir = seedValidPluginInBuildDir(pluginName)
+
+    // Real Haephestos role-plugins reference shared USER-level rules by
+    // tilde path; those live outside the plugin tree, so the gate must skip
+    // them rather than build pluginDir/rules/~/.claude/...md and reject.
+    fsStore[join(pluginDir, `${pluginName}.agent.toml`)] =
+      `[agent]\n` +
+      `name = "${pluginName}"\n` +
+      `compatible-titles = ["AUTONOMOUS"]\n` +
+      `compatible-clients = ["claude-code"]\n` +
+      `\n[rules]\n` +
+      `recommended = [\n  "~/.claude/rules/claim-verification.md",\n  "~/.claude/rules/tldr-cli.md"\n]\n`
+    // No plugin-local rules/ files seeded — the tilde paths must be skipped.
+
+    const res = await POST(makePublishRequest(pluginDir))
+    expect(res.status).toBe(200)
+  })
+
+  test('G2.5 regression: malformed TOML rejects the publish instead of silently passing the gate (code-review C3)', async () => {
+    const pluginName = 'malformed-toml-plugin'
+    const pluginDir = seedValidPluginInBuildDir(pluginName)
+
+    // Quad-identity is regex-extractable so G2/G3 pass, but the [skills]
+    // array is syntactically invalid TOML. The old `catch { return [] }`
+    // swallowed this and passed the gate; smol-toml must reject it.
+    fsStore[join(pluginDir, `${pluginName}.agent.toml`)] =
+      `[agent]\n` +
+      `name = "${pluginName}"\n` +
+      `compatible-titles = ["AUTONOMOUS"]\n` +
+      `compatible-clients = ["claude-code"]\n` +
+      `\n[skills]\n` +
+      `primary = ["unterminated-string\n`
+
+    const res = await POST(makePublishRequest(pluginDir))
+    expect(res.status).toBe(422)
+    const body = await res.json()
+    expect(body.issues).toEqual(
+      expect.arrayContaining([expect.stringMatching(/could not parse/i)]),
+    )
+  })
+
+  test('G2.5 regression: a skill name containing a path separator is skipped, never probed for traversal (code-review C4)', async () => {
+    const pluginName = 'traversal-name-plugin'
+    const pluginDir = seedValidPluginInBuildDir(pluginName)
+
+    // A `..`-bearing name is not a plugin-local bare name; the gate must
+    // skip it (no existsSync escape probe, no false-positive pass via a
+    // sibling file). With nothing else declared, the publish succeeds.
+    fsStore[join(pluginDir, `${pluginName}.agent.toml`)] =
+      `[agent]\n` +
+      `name = "${pluginName}"\n` +
+      `compatible-titles = ["AUTONOMOUS"]\n` +
+      `compatible-clients = ["claude-code"]\n` +
+      `\n[skills]\n` +
+      `primary = ["../../etc/passwd"]\n` +
+      `secondary = []\n` +
+      `specialized = []\n`
+
+    const res = await POST(makePublishRequest(pluginDir))
+    expect(res.status).toBe(200)
   })
 })

@@ -15,7 +15,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { homedir } from 'os'
 import { join, basename, resolve } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import { cp, rm, mkdir } from 'fs/promises'
+import { cp, rm, mkdir, rename } from 'fs/promises'
+import { parse as parseToml } from 'smol-toml'
 import { ensureMarketplace, updateMarketplaceManifest } from '@/services/role-plugin-service'
 import { getLocalMarketplacePath, LOCAL_MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
 import { withLock } from '@/lib/file-lock'
@@ -81,35 +82,46 @@ function extractPluginJsonField(pluginDir: string, field: string): string | null
 }
 
 /**
- * Extract a string array from an arbitrary TOML section.key, e.g.
+ * Extract a string array from a parsed TOML section.key, e.g.
  * `[skills].primary` or `[agents].recommended`. Returns [] when the
- * section or key is absent — callers treat empty as "no references".
+ * section or key is absent (or is not a string array) — callers treat
+ * empty as "no references".
  *
- * Intentionally regex-only (no TOML parser dep here): the publish route
- * already uses regex for [agent] field extraction, and the formats we
- * care about (`section.key = ["a", "b"]`) are deterministic in the
- * PSS / Haephestos output. If TOML evolves to use a structure regex
- * can't catch, switch to @iarna/toml (already imported by
- * services/role-plugin-service.ts) — but do not silently swallow
- * parse failures: a parse error MUST surface as a publish rejection.
+ * Takes the already-parsed TOML object (parsed once by the caller via
+ * smol-toml, the same parser services/role-plugin-service.ts uses) rather
+ * than re-reading/re-parsing the file per call. This is the correct fix
+ * for the earlier regex implementation, which used a `/m`-flagged section
+ * regex whose `\n*$` lookahead matched end-of-LINE and so captured only
+ * the FIRST key of each section — silently skipping [skills].secondary /
+ * [skills].specialized and any multi-line array (the canonical PSS output
+ * format), defeating the whole issue-#5 gate. A real parser handles
+ * multi-key sections, multi-line arrays, and quoting correctly; parse
+ * failures surface at the call site (NOT swallowed here) so a malformed
+ * TOML rejects the publish instead of passing the gate empty-handed.
  */
-function extractSectionArray(tomlPath: string, section: string, key: string): string[] {
-  try {
-    const content = readFileSync(tomlPath, 'utf-8')
-    // Capture the named section's body up to the next [section] header or EOF.
-    const sectionRe = new RegExp(`^\\[${section}\\]\\s*\\n([\\s\\S]*?)(?=\\n\\[|\\n*$)`, 'm')
-    const sectionMatch = content.match(sectionRe)
-    if (!sectionMatch) return []
-    const body = sectionMatch[1]
-    // key = [ "a", "b" ] — allow whitespace + newlines inside the brackets.
-    const keyRe = new RegExp(`^\\s*${key}\\s*=\\s*\\[([\\s\\S]*?)\\]`, 'm')
-    const keyMatch = body.match(keyRe)
-    if (!keyMatch) return []
-    return keyMatch[1]
-      .split(',')
-      .map(s => s.trim().replace(/^["']|["']$/g, '').trim())
-      .filter(Boolean)
-  } catch { return [] }
+function extractSectionArray(
+  parsed: Record<string, unknown>,
+  section: string,
+  key: string,
+): string[] {
+  const sec = parsed[section]
+  if (!sec || typeof sec !== 'object' || Array.isArray(sec)) return []
+  const arr = (sec as Record<string, unknown>)[key]
+  if (!Array.isArray(arr)) return []
+  return arr.filter((x): x is string => typeof x === 'string')
+}
+
+/**
+ * A plugin-LOCAL element is referenced by a bare name (no path separators,
+ * no `~` home-expansion, no `.`/`..` relative prefix). External references
+ * such as `~/.claude/rules/claim-verification.md` are user-level files that
+ * live OUTSIDE the plugin tree (real Haephestos role-plugins list shared
+ * user rules this way), so the element-presence gate must skip them — they
+ * are provided by the host, not bundled in the plugin. The path-separator
+ * check also closes a `..`-traversal hole in the existsSync probe.
+ */
+function isPluginLocalName(name: string): boolean {
+  return !name.includes('/') && !name.startsWith('~') && !name.startsWith('.')
 }
 
 /**
@@ -145,15 +157,22 @@ function extractSectionArray(tomlPath: string, section: string, key: string): st
 function validateElementPresence(pluginDir: string, tomlPath: string): string[] {
   const issues: string[] = []
 
+  // Parse the TOML ONCE with smol-toml. A read or parse failure is NOT
+  // swallowed here — it propagates to the route's outer try/catch (→ 500)
+  // so a malformed/unreadable TOML rejects the publish instead of passing
+  // the gate with an empty (false-negative) reference set.
+  const parsed = parseToml(readFileSync(tomlPath, 'utf-8')) as Record<string, unknown>
+
   // Skills — one folder per skill, with a SKILL.md inside (the canonical
   // Claude Code skill layout). Merge the three skill tiers; the same name
   // appearing in two tiers is unusual but treated as one reference.
   const skillNames = new Set<string>([
-    ...extractSectionArray(tomlPath, 'skills', 'primary'),
-    ...extractSectionArray(tomlPath, 'skills', 'secondary'),
-    ...extractSectionArray(tomlPath, 'skills', 'specialized'),
+    ...extractSectionArray(parsed, 'skills', 'primary'),
+    ...extractSectionArray(parsed, 'skills', 'secondary'),
+    ...extractSectionArray(parsed, 'skills', 'specialized'),
   ])
   for (const name of skillNames) {
+    if (!isPluginLocalName(name)) continue
     const skillFile = join(pluginDir, 'skills', name, 'SKILL.md')
     if (!existsSync(skillFile)) {
       issues.push(`Referenced skill "${name}" missing: expected skills/${name}/SKILL.md`)
@@ -161,7 +180,8 @@ function validateElementPresence(pluginDir: string, tomlPath: string): string[] 
   }
 
   // Sub-agents — one .md file per agent under agents/.
-  for (const name of extractSectionArray(tomlPath, 'agents', 'recommended')) {
+  for (const name of extractSectionArray(parsed, 'agents', 'recommended')) {
+    if (!isPluginLocalName(name)) continue
     const agentFile = join(pluginDir, 'agents', `${name}.md`)
     if (!existsSync(agentFile)) {
       issues.push(`Referenced sub-agent "${name}" missing: expected agents/${name}.md`)
@@ -169,15 +189,20 @@ function validateElementPresence(pluginDir: string, tomlPath: string): string[] 
   }
 
   // Slash commands — one .md file per command under commands/.
-  for (const name of extractSectionArray(tomlPath, 'commands', 'recommended')) {
+  for (const name of extractSectionArray(parsed, 'commands', 'recommended')) {
+    if (!isPluginLocalName(name)) continue
     const cmdFile = join(pluginDir, 'commands', `${name}.md`)
     if (!existsSync(cmdFile)) {
       issues.push(`Referenced command "${name}" missing: expected commands/${name}.md`)
     }
   }
 
-  // Rules — one .md file per rule under rules/.
-  for (const name of extractSectionArray(tomlPath, 'rules', 'recommended')) {
+  // Rules — one .md file per rule under rules/. Real role-plugins reference
+  // shared USER-level rules via `~/.claude/rules/<name>.md` paths; those are
+  // host-provided, not bundled, so isPluginLocalName skips them and only
+  // bare plugin-local rule names are checked.
+  for (const name of extractSectionArray(parsed, 'rules', 'recommended')) {
+    if (!isPluginLocalName(name)) continue
     const ruleFile = join(pluginDir, 'rules', `${name}.md`)
     if (!existsSync(ruleFile)) {
       issues.push(`Referenced rule "${name}" missing: expected rules/${name}.md`)
@@ -187,7 +212,7 @@ function validateElementPresence(pluginDir: string, tomlPath: string): string[] 
   // Hooks — single hooks/hooks.json file declares all events. We don't
   // check that each named hook is a key inside that JSON (that's CPV's
   // job); we just enforce that the file exists when any hook is listed.
-  const hookRefs = extractSectionArray(tomlPath, 'hooks', 'recommended')
+  const hookRefs = extractSectionArray(parsed, 'hooks', 'recommended')
   if (hookRefs.length > 0) {
     const hooksJson = join(pluginDir, 'hooks', 'hooks.json')
     if (!existsSync(hooksJson)) {
@@ -287,7 +312,17 @@ export async function POST(req: NextRequest) {
     // the plugin would otherwise install but yield zero functional skills.
     // Skip when the TOML itself is missing (G2 already flagged that).
     if (existsSync(tomlPath)) {
-      errors.push(...validateElementPresence(resolvedDir, tomlPath))
+      try {
+        errors.push(...validateElementPresence(resolvedDir, tomlPath))
+      } catch (e) {
+        // A TOML read/parse failure MUST reject the publish (issue #5:
+        // never pass the gate with a false-empty reference set). Convert
+        // the throw into an explicit validation issue instead of letting
+        // it fall through to an opaque 500.
+        errors.push(
+          `Could not parse ${dirName}.agent.toml for element-presence check: ${e instanceof Error ? e.message : String(e)}`,
+        )
+      }
     }
 
     if (errors.length > 0) {
@@ -303,12 +338,22 @@ export async function POST(req: NextRequest) {
     const version = extractPluginJsonField(resolvedDir, 'version') || '1.0.0'
 
     await withLock('publish-plugin', async () => {
-      // G4: Copy to marketplace — wipe existing if regenerating
+      // G4: Copy to marketplace atomically — stage into a temp dir, then
+      // swap. The previously-published plugin is removed ONLY after the new
+      // copy is fully staged, so a failed cp (disk full, source vanished,
+      // permission) can't destroy the live plugin. The final rename is
+      // atomic within the marketplace filesystem; if it ever fails, the
+      // full copy is still recoverable in the staging dir.
+      await mkdir(PLUGINS_DIR, { recursive: true })
+      const stagingDir = join(PLUGINS_DIR, `.${dirName}.staging-${process.pid}`)
+      if (existsSync(stagingDir)) {
+        await rm(stagingDir, { recursive: true })
+      }
+      await cp(resolvedDir, stagingDir, { recursive: true })
       if (existsSync(targetDir)) {
         await rm(targetDir, { recursive: true })
       }
-      await mkdir(PLUGINS_DIR, { recursive: true })
-      await cp(resolvedDir, targetDir, { recursive: true })
+      await rename(stagingDir, targetDir)
 
       // G5: Register in marketplace manifest
       await ensureMarketplace()

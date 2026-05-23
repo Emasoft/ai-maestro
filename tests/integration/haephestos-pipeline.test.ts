@@ -387,4 +387,259 @@ describe('Haephestos pipeline — POST /api/agents/creation-helper/publish-plugi
     expect(body.error).toMatch(/pluginDir is required/i)
     expect(cpSpy).not.toHaveBeenCalled()
   })
+
+  // ─── Issue #5 — element-presence gate (G2.5) ───────────────────────────
+  //
+  // Root cause of issue Emasoft/ai-maestro#5: Haephestos build dir can
+  // contain a quad-identity-valid plugin (plugin.json + .agent.toml +
+  // main-agent.md) whose TOML references skills/agents/commands/rules/hooks
+  // that never made it to disk — typically because PSS make-plugin was
+  // unavailable or the fallback minimal TOML was used without populating
+  // elements. Publishing such a shell yields a non-functional role-plugin.
+  //
+  // The publish endpoint MUST refuse to publish when the TOML references
+  // elements that are NOT present in their respective folders. Fail-fast,
+  // no fallback population. The Haephestos persona is the only thing that
+  // should build the elements; the publish endpoint just gates.
+
+  test('G2.5: rejects publish when [skills].primary references skills with no folder/SKILL.md on disk', async () => {
+    // Aim: a TOML that lists skills in [skills].primary but lacks the
+    // matching skills/<name>/SKILL.md must be rejected at publish time.
+    // This is the exact failure mode reported in issue #5.
+    const pluginName = 'skills-missing-agent'
+    const pluginDir = seedValidPluginInBuildDir(pluginName)
+
+    // Overwrite TOML to add 2 referenced skills, but DO NOT seed skill folders.
+    fsStore[join(pluginDir, `${pluginName}.agent.toml`)] =
+      `[agent]\n` +
+      `name = "${pluginName}"\n` +
+      `compatible-titles = ["AUTONOMOUS"]\n` +
+      `compatible-clients = ["claude-code"]\n` +
+      `\n[skills]\n` +
+      `primary = ["pytest-advanced", "vitest-testing"]\n` +
+      `secondary = []\n` +
+      `specialized = []\n`
+
+    const res = await POST(makePublishRequest(pluginDir))
+    expect(res.status).toBe(422)
+    const body = await res.json()
+    expect(body.issues).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/skill.*pytest-advanced/i),
+        expect.stringMatching(/skill.*vitest-testing/i),
+      ]),
+    )
+    // No copy / no marketplace mutation must happen on validation failure.
+    expect(cpSpy).not.toHaveBeenCalled()
+    expect(ensureMarketplaceSpy).not.toHaveBeenCalled()
+  })
+
+  test('G2.5: rejects publish when [agents].recommended references agents with no <name>.md on disk', async () => {
+    // Aim: missing referenced sub-agents must block publish. The role-plugin
+    // would otherwise install with sub-agents listed in its persona but
+    // unavailable when an agent actually tries to use them.
+    const pluginName = 'agents-missing-plugin'
+    const pluginDir = seedValidPluginInBuildDir(pluginName)
+
+    fsStore[join(pluginDir, `${pluginName}.agent.toml`)] =
+      `[agent]\n` +
+      `name = "${pluginName}"\n` +
+      `compatible-titles = ["AUTONOMOUS"]\n` +
+      `compatible-clients = ["claude-code"]\n` +
+      `\n[agents]\n` +
+      `recommended = ["unit-test-developer", "integration-test-developer"]\n`
+
+    const res = await POST(makePublishRequest(pluginDir))
+    expect(res.status).toBe(422)
+    const body = await res.json()
+    expect(body.issues).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/sub-agent.*unit-test-developer/i),
+        expect.stringMatching(/sub-agent.*integration-test-developer/i),
+      ]),
+    )
+    expect(cpSpy).not.toHaveBeenCalled()
+  })
+
+  test('G2.5: rejects publish when [commands].recommended references commands with no <name>.md on disk', async () => {
+    const pluginName = 'commands-missing-plugin'
+    const pluginDir = seedValidPluginInBuildDir(pluginName)
+
+    fsStore[join(pluginDir, `${pluginName}.agent.toml`)] =
+      `[agent]\n` +
+      `name = "${pluginName}"\n` +
+      `compatible-titles = ["AUTONOMOUS"]\n` +
+      `compatible-clients = ["claude-code"]\n` +
+      `\n[commands]\n` +
+      `recommended = ["tdd", "python-test"]\n`
+
+    const res = await POST(makePublishRequest(pluginDir))
+    expect(res.status).toBe(422)
+    const body = await res.json()
+    expect(body.issues).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/command.*tdd/),
+        expect.stringMatching(/command.*python-test/),
+      ]),
+    )
+    expect(cpSpy).not.toHaveBeenCalled()
+  })
+
+  test('G2.5: rejects publish when [rules].recommended references rules with no <name>.md on disk', async () => {
+    const pluginName = 'rules-missing-plugin'
+    const pluginDir = seedValidPluginInBuildDir(pluginName)
+
+    fsStore[join(pluginDir, `${pluginName}.agent.toml`)] =
+      `[agent]\n` +
+      `name = "${pluginName}"\n` +
+      `compatible-titles = ["AUTONOMOUS"]\n` +
+      `compatible-clients = ["claude-code"]\n` +
+      `\n[rules]\n` +
+      `recommended = ["tldr-cli", "debug-workflow"]\n`
+
+    const res = await POST(makePublishRequest(pluginDir))
+    expect(res.status).toBe(422)
+    const body = await res.json()
+    expect(body.issues).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/rule.*tldr-cli/),
+        expect.stringMatching(/rule.*debug-workflow/),
+      ]),
+    )
+    expect(cpSpy).not.toHaveBeenCalled()
+  })
+
+  test('G2.5: rejects publish when [hooks].recommended is non-empty but hooks/hooks.json is missing', async () => {
+    // Aim: a non-empty [hooks].recommended must have a corresponding
+    // hooks/hooks.json file at the plugin root. The hooks file is the
+    // single declaration point for all hook events; missing it makes the
+    // hook list a lie.
+    const pluginName = 'hooks-missing-plugin'
+    const pluginDir = seedValidPluginInBuildDir(pluginName)
+
+    fsStore[join(pluginDir, `${pluginName}.agent.toml`)] =
+      `[agent]\n` +
+      `name = "${pluginName}"\n` +
+      `compatible-titles = ["AUTONOMOUS"]\n` +
+      `compatible-clients = ["claude-code"]\n` +
+      `\n[hooks]\n` +
+      `recommended = ["session-start-hook"]\n`
+
+    const res = await POST(makePublishRequest(pluginDir))
+    expect(res.status).toBe(422)
+    const body = await res.json()
+    expect(body.issues).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/hooks\/hooks\.json/),
+      ]),
+    )
+    expect(cpSpy).not.toHaveBeenCalled()
+  })
+
+  test('G2.5: allows publish when TOML references match files on disk (full element population)', async () => {
+    // Aim: when the build dir contains all referenced elements (the
+    // post-PSS-make-plugin happy path), publish must succeed. This
+    // proves the new gate is not over-zealous.
+    const pluginName = 'fully-populated-plugin'
+    const pluginDir = seedValidPluginInBuildDir(pluginName)
+
+    fsStore[join(pluginDir, `${pluginName}.agent.toml`)] =
+      `[agent]\n` +
+      `name = "${pluginName}"\n` +
+      `compatible-titles = ["AUTONOMOUS"]\n` +
+      `compatible-clients = ["claude-code"]\n` +
+      `\n[skills]\n` +
+      `primary = ["pytest-advanced"]\n` +
+      `secondary = ["python-testing-patterns"]\n` +
+      `specialized = []\n` +
+      `\n[agents]\n` +
+      `recommended = ["unit-test-developer"]\n` +
+      `\n[commands]\n` +
+      `recommended = ["tdd"]\n` +
+      `\n[rules]\n` +
+      `recommended = ["tldr-cli"]\n` +
+      `\n[hooks]\n` +
+      `recommended = ["session-start-hook"]\n`
+
+    // Seed all referenced elements with the expected layout.
+    fsStore[join(pluginDir, 'skills', 'pytest-advanced', 'SKILL.md')] = '# pytest-advanced'
+    fsStore[join(pluginDir, 'skills', 'python-testing-patterns', 'SKILL.md')] = '# python-testing-patterns'
+    fsStore[join(pluginDir, 'agents', 'unit-test-developer.md')] = '---\nname: unit-test-developer\n---'
+    fsStore[join(pluginDir, 'commands', 'tdd.md')] = '# /tdd'
+    fsStore[join(pluginDir, 'rules', 'tldr-cli.md')] = '# tldr-cli rule'
+    fsStore[join(pluginDir, 'hooks', 'hooks.json')] = '{"hooks": {}}'
+
+    const res = await POST(makePublishRequest(pluginDir))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.success).toBe(true)
+    expect(cpSpy).toHaveBeenCalledTimes(1)
+  })
+
+  test('G2.5: allows publish when TOML has empty recommended lists (no skills/rules/etc. needed)', async () => {
+    // Aim: a TOML with empty [skills].primary, empty [rules].recommended,
+    // etc., does NOT need element folders. The gate must only check
+    // references that are actually declared. This is the "minimal
+    // role-plugin" use case — perfectly valid.
+    const pluginName = 'minimal-plugin'
+    const pluginDir = seedValidPluginInBuildDir(pluginName)
+
+    fsStore[join(pluginDir, `${pluginName}.agent.toml`)] =
+      `[agent]\n` +
+      `name = "${pluginName}"\n` +
+      `compatible-titles = ["AUTONOMOUS"]\n` +
+      `compatible-clients = ["claude-code"]\n` +
+      `\n[skills]\n` +
+      `primary = []\n` +
+      `secondary = []\n` +
+      `specialized = []\n` +
+      `\n[agents]\n` +
+      `recommended = []\n` +
+      `\n[commands]\n` +
+      `recommended = []\n` +
+      `\n[rules]\n` +
+      `recommended = []\n` +
+      `\n[hooks]\n` +
+      `recommended = []\n`
+
+    const res = await POST(makePublishRequest(pluginDir))
+    expect(res.status).toBe(200)
+  })
+
+  test('G2.5: reports ALL missing references in one response (no early bail-out on first miss)', async () => {
+    // Aim: when multiple element types are missing, the response lists
+    // every issue so the caller (Haephestos persona or `/aim-publish-plugin`)
+    // can show them all at once instead of trickling them out one publish
+    // attempt at a time. This is also how the existing G2 quad-identity
+    // gate behaves — keep behavior consistent.
+    const pluginName = 'multi-missing-plugin'
+    const pluginDir = seedValidPluginInBuildDir(pluginName)
+
+    fsStore[join(pluginDir, `${pluginName}.agent.toml`)] =
+      `[agent]\n` +
+      `name = "${pluginName}"\n` +
+      `compatible-titles = ["AUTONOMOUS"]\n` +
+      `compatible-clients = ["claude-code"]\n` +
+      `\n[skills]\n` +
+      `primary = ["missing-skill"]\n` +
+      `\n[agents]\n` +
+      `recommended = ["missing-agent"]\n` +
+      `\n[commands]\n` +
+      `recommended = ["missing-command"]\n` +
+      `\n[rules]\n` +
+      `recommended = ["missing-rule"]\n`
+
+    const res = await POST(makePublishRequest(pluginDir))
+    expect(res.status).toBe(422)
+    const body = await res.json()
+    expect(body.issues.length).toBeGreaterThanOrEqual(4)
+    expect(body.issues).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/skill.*missing-skill/i),
+        expect.stringMatching(/sub-agent.*missing-agent/i),
+        expect.stringMatching(/command.*missing-command/i),
+        expect.stringMatching(/rule.*missing-rule/i),
+      ]),
+    )
+  })
 })

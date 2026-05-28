@@ -1672,37 +1672,49 @@ The best features from both should be combined into `services/cross-client-skill
 
 Additionally, **https://github.com/REPOZY/Hookbridge** — Universal hook compiler from YAML to Claude Code and Codex native formats. Handles the hook format differences (26 Claude events vs 5 Codex events, 4 hook types vs 1). Provides loss reports and shim mechanism for approximated features. Our `UniversalPluginIR` extends this pattern to all component types.
 
-### Model Mapping Reference (2026-04)
+### Model Mapping Reference (2026-05)
 
 Cross-client model conversion is in `lib/converter/rewrite/model.ts`.
 
+**Family-based, version-proof.** Claude ships frontier models faster than a
+static table can track — Opus went 4.6 → 4.7 → 4.8 inside one month (Claude
+Code 2.1.142 → 2.1.154, Opus 4.8 GA on 2026-05-28). So the **Claude → X**
+direction is keyed by *family alias* (`opus`/`sonnet`/`haiku`) and any concrete
+id is normalized to its family before lookup via `claudeFamily()`:
+`claude-opus-4-8`, the 1M variant `claude-opus-4-8[1m]`, and a hypothetical
+`claude-opus-5` all collapse to `opus`. New Claude releases need **no edit** to
+the table. The reverse (**X → Claude**) emits the family *alias*, never a pinned
+version, so a converted agent always resolves to the current Claude model.
+
 **Claude → Codex** (source: https://developers.openai.com/codex/models):
 
-| Claude Model | Codex Model | Notes |
+| Claude family (any version, incl. `[1m]`) | Codex Model | Notes |
 |-------------|-------------|-------|
-| opus / claude-opus-4-6 | `gpt-5.4` | Flagship frontier model |
-| sonnet / claude-sonnet-4-6 | `gpt-5.3-codex` | Industry-leading coding model |
-| haiku / claude-haiku-4-5 | `gpt-5.4-mini` | Fast, efficient for subagents |
+| `opus` | `gpt-5.4` | Flagship frontier model |
+| `sonnet` | `gpt-5.3-codex` | Industry-leading coding model |
+| `haiku` | `gpt-5.4-mini` | Fast, efficient for subagents |
 
-**Codex → Claude** (reverse):
+**Codex → Claude** (reverse — emits the alias, which tracks the latest model):
 
-| Codex Model | Claude Model |
+| Codex Model | Claude alias |
 |-------------|-------------|
-| `gpt-5.4` | claude-opus-4-6 |
-| `gpt-5.4-mini` | claude-haiku-4-5 |
-| `gpt-5.3-codex` | claude-sonnet-4-6 |
-| `gpt-5.3-codex-spark` | claude-sonnet-4-6 |
-| `gpt-5.2` | claude-sonnet-4 |
-| `o3` | claude-opus-4-6 |
-| `o3-mini` | claude-sonnet-4-6 |
+| `gpt-5.4` | `opus` |
+| `gpt-5.4-mini` | `haiku` |
+| `gpt-5.3-codex` | `sonnet` |
+| `gpt-5.3-codex-spark` | `sonnet` |
+| `gpt-5.2` | `sonnet` |
+| `o3` | `opus` |
+| `o3-mini` | `sonnet` |
 
 **Claude → Gemini**:
 
-| Claude Model | Gemini Model |
+| Claude family | Gemini Model |
 |-------------|-------------|
-| sonnet | gemini-2-flash |
-| haiku | gemini-3-flash |
-| opus | gemini-2-pro |
+| `opus` | gemini-2-pro |
+| `sonnet` | gemini-2-flash |
+| `haiku` | gemini-3-flash |
+
+Tests: `tests/unit/converter-model-mapping.test.ts` (14 cases incl. Opus 4.8 `[1m]`, future `claude-opus-5`, round-trip stability).
 
 ### Universal Plugin IR Architecture
 

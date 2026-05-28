@@ -24,15 +24,21 @@ import { WarningCollector } from '../utils/warnings'
  *   (see `claudeFamily`). New Claude releases need no edit here.
  * - X→Claude emits the family *alias*, not a pinned version, so a converted
  *   agent always resolves to the current Claude model instead of a frozen
- *   one. Round-trips (alias → target → alias) are stable.
+ *   one. Round-trips (alias → target → alias) are stable. A Codex id the
+ *   curated table doesn't list yet falls back to a Claude alias *by tier*
+ *   (see `codexTier`), so a new `gpt-5.x` frontier model never passes
+ *   through as an invalid Claude id — the same staleness trap the Claude
+ *   side avoids via `claudeFamily`.
  *
- * Codex models: gpt-5.4, gpt-5.4-mini, gpt-5.3-codex, gpt-5.2
+ * Codex models (verified 2026-05-28): gpt-5.5 (newest frontier — the
+ * recommended default), gpt-5.4, gpt-5.4-mini, gpt-5.3-codex,
+ * gpt-5.3-codex-spark, gpt-5.2 (legacy).
  * Source: https://developers.openai.com/codex/models
  */
 
 /** Claude family alias → Codex model (flagship / coding / efficient tiers). */
 const CLAUDE_TO_CODEX: Record<string, string> = {
-  opus: 'gpt-5.4',
+  opus: 'gpt-5.5',
   sonnet: 'gpt-5.3-codex',
   haiku: 'gpt-5.4-mini',
 }
@@ -46,6 +52,7 @@ const CLAUDE_TO_GEMINI: Record<string, string> = {
 
 /** Codex → Claude family alias (alias, never a pinned version — see header). */
 const CODEX_TO_CLAUDE: Record<string, string> = {
+  'gpt-5.5': 'opus',
   'gpt-5.4': 'opus',
   'gpt-5.4-mini': 'haiku',
   'gpt-5.3-codex': 'sonnet',
@@ -77,6 +84,24 @@ function claudeFamily(model: string): 'opus' | 'sonnet' | 'haiku' | null {
   return null
 }
 
+/**
+ * Tier fallback for a Codex `gpt-5.x` id that CODEX_TO_CLAUDE doesn't list
+ * yet (a freshly-released frontier model). Curated/legacy ids — including
+ * the deliberate `gpt-5.2 → sonnet` downgrade — are matched by the table
+ * FIRST; this only catches ids the table misses, so it never overrides a
+ * curated capability judgment.
+ *   - `*-mini`  → haiku   (efficient tier)
+ *   - `*-codex` → sonnet  (coding tier)
+ *   - bare `gpt-5.x` → opus (frontier tier: gpt-5.5, future gpt-5.6, ...)
+ * Returns null for non-`gpt-5` ids (caller passes through unchanged).
+ */
+function codexTier(model: string): 'opus' | 'sonnet' | 'haiku' | null {
+  if (!model.startsWith('gpt-5')) return null
+  if (model.endsWith('-mini')) return 'haiku'
+  if (model.includes('-codex')) return 'sonnet'
+  return 'opus'
+}
+
 /** Get the mapping table for a source→target pair */
 function getMappingTable(source: string, target: string): Record<string, string> | null {
   if (source === 'claude-code' && target === 'codex') return CLAUDE_TO_CODEX
@@ -98,8 +123,16 @@ export function mapModel(model: string, source: Provider, target: Provider): str
     const family = claudeFamily(model)
     return family ? (table[family] ?? model) : model
   }
-  // X→Claude (and any other pair): exact match, pass through if unmapped.
-  return table[model] ?? model
+  // X→Claude (and any other pair): curated exact match first.
+  const exact = table[model]
+  if (exact) return exact
+  // Codex→Claude: a future / unlisted gpt-5.x id resolves to a Claude alias
+  // by tier rather than passing an invalid id through (see codexTier).
+  if (source.id === 'codex' && target.id === 'claude-code') {
+    const tier = codexTier(model)
+    if (tier) return tier
+  }
+  return model
 }
 
 /** Apply model mapping to all agents. Returns new array (no mutation). */

@@ -1686,11 +1686,11 @@ id is normalized to its family before lookup via `claudeFamily()`:
 the table. The reverse (**X → Claude**) emits the family *alias*, never a pinned
 version, so a converted agent always resolves to the current Claude model.
 
-**Claude → Codex** (source: https://developers.openai.com/codex/models):
+**Claude → Codex** (Codex lineup verified 2026-05-28 against https://developers.openai.com/codex/models):
 
 | Claude family (any version, incl. `[1m]`) | Codex Model | Notes |
 |-------------|-------------|-------|
-| `opus` | `gpt-5.4` | Flagship frontier model |
+| `opus` | `gpt-5.5` | Newest Codex frontier model (the recommended default) |
 | `sonnet` | `gpt-5.3-codex` | Industry-leading coding model |
 | `haiku` | `gpt-5.4-mini` | Fast, efficient for subagents |
 
@@ -1698,13 +1698,16 @@ version, so a converted agent always resolves to the current Claude model.
 
 | Codex Model | Claude alias |
 |-------------|-------------|
+| `gpt-5.5` | `opus` |
 | `gpt-5.4` | `opus` |
 | `gpt-5.4-mini` | `haiku` |
 | `gpt-5.3-codex` | `sonnet` |
 | `gpt-5.3-codex-spark` | `sonnet` |
-| `gpt-5.2` | `sonnet` |
+| `gpt-5.2` | `sonnet` (curated legacy downgrade) |
 | `o3` | `opus` |
 | `o3-mini` | `sonnet` |
+
+A Codex `gpt-5.x` id the table doesn't list yet (a freshly-released frontier model) falls back **by tier** via `codexTier()` — `*-mini`→`haiku`, `*-codex`→`sonnet`, bare `gpt-5.x`→`opus` — so a new model never emits an invalid Claude id. The curated table always wins first (e.g. `gpt-5.2`→`sonnet` is preserved despite its bare-frontier shape).
 
 **Claude → Gemini**:
 

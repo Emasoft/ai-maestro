@@ -3,7 +3,7 @@ trdd-id: 1657a5f4-c54b-4e4b-95da-12f9aa149937
 title: Chat-history browser redesign — comic-bubble timeline, parallel lifelines, token economics, context-panel + PSS lifeline, Tailwind migration
 status: not-started
 created: 2026-05-29T23:41:37+0200
-updated: 2026-05-29T23:41:37+0200
+updated: 2026-05-30T00:36:36+0200
 ---
 
 # TRDD-1657a5f4 — Chat-history browser redesign
@@ -102,7 +102,8 @@ Fix the bugs that make the current data wrong, so everything built on top is tru
 - Prominent, always-visible timestamps.
 - **Derived:** event taxonomy/classifier (2c); ruler virtualization for long sessions.
 
-### Phase 6 — Parallel multi-column lifelines (the heaviest sub-project)
+### Phase 6 — Parallel multi-column lifelines (the heaviest sub-project) — DEFERRED
+**DECISION (2026-05-30): split to its own follow-up TRDD/PR.** This build ships Phases 1-5 + 7-8 (most of the value); the parallel multi-column lifeline view is authored + built separately so the first PR stays reviewable and token-bounded. The §2c server lane/manifest model + the Phase-1 `tsMs` addition are the groundwork the future TRDD will consume.
 - Multi-column lane view of main + all forked subagents on one absolute time axis (leverage the ~90%-built server lane/manifest/global-order model, 2c).
 - Aggregation for 100+ lanes (thin columns, bucketing, expand/collapse one-by-one, virtualization); **no event dropped**.
 - **Derived:** lane↔subagent-jsonl linking via `agent-<id>` + `parentToolUseID`; performance test with a synthetic 100-lane fixture. **This phase may warrant its own follow-up TRDD** given its size.
@@ -128,12 +129,13 @@ Fix the bugs that make the current data wrong, so everything built on top is tru
 
 ---
 
-## 5. Decisions needed from the user (genuine forks)
+## 5. Decisions (RESOLVED 2026-05-30)
 
-1. **PDF export approach** — client-side (print-to-PDF via the browser / a JS lib like `pdf-lib`/`jsPDF`) vs server-side (headless render). Affects dependencies + fidelity. (Markdown export is trivial either way.)
-2. **Parallel-timeline scope now vs later** — Phase 6 is a large sub-project. Build it fully in this effort, or ship Phases 1-5+7-8 first and split Phase 6 into its own TRDD/PR? (Recommendation: split — it's independently large and the rest delivers most of the value.)
-3. **Live-tail behavior** — confirm the fix direction for C1: gate to `isOngoing` + explicit "follow tail" toggle (my recommendation), vs WebSocket push, vs remove entirely (pure historical browser).
-4. **PSS dependency posture** — confirm: build Phase 7's PSS integration to **degrade gracefully now** (sparse data) and improve as PSS#10 lands, rather than blocking. (Recommendation: yes.)
+1. **PDF export approach → CLIENT-SIDE print-to-PDF.** Render a print-styled view + browser print/save-to-PDF (light lib only if needed); no server/browser dependency; high fidelity to on-screen styling. Markdown export alongside. (Phase 8.)
+2. **Parallel-timeline scope → SPLIT to its own TRDD/PR.** This build = Phases 1-5 + 7-8. Phase 6 deferred (see §3 Phase 6).
+3. **Live-tail behavior → gate to `isOngoing` + explicit "follow tail" toggle** (self-decided, my recommendation; can be revisited in Phase 1). Removes the unconditional 2s poll (audit C1/C2/C3).
+4. **PSS dependency posture → degrade gracefully now**, improve as PSS#10 lands. Phase 7 PSS integration must not block the redesign. (self-decided.)
+5. **Sequencing → COMPACT FIRST, then build.** Auto-compact is broken in this session; the build launches from a fresh/compacted context, resuming from this TRDD.
 
 ## 6. Dependencies / blockers
 - **PSS#10** (lifeline engine fixes) — soft blocker for full Phase 7 PSS fidelity; graceful degradation unblocks the rest.
@@ -151,4 +153,6 @@ Fix the bugs that make the current data wrong, so everything built on top is tru
 - Mobile/touch parity; Markdown + PDF interval export.
 
 ## 8. Status / next action
-`not-started`. **Awaiting user go on the build workflow** + the §5 decisions. Investigations complete and persisted; PSS#10 filed. No source modified yet (plan-and-build separated per project rules + owner-PR-rejection risk).
+`not-started`. §5 decisions RESOLVED. Investigations complete + persisted; PSS#10 filed; no source modified.
+
+**NEXT ACTION (on resume after the user compacts / starts a fresh session):** launch the build Workflow for **Phases 1-5 + 7-8** (Phase 6 deferred to its own TRDD). Build agents use this TRDD's §2 findings as their briefs (eval-and-fix in one pass — do NOT re-discover). Worktree isolation for parallel code agents; per-phase verify (`yarn build` + `yarn tsc --noEmit` + targeted tests); no PR until bug-free + convention-clean. Start at Phase 1 (data-layer correctness) which everything else builds on.

@@ -11,8 +11,11 @@ import { describe, it, expect } from 'vitest'
 
 import {
   normalizeLine as normalizeLineRaw,
+  normalizeLines,
+  lineIndexToArrayPos,
   sumUsage,
 } from '@/components/agent-profile/sessions/useJsonlSession'
+import type { TranscriptLine } from '@/types/sessions-browser'
 
 /**
  * `normalizeLine` returns null for metadata-only records (custom-title,
@@ -297,5 +300,243 @@ describe('normalizeLine — metadata filter (returns null)', () => {
       { type: 'system', content: 'compaction triggered' },
       0,
     )).not.toBeNull()
+  })
+
+  // The ~28 new top-level record types from Claude Code 2.1.142+ (IN-1
+  // schema-evolution audit). Without these in HIDDEN_RECORD_TYPES they
+  // render as empty rows — the exact clutter the set exists to suppress.
+  it.each([
+    'hook_success',
+    'hook_additional_context',
+    'hook_non_blocking_error',
+    'hook_cancelled',
+    'queue-operation',
+    'queued_command',
+    'task_reminder',
+    'task_status',
+    'mode',
+    'tool_reference',
+    'skill_listing',
+    'invoked_skills',
+    'deferred_tools_delta',
+    'mcp_instructions_delta',
+    'command_permissions',
+    'compact_file_reference',
+    'file',
+    'create',
+    'update',
+    'edited_text_file',
+    'date_change',
+    'diagnostics',
+    'error',
+    'authentication_error',
+    'overloaded_error',
+  ])('hides new 2.1.142+ noise type=%s', (type) => {
+    expect(normalizeLineRaw({ type, sessionId: 's-1' }, 0)).toBeNull()
+  })
+})
+
+describe('normalizeLine — thinking extraction (concern 3)', () => {
+  it('captures reasoning from a thinking block (block.thinking, not block.text)', () => {
+    const line = normalizeLine(
+      {
+        role: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'let me reason about this', signature: 'Ep==' },
+            { type: 'text', text: 'the answer is 42' },
+          ],
+        },
+      },
+      0,
+    )
+    expect(line.thinkingText).toBe('let me reason about this')
+    // Reasoning must NOT leak into the visible message body.
+    expect(line.text).toBe('the answer is 42')
+  })
+
+  it('joins multiple thinking blocks with blank lines', () => {
+    const line = normalizeLine(
+      {
+        role: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'step one' },
+            { type: 'thinking', thinking: 'step two' },
+            { type: 'text', text: 'done' },
+          ],
+        },
+      },
+      0,
+    )
+    expect(line.thinkingText).toBe('step one\n\nstep two')
+  })
+
+  it('counts redacted_thinking blocks and leaves thinkingText undefined when only redacted', () => {
+    const line = normalizeLine(
+      {
+        role: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'redacted_thinking' },
+            { type: 'redacted_thinking' },
+            { type: 'text', text: 'visible' },
+          ],
+        },
+      },
+      0,
+    )
+    expect(line.redactedThinkingCount).toBe(2)
+    expect(line.thinkingText).toBeUndefined()
+    expect(line.text).toBe('visible')
+  })
+
+  it('leaves both thinking fields undefined for a plain text turn', () => {
+    const line = normalizeLine(
+      { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
+      0,
+    )
+    expect(line.thinkingText).toBeUndefined()
+    expect(line.redactedThinkingCount).toBeUndefined()
+  })
+
+  it('keeps tool_use handling intact alongside thinking blocks', () => {
+    const line = normalizeLine(
+      {
+        role: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'I should grep' },
+            { type: 'tool_use', id: 'tool-9', name: 'Grep', input: { pattern: 'x' } },
+          ],
+        },
+      },
+      0,
+    )
+    expect(line.thinkingText).toBe('I should grep')
+    expect(line.isToolEvent).toBe(true)
+    expect(line.toolName).toBe('Grep')
+    expect(line.toolUseId).toBe('tool-9')
+  })
+})
+
+describe('normalizeLine — tsMs (concern 5)', () => {
+  it('parses an ISO timestamp into epoch ms', () => {
+    const line = normalizeLine(
+      { role: 'user', content: 'hi', timestamp: '2026-04-20T12:34:56.000Z' },
+      0,
+    )
+    expect(line.tsMs).toBe(Date.parse('2026-04-20T12:34:56.000Z'))
+    expect(Number.isFinite(line.tsMs)).toBe(true)
+  })
+
+  it('falls back to the provided previous tsMs when timestamp is absent', () => {
+    // Call the raw export directly — the local non-null wrapper only forwards
+    // two args, so the prevTsMs param must be exercised against normalizeLineRaw.
+    const line = normalizeLineRaw({ role: 'user', content: 'no ts' }, 5, 1_700_000_000_000)
+    expect(line?.tsMs).toBe(1_700_000_000_000)
+  })
+
+  it('falls back to 0 when timestamp is absent and no previous tsMs is provided', () => {
+    const line = normalizeLine({ role: 'user', content: 'no ts' }, 0)
+    expect(line.tsMs).toBe(0)
+  })
+
+  it('never produces NaN for an unparseable timestamp string', () => {
+    const line = normalizeLineRaw({ role: 'user', timestamp: 'not-a-date' }, 0, 42)
+    expect(line).not.toBeNull()
+    expect(Number.isNaN(line!.tsMs)).toBe(false)
+    expect(line!.tsMs).toBe(42)
+  })
+})
+
+describe('normalizeLines — batch carry-forward + offset (concerns 4 & 5)', () => {
+  it('assigns absolute file offsets (fromOffset + i) and drops metadata rows', () => {
+    const raws = [
+      { role: 'user', content: 'first' }, // offset 10
+      { type: 'attachment' }, // offset 11 — filtered
+      { role: 'assistant', content: 'second' }, // offset 12
+    ]
+    const lines = normalizeLines(raws, 10)
+    expect(lines.map(l => l.lineIndex)).toEqual([10, 12])
+    expect(lines.map(l => l.text)).toEqual(['first', 'second'])
+  })
+
+  it('carries tsMs forward across timestamp-less rows within a batch', () => {
+    const t0 = '2026-04-20T00:00:00.000Z'
+    const raws = [
+      { role: 'user', content: 'a', timestamp: t0 },
+      { role: 'assistant', content: 'b' }, // no ts → inherits a's tsMs
+      { role: 'user', content: 'c' }, // no ts → still inherits a's tsMs
+    ]
+    const lines = normalizeLines(raws, 0)
+    expect(lines[0].tsMs).toBe(Date.parse(t0))
+    expect(lines[1].tsMs).toBe(Date.parse(t0))
+    expect(lines[2].tsMs).toBe(Date.parse(t0))
+  })
+
+  it('seeds carry-forward from the prior page (seedTsMs)', () => {
+    const lines = normalizeLines([{ role: 'user', content: 'page2 row, no ts' }], 100, 999)
+    expect(lines[0].tsMs).toBe(999)
+  })
+})
+
+describe('lineIndexToArrayPos — scroll-to-match mapping (concern 4)', () => {
+  // Build a filtered `lines` array whose lineIndex values SKIP the offsets of
+  // metadata records that normalizeLine dropped. This is exactly the shape the
+  // renderer holds: array positions are dense, lineIndex values are sparse.
+  function lineAt(lineIndex: number): TranscriptLine {
+    return {
+      lineIndex,
+      role: 'user',
+      text: `line ${lineIndex}`,
+      tsMs: 0,
+      isToolEvent: false,
+      raw: {},
+    }
+  }
+  // Offsets 0,1,2 were filtered out (metadata); rendered lines start at 3.
+  const lines = [lineAt(3), lineAt(5), lineAt(8), lineAt(13)]
+
+  it('maps an exact raw offset to its array position', () => {
+    expect(lineIndexToArrayPos(lines, 3)).toBe(0)
+    expect(lineIndexToArrayPos(lines, 5)).toBe(1)
+    expect(lineIndexToArrayPos(lines, 8)).toBe(2)
+    expect(lineIndexToArrayPos(lines, 13)).toBe(3)
+  })
+
+  it('maps an offset belonging to a FILTERED record to the nearest visible row before it', () => {
+    // offset 6,7 were filtered (between 5 and 8) → land on position of line 5.
+    expect(lineIndexToArrayPos(lines, 6)).toBe(1)
+    expect(lineIndexToArrayPos(lines, 7)).toBe(1)
+    // offset 9..12 filtered (between 8 and 13) → land on position of line 8.
+    expect(lineIndexToArrayPos(lines, 12)).toBe(2)
+  })
+
+  it('returns 0 when the target precedes every loaded line', () => {
+    // offsets 0..2 (leading metadata) precede the first rendered line (3).
+    expect(lineIndexToArrayPos(lines, 0)).toBe(0)
+    expect(lineIndexToArrayPos(lines, 2)).toBe(0)
+  })
+
+  it('clamps an offset past the loaded window to the last position', () => {
+    expect(lineIndexToArrayPos(lines, 99)).toBe(3)
+  })
+
+  it('returns -1 (not-found sentinel) for an empty list', () => {
+    expect(lineIndexToArrayPos([], 5)).toBe(-1)
+  })
+
+  it('regression: a match at a real offset lands on the correct row when leading metadata was filtered', () => {
+    // The C4 bug: indexing offsets[] (array-position-keyed) with the raw
+    // lineIndex scrolled to the wrong row. Here the match is at file offset 8;
+    // its correct ARRAY position is 2, NOT 8. Proves the translation.
+    const matchLineIndex = 8
+    expect(lineIndexToArrayPos(lines, matchLineIndex)).toBe(2)
+    expect(lineIndexToArrayPos(lines, matchLineIndex)).not.toBe(matchLineIndex)
   })
 })

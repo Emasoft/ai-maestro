@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react'
-import { useJsonlSession, sumUsage } from './sessions/useJsonlSession'
+import { useJsonlSession, sumUsage, lineIndexToArrayPos } from './sessions/useJsonlSession'
 import type { ChatTranscriptHandle } from './sessions/ChatTranscript'
 import ChatTranscript from './sessions/ChatTranscript'
 import SessionList from './sessions/SessionList'
@@ -40,12 +40,26 @@ export default function SessionsTab({ agentId, assistantAvatarUrl = null }: Sess
 
   const transcriptRef = useRef<ChatTranscriptHandle | null>(null)
 
+  // Latest rendered lines, read by the scroll-to-match effect WITHOUT being a
+  // dependency of it — so that effect still fires only when the match changes,
+  // not on every incremental line append (preserving the original behaviour).
+  const linesRef = useRef(api.lines)
+  useEffect(() => {
+    linesRef.current = api.lines
+  }, [api.lines])
+
   // Scroll to the current match whenever the match index (or match set) changes.
   useEffect(() => {
     if (api.matchIndex === null || api.matches.length === 0) return
     const match = api.matches[api.matchIndex]
     if (!match) return
-    transcriptRef.current?.scrollToLine(match.line)
+    // `match.line` is the RAW jsonl line offset; ChatTranscript.scrollToLine
+    // indexes its per-row `offsets[]` by ARRAY position. Filtered-out metadata
+    // records make the two diverge (a match in a session with hidden records
+    // would scroll to the wrong row, or — when lineIndex >= lines.length —
+    // nowhere). Translate once, here, before scrolling. The helper is exported
+    // + unit-tested in useJsonlSession. (TRDD-1657a5f4 Phase 1 — C4.)
+    transcriptRef.current?.scrollToLine(lineIndexToArrayPos(linesRef.current, match.line))
   }, [api.matchIndex, api.matches])
 
   const totalUsage = useMemo(() => (api.lines.length > 0 ? sumUsage(api.lines) : null), [api.lines])

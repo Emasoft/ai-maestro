@@ -35,6 +35,7 @@ import { promises as fs } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import { getLatestInventoryAtOrBefore, type InventorySnapshot, type LedgerElement } from '@/services/element-inventory-ledger'
+import { contextLimitForModel, DEFAULT_CONTEXT_LIMIT } from '@/lib/context-limits'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -90,7 +91,7 @@ export interface LocalContextBreakdown {
   freeSpace: number
   /** Sum of every consumed bucket. */
   total: number
-  /** Window size for the model, e.g. 1_000_000 for Opus 4.7. */
+  /** Window size for the model: 200_000 default, 1_000_000 for `[1m]` variants. */
   modelContextLimit: number
   /** Whether we used char/4 estimation anywhere. Always true. */
   approximate: boolean
@@ -837,20 +838,10 @@ function numberOrZero(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : 0
 }
 
-// ---------------------------------------------------------------------------
-// Model context-limit lookup (mirrors Rust's table)
-// ---------------------------------------------------------------------------
-
-const DEFAULT_LIMIT = 200_000
-
-function contextLimitForModel(modelId: string | null): number {
-  if (!modelId) return DEFAULT_LIMIT
-  const m = modelId.toLowerCase()
-  if (m.startsWith('claude-opus-4')) return 1_000_000
-  if (m.startsWith('claude-sonnet-4')) return 200_000
-  if (m.startsWith('claude-haiku-4')) return 200_000
-  return DEFAULT_LIMIT
-}
+// Model context-limit lookup lives in `@/lib/context-limits` — the single
+// TS source of truth (kept in sync with the Rust reader's
+// `context_limit_for_model`). `contextLimitForModel` + `DEFAULT_CONTEXT_LIMIT`
+// are imported at the top of this file. A `null` model id maps to the default.
 
 // ---------------------------------------------------------------------------
 // /context snapshot parser — when Claude itself ran the slash command
@@ -993,7 +984,14 @@ function parseContextFields(text: string): {
   const skills = grab('Skills')
   const messages = grab('Messages')
   const freeSpace = grab('Free space')
-  const autocompactBuffer = grab('Autocompact buffer')
+  // Modern Claude Code REMOVED the "Autocompact buffer" line from
+  // `/context` output, so `grab` returns null for every current session.
+  // Treating that as a hard requirement silently dropped the WHOLE
+  // recorded snapshot (the regression this fix repairs). When the line is
+  // absent we fall back to the published constant the buffer holds at
+  // (CLAUDE_CODE_AUTOCOMPACT_BUFFER_TOKENS); when it IS present (legacy
+  // snapshots) we keep the captured value verbatim — backward compatible.
+  const autocompactBuffer = grab('Autocompact buffer') ?? CLAUDE_CODE_AUTOCOMPACT_BUFFER_TOKENS
 
   // Total + model context window come from the header line:
   //   "91.6k/1m tokens (9%)"
@@ -1007,6 +1005,9 @@ function parseContextFields(text: string): {
   const modelMatch = /\b(claude-(?:opus|sonnet|haiku)-[\d-]+(?:-[a-z0-9]+)?)/i.exec(text)
   const modelId = modelMatch ? (modelMatch[1] ?? null) : null
 
+  // NOTE: `autocompactBuffer` is intentionally NOT in this guard — it now
+  // always resolves to a number (captured value or constant fallback
+  // above), so the missing-line case no longer drops the snapshot.
   if (
     systemPrompt === null
     || customAgents === null
@@ -1014,7 +1015,6 @@ function parseContextFields(text: string): {
     || skills === null
     || messages === null
     || freeSpace === null
-    || autocompactBuffer === null
     || total === null
     || modelContextLimit === null
   ) {
@@ -1120,7 +1120,9 @@ export async function computeLocalContextBreakdown(
       + summary.latestApiUsage.cacheReadTokens
     : bucketSum
 
-  const modelContextLimit = contextLimitForModel(summary.modelId)
+  const modelContextLimit = summary.modelId
+    ? contextLimitForModel(summary.modelId)
+    : DEFAULT_CONTEXT_LIMIT
   // Free space = model limit - actualUsage - reservedBuffer. We use
   // `bucketSum` here (not `total`) because that's the per-category
   // breakdown the user is actually looking at; the API total is shown

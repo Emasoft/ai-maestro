@@ -1229,9 +1229,24 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
       setSearchError(null)
       return
     }
+    // Same load-before-list guard as the transcript initial-load and breakdown
+    // effects: defer the search until the session's path is resolved while the
+    // list is still loading. Firing now would send the search WITHOUT `?path=`,
+    // so the API falls back to the per-worker `sidToPath` cache (unreliable
+    // across Next.js dev workers) and 404s with
+    // `search_failed:404:session_not_found` — the SCEN-027 BUG-001
+    // URL-direct-selection race the rest of the hook guards against. Both
+    // `selectedSessionPath` and `listLoading` are in the dep array, so the
+    // effect re-fires exactly once when the URL-direct-selected session's
+    // summary finally arrives (path resolved) and the search then runs with the
+    // correct `?path=`. The exception path (list finished, path still
+    // undefined → genuinely-missing session) is allowed through so the user
+    // sees a real error instead of a stuck spinner.
+    if (selectedSessionPath === undefined && listLoading) return
+    // Resolve the path from the SINGLE memoized source (not a raw ref lookup),
+    // so the guard above and the path we send are derived from the same value.
+    const sessionPath = selectedSessionPath
     searchTimerRef.current = setTimeout(() => {
-      const summary = sessionsRef.current.find(s => s.id === selectedSessionId)
-      const sessionPath = summary?.path
       const ctrl = new AbortController()
       searchCtrlRef.current = ctrl
       setSearching(true)
@@ -1255,7 +1270,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     return () => {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
     }
-  }, [selectedSessionId, query])
+  }, [selectedSessionId, query, selectedSessionPath, listLoading])
 
   const setQuery = useCallback((q: string) => setQueryRaw(q), [])
 

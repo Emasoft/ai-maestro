@@ -64,6 +64,23 @@ export default function SessionsTab({ agentId, assistantAvatarUrl = null }: Sess
   const totalUsage = useMemo(() => (api.lines.length > 0 ? sumUsage(api.lines) : null), [api.lines])
   const currentMatchLine = api.matchIndex !== null ? api.matches[api.matchIndex]?.line ?? null : null
 
+  // Conversation time the PSS component-lifeline resolves "what was loaded
+  // then" against. When the breakdown is pinned to a line, use THAT line's
+  // tsMs (resolved via the same raw-lineIndex→array-pos mapping the
+  // scroll-to-match path uses, since pinnedLineIndex is a raw jsonl offset);
+  // otherwise use the latest rendered line's tsMs ("now" of the conversation).
+  // null until we have at least one line. tsMs is always a finite epoch-ms.
+  const lifelineAtMs = useMemo<number | null>(() => {
+    const lines = api.lines
+    if (lines.length === 0) return null
+    if (api.pinnedLineIndex !== null) {
+      const pos = lineIndexToArrayPos(lines, api.pinnedLineIndex)
+      const line = pos >= 0 ? lines[pos] : null
+      if (line) return line.tsMs
+    }
+    return lines[lines.length - 1].tsMs
+  }, [api.lines, api.pinnedLineIndex])
+
   // Empty-state wiring: when the list has finished loading and is empty.
   const showAgentEmptyState =
     !!agentId && !api.listLoading && !api.listError && api.sessions.length === 0 && !api.selectedSessionId
@@ -168,6 +185,8 @@ export default function SessionsTab({ agentId, assistantAvatarUrl = null }: Sess
         breakdown={api.breakdown}
         loading={api.breakdownLoading}
         error={api.breakdownError}
+        projectDir={api.projectDir}
+        atMs={lifelineAtMs}
       />
     </div>
   )

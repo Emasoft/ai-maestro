@@ -61,25 +61,33 @@ function isTerminalTailError(message: string): boolean {
 // Normalization — raw JSONL line → TranscriptLine
 // ---------------------------------------------------------------------------
 
+/**
+ * Raw `usage` object shape as emitted in the JSONL. The nested
+ * `cache_creation` map (Claude Code 2.1.x) splits the cache-write total into
+ * ephemeral tiers; older records carry only the flat
+ * `cache_creation_input_tokens`. All fields optional — `extractUsage`
+ * defensively defaults each to 0.
+ */
+interface RawUsage {
+  input_tokens?: number
+  output_tokens?: number
+  cache_read_input_tokens?: number
+  cache_creation_input_tokens?: number
+  cache_creation?: {
+    ephemeral_5m_input_tokens?: number
+    ephemeral_1h_input_tokens?: number
+  }
+}
+
 interface RawRecord {
   type?: string
   role?: string
   message?: {
     role?: string
     content?: unknown
-    usage?: {
-      input_tokens?: number
-      output_tokens?: number
-      cache_read_input_tokens?: number
-      cache_creation_input_tokens?: number
-    }
+    usage?: RawUsage
   }
-  usage?: {
-    input_tokens?: number
-    output_tokens?: number
-    cache_read_input_tokens?: number
-    cache_creation_input_tokens?: number
-  }
+  usage?: RawUsage
   timestamp?: string
   content?: unknown
   text?: string
@@ -270,12 +278,24 @@ function extractUsage(raw: RawRecord): MessageUsage | undefined {
     typeof u.cache_read_input_tokens === 'number' ||
     typeof u.cache_creation_input_tokens === 'number'
   if (!hasAny) return undefined
-  return {
+  const out: MessageUsage = {
     inputTokens: u.input_tokens ?? 0,
     outputTokens: u.output_tokens ?? 0,
     cacheReadTokens: u.cache_read_input_tokens ?? 0,
     cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
   }
+  // Additive: carry the nested 5m/1h ephemeral split when present. These are
+  // a breakdown of cacheCreationTokens for UI drill-down, not a new total.
+  const cc = u.cache_creation
+  if (cc) {
+    if (typeof cc.ephemeral_5m_input_tokens === 'number') {
+      out.cacheCreation5mTokens = cc.ephemeral_5m_input_tokens
+    }
+    if (typeof cc.ephemeral_1h_input_tokens === 'number') {
+      out.cacheCreation1hTokens = cc.ephemeral_1h_input_tokens
+    }
+  }
+  return out
 }
 
 function extractToolInfo(raw: RawRecord): {
@@ -479,6 +499,17 @@ export function sumUsage(lines: TranscriptLine[]): MessageUsage {
       out.outputTokens += line.usage.outputTokens
       out.cacheReadTokens += line.usage.cacheReadTokens
       out.cacheCreationTokens += line.usage.cacheCreationTokens
+      // Additive: accumulate the optional 5m/1h split only when at least one
+      // line reported it, so the field stays undefined (not 0) for sessions
+      // whose records never carried the nested breakdown.
+      if (line.usage.cacheCreation5mTokens !== undefined) {
+        out.cacheCreation5mTokens =
+          (out.cacheCreation5mTokens ?? 0) + line.usage.cacheCreation5mTokens
+      }
+      if (line.usage.cacheCreation1hTokens !== undefined) {
+        out.cacheCreation1hTokens =
+          (out.cacheCreation1hTokens ?? 0) + line.usage.cacheCreation1hTokens
+      }
     }
   }
   return out

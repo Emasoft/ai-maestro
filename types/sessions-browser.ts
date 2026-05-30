@@ -202,6 +202,23 @@ export interface MessageUsage {
   outputTokens: number
   cacheReadTokens: number
   cacheCreationTokens: number
+  /**
+   * Optional split of `cacheCreationTokens` into the 5-minute ephemeral
+   * write tier, when the raw record carries the nested
+   * `usage.cache_creation.ephemeral_5m_input_tokens` field (Claude Code
+   * 2.1.x). Additive — `cacheCreationTokens` remains the authoritative
+   * total; this is just the 5m portion for UI drill-down. Absent on records
+   * that only report the flat `cache_creation_input_tokens`.
+   */
+  cacheCreation5mTokens?: number
+  /**
+   * Optional split of `cacheCreationTokens` into the 1-hour ephemeral write
+   * tier (`usage.cache_creation.ephemeral_1h_input_tokens`). Additive; see
+   * {@link MessageUsage.cacheCreation5mTokens}. Pricing-wise the cost module
+   * still bills the whole `cacheCreationTokens` at the 5m write rate — this
+   * field exists for display only, not for a separate price calculation.
+   */
+  cacheCreation1hTokens?: number
 }
 
 /**

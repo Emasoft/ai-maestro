@@ -36,8 +36,32 @@ import {
 } from 'react'
 import { Check, Download } from 'lucide-react'
 import type { TranscriptLine, MessageUsage } from '@/types/sessions-browser'
+import { approxCostUsd, formatUsd, isFallbackFamily, APPROX_COST_CAVEAT } from '@/lib/token-cost'
 import MessageBubble from './MessageBubble'
 import ToolUseRow from './ToolUseRow'
+
+/**
+ * Resolve the session's Claude model id for the cost roll-up, in priority:
+ *   1. an explicit `model` prop (when a caller wires one),
+ *   2. otherwise the most-recent assistant line that carries a model id at
+ *      `raw.message.model` (Claude Code's canonical location — verified on
+ *      live `.jsonl` files).
+ * Returns `null` when neither yields one → the cost module prices at the
+ * sonnet-tier fallback and the UI flags it. Scanning from the END finds the
+ * model with the fewest iterations for the common single-model session.
+ */
+function resolveSessionModel(lines: TranscriptLine[], explicit: string | null): string | null {
+  if (explicit && explicit.length > 0) return explicit
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const raw = lines[i]?.raw
+    if (!raw || typeof raw !== 'object') continue
+    const msg = (raw as { message?: unknown }).message
+    if (!msg || typeof msg !== 'object') continue
+    const model = (msg as { model?: unknown }).model
+    if (typeof model === 'string' && model.length > 0) return model
+  }
+  return null
+}
 
 // Minimum heights — every row gets at least this much vertical space even
 // when its content is empty, so the role badge + timestamp stay readable.
@@ -152,6 +176,16 @@ interface ChatTranscriptProps {
    * the generic sparkles glyph.
    */
   assistantAvatarUrl?: string | null
+  /**
+   * Optional Claude model id for the sticky-header cost roll-up. When
+   * omitted, the model is derived from the most-recent assistant line that
+   * carries one (`raw.message.model`). Additive — callers that already know
+   * the session model (e.g. from the context breakdown's `modelId`) may pass
+   * it to skip the scan. `null` / unknown → the roll-up is priced at the
+   * sonnet-tier fallback and flagged. The dollar figure is ALWAYS an
+   * INDICATIVE API-equivalent, never the user's flat-rate spend.
+   */
+  model?: string | null
 }
 
 export interface ChatTranscriptHandle {
@@ -171,6 +205,7 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
     pinnedLineIndex = null,
     onPinLineIndex,
     assistantAvatarUrl = null,
+    model = null,
   },
   ref,
 ) {
@@ -480,6 +515,22 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
   // Normalise the highlight query once per render.
   const normalisedQuery = highlightQuery.trim().toLowerCase()
 
+  // Session-level approximate cost roll-up for the sticky header. We sum the
+  // already-summed `totalUsage` at the session model's family rate. This is
+  // INDICATIVE only — the user pays a flat-rate Pro/Max subscription, so the
+  // figure is a "what would this have cost at published per-token API rates"
+  // yardstick, NEVER the user's actual spend. Memoized so we don't re-scan
+  // for the model id (resolveSessionModel walks the lines from the end) on
+  // every scroll-driven render. `null` totalUsage → no figure.
+  const sessionCost = useMemo(() => {
+    if (!totalUsage) return null
+    const resolved = resolveSessionModel(lines, model)
+    return {
+      usd: approxCostUsd(totalUsage, resolved),
+      fallback: isFallbackFamily(resolved),
+    }
+  }, [totalUsage, lines, model])
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Sticky aggregate header */}
@@ -500,6 +551,22 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
               totalUsage.cacheReadTokens
             ).toLocaleString()}
           </span>
+          {/* Approximate session cost roll-up. ALWAYS an INDICATIVE
+              API-equivalent figure (carries `~` + the caveat as its title),
+              NEVER the user's flat-rate Pro/Max spend. Flagged when the
+              session model is unknown (priced at the sonnet-tier fallback). */}
+          {sessionCost && (
+            <span
+              className="inline-flex items-baseline gap-1 text-[12px] leading-[1.25] tracking-[0.01em] whitespace-nowrap tabular-nums"
+              title={`${APPROX_COST_CAVEAT}${sessionCost.fallback ? ' (model unknown — priced at sonnet-tier rates)' : ''}`}
+            >
+              <span className="text-gray-500 uppercase tracking-wider font-medium">~cost</span>
+              <span className="font-semibold text-gray-200">~{formatUsd(sessionCost.usd)}</span>
+              {sessionCost.fallback && (
+                <span className="text-amber-300/70 normal-case tracking-normal text-[10px]">est.</span>
+              )}
+            </span>
+          )}
           <span className="ml-auto text-gray-500">{lines.length.toLocaleString()} messages</span>
         </div>
       )}

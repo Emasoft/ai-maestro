@@ -17,8 +17,9 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { Check, Copy, User, Sparkles, Terminal as TerminalIcon, Brain, ChevronRight } from 'lucide-react'
-import type { TranscriptLine } from '@/types/sessions-browser'
+import type { TranscriptLine, MessageUsage } from '@/types/sessions-browser'
 import { parseAnsi, stripAnsi } from '@/lib/ansi'
+import { costBreakdown, formatUsd, isFallbackFamily, APPROX_COST_CAVEAT } from '@/lib/token-cost'
 
 interface MessageBubbleProps {
   line: TranscriptLine
@@ -104,6 +105,216 @@ function formatTokenNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return String(n)
+}
+
+/**
+ * Pull the Claude model id out of a raw JSONL record. Claude Code writes
+ * it at `message.model` (e.g. `"claude-opus-4-8"`) on every assistant
+ * record that carries usage — verified against live `.jsonl` files. The
+ * top-level `record.model` is NOT used by Claude Code, so we read only the
+ * nested path. `TranscriptLine.raw` is typed `unknown`, so we narrow
+ * defensively: any non-object, or a missing/non-string `message.model`,
+ * yields `null`. A `null` model is intentional, not an error — the cost
+ * module's {@link isFallbackFamily} then flags the bubble as priced at the
+ * mid-tier (sonnet) fallback so the UI can say "assuming sonnet-tier rates"
+ * rather than silently presenting numbers as if the model were known.
+ */
+function resolveLineModel(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object') return null
+  const msg = (raw as { message?: unknown }).message
+  if (!msg || typeof msg !== 'object') return null
+  const model = (msg as { model?: unknown }).model
+  return typeof model === 'string' && model.length > 0 ? model : null
+}
+
+/**
+ * One row of the expanded per-bucket cost breakdown: a labelled token count
+ * plus its INDICATIVE USD contribution. Money is rendered with a leading
+ * `~` and carries {@link APPROX_COST_CAVEAT} as its tooltip — it is NEVER
+ * the user's real flat-rate spend, only an API-equivalent yardstick.
+ *
+ * `nested` indents sub-rows (the ephemeral 5m/1h split of cache-creation)
+ * and drops the dollar figure, because the cost module bills the whole
+ * `cacheCreationTokens` at the 5-minute write rate — the 5m/1h split is a
+ * display-only drill-down, not a separate price (see MessageUsage docs), so
+ * showing a per-tier dollar amount would double-count or mislead.
+ */
+function CostRow({
+  label,
+  tokens,
+  usd,
+  nested = false,
+}: {
+  label: string
+  tokens: number
+  usd?: number
+  nested?: boolean
+}) {
+  return (
+    <div className={`flex items-baseline justify-between gap-3 ${nested ? 'pl-3 text-gray-400' : 'text-gray-200'}`}>
+      <span className={`uppercase tracking-[0.08em] text-[10px] font-semibold ${nested ? 'text-gray-500' : 'text-amber-300/90'}`}>
+        {label}
+      </span>
+      <span className="flex items-baseline gap-2 tabular-nums lining-nums">
+        <span className="text-emerald-300 font-semibold">{formatTokenNumber(tokens)}</span>
+        {usd !== undefined && (
+          <span
+            className="text-gray-400 text-[10px] min-w-[58px] text-right"
+            title={APPROX_COST_CAVEAT}
+          >
+            ~{formatUsd(usd)}
+          </span>
+        )}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * Expandable token-cost element shared by the compact and full bubble
+ * branches (single source of truth — formerly the IN/OUT/CACHE block was
+ * copy-pasted into both, and the compact branch silently dropped the
+ * estimate case entirely; this component fixes both).
+ *
+ * COLLAPSED (default — adds ZERO vertical height to the bubble): a compact
+ * `<button>` badge. For assistant turns with a real `usage` record it shows
+ * the total token count + a tiny `~$X` indicative figure; for estimate-only
+ * turns (user / system / unsourced) it shows `~tokens N`. The trigger is a
+ * real button with `aria-expanded` + `focus-visible` ring so it is fully
+ * keyboard- and AT-operable.
+ *
+ * EXPANDED: a full-width breakdown panel (occupies a fresh row in the
+ * flex-wrap header via `basis-full`, so opening it grows the bubble
+ * vertically — the parent virtualizer's ResizeObserver then re-measures the
+ * row, keeping offsets correct). Rows: input / output / cache-read /
+ * cache-creation (each with token count AND approx USD), the optional
+ * nested ephemeral 5m/1h split of cache-creation when those fields exist on
+ * the usage object, then the total approx USD. cache-READ is ALWAYS shown
+ * (the prior static readout dropped it — audit finding).
+ *
+ * MONEY IS ALWAYS APPROXIMATE. Every dollar figure carries a `~` prefix and
+ * {@link APPROX_COST_CAVEAT}, and the panel ends with a footnote restating
+ * that these are API-equivalent figures, not the user's flat-rate spend.
+ *
+ * The component owns its own expanded state; it is per-instance, so a
+ * virtualized row that unmounts/remounts simply starts collapsed again
+ * (correct — no height surprise on scroll-in).
+ */
+function TokenCostElement({
+  usage,
+  estimate,
+  model,
+  bubbleId,
+}: {
+  /** Real per-message usage (assistant turns). Mutually exclusive with `estimate`. */
+  usage?: MessageUsage
+  /** char/4 BPE estimate (user / system / unsourced turns). */
+  estimate?: number
+  /** Resolved model id for pricing; `null` → sonnet-tier fallback (flagged). */
+  model: string | null
+  /** Stable id fragment for `aria-controls` wiring. */
+  bubbleId: string | number
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  // Estimate-only bubbles carry no input/output/cache split, so an
+  // expandable money breakdown would be meaningless (and misleading — we
+  // have no priced buckets). Render a plain, non-expandable `~tokens N`
+  // badge. This preserves the prior estimate presentation but now shows it
+  // in BOTH branches (the compact branch used to drop it entirely).
+  if (!usage) {
+    const n = estimate ?? 0
+    return (
+      <span
+        className="inline-flex items-baseline gap-[5px] text-[12px] leading-[1.25] tracking-[0.01em] whitespace-nowrap lining-nums tabular-nums"
+        aria-label={`Approximate token cost — ${n} tokens (char/4 estimate)`}
+        title="Estimate using char/4 BPE approximation — not a billed figure"
+      >
+        <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">~tokens</span>
+        <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(n)}</span>
+      </span>
+    )
+  }
+
+  const bd = costBreakdown(usage, model)
+  const fallback = isFallbackFamily(model)
+  const panelId = `bubble-cost-${bubbleId}`
+  // 5m/1h are display-only splits of cacheCreationTokens (priced as a whole
+  // at the write rate). Treat `undefined` as "not reported", NOT zero — only
+  // render a nested row when the field is actually present.
+  const has5m = usage.cacheCreation5mTokens !== undefined
+  const has1h = usage.cacheCreation1hTokens !== undefined
+
+  return (
+    <>
+      <button
+        type="button"
+        // Stop the click bubbling to the row's pin-on-click handler — same
+        // isolation the copy button / reasoning toggle / export checkbox use.
+        onClick={e => {
+          e.stopPropagation()
+          setExpanded(v => !v)
+        }}
+        aria-expanded={expanded}
+        aria-controls={panelId}
+        title={`Approximate API-equivalent cost — ${APPROX_COST_CAVEAT}`}
+        className="inline-flex items-baseline gap-[5px] text-[12px] leading-[1.25] tracking-[0.01em] whitespace-nowrap lining-nums tabular-nums rounded px-1 -mx-1 transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/70 cursor-pointer"
+      >
+        <ChevronRight
+          className={`w-3 h-3 self-center text-amber-300/80 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
+          aria-hidden
+        />
+        <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(bd.totalTokens)}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-amber-300/80">tok</span>
+        <span className="text-[12px] text-emerald-300/30 mx-0.5">·</span>
+        <span className="text-[12px] font-semibold text-gray-300">~{formatUsd(bd.approxUsd)}</span>
+      </button>
+
+      {expanded && (
+        <div
+          id={panelId}
+          // `basis-full` makes this take a fresh full-width row inside the
+          // flex-wrap header, so opening it grows the bubble vertically and
+          // the parent ResizeObserver re-measures the virtualized row.
+          className="basis-full w-full mt-1.5 rounded-md border border-amber-400/25 bg-amber-300/[0.05] px-2.5 py-2 normal-case tracking-normal"
+        >
+          <div className="flex flex-col gap-1 text-[11px]">
+            <CostRow label="input" tokens={bd.input.tokens} usd={bd.input.usd} />
+            <CostRow label="output" tokens={bd.output.tokens} usd={bd.output.usd} />
+            {/* cache-READ — MUST be shown; the old static readout dropped it. */}
+            <CostRow label="cache read" tokens={bd.cacheRead.tokens} usd={bd.cacheRead.usd} />
+            <CostRow label="cache write" tokens={bd.cacheCreation.tokens} usd={bd.cacheCreation.usd} />
+            {has5m && (
+              <CostRow label="• ephemeral 5m" tokens={usage.cacheCreation5mTokens ?? 0} nested />
+            )}
+            {has1h && (
+              <CostRow label="• ephemeral 1h" tokens={usage.cacheCreation1hTokens ?? 0} nested />
+            )}
+            <div className="mt-1 pt-1.5 border-t border-amber-400/20 flex items-baseline justify-between gap-3">
+              <span className="uppercase tracking-[0.08em] text-[10px] font-bold text-amber-200">
+                total{fallback ? ' (sonnet-tier est.)' : ''}
+              </span>
+              <span className="flex items-baseline gap-2 tabular-nums lining-nums">
+                <span className="text-emerald-300 font-bold">{formatTokenNumber(bd.totalTokens)}</span>
+                <span
+                  className="text-gray-200 font-semibold text-[11px] min-w-[58px] text-right"
+                  title={APPROX_COST_CAVEAT}
+                >
+                  ~{formatUsd(bd.approxUsd)}
+                </span>
+              </span>
+            </div>
+          </div>
+          <p className="mt-1.5 text-[9.5px] leading-snug text-gray-500 break-words">
+            {fallback && (
+              <span className="text-amber-300/70">Model unknown — priced at sonnet-tier rates. </span>
+            )}
+            ~ = approximate. {APPROX_COST_CAVEAT}
+          </p>
+        </div>
+      )}
+    </>
+  )
 }
 
 /**
@@ -415,6 +626,14 @@ export default function MessageBubble({
     }
   }, [line.usage, line.role, line.text])
 
+  // Model id for cost PRICING. Read from the raw JSONL record's
+  // `message.model` (Claude Code's canonical location — verified on live
+  // files). `null` for records without it → the cost module prices at the
+  // sonnet-tier fallback and flags the bubble as an estimate. Only matters
+  // for the usage branch (estimate bubbles show no money), but resolved
+  // unconditionally so it stays a single, memoized derivation.
+  const lineModel = useMemo(() => resolveLineModel(line.raw), [line.raw])
+
   // Copy-to-clipboard — copies the visible text body. Falls back to
   // the raw line text when the bubble is showing the slash-command
   // pill (so the user gets a useful payload either way).
@@ -507,21 +726,18 @@ export default function MessageBubble({
                 {formattedTs}
               </span>
             )}
-            {tokenReadout.kind === 'usage' ? (
-              <span
-                className="inline-flex items-baseline gap-[5px] text-[12px] leading-[1.25] tracking-[0.01em] whitespace-nowrap lining-nums tabular-nums"
-                aria-label={`Tokens — input ${tokenReadout.usage.inputTokens}, output ${tokenReadout.usage.outputTokens}, cache ${tokenReadout.usage.cacheReadTokens}`}
-              >
-                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">IN</span>
-                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.usage.inputTokens)}</span>
-                <span className="text-[13px] text-emerald-300/40 mx-0.5">·</span>
-                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">OUT</span>
-                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.usage.outputTokens)}</span>
-                <span className="text-[13px] text-emerald-300/40 mx-0.5">·</span>
-                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">CACHE</span>
-                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.usage.cacheReadTokens)}</span>
-              </span>
-            ) : null}
+            {/* Shared expandable token-cost element. Unlike the old inline
+                block (which rendered ONLY the usage case and silently
+                dropped estimate bubbles), this also shows `~tokens N` for
+                compact wrapper turns that carry no `usage`. Collapsed by
+                default → no extra height; expanding it grows the bubble and
+                the parent virtualizer re-measures. */}
+            <TokenCostElement
+              usage={tokenReadout.kind === 'usage' ? tokenReadout.usage : undefined}
+              estimate={tokenReadout.kind === 'estimate' ? tokenReadout.estimate : undefined}
+              model={lineModel}
+              bubbleId={line.lineIndex}
+            />
           </div>
         </div>
       </div>
@@ -575,35 +791,20 @@ export default function MessageBubble({
                 {formattedTs}
               </span>
             )}
-            {/* Per-bubble token readout. Assistant turns with usage
-                show the full IN/OUT/CACHE breakdown; everyone else
-                shows a single ~N estimate so the user can see the
-                cost of EVERY message (including their own). */}
-            {tokenReadout.kind === 'usage' ? (
-              <span
-                className="inline-flex items-baseline gap-[5px] text-[12px] leading-[1.25] tracking-[0.01em] whitespace-nowrap lining-nums tabular-nums"
-                aria-label={`Tokens — input ${tokenReadout.usage.inputTokens}, output ${tokenReadout.usage.outputTokens}, cache ${tokenReadout.usage.cacheReadTokens}`}
-                title={`in=${tokenReadout.usage.inputTokens} out=${tokenReadout.usage.outputTokens} cache=${tokenReadout.usage.cacheReadTokens}`}
-              >
-                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">IN</span>
-                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.usage.inputTokens)}</span>
-                <span className="text-[13px] text-emerald-300/40 mx-0.5">·</span>
-                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">OUT</span>
-                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.usage.outputTokens)}</span>
-                <span className="text-[13px] text-emerald-300/40 mx-0.5">·</span>
-                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">CACHE</span>
-                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.usage.cacheReadTokens)}</span>
-              </span>
-            ) : (
-              <span
-                className="inline-flex items-baseline gap-[5px] text-[12px] leading-[1.25] tracking-[0.01em] whitespace-nowrap lining-nums tabular-nums"
-                aria-label={`Approximate token cost — ${tokenReadout.estimate} tokens`}
-                title="Estimate using char/4 BPE approximation"
-              >
-                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">~tokens</span>
-                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.estimate)}</span>
-              </span>
-            )}
+            {/* Per-bubble token-cost element (shared, single source of
+                truth). Assistant turns with usage expand to the full
+                input / output / cache-read / cache-write breakdown with an
+                approx USD per bucket + total; everyone else shows a single
+                `~tokens N` estimate so the user sees the cost of EVERY
+                message (including their own). Collapsed by default →
+                ZERO extra height. cache-READ is always shown (the old block
+                dropped it). MONEY IS APPROXIMATE — see TokenCostElement. */}
+            <TokenCostElement
+              usage={tokenReadout.kind === 'usage' ? tokenReadout.usage : undefined}
+              estimate={tokenReadout.kind === 'estimate' ? tokenReadout.estimate : undefined}
+              model={lineModel}
+              bubbleId={line.lineIndex}
+            />
           </div>
           {/* Collapsed extended-thinking / reasoning block. Renders only
               when this turn carried `thinkingText` or `redactedThinking`.

@@ -21,7 +21,6 @@ import ChatTranscript from './sessions/ChatTranscript'
 import SessionList from './sessions/SessionList'
 import ContextBreakdownPanel from './sessions/ContextBreakdownPanel'
 import SessionSearchBar from './sessions/SessionSearchBar'
-import '@/styles/sessions-browser.css'
 
 interface SessionsTabProps {
   agentId: string | null

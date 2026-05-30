@@ -467,7 +467,7 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
           aria-live="polite"
         >
           <span className="text-gray-500 font-medium uppercase tracking-wider">Session totals</span>
-          <span className="aim-msg-tokens text-emerald-300/90">
+          <span className="inline-flex items-baseline gap-[5px] text-[12px] leading-[1.25] tracking-[0.01em] whitespace-nowrap tabular-nums text-emerald-300/90">
             in: {totalUsage.inputTokens.toLocaleString()} · out:{' '}
             {totalUsage.outputTokens.toLocaleString()} · cache:{' '}
             {totalUsage.cacheReadTokens.toLocaleString()} · total:{' '}
@@ -489,8 +489,7 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
         aria-label="Session transcript"
         onScroll={onScroll}
         onKeyDown={onKeyDown}
-        className="relative flex-1 min-h-0 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
-        style={{ touchAction: 'pan-y', overscrollBehavior: 'contain' }}
+        className="relative flex-1 min-h-0 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 touch-pan-y overscroll-contain"
       >
         <div style={{ height: totalHeight, position: 'relative' }}>
           {visibleLines.map((line, i) => {
@@ -517,7 +516,15 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
             // "faded" dim of every non-pinned row was rejected by user
             // feedback — non-pinned bubbles now keep their default
             // appearance regardless of whether another row is pinned.
-            const stateClass = isPinned ? 'aim-bubble-pinned' : 'aim-bubble-default'
+            //
+            // This wrapper is the `group` + `data-pinned` hook the inner
+            // cards (MessageBubble / ToolUseRow) read for their
+            // hover/pinned glow. The glow box-shadows live on the inner
+            // card as `group-hover:`/`group-data-[pinned=true]:` variants
+            // (parity with the former `.aim-bubble-*:hover .aim-msg-card`
+            // descendant rules) — so the `group` class and the
+            // `data-pinned` attribute MUST stay on this exact element or
+            // the cards lose their pin/hover chrome entirely.
             return (
               <div
                 key={`${line.lineIndex}-${line.role}`}
@@ -547,7 +554,8 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
                     ? 'Pinned to context breakdown panel — click to unpin'
                     : 'Click to pin context breakdown to this message'
                 }
-                className={stateClass}
+                data-pinned={isPinned || undefined}
+                className="group rounded-md transition-shadow duration-200 ease-out"
               >
                 {/* Two-column layout: left = finger-sized selection
                     checkbox, right = the bubble. Tool rows skip the
@@ -564,7 +572,7 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
                         : `Select message at line ${line.lineIndex} for Markdown export`
                     }
                     title={isSelected ? 'Selected for export — click to unselect' : 'Select for Markdown export'}
-                    className="aim-bubble-select"
+                    className="flex-shrink-0 w-8 h-8 mt-1 inline-flex items-center justify-center rounded-md border-[1.5px] border-gray-400/60 bg-gray-900/55 text-transparent transition-colors cursor-pointer hover:border-emerald-500/80 hover:bg-gray-800/80 data-[checked=true]:bg-emerald-500 data-[checked=true]:border-emerald-500 data-[checked=true]:text-gray-900"
                     data-checked={isSelected || undefined}
                     onClick={e => {
                       e.stopPropagation()
@@ -612,7 +620,7 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
         {selectedLineIndexes.size > 0 && (
           <button
             type="button"
-            className="aim-export-fab"
+            className="absolute bottom-4 right-7 z-[5] inline-flex items-center gap-1.5 px-3.5 py-[9px] rounded-full text-[12px] font-semibold tracking-[0.02em] bg-emerald-500 text-gray-900 border border-emerald-600 shadow-[0_8px_24px_-4px_rgba(16,185,129,0.55),0_2px_6px_rgba(0,0,0,0.35)] transition-[transform,box-shadow] duration-[120ms] hover:-translate-y-px hover:shadow-[0_10px_28px_-4px_rgba(16,185,129,0.7),0_3px_8px_rgba(0,0,0,0.4)] disabled:opacity-50 disabled:pointer-events-none"
             onClick={e => {
               if (e.altKey) {
                 clearSelected()
@@ -625,7 +633,7 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export to .md</span>
-            <span className="aim-export-count">{selectedLineIndexes.size}</span>
+            <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 ml-0.5 rounded-full bg-gray-900/85 text-emerald-300 text-[10px] font-bold">{selectedLineIndexes.size}</span>
           </button>
         )}
       </div>

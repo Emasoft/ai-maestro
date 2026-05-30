@@ -55,7 +55,7 @@ function estimateTokens(text: string): number {
 // out. Assistant=emerald is the dominant chrome of the dashboard so we
 // keep it slightly muted. System=gray reads as ambient. Tool=violet is
 // further differentiated by an explicit left-margin indent applied at
-// the wrapper level (`.aim-tool-row` in styles/sessions-browser.css).
+// the wrapper level (`ml-[28px]` on the ToolUseRow container).
 const ROLE_STYLES: Record<string, { wrapper: string; label: string; text: string; icon: typeof User }> = {
   user: {
     wrapper: 'border-blue-400/60 bg-blue-500/[0.18]',
@@ -193,15 +193,22 @@ function renderBubbleText(text: string, lowerQuery: string, currentMatch: boolea
           <mark
             key={key++}
             style={seg.style}
-            className={currentMatch ? 'aim-match aim-match-current' : 'aim-match'}
+            className={
+              currentMatch
+                ? 'inline align-baseline bg-amber-300/55 rounded-sm px-0.5 outline outline-1 outline-amber-300/80'
+                : 'inline align-baseline bg-amber-300/25 rounded-sm px-0.5'
+            }
           >
             {p.part}
           </mark>,
         )
       } else if (Object.keys(seg.style).length > 0) {
-        out.push(<span key={key++} style={seg.style}>{p.part}</span>)
+        // `inline align-baseline` keeps these programmatically-emitted
+        // ANSI spans on one baseline with no sub-pixel gap (formerly a
+        // descendant rule on the bubble's pre-wrap body span).
+        out.push(<span key={key++} className="inline align-baseline" style={seg.style}>{p.part}</span>)
       } else {
-        out.push(<span key={key++}>{p.part}</span>)
+        out.push(<span key={key++} className="inline align-baseline">{p.part}</span>)
       }
     }
   }
@@ -281,7 +288,7 @@ export default function MessageBubble({
   )
 
   // Unique id pairing role + line index for aria-labelledby.
-  const labelId = `aim-msg-label-${line.lineIndex}`
+  const labelId = `msg-label-${line.lineIndex}`
 
   // Format the timestamp once; falls back to raw on parse errors.
   const formattedTs = line.timestamp ? formatTimestamp(line.timestamp) : null
@@ -359,7 +366,7 @@ export default function MessageBubble({
       <div
         role="article"
         aria-labelledby={labelId}
-        className={`aim-msg-card aim-msg-card-compact relative rounded-md border-[1.5px] px-3 py-1 pr-10 text-[11px] ${styles.wrapper}`}
+        className={`opacity-85 relative rounded-md border-[1.5px] px-3 py-1 pr-10 text-[11px] transition-shadow duration-200 ease-out group-hover:shadow-[0_0_12px_1px_rgba(16,185,129,0.45)] group-data-[pinned=true]:shadow-[0_0_0_2px_rgb(16,185,129),0_0_18px_2px_rgba(16,185,129,0.55)] group-data-[pinned=true]:group-hover:shadow-[0_0_0_3px_rgb(52,211,153),0_0_26px_4px_rgba(16,185,129,0.75)] ${styles.wrapper}`}
       >
         {/* Compact bubbles still get a copy button so the user can
             grab the role+timestamp+tokens header text if they want it.
@@ -367,7 +374,7 @@ export default function MessageBubble({
             consistent. */}
         <button
           type="button"
-          className="aim-bubble-copy-btn"
+          className="absolute top-1.5 right-1.5 w-7 h-7 inline-flex items-center justify-center rounded-md text-gray-400 bg-gray-900/40 border border-white/[0.06] transition-colors hover:bg-gray-800/85 hover:text-gray-200 data-[copied=true]:text-emerald-500"
           onClick={handleCopy}
           data-copied={copied || undefined}
           aria-label={copied ? 'Copied' : 'Copy bubble content to clipboard'}
@@ -383,23 +390,26 @@ export default function MessageBubble({
           >
             <span>{line.role}</span>
             {formattedTs && (
-              <span className="aim-msg-time" title={line.timestamp}>
+              <span
+                className="text-cyan-300 font-mono text-[11px] font-medium tracking-normal normal-case"
+                title={line.timestamp}
+              >
                 {formattedTs}
               </span>
             )}
             {tokenReadout.kind === 'usage' ? (
               <span
-                className="aim-msg-tokens"
+                className="inline-flex items-baseline gap-[5px] text-[12px] leading-[1.25] tracking-[0.01em] whitespace-nowrap lining-nums tabular-nums"
                 aria-label={`Tokens — input ${tokenReadout.usage.inputTokens}, output ${tokenReadout.usage.outputTokens}, cache ${tokenReadout.usage.cacheReadTokens}`}
               >
-                <span className="aim-msg-tokens-label">IN</span>
-                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.usage.inputTokens)}</span>
-                <span className="aim-msg-tokens-sep">·</span>
-                <span className="aim-msg-tokens-label">OUT</span>
-                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.usage.outputTokens)}</span>
-                <span className="aim-msg-tokens-sep">·</span>
-                <span className="aim-msg-tokens-label">CACHE</span>
-                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.usage.cacheReadTokens)}</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">IN</span>
+                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.usage.inputTokens)}</span>
+                <span className="text-[13px] text-emerald-300/40 mx-0.5">·</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">OUT</span>
+                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.usage.outputTokens)}</span>
+                <span className="text-[13px] text-emerald-300/40 mx-0.5">·</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">CACHE</span>
+                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.usage.cacheReadTokens)}</span>
               </span>
             ) : null}
           </div>
@@ -414,11 +424,13 @@ export default function MessageBubble({
       aria-labelledby={labelId}
       // `border-[1.5px]` is a small bump from the default 1px — at the
       // 12 px text size the extra half-pixel tightens the visual frame
-      // without crossing into "boxed-in" territory. The `aim-msg-card`
-      // hook lets the wrapper classes in styles/sessions-browser.css
-      // adjust card-level chrome (pinned ring/glow, hover halo)
-      // without rewriting the role-color rules.
-      className={`aim-msg-card relative rounded-md border-[1.5px] px-3 py-2 pr-10 text-[12px] ${styles.wrapper}`}
+      // without crossing into "boxed-in" territory. Card-level chrome
+      // (pinned ring + hover halo) keys off the parent row's `group` +
+      // `data-pinned` state, but the `group-hover:`/`group-data-[pinned=true]:`
+      // shadow utilities MUST live on this card (the element that renders the
+      // shadow), not the parent. Byte-parity with the deleted .aim-msg-card
+      // glow rules (#7/#8/#9), matching ToolUseRow's inner card.
+      className={`relative rounded-md border-[1.5px] px-3 py-2 pr-10 text-[12px] transition-shadow duration-200 ease-out group-hover:shadow-[0_0_12px_1px_rgba(16,185,129,0.45)] group-data-[pinned=true]:shadow-[0_0_0_2px_rgb(16,185,129),0_0_18px_2px_rgba(16,185,129,0.55)] group-data-[pinned=true]:group-hover:shadow-[0_0_0_3px_rgb(52,211,153),0_0_26px_4px_rgba(16,185,129,0.75)] ${styles.wrapper}`}
     >
       {/* Copy-to-clipboard button — top-right corner of every bubble.
           Always visible (no hover-reveal) for touch parity, and large
@@ -426,7 +438,7 @@ export default function MessageBubble({
           underlying pin-on-click handler doesn't fire. */}
       <button
         type="button"
-        className="aim-bubble-copy-btn"
+        className="absolute top-1.5 right-1.5 w-7 h-7 inline-flex items-center justify-center rounded-md text-gray-400 bg-gray-900/40 border border-white/[0.06] transition-colors hover:bg-gray-800/85 hover:text-gray-200 data-[copied=true]:text-emerald-500"
         onClick={handleCopy}
         data-copied={copied || undefined}
         aria-label={copied ? 'Copied' : 'Copy bubble content to clipboard'}
@@ -443,7 +455,10 @@ export default function MessageBubble({
           >
             <span>{line.role}</span>
             {formattedTs && (
-              <span className="aim-msg-time" title={line.timestamp}>
+              <span
+                className="text-cyan-300 font-mono text-[11px] font-medium tracking-normal normal-case"
+                title={line.timestamp}
+              >
                 {formattedTs}
               </span>
             )}
@@ -453,43 +468,51 @@ export default function MessageBubble({
                 cost of EVERY message (including their own). */}
             {tokenReadout.kind === 'usage' ? (
               <span
-                className="aim-msg-tokens"
+                className="inline-flex items-baseline gap-[5px] text-[12px] leading-[1.25] tracking-[0.01em] whitespace-nowrap lining-nums tabular-nums"
                 aria-label={`Tokens — input ${tokenReadout.usage.inputTokens}, output ${tokenReadout.usage.outputTokens}, cache ${tokenReadout.usage.cacheReadTokens}`}
                 title={`in=${tokenReadout.usage.inputTokens} out=${tokenReadout.usage.outputTokens} cache=${tokenReadout.usage.cacheReadTokens}`}
               >
-                <span className="aim-msg-tokens-label">IN</span>
-                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.usage.inputTokens)}</span>
-                <span className="aim-msg-tokens-sep">·</span>
-                <span className="aim-msg-tokens-label">OUT</span>
-                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.usage.outputTokens)}</span>
-                <span className="aim-msg-tokens-sep">·</span>
-                <span className="aim-msg-tokens-label">CACHE</span>
-                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.usage.cacheReadTokens)}</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">IN</span>
+                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.usage.inputTokens)}</span>
+                <span className="text-[13px] text-emerald-300/40 mx-0.5">·</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">OUT</span>
+                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.usage.outputTokens)}</span>
+                <span className="text-[13px] text-emerald-300/40 mx-0.5">·</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">CACHE</span>
+                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.usage.cacheReadTokens)}</span>
               </span>
             ) : (
               <span
-                className="aim-msg-tokens"
+                className="inline-flex items-baseline gap-[5px] text-[12px] leading-[1.25] tracking-[0.01em] whitespace-nowrap lining-nums tabular-nums"
                 aria-label={`Approximate token cost — ${tokenReadout.estimate} tokens`}
                 title="Estimate using char/4 BPE approximation"
               >
-                <span className="aim-msg-tokens-label">~tokens</span>
-                <span className="aim-msg-tokens-value">{formatTokenNumber(tokenReadout.estimate)}</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-300">~tokens</span>
+                <span className="text-[13px] font-bold text-emerald-300">{formatTokenNumber(tokenReadout.estimate)}</span>
               </span>
             )}
           </div>
           {command ? (
             <div className="flex items-center flex-wrap gap-2 py-0.5">
-              <span className="aim-cmd-pill" aria-label={`Slash command ${command.name}`}>
-                <span className="aim-cmd-pill-prefix">cmd</span>
+              <span
+                className="inline-flex items-baseline gap-1 px-2 py-px rounded-full font-mono text-[12px] font-semibold tracking-[0.01em] bg-white/[0.06] border border-white/[0.12] text-gray-200"
+                aria-label={`Slash command ${command.name}`}
+              >
+                <span className="opacity-55 font-medium">cmd</span>
                 <span>{command.name}</span>
                 {command.args && (
-                  <span className="aim-cmd-pill-prefix">· {command.args}</span>
+                  <span className="opacity-55 font-medium">· {command.args}</span>
                 )}
               </span>
             </div>
           ) : (
             <div
-              className={`whitespace-pre-wrap break-words font-mono text-[12px] ${styles.text}`}
+              // `tracking-normal tabular-nums` normalizes the adjacent
+              // ANSI spans `renderBubbleText` emits: zero letter-spacing
+              // + tabular figures keep colored block-art on one baseline
+              // without sub-pixel stripes (formerly a descendant rule on
+              // the bubble's pre-wrap body container).
+              className={`whitespace-pre-wrap break-words font-mono text-[12px] tracking-normal tabular-nums ${styles.text}`}
               // The aria-label gives assistive tech the plain-text view
               // (no ANSI codes) of bubbles whose body otherwise carries
               // colored terminal output.

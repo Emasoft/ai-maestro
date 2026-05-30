@@ -72,7 +72,7 @@ export default function SessionList({
           {projectDir}
         </div>
       )}
-      <div className="flex-1 overflow-y-auto" style={{ touchAction: 'pan-y', overscrollBehavior: 'contain' }}>
+      <div className="flex-1 overflow-y-auto touch-pan-y overscroll-contain">
         {loading && sessions.length === 0 && (
           <div className="px-3 py-4 text-[11px] text-gray-500">Loading…</div>
         )}
@@ -96,7 +96,7 @@ export default function SessionList({
                   onClick={() => onSelect(s.id)}
                   aria-pressed={isSelected}
                   aria-label={`Session ${s.displayName}, ${formatBytes(s.size)}, last modified ${formatRelativeTime(s.lastModified)}`}
-                  className={`aim-session-row w-full flex items-start gap-2 px-3 py-2 text-left transition-colors ${
+                  className={`w-full flex items-start gap-2 px-3 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-emerald-500/70 focus-visible:[outline-offset:-1px] ${
                     isSelected
                       ? 'bg-emerald-500/10 text-gray-100 border-l-2 border-emerald-500'
                       : 'text-gray-300 hover:bg-gray-800/40 border-l-2 border-transparent'

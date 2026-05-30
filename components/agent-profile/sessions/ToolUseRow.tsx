@@ -60,7 +60,7 @@ export default function ToolUseRow({ line, expanded, onToggle }: ToolUseRowProps
   const ts = formatTs(line.timestamp)
 
   return (
-    <div className="aim-tool-row aim-msg-card rounded-md border-[1.5px] border-violet-400/50 bg-violet-500/[0.12] text-gray-300 text-[11px] overflow-hidden">
+    <div className="ml-[28px] rounded-md border-[1.5px] border-violet-400/50 bg-violet-500/[0.12] text-gray-300 text-[11px] overflow-hidden transition-shadow duration-200 ease-out group-hover:shadow-[0_0_12px_1px_rgba(16,185,129,0.45)] group-data-[pinned=true]:shadow-[0_0_0_2px_rgb(16,185,129),0_0_18px_2px_rgba(16,185,129,0.55)] group-data-[pinned=true]:group-hover:shadow-[0_0_0_3px_rgb(52,211,153),0_0_26px_4px_rgba(16,185,129,0.75)]">
       <button
         type="button"
         aria-expanded={expanded}
@@ -103,8 +103,7 @@ export default function ToolUseRow({ line, expanded, onToggle }: ToolUseRowProps
         // virtualizer's row slot. The parent's rowHeight() returns a
         // matching constant so the next bubble starts BELOW this panel.
         <div
-          className="px-3 py-2 border-t border-violet-500/30 font-mono text-[10.5px] text-gray-200 space-y-2 max-h-[280px] overflow-y-auto"
-          style={{ overscrollBehavior: 'contain' }}
+          className="px-3 py-2 border-t border-violet-500/30 font-mono text-[10.5px] text-gray-200 space-y-2 max-h-[280px] overflow-y-auto overscroll-contain"
         >
           {inputStr && (
             <div>

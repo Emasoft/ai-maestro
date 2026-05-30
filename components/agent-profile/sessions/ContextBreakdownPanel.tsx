@@ -158,7 +158,7 @@ function BarRow({
     <button
       type="button"
       onClick={() => onSelectBucket(bucket.key)}
-      className="aim-bar-row-btn"
+      className="block w-full text-left py-1 px-1.5 -my-0.5 -mx-1.5 rounded-md bg-transparent cursor-pointer transition-colors duration-[120ms] ease-out hover:bg-white/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500/70 focus-visible:[outline-offset:-1px]"
       aria-label={`${bucket.label}: ${formatTokenNumber(value)} tokens (${pct.toFixed(1)}% of model limit) — click to drill down`}
       title={tooltip}
     >
@@ -178,7 +178,7 @@ function BarRow({
         </span>
       </div>
       <div
-        className="aim-ctx-bar-track"
+        className="h-1.5 rounded-full bg-gray-700/40 overflow-hidden"
         role="progressbar"
         aria-label={`${bucket.label}: ${formatTokenNumber(value)} tokens (${pct.toFixed(1)}% of model limit)`}
         aria-valuemin={0}
@@ -187,7 +187,7 @@ function BarRow({
         title={tooltip}
       >
         <div
-          className="aim-ctx-bar-fill"
+          className="h-full rounded-[inherit] transition-[width] duration-[180ms] ease-out"
           style={{ width: `${Math.min(100, pct)}%`, backgroundColor: bucket.color }}
         />
       </div>
@@ -467,7 +467,7 @@ function SegmentDetailView({
           Context · drill-down
         </span>
       </div>
-      <div className="px-4 py-3 overflow-y-auto flex-1 min-h-0" style={{ overscrollBehavior: 'contain' }}>
+      <div className="px-4 py-3 overflow-y-auto flex-1 min-h-0 overscroll-contain">
         {/*
           Slice rectangle copied from the pillar at a fixed wide-and-short
           aspect so the visual link to the pillar is unmistakable.
@@ -691,8 +691,7 @@ export default function ContextBreakdownPanel(props: ContextBreakdownPanelProps)
     return (
       <aside
         aria-label="Context breakdown"
-        className="hidden lg:flex flex-col w-[280px] border-l border-gray-800 bg-gray-900/40 overflow-hidden"
-        style={{ touchAction: 'pan-y', overscrollBehavior: 'contain' }}
+        className="hidden lg:flex flex-col w-[280px] border-l border-gray-800 bg-gray-900/40 overflow-hidden touch-pan-y overscroll-contain"
       >
         <div className="sticky top-0 z-10 flex items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-wider font-semibold text-gray-500 bg-gray-900/70 backdrop-blur border-b border-gray-800/60">
           <span>Context</span>

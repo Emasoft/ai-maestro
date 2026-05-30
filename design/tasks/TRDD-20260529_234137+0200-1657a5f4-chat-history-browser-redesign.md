@@ -1,9 +1,9 @@
 ---
 trdd-id: 1657a5f4-c54b-4e4b-95da-12f9aa149937
 title: Chat-history browser redesign — comic-bubble timeline, parallel lifelines, token economics, context-panel + PSS lifeline, Tailwind migration
-status: not-started
+status: in-progress
 created: 2026-05-29T23:41:37+0200
-updated: 2026-05-30T00:36:36+0200
+updated: 2026-05-30T10:14:01+0200
 ---
 
 # TRDD-1657a5f4 — Chat-history browser redesign
@@ -153,6 +153,19 @@ Fix the bugs that make the current data wrong, so everything built on top is tru
 - Mobile/touch parity; Markdown + PDF interval export.
 
 ## 8. Status / next action
-`not-started`. §5 decisions RESOLVED. Investigations complete + persisted; PSS#10 filed; no source modified.
+`in-progress`. **Build COMPLETE** (2026-05-30) on branch `feat/chat-history-redesign` (worktree off `c9528b88`). Phases 1-5 + 7-8 built, each gated (tsc 0 / unit tests / `yarn build` 0 / claim-verified) and committed separately. Phase 6 (parallel multi-column lifelines) DEFERRED to its own follow-up TRDD per §3/§5.2.
 
-**NEXT ACTION (on resume after the user compacts / starts a fresh session):** launch the build Workflow for **Phases 1-5 + 7-8** (Phase 6 deferred to its own TRDD). Build agents use this TRDD's §2 findings as their briefs (eval-and-fix in one pass — do NOT re-discover). Worktree isolation for parallel code agents; per-phase verify (`yarn build` + `yarn tsc --noEmit` + targeted tests); no PR until bug-free + convention-clean. Start at Phase 1 (data-layer correctness) which everything else builds on.
+**Commits (one per phase):**
+- Phase 1 data-layer correctness — `3550e4d6`
+- Phase 2 Tailwind migration (delete sessions-browser.css) — `48ce21b6`
+- Phase 3 comic bubbles + pseudo-terminal — `a1dea5dc`
+- Phase 4 token/cost economics — `321ab8f0`
+- Phase 5 chronological ruler + event timeline — `8a8751bb`
+- Phase 7 context panel + PSS lifeline — `79e705ec`
+- Phase 8 mobile/touch + interval export — `0d6e529a`
+
+**Final gate:** tsc --noEmit 0 errors; 272 unit tests pass (14 files); eslint clean on the redesign surface; `yarn build` exit 0. Scope: 27 files, +5285/-855; sessions-browser.css deleted; 6 new lib modules + 1 API route + 2 new components (PseudoTerminal, TimelineRuler) + 7 new test files.
+
+**Acceptance criteria (§7) — met (code):** all 5 audit CRITICALs (C1/C2/C3 live-tail, C4 scroll-to-match, C5 drawer real-modal) + the 2a data-layer P0s (/context regression, Opus->1M limit) resolved; Tailwind-utility-first (zero bespoke CSS); comic bubbles + pseudo-terminal; token economics (cacheRead shown, money clearly approximate); chronological ruler + prominent timestamps; context panel /context + limits + PSS active-at-T with health-gate + graceful degradation; mobile/touch parity; Markdown + client-side print-to-PDF export.
+
+**PENDING (user-gated):** (1) **visual render verification** (light/dark, desktop + 390px) — held for a safe environment, because running a 2nd ai-maestro server against the live shared `~/.aimaestro` state (startup manager-check + session reconciliation) is unsafe unattended; do it with the user or post-merge on the main instance. (2) **merge** `feat/chat-history-redesign` -> `governance-rules` — held per the review-before-merge rule. (3) **PR**. No merge/PR without the user's word.

@@ -39,6 +39,7 @@ import type { TranscriptLine, MessageUsage } from '@/types/sessions-browser'
 import { approxCostUsd, formatUsd, isFallbackFamily, APPROX_COST_CAVEAT } from '@/lib/token-cost'
 import MessageBubble from './MessageBubble'
 import ToolUseRow from './ToolUseRow'
+import TimelineRuler, { type RulerRow } from './TimelineRuler'
 
 /**
  * Resolve the session's Claude model id for the cost roll-up, in priority:
@@ -80,6 +81,14 @@ const OVERSCAN = 10
 // border still read as a discrete card while bringing the rhythm in
 // line with conventional chat UIs.
 const ROW_GAP = 3
+
+// Width of the left chronological ruler gutter (TimelineRuler). The absolute
+// rows are inset by exactly this much (`left: RULER_GUTTER_PX`) so the bubbles
+// clear the ticks + the `HH:MM:SS` timestamp labels. 56 px holds a `00:00:00`
+// 9 px-mono stamp (~48 px) plus the spine/tick margin without an inner
+// horizontal scroller. Kept as the single source of truth shared by the ruler
+// (`widthPx`) and the rows' `left` inset so they can never disagree.
+const RULER_GUTTER_PX = 56
 
 // Visual constants matching MessageBubble.tsx CSS:
 //   - text size 12 px, line-height ~1.5 → ~18 px per text line
@@ -457,6 +466,27 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
   const endIndex = Math.min(lines.length, findStartIndex(endPixel) + OVERSCAN + 1)
   const visibleLines = lines.slice(startIndex, endIndex)
 
+  // Geometry for the left chronological ruler — ONE entry per visible row,
+  // never the full transcript, so the ruler stays O(visible) exactly like the
+  // rows. We read the SAME `offsets[]` the rows use (single source of truth):
+  // the effective row height is `offsets[index+1] - offsets[index] - ROW_GAP`
+  // because the offsets recurrence is `o[i+1] = o[i] + height + ROW_GAP`. This
+  // means a measured-height change (ResizeObserver → `offsets` recompute) flows
+  // into the ruler tick positions automatically, keeping ticks aligned with
+  // bubbles even after a tall `/context` block is measured. Keyed on the window
+  // bounds + offsets identity so it recomputes only when the visible set or the
+  // geometry changes — not on unrelated re-renders.
+  const visibleRulerRows = useMemo<RulerRow[]>(() => {
+    const rows: RulerRow[] = []
+    for (let i = 0; i < visibleLines.length; i++) {
+      const index = startIndex + i
+      const top = offsets[index]
+      const height = Math.max(0, offsets[index + 1] - offsets[index] - ROW_GAP)
+      rows.push({ line: visibleLines[i], top, height })
+    }
+    return rows
+  }, [visibleLines, startIndex, offsets])
+
   // API exposed to parent for scroll-to-match + programmatic scrollToBottom.
   useImperativeHandle(
     ref,
@@ -582,6 +612,16 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
         className="relative flex-1 min-h-0 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 touch-pan-y overscroll-contain"
       >
         <div style={{ height: totalHeight, position: 'relative' }}>
+          {/* Left chronological ruler — lives INSIDE this same `totalHeight`
+              spacer (and the same scroll container) so it scrolls in lock-step
+              with the absolute rows and its ticks share their exact `offsets[]`
+              coordinate space. `left:0` pins it to the gutter; the rows below
+              are inset by `RULER_GUTTER_PX` so bubbles clear the ticks. */}
+          <TimelineRuler
+            visible={visibleRulerRows}
+            totalHeight={totalHeight}
+            widthPx={RULER_GUTTER_PX}
+          />
           {visibleLines.map((line, i) => {
             const index = startIndex + i
             const top = offsets[index]
@@ -631,7 +671,13 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
                 style={{
                   position: 'absolute',
                   top,
-                  left: 0,
+                  // Inset past the left chronological ruler gutter so the
+                  // comic bubbles clear the ticks + timestamp labels. The
+                  // bubbles keep their agent-left / human-right justification
+                  // WITHIN this inset content area (the inner flex below). The
+                  // gutter width is the shared `RULER_GUTTER_PX` constant the
+                  // ruler also reads, so the two can never drift apart.
+                  left: RULER_GUTTER_PX,
                   right: 0,
                   // Natural content height — NO `minHeight: h`. Setting
                   // minHeight to the heuristic estimate trapped the

@@ -15,10 +15,11 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { useJsonlSession, sumUsage, lineIndexToArrayPos } from './sessions/useJsonlSession'
 import type { ChatTranscriptHandle } from './sessions/ChatTranscript'
 import ChatTranscript from './sessions/ChatTranscript'
-import SessionList from './sessions/SessionList'
+import SessionList, { formatRelativeTime, formatBytes } from './sessions/SessionList'
 import ContextBreakdownPanel from './sessions/ContextBreakdownPanel'
 import SessionSearchBar from './sessions/SessionSearchBar'
 
@@ -87,7 +88,13 @@ export default function SessionsTab({ agentId, assistantAvatarUrl = null }: Sess
 
   return (
     <div
-      className="flex h-full min-h-0 w-full bg-gray-950"
+      // `relative` makes ContextBreakdownPanel's `<lg` drawer-toggle
+      // (`absolute top-2 right-2`) resolve against THIS Sessions pane instead
+      // of an uncontrolled higher ancestor — so on tablet/phone the "open
+      // context breakdown" button (the only path to the panel there) lands in
+      // the pane's top-right, not in dead space. Harmless on desktop, where the
+      // panel is flow-positioned as an `<aside>`. (Audit theme C mobile parity.)
+      className="relative flex h-full min-h-0 w-full bg-gray-950"
       role="region"
       aria-label="Agent sessions"
     >
@@ -106,30 +113,75 @@ export default function SessionsTab({ agentId, assistantAvatarUrl = null }: Sess
 
       {/* Center: search + transcript */}
       <div className="flex-1 min-w-0 flex flex-col relative">
-        {/* Mobile session picker — a horizontal scroller replacement for the sidebar. */}
-        <div className="md:hidden flex items-center gap-2 px-2 py-1.5 border-b border-gray-800 overflow-x-auto bg-gray-900/40">
-          {api.sessions.length === 0 ? (
-            <span className="text-[10px] text-gray-500">
-              {api.listLoading ? 'Loading sessions…' : 'No sessions'}
+        {/*
+          Mobile session picker — replaces the (hidden `<md`) sidebar SessionList.
+          This is the ONE sanctioned horizontal scroller (a fixed-viewport control
+          strip, not document content). The refresh button is pinned OUTSIDE the
+          scrolling region so it stays reachable while the pills scroll, and a
+          list-load error is surfaced here in red — never masked as "No sessions"
+          (the desktop SessionList shows the error, but it's `hidden md:flex`, so
+          without this branch a fetch failure would look like an empty agent on
+          phone). Each pill carries the FULL session name + status + mtime in its
+          `title`/`aria-label` and the scroller is a `role="listbox"` of
+          `role="option"` pills with `aria-selected`, so two long-common-prefix
+          UUID names aren't indistinguishable to AT. (Audit theme C.)
+        */}
+        <div className="md:hidden flex items-stretch border-b border-gray-800 bg-gray-900/40">
+          <button
+            type="button"
+            onClick={api.refreshList}
+            aria-label="Refresh sessions list"
+            title="Refresh sessions list"
+            className="flex-shrink-0 flex items-center justify-center min-h-[44px] min-w-[44px] border-r border-gray-800/60 text-gray-500 hover:text-gray-300 hover:bg-gray-800/60 transition-colors motion-reduce:transition-none"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${api.listLoading ? 'animate-spin motion-reduce:animate-none' : ''}`} />
+          </button>
+          {api.listError ? (
+            <span
+              className="flex items-center px-3 text-[11px] text-red-300"
+              role="alert"
+              title={api.listError}
+            >
+              Failed to load sessions: {api.listError}
+            </span>
+          ) : api.sessions.length === 0 ? (
+            <span className="flex items-center px-3 text-[11px] text-gray-500">
+              {api.listLoading ? 'Loading sessions…' : 'No sessions yet.'}
             </span>
           ) : (
-            api.sessions.map(s => {
-              const selected = s.id === api.selectedSessionId
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => api.selectSession(s.id)}
-                  className={`flex-shrink-0 px-2 py-1 rounded text-[10px] font-mono border ${
-                    selected
-                      ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-200'
-                      : 'border-gray-700 text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  {s.displayName.slice(0, 8)}
-                </button>
-              )
-            })
+            <div
+              className="flex items-center gap-2 px-2 py-1.5 overflow-x-auto"
+              role="listbox"
+              aria-label="Sessions"
+            >
+              {api.sessions.map(s => {
+                const selected = s.id === api.selectedSessionId
+                const meta = `${formatBytes(s.size)}${
+                  s.messageCount != null ? `, ${s.messageCount} msgs` : ''
+                }, ${formatRelativeTime(s.lastModified)}`
+                const label = `Session ${s.displayName}${
+                  s.isOngoing ? ' (ongoing)' : ''
+                }, ${meta}`
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => api.selectSession(s.id)}
+                    role="option"
+                    aria-selected={selected}
+                    aria-label={label}
+                    title={label}
+                    className={`flex-shrink-0 flex items-center justify-center min-h-[44px] px-2.5 rounded text-[10px] font-mono border transition-colors motion-reduce:transition-none ${
+                      selected
+                        ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-200'
+                        : 'border-gray-700 text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    {s.displayName.slice(0, 8)}
+                  </button>
+                )
+              })}
+            </div>
           )}
         </div>
 

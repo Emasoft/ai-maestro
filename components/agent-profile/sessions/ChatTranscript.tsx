@@ -34,9 +34,11 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Check, Download } from 'lucide-react'
+import { Check, Download, FileText, Printer, X } from 'lucide-react'
 import type { TranscriptLine, MessageUsage } from '@/types/sessions-browser'
 import { approxCostUsd, formatUsd, isFallbackFamily, APPROX_COST_CAVEAT } from '@/lib/token-cost'
+import { toMarkdown } from '@/lib/session-export'
+import { stripAnsi } from '@/lib/ansi'
 import MessageBubble from './MessageBubble'
 import ToolUseRow from './ToolUseRow'
 import TimelineRuler, { type RulerRow } from './TimelineRuler'
@@ -149,6 +151,130 @@ function rowHeight(line: TranscriptLine): number {
   // paragraphs, so the total line count IS wrappedLineCount.
   void explicitBreaks
   return Math.max(BUBBLE_MIN_HEIGHT, wrappedLineCount * TEXT_LINE_HEIGHT_PX + BUBBLE_CHROME_PX + reasoning)
+}
+
+// ---------------------------------------------------------------------------
+// Client-side print-to-PDF helpers (pure string builders — NO DOM access).
+//
+// `buildPrintHtml` returns a complete, self-contained HTML document for the
+// selected interval. It is written ONLY into a freshly-opened popup window's
+// own document (see `exportSelectedAsPdf`), never into the app DOM, and every
+// dynamic value is HTML-escaped first, so there is no XSS / no-innerHTML-on-app
+// surface. The PDF comes from the browser's "Save as PDF" on `window.print()`.
+// ---------------------------------------------------------------------------
+
+/** Escape the five HTML-significant characters so a string is safe to embed
+ *  verbatim in markup. Used for every dynamic value in the print document. */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/** Local `YYYY-MM-DD HH:MM:SS` stamp for the print heading — same shape and
+ *  source priority as the on-screen bubbles (tsMs first, ISO fallback). */
+function printStamp(line: TranscriptLine): string {
+  let d: Date | null = null
+  if (Number.isFinite(line.tsMs) && line.tsMs > 0) d = new Date(line.tsMs)
+  else if (line.timestamp) {
+    const parsed = new Date(line.timestamp)
+    if (!Number.isNaN(parsed.getTime())) d = parsed
+  }
+  if (!d || Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+/** Build the inner `<section>` markup for one selected turn (escaped). */
+function printTurn(line: TranscriptLine): string {
+  const role = line.isToolEvent ? 'TOOL' : line.role.toUpperCase()
+  const stamp = printStamp(line)
+  const head = `<h2>${escapeHtml(role)}${stamp ? ` <span class="ts">— ${escapeHtml(stamp)}</span>` : ''}</h2>`
+
+  const parts: string[] = [head]
+
+  // Reasoning blockquote (ANSI stripped).
+  const thinking = (line.thinkingText ?? '').trim()
+  const redacted = line.redactedThinkingCount ?? 0
+  if (thinking.length > 0 || redacted > 0) {
+    const inner: string[] = ['<strong>reasoning</strong>']
+    if (thinking.length > 0) inner.push(escapeHtml(stripAnsi(thinking)))
+    if (redacted > 0) inner.push(`<em>[redacted reasoning ×${redacted}]</em>`)
+    parts.push(`<blockquote>${inner.join('<br/>')}</blockquote>`)
+  }
+
+  if (line.isToolEvent) {
+    const payload: Record<string, unknown> = { tool: line.toolName ?? 'tool' }
+    if (line.toolInput !== undefined) payload.input = line.toolInput
+    if (line.toolResult !== undefined) payload.result = line.toolResult
+    // Pretty-print then strip ANSI on the escaped serialisation. ANSI inside
+    // JSON-escaped string values is rare in the input but stripAnsi on the
+    // post-escape text is a no-op there; the visible code stays clean.
+    const json = stripAnsi(JSON.stringify(payload, null, 2))
+    parts.push(`<pre class="tool">${escapeHtml(json)}</pre>`)
+  } else {
+    const body = stripAnsi(line.text ?? '')
+    if (body.length === 0) parts.push(`<p class="empty">(empty)</p>`)
+    else parts.push(`<pre class="body">${escapeHtml(body)}</pre>`)
+  }
+
+  return `<section class="turn">${parts.join('')}</section>`
+}
+
+/** Assemble the full print document. Self-contained: inline <style>, no
+ *  external assets, no scripts that touch the opener. */
+/**
+ * Whether the viewer asked the OS to minimise motion. Read live (not
+ * cached) so a mid-session setting flip is honoured. SSR-safe: returns
+ * `false` when `window.matchMedia` is unavailable. Used to downgrade every
+ * imperative `behavior: 'smooth'` scroll to an instant `'auto'` jump — the
+ * Tailwind `motion-reduce:` variants only govern CSS `scroll-behavior`, which
+ * does NOT apply to programmatic `scrollTo({ behavior })` calls, so the JS
+ * path needs its own guard.
+ */
+function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+function buildPrintHtml(lines: TranscriptLine[]): string {
+  const turns = lines.map(printTurn).join('\n')
+  // Minimal, print-optimised stylesheet. Light background for ink economy.
+  // No inner scrollers — content flows and paginates naturally.
+  const style = `
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { font: 13px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+           color: #111; background: #fff; margin: 24px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .meta { color: #666; font-size: 11px; margin: 0 0 16px; }
+    .turn { margin: 0 0 18px; page-break-inside: avoid; }
+    h2 { font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase;
+         color: #0a7d54; margin: 0 0 6px; border-bottom: 1px solid #e3e3e3; padding-bottom: 3px; }
+    h2 .ts { color: #999; font-weight: 400; text-transform: none; letter-spacing: 0; }
+    blockquote { margin: 0 0 8px; padding: 6px 10px; border-left: 3px solid #c8c8c8;
+                 color: #555; background: #f6f6f6; font-size: 12px; }
+    pre { white-space: pre-wrap; word-break: break-word; margin: 0;
+          font: 12px/1.45 'SF Mono', ui-monospace, Menlo, Consolas, monospace; }
+    pre.tool { background: #f3f4f6; border: 1px solid #e3e3e3; border-radius: 4px; padding: 8px 10px; }
+    pre.body { color: #111; }
+    .empty { color: #aaa; font-style: italic; margin: 0; }
+    @media print { body { margin: 0; } }`
+  const now = escapeHtml(new Date().toLocaleString())
+  return [
+    '<!doctype html>',
+    '<html lang="en"><head><meta charset="utf-8"/>',
+    '<title>Session transcript export</title>',
+    `<style>${style}</style>`,
+    '</head><body>',
+    '<h1>Session transcript export</h1>',
+    `<p class="meta">${lines.length} message${lines.length === 1 ? '' : 's'} · exported ${now}</p>`,
+    turns,
+    '</body></html>',
+  ].join('\n')
 }
 
 interface ChatTranscriptProps {
@@ -265,41 +391,27 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
     setSelectedLineIndexes(new Set())
   }, [])
 
-  // Build the markdown payload. Each selected bubble becomes a section
-  // with a `## <ROLE> — <timestamp>` header followed by the body. Tool
-  // rows render as a single fenced code block so the JSON payload is
-  // trivially copy-pasteable. The order is the JSONL line order, which
-  // matches what the user sees on screen.
+  // The export FAB opens a small two-action menu (Markdown / PDF). The menu
+  // open state lives here so a click outside (or Escape) can dismiss it. We
+  // do NOT auto-open — the FAB toggles it — so a misclick never spams a
+  // download.
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
+
+  // The selected lines in JSONL line-order. The transcript already presents
+  // bubbles in `lines` order, so filtering preserves what the user sees.
+  // Memoised on the selection set + the lines so the export handlers and the
+  // print view share ONE source of truth (no second filter that could drift).
+  const selectedLines = useMemo(
+    () => lines.filter(l => selectedLineIndexes.has(l.lineIndex)),
+    [lines, selectedLineIndexes],
+  )
+
+  // (a) Markdown — serialise the selected interval via the pure
+  // `toMarkdown` helper and trigger a CLIENT-SIDE download (Blob → object
+  // URL → temporary <a download> → revoke). No server round-trip.
   const exportSelectedAsMarkdown = useCallback(() => {
-    if (selectedLineIndexes.size === 0) return
-    const selected = lines.filter(l => selectedLineIndexes.has(l.lineIndex))
-    const blocks: string[] = []
-    blocks.push(`# Session transcript export`)
-    blocks.push(`*${selected.length} message${selected.length === 1 ? '' : 's'} · exported ${new Date().toISOString()}*`)
-    blocks.push('')
-    for (const line of selected) {
-      const ts = line.timestamp ?? ''
-      const header = `## ${line.role.toUpperCase()}${ts ? ` — ${ts}` : ''}  *(line #${line.lineIndex})*`
-      blocks.push(header)
-      if (line.isToolEvent) {
-        const toolName = line.toolName ?? 'tool'
-        blocks.push(`\`\`\`json`)
-        blocks.push(`{`)
-        blocks.push(`  "tool": ${JSON.stringify(toolName)},`)
-        if (line.toolInput !== undefined) {
-          blocks.push(`  "input": ${JSON.stringify(line.toolInput, null, 2).split('\n').join('\n  ')},`)
-        }
-        if (line.toolResult !== undefined) {
-          blocks.push(`  "result": ${JSON.stringify(line.toolResult, null, 2).split('\n').join('\n  ')}`)
-        }
-        blocks.push(`}`)
-        blocks.push(`\`\`\``)
-      } else {
-        blocks.push(line.text || '*(empty)*')
-      }
-      blocks.push('')
-    }
-    const md = blocks.join('\n')
+    if (selectedLines.length === 0) return
+    const md = toMarkdown(selectedLines, { title: 'Session transcript export' })
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -309,7 +421,83 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-  }, [lines, selectedLineIndexes])
+    setExportMenuOpen(false)
+  }, [selectedLines])
+
+  // (b) PDF — CLIENT-SIDE print-to-PDF. We open a fresh window, write a
+  // print-friendly HTML document built from React-escaped strings (NO
+  // innerHTML on the app DOM — the only `document.write` happens on the
+  // brand-new window we just opened, never on our own page), and call
+  // `print()` so the browser's "Save as PDF" produces the file. No new
+  // dependency, no server round-trip.
+  //
+  // Why a popup rather than `print:` utilities on the live DOM: the
+  // transcript is a virtualised window — only ~20 rows are mounted at any
+  // time, so a `window.print()` of the live page would only ever print the
+  // visible slice. Rendering the FULL selected interval into a throwaway
+  // document is the only way to print rows that aren't currently mounted.
+  const exportSelectedAsPdf = useCallback(() => {
+    if (selectedLines.length === 0) return
+    setExportMenuOpen(false)
+    // NOTE: we deliberately do NOT pass `noopener` in the features string —
+    // `window.open(..., 'noopener')` returns `null` per spec (it severs the
+    // handle), and we NEED the handle to write the print document into the
+    // new window. We sever the opener reference manually below instead, so
+    // the popup still cannot navigate us.
+    const win = window.open('', '_blank', 'width=900,height=1000')
+    if (!win) return // popup blocked — silently no-op (the .md path still works)
+    // Defensively null out the back-reference so the popup can't reach back
+    // into the opener (parity with what `noopener` would have given us).
+    try {
+      win.opener = null
+    } catch {
+      // Some engines mark `opener` read-only on a same-origin blank window;
+      // the document we write is our own escaped markup with no scripts, so
+      // a non-null opener here is harmless.
+    }
+    const html = buildPrintHtml(selectedLines)
+    // `win.document` is the popup's OWN document, not the app DOM. Writing
+    // an escaped, self-contained string here cannot inject into our page.
+    win.document.open()
+    win.document.write(html)
+    win.document.close()
+    // Give the new document a tick to lay out before invoking print, then
+    // close the popup once the user finishes the print dialog.
+    win.focus()
+    const fire = () => {
+      win.print()
+    }
+    if (win.document.readyState === 'complete') {
+      // Defer one frame so fonts/layout settle.
+      win.setTimeout(fire, 50)
+    } else {
+      win.addEventListener('load', () => win.setTimeout(fire, 50))
+    }
+  }, [selectedLines])
+
+  // The export menu can never outlive a non-empty selection: when the user
+  // unticks the last bubble the FAB itself unmounts, so close the menu too.
+  // (Without this the `exportMenuOpen` state could stay `true` and the menu
+  // would flash open the next time a selection appears.)
+  useEffect(() => {
+    if (selectedLineIndexes.size === 0 && exportMenuOpen) setExportMenuOpen(false)
+  }, [selectedLineIndexes, exportMenuOpen])
+
+  // Escape closes the open export menu (a11y: every transient popover must be
+  // dismissible from the keyboard without reaching for the mouse). Bound at
+  // the window level only while the menu is open so we don't add a global
+  // listener for the common closed state.
+  useEffect(() => {
+    if (!exportMenuOpen) return
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        setExportMenuOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onEsc)
+    return () => window.removeEventListener('keydown', onEsc)
+  }, [exportMenuOpen])
 
   // ----- Measured row heights via ResizeObserver -----
   //
@@ -496,14 +684,15 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
         if (!el) return
         if (lineIndex < 0 || lineIndex >= offsets.length - 1) return
         const targetTop = offsets[lineIndex]
-        // Center the match roughly in the viewport.
+        // Center the match roughly in the viewport. Honour reduced-motion:
+        // an instant jump instead of a smooth glide when requested.
         const desired = Math.max(0, targetTop - el.clientHeight / 3)
-        el.scrollTo({ top: desired, behavior: 'smooth' })
+        el.scrollTo({ top: desired, behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
       },
       scrollToBottom: () => {
         const el = scrollRef.current
         if (!el) return
-        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+        el.scrollTo({ top: el.scrollHeight, behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
       },
     }),
     [offsets],
@@ -516,23 +705,25 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
       if (!el) return
       let handled = false
       const STEP = 120
+      // Reduced-motion downgrades every smooth glide to an instant jump.
+      const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth'
       if (e.key === 'j' || e.key === 'ArrowDown') {
-        el.scrollBy({ top: STEP, behavior: 'smooth' })
+        el.scrollBy({ top: STEP, behavior })
         handled = true
       } else if (e.key === 'k' || e.key === 'ArrowUp') {
-        el.scrollBy({ top: -STEP, behavior: 'smooth' })
+        el.scrollBy({ top: -STEP, behavior })
         handled = true
       } else if (e.key === 'Home') {
-        el.scrollTo({ top: 0, behavior: 'smooth' })
+        el.scrollTo({ top: 0, behavior })
         handled = true
       } else if (e.key === 'End') {
-        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+        el.scrollTo({ top: el.scrollHeight, behavior })
         handled = true
       } else if (e.key === 'PageDown') {
-        el.scrollBy({ top: el.clientHeight * 0.9, behavior: 'smooth' })
+        el.scrollBy({ top: el.clientHeight * 0.9, behavior })
         handled = true
       } else if (e.key === 'PageUp') {
-        el.scrollBy({ top: -el.clientHeight * 0.9, behavior: 'smooth' })
+        el.scrollBy({ top: -el.clientHeight * 0.9, behavior })
         handled = true
       }
       if (handled) {
@@ -768,29 +959,75 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
             {error}
           </div>
         )}
-        {/* Floating Export-to-Markdown FAB. Sits in the bottom-right
-            corner of the scrollable viewport, offset from the right
-            edge so the (touch-friendly, fat) browser scrollbar
-            doesn't overlap it. Disabled state when no rows are
-            selected; alt+click clears selection without exporting. */}
+        {/* Floating Export FAB + popover menu. Sits in the bottom-right
+            corner of the scrollable viewport, offset from the right edge so
+            the (touch-friendly, fat) browser scrollbar doesn't overlap it.
+            The FAB toggles a two-action menu (Markdown / PDF) plus a clear-
+            selection escape. Both the FAB and every action are >=44px touch
+            targets, keyboard-focusable, and focus-visible. Transitions carry
+            `motion-reduce:` variants so reduced-motion users get no glide. */}
         {selectedLineIndexes.size > 0 && (
-          <button
-            type="button"
-            className="absolute bottom-4 right-7 z-[5] inline-flex items-center gap-1.5 px-3.5 py-[9px] rounded-full text-[12px] font-semibold tracking-[0.02em] bg-emerald-500 text-gray-900 border border-emerald-600 shadow-[0_8px_24px_-4px_rgba(16,185,129,0.55),0_2px_6px_rgba(0,0,0,0.35)] transition-[transform,box-shadow] duration-[120ms] hover:-translate-y-px hover:shadow-[0_10px_28px_-4px_rgba(16,185,129,0.7),0_3px_8px_rgba(0,0,0,0.4)] disabled:opacity-50 disabled:pointer-events-none"
-            onClick={e => {
-              if (e.altKey) {
-                clearSelected()
-                return
-              }
-              exportSelectedAsMarkdown()
-            }}
-            aria-label={`Export ${selectedLineIndexes.size} selected message${selectedLineIndexes.size === 1 ? '' : 's'} as Markdown`}
-            title={`Export ${selectedLineIndexes.size} selected to Markdown · alt-click to clear selection`}
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export to .md</span>
-            <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 ml-0.5 rounded-full bg-gray-900/85 text-emerald-300 text-[10px] font-bold">{selectedLineIndexes.size}</span>
-          </button>
+          <div className="absolute bottom-4 right-7 z-[5] flex flex-col items-end gap-2">
+            {/* Action menu — only mounted while open. Rendered ABOVE the FAB
+                (column-reverse via DOM order: menu first, FAB last visually
+                because the wrapper is a normal column and the menu precedes
+                the FAB). Each item is a full-width >=44px row. */}
+            {exportMenuOpen && (
+              <div
+                role="menu"
+                aria-label="Export selected messages"
+                className="flex flex-col w-56 overflow-hidden rounded-xl border border-gray-700 bg-gray-900/97 backdrop-blur shadow-[0_12px_32px_-6px_rgba(0,0,0,0.6)]"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={exportSelectedAsMarkdown}
+                  className="flex items-center gap-2.5 min-h-[44px] px-4 py-2.5 text-left text-[13px] font-medium text-gray-200 transition-colors duration-150 motion-reduce:transition-none hover:bg-emerald-500/15 hover:text-emerald-200 focus:outline-none focus-visible:bg-emerald-500/20 focus-visible:text-emerald-100"
+                >
+                  <FileText className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+                  <span className="flex-1">Markdown (.md)</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={exportSelectedAsPdf}
+                  className="flex items-center gap-2.5 min-h-[44px] px-4 py-2.5 text-left text-[13px] font-medium text-gray-200 border-t border-gray-800 transition-colors duration-150 motion-reduce:transition-none hover:bg-emerald-500/15 hover:text-emerald-200 focus:outline-none focus-visible:bg-emerald-500/20 focus-visible:text-emerald-100"
+                >
+                  <Printer className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+                  <span className="flex-1">PDF (print / save)</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    clearSelected()
+                    setExportMenuOpen(false)
+                  }}
+                  className="flex items-center gap-2.5 min-h-[44px] px-4 py-2.5 text-left text-[13px] font-medium text-gray-400 border-t border-gray-800 transition-colors duration-150 motion-reduce:transition-none hover:bg-red-500/15 hover:text-red-200 focus:outline-none focus-visible:bg-red-500/20 focus-visible:text-red-100"
+                >
+                  <X className="w-4 h-4 flex-shrink-0" />
+                  <span className="flex-1">Clear selection</span>
+                </button>
+              </div>
+            )}
+
+            {/* The FAB itself. >=44px tall, full focus-visible ring, motion-
+                reduce drops the hover lift + shadow transition. Click toggles
+                the menu; aria-expanded reflects menu state. */}
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={exportMenuOpen}
+              onClick={() => setExportMenuOpen(o => !o)}
+              className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-[10px] rounded-full text-[12px] font-semibold tracking-[0.02em] bg-emerald-500 text-gray-900 border border-emerald-600 shadow-[0_8px_24px_-4px_rgba(16,185,129,0.55),0_2px_6px_rgba(0,0,0,0.35)] transition-[transform,box-shadow] duration-[120ms] motion-reduce:transition-none hover:-translate-y-px motion-reduce:hover:translate-y-0 hover:shadow-[0_10px_28px_-4px_rgba(16,185,129,0.7),0_3px_8px_rgba(0,0,0,0.4)] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+              aria-label={`Export ${selectedLineIndexes.size} selected message${selectedLineIndexes.size === 1 ? '' : 's'}`}
+              title={`Export ${selectedLineIndexes.size} selected — Markdown or PDF`}
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export</span>
+              <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 ml-0.5 rounded-full bg-gray-900/85 text-emerald-300 text-[10px] font-bold">{selectedLineIndexes.size}</span>
+            </button>
+          </div>
         )}
       </div>
     </div>

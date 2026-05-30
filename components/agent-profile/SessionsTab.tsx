@@ -127,6 +127,10 @@ export default function SessionsTab({ agentId, assistantAvatarUrl = null }: Sess
           searching={api.searching}
           error={api.searchError}
           disabled={!api.selectedSessionId}
+          isOngoing={api.isOngoing}
+          followTail={api.followTail}
+          onFollowTailChange={api.setFollowTail}
+          tailError={api.tailError}
         />
 
         {showAgentEmptyState ? (

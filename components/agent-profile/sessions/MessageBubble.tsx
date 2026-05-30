@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
-import { Check, Copy, User, Sparkles, Terminal as TerminalIcon } from 'lucide-react'
+import { Check, Copy, User, Sparkles, Terminal as TerminalIcon, Brain, ChevronRight } from 'lucide-react'
 import type { TranscriptLine } from '@/types/sessions-browser'
 import { parseAnsi, stripAnsi } from '@/lib/ansi'
 
@@ -56,30 +56,47 @@ function estimateTokens(text: string): number {
 // keep it slightly muted. System=gray reads as ambient. Tool=violet is
 // further differentiated by an explicit left-margin indent applied at
 // the wrapper level (`ml-[28px]` on the ToolUseRow container).
-const ROLE_STYLES: Record<string, { wrapper: string; label: string; text: string; icon: typeof User }> = {
+//
+// `tailBg` / `tailBorder` carry the SAME color tokens as `wrapper`, split
+// into the two pieces a clip-path tail needs (the tail is a separate
+// <div>, so it can't share the combined `border-… bg-…` string). Keeping
+// them in lock-step with `wrapper` here means the speech-bubble tail joins
+// the body seamlessly — change one, change all four in this block.
+const ROLE_STYLES: Record<
+  string,
+  { wrapper: string; label: string; text: string; icon: typeof User; tailBg: string; tailBorder: string }
+> = {
   user: {
     wrapper: 'border-blue-400/60 bg-blue-500/[0.18]',
     label: 'text-blue-200',
     text: 'text-gray-100',
     icon: User,
+    tailBg: 'bg-blue-500/[0.18]',
+    tailBorder: 'border-blue-400/60',
   },
   assistant: {
     wrapper: 'border-emerald-500/40 bg-emerald-500/[0.10]',
     label: 'text-emerald-300',
     text: 'text-gray-100',
     icon: Sparkles,
+    tailBg: 'bg-emerald-500/[0.10]',
+    tailBorder: 'border-emerald-500/40',
   },
   system: {
     wrapper: 'border-gray-500/50 bg-gray-700/40',
     label: 'text-gray-400',
     text: 'text-gray-300',
     icon: TerminalIcon,
+    tailBg: 'bg-gray-700/40',
+    tailBorder: 'border-gray-500/50',
   },
   tool: {
     wrapper: 'border-violet-400/50 bg-violet-500/[0.12]',
     label: 'text-violet-300',
     text: 'text-gray-200',
     icon: TerminalIcon,
+    tailBg: 'bg-violet-500/[0.12]',
+    tailBorder: 'border-violet-400/50',
   },
 }
 
@@ -233,6 +250,90 @@ export default function MessageBubble({
   const styles = ROLE_STYLES[line.role] ?? ROLE_STYLES.system
   const Icon = styles.icon
 
+  // ROLE → SIDE: the human (`user`) anchors RIGHT; every agent role
+  // (assistant / system / tool) anchors LEFT. This single boolean is the
+  // spine of the comic layout — it drives the avatar side (right vs left),
+  // the speech-bubble tail side, and the internal column direction. The
+  // row-level RIGHT/LEFT *justification* is set by ChatTranscript on the
+  // outer wrapper; here we only flip the bubble-internal pieces.
+  const isHuman = line.role === 'user'
+
+  // Reasoning (extended-thinking) presence — Phase 1 surfaced
+  // `thinkingText` (readable reasoning) and `redactedThinkingCount`
+  // (server-redacted blocks) onto every TranscriptLine. We render a
+  // collapsed reasoning row only when at least one is present, so a
+  // turn with no thinking adds zero extra height.
+  const redactedThinking = line.redactedThinkingCount ?? 0
+  const thinkingText = line.thinkingText ?? ''
+  const hasThinking = thinkingText.length > 0 || redactedThinking > 0
+
+  // The pointy, elongated speech-bubble tail. Rendered as an absolutely-
+  // positioned sibling on the bubble's avatar-facing edge so it reads as
+  // a comic bubble pointing at the speaker. Pure Tailwind (IN-4 §4.1
+  // Option B): a tapered clip-path polygon — wide where it joins the
+  // bubble body, narrowing to a point toward the avatar. Its bg/border
+  // reuse the SAME role tokens as the body (`tailBg`/`tailBorder` kept in
+  // lock-step with `wrapper` in ROLE_STYLES) so the join is seamless.
+  // `aria-hidden` — decorative chrome, no semantics.
+  const tail = isHuman ? (
+    // Human (right bubble): tail on the RIGHT edge, points right toward
+    // the right-side avatar. Mirror of the agent polygon.
+    <div
+      aria-hidden
+      className={`pointer-events-none absolute right-0 top-4 translate-x-full w-3.5 h-5 border-r border-y ${styles.tailBg} ${styles.tailBorder} [clip-path:polygon(0_0,0_100%,100%_50%)]`}
+    />
+  ) : (
+    // Agent (left bubble): tail on the LEFT edge, points left toward the
+    // left-side avatar.
+    <div
+      aria-hidden
+      className={`pointer-events-none absolute left-0 top-4 -translate-x-full w-3.5 h-5 border-l border-y ${styles.tailBg} ${styles.tailBorder} [clip-path:polygon(100%_0,100%_100%,0_50%)]`}
+    />
+  )
+
+  // Collapsed reasoning block — a native <details> so it is keyboard- and
+  // AT-accessible with zero extra JS. Closed by default; expanding reveals
+  // the (React-escaped) reasoning text, muted + italic to separate it from
+  // the answer. When ALL reasoning is redacted (no readable text) the
+  // body is just the redaction marker. Only rendered when `hasThinking`.
+  const reasoningBlock = hasThinking ? (
+    <details className="mb-1.5 group/reason rounded-md border border-amber-400/25 bg-amber-300/[0.06]">
+      <summary
+        // Stop the click bubbling to the row's pin-on-click handler so
+        // expanding the reasoning toggle does NOT also pin/unpin the
+        // bubble — same isolation the copy button + checkbox use.
+        onClick={e => e.stopPropagation()}
+        className="flex items-center gap-1.5 px-2 py-1 cursor-pointer select-none text-[11px] font-semibold uppercase tracking-wider text-amber-200/90 marker:content-none [&::-webkit-details-marker]:hidden"
+      >
+        <ChevronRight className="w-3 h-3 transition-transform duration-150 group-open/reason:rotate-90" aria-hidden />
+        <Brain className="w-3 h-3" aria-hidden />
+        <span>Reasoning</span>
+        {redactedThinking > 0 && (
+          <span className="font-normal normal-case tracking-normal text-amber-200/55">
+            ({redactedThinking} redacted)
+          </span>
+        )}
+      </summary>
+      {thinkingText.length > 0 && (
+        <div className="px-2 pb-2 pt-0.5 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed italic text-gray-400">
+          {thinkingText}
+        </div>
+      )}
+    </details>
+  ) : null
+
+  // Copy-button placement mirrors with the bubble: the human bubble
+  // anchors its avatar on the RIGHT, so its copy button moves to the
+  // LEFT (and the card reserves left padding) to avoid sitting on top
+  // of the avatar. The agent bubble keeps the conventional top-right
+  // button + right padding.
+  const copyBtnPos = isHuman ? 'top-1.5 left-1.5' : 'top-1.5 right-1.5'
+  const cardPadX = isHuman ? 'pl-10' : 'pr-10'
+  // Avatar column direction: agent = avatar-left (flex-row), human =
+  // avatar-right (flex-row-reverse). The body keeps `flex-1 min-w-0` so
+  // it grows into the remaining width on either side.
+  const avatarRowDir = isHuman ? 'flex-row-reverse' : 'flex-row'
+
   // Avatar slot — same dimensions for every role so the visual weight
   // of the conversation reads as paired turns regardless of speaker.
   // Width was bumped 3× per user request (was w-5/w-4 → 60 px). The
@@ -359,22 +460,31 @@ export default function MessageBubble({
   // padded bubble: same role + timestamp + token cost, but ~24 px
   // tall, so the transcript reads as one logical conversation flow
   // instead of a column of half-blank cards.
-  const isCompact = !command && bodyText.trim().length === 0
+  //
+  // EXCEPTION: a turn that carries reasoning (`hasThinking`) is never
+  // compact even when its visible body is empty — a reasoning-only
+  // assistant turn must render the full bubble so the collapsed
+  // reasoning block has a home. Collapsing it to a bare 1-line header
+  // would hide the reasoning entirely.
+  const isCompact = !command && bodyText.trim().length === 0 && !hasThinking
 
   if (isCompact) {
     return (
       <div
         role="article"
         aria-labelledby={labelId}
-        className={`opacity-85 relative rounded-md border-[1.5px] px-3 py-1 pr-10 text-[11px] transition-shadow duration-200 ease-out group-hover:shadow-[0_0_12px_1px_rgba(16,185,129,0.45)] group-data-[pinned=true]:shadow-[0_0_0_2px_rgb(16,185,129),0_0_18px_2px_rgba(16,185,129,0.55)] group-data-[pinned=true]:group-hover:shadow-[0_0_0_3px_rgb(52,211,153),0_0_26px_4px_rgba(16,185,129,0.75)] ${styles.wrapper}`}
+        className={`opacity-85 relative rounded-md border-[1.5px] px-3 py-1 ${cardPadX} text-[11px] transition-shadow duration-200 ease-out group-hover:shadow-[0_0_12px_1px_rgba(16,185,129,0.45)] group-data-[pinned=true]:shadow-[0_0_0_2px_rgb(16,185,129),0_0_18px_2px_rgba(16,185,129,0.55)] group-data-[pinned=true]:group-hover:shadow-[0_0_0_3px_rgb(52,211,153),0_0_26px_4px_rgba(16,185,129,0.75)] ${styles.wrapper}`}
       >
+        {/* Pointy speech-bubble tail toward the speaker's avatar. */}
+        {tail}
         {/* Compact bubbles still get a copy button so the user can
             grab the role+timestamp+tokens header text if they want it.
             Same component as full bubbles — keeps interactions
-            consistent. */}
+            consistent. Position mirrors with the bubble (left for the
+            human, right for the agent). */}
         <button
           type="button"
-          className="absolute top-1.5 right-1.5 w-7 h-7 inline-flex items-center justify-center rounded-md text-gray-400 bg-gray-900/40 border border-white/[0.06] transition-colors hover:bg-gray-800/85 hover:text-gray-200 data-[copied=true]:text-emerald-500"
+          className={`absolute ${copyBtnPos} w-7 h-7 inline-flex items-center justify-center rounded-md text-gray-400 bg-gray-900/40 border border-white/[0.06] transition-colors hover:bg-gray-800/85 hover:text-gray-200 data-[copied=true]:text-emerald-500`}
           onClick={handleCopy}
           data-copied={copied || undefined}
           aria-label={copied ? 'Copied' : 'Copy bubble content to clipboard'}
@@ -382,7 +492,7 @@ export default function MessageBubble({
         >
           {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
         </button>
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${avatarRowDir}`}>
           {renderRoleIcon('w-[60px] h-[60px]')}
           <div
             id={labelId}
@@ -430,15 +540,18 @@ export default function MessageBubble({
       // shadow utilities MUST live on this card (the element that renders the
       // shadow), not the parent. Byte-parity with the deleted .aim-msg-card
       // glow rules (#7/#8/#9), matching ToolUseRow's inner card.
-      className={`relative rounded-md border-[1.5px] px-3 py-2 pr-10 text-[12px] transition-shadow duration-200 ease-out group-hover:shadow-[0_0_12px_1px_rgba(16,185,129,0.45)] group-data-[pinned=true]:shadow-[0_0_0_2px_rgb(16,185,129),0_0_18px_2px_rgba(16,185,129,0.55)] group-data-[pinned=true]:group-hover:shadow-[0_0_0_3px_rgb(52,211,153),0_0_26px_4px_rgba(16,185,129,0.75)] ${styles.wrapper}`}
+      className={`relative rounded-md border-[1.5px] px-3 py-2 ${cardPadX} text-[12px] transition-shadow duration-200 ease-out group-hover:shadow-[0_0_12px_1px_rgba(16,185,129,0.45)] group-data-[pinned=true]:shadow-[0_0_0_2px_rgb(16,185,129),0_0_18px_2px_rgba(16,185,129,0.55)] group-data-[pinned=true]:group-hover:shadow-[0_0_0_3px_rgb(52,211,153),0_0_26px_4px_rgba(16,185,129,0.75)] ${styles.wrapper}`}
     >
-      {/* Copy-to-clipboard button — top-right corner of every bubble.
-          Always visible (no hover-reveal) for touch parity, and large
-          enough (28×28) to tap reliably. Stops propagation so the
-          underlying pin-on-click handler doesn't fire. */}
+      {/* Pointy speech-bubble tail toward the speaker's avatar. */}
+      {tail}
+      {/* Copy-to-clipboard button — corner of every bubble. Always
+          visible (no hover-reveal) for touch parity, and large enough
+          (28×28) to tap reliably. Stops propagation so the underlying
+          pin-on-click handler doesn't fire. Position mirrors with the
+          bubble: top-right for the agent, top-left for the human. */}
       <button
         type="button"
-        className="absolute top-1.5 right-1.5 w-7 h-7 inline-flex items-center justify-center rounded-md text-gray-400 bg-gray-900/40 border border-white/[0.06] transition-colors hover:bg-gray-800/85 hover:text-gray-200 data-[copied=true]:text-emerald-500"
+        className={`absolute ${copyBtnPos} w-7 h-7 inline-flex items-center justify-center rounded-md text-gray-400 bg-gray-900/40 border border-white/[0.06] transition-colors hover:bg-gray-800/85 hover:text-gray-200 data-[copied=true]:text-emerald-500`}
         onClick={handleCopy}
         data-copied={copied || undefined}
         aria-label={copied ? 'Copied' : 'Copy bubble content to clipboard'}
@@ -446,7 +559,7 @@ export default function MessageBubble({
       >
         {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
       </button>
-      <div className="flex items-start gap-2">
+      <div className={`flex items-start gap-2 ${avatarRowDir}`}>
         <div className="mt-0.5">{renderRoleIcon('w-[60px] h-[60px]')}</div>
         <div className="flex-1 min-w-0">
           <div
@@ -492,6 +605,11 @@ export default function MessageBubble({
               </span>
             )}
           </div>
+          {/* Collapsed extended-thinking / reasoning block. Renders only
+              when this turn carried `thinkingText` or `redactedThinking`.
+              Sits between the header and the answer body so the reasoning
+              reads as a precursor to the response. */}
+          {reasoningBlock}
           {command ? (
             <div className="flex items-center flex-wrap gap-2 py-0.5">
               <span

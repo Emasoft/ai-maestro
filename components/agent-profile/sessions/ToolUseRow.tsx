@@ -18,6 +18,7 @@
 
 import { ChevronRight, ChevronDown, Wrench } from 'lucide-react'
 import type { TranscriptLine } from '@/types/sessions-browser'
+import PseudoTerminal from './PseudoTerminal'
 
 interface ToolUseRowProps {
   line: TranscriptLine
@@ -98,27 +99,18 @@ export default function ToolUseRow({ line, expanded, onToggle }: ToolUseRowProps
         )}
       </button>
       {expanded && (
-        // Capped max-height + overflow-y:auto means the expanded payload
-        // can be huge (multi-K JSON) without bleeding past the
-        // virtualizer's row slot. The parent's rowHeight() returns a
-        // matching constant so the next bubble starts BELOW this panel.
-        <div
-          className="px-3 py-2 border-t border-violet-500/30 font-mono text-[10.5px] text-gray-200 space-y-2 max-h-[280px] overflow-y-auto overscroll-contain"
-        >
-          {inputStr && (
-            <div>
-              <div className="text-violet-300 mb-1 uppercase tracking-wider text-[9px] font-semibold">input</div>
-              <pre className="whitespace-pre-wrap break-all text-gray-100">{inputStr}</pre>
-            </div>
-          )}
-          {resultStr && (
-            <div>
-              <div className="text-violet-300 mb-1 uppercase tracking-wider text-[9px] font-semibold">result</div>
-              <pre className="whitespace-pre-wrap break-all text-gray-100">{resultStr}</pre>
-            </div>
-          )}
+        // Capped max-height + overflow-y:auto is the ONE sanctioned vertical
+        // inner scroller: the expanded payload can be huge (multi-K JSON /
+        // terminal output) without bleeding past the virtualizer's row slot.
+        // The parent's rowHeight() returns TOOL_ROW_EXPANDED_HEIGHT (320 px,
+        // = this 280 px cap + header + border) so the next bubble starts
+        // BELOW this panel. The PseudoTerminal blocks inside WRAP long lines
+        // (no horizontal scroller) — only THIS container scrolls vertically.
+        <div className="px-3 py-2 border-t border-violet-500/30 space-y-2 max-h-[280px] overflow-y-auto overscroll-contain">
+          {inputStr && <PseudoTerminal text={inputStr} title="input" />}
+          {resultStr && <PseudoTerminal text={resultStr} title="result" />}
           {!inputStr && !resultStr && (
-            <div className="text-gray-500">(no payload)</div>
+            <div className="font-mono text-[10.5px] text-gray-500">(no payload)</div>
           )}
         </div>
       )}

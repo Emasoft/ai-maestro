@@ -10,7 +10,7 @@
  */
 
 import { useId } from 'react'
-import { Search, ChevronUp, ChevronDown, Loader2, X } from 'lucide-react'
+import { Search, ChevronUp, ChevronDown, Loader2, X, Radio } from 'lucide-react'
 
 interface SessionSearchBarProps {
   query: string
@@ -23,6 +23,23 @@ interface SessionSearchBarProps {
   searching: boolean
   error: string | null
   disabled?: boolean
+  /**
+   * Whether the selected session is still being written. The "Follow tail"
+   * toggle is only meaningful — and only rendered — when this is true: a
+   * closed historical transcript can never grow, so tailing it is a no-op.
+   * (TRDD-1657a5f4 Phase 3 — live-tail gating, audit C1.)
+   */
+  isOngoing?: boolean
+  /** Current state of the user "follow tail" opt-in (defaults OFF in the hook). */
+  followTail?: boolean
+  /** Called when the user flips the toggle. Wired to `useJsonlSession.setFollowTail`. */
+  onFollowTailChange?: (on: boolean) => void
+  /**
+   * Terminal live-tail failure surfaced by the hook (binary missing, etc.).
+   * Rendered as a small inline note next to the toggle so a stalled tail is
+   * visible instead of silently looking "live" forever.
+   */
+  tailError?: string | null
 }
 
 export default function SessionSearchBar({
@@ -36,8 +53,13 @@ export default function SessionSearchBar({
   searching,
   error,
   disabled = false,
+  isOngoing = false,
+  followTail = false,
+  onFollowTailChange,
+  tailError = null,
 }: SessionSearchBarProps) {
   const inputId = useId()
+  const tailId = useId()
   const counter =
     query.trim() === ''
       ? null
@@ -119,6 +141,47 @@ export default function SessionSearchBar({
         <span className="text-[10px] text-red-300 ml-1 truncate max-w-[180px]" role="alert" title={error}>
           {error}
         </span>
+      )}
+
+      {/*
+        Follow-tail toggle — only for an ongoing (still-being-written) session.
+        A closed transcript can't grow, so the control is omitted entirely
+        rather than rendered disabled (less noise on the common historical
+        case). `ml-auto` floats it to the far right of the row regardless of
+        how wide the search area grows. The native checkbox keeps it
+        keyboard-operable for free; `focus-visible:ring-*` gives a visible
+        focus ring without the always-on outline.
+      */}
+      {isOngoing && (
+        <div className="flex items-center gap-1.5 ml-auto pl-2">
+          <label
+            htmlFor={tailId}
+            className="flex items-center gap-1 cursor-pointer select-none text-[10px] text-gray-400 hover:text-gray-200"
+            title="Live-tail this session as new lines are written"
+          >
+            <input
+              id={tailId}
+              type="checkbox"
+              checked={followTail}
+              onChange={e => onFollowTailChange?.(e.target.checked)}
+              className="h-3 w-3 cursor-pointer rounded-sm border border-gray-600 bg-gray-800/70 accent-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 focus-visible:ring-offset-1 focus-visible:ring-offset-gray-900"
+            />
+            <Radio
+              className={`w-3 h-3 ${followTail ? 'text-emerald-400' : 'text-gray-500'}`}
+              aria-hidden="true"
+            />
+            <span>Follow tail</span>
+          </label>
+          {tailError && (
+            <span
+              className="text-[10px] text-red-300 truncate max-w-[120px]"
+              role="alert"
+              title={tailError}
+            >
+              tail stopped
+            </span>
+          )}
+        </div>
       )}
     </div>
   )

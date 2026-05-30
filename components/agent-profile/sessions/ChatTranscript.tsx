@@ -64,6 +64,14 @@ const ROW_GAP = 3
 const TEXT_LINE_HEIGHT_PX = 18
 const VISIBLE_CHARS_PER_LINE = 80
 const BUBBLE_CHROME_PX = 34
+// Collapsed reasoning (extended-thinking) block — MessageBubble renders a
+// closed <details> "Reasoning" toggle (~22 px summary row + 6 px mb-1.5
+// margin) whenever a line carries `thinkingText` or `redactedThinkingCount`.
+// Closed by default, so we only reserve the one summary row here; expanding
+// it grows the wrapper, which the ResizeObserver then measures exactly. This
+// keeps the FIRST-PAINT offset from underestimating thinking-bearing rows
+// (the measured height overrides it the moment the wrapper mounts).
+const REASONING_ROW_PX = 28
 
 /**
  * Estimate row height from the line's content. Required for the absolutely-
@@ -78,11 +86,26 @@ const BUBBLE_CHROME_PX = 34
  *
  * Tool rows render a single-line summary in `ToolUseRow.tsx` so 40 px
  * remains accurate for them.
+ *
+ * A collapsed reasoning block adds one `REASONING_ROW_PX` row when the
+ * line carries `thinkingText` / `redactedThinkingCount` (Phase 1). This
+ * mirrors MessageBubble: a thinking-bearing row with an empty body is
+ * NOT compact (it renders the full bubble so the reasoning toggle has a
+ * home), so we add the bubble chrome to it too rather than collapsing to
+ * `BUBBLE_MIN_HEIGHT`.
  */
 function rowHeight(line: TranscriptLine): number {
   if (line.isToolEvent) return TOOL_ROW_HEIGHT
+  const hasThinking = (line.thinkingText?.length ?? 0) > 0 || (line.redactedThinkingCount ?? 0) > 0
+  const reasoning = hasThinking ? REASONING_ROW_PX : 0
   const text = line.text || ''
-  if (text.length === 0) return BUBBLE_MIN_HEIGHT
+  if (text.length === 0) {
+    // Empty body: a thinking-bearing turn still renders the full bubble
+    // (chrome + reasoning toggle); a plain empty wrapper stays compact.
+    return hasThinking
+      ? Math.max(BUBBLE_MIN_HEIGHT, BUBBLE_CHROME_PX + reasoning)
+      : BUBBLE_MIN_HEIGHT
+  }
   const explicitBreaks = (text.match(/\n/g) || []).length
   // wrapped lines for each natural paragraph (split on \n, ceiling on width)
   let wrappedLineCount = 0
@@ -92,7 +115,7 @@ function rowHeight(line: TranscriptLine): number {
   // explicitBreaks already added the newlines; wrappedLineCount counts
   // paragraphs, so the total line count IS wrappedLineCount.
   void explicitBreaks
-  return Math.max(BUBBLE_MIN_HEIGHT, wrappedLineCount * TEXT_LINE_HEIGHT_PX + BUBBLE_CHROME_PX)
+  return Math.max(BUBBLE_MIN_HEIGHT, wrappedLineCount * TEXT_LINE_HEIGHT_PX + BUBBLE_CHROME_PX + reasoning)
 }
 
 interface ChatTranscriptProps {
@@ -498,6 +521,15 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
             const isCurrent = currentMatchLine !== null && currentMatchLine === line.lineIndex
             const isPinned = pinnedLineIndex !== null && pinnedLineIndex === line.lineIndex
             const isSelected = selectedLineIndexes.has(line.lineIndex)
+            // ROLE → SIDE: the human (a genuine `user` message) anchors
+            // RIGHT; every agent role (assistant / system / tool) anchors
+            // LEFT. `&& !isToolEvent` is the defensive half: a tool_result
+            // block arrives inside a `user`-role record, but it is agent
+            // activity rendered by `ToolUseRow`, so it must stay LEFT — the
+            // raw role alone would wrongly flip it right. Tool events route
+            // to `<ToolUseRow>` below regardless; this guard keeps the
+            // wrapper justification correct for that branch too.
+            const isHuman = line.role === 'user' && !line.isToolEvent
             // Pin/unpin click handler — clicking a bubble that's already
             // pinned unpins (sets pin to null), otherwise pins to that
             // line. Click events that originate from the export
@@ -557,45 +589,56 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
                 data-pinned={isPinned || undefined}
                 className="group rounded-md transition-shadow duration-200 ease-out"
               >
-                {/* Two-column layout: left = finger-sized selection
-                    checkbox, right = the bubble. Tool rows skip the
-                    bubble's own copy button via ToolUseRow but still
-                    render the checkbox so they can be exported. */}
-                <div className="flex items-start gap-2">
-                  <button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={isSelected}
-                    aria-label={
-                      isSelected
-                        ? `Unselect message at line ${line.lineIndex} from export`
-                        : `Select message at line ${line.lineIndex} for Markdown export`
-                    }
-                    title={isSelected ? 'Selected for export — click to unselect' : 'Select for Markdown export'}
-                    className="flex-shrink-0 w-8 h-8 mt-1 inline-flex items-center justify-center rounded-md border-[1.5px] border-gray-400/60 bg-gray-900/55 text-transparent transition-colors cursor-pointer hover:border-emerald-500/80 hover:bg-gray-800/80 data-[checked=true]:bg-emerald-500 data-[checked=true]:border-emerald-500 data-[checked=true]:text-gray-900"
-                    data-checked={isSelected || undefined}
-                    onClick={e => {
-                      e.stopPropagation()
-                      toggleSelected(line.lineIndex)
-                    }}
+                {/* Comic two-sided layout. The OUTER flex justifies the
+                    bubble group to its side (human → end/right, agent →
+                    start/left). The INNER group clamps to ~80% of the
+                    pane width so a true two-sided conversation reads, and
+                    flips direction for the human so the selection checkbox
+                    mirrors to the bubble's outer edge. The bubble itself is
+                    content-sized (`min-w-0`, no flex-grow), so a short turn
+                    hugs its side while a long turn wraps at the 80% clamp.
+                    Tool rows always anchor LEFT (agent activity) and skip
+                    the bubble's own copy button via ToolUseRow, but still
+                    carry the checkbox so they can be exported. */}
+                <div className={`flex ${isHuman ? 'justify-end' : 'justify-start'}`}>
+                  <div
+                    className={`flex items-start gap-2 max-w-[80%] min-w-0 ${isHuman ? 'flex-row-reverse' : 'flex-row'}`}
                   >
-                    {isSelected && <Check className="w-4 h-4" strokeWidth={3} />}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    {line.isToolEvent ? (
-                      <ToolUseRow
-                        line={line}
-                        expanded={expandedToolKeys.has(line.lineIndex)}
-                        onToggle={() => toggleTool(line.lineIndex)}
-                      />
-                    ) : (
-                      <MessageBubble
-                        line={line}
-                        highlightQuery={normalisedQuery}
-                        currentMatch={isCurrent}
-                        assistantAvatarUrl={assistantAvatarUrl}
-                      />
-                    )}
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={isSelected}
+                      aria-label={
+                        isSelected
+                          ? `Unselect message at line ${line.lineIndex} from export`
+                          : `Select message at line ${line.lineIndex} for Markdown export`
+                      }
+                      title={isSelected ? 'Selected for export — click to unselect' : 'Select for Markdown export'}
+                      className="flex-shrink-0 w-8 h-8 mt-1 inline-flex items-center justify-center rounded-md border-[1.5px] border-gray-400/60 bg-gray-900/55 text-transparent transition-colors cursor-pointer hover:border-emerald-500/80 hover:bg-gray-800/80 data-[checked=true]:bg-emerald-500 data-[checked=true]:border-emerald-500 data-[checked=true]:text-gray-900"
+                      data-checked={isSelected || undefined}
+                      onClick={e => {
+                        e.stopPropagation()
+                        toggleSelected(line.lineIndex)
+                      }}
+                    >
+                      {isSelected && <Check className="w-4 h-4" strokeWidth={3} />}
+                    </button>
+                    <div className="min-w-0">
+                      {line.isToolEvent ? (
+                        <ToolUseRow
+                          line={line}
+                          expanded={expandedToolKeys.has(line.lineIndex)}
+                          onToggle={() => toggleTool(line.lineIndex)}
+                        />
+                      ) : (
+                        <MessageBubble
+                          line={line}
+                          highlightQuery={normalisedQuery}
+                          currentMatch={isCurrent}
+                          assistantAvatarUrl={assistantAvatarUrl}
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

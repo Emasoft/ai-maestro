@@ -190,6 +190,28 @@ export class JsonlReader extends EventEmitter {
   }
 
   /**
+   * Emit a best-effort `'error'` diagnostic WITHOUT crashing the process.
+   *
+   * Node's EventEmitter throws an uncaught exception when `'error'` is
+   * emitted with zero listeners. The reader is a process-wide singleton
+   * and its consumers (API routes, services) do NOT attach an `'error'`
+   * listener — so a naked `this.emit('error', …)` from a background path
+   * (idle sweep, orphan/parse-fail response) would take down the whole
+   * dashboard server for a non-fatal, recoverable condition. We only emit
+   * when a listener is present; otherwise we log and swallow. This is the
+   * one deliberate exception to fail-fast: these are diagnostics from a
+   * detached timer / stream callback, not the result path of an awaited
+   * request (those still reject their promise so callers see the failure).
+   */
+  private emitErrorSafely(err: Error): void {
+    if (this.listenerCount('error') > 0) {
+      this.emit('error', err)
+    } else {
+      console.error('[jsonl-reader]', err)
+    }
+  }
+
+  /**
    * Spawn the child if needed. Idempotent.
    * @throws JsonlReaderBinaryMissingError if the binary is missing.
    */
@@ -216,17 +238,25 @@ export class JsonlReader extends EventEmitter {
     })
     child.on('exit', (code, signal) => this.onChildExit(code, signal))
     child.on('error', (err) => {
-      // Spawn/runtime error. Reject all pending requests and let next call respawn.
+      // Spawn/runtime error. On a spawn failure (ENOENT etc.) the 'exit'
+      // event may NOT fire, so we must do the same teardown 'exit' does:
+      // reject pending requests AND clear the session maps. Otherwise the
+      // maps keep dead Rust-side handles, and after the next respawn the
+      // append-cache hands back a sessionId the fresh process never heard
+      // of — surfacing as a spurious `session_not_found` on the following
+      // read_range / context_breakdown.
       this.drainQueueWithError(
         new JsonlReaderProtocolError('child_error', err.message),
       )
       this.child = null
+      this.sessionsByPath.clear()
+      this.sessionsById.clear()
     })
 
     // Start the idle-sweep timer on first spawn.
     if (!this.manualSweep && this.sweepTimer === null) {
       this.sweepTimer = setInterval(() => {
-        this.sweepIdleSessions().catch((err) => this.emit('error', err))
+        this.sweepIdleSessions().catch((err) => this.emitErrorSafely(err as Error))
       }, this.sweepIntervalMs)
       // Don't keep the event loop alive just for the sweep.
       this.sweepTimer.unref?.()
@@ -259,7 +289,7 @@ export class JsonlReader extends EventEmitter {
         `failed to parse reader stdout line: ${(err as Error).message}`,
       )
       if (next) next.reject(wrapped)
-      else this.emit('error', wrapped)
+      else this.emitErrorSafely(wrapped)
       return
     }
 
@@ -664,8 +694,9 @@ export class JsonlReader extends EventEmitter {
       try {
         await this.close(entry.sessionId)
       } catch (err) {
-        // Best-effort. Don't let one failure block the rest.
-        this.emit('error', err)
+        // Best-effort. Don't let one failure block the rest — and never
+        // crash the process when no 'error' listener is attached.
+        this.emitErrorSafely(err as Error)
       }
     }
   }

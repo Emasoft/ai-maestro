@@ -41,6 +41,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { EventEmitter } from 'events'
 import { PassThrough } from 'stream'
+import { homedir } from 'node:os'
 import type { ChildProcessWithoutNullStreams } from 'child_process'
 
 // ---------------------------------------------------------------------------
@@ -101,6 +102,14 @@ import { POST as rangePOST } from '@/app/api/sessions-browser/sessions/[sid]/ran
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// The range route confines a caller-supplied `?path=` to the real Claude Code
+// transcript store (`~/.claude/projects/...jsonl`) via os.homedir() — a
+// path-traversal boundary added by the security audit. Tests exercising the
+// `?path=` success/404 paths therefore build their path from the SAME
+// homedir() the route uses, exactly as the production UI does. A hardcoded
+// '/Users/test/...' would be (correctly) rejected as out-of-store → HTTP 400.
+const TEST_PROJECTS_DIR = `${homedir()}/.claude/projects/-Users-test-proj`
 
 /**
  * Build a Request the same way the production fetch path would: with an
@@ -166,7 +175,7 @@ describe('range route — cross-worker isolation (BUG-001 core)', () => {
     // sidToPath map is empty. The UI sends `?path=` from the list
     // response so the route MUST resolve cross-worker.
     const sid = 'aabbccdd-1111-2222-3333-444455556666'
-    const absolutePath = '/Users/test/.claude/projects/-Users-test-proj/aabbccdd.jsonl'
+    const absolutePath = `${TEST_PROJECTS_DIR}/aabbccdd.jsonl`
 
     const fakeReader = makeFakeReader()
     fakeReader.open.mockResolvedValue({
@@ -246,7 +255,7 @@ describe('range route — warm-cache fallback (same-worker, no `?path=`)', () =>
 
   it('falls back to resolveSessionPath when `?path=` is omitted', async () => {
     const sid = 'warm-cache-sid-99887766'
-    const absolutePath = '/Users/test/.claude/projects/-Users-test-proj/warm.jsonl'
+    const absolutePath = `${TEST_PROJECTS_DIR}/warm.jsonl`
 
     // Simulate a list call having already populated the same-worker map.
     recordSessionMapping(sid, absolutePath)
@@ -287,7 +296,7 @@ describe('range route — retry on transient session_not_found (eviction race)',
 
   it('retries after one session_not_found and returns 200 on the second attempt', async () => {
     const sid = 'retry-sid-aaaa'
-    const absolutePath = '/Users/test/.claude/projects/-Users-test-proj/retry.jsonl'
+    const absolutePath = `${TEST_PROJECTS_DIR}/retry.jsonl`
 
     const fakeReader = makeFakeReader()
     // Open is called once per attempt — both attempts succeed (a fresh
@@ -325,7 +334,7 @@ describe('range route — retry on transient session_not_found (eviction race)',
 
   it('gives up after MAX_ATTEMPTS=3 consecutive evictions and returns 404', async () => {
     const sid = 'retry-exhausted-sid'
-    const absolutePath = '/Users/test/.claude/projects/-Users-test-proj/persistent-evict.jsonl'
+    const absolutePath = `${TEST_PROJECTS_DIR}/persistent-evict.jsonl`
 
     const fakeReader = makeFakeReader()
     fakeReader.open.mockResolvedValue({

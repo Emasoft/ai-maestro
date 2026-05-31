@@ -50,6 +50,12 @@ export async function GET(
   let caseInsensitive: boolean | undefined
   if (ciParam === 'true' || ciParam === '1') caseInsensitive = true
   else if (ciParam === 'false' || ciParam === '0') caseInsensitive = false
+  else if (ciParam !== null) {
+    return NextResponse.json(
+      { error: 'invalid_request', detail: 'ci must be true, false, 1, or 0' },
+      { status: 400 },
+    )
+  }
 
   const result = await searchTimeline(tid, q, { kind, caseInsensitive })
   if (!result.ok || !result.data) {

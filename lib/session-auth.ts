@@ -88,7 +88,16 @@ export async function createSession(ip?: string): Promise<string> {
   const result = new Promise<string>((resolve, reject) => {
     sessionMutex = sessionMutex.then(() => {
       try {
-        // Evict oldest if at capacity
+        // Purge expired records first — they're dead weight and must never
+        // cost a live session its slot. Uses the same expiry check as
+        // validateSession (single source of truth for "is this expired").
+        if (sessions.size >= MAX_SESSIONS) {
+          const now = Date.now()
+          for (const [hash, record] of sessions) {
+            if (now > record.expires_at) sessions.delete(hash)
+          }
+        }
+        // Still at capacity after purging? Evict the oldest live session.
         if (sessions.size >= MAX_SESSIONS) {
           let oldest: string | null = null
           let oldestTime = Infinity
@@ -103,9 +112,10 @@ export async function createSession(ip?: string): Promise<string> {
 
         const token = randomBytes(SESSION_TOKEN_BYTES).toString('hex')
         const now = Date.now()
+        const tokenHash = hashToken(token)
 
-        sessions.set(hashToken(token), {
-          token_hash: hashToken(token),
+        sessions.set(tokenHash, {
+          token_hash: tokenHash,
           created_at: now,
           expires_at: now + SESSION_LIFETIME_MS,
           ip,

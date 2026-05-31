@@ -6,7 +6,7 @@ import type { JsonPatch } from '@/types/json-patch'
 import { getHostPublicKeyHex, signHostAttestation } from '@/lib/host-keys'
 import { acquireLock } from '@/lib/file-lock'
 import { getSelfHostId } from '@/lib/hosts-config'
-import { verifyWithCurrentOrPrevious } from '@/lib/key-rotation'
+import { verifyWithCurrentOrPrevious, getPreviousPublicKeyHex } from '@/lib/key-rotation'
 import { loadSecurityConfig } from '@/lib/security-config'
 
 const GENESIS_HASH = '0'.repeat(64)
@@ -69,6 +69,18 @@ function hostKeyFingerprint(): string {
   return blake2bTrunc256(pubHex).substring(0, 32)
 }
 
+/**
+ * Fingerprint of the PREVIOUS host key, while one is still retained within
+ * the key-rotation overlap window. Returns null once the previous key has
+ * been cleaned up (or if no rotation has ever happened). Uses the IDENTICAL
+ * derivation as hostKeyFingerprint() so a fingerprint stored on an entry that
+ * was signed before the last rotation can still be recognized.
+ */
+function previousHostKeyFingerprint(): string | null {
+  const prevPubHex = getPreviousPublicKeyHex()
+  return prevPubHex ? blake2bTrunc256(prevPubHex).substring(0, 32) : null
+}
+
 export class SignedLedger {
   private readonly filePath: string
   private readonly lockName: string
@@ -89,6 +101,13 @@ export class SignedLedger {
       const parsed: LedgerFile = JSON.parse(raw)
       if (parsed.version !== 1) {
         throw new Error(`Unsupported ledger version: ${parsed.version}`)
+      }
+      // Fail fast at the trust boundary: a file with version===1 but a missing
+      // or non-array `entries` is corrupt. Without this guard the malformed
+      // value flows into this.entries and every downstream `.length` / `.push`
+      // / `.slice` throws an opaque TypeError far from the real cause.
+      if (!Array.isArray(parsed.entries)) {
+        throw new Error(`Corrupt ledger: 'entries' is not an array in ${this.filePath}`)
       }
       this.entries = parsed.entries
     } catch (err: unknown) {
@@ -168,8 +187,21 @@ export class SignedLedger {
       this.loaded = false
       this.ensureLoaded()
 
-      let expectedPrevHash = GENESIS_HASH
+      // The anchor (expected seq + prevHash of the FIRST present entry) is NOT
+      // hardcoded to 0 / GENESIS, because rotateLedger() keeps only a TAIL of
+      // the chain: after a rotation the first kept entry legitimately has a
+      // non-zero seq and a prevHash pointing at the last ARCHIVED entry (which
+      // is no longer in this file). Anchoring on entries[0] lets a rotated
+      // file verify. For the common non-rotated case (first entry seq === 0)
+      // we still REQUIRE the genesis prevHash, preserving full-strength chain
+      // anchoring there. After the anchor, strict +1 seq continuity and
+      // hash-chain continuity are enforced for every subsequent entry.
       const localFingerprint = hostKeyFingerprint()
+      const prevFingerprint = previousHostKeyFingerprint()
+      const first = this.entries[0]
+      let expectedSeq = first?.seq ?? 0
+      let expectedPrevHash =
+        first && first.seq === 0 ? GENESIS_HASH : first?.prevHash ?? GENESIS_HASH
 
       for (let i = 0; i < this.entries.length; i++) {
         const entry = this.entries[i]
@@ -182,17 +214,30 @@ export class SignedLedger {
           }
         }
 
-        if (entry.seq !== i) {
+        if (entry.seq !== expectedSeq) {
           return {
             ok: false,
             seq: entry.seq,
-            reason: `Sequence gap: entry at index ${i} has seq ${entry.seq}`,
+            reason: `Sequence gap: entry at index ${i} has seq ${entry.seq}, expected ${expectedSeq}`,
           }
         }
 
         const canon = canonicalize(entry)
         try {
-          if (entry.signerKeyFingerprint === localFingerprint) {
+          // Verify the signature whenever the entry claims to be signed by a
+          // key we STILL HOLD — the current key OR the previous key (within the
+          // rotation overlap window). Previously the gate matched ONLY the
+          // current fingerprint, so after a key rotation every pre-rotation
+          // entry's signature was SILENTLY SKIPPED instead of being verified
+          // against the retained previous key — defeating the whole point of
+          // keeping the previous key around. Entries whose fingerprint matches
+          // NEITHER held key (signed by a long-discarded key, or by a remote
+          // host) can't be cryptographically checked here and fall back to the
+          // hash-chain link only — verifying them is impossible without the
+          // signing key, and failing them would self-DoS a long-lived ledger
+          // after the signing key is cleaned up.
+          const fpr = entry.signerKeyFingerprint
+          if (fpr === localFingerprint || (prevFingerprint !== null && fpr === prevFingerprint)) {
             if (!verifyWithCurrentOrPrevious(canon, entry.signature)) {
               return { ok: false, seq: entry.seq, reason: `Invalid signature at index ${i}` }
             }
@@ -202,6 +247,7 @@ export class SignedLedger {
         }
 
         expectedPrevHash = computeEntryHash(entry)
+        expectedSeq = entry.seq + 1
       }
 
       return { ok: true }
@@ -252,6 +298,26 @@ export class SignedLedger {
 
   private rotateLedger(): void {
     const cfg = loadSecurityConfig().ledger
+    // Fail fast on a misconfigured rotation window. Rotation is only reached
+    // when entries.length > maxEntriesPerFile, and it must REDUCE the live
+    // file below that threshold. That requires 0 < compactAfterEntries <
+    // maxEntriesPerFile. If compactAfterEntries >= maxEntriesPerFile (or is
+    // non-positive), rotation makes no forward progress — it would keep the
+    // whole (or empty) tail and re-fire on EVERY subsequent append, spamming
+    // archive files to disk forever while never shrinking the live file. The
+    // happy-path defaults (max 10000 / compact 5000) satisfy this; the guard
+    // only trips on tampered/invalid config, which clampConfig() does not yet
+    // bound for the ledger section.
+    if (
+      !Number.isInteger(cfg.compactAfterEntries) ||
+      cfg.compactAfterEntries <= 0 ||
+      cfg.compactAfterEntries >= cfg.maxEntriesPerFile
+    ) {
+      throw new Error(
+        `[signed-ledger] Invalid rotation config: compactAfterEntries (${cfg.compactAfterEntries}) ` +
+          `must be a positive integer strictly less than maxEntriesPerFile (${cfg.maxEntriesPerFile})`,
+      )
+    }
     const archivePath = this.filePath.replace('.ledger.json', `.ledger.${Date.now()}.archive.json`)
     const archiveEntries = this.entries.slice(0, this.entries.length - cfg.compactAfterEntries)
     const keepEntries = this.entries.slice(this.entries.length - cfg.compactAfterEntries)

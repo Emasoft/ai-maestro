@@ -623,9 +623,14 @@ function extractMessageText(content: unknown): string {
   const parts: string[] = []
   for (const block of content) {
     if (typeof block !== 'object' || block === null) continue
-    const b = block as { type?: string; text?: string }
+    const b = block as { type?: string; text?: string; thinking?: string }
     if (b.type === 'text' && typeof b.text === 'string') parts.push(b.text)
-    if (b.type === 'thinking' && typeof b.text === 'string') parts.push(b.text)
+    // Thinking blocks carry their text in `thinking`, NOT `text` — the
+    // Anthropic content-block shape is `{ type:'thinking', thinking:'…' }`
+    // (matches config-service / agents-chat-service / the chat UI). Reading
+    // `b.text` here silently dropped every thinking block, undercounting the
+    // `messages` bucket since extended-thinking tokens DO sit in the window.
+    if (b.type === 'thinking' && typeof b.thinking === 'string') parts.push(b.thinking)
   }
   return parts.join('\n')
 }

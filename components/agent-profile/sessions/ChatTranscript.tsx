@@ -174,6 +174,28 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;')
 }
 
+/** Recursively strip ANSI from every string leaf of a JSON-able value, then
+ *  return a structurally-identical clone. This MUST run BEFORE `JSON.stringify`:
+ *  a captured-stdout string carries a real ESC byte (`\x1b`), but
+ *  `JSON.stringify` escapes it into the literal `` text, which
+ *  `stripAnsi`'s ESC-byte regex can no longer match — so stripping after
+ *  serialisation leaves visible `[..m` artefacts in the printed PDF.
+ *  Mirrors `session-export.ts::stripAnsiDeep` so the .md and PDF exports
+ *  produce identical, ANSI-free tool payloads. Primitives pass through; no
+ *  cycle guard is needed (Claude Code tool payloads are plain JSON). */
+function stripAnsiDeep(value: unknown): unknown {
+  if (typeof value === 'string') return stripAnsi(value)
+  if (Array.isArray(value)) return value.map(stripAnsiDeep)
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = stripAnsiDeep(v)
+    }
+    return out
+  }
+  return value
+}
+
 /** Local `YYYY-MM-DD HH:MM:SS` stamp for the print heading — same shape and
  *  source priority as the on-screen bubbles (tsMs first, ISO fallback). */
 function printStamp(line: TranscriptLine): string {
@@ -208,12 +230,14 @@ function printTurn(line: TranscriptLine): string {
 
   if (line.isToolEvent) {
     const payload: Record<string, unknown> = { tool: line.toolName ?? 'tool' }
-    if (line.toolInput !== undefined) payload.input = line.toolInput
-    if (line.toolResult !== undefined) payload.result = line.toolResult
-    // Pretty-print then strip ANSI on the escaped serialisation. ANSI inside
-    // JSON-escaped string values is rare in the input but stripAnsi on the
-    // post-escape text is a no-op there; the visible code stays clean.
-    const json = stripAnsi(JSON.stringify(payload, null, 2))
+    // Strip ANSI from the RAW string leaves BEFORE serialising. A captured
+    // tool_result string holds a real ESC byte; JSON.stringify would escape it
+    // to the literal `` (which stripAnsi can no longer match), so stripping
+    // post-serialisation would leak `[32m`-style codes into the PDF. Deep-
+    // strip first, then pretty-print — same contract as the .md exporter.
+    if (line.toolInput !== undefined) payload.input = stripAnsiDeep(line.toolInput)
+    if (line.toolResult !== undefined) payload.result = stripAnsiDeep(line.toolResult)
+    const json = JSON.stringify(payload, null, 2)
     parts.push(`<pre class="tool">${escapeHtml(json)}</pre>`)
   } else {
     const body = stripAnsi(line.text ?? '')

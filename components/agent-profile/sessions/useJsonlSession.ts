@@ -799,6 +799,32 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
   // validates it). When the list finally arrives, we don't clobber the
   // user's selection.
 
+  // Clear the selected session on a genuine agent SWITCH (one non-null agent id
+  // replaced by a DIFFERENT non-null id). A sid belongs to exactly one agent's
+  // project dir, so carrying Agent A's selection into Agent B would (a) load A's
+  // transcript under B's tab and (b) mirror A's sid into the URL while viewing
+  // B. The list/transcript/breakdown/search effects key on `selectedSessionId`,
+  // not `agentId`, so without this reset a changing `agentId` prop leaves the
+  // cross-agent selection live. The current dashboard remounts this hook per
+  // agent (`key={agent.id}`), so today this never fires — but the hook is an
+  // exported, reusable surface and must stay self-consistent for any caller
+  // that does NOT remount on switch.
+  //
+  // We deliberately reset ONLY on a non-null → different-non-null transition,
+  // not on the initial `null → id` resolution: a caller may mount with
+  // `agentId === null` (agent not resolved yet) while the URL carries
+  // `?sid=<uuid>`, and that URL-direct selection MUST survive until the agent
+  // resolves (see the comment block above). `prevAgentIdRef` seeds from the
+  // first `agentId` so the initial mount is skipped regardless.
+  const prevAgentIdRef = useRef<string | null>(agentId)
+  useEffect(() => {
+    const prev = prevAgentIdRef.current
+    prevAgentIdRef.current = agentId
+    if (prev !== null && agentId !== null && prev !== agentId) {
+      setSelectedSessionId(null)
+    }
+  }, [agentId])
+
   // Sync URL when selection changes. Guarded by syncUrl flag.
   useEffect(() => {
     if (!syncUrl) return

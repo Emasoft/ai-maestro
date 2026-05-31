@@ -30,12 +30,6 @@ use serde_json::{json, Value};
 
 const DEFAULT_CONTEXT_LIMIT: u64 = 200_000;
 
-const BUILTIN_TOOL_NAMES: &[&str] = &[
-    "Read", "Write", "Grep", "Bash", "Glob", "Edit", "MultiEdit",
-    "NotebookEdit", "WebFetch", "WebSearch", "Agent", "Task",
-    "Skill", "ToolSearch", "TodoWrite",
-];
-
 #[derive(Default, Debug)]
 pub struct Buckets {
     pub system_prompt:   u64,
@@ -247,10 +241,12 @@ fn classify(v: &Value, b: &mut Buckets) {
                             // cares, and a slight over-attribution to
                             // tools (vs messages) is the lesser evil.
                             let tool_cost = estimate_tokens(block, b);
+                            // mcp__* tools bucket into mcpTools; every other
+                            // tool_use (built-in or plugin-provided) is a
+                            // systemTools descriptor — there is no separate
+                            // user-tool bucket in the TRDD §4.5 model.
                             if name.starts_with("mcp__") {
                                 b.mcp_tools += tool_cost;
-                            } else if BUILTIN_TOOL_NAMES.iter().any(|t| *t == name) {
-                                b.system_tools += tool_cost;
                             } else {
                                 b.system_tools += tool_cost;
                             }

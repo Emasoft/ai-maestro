@@ -103,12 +103,42 @@ function stripAnsiDeep(value: unknown): unknown {
 }
 
 /**
+ * Wrap `body` in a code fence whose backtick run is guaranteed longer than
+ * any backtick run *inside* `body`. CommonMark closes a fenced block at the
+ * first line with at least as many backticks as the opening fence, so a
+ * naive 3-backtick fence is broken out of by any tool result / terminal
+ * capture that itself contains ``` ``` ``` (extremely common — Claude tool
+ * output routinely echoes fenced code). Per the spec the opening fence must
+ * be strictly longer than the longest interior run; we use `max(3, longest
+ * run + 1)` so backtick-free bodies keep the canonical 3-backtick fence and
+ * the existing exporter output is unchanged.
+ *
+ * @param body Already ANSI-stripped block content.
+ * @param lang Optional info string (e.g. `json`); omitted when empty.
+ */
+function fenceBlock(body: string, lang = ''): string {
+  let longestRun = 0
+  let current = 0
+  for (const ch of body) {
+    if (ch === '`') {
+      current += 1
+      if (current > longestRun) longestRun = current
+    } else {
+      current = 0
+    }
+  }
+  const fence = '`'.repeat(Math.max(3, longestRun + 1))
+  return [`${fence}${lang}`, body, fence].join('\n')
+}
+
+/**
  * Serialise the (already-selected, in-order) tool payload into a single
  * fenced JSON code block. Tool input/result are pretty-printed; string
  * leaves can carry ANSI codes (captured terminal output lives in
  * `toolResult` as a string for `local-command-stdout` events), so we strip
  * ANSI from every string leaf BEFORE serialising (see `stripAnsiDeep`).
- * The fence language is `json`.
+ * The fence language is `json`; the fence length adapts to the content so a
+ * payload string containing ``` ``` ``` cannot break out (see `fenceBlock`).
  *
  * `JSON.stringify` is deterministic for the object shapes Claude Code emits
  * (no Map/Set), so the output is stable across runs.
@@ -118,7 +148,7 @@ function toolBlock(line: TranscriptLine): string {
   if (line.toolInput !== undefined) payload.input = stripAnsiDeep(line.toolInput)
   if (line.toolResult !== undefined) payload.result = stripAnsiDeep(line.toolResult)
   const json = JSON.stringify(payload, null, 2)
-  return ['```json', json, '```'].join('\n')
+  return fenceBlock(json, 'json')
 }
 
 /**
@@ -142,7 +172,10 @@ function proseBody(line: TranscriptLine): string {
     raw.includes('[') ||
     raw.includes('<command-name>')
   if (looksTerminal) {
-    return ['```', stripped, '```'].join('\n')
+    // Adaptive fence: a captured terminal body can itself contain ``` ``` ```
+    // (e.g. a `/context` dump quoting fenced code), which would otherwise
+    // break out of a fixed 3-backtick fence — see `fenceBlock`.
+    return fenceBlock(stripped)
   }
   return stripped
 }

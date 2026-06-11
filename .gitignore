@@ -223,6 +223,8 @@ resume_needed_alert.md
 
 # ai-maestro-janitor plugin state + logs (project-local, see janitor README)
 .janitor/
+# janitor per-session context-usage snapshots (ephemeral runtime state)
+.claude/janitor/
 
 # Next.js smoke-test / broken backup build dirs
 .next.bak-*/

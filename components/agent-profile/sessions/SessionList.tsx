@@ -21,14 +21,20 @@ interface SessionListProps {
   projectDir: string | null
 }
 
-function formatBytes(n: number): string {
+// Exported so the mobile session-pill row in SessionsTab can build the same
+// rich `aria-label`/`title` strings the desktop rows use — keeping ONE source
+// of truth for size/mtime formatting across the desktop list and the phone
+// pill scroller (audit theme C: mobile pills must not drop the metadata the
+// desktop rows carry). NOTE: WorkTree.tsx has its OWN local `formatRelativeTime`
+// that takes a numeric epoch — these are distinct; no name collision.
+export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
   if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`
   return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
-function formatRelativeTime(iso: string): string {
+export function formatRelativeTime(iso: string): string {
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return iso
   const diff = Date.now() - then
@@ -62,9 +68,12 @@ export default function SessionList({
           onClick={onRefresh}
           aria-label="Refresh sessions list"
           title="Refresh sessions list"
-          className="p-1 rounded text-gray-500 hover:text-gray-300 hover:bg-gray-800/60 transition-colors"
+          // Visually compact icon, but a ≥44px tap area on touch (WCAG 2.5.5 /
+          // Apple HIG). `-my-2` pulls the oversized hit box back so it doesn't
+          // grow the 2-padding header row vertically; the icon stays centered.
+          className="flex items-center justify-center min-h-[44px] min-w-[44px] -my-2 rounded text-gray-500 hover:text-gray-300 hover:bg-gray-800/60 transition-colors motion-reduce:transition-none"
         >
-          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`} />
         </button>
       </div>
       {projectDir && (
@@ -72,7 +81,7 @@ export default function SessionList({
           {projectDir}
         </div>
       )}
-      <div className="flex-1 overflow-y-auto" style={{ touchAction: 'pan-y', overscrollBehavior: 'contain' }}>
+      <div className="flex-1 overflow-y-auto touch-pan-y overscroll-contain">
         {loading && sessions.length === 0 && (
           <div className="px-3 py-4 text-[11px] text-gray-500">Loading…</div>
         )}
@@ -96,7 +105,7 @@ export default function SessionList({
                   onClick={() => onSelect(s.id)}
                   aria-pressed={isSelected}
                   aria-label={`Session ${s.displayName}, ${formatBytes(s.size)}, last modified ${formatRelativeTime(s.lastModified)}`}
-                  className={`aim-session-row w-full flex items-start gap-2 px-3 py-2 text-left transition-colors ${
+                  className={`w-full flex items-start gap-2 px-3 py-2 text-left transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-emerald-500/70 focus-visible:[outline-offset:-1px] ${
                     isSelected
                       ? 'bg-emerald-500/10 text-gray-100 border-l-2 border-emerald-500'
                       : 'text-gray-300 hover:bg-gray-800/40 border-l-2 border-transparent'

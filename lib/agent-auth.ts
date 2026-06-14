@@ -339,7 +339,14 @@ function findAgentBySessionSecret(secret: string): { id: string; name: string } 
       }
     }
     return null
-  } catch {
+  } catch (err) {
+    // Surface the swallowed exception (consistent with the AUTH-MIN-02 fix in
+    // resolveGovernanceContext below). A registry-load / disk failure here
+    // silently denies an otherwise-valid agent; without this log the denial
+    // is invisible to operations. We still return null (fail-closed — a
+    // session-secret holder cannot authenticate while the registry is
+    // unreadable), but the WHY is now recorded.
+    console.warn('[agent-auth] findAgentBySessionSecret failed, denying:', err)
     return null
   }
 }
@@ -387,7 +394,14 @@ function resolveTeamId(agentId: string): string | null {
       }
     }
     return null
-  } catch {
+  } catch (err) {
+    // Surface the swallowed exception (consistent with the AUTH-MIN-02 fix in
+    // resolveGovernanceContext). A team-registry load failure silently resolves
+    // the caller to "no team", which can change a COS/orchestrator's effective
+    // permissions downstream — so the failure must not be invisible. We still
+    // return null (fail-closed: absent team membership rather than a guessed
+    // one), but operations now see why.
+    console.warn('[agent-auth] resolveTeamId failed, treating as no team:', err)
     return null
   }
 }

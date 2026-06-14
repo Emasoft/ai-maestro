@@ -323,11 +323,32 @@ impl TimelineHandle {
                 }
                 let slice = if buf.ends_with(b"\n") { &buf[..buf.len() - 1] } else { &buf[..] };
                 if slice.is_empty() {
+                    // A blank line is still a physical line in the sparse
+                    // index that drives read_range/search/manifest, so it
+                    // MUST advance running_global — otherwise a globalLine
+                    // anchor the UI obtained from those commands would
+                    // resolve to the wrong physical line here (off by the
+                    // number of blanks before it). It carries no tokens and
+                    // has no uuid, so only a GlobalLine target can land on
+                    // it; honor that before advancing.
+                    if let ContextAtTarget::GlobalLine(g) = &target {
+                        if *g == running_global {
+                            anchor_global = Some(running_global);
+                            break 'outer;
+                        }
+                    }
+                    running_global += 1;
                     continue;
                 }
                 let value: Value = match serde_json::from_slice(slice) {
                     Ok(v) => v,
                     Err(_) => {
+                        if let ContextAtTarget::GlobalLine(g) = &target {
+                            if *g == running_global {
+                                anchor_global = Some(running_global);
+                                break 'outer;
+                            }
+                        }
                         running_global += 1;
                         continue;
                     }

@@ -155,11 +155,15 @@ function findWorktreeProjectDirs(
       continue
     }
     // 2) Temp-worktree pattern driven by runner/scenario agents.
+    // The agent-name segment MUST be anchored by the `--claude-worktrees-`
+    // marker that always immediately follows the workdir slug — a loose
+    // `includes('agents-<name>')` would match a DIFFERENT agent whose name
+    // has this one's name as a prefix (e.g. agent `bot` matching
+    // `agents-bot-helper--claude-worktrees-…`), leaking its transcript here.
     if (
       agentNameSafe.length > 0 &&
       n.startsWith('-private-tmp-') &&
-      n.includes(`agents-${agentNameSafe}`) &&
-      n.includes('--claude-worktrees-')
+      n.includes(`agents-${agentNameSafe}--claude-worktrees-`)
     ) {
       matches.add(path.join(projectsRoot, n))
     }
@@ -231,10 +235,18 @@ function cwdMatchesAgent(absPath: string, agentWorkDir: string): boolean {
   if (!first) return true
   const cwd = first['cwd']
   if (typeof cwd !== 'string' || cwd.length === 0) return true
-  // Both-direction prefix match: a worktree's cwd may be a descendant of
-  // the agent's workingDirectory, or vice-versa on macOS where
-  // `/var/folders/...` and `/private/var/folders/...` alias the same tree.
-  return cwd.startsWith(agentWorkDir) || agentWorkDir.startsWith(cwd)
+  // Both-direction containment match: a worktree's cwd may be a descendant
+  // of the agent's workingDirectory, or vice-versa. The check MUST respect
+  // path-segment boundaries — a bare `String.startsWith` would treat
+  // `/workspace/myproj-other` as belonging to agent `/workspace/myproj`,
+  // leaking a SIBLING agent's transcript into this agent's timeline.
+  // Normalize both sides (strip trailing slashes) and require either exact
+  // equality or a boundary-respecting prefix (`prefix` + path separator).
+  const norm = (p: string) => p.replace(/[/\\]+$/g, '')
+  const a = norm(agentWorkDir)
+  const c = norm(cwd)
+  if (a === c) return true
+  return c.startsWith(a + path.sep) || a.startsWith(c + path.sep)
 }
 
 // ---------------------------------------------------------------------------

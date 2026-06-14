@@ -224,7 +224,14 @@ function lookupTeamIdForAgent(agentId: string): string | null {
       }
     }
     return null
-  } catch {
+  } catch (err) {
+    // Surface the swallowed exception in logs instead of silently returning
+    // null — matches the AUTH-MIN-02 treatment of lookupGovernanceTitle. A
+    // team-registry read failure (corruption, disk error) here previously
+    // collapsed a COS membership check to "no team" with zero diagnostics,
+    // which fails CLOSED (the COS is denied, never wrongly granted) — that
+    // safe direction is preserved, but the failure is no longer invisible.
+    console.warn('[authorization] lookupTeamIdForAgent failed, treating agent as team-less (deny):', { agentId, err })
     return null
   }
 }

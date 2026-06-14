@@ -202,6 +202,23 @@ export interface MessageUsage {
   outputTokens: number
   cacheReadTokens: number
   cacheCreationTokens: number
+  /**
+   * Optional split of `cacheCreationTokens` into the 5-minute ephemeral
+   * write tier, when the raw record carries the nested
+   * `usage.cache_creation.ephemeral_5m_input_tokens` field (Claude Code
+   * 2.1.x). Additive — `cacheCreationTokens` remains the authoritative
+   * total; this is just the 5m portion for UI drill-down. Absent on records
+   * that only report the flat `cache_creation_input_tokens`.
+   */
+  cacheCreation5mTokens?: number
+  /**
+   * Optional split of `cacheCreationTokens` into the 1-hour ephemeral write
+   * tier (`usage.cache_creation.ephemeral_1h_input_tokens`). Additive; see
+   * {@link MessageUsage.cacheCreation5mTokens}. Pricing-wise the cost module
+   * still bills the whole `cacheCreationTokens` at the 5m write rate — this
+   * field exists for display only, not for a separate price calculation.
+   */
+  cacheCreation1hTokens?: number
 }
 
 /**
@@ -229,8 +246,32 @@ export interface TranscriptLine {
   usage?: MessageUsage
   /** ISO timestamp if present on the record. */
   timestamp?: string
+  /**
+   * Epoch milliseconds derived from `timestamp` (or carried forward from
+   * the previous line when this record has no timestamp). Always a finite
+   * number — `normalizeLine` guarantees it via `0` / carry-forward fallback
+   * so Phase 5 (timeline + chronological ruler) can sort/space rows without
+   * re-parsing ISO strings per render. Never NaN, never undefined.
+   */
+  tsMs: number
   /** Whether this line is a tool_use or tool_result record. */
   isToolEvent: boolean
+  /**
+   * Reasoning text extracted from `thinking` content blocks (Claude Code
+   * 2.1.x extended-thinking feature — the reasoning lives in `block.thinking`,
+   * NOT `block.text`). Present only when the assistant turn carried at least
+   * one `thinking` block. The render layer shows this collapsed by default.
+   * `redacted_thinking` blocks contribute a short placeholder marker instead
+   * (see `redactedThinkingCount`).
+   */
+  thinkingText?: string
+  /**
+   * Number of `redacted_thinking` content blocks on this record. These carry
+   * no readable field (the reasoning is server-side-redacted), so the render
+   * layer shows a "[redacted reasoning ×N]" marker rather than dropping the
+   * signal entirely. `0` / absent means none.
+   */
+  redactedThinkingCount?: number
   /** Raw record, kept for debugging / highlight / future expansion. */
   raw: unknown
 }

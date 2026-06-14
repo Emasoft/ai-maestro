@@ -31,6 +31,17 @@
  * `sessions-browser-service.test.ts::recordSessionMapping` block — we do
  * not duplicate it here, but reference it for completeness.
  *
+ * SECURITY (added 2026-06-14, closes the pre-merge review MAJOR-1 gap): the
+ * fork-audit hardening added `confineToProjectsStore()` to all three
+ * `?path=`-accepting routes (range, search, context-breakdown) — without it
+ * an authenticated caller could pass `?path=/etc/passwd` and read any file on
+ * disk. That control shipped with ZERO tests; the final describe block below
+ * locks the path-traversal boundary so a future refactor that drops the
+ * confine call, weakens the `startsWith(projectsRoot)` prefix check, or
+ * reorders it after the reader open can never pass green. Every out-of-store /
+ * non-.jsonl / `..`-escape path MUST return 400 `invalid_path` and MUST NOT
+ * reach the reader.
+ *
  * The tests deliberately mock ONLY external dependencies (the JsonlReader
  * singleton, file-system reads) so the real route handler logic AND the
  * real per-path lock code path execute end-to-end. Per the test-writer
@@ -41,6 +52,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { EventEmitter } from 'events'
 import { PassThrough } from 'stream'
+import { homedir } from 'node:os'
 import type { ChildProcessWithoutNullStreams } from 'child_process'
 
 // ---------------------------------------------------------------------------
@@ -97,10 +109,20 @@ import {
   recordSessionMapping,
 } from '@/services/sessions-browser-service'
 import { POST as rangePOST } from '@/app/api/sessions-browser/sessions/[sid]/range/route'
+import { POST as searchPOST } from '@/app/api/sessions-browser/sessions/[sid]/search/route'
+import { GET as contextBreakdownGET } from '@/app/api/sessions-browser/sessions/[sid]/context-breakdown/route'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// The range route confines a caller-supplied `?path=` to the real Claude Code
+// transcript store (`~/.claude/projects/...jsonl`) via os.homedir() — a
+// path-traversal boundary added by the security audit. Tests exercising the
+// `?path=` success/404 paths therefore build their path from the SAME
+// homedir() the route uses, exactly as the production UI does. A hardcoded
+// '/Users/test/...' would be (correctly) rejected as out-of-store → HTTP 400.
+const TEST_PROJECTS_DIR = `${homedir()}/.claude/projects/-Users-test-proj`
 
 /**
  * Build a Request the same way the production fetch path would: with an
@@ -121,6 +143,40 @@ function makeRangeRequest(sid: string, queryPath?: string, body = { fromLine: 0,
 
 function asParams<T extends object>(obj: T): { params: Promise<T> } {
   return { params: Promise.resolve(obj) }
+}
+
+/**
+ * Build a /search request: same auth cookie + `?path=`, with a minimal valid
+ * search body. The path-confinement gate runs BEFORE the body is parsed
+ * (route reads `?path=` and confines it at the top, parses the body lower
+ * down), so a rejected path returns 400 `invalid_path` regardless of body.
+ */
+function makeSearchRequest(sid: string, queryPath: string) {
+  const base = `http://localhost:23000/api/sessions-browser/sessions/${sid}/search`
+  const url = `${base}?path=${encodeURIComponent(queryPath)}`
+  return new Request(url, {
+    method: 'POST',
+    headers: {
+      cookie: 'aim_session=fake-test-cookie',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ query: 'needle' }),
+  })
+}
+
+/**
+ * Build a /context-breakdown request: GET with the auth cookie + `?path=`.
+ * The auth gate (401) runs first, then the path-confinement gate (400), both
+ * before any atIndex handling — so the cookie is required to reach the path
+ * check at all.
+ */
+function makeContextRequest(sid: string, queryPath: string) {
+  const base = `http://localhost:23000/api/sessions-browser/sessions/${sid}/context-breakdown`
+  const url = `${base}?path=${encodeURIComponent(queryPath)}`
+  return new Request(url, {
+    method: 'GET',
+    headers: { cookie: 'aim_session=fake-test-cookie' },
+  })
 }
 
 /**
@@ -166,7 +222,7 @@ describe('range route — cross-worker isolation (BUG-001 core)', () => {
     // sidToPath map is empty. The UI sends `?path=` from the list
     // response so the route MUST resolve cross-worker.
     const sid = 'aabbccdd-1111-2222-3333-444455556666'
-    const absolutePath = '/Users/test/.claude/projects/-Users-test-proj/aabbccdd.jsonl'
+    const absolutePath = `${TEST_PROJECTS_DIR}/aabbccdd.jsonl`
 
     const fakeReader = makeFakeReader()
     fakeReader.open.mockResolvedValue({
@@ -246,7 +302,7 @@ describe('range route — warm-cache fallback (same-worker, no `?path=`)', () =>
 
   it('falls back to resolveSessionPath when `?path=` is omitted', async () => {
     const sid = 'warm-cache-sid-99887766'
-    const absolutePath = '/Users/test/.claude/projects/-Users-test-proj/warm.jsonl'
+    const absolutePath = `${TEST_PROJECTS_DIR}/warm.jsonl`
 
     // Simulate a list call having already populated the same-worker map.
     recordSessionMapping(sid, absolutePath)
@@ -287,7 +343,7 @@ describe('range route — retry on transient session_not_found (eviction race)',
 
   it('retries after one session_not_found and returns 200 on the second attempt', async () => {
     const sid = 'retry-sid-aaaa'
-    const absolutePath = '/Users/test/.claude/projects/-Users-test-proj/retry.jsonl'
+    const absolutePath = `${TEST_PROJECTS_DIR}/retry.jsonl`
 
     const fakeReader = makeFakeReader()
     // Open is called once per attempt — both attempts succeed (a fresh
@@ -325,7 +381,7 @@ describe('range route — retry on transient session_not_found (eviction race)',
 
   it('gives up after MAX_ATTEMPTS=3 consecutive evictions and returns 404', async () => {
     const sid = 'retry-exhausted-sid'
-    const absolutePath = '/Users/test/.claude/projects/-Users-test-proj/persistent-evict.jsonl'
+    const absolutePath = `${TEST_PROJECTS_DIR}/persistent-evict.jsonl`
 
     const fakeReader = makeFakeReader()
     fakeReader.open.mockResolvedValue({
@@ -470,5 +526,119 @@ describe('JsonlReader.open() — per-path Promise lock (concurrent open dedup)',
     expect(openCmdCount).toBe(1)
 
     await reader.shutdown()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Test 6 — SECURITY: path-traversal confinement (confineToProjectsStore)
+// ---------------------------------------------------------------------------
+//
+// The fork-audit hardening added confineToProjectsStore() to the three
+// `?path=`-accepting routes. The guard: path.resolve() normalizes `..`, then
+// the resolved path MUST end with `.jsonl` AND MUST start with the Claude Code
+// projects store (`~/.claude/projects/` + path.sep). Anything else → 400
+// `invalid_path`, and the reader is NEVER opened. These tests assert the
+// REJECTION direction across all three routes — the direction the shipped
+// regression suite never covered (pre-merge review MAJOR-1).
+
+describe('sessions-browser routes — path-traversal confinement (confineToProjectsStore)', () => {
+  const HOME = homedir()
+
+  // Each vector is crafted to defeat a SPECIFIC gate; if any gate regresses,
+  // the matching vector stops returning 400 and the test fails.
+  const MALICIOUS: Array<{ name: string; path: string }> = [
+    {
+      name: 'absolute path outside store, non-.jsonl (extension gate)',
+      path: '/etc/passwd',
+    },
+    {
+      // The real arbitrary-file-read vector: correct extension, wrong location.
+      // Only the `startsWith(projectsRoot + sep)` prefix check stops this.
+      name: 'absolute path outside store, .jsonl extension (prefix gate)',
+      path: '/etc/evil.jsonl',
+    },
+    {
+      // `..` segments that escape the store; path.resolve() must collapse them
+      // BEFORE the prefix check, otherwise the literal string would falsely
+      // appear to start with the projects root.
+      name: '`..` traversal escaping the store after resolve()',
+      path: `${HOME}/.claude/projects/../../../../../../etc/shadow.jsonl`,
+    },
+    {
+      // In-store directory but a non-transcript file — the extension gate must
+      // still reject it so the reader is never pointed at e.g. a secrets file
+      // that happens to live under the projects tree.
+      name: 'in-store path with non-.jsonl extension',
+      path: `${HOME}/.claude/projects/-Users-test-proj/secret.txt`,
+    },
+  ]
+
+  const ROUTES: Array<{
+    label: string
+    call: (sid: string, p: string) => Promise<Response>
+  }> = [
+    {
+      label: 'range (POST)',
+      call: (sid, p) => rangePOST(makeRangeRequest(sid, p), asParams({ sid })),
+    },
+    {
+      label: 'search (POST)',
+      call: (sid, p) => searchPOST(makeSearchRequest(sid, p), asParams({ sid })),
+    },
+    {
+      label: 'context-breakdown (GET)',
+      call: (sid, p) => contextBreakdownGET(makeContextRequest(sid, p), asParams({ sid })),
+    },
+  ]
+
+  let fakeReader: ReturnType<typeof makeFakeReader>
+
+  beforeEach(() => {
+    clearSessionMappings()
+    vi.mocked(getJsonlReader).mockReset()
+    fakeReader = makeFakeReader()
+    vi.mocked(getJsonlReader).mockReturnValue(fakeReader as any)
+  })
+
+  afterEach(() => {
+    vi.mocked(getJsonlReader).mockReset()
+  })
+
+  for (const route of ROUTES) {
+    for (const vec of MALICIOUS) {
+      it(`${route.label}: rejects ${vec.name} with 400 invalid_path and never opens the reader`, async () => {
+        const sid = 'trav-sid-1234'
+        const res = await route.call(sid, vec.path)
+
+        expect(res.status).toBe(400)
+        const body = await res.json()
+        expect(body).toEqual({ error: 'invalid_path' })
+        // CRITICAL: the confine gate fires BEFORE the reader is touched. If a
+        // refactor drops the confine call or reorders it after open(), the
+        // reader would be invoked on an out-of-store path — this fires.
+        expect(fakeReader.open).not.toHaveBeenCalled()
+      })
+    }
+  }
+
+  // Positive boundary — lock the guard against OVER-blocking: a legitimate
+  // in-store `.jsonl` path must pass confinement and reach the reader. A
+  // too-strict refactor that 400s a valid path would fail here. (Range route;
+  // the guard is byte-identical across all three.)
+  it('range (POST): a valid in-store .jsonl path passes the guard and reaches the reader', async () => {
+    const sid = 'valid-instore-sid'
+    const validPath = `${HOME}/.claude/projects/-Users-test-proj/${sid}.jsonl`
+    fakeReader.open.mockResolvedValue({
+      ok: true,
+      sessionId: 'rust-ok',
+      lineCount: 1,
+      indexed: false,
+    })
+    fakeReader.readRange.mockResolvedValue({ ok: true, lines: [{ ok: true }] })
+
+    const res = await rangePOST(makeRangeRequest(sid, validPath), asParams({ sid }))
+
+    expect(res.status).toBe(200)
+    expect(fakeReader.open).toHaveBeenCalledWith(validPath)
   })
 })

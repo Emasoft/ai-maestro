@@ -18,6 +18,7 @@
 
 import { ChevronRight, ChevronDown, Wrench } from 'lucide-react'
 import type { TranscriptLine } from '@/types/sessions-browser'
+import PseudoTerminal from './PseudoTerminal'
 
 interface ToolUseRowProps {
   line: TranscriptLine
@@ -60,7 +61,7 @@ export default function ToolUseRow({ line, expanded, onToggle }: ToolUseRowProps
   const ts = formatTs(line.timestamp)
 
   return (
-    <div className="aim-tool-row aim-msg-card rounded-md border-[1.5px] border-violet-400/50 bg-violet-500/[0.12] text-gray-300 text-[11px] overflow-hidden">
+    <div className="ml-[28px] rounded-md border-[1.5px] border-violet-400/50 bg-violet-500/[0.12] text-gray-300 text-[11px] overflow-hidden transition-shadow duration-200 ease-out group-hover:shadow-[0_0_12px_1px_rgba(16,185,129,0.45)] group-data-[pinned=true]:shadow-[0_0_0_2px_rgb(16,185,129),0_0_18px_2px_rgba(16,185,129,0.55)] group-data-[pinned=true]:group-hover:shadow-[0_0_0_3px_rgb(52,211,153),0_0_26px_4px_rgba(16,185,129,0.75)]">
       <button
         type="button"
         aria-expanded={expanded}
@@ -98,28 +99,18 @@ export default function ToolUseRow({ line, expanded, onToggle }: ToolUseRowProps
         )}
       </button>
       {expanded && (
-        // Capped max-height + overflow-y:auto means the expanded payload
-        // can be huge (multi-K JSON) without bleeding past the
-        // virtualizer's row slot. The parent's rowHeight() returns a
-        // matching constant so the next bubble starts BELOW this panel.
-        <div
-          className="px-3 py-2 border-t border-violet-500/30 font-mono text-[10.5px] text-gray-200 space-y-2 max-h-[280px] overflow-y-auto"
-          style={{ overscrollBehavior: 'contain' }}
-        >
-          {inputStr && (
-            <div>
-              <div className="text-violet-300 mb-1 uppercase tracking-wider text-[9px] font-semibold">input</div>
-              <pre className="whitespace-pre-wrap break-all text-gray-100">{inputStr}</pre>
-            </div>
-          )}
-          {resultStr && (
-            <div>
-              <div className="text-violet-300 mb-1 uppercase tracking-wider text-[9px] font-semibold">result</div>
-              <pre className="whitespace-pre-wrap break-all text-gray-100">{resultStr}</pre>
-            </div>
-          )}
+        // Capped max-height + overflow-y:auto is the ONE sanctioned vertical
+        // inner scroller: the expanded payload can be huge (multi-K JSON /
+        // terminal output) without bleeding past the virtualizer's row slot.
+        // The parent's rowHeight() returns TOOL_ROW_EXPANDED_HEIGHT (320 px,
+        // = this 280 px cap + header + border) so the next bubble starts
+        // BELOW this panel. The PseudoTerminal blocks inside WRAP long lines
+        // (no horizontal scroller) — only THIS container scrolls vertically.
+        <div className="px-3 py-2 border-t border-violet-500/30 space-y-2 max-h-[280px] overflow-y-auto overscroll-contain">
+          {inputStr && <PseudoTerminal text={inputStr} title="input" />}
+          {resultStr && <PseudoTerminal text={resultStr} title="result" />}
           {!inputStr && !resultStr && (
-            <div className="text-gray-500">(no payload)</div>
+            <div className="font-mono text-[10.5px] text-gray-500">(no payload)</div>
           )}
         </div>
       )}

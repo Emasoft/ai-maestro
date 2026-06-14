@@ -1,3 +1,6 @@
+import { homedir } from 'node:os'
+import path from 'node:path'
+
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -13,6 +16,27 @@ import {
 } from '@/lib/jsonl-reader'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Confine a caller-supplied `?path=` to the Claude Code transcript store
+ * (`~/.claude/projects/<slug>/...<uuid>.jsonl`). The raw `?path=` is
+ * attacker-controlled — any authenticated session can pass
+ * `?path=/etc/passwd` — and the downstream reader (`ensureOpenForPath` →
+ * Rust `open` → `fs.readFile`) does NOT confine it, so the gate has to
+ * live here at the request boundary. Mirrors `confineToProjectsStore` in
+ * the sibling context-breakdown route — the same fail-fast boundary for
+ * the same `?path=` surface. `path.resolve` collapses any `..` traversal,
+ * so a post-resolve `.jsonl`-suffix + projects-root-prefix check is the
+ * correct lexical confinement (no symlink follow — the reader does none
+ * either). Returns the resolved absolute path, or `null` to reject.
+ */
+function confineToProjectsStore(rawPath: string): string | null {
+  const resolved = path.resolve(rawPath)
+  if (!resolved.endsWith('.jsonl')) return null
+  const projectsRoot = path.join(homedir(), '.claude', 'projects')
+  if (!resolved.startsWith(projectsRoot + path.sep)) return null
+  return resolved
+}
 
 // Request body schema
 const RangeBodySchema = z.object({
@@ -52,9 +76,25 @@ export async function POST(
   //   2. Fallback to the in-memory `sidToPath` map populated by a previous
   //      list call in the same worker process. Kept for backward compat with
   //      callers that don't yet pass `?path=` and for warm-cache cases.
+  //
+  // The `?path=` form is caller-controlled, so it MUST be confined to the
+  // Claude Code transcript store before it reaches the reader (which opens
+  // it unguarded). A path outside the store is a path-traversal attempt —
+  // reject it explicitly rather than letting the reader read an arbitrary
+  // file. The `resolveSessionPath(sid)` fallback is server-derived (recorded
+  // by `listSessionsInProjectDir`, always under `~/.claude/projects/`) and
+  // needs no re-check.
   const url = new URL(request.url)
   const pathParam = url.searchParams.get('path')
-  const absolutePath = pathParam || resolveSessionPath(sid)
+  let absolutePath: string | null
+  if (pathParam) {
+    absolutePath = confineToProjectsStore(pathParam)
+    if (!absolutePath) {
+      return NextResponse.json({ error: 'invalid_path' }, { status: 400 })
+    }
+  } else {
+    absolutePath = resolveSessionPath(sid)
+  }
   if (!absolutePath) {
     return NextResponse.json({ error: 'session_not_found' }, { status: 404 })
   }

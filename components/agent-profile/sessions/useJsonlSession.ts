@@ -30,9 +30,54 @@ import type {
 
 const DEFAULT_PAGE_SIZE = 500
 
+/**
+ * Live-tail poll interval (ms). Only used when the session is ONGOING and the
+ * user has turned `followTail` ON — a closed historical session never polls
+ * (audit C1: a 2 s unconditional interval on a read-only browser was a
+ * no-polling-rule violation). 2 s is the "feels live" cadence; it is the
+ * ceiling of how stale a followed, actively-written session can look.
+ */
+const LIVE_TAIL_INTERVAL_MS = 2000
+
+/**
+ * Consecutive transient tail failures tolerated before the loop surfaces the
+ * error and stops. Transient = retryable (network blip, a brief
+ * session_not_found while the file rotates). Terminal errors
+ * (`binary_missing`) stop immediately regardless of this count.
+ */
+const TAIL_MAX_TRANSIENT_FAILURES = 5
+
+/**
+ * Classify a tail `fetchRange` error as terminal (stop the loop, surface it)
+ * vs transient (retry next tick). The error messages are the `*_failed:<status>:<detail>`
+ * strings thrown by `fetchRange` → `safeErrorDetail`. `binary_missing` (the
+ * Rust reader binary is gone) can never recover by retrying, so it is terminal.
+ */
+function isTerminalTailError(message: string): boolean {
+  return message.includes('binary_missing')
+}
+
 // ---------------------------------------------------------------------------
 // Normalization — raw JSONL line → TranscriptLine
 // ---------------------------------------------------------------------------
+
+/**
+ * Raw `usage` object shape as emitted in the JSONL. The nested
+ * `cache_creation` map (Claude Code 2.1.x) splits the cache-write total into
+ * ephemeral tiers; older records carry only the flat
+ * `cache_creation_input_tokens`. All fields optional — `extractUsage`
+ * defensively defaults each to 0.
+ */
+interface RawUsage {
+  input_tokens?: number
+  output_tokens?: number
+  cache_read_input_tokens?: number
+  cache_creation_input_tokens?: number
+  cache_creation?: {
+    ephemeral_5m_input_tokens?: number
+    ephemeral_1h_input_tokens?: number
+  }
+}
 
 interface RawRecord {
   type?: string
@@ -40,19 +85,9 @@ interface RawRecord {
   message?: {
     role?: string
     content?: unknown
-    usage?: {
-      input_tokens?: number
-      output_tokens?: number
-      cache_read_input_tokens?: number
-      cache_creation_input_tokens?: number
-    }
+    usage?: RawUsage
   }
-  usage?: {
-    input_tokens?: number
-    output_tokens?: number
-    cache_read_input_tokens?: number
-    cache_creation_input_tokens?: number
-  }
+  usage?: RawUsage
   timestamp?: string
   content?: unknown
   text?: string
@@ -64,9 +99,8 @@ interface RawRecord {
 
 /**
  * Top-level `type` values that Claude Code emits at session start (or
- * mid-session) which carry NO user-visible content — they exist only as
- * structural / metadata markers (custom title, agent name, permission
- * mode, attachments, file-history snapshots, last-prompt anchor).
+ * mid-session) which carry NO user-visible message body — they exist only as
+ * structural / telemetry / hook / tool-plumbing markers.
  *
  * Rendering them as "SYSTEM (empty)" rows clutters the transcript and
  * confuses the user (the screenshot 2026-05-06 21:24 showed five of
@@ -77,18 +111,64 @@ interface RawRecord {
  * IMPORTANT: lineIndex remains the raw JSONL line offset (not a
  * post-filter index), so server-side range fetches keep working with
  * the original line numbers. Only the rendered transcript is filtered.
+ *
+ * Classification (per IN-1 schema-evolution audit, Claude Code 2.1.142+):
+ *   - RENDER: `user`, `assistant` (real messages) — never in this Set.
+ *   - DEDICATED-EVENT (future): the error envelopes (`error`,
+ *     `authentication_error`, `overloaded_error`) and `compact_boundary`
+ *     (a `system` subtype, already caught by the empty-text heuristic below)
+ *     carry signal worth a dedicated event row. Until that render phase
+ *     exists, HIDING them is strictly better than emitting an empty bubble,
+ *     so they live here with a note. Promote them out of this Set when the
+ *     dedicated-event channel lands.
+ *   - HIDE: everything else below — structural noise (attachments, file
+ *     snapshots), hook telemetry (`hook_*`), task/queue/mode plumbing,
+ *     tool-discovery deltas, skill/agent listings. The RECENT 35 MB sample
+ *     had 12,356 `attachment` + 9,701 `hook_success` + 4,062 `queue-operation`
+ *     records — without this Set they all paint empty rows.
  */
 const HIDDEN_RECORD_TYPES = new Set([
+  // --- pre-existing structural markers ---
   'last-prompt',
   'custom-title',
   'agent-name',
   'permission-mode',
   'file-history-snapshot',
   'attachment',
-  // Phase 5 stream markers — emitted by Claude Code 2.x but irrelevant
-  // to a chat transcript reader.
+  // Legacy / hyphen-cased stream markers (kept for older sessions).
   'queued-prompt',
   'compact-summary-anchor',
+  // --- hook family (replaced OLD progress/agent_progress/hook_progress) ---
+  'hook_success',
+  'hook_additional_context',
+  'hook_non_blocking_error',
+  'hook_cancelled',
+  // --- task / queue / mode plumbing ---
+  'queue-operation',
+  'queued_command',
+  'task_reminder',
+  'task_status',
+  'mode',
+  // --- tool / skill / agent discovery plumbing (no message body) ---
+  'tool_reference',
+  'skill_listing',
+  'invoked_skills',
+  'deferred_tools_delta',
+  'mcp_instructions_delta',
+  'command_permissions',
+  'compact_file_reference',
+  // --- file-edit side records (the diff/content lives in tool_result) ---
+  'file',
+  'create',
+  'update',
+  'edited_text_file',
+  // --- telemetry / housekeeping ---
+  'date_change',
+  'diagnostics',
+  // --- error envelopes (DEDICATED-EVENT candidates — see note above) ---
+  'error',
+  'authentication_error',
+  'overloaded_error',
 ])
 
 function extractRole(raw: RawRecord): MessageRole {
@@ -130,6 +210,14 @@ function isMetadataOnlyRecord(raw: RawRecord): boolean {
 function extractText(raw: RawRecord): string {
   // Claude Code JSONL "content" is typically a string OR an array of
   // {type,text} blocks. We flatten both.
+  //
+  // IMPORTANT: only plain text/visible blocks land here. `thinking` and
+  // `redacted_thinking` blocks are reasoning, NOT message body — they are
+  // pulled out separately by `extractThinking` so the render layer can show
+  // them collapsed instead of inlining reasoning into the bubble text. We
+  // skip them here by checking `b.type` (a bare `b.text` on a thinking block
+  // would otherwise be empty anyway, but being explicit prevents a future
+  // thinking-block shape change from leaking reasoning into the text body).
   const content: unknown = raw.message?.content ?? raw.content ?? raw.text
   if (typeof content === 'string') return content
   if (Array.isArray(content)) {
@@ -139,12 +227,45 @@ function extractText(raw: RawRecord): string {
         parts.push(block)
       } else if (block && typeof block === 'object') {
         const b = block as { type?: string; text?: string }
+        if (b.type === 'thinking' || b.type === 'redacted_thinking') continue
         if (typeof b.text === 'string') parts.push(b.text)
       }
     }
     return parts.join('\n\n')
   }
   return ''
+}
+
+/**
+ * Pull reasoning out of `thinking` / `redacted_thinking` content blocks.
+ *
+ * Claude Code 2.1.x extended-thinking records the chain-of-thought in a
+ * `{type:'thinking', thinking:'<reasoning>', signature:'<base64>'}` block —
+ * the reasoning text is in the `thinking` FIELD, not `text`, so `extractText`
+ * would silently drop it. `redacted_thinking` blocks carry no readable field
+ * at all (the reasoning is server-side redacted); we count them so the render
+ * layer can show a "[redacted reasoning ×N]" marker rather than losing the
+ * signal that reasoning happened.
+ *
+ * Returns the concatenated thinking text (empty string if none) and the count
+ * of redacted blocks. Pure flattening over the same content array `extractText`
+ * walks; tool_use blocks are ignored here (handled by `extractToolInfo`).
+ */
+function extractThinking(raw: RawRecord): { thinkingText: string; redactedCount: number } {
+  const content: unknown = raw.message?.content ?? raw.content
+  if (!Array.isArray(content)) return { thinkingText: '', redactedCount: 0 }
+  const parts: string[] = []
+  let redactedCount = 0
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue
+    const b = block as { type?: string; thinking?: string }
+    if (b.type === 'thinking') {
+      if (typeof b.thinking === 'string' && b.thinking.length > 0) parts.push(b.thinking)
+    } else if (b.type === 'redacted_thinking') {
+      redactedCount += 1
+    }
+  }
+  return { thinkingText: parts.join('\n\n'), redactedCount }
 }
 
 function extractUsage(raw: RawRecord): MessageUsage | undefined {
@@ -157,12 +278,24 @@ function extractUsage(raw: RawRecord): MessageUsage | undefined {
     typeof u.cache_read_input_tokens === 'number' ||
     typeof u.cache_creation_input_tokens === 'number'
   if (!hasAny) return undefined
-  return {
+  const out: MessageUsage = {
     inputTokens: u.input_tokens ?? 0,
     outputTokens: u.output_tokens ?? 0,
     cacheReadTokens: u.cache_read_input_tokens ?? 0,
     cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
   }
+  // Additive: carry the nested 5m/1h ephemeral split when present. These are
+  // a breakdown of cacheCreationTokens for UI drill-down, not a new total.
+  const cc = u.cache_creation
+  if (cc) {
+    if (typeof cc.ephemeral_5m_input_tokens === 'number') {
+      out.cacheCreation5mTokens = cc.ephemeral_5m_input_tokens
+    }
+    if (typeof cc.ephemeral_1h_input_tokens === 'number') {
+      out.cacheCreation1hTokens = cc.ephemeral_1h_input_tokens
+    }
+  }
+  return out
 }
 
 function extractToolInfo(raw: RawRecord): {
@@ -211,6 +344,17 @@ function extractToolInfo(raw: RawRecord): {
 }
 
 /**
+ * Parse an ISO-8601 timestamp string into epoch milliseconds.
+ * Returns `null` when the input is absent or unparseable (NEVER NaN) so the
+ * caller can apply the carry-forward fallback deterministically.
+ */
+function parseTsMs(timestamp: string | undefined): number | null {
+  if (typeof timestamp !== 'string' || timestamp.length === 0) return null
+  const ms = Date.parse(timestamp)
+  return Number.isFinite(ms) ? ms : null
+}
+
+/**
  * Convert a raw JSONL record into a renderable TranscriptLine.
  *
  * Returns `null` for metadata-only records (custom-title, agent-name,
@@ -218,18 +362,36 @@ function extractToolInfo(raw: RawRecord): {
  * Callers MUST treat null as "skip this line" — the lineIndex passed in
  * is preserved on real records so the server-side range numbering
  * stays consistent (the filter is purely a render-side cull).
+ *
+ * `prevTsMs` is the epoch-ms of the previous RENDERED line (or 0 at the start
+ * of the file). When this record has no parseable `timestamp` we carry that
+ * value forward so `tsMs` is always a finite, monotonic-ish number for Phase 5
+ * (timeline ruler). `normalizeLines` threads this for the common batch case;
+ * direct callers may pass 0.
  */
-export function normalizeLine(raw: unknown, lineIndex: number): TranscriptLine | null {
+export function normalizeLine(
+  raw: unknown,
+  lineIndex: number,
+  prevTsMs = 0,
+): TranscriptLine | null {
   const r = (raw ?? {}) as RawRecord
   if (isMetadataOnlyRecord(r)) return null
   const role = extractRole(r)
   const { isToolEvent, toolName, toolInput, toolResult, toolUseId } = extractToolInfo(r)
+  const { thinkingText, redactedCount } = extractThinking(r)
+  const timestamp = typeof r.timestamp === 'string' ? r.timestamp : undefined
+  const parsed = parseTsMs(timestamp)
   return {
     lineIndex,
     role,
     text: extractText(r),
     usage: extractUsage(r),
-    timestamp: typeof r.timestamp === 'string' ? r.timestamp : undefined,
+    timestamp,
+    // Carry the previous line's tsMs forward when this record lacks a
+    // timestamp — never NaN, never undefined (Phase 5 sorts/spaces on it).
+    tsMs: parsed ?? prevTsMs,
+    thinkingText: thinkingText.length > 0 ? thinkingText : undefined,
+    redactedThinkingCount: redactedCount > 0 ? redactedCount : undefined,
     toolName,
     toolInput,
     toolResult,
@@ -237,6 +399,90 @@ export function normalizeLine(raw: unknown, lineIndex: number): TranscriptLine |
     isToolEvent,
     raw,
   }
+}
+
+/**
+ * Normalize a batch of raw records into rendered TranscriptLines, threading
+ * the `tsMs` carry-forward across the batch and dropping metadata-only rows.
+ *
+ * @param rawLines  raw JSONL objects from a range fetch (in file order)
+ * @param fromOffset absolute file offset of `rawLines[0]` (the cursor base)
+ * @param seedTsMs  tsMs of the line immediately BEFORE this batch (0 for the
+ *                  first page; the last rendered line's tsMs for appended pages)
+ *
+ * Centralises the map+filter that the initial-load / loadMore / live-tail
+ * paths used to duplicate inline (single source of truth for normalization),
+ * and is what makes the carry-forward correct ACROSS page boundaries — a row
+ * with no timestamp inherits the prior page's last tsMs, not 0.
+ */
+export function normalizeLines(
+  rawLines: unknown[],
+  fromOffset: number,
+  seedTsMs = 0,
+): TranscriptLine[] {
+  const out: TranscriptLine[] = []
+  let prevTsMs = seedTsMs
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = normalizeLine(rawLines[i], fromOffset + i, prevTsMs)
+    if (line === null) continue
+    prevTsMs = line.tsMs
+    out.push(line)
+  }
+  return out
+}
+
+/**
+ * Map a RAW JSONL line offset (`TranscriptLine.lineIndex`) to its position
+ * in the rendered/filtered `lines` array.
+ *
+ * WHY this exists (audit C4): `lineIndex` is the absolute file offset, but
+ * `normalizeLine` drops metadata-only records (see `HIDDEN_RECORD_TYPES`),
+ * so the rendered `lines` array is SHORTER than the file and its positions
+ * no longer equal the file offsets. Any consumer that indexes a
+ * position-keyed array (e.g. ChatTranscript's `offsets[]` for scroll-to-match)
+ * with a raw `lineIndex` lands on the wrong row — or, when
+ * `lineIndex >= lines.length`, silently nowhere. Translate the offset HERE,
+ * once, before indexing.
+ *
+ * Behaviour:
+ *   - Exact match on `lineIndex` → that array position.
+ *   - No exact match (the target offset belongs to a FILTERED-out record, or
+ *     is past the loaded window) → the position of the nearest loaded line
+ *     whose `lineIndex <= target` (so a match inside a filtered block scrolls
+ *     to the visible row just before it, never off the top of the list).
+ *   - No loaded line at-or-before the target (target precedes every loaded
+ *     line) → `0`.
+ *   - Empty `lines` → `-1` (caller treats as "cannot scroll"; mirrors
+ *     `findIndex`'s not-found sentinel so a bounds-check `pos < 0` works).
+ *
+ * `lines` is assumed sorted ascending by `lineIndex` (it always is —
+ * `normalizeLine` is fed sequential offsets and results are appended in
+ * order). Pure + side-effect-free so it is unit-testable in isolation; the
+ * unit test seeds a session whose leading records are filtered metadata and
+ * asserts a match maps to the correct array position.
+ */
+export function lineIndexToArrayPos(lines: TranscriptLine[], lineIndex: number): number {
+  if (lines.length === 0) return -1
+  // Binary search for the greatest array position whose lineIndex <= target.
+  // (Linear `findIndex` would be O(n) per jump on a 10k-line transcript;
+  // the array is sorted so a binary search keeps scroll-to-match O(log n).)
+  let lo = 0
+  let hi = lines.length - 1
+  // If the target precedes the first loaded line, there is nothing at-or-before it.
+  if (lineIndex < lines[0].lineIndex) return 0
+  let best = 0
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const midIdx = lines[mid].lineIndex
+    if (midIdx === lineIndex) return mid
+    if (midIdx < lineIndex) {
+      best = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  return best
 }
 
 /** Sum usage across all assistant messages. Returned for the sticky header. */
@@ -253,6 +499,17 @@ export function sumUsage(lines: TranscriptLine[]): MessageUsage {
       out.outputTokens += line.usage.outputTokens
       out.cacheReadTokens += line.usage.cacheReadTokens
       out.cacheCreationTokens += line.usage.cacheCreationTokens
+      // Additive: accumulate the optional 5m/1h split only when at least one
+      // line reported it, so the field stays undefined (not 0) for sessions
+      // whose records never carried the nested breakdown.
+      if (line.usage.cacheCreation5mTokens !== undefined) {
+        out.cacheCreation5mTokens =
+          (out.cacheCreation5mTokens ?? 0) + line.usage.cacheCreation5mTokens
+      }
+      if (line.usage.cacheCreation1hTokens !== undefined) {
+        out.cacheCreation1hTokens =
+          (out.cacheCreation1hTokens ?? 0) + line.usage.cacheCreation1hTokens
+      }
     }
   }
   return out
@@ -407,6 +664,29 @@ export interface UseJsonlSessionApi {
   transcriptLoading: boolean
   transcriptError: string | null
   loadMore: () => void
+  /**
+   * Whether the selected session is still being written (mtime within the
+   * last ~10 min, no shutdown marker). Derived from `SessionSummary.isOngoing`.
+   * Only an ongoing session is eligible for live-tailing; a closed historical
+   * transcript never polls. `false` when unknown or closed.
+   */
+  isOngoing: boolean
+  /**
+   * User "follow tail" toggle. DEFAULTS OFF — a read-only history browser must
+   * not poll unless the user explicitly opts in AND the session is ongoing.
+   * When both `followTail` and `isOngoing` are true, the hook polls the .jsonl
+   * for appended lines; otherwise it never sets up an interval (audit C1).
+   */
+  followTail: boolean
+  setFollowTail: (on: boolean) => void
+  /**
+   * Set when a live-tail poll hits a TERMINAL backend failure
+   * (binary_missing, or repeated session_not_found) — the loop stops and
+   * surfaces this instead of silently looking "live" forever (audit: tail
+   * fail-fast). Transient errors are retried on the next tick and do NOT set
+   * this. `null` when tailing is healthy or off.
+   */
+  tailError: string | null
 
   // Context breakdown
   breakdown: ContextBreakdownResponse | null
@@ -519,6 +799,32 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
   // validates it). When the list finally arrives, we don't clobber the
   // user's selection.
 
+  // Clear the selected session on a genuine agent SWITCH (one non-null agent id
+  // replaced by a DIFFERENT non-null id). A sid belongs to exactly one agent's
+  // project dir, so carrying Agent A's selection into Agent B would (a) load A's
+  // transcript under B's tab and (b) mirror A's sid into the URL while viewing
+  // B. The list/transcript/breakdown/search effects key on `selectedSessionId`,
+  // not `agentId`, so without this reset a changing `agentId` prop leaves the
+  // cross-agent selection live. The current dashboard remounts this hook per
+  // agent (`key={agent.id}`), so today this never fires — but the hook is an
+  // exported, reusable surface and must stay self-consistent for any caller
+  // that does NOT remount on switch.
+  //
+  // We deliberately reset ONLY on a non-null → different-non-null transition,
+  // not on the initial `null → id` resolution: a caller may mount with
+  // `agentId === null` (agent not resolved yet) while the URL carries
+  // `?sid=<uuid>`, and that URL-direct selection MUST survive until the agent
+  // resolves (see the comment block above). `prevAgentIdRef` seeds from the
+  // first `agentId` so the initial mount is skipped regardless.
+  const prevAgentIdRef = useRef<string | null>(agentId)
+  useEffect(() => {
+    const prev = prevAgentIdRef.current
+    prevAgentIdRef.current = agentId
+    if (prev !== null && agentId !== null && prev !== agentId) {
+      setSelectedSessionId(null)
+    }
+  }, [agentId])
+
   // Sync URL when selection changes. Guarded by syncUrl flag.
   useEffect(() => {
     if (!syncUrl) return
@@ -535,7 +841,40 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
   const [transcriptLoading, setTranscriptLoading] = useState(false)
   const [transcriptError, setTranscriptError] = useState<string | null>(null)
   const nextFromRef = useRef<number>(0)
+  // SINGLE abortable handle for the CURRENT range read (initial-load,
+  // loadMore, OR live-tail). Every range read registers here and clears it in
+  // its own `finally` — but only if it still owns the slot
+  // (`inFlightRef.current === ctrl`), so a later read that clobbered the slot
+  // is never wrongly nulled (audit MAJOR: loadMore used to leak its controller).
   const inFlightRef = useRef<AbortController | null>(null)
+  // tsMs of the last RENDERED line, so an appended page's carry-forward seeds
+  // from the true previous tsMs (not 0) across page boundaries. Kept in a ref
+  // because the append paths read it synchronously inside async callbacks.
+  const lastTsMsRef = useRef<number>(0)
+  // TRUE end-of-file flag — set ONLY when a range read returns fewer than
+  // `pageSize` raw rows. This is the authoritative EOF signal; `totalLines`
+  // (which may be seeded from the lazy `messageCount` hint) is a DISPLAY value
+  // and must NOT be used to short-circuit `loadMore` — `messageCount` counts
+  // messages, not raw JSONL lines, so it can be < the real line count and
+  // would otherwise wedge `loadMore` before the file's tail is loaded (a real
+  // risk now that live-tail no longer backfills by default).
+  const endReachedRef = useRef<boolean>(false)
+  // Mirror of selectedSessionId read synchronously AFTER an await to reject a
+  // stale append into a newly-selected session (audit C3: cross-session
+  // contamination). A closure-captured `reqSid` is compared against this.
+  const selectedSessionIdRef = useRef<string | null>(selectedSessionId)
+  useEffect(() => { selectedSessionIdRef.current = selectedSessionId }, [selectedSessionId])
+
+  // Follow-tail toggle — DEFAULTS OFF (audit C1: no unconditional polling on a
+  // read-only history browser). Only an ONGOING session that the user has
+  // opted into following is live-tailed. Reset to OFF on every session switch
+  // so following one session never silently follows the next.
+  const [followTail, setFollowTail] = useState(false)
+  const [tailError, setTailError] = useState<string | null>(null)
+  useEffect(() => {
+    setFollowTail(false)
+    setTailError(null)
+  }, [selectedSessionId])
 
   // Stable ref to the latest sessions array so polling / live-tail effects
   // can look up `summary.path` without putting `sessions` in their dep
@@ -559,6 +898,15 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     return sessions.find(s => s.id === selectedSessionId)?.path
   }, [sessions, selectedSessionId])
 
+  // Whether the selected session is still being written. Derived from the
+  // session summary's `isOngoing` flag (mtime within ~10 min, no shutdown
+  // marker — see SessionSummary). `false` when unknown or closed. Gates
+  // live-tailing: a closed historical transcript is NEVER polled (audit C1).
+  const isOngoing = useMemo(() => {
+    if (!selectedSessionId) return false
+    return sessions.find(s => s.id === selectedSessionId)?.isOngoing === true
+  }, [sessions, selectedSessionId])
+
   // Reset + load first page whenever the selected sid changes.
   useEffect(() => {
     if (inFlightRef.current) {
@@ -569,6 +917,8 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     setTotalLines(null)
     setTranscriptError(null)
     nextFromRef.current = 0
+    lastTsMsRef.current = 0
+    endReachedRef.current = false
 
     if (!selectedSessionId) return
 
@@ -600,17 +950,18 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     fetchRange(selectedSessionId, 0, pageSize - 1, sessionPath, ctrl.signal)
       .then(r => {
         if (ctrl.signal.aborted) return
-        // normalizeLine returns null for metadata-only records (custom-title,
-        // attachment, etc.) — filter them out of the rendered list. The
-        // server-side cursor (`nextFromRef`) advances by the RAW count so
-        // subsequent range requests pick up where this one left off.
-        const normalized = r.lines
-          .map((raw, i) => normalizeLine(raw, i))
-          .filter((l): l is TranscriptLine => l !== null)
+        // normalizeLines drops metadata-only records (custom-title,
+        // attachment, etc.) from the rendered list. The server-side cursor
+        // (`nextFromRef`) advances by the RAW count so subsequent range
+        // requests pick up where this one left off. Seed tsMs carry-forward
+        // from 0 (start of file).
+        const normalized = normalizeLines(r.lines, 0, 0)
         setLines(normalized)
         nextFromRef.current = r.lines.length
+        if (normalized.length > 0) lastTsMsRef.current = normalized[normalized.length - 1].tsMs
         // If the server returned fewer than pageSize lines, the file ends here.
         if (r.lines.length < pageSize) {
+          endReachedRef.current = true
           setTotalLines(prev => (prev === null ? r.lines.length : prev))
         }
       })
@@ -619,6 +970,9 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
         setTranscriptError((err as Error).message)
       })
       .finally(() => {
+        // Clear the in-flight slot only if we still own it (a session switch
+        // may have replaced it with a newer controller already).
+        if (inFlightRef.current === ctrl) inFlightRef.current = null
         if (!ctrl.signal.aborted) setTranscriptLoading(false)
       })
 
@@ -631,45 +985,105 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     // per-worker sidToPath cache.
   }, [selectedSessionId, pageSize, selectedSessionPath, listLoading])
 
-  const loadMore = useCallback(() => {
-    if (!selectedSessionId) return
-    if (transcriptLoading) return
-    const from = nextFromRef.current
-    // If we know we've hit end-of-file, short-circuit.
-    if (totalLines !== null && from >= totalLines) return
+  /**
+   * Read ONE page starting at the current cursor (`nextFromRef`) and append
+   * the visible rows. Shared by `loadMore` (user scroll) AND the live-tail
+   * tick — routing both through this single function with one `inFlightRef`
+   * guard is what eliminates the loadMore-vs-tail race (audit C2: both used to
+   * capture the same `from`, fetch the same range, append duplicates, and
+   * advance the cursor once) and the cross-session contamination (audit C3:
+   * a stale resolve appending into a newly-selected session).
+   *
+   * Returns `true` iff visible rows were appended (the tail uses this to
+   * decide whether to refresh the breakdown). Throws to its caller on fetch
+   * failure (the tail catches+classifies; loadMore surfaces into transcriptError).
+   *
+   * @param isTail  true when called from the poll tick (suppresses the
+   *                user-facing loading spinner so an idle poll stays calm).
+   */
+  const appendRange = useCallback(
+    async (isTail: boolean): Promise<boolean> => {
+      const sid = selectedSessionId
+      if (!sid) return false
+      // Single-flight: if ANY range read (initial-load, loadMore, or a prior
+      // tail) is in flight, skip. This is the mutual exclusion that prevents
+      // the duplicate-append / cursor-corruption race.
+      if (inFlightRef.current) return false
 
-    const summary = sessionsRef.current.find(s => s.id === selectedSessionId)
-    const sessionPath = summary?.path
+      // End-of-file short-circuit for loadMore ONLY, keyed on the AUTHORITATIVE
+      // EOF flag (a prior short page), never on the messageCount-seeded
+      // `totalLines`. The tail must ALWAYS re-probe — that is how it discovers
+      // the file grew (a `<pageSize` read at EOF, then more bytes later).
+      if (!isTail && endReachedRef.current) return false
 
-    const ctrl = new AbortController()
-    inFlightRef.current = ctrl
-    setTranscriptLoading(true)
-    fetchRange(selectedSessionId, from, from + pageSize - 1, sessionPath, ctrl.signal)
-      .then(r => {
-        if (ctrl.signal.aborted) return
-        // Filter metadata-only records — see comment on the initial-load
-        // branch above. Cursor advances by raw count, list grows by visible.
-        const normalized = r.lines
-          .map((raw, i) => normalizeLine(raw, from + i))
-          .filter((l): l is TranscriptLine => l !== null)
+      const from = nextFromRef.current
+      const summary = sessionsRef.current.find(s => s.id === sid)
+      const sessionPath = summary?.path
+
+      const ctrl = new AbortController()
+      inFlightRef.current = ctrl
+      if (!isTail) setTranscriptLoading(true)
+      try {
+        const r = await fetchRange(sid, from, from + pageSize - 1, sessionPath, ctrl.signal)
+        // Reject a resolve that lost the race to a session switch: either this
+        // controller was aborted, or the active session changed under us.
+        if (ctrl.signal.aborted || selectedSessionIdRef.current !== sid) return false
         if (r.lines.length === 0) {
+          // No bytes at the cursor. For loadMore that's EOF; for a tail it just
+          // means the file hasn't grown — mark EOF either way (a later tail
+          // read that returns rows clears it again below).
+          endReachedRef.current = true
           setTotalLines(prev => (prev === null ? from : prev))
-          return
+          return false
         }
-        setLines(prev => [...prev, ...normalized])
+        const normalized = normalizeLines(r.lines, from, lastTsMsRef.current)
+        if (normalized.length > 0) {
+          setLines(prev => [...prev, ...normalized])
+          lastTsMsRef.current = normalized[normalized.length - 1].tsMs
+        }
+        // Cursor advances by RAW count (metadata rows were filtered out of the
+        // rendered list but DO occupy file offsets).
         nextFromRef.current = from + r.lines.length
         if (r.lines.length < pageSize) {
-          setTotalLines(from + r.lines.length)
+          // Short page → end of file reached. (A subsequent tail read may grow
+          // past this if the ongoing session appends more.)
+          endReachedRef.current = true
+          setTotalLines(prev =>
+            prev === null ? from + r.lines.length : Math.max(prev, from + r.lines.length),
+          )
+        } else {
+          // A full page means there is more to read — clear any stale EOF so the
+          // next loadMore continues, and bump totalLines for the virtualizer.
+          endReachedRef.current = false
+          setTotalLines(prev => (prev === null ? null : Math.max(prev, from + r.lines.length)))
         }
-      })
-      .catch((err: unknown) => {
-        if (ctrl.signal.aborted) return
-        setTranscriptError((err as Error).message)
-      })
-      .finally(() => {
-        if (!ctrl.signal.aborted) setTranscriptLoading(false)
-      })
-  }, [selectedSessionId, pageSize, transcriptLoading, totalLines])
+        return normalized.length > 0
+      } catch (err: unknown) {
+        // An abort is NOT a real failure: a session switch (or this effect's
+        // own teardown) aborted the controller. Swallow it as a clean no-op so
+        // it never surfaces as `transcriptError`/`tailError`. Re-throw genuine
+        // fetch failures so loadMore surfaces them and the tail classifies them.
+        if (ctrl.signal.aborted) return false
+        throw err
+      } finally {
+        // Only clear the slot if we still own it (a session switch may already
+        // have installed a newer controller — never null someone else's).
+        if (inFlightRef.current === ctrl) inFlightRef.current = null
+        if (!isTail && !ctrl.signal.aborted) setTranscriptLoading(false)
+      }
+    },
+    // `totalLines` is intentionally NOT a dep — `appendRange` no longer reads
+    // it (EOF is keyed on `endReachedRef`), so depending on it would needlessly
+    // re-create the callback (and tear down the tail effect) on every count bump.
+    [selectedSessionId, pageSize],
+  )
+
+  const loadMore = useCallback(() => {
+    void appendRange(false).catch((err: unknown) => {
+      // appendRange only throws on a fetch failure; surface it like before.
+      setTranscriptError((err as Error).message)
+    })
+  }, [appendRange])
 
   // Context breakdown ----------------------------------------------------
   const [breakdown, setBreakdown] = useState<ContextBreakdownResponse | null>(null)
@@ -733,75 +1147,77 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
   }, [selectedSessionId, breakdownReloadTick, selectedSessionPath, listLoading, pinnedLineIndex])
 
   // Live-tail polling -----------------------------------------------------
-  // While a session is selected, poll every LIVE_TAIL_INTERVAL_MS to:
-  //   1. Append any new lines beyond `nextFromRef.current` (tails the .jsonl).
-  //   2. Re-fetch the context breakdown ONLY when new lines actually
-  //      arrived (saves a request when the file is idle).
+  // GATED: the interval is set up ONLY when the session is ONGOING and the
+  // user has turned `followTail` ON (audit C1 — a closed historical transcript
+  // is never polled, and even an ongoing one is not polled until the user opts
+  // in). When the gate is closed, this effect installs nothing and the hook
+  // does zero background work.
   //
-  // We do NOT call refreshList() here. The server-side jsonl-reader.ts
-  // self-invalidates its cache via statSync on every open(), so the
-  // range fetch automatically sees fresh bytes — the sessions list
-  // re-fetch is unnecessary AND was the cause of constant React
-  // re-renders (it changed the `sessions` reference on every poll,
-  // which fired transcript-reset / breakdown-reset effects → wiped
-  // `lines` → reset scroll → unreadable UI).
+  // Each tick delegates to `appendRange(true)`, which carries the single-flight
+  // guard (C2) and the cross-session reject (C3). On a genuine append, the
+  // breakdown is refreshed (new lines → new token totals).
   //
-  // Polling pauses when document.visibilityState is hidden so a
-  // backgrounded tab doesn't hammer the reader. Resumes immediately on
-  // visibility change so foregrounding the tab gives fresh content
-  // without a 2 s lag.
-  const LIVE_TAIL_INTERVAL_MS = 2000
+  // We do NOT call refreshList() here — the server-side reader self-invalidates
+  // its cache on every open(), so the range fetch sees fresh bytes; a list
+  // re-fetch would churn the `sessions` reference and wipe scroll state.
+  //
+  // Polling pauses when document.visibilityState is hidden and resumes on
+  // visibilitychange so a foregrounded tab gets fresh content immediately.
+  //
+  // Errors are CLASSIFIED, not swallowed (audit: tail fail-fast):
+  //   - terminal (binary_missing) → surface into `tailError`, stop the loop.
+  //   - transient → retry next tick; after TAIL_MAX_TRANSIENT_FAILURES
+  //     consecutive failures, surface and stop (don't poll a broken backend
+  //     forever every 2 s).
   useEffect(() => {
+    // The gate. A genuinely-live, followed session still updates; everything
+    // else installs no interval at all.
     if (!selectedSessionId) return
+    if (!isOngoing || !followTail) return
 
     let cancelled = false
+    let consecutiveFailures = 0
     let intervalId: ReturnType<typeof setInterval> | null = null
+
+    const stop = () => {
+      cancelled = true
+      if (intervalId !== null) {
+        clearInterval(intervalId)
+        intervalId = null
+      }
+    }
 
     const tick = async () => {
       if (cancelled) return
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
-
-      const summary = sessionsRef.current.find(s => s.id === selectedSessionId)
-      const sessionPath = summary?.path
-      const from = nextFromRef.current
-
-      // Tail: ask for `pageSize` lines starting at the current end pointer.
-      // If the file didn't grow, we get an empty array — no setState calls,
-      // no re-render, no scroll-position disturbance. THIS is what makes
-      // the UI calm during idle periods.
       try {
-        const r = await fetchRange(selectedSessionId, from, from + pageSize - 1, sessionPath)
+        const appended = await appendRange(true)
         if (cancelled) return
-        if (r.lines.length > 0) {
-          // Filter metadata-only records (see filter comment in the initial
-          // load and loadMore paths). Cursor advances by raw count.
-          const normalized = r.lines
-            .map((raw, i) => normalizeLine(raw, from + i))
-            .filter((l): l is TranscriptLine => l !== null)
-          if (normalized.length > 0) {
-            setLines(prev => [...prev, ...normalized])
-          }
-          nextFromRef.current = from + r.lines.length
-          // If we now know there are more rows than the prior totalLines hint,
-          // bump the count so virtualized scrollbacks can size correctly.
-          setTotalLines(prev =>
-            prev === null ? null : Math.max(prev, from + r.lines.length),
-          )
-          // New lines arrived → token totals changed → refresh breakdown.
-          setBreakdownReloadTick(t => t + 1)
+        consecutiveFailures = 0
+        // New visible lines arrived → token totals changed → refresh breakdown.
+        if (appended) setBreakdownReloadTick(t => t + 1)
+      } catch (err: unknown) {
+        if (cancelled) return
+        const message = (err as Error).message
+        if (isTerminalTailError(message)) {
+          setTailError(message)
+          stop()
+          return
         }
-      } catch {
-        // Swallow — polling is best-effort. The next tick will try again.
+        consecutiveFailures += 1
+        if (consecutiveFailures >= TAIL_MAX_TRANSIENT_FAILURES) {
+          setTailError(message)
+          stop()
+        }
+        // else: transient — let the next tick retry.
       }
     }
 
     intervalId = setInterval(tick, LIVE_TAIL_INTERVAL_MS)
 
     const onVisChange = () => {
-      // Resume immediately when the tab returns to foreground so the user
-      // sees fresh content without waiting for the next tick boundary.
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        tick()
+        void tick()
       }
     }
     if (typeof document !== 'undefined') {
@@ -809,13 +1225,12 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     }
 
     return () => {
-      cancelled = true
-      if (intervalId !== null) clearInterval(intervalId)
+      stop()
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', onVisChange)
       }
     }
-  }, [selectedSessionId, pageSize])
+  }, [selectedSessionId, isOngoing, followTail, appendRange])
 
   // Search ---------------------------------------------------------------
   const [query, setQueryRaw] = useState('')
@@ -840,9 +1255,24 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
       setSearchError(null)
       return
     }
+    // Same load-before-list guard as the transcript initial-load and breakdown
+    // effects: defer the search until the session's path is resolved while the
+    // list is still loading. Firing now would send the search WITHOUT `?path=`,
+    // so the API falls back to the per-worker `sidToPath` cache (unreliable
+    // across Next.js dev workers) and 404s with
+    // `search_failed:404:session_not_found` — the SCEN-027 BUG-001
+    // URL-direct-selection race the rest of the hook guards against. Both
+    // `selectedSessionPath` and `listLoading` are in the dep array, so the
+    // effect re-fires exactly once when the URL-direct-selected session's
+    // summary finally arrives (path resolved) and the search then runs with the
+    // correct `?path=`. The exception path (list finished, path still
+    // undefined → genuinely-missing session) is allowed through so the user
+    // sees a real error instead of a stuck spinner.
+    if (selectedSessionPath === undefined && listLoading) return
+    // Resolve the path from the SINGLE memoized source (not a raw ref lookup),
+    // so the guard above and the path we send are derived from the same value.
+    const sessionPath = selectedSessionPath
     searchTimerRef.current = setTimeout(() => {
-      const summary = sessionsRef.current.find(s => s.id === selectedSessionId)
-      const sessionPath = summary?.path
       const ctrl = new AbortController()
       searchCtrlRef.current = ctrl
       setSearching(true)
@@ -866,7 +1296,7 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     return () => {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
     }
-  }, [selectedSessionId, query])
+  }, [selectedSessionId, query, selectedSessionPath, listLoading])
 
   const setQuery = useCallback((q: string) => setQueryRaw(q), [])
 
@@ -908,6 +1338,10 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     transcriptLoading,
     transcriptError,
     loadMore,
+    isOngoing,
+    followTail,
+    setFollowTail,
+    tailError,
 
     breakdown,
     breakdownLoading,
@@ -938,6 +1372,10 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
     transcriptLoading,
     transcriptError,
     loadMore,
+    isOngoing,
+    followTail,
+    setFollowTail,
+    tailError,
     breakdown,
     breakdownLoading,
     breakdownError,

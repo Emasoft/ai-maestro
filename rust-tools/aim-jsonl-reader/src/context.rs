@@ -30,12 +30,6 @@ use serde_json::{json, Value};
 
 const DEFAULT_CONTEXT_LIMIT: u64 = 200_000;
 
-const BUILTIN_TOOL_NAMES: &[&str] = &[
-    "Read", "Write", "Grep", "Bash", "Glob", "Edit", "MultiEdit",
-    "NotebookEdit", "WebFetch", "WebSearch", "Agent", "Task",
-    "Skill", "ToolSearch", "TodoWrite",
-];
-
 #[derive(Default, Debug)]
 pub struct Buckets {
     pub system_prompt:   u64,
@@ -247,10 +241,12 @@ fn classify(v: &Value, b: &mut Buckets) {
                             // cares, and a slight over-attribution to
                             // tools (vs messages) is the lesser evil.
                             let tool_cost = estimate_tokens(block, b);
+                            // mcp__* tools bucket into mcpTools; every other
+                            // tool_use (built-in or plugin-provided) is a
+                            // systemTools descriptor — there is no separate
+                            // user-tool bucket in the TRDD §4.5 model.
                             if name.starts_with("mcp__") {
                                 b.mcp_tools += tool_cost;
-                            } else if BUILTIN_TOOL_NAMES.iter().any(|t| *t == name) {
-                                b.system_tools += tool_cost;
                             } else {
                                 b.system_tools += tool_cost;
                             }
@@ -332,10 +328,32 @@ fn usage_field(v: &Value, field: &str) -> Option<u64> {
 }
 
 /// Context-window table. TRDD §4.5 hard-codes the lookup.
+///
+/// Only the explicit 1M-context model variants advertise their window via
+/// the `[1m]` marker in the model id (e.g. `claude-opus-4-8[1m]`). Every
+/// other model — opus/sonnet/haiku-4 without the marker, or anything
+/// unknown — resolves to the default 200K window. The previous
+/// `starts_with("claude-opus-4")` rule over-reported ALL Opus-4 ids as 1M.
+// MUST match lib/context-limits.ts contextLimitForModel — TRDD-1657a5f4 Phase 1.
 pub fn context_limit_for_model(model_id: &str) -> u64 {
     let m = model_id.to_ascii_lowercase();
-    if m.starts_with("claude-opus-4")   { return 1_000_000; }
-    if m.starts_with("claude-sonnet-4") { return 200_000; }
-    if m.starts_with("claude-haiku-4")  { return 200_000; }
+    if m.contains("[1m]") { return 1_000_000; }
     DEFAULT_CONTEXT_LIMIT
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Canonical rule (mirrors lib/context-limits.ts): only ids carrying the
+    // `[1m]` marker get the 1M window; every other Opus/Sonnet/Haiku-4 id —
+    // and anything unknown — collapses to the 200K default.
+    #[test]
+    fn context_limit_marker_only_grants_one_million() {
+        assert_eq!(context_limit_for_model("claude-opus-4-8"), 200_000);
+        assert_eq!(context_limit_for_model("claude-opus-4-8[1m]"), 1_000_000);
+        assert_eq!(context_limit_for_model("claude-sonnet-4-6"), 200_000);
+        assert_eq!(context_limit_for_model("claude-haiku-4-5"), 200_000);
+        assert_eq!(context_limit_for_model("some-unknown-model"), 200_000);
+    }
 }

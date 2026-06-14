@@ -304,12 +304,28 @@ fn search_respects_limit() {
 fn context_breakdown_classifies_all_buckets() {
     let tmp = TempDir::new().unwrap();
     let path = write_jsonl(tmp.path(), "ctx.jsonl", &[
+        // system-prompt / agent-definition / memory: the forward-compat
+        // (non-Claude / converted) top-level shapes classify supports.
         json!({"type":"system-prompt","content":"x".repeat(400),"usage":{"input_tokens":100}}),
-        json!({"role":"user","content":"hello"}),
-        json!({"role":"assistant","model":"claude-sonnet-4-6","usage":{"output_tokens":50,"cache_read_input_tokens":10}}),
-        json!({"type":"tool_use","name":"Read","input":{"path":"/tmp/a"}}),
-        json!({"type":"tool_use","name":"mcp__foo__bar","input":{"x":"y"}}),
-        json!({"type":"tool_result","output":"ok"}),
+        // Canonical Claude Code JSONL shape (verified 2026-05-06 — see the
+        // dispatch comment in context.rs): role/model/usage live under
+        // `message`, and tool_use / tool_result blocks are nested inside
+        // `message.content[]`. Top-level `{"type":"tool_use",...}` records
+        // NEVER occur in real data, so a realistic test must nest them —
+        // otherwise the systemTools / mcpTools buckets stay 0.
+        json!({"type":"user","message":{"role":"user","content":"hello"}}),
+        json!({"type":"assistant","message":{
+            "role":"assistant",
+            "model":"claude-sonnet-4-6",
+            "usage":{"output_tokens":50,"cache_read_input_tokens":10},
+            "content":[
+                {"type":"tool_use","name":"Read","input":{"path":"/tmp/a"}},
+                {"type":"tool_use","name":"mcp__foo__bar","input":{"x":"y"}}
+            ]
+        }}),
+        json!({"type":"user","message":{"role":"user","content":[
+            {"type":"tool_result","content":"ok"}
+        ]}}),
         json!({"type":"agent-definition","content":"a".repeat(80)}),
         json!({"type":"memory","source":"claude-md","content":"m".repeat(40)}),
     ]);

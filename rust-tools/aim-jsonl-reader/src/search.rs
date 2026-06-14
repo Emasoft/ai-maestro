@@ -62,8 +62,10 @@ pub fn search(
             }));
         }
 
-        // Advance past the \n (or to EOF).
-        line_start = if line_end < data.len() { line_end + 1 } else { line_end + 1 };
+        // Advance past the \n (or, for the final line with no trailing
+        // newline, line_end == data.len() so line_start moves past EOF and
+        // the `line_start < data.len()` loop guard terminates the scan).
+        line_start = line_end + 1;
         line_no += 1;
     }
 
@@ -99,8 +101,12 @@ fn match_line(line: &[u8], kind: &SearchKind) -> Option<usize> {
 }
 
 fn substring_find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    // An empty needle is a degenerate query: matching it against every
+    // line at offset 0 produces `limit` garbage results that the caller
+    // cannot use. Treat it as "no match" so an empty `query` returns an
+    // empty match set instead of silently filling the page with noise.
     if needle.is_empty() || needle.len() > haystack.len() {
-        return if needle.is_empty() { Some(0) } else { None };
+        return None;
     }
     // Two-pointer naive search. Fine for needles up to ~1 KB.
     let n = needle.len();
@@ -113,8 +119,9 @@ fn substring_find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 }
 
 fn substring_find_ci(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    // See substring_find: an empty needle matches nothing, not everything.
     if needle.is_empty() || needle.len() > haystack.len() {
-        return if needle.is_empty() { Some(0) } else { None };
+        return None;
     }
     let n = needle.len();
     // Lower-case the needle once.

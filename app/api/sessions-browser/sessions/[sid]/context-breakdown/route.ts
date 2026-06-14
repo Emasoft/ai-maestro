@@ -1,3 +1,6 @@
+import { homedir } from 'node:os'
+import path from 'node:path'
+
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -13,6 +16,33 @@ import {
 } from '@/lib/jsonl-reader'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Confine a caller-supplied `?path=` to the Claude Code transcript store
+ * (`~/.claude/projects/<slug>/...<uuid>.jsonl`, plus subagent sidecars
+ * under `.../subagents/`). The raw `?path=` is attacker-controlled — any
+ * authenticated session can pass `?path=/etc/passwd` — and the downstream
+ * reader (`ensureOpenForPath` → Rust `open` → `fs.readFile`) does NOT
+ * confine it, so the gate has to live here at the request boundary.
+ *
+ * Returns the resolved absolute path when it is inside the store and names
+ * a `.jsonl` file, or `null` to reject (the caller fails fast with 400).
+ * `path.resolve` collapses any `..` traversal, so a post-resolve prefix
+ * check against the projects root is sufficient — there is no symlink
+ * follow here (that would require `fs.realpath`, an extra I/O the reader
+ * does not perform either; confining the lexical path is the correct
+ * boundary for this surface).
+ */
+function confineToProjectsStore(rawPath: string): string | null {
+  const resolved = path.resolve(rawPath)
+  // A real transcript names a `.jsonl` file strictly INSIDE the store, so
+  // the prefix check is `projectsRoot + sep` (the bare root dir can never
+  // be a `.jsonl` file and is correctly rejected).
+  if (!resolved.endsWith('.jsonl')) return null
+  const projectsRoot = path.join(homedir(), '.claude', 'projects')
+  if (!resolved.startsWith(projectsRoot + path.sep)) return null
+  return resolved
+}
 
 const RecordedSnapshotSchema = z.object({
   systemPrompt: z.number().int().nonnegative(),
@@ -102,7 +132,22 @@ export async function GET(
   // back from the list response is the safe round-trip.
   const url = new URL(request.url)
   const pathParam = url.searchParams.get('path')
-  const absolutePath = pathParam || resolveSessionPath(sid)
+  // The `?path=` form is caller-controlled, so it MUST be confined to the
+  // Claude Code transcript store before it reaches the reader (which opens
+  // it unguarded). A path outside the store is a path-traversal attempt —
+  // reject it explicitly rather than letting the reader read an arbitrary
+  // file. The `resolveSessionPath(sid)` fallback is server-derived (recorded
+  // by `listSessionsInProjectDir`, always under `~/.claude/projects/`) and
+  // needs no re-check.
+  let absolutePath: string | null
+  if (pathParam) {
+    absolutePath = confineToProjectsStore(pathParam)
+    if (!absolutePath) {
+      return NextResponse.json({ error: 'invalid_path' }, { status: 400 })
+    }
+  } else {
+    absolutePath = resolveSessionPath(sid)
+  }
   if (!absolutePath) {
     return NextResponse.json({ error: 'session_not_found' }, { status: 404 })
   }

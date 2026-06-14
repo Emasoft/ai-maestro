@@ -239,20 +239,34 @@ export class TmuxRuntime implements AgentRuntime {
     // first pane's process tree is already running and inherits nothing from
     // future set-environment calls. AGENT_WORK_DIR (directory-guard sandbox
     // boundary) and AID_AUTH (agent HTTP API session secret) must be atomic.
+    // AIMAESTRO_AGENT=1 — self-identification flag baked into EVERY ai-maestro
+    // agent session via `-e`, so any process in the tree can tell at runtime
+    // "I am inside an ai-maestro agent". Read by the janitor's
+    // in_ai_maestro_agent_env() detector, and inherited for free by every child
+    // the agent's `claude` spawns (hooks, detector subprocesses, a
+    // heartbeat-spawned daemon) since env vars propagate to all children.
+    // Injected HERE — the single launch chokepoint every path flows through
+    // (create, wake, restore, help-assistant, haephestos, any future caller) —
+    // so the invariant "one agent = one claude process tree, all flagged"
+    // cannot be silently broken by a new caller that forgets to set it. A
+    // restart reuses the SAME pane (send-keys relaunch), so the relaunched
+    // `claude` inherits this from the original `-e` injection — no separate
+    // handling needed. Forced on (caller env spread first, flag last) so the
+    // value is always exactly "1" regardless of caller-supplied env.
+    const finalEnv: Record<string, string> = { ...(env ?? {}), AIMAESTRO_AGENT: '1' }
+
     const args = ['new-session', '-d', '-s', name, '-c', cwd]
-    if (env) {
-      for (const [key, value] of Object.entries(env)) {
-        // Defense against injection from caller-controlled strings: reject any
-        // key that isn't a strict POSIX environment-variable identifier. This
-        // also blocks accidental CR/LF/`=` that would confuse tmux's KEY=VAL
-        // parsing. Values are NOT sanitized here — execFile (no shell) passes
-        // them as a single argv item to tmux, which in turn stores them as
-        // opaque bytes in the session environment.
-        if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
-          throw new Error(`[agent-runtime] Invalid env var name: ${key}`)
-        }
-        args.push('-e', `${key}=${value}`)
+    for (const [key, value] of Object.entries(finalEnv)) {
+      // Defense against injection from caller-controlled strings: reject any
+      // key that isn't a strict POSIX environment-variable identifier. This
+      // also blocks accidental CR/LF/`=` that would confuse tmux's KEY=VAL
+      // parsing. Values are NOT sanitized here — execFile (no shell) passes
+      // them as a single argv item to tmux, which in turn stores them as
+      // opaque bytes in the session environment.
+      if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
+        throw new Error(`[agent-runtime] Invalid env var name: ${key}`)
       }
+      args.push('-e', `${key}=${value}`)
     }
     await execFileAsync('tmux', args)
   }

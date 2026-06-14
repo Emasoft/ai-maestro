@@ -1,15 +1,33 @@
 ---
 trdd-id: 1657a5f4-c54b-4e4b-95da-12f9aa149937
 title: Chat-history browser redesign — comic-bubble timeline, parallel lifelines, token economics, context-panel + PSS lifeline, Tailwind migration
-status: in-progress
+status: completed
 created: 2026-05-29T23:41:37+0200
-updated: 2026-05-30T10:14:01+0200
+updated: 2026-06-14T11:29:35+0200
 ---
 
 # TRDD-1657a5f4 — Chat-history browser redesign
 
 **Filename:** `design/tasks/TRDD-20260529_234137+0200-1657a5f4-chat-history-browser-redesign.md`
 **Tracked in:** this repo (design/tasks/ is git-tracked)
+
+## ✅ COMPLETED — 2026-06-14 (merged into `governance-rules`, pending push)
+
+Implemented across 10 feature-branch commits (Phases 1–8 + fork-audit
+security/correctness fixes). Pre-merge IRON review by 3 reviewers
+(security / correctness / UI) returned **0 CRITICAL, 1 MAJOR, 12 MINOR/NIT**.
+The MAJOR — the new `confineToProjectsStore` path-traversal guard shipped
+with zero negative tests — was fixed on the branch with 13 real tests
+(12 rejection cases × 3 routes + 1 positive boundary), commit `e821a2db`.
+Merged into `governance-rules` at merge commit **`841088dd`**.
+Post-merge verification: `tsc --noEmit` 0 errors · vitest **1518 passed** ·
+`yarn build` exit 0. Review reports under `reports/chat-history-review/`.
+
+**Open follow-ups (non-blocking, recorded — NOT done here):** MINOR-2
+(`hasSessionCookie` is presence-only; pre-existing project-wide — recommend a
+dedicated hardening TRDD to call `validateSession()`) plus the other MINOR/NIT
+items in the review reports. **The merge is local on `governance-rules`; not
+yet pushed.**
 
 The page under redesign is the **Agent Profile → "Sessions" tab** — the read-only JSONL transcript browser (`app/page.tsx:65` → `components/agent-profile/SessionsTab.tsx` + `sessions/*` + `useJsonlSession.ts` + `styles/sessions-browser.css`; server `app/api/sessions-browser/*`; rust `rust-tools/aim-jsonl-reader`). It is the **literal memory of every agent conversation since the beginning** — crucial, currently built sloppily, and headed for a PR to the ai-maestro owner who rejects convention violations.
 

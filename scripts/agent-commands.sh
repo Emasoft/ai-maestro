@@ -317,6 +317,13 @@ cmd_show() {
 cmd_create() {
     local name="" dir="" program="claude-code" model="" task="" tags=""
     local no_session=false no_folder=false force_folder=false
+    # Additive (frozen-interface-safe): optional fields the POST /api/agents API
+    # already accepts but the CLI previously could NOT set — so a fully-specified
+    # agent (governance title, team, role-plugin, label, avatar, …) can be created
+    # in ONE script call. This closes the gap that forced the CHIEF-OF-STAFF to
+    # call the server API directly when staffing a team. Existing flags/behavior
+    # are unchanged; these only take effect when their flag is passed.
+    local title="" team="" label="" avatar="" client="" plugin="" owner="" github_repo=""
     local -a program_args=()  # Arguments to pass to the program (after --)
 
     while [[ $# -gt 0 ]]; do
@@ -339,6 +346,30 @@ cmd_create() {
             --no-session) no_session=true; shift ;;
             --no-folder) no_folder=true; shift ;;
             --force-folder) force_folder=true; shift ;;
+            --title)
+                [[ $# -lt 2 ]] && { print_error "--title requires a value"; return 1; }
+                title="$2"; shift 2 ;;
+            --team)
+                [[ $# -lt 2 ]] && { print_error "--team requires a value"; return 1; }
+                team="$2"; shift 2 ;;
+            --label)
+                [[ $# -lt 2 ]] && { print_error "--label requires a value"; return 1; }
+                label="$2"; shift 2 ;;
+            --avatar)
+                [[ $# -lt 2 ]] && { print_error "--avatar requires a value"; return 1; }
+                avatar="$2"; shift 2 ;;
+            --client)
+                [[ $# -lt 2 ]] && { print_error "--client requires a value"; return 1; }
+                client="$2"; shift 2 ;;
+            --plugin)
+                [[ $# -lt 2 ]] && { print_error "--plugin requires a value"; return 1; }
+                plugin="$2"; shift 2 ;;
+            --owner)
+                [[ $# -lt 2 ]] && { print_error "--owner requires a value"; return 1; }
+                owner="$2"; shift 2 ;;
+            --github-repo)
+                [[ $# -lt 2 ]] && { print_error "--github-repo requires a value"; return 1; }
+                github_repo="$2"; shift 2 ;;
             --)
                 # Everything after -- is passed to the program
                 shift
@@ -357,6 +388,15 @@ Options:
   --no-session           Don't create tmux session
   --no-folder            Don't create project folder
   --force-folder         Use existing directory (by default, errors if exists)
+  --title <title>        Governance title: member, chief-of-staff, architect,
+                         orchestrator, integrator, maintainer, autonomous, manager
+  --team <team-uuid>     Assign the agent to this team (team UUID)
+  --label <name>         Persona display name (defaults to the agent name)
+  --avatar <url|emoji>   Avatar URL or emoji
+  --plugin <name>        Role-plugin to install (else auto-selected from --title)
+  --client <client>      Client: claude, codex, gemini, … (defaults to program)
+  --owner <owner>        Owner username
+  --github-repo <o/r>    Associated GitHub repo (owner/repo)
 
 Program Arguments:
   Use -- to pass arguments to the program when it starts.
@@ -380,6 +420,11 @@ Examples:
 
   # Create agent with program arguments (passed to claude)
   aimaestro-agent.sh create my-agent --dir ~/Code/project -- --continue --chrome
+
+  # Create a fully-specified team member in ONE call (title + team) — what a
+  # CHIEF-OF-STAFF needs when staffing a team (no direct API call required)
+  aimaestro-agent.sh create backend-dev --dir ~/agents/backend-dev \
+    --title member --team 1b2c3d4e-5f6a-7b8c-9d0e-1f2a3b4c5d6e --label "Backend Dev"
 HELP
                 return 0 ;;
             -*) print_error "Unknown option: $1"; return 1 ;;
@@ -490,6 +535,20 @@ HELP
         local args_str="${program_args[*]}"
         payload=$(echo "$payload" | jq --arg a "$args_str" '. + {programArgs: $a}')
     fi
+
+    # Additive optional fields (see the `local` block above). Each is added to the
+    # payload ONLY when the caller passed its flag, so omitting them yields the exact
+    # same request as before — existing call sites are unaffected. The server
+    # (CreateAgent pipeline + the route's zod schema) stays the single source of
+    # truth that validates these values.
+    [[ -n "$title" ]]       && payload=$(echo "$payload" | jq --arg v "$title"       '. + {governanceTitle: $v}')
+    [[ -n "$team" ]]        && payload=$(echo "$payload" | jq --arg v "$team"        '. + {teamId: $v}')
+    [[ -n "$label" ]]       && payload=$(echo "$payload" | jq --arg v "$label"       '. + {label: $v}')
+    [[ -n "$avatar" ]]      && payload=$(echo "$payload" | jq --arg v "$avatar"      '. + {avatar: $v}')
+    [[ -n "$client" ]]      && payload=$(echo "$payload" | jq --arg v "$client"      '. + {client: $v}')
+    [[ -n "$plugin" ]]      && payload=$(echo "$payload" | jq --arg v "$plugin"      '. + {pluginName: $v}')
+    [[ -n "$owner" ]]       && payload=$(echo "$payload" | jq --arg v "$owner"       '. + {owner: $v}')
+    [[ -n "$github_repo" ]] && payload=$(echo "$payload" | jq --arg v "$github_repo" '. + {githubRepo: $v}')
 
     # Call API
     local api_base

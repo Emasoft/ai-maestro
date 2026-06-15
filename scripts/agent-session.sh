@@ -26,14 +26,20 @@ cmd_session() {
         add) cmd_session_add "$@" ;;
         remove) cmd_session_remove "$@" ;;
         exec) cmd_session_exec "$@" ;;
+        command) cmd_session_command "$@" ;;
+        activity-update) cmd_session_activity_update "$@" ;;
+        user-input) cmd_session_user_input "$@" ;;
         help|--help|-h)
             cat << 'HELP'
 Usage: aimaestro-agent.sh session <subcommand> [options]
 
 Subcommands:
-  add <agent>               Add a new session to agent
-  remove <agent>            Remove a session from agent
-  exec <agent> <command>    Execute command in agent's session
+  add <agent>                  Add a new session to agent
+  remove <agent>               Remove a session from agent
+  exec <agent> <command>       Execute command in agent's session (agent-keyed)
+  command <session> -- <cmd>   Send a command to a tmux session BY NAME
+  activity-update <session>    Update a session's activity/notification state
+  user-input                   Record the human user's last-input timestamp
 HELP
             ;;
         *)
@@ -195,6 +201,142 @@ cmd_session_exec() {
     fi
 
     print_success "Command sent to: $RESOLVED_ALIAS"
+}
+
+# ============================================================================
+# SESSION-NAME-KEYED OPS (added for fleet readiness — wrap the API endpoints the
+# core hook / janitor / AMAMA previously called DIRECTLY, so no plugin touches
+# the API. All additive; existing `add/remove/exec` are unchanged.)
+# ============================================================================
+
+# Send a command to a tmux session BY SESSION NAME (POST /api/sessions/<name>/command).
+# Distinct from `session exec` (agent-keyed PATCH): this is what a hook/daemon uses
+# when it already holds the tmux session name. Usage:
+#   aimaestro-agent.sh session command <session-name> [--require-idle] [--newline] -- <cmd...>
+cmd_session_command() {
+    local session="" require_idle=false add_newline=false
+    local -a cmd_args=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --require-idle) require_idle=true; shift ;;
+            --newline) add_newline=true; shift ;;
+            --) shift; cmd_args=("$@"); break ;;
+            -*) print_error "Unknown option: $1"; return 1 ;;
+            *) if [[ -z "$session" ]]; then session="$1"; else cmd_args+=("$1"); fi; shift ;;
+        esac
+    done
+    [[ -z "$session" ]] && { print_error "Session name (tmux) required"; return 1; }
+    [[ ${#cmd_args[@]} -eq 0 ]] && { print_error "Command required (after the session name, or after --)"; return 1; }
+    # Defence-in-depth: session name is interpolated into the URL path.
+    [[ "$session" =~ ^[a-zA-Z0-9_@.-]+$ ]] || { print_error "Invalid session name: $session"; return 1; }
+    local command="${cmd_args[*]}"
+
+    local api_base; api_base=$(get_api_base)
+    local payload
+    payload=$(jq -n --arg cmd "$command" --argjson ri "$require_idle" --argjson nl "$add_newline" \
+        '{command: $cmd, requireIdle: $ri, addNewline: $nl}')
+    local -a auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then auth_args=(-H "Authorization: Bearer $AID_AUTH"); fi
+    local response
+    response=$(curl -s --max-time 15 -X POST "${auth_args[@]}" "${api_base}/api/sessions/${session}/command" \
+        -H "Content-Type: application/json" -d "$payload")
+    local error; error=$(echo "$response" | jq -r '.error // empty')
+    [[ -n "$error" ]] && { print_error "$error"; return 1; }
+    print_success "Command sent to session: $session"
+}
+
+# Update a session's live activity/notification state (POST /api/sessions/activity/update).
+# Usage: aimaestro-agent.sh session activity-update <session-name> \
+#          [--status <s>] [--hook-status <h>] [--notification-type <n>]
+cmd_session_activity_update() {
+    local session="" status="" hook_status="" notif_type=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --status) [[ $# -lt 2 ]] && { print_error "--status requires a value"; return 1; }; status="$2"; shift 2 ;;
+            --hook-status) [[ $# -lt 2 ]] && { print_error "--hook-status requires a value"; return 1; }; hook_status="$2"; shift 2 ;;
+            --notification-type) [[ $# -lt 2 ]] && { print_error "--notification-type requires a value"; return 1; }; notif_type="$2"; shift 2 ;;
+            -*) print_error "Unknown option: $1"; return 1 ;;
+            *) if [[ -z "$session" ]]; then session="$1"; else print_error "Unexpected arg: $1"; return 1; fi; shift ;;
+        esac
+    done
+    [[ -z "$session" ]] && { print_error "Session name required"; return 1; }
+    local api_base; api_base=$(get_api_base)
+    local payload; payload=$(jq -n --arg s "$session" '{sessionName: $s}')
+    [[ -n "$status" ]]     && payload=$(echo "$payload" | jq --arg v "$status"     '. + {status: $v}')
+    [[ -n "$hook_status" ]] && payload=$(echo "$payload" | jq --arg v "$hook_status" '. + {hookStatus: $v}')
+    [[ -n "$notif_type" ]] && payload=$(echo "$payload" | jq --arg v "$notif_type"  '. + {notificationType: $v}')
+    local -a auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then auth_args=(-H "Authorization: Bearer $AID_AUTH"); fi
+    local response
+    response=$(curl -s --max-time 15 -X POST "${auth_args[@]}" "${api_base}/api/sessions/activity/update" \
+        -H "Content-Type: application/json" -d "$payload")
+    local error; error=$(echo "$response" | jq -r '.error // empty')
+    [[ -n "$error" ]] && { print_error "$error"; return 1; }
+    print_success "Activity updated for session: $session"
+}
+
+# Record the human user's last-input timestamp (POST /api/sessions/me/user-input).
+# No body — auth identifies the caller. Used by UserPromptSubmit hooks (AMAMA idle calc).
+cmd_session_user_input() {
+    local api_base; api_base=$(get_api_base)
+    local -a auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then auth_args=(-H "Authorization: Bearer $AID_AUTH"); fi
+    local response
+    response=$(curl -s --max-time 15 -X POST "${auth_args[@]}" "${api_base}/api/sessions/me/user-input" \
+        -H "Content-Type: application/json")
+    local error; error=$(echo "$response" | jq -r '.error // empty')
+    [[ -n "$error" ]] && { print_error "$error"; return 1; }
+    local ts; ts=$(echo "$response" | jq -r '.recorded_at_epoch // empty')
+    print_success "User-input timestamp recorded${ts:+ (epoch $ts)}"
+}
+
+# Resolve an agent BY NAME or BY --cwd <path> to its tmux session name (scriptable).
+# Default: prints the tmux session name (non-zero exit if none). --json: full object.
+# Replaces the find-agent-by-cwd / name->session lookups that callers did via the API.
+cmd_resolve() {
+    local name="" cwd="" json=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --cwd) [[ $# -lt 2 ]] && { print_error "--cwd requires a value"; return 1; }; cwd="$2"; shift 2 ;;
+            --json) json=true; shift ;;
+            -h|--help)
+                cat << 'HELP'
+Usage: aimaestro-agent.sh resolve <name> | --cwd <path> [--json]
+  Resolve an agent (by name, or by working directory) to its tmux session name.
+  Default output: the tmux session name (empty + non-zero exit if no live session).
+  --json: full object {agentId, name, tmuxSessionName, workingDirectory, status}.
+HELP
+                return 0 ;;
+            -*) print_error "Unknown option: $1"; return 1 ;;
+            *) if [[ -z "$name" ]]; then name="$1"; else print_error "Unexpected arg: $1"; return 1; fi; shift ;;
+        esac
+    done
+    local api_base; api_base=$(get_api_base)
+    local -a auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then auth_args=(-H "Authorization: Bearer $AID_AUTH"); fi
+
+    local agent_json=""
+    if [[ -n "$cwd" ]]; then
+        [[ -n "$name" ]] && { print_error "Provide a name OR --cwd, not both"; return 1; }
+        local rcwd; rcwd=$(realpath -m "$cwd" 2>/dev/null) || rcwd="$cwd"
+        local all; all=$(curl -s --max-time 15 "${auth_args[@]}" "${api_base}/api/agents")
+        agent_json=$(echo "$all" | jq -c --arg d "$rcwd" '((.agents // .) // []) | map(select(.workingDirectory == $d)) | .[0] // empty')
+        [[ -z "$agent_json" || "$agent_json" == "null" ]] && { print_error "No agent found with workingDirectory: $rcwd"; return 1; }
+    else
+        [[ -z "$name" ]] && { print_error "Provide an agent name or --cwd <path>"; return 1; }
+        resolve_agent "$name" || return 1
+        local full; full=$(curl -s --max-time 15 "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}")
+        agent_json=$(echo "$full" | jq -c '.agent // empty')
+        [[ -z "$agent_json" || "$agent_json" == "null" ]] && { print_error "Could not fetch agent: $name"; return 1; }
+    fi
+
+    if [[ "$json" == true ]]; then
+        echo "$agent_json" | jq -c '{agentId: .id, name: .name, tmuxSessionName: (.sessions[0].tmuxSessionName // .session.tmuxSessionName // .name), workingDirectory: .workingDirectory, status: (.sessions[0].status // .status // "unknown")}'
+    else
+        local tmux_name; tmux_name=$(echo "$agent_json" | jq -r '(.sessions[0].tmuxSessionName // .session.tmuxSessionName // .name) // empty')
+        [[ -z "$tmux_name" ]] && { print_error "No tmux session for the resolved agent"; return 1; }
+        echo "$tmux_name"
+    fi
 }
 
 # ============================================================================

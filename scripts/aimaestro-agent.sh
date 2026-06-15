@@ -87,6 +87,7 @@ main() {
     case "${1:-help}" in
         list)      shift; cmd_list "$@" ;;
         show)      shift; cmd_show "$@" ;;
+        resolve)   shift; cmd_resolve "$@" ;;
         create)    shift; cmd_create "$@" ;;
         delete)    shift; cmd_delete "$@" ;;
         update)    shift; cmd_update "$@" ;;

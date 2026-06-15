@@ -57,6 +57,28 @@ describe('mapModel — Claude → Gemini', () => {
   })
 })
 
+describe('mapModel — Fable 5 (top-tier line → flagship, family-normalized)', () => {
+  it('maps claude-fable-5 → gpt-5.5 (Codex flagship), not the literal id', () => {
+    expect(mapModel('claude-fable-5', claude, codex)).toBe('gpt-5.5')
+  })
+
+  it('maps the bare fable alias → gpt-5.5', () => {
+    expect(mapModel('fable', claude, codex)).toBe('gpt-5.5')
+  })
+
+  it('maps the 1M variant claude-fable-5[1m] → gpt-5.5 (context-window suffix stripped)', () => {
+    expect(mapModel('claude-fable-5[1m]', claude, codex)).toBe('gpt-5.5')
+  })
+
+  it('maps a future claude-fable-6 → gpt-5.5 with no table edit (family match)', () => {
+    expect(mapModel('claude-fable-6', claude, codex)).toBe('gpt-5.5')
+  })
+
+  it('maps claude-fable-5 → gemini-2-pro (Gemini flagship)', () => {
+    expect(mapModel('claude-fable-5', claude, gemini)).toBe('gemini-2-pro')
+  })
+})
+
 describe('mapModel — Codex → Claude (alias, not a pinned version)', () => {
   it('maps the gpt-5.5 frontier model → opus alias', () => {
     expect(mapModel('gpt-5.5', codex, claude)).toBe('opus')
@@ -115,6 +137,14 @@ describe('rewriteAgentModels', () => {
   it('rewrites an Opus 4.8 agent for Codex and records one warning', () => {
     const warnings = new WarningCollector()
     const out = rewriteAgentModels([makeAgent('claude-opus-4-8[1m]')], claude, codex, warnings)
+    expect(out[0].model).toBe('gpt-5.5')
+    expect(warnings.getWarnings()).toHaveLength(1)
+    expect(warnings.getWarnings()[0]).toContain('gpt-5.5')
+  })
+
+  it('rewrites a Fable 5 agent for Codex (gpt-5.5) and records one warning', () => {
+    const warnings = new WarningCollector()
+    const out = rewriteAgentModels([makeAgent('claude-fable-5')], claude, codex, warnings)
     expect(out[0].model).toBe('gpt-5.5')
     expect(warnings.getWarnings()).toHaveLength(1)
     expect(warnings.getWarnings()[0]).toContain('gpt-5.5')

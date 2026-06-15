@@ -41,6 +41,7 @@ const CLAUDE_TO_CODEX: Record<string, string> = {
   opus: 'gpt-5.5',
   sonnet: 'gpt-5.3-codex',
   haiku: 'gpt-5.4-mini',
+  fable: 'gpt-5.5',     // Fable 5 → flagship Codex tier (most capable)
 }
 
 /** Claude family alias → Gemini model. */
@@ -48,6 +49,7 @@ const CLAUDE_TO_GEMINI: Record<string, string> = {
   opus: 'gemini-2-pro',
   sonnet: 'gemini-2-flash',
   haiku: 'gemini-3-flash',
+  fable: 'gemini-2-pro',  // Fable 5 → flagship Gemini tier (most capable)
 }
 
 /** Codex → Claude family alias (alias, never a pinned version — see header). */
@@ -76,11 +78,17 @@ const GEMINI_TO_CLAUDE: Record<string, string> = {
  * `claude-opus-4-8[1m]` and `claude-opus-4-8` both resolve to `opus`.
  * Returns null for non-Claude / unrecognized ids (caller passes through).
  */
-function claudeFamily(model: string): 'opus' | 'sonnet' | 'haiku' | null {
+function claudeFamily(model: string): 'opus' | 'sonnet' | 'haiku' | 'fable' | null {
   const base = model.replace(/\[.*$/, '').trim()
   if (base === 'opus' || base.startsWith('claude-opus-')) return 'opus'
   if (base === 'sonnet' || base.startsWith('claude-sonnet-')) return 'sonnet'
   if (base === 'haiku' || base.startsWith('claude-haiku-')) return 'haiku'
+  // Fable is a distinct top-tier Claude line (Fable 5 GA'd in Claude Code
+  // 2.1.170, used as the auto-mode fallback). Map it to the flagship tier for
+  // cross-client conversion so a fable agent emits a VALID target model rather
+  // than the literal `claude-fable-5` (the same passthrough bug Opus 4.8 hit).
+  // Family-keyed, so future `claude-fable-6` / the `[1m]` variant need no edit.
+  if (base === 'fable' || base.startsWith('claude-fable-')) return 'fable'
   return null
 }
 

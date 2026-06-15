@@ -102,6 +102,9 @@ Commands:
       --payload-json '{…}'  full payload object (overrides --agent)
   approve <id> --password P [--approver UUID]
   reject  <id> --password P [--rejector UUID] [--reason R]
+  transfer list [--team ID] [--agent ID] [--status S]   List team-transfer requests
+  transfer create --agent ID --from-team ID --to-team ID [--note TEXT]
+  transfer resolve <transferId> --action approve|reject [--reject-reason TEXT]
   help                         Show this help
 
 Environment:
@@ -208,12 +211,76 @@ cmd_reject() {
     _api POST "/api/v1/governance/requests/${id}/reject" "$body"
 }
 
+# Team-transfer flow — the DEDICATED /api/governance/transfers surface (distinct
+# from a generic `request --type transfer-agent`, which is the cross-host path).
+# requestedBy/resolvedBy are taken from the authenticated identity (AID_AUTH) by
+# the server, never a flag — so the caller MUST export AID_AUTH.
+cmd_transfer() {
+    local sub="${1:-}"; shift || true
+    case "$sub" in
+        list)
+            local qs=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --team)   qs="${qs}&teamId=$2";  shift 2 ;;
+                    --agent)  qs="${qs}&agentId=$2"; shift 2 ;;
+                    --status) qs="${qs}&status=$2";  shift 2 ;;
+                    *) echo "Error: unknown flag for 'transfer list': $1" >&2; return 1 ;;
+                esac
+            done
+            local path="/api/governance/transfers"
+            [ -n "$qs" ] && path="${path}?${qs#&}"
+            _api GET "$path"
+            ;;
+        create)
+            local agent="" from="" to="" note=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --agent)     agent="$2"; shift 2 ;;
+                    --from-team) from="$2";  shift 2 ;;
+                    --to-team)   to="$2";    shift 2 ;;
+                    --note)      note="$2";  shift 2 ;;
+                    *) echo "Error: unknown flag for 'transfer create': $1" >&2; return 1 ;;
+                esac
+            done
+            if [ -z "$agent" ] || [ -z "$from" ] || [ -z "$to" ]; then
+                echo "Error: --agent, --from-team and --to-team are required" >&2; return 1
+            fi
+            local body
+            body="$(jq -nc --arg a "$agent" --arg f "$from" --arg t "$to" --arg n "$note" \
+                '{agentId:$a, fromTeamId:$f, toTeamId:$t} + (if $n != "" then {note:$n} else {} end)')"
+            _api POST "/api/governance/transfers" "$body"
+            ;;
+        resolve)
+            local id="${1:-}"; shift || true
+            [ -z "$id" ] && { echo "Error: transfer id required" >&2; return 1; }
+            local action="" reason=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --action)        action="$2"; shift 2 ;;
+                    --reject-reason) reason="$2"; shift 2 ;;
+                    *) echo "Error: unknown flag for 'transfer resolve': $1" >&2; return 1 ;;
+                esac
+            done
+            if [ "$action" != "approve" ] && [ "$action" != "reject" ]; then
+                echo "Error: --action must be 'approve' or 'reject'" >&2; return 1
+            fi
+            local body
+            body="$(jq -nc --arg act "$action" --arg r "$reason" \
+                '{action:$act} + (if $r != "" then {rejectReason:$r} else {} end)')"
+            _api POST "/api/governance/transfers/${id}/resolve" "$body"
+            ;;
+        *) echo "Error: 'transfer' needs a subcommand: list | create | resolve" >&2; return 1 ;;
+    esac
+}
+
 case "${1:-help}" in
     whoami|config) shift; cmd_whoami "$@" ;;
     requests)      shift; cmd_requests "$@" ;;
     request)       shift; cmd_request "$@" ;;
     approve)       shift; cmd_approve "$@" ;;
     reject)        shift; cmd_reject "$@" ;;
+    transfer)      shift; cmd_transfer "$@" ;;
     help|--help|-h) show_help ;;
     --version|-v)  echo "aimaestro-governance.sh v1.0.0" ;;
     *) echo "Error: unknown command: $1" >&2; echo "" >&2; show_help; exit 1 ;;

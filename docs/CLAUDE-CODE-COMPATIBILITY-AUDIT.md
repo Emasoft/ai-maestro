@@ -1,10 +1,10 @@
-# Claude Code 2.1.113 - 2.1.154 Compatibility Audit
+# Claude Code 2.1.113 - 2.1.178 Compatibility Audit
 
-**Audited:** 2026-05-07 (2.1.113–2.1.132), extended 2026-05-28 (2.1.133–2.1.154)
+**Audited:** 2026-05-07 (2.1.113–2.1.132), extended 2026-05-28 (2.1.133–2.1.154), extended 2026-06-16 (2.1.156–2.1.178)
 **Branch:** `governance-rules`
 **Server version:** v0.29.x
 
-This file enumerates every entry in the Claude Code 2.1.113-2.1.154
+This file enumerates every entry in the Claude Code 2.1.113-2.1.178
 changelog that COULD have affected AI Maestro, the audit verdict for
 each, and the action (or non-action) we took.
 
@@ -32,6 +32,29 @@ for 2.1.154.
                     integration, OAuth refinements not on our path)
 
 ## Per-entry verdicts
+
+### 2.1.156–2.1.178 — June 16, 2026 (third pass)
+
+Triggered by a fleet-readiness request to align with the latest Claude
+Code changelog. **The only code change in this range** is the cross-client
+model-mapping extension for **Fable 5** (`claude-fable-5`), GA'd in
+2.1.170: `lib/converter/rewrite/model.ts` + tests (commit `04585f34` on
+`governance-rules`). Everything else is AWARENESS / OUT-OF-REPO / N/A.
+
+| Change (version) | Verdict | Notes |
+|---|---|---|
+| **Fable 5 release (2.1.170)** + Fable 5 name normalization (2.1.173) | **APPLIED** | New top-tier Claude line outside the opus/sonnet/haiku families. `claudeFamily()` returned null → `mapModel` passed the literal `claude-fable-5` through to Codex/Gemini (an invalid target id — the Opus-4.8 passthrough-bug class). Added a `fable` family → flagship tier (`gpt-5.5` / `gemini-2-pro`). Family-keyed, so future `claude-fable-6` and the `[1m]` variant need no edit. +6 tests (26 pass) |
+| SessionStart hook `reloadSkills: true` + `sessionTitle` (2.1.152) / `post-session` hook (2.1.169) | AWARENESS | The dashboard's element-change restart queue could use `reloadSkills` for a lighter refresh than a full relaunch; `post-session` could drive cleanup. Opt-in enhancements; the core hook lives in `ai-maestro-plugin` (out-of-repo). Deferred |
+| Plugins in `.claude/skills` auto-load; `claude plugin init`; `/plugin` search (2.1.157/2.1.172) | AWARENESS | Additive plugin-CLI surface; the dashboard's `claude plugin install/uninstall/marketplace` calls are unchanged |
+| Plugin dependency enforcement / `dependencyResolution` (2.1.143/2.1.151), `requiredMinimum/MaximumVersion` (2.1.163), `disableBundledSkills` (2.1.169) | OUT-OF-REPO | Role-plugins + `ai-maestro-plugin` could declare deps / version floors / disabled-by-default in their manifests. Tracked for the MANAGER (plugin-side); our marketplace parsers don't read these yet |
+| `disallowed-tools` hook frontmatter REMOVED (2.1.163); `disallowed-tools` for Skills/slash commands (2.1.152) | OUT-OF-REPO | Affects plugin agents/skills, not the dashboard. `ai-maestro-hook.cjs` is a `.cjs` (no frontmatter) — unaffected. Verify in plugin repos |
+| Sub-agents spawn sub-agents, 5 levels (2.1.172/2.1.178); `Tool(param:value)` permission rules; nested skill dirs `<dir>:<name>` (2.1.178) | AWARENESS | Runtime/permission features; no AI Maestro code path depends on the old nesting limit |
+| `availableModels`/`enforceAvailableModels` (2.1.175/2.1.176), `fallbackModel` (2.1.166), glob deny rules (2.1.166), `--safe-mode` (2.1.169) | AWARENESS | Managed-settings / model-policy features; the dashboard doesn't centrally manage agent model policy |
+| stdio MCP `CLAUDE_CODE_SESSION_ID`/`CLAUDECODE=1` (2.1.161/2.1.163), `--strict-mcp-config` enforcement (2.1.169) | AWARENESS | We ship no stdio MCP server today |
+| Everything else (terminal/clipboard/tmux cosmetics, IDE sync, Bedrock/Vertex/Foundry, telemetry labels, model pickers, vim mode, CJK IME) | N/A | Runtime / terminal / enterprise-auth — off AI Maestro's path |
+
+> **Branch note:** this third pass landed on `governance-rules`. `main`
+> alignment is handled separately (same as prior passes).
 
 ### 2.1.154 — May 28, 2026
 

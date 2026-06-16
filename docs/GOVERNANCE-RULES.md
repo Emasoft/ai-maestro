@@ -1,8 +1,9 @@
 ---
-version: "3.9.1"
-date: 2026-05-06
+version: "3.10.0"
+date: 2026-06-16
 branch: feature/phase6-jsonl-rebase-test
 changelog:
+  - "3.10.0: Added R22 (Plugin↔Server Decoupling via the Frozen CLI Layer — IRON), R23 (Proactive Global Memory), R24 (Three-Pillars Task System). R22 codifies the USER-emphasized invariant that NO plugin element (skill / agent / command / hook / MCP config or server / bundled script / settings) may call the server API (`/api/…`) directly or instruct an agent to — all server access routes through the FROZEN-interface CLI/script layer shipped + installed with ai-maestro; every script/hook is split into an api-dependent part (lives in ai-maestro as a CLI) and a non-api part (lives in the plugin, carries only that); the CLI skill-facing interface is frozen (new capability = new CLI, sole exception = a security fix); NO element-level exception, not even the core `ai-maestro-plugin`; bright-line `grep -rn '/api/'` over a plugin tree shows no direct-call instructions. R23 mandates the global janitor-hosted 3-scope markdown memory (recall-before-acting + write/update-after-learning + sub-agent propagation; no per-plugin memory; LOCAL/PROJECT/USER scopes; PROJECT is pushed+shared so it forbids secrets/local-paths/PII, enforced by the memory-scope-leak detector) — closes the prior 0 governance refs to memory. R24 binds proactive, role-appropriate use of the existing TRDD/PRRD/Kanban rules (`~/.claude/rules/`) + core skills without restating their mechanics. Co-designed with MANAGER (assistant-manager-agent#17, USER-directed this session); per-plugin fleet propagation (role-plugin persona citations of R22-R24) driven by MANAGER separately."
   - "3.9.1: Codified the canonical agent-address format (R6.11–R6.14). Single ID string per host, wire format `<agent-id>@<host>` or `<host>:<agent-id>`, with bare `<agent-id>` defaulting to the writer's host. Persona name may alias the agent-id when no collision exists on the target host (R6.12); on collision, the API returns 409 `disambiguation_required`. The legacy 3-level hierarchical addressing (`team/sub/name`) is now formally deprecated for messaging — it survives only as the sidebar's visual tag organization. R6.14 mandates UI + persona-prompt migration across this repo and the 8 role-plugin repos."
   - "3.9.0: Expanded R21 to be the SINGLE COMPLETE source for All-In-One pipeline architecture (IRON). Folded in every AIO rule that previously lived only in the `make-all-in-one` skill: the 3 absolute rules (one-function-per-operation, helpers-must-be-pure, auth-inside-not-outside), the full gate architecture (G00-G99 / EXE / PG01-PG99 numbering, atomic gates, error-reporting by gate code), pre-gate / post-gate canonical sequences, the variant-specific `[VariantName]` bracket convention, the idempotency-gate pattern, the protected-resource four-layer defense, the result contract, the caller contract, the anti-pattern table, and the consolidation procedure. The user's 2026-05-06 composition directive remains verbatim at the top of R21 as load-bearing. With this expansion, GOVERNANCE-RULES.md is the canonical source for governance + AIO + communication rules; only scenario rules stay separate (`tests/scenarios/SCENARIOS_TESTS_RULES.md`) because they depend on per-user tooling choices (browser stack, headless vs visible, etc.)."
   - "3.8.0: Added R21 (All-In-One Pipeline Composition). Codifies the IRON rule that AIO API functions MUST call other AIOs internally when they need to perform a task another AIO already covers — never duplicate logic, never bypass gates with primitive helpers. Names matter: ChangePlugin is an agent-scoped configuration AIO (install/uninstall/enable/disable/update FOR THAT AGENT or user-scope target); UninstallPlugin (cross-agent) is the plugin-scoped AIO that cascades through ChangePlugin per agent; UninstallMarketplace cascades through UninstallPlugin per plugin. Without the cascade, agents are left with dangling enabledPlugins keys pointing at deleted marketplaces — they break. Driven by an audit that found ChangeMarketplace's remove path skipped agent cleanup and G11b in ChangePlugin called updateAgent directly instead of dispatching through ChangeCLIArgs."
@@ -1149,6 +1150,51 @@ Read-only operations (queries, lookups, calculations) do NOT need AIO functions 
 ---
 
 **Note on the `make-all-in-one` skill.** The skill at `~/.claude/skills/make-all-in-one/` predates this section. With v3.9.0 the skill is no longer the canonical source — this R21 section is. The skill remains useful as an authoring tutorial (the step-by-step process, the "create or consolidate" workflow), but the load-bearing rules that govern compliance live HERE. If the two ever drift, this section wins.
+
+---
+
+## R22. Plugin↔Server Decoupling via the Frozen CLI Layer (CRITICAL — IRON)
+
+**The invariant:** every plugin MUST be decoupled from ai-maestro server-API changes. The server API changes constantly; plugins must not. The immutable CLI/script layer shipped + installed with the ai-maestro project is the ONLY code that touches the API — it is the stability buffer between the dozen plugins and the ever-changing API. (USER-emphasized this session; supersedes the former "AI Maestro's own plugin is the provider-exception".)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R22.1 | **No plugin element — skill, agent, command, HOOK, MCP config/server, bundled script, or settings — may call the server API (`/api/…`) directly, nor instruct an agent to.** Derive this for EVERY element type, not only the ones named | Explicit |
+| R22.2 | All server access goes through the **frozen-interface CLI/script layer** installed with ai-maestro (`~/.local/bin/aimaestro-*.sh`, `amp-*.sh`, `aid-*.sh`) | Explicit |
+| R22.3 | Every script/hook is split into an **api-dependent part** (lives in ai-maestro, installed with it, as a CLI) and a **non-api part** (lives in the plugin). The plugin carries ONLY the non-api part — e.g. `ai-maestro-hook.cjs` is a thin shim over `aimaestro-hook.sh` | Explicit |
+| R22.4 | The CLIs' skill-facing interface (name + args + output) is **FROZEN**. New capability = a NEW CLI (or an additive optional flag), NEVER a changed interface. Sole exception: a security fix | Explicit |
+| R22.5 | **No element-level exception — not even the core `ai-maestro-plugin`.** The boundary is the script layer, not a plugin; those scripts are owned by + shipped from the ai-maestro repo and are the only code allowed to call the API | Explicit |
+| R22.6 | **Bright-line test:** `grep -rn '/api/'` over a plugin tree shows no direct-call instructions. Conceptual references that route through the CLI layer are fine — the line is endpoint-syntax + actual calls/instructions, NOT the word "API" | Implicit (enforcement) |
+
+**Rationale:** the CLI layer is the stability buffer — when the API changes, only ai-maestro's scripts change, never the plugins. One interface to keep stable instead of a dozen plugins to chase. If the layer lacks a call a plugin needs, ADD a CLI to ai-maestro — never reach past the layer.
+
+---
+
+## R23. Proactive Global Memory
+
+**The invariant:** there is ONE memory system — the global janitor-hosted markdown wiki — and every agent uses it proactively. Plugins ship no memory system of their own. (Closes the prior gap: zero governance references to memory.)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R23.1 | Every agent (main AND sub) uses the global janitor-hosted markdown memory system via the global `janitor-memory-{recall,write,update}` skills + the `markdown-memory-recall` rule | Explicit |
+| R23.2 | **recall-before-acting** (symptom-indexed) before debugging a recurring problem or making a design decision; **write/update-after-learning** once solved | Explicit |
+| R23.3 | The memory directive **propagates** into every spawned sub-agent (recall + write are inherited, not main-agent-only) | Explicit |
+| R23.4 | Plugins ship **NO per-plugin memory system** — no per-plugin `*-memory-*` skills, no `memory-protocol.md` mirror. The global skills + rule are the sole surface | Explicit |
+| R23.5 | Three scopes: **LOCAL** (`~/.claude/projects/<slug>/memory/`, machine-private) · **PROJECT** (`<repo>/.claude/project/memory/`, git-tracked + pushed + shared) · **USER** (the janitor plugin-DATA dir, cross-project) | Explicit |
+| R23.6 | **PROJECT scope is pushed + shared → it MUST NOT contain secrets, local paths, hostnames, or PII.** Enforced by the janitor `memory-scope-leak` detector (security-relevant — same class as R16) | Explicit |
+
+**Rationale:** one shared memory system means no drift and no duplicate per-plugin stores; the scope split keeps machine-private and shared knowledge separate, and the PROJECT-scope prohibition prevents leaking sensitive data into a pushed, shared corpus.
+
+---
+
+## R24. Three-Pillars Task System (TRDD / PRRD / Kanban)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R24.1 | Every agent uses the **3-pillars task system (TRDD / PRRD / Kanban) proactively but role-appropriately**, via the core plugin's task skills + the `~/.claude/rules/` PRRD/TRDD/approval-tier rules. Plugins ship NO per-plugin reimplementation | Explicit |
+| R24.2 | The mechanics live in those rules/skills and are **not restated here**: **PRRD** (`design/requirements/PRRD.md`) is the per-project constitution — ecosystem R-rules are the floor it may add to but never weaken; **TRDD** (`design/tasks/`) is the canonical work artifact with approval tiers + the proposal→planned lifecycle; **Kanban** is the canonical board (mechanical transitions exempt, release/escalation transitions non-exempt). This rule binds their proactive use as ecosystem governance | Explicit (pointer) |
+
+**Rationale:** the three pillars already exist as `~/.claude/rules/` + core skills; R24 binds them as ecosystem governance so every agent uses them proactively and role-appropriately, without each plugin reinventing the mechanics.
 
 ---
 

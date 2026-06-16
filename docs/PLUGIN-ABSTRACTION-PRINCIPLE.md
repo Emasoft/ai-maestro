@@ -45,10 +45,11 @@ When the API or script syntax changes, only the AI Maestro skills and scripts ne
 - Plugin skills reference these global skills by name
 - Agents read the global skill at runtime to learn current syntax
 
-**Layer 2: Scripts** (for hooks and automation)
+**Layer 2: Scripts** (for every EXECUTABLE plugin element — hooks, MCP servers, bundled scripts)
 - AI Maestro installs global scripts that wrap API calls into CLI commands
-- Plugin hooks call these global scripts
+- Plugin hooks, **MCP servers**, and any bundled script call these global scripts — **never** the API directly. "Hooks and MCP included": no executable element type is exempt.
 - Scripts handle auth, endpoints, error handling internally
+- **No element-level exception — not even the core `ai-maestro-plugin`'s own hook.** `ai-maestro-hook.cjs` stays in the plugin but is a thin shim over `aimaestro-hook.sh`. The boundary is the script layer; those scripts are owned by + shipped from the ai-maestro repo and are the ONLY code allowed to touch the API.
 
 ---
 
@@ -194,8 +195,8 @@ To migrate an existing plugin to follow this principle:
 
 1. **Find all `curl` commands** in plugin skills, commands, and agent definitions
 2. **Replace with skill references**: "Follow the `team-governance` skill for this operation"
-3. **Find all `curl`/`fetch` calls** in plugin hooks and scripts
-4. **Replace with global script calls**: `aimaestro-agent.sh`, `amp-send.sh`, etc.
+3. **Find all `curl`/`fetch`/HTTP calls + every `:23000` / `/api/...` reference** in EVERY executable element — hooks, **MCP servers**, and bundled scripts (not just hooks)
+4. **Replace with global script calls**: `aimaestro-agent.sh`, `aimaestro-governance.sh`, `aimaestro-teams.sh`, `aimaestro-hook.sh`, `amp-send.sh`, etc. If no script covers the call, ADD one to the ai-maestro repo — never let the element reach the API directly
 5. **Remove hardcoded governance rules** from plugin agent personas
 6. **Add prerequisites section** to plugin skills listing required AI Maestro skills
 7. **Update plugin.json description** to declare skill dependencies

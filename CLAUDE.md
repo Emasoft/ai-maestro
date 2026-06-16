@@ -988,12 +988,24 @@ AI Maestro installs CLI scripts to `~/.local/bin/` that wrap API calls:
 
 The same scripts are also bundled in the plugin (for slash commands). When the API changes, only these scripts need updating.
 
+### The decoupling invariant (the WHY — derive every rule below from THIS)
+
+**Every plugin element MUST be decoupled from the AI Maestro server API.** The
+API changes constantly; plugins must not. The immutable CLI script layer
+(`~/.local/bin/aimaestro-*.sh`, `amp-*.sh`, `aid-*.sh`) is the ONLY boundary
+that touches the API — it is the UI that shields every plugin from the
+ever-changing API behind it. Any plugin element that names a `/api/...`
+endpoint, a `:23000` URL, or issues an HTTP call to the server has coupled
+itself to the API and WILL break on the next API change. **This applies to
+EVERY element type — hooks and MCP servers included — not just the ones named
+below. Derive the consequence for each element type; do not wait to be told.**
+
 ### Rules for External Plugins
 
-1. **Plugin skills/commands/agents MUST NOT embed API syntax** (no curl commands, no endpoint URLs, no header patterns). They describe functionality and reference the global AI Maestro skill by name.
-2. **Plugin hooks/scripts MUST NOT call the API directly.** They call globally-installed AI Maestro scripts (`aimaestro-agent.sh`, `amp-send.sh`, etc.).
+1. **Prompt-elements (skills / commands / agents / rules / output-styles) MUST NOT embed API syntax** (no curl, no endpoint URLs, no headers). They describe functionality and reference the global AI Maestro skill by name.
+2. **Executable elements — hooks, MCP servers, bundled scripts, and ANY other code a plugin ships — MUST NOT call the API directly.** They shell out to the globally-installed AI Maestro CLI scripts (`aimaestro-agent.sh`, `aimaestro-governance.sh`, `aimaestro-teams.sh`, `aimaestro-hook.sh`, `amp-*.sh`, …). A hook STAYS in its plugin but becomes a thin shim that calls the intermediary script (see `aimaestro-hook.sh`); an MCP server that needs server data calls the script layer, never `fetch('/api/...')`. If the layer lacks a needed call, ADD a script to ai-maestro — never reach past it.
 3. **Governance rules are discovered at runtime** by reading the `team-governance` skill. Plugins MUST NOT hardcode governance rules, permission matrices, or role restrictions.
-4. **AI Maestro's own plugin is the exception** — it IS the provider of these abstractions. Its skills contain the canonical syntax. Its scripts make the actual API calls.
+4. **No element-level exception — not even the core `ai-maestro-plugin`** (this SUPERSEDES the former "AI Maestro's own plugin is the exception"). The boundary is the **script layer**, not a plugin: the `aimaestro-*` / `amp-*` / `aid-*` scripts are the intermediary and the ONLY code allowed to call the API — and those scripts are **owned by and shipped from the ai-maestro project** (this repo), not bundled in any plugin. The core plugin's hook (`ai-maestro-hook.cjs`) goes through `aimaestro-hook.sh` exactly like every other plugin's elements. Any script that internally depends on the API lives in ai-maestro, OUT of the plugins.
 
 ### Benefits
 - API change → update 1 skill/script → all plugins work

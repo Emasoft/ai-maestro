@@ -26,6 +26,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import { Lock, X, AlertCircle, Loader2 } from 'lucide-react'
+import type { SudoOperation } from '@/lib/sudo-fetch'
 
 // Proposal 32 (2026-04-20): auto-cancel window. If the user opens the
 // sudo modal, walks away, and the timer expires, the modal closes so
@@ -38,8 +39,13 @@ interface SudoContextValue {
    * Prompt the user for the governance password, exchange it for a
    * sudo token via POST /api/auth/sudo-password, and return the token.
    * Returns null if the user cancels or if the password is rejected.
+   *
+   * `operation` (optional, SUDO-01/R32): when supplied — e.g. by sudoFetch
+   * forwarding the (method, path) of the retried request — the minted token is
+   * bound to that operation so it cannot be replayed for a different strict
+   * route. Omitted → an unbound token (two-phase rollout, R-3).
    */
-  requestSudoToken: (reason: string) => Promise<string | null>
+  requestSudoToken: (reason: string, operation?: SudoOperation) => Promise<string | null>
 }
 
 const SudoContext = createContext<SudoContextValue | null>(null)
@@ -51,13 +57,15 @@ interface Resolver {
 export function SudoProvider({ children }: { children: ReactNode }) {
   const [reason, setReason] = useState<string | null>(null)
   const [resolver, setResolver] = useState<Resolver | null>(null)
+  const [operation, setOperation] = useState<SudoOperation | undefined>(undefined)
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const requestSudoToken = useCallback((r: string): Promise<string | null> => {
+  const requestSudoToken = useCallback((r: string, op?: SudoOperation): Promise<string | null> => {
     return new Promise<string | null>((resolve) => {
       setReason(r)
+      setOperation(op)
       setPassword('')
       setError(null)
       setResolver({ resolve })
@@ -68,6 +76,7 @@ export function SudoProvider({ children }: { children: ReactNode }) {
     if (resolver) resolver.resolve(null)
     setResolver(null)
     setReason(null)
+    setOperation(undefined)
     setPassword('')
     setError(null)
   }, [resolver])
@@ -104,7 +113,9 @@ export function SudoProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/auth/sudo-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        // SUDO-01: forward the operation (if any) so the minted token is bound
+        // to the action the user is confirming.
+        body: JSON.stringify(operation ? { password, operation } : { password }),
       })
       if (res.status === 403) {
         setError('Password does not match — try again.')
@@ -124,6 +135,7 @@ export function SudoProvider({ children }: { children: ReactNode }) {
       resolver.resolve(data.token)
       setResolver(null)
       setReason(null)
+      setOperation(undefined)
       setPassword('')
       setError(null)
     } catch (err) {
@@ -131,7 +143,7 @@ export function SudoProvider({ children }: { children: ReactNode }) {
     } finally {
       setSubmitting(false)
     }
-  }, [resolver, password, submitting])
+  }, [resolver, password, submitting, operation])
 
   const open = resolver !== null
 

@@ -13,7 +13,6 @@ import { z } from 'zod'
 import { getAgentSelf, updateAgentSelf } from '@/services/amp-service'
 import { authenticateRequest } from '@/lib/amp-auth'
 import { DeleteAgent } from '@/services/element-management-service'
-import { requireSudoToken } from '@/lib/sudo-guard'
 import type { AMPError } from '@/lib/types/amp'
 
 // API2-MIN-14: Zod schema for the PATCH body. Replaces the previous
@@ -76,12 +75,12 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    // API2-MAJ-02: Hard self-delete is irreversible (no cemetery, removes
-    // agent dir + AMP keys + messages). Require sudo, matching the
-    // operator-driven DELETE /api/agents/[id] path.
-    const sudoErr = requireSudoToken(request, 'DELETE', '/api/v1/agents/me')
-    if (sudoErr) return sudoErr
-
+    // R32: this is an AGENT-ONLY route (AMP self-deregister). Agents NEVER face
+    // a sudo gate — the prior `requireSudoToken` here was a direct R32
+    // violation (and routing it through the agent branch would 403 the agent's
+    // own self-delete via authorize()'s self-delete ban). Self-delete authority
+    // is DeleteAgent's own Gate-0, which permits an AMP-authenticated agent to
+    // hard self-deregister. No UI/USER path calls this route.
     const authHeader = request.headers.get('Authorization')
     // Inline the AMP auth + DeleteAgent pipeline (replaces deprecated deleteAgentSelf wrapper)
     const ampAuth = authenticateRequest(authHeader)

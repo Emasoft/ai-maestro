@@ -31,12 +31,31 @@ function getSudoTokenTtlMs(): number {
 }
 const SUDO_TOKEN_BYTES = 32
 
+/** A method+pathTemplate a sudo token is bound to (SUDO-01). */
+export interface SudoOperation {
+  method: string
+  path: string
+}
+
 interface SudoRecord {
   /** hash of the token (we never keep raw tokens in memory longer than needed) */
   tokenHash: string
   expiresAt: number
-  /** who earned this token — agentId for agents, or 'system-owner' for web user */
+  /**
+   * Who earned this token. Under R32 only the USER/UI mints sudo tokens, so
+   * this is always 'system-owner' for freshly-issued tokens. The field stays
+   * a string (not a literal) so legacy in-flight tokens issued before R32 still
+   * round-trip without a type break.
+   */
   subject: string
+  /**
+   * SUDO-01 (R32): the operation this token was minted for. When present, the
+   * guard refuses to consume the token on any OTHER (method, pathTemplate),
+   * preventing a token minted for op A on subject X from being replayed for op
+   * B. Optional during the two-phase rollout (R-3): a token minted without an
+   * operation (legacy / unbound) is tolerated by the guard.
+   */
+  operation?: SudoOperation
 }
 
 interface SudoGlobals {
@@ -69,7 +88,11 @@ function sweep(): void {
  * Returns the raw token string (show once, never stored) or throws on
  * password mismatch / missing password.
  */
-export async function issueSudoToken(password: string, subject: string): Promise<{ token: string; expiresAt: number }> {
+export async function issueSudoToken(
+  password: string,
+  subject: string,
+  operation?: SudoOperation
+): Promise<{ token: string; expiresAt: number }> {
   const config = loadGovernance()
   if (!config.passwordHash) {
     throw new Error('sudo_mode_unavailable: governance password not set')
@@ -84,13 +107,14 @@ export async function issueSudoToken(password: string, subject: string): Promise
   const tokenHash = hashToken(raw)
   const expiresAt = Date.now() + getSudoTokenTtlMs()
 
-  // Keyed by hash for O(1) lookup without exposing raw tokens
-  tokens.set(tokenHash, { tokenHash, expiresAt, subject })
+  // Keyed by hash for O(1) lookup without exposing raw tokens. `operation` is
+  // stored verbatim (SUDO-01) so the guard can verify op binding at consume.
+  tokens.set(tokenHash, { tokenHash, expiresAt, subject, operation })
   return { token: raw, expiresAt }
 }
 
 type ValidationResult =
-  | { ok: true; subject: string }
+  | { ok: true; subject: string; operation?: SudoOperation }
   | { ok: false; reason: 'missing' | 'expired' | 'unknown' }
 
 /**
@@ -120,13 +144,28 @@ export function validateAndConsumeSudoToken(rawToken: string | null | undefined)
     return { ok: false, reason: 'expired' }
   }
   tokens.delete(tokenHash) // one-shot
-  return { ok: true, subject: rec.subject }
+  return { ok: true, subject: rec.subject, operation: rec.operation }
 }
 
 /** Diagnostic: how many sudo tokens are currently outstanding. */
 export function activeSudoTokenCount(): number {
   sweep()
   return tokens.size
+}
+
+/**
+ * SUDO-05 (R32): count the outstanding (non-expired) tokens for a given
+ * subject. The mint route uses this to cap how many USER ('system-owner')
+ * sudo tokens may be live at once, so a flood of un-consumed tokens can't
+ * accumulate. Sweeps expired records first so the count is accurate.
+ */
+export function countBySubject(subject: string): number {
+  sweep()
+  let n = 0
+  for (const rec of tokens.values()) {
+    if (rec.subject === subject) n++
+  }
+  return n
 }
 
 // AUTH-MIN-04 fix: schedule a periodic sweep so expired tokens don't

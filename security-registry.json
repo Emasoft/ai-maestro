@@ -24,7 +24,17 @@
     "  gate (cookie or Bearer), plus the per-route authenticateFromRequest()",
     "  check, plus (for agent writes) the gate0Auth authorization check inside",
     "  the ChangeTitle / ChangePlugin pipelines. \"strict\" adds a fourth layer:",
-    "  a sudo-mode token earned by re-entering the password within the last 60s."
+    "  a sudo-mode token earned by re-entering the password within the last 60s.",
+    "",
+    "R32 DUAL-PATH (lib/sudo-guard.ts::requireSudoToken):",
+    "  A \"strict\" route is gated DIFFERENTLY per caller. USER/UI (cookie",
+    "  session, no agentId) → must present a fresh sudo token (subject- and",
+    "  op-bound, one-shot). AGENT (Bearer AID/AMP, has agentId) → NEVER sudo;",
+    "  the gate is the R28 three-check (AID identity → TITLE privilege via",
+    "  authorize() → portfolio/mandate token), so a strict entry stays correct",
+    "  for the USER while agents authorize by their AID. DELETE /api/v1/agents/me",
+    "  is intentionally NOT strict: it is agent-only (AMP self-deregister), and",
+    "  sudo there would violate R32 — its authority is DeleteAgent's Gate-0."
   ],
   "entries": {
     "DELETE_/api/agents/[id]": "strict",
@@ -47,7 +57,6 @@
     "PATCH_/api/settings/security": "strict",
     "PATCH_/api/settings/auto-update": "strict",
     "POST_/api/settings/auto-update/run": "strict",
-    "DELETE_/api/v1/agents/me": "strict",
     "POST_/api/agents/cemetery": "strict",
     "POST_/api/agents/import": "strict",
     "POST_/api/agents/[id]/transfer": "strict"

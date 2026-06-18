@@ -164,6 +164,16 @@ function clampConfig(config: Record<string, unknown>): void {
     clamp(pp, 'minLength', 4, 128)
     clamp(pp, 'maxLength', 8, 1024)
   }
+  // SUDO-03 (R32): clamp session/sudo TTLs on load too. A tampered .enc that
+  // pushed sudoTokenTtlSeconds to 99999 would keep a USER sudo token valid for
+  // hours, widening the replay window; pinning it to 90 days would let a stolen
+  // session cookie outlive any reasonable rotation. Defense-in-depth alongside
+  // the PATCH /api/settings/security Zod schema.
+  const sa = config.sessionAuth as Record<string, unknown> | undefined
+  if (sa) {
+    clamp(sa, 'sudoTokenTtlSeconds', 10, 600)
+    clamp(sa, 'sessionTtlDays', 1, 90)
+  }
 }
 
 function decryptConfig(blob: string, password: string): SecurityConfig | null {

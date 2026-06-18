@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { verifyPassword } from '@/lib/governance'
 import { createNewTeam } from '@/services/teams-service'
-import { enforceAuth } from '@/lib/route-auth'
+import { requireAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,8 +23,13 @@ const CreateWithProjectSchema = z.object({
 
 // POST /api/teams/create-with-project
 export async function POST(request: NextRequest) {
-  const authErr = enforceAuth(request)
-  if (authErr) return authErr
+  // R28/R29/R38: forward the verified caller so createNewTeam's MANAGER-RBAC
+  // gate fires. Previously enforceAuth discarded the identity, so the team was
+  // created with NO requestingAgentId — the gate (which 403s a non-MANAGER
+  // agent) was skipped entirely. The system owner (web UI, password-verified
+  // below) passes as isSystemOwner.
+  const auth = requireAuth(request)
+  if (!auth.ok) return auth.error
 
   try {
     let raw: unknown
@@ -57,6 +62,8 @@ export async function POST(request: NextRequest) {
       description: body.description?.trim(),
       chiefOfStaffId: body.chiefOfStaffId,
       orchestratorId: body.orchestratorId,
+      requestingAgentId: auth.agentId,
+      authContext: auth.context,
     })
 
     if (result.error) {

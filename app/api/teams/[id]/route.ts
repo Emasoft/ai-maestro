@@ -109,9 +109,17 @@ export async function PUT(
     // Membership updates trigger ChangeTeam → ChangeTitle, which is a
     // governance-level operation. The DELETE handler below already runs
     // requireSudoToken; PUT must do the same when the body carries
-    // `agentIds`. Plain renames or description edits (no agentIds) stay
-    // sudo-free so the user is not nagged for trivial changes.
-    if (safeBody.agentIds !== undefined) {
+    // `agentIds`. Plain renames or description edits stay sudo-free so the
+    // user is not nagged for trivial changes.
+    //
+    // L2 fix (2026-06-18): `orchestratorId` is also a team-STRUCTURE change
+    // (per R26/R29/R30 — it sets/clears the orchestrator slot) and must be
+    // gated identically to `agentIds`. Previously an orchestratorId-only PUT
+    // skipped this gate entirely. (NOTE: per R32 the full model is "agents use
+    // AID+title, not sudo; sudo is USER/UI-only" — making requireSudoToken
+    // agent-aware is a separate sudo-subsystem refactor tracked as follow-up;
+    // here we only close the bypass by matching the existing agentIds gate.)
+    if (safeBody.agentIds !== undefined || safeBody.orchestratorId !== undefined) {
       const sudoErr = requireSudoToken(request, 'PUT', '/api/teams/[id]')
       if (sudoErr) return sudoErr
     }

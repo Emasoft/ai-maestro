@@ -12,8 +12,12 @@ export async function GET(request: NextRequest) {
   }
   try {
     const { searchParams } = new URL(request.url)
+    // R28/R38: an authenticated agent may read ONLY its own mailbox — override
+    // the agent param with the verified identity (mirrors the POST body.from
+    // override below). The system owner (web UI) may query any agent.
+    const agentParam = auth.agentId || searchParams.get('agent')
     const result = await getMessages({
-      agent: searchParams.get('agent'),
+      agent: agentParam,
       id: searchParams.get('id'),
       action: searchParams.get('action'),
       box: searchParams.get('box') || 'inbox',

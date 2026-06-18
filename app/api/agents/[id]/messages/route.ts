@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listMessages, sendMessage } from '@/services/agents-messaging-service'
 import { isValidUuid } from '@/lib/validation'
-import { enforceAuth, requireAuth } from '@/lib/route-auth'
+import { requireAuth } from '@/lib/route-auth'
 
 /**
  * GET /api/agents/[id]/messages
@@ -11,10 +11,19 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // R28/R32/R38: reading a mailbox is authenticated, and an agent may read ONLY
+  // its own inbox (the verified AID must equal the path agentId); the system
+  // owner (web UI) may read any. Closes the prior unauthenticated IDOR — the GET
+  // had no auth, so any caller could read any agent's messages by UUID.
+  const auth = requireAuth(request)
+  if (!auth.ok) return auth.error
   try {
     const { id } = await params
     if (!isValidUuid(id)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
+    if (auth.agentId && auth.agentId !== id) {
+      return NextResponse.json({ error: 'Forbidden — you may only read your own mailbox' }, { status: 403 })
     }
     // SF-001 fix: Use NextRequest.nextUrl.searchParams instead of new URL(request.url)
     const searchParams = request.nextUrl.searchParams

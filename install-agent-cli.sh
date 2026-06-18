@@ -48,10 +48,28 @@ INSTALL_DIR="${HOME}/.local/bin"
 HELPERS_DIR="${HOME}/.local/share/aimaestro/shell-helpers"
 MANIFEST_DIR="${HOME}/.local/share/aimaestro"
 
-# Files to install
+# Scripts installed to ~/.local/bin: the agent CLI + the 6 modules it sources
+# (_source_module looks in the CLI's own dir / ~/.local/bin) + the team /
+# governance / hook CLIs of the immutable layer. They must all live together in
+# INSTALL_DIR so aimaestro-agent.sh can source its modules and the aimaestro-*.sh
+# CLIs resolve. Re-running refreshes any stale copies.
 INSTALLED_FILES=(
     "aimaestro-agent.sh"
+    "agent-core.sh"
     "agent-helper.sh"
+    "agent-commands.sh"
+    "agent-session.sh"
+    "agent-skill.sh"
+    "agent-plugin.sh"
+    "aimaestro-teams.sh"
+    "aimaestro-governance.sh"
+    "aimaestro-hook.sh"
+)
+
+# Shared helper sourced by the aimaestro-*.sh CLIs — installed to HELPERS_DIR
+# (their fallback lookup path), NOT to ~/.local/bin. Path is relative to source_dir.
+HELPER_FILES=(
+    "shell-helpers/common.sh"
 )
 
 # Colors (with terminal check)
@@ -263,17 +281,33 @@ cmd_install() {
         return 1
     fi
 
-    # Stage files
+    # Stage files (bin scripts flat in STAGING_DIR; helper files keep their subdir)
     echo "Staging files..."
-    cp "${source_dir}/aimaestro-agent.sh" "${STAGING_DIR}/" || {
-        print_error "Failed to stage aimaestro-agent.sh"
-        return 1
-    }
-    cp "${source_dir}/agent-helper.sh" "${STAGING_DIR}/" || {
-        print_error "Failed to stage agent-helper.sh"
-        return 1
-    }
-    print_success "Staged 2 files"
+    local staged=0 f
+    for f in "${INSTALLED_FILES[@]}"; do
+        if [[ ! -f "${source_dir}/${f}" ]]; then
+            print_error "Missing source script: ${source_dir}/${f}"
+            return 1
+        fi
+        cp "${source_dir}/${f}" "${STAGING_DIR}/" || {
+            print_error "Failed to stage ${f}"
+            return 1
+        }
+        staged=$((staged + 1))
+    done
+    for f in "${HELPER_FILES[@]}"; do
+        if [[ ! -f "${source_dir}/${f}" ]]; then
+            print_error "Missing source helper: ${source_dir}/${f}"
+            return 1
+        fi
+        mkdir -p "${STAGING_DIR}/$(dirname "${f}")"
+        cp "${source_dir}/${f}" "${STAGING_DIR}/${f}" || {
+            print_error "Failed to stage ${f}"
+            return 1
+        }
+        staged=$((staged + 1))
+    done
+    print_success "Staged ${staged} files"
     echo ""
 
     # Create directories
@@ -292,32 +326,38 @@ cmd_install() {
     # Install files
     echo "Installing files..."
 
-    # Install main script
-    cp "${STAGING_DIR}/aimaestro-agent.sh" "${INSTALL_DIR}/aimaestro-agent.sh" || {
-        print_error "Failed to install aimaestro-agent.sh"
-        return 1
-    }
-    chmod +x "${INSTALL_DIR}/aimaestro-agent.sh" || {
-        print_error "Failed to set executable permission on aimaestro-agent.sh"
-        return 1
-    }
-    print_success "${INSTALL_DIR}/aimaestro-agent.sh"
+    # Install every bin script to INSTALL_DIR (+x)
+    local fname base
+    for fname in "${INSTALLED_FILES[@]}"; do
+        cp "${STAGING_DIR}/${fname}" "${INSTALL_DIR}/${fname}" || {
+            print_error "Failed to install ${fname}"
+            return 1
+        }
+        chmod +x "${INSTALL_DIR}/${fname}" || {
+            print_error "Failed to set executable permission on ${fname}"
+            return 1
+        }
+        print_success "${INSTALL_DIR}/${fname}"
+    done
 
     # Create symlink without .sh extension for convenience
     ln -sf "aimaestro-agent.sh" "${INSTALL_DIR}/aimaestro-agent-bash" 2>/dev/null || {
         print_warning "Could not create convenience symlink (non-fatal)"
     }
 
-    # Install helper
-    cp "${STAGING_DIR}/agent-helper.sh" "${HELPERS_DIR}/agent-helper.sh" || {
-        print_error "Failed to install agent-helper.sh"
-        return 1
-    }
-    chmod +x "${HELPERS_DIR}/agent-helper.sh" || {
-        print_error "Failed to set executable permission on agent-helper.sh"
-        return 1
-    }
-    print_success "${HELPERS_DIR}/agent-helper.sh"
+    # Install shared helpers to HELPERS_DIR (the aimaestro-*.sh fallback path)
+    for fname in "${HELPER_FILES[@]}"; do
+        base="$(basename "${fname}")"
+        cp "${STAGING_DIR}/${fname}" "${HELPERS_DIR}/${base}" || {
+            print_error "Failed to install ${base}"
+            return 1
+        }
+        chmod +x "${HELPERS_DIR}/${base}" || {
+            print_error "Failed to set executable permission on ${base}"
+            return 1
+        }
+        print_success "${HELPERS_DIR}/${base}"
+    done
     echo ""
 
     # Configure PATH
@@ -380,6 +420,15 @@ cmd_install() {
         skill_installed_json="true"
     fi
 
+    # Absolute paths of every file we installed, for the uninstall manifest.
+    local installed_files_json
+    installed_files_json="$(
+        {
+            for fname in "${INSTALLED_FILES[@]}"; do printf '%s\n' "${INSTALL_DIR}/${fname}"; done
+            for fname in "${HELPER_FILES[@]}"; do printf '%s\n' "${HELPERS_DIR}/$(basename "${fname}")"; done
+        } | jq -R . | jq -sc .
+    )"
+
     manifest=$(jq -n \
         --arg version "$INSTALLER_VERSION" \
         --arg installed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -390,6 +439,7 @@ cmd_install() {
         --argjson path_modified "$path_modified_json" \
         --argjson skill_installed "$skill_installed_json" \
         --arg shell_config "${shell_config:-}" \
+        --argjson installed_files "$installed_files_json" \
         '{
             version: $version,
             installed_at: $installed_at,
@@ -397,10 +447,7 @@ cmd_install() {
             install_dir: $install_dir,
             helpers_dir: $helpers_dir,
             skill_dir: $skill_dir,
-            files: [
-                ($install_dir + "/aimaestro-agent.sh"),
-                ($helpers_dir + "/agent-helper.sh")
-            ] + (if $skill_installed then [($skill_dir + "/SKILL.md")] else [] end),
+            files: ($installed_files + (if $skill_installed then [($skill_dir + "/SKILL.md")] else [] end)),
             path_modified: $path_modified,
             skill_installed: $skill_installed,
             shell_config_file: $shell_config

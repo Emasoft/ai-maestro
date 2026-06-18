@@ -27,6 +27,7 @@
 #   aimaestro-teams.sh delete <teamId> [--password P] [--delete-agents]
 #   aimaestro-teams.sh add-agent <teamId> <agentUUID> [--password P]
 #   aimaestro-teams.sh remove-agent <teamId> <agentUUID> [--password P]
+#   aimaestro-teams.sh kanban-config <teamId> --get | --set <columns-json> | --set-file <path>
 #
 # =============================================================================
 
@@ -114,6 +115,10 @@ Commands:
       --delete-agents           cascade-delete the team's agents
   add-agent <teamId> <agentUUID>    [--password P]   add one member (read+PUT)
   remove-agent <teamId> <agentUUID> [--password P]   remove one member (read+PUT)
+  kanban-config <teamId> [flags]    Get or set the team's kanban columns
+      --get                     print the current column config
+      --set <columns-json>      set columns (inline JSON array, 1..20 items)
+      --set-file <path>         set columns from a JSON-array file
   help
 
 Environment:
@@ -276,6 +281,41 @@ cmd_remove_agent() {
     _edit_membership remove "$id" "$agent" "$password"
 }
 
+# kanban-config <teamId> --get | --set <columns-json> | --set-file <path>
+# GET/PUT the team's kanban column configuration (COS #11 — the CLI face of the
+# Configurable Kanban Columns feature). The PUT body is {columns:[{id,label,
+# color[,icon]}, …]} — 1..20 strict items, validated server-side.
+cmd_kanban_config() {
+    local id="${1:-}"; shift || true
+    [ -z "$id" ] && { echo "Error: teamId required" >&2; return 1; }
+    local mode="" columns_json="" columns_file=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --get)      mode="get"; shift ;;
+            --set)      mode="set"; columns_json="$2"; shift 2 ;;
+            --set-file) mode="set"; columns_file="$2"; shift 2 ;;
+            *) echo "Error: unknown flag for 'kanban-config': $1" >&2; return 1 ;;
+        esac
+    done
+    [ -z "$mode" ] && { echo "Error: kanban-config needs --get, --set <columns-json>, or --set-file <path>" >&2; return 1; }
+    if [ "$mode" = "get" ]; then
+        _api GET "/api/teams/${id}/kanban-config"
+    else
+        if [ -n "$columns_file" ]; then
+            [ -f "$columns_file" ] || { echo "Error: file not found: $columns_file" >&2; return 1; }
+            columns_json="$(cat "$columns_file")"
+        fi
+        [ -z "$columns_json" ] && { echo "Error: --set requires a JSON array of columns (or use --set-file)" >&2; return 1; }
+        if ! printf '%s' "$columns_json" | jq -e 'type == "array"' >/dev/null 2>&1; then
+            echo 'Error: columns must be a JSON array, e.g. [{"id":"todo","label":"To Do","color":"#888888"}]' >&2
+            return 1
+        fi
+        local body
+        body="$(jq -nc --argjson cols "$columns_json" '{columns: $cols}')"
+        _api PUT "/api/teams/${id}/kanban-config" "$body"
+    fi
+}
+
 case "${1:-help}" in
     list)         shift; cmd_list "$@" ;;
     show)         shift; cmd_show "$@" ;;
@@ -284,7 +324,8 @@ case "${1:-help}" in
     delete)       shift; cmd_delete "$@" ;;
     add-agent)    shift; cmd_add_agent "$@" ;;
     remove-agent) shift; cmd_remove_agent "$@" ;;
+    kanban-config) shift; cmd_kanban_config "$@" ;;
     help|--help|-h) show_help ;;
-    --version|-v) echo "aimaestro-teams.sh v1.0.0" ;;
+    --version|-v) echo "aimaestro-teams.sh v1.1.0" ;;
     *) echo "Error: unknown command: $1" >&2; echo "" >&2; show_help; exit 1 ;;
 esac

@@ -77,12 +77,32 @@ jobs:
           fi
           echo "✓ aimaestro-agent.sh installed"
 
-          # Verify agent-helper.sh in share dir
-          if [ ! -f ~/.local/share/aimaestro/shell-helpers/agent-helper.sh ]; then
-            echo "ERROR: agent-helper.sh not installed to share dir"
+          # Verify the agent CLI's sourced modules are installed to ~/.local/bin.
+          # aimaestro-agent.sh sources them via _source_module from its own dir
+          # (= ~/.local/bin) / the ~/.local/bin fallback — NOT the share dir.
+          for mod in agent-core.sh agent-helper.sh agent-commands.sh agent-session.sh agent-skill.sh agent-plugin.sh; do
+            if [ ! -x ~/.local/bin/$mod ]; then
+              echo "ERROR: module $mod not installed to ~/.local/bin"
+              exit 1
+            fi
+          done
+          echo "✓ agent CLI modules installed to ~/.local/bin"
+
+          # Verify the immutable-layer CLIs are installed to ~/.local/bin
+          for cli in aimaestro-teams.sh aimaestro-governance.sh aimaestro-hook.sh; do
+            if [ ! -x ~/.local/bin/$cli ]; then
+              echo "ERROR: $cli not installed to ~/.local/bin"
+              exit 1
+            fi
+          done
+          echo "✓ team/governance/hook CLIs installed to ~/.local/bin"
+
+          # Verify the shared helper is installed to the share dir (the CLIs' fallback path)
+          if [ ! -f ~/.local/share/aimaestro/shell-helpers/common.sh ]; then
+            echo "ERROR: common.sh not installed to share dir"
             exit 1
           fi
-          echo "✓ agent-helper.sh installed to share dir"
+          echo "✓ shell-helpers/common.sh installed to share dir"
 
           # Verify skill was installed (requires claude CLI to be present)
           if command -v claude &> /dev/null; then
@@ -99,13 +119,19 @@ jobs:
         run: |
           echo "=== Testing scripts can source dependencies ==="
 
-          # Test that agent-helper.sh can source dependencies
-          bash -n ~/.local/share/aimaestro/shell-helpers/agent-helper.sh
+          # Test that agent-helper.sh (now in ~/.local/bin) is valid
+          bash -n ~/.local/bin/agent-helper.sh
           echo "✓ agent-helper.sh syntax OK"
 
           # Test that aimaestro-agent.sh syntax is valid
           bash -n ~/.local/bin/aimaestro-agent.sh
           echo "✓ aimaestro-agent.sh syntax OK"
+
+          # Syntax-check the immutable-layer CLIs (they source common.sh)
+          for cli in aimaestro-teams.sh aimaestro-governance.sh aimaestro-hook.sh; do
+            bash -n ~/.local/bin/$cli
+          done
+          echo "✓ team/governance/hook CLIs syntax OK"
 
       - name: Test scripts show help (no tmux session)
         run: |

@@ -225,9 +225,19 @@ export async function listMessages(
     priority?: string
     from?: string
     to?: string
-  }
+  },
+  authContext?: AuthContext,
 ): Promise<ServiceResult<any>> {
   try {
+    // Object-level authz (defence-in-depth): an authenticated agent may read
+    // ONLY its own mailbox — the path agentId must equal the verified caller
+    // identity. Mirrors sendMessage's reject below (R28/R32/R38; never a sudo
+    // gate). System owner exempt; no authContext → the route guard is
+    // authoritative (the GET route already enforces own-mailbox-only).
+    if (authContext && !authContext.isSystemOwner && authContext.agentId !== agentId) {
+      return { error: 'Forbidden — you may only read your own mailbox', status: 403 }
+    }
+
     // SF-026: Validate agent exists as basic identity check (full auth deferred to Phase 2)
     const agent = getAgent(agentId)
     if (!agent) {

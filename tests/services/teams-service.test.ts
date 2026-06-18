@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { makeTeam, makeTask, makeDocument, makeAgent, resetFixtureCounter } from '../test-utils/fixtures'
+import type { Agent } from '@/types/agent'
 
 // ============================================================================
 // Mocks — vi.hoisted() ensures these are available when vi.mock() runs
@@ -50,7 +51,10 @@ const { mockTeams, mockGhProject, mockDocs, mockAgentRegistry, mockNotificationS
   },
   mockAgentRegistry: {
     getAgent: vi.fn(),
-    loadAgents: vi.fn(() => []),
+    // Annotate the empty-array default as Agent[] (not the inferred never[]),
+    // so mockReturnValue([makeAgent(...)]) — used by the orchestrator-slot
+    // eligibility tests — type-checks. Matches the real loadAgents(): Agent[].
+    loadAgents: vi.fn((): Agent[] => []),
     updateAgent: vi.fn(),
   },
   mockNotificationService: {

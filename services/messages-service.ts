@@ -55,6 +55,48 @@ import type { AuthContext } from '@/lib/agent-auth'
 // ServiceResult imported directly from canonical source
 
 // ---------------------------------------------------------------------------
+// Per-mailbox ownership guard (defence-in-depth)
+// ---------------------------------------------------------------------------
+
+/**
+ * Service-layer object-level authz for the global message routes.
+ *
+ * The route handlers already override the `agent` param with the verified
+ * caller identity (the primary IDOR closure). This guard is defence-in-depth:
+ * if a future caller forwards an `authContext` but forgets the route-level
+ * override, the service still refuses to read/mutate a mailbox the caller
+ * does not own. It mirrors SendMessage's G04.AUTH reject (R28/R32/R38 — an
+ * AID+title ownership check, never a sudo gate).
+ *
+ * - `authContext` undefined  → no enforcement (internal / headless callers
+ *   that don't carry a verified identity; the route guard is authoritative).
+ * - `isSystemOwner`          → exempt (web UI may touch any mailbox).
+ * - authenticated agent      → the supplied identifier must resolve to the
+ *   caller's own agentId, else 403.
+ *
+ * Returns a `ServiceResult` error envelope on denial, or null when allowed.
+ */
+function denyForeignMailbox(
+  agentIdentifier: string | null | undefined,
+  authContext?: AuthContext,
+): ServiceResult<never> | null {
+  if (!authContext || authContext.isSystemOwner) return null
+  // An authenticated agent without a resolvable own-identity cannot own any
+  // mailbox — refuse rather than fall through.
+  if (!authContext.agentId) {
+    return { error: 'Forbidden — you may only access your own mailbox', status: 403 }
+  }
+  if (!agentIdentifier) {
+    return { error: 'Forbidden — you may only access your own mailbox', status: 403 }
+  }
+  const resolved = resolveAgentIdentifier(agentIdentifier)
+  if (!resolved || resolved.agentId !== authContext.agentId) {
+    return { error: 'Forbidden — you may only access your own mailbox', status: 403 }
+  }
+  return null
+}
+
+// ---------------------------------------------------------------------------
 // Messages: GET /api/messages
 // ---------------------------------------------------------------------------
 
@@ -70,7 +112,10 @@ export interface GetMessagesParams {
   to?: string | null
 }
 
-export async function getMessages(params: GetMessagesParams): Promise<ServiceResult<any>> {
+export async function getMessages(
+  params: GetMessagesParams,
+  authContext?: AuthContext,
+): Promise<ServiceResult<any>> {
   const {
     agent: agentIdentifier,
     id: messageId,
@@ -112,6 +157,14 @@ export async function getMessages(params: GetMessagesParams): Promise<ServiceRes
       status: 200,
     }
   }
+
+  // Object-level authz: every branch below reads a specific agent's mailbox
+  // content (messages, counts, stats). The directory-discovery actions
+  // (resolve/search/agents/sessions) handled above are intentionally exempt —
+  // an agent may look up OTHER agents to message them, it just cannot read
+  // their mailbox. Defence-in-depth behind the route-level override.
+  const ownershipDenial = denyForeignMailbox(agentIdentifier, authContext)
+  if (ownershipDenial) return ownershipDenial
 
   // Get specific message
   if (agentIdentifier && messageId) {
@@ -249,10 +302,17 @@ export async function updateMessage(
   agentIdentifier: string | null,
   messageId: string | null,
   action: string | null,
+  authContext?: AuthContext,
 ): Promise<ServiceResult<{ success: boolean }>> {
   if (!agentIdentifier || !messageId) {
     return { error: 'Agent identifier and message ID required', status: 400 }
   }
+
+  // Object-level authz (defence-in-depth): an authenticated agent may only
+  // mark-read/archive its OWN messages. System owner exempt; no authContext
+  // → route guard is authoritative.
+  const ownershipDenial = denyForeignMailbox(agentIdentifier, authContext)
+  if (ownershipDenial) return ownershipDenial
 
   try {
     let success = false
@@ -286,10 +346,17 @@ export async function updateMessage(
 export async function removeMessage(
   agentIdentifier: string | null,
   messageId: string | null,
+  authContext?: AuthContext,
 ): Promise<ServiceResult<{ success: boolean }>> {
   if (!agentIdentifier || !messageId) {
     return { error: 'Agent identifier and message ID required', status: 400 }
   }
+
+  // Object-level authz (defence-in-depth): an authenticated agent may only
+  // delete its OWN messages. System owner exempt; no authContext → route
+  // guard is authoritative.
+  const ownershipDenial = denyForeignMailbox(agentIdentifier, authContext)
+  if (ownershipDenial) return ownershipDenial
 
   try {
     const success = await deleteMessage(agentIdentifier, messageId)

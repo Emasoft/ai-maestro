@@ -34,7 +34,7 @@ export async function GET(
       priority: searchParams.get('priority') || undefined,
       from: searchParams.get('from') || undefined,
       to: searchParams.get('to') || undefined,
-    })
+    }, auth.context)
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })

@@ -3,6 +3,21 @@ import { getMessages, sendMessage, updateMessage, removeMessage } from '@/servic
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 
 /**
+ * R28/R32/R38 ownership rule for the `?agent=` query param (read AND write).
+ * An authenticated agent may only act on its OWN mailbox, so its verified
+ * `auth.agentId` overrides any client-supplied `agent` param (mirrors the
+ * POST `body.from = auth.agentId` override). The system owner (web UI, no
+ * `auth.agentId`) may target any agent and keeps the supplied param.
+ * This is an AID+title check (R32: never a sudo gate).
+ */
+function resolveAuthorizedAgentParam(
+  auth: ReturnType<typeof authenticateFromRequest>,
+  suppliedAgent: string | null,
+): string | null {
+  return auth.agentId || suppliedAgent
+}
+
+/**
  * GET /api/messages?agent=<agentId|alias|sessionName>&status=<status>&from=<from>&box=<inbox|sent>
  */
 export async function GET(request: NextRequest) {
@@ -12,10 +27,9 @@ export async function GET(request: NextRequest) {
   }
   try {
     const { searchParams } = new URL(request.url)
-    // R28/R38: an authenticated agent may read ONLY its own mailbox — override
-    // the agent param with the verified identity (mirrors the POST body.from
-    // override below). The system owner (web UI) may query any agent.
-    const agentParam = auth.agentId || searchParams.get('agent')
+    // R28/R38: an authenticated agent may read ONLY its own mailbox; the
+    // system owner (web UI) may query any agent. See resolveAuthorizedAgentParam.
+    const agentParam = resolveAuthorizedAgentParam(auth, searchParams.get('agent'))
     const result = await getMessages({
       agent: agentParam,
       id: searchParams.get('id'),
@@ -26,7 +40,7 @@ export async function GET(request: NextRequest) {
       priority: searchParams.get('priority'),
       from: searchParams.get('from'),
       to: searchParams.get('to'),
-    })
+    }, buildAuthContext(auth))
     // NT-002: Use standard if (result.error) pattern instead of ?? which hides errors when data is {}
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
@@ -93,14 +107,18 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const agent = searchParams.get('agent')
+    // R28/R32/R38: an authenticated agent may mark-read/archive ONLY its own
+    // messages — its verified identity overrides the supplied agent param
+    // (same ownership rule as the GET fix and the POST body.from override);
+    // the system owner may target any agent.
+    const agent = resolveAuthorizedAgentParam(auth, searchParams.get('agent'))
     const id = searchParams.get('id')
     const action = searchParams.get('action')
     // Validate required query params are non-empty strings
     if (!agent || !id || !action) {
       return NextResponse.json({ error: 'Missing required query params: agent, id, action' }, { status: 400 })
     }
-    const result = await updateMessage(agent, id, action)
+    const result = await updateMessage(agent, id, action, buildAuthContext(auth))
     // NT-002: Use standard if (result.error) pattern
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })
@@ -124,13 +142,17 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const agent = searchParams.get('agent')
+    // R28/R32/R38: an authenticated agent may delete ONLY its own messages —
+    // its verified identity overrides the supplied agent param (same ownership
+    // rule as the GET fix and the POST body.from override); the system owner
+    // may target any agent.
+    const agent = resolveAuthorizedAgentParam(auth, searchParams.get('agent'))
     const id = searchParams.get('id')
     // Validate required query params are non-empty strings
     if (!agent || !id) {
       return NextResponse.json({ error: 'Missing required query params: agent, id' }, { status: 400 })
     }
-    const result = await removeMessage(agent, id)
+    const result = await removeMessage(agent, id, buildAuthContext(auth))
     // NT-002: Use standard if (result.error) pattern
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: result.status })

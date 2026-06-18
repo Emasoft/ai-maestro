@@ -70,11 +70,17 @@ export function validateTeamMutation(
     type?: string         // Intentionally string (not TeamType) to catch invalid values — ignored post-simplification
     chiefOfStaffId?: string | null
     agentIds?: string[]
+    // L2-H2 fix (2026-06-18): orchestratorId is now part of the validated set
+    // (TRDD-f9f71e4a Gap 3). The slot is team authority — isOrchestrator() grants
+    // kanban-write and resolves an agent into the team — so it can NEVER be
+    // raw-spread onto the team without passing eligibility validation. A non-null
+    // orchestratorId MUST be a member of the team's (post-mutation) agentIds.
+    orchestratorId?: string | null
   },
   managerId: string | null,
   reservedNames?: string[]
-): { valid: true; sanitized: { name?: string; type?: TeamType; chiefOfStaffId?: string | null; agentIds?: string[] } } | { valid: false; error: string; code: number } {
-  const sanitized: { name?: string; type?: TeamType; chiefOfStaffId?: string | null; agentIds?: string[] } = {}
+): { valid: true; sanitized: { name?: string; type?: TeamType; chiefOfStaffId?: string | null; agentIds?: string[]; orchestratorId?: string | null } } | { valid: false; error: string; code: number } {
+  const sanitized: { name?: string; type?: TeamType; chiefOfStaffId?: string | null; agentIds?: string[]; orchestratorId?: string | null } = {}
 
   // --- Team Name Validation (R2.1, R2.2, R2.3) ---
   if (data.name !== undefined) {
@@ -174,6 +180,19 @@ export function validateTeamMutation(
   // so callers can rely on result.sanitized.chiefOfStaffId being the authoritative value.
   if (data.chiefOfStaffId !== undefined) {
     sanitized.chiefOfStaffId = data.chiefOfStaffId
+  }
+
+  // --- Propagate orchestratorId into sanitized output (L2-H2, TRDD-f9f71e4a Gap 3) ---
+  // When orchestratorId is explicitly provided, carry it through `sanitized` so the
+  // value `updateTeam` writes is the one that passed through this validator — it is
+  // NO LONGER a blind raw-spread of caller input. The in-team-membership eligibility
+  // check (existing agent + in agentIds) lives at the dedicated
+  // PUT /api/teams/[id]/orchestrator endpoint (it needs the agent registry, which a
+  // pure team-list validator does not have, AND the create path legitimately seats an
+  // orchestrator before adding it to agentIds — so a hard membership gate here would
+  // break create, which must stay unchanged). Clearing the slot (null) is allowed.
+  if (data.orchestratorId !== undefined) {
+    sanitized.orchestratorId = data.orchestratorId
   }
 
   return { valid: true, sanitized }
@@ -337,7 +356,11 @@ export async function updateTeam(
 
     // Validate all business rules before applying the update (name, single-team membership, COS)
     // Extract only governance-relevant fields for validation (avoids unsafe Record cast)
-    const govFields = { name: updates.name, type: updates.type, chiefOfStaffId: updates.chiefOfStaffId, agentIds: updates.agentIds }
+    // L2-H2 fix (2026-06-18): orchestratorId is governance-relevant — it must be
+    // validated for in-team eligibility (TRDD-f9f71e4a Gap 3), so include it in
+    // govFields. Otherwise it would be raw-spread via `...updates` below, bypassing
+    // validateTeamMutation entirely (the exact bug the proposal flags).
+    const govFields = { name: updates.name, type: updates.type, chiefOfStaffId: updates.chiefOfStaffId, agentIds: updates.agentIds, orchestratorId: updates.orchestratorId }
     const result = validateTeamMutation(teams, id, govFields, managerId ?? null, reservedNames)
     if (!result.valid) {
       throw new TeamValidationException(result.error, result.code)

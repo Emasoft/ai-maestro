@@ -185,6 +185,7 @@ import {
   getTeamsBulkStats,
   getKanbanConfig,
   setKanbanConfig,
+  setTeamOrchestrator,
 } from '@/services/teams-service'
 import {
   listAllGroups,
@@ -216,7 +217,7 @@ import { getHosts } from '@/lib/hosts-config'
 import { statePath } from '@/lib/ecosystem-constants'
 import { verifyHostAttestation } from '@/lib/host-keys'
 // Imports for chief-of-staff endpoint (mirrors app/api/teams/[id]/chief-of-staff/route.ts)
-import { verifyPassword, loadGovernance, getManagerId, isChiefOfStaffAnywhere } from '@/lib/governance'
+import { verifyPassword, loadGovernance, getManagerId, isChiefOfStaffAnywhere, isManager, isChiefOfStaff } from '@/lib/governance'
 import { getTeam, updateTeam, TeamValidationException } from '@/lib/team-registry'
 import { getAgent, getAgentBySession } from '@/lib/agent-registry'
 import { execSync } from 'child_process'
@@ -2195,6 +2196,63 @@ const routes: Route[] = [
       console.error('Failed to set chief-of-staff:', error)
       sendJson(res, 500, { error: error instanceof Error ? error.message : 'Failed to set chief-of-staff' })
     }
+  }},
+  // Orchestrator slot set/clear -- mirrors app/api/teams/[id]/orchestrator/route.ts.
+  // (TRDD-f9f71e4a option b.) The headless router has NO sudo layer (sudo is Node-only,
+  // Next.js-route-only), so the USER/web-UI factor here is the verified session cookie
+  // (authContext.isSystemOwner). The AGENT factor is AID + title: MANAGER or this team's
+  // own CHIEF-OF-STAFF (R32 — agents authorize by title, never sudo). The service layer
+  // enforces in-team eligibility + applies the orchestrator title via ChangeTitle.
+  // These two patterns are anchored ($) and so are mutually exclusive with the bare
+  // /api/teams/[id] routes below; first-match order is not load-bearing here.
+  { method: 'PUT', pattern: /^\/api\/teams\/([^/]+)\/orchestrator$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const teamId = params.id
+    if (!isValidUuid(teamId)) {
+      sendJson(res, 400, { error: 'Invalid team ID format' })
+      return
+    }
+    const body = await readJsonBody(req).catch(() => null)
+    const orchestratorId: unknown = body?.orchestratorId
+    if (orchestratorId !== null && (typeof orchestratorId !== 'string' || !isValidUuid(orchestratorId))) {
+      sendJson(res, 400, { error: 'orchestratorId must be a team-member agent UUID or null' })
+      return
+    }
+    const auth = authenticateAgent(
+      getHeader(req, 'Authorization'),
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
+    )
+    if (auth.error) {
+      sendJson(res, auth.status || 401, { error: auth.error })
+      return
+    }
+    // Agent path → MANAGER or own-team COS only. System-owner session passes.
+    if (auth.agentId && !(isManager(auth.agentId) || isChiefOfStaff(auth.agentId, teamId))) {
+      sendJson(res, 403, { error: 'Access denied: only the MANAGER or this team’s Chief-of-Staff may change the orchestrator slot.' })
+      return
+    }
+    sendServiceResult(res, await setTeamOrchestrator(teamId, orchestratorId as string | null, buildAuthContext(auth)))
+  }},
+  { method: 'DELETE', pattern: /^\/api\/teams\/([^/]+)\/orchestrator$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const teamId = params.id
+    if (!isValidUuid(teamId)) {
+      sendJson(res, 400, { error: 'Invalid team ID format' })
+      return
+    }
+    const auth = authenticateAgent(
+      getHeader(req, 'Authorization'),
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
+    )
+    if (auth.error) {
+      sendJson(res, auth.status || 401, { error: auth.error })
+      return
+    }
+    if (auth.agentId && !(isManager(auth.agentId) || isChiefOfStaff(auth.agentId, teamId))) {
+      sendJson(res, 403, { error: 'Access denied: only the MANAGER or this team’s Chief-of-Staff may change the orchestrator slot.' })
+      return
+    }
+    sendServiceResult(res, await setTeamOrchestrator(teamId, null, buildAuthContext(auth)))
   }},
   { method: 'GET', pattern: /^\/api\/teams\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
     const auth = authenticateAgent(

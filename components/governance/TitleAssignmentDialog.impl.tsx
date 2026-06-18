@@ -439,14 +439,30 @@ export default function TitleAssignmentDialog({
         if (!res.ok) throw new Error(`Failed to assign ${t} title`)
       }
 
-      // Helper: clear or set orchestratorId on the team
+      // Helper: clear or set the team orchestrator slot.
+      // L2-H2 (2026-06-18, TRDD-f9f71e4a option b): the orchestrator slot is no longer
+      // settable via the general PUT /api/teams/[id] (that route now STRIPS orchestratorId,
+      // because the slot is team authority). It goes through the dedicated, sudo-gated
+      // /api/teams/[id]/orchestrator endpoint instead — PUT to set, DELETE to clear — so
+      // these calls must carry a one-shot sudo token like every other strict call here.
       const updateTeamOrchestratorId = async (value: string | null) => {
         if (!governance.memberTeam) return
-        const res = await fetch(`/api/teams/${governance.memberTeam.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orchestratorId: value }),
-        })
+        const url = `/api/teams/${governance.memberTeam.id}/orchestrator`
+        const res = value
+          ? await sudoFetchWithToken(
+              url,
+              {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ orchestratorId: value }),
+              },
+              await freshSudoToken(),
+            )
+          : await sudoFetchWithToken(
+              url,
+              { method: 'DELETE' },
+              await freshSudoToken(),
+            )
         if (!res.ok) throw new Error(`Failed to ${value ? 'set' : 'clear'} orchestratorId on team`)
       }
 
@@ -538,13 +554,11 @@ export default function TitleAssignmentDialog({
             throw new Error(`Failed to remove COS from: ${failures.join(', ')}`)
           }
         }
-        // If previous title was orchestrator, clear orchestratorId on the team
+        // If previous title was orchestrator, clear orchestratorId on the team.
+        // L2-H2 (2026-06-18): route through the dedicated sudo-gated endpoint helper
+        // (the bare PUT no longer accepts orchestratorId).
         if (currentTitle === 'orchestrator' && governance.memberTeam) {
-          await fetch(`/api/teams/${governance.memberTeam.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orchestratorId: null }),
-          })
+          await updateTeamOrchestratorId(null)
         }
         // Set the new simple governance title — ChangeTitle pipeline handles plugin install
         await setGovernanceTitle(selectedTitle)

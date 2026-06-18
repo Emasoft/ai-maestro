@@ -31,6 +31,8 @@
     "DELETE_/api/agents/[id]/session": "strict",
     "DELETE_/api/teams/[id]": "strict",
     "PUT_/api/teams/[id]": "strict",
+    "PUT_/api/teams/[id]/orchestrator": "strict",
+    "DELETE_/api/teams/[id]/orchestrator": "strict",
     "DELETE_/api/agents/cemetery": "strict",
     "POST_/api/governance/password": "strict",
     "DELETE_/api/settings/marketplaces": "strict",

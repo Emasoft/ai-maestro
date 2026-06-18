@@ -13,7 +13,7 @@ import { makeTeam, makeTask, makeDocument, makeAgent, resetFixtureCounter } from
 // Mocks — vi.hoisted() ensures these are available when vi.mock() runs
 // ============================================================================
 
-const { mockTeams, mockGhProject, mockDocs, mockAgentRegistry, mockNotificationService, MockTeamValidationException } = vi.hoisted(() => {
+const { mockTeams, mockGhProject, mockDocs, mockAgentRegistry, mockNotificationService, mockElementManagement, MockTeamValidationException } = vi.hoisted(() => {
   // TeamValidationException must be a real class so `instanceof` checks work in the service code
   class _MockTeamValidationException extends Error {
     code: number
@@ -56,6 +56,12 @@ const { mockTeams, mockGhProject, mockDocs, mockAgentRegistry, mockNotificationS
   mockNotificationService: {
     notifyAgent: vi.fn(),
   },
+  // Dynamically imported by createNewTeam/updateTeamById/setTeamOrchestrator.
+  // Mock so ChangeTitle resolves (the real module needs registry/auth wiring).
+  mockElementManagement: {
+    ChangeTitle: vi.fn(() => Promise.resolve({ success: true })),
+    ChangeTeam: vi.fn(() => Promise.resolve({ success: true })),
+  },
 }})
 
 vi.mock('@/lib/team-registry', () => mockTeams)
@@ -63,6 +69,7 @@ vi.mock('@/lib/github-project', () => mockGhProject)
 vi.mock('@/lib/document-registry', () => mockDocs)
 vi.mock('@/lib/agent-registry', () => mockAgentRegistry)
 vi.mock('@/lib/notification-service', () => mockNotificationService)
+vi.mock('@/services/element-management-service', () => mockElementManagement)
 
 // Mock governance module - getManagerId returns a manager so team creation works (R9 governance requires MANAGER)
 vi.mock('@/lib/governance', () => ({
@@ -92,6 +99,7 @@ import {
   createNewTeam,
   getTeamById,
   updateTeamById,
+  setTeamOrchestrator,
   deleteTeamById,
   listTeamTasks,
   createTeamTask,
@@ -284,6 +292,19 @@ describe('updateTeamById', () => {
     }, 'test-manager-id', [])
   })
 
+  it('strips orchestratorId from the update — it is NOT forwarded to updateTeam (L2-H2 Gap 2)', async () => {
+    /** The orchestrator slot is team authority; the general PUT must never set it. Like chiefOfStaffId, orchestratorId is stripped so the only path to the slot is the dedicated /orchestrator endpoint. */
+    mockTeams.updateTeam.mockResolvedValue(makeTeam())
+
+    await updateTeamById('team-1', { name: 'New Name', orchestratorId: 'attacker-self' } as any)
+
+    // updateTeam receives name but NOT orchestratorId — confirm the field was stripped.
+    const callArgs = mockTeams.updateTeam.mock.calls[0]
+    expect(callArgs[0]).toBe('team-1')
+    expect(callArgs[1]).toEqual({ name: 'New Name' })
+    expect('orchestratorId' in (callArgs[1] as Record<string, unknown>)).toBe(false)
+  })
+
   it('returns 404 when team not found', async () => {
     mockTeams.updateTeam.mockResolvedValue(null)
 
@@ -299,6 +320,100 @@ describe('updateTeamById', () => {
 
     expect(result.status).toBe(500)
     expect(result.error).toBe('write error')
+  })
+})
+
+// ============================================================================
+// setTeamOrchestrator (L2-H2, TRDD-f9f71e4a option b)
+// ============================================================================
+
+describe('setTeamOrchestrator', () => {
+  it('returns 404 when the team does not exist', async () => {
+    /** No team → no slot to set */
+    mockTeams.getTeam.mockReturnValue(null)
+    const result = await setTeamOrchestrator('team-1', 'a1')
+    expect(result.status).toBe(404)
+  })
+
+  it('returns 400 when the team is blocked (no MANAGER on host)', async () => {
+    /** R9.3 — mutations on blocked teams are rejected */
+    mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1', blocked: true, agentIds: ['a1'] }))
+    const result = await setTeamOrchestrator('team-1', 'a1')
+    expect(result.status).toBe(400)
+    expect(result.error).toMatch(/blocked/i)
+  })
+
+  it('rejects a non-existent agent (404)', async () => {
+    /** Eligibility: the orchestrator must be a real registered agent */
+    mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1', agentIds: ['a1'] }))
+    mockAgentRegistry.loadAgents.mockReturnValue([makeAgent({ id: 'a1', name: 'member-one' })])
+    const result = await setTeamOrchestrator('team-1', 'ghost-agent')
+    expect(result.status).toBe(404)
+    expect(result.error).toMatch(/not found/i)
+  })
+
+  it('rejects a FOREIGN agent that is not a member of this team (400)', async () => {
+    /** Eligibility: the exploit the proposal flags — grafting an arbitrary agent into the team authority graph. A real agent that is NOT in agentIds is rejected. */
+    mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1', agentIds: ['a1'] }))
+    mockAgentRegistry.loadAgents.mockReturnValue([
+      makeAgent({ id: 'a1', name: 'member-one' }),
+      makeAgent({ id: 'foreign', name: 'outsider' }),
+    ])
+    const result = await setTeamOrchestrator('team-1', 'foreign')
+    expect(result.status).toBe(400)
+    expect(result.error).toMatch(/not a member/i)
+    // The slot write must never happen for an ineligible agent.
+    expect(mockTeams.updateTeam).not.toHaveBeenCalled()
+    expect(mockElementManagement.ChangeTitle).not.toHaveBeenCalled()
+  })
+
+  it('sets the slot for an eligible in-team agent and applies the orchestrator title via ChangeTitle', async () => {
+    /** Happy path: a real, in-team agent is seated AND titled ORCHESTRATOR through the same pipeline the create path uses */
+    const team = makeTeam({ id: 'team-1', agentIds: ['a1'] })
+    mockTeams.getTeam.mockReturnValue(team)
+    mockAgentRegistry.loadAgents.mockReturnValue([makeAgent({ id: 'a1', name: 'member-one' })])
+    mockTeams.updateTeam.mockResolvedValue({ ...team, orchestratorId: 'a1' })
+
+    const result = await setTeamOrchestrator('team-1', 'a1', { isSystemOwner: true as const })
+
+    expect(result.status).toBe(200)
+    expect(mockTeams.updateTeam).toHaveBeenCalledWith('team-1', { orchestratorId: 'a1' }, expect.anything())
+    expect(mockElementManagement.ChangeTitle).toHaveBeenCalledWith(
+      'a1',
+      'orchestrator',
+      expect.objectContaining({ authContext: expect.objectContaining({ isSystemOwner: true }) }),
+    )
+  })
+
+  it('rolls back the slot when applying the orchestrator title fails', async () => {
+    /** If ChangeTitle throws, we must NOT leave an orchestrator seated without the governance title (the slot alone would grant kanban-write). The slot is cleared and a 500 returned. */
+    const team = makeTeam({ id: 'team-1', agentIds: ['a1'] })
+    mockTeams.getTeam.mockReturnValue(team)
+    mockAgentRegistry.loadAgents.mockReturnValue([makeAgent({ id: 'a1', name: 'member-one' })])
+    mockTeams.updateTeam.mockResolvedValue({ ...team, orchestratorId: 'a1' })
+    mockElementManagement.ChangeTitle.mockRejectedValueOnce(new Error('pipeline boom'))
+
+    const result = await setTeamOrchestrator('team-1', 'a1', { isSystemOwner: true as const })
+
+    expect(result.status).toBe(500)
+    expect(result.error).toMatch(/orchestrator title/i)
+    // First call seats a1; rollback call clears the slot.
+    expect(mockTeams.updateTeam).toHaveBeenCalledWith('team-1', { orchestratorId: 'a1' }, expect.anything())
+    expect(mockTeams.updateTeam).toHaveBeenCalledWith('team-1', { orchestratorId: null }, expect.anything())
+  })
+
+  it('clears the slot when orchestratorId is null (no eligibility check, no title change)', async () => {
+    /** Clearing the slot (null) is always allowed and does not re-title — the title lifecycle is driven separately by PATCH /api/agents/[id]/title */
+    const team = makeTeam({ id: 'team-1', agentIds: ['a1'], orchestratorId: 'a1' })
+    mockTeams.getTeam.mockReturnValue(team)
+    mockTeams.updateTeam.mockResolvedValue({ ...team, orchestratorId: null })
+
+    const result = await setTeamOrchestrator('team-1', null)
+
+    expect(result.status).toBe(200)
+    expect(mockTeams.updateTeam).toHaveBeenCalledWith('team-1', { orchestratorId: null }, expect.anything())
+    expect(mockElementManagement.ChangeTitle).not.toHaveBeenCalled()
+    expect(mockAgentRegistry.loadAgents).not.toHaveBeenCalled()
   })
 })
 

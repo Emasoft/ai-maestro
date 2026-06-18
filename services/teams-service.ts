@@ -457,10 +457,18 @@ export async function updateTeamById(id: string, params: UpdateTeamParams): Prom
       return { error: 'Team is blocked: no MANAGER exists on this host. Assign a MANAGER first.', status: 400 }
     }
 
-    // Destructure requestingAgentId, type, and chiefOfStaffId out so they do not leak
-    // into the lib update call. Governance type/COS changes must go through dedicated
-    // endpoints, not the general update path (CC-007 defense-in-depth).
-    const { requestingAgentId, authContext, type: _type, chiefOfStaffId: _cos, githubProject: ghProj, ...updateFields } = params
+    // Destructure requestingAgentId, type, chiefOfStaffId, and orchestratorId out so
+    // they do not leak into the lib update call. Governance type/COS/orchestrator
+    // changes must go through dedicated endpoints, not the general update path
+    // (CC-007 defense-in-depth).
+    // L2-H2 fix (2026-06-18, TRDD-f9f71e4a Gap 2): orchestratorId is now stripped
+    // here exactly like chiefOfStaffId. The slot is team authority (isOrchestrator →
+    // kanban-write + team resolution), so it must NOT be settable via the general
+    // PUT /api/teams/[id] path — only via PUT/DELETE /api/teams/[id]/orchestrator,
+    // which validates in-team eligibility and applies the orchestrator title through
+    // the ChangeTitle pipeline. This is the second strip layer (the route also
+    // strips it) so neither can be bypassed if the other is refactored.
+    const { requestingAgentId, authContext, type: _type, chiefOfStaffId: _cos, orchestratorId: _orch, githubProject: ghProj, ...updateFields } = params
 
     // SVC2-MAJ-11 (2026-05-06): refuse spoofed requestingAgentId.
     const mismatch = rejectMismatchedRequestingAgentId(requestingAgentId, authContext)
@@ -556,6 +564,105 @@ export async function updateTeamById(id: string, params: UpdateTeamParams): Prom
     }
     console.error('Failed to update team:', error)
     return { error: error instanceof Error ? error.message : 'Failed to update team', status: 500 }
+  }
+}
+
+/**
+ * Set or clear a team's orchestrator slot (TRDD-f9f71e4a Gap 2/3, option b).
+ *
+ * This is the ONLY service path that may write `team.orchestratorId` from an
+ * external request — the general `updateTeamById` strips the field, and the
+ * dedicated PUT/DELETE /api/teams/[id]/orchestrator route is the only caller.
+ * The route is responsible for the SECURITY factor (USER/UI → sudo; agent →
+ * AID + MANAGER-or-own-team-COS title per R32); this function is responsible
+ * for the GOVERNANCE-CORRECTNESS factor:
+ *
+ *   - the team exists and is not blocked,
+ *   - SET: `orchestratorId` is an EXISTING agent that is a MEMBER of this team
+ *     (`team.agentIds`) — a foreign or non-existent agent is rejected,
+ *   - SET: the orchestrator title is applied via the SAME ChangeTitle('orchestrator')
+ *     pipeline the create path uses, so kanban-write/ACL is granted through the
+ *     pipeline (never by a raw slot write),
+ *   - CLEAR (orchestratorId === null): the slot is emptied (no title change here;
+ *     the agent's title lifecycle is driven separately by PATCH /api/agents/[id]/title,
+ *     mirroring create-path semantics where slot and title are paired only on SET).
+ *
+ * The create-path orchestrator assignment (createNewTeam) is intentionally NOT
+ * routed through here and is unchanged.
+ */
+export async function setTeamOrchestrator(
+  id: string,
+  orchestratorId: string | null,
+  authContext?: AuthContext
+): Promise<ServiceResult<{ team: any }>> {
+  if (!isValidUuid(id)) {
+    return { error: 'Invalid team ID', status: 400 }
+  }
+
+  try {
+    const team = getTeam(id)
+    if (!team) {
+      return { error: 'Team not found', status: 404 }
+    }
+
+    // R9.3: reject mutations on blocked teams (no MANAGER on host)
+    if (team.blocked) {
+      return { error: 'Team is blocked: no MANAGER exists on this host. Assign a MANAGER first.', status: 400 }
+    }
+
+    const managerId = getManagerId()
+    // System-owner web-UI session is exempt from per-call agentName collision
+    // checks; updateTeam still validates the slot via validateTeamMutation.
+
+    if (orchestratorId) {
+      // Eligibility: the target MUST be an existing agent AND a member of THIS team.
+      const candidate = loadAgents().find(a => a.id === orchestratorId)
+      if (!candidate) {
+        return { error: `Agent ${orchestratorId} not found`, status: 404 }
+      }
+      if (!team.agentIds.includes(orchestratorId)) {
+        return {
+          error: `Agent "${candidate.name}" is not a member of this team. Add the agent to the team before assigning it as orchestrator.`,
+          status: 400,
+        }
+      }
+
+      // Persist the slot through the validated updateTeam path (validateTeamMutation
+      // re-checks and propagates orchestratorId; it is no longer raw-spread).
+      const updated = await updateTeam(id, { orchestratorId }, managerId)
+      if (!updated) {
+        return { error: 'Team not found', status: 404 }
+      }
+
+      // Apply the orchestrator title via the SAME pipeline the create path uses.
+      // teams-service is only reached from an authenticated route; pass the route's
+      // AuthContext so ChangeTitle Gate 0 (authContext mandatory) is satisfied.
+      try {
+        const { ChangeTitle } = await import('@/services/element-management-service')
+        await ChangeTitle(orchestratorId, 'orchestrator', { authContext: authContext ?? { isSystemOwner: true as const } })
+      } catch (err) {
+        // Roll back the slot so we never leave an orchestrator seated without the
+        // governance title (which would grant kanban-write through the slot alone).
+        try { await updateTeam(id, { orchestratorId: null }, managerId) } catch { /* best-effort rollback */ }
+        return { error: `Failed to apply orchestrator title: ${err instanceof Error ? err.message : String(err)}`, status: 500 }
+      }
+
+      const finalTeam = getTeam(id) || updated
+      return { data: { team: finalTeam }, status: 200 }
+    }
+
+    // CLEAR the slot.
+    const updated = await updateTeam(id, { orchestratorId: null }, managerId)
+    if (!updated) {
+      return { error: 'Team not found', status: 404 }
+    }
+    return { data: { team: updated }, status: 200 }
+  } catch (error) {
+    if (error instanceof TeamValidationException) {
+      return { error: error.message, status: error.code }
+    }
+    console.error('Failed to set team orchestrator:', error)
+    return { error: error instanceof Error ? error.message : 'Failed to set team orchestrator', status: 500 }
   }
 }
 

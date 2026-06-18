@@ -459,4 +459,37 @@ describe('validateTeamMutation', () => {
       })
     })
   })
+
+  // --- orchestratorId propagation (L2-H2, TRDD-f9f71e4a Gap 3) ---
+  describe('orchestratorId propagation', () => {
+    it('propagates an explicit orchestratorId into the sanitized output', () => {
+      /** Gap 3: orchestratorId is now part of the validated set — it is carried into sanitized so updateTeam writes the validator-approved value, never a blind raw-spread of caller input */
+      const team = makeTeam({ id: 'team-1', agentIds: ['a1'] })
+      const result = validateTeamMutation([team], 'team-1', { orchestratorId: 'a1' }, null)
+      expect(result.valid).toBe(true)
+      if (result.valid) {
+        expect(result.sanitized.orchestratorId).toBe('a1')
+      }
+    })
+
+    it('propagates a null orchestratorId (clearing the slot) into the sanitized output', () => {
+      /** Clearing the slot (null) is always allowed and must be carried through so the clear actually persists */
+      const team = makeTeam({ id: 'team-1', agentIds: ['a1'], orchestratorId: 'a1' })
+      const result = validateTeamMutation([team], 'team-1', { orchestratorId: null }, null)
+      expect(result.valid).toBe(true)
+      if (result.valid) {
+        expect(result.sanitized.orchestratorId).toBeNull()
+      }
+    })
+
+    it('omits orchestratorId from sanitized when the field is not supplied', () => {
+      /** A name-only update must not touch the orchestratorId slot — sanitized.orchestratorId stays undefined so updateTeam preserves the existing value */
+      const team = makeTeam({ id: 'team-1', name: 'Old Name', agentIds: ['a1'], orchestratorId: 'a1' })
+      const result = validateTeamMutation([team], 'team-1', { name: 'New Name' }, null)
+      expect(result.valid).toBe(true)
+      if (result.valid) {
+        expect('orchestratorId' in result.sanitized).toBe(false)
+      }
+    })
+  })
 })

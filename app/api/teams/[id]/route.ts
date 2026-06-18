@@ -100,10 +100,19 @@ export async function PUT(
       )
     }
 
-    // CC-005: Strip type and chiefOfStaffId from body — only dedicated governance endpoints can change these
-    // SF-015: Intentional defense-in-depth — updateTeamById() in teams-service.ts also strips these fields.
-    // Both layers strip independently so neither can be bypassed if the other is refactored.
-    const { type: _type, chiefOfStaffId: _cos, ...safeBody } = parsed.data
+    // CC-005: Strip type, chiefOfStaffId, and orchestratorId from body — only
+    // dedicated governance endpoints can change these.
+    // SF-015: Intentional defense-in-depth — updateTeamById() in teams-service.ts also
+    // strips these fields. Both layers strip independently so neither can be bypassed
+    // if the other is refactored.
+    // L2-H2 fix (2026-06-18, TRDD-f9f71e4a Gap 2): orchestratorId is now stripped here,
+    // exactly like chiefOfStaffId. The orchestrator slot is team authority (isOrchestrator
+    // → kanban-write + team resolution), so it is no longer settable via the general PUT —
+    // it goes ONLY through PUT/DELETE /api/teams/[id]/orchestrator, which validates in-team
+    // eligibility and applies the orchestrator title via the ChangeTitle pipeline. The
+    // schema still ACCEPTS orchestratorId (so older clients don't get a 400) but it is
+    // silently ignored, identical to type/chiefOfStaffId.
+    const { type: _type, chiefOfStaffId: _cos, orchestratorId: _orch, ...safeBody } = parsed.data
 
     // ── API-MAJ-01 fix (2026-05-04) — sudo on membership changes ──
     // Membership updates trigger ChangeTeam → ChangeTitle, which is a
@@ -112,14 +121,11 @@ export async function PUT(
     // `agentIds`. Plain renames or description edits stay sudo-free so the
     // user is not nagged for trivial changes.
     //
-    // L2 fix (2026-06-18): `orchestratorId` is also a team-STRUCTURE change
-    // (per R26/R29/R30 — it sets/clears the orchestrator slot) and must be
-    // gated identically to `agentIds`. Previously an orchestratorId-only PUT
-    // skipped this gate entirely. (NOTE: per R32 the full model is "agents use
-    // AID+title, not sudo; sudo is USER/UI-only" — making requireSudoToken
-    // agent-aware is a separate sudo-subsystem refactor tracked as follow-up;
-    // here we only close the bypass by matching the existing agentIds gate.)
-    if (safeBody.agentIds !== undefined || safeBody.orchestratorId !== undefined) {
+    // L2-H2 (2026-06-18): the earlier orchestratorId-only sudo gate is gone —
+    // orchestratorId is now STRIPPED above (option b), so it can no longer be set
+    // through this route at all and needs no per-field gate here. Setting/clearing it
+    // is the dedicated /orchestrator endpoint's job (its own sudo / AID+title gate).
+    if (safeBody.agentIds !== undefined) {
       const sudoErr = requireSudoToken(request, 'PUT', '/api/teams/[id]')
       if (sudoErr) return sudoErr
     }

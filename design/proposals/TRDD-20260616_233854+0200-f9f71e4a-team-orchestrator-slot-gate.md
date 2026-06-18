@@ -59,4 +59,13 @@ Option (b) is preferred for symmetry with `chiefOfStaffId`.
 
 Medium. Any existing tooling/UI that sets `orchestratorId` via the bare PUT must now supply sudo and/or use the dedicated endpoint — audit callers of the PUT before shipping.
 
+## Realignment + status (2026-06-18, GOVERNANCE-RULES v4.0.1)
+
+Governed by **R26/R29/R30** (the orchestrator slot is team-STRUCTURE/authority) and **R32** (agents never use sudo). **PARTIALLY IMPLEMENTED** in commit `e238d4ec`:
+- ✅ Gap 1 (sudo bypass) — `teams/[id]` PUT now fires `requireSudoToken` when `agentIds` **OR** `orchestratorId` is present (proposed change #1), closing the no-sudo `orchestratorId`-only path.
+- ⏳ **Remaining (follow-up):** Gaps 2 & 3 — `updateTeamById` still passes `orchestratorId` straight through with **no eligibility validation and no `ChangeTitle` pipeline**, and `validateTeamMutation` still omits it. Preferred fix (option b): strip `orchestratorId` from the PUT like `chiefOfStaffId`, add a dedicated `/api/teams/[id]/orchestrator` endpoint that validates in-team eligibility + applies the orchestrator title.
+- **R32 note:** the sudo gate above is the USER/UI factor; the agent path should authorize by AID+title (R28) — part of the `bb344037` sudo-subsystem refactor.
+
+tsc clean; 1527 unit tests pass.
+
 ## Approval log

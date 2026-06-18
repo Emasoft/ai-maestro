@@ -51,4 +51,8 @@ The existing `teams-service.ts:227-231` manager gate then fires for agent caller
 
 Low. The only behavior change is that a non-MANAGER+password caller is now correctly rejected — which is the intended governance rule. Verify no internal automation relied on the (buggy) password-only path.
 
+## Realignment + status (2026-06-18, GOVERNANCE-RULES v4.0.1)
+
+Governed by **R29** (MANAGER team authority), **R28** (AID → title), **R38.1** (only MAESTRO-user/MANAGER create teams). **IMPLEMENTED (complete)** in commit `e238d4ec`: `create-with-project` switched `enforceAuth` → `requireAuth` and now forwards `requestingAgentId` + `authContext` to `createNewTeam` (the exact two missing lines this proposal specified). The MANAGER-RBAC gate now fires — a non-MANAGER agent is rejected; the system-owner / password path passes as `isSystemOwner`. tsc clean; 1527 unit tests pass.
+
 ## Approval log

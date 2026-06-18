@@ -61,4 +61,13 @@ The correct pattern already exists in the codebase: `POST /api/messages` forward
 
 Low-risk fix (additive guards). Watch for callers that legitimately read another agent's mailbox as system-owner (the web UI) — those go through a cookie, so `isSystemOwner` is true and the guard passes.
 
+## Realignment + status (2026-06-18, GOVERNANCE-RULES v4.0.1)
+
+Governed by **R28** (AID → title authz), **R38** (user/agent messaging restrictions), **R32** (agents never use sudo — the fix is AID-auth + ownership, NOT a sudo gate). **PARTIALLY IMPLEMENTED** in commit `e238d4ec`:
+- ✅ Gap 3 (HIGH, unauthenticated `GET /api/agents/[id]/messages`) — now `requireAuth` + own-mailbox-only (`auth.agentId === id`); system owner unaffected.
+- ✅ Gap 1 (CRITICAL, `GET /api/messages?agent=`) — the route now overrides the `agent` param with the verified `auth.agentId` for agent callers (mirrors the POST `body.from` override); system owner may still query any.
+- ⏳ **Remaining (follow-up):** Gap 2 (MEDIUM) — `PATCH`/`DELETE /api/messages?agent=` still lack the same ownership compare; and the **service-layer defence-in-depth** (proposed steps 2 & 4 — `listMessages`/`getMessages`/`updateMessage`/`removeMessage` enforcing the owner check) is not yet wired. The route-level guards close the read-IDOR; the write side + defence-in-depth remain.
+
+tsc clean; 1527 unit tests pass.
+
 ## Approval log

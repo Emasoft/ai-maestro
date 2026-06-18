@@ -2,13 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAgent } from '@/lib/agent-registry'
 import { execSync } from 'child_process'
 import path from 'path'
+import { requireAuth } from '@/lib/route-auth'
 
 // GET /api/agents/[id]/repos — Scan agent's working directory for git repos
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // N3: this enumerated any agent's git repos + remotes by UUID with NO auth.
+  // Authenticate, and let an agent enumerate ONLY its own repos; the system
+  // owner (web UI) may enumerate any.
+  const auth = requireAuth(request)
+  if (!auth.ok) return auth.error
   const { id } = await params
+  if (auth.agentId && auth.agentId !== id) {
+    return NextResponse.json({ error: 'Forbidden — you may only enumerate your own repos' }, { status: 403 })
+  }
   const agent = getAgent(id)
   if (!agent) {
     return NextResponse.json({ error: 'Agent not found' }, { status: 404 })

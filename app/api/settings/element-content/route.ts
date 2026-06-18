@@ -15,6 +15,7 @@ import { readFile, stat, realpath } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, resolve } from 'path'
 import os from 'os'
+import { requireAuth } from '@/lib/route-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +23,12 @@ const PLUGINS_BASE = `${os.homedir()}/.claude/plugins`
 const PROJECT_ROOT = process.cwd()
 
 export async function GET(req: NextRequest) {
+  // N5: this read plugin-element file content (and, via action=mcp-tools, ran
+  // the mcp_discovery.py script server-side) with NO auth. Require
+  // authentication; any authenticated caller may read plugin source confined
+  // to ~/.claude/plugins/.
+  const auth = requireAuth(req)
+  if (!auth.ok) return auth.error
   const filePath = req.nextUrl.searchParams.get('path')
   const action = req.nextUrl.searchParams.get('action')
   const serverName = req.nextUrl.searchParams.get('server')

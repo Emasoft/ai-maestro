@@ -14,16 +14,25 @@ import type { NextRequest } from 'next/server'
 import { getSkillsConfig, updateSkills, addSkill, removeSkill } from '@/services/agents-skills-service'
 import { authenticateFromRequest } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
+import { requireAuth } from '@/lib/route-auth'
 import { isValidUuid } from '@/lib/validation'
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // A1: GET had no auth/RBAC while PATCH/POST/DELETE did — it dumped any
+  // agent's skills config by UUID. Authenticate, and let an agent read ONLY
+  // its own skills config; the system owner (web UI) may read any.
+  const auth = requireAuth(request)
+  if (!auth.ok) return auth.error
   try {
     const { id } = await params
     if (!isValidUuid(id)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
+    if (auth.agentId && auth.agentId !== id) {
+      return NextResponse.json({ error: 'Forbidden — you may only read your own skills config' }, { status: 403 })
     }
     const result = getSkillsConfig(id)
     if (result.error) {

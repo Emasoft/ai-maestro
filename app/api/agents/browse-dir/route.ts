@@ -15,8 +15,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { readdir, stat, lstat, readFile, realpath } from 'fs/promises'
-import { join, resolve, normalize, extname } from 'path'
+import { join, resolve, normalize, extname, relative, isAbsolute } from 'path'
 import { homedir } from 'os'
+import { requireAuth } from '@/lib/route-auth'
+import { getAgent } from '@/lib/agent-registry'
 
 export const dynamic = 'force-dynamic'
 
@@ -82,7 +84,32 @@ function isAllowedPath(normalizedPath: string): boolean {
   return false
 }
 
+/**
+ * True when `child` is `parent` itself or lives strictly inside it. Both
+ * arguments MUST already be realpath-resolved by the caller so symlink /
+ * ".." escapes are collapsed before this comparison. Uses path.relative
+ * (not a string prefix) so a sibling like `/a/agentsX` is NOT treated as
+ * being inside `/a/agents`.
+ */
+function isWithinDir(child: string, parent: string): boolean {
+  if (child === parent) return true
+  const rel = relative(parent, child)
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+}
+
 export async function GET(req: NextRequest) {
+  // SEC (N1): this GET was an UNAUTHENTICATED cross-agent filesystem read
+  // primitive — any forged-shape-cookie caller (or any agent supplying no
+  // identity) could list and read text files anywhere under ~/agents/,
+  // ~/.claude/, or any project .claude/ (incl. another agent's
+  // settings.local.json tool-grants and ~/.claude/projects/*/*.jsonl
+  // conversation transcripts). Now: authenticate first, then confine an
+  // AGENT caller to its OWN working directory. The system owner (web UI)
+  // keeps the full allowlist because the FolderBrowser panel is driven by
+  // the human user, not an agent.
+  const auth = requireAuth(req)
+  if (!auth.ok) return auth.error
+
   const dirPath = req.nextUrl.searchParams.get('path')
   const mode = req.nextUrl.searchParams.get('mode')
 
@@ -97,6 +124,46 @@ export async function GET(req: NextRequest) {
       { error: 'Path not allowed. Only ~/agents/, ~/.claude/, and project .claude/ folders are browsable.' },
       { status: 403 }
     )
+  }
+
+  // Object-level authorization: an authenticated AGENT (auth.agentId set) may
+  // read ONLY inside its own working directory. The system owner (auth.agentId
+  // === undefined → isSystemOwner) is exempt and may browse the full allowlist.
+  // We compare REALPATH-resolved paths so symlink / ".." escapes are collapsed
+  // before the containment check (the broad allowlist above confines WHERE; this
+  // confines WHO can read WHICH agent's tree).
+  if (auth.agentId) {
+    const agent = getAgent(auth.agentId)
+    const workDir = agent?.workingDirectory
+    if (!workDir) {
+      return NextResponse.json(
+        { error: 'Forbidden — your agent has no working directory to browse' },
+        { status: 403 }
+      )
+    }
+    let realWorkDir: string
+    let realTarget: string
+    try {
+      realWorkDir = await realpath(workDir)
+    } catch {
+      return NextResponse.json(
+        { error: 'Forbidden — your working directory could not be resolved' },
+        { status: 403 }
+      )
+    }
+    try {
+      realTarget = await realpath(normalized)
+    } catch {
+      // Non-existent path: nothing to disclose. Report not found rather than
+      // leaking whether the path exists outside the caller's scope.
+      return NextResponse.json({ error: 'Path not found' }, { status: 404 })
+    }
+    if (!isWithinDir(realTarget, realWorkDir)) {
+      return NextResponse.json(
+        { error: 'Forbidden — you may only browse your own agent working directory' },
+        { status: 403 }
+      )
+    }
   }
 
   try {

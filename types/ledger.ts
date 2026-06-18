@@ -48,6 +48,14 @@ export type LedgerOp =
    * path like `/system/clientVersions/<client>`.
    */
   | 'change_client_version'
+  // ── Portfolio / secure-enclave tokens (R28) ──────────────────
+  /**
+   * The host-signed portfolio ledger chain (R34 anchor). `issue` records a
+   * mint, `consume` a one-shot approval spend, `revoke` an explicit/cascade
+   * revocation. Appended to a SEPARATE ledger (portfolios.ledger.json), never
+   * the agent-registry ledger.
+   */
+  | 'issue_portfolio_token' | 'consume_portfolio_token' | 'revoke_portfolio_token'
 
 /**
  * LedgerActor — who initiated the operation.

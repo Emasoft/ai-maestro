@@ -2353,6 +2353,43 @@ export async function ChangeTitle(
       ops.push(`G14b: WARN — Token revocation skipped (aid-token module error)`)
     }
 
+    // ── GATE 14e: Revoke portfolio tokens this agent MINTED (R28) ─────
+    // When a title change REMOVES manager/COS authority, every approval/mandate
+    // this agent issued as a delegated authority must die — otherwise a demoted
+    // MANAGER's grants would keep authorizing operations. (The portfolio-check
+    // re-validates the issuer's current title as defence-in-depth, but the
+    // sweep here is the primary, eager revocation.)
+    {
+      const oldWasIssuer =
+        oldTitle === 'manager' || oldTitle === 'chief-of-staff'
+      const newIsIssuer =
+        effectiveTitle === 'manager' || effectiveTitle === 'chief-of-staff'
+      if (oldWasIssuer && !newIsIssuer) {
+        try {
+          const { revokeTokensFromIssuer } = await import('@/lib/portfolio-store')
+          const revoked = await revokeTokensFromIssuer(agentId)
+          if (revoked > 0) {
+            const { emitPortfolioOp } = await import('@/lib/portfolio-ledger')
+            void emitPortfolioOp(
+              'revoke_portfolio_token',
+              agentId,
+              [{ op: 'replace', path: `/portfolios/_issuer/${agentId}/status`, value: 'revoked' }],
+              {
+                action: 'revoke-issuer-portfolio-tokens',
+                agentId: options.authContext.agentId ?? null,
+                actor: options.authContext.agentId ? 'agent' : 'user',
+              },
+            )
+            ops.push(`G14e: Revoked ${revoked} portfolio token(s) minted by this agent (lost issuer authority)`)
+          } else {
+            ops.push(`G14e: No portfolio tokens minted by this agent to revoke`)
+          }
+        } catch (pErr) {
+          ops.push(`G14e: WARN — portfolio token revocation skipped: ${pErr instanceof Error ? pErr.message : pErr}`)
+        }
+      }
+    }
+
     // ── GATE 14d: Uninstall role-plugin bound to the OLD title ─────────
     // (EMS-MIN-02 fix: this gate was previously labeled G14c, colliding
     // with the per-op ledger emit at line ~2304. Renamed to G14d so the
@@ -6308,6 +6345,28 @@ export async function CreateAgent(
       ops.push('G01d: IBCT scope check passed')
     }
 
+    // ── G01e: portfolio / mandate token check (R28 check #3) ──────────
+    // The THIRD authorization check, after AID identity + TITLE. Runs EARLY
+    // (before the title is delegated to ChangeTitle at G06) so a delegated
+    // caller (COS and below) without a valid `agent:create` mandate is
+    // refused before any directory or registry side effect. While
+    // OPERATIONS_REQUIRING_TOKEN is empty (D2), this is a pure no-op. If a
+    // ONE-SHOT approval matched, its id is threaded to the consume-after-
+    // success tail below — the token is burned ONLY after the agent persists.
+    let matchedPortfolioTokenId: string | null = null
+    {
+      const { matchPortfolioToken } = await import('@/lib/portfolio-check')
+      const tokMatch = await matchPortfolioToken(desired.authContext, 'CreateAgent', {
+        teamId: desired.teamId,
+      })
+      if (!tokMatch.ok) {
+        result.error = tokMatch.reason
+        return result
+      }
+      matchedPortfolioTokenId = tokMatch.token?.token_id ?? null
+      ops.push('G01e: portfolio token check passed')
+    }
+
     // ── G02: Infer client/program (smart, with deprecated client handling) ──
     // Supported clients ranked by capability (tiebreaker when counts are equal)
     // Order: plugin support, tool use, context window, ecosystem maturity
@@ -6959,6 +7018,33 @@ export async function CreateAgent(
       )
     } catch (ledgerErr) {
       ops.push(`LEDGER: WARN — per-op append failed: ${ledgerErr instanceof Error ? ledgerErr.message : ledgerErr}`)
+    }
+
+    // ── Consume-after-success (R28 §4.3) ──────────────────────────────
+    // A ONE-SHOT approval token is consumed ONLY now — after every gate passed
+    // AND the agent (+ title + team) persisted. Consuming earlier would burn a
+    // token on a pipeline that later failed a downstream gate. Mandate tokens
+    // (uses_remaining null) are a no-op in consumeToken — only approvals burn.
+    if (matchedPortfolioTokenId) {
+      try {
+        const { consumeToken, getTokenById } = await import('@/lib/portfolio-store')
+        const tok = getTokenById(matchedPortfolioTokenId)
+        const consumed = await consumeToken(matchedPortfolioTokenId)
+        if (consumed && tok) {
+          const { emitPortfolioOp, consumeDiff } = await import('@/lib/portfolio-ledger')
+          const remaining = (tok.uses_remaining ?? 1) - 1
+          void emitPortfolioOp('consume_portfolio_token', tok.token_id, consumeDiff(tok, remaining), {
+            action: 'consume-portfolio-token',
+            agentId: desired.authContext?.agentId ?? null,
+            actor: desired.authContext?.agentId ? 'agent' : 'user',
+          })
+          ops.push('G-consume: one-shot portfolio approval consumed')
+        }
+      } catch (consumeErr) {
+        // Non-fatal: the agent is already created. A failed consume leaves the
+        // approval usable once more — logged so it is auditable.
+        ops.push(`G-consume: WARN — portfolio token consume failed: ${consumeErr instanceof Error ? consumeErr.message : consumeErr}`)
+      }
     }
 
     result.success = true

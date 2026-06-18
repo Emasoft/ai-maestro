@@ -1,8 +1,9 @@
 ---
-version: "3.11.0"
-date: 2026-06-16
+version: "4.0.0"
+date: 2026-06-18
 branch: feature/phase6-jsonl-rebase-test
 changelog:
+  - "4.0.0: Added 15 USER-set foundational security rules R26–R40 (the security-first governance core; USER directive 2026-06-18). R26 identity immutability (no agent self-changes its TITLE/ROLE/NAME/AID — only USER/MANAGER/own-team-COS; NAME/AID only on compromise). R27 self-install only via core-plugin skills + MANAGER/COS approval + server CPV scan. R28 three-check API authz: AID id → TITLE privilege → portfolio approval/mandate token (server-stored secure enclave; never trust client-supplied id/title/scope). R29 MANAGER team/agent lifecycle authority (create/delete teams auto-creating COS + 5 base members; create/delete AUTONOMOUS + MAINTAINER). R30 COS needs a MANAGER mandate; the 5-member base is invariant; customization limited to extra MEMBER agents. R31 incomplete-team freeze (only COS active until all 5 base members configured). R32 (CRITICAL) NO agent sudo gates — AID + title + portfolio token IS the authorization; a sudo password is requested ONLY of the USER, ONLY via the UI; SUPERSEDES the prior X-Sudo-Token-for-agents design (strict routes stay sudo-gated for USER/UI callers; agent callers use the R28 three-check). R33 signed-ledger recovery of agent auth on token loss. R34 the signed ledger is the ultimate source of truth (a valid AID with no ledger emission history = untrusted/refused; imported agents re-issue an AID via USER sudo, recorded in the ledger). R35 foreign agent/user needs MAESTRO UI approval before its AID is accepted (recorded in the ledger). R36 users have AIDs; exactly one MAESTRO per host. R37 (CRITICAL) MANAGER obeys only the MAESTRO; the MAESTRO may delegate to a single MAESTRO-DELEGATE at a time (original MAESTRO title suspended while delegated; no two MAESTROs); the delegate cannot manage the MAESTRO title/attributes/password and uses its own sudo password. R38 non-MAESTRO users cannot change agents/teams; kanban+PR workflow; restricted messaging (own-team COS, MANAGER, users only); subordinate to MANAGER/COS. R39 (CRITICAL) users have no terminal/AI client → an auto-created ASSISTANT agent running the new ai-maestro-assistant-role-agent role-plugin (MANAGER planning + AUTONOMOUS programming, minus agent/team creation); no team affiliation; profile label 'Assistant of <user>'; obeys only its user + MAESTRO; messaging restricted to its user + MAESTRO; user may edit its panel except NAME/TITLE/ROLE/TEAM. R40 foreign-user creation needs MAESTRO approval per-op; MANAGER may restrict specific API commands to specific foreign users. MAJOR bump: R32 changes the agent security model and R37 introduces the MAESTRO authority model. Security-first — when in doubt the most secure interpretation governs."
   - "3.11.0: Renumbered the three rules added in 3.10.0 to free R22 for the canonical GitHub authorship self-identification rule (Emasoft/ai-maestro#33, mirrored by the global PRRD baseline rule G1.1): Plugin↔Server Decoupling R22→R23, Proactive Global Memory R23→R24, Three-Pillars Task System R24→R25. R22 is now a RESERVED placeholder section pointing at #33 (held, never reused). No rule TEXT changed — only the numbers; any TRDD/persona citation of the 3.10.0 numbers (R22/R23/R24) shifts to R23/R24/R25. Reconciles the numbering collision surfaced by assistant-manager-agent#37 (which proposed decoupling=R23, memory=R24) against #33's prior claim on R22."
   - "3.10.0: [Rule numbers superseded by 3.11.0 — these three are now R23 / R24 / R25; R22 is reserved for the authorship self-id rule.] Added R22 (Plugin↔Server Decoupling via the Frozen CLI Layer — IRON), R23 (Proactive Global Memory), R24 (Three-Pillars Task System). R22 codifies the USER-emphasized invariant that NO plugin element (skill / agent / command / hook / MCP config or server / bundled script / settings) may call the server API (`/api/…`) directly or instruct an agent to — all server access routes through the FROZEN-interface CLI/script layer shipped + installed with ai-maestro; every script/hook is split into an api-dependent part (lives in ai-maestro as a CLI) and a non-api part (lives in the plugin, carries only that); the CLI skill-facing interface is frozen (new capability = new CLI, sole exception = a security fix); NO element-level exception, not even the core `ai-maestro-plugin`; bright-line `grep -rn '/api/'` over a plugin tree shows no direct-call instructions. R23 mandates the global janitor-hosted 3-scope markdown memory (recall-before-acting + write/update-after-learning + sub-agent propagation; no per-plugin memory; LOCAL/PROJECT/USER scopes; PROJECT is pushed+shared so it forbids secrets/local-paths/PII, enforced by the memory-scope-leak detector) — closes the prior 0 governance refs to memory. R24 binds proactive, role-appropriate use of the existing TRDD/PRRD/Kanban rules (`~/.claude/rules/`) + core skills without restating their mechanics. Co-designed with MANAGER (assistant-manager-agent#17, USER-directed this session); per-plugin fleet propagation (role-plugin persona citations of R22-R24) driven by MANAGER separately."
   - "3.9.1: Codified the canonical agent-address format (R6.11–R6.14). Single ID string per host, wire format `<agent-id>@<host>` or `<host>:<agent-id>`, with bare `<agent-id>` defaulting to the writer's host. Persona name may alias the agent-id when no collision exists on the target host (R6.12); on collision, the API returns 409 `disambiguation_required`. The legacy 3-level hierarchical addressing (`team/sub/name`) is now formally deprecated for messaging — it survives only as the sidebar's visual tag organization. R6.14 mandates UI + persona-prompt migration across this repo and the 8 role-plugin repos."
@@ -1205,7 +1206,163 @@ Read-only operations (queries, lookups, calculations) do NOT need AIO functions 
 
 ---
 
+## R26. Identity Immutability — No Self-Mutation of Title / Role / Name / AID (CRITICAL — IRON, USER-set)
+
+**The invariant:** an agent can NEVER change its own governance TITLE, its own role-plugin (ROLE), its own NAME, or its own AID identity token. Identity is conferred, never self-assigned.
+
+| ID | Rule | Source |
+|----|------|--------|
+| R26.1 | No agent may change its own **TITLE** or its own **role-plugin (ROLE)**. Only the **USER (MAESTRO)**, the **MANAGER**, or the **CHIEF-OF-STAFF of the agent's OWN team** (never another team's COS) may change them | Explicit (USER) |
+| R26.2 | No agent may change its own **NAME** or its own **AID identity token**. Only USER (MAESTRO) / MANAGER / own-team COS may, and **only** when a security issue requires it or the AID token was compromised | Explicit (USER) |
+| R26.3 | A COS's authority under R26.1–R26.2 is scoped to its **own team's** agents only — cross-team identity changes are forbidden | Explicit (USER) |
+
+---
+
+## R27. Self-Install Only via Core-Plugin Skills, With Approval + CPV Scan (IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R27.1 | An agent MAY install additional plugins/extensions (skills, subagents, hooks, MCP, …) for itself, but MUST first obtain permission from the **MANAGER** (if not in a team) or its **own CHIEF-OF-STAFF** (if in a team) | Explicit (USER) |
+| R27.2 | The install MUST go through the **core `ai-maestro-plugin` skills** — never by calling the Claude CLI (or any client CLI) directly (consistent with R23). The skills call the ai-maestro scripts → the server performs the install securely | Explicit (USER) |
+| R27.3 | The server **scans every extension/plugin with the CPV security scanner before installing it**; an install that fails the scan is refused | Explicit (USER) |
+
+---
+
+## R28. Three-Check API Authorization (AID → Title → Portfolio Token) (CRITICAL — IRON, USER-set)
+
+**The invariant:** every script/API operation an agent performs requires AID authentication; the server enforces a three-gate check and complies only if ALL pass.
+
+| ID | Rule | Source |
+|----|------|--------|
+| R28.1 | Every agent API operation (via the CLI/script layer) requires the agent to authenticate with its **AID** | Explicit (USER) |
+| R28.2 | The server verifies, in order: (1) the **AID identity**; (2) the **TITLE** assigned to that id/agent grants the privilege for the operation; (3) when the operation requires approval, the presence in the agent's **portfolio** (a server-stored secure enclave, per agent, holding approval + mandate tokens) of the required **approval/mandate token** issued by the MANAGER or the (own-team) COS | Explicit (USER) |
+| R28.3 | The request is fulfilled **only if all three checks pass**. Missing id, insufficient title, or a missing required token → refused. The server NEVER trusts a client-supplied id / title / scope | Explicit (USER) |
+
+---
+
+## R29. MANAGER Team & Agent Lifecycle Authority (IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R29.1 | The **MANAGER** may create and delete **Teams** on its own authority — no USER approval needed. Creating a team auto-creates the **CHIEF-OF-STAFF** + the **5 basic team members** | Explicit (USER) |
+| R29.2 | Alternatively the MANAGER may give the COS a **mandate** to populate the team with specific extra MEMBER-role agents tailored to the task (the 5-base structure stays mandatory) | Explicit (USER) |
+| R29.3 | The MANAGER may create and delete **AUTONOMOUS** agents and **MAINTAINER** agents on its own authority | Explicit (USER) |
+
+---
+
+## R30. COS Agent-Creation Requires a MANAGER Mandate; the 5-Member Base Is Invariant (IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R30.1 | The **CHIEF-OF-STAFF** requires the MANAGER's approval/mandate to create agents, **unless** the MANAGER granted a **team-creation mandate** | Explicit (USER) |
+| R30.2 | A team-creation mandate authorizes, by default, the **5 basic-member structure** PLUS specialized **MEMBER** agents tailored to the project. The 5-member base MUST always be present | Explicit (USER) |
+| R30.3 | Customization is limited to the **extra MEMBER agents**, which the COS creates from existing role-plugins (adding extra extensions). Neither MANAGER nor COS may create a team lacking the 5 basic agents, nor create non-MEMBER agents (or agents without the member-agent role-plugin) under a team-creation mandate | Explicit (USER) |
+
+---
+
+## R31. Incomplete-Team Freeze (IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R31.1 | Any team missing one or more of the **5 basic required members** is **FROZEN**: only the **CHIEF-OF-STAFF** may be active; all other team agents are **hibernated** until the COS finishes creating + configuring all basic members | Explicit (USER) |
+| R31.2 | A team becomes operative (unfrozen) **only** once all 5 basic members exist and are configured | Explicit (USER) |
+
+---
+
+## R32. No Sudo Gates for Agents — AID Is Sufficient; Sudo Is USER-via-UI Only (CRITICAL — IRON, USER-set; SUPERSEDES prior agent-sudo behavior)
+
+**The invariant:** agents NEVER face a sudo gate. Sudo password re-entry exists only for the **USER**, only via the **UI**. An agent's AID + title + portfolio token IS the authorization.
+
+| ID | Rule | Source |
+|----|------|--------|
+| R32.1 | Agents **never** require sudo gates / sudo tokens. They authenticate with their **AID**; the server derives identity + title + portfolio tokens from it (per R28) | Explicit (USER) |
+| R32.2 | A sudo password may be requested **only of the USER**, and **only via the UI**, for executing API commands. No agent-facing route is sudo-gated | Explicit (USER) |
+| R32.3 | This SUPERSEDES any prior design in which an agent supplied an `X-Sudo-Token`. Strict routes remain sudo-gated for **USER/UI** callers; for **agent** callers the gate is the R28 three-check (AID → title → token), not sudo | Explicit (USER) |
+
+---
+
+## R33. Signed-Ledger Recovery of Agent Auth State (IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R33.1 | On error or data loss in an agent's authentication tokens, the server reconstructs the agent's full history and recovers its status + authentication from the **signed ledger** | Explicit (USER) |
+
+---
+
+## R34. The Signed Ledger Is the Ultimate Source of Truth (CRITICAL — IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R34.1 | The **signed ledger** is the ultimate source of truth for identity. A valid-looking AID with **no ledger history** of its emission + association to that agent is **untrusted** → the API request is refused | Explicit (USER) |
+| R34.2 | An imported agent (from another host) undergoes an approval process to **re-issue a new AID**, requiring a **sudo password from the USER** (via UI). The procedure is recorded in the signed ledger and counts as a verification of the agent's AID validity | Explicit (USER) |
+
+---
+
+## R35. Foreign Agent/User Host Approval (CRITICAL — IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R35.1 | Any agent OR user from **another host** MUST be approved by this host's **MAESTRO** user before its AID is accepted by this host's API | Explicit (USER) |
+| R35.2 | The approval can be made **only by the MAESTRO user via the UI**, requiring the sudo password, and is recorded in the **signed ledger** (which thereafter validates the foreign agent/user AID) | Explicit (USER) |
+
+---
+
+## R36. Users Have AIDs; One MAESTRO Per Host (IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R36.1 | Native (this-host) and foreign (other-host) **users** also have an **AID**, with far fewer restrictions than agents bearing the USER title | Explicit (USER) |
+| R36.2 | A user promoted to **MAESTRO** is the sole admin; there is exactly **one MAESTRO per host** | Explicit (USER) |
+
+---
+
+## R37. MAESTRO and the Single MAESTRO-DELEGATE (CRITICAL — IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R37.1 | The **MANAGER** role agent obeys **only the MAESTRO** user, not other users | Explicit (USER) |
+| R37.2 | The MAESTRO may create a **MAESTRO-DELEGATE** by assigning that title to one human user — **only one at a time**. While the MAESTRO-DELEGATE title is in use, the original MAESTRO title is **suspended** and all its privileges/functions pass to the delegate (no two MAESTROs may co-exist — that would let conflicting orders reach agents) | Explicit (USER) |
+| R37.3 | The MAESTRO may **recall** the MAESTRO-DELEGATE title at any time, restoring itself as MAESTRO | Explicit (USER) |
+| R37.4 | The MAESTRO-DELEGATE has **no** power over the MAESTRO/MAESTRO-DELEGATE titles, cannot modify the MAESTRO user's attributes, and cannot change the MAESTRO's sudo password. While acting, sudo prompts accept the **delegate's own** password, not the original MAESTRO's | Explicit (USER) |
+
+---
+
+## R38. Non-MAESTRO User Restrictions (IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R38.1 | Only the **MAESTRO** user may create or change agents and teams; native users without the MAESTRO title may NOT | Explicit (USER) |
+| R38.2 | Normal (non-MAESTRO) users receive tasks from the **kanban** and make a **PR request** on completion. They may message **only** their own-team **COS**, the **MANAGER**, and other **users** — never the terminal of, or messages to, any other agent | Explicit (USER) |
+| R38.3 | Normal users are **subordinate** to MANAGER + COS: they cannot order them (only ask help/clarification about their assigned tasks; any other request is denied). Local or remote, they remain subordinate to the MANAGER and may be added to teams (following the COS) | Explicit (USER) |
+
+---
+
+## R39. Users Have No Terminal/Client → the ASSISTANT Agent (CRITICAL — IRON, USER-set)
+
+**The invariant:** human users have no terminal and no AI client; each works through an auto-created **ASSISTANT** agent.
+
+| ID | Rule | Source |
+|----|------|--------|
+| R39.1 | Users (being human) have **no terminal and no chat page** on their own profile. Each user is auto-assigned an **ASSISTANT**-title agent when created/registered (the MAESTRO user is exempt — it already has the MANAGER agent) | Explicit (USER) |
+| R39.2 | The ASSISTANT runs the **`ai-maestro-assistant-role-agent`** role-plugin — a mix of the MANAGER role-plugin (planning) + the AUTONOMOUS role-plugin (programming), but **without** agent/team-creation privileges | Explicit (USER) |
+| R39.3 | The user interacts with their ASSISTANT by selecting their own profile and typing in its terminal. The user may **not** access any other agent's terminal or join any team; selecting any non-own agent shows the profile with **no terminal** and **no** ability to edit that agent's profile panel | Explicit (USER) |
+| R39.4 | The ASSISTANT has **no team affiliation**; its profile shows `Assistant of <user name>` where the team label would be. The user may edit the ASSISTANT's profile panel **except** NAME, TITLE, ROLE-PLUGIN, and TEAM | Explicit (USER) |
+| R39.5 | The ASSISTANT obeys **only its user and the MAESTRO**, is aware of the user's kanban tasks, shares TRDDs sent to the user, and may message **only** its user and the MAESTRO | Explicit (USER) |
+
+---
+
+## R40. Foreign-User Creation Approval (IRON, USER-set)
+
+| ID | Rule | Source |
+|----|------|--------|
+| R40.1 | Non-native users (registered on another host) are subject to all R38 restrictions, **and** require the **MAESTRO's approval for every agent or team creation** | Explicit (USER) |
+| R40.2 | The MANAGER may restrict specific API commands to specific foreign users, per the MAESTRO's instructions | Explicit (USER) |
+
+---
+
 ## Role-Based Permission Matrix
+
+> **Authoritative identity / lifecycle / user rules: R26–R40.** The matrix below is a quick summary for the agent-title axis; where it and R26–R40 differ in detail, **R26–R40 govern** (e.g., agents never face sudo — R32; the MAESTRO/MAESTRO-DELEGATE + ASSISTANT + user model — R37/R39).
 
 | Action | MEMBER | COS (own team) | ORCHESTRATOR | ARCHITECT / INTEGRATOR | MANAGER | AUTONOMOUS |
 |--------|--------|----------------|--------------|----------------------|---------|------------|

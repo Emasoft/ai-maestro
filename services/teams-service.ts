@@ -231,6 +231,27 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
     }
   }
 
+  // ── Portfolio / mandate token check (R28 check #3) — mirrors CreateAgent
+  // G01e ──────────────────────────────────────────────────────────────────
+  // The THIRD authorization check, after (1) AID identity and (2) the
+  // MANAGER/web-UI title gate above. A DELEGATED caller (a COS holding a
+  // `team:create` mandate, etc.) without a valid, ledger-anchored mandate is
+  // refused BEFORE any team or COS-agent side effect. System-owner (no
+  // authContext / isSystemOwner) and MANAGER are the mint authority and bypass
+  // it inside matchPortfolioToken. While OPERATIONS_REQUIRING_TOKEN is empty
+  // (D2) this is a pure no-op with zero behavior change. If a ONE-SHOT approval
+  // matched, its id is threaded to the consume-after-success tail below so the
+  // token is burned ONLY after the team persists (R28 §4.3).
+  let matchedPortfolioTokenId: string | null = null
+  {
+    const { matchPortfolioToken } = await import('@/lib/portfolio-check')
+    const tokMatch = await matchPortfolioToken(params.authContext ?? { isSystemOwner: true }, 'CreateTeam')
+    if (!tokMatch.ok) {
+      return { error: tokMatch.reason, status: 403 }
+    }
+    matchedPortfolioTokenId = tokMatch.token?.token_id ?? null
+  }
+
   try {
     // Validate chiefOfStaffId if provided: must be an existing AUTONOMOUS agent (not in any team)
     let cosId: string | null = params.chiefOfStaffId || null
@@ -393,6 +414,32 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
         // updateTeam shouldn't fail on a freshly-created team, but if it
         // does the team is still usable — log and continue.
         console.warn('[teams] Failed to persist githubProject linkage:', err instanceof Error ? err.message : err)
+      }
+    }
+
+    // ── Consume-after-success (R28 §4.3) ──────────────────────────────
+    // A ONE-SHOT approval token is consumed ONLY now — after the team (and its
+    // COS / orchestrator / project links) persisted. Consuming earlier would
+    // burn a token on a create that later threw. Mandate tokens
+    // (uses_remaining null) are a no-op in consumeToken — only approvals burn.
+    if (matchedPortfolioTokenId) {
+      try {
+        const { consumeToken, getTokenById } = await import('@/lib/portfolio-store')
+        const tok = getTokenById(matchedPortfolioTokenId)
+        const consumed = await consumeToken(matchedPortfolioTokenId)
+        if (consumed && tok) {
+          const { emitPortfolioOp, consumeDiff } = await import('@/lib/portfolio-ledger')
+          const remaining = (tok.uses_remaining ?? 1) - 1
+          void emitPortfolioOp('consume_portfolio_token', tok.token_id, consumeDiff(tok, remaining), {
+            action: 'consume-portfolio-token',
+            agentId: params.authContext?.agentId ?? null,
+            actor: params.authContext?.agentId ? 'agent' : 'user',
+          })
+        }
+      } catch (consumeErr) {
+        // Non-fatal: the team is already created. A failed consume leaves the
+        // approval usable once more — logged so it is auditable.
+        console.warn('[teams] Portfolio token consume failed (team already created):', consumeErr instanceof Error ? consumeErr.message : consumeErr)
       }
     }
 

@@ -51,6 +51,10 @@ import {
 } from './agent-auth'
 import { authorize, type AuthAction } from './authorization'
 import { getAgentBySession } from './agent-registry'
+import { OPERATIONS_REQUIRING_TOKEN } from './portfolio-check'
+import { findActiveTokens } from './portfolio-store'
+import { verifyPortfolioToken } from './portfolio-sign'
+import type { PortfolioToken } from '@/types/portfolio'
 
 export function requireSudoToken(
   request: NextRequest,
@@ -236,19 +240,97 @@ function extractPathId(pathname: string, pathTemplate: string): string | undefin
 }
 
 /**
- * R28 check #3 PRE-WIRE — portfolio / mandate token (server-stored secure
- * enclave, future TRDD). Today a NO-OP returning allow. When the enclave
- * ships, the portfolio approval/mandate check wires in HERE at exactly ONE
- * call site (operations that "require approval" — cross-team transfer,
- * manage-team — are its future consumers). See R28.2 check #3.
+ * Map a strict (method, pathTemplate) to the portfolio OPERATION name that
+ * `OPERATIONS_REQUIRING_TOKEN` is keyed by (the SAME operation names the
+ * service-layer pipelines pass to `matchPortfolioToken`, e.g. 'CreateAgent',
+ * 'CreateTeam'). A route absent from this map is never portfolio-gated at the
+ * guard layer. Kept NARROW (security-first): only the agent-callable strict
+ * routes whose pipeline ALSO runs the service-layer portfolio check belong
+ * here, so the guard and the pipeline agree on which ops are gated.
+ *
+ * NOTE: none of the routes currently in this map are strict-and-agent-callable
+ * today (CreateAgent/CreateTeam are not in STRICT_AGENT_RULES), so the seam is
+ * dormant on the live request path until those routes are both classified
+ * strict and enabled in OPERATIONS_REQUIRING_TOKEN — at which point the entry
+ * below activates with zero further code change.
+ */
+const STRICT_ROUTE_TO_PORTFOLIO_OP: Record<string, string> = {
+  'POST /api/teams': 'CreateTeam',
+  'POST /api/agents': 'CreateAgent',
+}
+
+/**
+ * Coarse scope match for the GUARD-layer pre-check — exact match or a held
+ * `resource:*` / `*:*` wildcard covering the required scope's resource. This is
+ * the same normalization rule `lib/portfolio-check.ts::scopeSatisfies` and the
+ * IBCT scope check apply; duplicated as a one-liner here (rather than exporting
+ * the private helper) to keep the guard's import surface minimal.
+ */
+function guardScopeSatisfies(heldScope: string, requiredScope: string): boolean {
+  if (heldScope === requiredScope) return true
+  if (heldScope === '*:*') return true
+  const [reqResource] = requiredScope.split(':')
+  return heldScope === `${reqResource}:*`
+}
+
+/**
+ * R28 check #3 — portfolio / mandate token (server-stored secure enclave).
+ *
+ * This is the GUARD-LAYER, SYNCHRONOUS, DELIBERATELY COARSE pre-check (mirrors
+ * how `requireAidTitle` is coarse and lets the route's own pipeline re-run the
+ * fine check). The AUTHORITATIVE portfolio check — including the R34
+ * ledger-anchor requirement and the one-shot consume-after-success — is the
+ * ASYNC `matchPortfolioToken` wired into the service-layer pipelines
+ * (`CreateAgent` G01e / `createNewTeam`). The guard cannot be async (21 strict
+ * routes call `requireSudoToken` synchronously), so the ledger anchor stays in
+ * the service layer; the guard only does a coarse "is there a satisfying,
+ * host-signed active token?" pre-screen.
+ *
+ * D2 (zero-regression): while `OPERATIONS_REQUIRING_TOKEN` is EMPTY (the
+ * shipped state), `OPERATIONS_REQUIRING_TOKEN[op]` is undefined for every op,
+ * so this returns `{ allowed: true }` immediately — a pure no-op. Enabling an
+ * op there (the only behavior-changing flip) activates the gate, and the
+ * service-layer check enforces R34 + consume authoritatively.
+ *
+ * Bypass authority (mirrors matchPortfolioToken): a caller with no agentId
+ * (system-owner) and a MANAGER caller are the mint authority for their own R29
+ * authority and are not gated here — only DELEGATED callers (COS and below) are.
  */
 function requirePortfolioToken(
-  _auth: AgentAuthResult,
-  _method: string,
-  _pathTemplate: string
+  auth: AgentAuthResult,
+  method: string,
+  pathTemplate: string
 ): { allowed: boolean; reason?: string } {
-  // R28 #3: no enclave yet — allow. DO NOT add logic here without the enclave.
-  return { allowed: true }
+  const operation = STRICT_ROUTE_TO_PORTFOLIO_OP[`${method} ${pathTemplate}`]
+  // Route not portfolio-mapped at the guard layer → nothing to check.
+  if (!operation) return { allowed: true }
+
+  const requiredScope = OPERATIONS_REQUIRING_TOKEN[operation]
+  // Operation not gated. This is the case for EVERY op while the map is empty
+  // (D2 no-op). Enabling an op flips this branch.
+  if (!requiredScope) return { allowed: true }
+
+  // Bypass authority — system-owner (no agentId) and MANAGER are the mint
+  // authority; gate only the delegated callers.
+  if (!auth.agentId) return { allowed: true }
+  if ((auth.governanceTitle || '').toLowerCase() === 'manager') {
+    return { allowed: true }
+  }
+
+  // Coarse pre-screen: a host-signed, currently-active token whose scope
+  // satisfies the required scope. (Target pinning + the R34 ledger anchor are
+  // enforced authoritatively by the async service-layer matchPortfolioToken.)
+  const tokens = findActiveTokens(auth.agentId)
+  const hasToken = tokens.some(
+    (t: PortfolioToken) =>
+      guardScopeSatisfies(t.scope, requiredScope) && verifyPortfolioToken(t),
+  )
+  if (hasToken) return { allowed: true }
+
+  return {
+    allowed: false,
+    reason: `Operation "${operation}" requires an approval/mandate token with scope "${requiredScope}" granted by a MANAGER (or your team's CHIEF-OF-STAFF).`,
+  }
 }
 
 /**

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { listAllTeams, createNewTeam } from '@/services/teams-service'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 
 // SCEN-005.03 + SCEN-010.02 (second option, 2026-04-30): allow the user to
 // OPTIONALLY link an existing GitHub Projects v2 board to the team at create
@@ -87,7 +87,11 @@ export async function POST(request: NextRequest) {
 
   const { name, description, agentIds, type, chiefOfStaffId, githubProject } = body
 
-  const result = await createNewTeam({ name, description, agentIds, type, chiefOfStaffId, githubProject, requestingAgentId })
+  // Thread the verified AuthContext so createNewTeam can run the R28 portfolio
+  // check (check #3). The web-UI session is a system-owner (no agentId) and a
+  // MANAGER agent both bypass the check inside matchPortfolioToken; a delegated
+  // caller is gated once an op is enabled in OPERATIONS_REQUIRING_TOKEN.
+  const result = await createNewTeam({ name, description, agentIds, type, chiefOfStaffId, githubProject, requestingAgentId, authContext: buildAuthContext(auth) })
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }

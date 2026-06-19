@@ -25,9 +25,46 @@
  */
 
 import type { AgentRole } from '@/types/agent'
+import type { UserTitle } from '@/types/user'
 
 /** Extra pseudo-title used only in the graph — represents the human user. */
 export type GraphNode = AgentRole | 'human'
+
+/**
+ * R38.2 relational user-sender block (TRDD R36/R37/R38). Populated ONLY by
+ * callers that have registry access AND only when the user-authority model is
+ * ENABLED (governance.userAuthorityModelEnabled). The comm-graph stays PURE —
+ * it never reads a registry; the caller computes these relationship flags and
+ * hands them in. With the model OFF this block is never supplied and the legacy
+ * `isUserMessage`/`human` path is taken instead (byte-identical to pre-model
+ * behavior).
+ */
+export interface UserSenderContext {
+  /** The sending user's authority title (R36/R37). */
+  userTitle: UserTitle
+  /** True when the sender is the MAESTRO OR the currently-acting MAESTRO-DELEGATE (R37.2). */
+  isActiveMaestro: boolean
+  /** Recipient is THIS user's own bound ASSISTANT agent (R38.2/R39.5). */
+  recipientIsOwnAssistant: boolean
+  /** Recipient is the COS of a team this user follows (R38.2/R38.3). */
+  recipientIsOwnTeamCos: boolean
+  /** Recipient is the singleton MANAGER (R38.2). */
+  recipientIsManager: boolean
+  /** Recipient resolves to ANOTHER human user (R38.2 forbids for a normal user). */
+  recipientIsUser: boolean
+}
+
+/**
+ * R39.5 ASSISTANT-sender block. An ASSISTANT may message ONLY its own user and
+ * the active MAESTRO. Populated only by flag-on callers; the comm-graph itself
+ * stays registry-free.
+ */
+export interface AssistantSenderContext {
+  /** Recipient is THIS assistant's own user. */
+  recipientIsOwnUser: boolean
+  /** Recipient is the currently-acting MAESTRO (R37.2). */
+  recipientIsActiveMaestro: boolean
+}
 
 /** Edge type between two graph nodes. */
 export type EdgeType = 'allow' | 'deny' | 'reply-only'
@@ -66,7 +103,19 @@ const ALLOW_EDGES: Record<GraphNode, ReadonlySet<GraphNode>> = {
   'autonomous':     new Set<GraphNode>(['human', 'manager', 'autonomous']),
   'maintainer':     new Set<GraphNode>(['human', 'manager']),
   // HUMAN USER: full outbound access, including user-to-user (H -> H).
+  // R38.2 NOTE (user-authority model): this static full-Y row applies ONLY when
+  // the sender is the active MAESTRO (the admin). When the model is ENABLED,
+  // validateMessageRoute branches on the relational `userSender` block BEFORE
+  // consulting this row — a NORMAL user is decided relationally (own ASSISTANT /
+  // own-team COS / MANAGER only; never another user). With the model OFF this
+  // row is the legacy full-Y human node (no behavior change).
   'human':          new Set<GraphNode>(['human', 'manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member', 'autonomous', 'maintainer']),
+  // R39.7 ASSISTANT invisibility: NO static edge to any node. An ASSISTANT's
+  // real targets (its own user + the active MAESTRO) are RELATIONAL and decided
+  // in validateMessageRoute via assistantSender. The empty set means no agent
+  // title can reach an ASSISTANT through a static edge either (it is never a
+  // recipient in any other row), which IS the invisibility encoding.
+  'assistant':      new Set<GraphNode>([]),
 }
 
 /**
@@ -91,6 +140,7 @@ const REPLY_ONLY_EDGES: Record<GraphNode, ReadonlySet<GraphNode>> = {
   'autonomous':     new Set<GraphNode>(),
   'maintainer':     new Set<GraphNode>(),
   'human':          new Set<GraphNode>(),
+  'assistant':      new Set<GraphNode>(),
 }
 
 /** All valid graph nodes (agent roles + the human user). */
@@ -205,6 +255,12 @@ const ROUTING_SUGGESTIONS: Record<string, string> = {
   'maintainer->member':       'Contact manager instead',
   'maintainer->maintainer':   'Contact manager instead (MAINTAINER-to-MAINTAINER coordination routes through MANAGER)',
   'maintainer->autonomous':   'Contact manager instead',
+  // R38.2 — normal (non-MAESTRO) users may message ONLY their own ASSISTANT,
+  // their own-team COS, and the MANAGER. Used as the suggestion for any denied
+  // user-sender route when the user-authority model is enabled.
+  'user->*':                  'Normal users may only message their own ASSISTANT, their own-team COS, or the MANAGER (R38.2)',
+  // R39.5/R39.7 — an ASSISTANT may message ONLY its own user and the MAESTRO.
+  'assistant->*':             'An ASSISTANT may only message its own user and the MAESTRO (R39.5)',
 }
 
 export interface MessageRouteValidation {
@@ -221,9 +277,19 @@ export interface MessageRouteValidation {
  *
  * Options:
  *   - isSubagent: true → always reject (subagents have no AMP identity).
- *   - isUserMessage: true → sender is the human user (maestro). The user
- *       can message every node in the graph including other humans.
- *       Incoming to agents is always 'allow' from H.
+ *   - isUserMessage: true → LEGACY (user-authority model OFF) flag: the sender
+ *       is the human user and may message every node including other humans.
+ *       Used by callers when governance.userAuthorityModelEnabled is false, so
+ *       flag-off behavior is byte-identical to pre-model. When the model is ON,
+ *       callers DO NOT set this — they pass `userSender` instead.
+ *   - userSender: R38.2 relational block (user-authority model ON). When
+ *       present it drives the user-send decision: the active MAESTRO may message
+ *       anything; a normal user may message ONLY its own ASSISTANT, its own-team
+ *       COS, or the MANAGER, and NEVER another user (symmetric — no user↔user).
+ *   - assistantSender: R39.5 relational block — an ASSISTANT sender may reach
+ *       ONLY its own user and the active MAESTRO.
+ *   - recipientUserTitle: when the recipient is a human user, its title — used
+ *       for inbound R38.2 rules (a normal user does not receive from other users).
  *   - recipientIsHuman: true → recipient is the human user. Sender must
  *       be an agent with either an 'allow' or 'reply-only' edge to H.
  *       For 'reply-only' edges, inReplyToMessageId is REQUIRED.
@@ -232,6 +298,12 @@ export interface MessageRouteValidation {
  *       and the sender's edge to H is 'reply-only'. Unlocks a single
  *       reply; subsequent replies to the same message are enforced by
  *       the AMP inbox layer (not this function).
+ *
+ * FAIL-CLOSED CONTRACT (user-authority model ON): a `human` sender with NO
+ * `userSender` block is DENIED — the caller failed to resolve the relationship,
+ * and the secure default is to refuse rather than fall through to the legacy
+ * full-Y short-circuit. The legacy short-circuit is reachable ONLY via the
+ * explicit `isUserMessage` flag (which model-on callers never set).
  */
 export function validateMessageRoute(
   senderRole: string | null | undefined,
@@ -239,6 +311,9 @@ export function validateMessageRoute(
   options: {
     isSubagent?: boolean
     isUserMessage?: boolean
+    userSender?: UserSenderContext
+    assistantSender?: AssistantSenderContext
+    recipientUserTitle?: UserTitle
     recipientIsHuman?: boolean
     inReplyToMessageId?: string
   } = {}
@@ -251,12 +326,85 @@ export function validateMessageRoute(
     }
   }
 
-  // User (maestro) can message any node including other humans.
-  // Sender 'human' is short-circuited here rather than going through the
-  // isValidRole check below (which excludes 'human' on purpose so agent
-  // role validation stays typed).
-  if (options.isUserMessage || senderRole === 'human') {
+  // ── R38.2 user-sender branch (user-authority model ON) ───────────────────
+  // Reached only when a flag-on caller supplies the relational block. This
+  // REPLACES the blanket short-circuit for users: the active MAESTRO is the
+  // admin (full allow incl. user↔user); a normal user is restricted to its own
+  // ASSISTANT / own-team COS / MANAGER and may NEVER reach another user.
+  if (options.userSender) {
+    const us = options.userSender
+    if (us.isActiveMaestro) {
+      // MAESTRO / acting-delegate is the admin — may message any node,
+      // including other humans (R37/R38.1).
+      return { allowed: true, edgeType: 'allow' }
+    }
+    // Normal (non-MAESTRO) user.
+    if (us.recipientIsUser) {
+      return {
+        allowed: false,
+        reason: 'user-to-user messaging is forbidden (R38.2)',
+        suggestion: ROUTING_SUGGESTIONS['user->*'],
+        edgeType: 'deny',
+      }
+    }
+    if (us.recipientIsOwnAssistant || us.recipientIsOwnTeamCos || us.recipientIsManager) {
+      return { allowed: true, edgeType: 'allow' }
+    }
+    return {
+      allowed: false,
+      reason: 'Normal users may only message their own ASSISTANT, their own-team COS, or the MANAGER (R38.2)',
+      suggestion: ROUTING_SUGGESTIONS['user->*'],
+      edgeType: 'deny',
+    }
+  }
+
+  // ── R39.5 ASSISTANT-sender branch ────────────────────────────────────────
+  // An ASSISTANT may message ONLY its own user and the active MAESTRO.
+  if (senderRole === 'assistant') {
+    const as = options.assistantSender
+    if (as && (as.recipientIsOwnUser || as.recipientIsActiveMaestro)) {
+      return { allowed: true, edgeType: 'allow' }
+    }
+    return {
+      allowed: false,
+      reason: 'An ASSISTANT may only message its own user and the MAESTRO (R39.5)',
+      suggestion: ROUTING_SUGGESTIONS['assistant->*'],
+      edgeType: 'deny',
+    }
+  }
+
+  // ── R39.7 ASSISTANT invisibility (inbound) ───────────────────────────────
+  // No agent title may reach an ASSISTANT. The bound-user/MAESTRO paths to an
+  // ASSISTANT come through the userSender branch above (recipientIsOwnAssistant),
+  // so any route that lands here with an assistant recipient is an agent sender
+  // and must be denied (the ASSISTANT is invisible to other agents).
+  if (recipientRole === 'assistant') {
+    return {
+      allowed: false,
+      reason: 'An ASSISTANT is invisible to other agents and cannot be messaged by them (R39.7)',
+      edgeType: 'deny',
+    }
+  }
+
+  // LEGACY user/maestro short-circuit (user-authority model OFF). Reachable via
+  // the explicit `isUserMessage` flag OR a raw `human` sender. Model-on callers
+  // never set `isUserMessage`; a raw `human` sender with no userSender is the
+  // genuinely-unresolved case handled by the fail-closed guard below.
+  if (options.isUserMessage) {
     return { allowed: true, edgeType: 'allow' }
+  }
+  if (senderRole === 'human') {
+    // FAIL-CLOSED (user-authority model): a human sender that reached here has
+    // NO resolved userSender block and did NOT set the legacy isUserMessage
+    // flag. Under the legacy model the caller always sets isUserMessage; under
+    // the new model the caller always sets userSender. Either way, an
+    // unresolved human sender is refused rather than granted the old full-Y
+    // default — this closes the blanket-allow hole (R38.2).
+    return {
+      allowed: false,
+      reason: 'user sender context unresolved — cannot route (R38.2)',
+      edgeType: 'deny',
+    }
   }
 
   // Null/missing sender role — fail closed
@@ -266,6 +414,23 @@ export function validateMessageRoute(
 
   // Recipient is the human user (H). Look up the sender's edge to H.
   if (options.recipientIsHuman || recipientRole === 'human') {
+    // R38.2 inbound (user-authority model ON): a NORMAL user does NOT receive
+    // messages from other users, nor from arbitrary agents. The legitimate
+    // inbound paths to a user are: (a) its own ASSISTANT or the MAESTRO — both
+    // handled by the assistantSender / userSender branches ABOVE, which return
+    // before reaching here; (b) the MAESTRO addressing the user — also a
+    // userSender(isActiveMaestro) send handled above. So any sender that lands
+    // HERE with a NORMAL-user recipient is a non-assistant AGENT (or an
+    // unresolved user), which R38.2/R39.7 forbid. Only enforced when the caller
+    // supplied recipientUserTitle (i.e. the model is on); legacy callers leave
+    // it undefined and the historical reply-only-to-human logic below applies.
+    if (options.recipientUserTitle === 'user') {
+      return {
+        allowed: false,
+        reason: 'Normal users do not receive messages from other users or arbitrary agents — only their own ASSISTANT or the MAESTRO may reach them (R38.2/R39.7)',
+        edgeType: 'deny',
+      }
+    }
     if (!isValidRole(senderRole)) {
       return { allowed: false, reason: `Unknown sender role: ${senderRole}` }
     }

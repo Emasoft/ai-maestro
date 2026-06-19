@@ -483,9 +483,9 @@ export type AgentStatus = 'active' | 'idle' | 'offline' | 'deleted'
  * Kept as "AgentRole" type name for backward compatibility with existing API/DB schema.
  * The semantic meaning is "title" — a future migration may rename this.
  */
-export type AgentRole = 'manager' | 'chief-of-staff' | 'architect' | 'orchestrator' | 'integrator' | 'member' | 'autonomous' | 'maintainer'
+export type AgentRole = 'manager' | 'chief-of-staff' | 'architect' | 'orchestrator' | 'integrator' | 'member' | 'autonomous' | 'maintainer' | 'assistant'
 
-export const VALID_GOVERNANCE_TITLES: readonly AgentRole[] = ['manager', 'chief-of-staff', 'architect', 'orchestrator', 'integrator', 'member', 'autonomous', 'maintainer'] as const
+export const VALID_GOVERNANCE_TITLES: readonly AgentRole[] = ['manager', 'chief-of-staff', 'architect', 'orchestrator', 'integrator', 'member', 'autonomous', 'maintainer', 'assistant'] as const
 
 /**
  * Simplified agent for listings

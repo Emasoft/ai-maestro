@@ -94,6 +94,15 @@ export default function TitleBadge({ title, onClick, size = 'md' }: TitleBadgePr
       return renderBadge(classes, <>MEMBER</>)
     }
 
+    case 'assistant': {
+      // R39.2 ASSISTANT — a user's bound assistant agent (planning + programming
+      // mix, no agent/team-creation). Teal badge, distinct from the agent titles.
+      const classes = `inline-flex items-center ${sizeClasses} rounded-full border font-bold tracking-wider transition-colors
+            bg-teal-500/15 text-teal-400 border-teal-500/30
+            ${onClick ? 'hover:bg-teal-500/25 cursor-pointer' : 'cursor-default'}`
+      return renderBadge(classes, <><Bot className={iconSize} />ASSISTANT</>)
+    }
+
     default: {
       // NT-022: Exhaustiveness check — if all GovernanceTitle variants are handled above,
       // this line will cause a compile-time error when a new variant is added but not handled.

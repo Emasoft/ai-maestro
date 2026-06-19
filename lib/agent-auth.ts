@@ -16,9 +16,10 @@
  */
 import { authenticateRequest } from './amp-auth'
 import { validateGovernanceToken } from './aid-token'
-import { extractSessionFromCookie, validateSession } from './session-auth'
+import { extractSessionFromCookie, validateSessionWithUser } from './session-auth'
 import { isSessionSecret, validateSessionSecret } from './session-secret'
 import { verifyCompactIbct } from './ibct'
+import type { UserTitle } from '@/types/user'
 
 export interface AgentAuthResult {
   /** Verified agent ID, or undefined for system owner / web UI */
@@ -27,6 +28,14 @@ export interface AgentAuthResult {
   governanceTitle?: string
   /** Team ID — from AID token (embedded) or registry (session secret / AMP key). null = no team. */
   teamId?: string | null
+  /**
+   * R36/R37 — verified human-USER id. Present for a web session (the active
+   * MAESTRO under the single-operator model) and for a user-AID Bearer token.
+   * A user has NO agentId; a request is never both an agent and a user.
+   */
+  userId?: string
+  /** R36/R37 — the user's authority title (when userId is set). */
+  userTitle?: UserTitle
   /** IBCT scope claims — present only for AIP token auth. Downstream must check scope.includes(required). */
   ibctScope?: string[]
   /** IBCT max delegation depth — present only for AIP token auth. */
@@ -60,9 +69,21 @@ export function authenticateAgent(
     // endpoints (plus /api/v1/health and /api/v1/info) so the unbootstrapped
     // browser can reach them.
     const sessionToken = extractSessionFromCookie(cookieHeader ?? null)
-    if (sessionToken && validateSession(sessionToken)) {
-      // Valid session cookie → system owner (web UI user)
-      return {}
+    if (sessionToken) {
+      // R36/R37 — resolve the web session to a user when the user-authority
+      // model is on. validateSessionWithUser returns userId only when the model
+      // is enabled (the logged-in web session = the active MAESTRO); with the
+      // model OFF it returns { valid } with no userId, so the result below is
+      // `{}` — byte-identical to the legacy "valid session → system owner".
+      const sess = validateSessionWithUser(sessionToken)
+      if (sess.valid) {
+        if (sess.userId) {
+          const userTitle = resolveUserTitle(sess.userId)
+          return { userId: sess.userId, userTitle }
+        }
+        // Valid session cookie, model OFF → legacy system owner (web UI user)
+        return {}
+      }
     }
 
     // Distinguish "first run, please bootstrap" from "ordinary unauth"
@@ -104,6 +125,33 @@ export function authenticateAgent(
         return {
           error: 'Invalid or expired governance token',
           status: 401
+        }
+      }
+
+      // Case 3a-user (R36.1): a human-USER AID token. There is NO agent behind
+      // it — agent_id carries the USER id, user_title the authority title.
+      if (aidRecord.subject_type === 'user') {
+        const userId = aidRecord.agent_id
+        // R35/R40 foreign-user approval gate: refuse an UNAPPROVED foreign user
+        // (native===false && no approvedByMaestroAt). Mirrors the foreign-agent
+        // approval. A native user, or an approved foreign user, passes.
+        try {
+          const { getUser } = require('./user-registry') as typeof import('./user-registry')
+          const userRec = getUser(userId)
+          if (userRec && userRec.native === false && !userRec.approvedByMaestroAt) {
+            return {
+              error: 'Foreign user not approved by this host\'s MAESTRO (R35/R40)',
+              status: 403,
+            }
+          }
+        } catch (err) {
+          // Fail closed: if we cannot verify the user record, refuse the token.
+          console.warn('[agent-auth] user-AID approval check failed, denying:', err)
+          return { error: 'User identity could not be verified', status: 401 }
+        }
+        return {
+          userId,
+          userTitle: (aidRecord.user_title ?? 'user') as UserTitle,
         }
       }
 
@@ -249,12 +297,25 @@ export async function authenticateFromRequestAsync(
 export interface AuthContext {
   /** Verified agent ID, or undefined for system owner / web UI */
   agentId?: string
-  /** True when the caller is the system owner (web UI user) — full access */
+  /**
+   * True when the caller is the system owner.
+   *
+   * SEMANTICS DEPEND ON THE USER-AUTHORITY MODEL FLAG (R36/R37, decision D3):
+   *  - model OFF (default): legacy meaning — `!agentId` (any web session is the
+   *    system owner). Byte-identical to pre-model behavior.
+   *  - model ON: the ACTIVE MAESTRO — `userTitle ∈ {maestro, maestro-delegate}`.
+   *    A normal user has a session but `isSystemOwner=false`.
+   * The flip lives in buildAuthContext and is the single switch all gates read.
+   */
   isSystemOwner: boolean
   /** CC-GOV-004: Governance title from auth result — avoids redundant registry lookup */
   governanceTitle?: string
   /** CC-GOV-004: Team ID from auth result — avoids redundant registry lookup */
   teamId?: string | null
+  /** R36/R37 — verified human-USER id (web session = active MAESTRO, or user-AID token). */
+  userId?: string
+  /** R36/R37 — the user's authority title (when userId is set). */
+  userTitle?: UserTitle
   /** IBCT scope claims — present when caller authenticated via AIP token */
   ibctScope?: string[]
   /** IBCT max delegation depth */
@@ -271,13 +332,43 @@ export interface AuthContext {
 /**
  * Build an AuthContext from an AgentAuthResult.
  * Convenience for API routes that call Change* functions directly.
+ *
+ * R36/R37 (decision D3) — THE isSystemOwner SEMANTIC FLIP, flag-gated:
+ *  - model OFF (default): isSystemOwner = !agentId (legacy — any web session is
+ *    the system owner). userId/userTitle are passed through additively but do
+ *    NOT change the gate, so flag-off behavior is byte-identical.
+ *  - model ON: isSystemOwner = the caller is the ACTIVE MAESTRO, i.e.
+ *    userTitle ∈ {maestro, maestro-delegate}. A normal user (userTitle==='user')
+ *    has a session/userId but isSystemOwner=false → the 24 enforceSystemOwner
+ *    routes correctly reject it.
+ * The flag is read via lib/governance (runtime require to avoid a static cycle).
  */
 export function buildAuthContext(authResult: AgentAuthResult): AuthContext {
+  let isSystemOwner: boolean
+  let modelEnabled = false
+  try {
+    const { isUserAuthorityModelEnabled } = require('./governance') as typeof import('./governance')
+    modelEnabled = isUserAuthorityModelEnabled()
+  } catch {
+    modelEnabled = false
+  }
+  if (modelEnabled) {
+    // Active-MAESTRO semantics. An agent (agentId set) is never the system
+    // owner. A user is the system owner ONLY when its title is maestro or the
+    // acting maestro-delegate.
+    isSystemOwner = !authResult.agentId &&
+      (authResult.userTitle === 'maestro' || authResult.userTitle === 'maestro-delegate')
+  } else {
+    // Legacy semantics — unchanged.
+    isSystemOwner = !authResult.agentId
+  }
   return {
     agentId: authResult.agentId,
-    isSystemOwner: !authResult.agentId,
+    isSystemOwner,
     governanceTitle: authResult.governanceTitle,
     teamId: authResult.teamId,
+    userId: authResult.userId,
+    userTitle: authResult.userTitle,
     ibctScope: authResult.ibctScope,
     ibctMaxDepth: authResult.ibctMaxDepth,
   }
@@ -376,6 +467,27 @@ function resolveGovernanceContext(agentId: string): { title: string; teamId: str
     // operations now see why it happened.
     console.warn('[agent-auth] resolveGovernanceContext failed, falling back to autonomous:', { agentId, err })
     return { title: 'autonomous', teamId: null }
+  }
+}
+
+/**
+ * R36/R37 — resolve a user's authority title from the user-registry. Used for a
+ * web session resolved to a user id (the active MAESTRO under the single-operator
+ * model). Falls back to 'maestro' when the record is the configured maestro but
+ * unreadable, else 'user'. The session→user binding only happens when the model
+ * is on, so this is never reached with the model off.
+ */
+function resolveUserTitle(userId: string): UserTitle {
+  try {
+    const userRegistry = require('./user-registry') as typeof import('./user-registry')
+    const rec = userRegistry.getUser(userId)
+    if (rec) return rec.title
+    // The active-maestro id resolved but the record is gone — treat as a normal
+    // user (fail toward LESS privilege, never silently grant maestro).
+    return 'user'
+  } catch (err) {
+    console.warn('[agent-auth] resolveUserTitle failed, defaulting to user:', err)
+    return 'user'
   }
 }
 

@@ -860,7 +860,28 @@ export async function routeMessage(
     )
     const senderAgent = isMeshForwarded ? null : getAgent(auth.agentId!)
 
-    if (!senderAgent && !isMeshForwarded) {
+    // R36/R37/R38 — is the authenticated subject a human USER (not an agent)?
+    // Only meaningful when the user-authority model is ENABLED; with the model
+    // OFF this stays null and every path below is byte-identical to pre-model
+    // (AMP API keys are agent-keyed today, so a user subject never appears).
+    let senderUserRecord: import('@/types/user').UserRecord | null = null
+    let userModelEnabled = false
+    if (!isMeshForwarded && !senderAgent && auth.agentId) {
+      try {
+        const { isUserAuthorityModelEnabled } = await import('@/lib/governance')
+        userModelEnabled = isUserAuthorityModelEnabled()
+        if (userModelEnabled) {
+          const { getUser } = await import('@/lib/user-registry')
+          senderUserRecord = getUser(auth.agentId)
+        }
+      } catch {
+        senderUserRecord = null
+      }
+    }
+
+    // A non-mesh sender that is neither a known agent NOR a known user is an
+    // error. A user sender (model ON) is legitimate and falls through.
+    if (!senderAgent && !isMeshForwarded && !senderUserRecord) {
       return {
         data: { error: 'internal_error', message: 'Sender agent not found in registry' } as AMPError,
         status: 500
@@ -1190,11 +1211,18 @@ export async function routeMessage(
     // Title-based communication graph — enforces directed messaging rules between governance titles.
     // 2026-04-22 v2 graph: HUMAN (H) is a first-class node; team titles have
     // reply-only (`1>`) edges to H that require inReplyToMessageId.
-    // NOTE: In Phase 1, the user (web UI) sends messages via /api/teams/{id}/notify, NOT /v1/route.
-    // The isUserMessage flag exists for Phase 2 (maestro auth) when the user may send via /v1/route.
-    // Currently isUserSender is always false here because auth + agent resolution precede this point.
+    //
+    // R36/R37/R38 — when the user-authority model is ENABLED and the sender is a
+    // human USER (senderUserRecord set), the comm-graph is driven by the
+    // relational `userSender` block (R38.2) rather than the legacy full-Y
+    // `isUserMessage` short-circuit. A normal user may reach ONLY their own
+    // ASSISTANT, own-team COS, or the MANAGER; the active MAESTRO may reach any
+    // node. With the model OFF (the default), `senderUserRecord` is null and the
+    // legacy `isUserMessage` path is taken — byte-identical to pre-model.
     const isUserSender = !senderAgent && !isMeshForwarded
-    const senderTitle = isMeshForwarded ? (verifiedSenderRole || null) : (senderAgent?.governanceTitle || null)
+    const senderTitle = isMeshForwarded
+      ? (verifiedSenderRole || null)
+      : (senderUserRecord ? 'human' : (senderAgent?.governanceTitle || null))
     const recipientTitle = localAgent.governanceTitle || null
     // String-cast the comparison because AgentRole does not include 'human'
     // or the legacy 'user' sentinel; the AMP route handler historically
@@ -1209,8 +1237,57 @@ export async function routeMessage(
     const bodyRecord = body as unknown as Record<string, unknown>
     const inReplyToRaw = bodyRecord?.in_reply_to
     const inReplyToId = typeof inReplyToRaw === 'string' ? inReplyToRaw : undefined
+
+    // Build the R38.2 relational block for a user sender (model ON only). The
+    // recipient here is always a resolved local AGENT (AMP local delivery), so
+    // recipientIsUser is false; user→user is not an AMP-route shape.
+    let userSenderCtx: import('@/lib/communication-graph').UserSenderContext | undefined
+    if (senderUserRecord) {
+      let recipientIsManager = false
+      try { recipientIsManager = isManager(localAgent.id) } catch { recipientIsManager = false }
+      if (!recipientIsManager && recipientTitleStr === 'manager') recipientIsManager = true
+
+      const recipientIsOwnAssistant =
+        !!senderUserRecord.assistantAgentId && senderUserRecord.assistantAgentId === localAgent.id
+
+      let recipientIsOwnTeamCos = false
+      if (recipientTitleStr === 'chief-of-staff') {
+        try {
+          const { loadTeams } = await import('@/lib/team-registry')
+          const teams = loadTeams()
+          const followedTeamIds = new Set<string>()
+          if (senderUserRecord.assistantAgentId) {
+            for (const t of teams) {
+              if (t.agentIds?.includes(senderUserRecord.assistantAgentId)) followedTeamIds.add(t.id)
+            }
+          }
+          recipientIsOwnTeamCos = teams.some(
+            t => t.chiefOfStaffId === localAgent.id && followedTeamIds.has(t.id),
+          )
+        } catch { recipientIsOwnTeamCos = false }
+      }
+
+      let isActiveMaestro = false
+      try {
+        const { getActiveMaestroUserId } = await import('@/lib/user-registry')
+        isActiveMaestro = getActiveMaestroUserId() === senderUserRecord.id
+      } catch { isActiveMaestro = false }
+
+      userSenderCtx = {
+        userTitle: senderUserRecord.title,
+        isActiveMaestro,
+        recipientIsOwnAssistant,
+        recipientIsOwnTeamCos,
+        recipientIsManager,
+        recipientIsUser: false,
+      }
+    }
+
     const graphCheck = validateMessageRoute(senderTitle, recipientTitle, {
-      isUserMessage: isUserSender,
+      // Model ON + user sender → relational userSender (R38.2). Otherwise the
+      // legacy isUserMessage flag (false for an agent sender; true only on the
+      // pre-model user path which AMP keys never produce today).
+      ...(userSenderCtx ? { userSender: userSenderCtx } : { isUserMessage: isUserSender }),
       recipientIsHuman,
       inReplyToMessageId: inReplyToId,
     })

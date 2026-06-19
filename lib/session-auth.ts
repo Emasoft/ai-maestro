@@ -165,6 +165,42 @@ export function validateSession(token: string): boolean {
 }
 
 /**
+ * R36/R37 session→user resolution. Returns whether the session is valid AND,
+ * when the user-authority model is ENABLED, the id of the user the web session
+ * represents — the active MAESTRO under the single-operator model (a logged-in
+ * web session IS the host operator).
+ *
+ * BACKWARD-COMPATIBLE: `validateSession(token): boolean` above is UNCHANGED, so
+ * the webauthn / auth-session / headless callers keep working untouched. This
+ * is the additive variant agent-auth uses to populate AuthContext.userId.
+ *
+ * When the model is OFF, `userId` is undefined → AuthContext stays exactly as
+ * before (anonymous system owner). The userId resolution is intentionally done
+ * here via the registry (not a session→userId map) so no change to
+ * createSession or its callers is required.
+ *
+ * SYNCHRONOUS — same TOCTOU-safety contract as validateSession (no awaits).
+ */
+export function validateSessionWithUser(token: string): { valid: boolean; userId?: string } {
+  if (!validateSession(token)) return { valid: false }
+  // Resolve the active-maestro user id only when the model is on. Runtime
+  // require avoids a static cycle (governance/user-registry pull in this file's
+  // siblings) and keeps session-auth dependency-light.
+  try {
+    const { isUserAuthorityModelEnabled } = require('./governance') as typeof import('./governance')
+    if (!isUserAuthorityModelEnabled()) return { valid: true }
+    const { getActiveMaestroUserId } = require('./user-registry') as typeof import('./user-registry')
+    const userId = getActiveMaestroUserId() ?? undefined
+    return { valid: true, userId }
+  } catch (err) {
+    // A registry read failure must not invalidate an otherwise-valid session;
+    // fall back to "valid, no userId" (legacy-equivalent).
+    console.warn('[session-auth] validateSessionWithUser registry read failed, no userId resolved:', err)
+    return { valid: true }
+  }
+}
+
+/**
  * Invalidate a session (logout).
  *
  * LIB2-MIN-05: synchronous — see `validateSession` doc-comment.

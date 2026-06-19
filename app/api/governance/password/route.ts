@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { setGovernancePassword } from '@/services/governance-service'
 import { enforceSystemOwner } from '@/lib/route-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { loadSecurityConfig } from '@/lib/security-config'
 
@@ -26,6 +27,26 @@ export async function POST(request: NextRequest) {
   // operation on the host. System-owner only + sudo token required.
   const authErr = enforceSystemOwner(request)
   if (authErr) return authErr
+
+  // R37.4 — a MAESTRO-DELEGATE has NO power over the MAESTRO's attributes and
+  // CANNOT change the MAESTRO's sudo password. Under the user-authority model
+  // this global governance password is the MAESTRO's password, so refuse a
+  // delegate caller. enforceSystemOwner admits the active maestro (which a
+  // delegate is while acting), so this extra check is what stops the delegate.
+  // FLAG-OFF: userTitle is undefined → the guard is inert (no behavior change).
+  {
+    const result = authenticateFromRequest(request)
+    if (!result.error) {
+      const ctx = buildAuthContext(result)
+      if (ctx.userTitle === 'maestro-delegate') {
+        return NextResponse.json(
+          { error: 'forbidden_delegate_cannot_change_maestro_password', message: 'A MAESTRO-DELEGATE cannot change the MAESTRO\'s sudo password (R37.4).' },
+          { status: 403 },
+        )
+      }
+    }
+  }
+
   const sudoErr = requireSudoToken(request, 'POST', '/api/governance/password')
   if (sudoErr) return sudoErr
 

@@ -32,6 +32,13 @@ let _prevGovernance: GovernanceConfig | null = null
 // pattern in team-registry.ts.
 let _governanceMigrationDone = false
 
+// One-shot guard for the R36/R37 first-MAESTRO user migration (mirrors
+// _governanceMigrationDone). The migration is idempotent (it no-ops once a
+// MAESTRO user exists) but the flag prevents redundant work + a require() of
+// user-registry on every read. It ONLY runs when the user-authority model is
+// enabled, so a flag-off host never gains a user record or a new writeback.
+let _userMigrationDone = false
+
 /** Ensure ~/.aimaestro directory exists */
 function ensureAimaestroDir() {
   if (!fs.existsSync(AIMAESTRO_DIR)) {
@@ -43,6 +50,59 @@ function ensureAimaestroDir() {
 function generateUserName(): string {
   const n = Math.floor(Math.random() * 999) + 1
   return `user${String(n).padStart(3, '0')}`
+}
+
+/**
+ * R36/R37 one-shot migration: when the user-authority model is enabled and no
+ * MAESTRO user exists yet, create the first MAESTRO UserRecord from the legacy
+ * single-user fields ({userName, userAvatar, passwordHash}) and record its id in
+ * governance.json. Idempotent + re-entrancy-safe. Performs NOTHING when the
+ * model is disabled, so a flag-off host never grows a user record — preserving
+ * exact legacy behavior.
+ *
+ * Implemented via a runtime require() of user-registry to avoid a module-load
+ * cycle (user-registry imports the governance pointers).
+ *
+ * @param parsed the just-parsed governance config (NOT re-read, to avoid recursion)
+ */
+function maybeMigrateMaestroUser(parsed: GovernanceConfig): void {
+  if (_userMigrationDone) return
+  // Gate STRICTLY on the model flag from the already-parsed config — never call
+  // isUserAuthorityModelEnabled() here (it would re-enter loadGovernance()).
+  if (parsed.userAuthorityModelEnabled !== true) return
+  if (parsed.maestroUserId) {
+    // Already migrated in a prior process — mark done so we don't re-check.
+    _userMigrationDone = true
+    return
+  }
+  // Set the guard BEFORE doing any work so a re-entrant loadGovernance() during
+  // the migration sees it as in-progress and does not recurse.
+  _userMigrationDone = true
+  try {
+    const userRegistry = require('./user-registry') as typeof import('./user-registry')
+    const existing = userRegistry.getActiveMaestroUserIdFromList()
+    if (existing) {
+      // A MAESTRO user already exists in users.json (e.g. restored backup) —
+      // just record the pointer.
+      const fresh = { ...parsed, maestroUserId: existing }
+      saveGovernance(fresh)
+      return
+    }
+    const rec = userRegistry.createMaestroFromLegacy({
+      name: parsed.userName ?? generateUserName(),
+      avatar: parsed.userAvatar,
+      passwordHash: parsed.passwordHash,
+      passwordSetAt: parsed.passwordSetAt,
+    })
+    const fresh = { ...parsed, maestroUserId: rec.id }
+    saveGovernance(fresh)
+  } catch (err) {
+    // Migration is best-effort and must not break loadGovernance for every
+    // caller. Reset the guard so a later call can retry once the underlying
+    // issue (e.g. transient FS error) clears.
+    _userMigrationDone = false
+    console.error('[governance] R36/R37 first-MAESTRO migration failed (will retry):', err instanceof Error ? err.message : err)
+  }
 }
 
 /** Load governance config from disk, creating with defaults if missing */
@@ -76,6 +136,12 @@ export function loadGovernance(): GovernanceConfig {
       }
     }
     _prevGovernance = parsed
+    // R36/R37 one-shot first-MAESTRO migration. Only runs when the
+    // user-authority model is ENABLED and no MAESTRO user is recorded yet; a
+    // flag-off host returns here with zero new behavior. Re-entrancy is
+    // prevented by the _userMigrationDone flag (set before the work) plus the
+    // already-set _prevGovernance.
+    maybeMigrateMaestroUser(parsed)
     return parsed
   } catch (error) {
     // Distinguish read errors from parse errors — parse errors indicate disk corruption
@@ -331,4 +397,60 @@ export async function setUserAvatar(avatar: string | null): Promise<void> {
     }
     saveGovernance(config)
   })
+}
+
+// ─── R36/R37/R38 user-authority model (TRDD decision D3) ────────────────────
+
+/**
+ * Master switch for the R36/R37/R38 user-authority model. DEFAULT = false.
+ *
+ * When false (the default and the only value on the running single-operator
+ * deployment until the model is deliberately enabled), every behavioral change
+ * in the model is INERT: `isSystemOwner` keeps its legacy "no agentId" meaning,
+ * the comm-graph keeps the full-`Y` HUMAN node and the user blanket-allow, and
+ * sudo verifies the single global governance password. This accessor is the one
+ * place every gate consults so the flag can be flipped atomically.
+ *
+ * NOTE: this is read synchronously from governance.json on every call (same
+ * pattern as getManagerId). The value is a plain boolean; a missing/undefined
+ * field is treated as false (fail-safe-off), and any non-true value is clamped
+ * to false so a malformed config can never silently enable the model.
+ */
+export function isUserAuthorityModelEnabled(): boolean {
+  try {
+    return loadGovernance().userAuthorityModelEnabled === true
+  } catch (err) {
+    // Fail-safe: if governance.json can't be read, the model is OFF (legacy
+    // behavior). Surfacing the error keeps a misconfiguration visible without
+    // accidentally activating breaking gates.
+    console.warn('[governance] isUserAuthorityModelEnabled read failed, treating model as OFF:', err)
+    return false
+  }
+}
+
+/**
+ * Enable or disable the user-authority model. Clamps to a strict boolean so a
+ * truthy-but-non-boolean value can never be persisted as the activation signal.
+ */
+export async function setUserAuthorityModelEnabled(enabled: boolean): Promise<void> {
+  return withLock('governance', async () => {
+    const config = loadGovernance()
+    config.userAuthorityModelEnabled = enabled === true
+    saveGovernance(config)
+  })
+}
+
+/**
+ * Id of the MAESTRO user recorded in governance.json (R36/R37), or null if the
+ * one-shot user migration has not yet run. This is the O(1) "who is the
+ * configured MAESTRO" pointer; `getActiveMaestroUserId()` in lib/user-registry
+ * layers the delegate-suspends-maestro rule (R37.2) on top of it.
+ */
+export function getMaestroUserId(): string | null {
+  return loadGovernance().maestroUserId ?? null
+}
+
+/** Id of the currently-acting MAESTRO-DELEGATE user (R37.2), or null when none. */
+export function getMaestroDelegateUserId(): string | null {
+  return loadGovernance().maestroDelegateUserId ?? null
 }

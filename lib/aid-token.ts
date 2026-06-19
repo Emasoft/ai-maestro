@@ -29,6 +29,16 @@ export interface AIDTokenRecord {
   scope: string
   issued_at: string
   expires_at: string
+  /**
+   * R36/R37 — the subject this token authenticates. Default 'agent' (every
+   * pre-existing agent token; the field is omitted on disk for those and
+   * normalized to 'agent' at validation). 'user' marks a human-user AID token:
+   * for those, `agent_id` carries the USER id and `user_title` the user's
+   * authority title; there is NO agent behind a user token.
+   */
+  subject_type?: 'agent' | 'user'
+  /** R36/R37 — the user's authority title; present only when subject_type==='user'. */
+  user_title?: import('@/types/user').UserTitle
 }
 
 export interface TokenExchangeResult {
@@ -291,6 +301,59 @@ export async function issueGovernanceToken(
     governance_title: governanceTitle,
     team_id: teamId,
     scope
+  }
+}
+
+/**
+ * R36/R37 — issue a short-lived governance token for a human USER (users have
+ * AIDs too, R36.1). Stored in the same active-tokens store but flagged
+ * subject_type='user' with the user's authority title. `agent_id` carries the
+ * USER id (there is no agent behind a user token); `team_id` is always null for
+ * a user. Validation goes through the same validateGovernanceToken path, which
+ * returns the record verbatim (callers branch on subject_type).
+ */
+export async function issueUserGovernanceToken(
+  userId: string,
+  userName: string,
+  userTitle: import('@/types/user').UserTitle,
+  scope: string = 'governance'
+): Promise<TokenExchangeResult & { subject_type: 'user'; user_title: import('@/types/user').UserTitle }> {
+  const rawToken = TOKEN_PREFIX + randomBytes(TOKEN_RANDOM_BYTES).toString('hex')
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + TOKEN_LIFETIME_SECONDS * 1000)
+
+  const record: AIDTokenRecord = {
+    token_hash: hashToken(rawToken),
+    agent_id: userId,
+    agent_name: userName,
+    governance_title: userTitle, // mirrors the title for any title-keyed consumer
+    team_id: null,
+    scope,
+    issued_at: now.toISOString(),
+    expires_at: expiresAt.toISOString(),
+    subject_type: 'user',
+    user_title: userTitle,
+  }
+
+  await withLock('governance-tokens', () => {
+    const tokens = loadTokens()
+    const validTokens = tokens
+      .filter(t => new Date(t.expires_at).getTime() > Date.now())
+      .slice(-199)
+    validTokens.push(record)
+    saveTokens(validTokens)
+  })
+
+  return {
+    access_token: rawToken,
+    token_type: 'bearer',
+    expires_in: TOKEN_LIFETIME_SECONDS,
+    agent_id: userId,
+    governance_title: userTitle,
+    team_id: null,
+    scope,
+    subject_type: 'user',
+    user_title: userTitle,
   }
 }
 

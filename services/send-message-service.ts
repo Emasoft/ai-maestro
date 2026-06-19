@@ -70,6 +70,119 @@ export interface SendMessageResult {
 }
 
 /**
+ * R38.2 — compute the relational user-sender flags for the comm-graph from the
+ * registries (the graph stays pure; this caller has registry access). Resolves:
+ *  - userTitle / isActiveMaestro from the user-registry (R37.2 delegate-suspends-maestro)
+ *  - recipientIsOwnAssistant: the user's bound ASSISTANT == recipient (R39.5)
+ *  - recipientIsOwnTeamCos: recipient is COS of a team this user follows (R38.2/R38.3)
+ *  - recipientIsManager: recipient is the singleton MANAGER (R38.2)
+ *  - recipientIsUser: recipient resolves to ANOTHER human user (R38.2 forbids)
+ *
+ * Only called when the user-authority model is enabled AND a senderUserId is
+ * resolved, so it never runs on the flag-off path.
+ */
+async function resolveUserSenderContext(
+  senderUserId: string,
+  recipientAgentId: string | null,
+  recipientTitle: string,
+  recipientIdentifier: string,
+): Promise<import('@/lib/communication-graph').UserSenderContext> {
+  const { getUser, getUserByName, getActiveMaestroUserId } = await import('@/lib/user-registry')
+  const senderUser = getUser(senderUserId)
+  const userTitle = senderUser?.title ?? 'user'
+  const isActiveMaestro = getActiveMaestroUserId() === senderUserId
+
+  // recipientIsOwnAssistant: the sender user's bound ASSISTANT is the recipient.
+  const recipientIsOwnAssistant =
+    !!senderUser?.assistantAgentId &&
+    !!recipientAgentId &&
+    senderUser.assistantAgentId === recipientAgentId
+
+  // recipientIsManager: recipient is the singleton MANAGER.
+  let recipientIsManager = false
+  if (recipientAgentId) {
+    try {
+      const { isManager } = await import('@/lib/governance')
+      recipientIsManager = isManager(recipientAgentId)
+    } catch { recipientIsManager = false }
+  }
+  // Defensive: a MANAGER recipientTitle also satisfies the rule even if the
+  // singleton pointer is momentarily unresolved.
+  if (!recipientIsManager && String(recipientTitle) === 'manager') recipientIsManager = true
+
+  // recipientIsOwnTeamCos: recipient is the COS of a team the user follows.
+  // A normal user is added to a team and follows its COS (R38.3). We treat the
+  // user as following the team(s) their bound ASSISTANT belongs to; absent an
+  // ASSISTANT-team binding, this is conservatively false (deny) unless the
+  // recipient is a COS of a team the user is a recorded member of.
+  let recipientIsOwnTeamCos = false
+  if (recipientAgentId && String(recipientTitle) === 'chief-of-staff') {
+    try {
+      const { loadTeams } = await import('@/lib/team-registry')
+      const teams = loadTeams()
+      // Teams this user follows: any team whose membership includes the user's
+      // ASSISTANT agent (the user works through its ASSISTANT — R39.7).
+      const followedTeamIds = new Set<string>()
+      if (senderUser?.assistantAgentId) {
+        for (const t of teams) {
+          if (t.agentIds?.includes(senderUser.assistantAgentId)) followedTeamIds.add(t.id)
+        }
+      }
+      recipientIsOwnTeamCos = teams.some(
+        t => t.chiefOfStaffId === recipientAgentId && followedTeamIds.has(t.id),
+      )
+    } catch { recipientIsOwnTeamCos = false }
+  }
+
+  // recipientIsUser: recipient resolves to ANOTHER human user (by id or name).
+  // An agent recipient (recipientAgentId set) is never a user. When the
+  // recipient did NOT resolve to an agent, look it up in the user registry by id
+  // then by name (stripping any @host suffix) — if it is a user, R38.2 forbids a
+  // normal user from messaging it (user↔user is symmetric-forbidden). This is
+  // what makes the graph's recipientIsUser deny branch reachable from the
+  // production send path.
+  let recipientIsUser = false
+  if (!recipientAgentId) {
+    try {
+      const name = recipientIdentifier.includes('@')
+        ? recipientIdentifier.split('@')[0]
+        : recipientIdentifier
+      const rec = getUser(name) ?? getUserByName(name)
+      recipientIsUser = !!rec
+    } catch {
+      recipientIsUser = false
+    }
+  }
+
+  return {
+    userTitle,
+    isActiveMaestro,
+    recipientIsOwnAssistant,
+    recipientIsOwnTeamCos,
+    recipientIsManager,
+    recipientIsUser,
+  }
+}
+
+/**
+ * R38.2 — resolve whether a recipient identifier (name or id, possibly @host)
+ * is a human user, returning its title or undefined when it is not a user.
+ * Used so the inbound "normal users don't receive from agents" rule can fire.
+ */
+async function resolveRecipientUserTitle(
+  recipientIdentifier: string,
+): Promise<import('@/types/user').UserTitle | undefined> {
+  try {
+    const { getUser, getUserByName } = await import('@/lib/user-registry')
+    const name = recipientIdentifier.includes('@') ? recipientIdentifier.split('@')[0] : recipientIdentifier
+    const rec = getUser(name) ?? getUserByName(name)
+    return rec?.title
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * All-in-one message sender. Validates, routes, delivers, and notifies.
  */
 export async function SendMessage(
@@ -196,7 +309,59 @@ export async function SendMessage(
     // a WARN and let the message through. A broken import path or transient
     // throw became a silent governance bypass. Now fail-CLOSED with a 503-style
     // error so the failure is observable.
-    if (!input.skipGraphCheck && senderTitle !== 'user' && senderTitle !== 'system') {
+    // R36/R37/R38 — is the user-authority model enabled? Read once; gates the
+    // new user-sender enforcement so flag-off behavior is byte-identical
+    // (user/system senders skip the graph exactly as before).
+    let userModelEnabled = false
+    try {
+      const { isUserAuthorityModelEnabled } = await import('@/lib/governance')
+      userModelEnabled = isUserAuthorityModelEnabled()
+    } catch { userModelEnabled = false }
+
+    if (input.skipGraphCheck) {
+      ops.push(`G06: Graph check skipped (explicitly)`)
+    } else if (senderTitle === 'user') {
+      // ── R38.2 USER-SENDER ENFORCEMENT (model ON) ──────────────────────────
+      // SECURITY-CRITICAL: pre-model, this path SKIPPED the graph entirely
+      // (line 199 `senderTitle !== 'user'`), letting any "user" message bypass
+      // all routing. With the model ON and a resolved userId, we now compute the
+      // relational flags and run the graph fail-closed. With the model OFF (or
+      // no resolved userId — e.g. an internal/system caller passing from:'user')
+      // we preserve the legacy skip.
+      const senderUserId = input.authContext?.userId
+      if (userModelEnabled && senderUserId) {
+        try {
+          const us = await resolveUserSenderContext(senderUserId, recipientAgentId, recipientTitle, to)
+          const { validateMessageRoute } = await import('@/lib/communication-graph')
+          const recipientTitleStr = String(recipientTitle ?? '')
+          const recipientIsHuman = recipientTitleStr === 'human' || recipientTitleStr === 'user' || us.recipientIsUser
+          const graphResult = validateMessageRoute(senderTitle, recipientTitle, {
+            userSender: us,
+            recipientIsHuman,
+            recipientUserTitle: us.recipientIsUser ? 'user' : undefined,
+            inReplyToMessageId: input.inReplyTo,
+          })
+          if (!graphResult.allowed) {
+            result.error = `Message blocked by communication graph (R38.2): ${graphResult.reason || 'user message forbidden'}. ` +
+              (graphResult.suggestion ? `Suggestion: ${graphResult.suggestion}` : '')
+            ops.push(`G06: DENIED — R38.2 user-route: user → ${recipientTitle ?? 'unknown'} forbidden${graphResult.edgeType ? ` (${graphResult.edgeType})` : ''}`)
+            return result
+          }
+          ops.push(`G06: R38.2 user-route allows user → ${recipientTitle ?? 'unknown'}`)
+        } catch (graphErr) {
+          // FAIL-CLOSED: a broken module / lookup must never pass-through.
+          result.error = 'graph_check_unavailable'
+          ops.push(`G06: DENIED — user-route check unavailable (${graphErr instanceof Error ? graphErr.message : 'unknown error'})`)
+          console.error('[SendMessage] G06 user-route check failed (fail-closed):', graphErr)
+          return result
+        }
+      } else {
+        ops.push(`G06: Graph check skipped (user sender, model ${userModelEnabled ? 'on but no resolved userId' : 'off'})`)
+      }
+    } else if (senderTitle === 'system') {
+      ops.push(`G06: Graph check skipped (sender is system)`)
+    } else {
+      // ── Agent sender — existing R6 graph check (unchanged) ────────────────
       try {
         const { validateMessageRoute } = await import('@/lib/communication-graph')
         // recipientTitle is typed as AgentRole | null | undefined; AgentRole
@@ -204,8 +369,16 @@ export async function SendMessage(
         // sentinel on the wire. Normalise by string-cast before comparison.
         const recipientTitleStr = String(recipientTitle ?? '')
         const recipientIsHuman = recipientTitleStr === 'human' || recipientTitleStr === 'user'
+        // R38.2 — when the model is on, tell the graph the recipient user's
+        // title so the inbound "normal users don't receive from agents" rule
+        // fires. Resolve only when the recipient is a user (cheap no-op otherwise).
+        let recipientUserTitle: import('@/types/user').UserTitle | undefined
+        if (userModelEnabled && recipientIsHuman) {
+          recipientUserTitle = await resolveRecipientUserTitle(to)
+        }
         const graphResult = validateMessageRoute(senderTitle, recipientTitle, {
           recipientIsHuman,
+          recipientUserTitle,
           inReplyToMessageId: input.inReplyTo,
         })
         if (!graphResult.allowed) {
@@ -224,8 +397,6 @@ export async function SendMessage(
         console.error('[SendMessage] G06 graph check failed (fail-closed):', graphErr)
         return result
       }
-    } else {
-      ops.push(`G06: Graph check skipped (${input.skipGraphCheck ? 'explicitly' : `sender is ${senderTitle}`})`)
     }
 
     // ── G07: Team isolation check ─────────────────────────────

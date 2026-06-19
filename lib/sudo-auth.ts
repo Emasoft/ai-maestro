@@ -22,7 +22,7 @@
 
 import { randomBytes, timingSafeEqual } from 'crypto'
 import { verifyPasswordAuto } from '@/lib/argon2'
-import { loadGovernance } from './governance'
+import { loadGovernance, isUserAuthorityModelEnabled } from './governance'
 
 import { loadSecurityConfig } from '@/lib/security-config'
 
@@ -84,20 +84,73 @@ function sweep(): void {
 }
 
 /**
+ * Resolve which password hash to verify `password` against, per R37.4.
+ *
+ * - Model OFF (default): the single global `governance.passwordHash` — exactly
+ *   the legacy behavior. `subject` is opaque ('system-owner'); it is NOT used to
+ *   pick a hash. This keeps every pre-model caller and test byte-identical.
+ * - Model ON (R37.4): the ACTING user's own `UserRecord.passwordHash` (looked up
+ *   by `subject`=userId). While a MAESTRO-DELEGATE acts, the delegate's record is
+ *   the active maestro (getActiveMaestroUserId), so sudo accepts the DELEGATE's
+ *   password, not the original maestro's.
+ *
+ * R32 GUARD: under the model, `subject` MUST resolve to a USER record. Sudo is
+ * USER-via-UI only (R32.2) — an agent id never reaches here, and if one is
+ * passed we reject rather than fall back to a hash, so an agent can never mint a
+ * sudo token through a mis-routed call.
+ *
+ * Throws `sudo_mode_unavailable` when no usable hash exists.
+ */
+function resolveSudoPasswordHash(subject: string): string {
+  // FLAG-OFF (and the safe default if the flag read fails): global hash.
+  let modelOn = false
+  try {
+    modelOn = isUserAuthorityModelEnabled()
+  } catch {
+    modelOn = false
+  }
+
+  if (!modelOn) {
+    const config = loadGovernance()
+    if (!config.passwordHash) {
+      throw new Error('sudo_mode_unavailable: governance password not set')
+    }
+    return config.passwordHash
+  }
+
+  // FLAG-ON (R37.4): per-user verification against the acting user's own hash.
+  // R32 guard: subject must resolve to a UserRecord. The legacy sentinel
+  // 'system-owner' is NOT a user id — under the model, callers pass the acting
+  // user's id (the sudo-password route resolves it from the auth context).
+  const { getUser } = require('./user-registry') as typeof import('./user-registry')
+  const user = getUser(subject)
+  if (!user) {
+    // Never silently fall back to the global hash for an unknown/agent subject —
+    // that would let a mis-routed agent call mint a token (R32 violation).
+    throw new Error('sudo_subject_not_a_user: sudo is USER-via-UI only (R32) — subject must resolve to a user record')
+  }
+  if (!user.passwordHash) {
+    throw new Error('sudo_mode_unavailable: user has no sudo password set')
+  }
+  return user.passwordHash
+}
+
+/**
  * Verify the governance password and issue a new sudo token.
  * Returns the raw token string (show once, never stored) or throws on
  * password mismatch / missing password.
+ *
+ * R37.4: under the user-authority model the password is verified against the
+ * ACTING user's own hash (see resolveSudoPasswordHash). With the model OFF the
+ * single global governance password is used — identical to pre-model behavior.
  */
 export async function issueSudoToken(
   password: string,
   subject: string,
   operation?: SudoOperation
 ): Promise<{ token: string; expiresAt: number }> {
-  const config = loadGovernance()
-  if (!config.passwordHash) {
-    throw new Error('sudo_mode_unavailable: governance password not set')
-  }
-  const ok = await verifyPasswordAuto(config.passwordHash, password)
+  const passwordHash = resolveSudoPasswordHash(subject)
+  const ok = await verifyPasswordAuto(passwordHash, password)
   if (!ok) {
     throw new Error('sudo_mode_bad_password')
   }

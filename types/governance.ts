@@ -31,6 +31,29 @@ export interface GovernanceConfig {
   userName?: string             // Display name for the local user (auto-generated on first load if absent)
   /** Avatar identifier for the local user (AvatarPicker value, /public path, or URL) */
   userAvatar?: string
+  /**
+   * R36/R37/R38 user-authority model master switch (TRDD decision D3).
+   *
+   * DEFAULT (false / absent): the host behaves EXACTLY as before this model
+   * shipped — a single anonymous web session is the system owner, the
+   * comm-graph treats the human as one full-`Y` node, sudo verifies the single
+   * global governance password. The MAESTRO / MAESTRO-DELEGATE / user entities
+   * and the R38.2 comm-graph restrictions are completely INERT.
+   *
+   * true: the new model activates — `isSystemOwner` becomes "active MAESTRO",
+   * the comm-graph fails closed for unresolved user senders and enforces the
+   * non-MAESTRO restrictions (R38.2), sudo verifies the acting user's own
+   * password (R37.4), and a single MAESTRO-DELEGATE may suspend the MAESTRO.
+   *
+   * This flag is the ONLY thing that gates every breaking behavior change in
+   * the user-authority model; it is what lets the model ship without
+   * destabilizing the running single-operator deployment.
+   */
+  userAuthorityModelEnabled?: boolean
+  /** R36/R37: id of the MAESTRO user (set by the one-shot user migration). null = not migrated. */
+  maestroUserId?: string | null
+  /** R37.2: id of the currently-acting MAESTRO-DELEGATE user, or null when none. */
+  maestroDelegateUserId?: string | null
 }
 
 /** Default governance config for first-time initialization */
@@ -39,6 +62,9 @@ export const DEFAULT_GOVERNANCE_CONFIG: GovernanceConfig = {
   passwordHash: null,
   passwordSetAt: null,
   managerId: null,
+  userAuthorityModelEnabled: false,
+  maestroUserId: null,
+  maestroDelegateUserId: null,
 }
 
 /** Status of a team transfer request */

@@ -8,6 +8,7 @@ const mockAuthenticateRequest = vi.fn()
 const mockValidateGovernanceToken = vi.fn()
 const mockExtractSessionFromCookie = vi.fn()
 const mockValidateSession = vi.fn()
+const mockValidateSessionWithUser = vi.fn()
 
 vi.mock('@/lib/amp-auth', () => ({
   authenticateRequest: (...args: unknown[]) => mockAuthenticateRequest(...args),
@@ -20,6 +21,7 @@ vi.mock('@/lib/aid-token', () => ({
 vi.mock('@/lib/session-auth', () => ({
   extractSessionFromCookie: (...args: unknown[]) => mockExtractSessionFromCookie(...args),
   validateSession: (...args: unknown[]) => mockValidateSession(...args),
+  validateSessionWithUser: (...args: unknown[]) => mockValidateSessionWithUser(...args),
 }))
 
 const mockIsSessionSecret = vi.fn()
@@ -64,6 +66,12 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockExtractSessionFromCookie.mockReturnValue(null)
   mockValidateSession.mockReturnValue(false)
+  // R36/R37: agent-auth's outcome-1 calls validateSessionWithUser (model-aware).
+  // The mock derives validity from mockValidateSession and never supplies a
+  // userId — this models the FLAG-OFF path (valid session → system owner → {}),
+  // which is exactly what these legacy tests assert. A flag-on userId scenario
+  // would override mockValidateSessionWithUser per-test.
+  mockValidateSessionWithUser.mockImplementation(() => ({ valid: mockValidateSession() }))
   mockIsSessionSecret.mockImplementation((t: string) => t?.startsWith('mst_'))
   mockLoadAgents.mockReturnValue([])
   mockIsManager.mockReturnValue(false)

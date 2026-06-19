@@ -191,9 +191,11 @@ describe('element-management-service', () => {
       const { uninstallAllRolePlugins } = await import('@/services/element-management-service')
       await uninstallAllRolePlugins('/tmp/agent-dir')
 
-      // Should attempt to uninstall each title-mapped plugin (8 titles in TITLE_PLUGIN_MAP:
-      // MANAGER, CHIEF-OF-STAFF, ARCHITECT, INTEGRATOR, ORCHESTRATOR, MEMBER, MAINTAINER, AUTONOMOUS)
-      expect(mockExecFileAsync).toHaveBeenCalledTimes(8)
+      // Should attempt to uninstall each title-mapped plugin (9 titles in TITLE_PLUGIN_MAP:
+      // MANAGER, CHIEF-OF-STAFF, ARCHITECT, INTEGRATOR, ORCHESTRATOR, MEMBER, MAINTAINER,
+      // AUTONOMOUS, and ASSISTANT — the R39.2 user-assistant role-plugin added with the
+      // R36/R37/R38 user-authority model).
+      expect(mockExecFileAsync).toHaveBeenCalledTimes(9)
     })
   })
 

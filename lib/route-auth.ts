@@ -180,3 +180,71 @@ export function enforceSystemOwner(request: NextRequest): NextResponse | null {
   }
   return null
 }
+
+/**
+ * R37 — enforce that the caller is the ACTIVE MAESTRO.
+ *
+ * This is an explicit, readable alias of {@link enforceSystemOwner}: under the
+ * R36/R37/R38 user-authority model (decision D3), `buildAuthContext` redefines
+ * `isSystemOwner` to mean "the caller is the active MAESTRO" (`userTitle ∈
+ * {maestro, maestro-delegate}`) — see lib/agent-auth.ts. With the model OFF the
+ * meaning is the legacy "any logged-in web session", so this gate behaves
+ * EXACTLY like enforceSystemOwner does today (zero behavior change).
+ *
+ * Use this on the new delegate-handoff / user-management routes where the WHY is
+ * "only the MAESTRO may do this" rather than the generic "system owner".
+ */
+export function enforceMaestro(request: NextRequest): NextResponse | null {
+  return enforceSystemOwner(request)
+}
+
+/** Result of {@link requireUser}: a resolved human-user caller, or a 401/403. */
+export type RequireUserResult =
+  | { ok: true; userId?: string; userTitle?: AuthContext['userTitle']; context: AuthContext }
+  | { ok: false; error: NextResponse }
+
+/**
+ * R38.1 exception — admit a caller that is a HUMAN USER (any title, incl. a
+ * normal non-MAESTRO user), as opposed to an agent. Used by the few routes a
+ * normal user MAY hit (e.g. editing their OWN ASSISTANT profile within R39.4
+ * limits, their kanban, a PR request). It does NOT grant admin authority — the
+ * handler still authorizes the specific action against `userId`/`userTitle`.
+ *
+ * Rejects:
+ *   - an unauthenticated caller (401),
+ *   - an AGENT caller (403) — agents are never "users"; they authorize by AID
+ *     + title + portfolio token (R28/R32), not through user-facing routes.
+ *
+ * FLAG-OFF behavior: with the user-authority model disabled, a logged-in web
+ * session has no `userId` (it is the anonymous system owner), so this gate
+ * admits it as a user with `userId` undefined — the single-operator UI keeps
+ * working exactly as before. With the model ON, `userId`/`userTitle` are the
+ * resolved user identity.
+ */
+export function requireUser(request: NextRequest): RequireUserResult {
+  const writeBlock = checkWriteBlock(request.method)
+  if (writeBlock) return { ok: false, error: writeBlock }
+
+  const result = authenticateFromRequest(request)
+  if (result.error) {
+    recordAuthFailure()
+    return {
+      ok: false,
+      error: NextResponse.json({ error: result.error }, { status: result.status ?? 401 }),
+    }
+  }
+  recordAuthSuccess()
+  const ctx = buildAuthContext(result)
+  // An authenticated AGENT (has agentId) is not a user — refuse. A user/web
+  // session has no agentId.
+  if (ctx.agentId) {
+    return {
+      ok: false,
+      error: NextResponse.json(
+        { error: 'Forbidden — this route is for human users, not agents' },
+        { status: 403 }
+      ),
+    }
+  }
+  return { ok: true, userId: ctx.userId, userTitle: ctx.userTitle, context: ctx }
+}

@@ -82,8 +82,17 @@ export async function POST(request: NextRequest) {
       { status: 403 }
     )
   }
-  // Under R32 the subject is always the USER/system owner.
-  const subject = 'system-owner'
+  // R32: a sudo token is always minted for a USER (never an agent — the
+  // isSystemOwner gate above already refused agents).
+  //
+  // R37.4: under the user-authority model the token must be bound to the ACTING
+  // user's id so issueSudoToken verifies against THAT user's own password (a
+  // delegate's password while it acts, not the maestro's). With the model OFF
+  // ctx.userId is undefined, so the subject stays the legacy 'system-owner'
+  // sentinel — byte-identical to pre-model behavior and what the existing tests
+  // assert. The per-subject quota cap (countBySubject) therefore caps per-user
+  // when the model is on, and globally when it is off.
+  const subject = ctx.userId ?? 'system-owner'
 
   let raw: unknown
   try {

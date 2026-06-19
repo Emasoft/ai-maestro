@@ -59,6 +59,8 @@
     "POST_/api/settings/auto-update/run": "strict",
     "POST_/api/agents/cemetery": "strict",
     "POST_/api/agents/import": "strict",
-    "POST_/api/agents/[id]/transfer": "strict"
+    "POST_/api/agents/[id]/transfer": "strict",
+    "POST_/api/governance/maestro-delegate": "strict",
+    "DELETE_/api/governance/maestro-delegate": "strict"
   }
 }

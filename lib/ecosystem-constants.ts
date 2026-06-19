@@ -276,6 +276,16 @@ export const ROLE_PLUGIN_ORCHESTRATOR = 'ai-maestro-orchestrator-agent'
 export const ROLE_PLUGIN_PROGRAMMER = 'ai-maestro-programmer-agent'
 export const ROLE_PLUGIN_MAINTAINER = 'ai-maestro-maintainer-agent'
 export const ROLE_PLUGIN_AUTONOMOUS = 'ai-maestro-autonomous-agent'
+/**
+ * R39.2 ASSISTANT role-plugin. A LOCAL source (decision D4) — authored into
+ * ~/agents/role-plugins/, NOT one of the 8 predefined/published GitHub
+ * role-plugins, so it is intentionally absent from PREDEFINED_ROLE_PLUGIN_NAMES.
+ * It runs a mix of the MANAGER (planning) + AUTONOMOUS (programming) role-plugins
+ * WITHOUT agent/team-creation privileges. Listed in the title→plugin and
+ * compatible-titles maps so title→plugin resolution and tsc exhaustiveness stay
+ * total now that 'assistant' is a first-class AgentRole.
+ */
+export const ROLE_PLUGIN_ASSISTANT = 'ai-maestro-assistant-role-agent'
 
 /** All predefined role-plugin names */
 export const PREDEFINED_ROLE_PLUGIN_NAMES = [
@@ -299,6 +309,7 @@ export const ROLE_PLUGIN_MAIN_AGENTS: Record<string, string> = {
   [ROLE_PLUGIN_PROGRAMMER]: 'ai-maestro-programmer-agent-main-agent',
   [ROLE_PLUGIN_MAINTAINER]: 'ai-maestro-maintainer-agent-main-agent',
   [ROLE_PLUGIN_AUTONOMOUS]: 'ai-maestro-autonomous-agent-main-agent',
+  [ROLE_PLUGIN_ASSISTANT]: 'ai-maestro-assistant-role-agent-main-agent',
 }
 
 /** Map from governance title to its required role-plugin.
@@ -319,6 +330,7 @@ export const TITLE_PLUGIN_MAP: Record<string, string> = {
   'MEMBER': ROLE_PLUGIN_PROGRAMMER,
   'MAINTAINER': ROLE_PLUGIN_MAINTAINER,
   'AUTONOMOUS': ROLE_PLUGIN_AUTONOMOUS,
+  'ASSISTANT': ROLE_PLUGIN_ASSISTANT,
 }
 
 /** Map from role-plugin name to compatible governance titles */
@@ -331,6 +343,7 @@ export const PLUGIN_COMPATIBLE_TITLES: Record<string, string[]> = {
   [ROLE_PLUGIN_PROGRAMMER]: ['MEMBER'],
   [ROLE_PLUGIN_MAINTAINER]: ['MAINTAINER'],
   [ROLE_PLUGIN_AUTONOMOUS]: ['AUTONOMOUS'],
+  [ROLE_PLUGIN_ASSISTANT]: ['ASSISTANT'],
 }
 
 // ── Repo URLs ───────────────────────────────────────────────

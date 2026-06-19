@@ -51,6 +51,9 @@ const TITLE_COLORS: Record<AgentRole, string> = {
   member: 'border-gray-500/60 bg-gray-500/10 text-gray-400',
   autonomous: 'border-gray-500/60 bg-gray-500/10 text-gray-400',
   maintainer: 'border-emerald-500/60 bg-emerald-500/10 text-emerald-400',
+  // R39.2 ASSISTANT — auto-created per user, not selectable in the wizard
+  // (STANDALONE_TITLES omits it). Entry present only for Record exhaustiveness.
+  assistant: 'border-teal-500/60 bg-teal-500/10 text-teal-400',
 }
 
 // Plugin compatibility is now determined dynamically by scanning .agent.toml compatible-titles

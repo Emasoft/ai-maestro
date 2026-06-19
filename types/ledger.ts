@@ -56,6 +56,24 @@ export type LedgerOp =
    * the agent-registry ledger.
    */
   | 'issue_portfolio_token' | 'consume_portfolio_token' | 'revoke_portfolio_token'
+  // ── Identity / AID lifecycle (R33/R34/R35/R40) ───────────────
+  /**
+   * The host-signed AID-association chain (R34.1 anchor). These ops record the
+   * binding between an Ed25519 fingerprint and an agent (or the foreign-host
+   * approval that re-issued a fresh native AID). Appended to the SAME
+   * agents/registry.json ledger as create_agent, so a single chain proves both
+   * the agent's existence and its identity. `verify()` does not enum-check `op`,
+   * so adding these is additive — existing ledger files verify byte-for-byte.
+   *
+   * - aid_associate       — binds a fingerprint → agentId. THE row R34.1 searches for.
+   * - aid_reissue         — a foreign AID retired, a new native AID minted under MAESTRO sudo (R34.2).
+   * - aid_approve_foreign — MAESTRO approved a foreign agent/user AID for this host (R35.2).
+   * - aid_revoke          — an AID association revoked (compromise / agent delete) — recovery must honor it.
+   * - foreign_user_grant  — R40.2 MANAGER-scoped per-command grant to a foreign user.
+   * - foreign_user_revoke — R40.2 revoke of such a grant.
+   */
+  | 'aid_associate' | 'aid_reissue' | 'aid_approve_foreign' | 'aid_revoke'
+  | 'foreign_user_grant' | 'foreign_user_revoke'
 
 /**
  * LedgerActor — who initiated the operation.

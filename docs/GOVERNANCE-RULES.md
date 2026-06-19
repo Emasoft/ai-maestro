@@ -1362,6 +1362,23 @@ Read-only operations (queries, lookups, calculations) do NOT need AIO functions 
 | R40.1 | Non-native users (registered on another host) are subject to all R38 restrictions, **and** require the **MAESTRO's approval for every agent or team creation** | Explicit (USER) |
 | R40.2 | The MANAGER may restrict specific API commands to specific foreign users, per the MAESTRO's instructions | Explicit (USER) |
 
+> **Implementation (R33/R34/R35/R40, 2026-06-19).** The signed-ledger identity
+> model ships behind `ledger.enforceAidAssociation` (security config, **default
+> OFF**, decision D5) so flipping it on is a deliberate act after a clean backfill
+> — with it OFF the behavior is unchanged. Modules:
+> `lib/aid-ledger-authority.ts` (`isAidAssociated` = the R34.1 gate;
+> `reconstructAgentAuthState` = R33 recovery; `record{AidAssociation,AidReissue,
+> AidRevocation,ForeignApproval}`), `lib/foreign-approval-registry.ts` +
+> `types/foreign-approval.ts` (the R35 pending queue),
+> `app/api/v1/auth/token/route.ts` + `lib/agent-auth.ts` (R34.1 MINT/SPEND gates),
+> `app/api/agents/foreign-approvals/[id]/{approve,reject}/route.ts` +
+> `app/api/system/aid-recover/route.ts` (MAESTRO-via-UI + sudo, R32-compliant —
+> never agent-reachable), and `assertForeignUserMayCall` in
+> `services/element-management-service.ts` (R40, restrictable set
+> `{create_agent, create_team}`). The new `aid_*` ledger ops are additive in
+> `types/ledger.ts`. Full surface + the breaking foreign-import 202 contract:
+> `docs/API-CHANGES.md` §6.
+
 ---
 
 ## Role-Based Permission Matrix

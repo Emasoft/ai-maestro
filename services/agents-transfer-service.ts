@@ -8,7 +8,7 @@
 import { getAgent, getAgentByAlias, getAgentByName, getAgentSkills, loadAgents, saveAgents } from '@/lib/agent-registry'
 import { getSkillById } from '@/lib/marketplace-skills'
 import { hasKeyPair, getKeysDir, getRegistrationsDir, listRegisteredProviders, generateKeyPair, saveKeyPair } from '@/lib/amp-keys'
-import { getSelfHost } from '@/lib/hosts-config'
+import { getSelfHost, getSelfHostId } from '@/lib/hosts-config'
 import archiver from 'archiver'
 import yauzl from 'yauzl'
 import fs from 'fs'
@@ -590,8 +590,18 @@ export function createTranscriptExportJob(
  */
 export async function importAgent(
   zipBuffer: Buffer,
-  options: AgentImportOptions = {}
-): Promise<ServiceResult<AgentImportResult>> {
+  options: AgentImportOptions = {},
+  /**
+   * R34.2/R35 — internal control flags NOT exposed on the public
+   * AgentImportOptions type. `bypassForeignApproval` is set ONLY by the
+   * foreign-approval APPROVE route (app/api/agents/foreign-approvals/[id]/approve)
+   * after the MAESTRO has approved under sudo — it lets the materialize step run
+   * the native import path on a foreign export. No external/API caller may set
+   * it (the import route never passes it), so a foreign agent can NEVER skip the
+   * approval queue.
+   */
+  internal: { bypassForeignApproval?: boolean } = {},
+): Promise<ServiceResult<AgentImportResult & { pendingApprovalId?: string }>> {
   const warnings: string[] = []
   const errors: string[] = []
   const stats: AgentImportResult['stats'] = {
@@ -646,6 +656,68 @@ export async function importAgent(
     const importedAgentName = importedAgent.name
     if (!importedAgentName) {
       return { error: 'Invalid agent export: agent has no name', status: 400 }
+    }
+
+    // ── R34.2/R35: foreign-origin gate ────────────────────────────────────
+    // An agent exported from ANOTHER host is NOT auto-accepted. The biggest
+    // behavioral change of this item: we capture the INCOMING provenance from
+    // the manifest's exportedFrom.hostname (the source overwrites the agent's
+    // deployment to {type:'local', this-host} below at "Prepare agent for
+    // import", so we must read provenance from the manifest BEFORE that). If it
+    // differs from this host, we stage the ZIP, enqueue a pending approval, and
+    // return 202 — NO keys imported, NO AID registered, NO ampIdentity written.
+    // The real import + a FRESH native AID happen only in the approve route
+    // under MAESTRO sudo. The native (same-host, e.g. backup restore) path is
+    // unchanged. internal.bypassForeignApproval is set ONLY by that approve
+    // route; no API caller can set it.
+    const exportedFromHost = (manifest.exportedFrom?.hostname ?? '')
+      .toLowerCase()
+      .replace(/\.local$/, '')
+    const selfHostId = getSelfHostId()
+    const isForeignOrigin = exportedFromHost !== '' && exportedFromHost !== selfHostId
+    if (isForeignOrigin && !internal.bypassForeignApproval) {
+      const foreignFingerprint =
+        importedAgent.ampIdentity?.fingerprint ||
+        ((importedAgent.metadata?.amp as Record<string, unknown> | undefined)?.fingerprint as string | undefined) ||
+        `unknown-${importedAgent.id}`
+      try {
+        // Stage the ZIP under ~/.aimaestro/tmp so the approve route can
+        // materialize it later. We do NOT keep keys/AID anywhere live.
+        const tmpDir = path.join(AIMAESTRO_DIR, 'tmp')
+        ensureDir(tmpDir)
+        const stagedPath = path.join(tmpDir, `foreign-import-${importedAgent.id}-${Date.now()}.zip`)
+        fs.writeFileSync(stagedPath, zipBuffer, { mode: 0o600 })
+
+        const { upsertForeignApproval } = await import('@/lib/foreign-approval-registry')
+        const approvalId = `${foreignFingerprint}@${exportedFromHost}`
+        upsertForeignApproval({
+          id: approvalId,
+          fingerprint: foreignFingerprint,
+          kind: 'agent',
+          sourceHostId: exportedFromHost,
+          displayName: importedAgentName,
+          status: 'pending',
+          requestedAt: new Date().toISOString(),
+          importPayloadPath: stagedPath,
+        })
+
+        // Clean up the extraction temp dir (we keep only the staged ZIP).
+        if (tempDir && fs.existsSync(tempDir)) {
+          try { fs.rmSync(tempDir, { recursive: true, force: true }) } catch { /* best-effort */ }
+          tempDir = null
+        }
+
+        warnings.push(`Foreign agent from host "${exportedFromHost}" requires MAESTRO approval (R35). Queued as ${approvalId}.`)
+        return {
+          data: { success: false, warnings, errors, stats, pendingApprovalId: approvalId },
+          status: 202,
+        }
+      } catch (stageErr) {
+        return {
+          error: `Failed to queue foreign agent for approval: ${stageErr instanceof Error ? stageErr.message : stageErr}`,
+          status: 500,
+        }
+      }
     }
 
     // Check for name conflict
@@ -934,6 +1006,28 @@ export async function importAgent(
         }
       } catch (error) {
         warnings.push(`Failed to generate new keypair: ${error}`)
+      }
+    }
+
+    // R34.1 — record the AID↔agent association for a NATIVE import (e.g. backup
+    // restore on the same host) so the restored agent's fingerprint is
+    // ledger-backed and R34.1 accepts its tokens post-import.
+    //
+    // CRITICAL (R34.2 impersonation defense): we do NOT associate the imported
+    // fingerprint when bypassForeignApproval is set. On that path the keys just
+    // imported are the FOREIGN agent's keys — the approve route re-issues a FRESH
+    // native AID and records the association for the NEW fingerprint, leaving the
+    // foreign fingerprint permanently unbacked. Associating it here would defeat
+    // the whole point of the re-issue.
+    if (!internal.bypassForeignApproval) {
+      try {
+        const importedFp = agentToImport.ampIdentity?.fingerprint
+        if (importedFp) {
+          const { recordAidAssociation } = await import('@/lib/aid-ledger-authority')
+          recordAidAssociation(agentToImport.id, importedFp, getSelfHostId(), { actor: 'system' })
+        }
+      } catch (assocErr) {
+        warnings.push(`Failed to record AID association for imported agent: ${assocErr instanceof Error ? assocErr.message : assocErr}`)
       }
     }
 

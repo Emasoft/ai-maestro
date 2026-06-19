@@ -198,6 +198,78 @@ documentation tightening, not a wire change.
 See `docs/CLAUDE-CODE-COMPATIBILITY-AUDIT.md` for the per-changelog-
 entry verdict. Net effect on this repo's API: ZERO required changes.
 
+## 6. R33/R34/R35/R40 — signed-ledger AID authority + foreign-host approval
+
+Implements the signed-ledger-as-ultimate-truth identity model. Shipped
+behind a staged-rollout flag, `ledger.enforceAidAssociation` (in the
+encrypted security config, **default OFF** per decision D5). With the
+flag OFF the system behaves EXACTLY as before — a valid AID is trusted
+without a ledger-history check (zero wire/behavior change). With it ON,
+the four rules below activate.
+
+### New ledger ops (`types/ledger.ts`, additive)
+
+`aid_associate`, `aid_reissue`, `aid_approve_foreign`, `aid_revoke`,
+`foreign_user_grant`, `foreign_user_revoke`. All append to the existing
+`agents/registry.json` signed chain (`verify()` does not enum-check
+`op`, so existing ledger files verify byte-for-byte — no migration).
+
+### R34.1 — AID must be ledger-backed (flag-gated)
+
+- **MINT** (`POST /api/v1/auth/token`): when the flag is ON, an AID
+  whose fingerprint has no `aid_associate`/`aid_reissue` for the agent
+  it claims is refused with `403 { error: "aid_no_ledger_history" }`.
+  When the live token store was lost but the ledger still proves the
+  binding, the title/team are reconstructed from the ledger (R33) and
+  the ledger value is authoritative over the registry.
+- **SPEND** (`lib/agent-auth.ts`, all three agent paths — `aim_tk_`,
+  `mst_`, IBCT): same check before returning a verified agent identity;
+  an unbacked agent is rejected `403 aid_no_ledger_history`. This is an
+  AID-validity check (R28 check 1), **not** a sudo gate (R32) — agents
+  are supposed to pass it.
+
+### R33 — recovery (new ops route)
+
+- `POST /api/system/aid-recover` (**strict**, system-owner + sudo) —
+  rebuild an agent's auth state from the signed ledger for a given
+  `agentId` or `fingerprint`; reports the recovered `{title, team,
+  fingerprint}`. The automatic path runs inside the token-route mint
+  fallback above.
+
+### R34.2 / R35 — foreign-agent import is no longer auto-accepted (BREAKING)
+
+- `POST /api/agents/import`: when the export's `manifest.exportedFrom.hostname`
+  differs from this host, the import is **not** performed. It returns
+  `202 { success:false, pendingApprovalId }`, stages the ZIP, and
+  enqueues a pending entry — **no keys imported, no AID registered**.
+  Native (same-host) imports keep the existing fast path and now record
+  an `aid_associate` for the restored agent.
+- New routes (**all strict, system-owner + sudo — MAESTRO via UI only**):
+  - `GET  /api/agents/foreign-approvals` — list pending approvals.
+  - `POST /api/agents/foreign-approvals/[id]/approve` — materialize the
+    staged agent, **re-issue a fresh native AID** (discarding the
+    foreign key), and record `aid_reissue` + `aid_associate` +
+    `aid_approve_foreign`. The foreign fingerprint stays permanently
+    unbacked (impersonation defense).
+  - `POST /api/agents/foreign-approvals/[id]/reject` — discard the
+    staged import.
+
+### R40 — foreign-user per-command grant
+
+- `CreateAgent` (and, by the exported `assertForeignUserMayCall`
+  helper, `create_team`) refuse a foreign (non-native) user unless the
+  MAESTRO granted that command (v1 restrictable set:
+  `{create_agent, create_team}`). Inert for native users / the MAESTRO
+  / agents, and inert entirely when the user-authority model is OFF (no
+  `userId` is resolved then).
+
+**Effect on plugins:** No wire change while the flag is OFF. The
+foreign-import 202 contract is the only breaking change, and only for a
+host that flips enforcement on AND imports a cross-host export — the
+replacement is the approval queue above.
+
+**Reference:** R33/R34/R35/R40 in `docs/GOVERNANCE-RULES.md`.
+
 ## How plugins should consume this doc
 
 1. The role-plugins use `https://raw.githubusercontent.com/Emasoft/ai-maestro/governance-rules/docs/GOVERNANCE-RULES.md` (and similar for other docs) to learn about API surface.

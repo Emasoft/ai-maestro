@@ -2673,6 +2673,22 @@ export async function markAgentAsAMPRegistered(
   }
 
   saveAgents(agents)
+
+  // R34.1 — record the AID↔agent association in the signed ledger the moment the
+  // registry's metadata.amp.fingerprint is set. This is the CANONICAL binding
+  // point for the normal AMP-register flow (the precise field token/route.ts and
+  // agent-auth.ts read). recordAidAssociation is idempotent (cache-deduped), so
+  // a re-register or the startup backfill won't add duplicate rows. Lazy-require
+  // to avoid a static cycle (aid-ledger-authority lazy-requires this module).
+  try {
+    const { recordAidAssociation } = require('./aid-ledger-authority') as typeof import('./aid-ledger-authority')
+    recordAidAssociation(agentId, ampData.fingerprint, getSelfHostId(), { actor: 'system' })
+  } catch (err) {
+    // Fire-and-forget audit — a failure here must never block AMP registration.
+    console.error('[agent-registry] AUDIT GAP: aid_associate NOT recorded for',
+      agentId, err instanceof Error ? err.message : err)
+  }
+
   return agents[index]
   }) // end withLock('agents')
 }

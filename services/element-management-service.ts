@@ -128,6 +128,76 @@ async function gate0Auth(
   return null
 }
 
+// ── R40 foreign-user per-command guard ──────────────────────────
+//
+// R40.1: a non-native (foreign) USER needs MAESTRO approval for EVERY agent or
+// team creation; R40.2: the MANAGER may restrict specific API commands per
+// foreign user. The restrictable command set for v1 (decision D5) is
+// {create_agent, create_team}. A foreign user may run such a command ONLY when
+// its ForeignApprovalEntry grants it (grantedCommands).
+//
+// NATURALLY INERT WHEN THE USER-AUTHORITY MODEL IS OFF: with the model off,
+// buildAuthContext never sets authContext.userId (no user identity is resolved),
+// so isForeignUser() is false and assertForeignUserMayCall() always allows —
+// zero behavior change for the single-operator deployment.
+
+/** The R40.2 restrictable command set (v1). */
+export const R40_RESTRICTABLE_COMMANDS: ReadonlySet<string> = new Set(['create_agent', 'create_team'])
+
+/**
+ * Is the caller a FOREIGN human user? True only when an authenticated user id is
+ * present AND its registry record exists with native===false. A native user, the
+ * MAESTRO/system-owner, and any agent caller are NOT foreign users.
+ */
+export async function isForeignUser(authContext: AuthContext | null | undefined): Promise<boolean> {
+  if (!authContext?.userId) return false
+  try {
+    const { getUser } = await import('@/lib/user-registry')
+    const rec = getUser(authContext.userId)
+    return !!rec && rec.native === false
+  } catch {
+    // Fail toward LESS restriction on a registry glitch — R40 only ADDS a gate
+    // for foreign users; if we cannot prove the user is foreign, treat as native
+    // (the user's own AID approval gate in agent-auth already fenced foreign users).
+    return false
+  }
+}
+
+/**
+ * R40 guard — throw-free deny check. Returns an error string when a foreign user
+ * is NOT permitted to run `command`, else null (allowed). `command` must be one
+ * of R40_RESTRICTABLE_COMMANDS. A native/MAESTRO/agent caller is always allowed
+ * here (their authority is governed elsewhere — R38/R28/gate0Auth).
+ */
+export async function assertForeignUserMayCall(
+  authContext: AuthContext | null | undefined,
+  command: string,
+): Promise<string | null> {
+  if (!(await isForeignUser(authContext))) return null
+  // It IS a foreign user. Only restrictable commands are gated by R40.2; a
+  // non-restrictable command falls through to the normal R38 path.
+  if (!R40_RESTRICTABLE_COMMANDS.has(command)) return null
+  try {
+    const { getUser } = await import('@/lib/user-registry')
+    const { loadForeignApprovals } = await import('@/lib/foreign-approval-registry')
+    const rec = getUser(authContext!.userId!)
+    const fp = rec?.aid
+    if (!fp) {
+      return `R40: foreign user has no AID on record; "${command}" denied`
+    }
+    // Find this user's approval entry (kind:'user') by fingerprint.
+    const grant = loadForeignApprovals().find(e => e.kind === 'user' && e.fingerprint === fp)
+    if (grant && grant.status === 'approved' && (grant.grantedCommands ?? []).includes(command)) {
+      return null
+    }
+    return `R40: foreign user is not granted "${command}" by the MAESTRO`
+  } catch (err) {
+    // Fail CLOSED for a foreign user on a restrictable command — R40 is a
+    // security ADD; a glitch must not silently grant a foreign user create rights.
+    return `R40: could not verify foreign-user grant for "${command}" (${err instanceof Error ? err.message : 'error'})`
+  }
+}
+
 // GitHub marketplace for predefined role plugins
 export const GITHUB_MARKETPLACE_NAME = GITHUB_MARKETPLACE_NAME_IMPORT
 
@@ -6214,6 +6284,26 @@ export async function DeleteAgent(
       ops.push(`LEDGER: WARN — per-op append failed: ${ledgerErr instanceof Error ? ledgerErr.message : ledgerErr}`)
     }
 
+    // R34.1 — revoke the agent's AID association in the signed ledger. A deleted
+    // agent's fingerprint must STOP backing any token: reconstruct + the R34.1
+    // gate honor a later aid_revoke over the earlier aid_associate, so a stolen
+    // token for a deleted agent is refused once enforcement is on. Best-effort:
+    // never blocks the delete.
+    try {
+      const fp = (agent.metadata?.amp as Record<string, unknown> | undefined)?.fingerprint as string | undefined
+      if (fp) {
+        const { recordAidRevocation } = await import('@/lib/aid-ledger-authority')
+        recordAidRevocation(
+          agentId,
+          fp,
+          hard ? 'agent-hard-deleted' : 'agent-soft-deleted',
+          options.authContext?.agentId ? 'agent' : 'user',
+        )
+      }
+    } catch (revokeErr) {
+      ops.push(`LEDGER: WARN — aid_revoke emit failed: ${revokeErr instanceof Error ? revokeErr.message : revokeErr}`)
+    }
+
     result.success = true
     console.log(`[DeleteAgent] "${agent.name}" deleted (hard=${hard}, ${ops.length} gates)`)
     return result
@@ -6284,6 +6374,22 @@ export async function CreateAgent(
   const result: CreateAgentResult = { success: false, agentId: null, operations: ops, restartNeeded: false }
 
   try {
+    // ── G00f: R40 foreign-user gate ──────────────────────────
+    // A foreign (non-native) user needs an explicit MAESTRO grant for
+    // create_agent (R40.1/R40.2). Inert for native users, the MAESTRO/system-
+    // owner, and agents — and inert entirely when the user-authority model is
+    // off (no userId is resolved then). Runs first so an ungranted foreign user
+    // is refused before any work.
+    {
+      const foreignErr = await assertForeignUserMayCall(desired.authContext, 'create_agent')
+      if (foreignErr) {
+        result.error = foreignErr
+        ops.push(`G00f: DENIED — ${foreignErr}`)
+        return result
+      }
+      ops.push('G00f: R40 foreign-user check passed')
+    }
+
     // ── G01: Validate name format ────────────────────────────
     const name = desired.name?.toLowerCase().trim()
     if (!name || !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(name)) {

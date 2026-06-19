@@ -38,6 +38,16 @@ export interface SecurityConfig {
     verifyOnStartup: boolean
     maxEntriesPerFile: number
     compactAfterEntries: number
+    /**
+     * R33/R34 staged-rollout flag (decision D5, default OFF). When false the
+     * AID-ledger-association gates (token MINT in app/api/v1/auth/token, token
+     * SPEND in lib/agent-auth) are SKIPPED entirely — behavior is byte-identical
+     * to pre-R33/R34. When true, an AID with no signed-ledger association is
+     * refused (R34.1) and the ledger-reconstructed title/team is authoritative
+     * (R33). Flip to true ONLY after backfillAidAssociations() has run on a clean
+     * chain — otherwise every pre-existing agent is locked out.
+     */
+    enforceAidAssociation: boolean
   }
   passwordPolicy: {
     minLength: number
@@ -81,6 +91,9 @@ const DEFAULTS: SecurityConfig = {
     verifyOnStartup: true,
     maxEntriesPerFile: 10000,
     compactAfterEntries: 5000,
+    // R33/R34 staged-rollout flag — default OFF (opt-in, decision D5). Zero
+    // behavior change until explicitly enabled after a clean backfill+verify.
+    enforceAidAssociation: false,
   },
   passwordPolicy: {
     minLength: 8,
@@ -173,6 +186,14 @@ function clampConfig(config: Record<string, unknown>): void {
   if (sa) {
     clamp(sa, 'sudoTokenTtlSeconds', 10, 600)
     clamp(sa, 'sessionTtlDays', 1, 90)
+  }
+  // R33/R34 — coerce enforceAidAssociation to a STRICT boolean on load. A
+  // tampered .enc that set it to a truthy non-boolean (e.g. the string "false",
+  // which is truthy) must not silently turn on the AID-ledger gate. `=== true`
+  // means only a real boolean true enables enforcement; anything else is OFF.
+  const lg = config.ledger as Record<string, unknown> | undefined
+  if (lg && 'enforceAidAssociation' in lg) {
+    lg.enforceAidAssociation = lg.enforceAidAssociation === true
   }
 }
 

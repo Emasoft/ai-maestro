@@ -19,6 +19,9 @@ import { validateGovernanceToken } from './aid-token'
 import { extractSessionFromCookie, validateSessionWithUser } from './session-auth'
 import { isSessionSecret, validateSessionSecret } from './session-secret'
 import { verifyCompactIbct } from './ibct'
+import { loadSecurityConfig } from './security-config'
+import { isAidAssociated } from './aid-ledger-authority'
+import { getAgent as getAgentRecord } from './agent-registry'
 import type { UserTitle } from '@/types/user'
 
 export interface AgentAuthResult {
@@ -163,6 +166,14 @@ export function authenticateAgent(
         }
       }
 
+      // R34.1 SPEND gate (no-op when enforceAidAssociation is OFF — default).
+      if (!assertAidLedgerBacked(aidRecord.agent_id)) {
+        return {
+          error: 'aid_no_ledger_history: AID has no signed-ledger association on this host (R34.1)',
+          status: 403,
+        }
+      }
+
       return {
         agentId: aidRecord.agent_id,
         governanceTitle: aidRecord.governance_title,
@@ -186,6 +197,14 @@ export function authenticateAgent(
         return {
           error: 'X-Agent-Id does not match authenticated agent identity',
           status: 403
+        }
+      }
+
+      // R34.1 SPEND gate (no-op when enforceAidAssociation is OFF — default).
+      if (!assertAidLedgerBacked(agentRecord.id)) {
+        return {
+          error: 'aid_no_ledger_history: AID has no signed-ledger association on this host (R34.1)',
+          status: 403,
         }
       }
 
@@ -267,6 +286,14 @@ export async function authenticateFromRequestAsync(
         const agentId = claims.sub.startsWith('aip:key:ed25519:')
           ? claims.sub.slice('aip:key:ed25519:'.length)
           : claims.sub
+
+        // R34.1 SPEND gate (no-op when enforceAidAssociation is OFF — default).
+        if (!assertAidLedgerBacked(agentId)) {
+          return {
+            error: 'aid_no_ledger_history: AID has no signed-ledger association on this host (R34.1)',
+            status: 403,
+          }
+        }
 
         const govContext = resolveGovernanceContext(agentId)
         return {
@@ -488,6 +515,45 @@ function resolveUserTitle(userId: string): UserTitle {
   } catch (err) {
     console.warn('[agent-auth] resolveUserTitle failed, defaulting to user:', err)
     return 'user'
+  }
+}
+
+/**
+ * R34.1 SPEND gate — is the agent behind a minted token still backed by a
+ * signed-ledger AID association?
+ *
+ * Decision D5 (staged): when ledger.enforceAidAssociation is OFF (default) this
+ * returns true UNCONDITIONALLY — token spend behaves EXACTLY as before R34, so
+ * there is zero regression. When ON, a token whose agent has no current (non-
+ * revoked) ledger association to its own fingerprint is rejected.
+ *
+ * This is NOT a sudo gate (R32): it is the R28 check-1 AID-validity check, which
+ * agents are supposed to pass. It only ever DENIES an agent whose identity the
+ * ledger does not back (tampered registry / revoked / deleted agent).
+ *
+ * Lazy-`require`s its deps (same cycle-avoidance as the helpers above).
+ */
+function assertAidLedgerBacked(agentId: string): boolean {
+  // loadSecurityConfig + isAidAssociated are STATIC imports (top of file): they
+  // are cycle-free (neither imports agent-auth), and a static import resolves the
+  // module identically in production AND under vitest's mock layer — a runtime
+  // `require('./security-config')` here did NOT pick up vi.mock in tests.
+  if (!loadSecurityConfig().ledger.enforceAidAssociation) return true
+  try {
+    // getAgentRecord is a STATIC import (top of file) — vitest's runtime
+    // `require('./agent-registry')` does NOT resolve the .ts in tests, and the
+    // static edge adds no new cycle (aid-ledger-authority, also static-imported
+    // here, already pulls agent-registry).
+    const agent = getAgentRecord(agentId)
+    const fp = (agent?.metadata?.amp as Record<string, unknown> | undefined)?.fingerprint as string | undefined
+    if (!fp) return false
+    const a = isAidAssociated(fp)
+    return a.ok && a.agentId === agentId && !a.revoked
+  } catch (err) {
+    // Enforcement is ON but we cannot verify → fail CLOSED (deny). With the flag
+    // OFF we already returned true above, so this never affects default behavior.
+    console.warn('[agent-auth] assertAidLedgerBacked verification failed, denying:', err)
+    return false
   }
 }
 

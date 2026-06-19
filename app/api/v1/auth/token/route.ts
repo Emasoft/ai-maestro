@@ -140,7 +140,10 @@ export async function POST(request: Request) {
     }
 
     // 7. Resolve governance context
-    const governanceTitle = (agent.governanceTitle as string) || 'autonomous'
+    // R34: `let` (not const) so the R34.1/R33 block below can override it with
+    // the ledger-reconstructed title when recovery is used (the ledger BEATS the
+    // registry on divergence — "ultimate source of truth").
+    let governanceTitle = (agent.governanceTitle as string) || 'autonomous'
 
     // Find the team this agent belongs to
     let teamId: string | null = null
@@ -153,6 +156,39 @@ export async function POST(request: Request) {
       ) {
         teamId = team.id
         break
+      }
+    }
+
+    // 7b. R34.1 ledger gate + R33 recovery fallback (decision D5, staged).
+    // When ledger.enforceAidAssociation is OFF (default) this block is SKIPPED
+    // entirely — the token is minted exactly as before (zero regression). When
+    // ON: an AID whose fingerprint has no signed-ledger association to THIS agent
+    // is refused (R34.1); if the live token store was lost but the ledger still
+    // proves the binding, we reconstruct {title,team} from the ledger (R33) and
+    // mint with those AUTHORITATIVE values.
+    {
+      const { loadSecurityConfig } = await import('@/lib/security-config')
+      if (loadSecurityConfig().ledger.enforceAidAssociation) {
+        const fp = (agent.metadata?.amp as Record<string, unknown> | undefined)?.fingerprint as string | undefined
+        const { isAidAssociated, reconstructAgentAuthState } = await import('@/lib/aid-ledger-authority')
+        const assoc = fp ? isAidAssociated(fp) : { ok: false as const }
+        if (!assoc.ok || assoc.agentId !== agent.id || assoc.revoked) {
+          // Not backed by a current association → try the R33 recovery path.
+          const recovered = fp ? reconstructAgentAuthState(fp) : null
+          if (!recovered || recovered.agentId !== agent.id) {
+            return NextResponse.json(
+              {
+                error: 'aid_no_ledger_history',
+                message: 'AID has no signed-ledger association on this host; refused (R34.1).',
+              },
+              { status: 403 }
+            )
+          }
+          // R34: the ledger is the ultimate source of truth — its reconstructed
+          // title/team override the (possibly tampered/stale) registry values.
+          governanceTitle = recovered.governanceTitle
+          teamId = recovered.teamId
+        }
       }
     }
 

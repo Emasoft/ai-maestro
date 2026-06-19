@@ -1869,7 +1869,10 @@ export interface ChangeTitleResult {
 }
 
 const VALID_TITLES: ReadonlySet<string> = new Set([
-  'manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member', 'autonomous', 'maintainer',
+  // R39.1/R39.2: 'assistant' is the 9th governance title — the per-user ASSISTANT
+  // agent running the ai-maestro-assistant-role-agent role-plugin. Without it,
+  // ChangeTitle(agentId,'assistant',…) is rejected at Gate 1 ("Invalid title").
+  'manager', 'chief-of-staff', 'orchestrator', 'architect', 'integrator', 'member', 'autonomous', 'maintainer', 'assistant',
 ])
 
 // Titles that require team membership
@@ -1878,8 +1881,11 @@ const TEAM_TITLES: ReadonlySet<string> = new Set([
 ])
 
 // Titles that are standalone (no team required)
+// R39.4: ASSISTANT has NO team affiliation (its panel shows "Assistant of <user>"
+// where the team label would be), so it is standalone — mirroring autonomous /
+// maintainer. This makes the team-membership gate (Gate 9) skip it.
 const STANDALONE_TITLES: ReadonlySet<string> = new Set([
-  'manager', 'autonomous', 'maintainer',
+  'manager', 'autonomous', 'maintainer', 'assistant',
 ])
 
 // Singleton titles (only one agent can hold this on the host/team)
@@ -5910,6 +5916,7 @@ export interface DeleteAgentResult {
  * Gates:
  *   G00: Authorization — system-owner/MANAGER can delete any agent; others denied
  *   G01: Validate agent exists
+ *   G01b: R39.6 — block INDEPENDENT deletion of an ASSISTANT agent
  *   G02: Auto-demote MANAGER to AUTONOMOUS (triggers R10 blocking cascade)
  *   G03: Strip COS/Orchestrator title from teams
  *   G04: Remove agent from all teams
@@ -5925,6 +5932,15 @@ export async function DeleteAgent(
     authContext: AuthContext
     hard?: boolean          // true = permanent delete with backup; false = soft-delete (default)
     deleteFolder?: boolean  // true = also rm -rf the agent's ~/agents/<name>/ folder
+    /**
+     * R39.6 — set ONLY by the user-delete cascade. An ASSISTANT agent cannot be
+     * deleted independently; it is soft-deleted exclusively as a side effect of
+     * deleting its owning USER. This flag is the seam that lets the Phase-B
+     * user-delete cascade (gated by governance.userAuthorityModelEnabled) bypass
+     * the G01b independent-delete block. Every other caller (UI/API direct
+     * delete) leaves it false, so G01b refuses.
+     */
+    cascadeFromUser?: boolean
   },
 ): Promise<DeleteAgentResult> {
   const ops: string[] = []
@@ -5957,6 +5973,28 @@ export async function DeleteAgent(
       return result
     }
     ops.push(`G01: Agent "${agent.name}" found (id=${agentId.substring(0, 8)})`)
+
+    // ── G01b: R39.6 — block INDEPENDENT deletion of an ASSISTANT ──
+    // An ASSISTANT agent CANNOT be deleted on its own. Every user must always
+    // have exactly one ASSISTANT for as long as the user exists; the ASSISTANT's
+    // lifecycle is bound to its user — only deleting the USER cascades a (soft)
+    // delete to the ASSISTANT (cemetery model). The only caller permitted to
+    // delete an ASSISTANT is that user-delete cascade, which sets
+    // options.cascadeFromUser=true (Phase B, behind the user-authority model).
+    // Any other delete path (UI/API direct, MANAGER, system-owner) is refused
+    // here — the most-secure interpretation of "cannot be deleted independently".
+    // This runs BEFORE G02/G03 so we never auto-demote or archive an ASSISTANT
+    // we are about to refuse to delete.
+    if (agent.governanceTitle === 'assistant' && !options?.cascadeFromUser) {
+      result.error = 'An ASSISTANT agent cannot be deleted independently (R39.6). It is deleted only when its user is deleted.'
+      ops.push('G01b: DENIED — ASSISTANT independent delete blocked (R39.6)')
+      return result
+    }
+    if (agent.governanceTitle === 'assistant') {
+      ops.push('G01b: ASSISTANT delete authorized via user cascade (R39.6)')
+    } else {
+      ops.push('G01b: Not an ASSISTANT — OK to delete')
+    }
 
     // ── G02: Auto-demote MANAGER before deletion ───────────────
     // If the agent is MANAGER, auto-demote to AUTONOMOUS first. This removes

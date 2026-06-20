@@ -3,7 +3,7 @@ trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-06-21T00:50:00+0200
+updated: 2026-06-21T00:55:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -81,5 +81,27 @@ On completion: synthesize → Phase C (ai-maestro fixes, worktree-isolated) + Ph
 - 2026-06-21T00:45 — **SECURITY FIX #1 LANDED — commit `a11d1bfb`, NOT pushed.** sessions-browser auth-bypass + path-traversal SSOT. Implemented TRDD-9e1e4b29 (presence-only `hasSessionCookie` let a forged `aim_session` read any agent's transcript → now validates via `hasValidSession`→`validateSession`; 401 on forged/absent; login round-trip verified, no legit-user lockout) + TRDD-5df6f7da (`confineToProjectsStore` triplication → single shared export; **DISCOVERED + fixed a headless-mode `?path=` traversal hole that had NO guard**). 9 Next routes + headless (8 gates + 3 confine) + service. Full loop honored: `tsc` clean + full unit suite **1851 passed / 0 failed** + docs (API-CHANGES §7) + both TRDDs → completed. Method note: did it in-main-tree (not parallel fix-agents) — security transparency + tonight's throttle + the concurrent finder reads made single-writer atomic edits the right call.
 - **NEW FINDING for Phase C: `server.mjs` `hasCredential()` (~L609/L1036) uses its own inline presence-only `aim_session` regex — same auth weakness, broader full-mode surface. `.mjs` can't import the TS validator → its own TRDD/fix needed.**
 
+## Phase B synthesis — confirmed fix-queue (2026-06-21T00:55; from reports/overnight-verify/, 98 findings/10 hot)
+Each item below: CONFIRM against current code before fixing (workflow findings are LLM-judgment). Order = security → governance → scripts-align → kanban → decoupling.
+
+**ai-maestro-fixable (Phase C), priority order:**
+1. ✅ DONE a11d1bfb — TRDD-9e1e4b29 sessions-browser auth+traversal.
+2. SECURITY — ChangeFolder has NO `~/agents/` confinement (workdir-write escape, #32-class); mirror CreateAgent G03. `services/element-management-service.ts` ChangeFolder.
+3. SECURITY — `server.mjs hasCredential()` (~L609/L1036) inline presence-only `aim_session` regex (.mjs, harder — own TRDD).
+4. SECURITY (MEDIUM, deeper) — AID PoP replay (TRDD-15ff13ae, token reuse in 300s window); `POST /api/v1/federation/deliver` bypasses comm-graph+team-isolation.
+5. GOV — ChangeTitle Gate14-before-Gate16: role-plugin install failure leaves title set + no role (R9.13). Make Gate16 fail-fast/rollback. `element-management-service.ts:2355-2394`.
+6. GOV — `registerAgent` uses raw createAgent primitive, bypasses CreateAgent AIO (R21/R9.13/R17). `services/agents-core-service.ts:1048,1125-1135`.
+7. GOV — ChangeClient R18.4 partial-plugin-state on install-time failure.
+8. SCRIPTS-ALIGN #45 (HIGH, ADDITIVE — frozen-safe): add verbs `presence` (GET /api/users/me/presence), `teams tasks <id>` (GET /api/teams/[id]/tasks), `teams reassign-cos <id> <uuid>` (POST /api/teams/[id]/chief-of-staff). NOT a --cos flag on update.
+9. KANBAN — Next.js `POST /api/teams/[id]/tasks` reportedly drops TRDD-v2 fields in FULL mode (VERIFY — contradicts my earlier read that the Zod schema persists them); per-column move-permission inert (#2).
+10. CONTEXT-PARSER — TRDD-3339cc45 silent-drop regression re-armed.
+11. DECOUPLING — create `scripts/aimaestro-hook.sh` (ai-maestro side) so the plugin's `ai-maestro-hook.cjs` can shim through it (#37). The .cjs rewrite itself is plugin-fleet.
+
+**Deploy/note (NOT an in-project edit — flag for USER):** deployed `~/.local/bin` CLI is drifted/security-regressed (aid-init.sh SH-MAJOR-04 UUID-keyed-dir fix missing; helper divergence). Re-run `install-messaging.sh`. Consider adding installer hash/self-heal (in-project).
+
+**Plugin-fleet (Phase E — GitHub issues, NEVER edit their repos):** `ai-maestro-hook.cjs` direct-/api rewrite (#37, after aimaestro-hook.sh lands); whether agent-plugin.sh/agent-skill.sh/amp-send.sh local-FS installs are intended (gov-auth-sudo-aid TRDD-a6d93b9c).
+
+**Design-column (defer, multi-phase):** TRDD-a1019073 controlled-exec-env; TRDD-1ee4a3c1 portable agents; TRDD-c7a81642 boot auto-hibernate scan.
+
 ## NEXT ACTION
-Phase B (synthesize): read `reports/overnight-verify/*.findings.json` (10 dims, ~93 findings). Triage HOT (gap|partial AND CRITICAL|HIGH) first, security before all; CONFIRM each against current code (the workflow's findings are LLM-judgment — cross-check before acting); split ai-maestro-fixable vs plugin-fleet. Then Phase C per ai-maestro gap (security-ordered): per-area TRDD → verify→fix→test→docs→commit (NO push). Carry the `server.mjs hasCredential()` presence-check finding into Phase C as its own TRDD. Plugin-fleet gaps → GitHub issues + notify the janitor (Phase E). Security fix #1 (a11d1bfb) DONE.
+Execute fix-queue item #2 (ChangeFolder `~/agents/` confinement — SECURITY, self-contained): verify CreateAgent's existing G03 confinement + ChangeFolder's lack of it → TRDD → fix → test (TDD) → docs → commit (NO push). Then proceed down the queue security-first. Service `[janitor-heartbeat]` markers between items.

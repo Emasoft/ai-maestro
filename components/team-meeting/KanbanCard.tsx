@@ -1,15 +1,31 @@
 'use client'
 
-import { Archive, Circle, CheckCircle2, PlayCircle, Eye, Lock, User, GitPullRequest, GitBranch, CircleDot } from 'lucide-react'
+import * as LucideIcons from 'lucide-react'
+import { Circle, Lock, User, GitPullRequest, GitBranch, CircleDot } from 'lucide-react'
 import type { TaskWithDeps } from '@/types/task'
+import type { KanbanColumnConfig } from '@/types/team'
 
-// Map task status to a meaningful icon
-const STATUS_ICON_MAP: Record<string, React.ElementType> = {
-  backlog: Archive,
-  pending: Circle,
-  in_progress: PlayCircle,
-  review: Eye,
-  completed: CheckCircle2,
+type IconComponent = React.ComponentType<{ className?: string }>
+
+/**
+ * Resolve a column's lucide icon NAME string (as stored in KanbanColumnConfig.icon)
+ * to the actual lucide component. Falls back to Circle for an unknown/missing name.
+ * Exported so the board, columns, and detail/section views all resolve icons the
+ * same way from the dynamic column config instead of a hardcoded status->icon map.
+ */
+export function resolveColumnIcon(iconName?: string): IconComponent {
+  if (iconName) {
+    const candidate = (LucideIcons as unknown as Record<string, IconComponent>)[iconName]
+    if (candidate) return candidate
+  }
+  return Circle
+}
+
+// 'complete' is the single terminal-done status (TRDD-v2 renamed the old 'completed').
+// Used to strike-through finished cards. We treat the legacy 'completed'/'done' values as
+// complete too so cards that haven't been migrated yet still render struck-through.
+function isCompleteStatus(status: string): boolean {
+  return status === 'complete' || status === 'completed' || status === 'done'
 }
 
 // Priority indicator colors: 0=critical(red), 1=high(amber), 2=medium(blue), 3+=low(gray)
@@ -46,6 +62,13 @@ interface KanbanCardProps {
   isSelected?: boolean
   /** Optional agent status indicator — shown as a small dot on the avatar */
   agentStatus?: AgentStatusOnCard
+  /**
+   * The column config this card's status belongs to. When provided, the card's
+   * fallback status icon is derived from the column's configured lucide icon
+   * (so it stays in sync with the 17-column board). Optional + backward
+   * compatible — without it the card falls back to a plain Circle.
+   */
+  column?: KanbanColumnConfig
 }
 
 // Stable color palette for assignee avatar circles — hash-based assignment
@@ -58,9 +81,12 @@ function assigneeColor(name: string): string {
   return ASSIGNEE_COLORS[Math.abs(hash) % ASSIGNEE_COLORS.length]
 }
 
-export default function KanbanCard({ task, onSelect, isSelected, agentStatus }: KanbanCardProps) {
-  const Icon = STATUS_ICON_MAP[task.status] || Circle
+export default function KanbanCard({ task, onSelect, isSelected, agentStatus, column }: KanbanCardProps) {
+  // Derive the fallback status icon from the dynamic column config (17-column board),
+  // not a hardcoded status->icon map that drifts when the column set changes.
+  const Icon = resolveColumnIcon(column?.icon)
   const priorityDot = task.priority != null ? (PRIORITY_COLORS[task.priority] || 'bg-gray-500') : null
+  const isComplete = isCompleteStatus(task.status)
 
   // Filter out Title: pseudo-labels and assign: labels (shown as assignee instead)
   const displayLabels = (task.labels || []).filter(l => !l.startsWith('Title:') && !l.startsWith('assign:'))
@@ -81,7 +107,7 @@ export default function KanbanCard({ task, onSelect, isSelected, agentStatus }: 
 
   // Subject content — reused for both linked and plain rendering
   const subjectContent = (
-    <span className={`text-xs leading-snug line-clamp-2 ${task.status === 'completed' ? 'text-gray-500 line-through' : 'text-gray-200'}`}>
+    <span className={`text-xs leading-snug line-clamp-2 ${isComplete ? 'text-gray-500 line-through' : 'text-gray-200'}`}>
       {task.subject}
     </span>
   )
@@ -149,7 +175,7 @@ export default function KanbanCard({ task, onSelect, isSelected, agentStatus }: 
             const issueMatch = task.externalRef.match(/(?:issues|pull)\/(\d+)/)
             if (!issueMatch) return null
             const TypeIcon = isPR ? GitPullRequest : CircleDot
-            const isCompleted = task.status === 'done' || task.status === 'completed'
+            const isCompleted = isComplete
             return (
               <a
                 href={task.externalRef}

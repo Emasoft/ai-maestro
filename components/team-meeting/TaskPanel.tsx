@@ -25,7 +25,8 @@ export default function TaskPanel({
   onCreateTask, onUpdateTask, onDeleteTask,
 }: TaskPanelProps) {
   const [selectedTask, setSelectedTask] = useState<TaskWithDeps | null>(null)
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({ completed: true })
+  // 'complete' is the terminal-done column id (TRDD-v2 renamed the old 'completed').
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({ complete: true })
 
   const columns = kanbanColumns || DEFAULT_KANBAN_COLUMNS
 
@@ -88,6 +89,7 @@ export default function TaskPanel({
                   task={task}
                   onSelect={setSelectedTask}
                   onStatusChange={handleStatusChange}
+                  kanbanColumns={columns}
                 />
               ))}
             </div>

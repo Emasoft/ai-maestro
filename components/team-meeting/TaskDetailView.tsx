@@ -63,8 +63,12 @@ export default function TaskDetailView({ task, agents, allTasks, kanbanColumns, 
     }
   }
 
+  // A blocked task may only move to the early triage columns (TRDD-v2: 'backburner'/'todo'),
+  // mirroring the createTask/updateTask gate that clears startedAt for those statuses.
+  const isTriageStatus = (status: string): boolean => status === 'backburner' || status === 'todo'
+
   const handleStatusChange = async (status: TaskStatus) => {
-    if (task.isBlocked && status !== 'pending' && status !== 'backlog') return
+    if (task.isBlocked && !isTriageStatus(status)) return
     setError(null)
     try {
       await onUpdate(task.id, { status })
@@ -127,12 +131,12 @@ export default function TaskDetailView({ task, agents, allTasks, kanbanColumns, 
             <button
               key={col.id}
               onClick={() => handleStatusChange(col.id)}
-              disabled={task.isBlocked && col.id !== 'pending' && col.id !== 'backlog'}
+              disabled={task.isBlocked && !isTriageStatus(col.id)}
               className={`px-2 py-1 text-xs rounded transition-colors ${
                 task.status === col.id
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-              } ${task.isBlocked && col.id !== 'pending' && col.id !== 'backlog' ? 'opacity-50 cursor-not-allowed' : ''}`}
+              } ${task.isBlocked && !isTriageStatus(col.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {col.label}
             </button>
@@ -238,6 +242,46 @@ export default function TaskDetailView({ task, agents, allTasks, kanbanColumns, 
           <div className="space-y-1">
             <label className="text-[11px] text-gray-500 font-medium">Type</label>
             <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400">{task.taskType}</span>
+          </div>
+        )}
+
+        {/* TRDD-v2 classification (read-only) — mirrors the TRDD frontmatter fields.
+            Each is shown only when present so the layout stays compact for plain tasks. */}
+        {task.severity && (
+          <div className="space-y-1">
+            <label className="text-[11px] text-gray-500 font-medium">Severity</label>
+            <span className={`text-xs px-2 py-0.5 rounded ${
+              task.severity === 'CRITICAL' ? 'bg-red-900/50 text-red-400' :
+              task.severity === 'HIGH' ? 'bg-orange-900/50 text-orange-400' :
+              task.severity === 'MEDIUM' ? 'bg-amber-900/50 text-amber-400' :
+              task.severity === 'LOW' ? 'bg-blue-900/50 text-blue-400' :
+              'bg-gray-800 text-gray-400'
+            }`}>{task.severity}</span>
+          </div>
+        )}
+
+        {task.effort && (
+          <div className="space-y-1">
+            <label className="text-[11px] text-gray-500 font-medium">Effort</label>
+            <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400">{task.effort}</span>
+          </div>
+        )}
+
+        {task.releaseVia && (
+          <div className="space-y-1">
+            <label className="text-[11px] text-gray-500 font-medium">Release Via</label>
+            <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400">{task.releaseVia}</span>
+          </div>
+        )}
+
+        {task.relevantRules && task.relevantRules.length > 0 && (
+          <div className="space-y-1">
+            <label className="text-[11px] text-gray-500 font-medium">Relevant Rules</label>
+            <div className="flex flex-wrap gap-1">
+              {task.relevantRules.map(rule => (
+                <span key={rule} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 font-mono">{rule}</span>
+              ))}
+            </div>
           </div>
         )}
 

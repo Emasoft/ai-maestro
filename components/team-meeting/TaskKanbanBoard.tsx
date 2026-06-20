@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  X, Archive, Circle, PlayCircle, Eye, CheckCircle2, SearchCheck, UserCheck,
-  GitMerge, Ban, Clock, TestTube, FileQuestion, Search, ArrowUp, ArrowDown,
+  X, Search, ArrowUp, ArrowDown,
   MoreVertical, Palette, ChevronRight, Plus, ShieldAlert,
   ExternalLink, GitBranch,
 } from 'lucide-react'
@@ -11,16 +10,11 @@ import type { Agent } from '@/types/agent'
 import type { TaskWithDeps, TaskStatus } from '@/types/task'
 import type { KanbanColumnConfig } from '@/types/team'
 import { DEFAULT_KANBAN_COLUMNS } from '@/types/team'
-import KanbanCard from './KanbanCard'
+import KanbanCard, { resolveColumnIcon } from './KanbanCard'
 import { useSessionActivity } from '@/hooks/useSessionActivity'
 import { resolveAgentStatus } from '@/lib/agent-status'
 import TaskDetailView from './TaskDetailView'
 import TaskCreateForm from './TaskCreateForm'
-
-const ICON_MAP: Record<string, typeof Circle> = {
-  Archive, Circle, PlayCircle, Eye, CheckCircle2, SearchCheck, UserCheck,
-  GitMerge, Ban, Clock, TestTube, FileQuestion, ShieldAlert,
-}
 
 // 8-color palette consistent with AI Maestro dark theme
 const COLUMN_COLORS = [
@@ -308,7 +302,7 @@ export default function TaskKanbanBoard({
           {cols.map(col => {
             const IconComponent = isBlockedColumn(col.id)
               ? ShieldAlert
-              : (ICON_MAP[col.icon || 'Circle'] || Circle)
+              : resolveColumnIcon(col.icon)
             const state = getColState(col.id)
             const colColor = getColColor(col.id)
             const rawTasks = tasksByStatus[col.id] || []
@@ -317,6 +311,7 @@ export default function TaskKanbanBoard({
               <EnhancedColumn
                 key={col.id}
                 colId={col.id}
+                column={col}
                 label={col.label}
                 dotColor={col.color}
                 icon={IconComponent}
@@ -411,6 +406,8 @@ export default function TaskKanbanBoard({
 // ---------------------------------------------------------------------------
 interface EnhancedColumnProps {
   colId: string
+  /** Full column config — passed down to KanbanCard so it derives its status icon from the 17-column config. */
+  column: KanbanColumnConfig
   label: string
   dotColor: string
   icon: React.ComponentType<{ className?: string }>
@@ -440,7 +437,7 @@ interface EnhancedColumnProps {
 }
 
 function EnhancedColumn({
-  colId, label, dotColor, icon: Icon, tasks, totalCount, colColor, state,
+  colId, column, label, dotColor, icon: Icon, tasks, totalCount, colColor, state,
   isBlocked, selectedCardId, menuOpen, colorPickerOpen,
   onDrop, onSelectTask, onQuickAdd, onFilterChange, onCycleSort,
   onToggleCollapse, onMenuToggle, onColorPickerToggle, onColorChange,
@@ -634,7 +631,7 @@ function EnhancedColumn({
                 : ''
             }`}
           >
-            <KanbanCard task={task} onSelect={onSelectTask} agentStatus={getAgentStatus(task)} />
+            <KanbanCard task={task} onSelect={onSelectTask} agentStatus={getAgentStatus(task)} column={column} />
           </div>
         ))}
 
@@ -691,7 +688,7 @@ function IssueBrowserModal({ teamId, columns, onCreateTask, onClose }: IssueBrow
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null)
   const [issues, setIssues] = useState<GitHubIssue[]>([])
-  const [targetColumn, setTargetColumn] = useState(columns[0]?.id || 'backlog')
+  const [targetColumn, setTargetColumn] = useState(columns[0]?.id || 'todo')
   const [loading, setLoading] = useState(false)
   const [loadingIssues, setLoadingIssues] = useState(false)
   const [error, setError] = useState<string | null>(null)

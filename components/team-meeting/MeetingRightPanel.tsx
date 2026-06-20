@@ -44,7 +44,8 @@ export default function MeetingRightPanel({
   onBroadcastToAll,
   onMarkChatRead,
 }: MeetingRightPanelProps) {
-  const taskCount = tasks.filter(t => t.status !== 'completed').length
+  // Count tasks not yet in the terminal-done column (TRDD-v2 renamed 'completed' -> 'complete').
+  const taskCount = tasks.filter(t => t.status !== 'complete').length
 
   // Mark chat as read when viewing the chat tab
   useEffect(() => {

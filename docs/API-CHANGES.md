@@ -306,6 +306,25 @@ shapes changed. `tsc --noEmit` clean; full unit suite 1851 passed / 0 failed.
 same weakness, broader surface; it is `.mjs` and cannot import the TS
 validator without a build step.
 
+## 8. ChangeFolder confines workingDirectory to ~/agents/ (2026-06-21)
+
+`TRDD-35af6b13`. `PATCH /api/agents/[id]` with a `workingDirectory` change
+(the `ChangeFolder` pipeline) now **rejects any target outside `~/agents/`**.
+Previously `ChangeFolder` validated only no-`..`-traversal and that the path
+existed + was a directory — any existing absolute dir was accepted (e.g.
+`~/.claude`, `~/ai-maestro`). Since the agent-shell-guard permits writes
+anywhere under an agent's `workingDirectory` and `DeleteAgent`'s folder-delete
+safety is gated on `~/agents/`, relocating an agent outside `~/agents/` was a
+write-boundary escape. A new gate **G01b** (mirroring `CreateAgent`
+G03-ENFORCE and `DeleteAgent` G09, checked before the existence probe) returns
+an error `Working directory must be under ~/agents/ …` and writes nothing.
+
+**Plugin impact:** an agent-management call that set `workingDirectory` to a
+path outside `~/agents/` used to succeed and now fails with that error. No
+endpoint shape changed; legitimate `~/agents/<name>` relocations are
+unaffected. `tsc --noEmit` clean; `tests/integration/change-folder-confinement.test.ts`
+(4 cases) green.
+
 ## How plugins should consume this doc
 
 1. The role-plugins use `https://raw.githubusercontent.com/Emasoft/ai-maestro/governance-rules/docs/GOVERNANCE-RULES.md` (and similar for other docs) to learn about API surface.

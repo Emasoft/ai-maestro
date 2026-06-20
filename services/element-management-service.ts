@@ -4735,6 +4735,28 @@ export async function ChangeFolder(
     const resolved = newFolder.startsWith('~') ? newFolder.replace('~', HOME) : newFolder
     ops.push(`G01: Path "${resolved}" validated (no traversal)`)
 
+    // ── G01b: Confine to ~/agents/ (SECURITY — workdir-write boundary) ──
+    // The agent-shell-guard permits writes anywhere under the agent's
+    // workingDirectory, and DeleteAgent's folder-delete safety (G09) is gated
+    // on the folder being under ~/agents/. Relocating an agent OUTSIDE
+    // ~/agents/ would let it write into the user's home / source / config
+    // trees AND orphan its folder from the delete-safety guard — so a folder
+    // change MUST stay under ~/agents/. Mirrors CreateAgent G03-ENFORCE and
+    // DeleteAgent G09; the PATCH route (app/api/agents/[id]/route.ts) already
+    // documents this as the intended ChangeFolder Gate-3 invariant, but it was
+    // MISSING here (G03 only fetched the agent — no confinement). Checked
+    // BEFORE the existsSync/stat probe so an out-of-bounds path never touches
+    // the filesystem.
+    const { resolve } = await import('path')
+    const agentsRoot = resolve(HOME, 'agents')
+    const normalizedTarget = resolve(resolved)
+    if (normalizedTarget !== agentsRoot && !normalizedTarget.startsWith(agentsRoot + '/')) {
+      result.error = `Working directory must be under ~/agents/ (got "${resolved}"). Relocating an agent outside ~/agents/ would escape the per-agent write boundary.`
+      ops.push(`G01b: REFUSED — "${resolved}" is outside ~/agents/`)
+      return result
+    }
+    ops.push(`G01b: "${resolved}" confined to ~/agents/`)
+
     // ── G02: Check path exists and is directory ───────────────
     if (!existsSync(resolved)) {
       result.error = `Path "${resolved}" does not exist`

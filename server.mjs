@@ -14,6 +14,7 @@ import { getHostById, isSelf } from './lib/hosts-config-server.mjs'
 import { statePath } from './lib/ecosystem-state-paths.mjs'
 import { hostHints } from './lib/host-hints-server.mjs'
 import { getOrCreateBuffer } from './lib/cerebellum/session-bridge.mjs'
+import { validateSessionCookie } from './lib/session-validate-server.mjs'
 import {
   sessionActivity,
   terminalSessions,
@@ -600,13 +601,17 @@ async function startServer(handleRequest) {
       // SRV-CRIT-01 fix (2026-05-04): require a credential (session cookie OR
       // bearer token). The endpoint is bypassed by Next.js middleware because
       // it's handled here in server.mjs before req hand-off, so we replicate
-      // the same structural credential check inline. Full token validation
-      // remains the job of downstream consumers; this is a presence gate to
-      // keep unauthenticated localhost / Tailscale-peer probes out.
+      // the same credential check inline. The session COOKIE is now deep-validated
+      // (#3, 2026-06-21) against the shared in-memory store (globalThis.__aiMaestroSessionsMap)
+      // so a forged aim_session value can no longer pass; the BEARER stays a presence
+      // check because the bearer tokens (one-shot AID tokens, JWTs) must be validated
+      // downstream where their consumption/crypto semantics live — deep-validating
+      // them at this pre-handshake gate would consume a one-shot token before its
+      // real consumer runs.
       if (parsedUrl.pathname === '/api/internal/pty-sessions') {
         const cookieHdr = req.headers.cookie || ''
         const authHdr = req.headers.authorization || ''
-        const hasSessionCookie = /(^|;\s*)aim_session=[A-Za-z0-9_+/=\-]+/.test(cookieHdr)
+        const hasSessionCookie = validateSessionCookie(cookieHdr)
         const hasBearer = /^Bearer\s+(aim_tk_|amp_live_sk_|mst_|eyJ)[A-Za-z0-9_\-\.]{10,}$/.test(authHdr.trim())
         if (!hasSessionCookie && !hasBearer) {
           res.statusCode = 401
@@ -1026,14 +1031,16 @@ async function startServer(handleRequest) {
   // only gate, which meant any localhost process or Tailscale peer could
   // open a terminal to any agent's tmux session and read/write commands.
   //
-  // We replicate the same structural credential check used by middleware.ts
-  // hasCredential() — the request must carry an aim_session cookie OR a
-  // Bearer token in a recognized format. This is a presence gate; deeper
-  // token validation and per-session ACL are downstream responsibilities,
-  // tracked separately. Untracked paths still hit socket.destroy() below.
+  // We replicate the same credential check used by middleware.ts hasCredential() —
+  // the request must carry a valid aim_session cookie OR a Bearer token. The COOKIE
+  // is now deep-validated (#3, 2026-06-21) against the shared in-memory store so a
+  // forged aim_session can no longer pass; the BEARER stays a presence check (deep
+  // bearer validation is a downstream responsibility — one-shot AID tokens must not
+  // be consumed at this pre-handshake gate). Untracked paths still hit
+  // socket.destroy() below.
   const wsHasCredential = (request) => {
     const cookieHdr = request.headers.cookie || ''
-    if (/(^|;\s*)aim_session=[A-Za-z0-9_+/=\-]+/.test(cookieHdr)) return true
+    if (validateSessionCookie(cookieHdr)) return true
     const authHdr = request.headers.authorization || ''
     if (/^Bearer\s+(aim_tk_|amp_live_sk_|mst_|eyJ)[A-Za-z0-9_\-\.]{10,}$/.test(authHdr.trim())) return true
     return false

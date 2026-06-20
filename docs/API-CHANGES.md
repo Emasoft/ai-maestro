@@ -370,6 +370,33 @@ changed. `tsc --noEmit` clean; full unit suite **1858 passed / 0 failed**; the
 G17 case in `tests/services/element-management-assistant-title.test.ts` was
 RED-verified against the unfixed gate first, then green.
 
+## 11. server.mjs full-mode auth gate now deep-validates the session cookie (2026-06-21)
+
+`TRDD-ba9d6df2`. `server.mjs`'s two full-mode credential gates — the inline
+`GET /api/internal/pty-sessions` handler and the pre-handshake `wsHasCredential`
+for `/term` · `/status` · `/v1/ws` · `/companion-ws` WebSocket upgrades — used a
+**presence-only** cookie check (`/aim_session=…/.test(cookie)`), so any non-empty
+`aim_session` value (a **forged** cookie from a Tailscale peer or local process)
+passed. They now call a new `.mjs` validator (`lib/session-validate-server.mjs`)
+that validates the token against the same in-memory session store
+(`globalThis.__aiMaestroSessionsMap`, shared because server.mjs runs in the same
+Node process as the Next routes) — sha256 key + `expires_at` check, mirroring the
+TS `validateSession`. This is the full-mode counterpart of the `a11d1bfb`
+sessions-browser fix.
+
+**Plugin/agent impact:** a forged or stale `aim_session` cookie can no longer open
+a terminal/status/AMP/companion WebSocket or read pty-session metadata. A **valid**
+session cookie is unaffected; a stale cookie after `pm2 restart` now 401s → the UI
+re-logs-in (the designed "sessions cleared on restart" posture). The **Bearer**
+path (`aim_tk_` AID tokens, `amp_live_sk_` AMP keys, `mst_`, `eyJ` JWTs) is
+unchanged — it stays a non-consuming presence check at this gate **by design**:
+deep-validating a bearer here would consume one-shot AID tokens before their real
+downstream consumer runs, so deep bearer validation remains a downstream
+responsibility (documented follow-up). No endpoint shape changed. `node --check`
+clean; `tsc --noEmit` clean; full unit suite **1864 passed / 0 failed**;
+`tests/unit/session-validate-server.test.ts` (6 cases) RED-verified first, then
+green.
+
 ## How plugins should consume this doc
 
 1. The role-plugins use `https://raw.githubusercontent.com/Emasoft/ai-maestro/governance-rules/docs/GOVERNANCE-RULES.md` (and similar for other docs) to learn about API surface.

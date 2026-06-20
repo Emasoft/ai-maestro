@@ -123,15 +123,47 @@ export function requireSudoToken(
     )
   }
 
-  // SUDO-02: the consumed token must belong to the USER. Under R32 the mint
-  // route always issues subject 'system-owner', so any other subject is a
-  // legacy/agent token that must not authorize a USER-path strict op.
-  if (result.subject !== 'system-owner') {
+  // SUDO-02: the consumed token must belong to the USER on THIS session.
+  //
+  // R37.4 SUBJECT-BINDING (the model-ON fix): the mint route binds the token's
+  // subject to `ctx.userId ?? 'system-owner'` (sudo-password/route.ts), so the
+  // accepted subject DIFFERS by model:
+  //   - model OFF (default): ctx.userId is undefined at mint time, so the ONLY
+  //     valid subject is the legacy sentinel 'system-owner'. This branch is
+  //     byte-equivalent to pre-model behavior — the acceptance set is exactly
+  //     {'system-owner'} and `getActiveMaestroUserId()` is never consulted.
+  //   - model ON: we only reach here past the `!ctx.isSystemOwner` gate above,
+  //     i.e. the caller IS the ACTIVE MAESTRO (maestro or acting delegate). The
+  //     mint stored that user's id as the subject, so we additionally accept
+  //     the currently-active-maestro id. A delegate suspends the maestro, so
+  //     getActiveMaestroUserId() resolves to the same id the mint stored.
+  // Without this, EVERY sudo-gated strict route 403s with the model on (the
+  // mint emits a UUID subject the unchanged R32 consume check rejected) — a
+  // complete fail-secure feature break (assign-delegate, set-password, …).
+  //
+  // The legacy sentinel is ALWAYS accepted (covers model-OFF and any unbound
+  // token minted before the flip). One-shot, op-binding, and subject-binding
+  // are all preserved — this only WIDENS the subject set under the model, never
+  // weakens it: a non-active-maestro UUID subject is still rejected.
+  const validSubjects = new Set<string>(['system-owner'])
+  try {
+    const { isUserAuthorityModelEnabled } = require('./governance') as typeof import('./governance')
+    if (isUserAuthorityModelEnabled()) {
+      const { getActiveMaestroUserId } = require('./user-registry') as typeof import('./user-registry')
+      const activeMaestroId = getActiveMaestroUserId()
+      if (activeMaestroId) validSubjects.add(activeMaestroId)
+    }
+  } catch {
+    // Fail-safe: if the model flag or user registry can't be read, fall back to
+    // the legacy {'system-owner'}-only set — never widen the subject set on an
+    // error, so a misconfiguration can only DENY (fail-secure), never grant.
+  }
+  if (!validSubjects.has(result.subject)) {
     return NextResponse.json(
       {
         error: 'sudo_subject_mismatch',
         message: 'That confirmation does not belong to this session. Please re-enter your governance password.',
-        devHint: `Sudo token subject "${result.subject}" is not "system-owner".`,
+        devHint: `Sudo token subject "${result.subject}" is not an accepted subject (expected "system-owner"${validSubjects.size > 1 ? ' or the active-maestro user id' : ''}).`,
         route: `${method} ${pathTemplate}`,
       },
       { status: 403 }

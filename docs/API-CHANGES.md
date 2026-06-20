@@ -325,6 +325,27 @@ endpoint shape changed; legitimate `~/agents/<name>` relocations are
 unaffected. `tsc --noEmit` clean; `tests/integration/change-folder-confinement.test.ts`
 (4 cases) green.
 
+## 9. Kanban: Next.js POST tasks route now forwards TRDD-v2 fields (2026-06-21)
+
+`TRDD-67f8b9bd`. `POST /api/teams/[id]/tasks` in **FULL (Next.js) mode** now
+**forwards the 8 end-to-end-supported TRDD-v2 task fields** — `severity`,
+`effort`, `parentTask`, `npt`, `eht`, `supersedes`, `relevantRules`,
+`releaseVia` — into the created task. Previously the route VALIDATED these via
+its Zod schema (so the request returned 200) but never spread them into the
+params passed to `createTeamTask`, so they were silently dropped on create. The
+**headless mode** mirror already forwarded them correctly, so this was a
+FULL-vs-headless drift, now resolved (both modes behave identically).
+
+**Plugin impact:** a kanban task created via the FULL-mode API with TRDD-v2
+metadata now persists that metadata (encoded as `severity:…` / `npt:…` / …
+GitHub issue labels by the github-project layer) instead of losing it. No
+endpoint shape or validation changed. Six further schema-accepted fields
+(`reviewResult`, `supersededBy`, `implementationCommits`, `lastTestResult`,
+`publishedVersion`, `liveSince`) are still accepted-but-not-yet-carried in
+*both* modes — a separate follow-up, not a behavior change here. `tsc --noEmit`
+clean; `tests/unit/api-team-tasks-trddv2-fields.test.ts` (2 cases, RED-verified
+first) green.
+
 ## How plugins should consume this doc
 
 1. The role-plugins use `https://raw.githubusercontent.com/Emasoft/ai-maestro/governance-rules/docs/GOVERNANCE-RULES.md` (and similar for other docs) to learn about API surface.

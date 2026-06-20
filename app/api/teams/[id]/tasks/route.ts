@@ -116,17 +116,31 @@ export async function POST(
     ...(body.acceptanceCriteria !== undefined && { acceptanceCriteria: body.acceptanceCriteria }),
     ...(body.handoffDoc !== undefined && { handoffDoc: body.handoffDoc }),
     ...(body.prUrl !== undefined && { prUrl: body.prUrl }),
+    // TRDD-v2 alignment fields — forward the 8 that CreateTaskParams,
+    // createTeamTask, and ghProject.createTask (trddMetadataLabels) support
+    // end-to-end, matching the headless-router mirror
+    // (services/headless-router.ts:2099-2106). Without this spread the Next.js
+    // route VALIDATED these via CreateTaskSchema but dropped them before
+    // createTeamTask, so a kanban task created in FULL (Next.js) mode silently
+    // lost its classification/relationship/delivery metadata while the same
+    // request in headless mode kept it — a dual-mode drift (TRDD-903b7a20 #9).
+    ...(body.severity !== undefined && { severity: body.severity }),
+    ...(body.effort !== undefined && { effort: body.effort }),
+    ...(body.parentTask !== undefined && { parentTask: body.parentTask }),
+    ...(body.npt !== undefined && { npt: body.npt }),
+    ...(body.eht !== undefined && { eht: body.eht }),
+    ...(body.supersedes !== undefined && { supersedes: body.supersedes }),
+    ...(body.relevantRules !== undefined && { relevantRules: body.relevantRules }),
+    ...(body.releaseVia !== undefined && { releaseVia: body.releaseVia }),
     requestingAgentId,
     // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
     authContext: buildAuthContext(auth),
-    // The schema above now ACCEPTS+validates the TRDD-v2 fields (reviewResult,
-    // severity, effort, parentTask, npt, eht, supersedes, supersededBy,
-    // relevantRules, releaseVia, implementationCommits, lastTestResult,
-    // publishedVersion, liveSince) so the API is at parity with the 17-stage
-    // model and no longer 400s on valid payloads. Forwarding them into the
-    // service is the services-wave job (teams-service.ts CreateTaskParams +
-    // createTeamTask -> task-registry.createTask, which already persists them);
-    // adding them here would break tsc against the current CreateTaskParams.
+    // NOTE: 6 further schema-validated fields (reviewResult, supersededBy,
+    // implementationCommits, lastTestResult, publishedVersion, liveSince) are
+    // accepted by CreateTaskSchema (so the API does not 400 on a valid TRDD-v2
+    // payload) but are NOT yet carried by CreateTaskParams / createTeamTask /
+    // ghProject.createTask, so forwarding them here would break tsc. Extending
+    // the full service+GitHub chain for those is the remaining part of #9.
   }
   const result = await createTeamTask(id, safeParams)
 

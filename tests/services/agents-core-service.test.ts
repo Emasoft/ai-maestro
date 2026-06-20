@@ -197,6 +197,10 @@ beforeEach(() => {
   mockRuntime.sessionExists.mockResolvedValue(false)
   mockRuntime.createSession.mockResolvedValue(undefined)
   mockAgentRegistry.loadAgents.mockReturnValue([])
+  // updateAgent is async in production (returns a Promise). registerAgent's R9.13
+  // roleMissing flag uses `.catch`, so the mock must resolve a Promise — a bare
+  // vi.fn() returns undefined and `undefined.catch()` would throw.
+  mockAgentRegistry.updateAgent.mockResolvedValue(undefined)
   mockHostsConfig.getSelfHost.mockReturnValue({ id: 'test-host', name: 'Test Host', url: 'http://localhost:23000' })
   mockHostsConfig.getHosts.mockReturnValue([{ id: 'test-host', name: 'Test Host', url: 'http://localhost:23000' }])
   mockHostsConfig.isSelf.mockReturnValue(true)
@@ -447,6 +451,30 @@ describe('registerAgent', () => {
     expect(result.data?.success).toBe(true)
     // agentId comes from createAgent's returned agent.id, not from sessionName
     expect(result.data?.agentId).toBe('new-id')
+  })
+
+  it('R9.13: flags roleMissing=true on an agent CREATED from a session (raw createAgent bypasses the role-installing AIO)', async () => {
+    mockAgentRegistry.getAgentBySession.mockReturnValue(null)
+    mockAgentRegistry.createAgent.mockReturnValue(makeAgent({ id: 'new-id', name: 'my-agent' }))
+    mockFs.default.existsSync.mockReturnValue(false)
+
+    const result = await registerAgent({ sessionName: 'my-agent', workingDirectory: '/home', authContext: SYSTEM_OWNER_CTX })
+
+    expect(result.status).toBe(200)
+    // The new agent has no role-plugin (createAgent installs none; the workdir does
+    // not exist at register time) → it MUST be flagged so the wake route's R9.13 gate
+    // (role_plugin_required, 409) blocks it until a role is assigned. Mirrors G17/PG04.
+    expect(mockAgentRegistry.updateAgent).toHaveBeenCalledWith('new-id', { roleMissing: true })
+  })
+
+  it('does NOT flag roleMissing when LINKING an existing agent (it owns its own role state)', async () => {
+    const existing = makeAgent({ id: 'existing-id', name: 'my-agent' })
+    mockAgentRegistry.getAgentBySession.mockReturnValue(existing)
+    mockFs.default.existsSync.mockReturnValue(false)
+
+    await registerAgent({ sessionName: 'my-agent', authContext: SYSTEM_OWNER_CTX })
+
+    expect(mockAgentRegistry.updateAgent).not.toHaveBeenCalledWith('existing-id', { roleMissing: true })
   })
 
   it('links existing agent when found by session', async () => {

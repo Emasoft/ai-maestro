@@ -1135,6 +1135,17 @@ export async function registerAgent(body: RegisterAgentParams): Promise<ServiceR
           })
           // createAgent always generates a UUID; use it as the canonical ID
           agentId = registryAgent.id
+          // R9.13 (TRDD-47effd69): this raw createAgent bypasses the CreateAgent AIO
+          // that installs a role-plugin, so the new agent is role-less. Its workdir
+          // does not exist yet (createAgent makes it on first wake), so we cannot
+          // install the plugin here — flag roleMissing so the wake route's R9.13 gate
+          // (role_plugin_required, 409) blocks the agent until a role is assigned via
+          // the Config tab. Mirrors ChangeTitle G17 / ChangePlugin PG04 (create-then-
+          // flag, never silently role-less). The .catch keeps a flag-write failure
+          // from orphaning the just-created agent's id via the createError fallback.
+          await updateAgent(agentId, { roleMissing: true }).catch((flagErr) => {
+            console.warn(`[Register] Could not flag roleMissing on ${agentId}:`, flagErr)
+          })
         } catch (createError) {
           console.warn(`[Register] Could not create registry entry for ${sessionName}:`, createError)
           // Fall back to a fresh UUID so agentConfig.id is always a valid UUID

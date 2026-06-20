@@ -397,6 +397,30 @@ clean; `tsc --noEmit` clean; full unit suite **1864 passed / 0 failed**;
 `tests/unit/session-validate-server.test.ts` (6 cases) RED-verified first, then
 green.
 
+## 12. registerAgent now flags roleMissing on the role-less agent it creates (R9.13) (2026-06-21)
+
+`TRDD-47effd69`. `registerAgent` (behind `POST /api/v1/register`,
+`POST /api/agents/register`, headless) has a system-owner-only "register from
+session name" path that, when no existing agent matches, creates one via the raw
+`createAgent` registry primitive — which sets no role-plugin (it bypasses the
+CreateAgent AIO that installs one). The agent's workdir doesn't exist yet (it's
+created on first wake), so a plugin can't be installed at register time. The agent
+was therefore left **role-less with `roleMissing` unset**, so the wake route's R9.13
+gate (`role_plugin_required`, 409) never fired and it could wake with no role —
+violating R9.13. registerAgent now sets `roleMissing: true` on that created agent
+(mirroring ChangeTitle G17 / ChangePlugin PG04 / the wake-path `corePluginMissing`
+pattern), so the existing wake gate blocks it until a role is assigned via the
+Config tab.
+
+**Plugin/agent impact:** an agent registered-from-session by a raw `createAgent`
+path now correctly shows `roleMissing` and is blocked from waking until a role-plugin
+is assigned (the same remediation surface as any other role-less agent). This only
+affects the new-agent branch — registering against an **existing** agent (link) and
+the **cloud** full-config branch are unchanged. No endpoint shape changed.
+`tsc --noEmit` clean; full unit suite **1866 passed / 0 failed**; two new cases in
+`tests/services/agents-core-service.test.ts` (new-agent flags; link does not),
+RED-verified first.
+
 ## How plugins should consume this doc
 
 1. The role-plugins use `https://raw.githubusercontent.com/Emasoft/ai-maestro/governance-rules/docs/GOVERNANCE-RULES.md` (and similar for other docs) to learn about API surface.

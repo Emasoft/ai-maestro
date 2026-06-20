@@ -44,6 +44,15 @@ TEAM_ID=""
 STATUS=""
 PRIORITY=""
 TASK_TYPE=""
+PARENT_TASK=""
+NPT=""
+EHT=""
+SUPERSEDES=""
+RELEVANT_RULES=""
+SEVERITY=""
+EFFORT=""
+RELEASE_VIA=""
+EXTERNAL_REF=""
 
 show_help() {
     echo "Usage: amp-kanban-create-task.sh <title> [options]"
@@ -62,7 +71,16 @@ show_help() {
     echo "                               human_review|complete|publish|published|deploy|live|live_auditing"
     echo "                             or an exception state: blocked|failed|superseded"
     echo "  --priority, -p NUMBER      Priority (numeric, higher = more urgent)"
-    echo "  --task-type TYPE           Task type (e.g. bug, feature, chore)"
+    echo "  --task-type TYPE           Task type (e.g. bug, feature, chore, epic)"
+    echo "  --parent TASK_ID           Parent task UUID (links a child to its epic/parent)"
+    echo "  --npt \"id1,id2\"            Necessary Prerequisite Task UUIDs (comma-separated)"
+    echo "  --eht \"id1,id2\"            Effects Handling Task UUIDs (comma-separated)"
+    echo "  --supersedes \"id1,id2\"     Task UUIDs this task replaces (comma-separated)"
+    echo "  --relevant-rules \"3,27\"    PRRD rule numbers this task complies with (comma-separated)"
+    echo "  --severity LEVEL           CRITICAL|HIGH|MEDIUM|LOW|NIT"
+    echo "  --effort SIZE              S|M|L|XL"
+    echo "  --release-via MODE         publish|deploy|none"
+    echo "  --external-ref REF         GitHub issue/PR URL or number"
     echo "  --team TEAM_ID             Team UUID (auto-detected from agent if omitted)"
     echo "  --id UUID                  Operate as this agent (UUID from config.json)"
     echo "  --help, -h                 Show this help"
@@ -71,6 +89,10 @@ show_help() {
     echo "  amp-kanban-create-task.sh \"Fix login bug\""
     echo "  amp-kanban-create-task.sh \"Deploy v2\" --assignee abc-123 --labels \"deploy,urgent\""
     echo "  amp-kanban-create-task.sh \"Review PR\" --team team-uuid --status ai_review"
+    echo ""
+    echo "  # Epic -> child-task tree (design-doc breakdown):"
+    echo "  EPIC=\$(amp-kanban-create-task.sh \"Auth subsystem\" --task-type epic --team t1 | ...)"
+    echo "  amp-kanban-create-task.sh \"Login endpoint\" --parent \"\$EPIC\" --task-type feature --team t1"
 }
 
 # Parse arguments
@@ -99,6 +121,42 @@ while [[ $# -gt 0 ]]; do
             ;;
         --task-type)
             TASK_TYPE="$2"
+            shift 2
+            ;;
+        --parent)
+            PARENT_TASK="$2"
+            shift 2
+            ;;
+        --npt)
+            NPT="$2"
+            shift 2
+            ;;
+        --eht)
+            EHT="$2"
+            shift 2
+            ;;
+        --supersedes)
+            SUPERSEDES="$2"
+            shift 2
+            ;;
+        --relevant-rules)
+            RELEVANT_RULES="$2"
+            shift 2
+            ;;
+        --severity)
+            SEVERITY="$2"
+            shift 2
+            ;;
+        --effort)
+            EFFORT="$2"
+            shift 2
+            ;;
+        --release-via)
+            RELEASE_VIA="$2"
+            shift 2
+            ;;
+        --external-ref)
+            EXTERNAL_REF="$2"
             shift 2
             ;;
         --team)
@@ -186,6 +244,51 @@ if [ -n "$TASK_TYPE" ]; then
     BODY=$(echo "$BODY" | jq --arg t "$TASK_TYPE" '. + {taskType: $t}')
 fi
 
+# TRDD-v2 relationship/classification passthroughs. The server task model + POST
+# route already accept these (#1); they are added here as OPTIONAL flags so the
+# epic->child tree is reachable through the R23 frozen verb WITHOUT changing any
+# existing arg/output (additive only — existing callers are unaffected).
+if [ -n "$PARENT_TASK" ]; then
+    BODY=$(echo "$BODY" | jq --arg p "$PARENT_TASK" '. + {parentTask: $p}')
+fi
+
+if [ -n "$EXTERNAL_REF" ]; then
+    BODY=$(echo "$BODY" | jq --arg r "$EXTERNAL_REF" '. + {externalRef: $r}')
+fi
+
+if [ -n "$SEVERITY" ]; then
+    BODY=$(echo "$BODY" | jq --arg s "$SEVERITY" '. + {severity: $s}')
+fi
+
+if [ -n "$EFFORT" ]; then
+    BODY=$(echo "$BODY" | jq --arg e "$EFFORT" '. + {effort: $e}')
+fi
+
+if [ -n "$RELEASE_VIA" ]; then
+    BODY=$(echo "$BODY" | jq --arg rv "$RELEASE_VIA" '. + {releaseVia: $rv}')
+fi
+
+# Comma-separated ID/string lists → JSON arrays (trim surrounding whitespace per item)
+if [ -n "$NPT" ]; then
+    NPT_JSON=$(echo "$NPT" | jq -R 'split(",") | map(gsub("^\\s+|\\s+$"; ""))')
+    BODY=$(echo "$BODY" | jq --argjson npt "$NPT_JSON" '. + {npt: $npt}')
+fi
+
+if [ -n "$EHT" ]; then
+    EHT_JSON=$(echo "$EHT" | jq -R 'split(",") | map(gsub("^\\s+|\\s+$"; ""))')
+    BODY=$(echo "$BODY" | jq --argjson eht "$EHT_JSON" '. + {eht: $eht}')
+fi
+
+if [ -n "$SUPERSEDES" ]; then
+    SUPERSEDES_JSON=$(echo "$SUPERSEDES" | jq -R 'split(",") | map(gsub("^\\s+|\\s+$"; ""))')
+    BODY=$(echo "$BODY" | jq --argjson sup "$SUPERSEDES_JSON" '. + {supersedes: $sup}')
+fi
+
+if [ -n "$RELEVANT_RULES" ]; then
+    RR_JSON=$(echo "$RELEVANT_RULES" | jq -R 'split(",") | map(gsub("^\\s+|\\s+$"; ""))')
+    BODY=$(echo "$BODY" | jq --argjson rr "$RR_JSON" '. + {relevantRules: $rr}')
+fi
+
 # =============================================================================
 # Create the task
 # =============================================================================
@@ -209,6 +312,7 @@ if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
     echo "  Status:   ${TASK_STATUS}"
     [ -n "$ASSIGNEE" ] && echo "  Assignee: ${ASSIGNEE}"
     [ -n "$LABELS" ] && echo "  Labels:   ${LABELS}"
+    [ -n "$PARENT_TASK" ] && echo "  Parent:   ${PARENT_TASK}"
 
     # Send assignment notification if assignee specified
     if [ -n "$ASSIGNEE" ]; then

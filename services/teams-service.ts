@@ -30,7 +30,7 @@ import { loadTeams, createTeam, getTeam, updateTeam, deleteTeam, TeamValidationE
 // Local task-registry removed (governance simplification 2026-03-27) — kanban uses GitHub Projects exclusively
 import { loadDocuments, createDocument, getDocument, updateDocument, deleteDocument } from '@/lib/document-registry'
 import * as ghProject from '@/lib/github-project'
-import type { TaskWithDeps } from '@/types/task'
+import type { Task, TaskWithDeps } from '@/types/task'
 import type { Team, KanbanColumnConfig } from '@/types/team'
 import { DEFAULT_KANBAN_COLUMNS } from '@/types/team'
 import type { TeamDocument } from '@/types/document'
@@ -126,6 +126,16 @@ export interface CreateTaskParams {
   acceptanceCriteria?: string[]
   handoffDoc?: string
   prUrl?: string
+  // TRDD-v2 alignment fields (additive, all optional) — mirror the Task schema so
+  // the service layer can carry the same classification/relationship/delivery metadata.
+  severity?: Task['severity']
+  effort?: Task['effort']
+  parentTask?: string
+  npt?: string[]
+  eht?: string[]
+  supersedes?: string[]
+  relevantRules?: string[]
+  releaseVia?: Task['releaseVia']
   requestingAgentId?: string
   authContext?: AuthContext
 }
@@ -147,6 +157,15 @@ export interface UpdateTaskParams {
   handoffDoc?: string
   prUrl?: string
   reviewResult?: string
+  // TRDD-v2 alignment fields (additive, all optional) — mirror the Task schema.
+  severity?: Task['severity']
+  effort?: Task['effort']
+  parentTask?: string
+  npt?: string[]
+  eht?: string[]
+  supersedes?: string[]
+  relevantRules?: string[]
+  releaseVia?: Task['releaseVia']
   requestingAgentId?: string
   authContext?: AuthContext
 }
@@ -1042,6 +1061,15 @@ export async function createTeamTask(teamId: string, params: CreateTaskParams): 
       blockedBy,
       acceptanceCriteria: taskFields.acceptanceCriteria,
       prUrl: taskFields.prUrl,
+      // TRDD-v2 alignment fields (carried as prefixed issue labels by github-project).
+      severity: taskFields.severity,
+      effort: taskFields.effort,
+      parentTask: taskFields.parentTask,
+      npt: taskFields.npt,
+      eht: taskFields.eht,
+      supersedes: taskFields.supersedes,
+      relevantRules: taskFields.relevantRules,
+      releaseVia: taskFields.releaseVia,
     })
     return { data: { task }, status: 201 }
   } catch (error) {
@@ -1108,6 +1136,15 @@ export async function updateTeamTask(
       acceptanceCriteria: taskFields.acceptanceCriteria,
       prUrl: taskFields.prUrl,
       previousStatus: taskFields.previousStatus,
+      // TRDD-v2 alignment fields (carried as prefixed issue labels by github-project).
+      severity: taskFields.severity,
+      effort: taskFields.effort,
+      parentTask: taskFields.parentTask,
+      npt: taskFields.npt,
+      eht: taskFields.eht,
+      supersedes: taskFields.supersedes,
+      relevantRules: taskFields.relevantRules,
+      releaseVia: taskFields.releaseVia,
     })
     if (!task) {
       return { error: 'Task not found', status: 404 }

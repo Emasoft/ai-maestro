@@ -10,7 +10,115 @@
 
 import { execSync, spawnSync } from 'child_process'
 import type { Task, TaskWithDeps } from '@/types/task'
+import { migrateStatus } from '@/lib/task-registry'
+import { DEFAULT_KANBAN_COLUMNS } from '@/types/team'
 import type { KanbanColumnConfig } from '@/types/team'
+
+// Lookup of the canonical 14-stage column config keyed by status id, so GitHub
+// Project columns can inherit the project-standard color + icon when their
+// normalized id matches a known stage.
+const DEFAULT_COLUMN_BY_ID = new Map(DEFAULT_KANBAN_COLUMNS.map(c => [c.id, c]))
+
+/**
+ * Normalize a GitHub Project Status option name to a kanban status id.
+ * 1. lowercase + collapse non-alphanumerics to underscores (so "In Progress" -> "in_progress")
+ * 2. run the committed-core legacy->TRDD-v2 migration (so "in_progress" -> "dev",
+ *    "backlog" -> "backburner", etc.) — single source of truth in lib/task-registry.
+ * A GH option that already matches a 14-stage column id (e.g. "Dev", "AI Review")
+ * passes the migration unchanged, so this is safe for both old and new project
+ * boards. A custom GH column with no mapping is returned as its normalized id.
+ */
+function normalizeGhStatus(name: string): string {
+  const normalized = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '')
+  return migrateStatus(normalized)
+}
+
+/**
+ * Build prefixed issue labels for the TRDD-v2 metadata fields that GitHub
+ * Projects has no native field for. Array fields emit one label per entry.
+ */
+function trddMetadataLabels(data: {
+  severity?: Task['severity']
+  effort?: Task['effort']
+  parentTask?: string
+  npt?: string[]
+  eht?: string[]
+  supersedes?: string[]
+  relevantRules?: string[]
+  releaseVia?: Task['releaseVia']
+}): string[] {
+  const labels: string[] = []
+  if (data.severity) labels.push(`severity:${data.severity}`)
+  if (data.effort) labels.push(`effort:${data.effort}`)
+  if (data.parentTask) labels.push(`parent:${data.parentTask}`)
+  if (data.releaseVia) labels.push(`release-via:${data.releaseVia}`)
+  for (const ref of data.npt ?? []) labels.push(`npt:${ref}`)
+  for (const ref of data.eht ?? []) labels.push(`eht:${ref}`)
+  for (const ref of data.supersedes ?? []) labels.push(`supersedes:${ref}`)
+  for (const rule of data.relevantRules ?? []) labels.push(`rule:${rule}`)
+  return labels
+}
+
+/** Parsed TRDD-v2 metadata extracted from issue labels (inverse of trddMetadataLabels). */
+interface ParsedTrddMetadata {
+  severity?: Task['severity']
+  effort?: Task['effort']
+  parentTask?: string
+  npt: string[]
+  eht: string[]
+  supersedes: string[]
+  relevantRules: string[]
+  releaseVia?: Task['releaseVia']
+}
+
+/**
+ * Extract TRDD-v2 metadata from a label, mutating the accumulator. Returns true
+ * when the label was a TRDD metadata label (so the caller can drop it from the
+ * display labels), false otherwise.
+ */
+function consumeTrddMetadataLabel(label: string, acc: ParsedTrddMetadata): boolean {
+  const lower = label.toLowerCase()
+  if (lower.startsWith('severity:')) {
+    acc.severity = label.slice(9).trim() as Task['severity']
+  } else if (lower.startsWith('effort:')) {
+    acc.effort = label.slice(7).trim() as Task['effort']
+  } else if (lower.startsWith('parent:')) {
+    acc.parentTask = label.slice(7).trim()
+  } else if (lower.startsWith('release-via:')) {
+    acc.releaseVia = label.slice(12).trim() as Task['releaseVia']
+  } else if (lower.startsWith('npt:')) {
+    const v = label.slice(4).trim(); if (v) acc.npt.push(v)
+  } else if (lower.startsWith('eht:')) {
+    const v = label.slice(4).trim(); if (v) acc.eht.push(v)
+  } else if (lower.startsWith('supersedes:')) {
+    const v = label.slice(11).trim(); if (v) acc.supersedes.push(v)
+  } else if (lower.startsWith('rule:')) {
+    const v = label.slice(5).trim(); if (v) acc.relevantRules.push(v)
+  } else {
+    return false
+  }
+  return true
+}
+
+/**
+ * Find the GitHub Project Status option matching a target status id. The target
+ * may be a 14-stage id (e.g. "dev"); each GH option is normalized AND migrated
+ * (via normalizeGhStatus) before comparison, so "dev" matches a GH "In Progress"
+ * column on a legacy board. Also accepts an exact match on the GH option's own
+ * normalized id (so a project whose columns are already the new names works too).
+ */
+function findStatusOption(
+  options: ProjectFieldOption[] | undefined,
+  targetStatus: string,
+): ProjectFieldOption | undefined {
+  if (!options) return undefined
+  // The target may already be a new-name; migrate it too so both sides are normalized.
+  const target = migrateStatus(targetStatus)
+  return options.find(o => normalizeGhStatus(o.name) === target)
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -252,7 +360,9 @@ function mapProjectItemToTask(
   if (!item.content || !item.content.title) return null
 
   // ── Extract project field values (Status, Priority, custom text fields) ──
-  let status = 'backlog'
+  // Default to the first 14-stage column ('backburner') when the GH item has no
+  // Status set (TRDD-v2 renamed 'backlog' -> 'backburner').
+  let status = 'backburner'
   let priority: number | undefined
   const customFields: Record<string, string> = {} // e.g. Platform
   let assigneeFromAgentField: string | null = null // Agent TEXT field on GitHub Project
@@ -263,11 +373,10 @@ function mapProjectItemToTask(
     if (!fieldName) continue
 
     if (fieldName === 'Status' && fv.name) {
-      // Convert "In Progress" → "in_progress", "To Do" → "to_do", etc.
-      status = fv.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_|_$/g, '')
+      // Normalize "In Progress" → "in_progress" then migrate to the 14-stage id
+      // ("in_progress" → "dev", "Backlog" → "backburner", etc.). A GH column that
+      // already matches a new column id passes through unchanged.
+      status = normalizeGhStatus(fv.name)
     } else if (fieldName === 'Priority' && fv.name) {
       const pMap: Record<string, number> = {
         'critical': 0, 'urgent': 0,
@@ -295,11 +404,18 @@ function mapProjectItemToTask(
   let previousStatus: string | undefined
   const blockedBy: string[] = []
   const displayLabels: string[] = []
+  // TRDD-v2 metadata reconstructed from prefixed labels (see trddMetadataLabels).
+  const trdd: ParsedTrddMetadata = {
+    npt: [], eht: [], supersedes: [], relevantRules: [],
+  }
 
   for (const label of allLabels) {
     const lower = label.toLowerCase()
 
-    if (lower.startsWith('type:')) {
+    if (consumeTrddMetadataLabel(label, trdd)) {
+      // Consumed as TRDD-v2 metadata — do not also display it.
+      continue
+    } else if (lower.startsWith('type:')) {
       // type:bug, type:feature, type:epic → taskType
       taskType = label.slice(5).trim()
     } else if (lower.startsWith('assign:')) {
@@ -409,7 +525,19 @@ function mapProjectItemToTask(
     acceptanceCriteria,
     handoffDoc,
     prUrl,
-    startedAt: status === 'in_progress' ? updatedAt : undefined,
+    // TRDD-v2 metadata reconstructed from prefixed labels (undefined when absent
+    // so the field is omitted rather than serialized as an empty array).
+    severity: trdd.severity,
+    effort: trdd.effort,
+    parentTask: trdd.parentTask,
+    npt: trdd.npt.length ? trdd.npt : undefined,
+    eht: trdd.eht.length ? trdd.eht : undefined,
+    supersedes: trdd.supersedes.length ? trdd.supersedes : undefined,
+    relevantRules: trdd.relevantRules.length ? trdd.relevantRules : undefined,
+    releaseVia: trdd.releaseVia,
+    // 'status' is already migrated to the 14-stage id, so the work-started
+    // marker is the 'dev' column (TRDD-v2 renamed 'in_progress' -> 'dev').
+    startedAt: status === 'dev' ? updatedAt : undefined,
     completedAt,
     createdAt,
     updatedAt,
@@ -542,21 +670,27 @@ export async function getKanbanColumns(
 ): Promise<KanbanColumnConfig[]> {
   const meta = await getProjectMeta(cfg)
 
-  // Map GitHub Status options to KanbanColumnConfig
+  // Fallback palette for GitHub columns that don't map to a known 14-stage id.
   const colorPalette = [
     'bg-gray-500', 'bg-gray-400', 'bg-blue-400', 'bg-purple-400',
     'bg-amber-400', 'bg-cyan-400', 'bg-emerald-400', 'bg-red-400',
     'bg-pink-400', 'bg-indigo-400',
   ]
 
-  return (meta.statusField.options || []).map((opt, i) => ({
-    id: opt.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_|_$/g, ''),
-    label: opt.name,
-    color: colorPalette[i % colorPalette.length],
-  }))
+  // Map each GitHub Status option to a kanban column. The id is the migrated
+  // 14-stage id (so "In Progress" -> "dev"), and when that id is one of the
+  // canonical stages we reuse its standard color + icon; otherwise we keep the
+  // GH option's own label and assign a palette color.
+  return (meta.statusField.options || []).map((opt, i) => {
+    const id = normalizeGhStatus(opt.name)
+    const canonical = DEFAULT_COLUMN_BY_ID.get(id)
+    return {
+      id,
+      label: canonical?.label ?? opt.name,
+      color: canonical?.color ?? colorPalette[i % colorPalette.length],
+      ...(canonical?.icon ? { icon: canonical.icon } : {}),
+    }
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -577,6 +711,16 @@ export async function createTask(
     blockedBy?: string[]
     acceptanceCriteria?: string[]
     prUrl?: string
+    // TRDD-v2 alignment fields. GitHub Projects has no native field for these,
+    // so they round-trip as prefixed issue labels (parsed back in mapProjectItemToTask).
+    severity?: Task['severity']
+    effort?: Task['effort']
+    parentTask?: string
+    npt?: string[]
+    eht?: string[]
+    supersedes?: string[]
+    relevantRules?: string[]
+    releaseVia?: Task['releaseVia']
   },
 ): Promise<Task> {
   const meta = await getProjectMeta(cfg)
@@ -592,6 +736,8 @@ export async function createTask(
       issueLabels.push(`blocked-by:${ref}`)
     }
   }
+  // TRDD-v2 metadata → prefixed labels (no native GH Project field for these).
+  issueLabels.push(...trddMetadataLabels(data))
   // Use spawnSync with argument arrays to avoid shell injection risks
   const createArgs = [
     'issue', 'create',
@@ -628,10 +774,9 @@ export async function createTask(
 
   // 3. Set Status field if specified
   if (data.status && meta.statusField.options) {
-    // Use the same normalization as mapProjectItemToTask: lowercase, replace non-alnum with _, trim underscores
-    const option = meta.statusField.options.find(
-      o => o.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') === data.status
-    )
+    // Match by migrated 14-stage id so a new-name status ("dev") resolves to the
+    // GH column it maps to ("In Progress") on legacy boards, and to itself on new ones.
+    const option = findStatusOption(meta.statusField.options, data.status)
     if (option) {
       await setFieldValue(meta.projectId, itemId, meta.statusField.id, option.id)
     }
@@ -666,7 +811,7 @@ export async function createTask(
     teamId,
     subject: data.subject,
     description: data.description,
-    status: data.status || 'backlog',
+    status: data.status || 'backburner',
     assigneeAgentId: data.assigneeLogin || null,
     blockedBy: data.blockedBy || [],
     priority: data.priority,
@@ -676,6 +821,15 @@ export async function createTask(
     externalProjectRef: itemId,
     acceptanceCriteria: data.acceptanceCriteria,
     prUrl: data.prUrl,
+    // Echo TRDD-v2 fields so the create response reflects what was requested.
+    severity: data.severity,
+    effort: data.effort,
+    parentTask: data.parentTask,
+    npt: data.npt,
+    eht: data.eht,
+    supersedes: data.supersedes,
+    relevantRules: data.relevantRules,
+    releaseVia: data.releaseVia,
     createdAt: now,
     updatedAt: now,
   }
@@ -701,6 +855,15 @@ export async function updateTask(
     acceptanceCriteria?: string[]
     prUrl?: string
     previousStatus?: string
+    // TRDD-v2 alignment fields — round-trip as prefixed issue labels.
+    severity?: Task['severity']
+    effort?: Task['effort']
+    parentTask?: string
+    npt?: string[]
+    eht?: string[]
+    supersedes?: string[]
+    relevantRules?: string[]
+    releaseVia?: Task['releaseVia']
   },
 ): Promise<Task | null> {
   const meta = await getProjectMeta(cfg)
@@ -710,10 +873,9 @@ export async function updateTask(
 
   // Update Status field
   if (updates.status !== undefined && meta.statusField.options) {
-    // Use the same normalization as mapProjectItemToTask: lowercase, replace non-alnum with _, trim underscores
-    const option = meta.statusField.options.find(
-      o => o.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') === updates.status
-    )
+    // Match by migrated 14-stage id (see findStatusOption) so moving a task to a
+    // new-name column resolves correctly on both legacy and new GH boards.
+    const option = findStatusOption(meta.statusField.options, updates.status)
     if (option) {
       await setFieldValue(meta.projectId, itemId, meta.statusField.id, option.id)
     }
@@ -770,6 +932,16 @@ export async function updateTask(
     if (updates.taskType) removePrefixes.push('type:')
     if (updates.blockedBy !== undefined) removePrefixes.push('blocked-by:', 'depends:')
     if (updates.previousStatus) removePrefixes.push('status:blocked-from:')
+    // Clear stale TRDD-v2 metadata labels for each field being updated so a new
+    // value replaces (not accumulates with) the old one.
+    if (updates.severity !== undefined) removePrefixes.push('severity:')
+    if (updates.effort !== undefined) removePrefixes.push('effort:')
+    if (updates.parentTask !== undefined) removePrefixes.push('parent:')
+    if (updates.releaseVia !== undefined) removePrefixes.push('release-via:')
+    if (updates.npt !== undefined) removePrefixes.push('npt:')
+    if (updates.eht !== undefined) removePrefixes.push('eht:')
+    if (updates.supersedes !== undefined) removePrefixes.push('supersedes:')
+    if (updates.relevantRules !== undefined) removePrefixes.push('rule:')
 
     if (removePrefixes.length > 0) {
       // Fetch current labels and remove stale prefix matches
@@ -801,6 +973,8 @@ export async function updateTask(
       for (const ref of updates.blockedBy) addLabels.push(`blocked-by:${ref}`)
     }
     if (updates.previousStatus) addLabels.push(`status:blocked-from:${updates.previousStatus}`)
+    // Re-emit TRDD-v2 metadata labels for the fields included in this update.
+    addLabels.push(...trddMetadataLabels(updates))
 
     if (addLabels.length > 0) {
       const addArgs = ['issue', 'edit', String(issueNumber), '-R', repo]
@@ -1105,8 +1279,13 @@ export function resolveTaskDeps(tasks: Task[]): TaskWithDeps[] {
     }
   }
 
-  // Compute isBlocked: true if any blockedBy task is NOT completed
-  const completedStatuses = new Set(['completed', 'done', 'closed'])
+  // Compute isBlocked: true if any blockedBy task is NOT in a terminal-DONE state.
+  // TRDD-v2 terminal-DONE columns are 'complete' (renamed from 'completed'),
+  // 'published', and 'live'; 'done'/'closed' are GitHub-native terminal names,
+  // and 'completed' is kept for any un-migrated legacy board.
+  const completedStatuses = new Set([
+    'complete', 'published', 'live', 'completed', 'done', 'closed',
+  ])
   return resolvedTasks.map(task => ({
     ...task,
     blocks: blocksMap.get(task.id) || [],

@@ -2006,6 +2006,15 @@ const routes: Route[] = [
       ...(body.handoffDoc !== undefined && { handoffDoc: String(body.handoffDoc) }),
       ...(body.prUrl !== undefined && { prUrl: String(body.prUrl) }),
       ...(body.reviewResult !== undefined && { reviewResult: String(body.reviewResult) }),
+      // TRDD-v2 alignment fields (parity with the Next.js route + Task schema).
+      ...(body.severity !== undefined && { severity: String(body.severity) }),
+      ...(body.effort !== undefined && { effort: String(body.effort) }),
+      ...(body.parentTask !== undefined && { parentTask: String(body.parentTask) }),
+      ...(body.npt !== undefined && { npt: body.npt }),
+      ...(body.eht !== undefined && { eht: body.eht }),
+      ...(body.supersedes !== undefined && { supersedes: body.supersedes }),
+      ...(body.relevantRules !== undefined && { relevantRules: body.relevantRules }),
+      ...(body.releaseVia !== undefined && { releaseVia: String(body.releaseVia) }),
       requestingAgentId: auth.agentId,
       // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
       authContext: buildAuthContext(auth),
@@ -2085,6 +2094,15 @@ const routes: Route[] = [
       ...(body.acceptanceCriteria !== undefined && { acceptanceCriteria: body.acceptanceCriteria }),
       ...(body.handoffDoc !== undefined && { handoffDoc: String(body.handoffDoc) }),
       ...(body.prUrl !== undefined && { prUrl: String(body.prUrl) }),
+      // TRDD-v2 alignment fields (parity with the Next.js route + Task schema).
+      ...(body.severity !== undefined && { severity: String(body.severity) }),
+      ...(body.effort !== undefined && { effort: String(body.effort) }),
+      ...(body.parentTask !== undefined && { parentTask: String(body.parentTask) }),
+      ...(body.npt !== undefined && { npt: body.npt }),
+      ...(body.eht !== undefined && { eht: body.eht }),
+      ...(body.supersedes !== undefined && { supersedes: body.supersedes }),
+      ...(body.relevantRules !== undefined && { relevantRules: body.relevantRules }),
+      ...(body.releaseVia !== undefined && { releaseVia: String(body.releaseVia) }),
       requestingAgentId: auth.agentId,
       // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
       authContext: buildAuthContext(auth),
@@ -2129,10 +2147,15 @@ const routes: Route[] = [
         typeof (col as Record<string, unknown>).label === 'string' &&
         typeof (col as Record<string, unknown>).color === 'string' &&
         ((col as Record<string, unknown>).icon === undefined ||
-          typeof (col as Record<string, unknown>).icon === 'string')
+          typeof (col as Record<string, unknown>).icon === 'string') &&
+        // roles? is the optional per-column governance-title gate (14-stage parity):
+        // undefined, or an array of title strings.
+        ((col as Record<string, unknown>).roles === undefined ||
+          (Array.isArray((col as Record<string, unknown>).roles) &&
+            ((col as Record<string, unknown>).roles as unknown[]).every(r => typeof r === 'string')))
     )
     if (!isValidColumns) {
-      sendJson(res, 400, { error: 'Each column must have string fields: id, label, color (icon is optional string)' })
+      sendJson(res, 400, { error: 'Each column must have string fields: id, label, color (icon and roles are optional; roles is a string array)' })
       return
     }
     // LIB2-CRIT-02 (2026-05-06): forward AuthContext.

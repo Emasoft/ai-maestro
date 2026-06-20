@@ -10,9 +10,14 @@ const KanbanColumnSchema = z.object({
   label: z.string().min(1).max(128),
   color: z.string().min(1).max(64),
   icon: z.string().max(64).optional(),
+  // Per-column move-permission (TRDD-v2 #2 spec): governance titles allowed to
+  // move a task INTO this column. undefined/empty = any title may move tasks here.
+  roles: z.array(z.string().max(64)).max(20).optional(),
 }).strict()
 
 const UpdateKanbanConfigSchema = z.object({
+  // Widened to 20 columns to fit the 17-stage default set (14 lifecycle + 3
+  // exception states) plus headroom for a few custom columns.
   columns: z.array(KanbanColumnSchema).min(1).max(20),
 }).strict()
 

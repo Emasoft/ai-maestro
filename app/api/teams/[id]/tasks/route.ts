@@ -8,7 +8,9 @@ const CreateTaskSchema = z.object({
   subject: z.string().min(1).max(512),
   description: z.string().max(4096).optional(),
   assigneeAgentId: z.string().uuid().nullable().optional(),
-  status: z.string().max(32).optional(),
+  // status stays a free string — the registry validates it against the team's
+  // columns (custom kanban or the 17 DEFAULT_STATUSES). Don't duplicate that here.
+  status: z.string().max(64).optional(),
   priority: z.number().int().min(0).max(10).optional(),
   blockedBy: z.array(z.string().uuid()).max(20).optional(),
   labels: z.array(z.string().max(64)).max(20).optional(),
@@ -18,6 +20,23 @@ const CreateTaskSchema = z.object({
   externalProjectRef: z.string().max(512).optional(),
   handoffDoc: z.string().max(4096).optional(),
   prUrl: z.string().max(512).optional(),
+  reviewResult: z.string().max(512).optional(),
+  // TRDD-v2 alignment fields (additive, all optional) — mirror the Task schema in
+  // types/task.ts so a kanban task created via the API can carry the same
+  // classification / relationship / delivery / evidence metadata a TRDD does.
+  severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'NIT']).optional(),
+  effort: z.enum(['S', 'M', 'L', 'XL']).optional(),
+  parentTask: z.string().uuid().optional(),
+  npt: z.array(z.string().uuid()).max(50).optional(),
+  eht: z.array(z.string().uuid()).max(50).optional(),
+  supersedes: z.array(z.string().uuid()).max(50).optional(),
+  supersededBy: z.array(z.string().uuid()).max(50).optional(),
+  relevantRules: z.array(z.string().max(32)).max(50).optional(),
+  releaseVia: z.enum(['publish', 'deploy', 'none']).optional(),
+  implementationCommits: z.array(z.string().max(64)).max(100).optional(),
+  lastTestResult: z.enum(['not-run', 'pass', 'fail', 'partial']).optional(),
+  publishedVersion: z.string().max(64).optional(),
+  liveSince: z.string().max(64).optional(),
 }).strict()
 
 // GET /api/teams/[id]/tasks - List tasks with resolved dependencies
@@ -100,6 +119,14 @@ export async function POST(
     requestingAgentId,
     // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
     authContext: buildAuthContext(auth),
+    // The schema above now ACCEPTS+validates the TRDD-v2 fields (reviewResult,
+    // severity, effort, parentTask, npt, eht, supersedes, supersededBy,
+    // relevantRules, releaseVia, implementationCommits, lastTestResult,
+    // publishedVersion, liveSince) so the API is at parity with the 17-stage
+    // model and no longer 400s on valid payloads. Forwarding them into the
+    // service is the services-wave job (teams-service.ts CreateTaskParams +
+    // createTeamTask -> task-registry.createTask, which already persists them);
+    // adding them here would break tsc against the current CreateTaskParams.
   }
   const result = await createTeamTask(id, safeParams)
 

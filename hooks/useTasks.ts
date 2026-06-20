@@ -1,7 +1,34 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import type { TaskWithDeps, TaskStatus } from '@/types/task'
+import type { Task, TaskWithDeps } from '@/types/task'
+
+// Param object accepted by createTask. Mirrors lib/task-registry.ts::createTask
+// (minus teamId, which the hook supplies) so the hook stays in lockstep with the
+// committed registry core, including the additive TRDD-v2 fields. Derived via
+// Pick<Task, ...> rather than re-listing literal unions so the two never drift.
+type CreateTaskInput = { subject: string } & Partial<Pick<Task,
+  | 'description' | 'assigneeAgentId' | 'blockedBy' | 'priority' | 'status'
+  | 'labels' | 'taskType' | 'externalRef' | 'externalProjectRef'
+  | 'acceptanceCriteria' | 'handoffDoc' | 'prUrl' | 'reviewResult'
+  // TRDD-v2 alignment fields (additive)
+  | 'severity' | 'effort' | 'parentTask' | 'npt' | 'eht' | 'supersedes' | 'supersededBy'
+  | 'relevantRules' | 'releaseVia' | 'implementationCommits' | 'lastTestResult'
+  | 'publishedVersion' | 'liveSince'
+>>
+
+// Param object accepted by updateTask. Mirrors lib/task-registry.ts::updateTask
+// so every field the registry persists can be sent from the UI, including the
+// additive TRDD-v2 fields. status carries Task['status'] (the TaskStatus alias).
+type UpdateTaskInput = Partial<Pick<Task,
+  | 'subject' | 'description' | 'status' | 'assigneeAgentId' | 'blockedBy' | 'priority'
+  | 'labels' | 'taskType' | 'externalRef' | 'externalProjectRef' | 'previousStatus'
+  | 'acceptanceCriteria' | 'handoffDoc' | 'prUrl' | 'reviewResult'
+  // TRDD-v2 alignment fields (additive)
+  | 'severity' | 'effort' | 'parentTask' | 'npt' | 'eht' | 'supersedes' | 'supersededBy'
+  | 'relevantRules' | 'releaseVia' | 'implementationCommits' | 'lastTestResult'
+  | 'publishedVersion' | 'liveSince'
+>>
 
 interface UseTasksResult {
   tasks: TaskWithDeps[]
@@ -12,8 +39,8 @@ interface UseTasksResult {
   completedTasks: TaskWithDeps[]
   tasksByStatus: Record<string, TaskWithDeps[]>
   tasksByAgent: Record<string, TaskWithDeps[]>
-  createTask: (data: { subject: string; description?: string; assigneeAgentId?: string; blockedBy?: string[]; priority?: number; status?: string; labels?: string[]; taskType?: string; externalRef?: string }) => Promise<void>
-  updateTask: (taskId: string, updates: { subject?: string; description?: string; status?: TaskStatus; assigneeAgentId?: string | null; blockedBy?: string[]; priority?: number; labels?: string[]; taskType?: string; externalRef?: string; externalProjectRef?: string; previousStatus?: string; acceptanceCriteria?: string[]; handoffDoc?: string; prUrl?: string; reviewResult?: string }) => Promise<{ unblocked: TaskWithDeps[] }>
+  createTask: (data: CreateTaskInput) => Promise<void>
+  updateTask: (taskId: string, updates: UpdateTaskInput) => Promise<{ unblocked: TaskWithDeps[] }>
   deleteTask: (taskId: string) => Promise<void>
   assignTask: (taskId: string, agentId: string | null) => Promise<void>
   refreshTasks: () => Promise<void>
@@ -79,7 +106,7 @@ export function useTasks(teamId: string | null): UseTasksResult {
     }
   }, [teamId, fetchTasks])
 
-  const createTask = useCallback(async (data: { subject: string; description?: string; assigneeAgentId?: string; blockedBy?: string[]; priority?: number; status?: string; labels?: string[]; taskType?: string; externalRef?: string }) => {
+  const createTask = useCallback(async (data: CreateTaskInput) => {
     if (!teamId) return
     try {
       const res = await fetch(`/api/teams/${teamId}/tasks`, {
@@ -107,7 +134,7 @@ export function useTasks(teamId: string | null): UseTasksResult {
     }
   }, [teamId, fetchTasks])
 
-  const updateTask = useCallback(async (taskId: string, updates: { subject?: string; description?: string; status?: TaskStatus; assigneeAgentId?: string | null; blockedBy?: string[]; priority?: number; labels?: string[]; taskType?: string; externalRef?: string; externalProjectRef?: string; previousStatus?: string; acceptanceCriteria?: string[]; handoffDoc?: string; prUrl?: string; reviewResult?: string }) => {
+  const updateTask = useCallback(async (taskId: string, updates: UpdateTaskInput) => {
     if (!teamId) return { unblocked: [] as TaskWithDeps[] }
     // Filter out undefined values to avoid overwriting existing task fields during optimistic merge
     const cleanUpdates = Object.fromEntries(Object.entries(updates).filter(([, v]) => v !== undefined))
@@ -150,9 +177,13 @@ export function useTasks(teamId: string | null): UseTasksResult {
     await updateTask(taskId, { assigneeAgentId: agentId })
   }, [updateTask])
 
-  const pendingTasks = useMemo(() => tasks.filter(t => t.status === 'pending'), [tasks])
-  const inProgressTasks = useMemo(() => tasks.filter(t => t.status === 'in_progress'), [tasks])
-  const completedTasks = useMemo(() => tasks.filter(t => t.status === 'completed'), [tasks])
+  // 17-status migration: the kanban statuses were renamed (backlog->backburner,
+  // pending->todo, in_progress->dev, review->ai_review, completed->complete).
+  // These three memo *names* are kept for caller compatibility, but each now
+  // filters on the NEW status id so consumers keep getting the right tasks.
+  const pendingTasks = useMemo(() => tasks.filter(t => t.status === 'todo'), [tasks])
+  const inProgressTasks = useMemo(() => tasks.filter(t => t.status === 'dev'), [tasks])
+  const completedTasks = useMemo(() => tasks.filter(t => t.status === 'complete'), [tasks])
 
   const tasksByStatus = useMemo(() => {
     const map: Record<string, TaskWithDeps[]> = {}

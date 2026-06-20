@@ -1,11 +1,9 @@
-import { homedir } from 'node:os'
-import path from 'node:path'
-
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import {
-  hasSessionCookie,
+  hasValidSession,
+  confineToProjectsStore,
   resolveSessionPath,
   ensureOpenForPath,
 } from '@/services/sessions-browser-service'
@@ -16,27 +14,6 @@ import {
 } from '@/lib/jsonl-reader'
 
 export const dynamic = 'force-dynamic'
-
-/**
- * Confine a caller-supplied `?path=` to the Claude Code transcript store
- * (`~/.claude/projects/<slug>/...<uuid>.jsonl`). The raw `?path=` is
- * attacker-controlled — any authenticated session can pass
- * `?path=/etc/passwd` — and the downstream reader (`ensureOpenForPath` →
- * Rust `open` → `fs.readFile`) does NOT confine it, so the gate has to
- * live here at the request boundary. Mirrors `confineToProjectsStore` in
- * the sibling context-breakdown route — the same fail-fast boundary for
- * the same `?path=` surface. `path.resolve` collapses any `..` traversal,
- * so a post-resolve `.jsonl`-suffix + projects-root-prefix check is the
- * correct lexical confinement (no symlink follow — the reader does none
- * either). Returns the resolved absolute path, or `null` to reject.
- */
-function confineToProjectsStore(rawPath: string): string | null {
-  const resolved = path.resolve(rawPath)
-  if (!resolved.endsWith('.jsonl')) return null
-  const projectsRoot = path.join(homedir(), '.claude', 'projects')
-  if (!resolved.startsWith(projectsRoot + path.sep)) return null
-  return resolved
-}
 
 const SearchBodySchema = z.object({
   query: z.string().min(1),
@@ -60,7 +37,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ sid: string }> },
 ) {
-  if (!hasSessionCookie(request.headers.get('cookie'))) {
+  if (!hasValidSession(request.headers.get('cookie'))) {
     return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
   }
 

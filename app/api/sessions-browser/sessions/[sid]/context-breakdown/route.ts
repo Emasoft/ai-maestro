@@ -1,11 +1,9 @@
-import { homedir } from 'node:os'
-import path from 'node:path'
-
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import {
-  hasSessionCookie,
+  hasValidSession,
+  confineToProjectsStore,
   resolveSessionPath,
   ensureOpenForPath,
 } from '@/services/sessions-browser-service'
@@ -16,33 +14,6 @@ import {
 } from '@/lib/jsonl-reader'
 
 export const dynamic = 'force-dynamic'
-
-/**
- * Confine a caller-supplied `?path=` to the Claude Code transcript store
- * (`~/.claude/projects/<slug>/...<uuid>.jsonl`, plus subagent sidecars
- * under `.../subagents/`). The raw `?path=` is attacker-controlled — any
- * authenticated session can pass `?path=/etc/passwd` — and the downstream
- * reader (`ensureOpenForPath` → Rust `open` → `fs.readFile`) does NOT
- * confine it, so the gate has to live here at the request boundary.
- *
- * Returns the resolved absolute path when it is inside the store and names
- * a `.jsonl` file, or `null` to reject (the caller fails fast with 400).
- * `path.resolve` collapses any `..` traversal, so a post-resolve prefix
- * check against the projects root is sufficient — there is no symlink
- * follow here (that would require `fs.realpath`, an extra I/O the reader
- * does not perform either; confining the lexical path is the correct
- * boundary for this surface).
- */
-function confineToProjectsStore(rawPath: string): string | null {
-  const resolved = path.resolve(rawPath)
-  // A real transcript names a `.jsonl` file strictly INSIDE the store, so
-  // the prefix check is `projectsRoot + sep` (the bare root dir can never
-  // be a `.jsonl` file and is correctly rejected).
-  if (!resolved.endsWith('.jsonl')) return null
-  const projectsRoot = path.join(homedir(), '.claude', 'projects')
-  if (!resolved.startsWith(projectsRoot + path.sep)) return null
-  return resolved
-}
 
 const RecordedSnapshotSchema = z.object({
   systemPrompt: z.number().int().nonnegative(),
@@ -122,7 +93,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ sid: string }> },
 ) {
-  if (!hasSessionCookie(request.headers.get('cookie'))) {
+  if (!hasValidSession(request.headers.get('cookie'))) {
     return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
   }
 

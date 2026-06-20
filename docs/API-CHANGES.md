@@ -270,6 +270,42 @@ replacement is the approval queue above.
 
 **Reference:** R33/R34/R35/R40 in `docs/GOVERNANCE-RULES.md`.
 
+## 7. Sessions-browser routes: aim_session VALIDATION + path-traversal SSOT (2026-06-21)
+
+Two security fixes to the `/api/sessions-browser/*` routes (Next-mode AND
+headless-mode mirrors), landing TRDD-9e1e4b29 + TRDD-5df6f7da.
+
+**Auth gate hardened (TRDD-9e1e4b29).** Every `/api/sessions-browser/*`
+route previously gated on `hasSessionCookie`, which returned `true` for ANY
+non-empty `aim_session` cookie value (presence-only). A client on the
+allowed network (localhost / Tailscale) could read every agent's full
+transcript + context breakdown by sending `Cookie: aim_session=anything`.
+The routes now call `hasValidSession`, which VALIDATES the token against the
+server session store (`validateSession` in `lib/session-auth.ts`). Forged /
+absent / expired `aim_session` → **401 `unauthenticated`**, reader never
+invoked. A real logged-in session (issued by `login` / `setup-verify` /
+`webauthn/authenticate` via `createSession`) is unaffected — `validateSession`
+is independent of the user-authority-model toggle, so no legit-user lockout.
+
+**Path-traversal guard de-duplicated + headless hole closed (TRDD-5df6f7da).**
+`confineToProjectsStore` (resolve → must end `.jsonl` → must sit under
+`~/.claude/projects/`) was copy-pasted into 3 Next routes; it now lives once
+in `services/sessions-browser-service.ts`. The **headless-router mirror had
+NO confinement** — its range/search/context-breakdown handlers passed
+`?path=` straight to the reader (a traversal hole). All 3 headless handlers
+now use the shared guard: a `?path=` outside the transcript store → **400
+`invalid_path`**.
+
+**Effect on plugins:** wire-compatible for legitimate callers (a valid
+session cookie behaves exactly as before). A request relying on a junk or
+absent `aim_session` to read transcripts now correctly gets 401. No endpoint
+shapes changed. `tsc --noEmit` clean; full unit suite 1851 passed / 0 failed.
+
+**Still open (separate TRDD needed):** `server.mjs`'s full-mode
+`hasCredential()` uses its own inline presence-only `aim_session` regex —
+same weakness, broader surface; it is `.mjs` and cannot import the TS
+validator without a build step.
+
 ## How plugins should consume this doc
 
 1. The role-plugins use `https://raw.githubusercontent.com/Emasoft/ai-maestro/governance-rules/docs/GOVERNANCE-RULES.md` (and similar for other docs) to learn about API surface.

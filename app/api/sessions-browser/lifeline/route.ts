@@ -3,7 +3,7 @@ import path from 'path'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
-import { hasSessionCookie } from '@/services/sessions-browser-service'
+import { hasValidSession } from '@/services/sessions-browser-service'
 import { componentsActiveAt } from '@/lib/pss-lifeline'
 
 export const dynamic = 'force-dynamic'
@@ -48,7 +48,7 @@ const LifelineResultSchema = z.object({
 })
 
 export async function GET(request: Request) {
-  if (!hasSessionCookie(request.headers.get('cookie'))) {
+  if (!hasValidSession(request.headers.get('cookie'))) {
     return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
   }
 

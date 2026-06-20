@@ -23,11 +23,12 @@ import {
   resolveSessionPath,
   recordSessionMapping,
   clearSessionMappings,
-  hasSessionCookie,
+  hasValidSession,
   ensureOpenForPath,
 } from '@/services/sessions-browser-service'
 import { getAgent } from '@/lib/agent-registry'
 import { getJsonlReader } from '@/lib/jsonl-reader'
+import { createSession, invalidateSession } from '@/lib/session-auth'
 
 // ---------------------------------------------------------------------------
 // slugifyWorkingDirectory
@@ -192,26 +193,50 @@ describe('getSessionsForAgent', () => {
 // Cookie parser
 // ---------------------------------------------------------------------------
 
-describe('hasSessionCookie', () => {
-  it('returns false for null/empty/absent', () => {
-    expect(hasSessionCookie(null)).toBe(false)
-    expect(hasSessionCookie(undefined)).toBe(false)
-    expect(hasSessionCookie('')).toBe(false)
+describe('hasValidSession', () => {
+  // TRDD-9e1e4b29: the gate VALIDATES the aim_session token against the server
+  // session store — presence is NOT enough. These are real round-trips against
+  // the live session store (createSession is the same call the login routes use),
+  // never a mock, so a regression in the validating gate is actually caught.
+  it('returns false for null/empty/absent cookie', () => {
+    expect(hasValidSession(null)).toBe(false)
+    expect(hasValidSession(undefined)).toBe(false)
+    expect(hasValidSession('')).toBe(false)
   })
 
-  it('returns true when aim_session is present with a non-empty value', () => {
-    expect(hasSessionCookie('aim_session=abc123')).toBe(true)
-    expect(hasSessionCookie('other=x; aim_session=abc123; yet=y')).toBe(true)
+  it('returns false for a forged aim_session the store never issued', () => {
+    // The whole point of the fix: a junk value that passed the old presence
+    // check must now be rejected.
+    expect(hasValidSession('aim_session=forged-never-issued')).toBe(false)
+    expect(hasValidSession('other=x; aim_session=also-forged; yet=y')).toBe(false)
+    expect(hasValidSession('aim_session=')).toBe(false)
+    expect(hasValidSession('aim_session= ')).toBe(false)
   })
 
-  it('returns false when aim_session is empty', () => {
-    expect(hasSessionCookie('aim_session=')).toBe(false)
-    expect(hasSessionCookie('aim_session= ')).toBe(false)
+  it('returns true only for a token the store actually issued', async () => {
+    const token = await createSession()
+    try {
+      expect(hasValidSession(`aim_session=${token}`)).toBe(true)
+      expect(hasValidSession(`other=x; aim_session=${token}; yet=y`)).toBe(true)
+    } finally {
+      invalidateSession(token)
+    }
   })
 
-  it('does not false-match substring names', () => {
-    expect(hasSessionCookie('my_aim_session=abc')).toBe(false)
-    expect(hasSessionCookie('aim_session_x=abc')).toBe(false)
+  it('returns false once the issued session is invalidated (logout)', async () => {
+    const token = await createSession()
+    invalidateSession(token)
+    expect(hasValidSession(`aim_session=${token}`)).toBe(false)
+  })
+
+  it('does not false-match substring cookie names even with a valid token', async () => {
+    const token = await createSession()
+    try {
+      expect(hasValidSession(`my_aim_session=${token}`)).toBe(false)
+      expect(hasValidSession(`aim_session_x=${token}`)).toBe(false)
+    } finally {
+      invalidateSession(token)
+    }
   })
 })
 

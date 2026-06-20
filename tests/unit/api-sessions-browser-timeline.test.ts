@@ -11,7 +11,7 @@
  * `sessions-timeline-service.test.ts`.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest'
 
 // Mock the service layer before importing routes.
 vi.mock('@/services/sessions-timeline-service', () => ({
@@ -31,6 +31,20 @@ import { GET as getTimeline } from '@/app/api/sessions-browser/agents/[id]/timel
 import { GET as getRange } from '@/app/api/sessions-browser/timelines/[tid]/range/route'
 import { GET as getSearch } from '@/app/api/sessions-browser/timelines/[tid]/search/route'
 import { GET as getContextAt } from '@/app/api/sessions-browser/timelines/[tid]/context-at/route'
+import { createSession, invalidateSession } from '@/lib/session-auth'
+
+// A real session token: the validating auth gate (TRDD-9e1e4b29) now rejects a
+// junk `aim_session` value, so the authenticated-request helper must carry a
+// token the store actually issued. createSession is the same mint the login
+// routes use; validateSession (inside the route gate) accepts it.
+let validCookie = ''
+beforeAll(async () => {
+  validCookie = `aim_session=${await createSession()}`
+})
+afterAll(() => {
+  const token = validCookie.slice('aim_session='.length)
+  if (token) invalidateSession(token)
+})
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -38,7 +52,7 @@ import { GET as getContextAt } from '@/app/api/sessions-browser/timelines/[tid]/
 
 function makeRequest(url: string, options: RequestInit = {}): Request {
   return new Request(url, {
-    headers: { cookie: 'aim_session=s1', ...(options.headers ?? {}) },
+    headers: { cookie: validCookie, ...(options.headers ?? {}) },
     ...options,
   })
 }

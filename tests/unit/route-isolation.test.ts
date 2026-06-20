@@ -49,7 +49,7 @@
  * confidence.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest'
 import { EventEmitter } from 'events'
 import { PassThrough } from 'stream'
 import { homedir } from 'node:os'
@@ -111,6 +111,20 @@ import {
 import { POST as rangePOST } from '@/app/api/sessions-browser/sessions/[sid]/range/route'
 import { POST as searchPOST } from '@/app/api/sessions-browser/sessions/[sid]/search/route'
 import { GET as contextBreakdownGET } from '@/app/api/sessions-browser/sessions/[sid]/context-breakdown/route'
+import { createSession, invalidateSession } from '@/lib/session-auth'
+
+// A real session token minted from the live store so the validating auth gate
+// (hasValidSession → validateSession, TRDD-9e1e4b29) passes for the traversal
+// tests below — exactly what the production login round-trip issues. A hardcoded
+// junk cookie would now be (correctly) rejected with 401 before the path check.
+let validCookie = ''
+beforeAll(async () => {
+  validCookie = `aim_session=${await createSession()}`
+})
+afterAll(() => {
+  const token = validCookie.slice('aim_session='.length)
+  if (token) invalidateSession(token)
+})
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -134,7 +148,7 @@ function makeRangeRequest(sid: string, queryPath?: string, body = { fromLine: 0,
   return new Request(url, {
     method: 'POST',
     headers: {
-      cookie: 'aim_session=fake-test-cookie',
+      cookie: validCookie,
       'content-type': 'application/json',
     },
     body: JSON.stringify(body),
@@ -157,7 +171,7 @@ function makeSearchRequest(sid: string, queryPath: string) {
   return new Request(url, {
     method: 'POST',
     headers: {
-      cookie: 'aim_session=fake-test-cookie',
+      cookie: validCookie,
       'content-type': 'application/json',
     },
     body: JSON.stringify({ query: 'needle' }),
@@ -175,7 +189,7 @@ function makeContextRequest(sid: string, queryPath: string) {
   const url = `${base}?path=${encodeURIComponent(queryPath)}`
   return new Request(url, {
     method: 'GET',
-    headers: { cookie: 'aim_session=fake-test-cookie' },
+    headers: { cookie: validCookie },
   })
 }
 
@@ -640,5 +654,59 @@ describe('sessions-browser routes — path-traversal confinement (confineToProje
 
     expect(res.status).toBe(200)
     expect(fakeReader.open).toHaveBeenCalledWith(validPath)
+  })
+})
+
+describe('sessions-browser routes — aim_session validation gate (TRDD-9e1e4b29)', () => {
+  // The gate VALIDATES the token against the live server session store, not just
+  // its presence. A forged/absent cookie is rejected with 401 BEFORE the route
+  // does any work (no transcript is read for an unauthenticated caller); a real
+  // issued token passes the gate (then 404s here because no mapping is recorded).
+  // These short-circuit before the reader, so no fake reader is needed.
+  beforeEach(() => {
+    clearSessionMappings()
+  })
+
+  const bogus = 'aim_session=forged-never-issued'
+
+  it('range: forged (never-issued) cookie → 401', async () => {
+    const req = new Request('http://localhost:23000/api/sessions-browser/sessions/s1/range', {
+      method: 'POST', headers: { cookie: bogus, 'content-type': 'application/json' },
+      body: JSON.stringify({ fromLine: 0, toLine: 1 }),
+    })
+    expect((await rangePOST(req, asParams({ sid: 's1' }))).status).toBe(401)
+  })
+
+  it('range: absent cookie → 401', async () => {
+    const req = new Request('http://localhost:23000/api/sessions-browser/sessions/s1/range', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fromLine: 0, toLine: 1 }),
+    })
+    expect((await rangePOST(req, asParams({ sid: 's1' }))).status).toBe(401)
+  })
+
+  it('search: forged cookie → 401', async () => {
+    const req = new Request('http://localhost:23000/api/sessions-browser/sessions/s1/search', {
+      method: 'POST', headers: { cookie: bogus, 'content-type': 'application/json' },
+      body: JSON.stringify({ query: 'x' }),
+    })
+    expect((await searchPOST(req, asParams({ sid: 's1' }))).status).toBe(401)
+  })
+
+  it('context-breakdown: forged cookie → 401', async () => {
+    const req = new Request('http://localhost:23000/api/sessions-browser/sessions/s1/context-breakdown', {
+      method: 'GET', headers: { cookie: bogus },
+    })
+    expect((await contextBreakdownGET(req, asParams({ sid: 's1' }))).status).toBe(401)
+  })
+
+  it('valid issued cookie → NOT 401 (passes the gate, then 404 with no mapping)', async () => {
+    const req = new Request('http://localhost:23000/api/sessions-browser/sessions/no-such-sid/range', {
+      method: 'POST', headers: { cookie: validCookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ fromLine: 0, toLine: 1 }),
+    })
+    const res = await rangePOST(req, asParams({ sid: 'no-such-sid' }))
+    expect(res.status).not.toBe(401)
+    expect(res.status).toBe(404)
   })
 })

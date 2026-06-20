@@ -306,7 +306,8 @@ import {
 // review.
 import {
   getSessionsForAgentWithMetadata as getSessionsForAgentBrowser,
-  hasSessionCookie,
+  hasValidSession,
+  confineToProjectsStore,
   resolveSessionPath,
   ensureOpenForPath,
 } from '@/services/sessions-browser-service'
@@ -3200,7 +3201,7 @@ const routes: Route[] = [
   // Sessions Browser (TRDD-d46b42e9 Phase 2)
   // =========================================================================
   { method: 'GET', pattern: /^\/api\/sessions-browser\/agents\/([^/]+)\/sessions$/, paramNames: ['id'], handler: async (req, res, params) => {
-    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+    if (!hasValidSession(getHeader(req, 'cookie'))) {
       sendJson(res, 401, { error: 'unauthenticated' })
       return
     }
@@ -3217,13 +3218,25 @@ const routes: Route[] = [
     sendJson(res, 200, result.data)
   }},
   { method: 'POST', pattern: /^\/api\/sessions-browser\/sessions\/([^/]+)\/range$/, paramNames: ['sid'], handler: async (req, res, params, query) => {
-    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+    if (!hasValidSession(getHeader(req, 'cookie'))) {
       sendJson(res, 401, { error: 'unauthenticated' })
       return
     }
     // Prefer the explicit `?path=` (avoids cross-worker map staleness — see
-    // SCEN-027 BUG-001 and the Next.js route handler for context).
-    const absolutePath = query?.path || resolveSessionPath(params.sid)
+    // SCEN-027 BUG-001 and the Next.js route handler for context). The
+    // caller-controlled `?path=` MUST be confined to the transcript store
+    // before it reaches the reader (which opens it unguarded) — same
+    // path-traversal boundary the Next.js route enforces (TRDD-5df6f7da).
+    let absolutePath: string | null
+    if (query?.path) {
+      absolutePath = confineToProjectsStore(query.path)
+      if (!absolutePath) {
+        sendJson(res, 400, { error: 'invalid_path' })
+        return
+      }
+    } else {
+      absolutePath = resolveSessionPath(params.sid)
+    }
     if (!absolutePath) {
       sendJson(res, 404, { error: 'session_not_found' })
       return
@@ -3259,12 +3272,23 @@ const routes: Route[] = [
     }
   }},
   { method: 'POST', pattern: /^\/api\/sessions-browser\/sessions\/([^/]+)\/search$/, paramNames: ['sid'], handler: async (req, res, params, urlQuery) => {
-    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+    if (!hasValidSession(getHeader(req, 'cookie'))) {
       sendJson(res, 401, { error: 'unauthenticated' })
       return
     }
     // See SCEN-027 BUG-001: prefer `?path=` over the unreliable in-memory map.
-    const absolutePath = urlQuery?.path || resolveSessionPath(params.sid)
+    // Caller-controlled `?path=` MUST be confined to the transcript store
+    // before it reaches the reader (TRDD-5df6f7da) — the reader opens it unguarded.
+    let absolutePath: string | null
+    if (urlQuery?.path) {
+      absolutePath = confineToProjectsStore(urlQuery.path)
+      if (!absolutePath) {
+        sendJson(res, 400, { error: 'invalid_path' })
+        return
+      }
+    } else {
+      absolutePath = resolveSessionPath(params.sid)
+    }
     if (!absolutePath) {
       sendJson(res, 404, { error: 'session_not_found' })
       return
@@ -3302,12 +3326,23 @@ const routes: Route[] = [
     }
   }},
   { method: 'GET', pattern: /^\/api\/sessions-browser\/sessions\/([^/]+)\/context-breakdown$/, paramNames: ['sid'], handler: async (req, res, params, query) => {
-    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+    if (!hasValidSession(getHeader(req, 'cookie'))) {
       sendJson(res, 401, { error: 'unauthenticated' })
       return
     }
     // See SCEN-027 BUG-001: prefer `?path=` over the unreliable in-memory map.
-    const absolutePath = query?.path || resolveSessionPath(params.sid)
+    // Caller-controlled `?path=` MUST be confined to the transcript store
+    // before it reaches the reader (TRDD-5df6f7da) — the reader opens it unguarded.
+    let absolutePath: string | null
+    if (query?.path) {
+      absolutePath = confineToProjectsStore(query.path)
+      if (!absolutePath) {
+        sendJson(res, 400, { error: 'invalid_path' })
+        return
+      }
+    } else {
+      absolutePath = resolveSessionPath(params.sid)
+    }
     if (!absolutePath) {
       sendJson(res, 404, { error: 'session_not_found' })
       return
@@ -3351,7 +3386,7 @@ const routes: Route[] = [
   // session routes above so the diff stays small and easy to review.
   // ---------------------------------------------------------------------
   { method: 'GET', pattern: /^\/api\/sessions-browser\/agents\/([^/]+)\/timeline$/, paramNames: ['id'], handler: async (req, res, params) => {
-    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+    if (!hasValidSession(getHeader(req, 'cookie'))) {
       sendJson(res, 401, { error: 'unauthenticated' })
       return
     }
@@ -3364,7 +3399,7 @@ const routes: Route[] = [
   }},
 
   { method: 'GET', pattern: /^\/api\/sessions-browser\/timelines\/([^/]+)\/range$/, paramNames: ['tid'], handler: async (req, res, params) => {
-    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+    if (!hasValidSession(getHeader(req, 'cookie'))) {
       sendJson(res, 401, { error: 'unauthenticated' })
       return
     }
@@ -3395,7 +3430,7 @@ const routes: Route[] = [
   }},
 
   { method: 'GET', pattern: /^\/api\/sessions-browser\/timelines\/([^/]+)\/search$/, paramNames: ['tid'], handler: async (req, res, params) => {
-    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+    if (!hasValidSession(getHeader(req, 'cookie'))) {
       sendJson(res, 401, { error: 'unauthenticated' })
       return
     }
@@ -3429,7 +3464,7 @@ const routes: Route[] = [
   }},
 
   { method: 'GET', pattern: /^\/api\/sessions-browser\/timelines\/([^/]+)\/context-at$/, paramNames: ['tid'], handler: async (req, res, params) => {
-    if (!hasSessionCookie(getHeader(req, 'cookie'))) {
+    if (!hasValidSession(getHeader(req, 'cookie'))) {
       sendJson(res, 401, { error: 'unauthenticated' })
       return
     }

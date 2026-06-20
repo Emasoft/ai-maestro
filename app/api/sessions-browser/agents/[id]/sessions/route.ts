@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import {
   getSessionsForAgentWithMetadata,
-  hasSessionCookie,
+  hasValidSession,
 } from '@/services/sessions-browser-service'
 
 export const dynamic = 'force-dynamic'
@@ -34,7 +34,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!hasSessionCookie(request.headers.get('cookie'))) {
+  if (!hasValidSession(request.headers.get('cookie'))) {
     return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
   }
   const { id } = await params

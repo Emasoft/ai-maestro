@@ -28,6 +28,7 @@ import { getAgent } from '@/lib/agent-registry'
 import type { SessionSummary, SessionsListResponse } from '@/types/sessions-browser'
 import { getJsonlReader } from '@/lib/jsonl-reader'
 import type { AnalyzeFileMetadataOkResponse } from '@/lib/jsonl-reader-protocol'
+import { validateSession, extractSessionFromCookie } from '@/lib/session-auth'
 
 /**
  * Convert an absolute working directory into Claude's project-dir slug.
@@ -137,29 +138,50 @@ export interface GetSessionsForAgentResult {
 }
 
 /**
- * Parse a raw `Cookie` header and return true iff it carries a non-empty
- * `aim_session` cookie.
+ * Validate the `aim_session` cookie against the server session store.
  *
- * Exported here (rather than living inside each route.ts) so the Next.js
- * routes and the headless-router share the same auth gate. When the
- * rest of the project's auth stack merges in, swap this helper for a
- * richer check (e.g. validating the session token against the server
- * store). For now the mere presence of the cookie value is what the
- * spec defines.
+ * Supersedes the presence-only `hasSessionCookie` (TRDD-9e1e4b29): a forged
+ * `aim_session=anything` MUST NOT pass — only a token the session store
+ * actually issued (via the login round-trip) and that is still live is
+ * accepted. Returns false for an absent / empty / forged / expired cookie.
+ *
+ * WHY this matters: every `/api/sessions-browser/*` route exposes complete
+ * agent transcripts + context/token economics. Network reachability is already
+ * confined to localhost / Tailscale (`server.mjs:isAllowedSource()`), but that
+ * is not authentication — a presence-only gate let any reachable client read
+ * every agent's conversation by sending a junk cookie. This is the single
+ * shared validating gate the routes (Next + headless) call.
+ *
+ * Synchronous: both `extractSessionFromCookie` and `validateSession` are sync,
+ * so the route gates stay synchronous (no handler signature change).
  */
-export function hasSessionCookie(cookieHeader: string | null | undefined): boolean {
-  if (!cookieHeader) return false
-  const parts = cookieHeader.split(/;\s*/)
-  for (const p of parts) {
-    const eq = p.indexOf('=')
-    if (eq === -1) continue
-    const name = p.slice(0, eq).trim()
-    if (name === 'aim_session') {
-      const val = p.slice(eq + 1).trim()
-      if (val.length > 0) return true
-    }
-  }
-  return false
+export function hasValidSession(cookieHeader: string | null | undefined): boolean {
+  const token = extractSessionFromCookie(cookieHeader ?? null)
+  return token !== null && validateSession(token)
+}
+
+/**
+ * Confine a caller-supplied `?path=` to the Claude Code transcript store
+ * (`~/.claude/projects/<slug>/...<uuid>.jsonl`). The raw `?path=` is
+ * attacker-controlled — any authenticated session can pass `?path=/etc/passwd`
+ * — and the downstream reader (`ensureOpenForPath` → Rust `open` →
+ * `fs.readFile`) does NOT confine it, so the gate lives here at the request
+ * boundary. `path.resolve` collapses any `..` traversal, so a post-resolve
+ * `.jsonl`-suffix + projects-root-prefix check is the correct lexical
+ * confinement (no symlink follow — the reader does none either).
+ *
+ * SINGLE SOURCE OF TRUTH (TRDD-5df6f7da): the range / search / context-breakdown
+ * routes (Next + headless) all import THIS one definition, so this security
+ * control can never silently drift across copies. Any future hardening (e.g.
+ * `fs.realpath` symlink resolution) is made here once. Returns the resolved
+ * absolute path, or `null` to reject.
+ */
+export function confineToProjectsStore(rawPath: string): string | null {
+  const resolved = path.resolve(rawPath)
+  if (!resolved.endsWith('.jsonl')) return null
+  const projectsRoot = path.join(os.homedir(), '.claude', 'projects')
+  if (!resolved.startsWith(projectsRoot + path.sep)) return null
+  return resolved
 }
 
 /**

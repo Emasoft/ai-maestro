@@ -11,8 +11,8 @@
 #
 # Examples:
 #   amp-kanban-list.sh
-#   amp-kanban-list.sh --status in_progress
-#   amp-kanban-list.sh --assignee <agent-id> --status review
+#   amp-kanban-list.sh --status dev
+#   amp-kanban-list.sh --assignee <agent-id> --status ai_review
 #   amp-kanban-list.sh --label bug --team <team-id>
 #
 # =============================================================================
@@ -49,7 +49,10 @@ show_help() {
     echo "List kanban items with optional filters."
     echo ""
     echo "Options:"
-    echo "  --status, -s STATUS        Filter by status (backlog|pending|in_progress|review|completed)"
+    echo "  --status, -s STATUS        Filter by status — one of the 14 TRDD-v2 pipeline stages:"
+    echo "                               backburner|todo|design|dispatch|dev|testing|ai_review|"
+    echo "                               human_review|complete|publish|published|deploy|live|live_auditing"
+    echo "                             or an exception state: blocked|failed|superseded"
     echo "  --assignee, -a AGENT_ID    Filter by assignee agent UUID"
     echo "  --label, -l LABEL          Filter by label"
     echo "  --task-type TYPE           Filter by task type (bug|feature|chore)"
@@ -59,8 +62,8 @@ show_help() {
     echo ""
     echo "Examples:"
     echo "  amp-kanban-list.sh"
-    echo "  amp-kanban-list.sh --status in_progress"
-    echo "  amp-kanban-list.sh --assignee agent-uuid --status review"
+    echo "  amp-kanban-list.sh --status dev"
+    echo "  amp-kanban-list.sh --assignee agent-uuid --status ai_review"
     echo "  amp-kanban-list.sh --label bug --team team-uuid"
 }
 

@@ -9,13 +9,15 @@
 # Usage:
 #   amp-kanban-move.sh <task-id> <status> [options]
 #
-# Status values:
-#   backlog, pending, in_progress, review, completed
+# Status values (14 TRDD-v2 pipeline stages + 3 exception states):
+#   backburner, todo, design, dispatch, dev, testing, ai_review, human_review,
+#   complete, publish, published, deploy, live, live_auditing
+#   blocked, failed, superseded
 #
 # Examples:
-#   amp-kanban-move.sh abc-123 in_progress
-#   amp-kanban-move.sh abc-123 review --team <team-id>
-#   amp-kanban-move.sh abc-123 completed
+#   amp-kanban-move.sh abc-123 dev
+#   amp-kanban-move.sh abc-123 ai_review --team <team-id>
+#   amp-kanban-move.sh abc-123 complete
 #
 # =============================================================================
 
@@ -52,8 +54,11 @@ show_help() {
     echo "  task-id    Task UUID or external reference"
     echo "  status     Target status column"
     echo ""
-    echo "Status values:"
-    echo "  backlog, pending, in_progress, review, completed"
+    echo "Status values (14 TRDD-v2 pipeline stages):"
+    echo "  backburner, todo, design, dispatch, dev, testing, ai_review, human_review,"
+    echo "  complete, publish, published, deploy, live, live_auditing"
+    echo "Exception states:"
+    echo "  blocked, failed, superseded"
     echo ""
     echo "Options:"
     echo "  --team TEAM_ID    Team UUID (auto-detected from agent if omitted)"
@@ -61,9 +66,9 @@ show_help() {
     echo "  --help, -h        Show this help"
     echo ""
     echo "Examples:"
-    echo "  amp-kanban-move.sh abc-123 in_progress"
-    echo "  amp-kanban-move.sh abc-123 review --team team-uuid"
-    echo "  amp-kanban-move.sh abc-123 completed"
+    echo "  amp-kanban-move.sh abc-123 dev"
+    echo "  amp-kanban-move.sh abc-123 ai_review --team team-uuid"
+    echo "  amp-kanban-move.sh abc-123 complete"
 }
 
 # Parse arguments

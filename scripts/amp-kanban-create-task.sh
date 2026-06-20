@@ -12,7 +12,7 @@
 # Examples:
 #   amp-kanban-create-task.sh "Fix login bug"
 #   amp-kanban-create-task.sh "Deploy v2" --assignee <agent-id> --labels "deploy,urgent"
-#   amp-kanban-create-task.sh "Review PR #42" --team <team-id> --status review
+#   amp-kanban-create-task.sh "Review PR #42" --team <team-id> --status ai_review
 #
 # =============================================================================
 
@@ -57,7 +57,10 @@ show_help() {
     echo "  --description, -d TEXT     Task description"
     echo "  --assignee, -a AGENT_ID   Agent UUID to assign the task to"
     echo "  --labels, -l \"a,b,c\"      Comma-separated labels"
-    echo "  --status, -s STATUS        Initial status (backlog|pending|in_progress|review|completed)"
+    echo "  --status, -s STATUS        Initial status — one of the 14 TRDD-v2 pipeline stages:"
+    echo "                               backburner|todo|design|dispatch|dev|testing|ai_review|"
+    echo "                               human_review|complete|publish|published|deploy|live|live_auditing"
+    echo "                             or an exception state: blocked|failed|superseded"
     echo "  --priority, -p NUMBER      Priority (numeric, higher = more urgent)"
     echo "  --task-type TYPE           Task type (e.g. bug, feature, chore)"
     echo "  --team TEAM_ID             Team UUID (auto-detected from agent if omitted)"
@@ -67,7 +70,7 @@ show_help() {
     echo "Examples:"
     echo "  amp-kanban-create-task.sh \"Fix login bug\""
     echo "  amp-kanban-create-task.sh \"Deploy v2\" --assignee abc-123 --labels \"deploy,urgent\""
-    echo "  amp-kanban-create-task.sh \"Review PR\" --team team-uuid --status review"
+    echo "  amp-kanban-create-task.sh \"Review PR\" --team team-uuid --status ai_review"
 }
 
 # Parse arguments
@@ -196,7 +199,7 @@ RESP_BODY=$(echo "$RESPONSE" | sed '$d')
 
 if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
     TASK_ID=$(echo "$RESP_BODY" | jq -r '.task.id // .id // "unknown"')
-    TASK_STATUS=$(echo "$RESP_BODY" | jq -r '.task.status // .status // "backlog"')
+    TASK_STATUS=$(echo "$RESP_BODY" | jq -r '.task.status // .status // "backburner"')
 
     echo "✅ Task created"
     echo ""

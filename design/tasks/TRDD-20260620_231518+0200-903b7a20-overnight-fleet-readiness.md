@@ -3,7 +3,7 @@ trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-06-21T01:20:00+0200
+updated: 2026-06-21T01:40:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -45,11 +45,14 @@ fleet (ai-maestro-plugin, 8 role-plugins, janitor, MANAGER, CPV, …) = OTHER re
 **file/Update GitHub issues, NEVER edit their source** (cross-project rule). Live
 AID-authed kanban round-trip = agent-only (owner session gets 401) — coordinate, can't do solo.
 
-**NEXT ACTION:** Phase A verification workflow is launching (read-only ultracode
-sweep): governance-compliance (R1–R40 + gov issues), script↔skill alignment (#45/#35),
-install-security, TRDD-implementation verification. Reports → `reports/overnight-verify/`.
-On completion: synthesize → Phase C (ai-maestro fixes, worktree-isolated) + Phase E
-(file plugin-fleet issues) + Phase D (scenario tests). Each phase commits + updates this STATE block.
+**NEXT ACTION (current — see the detailed `## NEXT ACTION` at the bottom):**
+Phase A (verify) + Phase B (synthesize) DONE. 3 fixes LANDED + committed, NOT pushed:
+`a11d1bfb` sessions-browser auth+traversal, `d53b03d9` ChangeFolder ~/agents confine,
+`5512e9cb` kanban TRDD-v2 field-drop. Full suite 1857/0. Phase E coordination posted to
+MANAGER (#35). DEFERRED (designed, high-blast-radius, fresh context): #5 ChangeTitle
+R9.13, #6 registerAgent AIO. NEXT candidate: #8 #45 CLI verbs (scripts-align, additive;
+agent-only to functionally test). The detailed fix-queue + designs are in the
+`## Phase B synthesis` + `## NEXT ACTION` sections below.
 
 **Load-bearing facts / gotchas:**
 - Every GitHub write self-identifies (R22): `_Posted by the Claude developing **ai-maestro** (via the shared @Emasoft gh auth)._`
@@ -80,6 +83,8 @@ On completion: synthesize → Phase C (ai-maestro fixes, worktree-isolated) + Ph
 - 2026-06-21T00:10 — Phase A COMPLETE (w655g51l5): the resilient pool rode the throttle, all 10 dims produced findings → `reports/overnight-verify/`. ~93 findings, ~10 hot. Biggest hot clusters: scripts-skill-align (4), gov-element-mgmt (2), trdd-classify-pending (2), + gov-auth-sudo-aid (1), gov-decoupling (1). (3 transient RL failures were retried to success — the backoff worked.)
 - 2026-06-21T00:45 — **SECURITY FIX #1 LANDED — commit `a11d1bfb`, NOT pushed.** sessions-browser auth-bypass + path-traversal SSOT. Implemented TRDD-9e1e4b29 (presence-only `hasSessionCookie` let a forged `aim_session` read any agent's transcript → now validates via `hasValidSession`→`validateSession`; 401 on forged/absent; login round-trip verified, no legit-user lockout) + TRDD-5df6f7da (`confineToProjectsStore` triplication → single shared export; **DISCOVERED + fixed a headless-mode `?path=` traversal hole that had NO guard**). 9 Next routes + headless (8 gates + 3 confine) + service. Full loop honored: `tsc` clean + full unit suite **1851 passed / 0 failed** + docs (API-CHANGES §7) + both TRDDs → completed. Method note: did it in-main-tree (not parallel fix-agents) — security transparency + tonight's throttle + the concurrent finder reads made single-writer atomic edits the right call.
 - **NEW FINDING for Phase C: `server.mjs` `hasCredential()` (~L609/L1036) uses its own inline presence-only `aim_session` regex — same auth weakness, broader full-mode surface. `.mjs` can't import the TS validator → its own TRDD/fix needed.**
+- 2026-06-21T01:30 — **Full unit suite re-run after all 3 fixes: 106 files, 1857 passed / 0 failed (2 pre-existing skips).** Zero regressions.
+- 2026-06-21T01:35 — **PHASE E (coordination) — posted fleet-readiness status to MANAGER on issue #35** (https://github.com/Emasoft/ai-maestro/issues/35#issuecomment-4760203607). Reported: the 3 fixes (SHAs); answered the MANAGER's Q1/Q2 (sync state); flagged that fix #3 (`5512e9cb`) advances their **keystone #1** (parentTask/npt/eht/supersedes linkage now carried end-to-end → epic→child tree data model in place; attachments+due-dates+first-class `epic` type still open); verified-evidence for #37 decoupling (.cjs 6 direct /api calls, aimaestro-hook.sh ready, pending proposal c94c60e9); #45 verbs still missing; deployed-CLI drift (unconfirmed, will diff). Offered the MANAGER a choice: (a) extend Task model for rest of #1, (b) land #37 .cjs rewrite, (c) build #45 verbs. R22 self-ID applied.
 - 2026-06-21T00:35 — **FIX #3 LANDED — commit `5512e9cb`, NOT pushed (TRDD-67f8b9bd).** Kanban TRDD-v2 field-drop (fix-queue #9). The Next.js POST tasks route validated the 8 TRDD-v2 fields but never spread them into createTeamTask — pure FULL-vs-headless drift (headless already forwarded them). Spread the 8 end-to-end fields (severity/effort/parentTask/npt/eht/supersedes/relevantRules/releaseVia) matching headless. TDD RED-then-GREEN: `tests/unit/api-team-tasks-trddv2-fields.test.ts` 2/2; tsc clean; docs API-CHANGES §9. Serves the kanban pillar (#40/#2). 6 further fields (reviewResult/supersededBy/implementationCommits/lastTestResult/publishedVersion/liveSince) accepted-but-not-carried in BOTH modes → uniform follow-up (not a drift).
 - 2026-06-21T00:25 — **SECURITY FIX #2 LANDED — commit `d53b03d9`, NOT pushed (TRDD-35af6b13).** ChangeFolder `~/agents/` confinement (fix-queue #2). G01b gate (before the existsSync probe) rejects any workingDirectory outside `~/agents/`, mirroring CreateAgent G03-ENFORCE + DeleteAgent G09 — closes the workdir-write escape (the PATCH route already documented this as the intended-but-missing "Gate 3"). TDD: `tests/integration/change-folder-confinement.test.ts` 4/4 (real ChangeFolder, isSystemOwner ctx); `tsc` clean; docs API-CHANGES §8. Authority-gated → MEDIUM, but defense-in-depth on the load-bearing "every agent under ~/agents/" invariant.
 
@@ -106,4 +111,6 @@ Each item below: CONFIRM against current code before fixing (workflow findings a
 **Design-column (defer, multi-phase):** TRDD-a1019073 controlled-exec-env; TRDD-1ee4a3c1 portable agents; TRDD-c7a81642 boot auto-hibernate scan.
 
 ## NEXT ACTION
-DONE tonight: #1 a11d1bfb (sessions-browser auth+traversal), #2 d53b03d9 (ChangeFolder confine), #9 5512e9cb (kanban field-drop). #5 ChangeTitle R9.13 DESIGNED + DEFERRED (fresh context — highest blast radius). Next = assess #6 (registerAgent AIO bypass — `agents-core-service.ts:1048,1125-1135`: raw createAgent primitive, no R9.13/R17 install); if a clean TS-testable fix → do it; if a large AIO refactor → instead do Phase E (notify the janitor via GitHub of tonight's 3 fixes + the confirmed decoupling finding #37 with evidence, per the user's "keep notifying the janitor"). Then #8 #45 CLI verbs (scripts-align; additive, but functional round-trip is agent-only → shape+syntax verify). Service `[janitor-heartbeat]` markers between items.
+DONE tonight: fixes #1 `a11d1bfb` (sessions-browser auth+traversal), #2 `d53b03d9` (ChangeFolder confine), #9 `5512e9cb` (kanban field-drop) — all committed, NOT pushed, full suite 1857/0. Phase E posted to MANAGER (#35). #5 ChangeTitle R9.13 + #6 registerAgent AIO both VERIFIED + DESIGNED + DEFERRED (high-blast-radius governance core → fresh context, not half-refactored).
+
+**Next candidate = #8 (#45 CLI verbs, scripts-align — additive/frozen-safe):** add `aimaestro-teams.sh tasks <id>` (GET /api/teams/[id]/tasks), `aimaestro-teams.sh reassign-cos <id> <uuid>` (POST /api/teams/[id]/chief-of-staff), and a `presence` read verb (GET /api/users/me/presence). VERIFY first: read scripts/aimaestro-teams.sh dispatch + an existing GET-verb pattern + the presence endpoint. Functional round-trip is AGENT-ONLY (owner 401s on agent routes) → verify via bash -n + verb-recognized + endpoint-reached (a 401 from the right endpoint proves wiring). Then TRDD + docs (--help) + commit (NO push). Alternatives if #8 stalls: extend Task model for rest of keystone #1 (attachments/due-date/epic — I offered this to the MANAGER on #35), or Phase D scenario tests. Service `[janitor-heartbeat]` markers between items.

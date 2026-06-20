@@ -19,6 +19,7 @@
 #   plugin      Manage Claude Code plugins for an agent
 #   export      Export agent to file
 #   import      Import agent from file
+#   presence    Print the human user's presence (last input + idle window)
 #   help        Show this help
 #
 # Version: Sync with bump-version.sh - currently v1.0.1
@@ -100,6 +101,7 @@ main() {
         plugin)    shift; cmd_plugin "$@" ;;
         export)    shift; cmd_export "$@" ;;
         import)    shift; cmd_import "$@" ;;
+        presence)  shift; cmd_presence "$@" ;;
         help|--help|-h) cmd_help ;;
         --version|-v) echo "aimaestro-agent.sh v1.0.1" ;;
         *) print_error "Unknown command: $1"; echo ""; cmd_help; exit 1 ;;

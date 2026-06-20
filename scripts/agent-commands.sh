@@ -35,6 +35,7 @@ Commands:
   plugin <subcommand>           Manage Claude Code plugins
   export <agent>                Export agent to file
   import <file>                 Import agent from file
+  presence                      Print the human user's presence (last input + idle window)
   help                          Show this help
 
 Examples:
@@ -184,6 +185,29 @@ HELP
 # ============================================================================
 # SHOW
 # ============================================================================
+
+# presence — print the human user's presence (GET /api/users/me/presence).
+# #45: the AMAMA presence-tracker skill reads the user's availability through this
+# FROZEN CLI verb instead of a direct /api call (the decoupling invariant). Read-only
+# verb; auth via AID_AUTH when set (the endpoint is auth-gated like every agent route).
+cmd_presence() {
+    case "${1:-}" in
+        -h|--help)
+            echo "Usage: aimaestro-agent.sh presence    Print the human user's presence (last input epoch + idle window)"
+            return 0 ;;
+    esac
+    local api_base
+    api_base=$(get_api_base) || return 1
+    local -a auth_args=()
+    _build_auth_args auth_args
+    local response
+    response=$(curl -s --max-time 30 "${auth_args[@]}" "${api_base}/api/users/me/presence" 2>/dev/null)
+    if [[ -z "$response" ]]; then
+        print_error "Failed to fetch presence"
+        return 1
+    fi
+    echo "$response"
+}
 
 cmd_show() {
     local agent=""

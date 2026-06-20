@@ -453,6 +453,27 @@ function getHeader(req: IncomingMessage, name: string): string | null {
 }
 
 /**
+ * Build the header set to FORWARD when a headless handler delegates to a
+ * Next.js route handler. The Next.js auth gates (requireAuth /
+ * enforceSystemOwner / requireSudoToken) read the caller's credentials from
+ * the forwarded Request via `request.headers.get(...)`, so the original
+ * Authorization, Cookie, X-Agent-Id and X-Sudo-Token MUST be carried through.
+ * The pre-existing element-content shim (I4 in the audit) FAILED to forward
+ * these and therefore always 401'd; forwarding them is what makes the
+ * delegated handler authenticate the REAL caller instead of a credential-less
+ * fake request. Only credential headers are forwarded — nothing else.
+ */
+function forwardAuthHeaders(req: IncomingMessage, extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = {}
+  for (const name of ['authorization', 'cookie', 'x-agent-id', 'x-sudo-token']) {
+    const v = getHeader(req, name)
+    if (v !== null) headers[name] = v
+  }
+  if (extra) Object.assign(headers, extra)
+  return headers
+}
+
+/**
  * Minimal multipart form-data parser.
  * Handles the single use case: one file field + one text field for /api/agents/import.
  *
@@ -551,7 +572,11 @@ const routes: Route[] = [
     const body = await readJsonBody(req)
     sendServiceResult(res, setOrganizationName(body))
   }},
-  { method: 'GET', pattern: /^\/api\/subconscious$/, paramNames: [], handler: async (_req, res) => {
+  { method: 'GET', pattern: /^\/api\/subconscious$/, paramNames: [], handler: async (req, res) => {
+    // Audit mirror: the Next.js GET /api/subconscious calls requireAuth.
+    // Mirror it — the structural credential gate is forgeable, not auth.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     sendServiceResult(res, getSubconsciousStatus())
   }},
   { method: 'GET', pattern: /^\/api\/debug\/pty$/, paramNames: [], handler: async (_req, res) => {
@@ -574,7 +599,15 @@ const routes: Route[] = [
   // =========================================================================
   // Sessions
   // =========================================================================
-  { method: 'GET', pattern: /^\/api\/sessions$/, paramNames: [], handler: async (_req, res, _params, query) => {
+  { method: 'GET', pattern: /^\/api\/sessions$/, paramNames: [], handler: async (req, res, _params, query) => {
+    // H3 (audit C/H mirror): the Next.js GET /api/sessions now starts with
+    // requireAuth (commit 55494306, "A3" fix) but this headless twin still
+    // leaked the cross-host session list (agent names + working dirs =
+    // internal topology) to any caller that satisfied only the forgeable
+    // structural credential gate. Authenticate the caller for real before
+    // listing — the structural gate is defence-in-depth, NOT authentication.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     try {
       if (query.local === 'true') {
         const result = await listLocalSessions()
@@ -964,7 +997,17 @@ const routes: Route[] = [
   }},
 
   // Local Config (Agent Profile Panel)
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/local-config$/, paramNames: ['id'], handler: async (_req, res, params) => {
+  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/local-config$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // H2 (audit C/H mirror): the Next.js GET (commit 55494306, "N2" fix) now
+    // authenticates and lets an AGENT read ONLY its own config (settings.local.json
+    // tool/MCP grants); the system owner (web UI AgentProfilePanel) may read any.
+    // This headless twin dumped any agent's full local element config by UUID
+    // with zero auth. Mirror the same gate: authenticate, then own-id 403.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (auth.agentId && auth.agentId !== params.id) {
+      sendJson(res, 403, { error: 'Forbidden — you may only read your own local config' }); return
+    }
     sendServiceResult(res, scanAgentLocalConfig(params.id))
   }},
 
@@ -1050,7 +1093,15 @@ const routes: Route[] = [
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     sendServiceResult(res, await saveSkillSettings(params.id, body, auth.error ? null : auth.agentId))
   }},
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/skills$/, paramNames: ['id'], handler: async (_req, res, params) => {
+  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/skills$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // H2 sibling (audit C/H mirror): the Next.js skills GET requires auth +
+    // own-id (an agent reads only its own skills config; system owner reads any).
+    // This headless twin had no auth. Mirror the gate.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (auth.agentId && auth.agentId !== params.id) {
+      sendJson(res, 403, { error: 'Forbidden — you may only read your own skills config' }); return
+    }
     sendServiceResult(res, getSkillsConfig(params.id))
   }},
   { method: 'PATCH', pattern: /^\/api\/agents\/([^/]+)\/skills$/, paramNames: ['id'], handler: async (req, res, params) => {
@@ -1087,7 +1138,12 @@ const routes: Route[] = [
   }},
 
   // Subconscious
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/subconscious$/, paramNames: ['id'], handler: async (_req, res, params) => {
+  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/subconscious$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // Audit mirror: the Next.js per-agent subconscious GET calls enforceAuth
+    // (authenticate; no own-id check). Mirror it — authenticate for real
+    // rather than relying solely on the forgeable structural credential gate.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     sendServiceResult(res, await getAgentSubconsciousStatus(params.id))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/subconscious$/, paramNames: ['id'], handler: async (req, res, params) => {
@@ -1096,7 +1152,15 @@ const routes: Route[] = [
   }},
 
   // Repos
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/repos$/, paramNames: ['id'], handler: async (_req, res, params) => {
+  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/repos$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // H2 sibling (audit C/H mirror): the Next.js repos GET requires auth +
+    // own-id (an agent enumerates only its own repos; system owner enumerates any).
+    // This headless twin had no auth. Mirror the gate.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (auth.agentId && auth.agentId !== params.id) {
+      sendJson(res, 403, { error: 'Forbidden — you may only enumerate your own repos' }); return
+    }
     sendServiceResult(res, listRepos(params.id))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/repos$/, paramNames: ['id'], handler: async (req, res, params) => {
@@ -1249,6 +1313,36 @@ const routes: Route[] = [
     } else {
       sendServiceResult(res, { status: 200, data: { success: true } })
     }
+  }},
+
+  // Browse directory (Folder browser in profile panel).
+  // MUST be defined BEFORE the catch-all `/api/agents/([^/]+)$` GET below:
+  // matchRoute() is a first-match linear scan, so the literal `browse-dir`
+  // segment would otherwise be SHADOWED and routed to getAgentById('browse-dir')
+  // (a pre-existing bug that made this handler dead code in headless and is also
+  // what would have masked the C1 fix). The literal route taking precedence over
+  // the dynamic `[id]` segment matches Next.js routing semantics.
+  { method: 'GET', pattern: /^\/api\/agents\/browse-dir$/, paramNames: [], handler: async (req, res) => {
+    // C1 (audit CRITICAL): this handler used to reimplement the OLD broad
+    // allowlist (~/agents, ~/.claude, any /.claude/) with NO authentication and
+    // NO per-agent working-directory confinement, making it a cross-agent
+    // filesystem READ primitive — any forged-shape-credential caller could read
+    // another agent's settings.local.json tool/MCP grants or ~/.claude/projects/
+    // */*.jsonl transcripts. The Next.js GET (commit 55494306, "N1" fix) adds
+    // requireAuth + realpath workdir confinement. Per the audit's preferred
+    // remediation we now FORWARD through that single hardened handler — there is
+    // one implementation, and the forgeable structural gate is never the sole
+    // gate. The original query string + caller credentials are forwarded so
+    // requireAuth verifies the REAL caller (do NOT drop them — see the I4 trap).
+    const search = (req.url || '').includes('?') ? '?' + (req.url || '').split('?').slice(1).join('?') : ''
+    const { NextRequest } = await import('next/server')
+    const mod = await import('@/app/api/agents/browse-dir/route')
+    const fakeReq = new NextRequest(`http://localhost/api/agents/browse-dir${search}`, {
+      headers: forwardAuthHeaders(req),
+    })
+    const response = await mod.GET(fakeReq)
+    const data = await response.json()
+    sendJson(res, response.status, data)
   }},
 
   // Agent CRUD (must be LAST among /api/agents/[id]/* routes)
@@ -1476,10 +1570,21 @@ const routes: Route[] = [
     const body = await readJsonBody(req)
     sendServiceResult(res, await forwardGlobalMessage(body))
   }},
-  { method: 'GET', pattern: /^\/api\/messages$/, paramNames: [], handler: async (_req, res, _params, query) => {
+  { method: 'GET', pattern: /^\/api\/messages$/, paramNames: [], handler: async (req, res, _params, query) => {
+    // H1 (audit, TRDD f4a8fa1c): the Next.js GET authenticates and overrides
+    // the `?agent=` param with the verified caller identity (resolveAuthorizedAgentParam),
+    // so an agent reads ONLY its own mailbox. This headless twin took `agent`
+    // straight from the query with no auth + no authContext — denyForeignMailbox
+    // is a no-op without authContext, so any forged-shape-token caller could
+    // read ANY agent's mailbox. Authenticate, then override + thread authContext.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    // R28/R38 ownership: an authenticated agent's verified identity overrides
+    // any client-supplied `agent`; the system owner (no agentId) keeps the param.
+    const agentParam = auth.agentId || query.agent || null
     // Extract and validate specific query parameters instead of passing raw query as any
     const msgParams = {
-      agent: query.agent || null,
+      agent: agentParam,
       id: query.id || null,
       action: query.action || null,
       box: query.box || null,
@@ -1489,7 +1594,7 @@ const routes: Route[] = [
       from: query.from || null,
       to: query.to || null,
     }
-    sendServiceResult(res, await getMessages(msgParams))
+    sendServiceResult(res, await getMessages(msgParams, buildAuthContext(auth)))
   }},
   { method: 'POST', pattern: /^\/api\/messages$/, paramNames: [], handler: async (req, res) => {
     // SVC2-CRIT-03 (related): authenticate + forward AuthContext to the
@@ -1499,18 +1604,30 @@ const routes: Route[] = [
     const body = await readJsonBody(req)
     sendServiceResult(res, await sendGlobalMessage({ ...body, authContext: buildAuthContext(auth) }))
   }},
-  { method: 'PATCH', pattern: /^\/api\/messages$/, paramNames: [], handler: async (_req, res, _params, query) => {
-    // Normalise empty strings to null so downstream service receives null for absent optional params
-    const agent = query.agent || null
+  { method: 'PATCH', pattern: /^\/api\/messages$/, paramNames: [], handler: async (req, res, _params, query) => {
+    // H1 (audit, TRDD f4a8fa1c): authenticate + override the agent param with
+    // the verified identity + thread authContext, so an agent may mark-read/
+    // archive ONLY its own messages (mirrors the Next.js PATCH). Previously this
+    // mutated ANY agent's mailbox for any forged-shape-token caller.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    // Verified identity overrides the supplied agent; system owner keeps the param.
+    const agent = auth.agentId || query.agent || null
     const id = query.id || null
     const action = query.action || null
-    sendServiceResult(res, await updateGlobalMessage(agent, id, action))
+    sendServiceResult(res, await updateGlobalMessage(agent, id, action, buildAuthContext(auth)))
   }},
-  { method: 'DELETE', pattern: /^\/api\/messages$/, paramNames: [], handler: async (_req, res, _params, query) => {
-    // Normalise empty strings to null so downstream service receives null for absent optional params
-    const agent = query.agent || null
+  { method: 'DELETE', pattern: /^\/api\/messages$/, paramNames: [], handler: async (req, res, _params, query) => {
+    // H1 (audit, TRDD f4a8fa1c): authenticate + override the agent param with
+    // the verified identity + thread authContext, so an agent may delete ONLY
+    // its own messages (mirrors the Next.js DELETE). Previously this deleted
+    // ANY agent's mailbox for any forged-shape-token caller.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    // Verified identity overrides the supplied agent; system owner keeps the param.
+    const agent = auth.agentId || query.agent || null
     const id = query.id || null
-    sendServiceResult(res, await removeMessage(agent, id))
+    sendServiceResult(res, await removeMessage(agent, id, buildAuthContext(auth)))
   }},
 
   // =========================================================================
@@ -1545,8 +1662,30 @@ const routes: Route[] = [
     sendServiceResult(res, await setManagerRole(body))
   }},
   { method: 'POST', pattern: /^\/api\/governance\/password$/, paramNames: [], handler: async (req, res) => {
+    // C2 (audit CRITICAL — host takeover): this handler called
+    // setGovernancePassword(body) directly with NO auth, NO sudo token and NO
+    // R37.4 delegate block. setGovernancePassword skips EVERY check on
+    // first-time-set, so any forged-shape-credential caller could ESTABLISH the
+    // host governance/sudo password — full host takeover. The Next.js POST
+    // (app/api/governance/password/route.ts) gates this with enforceSystemOwner +
+    // the R37.4 delegate-self-mutation refusal + requireSudoToken. We FORWARD
+    // through that single hardened handler so all three gates run here too,
+    // including for the unauthenticated first-time-set takeover vector. Caller
+    // credentials AND the X-Sudo-Token are forwarded (see forwardAuthHeaders) so
+    // enforceSystemOwner/requireSudoToken verify the REAL caller; the body is
+    // re-serialized so the route's zod parse + setGovernancePassword see it
+    // unchanged.
     const body = await readJsonBody(req)
-    sendServiceResult(res, await setGovernancePassword(body))
+    const { NextRequest } = await import('next/server')
+    const mod = await import('@/app/api/governance/password/route')
+    const fakeReq = new NextRequest('http://localhost/api/governance/password', {
+      method: 'POST',
+      headers: forwardAuthHeaders(req, { 'content-type': 'application/json' }),
+      body: JSON.stringify(body),
+    })
+    const response = await mod.POST(fakeReq)
+    const data = await response.json()
+    sendJson(res, response.status, data)
   }},
   { method: 'GET', pattern: /^\/api\/governance\/reachable$/, paramNames: [], handler: async (_req, res, _params, query) => {
     sendServiceResult(res, getReachableAgents(query.agentId || null))
@@ -2318,7 +2457,13 @@ const routes: Route[] = [
       return
     }
     const requestingAgentId = auth.agentId
-    sendServiceResult(res, await createNewTeam({ ...body, requestingAgentId }))
+    // M5 (audit mirror): thread the verified AuthContext into createNewTeam so
+    // the R28 portfolio check (#3) runs in headless exactly as it does on the
+    // Next.js route. Headless was the lone outlier among ~20 handlers that pass
+    // authContext; without it R28 is silently bypassed if the title gate is
+    // ever loosened to admit delegated create_team mandates. This does NOT
+    // change R40/create_team enforcement logic (owned by createNewTeam).
+    sendServiceResult(res, await createNewTeam({ ...body, requestingAgentId, authContext: buildAuthContext(auth) }))
   }},
 
   // =========================================================================
@@ -2679,54 +2824,6 @@ const routes: Route[] = [
     const { getRequiredPluginForTitle } = await import('@/services/role-plugin-service')
     const required = getRequiredPluginForTitle(title)
     sendJson(res, 200, { title, requiredPlugin: required })
-  }},
-
-  // Browse directory (Folder browser in profile panel)
-  { method: 'GET', pattern: /^\/api\/agents\/browse-dir$/, paramNames: [], handler: async (req, res) => {
-    const { readdir, stat: fsStat, readFile: fsReadFile } = await import('fs/promises')
-    const { join, resolve: pathResolve, normalize: pathNormalize } = await import('path')
-    const { homedir } = await import('os')
-    const HOME = homedir()
-    const ALLOWED = [join(HOME, 'agents'), join(HOME, '.claude')]
-    const MAX_LINES = 500
-    const MAX_SIZE = 512 * 1024
-    const BINARY_EXT = new Set(['png','jpg','jpeg','gif','bmp','ico','webp','avif','tiff','tif','heic','heif','raw','cr2','nef','arw','dng','psd','ai','eps','xcf','sketch','fig','indd','mp4','mkv','avi','mov','wmv','flv','webm','m4v','mpg','mpeg','3gp','ogv','ts','vob','mp3','wav','flac','aac','ogg','wma','m4a','opus','aiff','mid','midi','zip','gz','tar','bz2','xz','7z','rar','zst','lz','lz4','lzma','cab','iso','dmg','pkg','deb','rpm','apk','msi','tgz','tbz2','txz','exe','dll','so','dylib','o','a','lib','obj','bin','elf','com','out','app','mach','wasm','pyc','pyo','class','jar','war','ear','db','sqlite','sqlite3','mdb','accdb','frm','ibd','dbf','woff','woff2','ttf','otf','eot','pfb','pfm','pdf','doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp','rtf','epub','mobi','azw','azw3','pem','der','p12','pfx','key','crt','cer','jks','keystore','token','tfstate','tsbuildinfo','lcov','dat','pak','bundle','nib','storyboardc','swp','swo'])
-
-    const url = new URL(req.url || '/', `http://${getHeader(req, 'host') || 'localhost'}`)
-    const dirPath = url.searchParams.get('path')
-    const mode = url.searchParams.get('mode')
-    if (!dirPath) return sendJson(res, 400, { error: 'Missing path parameter' })
-
-    const norm = pathNormalize(pathResolve(dirPath))
-    const allowed = ALLOWED.some(p => norm.startsWith(p)) || norm.includes('/.claude/') || norm.endsWith('/.claude')
-    if (!allowed) return sendJson(res, 403, { error: 'Path not allowed' })
-
-    try {
-      const st = await fsStat(norm)
-      if (mode === 'file' || st.isFile()) {
-        if (!st.isFile()) return sendJson(res, 400, { error: 'Not a file' })
-        const ext = norm.split('.').pop()?.toLowerCase() || ''
-        if (BINARY_EXT.has(ext)) return sendJson(res, 200, { path: norm, content: `(Binary file: .${ext} — preview not supported)`, truncated: false })
-        if (st.size > MAX_SIZE) return sendJson(res, 200, { path: norm, content: `(File too large: ${(st.size/1024).toFixed(1)}KB)`, truncated: true })
-        const raw = await fsReadFile(norm, 'utf-8')
-        if (raw.slice(0, 8192).includes('\0')) return sendJson(res, 200, { path: norm, content: '(Binary file detected — preview not supported)', truncated: false })
-        const lines = raw.split('\n')
-        const truncated = lines.length > MAX_LINES
-        return sendJson(res, 200, { path: norm, content: truncated ? lines.slice(0, MAX_LINES).join('\n') + '\n…' : raw, truncated })
-      }
-      if (!st.isDirectory()) return sendJson(res, 400, { error: 'Not a directory' })
-      const names = await readdir(norm)
-      const entries: { name: string; type: string; size: number }[] = []
-      for (const name of names.sort()) {
-        if (name.startsWith('.') && name !== '.claude' && name !== '.claude-plugin') continue
-        try {
-          const ep = join(norm, name)
-          const es = await fsStat(ep)
-          entries.push({ name, type: es.isDirectory() ? 'dir' : 'file', size: es.isFile() ? es.size : 0 })
-        } catch { /* skip */ }
-      }
-      return sendJson(res, 200, { path: norm, entries })
-    } catch (e) { sendJson(res, 500, { error: String(e) }) }
   }},
 
   // Create agent from TOML (single endpoint: generate + create folder + install)

@@ -102,11 +102,14 @@ async function buildForeignExportZip(agentName: string, includeKeys = true): Pro
     version: '1.2.0',
     exportedAt: new Date().toISOString(),
     exportedFrom: { hostname: 'remote-host', platform: 'linux', aiMaestroVersion: '0.29.0' },
-    agent: { id: 'foreign-agent-id', name: agentName },
+    // M4: real exports always carry a uuidv4() id (the registry id). The id is
+    // now validated as a strict UUID before it touches any filesystem path, so
+    // the fixture must use a valid UUID to reflect a genuine export.
+    agent: { id: 'f0e1d2c3-b4a5-4968-8778-69504a3b2c1d', name: agentName },
     contents: { hasRegistry: true, hasDatabase: false, hasMessages: false, hasKeys: includeKeys, hasRegistrations: false },
   }
   const agentRecord = {
-    id: 'foreign-agent-id',
+    id: 'f0e1d2c3-b4a5-4968-8778-69504a3b2c1d',
     name: agentName,
     alias: agentName,
     governanceTitle: 'autonomous',
@@ -170,6 +173,70 @@ describe('foreign-import-approval — step 1: import is NOT auto-accepted', () =
     expect(pending!.kind).toBe('agent')
     expect(pending!.importPayloadPath).toBeTruthy()
     expect(fs.existsSync(pending!.importPayloadPath!)).toBe(true)
+  })
+})
+
+describe('foreign-import-approval — M4: path-traversal agent id is rejected, writes nothing outside tmp', () => {
+  it('a manifest with id "../../../../tmp/evil" is rejected (400) and writes no file outside the staging dir', async () => {
+    // M4 regression: importedAgent.id comes from the UNTRUSTED ZIP. Before the
+    // fix it was interpolated into the staging path.join() and written with
+    // fs.writeFileSync, so "../../../../tmp/evil" escaped ~/.aimaestro/tmp.
+    const MALICIOUS_ID = '../../../../tmp/evil'
+    const manifest = {
+      version: '1.2.0',
+      exportedAt: new Date().toISOString(),
+      // foreign origin → would otherwise hit the staging-write code path.
+      exportedFrom: { hostname: 'remote-host', platform: 'linux', aiMaestroVersion: '0.29.0' },
+      agent: { id: MALICIOUS_ID, name: 'evil-foreign' },
+      contents: { hasRegistry: true, hasDatabase: false, hasMessages: false, hasKeys: false, hasRegistrations: false },
+    }
+    const agentRecord = {
+      id: MALICIOUS_ID, name: 'evil-foreign', alias: 'evil-foreign', governanceTitle: 'autonomous',
+      workingDirectory: path.join(TMP_HOME, 'agents', 'evil-foreign'),
+      deployment: { type: 'local', local: { hostname: 'remote-host', platform: 'linux' } },
+      sessions: [], status: 'offline', tools: {}, metadata: {},
+    }
+    const zip = await new Promise<Buffer>((resolve, reject) => {
+      const archive = archiver('zip', { zlib: { level: 9 } })
+      const chunks: Buffer[] = []
+      archive.on('data', (c: Buffer) => chunks.push(c))
+      archive.on('end', () => resolve(Buffer.concat(chunks)))
+      archive.on('error', reject)
+      archive.append(JSON.stringify(manifest), { name: 'manifest.json' })
+      archive.append(JSON.stringify(agentRecord), { name: 'registry.json' })
+      archive.finalize()
+    })
+
+    const aimDir = path.join(TMP_HOME, '.aimaestro')
+    const stagingDir = path.join(aimDir, 'tmp')
+    // The path the traversal payload would have escaped to:
+    // path.join('<TMP_HOME>/.aimaestro/tmp', 'foreign-import-../../../../tmp/evil-<ts>.zip')
+    // resolves under '<TMP_HOME>/tmp/'. Assert nothing lands there.
+    const escapeDir = path.join(TMP_HOME, 'tmp')
+    const escapeBefore = fs.existsSync(escapeDir) ? fs.readdirSync(escapeDir).length : 0
+
+    const res = await transfer.importAgent(zip)
+
+    // (a) FAIL FAST: rejected at validation, before any write.
+    expect(res.status).toBe(400)
+    expect(res.data?.success).not.toBe(true)
+
+    // (b) No staged ZIP was written anywhere — neither inside the staging dir
+    //     nor at the escaped location.
+    const stagedNow = fs.existsSync(stagingDir)
+      ? fs.readdirSync(stagingDir).filter(f => f.endsWith('.zip'))
+      : []
+    expect(stagedNow).toEqual([])
+    const escapeAfter = fs.existsSync(escapeDir) ? fs.readdirSync(escapeDir).length : 0
+    expect(escapeAfter).toBe(escapeBefore)
+    // No 'evil' file materialized at the traversal target.
+    expect(fs.existsSync(path.join(escapeDir, 'evil.zip'))).toBe(false)
+
+    // (c) No agent and no pending approval were created.
+    expect(registry.getAgentByName('evil-foreign')).toBeNull()
+    await flushLedger('foreign-approvals')
+    const approvals = foreignReg.loadForeignApprovals()
+    expect(approvals.find(a => a.displayName === 'evil-foreign')).toBeUndefined()
   })
 })
 
@@ -239,11 +306,12 @@ describe('foreign-import-approval — native (same-host) import is unaffected', 
       version: '1.2.0',
       exportedAt: new Date().toISOString(),
       exportedFrom: { hostname: 'this-host', platform: 'darwin', aiMaestroVersion: '0.29.0' },
-      agent: { id: 'native-agent-id', name: 'gamma-native' },
+      // M4: valid uuidv4() id (real exports always have one).
+      agent: { id: 'a1b2c3d4-e5f6-4789-9abc-def012345678', name: 'gamma-native' },
       contents: { hasRegistry: true, hasDatabase: false, hasMessages: false, hasKeys: true, hasRegistrations: false },
     }
     const agentRecord = {
-      id: 'native-agent-id', name: 'gamma-native', alias: 'gamma-native', governanceTitle: 'autonomous',
+      id: 'a1b2c3d4-e5f6-4789-9abc-def012345678', name: 'gamma-native', alias: 'gamma-native', governanceTitle: 'autonomous',
       workingDirectory: path.join(TMP_HOME, 'agents', 'gamma-native'),
       deployment: { type: 'local', local: { hostname: 'this-host', platform: 'darwin' } },
       sessions: [], status: 'offline', tools: {},

@@ -20,6 +20,7 @@ import type { Agent, Repository } from '@/types/agent'
 import type { AgentExportManifest, AgentImportOptions, AgentImportResult, PortableRepository, RepositoryImportResult } from '@/types/portable'
 import { ServiceResult } from '@/types/service'
 import { getStateDir } from '@/lib/ecosystem-constants'
+import { isValidUuid } from '@/lib/validation'
 // ServiceResult imported directly from canonical source
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -658,6 +659,23 @@ export async function importAgent(
       return { error: 'Invalid agent export: agent has no name', status: 400 }
     }
 
+    // ── M4 (path traversal): the agent id comes from the UNTRUSTED imported
+    // ZIP's registry.json and downstream flows into many filesystem paths —
+    // the foreign-import staging filename (path.join(tmpDir, ...)), and on the
+    // native-import path: the agent.db dir, keys dir, registrations dir, etc.
+    // A crafted id such as "../../../../tmp/evil" would escape ~/.aimaestro.
+    // A legitimately-exported agent's id is always a uuidv4(), so requiring a
+    // strict UUID rejects every traversal payload WITHOUT breaking any real
+    // export (native backup-restore or foreign). FAIL FAST before the id can
+    // touch any path. isValidUuid already excludes '/', '\\', '.' entirely
+    // (the UUID charset is hex + '-'), so it subsumes the separator/'..' check.
+    if (!isValidUuid(importedAgent.id)) {
+      return {
+        error: 'Invalid agent export: agent id is not a valid UUID',
+        status: 400,
+      }
+    }
+
     // ── R34.2/R35: foreign-origin gate ────────────────────────────────────
     // An agent exported from ANOTHER host is NOT auto-accepted. The biggest
     // behavioral change of this item: we capture the INCOMING provenance from
@@ -683,9 +701,15 @@ export async function importAgent(
       try {
         // Stage the ZIP under ~/.aimaestro/tmp so the approve route can
         // materialize it later. We do NOT keep keys/AID anywhere live.
+        // M4 defense-in-depth: the staging filename is built ONLY from
+        // server-generated data (a fresh uuidv4), never from the untrusted
+        // manifest id — so even if the UUID guard above were ever bypassed,
+        // this path can never be steered out of tmpDir. The stagedPath is then
+        // persisted in the approval record and later read/unlinked verbatim by
+        // the approve/reject routes, so making it safe HERE makes those safe.
         const tmpDir = path.join(AIMAESTRO_DIR, 'tmp')
         ensureDir(tmpDir)
-        const stagedPath = path.join(tmpDir, `foreign-import-${importedAgent.id}-${Date.now()}.zip`)
+        const stagedPath = path.join(tmpDir, `foreign-import-${uuidv4()}.zip`)
         fs.writeFileSync(stagedPath, zipBuffer, { mode: 0o600 })
 
         const { upsertForeignApproval } = await import('@/lib/foreign-approval-registry')

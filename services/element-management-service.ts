@@ -113,11 +113,21 @@ async function gate0Auth(
     return null
   }
   const { authorize } = await import('@/lib/authorization')
-  // CC-GOV-004: Pass governanceTitle and teamId to avoid redundant registry lookups
+  // CC-GOV-004: Pass governanceTitle and teamId to avoid redundant registry lookups.
+  // M1 fix (2026-06-19 R26-R40 audit): also forward userId/userTitle so authorize()
+  // can apply its deny-by-default rule for a model-ON non-system-owner USER. Without
+  // these, a non-maestro user (userTitle 'user', no agentId) was stripped to a
+  // no-agentId authResult and slipped into authorize()'s legacy system-owner grant.
+  // isSystemOwner was already false for such a user (buildAuthContext), so the
+  // short-circuit above is not taken — the deny now fires in authorize(). Flag-OFF:
+  // a web session has no userId, so this changes nothing (still system-owner above);
+  // an agent caller has no userId either, so its existing authz is unaffected.
   const authResult: import('@/lib/agent-auth').AgentAuthResult = {
     agentId: authContext.agentId,
     governanceTitle: authContext.governanceTitle,
     teamId: authContext.teamId,
+    userId: authContext.userId,
+    userTitle: authContext.userTitle,
   }
   const authz = authorize(authResult, action, agentId)
   if (!authz.allowed) {

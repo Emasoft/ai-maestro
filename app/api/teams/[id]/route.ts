@@ -203,7 +203,9 @@ export async function DELETE(
   if (auth.error) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
-  const requestingAgentId = auth.agentId
+  // M1 fix (2026-06-19): `requestingAgentId` is no longer extracted here — the
+  // AuthContext for DeleteTeam below is now derived via buildAuthContext(auth),
+  // which already carries agentId/isSystemOwner/userId/userTitle.
 
   // Extract governance password + optional deleteAgents cascade flag from request body
   let password: string | undefined
@@ -227,9 +229,19 @@ export async function DELETE(
   }
 
   // Delegate to the all-in-one pipeline.
+  // M1 fix (2026-06-19 R26-R40 audit): derive the AuthContext via buildAuthContext
+  // instead of hard-coding `isSystemOwner: !requestingAgentId`. The hard-coded form
+  // set isSystemOwner=true for ANY no-agent caller — including a model-ON non-maestro
+  // USER ({ userId, userTitle:'user' }, no agentId) — handing an ordinary user
+  // system-owner authority to delete a team. buildAuthContext applies the model-aware
+  // flip (system-owner only when userTitle ∈ {maestro, maestro-delegate}) and forwards
+  // userId/userTitle so DeleteTeam's gate0Auth → authorize() can deny-by-default.
+  // FLAG-OFF: a web session resolves to {} (no userId) → buildAuthContext sets
+  // isSystemOwner = !agentId = true — identical to the old literal for the only
+  // caller class that existed before the model.
   const { DeleteTeam } = await import('@/services/element-management-service')
   const delResult = await DeleteTeam(id, {
-    authContext: { agentId: requestingAgentId, isSystemOwner: !requestingAgentId, governanceTitle: auth.governanceTitle, teamId: auth.teamId },
+    authContext: buildAuthContext(auth),
     password,
     deleteAgents,
   })

@@ -95,3 +95,88 @@ describe('authorize() — fail-closed on errored auth result (AUTH-CRIT-01)', ()
     expect(result.allowed).toBe(true)
   })
 })
+
+describe('authorize() — deny-by-default for a model-ON non-system-owner USER (M1/U1, R26-R40 audit)', () => {
+  /**
+   * Under the user-authority model (R36/R37), a non-maestro web/AID user
+   * resolves to { userId, userTitle:'user' } with NO agentId. Before the M1
+   * fix, that principal fell into the legacy `!agentId ⇒ system-owner` grant
+   * and could delete agents / teams / kill sessions. authorize() must now DENY
+   * any userId-bearing principal whose title is not maestro/maestro-delegate,
+   * WITHOUT regressing the flag-OFF web session ({}) or the maestro user.
+   */
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('denies a model-ON normal user (userTitle:user, no agentId) on delete-agent', () => {
+    const normalUser: AgentAuthResult = {
+      userId: 'user-uuid-1',
+      userTitle: 'user',
+      agentId: undefined,
+    }
+    const result = authorize(normalUser, 'delete-agent', 'victim-agent')
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toMatch(/not authorized/i)
+  })
+
+  it('denies a model-ON normal user on manage-team (the team-deletion authz)', () => {
+    /** DELETE /api/teams/[id] → DeleteTeam → gate0Auth('manage-team') → authorize(). */
+    const normalUser: AgentAuthResult = {
+      userId: 'user-uuid-2',
+      userTitle: 'user',
+      agentId: undefined,
+    }
+    const result = authorize(normalUser, 'manage-team', 'some-team-id')
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toMatch(/not authorized/i)
+  })
+
+  it('denies a model-ON normal user on session control (delete-session)', () => {
+    const normalUser: AgentAuthResult = {
+      userId: 'user-uuid-3',
+      userTitle: 'user',
+      agentId: undefined,
+    }
+    const result = authorize(normalUser, 'delete-session', 'some-agent')
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toMatch(/not authorized/i)
+  })
+
+  it('ZERO-REGRESSION: flag-OFF system-owner web session ({}) is still allowed on delete-agent', () => {
+    /** Model OFF → authenticateAgent returns {} (no userId). The new deny must
+     * NOT trigger (it keys on the presence of userId, not on !agentId), so the
+     * legacy system-owner grant still applies. This is the sacred invariant. */
+    const flagOffWebUI: AgentAuthResult = {} // no error, no userId, no agentId
+    const result = authorize(flagOffWebUI, 'delete-agent', 'any-agent')
+    expect(result.allowed).toBe(true)
+  })
+
+  it('ZERO-REGRESSION: flag-OFF system-owner web session ({}) is still allowed on manage-team', () => {
+    const flagOffWebUI: AgentAuthResult = {}
+    const result = authorize(flagOffWebUI, 'manage-team', 'any-team')
+    expect(result.allowed).toBe(true)
+  })
+
+  it('still allows a model-ON MAESTRO user (the active system owner) on delete-agent', () => {
+    /** A userId-bearing principal whose title IS maestro is the active system
+     * owner — it must skip the deny branch and keep the system-owner grant. */
+    const maestroUser: AgentAuthResult = {
+      userId: 'maestro-uuid',
+      userTitle: 'maestro',
+      agentId: undefined,
+    }
+    const result = authorize(maestroUser, 'delete-agent', 'any-agent')
+    expect(result.allowed).toBe(true)
+  })
+
+  it('still allows a model-ON maestro-delegate on manage-team', () => {
+    const delegateUser: AgentAuthResult = {
+      userId: 'delegate-uuid',
+      userTitle: 'maestro-delegate',
+      agentId: undefined,
+    }
+    const result = authorize(delegateUser, 'manage-team', 'any-team')
+    expect(result.allowed).toBe(true)
+  })
+})

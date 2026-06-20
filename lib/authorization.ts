@@ -71,6 +71,28 @@ export function authorize(
     return { allowed: false, reason: auth.error }
   }
 
+  // ── M1/U1 fix (2026-06-19 R26-R40 audit) — deny-by-default for a model-ON
+  // non-system-owner USER principal ──────────────────────────────────────
+  // BUG: under the user-authority model (R36/R37), a non-maestro web/AID user
+  // resolves to { userId, userTitle:'user' } with NO agentId. The legacy
+  // `!agentId ⇒ system-owner` grant below would then hand that ordinary user
+  // unrestricted access on every agent-callable strict route (delete-agent,
+  // delete-team, session kill/stop/restart). A `userId`-bearing principal whose
+  // title is NOT maestro/maestro-delegate is the active-non-owner user and MUST
+  // be denied here, NOT fall through into the system-owner branch.
+  // ZERO-REGRESSION: this keys on the PRESENCE of `userId`, never on `!agentId`.
+  // The flag-OFF web session resolves to `{}` (no userId — see agent-auth.ts
+  // authenticateAgent Case 1), so it skips this branch and is still granted by
+  // the legacy path below — byte-equivalent to pre-model behavior. A model-ON
+  // system-owner (userTitle 'maestro' / 'maestro-delegate') also skips this
+  // branch and keeps its system-owner grant.
+  if (auth.userId && auth.userTitle !== 'maestro' && auth.userTitle !== 'maestro-delegate') {
+    return {
+      allowed: false,
+      reason: `User "${auth.userTitle ?? 'user'}" is not authorized to ${action} via the AI Maestro API`,
+    }
+  }
+
   // System-owner (web UI) → always allowed (no error AND no agentId)
   if (!auth.agentId) {
     return { allowed: true }

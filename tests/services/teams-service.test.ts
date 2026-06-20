@@ -62,9 +62,17 @@ const { mockTeams, mockGhProject, mockDocs, mockAgentRegistry, mockNotificationS
   },
   // Dynamically imported by createNewTeam/updateTeamById/setTeamOrchestrator.
   // Mock so ChangeTitle resolves (the real module needs registry/auth wiring).
+  // M3 fix (2026-06-19 R26-R40 audit): createNewTeam now also dynamically imports
+  // assertForeignUserMayCall to gate the R40 `create_team` command. Default it to
+  // null (allowed) so every pre-existing createNewTeam test — none of which pass a
+  // foreign-user authContext — is unaffected; the R40 gate test overrides it.
   mockElementManagement: {
     ChangeTitle: vi.fn(() => Promise.resolve({ success: true })),
     ChangeTeam: vi.fn(() => Promise.resolve({ success: true })),
+    // Return type explicitly `string | null` (matches the real
+    // assertForeignUserMayCall) so the R40-gate test can override it with a
+    // deny string via mockResolvedValueOnce without a type error.
+    assertForeignUserMayCall: vi.fn((): Promise<string | null> => Promise.resolve(null)),
   },
 }})
 
@@ -230,6 +238,59 @@ describe('createNewTeam', () => {
       'test-manager-id',
       []
     )
+  })
+})
+
+// ============================================================================
+// createNewTeam — R40 create_team foreign-user gate (M3, R26-R40 audit)
+// ============================================================================
+
+describe('createNewTeam — R40 create_team foreign-user gate (M3)', () => {
+  it('returns 403 when an approved foreign user lacks the create_team grant', async () => {
+    /**
+     * M3: `create_team` is in R40_RESTRICTABLE_COMMANDS but the gate was wired
+     * only into CreateAgent. A model-ON foreign user (no agentId → MANAGER gate
+     * skipped) could create teams ungated. createNewTeam now calls
+     * assertForeignUserMayCall(authContext, 'create_team') BEFORE any side
+     * effect; when it returns an error string, creation is refused 403 and
+     * createTeam is never reached.
+     */
+    mockElementManagement.assertForeignUserMayCall.mockResolvedValueOnce(
+      'R40: foreign user is not granted "create_team" by the MAESTRO',
+    )
+
+    const result = await createNewTeam({
+      name: 'Foreign Team',
+      agentIds: [],
+      authContext: { isSystemOwner: false, userId: 'foreign-user-uuid', userTitle: 'user' },
+    })
+
+    expect(result.status).toBe(403)
+    expect(result.error).toMatch(/create_team/i)
+    // The gate fires before any team creation side effect.
+    expect(mockTeams.createTeam).not.toHaveBeenCalled()
+    expect(mockElementManagement.assertForeignUserMayCall).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'foreign-user-uuid' }),
+      'create_team',
+    )
+  })
+
+  it('ZERO-REGRESSION: a system-owner caller (gate returns null) creates the team normally', async () => {
+    /** The gate is inert for native/MAESTRO/agent callers — assertForeignUserMayCall
+     * returns null and createNewTeam proceeds exactly as before. */
+    const team = makeTeam({ name: 'Owner Team' })
+    mockTeams.createTeam.mockResolvedValue(team)
+    // Default mock already returns null; be explicit for clarity.
+    mockElementManagement.assertForeignUserMayCall.mockResolvedValueOnce(null)
+
+    const result = await createNewTeam({
+      name: 'Owner Team',
+      agentIds: [],
+      authContext: { isSystemOwner: true },
+    })
+
+    expect(result.status).toBe(201)
+    expect(mockTeams.createTeam).toHaveBeenCalled()
   })
 })
 

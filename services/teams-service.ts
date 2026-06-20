@@ -217,6 +217,28 @@ export async function createNewTeam(params: CreateTeamParams): Promise<ServiceRe
     return { error: 'agentIds must be an array', status: 400 }
   }
 
+  // ── R40 foreign-user gate for create_team ──────────────────────────────
+  // M3 fix (2026-06-19 R26-R40 audit): `create_team` is in
+  // R40_RESTRICTABLE_COMMANDS but assertForeignUserMayCall was wired ONLY into
+  // CreateAgent (G00f). Every team-creation entry point routes through
+  // createNewTeam (the Next.js routes AND headless), so gating here closes the
+  // gap for all of them: an approved foreign user (model-ON) without a
+  // `create_team` grant is refused BEFORE any side effect, exactly like the
+  // create_agent gate. INERT WHEN THE MODEL IS OFF — no userId is resolved then,
+  // so isForeignUser() is false and assertForeignUserMayCall() returns null
+  // (zero behavior change for the single-operator deployment). Native users, the
+  // MAESTRO/system-owner, and agent callers are also passed through here (their
+  // authority is governed by the MANAGER/web-UI title gate + R28 below). Dynamic
+  // import mirrors the ChangeTitle calls below — element-management-service
+  // dynamically imports teams-service, so a static edge here would cycle.
+  {
+    const { assertForeignUserMayCall } = await import('@/services/element-management-service')
+    const foreignErr = await assertForeignUserMayCall(params.authContext, 'create_team')
+    if (foreignErr) {
+      return { error: foreignErr, status: 403 }
+    }
+  }
+
   // Governance: teams require an existing MANAGER first
   const existingManagerId = getManagerId()
   if (!existingManagerId) {

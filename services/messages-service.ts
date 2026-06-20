@@ -269,6 +269,25 @@ export async function sendMessage(params: SendMessageParams): Promise<ServiceRes
 
   // Delegate to the unified SendMessage AIO pipeline
   const { SendMessage } = await import('@/services/send-message-service')
+  // M2 fix (R38.2, model-ON): do NOT unconditionally skip the comm-graph here.
+  // The pre-fix `skipGraphCheck: true` made this production POST path bypass the
+  // R38.2 normal-user routing restriction entirely, while the AMP /v1/route path
+  // (which never skips) enforced it — an authz-bypass asymmetry. We now skip ONLY
+  // for senders that are genuinely exempt:
+  //   - isSystemOwner: the active MAESTRO / owner web UI (R6.6 — owner is exempt;
+  //     flag-OFF this is `!agentId`, i.e. every web session, so flag-OFF stays
+  //     byte-identical).
+  //   - non-user senders (from !== 'user'): on the Next.js route an authenticated
+  //     agent has body.from overridden to its agentId, so this branch keeps the
+  //     prior agent behavior unchanged (agents continue to route through AMP for
+  //     R6-governed messaging; flag-OFF byte-identical).
+  // A normal user (model ON: isSystemOwner=false, from==='user') now flows into
+  // SendMessage G06's R38.2 user-sender branch, which resolves the relational
+  // context and enforces the restriction. With the model OFF, G06's user branch
+  // is itself a no-op (it requires userAuthorityModelEnabled), so even when the
+  // check is no longer skipped the outcome is unchanged — the zero-regression
+  // invariant holds on every flag-OFF path.
+  const skipGraphCheck = params.authContext.isSystemOwner || (from || '') !== 'user'
   const result = await SendMessage({
     from: from || '',
     to: to || '',
@@ -276,8 +295,7 @@ export async function sendMessage(params: SendMessageParams): Promise<ServiceRes
     content: content ? { type: content.type, message: content.message, context: content.context } : { type: 'notification', message: '' },
     priority: params.priority,
     inReplyTo: params.inReplyTo,
-    // User/UI messages skip graph check (R6.6: user is exempt)
-    skipGraphCheck: true,
+    skipGraphCheck,
     authContext: params.authContext,
   })
 

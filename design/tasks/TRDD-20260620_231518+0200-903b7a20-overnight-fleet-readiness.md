@@ -3,7 +3,7 @@ trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-06-21T00:55:00+0200
+updated: 2026-06-21T01:05:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -80,13 +80,14 @@ On completion: synthesize → Phase C (ai-maestro fixes, worktree-isolated) + Ph
 - 2026-06-21T00:10 — Phase A COMPLETE (w655g51l5): the resilient pool rode the throttle, all 10 dims produced findings → `reports/overnight-verify/`. ~93 findings, ~10 hot. Biggest hot clusters: scripts-skill-align (4), gov-element-mgmt (2), trdd-classify-pending (2), + gov-auth-sudo-aid (1), gov-decoupling (1). (3 transient RL failures were retried to success — the backoff worked.)
 - 2026-06-21T00:45 — **SECURITY FIX #1 LANDED — commit `a11d1bfb`, NOT pushed.** sessions-browser auth-bypass + path-traversal SSOT. Implemented TRDD-9e1e4b29 (presence-only `hasSessionCookie` let a forged `aim_session` read any agent's transcript → now validates via `hasValidSession`→`validateSession`; 401 on forged/absent; login round-trip verified, no legit-user lockout) + TRDD-5df6f7da (`confineToProjectsStore` triplication → single shared export; **DISCOVERED + fixed a headless-mode `?path=` traversal hole that had NO guard**). 9 Next routes + headless (8 gates + 3 confine) + service. Full loop honored: `tsc` clean + full unit suite **1851 passed / 0 failed** + docs (API-CHANGES §7) + both TRDDs → completed. Method note: did it in-main-tree (not parallel fix-agents) — security transparency + tonight's throttle + the concurrent finder reads made single-writer atomic edits the right call.
 - **NEW FINDING for Phase C: `server.mjs` `hasCredential()` (~L609/L1036) uses its own inline presence-only `aim_session` regex — same auth weakness, broader full-mode surface. `.mjs` can't import the TS validator → its own TRDD/fix needed.**
+- 2026-06-21T00:25 — **SECURITY FIX #2 LANDED — commit `d53b03d9`, NOT pushed (TRDD-35af6b13).** ChangeFolder `~/agents/` confinement (fix-queue #2). G01b gate (before the existsSync probe) rejects any workingDirectory outside `~/agents/`, mirroring CreateAgent G03-ENFORCE + DeleteAgent G09 — closes the workdir-write escape (the PATCH route already documented this as the intended-but-missing "Gate 3"). TDD: `tests/integration/change-folder-confinement.test.ts` 4/4 (real ChangeFolder, isSystemOwner ctx); `tsc` clean; docs API-CHANGES §8. Authority-gated → MEDIUM, but defense-in-depth on the load-bearing "every agent under ~/agents/" invariant.
 
 ## Phase B synthesis — confirmed fix-queue (2026-06-21T00:55; from reports/overnight-verify/, 98 findings/10 hot)
 Each item below: CONFIRM against current code before fixing (workflow findings are LLM-judgment). Order = security → governance → scripts-align → kanban → decoupling.
 
 **ai-maestro-fixable (Phase C), priority order:**
 1. ✅ DONE a11d1bfb — TRDD-9e1e4b29 sessions-browser auth+traversal.
-2. SECURITY — ChangeFolder has NO `~/agents/` confinement (workdir-write escape, #32-class); mirror CreateAgent G03. `services/element-management-service.ts` ChangeFolder.
+2. ✅ DONE d53b03d9 — ChangeFolder `~/agents/` confinement (TRDD-35af6b13, workdir-write escape).
 3. SECURITY — `server.mjs hasCredential()` (~L609/L1036) inline presence-only `aim_session` regex (.mjs, harder — own TRDD).
 4. SECURITY (MEDIUM, deeper) — AID PoP replay (TRDD-15ff13ae, token reuse in 300s window); `POST /api/v1/federation/deliver` bypasses comm-graph+team-isolation.
 5. GOV — ChangeTitle Gate14-before-Gate16: role-plugin install failure leaves title set + no role (R9.13). Make Gate16 fail-fast/rollback. `element-management-service.ts:2355-2394`.
@@ -104,4 +105,4 @@ Each item below: CONFIRM against current code before fixing (workflow findings a
 **Design-column (defer, multi-phase):** TRDD-a1019073 controlled-exec-env; TRDD-1ee4a3c1 portable agents; TRDD-c7a81642 boot auto-hibernate scan.
 
 ## NEXT ACTION
-Execute fix-queue item #2 (ChangeFolder `~/agents/` confinement — SECURITY, self-contained): verify CreateAgent's existing G03 confinement + ChangeFolder's lack of it → TRDD → fix → test (TDD) → docs → commit (NO push). Then proceed down the queue security-first. Service `[janitor-heartbeat]` markers between items.
+Fix-queue #1 (a11d1bfb) + #2 (d53b03d9) DONE. Next = item #5 (ChangeTitle R9.13: title persisted at Gate14 BEFORE role-plugin install at Gate16 → install failure leaves a titled agent with NO role-plugin, violating R9.13 mandatory-role). VERIFY the gate ordering in `element-management-service.ts` (~2355-2394 + the installPluginLocally call site ~2700-2800), then make the install-failure path fail-fast (roll back the title write OR set roleMissing+hibernate) → TRDD → TDD → docs → commit (NO push). Then #6 registerAgent AIO bypass, then #8 #45 CLI verbs (scripts-align), then kanban (#9). Service `[janitor-heartbeat]` markers between items.

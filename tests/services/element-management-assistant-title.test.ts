@@ -80,7 +80,7 @@ vi.mock('@/lib/ibct-scope-check', () => ({
 }))
 
 vi.mock('@/lib/client-capabilities', () => ({
-  getClientCapabilities: vi.fn(() => ({ plugins: true, skills: true, agents: true, hooks: true })),
+  getClientCapabilities: vi.fn(() => ({ plugins: true, rolePlugins: true, skills: true, agents: true, hooks: true })),
   detectClientType: vi.fn(() => 'claude'),
 }))
 
@@ -299,6 +299,39 @@ describe('element-management — ChangeTitle to ASSISTANT (R39.1/R39.4)', () => 
     expect(result.error).toMatch(/MANAGER|CHIEF-OF-STAFF/i)
     // Title must NOT have changed.
     expect(registryStore.get('assistant-agent-2')?.governanceTitle).toBe('autonomous')
+  })
+})
+
+describe('element-management — ChangeTitle G17 R9.13 recovery (titled-but-role-less)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    registryStore.clear()
+  })
+  afterEach(() => { vi.clearAllMocks() })
+
+  it('G17: 0 active role-plugins after a non-skip install → set roleMissing (not a false "consistent")', async () => {
+    // skipPluginSync is OMITTED so Gate 16 (install) + Gate 17 (consistency)
+    // actually run. The mocked fs leaves settings.local.json absent
+    // (existsSync→false ⇒ loadJsonSafe→{}), so after the G16 install the agent
+    // has ZERO active role-plugins despite a resolved targetPluginName — exactly
+    // the "install silently WARNed and failed" R9.13 hole this fix closes. G17
+    // must NOT report "Plugin state consistent (0 role-plugin(s))"; it must
+    // enforce R9.13 by setting roleMissing=true (mirroring ChangePlugin's PG04).
+    seedAgent('g17-roleless-1', 'autonomous')
+    const { ChangeTitle } = await import('@/services/element-management-service')
+    const result = await ChangeTitle('g17-roleless-1', 'assistant', {
+      authContext: managerCtx,
+      skipRestart: true,
+    })
+
+    // The title change itself still succeeds — the gap was the SILENT role-loss,
+    // not a failed title write.
+    expect(result.success).toBe(true)
+    // R9.13 enforcement: G17 set roleMissing=true on the registry.
+    expect(mockUpdateAgent).toHaveBeenCalledWith('g17-roleless-1', { roleMissing: true })
+    // The ops log shows the R9.13 enforcement, NOT a false "consistent (0…)".
+    expect(result.operations.some(o => /G17:.*R9\.13/.test(o))).toBe(true)
+    expect(result.operations.some(o => /G17: Plugin state consistent \(0 role-plugin/.test(o))).toBe(false)
   })
 })
 

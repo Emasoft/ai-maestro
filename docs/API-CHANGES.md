@@ -346,6 +346,30 @@ endpoint shape or validation changed. Six further schema-accepted fields
 clean; `tests/unit/api-team-tasks-trddv2-fields.test.ts` (2 cases, RED-verified
 first) green.
 
+## 10. ChangeTitle Gate 17 now enforces R9.13 when an install leaves an agent role-less (2026-06-21)
+
+`TRDD-51ed3b0b`. ChangeTitle persists the new title at **Gate 14** BEFORE
+installing the role-plugin at **Gate 16**. Gate 16 only WARNs on a failed
+install, so a failure left the agent **titled but role-less** — and the old
+**Gate 17** consistency check reported `Plugin state consistent (0
+role-plugin(s))` (a false positive), masking the R9.13 violation. Gate 17 now,
+when a role-plugin was REQUIRED (`targetPluginName` resolved) but 0 are active
+after Gate 16, **retries the install once**; if the agent is still role-less it
+sets `roleMissing=true` on the registry and **hibernates** the agent (mirroring
+ChangePlugin's PG04 recovery), so `/wake` refuses with `role_plugin_required`
+(409) until the Config tab assigns a plugin. The recovery calls
+`installPluginLocally` directly (never `ChangeTitle`), so a
+PG04→ChangeTitle→Gate-17 chain cannot recurse.
+
+**Plugin impact:** a title change whose role-plugin install fails no longer
+silently produces a titled-but-role-less agent — the agent is flagged
+`roleMissing` and hibernated, surfaced via the `hibernate_role_missing` ledger op
+and the Gate 17 ops log. The title change itself still reports `success: true`
+(the title DID persist — only the role install failed). No endpoint shape
+changed. `tsc --noEmit` clean; full unit suite **1858 passed / 0 failed**; the
+G17 case in `tests/services/element-management-assistant-title.test.ts` was
+RED-verified against the unfixed gate first, then green.
+
 ## How plugins should consume this doc
 
 1. The role-plugins use `https://raw.githubusercontent.com/Emasoft/ai-maestro/governance-rules/docs/GOVERNANCE-RULES.md` (and similar for other docs) to learn about API surface.

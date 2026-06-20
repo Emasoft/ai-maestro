@@ -2778,7 +2778,52 @@ export async function ChangeTitle(
     // ── GATE 17: Verify plugin state consistency ─────────────
     if (!options?.skipPluginSync && clientSupportsRolePlugins && agentDir) {
       try {
-        const localSettings = join(agentDir.startsWith('~') ? agentDir.replace('~', HOME) : agentDir, '.claude', 'settings.local.json')
+        const g17Dir = agentDir
+        const localSettings = join(g17Dir.startsWith('~') ? g17Dir.replace('~', HOME) : g17Dir, '.claude', 'settings.local.json')
+        // R9.13 recovery — invoked when a role-plugin was REQUIRED for this title
+        // (targetPluginName set) but the post-G16 scan shows ZERO active. G16 only
+        // WARNs on a failed install, so a failure silently slips past here and the
+        // agent is left titled-but-role-less (the gate previously reported "Plugin
+        // state consistent (0 role-plugin(s))" — a false positive). This retries the
+        // install once; if the agent is STILL role-less it is in R9.13 violation →
+        // set roleMissing=true + hibernate so /wake refuses until the Config tab
+        // assigns a plugin. Mirrors ChangePlugin's PG04 recovery (TRDD-c7a81642);
+        // calls installPluginLocally DIRECTLY (never ChangeTitle), so a
+        // PG04→ChangeTitle→here chain cannot recurse. (Consolidating this with PG04
+        // into one shared helper is deferred until PG04 has characterization tests —
+        // duplicating ~20 lines here avoids refactoring PG04's working,
+        // ledger-only-covered path inside this bug fix.)
+        const enforceRoleOrHibernate = async (): Promise<void> => {
+          if (!targetPluginName) return
+          ops.push(`G17: R9.13 — role-plugin "${targetPluginName}" required for "${effectiveTitle}" but 0 active after G16. Retrying install once.`)
+          await installPluginLocally(targetPluginName, g17Dir, targetMarketplace).catch(() => {})
+          const reSettings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+          const reEp = (reSettings.enabledPlugins || {}) as Record<string, boolean>
+          const reActive = Object.keys(reEp).filter(k => Object.values(TITLE_PLUGIN_MAP).includes(k.split('@')[0]))
+          if (reActive.length > 0) {
+            ops.push(`G17: R9.13 recovered — reinstall restored "${reActive[0].split('@')[0]}" for ${effectiveTitle}`)
+            return
+          }
+          const g17AuthContext: AuthContext = { isSystemOwner: true as const }
+          try {
+            await updateAgent(agentId, { roleMissing: true })
+            ops.push(`G17: R9.13 VIOLATION — agent titled "${effectiveTitle}" with 0 role-plugins after retry. set roleMissing=true`)
+            const { hibernateAgent } = await import('@/services/agents-core-service')
+            const hibResult = await hibernateAgent(agentId, { sessionIndex: 0, authContext: g17AuthContext })
+            ops.push(hibResult?.data?.success
+              ? `G17: auto-hibernated agent (reason: role_plugin_missing)`
+              : `G17: WARN — hibernate after roleMissing set: ${hibResult?.error ?? 'unknown'}`)
+            await tryEmitLedgerOp(
+              'hibernate_role_missing',
+              [{ op: 'replace', path: `/agents/${agentId}/roleMissing`, value: true }],
+              g17AuthContext,
+              'g17-hibernate-role-missing',
+              ops,
+            )
+          } catch (hibErr) {
+            ops.push(`G17: WARN — roleMissing/hibernate path failed: ${hibErr instanceof Error ? hibErr.message : hibErr}`)
+          }
+        }
         if (existsSync(localSettings)) {
           const settings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
           const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
@@ -2788,23 +2833,29 @@ export async function ChangeTitle(
           })
           if (activeRolePlugins.length > 1) {
             ops.push(`G17: WARN — ${activeRolePlugins.length} role-plugins active (expected 0 or 1). Cleaning.`)
-            await uninstallAllRolePlugins(agentDir)
+            await uninstallAllRolePlugins(g17Dir)
             if (targetPluginName) {
-              await installPluginLocally(targetPluginName, agentDir, targetMarketplace).catch(() => {})
+              await installPluginLocally(targetPluginName, g17Dir, targetMarketplace).catch(() => {})
             }
           } else if (targetPluginName && activeRolePlugins.length === 1) {
             // Verify the active plugin matches the expected one for this title
             const activeName = activeRolePlugins[0].split('@')[0]
             if (activeName !== targetPluginName) {
               ops.push(`G17: MISMATCH — active "${activeName}" != expected "${targetPluginName}" for ${effectiveTitle}. Fixing.`)
-              await uninstallAllRolePlugins(agentDir)
-              await installPluginLocally(targetPluginName, agentDir, targetMarketplace).catch(() => {})
+              await uninstallAllRolePlugins(g17Dir)
+              await installPluginLocally(targetPluginName, g17Dir, targetMarketplace).catch(() => {})
             } else {
               ops.push(`G17: Plugin state consistent (${activeName} matches ${effectiveTitle})`)
             }
+          } else if (targetPluginName && activeRolePlugins.length === 0) {
+            // R9.13: a role-plugin was required but the install left none active.
+            await enforceRoleOrHibernate()
           } else {
             ops.push(`G17: Plugin state consistent (${activeRolePlugins.length} role-plugin(s))`)
           }
+        } else if (targetPluginName) {
+          // settings.local.json absent but a role-plugin was required → 0 active.
+          await enforceRoleOrHibernate()
         } else {
           ops.push(`G17: No settings.local.json — plugin state clean`)
         }

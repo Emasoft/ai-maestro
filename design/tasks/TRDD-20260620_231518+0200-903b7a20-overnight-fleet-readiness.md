@@ -3,7 +3,7 @@ trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-06-21T02:15:00+0200
+updated: 2026-06-21T02:30:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -46,13 +46,14 @@ fleet (ai-maestro-plugin, 8 role-plugins, janitor, MANAGER, CPV, …) = OTHER re
 AID-authed kanban round-trip = agent-only (owner session gets 401) — coordinate, can't do solo.
 
 **NEXT ACTION (current — see the detailed `## NEXT ACTION` at the bottom):**
-Phase A (verify) + B (synthesize) + E (MANAGER coordination #35) DONE. **4 fixes LANDED
-+ committed on `governance-rules`, NOT pushed; full suite 1857/0:** `a11d1bfb`
+Phase A (verify) + B (synthesize) + E (MANAGER coordination #35) DONE. **6 fixes LANDED
++ committed on `governance-rules`, NOT pushed; full suite 1858/0:** `a11d1bfb`
 sessions-browser auth+traversal, `d53b03d9` ChangeFolder ~/agents confine, `5512e9cb`
-kanban TRDD-v2 field-drop, `41697ca5` #45 teams CLI verbs. DEFERRED-COMPLEX (designed,
-high-blast-radius governance core → fresh context): #5 ChangeTitle R9.13, #6 registerAgent
-AIO. NEXT: a deferred-complex governance fix in fresh context OR Phase D scenarios — full
-remaining queue + designs in the `## Phase B synthesis` + `## NEXT ACTION` sections below.
+kanban TRDD-v2 field-drop, `41697ca5` #45 teams CLI verbs, `32816842` #45 presence verb,
+`98cdd3bd` **#5 ChangeTitle G17 R9.13 (governance core)**. DEFERRED-COMPLEX (designed,
+high-blast-radius, fresh context): #6 registerAgent AIO bypass. NEXT: #6, OR Phase D
+scenarios — full remaining queue + designs in the `## Phase B synthesis` + `## NEXT
+ACTION` sections below.
 
 **Load-bearing facts / gotchas:**
 - Every GitHub write self-identifies (R22): `_Posted by the Claude developing **ai-maestro** (via the shared @Emasoft gh auth)._`
@@ -81,6 +82,7 @@ remaining queue + designs in the `## Phase B synthesis` + `## NEXT ACTION` secti
 - 2026-06-20T23:27 — Phase A attempt 2 (workflow w655g51l5) relaunched RESILIENT: hand-rolled pool, concurrency 3, ramped spawn 15s, exponential backoff that re-enqueues on rate-limit, schemaless agents writing reports/overnight-verify/<dim>.{md,findings.json}. Only 3 agents hit the API at once. Running in background.
 - **`/go-on-yourself` directive folded in (2026-06-20 ~23:18): DO NOT PUSH (commit only, await approval); TRDD per change; SERENA for symbol edits; update docs/readme/help per change; TDD; no bloat / modularize / reuse; prefer integrating alternatives over deleting; nothing outside project + /tmp; never relax security or quality gates.**
 - 2026-06-21T00:10 — Phase A COMPLETE (w655g51l5): the resilient pool rode the throttle, all 10 dims produced findings → `reports/overnight-verify/`. ~93 findings, ~10 hot. Biggest hot clusters: scripts-skill-align (4), gov-element-mgmt (2), trdd-classify-pending (2), + gov-auth-sudo-aid (1), gov-decoupling (1). (3 transient RL failures were retried to success — the backoff worked.)
+- 2026-06-21T02:30 — **GOVERNANCE FIX #5 LANDED — commit `98cdd3bd`, NOT pushed (TRDD-51ed3b0b, R9.13).** ChangeTitle G17 now enforces R9.13. G14 persists title BEFORE G16 installs the role-plugin; G16 only WARNs on install failure; the old G17 `else` reported "consistent (0 role-plugin(s))" → a titled-but-role-less agent (R9.13 violation, undetected, success=true). FIX: a G17 recovery closure (retry install once → if still 0, `roleMissing=true` + hibernate + `hibernate_role_missing` ledger, mirroring PG04; calls `installPluginLocally` DIRECTLY so PG04→ChangeTitle→G17 can't recurse). Scoped follow-up noted IN-CODE: consolidate G17+PG04 recovery into a shared helper after PG04 characterization tests. TDD RED→GREEN: new assistant-title case driving ChangeTitle WITHOUT `skipPluginSync` (the existing deep tests all skip-sync → WHY this gap was never caught) + a test-infra fix (the `getClientCapabilities` mock returned `{plugins}` but the code checks `caps.rolePlugins`). tsc clean + affected set 133/0 + **full unit suite 1858/0** (+1 new test). API-CHANGES §10.
 - 2026-06-21T00:45 — **SECURITY FIX #1 LANDED — commit `a11d1bfb`, NOT pushed.** sessions-browser auth-bypass + path-traversal SSOT. Implemented TRDD-9e1e4b29 (presence-only `hasSessionCookie` let a forged `aim_session` read any agent's transcript → now validates via `hasValidSession`→`validateSession`; 401 on forged/absent; login round-trip verified, no legit-user lockout) + TRDD-5df6f7da (`confineToProjectsStore` triplication → single shared export; **DISCOVERED + fixed a headless-mode `?path=` traversal hole that had NO guard**). 9 Next routes + headless (8 gates + 3 confine) + service. Full loop honored: `tsc` clean + full unit suite **1851 passed / 0 failed** + docs (API-CHANGES §7) + both TRDDs → completed. Method note: did it in-main-tree (not parallel fix-agents) — security transparency + tonight's throttle + the concurrent finder reads made single-writer atomic edits the right call.
 - **NEW FINDING for Phase C: `server.mjs` `hasCredential()` (~L609/L1036) uses its own inline presence-only `aim_session` regex — same auth weakness, broader full-mode surface. `.mjs` can't import the TS validator → its own TRDD/fix needed.**
 - 2026-06-21T01:50 — **FIX #4 LANDED — commit `41697ca5`, NOT pushed (TRDD-fb75c4d1, #45).** scripts-align: added FROZEN CLI verbs `aimaestro-teams.sh tasks <id>` (GET /api/teams/<id>/tasks) + `reassign-cos <id> <uuid> --password P` (POST chief-of-staff) — additive, mirroring cmd_add_agent/cmd_kanban_config; v1.1.0→v1.2.0. Verified: bash -n clean, --version/help/arg-validation correct, LIVE WIRING proven (`tasks <uuid>`→"HTTP 401 auth_required" = reached the real endpoint). Functional 200 round-trip is agent-only. The 3rd #45 verb `presence` (in aimaestro-agent.sh — delegates to agent-*.sh modules) DEFERRED. Deployed ~/.local/bin needs install-messaging.sh re-run (outside-project deploy, flagged).
@@ -99,7 +101,7 @@ Each item below: CONFIRM against current code before fixing (workflow findings a
 2. ✅ DONE d53b03d9 — ChangeFolder `~/agents/` confinement (TRDD-35af6b13, workdir-write escape).
 3. SECURITY — `server.mjs hasCredential()` (~L609/L1036) inline presence-only `aim_session` regex (.mjs, harder — own TRDD).
 4. SECURITY (MEDIUM, deeper) — AID PoP replay (TRDD-15ff13ae, token reuse in 300s window); `POST /api/v1/federation/deliver` bypasses comm-graph+team-isolation.
-5. GOV — ChangeTitle Gate14-before-Gate16: role-plugin install failure leaves title set + no role (R9.13). **VERIFIED + designed (2026-06-21):** G14 writes+verifies title; G16 (`element-management-service.ts:2724`) CATCHES install failure → WARN → continues; G17's final `else` (line 2805) reports "consistent" even for 0 role-plugins when a title requires one → ChangeTitle returns SUCCESS with a titled, role-less agent (R9.13 violation, undetected). FIX DESIGN: extract a shared helper `enforceRoleMissingHibernate(agentId, authContext, ops, tag)` from PG04's terminal recovery (lines 1168-1195: updateAgent roleMissing:true + hibernateAgent + `<tag>-hibernate-role-missing` ledger op — parameterize tag+source to PRESERVE PG04's exact `PG04:` log strings so existing tests pass); refactor PG04 to call it (tag='PG04'); at G17 detect `targetPluginName && activeRolePlugins.length === 0` → one direct `installPluginLocally(...).catch` reinstall → re-scan → if still 0 call the helper (tag='G17') + set a result flag (do NOT call ChangeTitle from G17 → infinite recursion). TDD: mock installPluginLocally to throw → assert roleMissing+hibernate. HIGH-blast-radius (ChangeTitle 23 gates) → do in fresh context, run FULL change-title/change-plugin suite + tsc. **DEFERRED tonight (compaction risk on the governance core).**
+5. ✅ DONE `98cdd3bd` (2026-06-21, TRDD-51ed3b0b) — GOV — ChangeTitle Gate14-before-Gate16: role-plugin install failure leaves title set + no role (R9.13). **VERIFIED + designed (2026-06-21):** G14 writes+verifies title; G16 (`element-management-service.ts:2724`) CATCHES install failure → WARN → continues; G17's final `else` (line 2805) reports "consistent" even for 0 role-plugins when a title requires one → ChangeTitle returns SUCCESS with a titled, role-less agent (R9.13 violation, undetected). FIX DESIGN: extract a shared helper `enforceRoleMissingHibernate(agentId, authContext, ops, tag)` from PG04's terminal recovery (lines 1168-1195: updateAgent roleMissing:true + hibernateAgent + `<tag>-hibernate-role-missing` ledger op — parameterize tag+source to PRESERVE PG04's exact `PG04:` log strings so existing tests pass); refactor PG04 to call it (tag='PG04'); at G17 detect `targetPluginName && activeRolePlugins.length === 0` → one direct `installPluginLocally(...).catch` reinstall → re-scan → if still 0 call the helper (tag='G17') + set a result flag (do NOT call ChangeTitle from G17 → infinite recursion). TDD: mock installPluginLocally to throw → assert roleMissing+hibernate. HIGH-blast-radius (ChangeTitle 23 gates) → do in fresh context, run FULL change-title/change-plugin suite + tsc. **DEFERRED tonight (compaction risk on the governance core).**
 6. GOV — `registerAgent` uses raw createAgent primitive, bypasses CreateAgent AIO (R21/R9.13/R17). `services/agents-core-service.ts:1048,1125-1135`.
 7. GOV — ChangeClient R18.4 partial-plugin-state on install-time failure.
 8. ✅ DONE (FULL) — all 3 #45 frozen CLI verbs: teams `tasks` + `reassign-cos` (41697ca5) + agent `presence` (32816842), TRDD-fb75c4d1. Verified (bash -n + live-wiring-to-endpoint; functional round-trip agent-only). Deployed `~/.local/bin` copies need `install-messaging.sh` re-run (outside-project deploy step — flagged, not run).
@@ -121,11 +123,11 @@ B (synthesize) + E (MANAGER coordination #35) complete.
 
 **REMAINING (pick up in fresh context — designs/evidence captured above):**
 - BOUNDED/mechanical: #45 `presence` verb (aimaestro-agent.sh modules); kanban 6-field remainder (extend CreateTaskParams+createTeamTask+ghProject); #2 kanban per-column move-permission (investigate the inert check).
-- DEFERRED-COMPLEX (high-blast-radius governance core — designs in §"Phase B synthesis" item #5; do carefully, run FULL change-title/change-plugin suite): #5 ChangeTitle R9.13 (shared `enforceRoleMissingHibernate` helper + G17 detection); #6 registerAgent AIO bypass (route through CreateAgent).
+- ✅ #5 ChangeTitle R9.13 DONE (`98cdd3bd`, TRDD-51ed3b0b — G17 recovery; full suite 1858/0). REMAINING DEFERRED-COMPLEX (high-blast-radius governance core — design in §"Phase B synthesis" item #6; do carefully, run FULL change-plugin/register suite): #6 registerAgent AIO bypass — but FIRST a semantic investigation (is registerAgent meant to create a FULL local agent → must route through CreateAgent AIO for R9.13/R17, OR a lightweight peer/registry entry → raw createAgent is correct?). Callers: `/api/v1/register`, `/api/agents/register`, headless.
 - SECURITY MEDIUM (deeper): AID PoP replay (TRDD-15ff13ae); `/api/v1/federation/deliver` comm-graph bypass.
 - DECOUPLING #37: .cjs→aimaestro-hook.sh rewrite — VERIFIED ready (intermediary has activity/notify/check-messages); gated behind pending proposal c94c60e9 (tier-2) — MANAGER asked on #35, await steer OR land it.
 - Phase D: scenario tests via dev-browser (UI flawless + agent controllability) — via the run-scenario-test skill (forked agent).
 - DEPLOY (USER action): re-run install-messaging.sh (deployed CLI drift: aid-init.sh SH-MAJOR-04 + the new teams verbs); add installer self-heal.
 - #44 (plugin repo): core ai-maestro-plugin publish-pipeline → CPV canonical.
 
-Recommend next: a DEFERRED-COMPLEX governance fix (#5 or #6) in fresh context (highest mandate value, designs ready), OR Phase D scenarios. Service `[janitor-heartbeat]` markers between items.
+Recommend next: #6 registerAgent (after the semantic investigation above) in fresh context, OR Phase D scenarios (dev-browser UI). Service `[janitor-heartbeat]` markers between items.

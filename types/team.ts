@@ -20,19 +20,38 @@ export type TeamType = 'closed'
 
 /** Per-team kanban column configuration */
 export interface KanbanColumnConfig {
-  id: string           // Column key, used as task status value (e.g., "ai-review")
+  id: string           // Column key, used as task status value (e.g., "ai_review")
   label: string        // Display name (e.g., "AI Review")
   color: string        // Tailwind dot color class (e.g., "bg-purple-400")
-  icon?: string        // Lucide icon name (e.g., "SearchCheck") — resolved at render time
+  icon?: string        // Lucide icon name (e.g., "Bot") — resolved at render time
+  roles?: string[]     // Governance titles allowed to move a task INTO this column.
+                       // undefined or empty = any title may move tasks here.
 }
 
-/** Default 5-column kanban — used when team has no custom kanban config */
+/**
+ * Default kanban — used when a team has no custom kanban config.
+ * 14 TRDD-v2 lifecycle stages + 3 orthogonal exception states
+ * (blocked / failed / superseded). The ids/order MUST stay in sync with
+ * DEFAULT_STATUSES in types/task.ts.
+ */
 export const DEFAULT_KANBAN_COLUMNS: KanbanColumnConfig[] = [
-  { id: 'backlog', label: 'Backlog', color: 'bg-gray-500', icon: 'Archive' },
-  { id: 'pending', label: 'To Do', color: 'bg-gray-400', icon: 'Circle' },
-  { id: 'in_progress', label: 'In Progress', color: 'bg-blue-400', icon: 'PlayCircle' },
-  { id: 'review', label: 'Review', color: 'bg-amber-400', icon: 'Eye' },
-  { id: 'completed', label: 'Done', color: 'bg-emerald-400', icon: 'CheckCircle2' },
+  { id: 'backburner', label: 'Backburner', color: 'bg-gray-500', icon: 'Archive' },
+  { id: 'todo', label: 'To Do', color: 'bg-gray-400', icon: 'Circle' },
+  { id: 'design', label: 'Design', color: 'bg-indigo-400', icon: 'PenTool' },
+  { id: 'dispatch', label: 'Dispatch', color: 'bg-cyan-400', icon: 'Send' },
+  { id: 'dev', label: 'Dev', color: 'bg-blue-400', icon: 'Code' },
+  { id: 'testing', label: 'Testing', color: 'bg-amber-400', icon: 'FlaskConical' },
+  { id: 'ai_review', label: 'AI Review', color: 'bg-purple-400', icon: 'Bot' },
+  { id: 'human_review', label: 'Human Review', color: 'bg-pink-400', icon: 'UserCheck' },
+  { id: 'complete', label: 'Complete', color: 'bg-emerald-400', icon: 'CheckCircle2' },
+  { id: 'publish', label: 'Publish', color: 'bg-teal-400', icon: 'UploadCloud' },
+  { id: 'published', label: 'Published', color: 'bg-green-500', icon: 'PackageCheck' },
+  { id: 'deploy', label: 'Deploy', color: 'bg-orange-400', icon: 'Rocket' },
+  { id: 'live', label: 'Live', color: 'bg-lime-500', icon: 'Radio' },
+  { id: 'live_auditing', label: 'Live Auditing', color: 'bg-yellow-400', icon: 'Activity' },
+  { id: 'blocked', label: 'Blocked', color: 'bg-red-500', icon: 'Ban' },
+  { id: 'failed', label: 'Failed', color: 'bg-rose-600', icon: 'XCircle' },
+  { id: 'superseded', label: 'Superseded', color: 'bg-slate-500', icon: 'Replace' },
 ]
 
 /** GitHub Project link — when set, AI Maestro kanban is a live browser of the GitHub Project */

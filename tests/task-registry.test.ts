@@ -50,6 +50,13 @@ vi.mock('@/lib/agent-registry', () => ({
   ]),
 }))
 
+// getTeam drives validStatusesForTeam(). Default: no team found -> validation
+// falls back to DEFAULT_STATUSES (the 17 default columns). Individual tests
+// override getTeam to simulate a team with a custom kanban config.
+vi.mock('@/lib/team-registry', () => ({
+  getTeam: vi.fn(() => null),
+}))
+
 // ============================================================================
 // Import module under test (after mocks are declared)
 // ============================================================================
@@ -63,7 +70,9 @@ import {
   updateTask,
   deleteTask,
   wouldCreateCycle,
+  migrateStatus,
 } from '@/lib/task-registry'
+import { getTeam } from '@/lib/team-registry'
 import type { Task } from '@/types/task'
 
 // ============================================================================
@@ -91,7 +100,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     id: `task-${++makeTaskCounter}`,
     teamId: TEAM_1,
     subject: 'Default Task',
-    status: 'pending',
+    status: 'todo',
     assigneeAgentId: null,
     blockedBy: [],
     createdAt: '2025-01-01T00:00:00.000Z',
@@ -109,6 +118,9 @@ beforeEach(() => {
   uuidCounter = 0
   makeTaskCounter = 1000
   vi.clearAllMocks()
+  // vi.clearAllMocks() wipes mock implementations; re-establish the default
+  // getTeam behavior (no team -> validation falls back to DEFAULT_STATUSES).
+  vi.mocked(getTeam).mockReturnValue(null)
 })
 
 // ============================================================================
@@ -183,10 +195,10 @@ describe('saveTasks', () => {
 // ============================================================================
 
 describe('createTask', () => {
-  it('creates a task with default status pending', async () => {
+  it('creates a task with default status todo', async () => {
     const task = await createTask({ teamId: TEAM_1, subject: 'New Task' })
 
-    expect(task.status).toBe('pending')
+    expect(task.status).toBe('todo')
     expect(task.subject).toBe('New Task')
     expect(task.teamId).toBe(TEAM_1)
   })
@@ -301,43 +313,50 @@ describe('updateTask', () => {
     expect(result.task!.updatedAt).toBeDefined()
   })
 
-  it('sets startedAt when status changes to in_progress', async () => {
+  it('sets startedAt when status changes to dev', async () => {
     const created = await createTask({ teamId: TEAM_1, subject: 'Start Me' })
-    const result = await updateTask(TEAM_1, created.id, { status: 'in_progress' })
+    const result = await updateTask(TEAM_1, created.id, { status: 'dev' })
 
     expect(result.task!.startedAt).toBeDefined()
-    expect(result.task!.status).toBe('in_progress')
+    expect(result.task!.status).toBe('dev')
   })
 
-  it('sets startedAt when status changes to review (if not already started)', async () => {
-    const created = await createTask({ teamId: TEAM_1, subject: 'Review Me' })
-    const result = await updateTask(TEAM_1, created.id, { status: 'review' })
-
-    expect(result.task!.startedAt).toBeDefined()
-    expect(result.task!.status).toBe('review')
-  })
-
-  it('sets completedAt when status changes to completed', async () => {
+  it('sets completedAt when status changes to complete', async () => {
     const created = await createTask({ teamId: TEAM_1, subject: 'Complete Me' })
-    const result = await updateTask(TEAM_1, created.id, { status: 'completed' })
+    const result = await updateTask(TEAM_1, created.id, { status: 'complete' })
 
     expect(result.task!.completedAt).toBeDefined()
-    expect(result.task!.status).toBe('completed')
+    expect(result.task!.status).toBe('complete')
   })
 
   it('does not overwrite startedAt if already set', async () => {
     const created = await createTask({ teamId: TEAM_1, subject: 'Already Started' })
 
-    // Move to in_progress first to set startedAt
-    const first = await updateTask(TEAM_1, created.id, { status: 'in_progress' })
+    // Move to dev first to set startedAt
+    const first = await updateTask(TEAM_1, created.id, { status: 'dev' })
     const firstStartedAt = first.task!.startedAt
 
-    // Move to review -- startedAt should not change
-    const second = await updateTask(TEAM_1, created.id, { status: 'review' })
+    // Move forward to testing -- startedAt should not change (already set in dev)
+    const second = await updateTask(TEAM_1, created.id, { status: 'testing' })
     expect(second.task!.startedAt).toBe(firstStartedAt)
   })
 
-  it('detects unblocked tasks when a blocker is completed', async () => {
+  it('clears startedAt when moving back to todo', async () => {
+    const created = await createTask({ teamId: TEAM_1, subject: 'Move Back' })
+    await updateTask(TEAM_1, created.id, { status: 'dev' })
+    const back = await updateTask(TEAM_1, created.id, { status: 'todo' })
+    expect(back.task!.startedAt).toBeUndefined()
+  })
+
+  it('clears completedAt when moving away from complete', async () => {
+    const created = await createTask({ teamId: TEAM_1, subject: 'Reopen' })
+    const done = await updateTask(TEAM_1, created.id, { status: 'complete' })
+    expect(done.task!.completedAt).toBeDefined()
+    const reopened = await updateTask(TEAM_1, created.id, { status: 'dev' })
+    expect(reopened.task!.completedAt).toBeUndefined()
+  })
+
+  it('detects unblocked tasks when a blocker is complete', async () => {
     const blocker = await createTask({ teamId: TEAM_1, subject: 'Blocker' })
     const blocked = await createTask({
       teamId: TEAM_1,
@@ -345,7 +364,7 @@ describe('updateTask', () => {
       blockedBy: [blocker.id],
     })
 
-    const result = await updateTask(TEAM_1, blocker.id, { status: 'completed' })
+    const result = await updateTask(TEAM_1, blocker.id, { status: 'complete' })
 
     expect(result.unblocked).toHaveLength(1)
     expect(result.unblocked[0].id).toBe(blocked.id)
@@ -361,14 +380,14 @@ describe('updateTask', () => {
     })
 
     // Complete only the first blocker
-    const result = await updateTask(TEAM_1, blocker1.id, { status: 'completed' })
+    const result = await updateTask(TEAM_1, blocker1.id, { status: 'complete' })
 
     expect(result.unblocked).toHaveLength(0)
   })
 
-  it('does not report unblocked when task was already completed before', async () => {
+  it('does not report unblocked when task was already complete before', async () => {
     const blocker = await createTask({ teamId: TEAM_1, subject: 'Already Done' })
-    await updateTask(TEAM_1, blocker.id, { status: 'completed' })
+    await updateTask(TEAM_1, blocker.id, { status: 'complete' })
 
     await createTask({
       teamId: TEAM_1,
@@ -376,9 +395,15 @@ describe('updateTask', () => {
       blockedBy: [blocker.id],
     })
 
-    // Update the already-completed blocker again -- wasCompleted is true so no unblock detection
-    const result = await updateTask(TEAM_1, blocker.id, { status: 'completed' })
+    // Update the already-complete blocker again -- wasCompleted is true so no unblock detection
+    const result = await updateTask(TEAM_1, blocker.id, { status: 'complete' })
     expect(result.unblocked).toEqual([])
+  })
+
+  it('rejects an update to a status not in the team columns', async () => {
+    const created = await createTask({ teamId: TEAM_1, subject: 'Bad Status Update' })
+    await expect(updateTask(TEAM_1, created.id, { status: 'not-a-real-column' }))
+      .rejects.toThrow('Invalid task status')
   })
 })
 
@@ -452,8 +477,8 @@ describe('resolveTaskDeps', () => {
     expect(resolvedB.blocks).toEqual([])
   })
 
-  it('sets isBlocked to true when a dependency is not completed', () => {
-    const dep = makeTask({ id: 'dep', status: 'in_progress' })
+  it('sets isBlocked to true when a dependency is not complete', () => {
+    const dep = makeTask({ id: 'dep', status: 'dev' })
     const blocked = makeTask({ id: 'blocked', blockedBy: ['dep'] })
 
     const resolved = resolveTaskDeps([dep, blocked])
@@ -462,8 +487,8 @@ describe('resolveTaskDeps', () => {
     expect(resolvedBlocked.isBlocked).toBe(true)
   })
 
-  it('sets isBlocked to false when all dependencies are completed', () => {
-    const dep = makeTask({ id: 'dep', status: 'completed' })
+  it('sets isBlocked to false when all dependencies are complete', () => {
+    const dep = makeTask({ id: 'dep', status: 'complete' })
     const unblocked = makeTask({ id: 'unblocked', blockedBy: ['dep'] })
 
     const resolved = resolveTaskDeps([dep, unblocked])
@@ -513,6 +538,154 @@ describe('resolveTaskDeps', () => {
   it('handles empty task list', () => {
     const resolved = resolveTaskDeps([])
     expect(resolved).toEqual([])
+  })
+})
+
+// ============================================================================
+// migrateStatus
+// ============================================================================
+
+describe('migrateStatus', () => {
+  it('maps each legacy status to its TRDD-v2 equivalent', () => {
+    expect(migrateStatus('backlog')).toBe('backburner')
+    expect(migrateStatus('pending')).toBe('todo')
+    expect(migrateStatus('in_progress')).toBe('dev')
+    expect(migrateStatus('review')).toBe('ai_review')
+    expect(migrateStatus('completed')).toBe('complete')
+  })
+
+  it('is idempotent — an already-migrated status passes through unchanged', () => {
+    for (const s of ['backburner', 'todo', 'dev', 'ai_review', 'complete', 'published', 'live']) {
+      expect(migrateStatus(s)).toBe(s)
+    }
+    // Double-migration is a no-op (running migrate over already-new values)
+    expect(migrateStatus(migrateStatus('pending'))).toBe('todo')
+  })
+
+  it('passes an unknown / custom column id through unchanged', () => {
+    expect(migrateStatus('my-custom-column')).toBe('my-custom-column')
+  })
+})
+
+// ============================================================================
+// loadTasks status normalization
+// ============================================================================
+
+describe('loadTasks status migration', () => {
+  it('normalizes a legacy-status task to the TRDD-v2 status on read', () => {
+    // Persist a task carrying the OLD 'in_progress' status directly to storage,
+    // then confirm loadTasks rewrites it to the new 'dev' status at read time.
+    const legacy = makeTask({ id: 'legacy-1', teamId: TEAM_1, status: 'in_progress' })
+    fsStore[tasksFilePath(TEAM_1)] = JSON.stringify({ version: 1, tasks: [legacy] })
+
+    const loaded = loadTasks(TEAM_1)
+    expect(loaded).toHaveLength(1)
+    expect(loaded[0].status).toBe('dev')
+  })
+
+  it('migrates every legacy status across a mixed-status file', () => {
+    const tasks = [
+      makeTask({ id: 'm-backlog', status: 'backlog' }),
+      makeTask({ id: 'm-pending', status: 'pending' }),
+      makeTask({ id: 'm-review', status: 'review' }),
+      makeTask({ id: 'm-completed', status: 'completed' }),
+      makeTask({ id: 'm-new', status: 'published' }),
+    ]
+    fsStore[tasksFilePath(TEAM_1)] = JSON.stringify({ version: 1, tasks })
+
+    const loaded = loadTasks(TEAM_1)
+    const byId = Object.fromEntries(loaded.map(t => [t.id, t.status]))
+    expect(byId['m-backlog']).toBe('backburner')
+    expect(byId['m-pending']).toBe('todo')
+    expect(byId['m-review']).toBe('ai_review')
+    expect(byId['m-completed']).toBe('complete')
+    expect(byId['m-new']).toBe('published') // already-new value untouched
+  })
+})
+
+// ============================================================================
+// status validation
+// ============================================================================
+
+describe('status validation', () => {
+  it('createTask rejects a status that is not a valid column (defaults)', async () => {
+    // getTeam returns null in the default mock -> validation uses DEFAULT_STATUSES.
+    await expect(createTask({ teamId: TEAM_1, subject: 'Bad', status: 'nonsense' }))
+      .rejects.toThrow('Invalid task status')
+  })
+
+  it('createTask accepts a valid default status', async () => {
+    const task = await createTask({ teamId: TEAM_1, subject: 'Good', status: 'testing' })
+    expect(task.status).toBe('testing')
+  })
+
+  it('createTask validates against a team custom kanban config', async () => {
+    // Simulate a team whose only legal columns are an inbox + done pair.
+    vi.mocked(getTeam).mockReturnValue({
+      id: TEAM_1,
+      name: 'Custom Kanban Team',
+      agentIds: [],
+      type: 'closed',
+      kanbanConfig: [
+        { id: 'inbox', label: 'Inbox', color: 'bg-gray-400' },
+        { id: 'done', label: 'Done', color: 'bg-emerald-400' },
+      ],
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    } as ReturnType<typeof getTeam>)
+
+    // A default-pipeline status like 'dev' is NOT a column on this team.
+    await expect(createTask({ teamId: TEAM_1, subject: 'Wrong column', status: 'dev' }))
+      .rejects.toThrow('Invalid task status')
+    // The team's own column is accepted.
+    const ok = await createTask({ teamId: TEAM_1, subject: 'Right column', status: 'inbox' })
+    expect(ok.status).toBe('inbox')
+  })
+})
+
+// ============================================================================
+// TRDD-v2 Task fields round-trip
+// ============================================================================
+
+describe('TRDD-v2 Task fields', () => {
+  it('round-trips new fields through create + update', async () => {
+    const created = await createTask({
+      teamId: TEAM_1,
+      subject: 'Rich Task',
+      severity: 'HIGH',
+      effort: 'L',
+      releaseVia: 'publish',
+      relevantRules: ['3', '27'],
+      npt: ['npt-1'],
+    })
+
+    expect(created.severity).toBe('HIGH')
+    expect(created.effort).toBe('L')
+    expect(created.releaseVia).toBe('publish')
+    expect(created.relevantRules).toEqual(['3', '27'])
+    expect(created.npt).toEqual(['npt-1'])
+
+    // Persisted to disk
+    const reloaded = getTask(TEAM_1, created.id)
+    expect(reloaded!.severity).toBe('HIGH')
+    expect(reloaded!.relevantRules).toEqual(['3', '27'])
+
+    // Update mutates the new fields and persists them
+    const { task: updated } = await updateTask(TEAM_1, created.id, {
+      severity: 'LOW',
+      implementationCommits: ['abc1234'],
+      lastTestResult: 'pass',
+    })
+    expect(updated!.severity).toBe('LOW')
+    expect(updated!.implementationCommits).toEqual(['abc1234'])
+    expect(updated!.lastTestResult).toBe('pass')
+
+    const afterUpdate = getTask(TEAM_1, created.id)
+    expect(afterUpdate!.severity).toBe('LOW')
+    expect(afterUpdate!.implementationCommits).toEqual(['abc1234'])
+    expect(afterUpdate!.lastTestResult).toBe('pass')
+    // Unchanged field survives the update
+    expect(afterUpdate!.effort).toBe('L')
   })
 })
 

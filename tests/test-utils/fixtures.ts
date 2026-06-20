@@ -116,8 +116,9 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
   return {
     id: `task-${n}`,
     teamId: 'team-1',
+    // 'todo' matches the production createTask default (TRDD-v2 14-stage pipeline)
     subject: `Test Task ${n}`,
-    status: 'pending' as TaskStatus,
+    status: 'todo' as TaskStatus,
     assigneeAgentId: null, // SF-004: match production createTask default (uses ?? null)
     blockedBy: [],
     createdAt: '2025-01-01T00:00:00.000Z',

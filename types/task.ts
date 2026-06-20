@@ -10,8 +10,31 @@
 
 export type TaskStatus = string
 
-/** The original 5 statuses — used when a team has no custom kanban config */
-export const DEFAULT_STATUSES: string[] = ['backlog', 'pending', 'in_progress', 'review', 'completed']
+/**
+ * The 17 default statuses — used when a team has no custom kanban config.
+ * 14 TRDD-v2 lifecycle stages followed by 3 orthogonal exception states
+ * (blocked / failed / superseded). Order matches DEFAULT_KANBAN_COLUMNS in
+ * types/team.ts so the two sources stay aligned.
+ */
+export const DEFAULT_STATUSES: string[] = [
+  'backburner',
+  'todo',
+  'design',
+  'dispatch',
+  'dev',
+  'testing',
+  'ai_review',
+  'human_review',
+  'complete',
+  'publish',
+  'published',
+  'deploy',
+  'live',
+  'live_auditing',
+  'blocked',
+  'failed',
+  'superseded',
+]
 
 export interface Task {
   id: string                     // UUID
@@ -37,6 +60,23 @@ export interface Task {
   handoffDoc?: string            // Path to handoff document
   prUrl?: string                 // PR URL when in review
   reviewResult?: string          // pass|fail from integrator
+
+  // TRDD-v2 alignment fields (additive, all optional) — mirror the TRDD frontmatter
+  // schema so a kanban task can carry the same classification / relationship /
+  // delivery / evidence metadata a TRDD does. taskType stays a string (see above).
+  severity?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'NIT'
+  effort?: 'S' | 'M' | 'L' | 'XL'
+  parentTask?: string            // Task ID that spawned this one
+  npt?: string[]                 // Necessary Prerequisite Task IDs
+  eht?: string[]                 // Effects Handling Task IDs
+  supersedes?: string[]          // Task IDs this one replaces
+  supersededBy?: string[]        // Task IDs that replace this one (set when status=superseded)
+  relevantRules?: string[]       // PRRD rule numbers this task must comply with
+  releaseVia?: 'publish' | 'deploy' | 'none'
+  implementationCommits?: string[] // SHAs where this task's code landed (backtracking)
+  lastTestResult?: 'not-run' | 'pass' | 'fail' | 'partial'
+  publishedVersion?: string      // Version published (when status reaches published)
+  liveSince?: string             // ISO timestamp when deployed live
 }
 
 export interface TaskWithDeps extends Task {

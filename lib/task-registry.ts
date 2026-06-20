@@ -9,10 +9,47 @@ import fs from 'fs'
 import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import { loadAgents } from '@/lib/agent-registry'
+import { getTeam } from '@/lib/team-registry'
 import { withLock } from '@/lib/file-lock'
 import { isValidUuid } from '@/lib/validation'
+import { DEFAULT_STATUSES } from '@/types/task'
 import type { Task, TaskWithDeps, TasksFile } from '@/types/task'
 import { statePath } from '@/lib/ecosystem-constants'
+
+/**
+ * Legacy status -> TRDD-v2 status migration map.
+ * The original 5-column kanban used these statuses; the 14-stage pipeline
+ * renamed them. Migration is applied at read time (loadTasks) and is idempotent
+ * — a status not in this map (already-new, or a custom column id) passes through
+ * unchanged.
+ */
+const STATUS_MIGRATION: Record<string, string> = {
+  backlog: 'backburner',
+  pending: 'todo',
+  in_progress: 'dev',
+  review: 'ai_review',
+  completed: 'complete',
+}
+
+/**
+ * Migrate a single legacy status string to its TRDD-v2 equivalent.
+ * Idempotent: an unrecognized status (a new status, or a custom kanban column id)
+ * is returned unchanged, so re-running migration never double-maps.
+ */
+export function migrateStatus(status: string): string {
+  return STATUS_MIGRATION[status] ?? status
+}
+
+/**
+ * The set of status ids a task may legally hold for a given team.
+ * Uses the team's custom kanban column ids when configured, otherwise the
+ * 17 DEFAULT_STATUSES. A missing/unknown team falls back to DEFAULT_STATUSES so
+ * validation degrades safely rather than rejecting every status.
+ */
+function validStatusesForTeam(teamId: string): string[] {
+  const team = getTeam(teamId)
+  return team?.kanbanConfig?.map(c => c.id) ?? DEFAULT_STATUSES
+}
 
 const TEAMS_DIR = statePath('teams')
 
@@ -38,7 +75,10 @@ export function loadTasks(teamId: string): Task[] {
     }
     const data = fs.readFileSync(filePath, 'utf-8')
     const parsed: TasksFile = JSON.parse(data)
-    return Array.isArray(parsed.tasks) ? parsed.tasks : []
+    if (!Array.isArray(parsed.tasks)) return []
+    // Normalize any legacy status to its TRDD-v2 equivalent at read time so the
+    // rest of the codebase only ever sees current status ids (idempotent).
+    return parsed.tasks.map(t => ({ ...t, status: migrateStatus(t.status) }))
   } catch (error) {
     console.error(`Failed to load tasks for team ${teamId}:`, error)
     return []
@@ -72,10 +112,11 @@ export function resolveTaskDeps(tasks: Task[]): TaskWithDeps[] {
       .filter(t => t.blockedBy.includes(task.id))
       .map(t => t.id)
 
-    // Compute isBlocked
+    // Compute isBlocked — a dependency that has not reached the terminal
+    // 'complete' status still blocks (TRDD-v2 renamed 'completed' -> 'complete').
     const isBlocked = task.blockedBy.some(depId => {
       const dep = taskMap.get(depId)
-      return dep && dep.status !== 'completed'
+      return dep && dep.status !== 'complete'
     })
 
     // Resolve assignee: try by ID, then by name/alias/label (for assign: labels from GitHub)
@@ -124,18 +165,39 @@ export function createTask(data: {
   handoffDoc?: string
   prUrl?: string
   reviewResult?: string
+  // TRDD-v2 alignment fields (additive)
+  severity?: Task['severity']
+  effort?: Task['effort']
+  parentTask?: string
+  npt?: string[]
+  eht?: string[]
+  supersedes?: string[]
+  supersededBy?: string[]
+  relevantRules?: string[]
+  releaseVia?: Task['releaseVia']
+  implementationCommits?: string[]
+  lastTestResult?: Task['lastTestResult']
+  publishedVersion?: string
+  liveSince?: string
 }): Promise<Task> {
   return withLock('tasks-' + data.teamId, () => {
     const tasks = loadTasks(data.teamId)
     const now = new Date().toISOString()
+
+    // Default to 'todo' (skip 'backburner') — tasks created via API are considered already triaged
+    const status = data.status || 'todo'
+    // Reject a status that is not a valid column for this team (custom kanban or defaults).
+    const validStatuses = validStatusesForTeam(data.teamId)
+    if (!validStatuses.includes(status)) {
+      throw new Error(`Invalid task status: ${status}`)
+    }
 
     const task: Task = {
       id: uuidv4(),
       teamId: data.teamId,
       subject: data.subject,
       description: data.description,
-      // Default to 'pending' (skip 'backlog') — tasks created via API are considered already triaged
-      status: data.status || 'pending',
+      status,
       // SF-034: Use || instead of ?? to normalize empty string to null (empty string is not a valid agent ID)
       assigneeAgentId: data.assigneeAgentId || null,
       blockedBy: data.blockedBy ?? [],
@@ -148,6 +210,19 @@ export function createTask(data: {
       handoffDoc: data.handoffDoc,
       prUrl: data.prUrl,
       reviewResult: data.reviewResult,
+      severity: data.severity,
+      effort: data.effort,
+      parentTask: data.parentTask,
+      npt: data.npt,
+      eht: data.eht,
+      supersedes: data.supersedes,
+      supersededBy: data.supersededBy,
+      relevantRules: data.relevantRules,
+      releaseVia: data.releaseVia,
+      implementationCommits: data.implementationCommits,
+      lastTestResult: data.lastTestResult,
+      publishedVersion: data.publishedVersion,
+      liveSince: data.liveSince,
       createdAt: now,
       updatedAt: now,
     }
@@ -169,16 +244,29 @@ export function getTask(teamId: string, taskId: string): Task | null {
 export function updateTask(
   teamId: string,
   taskId: string,
-  updates: Partial<Pick<Task, 'subject' | 'description' | 'status' | 'assigneeAgentId' | 'blockedBy' | 'priority' | 'labels' | 'taskType' | 'externalRef' | 'externalProjectRef' | 'previousStatus' | 'acceptanceCriteria' | 'handoffDoc' | 'prUrl' | 'reviewResult'>>
+  updates: Partial<Pick<Task,
+    | 'subject' | 'description' | 'status' | 'assigneeAgentId' | 'blockedBy' | 'priority'
+    | 'labels' | 'taskType' | 'externalRef' | 'externalProjectRef' | 'previousStatus'
+    | 'acceptanceCriteria' | 'handoffDoc' | 'prUrl' | 'reviewResult'
+    // TRDD-v2 alignment fields (additive)
+    | 'severity' | 'effort' | 'parentTask' | 'npt' | 'eht' | 'supersedes' | 'supersededBy'
+    | 'relevantRules' | 'releaseVia' | 'implementationCommits' | 'lastTestResult'
+    | 'publishedVersion' | 'liveSince'
+  >>
 ): Promise<{ task: Task | null; unblocked: Task[] }> {
   return withLock('tasks-' + teamId, () => {
+    // Reject an invalid target status before mutating (only when a status change is requested).
+    if (updates.status !== undefined && !validStatusesForTeam(teamId).includes(updates.status)) {
+      throw new Error(`Invalid task status: ${updates.status}`)
+    }
+
     const tasks = loadTasks(teamId)
     const index = tasks.findIndex(t => t.id === taskId)
     if (index === -1) return { task: null, unblocked: [] }
 
     const now = new Date().toISOString()
-    const wasCompleted = tasks[index].status === 'completed'
-    const isNowCompleted = updates.status === 'completed'
+    const wasCompleted = tasks[index].status === 'complete'
+    const isNowCompleted = updates.status === 'complete'
 
     tasks[index] = {
       ...tasks[index],
@@ -187,30 +275,30 @@ export function updateTask(
     }
 
     // Clear timestamps first when moving backward in workflow
-    if (updates.status && updates.status !== 'completed') {
+    if (updates.status && updates.status !== 'complete') {
       tasks[index].completedAt = undefined
     }
-    if (updates.status && (updates.status === 'backlog' || updates.status === 'pending')) {
+    if (updates.status && (updates.status === 'backburner' || updates.status === 'todo')) {
       tasks[index].startedAt = undefined
     }
 
     // Then set timestamps based on status changes (after clearing, so intent is unambiguous)
-    if ((updates.status === 'in_progress' || updates.status === 'review') && !tasks[index].startedAt) {
+    if (updates.status === 'dev' && !tasks[index].startedAt) {
       tasks[index].startedAt = now
     }
-    if (updates.status === 'completed' && !tasks[index].completedAt) {
+    if (updates.status === 'complete' && !tasks[index].completedAt) {
       tasks[index].completedAt = now
     }
 
-    // Find newly unblocked tasks when a task is completed
+    // Find newly unblocked tasks when a task reaches the terminal 'complete' status
     let unblocked: Task[] = []
     if (!wasCompleted && isNowCompleted) {
       unblocked = tasks.filter(t => {
         if (!t.blockedBy.includes(taskId)) return false
-        // Check if ALL blockers are now completed
+        // Check if ALL blockers are now complete
         return t.blockedBy.every(depId => {
           const dep = tasks.find(d => d.id === depId)
-          return dep && dep.status === 'completed'
+          return dep && dep.status === 'complete'
         })
       })
     }

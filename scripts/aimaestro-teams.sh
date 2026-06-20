@@ -119,6 +119,9 @@ Commands:
       --get                     print the current column config
       --set <columns-json>      set columns (inline JSON array, 1..20 items)
       --set-file <path>         set columns from a JSON-array file
+  tasks <teamId>                List the team's kanban tasks (GET /api/teams/<id>/tasks)
+  reassign-cos <teamId> <agentUUID> --password P
+                                Reassign the team's chief-of-staff (POST chief-of-staff)
   help
 
 Environment:
@@ -316,6 +319,36 @@ cmd_kanban_config() {
     fi
 }
 
+# tasks <teamId> — list the team's kanban tasks (GET). #45: the AMAMA
+# status-reporting skill needs team kanban statuses through a FROZEN CLI verb
+# (the decoupling invariant) instead of a direct /api/teams/<id>/tasks call.
+cmd_tasks() {
+    local id="${1:-}"
+    [ -z "$id" ] && { echo "Error: teamId required" >&2; return 1; }
+    _api GET "/api/teams/${id}/tasks"
+}
+
+# reassign-cos <teamId> <agentUUID> --password P — reassign the team's
+# chief-of-staff via the dedicated canonical route (POST
+# /api/teams/<id>/chief-of-staff with {agentId, password}). #45: in-host COS
+# reassignment. NOT a --cos flag on `update` — `update` PUTs team fields and
+# does not move the COS slot; the chief-of-staff route is the only correct one.
+cmd_reassign_cos() {
+    local id="${1:-}" agent="${2:-}"; shift 2 2>/dev/null || true
+    [ -z "$id" ] || [ -z "$agent" ] && { echo "Error: teamId and the new COS agentUUID are required" >&2; return 1; }
+    local password=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --password) password="$2"; shift 2 ;;
+            *) echo "Error: unknown flag for 'reassign-cos': $1" >&2; return 1 ;;
+        esac
+    done
+    [ -z "$password" ] && { echo "Error: reassign-cos requires --password <governance-password>" >&2; return 1; }
+    local body
+    body="$(jq -nc --arg a "$agent" --arg p "$password" '{agentId: $a, password: $p}')"
+    _api POST "/api/teams/${id}/chief-of-staff" "$body"
+}
+
 case "${1:-help}" in
     list)         shift; cmd_list "$@" ;;
     show)         shift; cmd_show "$@" ;;
@@ -325,7 +358,9 @@ case "${1:-help}" in
     add-agent)    shift; cmd_add_agent "$@" ;;
     remove-agent) shift; cmd_remove_agent "$@" ;;
     kanban-config) shift; cmd_kanban_config "$@" ;;
+    tasks)        shift; cmd_tasks "$@" ;;
+    reassign-cos) shift; cmd_reassign_cos "$@" ;;
     help|--help|-h) show_help ;;
-    --version|-v) echo "aimaestro-teams.sh v1.1.0" ;;
+    --version|-v) echo "aimaestro-teams.sh v1.2.0" ;;
     *) echo "Error: unknown command: $1" >&2; echo "" >&2; show_help; exit 1 ;;
 esac

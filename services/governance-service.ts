@@ -14,7 +14,8 @@
  *   POST   /api/governance/transfers/[id]/resolve   -> resolveTransferReq
  */
 
-import { loadGovernance, verifyPassword, setManager, removeManager, setPassword, setUserName, isManager, isChiefOfStaffAnywhere, getManagerId } from '@/lib/governance'
+import { loadGovernance, verifyPassword, setManager, removeManager, setPassword, setUserName, isManager, isChiefOfStaffAnywhere, getManagerId, isUserAuthorityModelEnabled } from '@/lib/governance'
+import { getUser, getMaestroUserId, saveUser } from '@/lib/user-registry'
 import { addTrustedManager, removeTrustedManager, getTrustedManagers } from '@/lib/manager-trust'
 import type { ManagerTrust } from '@/lib/manager-trust'
 import { getAgent, loadAgents, updateAgent } from '@/lib/agent-registry'
@@ -183,6 +184,44 @@ export async function setGovernancePassword(params: {
     console.log('[governance] Password changed at', new Date().toISOString())
   } else {
     console.log('[governance] Password set at', new Date().toISOString())
+  }
+
+  // L3 (R36-38 audit) — model-ON credential-rotation gap.
+  // WHY: with the user-authority model ON, sudo verifies against the ACTING
+  // user's own UserRecord.passwordHash (sudo-auth.ts::resolveSudoPasswordHash →
+  // getUser(subject)), NOT the global governance.passwordHash. setPassword()
+  // above rotated ONLY the global hash. Without this propagation the MAESTRO's
+  // UserRecord still holds the OLD hash, so after a rotation (a) the maestro
+  // cannot mint sudo with the NEW password and (b) the OLD password still mints
+  // sudo — i.e. the credential is not actually rotated. The global governance
+  // password IS the MAESTRO's password (createMaestroFromLegacy seeded the
+  // MAESTRO record from it), so propagate the rotation into the MAESTRO record.
+  //
+  // ONLY the MAESTRO — deliberately NOT the MAESTRO-DELEGATE. R37.4 makes the
+  // delegate's sudo password the delegate user's OWN credential (the
+  // maestro-delegate route PROMOTES an existing user without touching its
+  // passwordHash, and resolveSudoPasswordHash verifies the delegate's own hash
+  // while it acts). Overwriting the delegate's hash with the global password
+  // would CLOBBER that legitimate per-user credential. This is also
+  // unreachable while a delegate is active: a delegate suspends the maestro
+  // (R37.2) and the password route refuses a delegate caller (R37.4), so the
+  // only caller that reaches here is the original MAESTRO acting.
+  // FLAG-OFF: model is OFF → users.json is never populated → this whole block is
+  // skipped and behavior is byte-identical to legacy (global hash only).
+  if (isUserAuthorityModelEnabled()) {
+    // Re-read the freshly-written hash/timestamp rather than re-hashing: argon2
+    // is salted, so re-hashing would yield a different (still-valid) string;
+    // copying the exact hash setPassword() just wrote keeps the MAESTRO record
+    // byte-identical to the global hash (the invariant createMaestroFromLegacy
+    // established) and avoids a second expensive KDF call.
+    const updated = loadGovernance()
+    const maestroId = getMaestroUserId()
+    if (updated.passwordHash && maestroId) {
+      const maestro = getUser(maestroId)
+      if (maestro) {
+        await saveUser({ ...maestro, passwordHash: updated.passwordHash, passwordSetAt: updated.passwordSetAt })
+      }
+    }
   }
 
   // Persist userName if provided alongside the password change

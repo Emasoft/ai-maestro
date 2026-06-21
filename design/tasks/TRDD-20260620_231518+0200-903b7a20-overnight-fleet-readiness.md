@@ -3,7 +3,7 @@ trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-06-21T03:07:57+0200
+updated: 2026-06-21T03:08:47+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -65,12 +65,19 @@ exits could still leave a titled agent role-less → FIXED `99a79ba0` (one uncon
 post-block re-scan covers all 4 exits) + re-verified. The NIT (#3 `.mjs` cookie
 extractor diverged from the canonical one on a leading-whitespace cookie,
 false-negative-only/unreachable) → FIXED `c798768e` for byte-for-byte parity. **ALL 8
-FIXES NOW VERIFIED-CLEAN.** 25 commits on `governance-rules`, NOT pushed; `yarn build`
+FIXES NOW VERIFIED-CLEAN.** 28 commits on `governance-rules`, NOT pushed; `yarn build`
 ✓ (49.71s), full suite **1867/0**, tsc 0. Per-fix verdicts in
-`reports/verify-governance-fixes/`. NEXT: Phase D scenarios (dev-browser UI
-validation) OR the lower-priority residuals (#3b bearer-downstream, #37 decoupling
-[gated], install --verify) — full queue + designs in `## Phase B synthesis` + `## NEXT
-ACTION` below.
+`reports/verify-governance-fixes/`. ✅ SECURITY-SPINE CROSS-CHECKED (4 tier-2
+proposals all valid + pending MANAGER approval; #a6d93b9c is highest-impact). ✅ COND-3
+GROUNDED (CLI drift audit: 20/63 deployed CLIs lag the repo — incl. aid-init SH-MAJOR-04,
+amp-send MF-023, #45 verbs → `reports/cli-deployment-audit/`; FIX = USER runs
+`install-messaging.sh -y`, agent barred since it writes outside the project tree). ✅ LOCAL
+wikimem repaired (3 pages schema-migrated; ~60 backlog drains via the heartbeat repair
+cadence). NEXT — all remaining items need the USER or are gated: Phase D scenarios
+(dev-browser UI — risky unattended: live-server restart + real-agent spawning + quota),
+#3b bearer-downstream (deep/design-sensitive), #37 decoupling (gated on MANAGER #35), the
+user's version bump + push approval. **The autonomous-SAFE campaign work is substantially
+COMPLETE + independently verified; the branch is PR-ready modulo the version bump.**
 
 **Load-bearing facts / gotchas:**
 - Every GitHub write self-identifies (R22): `_Posted by the Claude developing **ai-maestro** (via the shared @Emasoft gh auth)._`

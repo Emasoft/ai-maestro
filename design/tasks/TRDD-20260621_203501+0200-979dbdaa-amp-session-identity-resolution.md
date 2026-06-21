@@ -3,7 +3,7 @@ trdd-id: 979dbdaa-d73c-4041-8dd7-406c0d546b4b
 title: AMP sessions self-resolve identity from CWD — fix #46 (keystone, unblocks all amp-* coordination)
 column: design
 created: 2026-06-21T20:35:01+0200
-updated: 2026-06-21T20:35:01+0200
+updated: 2026-06-21T22:44:25+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -26,6 +26,18 @@ external-refs: ["github.com/Emasoft/ai-maestro/issues/46", "github.com/Emasoft/a
 waits for the USER's explicit go, and is gated behind the `governance-rules` MERGE
 decision (the MANAGER flagged that merge to the USER).** This TRDD is the design the build
 executes from.
+
+**⚠ DESIGN CORRECTED 2026-06-21 (post-audit, before any build).** A delegated read-only
+audit (`reports/audit-infra-46design/`) reproduced the v1 snippet under the helper's real
+`set -euo pipefail` and found a **CRITICAL regression**: a bare `_agents_base="$(cd … &&
+pwd -P)"` cmd-sub exits non-zero on a host WITHOUT `~/agents/`, and under `set -e` that
+**kills the script before P4** — converting the existing single-agent success path into an
+`exit 1` (an R23 frozen-CLI violation, the exact opposite of the "additive" claim). It also
+used the wrong primary env key (`CLAUDE_PROJECT_DIR`, which AI Maestro NEVER sets — the real
+injected var is `AGENT_WORK_DIR`), and an empty base would glob-match any path → phantom
+"Users" agent. The pseudocode below is the corrected version (guards A/B + key C + unset D).
+**Mandatory regression test for the build:** a fixture with `~/agents/` ABSENT + exactly one
+indexed agent MUST still resolve via P4 (catches the `set -e` crash).
 
 **Why (MANAGER direction, ai-maestro#35, 2026-06-21):** after accepting (a) the Extended
 Task Model, the MANAGER confirmed ordering **(b) #46 -> (c) #37**. #46 is the keystone — it
@@ -59,22 +71,34 @@ Add a **new resolution step between current Priority 3 and Priority 4** in
 # Priority 3.5: derive identity from the session's working directory.
 # An AI-Maestro agent runs in ~/agents/<name>/ — a deterministic self-identity key
 # (never the shared host identity, never guessed). TRDD-979dbdaa / #46.
-if [ "$_amp_resolved" = false ]; then
-    _amp_cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
-    _agents_base="$(cd "$HOME/agents" 2>/dev/null && pwd -P)"
+# CORRECTED per audit (A/B/C/D): AGENT_WORK_DIR is the var AI Maestro actually injects
+# (CLAUDE_PROJECT_DIR is NEVER set) -> fall back to $PWD. The `[ -d "$HOME/agents" ]`
+# precondition + `|| _agents_base=""` keep this a TRUE no-op under `set -euo pipefail`
+# on hosts WITHOUT ~/agents/ (a bare `_x="$(cd … && pwd)"` cmd-sub exits non-zero, so
+# `set -e` would kill the script and break the existing P4 single-agent success path).
+# The non-empty `_agents_base` guard stops an empty base from glob-matching any path.
+if [ "$_amp_resolved" = false ] && [ -d "$HOME/agents" ]; then
+    _amp_cwd="${AGENT_WORK_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+    _agents_base="$(cd "$HOME/agents" && pwd -P)" || _agents_base=""
     _cwd_real="$(cd "$_amp_cwd" 2>/dev/null && pwd -P || echo "$_amp_cwd")"
-    case "$_cwd_real/" in
-      "$_agents_base"/*/)
-        _amp_name="${_cwd_real#$_agents_base/}"; _amp_name="${_amp_name%%/*}"
-        _amp_uuid="$(_index_lookup "$_amp_name" 2>/dev/null || true)"
-        if [ -n "$_amp_uuid" ]; then AMP_DIR="${AMP_AGENTS_BASE}/$_amp_uuid"; _amp_resolved=true; fi
-        ;;
-    esac
+    if [ -n "$_agents_base" ]; then
+        case "$_cwd_real/" in
+          "$_agents_base"/*/)
+            _amp_name="${_cwd_real#"$_agents_base"/}"; _amp_name="${_amp_name%%/*}"
+            _amp_uuid="$(_index_lookup "$_amp_name" 2>/dev/null || true)"
+            if [ -n "$_amp_uuid" ]; then AMP_DIR="${AMP_AGENTS_BASE}/$_amp_uuid"; _amp_resolved=true; fi
+            ;;
+        esac
+    fi
+    unset _amp_cwd _agents_base _cwd_real _amp_name _amp_uuid
 fi
 ```
 
-- **Additive / R23-safe:** resolves ONLY a case that currently exits 1; no existing arg,
-  output, or success path changes. Same shape as the existing tmux-name fallback.
+- **Additive / R23-safe (only AFTER the A/B guards above):** with the `[ -d "$HOME/agents" ]`
+  precondition + `|| _agents_base=""` + non-empty-base guard, this resolves ONLY a case that
+  currently exits 1 and is a true no-op everywhere else; no existing arg/output/success path
+  changes. (The v1 snippet was NOT additive — it crashed P4 under `set -e` on no-`~/agents`
+  hosts; see the post-audit correction note above.) Same shape as the existing tmux fallback.
 - **No-match -> unchanged:** a CWD not under `~/agents/<name>/`, or a `<name>` not in the
   index, falls through to the existing Priority-4 error (no regression; the owner/core-app
   session — e.g. CWD `~/ai-maestro` — correctly does NOT resolve to an agent).

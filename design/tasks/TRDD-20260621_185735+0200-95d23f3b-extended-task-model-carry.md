@@ -1,9 +1,9 @@
 ---
 trdd-id: 95d23f3b-54df-4890-b452-e16eeb16d070
 title: Complete the Extended Task Model — carry evidence fields + attachments/dueDate/first-class-epic end-to-end
-column: dev
+column: complete
 created: 2026-06-21T18:57:35+0200
-updated: 2026-06-21T19:03:10+0200
+updated: 2026-06-21T19:35:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -21,6 +21,24 @@ external-refs: ["github.com/Emasoft/ai-maestro/issues/35", "github.com/Emasoft/a
 # TRDD-95d23f3b — Complete the Extended Task Model (carry evidence fields end-to-end)
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME — 2026-06-21
+
+**✅ DONE + VERIFIED (2026-06-21T19:35) — column: complete.** Carried end-to-end and verified:
+`tsc --noEmit` 0 errors; full vitest suite 1886/1888 passing (2 pre-existing skips, 0
+failures); 14 new pure round-trip tests passing. Landed in 4 commits on `governance-rules`
+(pushed to fork; USER-gated for the main merge):
+- `48ac496c` backend — types/task.ts (+TaskAttachment, attachments, dueDate, TASK_TYPES) +
+  teams-service params/call-sites + github-project.ts label/body encode-decode (6 evidence
+  fields label-encoded, impl-commit 12-char short-SHA'd, attachments body-encoded lossless).
+- `1daa4e56` API — POST/PUT routes + headless-router at FULL FULL-vs-headless parity (the
+  Next.js PUT previously forwarded 0 TRDD-v2 fields — fixed).
+- `504b91a8` UI+mirror+hook — task-registry + useTasks (attachments/dueDate); TaskCreateForm
+  Type dropdown (epic now selectable) + Due input; TaskDetailView dueDate/attachments;
+  KanbanCard severity badge + due pill.
+- `181bf484` tests — exported the 4 pure helpers + 14 round-trip tests.
+Wikimem `reference_kanban_task_creation_contract.md` (USER scope) updated with the carry + a
+`[^3]` lesson. **Deferred (NOT mocked):** route field-carry + FULL-vs-headless integration
+tests need a live server — out of this pass (mocks forbidden); the pure round-trip IS the
+core contract and is fully covered.
 
 **Why:** MANAGER (GitHub #35, 2026-06-21T15:42) gave a grounded sequencing decision —
 **Extended Task Model FIRST** — because #40 (kanban renderer) and #11 (the 3-pillar

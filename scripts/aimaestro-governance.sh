@@ -87,6 +87,7 @@ aimaestro-governance.sh — AI Maestro governance CLI
 
 Commands:
   whoami                       Show governance config (manager, owner title, hasManager)
+  status                       Alias for whoami — flat governance probe (hasManager, …)
   requests [filters]           List governance requests
       --status S   filter by status (pending|approved|rejected)
       --type T     filter by request type
@@ -275,7 +276,7 @@ cmd_transfer() {
 }
 
 case "${1:-help}" in
-    whoami|config) shift; cmd_whoami "$@" ;;
+    whoami|config|status) shift; cmd_whoami "$@" ;;
     requests)      shift; cmd_requests "$@" ;;
     request)       shift; cmd_request "$@" ;;
     approve)       shift; cmd_approve "$@" ;;

@@ -60,7 +60,10 @@ function scopeSatisfies(heldScope: string, requiredScope: string): boolean {
  */
 function issuerStillValid(token: PortfolioToken): boolean {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // Lazy CommonJS require (sync, inside this sync guard) to avoid a circular
+    // import with agent-registry. (@typescript-eslint is not loaded by the current
+    // next/core-web-vitals config, so no no-require-imports disable is needed — and
+    // an eslint-disable for an unloaded rule is itself a build error.)
     const reg = require('@/lib/agent-registry') as {
       loadAgents: () => Array<{ id: string; governanceTitle?: string; deletedAt?: string | null }>
     }

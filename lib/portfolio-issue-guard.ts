@@ -106,7 +106,10 @@ export function canIssue(ctx: AuthContext, body: IssueRequestBody): IssueDecisio
  */
 function isAgentInTeam(agentId: string, teamId: string): boolean {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // Lazy CommonJS require (sync, inside this sync guard) to avoid a circular
+    // import with team-registry. (@typescript-eslint is not loaded by the current
+    // next/core-web-vitals config, so no no-require-imports disable is needed — and
+    // an eslint-disable for an unloaded rule is itself a build error.)
     const teamRegistry = require('@/lib/team-registry') as {
       loadTeams: () => Array<{ id: string; agentIds: string[] }>
     }

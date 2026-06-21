@@ -400,13 +400,13 @@ restart_agent() {
 
     print_info "Restarting Claude Code (preserving tmux session and history)..."
 
-    # Build AID auth header if available (SPARK-1: all API-calling helpers must
-    # pass the agent's AID session secret so the server can authenticate the
-    # caller as the agent process itself — never user credentials).
+    # Build the AID auth header via the single source of truth (_build_auth_args
+    # in agent-helper.sh). SPARK-1: all API-calling helpers must pass the agent's
+    # AID session secret so the server authenticates the caller as the agent
+    # process itself — never user credentials. Keeping ONE construction site means
+    # a future change to the auth scheme touches one function, not every call.
     local -a auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then
-        auth_args=(-H "Authorization: Bearer $AID_AUTH")
-    fi
+    _build_auth_args auth_args
 
     # Get the agent's session name and programArgs from registry
     local agent_json

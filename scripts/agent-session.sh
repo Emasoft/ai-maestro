@@ -72,11 +72,9 @@ cmd_session_add() {
     local payload
     payload=$(jq -n --arg role "$role" '{role: $role}')
 
-    # Build AID auth header if available
+    # Single source of truth for the AID bearer header (agent-helper.sh).
     local -a auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then
-        auth_args=(-H "Authorization: Bearer $AID_AUTH")
-    fi
+    _build_auth_args auth_args
 
     print_info "Adding session to agent..."
     local response
@@ -124,11 +122,9 @@ cmd_session_remove() {
     local url="${api_base}/api/agents/${RESOLVED_AGENT_ID}/session"
     [[ "$all" == true ]] && url="${url}?all=true" || url="${url}?index=${index}"
 
-    # Build AID auth header if available
+    # Single source of truth for the AID bearer header (agent-helper.sh).
     local -a auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then
-        auth_args=(-H "Authorization: Bearer $AID_AUTH")
-    fi
+    _build_auth_args auth_args
 
     print_info "Removing session..."
     local response
@@ -182,11 +178,9 @@ cmd_session_exec() {
     local payload
     payload=$(jq -n --arg cmd "$command" '{command: $cmd}')
 
-    # Build AID auth header if available
+    # Single source of truth for the AID bearer header (agent-helper.sh).
     local -a auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then
-        auth_args=(-H "Authorization: Bearer $AID_AUTH")
-    fi
+    _build_auth_args auth_args
 
     local response
     response=$(curl -s --max-time 30 -X PATCH "${auth_args[@]}" "${api_base}/api/agents/${RESOLVED_AGENT_ID}/session" \
@@ -236,7 +230,7 @@ cmd_session_command() {
     payload=$(jq -n --arg cmd "$command" --argjson ri "$require_idle" --argjson nl "$add_newline" \
         '{command: $cmd, requireIdle: $ri, addNewline: $nl}')
     local -a auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then auth_args=(-H "Authorization: Bearer $AID_AUTH"); fi
+    _build_auth_args auth_args  # single source of truth for the AID bearer header (agent-helper.sh)
     local response
     response=$(curl -s --max-time 15 -X POST "${auth_args[@]}" "${api_base}/api/sessions/${session}/command" \
         -H "Content-Type: application/json" -d "$payload")
@@ -266,7 +260,7 @@ cmd_session_activity_update() {
     [[ -n "$hook_status" ]] && payload=$(echo "$payload" | jq --arg v "$hook_status" '. + {hookStatus: $v}')
     [[ -n "$notif_type" ]] && payload=$(echo "$payload" | jq --arg v "$notif_type"  '. + {notificationType: $v}')
     local -a auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then auth_args=(-H "Authorization: Bearer $AID_AUTH"); fi
+    _build_auth_args auth_args  # single source of truth for the AID bearer header (agent-helper.sh)
     local response
     response=$(curl -s --max-time 15 -X POST "${auth_args[@]}" "${api_base}/api/sessions/activity/update" \
         -H "Content-Type: application/json" -d "$payload")
@@ -280,7 +274,7 @@ cmd_session_activity_update() {
 cmd_session_user_input() {
     local api_base; api_base=$(get_api_base)
     local -a auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then auth_args=(-H "Authorization: Bearer $AID_AUTH"); fi
+    _build_auth_args auth_args  # single source of truth for the AID bearer header (agent-helper.sh)
     local response
     response=$(curl -s --max-time 15 -X POST "${auth_args[@]}" "${api_base}/api/sessions/me/user-input" \
         -H "Content-Type: application/json")
@@ -313,7 +307,7 @@ HELP
     done
     local api_base; api_base=$(get_api_base)
     local -a auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then auth_args=(-H "Authorization: Bearer $AID_AUTH"); fi
+    _build_auth_args auth_args  # single source of truth for the AID bearer header (agent-helper.sh)
 
     local agent_json=""
     if [[ -n "$cwd" ]]; then
@@ -363,11 +357,9 @@ cmd_hibernate() {
     local api_base
     api_base=$(get_api_base)
 
-    # Build AID auth header if available
+    # Single source of truth for the AID bearer header (agent-helper.sh).
     local -a auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then
-        auth_args=(-H "Authorization: Bearer $AID_AUTH")
-    fi
+    _build_auth_args auth_args
 
     print_info "Hibernating agent '$RESOLVED_ALIAS'..."
     local response
@@ -404,11 +396,9 @@ cmd_wake() {
     local api_base
     api_base=$(get_api_base)
 
-    # Build AID auth header if available
+    # Single source of truth for the AID bearer header (agent-helper.sh).
     local -a auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then
-        auth_args=(-H "Authorization: Bearer $AID_AUTH")
-    fi
+    _build_auth_args auth_args
 
     print_info "Waking agent '$RESOLVED_ALIAS'..."
     local response

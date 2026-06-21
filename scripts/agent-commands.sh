@@ -24,6 +24,7 @@ Usage: aimaestro-agent.sh <command> [options]
 Commands:
   list                          List all agents
   show <agent>                  Show agent details
+  resolve <agent>|--cwd <path>  Resolve an agent to its tmux session name
   create <name>                 Create a new agent
   delete <agent>                Delete an agent
   update <agent>                Update agent properties
@@ -31,6 +32,7 @@ Commands:
   session <subcommand>          Manage agent sessions
   hibernate <agent>             Hibernate an agent
   wake <agent>                  Wake a hibernated agent
+  restart <agent>               Restart an agent (hibernate + wake with verification)
   skill <subcommand>            Manage agent skills
   plugin <subcommand>           Manage Claude Code plugins
   export <agent>                Export agent to file
@@ -495,20 +497,33 @@ HELP
         return 1
     fi
 
-    # MEDIUM-6: Validate directory path is safe using realpath for proper canonicalization
-    # This handles symlinks and .. correctly
+    # MEDIUM-6: Validate directory path is safe using proper canonicalization that
+    # actually collapses `..` and resolves symlinks. SECURITY: `command -v realpath`
+    # is NOT sufficient — stock macOS ships a BSD `realpath` that LACKS `-m`, so the
+    # old guard would silently fall back to the UNRESOLVED $dir; a path like
+    # "$HOME/agents/../../etc" then still starts with $HOME and passes the
+    # containment check below while actually escaping HOME. Feature-test `-m`
+    # specifically (same pattern as validate_cache_path in agent-core.sh), then
+    # python3, then a manual `cd -P` that canonicalizes the parent.
     local resolved_dir
-    if command -v realpath >/dev/null 2>&1; then
-        # Use realpath -m to handle non-existent paths
+    if command -v realpath >/dev/null 2>&1 && realpath -m / >/dev/null 2>&1; then
         resolved_dir=$(realpath -m "$dir" 2>/dev/null) || resolved_dir="$dir"
+    elif command -v python3 >/dev/null 2>&1; then
+        resolved_dir=$(python3 -c "import os,sys; print(os.path.normpath(os.path.join(os.getcwd(), sys.argv[1])))" "$dir" 2>/dev/null) || resolved_dir="$dir"
     else
-        # Fallback for systems without realpath
+        # Manual fallback: canonicalize the parent (resolves symlinks + ..) then append basename
         resolved_dir=$(cd -P -- "$(dirname "$dir")" 2>/dev/null && pwd)/$(basename -- "$dir") 2>/dev/null || resolved_dir="$dir"
     fi
     # Note: /tmp on macOS is a symlink to /private/tmp, so check both
-    # Also resolve HOME in case it contains symlinks
+    # Also resolve HOME in case it contains symlinks (same feature-test discipline)
     local resolved_home
-    resolved_home=$(realpath -m "$HOME" 2>/dev/null) || resolved_home="$HOME"
+    if command -v realpath >/dev/null 2>&1 && realpath -m / >/dev/null 2>&1; then
+        resolved_home=$(realpath -m "$HOME" 2>/dev/null) || resolved_home="$HOME"
+    elif command -v python3 >/dev/null 2>&1; then
+        resolved_home=$(python3 -c "import os,sys; print(os.path.normpath(os.path.join(os.getcwd(), sys.argv[1])))" "$HOME" 2>/dev/null) || resolved_home="$HOME"
+    else
+        resolved_home=$(cd -P -- "$HOME" 2>/dev/null && pwd) || resolved_home="$HOME"
+    fi
     if [[ "$resolved_dir" != "$resolved_home"* && "$resolved_dir" != "/opt"* && "$resolved_dir" != "/tmp"* && "$resolved_dir" != "/private/tmp"* ]]; then
         print_error "Directory must be under home directory, /opt, or /tmp"
         return 1

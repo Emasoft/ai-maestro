@@ -68,8 +68,32 @@ export function loadManagerTrust(): ManagerTrustFile {
   }
   try {
     const data = fs.readFileSync(TRUST_FILE, 'utf-8')
-    const parsed: ManagerTrustFile = JSON.parse(data)
-    return parsed
+    const parsed = JSON.parse(data) as Partial<ManagerTrustFile>
+    // SECURITY/robustness: a file that is valid JSON but structurally malformed
+    // (missing `trustedManagers`, or it is not an array — e.g. a partial write,
+    // a hand-edit, or an older format) must NOT reach the consumers. Every
+    // consumer (isTrustedManager, shouldAutoApprove, getTrustedManagers,
+    // add/removeTrustedManager) calls .find/.some/.push on trustedManagers and
+    // would throw a TypeError on a non-array. Worse, shouldAutoApprove gates a
+    // cross-host AUTO-APPROVAL — it must operate on a well-formed list or fail
+    // CLOSED (treat as "no trusted managers" → no auto-approve). Normalize the
+    // shape here so a corrupt trust file degrades to the safe empty state
+    // instead of crashing or leaking an undefined into an auth decision.
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.trustedManagers)) {
+      console.error('[manager-trust] manager-trust.json is structurally invalid (trustedManagers missing or not an array) — treating as empty (fail-closed). Manual inspection required:', TRUST_FILE)
+      return { ...DEFAULT_TRUST_FILE, trustedManagers: [] }
+    }
+    // Drop any malformed entries (non-object, or missing the identity fields a
+    // trust decision keys on) so a single bad record cannot crash a .some/.find
+    // over the array, and so shouldAutoApprove never matches on a half-formed
+    // record.
+    const trustedManagers = parsed.trustedManagers.filter(
+      (t): t is ManagerTrust =>
+        !!t && typeof t === 'object' &&
+        typeof (t as ManagerTrust).hostId === 'string' &&
+        typeof (t as ManagerTrust).managerId === 'string',
+    )
+    return { version: 1, trustedManagers }
   } catch (error) {
     // Distinguish read errors from parse errors -- parse errors indicate disk corruption
     if (error instanceof SyntaxError) {

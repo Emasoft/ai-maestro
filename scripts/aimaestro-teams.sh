@@ -76,7 +76,17 @@ _api() {
     code="$(printf '%s' "$resp" | tail -n1)"
     out="$(printf '%s' "$resp" | sed '$d')"
 
-    if [ "$code" -ge 400 ] 2>/dev/null; then
+    # Fail closed: an unparseable/missing HTTP status (e.g. curl wrote no
+    # %{http_code} line, or a proxy mangled the response) must be treated as an
+    # error, never silently printed as a success body — otherwise the [ -ge 400 ]
+    # test would be a no-op and the empty/garbage body would flow downstream
+    # (e.g. into _edit_membership's jq) as if it were a 2xx response (fail-fast).
+    if ! [[ "$code" =~ ^[0-9]+$ ]]; then
+        echo "Error: malformed response from ${path} (no HTTP status code)" >&2
+        return 1
+    fi
+
+    if [ "$code" -ge 400 ]; then
         local err
         err="$(printf '%s' "$out" | jq -r '.error // .message // empty' 2>/dev/null)"
         echo "Error: HTTP ${code}${err:+ — ${err}}" >&2
@@ -244,6 +254,15 @@ _edit_membership() {
     [ -z "$id" ] || [ -z "$agent" ] && { echo "Error: teamId and agentUUID required" >&2; return 1; }
     local team
     team="$(_api GET "/api/teams/${id}")" || return 1
+    # Fail-fast: the response MUST be a JSON object. If jq cannot parse it (or it
+    # is not an object), abort — do NOT fall back to an empty array, because on
+    # `add` that would PUT agentIds=[<new>] and silently WIPE every existing
+    # member (read-modify-write clobber). A genuinely member-less team is the
+    # legitimate `.agentIds // []` case below; an unparseable body is not.
+    if ! printf '%s' "$team" | jq -e 'type == "object"' >/dev/null 2>&1; then
+        echo "Error: could not read team ${id} (unexpected response shape)" >&2
+        return 1
+    fi
     local current
     current="$(printf '%s' "$team" | jq -c '.agentIds // []' 2>/dev/null)"
     [ -z "$current" ] && current='[]'

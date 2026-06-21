@@ -8,31 +8,63 @@
  * (never the public key). Deletion requires sudo mode for safety.
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { loadCredentials, deleteCredential } from '@/lib/webauthn-server'
-import { extractSessionFromCookie, validateSession } from '@/lib/session-auth'
+import { enforceSystemOwner } from '@/lib/route-auth'
 import { validateAndConsumeSudoToken } from '@/lib/sudo-auth'
+import { isUserAuthorityModelEnabled } from '@/lib/governance'
+import { getActiveMaestroUserId } from '@/lib/user-registry'
 
-// ============================================================================
-// Helpers
-// ============================================================================
-
-function isAuthenticated(request: Request): boolean {
-  const cookieHeader = request.headers.get('cookie')
-  const token = extractSessionFromCookie(cookieHeader)
-  if (!token) return false
-  return validateSession(token)
+/**
+ * Verify a one-shot sudo token earned by the system owner and enforce
+ * subject + operation binding inline (this route is not in security-registry's
+ * strict list, so it cannot use lib/sudo-guard's requireSudoToken — that helper
+ * no-ops for unregistered routes; calling it here would silently DROP the sudo
+ * requirement). Mirrors requireSudoToken's USER/SYSTEM-OWNER branch (SUDO-01/02);
+ * the caller MUST run enforceSystemOwner() FIRST (SUDO-04, authenticate-before-consume).
+ */
+function consumeOwnerSudoToken(
+  rawToken: string | null,
+  method: string,
+  path: string
+): { ok: true } | { ok: false; status: number; body: Record<string, unknown> } {
+  const result = validateAndConsumeSudoToken(rawToken)
+  if (!result.ok) {
+    return { ok: false, status: 403, body: { error: 'sudo_required', reason: result.reason } }
+  }
+  // SUDO-02 subject binding — accept 'system-owner' always, and the active-maestro
+  // id under the user-authority model. Fail-secure: never widen on a read error.
+  const validSubjects = new Set<string>(['system-owner'])
+  try {
+    if (isUserAuthorityModelEnabled()) {
+      const activeMaestroId = getActiveMaestroUserId()
+      if (activeMaestroId) validSubjects.add(activeMaestroId)
+    }
+  } catch {
+    /* fail-secure */
+  }
+  if (!validSubjects.has(result.subject)) {
+    return { ok: false, status: 403, body: { error: 'sudo_subject_mismatch' } }
+  }
+  // SUDO-01 operation binding — a bound token may be used only for its operation.
+  if (result.operation && (result.operation.method !== method || result.operation.path !== path)) {
+    return { ok: false, status: 403, body: { error: 'sudo_operation_mismatch' } }
+  }
+  return { ok: true }
 }
 
 // ============================================================================
 // GET — List registered credentials
 // ============================================================================
 
-export async function GET(request: Request) {
-  if (!isAuthenticated(request)) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
+export async function GET(request: NextRequest) {
+  // SYSTEM-OWNER ONLY. WHY: the passkey inventory is the host owner's, and the
+  // previous raw validateSession() check admitted any logged-in user under the
+  // R36/R37 user-authority model. enforceSystemOwner is the active-MAESTRO under
+  // the model and the (unchanged) logged-in web session when the model is off.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
 
   try {
     const credentials = loadCredentials()
@@ -61,20 +93,20 @@ const DeleteSchema = z.object({
   credentialID: z.string().min(1),
 }).strict()
 
-export async function DELETE(request: Request) {
-  if (!isAuthenticated(request)) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-  }
+export async function DELETE(request: NextRequest) {
+  // SYSTEM-OWNER ONLY (see GET) — deleting a passkey removes a login credential.
+  // Runs FIRST so a forged/expired session can never burn a one-shot sudo token (SUDO-04).
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
 
-  // Must have sudo token
-  const sudoToken = request.headers.get('x-sudo-token')
-  const sudoResult = validateAndConsumeSudoToken(sudoToken)
-  if (!sudoResult.ok) {
-    return NextResponse.json(
-      { error: 'Sudo token required for credential deletion', reason: sudoResult.reason },
-      { status: 403 }
-    )
-  }
+  // STRICT (sudo). WHY: the previous code consumed the token with a bare
+  // validateAndConsumeSudoToken() and ignored the returned subject/operation,
+  // so a token minted for a different operation or subject could be replayed to
+  // delete a passkey. consumeOwnerSudoToken enforces subject-binding (SUDO-02)
+  // and operation-binding (SUDO-01) inline (this route is not in the strict
+  // registry, so requireSudoToken would no-op — see the helper's doc-comment).
+  const sudo = consumeOwnerSudoToken(request.headers.get('x-sudo-token'), 'DELETE', '/api/auth/webauthn/credentials')
+  if (!sudo.ok) return NextResponse.json(sudo.body, { status: sudo.status })
 
   try {
     const raw = await request.json()

@@ -114,18 +114,37 @@ export async function PUT(
     // silently ignored, identical to type/chiefOfStaffId.
     const { type: _type, chiefOfStaffId: _cos, orchestratorId: _orch, ...safeBody } = parsed.data
 
-    // ── API-MAJ-01 fix (2026-05-04) — sudo on membership changes ──
-    // Membership updates trigger ChangeTeam → ChangeTitle, which is a
-    // governance-level operation. The DELETE handler below already runs
-    // requireSudoToken; PUT must do the same when the body carries
-    // `agentIds`. Plain renames or description edits stay sudo-free so the
-    // user is not nagged for trivial changes.
+    // ── strict-route gate (R32 dual-path) ──────────────────────────────────
+    // `PUT_/api/teams/[id]` is classified "strict" in security-registry.json so
+    // requireSudoToken is the load-bearing authz layer: for an AGENT caller it
+    // runs authorize('manage-team') (MANAGER-only); for the USER/web-UI it
+    // requires a fresh sudo token.
     //
-    // L2-H2 (2026-06-18): the earlier orchestratorId-only sudo gate is gone —
-    // orchestratorId is now STRIPPED above (option b), so it can no longer be set
-    // through this route at all and needs no per-field gate here. Setting/clearing it
-    // is the dedicated /orchestrator endpoint's job (its own sudo / AID+title gate).
-    if (safeBody.agentIds !== undefined) {
+    // GOV-AUDIT fix (2026-06-21): the gate previously ran ONLY when the body
+    // carried `agentIds`. That dropped the strict gate for `name`/`description`/
+    // `githubProject` edits, letting the request fall straight through to
+    // updateTeamById → checkTeamAccess — which authorizes ANY team MEMBER. The
+    // net effect was an RBAC bypass: a non-MANAGER MEMBER/ORCHESTRATOR agent
+    // could rename the team and (worse) relink `team.githubProject`, redirecting
+    // where the kanban gh CLI files issues, with NO manage-team authorization.
+    //
+    // The fix runs the gate for:
+    //   • EVERY agent caller (auth.agentId set) — so authorize('manage-team')
+    //     ALWAYS fires and a non-MANAGER agent is 403'd regardless of which
+    //     field it edits; AND
+    //   • the USER/web-UI path when a privileged, side-effecting field is
+    //     present — `agentIds` (membership → ChangeTeam/ChangeTitle, governance)
+    //     or `githubProject` (the gh-CLI issue target).
+    // A system-owner rename/description edit stays sudo-free (requireSudoToken's
+    // user branch is reached only when a privileged field is present), preserving
+    // the documented "don't nag for trivial edits" UX without leaving the
+    // governance fields ungated.
+    //
+    // L2-H2 (2026-06-18): orchestratorId is STRIPPED above (option b), so it can
+    // no longer be set through this route and needs no per-field gate here.
+    const touchesPrivilegedField =
+      safeBody.agentIds !== undefined || safeBody.githubProject !== undefined
+    if (auth.agentId || touchesPrivilegedField) {
       const sudoErr = requireSudoToken(request, 'PUT', '/api/teams/[id]')
       if (sudoErr) return sudoErr
     }

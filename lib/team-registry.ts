@@ -456,11 +456,21 @@ export async function blockAllTeams(): Promise<string[]> {
     if (team.orchestratorId) teamAgentIds.add(team.orchestratorId)
   }
 
-  // Hibernate each team agent (kill tmux session)
+  // Hibernate each team agent (kill tmux session).
+  // PERF: resolve the lazy imports ONCE before the loop, not per-iteration.
+  // The imports stay dynamic (not top-of-file) to avoid a static import cycle
+  // — team-registry must not statically depend on agent-registry — but
+  // re-importing them on every agent was pure overhead (the module cache made
+  // each call cheap, yet it still allocated a fresh promise per iteration and
+  // re-derived execFileAsync each time). Hoisting preserves the cycle-avoidance
+  // intent while doing the resolution exactly once.
+  const { getAgent } = await import('@/lib/agent-registry')
+  const { execFile } = await import('child_process')
+  const { promisify } = await import('util')
+  const execFileAsync = promisify(execFile)
   const hibernated: string[] = []
   for (const agentId of teamAgentIds) {
     try {
-      const { getAgent } = await import('@/lib/agent-registry')
       const agent = getAgent(agentId)
       if (!agent) continue
       const sessionName = agent.name
@@ -478,9 +488,6 @@ export async function blockAllTeams(): Promise<string[]> {
         console.warn(`[blockAllTeams] Refusing to kill session with unsafe name: ${sessionName}`)
         continue
       }
-      const { execFile } = await import('child_process')
-      const { promisify } = await import('util')
-      const execFileAsync = promisify(execFile)
       try {
         await execFileAsync('tmux', ['kill-session', '-t', sessionName], { timeout: 5000 })
         hibernated.push(agentId)

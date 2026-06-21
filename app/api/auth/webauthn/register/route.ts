@@ -9,42 +9,79 @@
  * credentials) for passwordless login.
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
   generateWebAuthnRegistrationOptions,
   verifyWebAuthnRegistration,
   saveCredential,
-  loadCredentials,
   type StoredCredential,
 } from '@/lib/webauthn-server'
-import { extractSessionFromCookie, validateSession } from '@/lib/session-auth'
+import { enforceSystemOwner } from '@/lib/route-auth'
 import { validateAndConsumeSudoToken } from '@/lib/sudo-auth'
+import { isUserAuthorityModelEnabled } from '@/lib/governance'
+import { getActiveMaestroUserId } from '@/lib/user-registry'
 import type { RegistrationResponseJSON } from '@simplewebauthn/types'
 
-// ============================================================================
-// Helpers
-// ============================================================================
-
-function isAuthenticated(request: Request): boolean {
-  const cookieHeader = request.headers.get('cookie')
-  const token = extractSessionFromCookie(cookieHeader)
-  if (!token) return false
-  return validateSession(token)
+/**
+ * Verify a one-shot sudo token earned by the system owner and enforce
+ * subject + operation binding inline (this route is not in security-registry's
+ * strict list, so it cannot use lib/sudo-guard's requireSudoToken — that helper
+ * no-ops for unregistered routes; calling it here would silently DROP the sudo
+ * requirement). This mirrors requireSudoToken's USER/SYSTEM-OWNER branch:
+ *  - subject must be 'system-owner' (model-off) or the active-maestro id (model-on),
+ *    so a token minted for a different subject cannot be replayed here (SUDO-02);
+ *  - if the token was minted bound to a specific operation, it may be consumed
+ *    ONLY for THIS (method, path); an unbound (legacy) token is tolerated (SUDO-01).
+ * The caller MUST run enforceSystemOwner() FIRST so a forged session can never
+ * burn a one-shot token (SUDO-04).
+ */
+function consumeOwnerSudoToken(
+  rawToken: string | null,
+  method: string,
+  path: string
+): { ok: true } | { ok: false; status: number; body: Record<string, unknown> } {
+  const result = validateAndConsumeSudoToken(rawToken)
+  if (!result.ok) {
+    return { ok: false, status: 403, body: { error: 'sudo_required', reason: result.reason } }
+  }
+  // SUDO-02 subject binding — accept the legacy 'system-owner' sentinel always,
+  // and the active-maestro id when the user-authority model is on (mirrors the
+  // mint, which binds subject to ctx.userId ?? 'system-owner'). Fail-safe: on any
+  // registry/flag read error, keep the legacy {'system-owner'}-only set (deny-only).
+  const validSubjects = new Set<string>(['system-owner'])
+  try {
+    if (isUserAuthorityModelEnabled()) {
+      const activeMaestroId = getActiveMaestroUserId()
+      if (activeMaestroId) validSubjects.add(activeMaestroId)
+    }
+  } catch {
+    /* fail-secure: never widen the subject set on error */
+  }
+  if (!validSubjects.has(result.subject)) {
+    return { ok: false, status: 403, body: { error: 'sudo_subject_mismatch' } }
+  }
+  // SUDO-01 operation binding — a bound token may be used only for its operation.
+  if (result.operation && (result.operation.method !== method || result.operation.path !== path)) {
+    return { ok: false, status: 403, body: { error: 'sudo_operation_mismatch' } }
+  }
+  return { ok: true }
 }
 
 // ============================================================================
 // GET — Generate registration options
 // ============================================================================
 
-export async function GET(request: Request) {
-  // Must be authenticated (system-owner session)
-  if (!isAuthenticated(request)) {
-    return NextResponse.json(
-      { error: 'Authentication required' },
-      { status: 401 }
-    )
-  }
+export async function GET(request: NextRequest) {
+  // SYSTEM-OWNER ONLY. WHY: registering a passkey for the host owner is a
+  // privilege-grant. The previous check used raw validateSession(), which under
+  // the R36/R37 user-authority model admits ANY logged-in user (incl. a
+  // non-MAESTRO normal user) — a privilege-escalation gap. enforceSystemOwner
+  // resolves isSystemOwner via buildAuthContext, which is the active-MAESTRO
+  // under the model and the (unchanged) logged-in web session when the model is
+  // off, so the single-operator default is byte-identical.
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
 
   try {
     const options = await generateWebAuthnRegistrationOptions()
@@ -92,24 +129,20 @@ const RegistrationBodySchema = z.object({
   label: z.string().min(1).max(100).default('Passkey'),
 }).strict()
 
-export async function POST(request: Request) {
-  // Must be authenticated (system-owner session)
-  if (!isAuthenticated(request)) {
-    return NextResponse.json(
-      { error: 'Authentication required' },
-      { status: 401 }
-    )
-  }
+export async function POST(request: NextRequest) {
+  // SYSTEM-OWNER ONLY (see GET) — registering a new passkey is a privilege grant.
+  // Runs FIRST so a forged/expired session can never burn a one-shot sudo token (SUDO-04).
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
 
-  // Must have sudo token (registering a new passkey is a privileged operation)
-  const sudoToken = request.headers.get('x-sudo-token')
-  const sudoResult = validateAndConsumeSudoToken(sudoToken)
-  if (!sudoResult.ok) {
-    return NextResponse.json(
-      { error: 'Sudo token required for credential registration', reason: sudoResult.reason },
-      { status: 403 }
-    )
-  }
+  // STRICT (sudo). WHY: the previous code consumed the token with a bare
+  // validateAndConsumeSudoToken() and IGNORED the returned subject/operation,
+  // so a token minted for a different operation or subject could be replayed to
+  // register a passkey. consumeOwnerSudoToken enforces subject-binding (SUDO-02)
+  // and operation-binding (SUDO-01) inline (this route is not in the strict
+  // registry, so requireSudoToken would no-op — see the helper's doc-comment).
+  const sudo = consumeOwnerSudoToken(request.headers.get('x-sudo-token'), 'POST', '/api/auth/webauthn/register')
+  if (!sudo.ok) return NextResponse.json(sudo.body, { status: sudo.status })
 
   try {
     const raw = await request.json()

@@ -73,7 +73,19 @@ export async function POST(request: NextRequest) {
   //   1. System-owner (web UI with session cookie) — already authenticated via login.
   //   2. MANAGER agent (AID/session-secret auth) — team creation is a core MANAGER duty.
   // All other agents must provide the governance password.
-  const isSystemOwner = !auth.agentId && !auth.error
+  //
+  // GOV-AUDIT fix (2026-06-21): derive `isSystemOwner` from the model-aware
+  // buildAuthContext, NOT the hand-rolled `!auth.agentId`. The literal form set
+  // isSystemOwner=true for ANY no-agent caller — including a model-ON non-maestro
+  // USER ({ userId, userTitle:'user' }, no agentId) — which let an ordinary user
+  // SKIP the governance-password gate and create a team. buildAuthContext applies
+  // the R36/R37 flip (system-owner only when userTitle ∈ {maestro, maestro-delegate}),
+  // so a normal user now correctly falls into the password-required branch. This
+  // mirrors the M1 fix already applied to the DELETE handler in [id]/route.ts.
+  // FLAG-OFF: a web session resolves to {} (no userId) → buildAuthContext sets
+  // isSystemOwner = !agentId = true — byte-identical to the old literal for the
+  // only caller class that existed before the user-authority model.
+  const isSystemOwner = buildAuthContext(auth).isSystemOwner
   const isManager = auth.governanceTitle?.toUpperCase() === 'MANAGER'
   if (!isSystemOwner && !isManager) {
     const { verifyPassword } = await import('@/lib/governance')

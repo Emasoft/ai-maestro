@@ -23,6 +23,16 @@ import { TITLE_PLUGIN_MAP } from '@/lib/ecosystem-constants'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
+  // Authentication gate. Per the project H24 rule every /api/* surface must be
+  // authenticated, and the /api/* middleware only does a structural
+  // credential-shape check (it defers real verification to the handler — a
+  // forged well-formed cookie passes middleware). The POST/DELETE siblings on
+  // this route already call enforceAuth; the GET was the lone unauthenticated
+  // path. Adding the same guard closes that gap without changing behavior for
+  // authenticated callers.
+  const authErr = enforceAuth(req)
+  if (authErr) return authErr
+
   try {
     const title = req.nextUrl.searchParams.get('title')
     const client = req.nextUrl.searchParams.get('client')

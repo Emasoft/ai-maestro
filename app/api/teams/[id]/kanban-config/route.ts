@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getKanbanConfig, setKanbanConfig } from '@/services/teams-service'
-import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 import type { KanbanColumnConfig } from '@/types/team'
 
@@ -35,7 +35,14 @@ export async function GET(
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
 
-  const result = await getKanbanConfig(id, auth.agentId)
+  // GOV-AUDIT fix (2026-06-21): forward AuthContext so getKanbanConfig's
+  // checkTeamAccess can recognize a verified system-owner web-UI session. Without
+  // it, checkTeamAccess sees requestingAgentId=undefined AND no authContext and
+  // fails closed on the anonymous branch — so the web UI was wrongly 403'd in
+  // FULL (Next.js) mode while the headless mirror (which DOES forward it) worked.
+  // This removes that FULL-vs-headless drift; agent callers are unaffected
+  // (checkTeamAccess keys on agentId either way).
+  const result = await getKanbanConfig(id, auth.agentId, buildAuthContext(auth))
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }
@@ -69,7 +76,10 @@ export async function PUT(
     )
   }
 
-  const result = await setKanbanConfig(id, parsed.data.columns as KanbanColumnConfig[], auth.agentId)
+  // GOV-AUDIT fix (2026-06-21): forward AuthContext (see GET above). Required so a
+  // verified system-owner web-UI session is recognized by checkTeamAccess in FULL
+  // mode, matching the headless mirror; without it the web UI got a spurious 403.
+  const result = await setKanbanConfig(id, parsed.data.columns as KanbanColumnConfig[], auth.agentId, buildAuthContext(auth))
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }

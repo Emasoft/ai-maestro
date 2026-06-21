@@ -144,11 +144,10 @@ _api_request() {
         return 1
     }
 
-    # Build AID auth header if available
+    # Build the AID auth header via the single source of truth (_build_auth_args,
+    # defined below; resolved at call time, which is always after sourcing completes).
     local -a auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then
-        auth_args=(-H "Authorization: Bearer $AID_AUTH")
-    fi
+    _build_auth_args auth_args
 
     http_code=$(curl -s -w '%{http_code}' -o "$tmp_body" --max-time 10 "${auth_args[@]}" "$url" 2>/dev/null)
     local curl_exit=$?
@@ -646,11 +645,10 @@ resolve_agent() {
             fi
             return 1
         fi
-        # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate
+        # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate.
+        # Built via the single source of truth (_build_auth_args, above).
         local -a _resolve_auth_args=()
-        if [ -n "${AID_AUTH:-}" ]; then
-            _resolve_auth_args=(-H "Authorization: Bearer $AID_AUTH")
-        fi
+        _build_auth_args _resolve_auth_args
         local response
         response=$(curl -s --max-time 10 "${_resolve_auth_args[@]}" "${target_api}/api/messages?action=resolve&agent=${agent_part}" 2>/dev/null)
         if [[ -z "$response" ]]; then
@@ -782,11 +780,10 @@ resolve_agent() {
             echo "" >&2
         fi
         # List agents on localhost so the caller can retry with the correct name
-        # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate
+        # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate.
+        # Built via the single source of truth (_build_auth_args, above).
         local -a _list_auth_args=()
-        if [ -n "${AID_AUTH:-}" ]; then
-            _list_auth_args=(-H "Authorization: Bearer $AID_AUTH")
-        fi
+        _build_auth_args _list_auth_args
         local agent_list
         agent_list=$(curl -s --max-time 3 "${_list_auth_args[@]}" "http://localhost:23000/api/agents" 2>/dev/null \
             | jq -r '.agents[].name // empty' 2>/dev/null | sort -u)
@@ -871,11 +868,10 @@ check_api_running() {
     local api_base
     _validate_api_base api_base || return 1
 
-    # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers get 200 instead of 401
+    # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers get 200 instead of 401.
+    # Built via the single source of truth (_build_auth_args, above).
     local -a _chk_auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then
-        _chk_auth_args=(-H "Authorization: Bearer $AID_AUTH")
-    fi
+    _build_auth_args _chk_auth_args
 
     # LOW-4: Use 2>/dev/null instead of 2>&1 to prevent curl errors polluting http_code
     local http_code

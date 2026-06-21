@@ -25,6 +25,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { loadAgents } from '@/lib/agent-registry'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 import { PREDEFINED_ROLE_PLUGINS } from '@/services/element-management-service'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
@@ -95,6 +96,20 @@ function findRolePluginsInSettings(
 }
 
 export async function GET(req: NextRequest) {
+  // Authentication gate. The /api/* middleware only does a STRUCTURAL
+  // credential-shape check and explicitly defers cryptographic verification
+  // to the handler — a forged-but-well-formed `aim_session` cookie passes
+  // middleware. This endpoint enumerates EVERY agent's name, governanceTitle,
+  // absolute workingDirectory, and role-plugin install state, so it MUST
+  // verify identity before responding (project invariant: routes derive
+  // caller identity from authenticateFromRequest(); siblings like
+  // app/api/agents/route.ts GET already do this). Without it, an attacker
+  // with a fake cookie could enumerate the agent roster + leak local paths.
+  const auth = authenticateFromRequest(req)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+
   try {
     const filterParam = req.nextUrl.searchParams.get('filter')
     const pluginParam = req.nextUrl.searchParams.get('plugin')

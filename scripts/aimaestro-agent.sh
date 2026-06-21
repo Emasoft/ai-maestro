@@ -8,6 +8,7 @@
 # Commands:
 #   list        List all agents
 #   show        Show agent details
+#   resolve     Resolve an agent (by name or --cwd) to its tmux session name
 #   create      Create a new agent
 #   delete      Delete an agent
 #   update      Update agent properties
@@ -15,6 +16,7 @@
 #   session     Manage agent sessions
 #   hibernate   Hibernate an agent (stop session, preserve state)
 #   wake        Wake a hibernated agent
+#   restart     Restart an agent (hibernate + wake with verification)
 #   skill       Manage agent skills
 #   plugin      Manage Claude Code plugins for an agent
 #   export      Export agent to file

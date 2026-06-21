@@ -108,7 +108,39 @@ export function getAllPeerGovernance(): GovernancePeerState[] {
   for (const file of files) {
     try {
       const data = readFileSync(path.join(PEERS_DIR, file), 'utf-8')
-      const state: GovernancePeerState = JSON.parse(data)
+      const raw = JSON.parse(data) as Partial<GovernancePeerState>
+
+      // SECURITY: peer governance state is a CACHE of data that ORIGINATED on a
+      // remote host (handleGovernanceSyncMessage → savePeerGovernance), and the
+      // on-disk file can also be corrupt or hand-edited. The write path checks
+      // that `teams` is an array but does NOT validate the individual entries, so
+      // a peer could persist `teams: [null, 42]`. The downstream consumers of
+      // this function (isChiefOfStaffOnAnyHost, getTeamFromAnyHost,
+      // getPeerTeamsForAgent) all read `state.teams[i].chiefOfStaffId` /
+      // `.agentIds` OUTSIDE any try/catch — a malformed entry there would throw
+      // and break a governance query for ALL peers. Normalize here, fail-closed:
+      // skip a state object that isn't an object, and drop any team entry that
+      // isn't a well-formed object. A bad peer can only ever shrink its own
+      // advertised teams, never crash the query or inject a half-formed team.
+      if (!raw || typeof raw !== 'object') {
+        continue
+      }
+      // Require agentIds to be an array: getPeerTeamsForAgent() calls
+      // team.agentIds.includes(...), which throws if agentIds is undefined on a
+      // malformed entry. Normalizing it to [] here keeps that consumer safe
+      // without it having to re-validate. id/chiefOfStaffId accesses are
+      // null-safe on an object, so only agentIds needs the stricter guard.
+      const teams = (Array.isArray(raw.teams) ? raw.teams : [])
+        .filter((t): t is PeerTeamSummary => !!t && typeof t === 'object')
+        .map((t) => ({ ...t, agentIds: Array.isArray(t.agentIds) ? t.agentIds : [] }))
+      const state: GovernancePeerState = {
+        hostId: typeof raw.hostId === 'string' ? raw.hostId : file.replace(/\.json$/, ''),
+        managerId: typeof raw.managerId === 'string' ? raw.managerId : null,
+        managerName: typeof raw.managerName === 'string' ? raw.managerName : null,
+        teams,
+        lastSyncAt: typeof raw.lastSyncAt === 'string' ? raw.lastSyncAt : '',
+        ttl: typeof raw.ttl === 'number' ? raw.ttl : DEFAULT_TTL,
+      }
 
       // Use state.ttl if present, otherwise fall back to DEFAULT_TTL
       const ttlMs = (state.ttl ?? DEFAULT_TTL) * 1000

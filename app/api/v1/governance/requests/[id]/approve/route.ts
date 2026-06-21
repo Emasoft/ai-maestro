@@ -36,11 +36,21 @@ export async function POST(
       return NextResponse.json({ error: 'Missing required field: password' }, { status: 400 })
     }
 
-    // Use authenticated agent ID instead of self-asserted body field.
-    // System-owner (web UI) must provide approverAgentId in body since they have no agentId.
-    const approverAgentId = auth.agentId || body.approverAgentId
+    // SECURITY (IDOR / identity-trust): the approver MUST be the AUTHENTICATED
+    // caller — NEVER a self-asserted body field. `approveCrossHostRequest`
+    // verifies only the *global* governance password and then derives the
+    // approval vote + authority class (isManager/isChiefOfStaffAnywhere) entirely
+    // from `approverAgentId`. If we fell back to `body.approverAgentId` (the prior
+    // behavior), any non-agent caller who knows the governance password (e.g. a
+    // model-ON non-maestro user) could approve a cross-host governance request
+    // *as any MANAGER/COS agent* — spoofing a vote that agent never cast. This
+    // mirrors the secure pattern already used by the sibling reject route, which
+    // also uses ONLY `auth.agentId`. Approval is an agent-only act (MANAGER/COS);
+    // a true system owner is not a governance agent and approves by being
+    // authenticated AS that agent (Bearer/AID), not by asserting a body identity.
+    const approverAgentId = auth.agentId
     if (!approverAgentId || !isValidUuid(approverAgentId)) {
-      return NextResponse.json({ error: 'Could not determine approver agent ID' }, { status: 400 })
+      return NextResponse.json({ error: 'Could not determine approver agent ID from auth' }, { status: 401 })
     }
 
     const result = await approveCrossHostRequest(id, approverAgentId, body.password)

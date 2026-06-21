@@ -72,7 +72,17 @@ _api() {
     code="$(printf '%s' "$resp" | tail -n1)"
     out="$(printf '%s' "$resp" | sed '$d')"
 
-    if [ "$code" -ge 400 ] 2>/dev/null; then
+    # Fail closed: an unparseable/missing HTTP status (e.g. curl wrote no
+    # %{http_code} line, or a proxy mangled the response) must be treated as an
+    # error, never silently printed as a success body — otherwise the [ -ge 400 ]
+    # test would be a no-op and the empty/garbage body would flow downstream as
+    # if it were a 2xx response (fail-fast invariant).
+    if ! [[ "$code" =~ ^[0-9]+$ ]]; then
+        echo "Error: malformed response from ${path} (no HTTP status code)" >&2
+        return 1
+    fi
+
+    if [ "$code" -ge 400 ]; then
         local err
         err="$(printf '%s' "$out" | jq -r '.error // .message // empty' 2>/dev/null)"
         echo "Error: HTTP ${code}${err:+ — ${err}}" >&2
@@ -89,10 +99,13 @@ Commands:
   whoami                       Show governance config (manager, owner title, hasManager)
   status                       Alias for whoami — flat governance probe (hasManager, …)
   requests [filters]           List governance requests
-      --status S   filter by status (pending|approved|rejected)
-      --type T     filter by request type
+      --status S   filter by status: pending | remote-approved | local-approved
+                   | dual-approved | executed | rejected
+      --type T     filter by type: add-to-team | remove-from-team | assign-cos
+                   | remove-cos | transfer-agent | create-agent | delete-agent
+                   | configure-agent
       --host H     filter by host id
-      --agent A    filter by agent id
+      --agent A    filter by agent id (UUID)
   request <flags>              Create a governance request
       --type T              request type (required)
       --password P          governance password (required)

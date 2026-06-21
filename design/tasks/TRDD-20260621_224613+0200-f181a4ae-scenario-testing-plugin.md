@@ -3,7 +3,7 @@ trdd-id: f181a4ae-36a2-4524-abb1-3eab554999d9
 title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-plugin (dev-browser integrated)
 column: testing
 created: 2026-06-21T22:46:13+0200
-updated: 2026-06-22T01:25:00+0200
+updated: 2026-06-22T01:50:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -31,7 +31,10 @@ external-refs: []
 - **Gitignore:** sentinel ignored; `tests/scenarios/*.scen.md` stay git-TRACKED (per-project, not bundled — auto-discovered at `${CLAUDE_PROJECT_DIR}/tests/scenarios/`, configurable via `scenarios.config.json` `scenariosDir`).
 - Self-check GREEN: all JSON parse, all 8 scripts `bash -n`, quad-identity consistent (`web-scenario-tester` / `web-scenario-tester-main-agent`; repo dir `ai-maestro-web-scenario-tester` is independent by design).
 - Deps: `dev-browser` @ `dev-browser-marketplace` (hard, cross-marketplace); `llm-externalizer` (optional, doc-only).
-- **NEXT (USER-gated):** CPV validate → publish to `Emasoft/ai-maestro-plugins` (marketplace.json needs `allowCrossMarketplaceDependenciesOn: ["dev-browser-marketplace"]`). Then ai-maestro repo step 5: repoint `tests/scenarios/` to CONSUME the plugin + add `scenarios.config.json` + de-path `fixture-helpers.sh:21`.
+- **✅ CPV-VALIDATED 2026-06-22 — publish gate `validate_plugin --strict` GREEN** (CRITICAL/MAJOR/MINOR/NIT = 0; the only 2 MINOR left are the pre-push-hook + CI workflow = publish-pipeline scaffolding CPV creates AT publish). 3 CRITICAL fixed (write-guard hook: explicit `bash` + `timeout:10`; `eval echo` RC-120 → safe `expand_path()`) + 6 MAJOR (MIT LICENSE, `color:` removed, SKILL desc trim, `context: fork`, `/var/folders` de-path). 26 deep-security findings = confirmed structural FALSE POSITIVES. Write-guard re-verified 6/6. Fixer report: `reports/plugin-fixer/20260622_014221+0200-web-scenario-tester-fix.md`.
+- **⏸ PUBLISH ON HOLD (USER directive 2026-06-22): do NOT publish with the current CPV.** CPV is mid-update (new Claude Code specs + fixes from Anthropic). WAIT for the updated CPV to be published, THEN re-run the CPV publish agent. Current CPV = **2.141.1** (`Emasoft/claude-plugins-validation`).
+  - **RESUME PROTOCOL (every resume/heartbeat):** check installed CPV version (`ls ~/.claude/plugins/cache/*/claude-plugins-validation/`). If **> 2.141.1** → new CPV is live → run the CPV publish flow for `~/Code/ai-maestro-web-scenario-tester/` → `Emasoft/ai-maestro-plugins` (its marketplace.json needs `allowCrossMarketplaceDependenciesOn: ["dev-browser-marketplace"]`). If still **2.141.1** → keep holding, stay silent. Do NOT rebuild — the plugin is DONE + validated.
+- **AFTER PUBLISH** (separate ai-maestro follow-ups): (a) repoint `tests/scenarios/` to CONSUME the plugin + add `scenarios.config.json` + de-path `fixture-helpers.sh:21`; (b) the ai-maestro ORIGINAL `tests/scenarios/scripts/scenario-setup.sh` still carries the same `eval echo` RC-120 shape CPV flagged in the plugin copy — fix it there too.
 
 The USER specified: repo `Emasoft/ai-maestro-web-scenario-tester`; a ROLE-plugin whose main-agent is
 `web-scenario-tester-main-agent`; skills + subagents prefixed `amwst-`. Research done (2 opus agents) +

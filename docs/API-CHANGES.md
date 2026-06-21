@@ -407,6 +407,13 @@ clean; `tsc --noEmit` clean; full unit suite **1864 passed / 0 failed**;
 `tests/unit/session-validate-server.test.ts` (6 cases) RED-verified first, then
 green.
 
+**NIT fix (same day — adversarial verification):** the `.mjs` cookie extractor's
+regex anchor `(?:^|;\s*)` rejected a leading-whitespace-before-first-pair cookie
+that the canonical `lib/session-auth.ts` extractor accepts (a false-negative-only
+divergence, unreachable per RFC 6265). Aligned to `(?:^|;)\s*` for byte-for-byte
+parity (the `.mjs` mirrors the canonical extractor) + 2 parity test cases; still
+fails closed. No contract change.
+
 ## 12. registerAgent now flags roleMissing on the role-less agent it creates (R9.13) (2026-06-21)
 
 `TRDD-47effd69`. `registerAgent` (behind `POST /api/v1/register`,

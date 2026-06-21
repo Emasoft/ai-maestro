@@ -3,7 +3,7 @@ trdd-id: ba9d6df2-781c-43a3-b931-b67144a642f5
 title: server.mjs full-mode auth gate must deep-validate the session cookie (not presence-only)
 column: complete
 created: 2026-06-21T01:39:45+0200
-updated: 2026-06-21T01:39:45+0200
+updated: 2026-06-21T02:45:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: security
@@ -98,3 +98,21 @@ is rejected + evicted, no-cookie rejected, absent-Map rejected.
 comment updates) + `tests/unit/session-validate-server.test.ts` (new) +
 `docs/API-CHANGES.md` §11. Landed in the overnight campaign (TRDD-903b7a20). Not
 pushed.
+
+## Verification + NIT fix (2026-06-21)
+The campaign's adversarial-verification workflow returned **CONFIRMED** on this
+fix: cookie deep-validated, 0 bypasses, the bearer-presence-by-design scope sound,
+the sha256+expires_at read mirrors `validateSession`, no legit lockout, the `.mjs`
+cannot throw on a malformed cookie / absent Map. One **NIT**: the `.mjs`
+extractor's regex `(?:^|;\s*)aim_session=` rejected a cookie with leading
+whitespace before the FIRST pair (e.g. `"  aim_session=…"`), while the canonical
+`extractSessionFromCookie` in `lib/session-auth.ts` (split + `.trim()` each pair)
+ACCEPTS it — a false-negative-only divergence (rejects a valid token, never
+accepts an invalid one; both still require the sha256 in the shared Map), and
+unreachable in practice (RFC 6265 `Cookie:` headers have no leading whitespace
+before the first pair). Fixed for byte-for-byte parity (the `.mjs`'s whole purpose
+is to mirror the canonical extractor): regex anchor `(?:^|;\s*)` → `(?:^|;)\s*` so
+`\s*` absorbs leading whitespace after BOTH `^` and `;`. Added 2 parity test cases
+(leading space + tab). Still fails closed. tsc 0 errors (the IDE-diagnostic
+"cannot find .mjs module" is a false positive — the project tsconfig resolves it,
+`npx tsc --noEmit` is clean); session-validate test file 6/6 (now 8 assertions).

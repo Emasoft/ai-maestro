@@ -30,6 +30,12 @@ describe('session-validate-server (.mjs full-mode cookie validator)', () => {
   it('extractSessionToken pulls the aim_session value from a cookie header', () => {
     expect(extractSessionToken('foo=1; aim_session=abc123; bar=2')).toBe('abc123')
     expect(extractSessionToken('aim_session=xyz')).toBe('xyz')
+    // Leading whitespace before the FIRST cookie-pair — parity with the canonical
+    // split+trim extractor in lib/session-auth.ts (NIT-1 from the adversarial
+    // verification of TRDD-ba9d6df2: the old `(?:^|;\s*)` anchor rejected this,
+    // diverging from the browser routes; `(?:^|;)\s*` now accepts it, fail-closed).
+    expect(extractSessionToken('  aim_session=ws123')).toBe('ws123')
+    expect(extractSessionToken('\taim_session=tab456')).toBe('tab456')
     expect(extractSessionToken('other=1')).toBeNull()
     expect(extractSessionToken('')).toBeNull()
     expect(extractSessionToken(null)).toBeNull()

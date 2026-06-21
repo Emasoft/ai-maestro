@@ -233,6 +233,20 @@ export default function KanbanCard({ task, onSelect, isSelected, agentStatus, co
             {!task.externalRef && task.taskType && (
               <span className="text-[9px] text-gray-500">{task.taskType}</span>
             )}
+            {task.severity && (
+              <span className={`text-[9px] px-1 rounded ${
+                task.severity === 'CRITICAL' ? 'bg-red-900/50 text-red-400' :
+                task.severity === 'HIGH' ? 'bg-orange-900/50 text-orange-400' :
+                task.severity === 'MEDIUM' ? 'bg-amber-900/50 text-amber-400' :
+                task.severity === 'LOW' ? 'bg-blue-900/50 text-blue-400' :
+                'bg-gray-800 text-gray-400'
+              }`}>{task.severity}</span>
+            )}
+            {task.dueDate && (
+              <span className="text-[9px] text-gray-500" title={`Due ${new Date(task.dueDate).toLocaleString()}`}>
+                ⏰ {new Date(task.dueDate).toLocaleDateString()}
+              </span>
+            )}
             {task.blockedBy.length > 0 && (
               <span className="text-[9px] text-amber-500/70 ml-1">{task.blockedBy.length} dep{task.blockedBy.length > 1 ? 's' : ''}</span>
             )}

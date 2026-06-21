@@ -285,6 +285,35 @@ export default function TaskDetailView({ task, agents, allTasks, kanbanColumns, 
           </div>
         )}
 
+        {task.dueDate && (
+          <div className="space-y-1">
+            <label className="text-[11px] text-gray-500 font-medium">Due</label>
+            <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400">
+              {new Date(task.dueDate).toLocaleString()}
+            </span>
+          </div>
+        )}
+
+        {task.attachments && task.attachments.length > 0 && (
+          <div className="space-y-1">
+            <label className="text-[11px] text-gray-500 font-medium">Attachments</label>
+            <div className="flex flex-col gap-1">
+              {task.attachments.map((a, i) => (
+                <a
+                  key={`${a.url}-${i}`}
+                  href={a.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-emerald-400 hover:underline truncate"
+                  title={a.url}
+                >
+                  {a.name || a.url}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Labels (editable) */}
         <div>
           <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Labels</label>

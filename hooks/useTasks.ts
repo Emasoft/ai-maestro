@@ -14,7 +14,7 @@ type CreateTaskInput = { subject: string } & Partial<Pick<Task,
   // TRDD-v2 alignment fields (additive)
   | 'severity' | 'effort' | 'parentTask' | 'npt' | 'eht' | 'supersedes' | 'supersededBy'
   | 'relevantRules' | 'releaseVia' | 'implementationCommits' | 'lastTestResult'
-  | 'publishedVersion' | 'liveSince'
+  | 'publishedVersion' | 'liveSince' | 'attachments' | 'dueDate'
 >>
 
 // Param object accepted by updateTask. Mirrors lib/task-registry.ts::updateTask
@@ -27,7 +27,7 @@ type UpdateTaskInput = Partial<Pick<Task,
   // TRDD-v2 alignment fields (additive)
   | 'severity' | 'effort' | 'parentTask' | 'npt' | 'eht' | 'supersedes' | 'supersededBy'
   | 'relevantRules' | 'releaseVia' | 'implementationCommits' | 'lastTestResult'
-  | 'publishedVersion' | 'liveSince'
+  | 'publishedVersion' | 'liveSince' | 'attachments' | 'dueDate'
 >>
 
 interface UseTasksResult {

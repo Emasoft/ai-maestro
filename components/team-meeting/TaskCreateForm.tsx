@@ -3,13 +3,13 @@
 import { useState } from 'react'
 import { Plus, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Agent } from '@/types/agent'
-import type { TaskWithDeps } from '@/types/task'
+import { TASK_TYPES, type TaskWithDeps } from '@/types/task'
 import DependencyPicker from './DependencyPicker'
 
 interface TaskCreateFormProps {
   agents: Agent[]
   existingTasks: TaskWithDeps[]
-  onCreateTask: (data: { subject: string; description?: string; assigneeAgentId?: string; blockedBy?: string[]; priority?: number; labels?: string[] }) => Promise<void>
+  onCreateTask: (data: { subject: string; description?: string; assigneeAgentId?: string; blockedBy?: string[]; priority?: number; labels?: string[]; taskType?: string; dueDate?: string }) => Promise<void>
 }
 
 export default function TaskCreateForm({ agents, existingTasks, onCreateTask }: TaskCreateFormProps) {
@@ -20,6 +20,8 @@ export default function TaskCreateForm({ agents, existingTasks, onCreateTask }: 
   const [blockedBy, setBlockedBy] = useState<string[]>([])
   const [priority, setPriority] = useState<number>(0)
   const [labels, setLabels] = useState('')
+  const [taskType, setTaskType] = useState('')
+  const [dueDate, setDueDate] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -37,6 +39,10 @@ export default function TaskCreateForm({ agents, existingTasks, onCreateTask }: 
         blockedBy: blockedBy.length > 0 ? blockedBy : undefined,
         priority: priority > 0 ? priority : undefined,
         labels: labels.trim() ? labels.split(',').map(l => l.trim()).filter(Boolean) : undefined,
+        taskType: taskType || undefined,
+        // datetime-local yields "YYYY-MM-DDTHH:mm" in local time; store as ISO so it
+        // round-trips through the dueDate label intact (TRDD-95d23f3b).
+        dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
       })
       setSubject('')
       setDescription('')
@@ -44,6 +50,8 @@ export default function TaskCreateForm({ agents, existingTasks, onCreateTask }: 
       setBlockedBy([])
       setPriority(0)
       setLabels('')
+      setTaskType('')
+      setDueDate('')
       setExpanded(false)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create task'
@@ -135,6 +143,30 @@ export default function TaskCreateForm({ agents, existingTasks, onCreateTask }: 
               <option value={3}>P3 — Medium</option>
               <option value={4}>P4 — Low</option>
             </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Type</label>
+            <select
+              value={taskType}
+              onChange={e => setTaskType(e.target.value)}
+              className="w-full text-sm bg-gray-800/60 text-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-600 border border-gray-700 appearance-none cursor-pointer"
+            >
+              <option value="">None</option>
+              {TASK_TYPES.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Due date</label>
+            <input
+              type="datetime-local"
+              value={dueDate}
+              onChange={e => setDueDate(e.target.value)}
+              className="w-full text-sm bg-gray-800/60 text-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-600 border border-gray-700"
+            />
           </div>
 
           <div>

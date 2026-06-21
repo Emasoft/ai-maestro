@@ -179,6 +179,8 @@ export function createTask(data: {
   lastTestResult?: Task['lastTestResult']
   publishedVersion?: string
   liveSince?: string
+  attachments?: Task['attachments']
+  dueDate?: string
 }): Promise<Task> {
   return withLock('tasks-' + data.teamId, () => {
     const tasks = loadTasks(data.teamId)
@@ -223,6 +225,8 @@ export function createTask(data: {
       lastTestResult: data.lastTestResult,
       publishedVersion: data.publishedVersion,
       liveSince: data.liveSince,
+      attachments: data.attachments,
+      dueDate: data.dueDate,
       createdAt: now,
       updatedAt: now,
     }
@@ -251,7 +255,7 @@ export function updateTask(
     // TRDD-v2 alignment fields (additive)
     | 'severity' | 'effort' | 'parentTask' | 'npt' | 'eht' | 'supersedes' | 'supersededBy'
     | 'relevantRules' | 'releaseVia' | 'implementationCommits' | 'lastTestResult'
-    | 'publishedVersion' | 'liveSince'
+    | 'publishedVersion' | 'liveSince' | 'attachments' | 'dueDate'
   >>
 ): Promise<{ task: Task | null; unblocked: Task[] }> {
   return withLock('tasks-' + teamId, () => {

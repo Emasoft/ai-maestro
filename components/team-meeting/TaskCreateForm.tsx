@@ -18,7 +18,11 @@ export default function TaskCreateForm({ agents, existingTasks, onCreateTask }: 
   const [description, setDescription] = useState('')
   const [assigneeAgentId, setAssigneeAgentId] = useState('')
   const [blockedBy, setBlockedBy] = useState<string[]>([])
-  const [priority, setPriority] = useState<number>(0)
+  // -1 = "None" sentinel (priority is omitted); 0 = highest, matching the
+  // `0=highest` Task model + TaskDetailView + KanbanCard (F8 fix — the form
+  // previously used 1=Critical..4=Low/0=None, so create disagreed with edit/render
+  // and the card's highest (priority 0, red) was unreachable from this form).
+  const [priority, setPriority] = useState<number>(-1)
   const [labels, setLabels] = useState('')
   const [taskType, setTaskType] = useState('')
   const [dueDate, setDueDate] = useState('')
@@ -37,7 +41,7 @@ export default function TaskCreateForm({ agents, existingTasks, onCreateTask }: 
         description: description.trim() || undefined,
         assigneeAgentId: assigneeAgentId || undefined,
         blockedBy: blockedBy.length > 0 ? blockedBy : undefined,
-        priority: priority > 0 ? priority : undefined,
+        priority: priority >= 0 ? priority : undefined,
         labels: labels.trim() ? labels.split(',').map(l => l.trim()).filter(Boolean) : undefined,
         taskType: taskType || undefined,
         // datetime-local yields "YYYY-MM-DDTHH:mm" in local time; store as ISO so it
@@ -48,7 +52,7 @@ export default function TaskCreateForm({ agents, existingTasks, onCreateTask }: 
       setDescription('')
       setAssigneeAgentId('')
       setBlockedBy([])
-      setPriority(0)
+      setPriority(-1)
       setLabels('')
       setTaskType('')
       setDueDate('')
@@ -137,11 +141,11 @@ export default function TaskCreateForm({ agents, existingTasks, onCreateTask }: 
               onChange={e => setPriority(Number(e.target.value))}
               className="w-full text-sm bg-gray-800/60 text-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-600 border border-gray-700 appearance-none cursor-pointer"
             >
-              <option value={0}>None</option>
-              <option value={1}>P1 — Critical</option>
-              <option value={2}>P2 — High</option>
-              <option value={3}>P3 — Medium</option>
-              <option value={4}>P4 — Low</option>
+              <option value={-1}>None</option>
+              <option value={0}>P0 — Critical</option>
+              <option value={1}>P1 — High</option>
+              <option value={2}>P2 — Medium</option>
+              <option value={3}>P3 — Low</option>
             </select>
           </div>
 

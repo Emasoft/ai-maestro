@@ -12,7 +12,13 @@ const CreateTaskSchema = z.object({
   // columns (custom kanban or the 17 DEFAULT_STATUSES). Don't duplicate that here.
   status: z.string().max(64).optional(),
   priority: z.number().int().min(0).max(10).optional(),
-  blockedBy: z.array(z.string().uuid()).max(20).optional(),
+  // F3 fix: relationship ids are NOT UUIDs. The only live persistence path is
+  // GitHub Projects, where a task id is a `PVTI_…` node id, and these fields mirror
+  // TRDD frontmatter whose refs are `TRDD-<8hex>` — neither passes z.string().uuid(),
+  // so a real payload was rejected 400 by this route while headless accepted it.
+  // Use the same bounded-string rule this route already applies to the path taskId
+  // (length <= 200). Array `.max()` bounds are preserved.
+  blockedBy: z.array(z.string().min(1).max(200)).max(20).optional(),
   labels: z.array(z.string().max(64)).max(20).optional(),
   acceptanceCriteria: z.array(z.string().max(512)).max(20).optional(),
   taskType: z.string().max(32).optional(),
@@ -26,11 +32,13 @@ const CreateTaskSchema = z.object({
   // classification / relationship / delivery / evidence metadata a TRDD does.
   severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'NIT']).optional(),
   effort: z.enum(['S', 'M', 'L', 'XL']).optional(),
-  parentTask: z.string().uuid().optional(),
-  npt: z.array(z.string().uuid()).max(50).optional(),
-  eht: z.array(z.string().uuid()).max(50).optional(),
-  supersedes: z.array(z.string().uuid()).max(50).optional(),
-  supersededBy: z.array(z.string().uuid()).max(50).optional(),
+  // F3 fix: see blockedBy above — relationship ids are GitHub `PVTI_…` node ids /
+  // `TRDD-<8hex>` refs, not UUIDs, so z.string().uuid() rejected real payloads 400.
+  parentTask: z.string().min(1).max(200).optional(),
+  npt: z.array(z.string().min(1).max(200)).max(50).optional(),
+  eht: z.array(z.string().min(1).max(200)).max(50).optional(),
+  supersedes: z.array(z.string().min(1).max(200)).max(50).optional(),
+  supersededBy: z.array(z.string().min(1).max(200)).max(50).optional(),
   relevantRules: z.array(z.string().max(32)).max(50).optional(),
   releaseVia: z.enum(['publish', 'deploy', 'none']).optional(),
   implementationCommits: z.array(z.string().max(64)).max(100).optional(),

@@ -176,3 +176,149 @@ describe('headless-router auth mirror — forged structural credential is reject
     expect(res.statusCode).not.toBe(200)
   })
 })
+
+/**
+ * SF1/SF2 drift-fix coverage for commit 9d7065c7 (fix(headless): mirror Next.js
+ * auth/validation into headless-router). Two NEW gate families were added that
+ * were previously protected ONLY by the forgeable structural credential gate:
+ *
+ *   SF2 — the role-plugins strict handlers
+ *           POST   /api/agents/role-plugins/install
+ *           DELETE /api/agents/role-plugins/install
+ *           DELETE /api/agents/role-plugins
+ *         now authenticateAgent() FIRST (401 on auth.error), then
+ *         authorize(auth, 'manage-skills') (403 if not allowed) — mirroring the
+ *         Next.js routes' requireSudoToken → requireAidTitle → authorize chain.
+ *         Before the fix a forged structural bearer could install/uninstall a
+ *         plugin into an ARBITRARY agentDir with no real auth at all.
+ *
+ *   SF1 — the cross-host governance vote handlers
+ *           POST /api/v1/governance/requests/:id/approve
+ *           POST /api/v1/governance/requests/:id/reject  (local, non-host-signed path)
+ *         now authenticateAgent() and derive the voter from auth.agentId ONLY —
+ *         never from a self-asserted body field — closing the IDOR where any
+ *         caller who knew the global password could vote AS ANY MANAGER/COS.
+ *
+ * Same harness as above: the forged `aim_tk_AAAA…` token is shape-valid (so it
+ * PASSES the structural gate and genuinely reaches the per-handler auth) but
+ * cryptographically invalid (so authenticateAgent → 401). A credential-less
+ * request is bounced earlier by the structural gate (401 `auth_required`). No
+ * service mocking is needed because every rejection lands before any service
+ * call. For the governance handlers a VALID UUID is used in the path so the
+ * request reaches the auth gate rather than being bounced by the UUID-format
+ * check (isValidUuid runs first) — the assertion targets the auth gate.
+ */
+describe('headless-router auth mirror — SF1/SF2 new gates (commit 9d7065c7)', () => {
+  // A real, well-formed UUID so the governance handlers' isValidUuid() gate
+  // passes and the request reaches authenticateAgent() (the gate under test).
+  const VALID_UUID = '11111111-1111-4111-8111-111111111111'
+
+  // ── SF2 — POST /api/agents/role-plugins/install ────────────────────────────
+  it('SF2: POST /api/agents/role-plugins/install — credential-less request is bounced by the structural gate (401)', async () => {
+    const res = await call('POST', '/api/agents/role-plugins/install')
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).toBe('auth_required')
+    expect(res.bodyJson()?.success).toBeUndefined() // never installs
+  })
+
+  it('SF2: POST /api/agents/role-plugins/install — forged token passes the structural gate but is rejected by handler auth (401, not auth_required)', async () => {
+    const res = await call('POST', '/api/agents/role-plugins/install', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
+    expect(res.statusCode).toBe(401) // authenticateAgent rejects the invalid token before authorize/install
+    expect(res.bodyJson()?.error).not.toBe('auth_required') // handler auth, not the structural gate
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.success).toBeUndefined()
+  })
+
+  // ── SF2 — DELETE /api/agents/role-plugins/install ──────────────────────────
+  it('SF2: DELETE /api/agents/role-plugins/install — credential-less request is bounced by the structural gate (401)', async () => {
+    const res = await call('DELETE', '/api/agents/role-plugins/install')
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).toBe('auth_required')
+    expect(res.bodyJson()?.success).toBeUndefined() // never uninstalls
+  })
+
+  it('SF2: DELETE /api/agents/role-plugins/install — forged token is rejected by handler auth (401, not auth_required)', async () => {
+    const res = await call('DELETE', '/api/agents/role-plugins/install', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.success).toBeUndefined()
+  })
+
+  // ── SF2 — DELETE /api/agents/role-plugins ──────────────────────────────────
+  it('SF2: DELETE /api/agents/role-plugins — credential-less request is bounced by the structural gate (401)', async () => {
+    const res = await call('DELETE', '/api/agents/role-plugins?name=scen-test-plugin')
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).toBe('auth_required')
+    expect(res.bodyJson()?.success).toBeUndefined() // never deletes
+  })
+
+  it('SF2: DELETE /api/agents/role-plugins — forged token is rejected by handler auth before any delete (401, not auth_required)', async () => {
+    const res = await call('DELETE', '/api/agents/role-plugins?name=scen-test-plugin', { Authorization: FORGED_BEARER })
+    expect(res.statusCode).toBe(401) // authenticateAgent rejects before the name guard / deleteRolePlugin
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.success).toBeUndefined()
+  })
+
+  // ── SF1 — POST /api/v1/governance/requests/:id/approve ─────────────────────
+  it('SF1: POST /api/v1/governance/requests/:id/approve — credential-less request is bounced by the structural gate (401)', async () => {
+    const res = await call('POST', `/api/v1/governance/requests/${VALID_UUID}/approve`)
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).toBe('auth_required') // never reaches approveCrossHostRequest
+  })
+
+  it('SF1: POST /api/v1/governance/requests/:id/approve — forged token is rejected by handler auth, voter not spoofable (401, not auth_required)', async () => {
+    // Valid UUID in the path → isValidUuid() passes → request reaches
+    // authenticateAgent(), which rejects the forged token (the approver is
+    // derived from auth.agentId, never from body.approverAgentId).
+    const res = await call('POST', `/api/v1/governance/requests/${VALID_UUID}/approve`, { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+  })
+
+  // ── SF1 — POST /api/v1/governance/requests/:id/reject (local path) ──────────
+  it('SF1: POST /api/v1/governance/requests/:id/reject — credential-less request is bounced by the structural gate (401)', async () => {
+    const res = await call('POST', `/api/v1/governance/requests/${VALID_UUID}/reject`)
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).toBe('auth_required') // never reaches rejectCrossHostRequest
+  })
+
+  it('SF1: POST /api/v1/governance/requests/:id/reject — forged token (no host-signature) is rejected by handler auth (401, not auth_required)', async () => {
+    // No X-Host-Signature headers → the local-rejection branch runs, which
+    // authenticateAgent()s and derives the rejector from auth.agentId only.
+    // Valid UUID so the upstream isValidUuid() gate passes and we exercise auth.
+    const res = await call('POST', `/api/v1/governance/requests/${VALID_UUID}/reject`, { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+  })
+
+  // ── SF1 — gate-ordering parity for the reject handler's TWO auth modes ──────
+  it('SF1: POST /api/v1/governance/requests/:id/reject — host-signature path enforces UUID validation before the host-sig branch (400 on a bad id)', async () => {
+    // The reject handler validates isValidUuid(params.id) BEFORE the host-signed
+    // branch (and before the local-auth branch). A forged host signature on a
+    // malformed id is rejected at the UUID gate (400), never reaching
+    // verifyHostAttestation / receiveRemoteRejection — mirroring MF-014.
+    const res = await call('POST', '/api/v1/governance/requests/not-a-uuid/reject', {
+      Authorization: FORGED_BEARER,
+      'X-Host-Signature': 'AAAA',
+      'X-Host-Timestamp': new Date().toISOString(),
+      'X-Host-Id': 'unknown-host',
+      'Content-Type': 'application/json',
+    })
+    expect(res.statusCode).toBe(400)
+    expect(res.bodyJson()?.error).toMatch(/Invalid request ID format/i)
+  })
+
+  it('SF1: POST /api/v1/governance/requests/:id/approve — forged token with a malformed id is still rejected (auth gate fires first; no vote, never 200)', async () => {
+    // For approve, authenticateAgent() runs BEFORE isValidUuid(), so the forged
+    // token is rejected at auth (401) — the malformed id never reaches the
+    // service. Either way the request is refused and no vote is cast.
+    const res = await call('POST', '/api/v1/governance/requests/not-a-uuid/approve', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
+    expect(res.statusCode).toBe(401) // auth gate precedes the UUID gate on approve
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    expect(res.statusCode).not.toBe(200)
+  })
+})

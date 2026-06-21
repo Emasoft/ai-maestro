@@ -1,9 +1,9 @@
 ---
 trdd-id: f181a4ae-36a2-4524-abb1-3eab554999d9
 title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-plugin (dev-browser integrated)
-column: dev
+column: testing
 created: 2026-06-21T22:46:13+0200
-updated: 2026-06-22T00:35:00+0200
+updated: 2026-06-22T01:25:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -24,6 +24,15 @@ external-refs: []
 ## ⏵ STATE — READ THIS FIRST ON RESUME — 2026-06-21
 
 **⚠ PIVOT 2026-06-22 (USER directive) — this is now an AI-MAESTRO ROLE-PLUGIN, not a generic harness.**
+
+**✅ BUILD COMPLETE 2026-06-22 — plugin built + self-verified at `~/Code/ai-maestro-web-scenario-tester/` (local git, 4 commits, NOT pushed — publish is USER-gated).**
+- Structure: 5 agents (`web-scenario-tester-main-agent` + 4 `amwst-` subagents), 7 `amwst-` skills, 8 scripts, 5 references (incl. the 1465-line `SCENARIOS_TESTS_RULES.md` verbatim), `hooks/hooks.json` + `scripts/amwst_subagent-write-guard.sh`, 2 example `.scen.md`, `.claude-plugin/plugin.json`, `web-scenario-tester.agent.toml`.
+- **Write-guard design (USER directive):** PLUGIN-scoped PreToolUse hook, SENTINEL-GATED on `${CLAUDE_PROJECT_DIR}/.claude/scenario_is_running.json` — inert outside a run; run-owner skills create it at run start / delete at run end + gitignore it; `master-cleanup.sh` step 0 disarms it belt-and-braces. Verified: no-sentinel→exit0, sentinel+out-of-scope→exit2, sentinel+in-scope→exit0.
+- **Gitignore:** sentinel ignored; `tests/scenarios/*.scen.md` stay git-TRACKED (per-project, not bundled — auto-discovered at `${CLAUDE_PROJECT_DIR}/tests/scenarios/`, configurable via `scenarios.config.json` `scenariosDir`).
+- Self-check GREEN: all JSON parse, all 8 scripts `bash -n`, quad-identity consistent (`web-scenario-tester` / `web-scenario-tester-main-agent`; repo dir `ai-maestro-web-scenario-tester` is independent by design).
+- Deps: `dev-browser` @ `dev-browser-marketplace` (hard, cross-marketplace); `llm-externalizer` (optional, doc-only).
+- **NEXT (USER-gated):** CPV validate → publish to `Emasoft/ai-maestro-plugins` (marketplace.json needs `allowCrossMarketplaceDependenciesOn: ["dev-browser-marketplace"]`). Then ai-maestro repo step 5: repoint `tests/scenarios/` to CONSUME the plugin + add `scenarios.config.json` + de-path `fixture-helpers.sh:21`.
+
 The USER specified: repo `Emasoft/ai-maestro-web-scenario-tester`; a ROLE-plugin whose main-agent is
 `web-scenario-tester-main-agent`; skills + subagents prefixed `amwst-`. Research done (2 opus agents) +
 captured durably in the **[[role-plugin-structure-spec]]** wikimem + `reports/web-scenario-tester/`

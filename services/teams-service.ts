@@ -136,6 +136,15 @@ export interface CreateTaskParams {
   supersedes?: string[]
   relevantRules?: string[]
   releaseVia?: Task['releaseVia']
+  // TRDD-v2 evidence + new fields, carried end-to-end through github-project (TRDD-95d23f3b)
+  reviewResult?: string
+  supersededBy?: string[]
+  implementationCommits?: string[]
+  lastTestResult?: Task['lastTestResult']
+  publishedVersion?: string
+  liveSince?: string
+  attachments?: Task['attachments']
+  dueDate?: string
   requestingAgentId?: string
   authContext?: AuthContext
 }
@@ -166,6 +175,14 @@ export interface UpdateTaskParams {
   supersedes?: string[]
   relevantRules?: string[]
   releaseVia?: Task['releaseVia']
+  // TRDD-v2 evidence + new fields, carried end-to-end through github-project (TRDD-95d23f3b)
+  supersededBy?: string[]
+  implementationCommits?: string[]
+  lastTestResult?: Task['lastTestResult']
+  publishedVersion?: string
+  liveSince?: string
+  attachments?: Task['attachments']
+  dueDate?: string
   requestingAgentId?: string
   authContext?: AuthContext
 }
@@ -1070,6 +1087,15 @@ export async function createTeamTask(teamId: string, params: CreateTaskParams): 
       supersedes: taskFields.supersedes,
       relevantRules: taskFields.relevantRules,
       releaseVia: taskFields.releaseVia,
+      // TRDD-v2 evidence + new fields (TRDD-95d23f3b).
+      reviewResult: taskFields.reviewResult,
+      supersededBy: taskFields.supersededBy,
+      implementationCommits: taskFields.implementationCommits,
+      lastTestResult: taskFields.lastTestResult,
+      publishedVersion: taskFields.publishedVersion,
+      liveSince: taskFields.liveSince,
+      dueDate: taskFields.dueDate,
+      attachments: taskFields.attachments,
     })
     return { data: { task }, status: 201 }
   } catch (error) {
@@ -1145,6 +1171,15 @@ export async function updateTeamTask(
       supersedes: taskFields.supersedes,
       relevantRules: taskFields.relevantRules,
       releaseVia: taskFields.releaseVia,
+      // TRDD-v2 evidence + new fields (TRDD-95d23f3b).
+      reviewResult: taskFields.reviewResult,
+      supersededBy: taskFields.supersededBy,
+      implementationCommits: taskFields.implementationCommits,
+      lastTestResult: taskFields.lastTestResult,
+      publishedVersion: taskFields.publishedVersion,
+      liveSince: taskFields.liveSince,
+      dueDate: taskFields.dueDate,
+      attachments: taskFields.attachments,
     })
     if (!task) {
       return { error: 'Task not found', status: 404 }

@@ -11,6 +11,18 @@
 export type TaskStatus = string
 
 /**
+ * First-class task-type catalogue. `taskType` stays a `string` for back-compat with
+ * existing stored tasks + GitHub bare-type labels (bug/enhancement/… that aren't in
+ * the TRDD set), but TASK_TYPES is the canonical set the create form offers and the
+ * kanban renderer / pillar skills validate against. Mirrors the TRDD `task-type:` values.
+ */
+export const TASK_TYPES = [
+  'feature', 'bugfix', 'refactor', 'docs', 'infra',
+  'security', 'artifact', 'spike', 'audit', 'epic', 'chore',
+] as const
+export type TaskType = (typeof TASK_TYPES)[number]
+
+/**
  * The 17 default statuses — used when a team has no custom kanban config.
  * 14 TRDD-v2 lifecycle stages followed by 3 orthogonal exception states
  * (blocked / failed / superseded). Order matches DEFAULT_KANBAN_COLUMNS in
@@ -35,6 +47,12 @@ export const DEFAULT_STATUSES: string[] = [
   'failed',
   'superseded',
 ]
+
+export interface TaskAttachment {
+  url: string                    // Link or file URL (load-bearing)
+  name?: string                  // Display name
+  kind?: string                  // e.g. "pr", "doc", "image", "log"
+}
 
 export interface Task {
   id: string                     // UUID
@@ -77,6 +95,8 @@ export interface Task {
   lastTestResult?: 'not-run' | 'pass' | 'fail' | 'partial'
   publishedVersion?: string      // Version published (when status reaches published)
   liveSince?: string             // ISO timestamp when deployed live
+  attachments?: TaskAttachment[] // Links / files attached to the task
+  dueDate?: string               // ISO 8601 due date
 }
 
 export interface TaskWithDeps extends Task {

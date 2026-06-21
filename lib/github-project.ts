@@ -49,6 +49,16 @@ function trddMetadataLabels(data: {
   supersedes?: string[]
   relevantRules?: string[]
   releaseVia?: Task['releaseVia']
+  // TRDD-v2 evidence fields (TRDD-95d23f3b). Single-valued enums/versions/dates fit
+  // in a label; implementationCommits is short-SHA'd to stay under GitHub's 50-char
+  // label cap. attachments are long/structured → persisted in the issue BODY, not here.
+  supersededBy?: string[]
+  reviewResult?: string
+  lastTestResult?: Task['lastTestResult']
+  publishedVersion?: string
+  liveSince?: string
+  dueDate?: string
+  implementationCommits?: string[]
 }): string[] {
   const labels: string[] = []
   if (data.severity) labels.push(`severity:${data.severity}`)
@@ -59,7 +69,48 @@ function trddMetadataLabels(data: {
   for (const ref of data.eht ?? []) labels.push(`eht:${ref}`)
   for (const ref of data.supersedes ?? []) labels.push(`supersedes:${ref}`)
   for (const rule of data.relevantRules ?? []) labels.push(`rule:${rule}`)
+  if (data.reviewResult) labels.push(`review:${data.reviewResult}`)
+  if (data.lastTestResult) labels.push(`last-test:${data.lastTestResult}`)
+  if (data.publishedVersion) labels.push(`published-version:${data.publishedVersion}`)
+  if (data.liveSince) labels.push(`live-since:${data.liveSince}`)
+  if (data.dueDate) labels.push(`due:${data.dueDate}`)
+  for (const ref of data.supersededBy ?? []) labels.push(`superseded-by:${ref}`)
+  // Short-SHA (≤12) keeps `impl-commit:<sha>` within GitHub's 50-char label limit.
+  for (const sha of data.implementationCommits ?? []) labels.push(`impl-commit:${sha.slice(0, 12)}`)
   return labels
+}
+
+/**
+ * Split an issue body into prose + the structured "## Attachments" section
+ * (TRDD-95d23f3b). Attachments are too long/structured for labels, so they live in
+ * the body as markdown links ("- [name](url)" or a bare "- https://…"); the prose is
+ * everything else. Inverse of buildBodyWithAttachments — the two keep the body and the
+ * Task.attachments field in sync across create/read/update.
+ */
+function splitBodyAttachments(body: string): { prose: string; attachments: NonNullable<Task['attachments']> } {
+  const attachments: NonNullable<Task['attachments']> = []
+  const match = body.match(/##\s*Attachments\s*\n([\s\S]*?)(?=\n##\s|\n---|$)/i)
+  if (match) {
+    for (const raw of match[1].split('\n')) {
+      const line = raw.replace(/^\s*-\s*/, '').trim()
+      if (!line) continue
+      const md = line.match(/^\[([^\]]*)\]\(([^)]+)\)$/)
+      if (md) attachments.push({ url: md[2].trim(), name: md[1].trim() || undefined })
+      else if (/^https?:\/\//i.test(line)) attachments.push({ url: line })
+    }
+  }
+  const prose = body.replace(/\n*##\s*Attachments\s*\n[\s\S]*?(?=\n##\s|\n---|$)/i, '').trimEnd()
+  return { prose, attachments }
+}
+
+/** Build an issue body from prose + attachments (inverse of splitBodyAttachments). */
+function buildBodyWithAttachments(prose: string, attachments?: Task['attachments']): string {
+  let body = prose || ''
+  if (attachments?.length) {
+    const lines = attachments.map(a => `- [${a.name || a.url}](${a.url})`).join('\n')
+    body = (body ? `${body}\n\n` : '') + `## Attachments\n${lines}`
+  }
+  return body
 }
 
 /** Parsed TRDD-v2 metadata extracted from issue labels (inverse of trddMetadataLabels). */
@@ -72,6 +123,14 @@ interface ParsedTrddMetadata {
   supersedes: string[]
   relevantRules: string[]
   releaseVia?: Task['releaseVia']
+  // TRDD-v2 evidence fields (TRDD-95d23f3b)
+  supersededBy: string[]
+  implementationCommits: string[]
+  reviewResult?: string
+  lastTestResult?: Task['lastTestResult']
+  publishedVersion?: string
+  liveSince?: string
+  dueDate?: string
 }
 
 /**
@@ -97,6 +156,20 @@ function consumeTrddMetadataLabel(label: string, acc: ParsedTrddMetadata): boole
     const v = label.slice(11).trim(); if (v) acc.supersedes.push(v)
   } else if (lower.startsWith('rule:')) {
     const v = label.slice(5).trim(); if (v) acc.relevantRules.push(v)
+  } else if (lower.startsWith('review:')) {
+    acc.reviewResult = label.slice(7).trim()
+  } else if (lower.startsWith('last-test:')) {
+    acc.lastTestResult = label.slice(10).trim() as Task['lastTestResult']
+  } else if (lower.startsWith('published-version:')) {
+    acc.publishedVersion = label.slice(18).trim()
+  } else if (lower.startsWith('live-since:')) {
+    acc.liveSince = label.slice(11).trim()
+  } else if (lower.startsWith('due:')) {
+    acc.dueDate = label.slice(4).trim()
+  } else if (lower.startsWith('superseded-by:')) {
+    const v = label.slice(14).trim(); if (v) acc.supersededBy.push(v)
+  } else if (lower.startsWith('impl-commit:')) {
+    const v = label.slice(12).trim(); if (v) acc.implementationCommits.push(v)
   } else {
     return false
   }
@@ -406,7 +479,7 @@ function mapProjectItemToTask(
   const displayLabels: string[] = []
   // TRDD-v2 metadata reconstructed from prefixed labels (see trddMetadataLabels).
   const trdd: ParsedTrddMetadata = {
-    npt: [], eht: [], supersedes: [], relevantRules: [],
+    npt: [], eht: [], supersedes: [], relevantRules: [], supersededBy: [], implementationCommits: [],
   }
 
   for (const label of allLabels) {
@@ -460,6 +533,7 @@ function mapProjectItemToTask(
   // Format: lines starting with "- [ ]" or "- [x]" under "## Acceptance Criteria"
   let acceptanceCriteria: string[] | undefined
   let handoffDoc: string | undefined
+  let attachments: Task['attachments'] | undefined
   const body = item.content.body || ''
   if (body) {
     // Parse acceptance criteria section
@@ -474,6 +548,10 @@ function mapProjectItemToTask(
     // Parse handoff doc reference
     const handoffMatch = body.match(/(?:handoff|handoff[- ]doc(?:ument)?)\s*:\s*(.+)/i)
     if (handoffMatch) handoffDoc = handoffMatch[1].trim()
+
+    // Parse attachments from the body's "## Attachments" section (TRDD-95d23f3b).
+    const parsedAtts = splitBodyAttachments(body).attachments
+    if (parsedAtts.length > 0) attachments = parsedAtts
 
     // Parse blockedBy from issue body references: "Blocked by #42", "Depends on #13"
     const depMatches = body.matchAll(/(?:blocked\s+by|depends\s+on)\s+#(\d+)/gi)
@@ -535,6 +613,15 @@ function mapProjectItemToTask(
     supersedes: trdd.supersedes.length ? trdd.supersedes : undefined,
     relevantRules: trdd.relevantRules.length ? trdd.relevantRules : undefined,
     releaseVia: trdd.releaseVia,
+    // TRDD-v2 evidence fields reconstructed from labels + body (TRDD-95d23f3b).
+    supersededBy: trdd.supersededBy.length ? trdd.supersededBy : undefined,
+    implementationCommits: trdd.implementationCommits.length ? trdd.implementationCommits : undefined,
+    reviewResult: trdd.reviewResult,
+    lastTestResult: trdd.lastTestResult,
+    publishedVersion: trdd.publishedVersion,
+    liveSince: trdd.liveSince,
+    dueDate: trdd.dueDate,
+    attachments,
     // 'status' is already migrated to the 14-stage id, so the work-started
     // marker is the 'dev' column (TRDD-v2 renamed 'in_progress' -> 'dev').
     startedAt: status === 'dev' ? updatedAt : undefined,
@@ -721,6 +808,15 @@ export async function createTask(
     supersedes?: string[]
     relevantRules?: string[]
     releaseVia?: Task['releaseVia']
+    // TRDD-v2 evidence + new fields (TRDD-95d23f3b) — label-encoded except attachments (body).
+    reviewResult?: string
+    supersededBy?: string[]
+    implementationCommits?: string[]
+    lastTestResult?: Task['lastTestResult']
+    publishedVersion?: string
+    liveSince?: string
+    dueDate?: string
+    attachments?: Task['attachments']
   },
 ): Promise<Task> {
   const meta = await getProjectMeta(cfg)
@@ -738,6 +834,8 @@ export async function createTask(
   }
   // TRDD-v2 metadata → prefixed labels (no native GH Project field for these).
   issueLabels.push(...trddMetadataLabels(data))
+  // Persist attachments in the issue BODY (long/structured — not labels). TRDD-95d23f3b.
+  const issueBody = buildBodyWithAttachments(data.description || '', data.attachments)
   // Use spawnSync with argument arrays to avoid shell injection risks
   const createArgs = [
     'issue', 'create',
@@ -745,7 +843,7 @@ export async function createTask(
     '--title', data.subject,
     '--json', 'number,url,nodeId',
   ]
-  if (data.description) createArgs.push('--body', data.description)
+  if (issueBody) createArgs.push('--body', issueBody)
   for (const l of issueLabels) createArgs.push('--label', l)
   if (data.assigneeLogin) createArgs.push('--assignee', data.assigneeLogin)
 
@@ -830,6 +928,14 @@ export async function createTask(
     supersedes: data.supersedes,
     relevantRules: data.relevantRules,
     releaseVia: data.releaseVia,
+    reviewResult: data.reviewResult,
+    supersededBy: data.supersededBy,
+    implementationCommits: data.implementationCommits,
+    lastTestResult: data.lastTestResult,
+    publishedVersion: data.publishedVersion,
+    liveSince: data.liveSince,
+    dueDate: data.dueDate,
+    attachments: data.attachments,
     createdAt: now,
     updatedAt: now,
   }
@@ -864,6 +970,15 @@ export async function updateTask(
     supersedes?: string[]
     relevantRules?: string[]
     releaseVia?: Task['releaseVia']
+    // TRDD-v2 evidence + new fields (TRDD-95d23f3b) — label-encoded except attachments (body).
+    reviewResult?: string
+    supersededBy?: string[]
+    implementationCommits?: string[]
+    lastTestResult?: Task['lastTestResult']
+    publishedVersion?: string
+    liveSince?: string
+    dueDate?: string
+    attachments?: Task['attachments']
   },
 ): Promise<Task | null> {
   const meta = await getProjectMeta(cfg)
@@ -913,7 +1028,24 @@ export async function updateTask(
   if (issueNumber) {
     const editArgs = ['issue', 'edit', String(issueNumber), '-R', repo]
     if (updates.subject) editArgs.push('--title', updates.subject)
-    if (updates.description) editArgs.push('--body', updates.description)
+    // Body co-manages the description prose + the ## Attachments section (TRDD-95d23f3b).
+    // When either changes, fetch the current body to preserve the half not being updated,
+    // then rebuild — so a description edit never wipes attachments and vice-versa.
+    if (updates.description !== undefined || updates.attachments !== undefined) {
+      let prose = updates.description
+      let atts = updates.attachments
+      if (prose === undefined || atts === undefined) {
+        const cur = spawnSync('gh', ['issue', 'view', String(issueNumber), '-R', repo, '--json', 'body'], {
+          encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        let curBody = ''
+        if (cur.status === 0) { try { curBody = (JSON.parse(cur.stdout).body as string) || '' } catch { curBody = '' } }
+        const split = splitBodyAttachments(curBody)
+        if (prose === undefined) prose = split.prose
+        if (atts === undefined) atts = split.attachments
+      }
+      editArgs.push('--body', buildBodyWithAttachments(prose || '', atts))
+    }
 
     if (editArgs.length > 5) {
       try {
@@ -942,6 +1074,13 @@ export async function updateTask(
     if (updates.eht !== undefined) removePrefixes.push('eht:')
     if (updates.supersedes !== undefined) removePrefixes.push('supersedes:')
     if (updates.relevantRules !== undefined) removePrefixes.push('rule:')
+    if (updates.reviewResult !== undefined) removePrefixes.push('review:')
+    if (updates.lastTestResult !== undefined) removePrefixes.push('last-test:')
+    if (updates.publishedVersion !== undefined) removePrefixes.push('published-version:')
+    if (updates.liveSince !== undefined) removePrefixes.push('live-since:')
+    if (updates.dueDate !== undefined) removePrefixes.push('due:')
+    if (updates.supersededBy !== undefined) removePrefixes.push('superseded-by:')
+    if (updates.implementationCommits !== undefined) removePrefixes.push('impl-commit:')
 
     if (removePrefixes.length > 0) {
       // Fetch current labels and remove stale prefix matches

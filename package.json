@@ -13,7 +13,7 @@
   },
   "homepage": "https://github.com/23blocks-OS/ai-maestro#readme",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.0.0 <26.0.0"
   },
   "keywords": [
     "claude-code",

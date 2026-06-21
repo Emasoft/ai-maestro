@@ -104,12 +104,37 @@ elif [ ! -f "$PROJECT_ROOT/.next/BUILD_ID" ] && [ "$NODE_ENV_RESOLVED" = "produc
     exit 1
 fi
 
-# Step 5: Start the actual server
-# NT-032: Verify tsx is available before exec to provide a clear error message
-# instead of a cryptic "command not found" after SSH setup completes.
-if ! command -v tsx &>/dev/null; then
-    echo "[AI Maestro] Error: tsx not found. Install with: npm install -g tsx"
+# Step 5: Pin a supported Node (<26) before starting the server.
+#
+# WHY: the project's native deps do NOT support Node 26 — better-sqlite3@12.8.0
+# `engines` hard-caps at Node 25, and node-pty's compiled binary is
+# NODE_MODULE_VERSION 127 (Node 22 ABI) while Node 26 needs 147. When the
+# machine's default `node` is 26 (as it became here), `tsx server.mjs` crashes
+# on `require('node-pty')` with ERR_DLOPEN_FAILED and pm2 crash-loops forever
+# (PTY/terminal streaming — the dashboard's core feature — is dead). See
+# .nvmrc (22) + package.json engines (>=22 <26) + TRDD-62e24f29.
+#
+# We prefer a real <=25 homebrew keg if present. CRITICAL: we version-CHECK the
+# keg's actual `node -v` rather than trust its name — on this machine the
+# node@23/24/25/26 kegs are all mislabeled to v26.3.0, so a name-only pin would
+# silently re-introduce Node 26. If no real <26 keg is found we fall back to the
+# default PATH node (correct on any machine whose default is already <26).
+for NODE_BIN in /opt/homebrew/opt/node@22/bin /opt/homebrew/opt/node@24/bin /opt/homebrew/opt/node@25/bin; do
+    if [ -x "$NODE_BIN/node" ] && "$NODE_BIN/node" -v 2>/dev/null | grep -qE '^v(2[2-5])\.'; then
+        export PATH="$NODE_BIN:$PATH"
+        echo "[AI Maestro] Pinned Node $("$NODE_BIN/node" -v) from $NODE_BIN (native deps require <26)"
+        break
+    fi
+done
+
+# Start the actual server via the LOCAL tsx (node_modules/.bin/tsx) so it runs
+# under the pinned node above — NOT a global tsx that may carry its own node.
+# NT-032: verify tsx is present first for a clear error instead of a cryptic
+# "command not found" after SSH setup completes.
+TSX_BIN="./node_modules/.bin/tsx"
+if [ ! -x "$TSX_BIN" ]; then
+    echo "[AI Maestro] Error: local tsx not found at $TSX_BIN. Run: yarn install"
     exit 1
 fi
-echo "[AI Maestro] Starting server (NODE_ENV=$NODE_ENV_RESOLVED)..."
-exec tsx server.mjs
+echo "[AI Maestro] Starting server (NODE_ENV=$NODE_ENV_RESOLVED, node=$(node -v 2>/dev/null))..."
+exec "$TSX_BIN" server.mjs

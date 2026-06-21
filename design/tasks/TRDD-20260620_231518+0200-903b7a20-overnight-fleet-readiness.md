@@ -3,7 +3,7 @@ trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-06-21T03:05:00+0200
+updated: 2026-06-21T02:42:06+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -57,7 +57,17 @@ ChangeTitle R9.13, registerAgent R9.13). ✅ **BRANCH BUILDS CLEAN — `yarn bui
 (`2de768a5` fixed a PRE-EXISTING build-blocker: a stale eslint-disable for the now-
 unloaded `@typescript-eslint/no-var-requires` in lib/portfolio-*.ts — unrelated to the
 campaign, but it blocked the PR; tsc+vitest stayed green so it was invisible without
-`yarn build`). NEXT: Phase D scenarios (dev-browser UI
+`yarn build`). ✅ **INDEPENDENT VERIFICATION COMPLETE (ultracode workflow, 8 skeptic
+agents — one per fix — per the "launch ultracode workflows to verify" mandate):** 7
+CONFIRMED (6 NONE + 1 NIT) + 1 MAJOR. The MAJOR was on #5 ChangeTitle G17 — the first
+fix covered only 2 of G17's 4 zero-active exits; the `>1` and MISMATCH reinstall-fail
+exits could still leave a titled agent role-less → FIXED `99a79ba0` (one unconditional
+post-block re-scan covers all 4 exits) + re-verified. The NIT (#3 `.mjs` cookie
+extractor diverged from the canonical one on a leading-whitespace cookie,
+false-negative-only/unreachable) → FIXED `c798768e` for byte-for-byte parity. **ALL 8
+FIXES NOW VERIFIED-CLEAN.** 25 commits on `governance-rules`, NOT pushed; `yarn build`
+✓ (49.71s), full suite **1867/0**, tsc 0. Per-fix verdicts in
+`reports/verify-governance-fixes/`. NEXT: Phase D scenarios (dev-browser UI
 validation) OR the lower-priority residuals (#3b bearer-downstream, #37 decoupling
 [gated], install --verify) — full queue + designs in `## Phase B synthesis` + `## NEXT
 ACTION` below.

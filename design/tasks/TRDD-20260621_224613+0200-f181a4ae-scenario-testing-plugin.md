@@ -1,9 +1,9 @@
 ---
 trdd-id: f181a4ae-36a2-4524-abb1-3eab554999d9
-title: Package the scenario-UI-testing system as a standalone reusable plugin (dev-browser integrated)
+title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-plugin (dev-browser integrated)
 column: design
 created: 2026-06-21T22:46:13+0200
-updated: 2026-06-21T22:46:13+0200
+updated: 2026-06-22T00:04:50+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -23,9 +23,27 @@ external-refs: []
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME — 2026-06-21
 
-**PLAN — design ready, not yet built.** From the user's request: package the scenario-UI-testing
-skills into a separate plugin, integrate the dev-browser logic + all the scenario rules. Two
-delegated opus design agents investigated; this TRDD records the decisions.
+**⚠ PIVOT 2026-06-22 (USER directive) — this is now an AI-MAESTRO ROLE-PLUGIN, not a generic harness.**
+The USER specified: repo `Emasoft/ai-maestro-web-scenario-tester`; a ROLE-plugin whose main-agent is
+`web-scenario-tester-main-agent`; skills + subagents prefixed `amwst-`. Research done (2 opus agents) +
+captured durably in the **[[role-plugin-structure-spec]]** wikimem + `reports/web-scenario-tester/`
+(`*-pss-agent-toml-spec.md`, `*-real-role-plugin-anatomy.md`). Key consequences:
+1. **Quad-identity forces the PLUGIN name = `web-scenario-tester`** (≠ the repo `ai-maestro-web-scenario-tester`):
+   main-agent `<P>-main-agent` ⟹ `<P>` = `web-scenario-tester`. Repo name is independent of plugin name.
+2. **The shipped `.agent.toml` uses the role-plugin format** (`[agent]` + `compatible-titles`/`compatible-clients`/
+   `prefix`/`main_agent` + nested `[agent.persona]`/`[agent.skills].bundled`), NOT the PSS profile format
+   (`[agent].path` + top-level `[skills]` tiers). The two are mutually-invalid; PSS is a creation-time artifact.
+3. **`prefix = "amwst-"`** (kebab for skills/commands/subagents/hooks; `amwst_` underscore for scripts); the
+   main-agent is the UNPREFIXED `web-scenario-tester-main-agent`.
+4. **OPEN DECISION (blocks build):** `compatible-titles` must be one of the 8 governance titles —
+   **MEMBER** (team worker) vs **AUTONOMOUS** (standalone tool). Needs USER/MANAGER pick; it is NOT a new title.
+Decision-1 below (dev-browser approach B) STILL HOLDS. Decision-2's 'generic harness vs project-specific'
+framing is SUPERSEDED by the role-plugin shape (the dev-browser dependency + the 14 scenario rules still
+apply, now bundled INTO the role-plugin as `amwst-` skills + the main-agent persona).
+
+**PLAN (original generic-harness framing — partly SUPERSEDED by the pivot above).** From the user's request:
+package the scenario-UI-testing skills into a separate plugin, integrate the dev-browser logic + all the
+scenario rules. Two delegated opus design agents investigated; this TRDD records the decisions.
 
 **Durable evidence:**
 - `reports/scenario-plugin-devbrowser/20260621_223542+0200-devbrowser-integration-options.md`

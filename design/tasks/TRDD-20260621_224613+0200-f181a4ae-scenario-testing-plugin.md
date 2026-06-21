@@ -3,7 +3,7 @@ trdd-id: f181a4ae-36a2-4524-abb1-3eab554999d9
 title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-plugin (dev-browser integrated)
 column: dev
 created: 2026-06-21T22:46:13+0200
-updated: 2026-06-22T00:21:40+0200
+updated: 2026-06-22T00:35:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -61,6 +61,11 @@ scenario rules. Two delegated opus design agents investigated; this TRDD records
   STILL TO INVENTORY: `tests/scenarios/` (SCENARIOS_TESTS_RULES.md, scripts/{state-machine-tick,scenario-setup,
   scenario-restore,compress-screenshots}.sh, dev-browser-helpers/aim-helpers.sh, example SCEN-*.scen.md) + the
   3 gaps (run-scenario-test skill, init-scenarios-folder.sh, scenarios.config.json).
+- **Scenario files are PER-PROJECT, NOT bundled (USER 2026-06-22):** `*.scen.md` files are unique to each
+  consuming project — the plugin does NOT ship them. The plugin AUTO-DISCOVERS them in the consumer's standard
+  scenarios folder (default `${CLAUDE_PROJECT_DIR}/tests/scenarios/`, overridable via `scenarios.config.json`
+  key `scenariosDir`). Canonical extension is **`.scen.md`** (bare `*.md` is wrong/legacy — the discovery glob
+  + create-scenario must standardize on `.scen.md`). Plugin ships only 2-3 generic EXAMPLE scenarios under `examples/`.
 - **Publish (USER-gated, LAST step):** use the **CPV plugin** (`claude-plugins-validation`) for BOTH the
   publish-pipeline CONFIG (publish.py + CI workflows + git hooks — via plugin-creator / canonical-pipeline /
   setup-plugin-repo) AND the publish into the `Emasoft/ai-maestro-plugins` marketplace (CPV's publish agent).

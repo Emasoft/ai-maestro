@@ -220,6 +220,13 @@ import { verifyHostAttestation } from '@/lib/host-keys'
 import { verifyPassword, loadGovernance, getManagerId, isChiefOfStaffAnywhere, isManager, isChiefOfStaff } from '@/lib/governance'
 import { getTeam, updateTeam, TeamValidationException } from '@/lib/team-registry'
 import { getAgent, getAgentBySession } from '@/lib/agent-registry'
+// SF2 drift-fix: the role-plugins install/delete headless handlers must mirror the
+// Next.js routes' agent-path RBAC. Those routes gate agents via requireSudoToken →
+// requireAidTitle → authorize(auth, 'manage-skills') (lib/sudo-guard.ts STRICT_AGENT_RULES).
+// Calling the SAME authorize() here reproduces that exact decision (drift-free), while a
+// system-owner web session (no agentId) is granted by authorize() just as isSystemOwner is
+// — the headless router has no sudo layer (see the orchestrator handler note ~2381).
+import { authorize } from '@/lib/authorization'
 import { execSync } from 'child_process'
 // Atomic rate limiting for auth endpoints
 import { checkAndRecordAttempt, resetRateLimit } from '@/lib/rate-limit'
@@ -443,6 +450,88 @@ function sendServiceResult(res: ServerResponse, result: any) {
   } else {
     sendJson(res, result.status || 200, result.data, result.headers)
   }
+}
+
+/**
+ * F5 + F3 drift-fix — shape validation for team-task create/update, mirroring the
+ * Zod schemas in app/api/teams/[id]/tasks/route.ts (CreateTaskSchema) and
+ * app/api/teams/[id]/tasks/[taskId]/route.ts (UpdateTaskSchema). The headless task
+ * handlers previously passed `attachments` through with NO shape check and the
+ * relationship arrays (npt/eht/supersedes/supersededBy) with no element/length
+ * bounds, while the Next.js routes Zod-validate both — a FULL-vs-headless divergence.
+ * These helpers reproduce the SAME bounds (drift-free); they only ADD validation.
+ *
+ * Each returns a `{ path, message }` issue on failure, or null when valid, so the
+ * handler can emit the same `{ error: 'Validation failed', issues: [...] }` contract
+ * the Next.js routes return on a zod failure.
+ */
+type TaskValidationIssue = { path: string; message: string }
+
+/**
+ * Bounded relationship-id array: every element a string of length 1..200 (matching the
+ * Next.js `z.array(z.string().min(1).max(200)).max(N)` rule, where N is the array cap).
+ * F3-mirror: relationship ids are GitHub `PVTI_…` node ids / `TRDD-<8hex>` refs, NOT UUIDs,
+ * so the bound is a generic bounded string — relaxed to match commit b90aa125, not stricter.
+ */
+function validateTaskRelationArray(value: unknown, field: string, maxItems: number): TaskValidationIssue | null {
+  if (!Array.isArray(value)) return { path: field, message: `${field} must be an array` }
+  if (value.length > maxItems) return { path: field, message: `${field} must contain at most ${maxItems} items` }
+  for (const v of value) {
+    if (typeof v !== 'string' || v.length < 1 || v.length > 200) {
+      return { path: field, message: `${field} entries must be strings of length 1..200` }
+    }
+  }
+  return null
+}
+
+/** Bounded single relationship id (`parentTask`): string of length 1..200. */
+function validateTaskRelationString(value: unknown, field: string): TaskValidationIssue | null {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 200) {
+    return { path: field, message: `${field} must be a string of length 1..200` }
+  }
+  return null
+}
+
+/**
+ * F5: attachments — array (max 50) of objects { url: string<=2048, name?: string<=256,
+ * kind?: string<=64 }, mirroring the Next.js `z.array(z.object({...})).max(50)`.
+ */
+function validateTaskAttachments(value: unknown): TaskValidationIssue | null {
+  if (!Array.isArray(value)) return { path: 'attachments', message: 'attachments must be an array' }
+  if (value.length > 50) return { path: 'attachments', message: 'attachments must contain at most 50 items' }
+  for (const a of value) {
+    if (typeof a !== 'object' || a === null || Array.isArray(a)) {
+      return { path: 'attachments', message: 'each attachment must be an object' }
+    }
+    const att = a as Record<string, unknown>
+    if (typeof att.url !== 'string' || att.url.length > 2048) {
+      return { path: 'attachments.url', message: 'attachment.url is required and must be a string of length <= 2048' }
+    }
+    if (att.name !== undefined && (typeof att.name !== 'string' || att.name.length > 256)) {
+      return { path: 'attachments.name', message: 'attachment.name must be a string of length <= 256' }
+    }
+    if (att.kind !== undefined && (typeof att.kind !== 'string' || att.kind.length > 64)) {
+      return { path: 'attachments.kind', message: 'attachment.kind must be a string of length <= 64' }
+    }
+  }
+  return null
+}
+
+/**
+ * Run all relationship + attachment shape checks present in `body` and return the FIRST
+ * issue, or null if all valid. `blockedBy` keeps its existing length cap of 20; the other
+ * relationship arrays use 50; both match the Next.js `.max(...)` array bounds.
+ */
+function validateTaskShapeFields(body: Record<string, unknown>): TaskValidationIssue | null {
+  if (body.parentTask !== undefined) {
+    const i = validateTaskRelationString(body.parentTask, 'parentTask'); if (i) return i
+  }
+  if (body.npt !== undefined) { const i = validateTaskRelationArray(body.npt, 'npt', 50); if (i) return i }
+  if (body.eht !== undefined) { const i = validateTaskRelationArray(body.eht, 'eht', 50); if (i) return i }
+  if (body.supersedes !== undefined) { const i = validateTaskRelationArray(body.supersedes, 'supersedes', 50); if (i) return i }
+  if (body.supersededBy !== undefined) { const i = validateTaskRelationArray(body.supersededBy, 'supersededBy', 50); if (i) return i }
+  if (body.attachments !== undefined) { const i = validateTaskAttachments(body.attachments); if (i) return i }
+  return null
 }
 
 function getHeader(req: IncomingMessage, name: string): string | null {
@@ -1889,14 +1978,51 @@ const routes: Route[] = [
     }))
   }},
   { method: 'POST', pattern: /^\/api\/v1\/governance\/requests\/([^/]+)\/approve$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    if (!body?.approverAgentId || !body?.password) {
-      sendJson(res, 400, { error: 'Missing required fields: approverAgentId, password' })
+    // SF1 drift-fix — mirror app/api/v1/governance/requests/[id]/approve/route.ts.
+    // The approver MUST be the AUTHENTICATED caller, never a self-asserted body field:
+    // approveCrossHostRequest verifies only the *global* governance password and then
+    // derives the vote + authority class (isManager/isChiefOfStaffAnywhere) entirely from
+    // the approverAgentId. The prior body.approverAgentId fallback let any caller who knew
+    // the password approve *as any MANAGER/COS* (IDOR). Authenticate first, then use only
+    // auth.agentId (this matches the transfers handlers' pattern in the same file).
+    const auth = authenticateAgent(
+      getHeader(req, 'Authorization'),
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
+    )
+    if (auth.error) {
+      sendJson(res, auth.status || 401, { error: auth.error })
       return
     }
-    sendServiceResult(res, await approveCrossHostRequest(params.id, body.approverAgentId, body.password))
+    // MF-013 parity: validate the request id as a UUID before hitting the service.
+    if (!isValidUuid(params.id)) {
+      sendJson(res, 400, { error: 'Invalid request ID format' })
+      return
+    }
+    const body = await readJsonBody(req)
+    if (!body?.password) {
+      sendJson(res, 400, { error: 'Missing required field: password' })
+      return
+    }
+    // Derive the approver from auth ONLY — discard any body.approverAgentId.
+    const approverAgentId = auth.agentId
+    if (!approverAgentId || !isValidUuid(approverAgentId)) {
+      sendJson(res, 401, { error: 'Could not determine approver agent ID from auth' })
+      return
+    }
+    sendServiceResult(res, await approveCrossHostRequest(params.id, approverAgentId, body.password))
   }},
   { method: 'POST', pattern: /^\/api\/v1\/governance\/requests\/([^/]+)\/reject$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // SF1 drift-fix — mirror app/api/v1/governance/requests/[id]/reject/route.ts.
+    // Two auth modes (unchanged from the route): (1) remote host-signature notification
+    // keeps body.rejectorAgentId because the HOST signature is the authority, (2) local
+    // rejection now authenticates the caller and derives the rejector from auth.agentId
+    // ONLY — never the body — closing the same IDOR the approve handler had.
+    // MF-014 parity: validate the request id as a UUID up front.
+    if (!isValidUuid(params.id)) {
+      sendJson(res, 400, { error: 'Invalid request ID format' })
+      return
+    }
     const body = await readJsonBody(req)
     // Accept host-signature auth as alternative for remote rejection notifications
     const hostSignature = getHeader(req, 'X-Host-Signature')
@@ -1919,15 +2045,39 @@ const routes: Route[] = [
       if (!body?.rejectorAgentId) {
         sendJson(res, 400, { error: 'Missing required field: rejectorAgentId' }); return
       }
+      // SF-025 parity: on the host-signed remote path the rejector id IS body-supplied
+      // (the host vouches for it), but it must still be a string + valid UUID.
+      if (typeof body.rejectorAgentId !== 'string' || !isValidUuid(body.rejectorAgentId)) {
+        sendJson(res, 400, { error: 'Invalid rejectorAgentId format' }); return
+      }
       sendServiceResult(res, await receiveRemoteRejection(params.id, hostId, body.rejectorAgentId, body.reason))
       return
     }
-    // Local rejection — requires password
-    if (!body?.rejectorAgentId || !body?.password) {
-      sendJson(res, 400, { error: 'Missing required fields: rejectorAgentId, password' })
+    // Local rejection — requires identity auth + password (mirrors the route).
+    const auth = authenticateAgent(
+      getHeader(req, 'Authorization'),
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
+    )
+    if (auth.error) {
+      sendJson(res, auth.status || 401, { error: auth.error })
       return
     }
-    sendServiceResult(res, await rejectCrossHostRequest(params.id, body.rejectorAgentId, body.password, body.reason))
+    if (!body?.password) {
+      sendJson(res, 400, { error: 'Missing required field: password' })
+      return
+    }
+    if (typeof body.password !== 'string') {
+      sendJson(res, 400, { error: 'password must be a string' })
+      return
+    }
+    // Use ONLY the authenticated agent id — never fall back to body.rejectorAgentId.
+    const rejectorAgentId = auth.agentId
+    if (!rejectorAgentId || !isValidUuid(rejectorAgentId)) {
+      sendJson(res, 401, { error: 'Could not determine rejector agent ID from auth' })
+      return
+    }
+    sendServiceResult(res, await rejectCrossHostRequest(params.id, rejectorAgentId, body.password, body.reason))
   }},
 
   // ── Manager Trust (Layer 4: host-scoped manager authority) ──────────────
@@ -1984,12 +2134,16 @@ const routes: Route[] = [
       sendJson(res, 400, { error: 'priority must be a finite number' })
       return
     }
+    // F3-mirror: blockedBy now uses the exact Next.js bound (string 1..200, max 20)
+    // instead of the looser "array of strings" check — full parity with UpdateTaskSchema.
     if (body.blockedBy !== undefined) {
-      if (!Array.isArray(body.blockedBy) || !body.blockedBy.every((v: unknown) => typeof v === 'string')) {
-        sendJson(res, 400, { error: 'blockedBy must be an array of strings' })
-        return
-      }
+      const i = validateTaskRelationArray(body.blockedBy, 'blockedBy', 20)
+      if (i) { sendJson(res, 400, { error: 'Validation failed', issues: [i] }); return }
     }
+    // F5 + F3-mirror: validate attachments shape + relationship arrays/parentTask with the
+    // same bounds as the Next.js UpdateTaskSchema (drift-free; adds validation only).
+    const shapeIssue = validateTaskShapeFields(body)
+    if (shapeIssue) { sendJson(res, 400, { error: 'Validation failed', issues: [shapeIssue] }); return }
     // Whitelist fields to prevent arbitrary data injection
     const safeParams: Record<string, unknown> = {
       ...(body.subject !== undefined && { subject: String(body.subject) }),
@@ -2082,12 +2236,16 @@ const routes: Route[] = [
       sendJson(res, 400, { error: 'priority must be a finite number' })
       return
     }
+    // F3-mirror: blockedBy now uses the exact Next.js bound (string 1..200, max 20)
+    // instead of the looser "array of strings" check — full parity with CreateTaskSchema.
     if (body.blockedBy !== undefined) {
-      if (!Array.isArray(body.blockedBy) || !body.blockedBy.every((v: unknown) => typeof v === 'string')) {
-        sendJson(res, 400, { error: 'blockedBy must be an array of strings' })
-        return
-      }
+      const i = validateTaskRelationArray(body.blockedBy, 'blockedBy', 20)
+      if (i) { sendJson(res, 400, { error: 'Validation failed', issues: [i] }); return }
     }
+    // F5 + F3-mirror: validate attachments shape + relationship arrays/parentTask with the
+    // same bounds as the Next.js CreateTaskSchema (drift-free; adds validation only).
+    const shapeIssue = validateTaskShapeFields(body)
+    if (shapeIssue) { sendJson(res, 400, { error: 'Validation failed', issues: [shapeIssue] }); return }
     // Whitelist fields to prevent arbitrary data injection
     const safeParams: Record<string, unknown> = {
       subject: String(body.subject ?? ''),
@@ -2726,9 +2884,33 @@ const routes: Route[] = [
     } catch (e) { sendJson(res, 500, { error: String(e) }) }
   }},
   { method: 'DELETE', pattern: /^\/api\/agents\/role-plugins$/, paramNames: [], handler: async (req, res) => {
+    // SF2 drift-fix — mirror app/api/agents/role-plugins/route.ts DELETE, which is
+    // classed strict and gates via enforceAuth + requireSudoToken('DELETE',
+    // '/api/agents/role-plugins'). For an agent that resolves to
+    // authorize(auth, 'manage-skills') (MANAGER-only here, since there is no path target);
+    // a system-owner session passes. The headless router has no sudo layer, so the
+    // verified session cookie IS the user factor (authorize grants when !auth.agentId).
+    const auth = authenticateAgent(
+      getHeader(req, 'Authorization'),
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
+    )
+    if (auth.error) {
+      sendJson(res, auth.status || 401, { error: auth.error })
+      return
+    }
+    const decision = authorize(auth, 'manage-skills')
+    if (!decision.allowed) {
+      sendJson(res, 403, { error: decision.reason || 'Not authorized to manage role-plugins' })
+      return
+    }
     const url = new URL(req.url || '/', `http://${getHeader(req, 'host') || 'localhost'}`)
     const name = url.searchParams.get('name')
     if (!name) return sendJson(res, 400, { error: 'name query parameter is required' })
+    // Guard: reject path traversal and shell metacharacters in plugin name (route parity).
+    if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+      return sendJson(res, 400, { error: 'Invalid plugin name — only alphanumeric, hyphens, and underscores allowed' })
+    }
     // Guard: prevent deletion of default marketplace role plugins
     if (Object.keys(PREDEFINED_ROLE_PLUGINS).includes(name)) {
       return sendJson(res, 403, { error: 'Cannot delete default marketplace role plugins' })
@@ -2739,6 +2921,26 @@ const routes: Route[] = [
     } catch (e) { sendJson(res, 500, { error: String(e) }) }
   }},
   { method: 'POST', pattern: /^\/api\/agents\/role-plugins\/install$/, paramNames: [], handler: async (req, res) => {
+    // SF2 drift-fix — mirror app/api/agents/role-plugins/install/route.ts POST, which is
+    // classed strict and gates via requireSudoToken('POST', '/api/agents/role-plugins/install')
+    // + requireAuth. For an agent that resolves to authorize(auth, 'manage-skills')
+    // (MANAGER-only here — the route has no path target); a system-owner session passes.
+    // Without this, a forged structural bearer could install a plugin into an arbitrary
+    // agentDir with no auth at all.
+    const auth = authenticateAgent(
+      getHeader(req, 'Authorization'),
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
+    )
+    if (auth.error) {
+      sendJson(res, auth.status || 401, { error: auth.error })
+      return
+    }
+    const decision = authorize(auth, 'manage-skills')
+    if (!decision.allowed) {
+      sendJson(res, 403, { error: decision.reason || 'Not authorized to install role-plugins' })
+      return
+    }
     const body = await readJsonBody(req)
     if (!body.pluginName || !body.agentDir) return sendJson(res, 400, { error: 'pluginName and agentDir are required' })
     try {
@@ -2755,6 +2957,25 @@ const routes: Route[] = [
     } catch (e) { sendJson(res, 500, { error: String(e) }) }
   }},
   { method: 'DELETE', pattern: /^\/api\/agents\/role-plugins\/install$/, paramNames: [], handler: async (req, res) => {
+    // SF2 drift-fix — mirror app/api/agents/role-plugins/install/route.ts DELETE, which is
+    // classed strict and gates via requireSudoToken('DELETE', '/api/agents/role-plugins/install')
+    // + requireAuth. For an agent that resolves to authorize(auth, 'manage-skills')
+    // (MANAGER-only here — no path target); a system-owner session passes. Without this, a
+    // forged structural bearer could uninstall a plugin from an arbitrary agentDir.
+    const auth = authenticateAgent(
+      getHeader(req, 'Authorization'),
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
+    )
+    if (auth.error) {
+      sendJson(res, auth.status || 401, { error: auth.error })
+      return
+    }
+    const decision = authorize(auth, 'manage-skills')
+    if (!decision.allowed) {
+      sendJson(res, 403, { error: decision.reason || 'Not authorized to uninstall role-plugins' })
+      return
+    }
     const body = await readJsonBody(req)
     if (!body.pluginName || !body.agentDir) return sendJson(res, 400, { error: 'pluginName and agentDir are required' })
     try {

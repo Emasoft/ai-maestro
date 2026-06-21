@@ -61,54 +61,114 @@ export function trddMetadataLabels(data: {
   implementationCommits?: string[]
 }): string[] {
   const labels: string[] = []
-  if (data.severity) labels.push(`severity:${data.severity}`)
-  if (data.effort) labels.push(`effort:${data.effort}`)
-  if (data.parentTask) labels.push(`parent:${data.parentTask}`)
-  if (data.releaseVia) labels.push(`release-via:${data.releaseVia}`)
-  for (const ref of data.npt ?? []) labels.push(`npt:${ref}`)
-  for (const ref of data.eht ?? []) labels.push(`eht:${ref}`)
-  for (const ref of data.supersedes ?? []) labels.push(`supersedes:${ref}`)
-  for (const rule of data.relevantRules ?? []) labels.push(`rule:${rule}`)
-  if (data.reviewResult) labels.push(`review:${data.reviewResult}`)
-  if (data.lastTestResult) labels.push(`last-test:${data.lastTestResult}`)
-  if (data.publishedVersion) labels.push(`published-version:${data.publishedVersion}`)
-  if (data.liveSince) labels.push(`live-since:${data.liveSince}`)
-  if (data.dueDate) labels.push(`due:${data.dueDate}`)
-  for (const ref of data.supersededBy ?? []) labels.push(`superseded-by:${ref}`)
-  // Short-SHA (≤12) keeps `impl-commit:<sha>` within GitHub's 50-char label limit.
-  for (const sha of data.implementationCommits ?? []) labels.push(`impl-commit:${sha.slice(0, 12)}`)
+  // GitHub caps a label name at 50 chars; a value longer than (50 - prefix length)
+  // would make `gh issue create` exit non-zero (aborting create) or be silently
+  // dropped on update. Cap EVERY value defensively so no prefixed label can ever
+  // overflow — not just impl-commit:. The Zod schemas permit values (e.g.
+  // publishedVersion/liveSince/dueDate up to 64 chars, a 36-char UUID for
+  // superseded-by:) that would otherwise breach the cap. (F4)
+  const push = (prefix: string, value: string): void => {
+    labels.push(prefix + value.slice(0, 50 - prefix.length))
+  }
+  if (data.severity) push('severity:', data.severity)
+  if (data.effort) push('effort:', data.effort)
+  if (data.parentTask) push('parent:', data.parentTask)
+  if (data.releaseVia) push('release-via:', data.releaseVia)
+  for (const ref of data.npt ?? []) push('npt:', ref)
+  for (const ref of data.eht ?? []) push('eht:', ref)
+  for (const ref of data.supersedes ?? []) push('supersedes:', ref)
+  for (const rule of data.relevantRules ?? []) push('rule:', rule)
+  if (data.reviewResult) push('review:', data.reviewResult)
+  if (data.lastTestResult) push('last-test:', data.lastTestResult)
+  if (data.publishedVersion) push('published-version:', data.publishedVersion)
+  if (data.liveSince) push('live-since:', data.liveSince)
+  if (data.dueDate) push('due:', data.dueDate)
+  for (const ref of data.supersededBy ?? []) push('superseded-by:', ref)
+  // Short-SHA (≤12) keeps `impl-commit:<sha>` readable; the cap above is the backstop.
+  for (const sha of data.implementationCommits ?? []) push('impl-commit:', sha.slice(0, 12))
   return labels
 }
 
+// The attachments block is encoded LOSSLESSLY (F2). Free markdown links
+// ("- [name](url)") drop attachments whose URL contains ')' or whose name
+// contains ']' (the parse regex anchors fail), and cannot carry `kind` at all.
+// Instead we serialise the whole attachments array to JSON, base64-encode it, and
+// wrap it in an HTML comment under the "## Attachments" heading. base64 is the key
+// safety choice: its alphabet (A–Za–z0–9+/=) can never contain '-->' or any markdown
+// metacharacter, so an arbitrary url/name/kind (incl. ')', ']', '-->', newlines)
+// round-trips exactly and the comment can never be closed prematurely. The HTML
+// comment is invisible in GitHub's rendered view; the "## Attachments" heading is
+// kept so a human sees the section exists and the acceptance-criteria parser's
+// "next ## heading" terminator still fires.
+const ATTACHMENTS_COMMENT_RE = /<!--\s*ai-maestro-attachments:([A-Za-z0-9+/=]*)\s*-->/
+
 /**
  * Split an issue body into prose + the structured "## Attachments" section
- * (TRDD-95d23f3b). Attachments are too long/structured for labels, so they live in
- * the body as markdown links ("- [name](url)" or a bare "- https://…"); the prose is
- * everything else. Inverse of buildBodyWithAttachments — the two keep the body and the
- * Task.attachments field in sync across create/read/update.
+ * (TRDD-95d23f3b). Inverse of buildBodyWithAttachments — the two keep the body and
+ * the Task.attachments field in sync across create/read/update. Parses the lossless
+ * base64-JSON HTML-comment form first; falls back to the LEGACY markdown-link form
+ * ("- [name](url)" / bare "- https://…") so attachments persisted by older code are
+ * still read back (and re-emitted in the new form on the next save).
  */
 export function splitBodyAttachments(body: string): { prose: string; attachments: NonNullable<Task['attachments']> } {
   const attachments: NonNullable<Task['attachments']> = []
-  const match = body.match(/##\s*Attachments\s*\n([\s\S]*?)(?=\n##\s|\n---|$)/i)
-  if (match) {
-    for (const raw of match[1].split('\n')) {
-      const line = raw.replace(/^\s*-\s*/, '').trim()
-      if (!line) continue
-      const md = line.match(/^\[([^\]]*)\]\(([^)]+)\)$/)
-      if (md) attachments.push({ url: md[2].trim(), name: md[1].trim() || undefined })
-      else if (/^https?:\/\//i.test(line)) attachments.push({ url: line })
+
+  // 1. Lossless form: base64-encoded JSON inside an HTML comment.
+  const enc = body.match(ATTACHMENTS_COMMENT_RE)
+  if (enc) {
+    try {
+      const json = Buffer.from(enc[1], 'base64').toString('utf-8')
+      const parsed = JSON.parse(json)
+      if (Array.isArray(parsed)) {
+        for (const a of parsed) {
+          // Only keep well-formed entries; a non-string url is unusable.
+          if (a && typeof a === 'object' && typeof a.url === 'string') {
+            const att: NonNullable<Task['attachments']>[number] = { url: a.url }
+            if (typeof a.name === 'string') att.name = a.name
+            if (typeof a.kind === 'string') att.kind = a.kind
+            attachments.push(att)
+          }
+        }
+      }
+    } catch {
+      // Corrupt/garbage comment — treat as no attachments rather than throwing.
+    }
+  } else {
+    // 2. Legacy markdown-link form (read back-compat for already-persisted issues).
+    const match = body.match(/##\s*Attachments\s*\n([\s\S]*?)(?=\n##\s|\n---|$)/i)
+    if (match) {
+      for (const raw of match[1].split('\n')) {
+        const line = raw.replace(/^\s*-\s*/, '').trim()
+        if (!line) continue
+        const md = line.match(/^\[([^\]]*)\]\(([^)]+)\)$/)
+        if (md) attachments.push({ url: md[2].trim(), name: md[1].trim() || undefined })
+        else if (/^https?:\/\//i.test(line)) attachments.push({ url: line })
+      }
     }
   }
+
+  // Strip the whole "## Attachments" section (heading + body/comment) from the prose.
   const prose = body.replace(/\n*##\s*Attachments\s*\n[\s\S]*?(?=\n##\s|\n---|$)/i, '').trimEnd()
   return { prose, attachments }
 }
 
-/** Build an issue body from prose + attachments (inverse of splitBodyAttachments). */
+/**
+ * Build an issue body from prose + attachments (inverse of splitBodyAttachments).
+ * Emits the lossless base64-JSON HTML-comment form so arbitrary url/name/kind (F2)
+ * survive the round-trip.
+ */
 export function buildBodyWithAttachments(prose: string, attachments?: Task['attachments']): string {
   let body = prose || ''
   if (attachments?.length) {
-    const lines = attachments.map(a => `- [${a.name || a.url}](${a.url})`).join('\n')
-    body = (body ? `${body}\n\n` : '') + `## Attachments\n${lines}`
+    // Normalise to {url,name?,kind?} so only the meaningful fields are serialised.
+    const slim = attachments.map(a => {
+      const o: { url: string; name?: string; kind?: string } = { url: a.url }
+      if (a.name !== undefined) o.name = a.name
+      if (a.kind !== undefined) o.kind = a.kind
+      return o
+    })
+    const encoded = Buffer.from(JSON.stringify(slim), 'utf-8').toString('base64')
+    body = (body ? `${body}\n\n` : '') + `## Attachments\n<!-- ai-maestro-attachments:${encoded} -->`
   }
   return body
 }
@@ -133,10 +193,27 @@ export interface ParsedTrddMetadata {
   dueDate?: string
 }
 
+// Known review-result values the `review:` label is allowed to carry. The decoder
+// only consumes a `review:` label whose value is in this set, so a user's plain
+// label like `review:done` (not a review result) is NOT swallowed as TRDD metadata
+// and stays a display label (F6). These are the values trddMetadataLabels actually
+// emits across the codebase; widen this set if a new review-result value is added.
+const KNOWN_REVIEW_RESULTS = new Set([
+  'pass', 'fail', 'approved', 'rejected', 'changes-requested', 'partial',
+])
+
 /**
  * Extract TRDD-v2 metadata from a label, mutating the accumulator. Returns true
  * when the label was a TRDD metadata label (so the caller can drop it from the
  * display labels), false otherwise.
+ *
+ * The generic `review:` / `due:` prefixes collide with plausible user labels
+ * (`review:done`, `due:soon`). To avoid silently swallowing a real label, those two
+ * are SHAPE-VALIDATED before being consumed (review: must be a known result, due:
+ * must parse as a date); a value that fails validation returns false and is left as
+ * a display label. Chosen over namespacing the prefixes because renaming the prefix
+ * would orphan every already-persisted `review:`/`due:` label on existing issues —
+ * shape-validation only affects the rare genuine collision. (F6)
  */
 export function consumeTrddMetadataLabel(label: string, acc: ParsedTrddMetadata): boolean {
   const lower = label.toLowerCase()
@@ -157,7 +234,10 @@ export function consumeTrddMetadataLabel(label: string, acc: ParsedTrddMetadata)
   } else if (lower.startsWith('rule:')) {
     const v = label.slice(5).trim(); if (v) acc.relevantRules.push(v)
   } else if (lower.startsWith('review:')) {
-    acc.reviewResult = label.slice(7).trim()
+    // Only consume a known review result; otherwise it's a user label — leave it.
+    const v = label.slice(7).trim()
+    if (!KNOWN_REVIEW_RESULTS.has(v.toLowerCase())) return false
+    acc.reviewResult = v
   } else if (lower.startsWith('last-test:')) {
     acc.lastTestResult = label.slice(10).trim() as Task['lastTestResult']
   } else if (lower.startsWith('published-version:')) {
@@ -165,7 +245,10 @@ export function consumeTrddMetadataLabel(label: string, acc: ParsedTrddMetadata)
   } else if (lower.startsWith('live-since:')) {
     acc.liveSince = label.slice(11).trim()
   } else if (lower.startsWith('due:')) {
-    acc.dueDate = label.slice(4).trim()
+    // Only consume a parseable date; otherwise it's a user label — leave it.
+    const v = label.slice(4).trim()
+    if (!v || Number.isNaN(Date.parse(v))) return false
+    acc.dueDate = v
   } else if (lower.startsWith('superseded-by:')) {
     const v = label.slice(14).trim(); if (v) acc.supersededBy.push(v)
   } else if (lower.startsWith('impl-commit:')) {
@@ -535,6 +618,13 @@ function mapProjectItemToTask(
   let handoffDoc: string | undefined
   let attachments: Task['attachments'] | undefined
   const body = item.content.body || ''
+  // Split body into prose + attachments ONCE; reuse for both `attachments` and the
+  // read-back `description`. The prose is the clean description with the
+  // "## Attachments" section removed (F1) — returning the raw body instead would
+  // make create→read asymmetric and, because updateTask re-runs the prose back
+  // through buildBodyWithAttachments, would APPEND a duplicate "## Attachments"
+  // section on every subsequent save (unbounded growth + double display).
+  const { prose: descriptionProse, attachments: parsedAtts } = splitBodyAttachments(body)
   if (body) {
     // Parse acceptance criteria section
     const acMatch = body.match(/##\s*Acceptance\s+Criteria\s*\n([\s\S]*?)(?=\n##|\n---|$)/i)
@@ -549,8 +639,7 @@ function mapProjectItemToTask(
     const handoffMatch = body.match(/(?:handoff|handoff[- ]doc(?:ument)?)\s*:\s*(.+)/i)
     if (handoffMatch) handoffDoc = handoffMatch[1].trim()
 
-    // Parse attachments from the body's "## Attachments" section (TRDD-95d23f3b).
-    const parsedAtts = splitBodyAttachments(body).attachments
+    // Attachments parsed from the body's "## Attachments" section (TRDD-95d23f3b).
     if (parsedAtts.length > 0) attachments = parsedAtts
 
     // Parse blockedBy from issue body references: "Blocked by #42", "Depends on #13"
@@ -590,7 +679,10 @@ function mapProjectItemToTask(
     id: item.id, // GitHub Project item node_id as task ID
     teamId,
     subject: item.content.title,
-    description: body || undefined,
+    // Clean prose only — the "## Attachments" section is carried in `attachments`,
+    // not in `description`, so create→read is symmetric and re-saves don't duplicate
+    // the section (F1).
+    description: descriptionProse || undefined,
     status,
     assigneeAgentId,
     blockedBy,

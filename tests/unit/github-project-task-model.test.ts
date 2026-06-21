@@ -254,7 +254,7 @@ describe('splitBodyAttachments — parse the "## Attachments" markdown section',
 })
 
 describe('buildBodyWithAttachments <-> splitBodyAttachments', () => {
-  it('round-trips prose + attachments through body and back', () => {
+  it('round-trips prose + attachments through body and back (lossless)', () => {
     const prose = 'Implement the extended task model.\n\nDetails follow.'
     const attachments = [
       { url: 'https://example.com/design.pdf', name: 'Design doc' },
@@ -264,21 +264,144 @@ describe('buildBodyWithAttachments <-> splitBodyAttachments', () => {
     const split = splitBodyAttachments(body)
 
     expect(split.prose).toBe(prose)
-    // buildBodyWithAttachments labels a name-less attachment with its URL, so the
-    // rebuilt link is "- [url](url)" which splitBodyAttachments parses back with
-    // name === url. Assert the URLs match and the named one keeps its name.
-    expect(split.attachments).toHaveLength(2)
-    expect(split.attachments[0]).toEqual({
-      url: 'https://example.com/design.pdf',
-      name: 'Design doc',
-    })
-    expect(split.attachments[1].url).toBe('https://example.com/raw.zip')
-    expect(split.attachments[1].name).toBe('https://example.com/raw.zip')
+    // The lossless JSON encoding preserves attachments EXACTLY: a name-less
+    // attachment round-trips with no name (the old markdown form lossily set
+    // name === url; the JSON form does not).
+    expect(split.attachments).toEqual([
+      { url: 'https://example.com/design.pdf', name: 'Design doc' },
+      { url: 'https://example.com/raw.zip' },
+    ])
   })
 
   it('returns the prose unchanged when there are no attachments', () => {
     const prose = 'Prose with no attachments.'
     expect(buildBodyWithAttachments(prose)).toBe(prose)
     expect(buildBodyWithAttachments(prose, [])).toBe(prose)
+  })
+})
+
+describe('attachments round-trip — adversarial inputs (F2: lossless)', () => {
+  it('preserves a URL containing ")" (was dropped by the markdown-link parser)', () => {
+    // Real Wikipedia/Jira/SharePoint URLs routinely contain parentheses; the old
+    // "- [name](url)" regex anchored on the first ")" so the whole attachment vanished.
+    const attachments = [{ url: 'https://en.wikipedia.org/wiki/Foo_(disambiguation)' }]
+    const body = buildBodyWithAttachments('Prose.', attachments)
+    expect(splitBodyAttachments(body).attachments).toEqual(attachments)
+  })
+
+  it('preserves a name containing "]" (was dropped by the markdown-link parser)', () => {
+    const attachments = [{ url: 'https://example.com/x', name: 'a]b [draft]' }]
+    const body = buildBodyWithAttachments('Prose.', attachments)
+    expect(splitBodyAttachments(body).attachments).toEqual(attachments)
+  })
+
+  it('preserves the `kind` field (was silently dropped on the GitHub path)', () => {
+    const attachments = [
+      { url: 'https://github.com/o/r/pull/1', name: 'PR', kind: 'pr' },
+      { url: 'https://example.com/log.txt', kind: 'log' },
+    ]
+    const body = buildBodyWithAttachments('Prose.', attachments)
+    expect(splitBodyAttachments(body).attachments).toEqual(attachments)
+  })
+
+  it('survives values that would break a naive HTML comment ("-->", newlines, quotes)', () => {
+    // base64 of the JSON means no value can prematurely close the <!-- --> comment.
+    const attachments = [
+      { url: 'https://example.com/a?x="1"&y=2', name: 'weird --> name\nwith newline', kind: 'doc' },
+    ]
+    const body = buildBodyWithAttachments('Prose.', attachments)
+    expect(splitBodyAttachments(body).attachments).toEqual(attachments)
+  })
+
+  it('still reads the LEGACY markdown-link form (back-compat for already-persisted issues)', () => {
+    // Issues persisted by older code carry "- [name](url)" lines, not the JSON comment.
+    const legacyBody = ['Prose.', '', '## Attachments', '- [Spec](https://example.com/spec.md)'].join('\n')
+    expect(splitBodyAttachments(legacyBody).attachments).toEqual([
+      { url: 'https://example.com/spec.md', name: 'Spec' },
+    ])
+  })
+})
+
+describe('label overflow — values are capped to GitHub\'s 50-char limit (F4)', () => {
+  it('caps a 64-char publishedVersion so the published-version: label stays <= 50 chars', () => {
+    const longVersion = 'v'.repeat(64) // Zod permits up to 64; would overflow once prefixed
+    expect(longVersion).toHaveLength(64)
+    const labels = trddMetadataLabels({ publishedVersion: longVersion })
+    const verLabel = labels.find((l) => l.startsWith('published-version:'))!
+    expect(verLabel.length).toBeLessThanOrEqual(50)
+  })
+
+  it('caps EVERY prefixed label value (no label can exceed 50 chars)', () => {
+    const labels = trddMetadataLabels({
+      severity: 'CRITICAL',
+      effort: 'XL',
+      parentTask: 'X'.repeat(80),
+      npt: ['Y'.repeat(80)],
+      eht: ['Z'.repeat(80)],
+      supersedes: ['A'.repeat(80)],
+      supersededBy: ['B'.repeat(80)],
+      relevantRules: ['C'.repeat(80)],
+      releaseVia: 'publish',
+      reviewResult: 'approved',
+      lastTestResult: 'pass',
+      publishedVersion: 'D'.repeat(80),
+      liveSince: 'E'.repeat(80),
+      dueDate: 'F'.repeat(80),
+      implementationCommits: ['G'.repeat(80)],
+    })
+    expect(labels.length).toBeGreaterThan(0)
+    for (const l of labels) {
+      expect(l.length).toBeLessThanOrEqual(50)
+    }
+  })
+})
+
+describe('read-back description is clean prose (F1)', () => {
+  // The read path (mapProjectItemToTask) sets description = splitBodyAttachments(body).prose
+  // and create persists buildBodyWithAttachments(prose, atts), so this helper-level
+  // identity IS the create->read description equality and proves re-saves don't append
+  // a duplicate "## Attachments" section.
+  it('create->read description equality: split(build(prose, atts)).prose === prose', () => {
+    const prose = 'Do the thing.\n\nWith detail.'
+    const atts = [{ url: 'https://example.com/d.pdf', name: 'Design' }]
+    expect(splitBodyAttachments(buildBodyWithAttachments(prose, atts)).prose).toBe(prose)
+  })
+
+  it('build->split->build is idempotent (no compounding "## Attachments" sections)', () => {
+    const prose = 'Do the thing.'
+    const atts = [{ url: 'https://example.com/d.pdf', name: 'Design', kind: 'doc' }]
+    const body1 = buildBodyWithAttachments(prose, atts)
+    const split1 = splitBodyAttachments(body1)
+    // Re-encode the read-back halves — must reproduce the SAME body (fixed point).
+    const body2 = buildBodyWithAttachments(split1.prose, split1.attachments)
+    expect(body2).toBe(body1)
+    // And exactly one Attachments section after the round-trip, never two.
+    expect((body2.match(/##\s*Attachments/g) || []).length).toBe(1)
+  })
+})
+
+describe('generic prefix collisions are not swallowed (F6)', () => {
+  it('leaves a user label review:done untouched (not a known review result)', () => {
+    const acc = freshAcc()
+    expect(consumeTrddMetadataLabel('review:done', acc)).toBe(false)
+    expect(acc.reviewResult).toBeUndefined()
+  })
+
+  it('still consumes a real review result (review:approved)', () => {
+    const acc = freshAcc()
+    expect(consumeTrddMetadataLabel('review:approved', acc)).toBe(true)
+    expect(acc.reviewResult).toBe('approved')
+  })
+
+  it('leaves a user label due:soon untouched (not a parseable date)', () => {
+    const acc = freshAcc()
+    expect(consumeTrddMetadataLabel('due:soon', acc)).toBe(false)
+    expect(acc.dueDate).toBeUndefined()
+  })
+
+  it('still consumes a real date (due:2026-07-01)', () => {
+    const acc = freshAcc()
+    expect(consumeTrddMetadataLabel('due:2026-07-01', acc)).toBe(true)
+    expect(acc.dueDate).toBe('2026-07-01')
   })
 })

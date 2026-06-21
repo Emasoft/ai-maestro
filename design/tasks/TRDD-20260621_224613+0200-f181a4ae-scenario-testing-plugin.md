@@ -1,9 +1,9 @@
 ---
 trdd-id: f181a4ae-36a2-4524-abb1-3eab554999d9
 title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-plugin (dev-browser integrated)
-column: design
+column: dev
 created: 2026-06-21T22:46:13+0200
-updated: 2026-06-22T00:04:50+0200
+updated: 2026-06-22T00:21:40+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -35,8 +35,8 @@ captured durably in the **[[role-plugin-structure-spec]]** wikimem + `reports/we
    (`[agent].path` + top-level `[skills]` tiers). The two are mutually-invalid; PSS is a creation-time artifact.
 3. **`prefix = "amwst-"`** (kebab for skills/commands/subagents/hooks; `amwst_` underscore for scripts); the
    main-agent is the UNPREFIXED `web-scenario-tester-main-agent`.
-4. **OPEN DECISION (blocks build):** `compatible-titles` must be one of the 8 governance titles —
-   **MEMBER** (team worker) vs **AUTONOMOUS** (standalone tool). Needs USER/MANAGER pick; it is NOT a new title.
+4. **TITLE RESOLVED (USER 2026-06-22): `compatible-titles = ["MEMBER"]`** — "a scenario-tester agent is
+   a member of the team." Build is UNBLOCKED.
 Decision-1 below (dev-browser approach B) STILL HOLDS. Decision-2's 'generic harness vs project-specific'
 framing is SUPERSEDED by the role-plugin shape (the dev-browser dependency + the 14 scenario rules still
 apply, now bundled INTO the role-plugin as `amwst-` skills + the main-agent persona).
@@ -44,6 +44,27 @@ apply, now bundled INTO the role-plugin as `amwst-` skills + the main-agent pers
 **PLAN (original generic-harness framing — partly SUPERSEDED by the pivot above).** From the user's request:
 package the scenario-UI-testing skills into a separate plugin, integrate the dev-browser logic + all the
 scenario rules. Two delegated opus design agents investigated; this TRDD records the decisions.
+
+**BUILD METHOD (USER-specified 2026-06-22) — how to package + publish:**
+- **Location:** build in a LOCAL folder `~/Code/ai-maestro-web-scenario-tester/` (USER-chosen; a real dev
+  checkout, NOT /tmp). PLUGIN name = `web-scenario-tester`; REPO/dir = `ai-maestro-web-scenario-tester`.
+- **Packaging recipe** (generic plugin-build method — see the [[plugin-build-from-extensions]] USER memory,
+  VERIFIED against the Anthropic plugin docs): COPY every scenario extension (from BOTH `.claude/` AND
+  `tests/scenarios/`, + verify nothing stranded in `~/.claude/`) into the plugin; de-path absolute paths →
+  `${CLAUDE_PLUGIN_ROOT}/…` (ephemeral, read-only — bundled scripts/`bin/`); first-run dep installs →
+  `${CLAUDE_PLUGIN_DATA}` (persistent); precompiled binaries → `bin/`; make cross-platform; write README +
+  optional docs/; declare plugin→plugin `dependencies` in plugin.json (grep every file for other-plugin usage —
+  at minimum `dev-browser`; check chrome-devtools / llm-externalizer / pss / cpv).
+- **Inventory so far (`.claude/`, project-scope):** 4 agents (scenario-runner, scenario-improvement-implementer,
+  parallel-tester-agent, parallel-worker-agent); 6 skills (create-scenario, edit-scenario,
+  implement-scenarios-proposals, improve-scenario, run-scenarios-batch, scenarios-rules); 1 rule; 3 scripts.
+  STILL TO INVENTORY: `tests/scenarios/` (SCENARIOS_TESTS_RULES.md, scripts/{state-machine-tick,scenario-setup,
+  scenario-restore,compress-screenshots}.sh, dev-browser-helpers/aim-helpers.sh, example SCEN-*.scen.md) + the
+  3 gaps (run-scenario-test skill, init-scenarios-folder.sh, scenarios.config.json).
+- **Publish (USER-gated, LAST step):** use the **CPV plugin** (`claude-plugins-validation`) for BOTH the
+  publish-pipeline CONFIG (publish.py + CI workflows + git hooks — via plugin-creator / canonical-pipeline /
+  setup-plugin-repo) AND the publish into the `Emasoft/ai-maestro-plugins` marketplace (CPV's publish agent).
+  Do NOT hand-roll the pipeline; do NOT publish without USER approval.
 
 **Durable evidence:**
 - `reports/scenario-plugin-devbrowser/20260621_223542+0200-devbrowser-integration-options.md`

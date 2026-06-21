@@ -2849,15 +2849,33 @@ export async function ChangeTitle(
             }
           } else if (targetPluginName && activeRolePlugins.length === 0) {
             // R9.13: a role-plugin was required but the install left none active.
-            await enforceRoleOrHibernate()
+            // (Recovery runs in the single post-block re-scan below, which covers
+            // this exit AND the >1 / MISMATCH reinstall-fail exits uniformly.)
+            ops.push(`G17: 0 role-plugins active but "${targetPluginName}" required — R9.13 recovery runs below.`)
           } else {
             ops.push(`G17: Plugin state consistent (${activeRolePlugins.length} role-plugin(s))`)
           }
         } else if (targetPluginName) {
           // settings.local.json absent but a role-plugin was required → 0 active.
-          await enforceRoleOrHibernate()
+          // (Recovery runs in the single post-block re-scan below.)
+          ops.push(`G17: no settings.local.json but "${targetPluginName}" required — R9.13 recovery runs below.`)
         } else {
           ops.push(`G17: No settings.local.json — plugin state clean`)
+        }
+        // R9.13 post-block enforcement — a SINGLE re-scan covering EVERY G17 exit
+        // above. The >1 and MISMATCH branches uninstall-then-reinstall with a
+        // swallowed .catch(); a transient reinstall failure there would otherwise
+        // leave a titled agent with 0 role-plugins — WORSE than a no-op, since the
+        // prior plugin was already uninstalled. The 0-active and no-settings exits
+        // start at 0. Re-scanning once here and running the shared recovery means NO
+        // G17 exit can leave a titled agent role-less (R9.13). The per-branch recovery
+        // this replaces covered only 2 of the 4 zero-active exits — gap found by
+        // adversarial verification of TRDD-51ed3b0b.
+        if (targetPluginName) {
+          const finalSettings = await loadJsonSafe(localSettings) as Record<string, Record<string, unknown>>
+          const finalEp = (finalSettings.enabledPlugins || {}) as Record<string, boolean>
+          const finalActive = Object.keys(finalEp).filter(k => Object.values(TITLE_PLUGIN_MAP).includes(k.split('@')[0]))
+          if (finalActive.length === 0) await enforceRoleOrHibernate()
         }
       } catch {
         ops.push(`G17: Plugin verification skipped (read error)`)

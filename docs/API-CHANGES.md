@@ -370,6 +370,16 @@ changed. `tsc --noEmit` clean; full unit suite **1858 passed / 0 failed**; the
 G17 case in `tests/services/element-management-assistant-title.test.ts` was
 RED-verified against the unfixed gate first, then green.
 
+**Completeness fix (same day, MAJOR — found by adversarial verification):** the
+first cut wired the recovery into only 2 of Gate 17's 4 zero-active exits; the
+`>1 active` and `==1 MISMATCH` branches (which uninstall-then-reinstall with a
+swallowed error) could still leave a titled agent role-less on a transient
+reinstall failure. The recovery is now a **single unconditional post-block
+re-scan** after the whole branch chain, so EVERY Gate 17 exit converges on the one
+R9.13 recovery point. Plugin impact is unchanged (Gate 17 enforces R9.13); the
+enforcement is now exit-complete. Full unit suite **1867 passed / 0 failed** after
+the completeness fix (+1 test for the existsSync=true exit).
+
 ## 11. server.mjs full-mode auth gate now deep-validates the session cookie (2026-06-21)
 
 `TRDD-ba9d6df2`. `server.mjs`'s two full-mode credential gates — the inline

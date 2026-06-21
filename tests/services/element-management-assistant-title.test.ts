@@ -333,6 +333,43 @@ describe('element-management — ChangeTitle G17 R9.13 recovery (titled-but-role
     expect(result.operations.some(o => /G17:.*R9\.13/.test(o))).toBe(true)
     expect(result.operations.some(o => /G17: Plugin state consistent \(0 role-plugin/.test(o))).toBe(false)
   })
+
+  it('G17: settings.local.json PRESENT but 0 role-plugins → the single post-block re-scan recovers (the existsSync=true exit)', async () => {
+    // The original G17 fix wired recovery into only 2 of 4 zero-active exits; the
+    // >1 and MISMATCH reinstall-fail exits (uninstall-then-reinstall with a
+    // swallowed .catch) had none. The fix replaced the per-branch calls with ONE
+    // UNCONDITIONAL post-block re-scan, so every exit falls through to the same
+    // recovery. The prior test drives existsSync=FALSE (no-settings); this drives
+    // existsSync=TRUE (a settings.local.json that ends with 0 role-plugins) — the
+    // with-settings entry the prior test never exercised — and asserts the post-block
+    // re-scan still enforces R9.13 (roleMissing=true). The recovery here comes ONLY
+    // from the post-block (the per-branch call was removed), so this guards the
+    // refactor. Gap + test gap found by adversarial verification of TRDD-51ed3b0b.
+    const fs = await import('fs')
+    const fsp = await import('fs/promises')
+    // existsSync→true ONLY for settings.local.json (other paths stay false, so the
+    // registry-json readFileSync view and the rest of the pipeline are unaffected);
+    // readFile returns a settings file with zero role-plugins.
+    vi.mocked(fs.existsSync).mockImplementation((p: unknown) => typeof p === 'string' && p.includes('settings.local.json'))
+    vi.mocked(fsp.readFile).mockImplementation(async (p: unknown) => (typeof p === 'string' && p.includes('settings.local.json')) ? '{"enabledPlugins":{}}' : '')
+    try {
+      seedAgent('g17-roleless-2', 'autonomous')
+      const { ChangeTitle } = await import('@/services/element-management-service')
+      const result = await ChangeTitle('g17-roleless-2', 'assistant', {
+        authContext: managerCtx,
+        skipRestart: true,
+      })
+      expect(result.success).toBe(true)
+      // The single post-block R9.13 re-scan recovered on the with-settings exit.
+      expect(mockUpdateAgent).toHaveBeenCalledWith('g17-roleless-2', { roleMissing: true })
+      expect(result.operations.some(o => /G17:.*R9\.13/.test(o))).toBe(true)
+    } finally {
+      // clearAllMocks() clears calls but NOT implementations — restore the module
+      // defaults so the existsSync/readFile leak cannot affect the DeleteAgent suite.
+      vi.mocked(fs.existsSync).mockReturnValue(false)
+      vi.mocked(fsp.readFile).mockResolvedValue('')
+    }
+  })
 })
 
 describe('element-management — DeleteAgent ASSISTANT independent-delete block (R39.6)', () => {

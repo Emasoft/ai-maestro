@@ -1487,6 +1487,24 @@ export async function setKanbanConfig(teamId: string, columns: KanbanColumnConfi
   if (!access.allowed) {
     return { error: access.reason || 'Access denied', status: 403 }
   }
+  // GOV-AUDIT fix (2026-06-21): kanban-config WRITE is privileged — the column
+  // set carries each column's move-permission roles (who may move cards into it),
+  // so letting any team MEMBER rewrite it is a privilege gap. Mirror the
+  // kanban/items POST RBAC EXACTLY (only ORCHESTRATOR/COS/MANAGER agents may
+  // write; the web-UI/system-owner path has no requestingAgentId and is allowed,
+  // already authorized by checkTeamAccess above). Placing the gate in the service
+  // closes it for BOTH the Next.js route and the headless router (no FULL-vs-
+  // headless drift), which is why it belongs here, not in the route handler.
+  if (requestingAgentId) {
+    const { isManager, isOrchestrator, isChiefOfStaff } = await import('@/lib/governance')
+    const isWriteAllowed =
+      isManager(requestingAgentId) ||
+      isOrchestrator(requestingAgentId, teamId) ||
+      isChiefOfStaff(requestingAgentId, teamId)
+    if (!isWriteAllowed) {
+      return { error: 'Only ORCHESTRATOR, COS, or MANAGER can modify kanban config', status: 403 }
+    }
+  }
   if (!Array.isArray(columns) || columns.length === 0) {
     return { error: 'columns must be a non-empty array', status: 400 }
   }

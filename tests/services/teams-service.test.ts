@@ -88,6 +88,10 @@ vi.mock('@/lib/governance', () => ({
   getManagerId: vi.fn(() => 'test-manager-id'),
   isManager: vi.fn(() => false),
   isChiefOfStaffAnywhere: vi.fn(() => false),
+  // isOrchestrator/isChiefOfStaff back the GOV-AUDIT setKanbanConfig RBAC gate
+  // (only ORCHESTRATOR/COS/MANAGER agents may rewrite kanban column config).
+  isOrchestrator: vi.fn(() => false),
+  isChiefOfStaff: vi.fn(() => false),
   verifyPassword: vi.fn(() => Promise.resolve(true)),
   loadGovernance: vi.fn(() => ({ passwordHash: null, managerId: 'test-manager-id' })),
 }))
@@ -123,8 +127,9 @@ import {
   updateTeamDocument,
   deleteTeamDocument,
   notifyTeamAgents,
+  setKanbanConfig,
 } from '@/services/teams-service'
-import { getManagerId } from '@/lib/governance'
+import { getManagerId, isManager, isOrchestrator, isChiefOfStaff } from '@/lib/governance'
 
 // ============================================================================
 // Setup
@@ -1098,5 +1103,72 @@ describe('notifyTeamAgents', () => {
     expect(mockNotificationService.notifyAgent).toHaveBeenCalledWith(
       expect.objectContaining({ agentName: 'backend-alias' })
     )
+  })
+})
+
+// ============================================================================
+// setKanbanConfig — kanban-config WRITE RBAC (GOV-AUDIT 2026-06-21)
+// Only ORCHESTRATOR/COS/MANAGER agents may rewrite a team's kanban column config
+// (the column set carries per-column move-permission roles). The web-UI/
+// system-owner path has no requestingAgentId and is allowed (already authorized
+// by checkTeamAccess). Mirrors the kanban/items POST gate, in the service so both
+// the Next.js route and the headless router are covered with no drift.
+// ============================================================================
+
+describe('setKanbanConfig — kanban-config write RBAC (GOV-AUDIT 2026-06-21)', () => {
+  const COLS = [{ id: 'todo', label: 'To Do', color: '#ffffff' }]
+
+  // The shared beforeEach uses vi.clearAllMocks() which clears CALLS but NOT the
+  // mockReturnValue implementations — so reset all three authz fns to false here,
+  // otherwise a `mockReturnValue(true)` from one test leaks into the next.
+  beforeEach(() => {
+    vi.mocked(isManager).mockReturnValue(false)
+    vi.mocked(isOrchestrator).mockReturnValue(false)
+    vi.mocked(isChiefOfStaff).mockReturnValue(false)
+  })
+
+  it('rejects a non-privileged MEMBER agent with 403 (does not write)', async () => {
+    mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1' }))
+    const result = await setKanbanConfig('team-1', COLS, 'member-1', undefined)
+    expect(result.status).toBe(403)
+    expect(result.error).toMatch(/ORCHESTRATOR, COS, or MANAGER/i)
+    expect(mockTeams.updateTeam).not.toHaveBeenCalled()
+  })
+
+  it('allows a MANAGER agent', async () => {
+    mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1' }))
+    mockTeams.updateTeam.mockResolvedValue(makeTeam({ id: 'team-1' }))
+    vi.mocked(isManager).mockReturnValue(true)
+    const result = await setKanbanConfig('team-1', COLS, 'mgr-1', undefined)
+    expect(result.status).toBe(200)
+    expect(mockTeams.updateTeam).toHaveBeenCalledWith('team-1', { kanbanConfig: COLS })
+  })
+
+  it('allows an ORCHESTRATOR of the team', async () => {
+    mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1' }))
+    mockTeams.updateTeam.mockResolvedValue(makeTeam({ id: 'team-1' }))
+    vi.mocked(isOrchestrator).mockReturnValue(true)
+    const result = await setKanbanConfig('team-1', COLS, 'orch-1', undefined)
+    expect(result.status).toBe(200)
+    expect(vi.mocked(isOrchestrator)).toHaveBeenCalledWith('orch-1', 'team-1')
+  })
+
+  it('allows a CHIEF-OF-STAFF of the team', async () => {
+    mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1' }))
+    mockTeams.updateTeam.mockResolvedValue(makeTeam({ id: 'team-1' }))
+    vi.mocked(isChiefOfStaff).mockReturnValue(true)
+    const result = await setKanbanConfig('team-1', COLS, 'cos-1', undefined)
+    expect(result.status).toBe(200)
+    expect(vi.mocked(isChiefOfStaff)).toHaveBeenCalledWith('cos-1', 'team-1')
+  })
+
+  it('allows the web UI / system-owner (no requestingAgentId) with no RBAC check', async () => {
+    mockTeams.getTeam.mockReturnValue(makeTeam({ id: 'team-1' }))
+    mockTeams.updateTeam.mockResolvedValue(makeTeam({ id: 'team-1' }))
+    const result = await setKanbanConfig('team-1', COLS, undefined, undefined)
+    expect(result.status).toBe(200)
+    // The RBAC gate is skipped entirely when there is no agent identity.
+    expect(vi.mocked(isManager)).not.toHaveBeenCalled()
+    expect(vi.mocked(isOrchestrator)).not.toHaveBeenCalled()
   })
 })

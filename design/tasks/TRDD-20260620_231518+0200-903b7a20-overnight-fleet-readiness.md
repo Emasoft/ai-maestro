@@ -3,7 +3,7 @@ trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-06-21T17:39:58+0200
+updated: 2026-06-21T17:51:45+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -42,10 +42,15 @@ gov-gates (element-management-service) audited clean (R9.13 / ~/agents confineme
 manager-block / no-IDOR all verified, 0 edits). **NEXT:** write the wikimem memory →
 push `governance-rules` to fork → post findings to MANAGER #35 → resume pending.
 Flagged-not-fixed (correct, out-of-scope): #37 `.cjs` 6 direct /api calls (gated tier-2,
-proposal c94c60e9); `consumeOwnerSudoToken` DRY dup (canonical = shared lib + strict-reg);
-kanban-config write RBAC belongs in the services layer. Per-slice evidence:
+proposal c94c60e9); `consumeOwnerSudoToken` DRY dup (canonical = shared lib + strict-reg).
+**Audit follow-up FIXED `7f3878fc`:** the flagged kanban-config write-RBAC gap — verified
+real (any MEMBER could rewrite a team's kanban column config incl. per-column move-permission
+roles; only `checkTeamAccess` gated it) — closed in `services/teams-service.ts::setKanbanConfig`
+mirroring the kanban/items POST gate (service layer → covers FULL + headless, no drift), +5
+hermetic tests (full suite 1872 pass, tsc clean). Per-slice evidence:
 `reports/governance-examination/` (gitignored). **SUPERSEDES** the 16:46 "HEAD 90c4ca52 /
-32 commits" head — HEAD is now `e54e2de4` (+ the docs commit); still NO PR (user-gated).
+32 commits" head — HEAD is now `7f3878fc` (fixes `e54e2de4` + docs `aac11266` + kanban
+`7f3878fc`); still NO PR (user-gated).
 
 **▶ UPDATE 2026-06-21T16:46 (USER AWAKE — pushed to fork on request):** User read the
 open issues and asked to "ensure all fixes are done, then push to the github fork"

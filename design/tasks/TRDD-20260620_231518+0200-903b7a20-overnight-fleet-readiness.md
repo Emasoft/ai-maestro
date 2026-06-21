@@ -3,7 +3,7 @@ trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-06-21T03:16:51+0200
+updated: 2026-06-21T16:46:33+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -20,6 +20,19 @@ labels: [overnight, fleet-readiness, governance, security, scripts, scenarios]
 # TRDD-903b7a20 — Overnight fleet-readiness campaign
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-06-20
+
+**▶ UPDATE 2026-06-21T16:46 (USER AWAKE — pushed to fork on request):** User read the
+open issues and asked to "ensure all fixes are done, then push to the github fork"
+(**push only — explicitly NO PR yet**). Done: (1) closed **#45 item 4** — the 4th
+decoupling verb (governance-status) was a confirm-question, not a hard gap; `whoami`
+already wraps `GET /api/governance` (hasManager), so added an explicit `status` alias
+(`90c4ca52`, additive/frozen-CLI-safe, aliases cmd_whoami — one source of truth).
+(2) `yarn build` ✓ (52.6s, tsc clean). (3) **PUSHED** `governance-rules` →
+`fork/governance-rules`: HEAD now **`90c4ca52`**, **32 commits**, 0 unpushed.
+**SUPERSEDES every line below** that says "NOT pushed" / "28 commits" / "HEAD
+6e1eeb57" — the branch IS pushed to the fork; NO PR opened (user-gated). The other 16
+open fork issues remain gated / other-repo (MANAGER coordination, Haephestos,
+governance-owner rule-text, AMP protocol) — out of this branch's scope.
 
 **Mandate (user, 2026-06-20 ~23:00, going to sleep, explicit autonomous authorization):**
 Keep working + coordinating with the janitor-plugin Claude and MANAGER-plugin Claude

@@ -39,6 +39,13 @@ const UpdateTaskSchema = z.object({
   lastTestResult: z.enum(['not-run', 'pass', 'fail', 'partial']).optional(),
   publishedVersion: z.string().max(64).optional(),
   liveSince: z.string().max(64).optional(),
+  // New fields (TRDD-95d23f3b): attachments (body-encoded) + dueDate (label-encoded).
+  attachments: z.array(z.object({
+    url: z.string().max(2048),
+    name: z.string().max(256).optional(),
+    kind: z.string().max(64).optional(),
+  })).max(50).optional(),
+  dueDate: z.string().max(64).optional(),
 }).strict()
 
 // PUT /api/teams/[id]/tasks/[taskId] - Update a task
@@ -91,17 +98,28 @@ export async function PUT(
     ...(body.handoffDoc !== undefined && { handoffDoc: body.handoffDoc }),
     ...(body.prUrl !== undefined && { prUrl: body.prUrl }),
     ...(body.reviewResult !== undefined && { reviewResult: body.reviewResult }),
+    // TRDD-v2 classification/relationship/delivery + evidence + new fields — now carried
+    // end-to-end through UpdateTaskParams → updateTeamTask → ghProject.updateTask
+    // (TRDD-95d23f3b), bringing the Next.js PUT to FULL parity with the headless PUT
+    // (no more dual-mode drift where dashboard edits dropped these but headless kept them).
+    ...(body.severity !== undefined && { severity: body.severity }),
+    ...(body.effort !== undefined && { effort: body.effort }),
+    ...(body.parentTask !== undefined && { parentTask: body.parentTask }),
+    ...(body.npt !== undefined && { npt: body.npt }),
+    ...(body.eht !== undefined && { eht: body.eht }),
+    ...(body.supersedes !== undefined && { supersedes: body.supersedes }),
+    ...(body.supersededBy !== undefined && { supersededBy: body.supersededBy }),
+    ...(body.relevantRules !== undefined && { relevantRules: body.relevantRules }),
+    ...(body.releaseVia !== undefined && { releaseVia: body.releaseVia }),
+    ...(body.implementationCommits !== undefined && { implementationCommits: body.implementationCommits }),
+    ...(body.lastTestResult !== undefined && { lastTestResult: body.lastTestResult }),
+    ...(body.publishedVersion !== undefined && { publishedVersion: body.publishedVersion }),
+    ...(body.liveSince !== undefined && { liveSince: body.liveSince }),
+    ...(body.attachments !== undefined && { attachments: body.attachments }),
+    ...(body.dueDate !== undefined && { dueDate: body.dueDate }),
     requestingAgentId,
     // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
     authContext: buildAuthContext(auth),
-    // The schema above now ACCEPTS+validates the TRDD-v2 fields (severity, effort,
-    // parentTask, npt, eht, supersedes, supersededBy, relevantRules, releaseVia,
-    // implementationCommits, lastTestResult, publishedVersion, liveSince) so the
-    // API is at parity with the 17-stage model and no longer 400s on valid
-    // payloads. Forwarding them into the service is the services-wave job
-    // (teams-service.ts UpdateTaskParams + updateTeamTask -> task-registry.updateTask,
-    // which already persists them); adding them here would break tsc against the
-    // current UpdateTaskParams.
   }
 
   const result = await updateTeamTask(id, taskId, safeParams)

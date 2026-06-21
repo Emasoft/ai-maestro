@@ -2016,6 +2016,14 @@ const routes: Route[] = [
       ...(body.supersedes !== undefined && { supersedes: body.supersedes }),
       ...(body.relevantRules !== undefined && { relevantRules: body.relevantRules }),
       ...(body.releaseVia !== undefined && { releaseVia: String(body.releaseVia) }),
+      // TRDD-v2 evidence + new fields (TRDD-95d23f3b) — full parity with the Next.js PUT.
+      ...(body.supersededBy !== undefined && { supersededBy: body.supersededBy }),
+      ...(body.implementationCommits !== undefined && { implementationCommits: body.implementationCommits }),
+      ...(body.lastTestResult !== undefined && { lastTestResult: String(body.lastTestResult) }),
+      ...(body.publishedVersion !== undefined && { publishedVersion: String(body.publishedVersion) }),
+      ...(body.liveSince !== undefined && { liveSince: String(body.liveSince) }),
+      ...(body.attachments !== undefined && { attachments: body.attachments }),
+      ...(body.dueDate !== undefined && { dueDate: String(body.dueDate) }),
       requestingAgentId: auth.agentId,
       // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
       authContext: buildAuthContext(auth),
@@ -2104,6 +2112,15 @@ const routes: Route[] = [
       ...(body.supersedes !== undefined && { supersedes: body.supersedes }),
       ...(body.relevantRules !== undefined && { relevantRules: body.relevantRules }),
       ...(body.releaseVia !== undefined && { releaseVia: String(body.releaseVia) }),
+      // TRDD-v2 evidence + new fields (TRDD-95d23f3b) — full parity with the Next.js POST.
+      ...(body.reviewResult !== undefined && { reviewResult: String(body.reviewResult) }),
+      ...(body.supersededBy !== undefined && { supersededBy: body.supersededBy }),
+      ...(body.implementationCommits !== undefined && { implementationCommits: body.implementationCommits }),
+      ...(body.lastTestResult !== undefined && { lastTestResult: String(body.lastTestResult) }),
+      ...(body.publishedVersion !== undefined && { publishedVersion: String(body.publishedVersion) }),
+      ...(body.liveSince !== undefined && { liveSince: String(body.liveSince) }),
+      ...(body.attachments !== undefined && { attachments: body.attachments }),
+      ...(body.dueDate !== undefined && { dueDate: String(body.dueDate) }),
       requestingAgentId: auth.agentId,
       // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
       authContext: buildAuthContext(auth),

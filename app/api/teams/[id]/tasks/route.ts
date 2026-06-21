@@ -37,6 +37,13 @@ const CreateTaskSchema = z.object({
   lastTestResult: z.enum(['not-run', 'pass', 'fail', 'partial']).optional(),
   publishedVersion: z.string().max(64).optional(),
   liveSince: z.string().max(64).optional(),
+  // New fields (TRDD-95d23f3b): attachments (body-encoded) + dueDate (label-encoded).
+  attachments: z.array(z.object({
+    url: z.string().max(2048),
+    name: z.string().max(256).optional(),
+    kind: z.string().max(64).optional(),
+  })).max(50).optional(),
+  dueDate: z.string().max(64).optional(),
 }).strict()
 
 // GET /api/teams/[id]/tasks - List tasks with resolved dependencies
@@ -132,15 +139,19 @@ export async function POST(
     ...(body.supersedes !== undefined && { supersedes: body.supersedes }),
     ...(body.relevantRules !== undefined && { relevantRules: body.relevantRules }),
     ...(body.releaseVia !== undefined && { releaseVia: body.releaseVia }),
+    // TRDD-v2 evidence + new fields — now carried end-to-end through
+    // CreateTaskParams → createTeamTask → ghProject.createTask (TRDD-95d23f3b).
+    ...(body.reviewResult !== undefined && { reviewResult: body.reviewResult }),
+    ...(body.supersededBy !== undefined && { supersededBy: body.supersededBy }),
+    ...(body.implementationCommits !== undefined && { implementationCommits: body.implementationCommits }),
+    ...(body.lastTestResult !== undefined && { lastTestResult: body.lastTestResult }),
+    ...(body.publishedVersion !== undefined && { publishedVersion: body.publishedVersion }),
+    ...(body.liveSince !== undefined && { liveSince: body.liveSince }),
+    ...(body.attachments !== undefined && { attachments: body.attachments }),
+    ...(body.dueDate !== undefined && { dueDate: body.dueDate }),
     requestingAgentId,
     // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
     authContext: buildAuthContext(auth),
-    // NOTE: 6 further schema-validated fields (reviewResult, supersededBy,
-    // implementationCommits, lastTestResult, publishedVersion, liveSince) are
-    // accepted by CreateTaskSchema (so the API does not 400 on a valid TRDD-v2
-    // payload) but are NOT yet carried by CreateTaskParams / createTeamTask /
-    // ghProject.createTask, so forwarding them here would break tsc. Extending
-    // the full service+GitHub chain for those is the remaining part of #9.
   }
   const result = await createTeamTask(id, safeParams)
 

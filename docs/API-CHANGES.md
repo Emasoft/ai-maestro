@@ -438,6 +438,46 @@ the **cloud** full-config branch are unchanged. No endpoint shape changed.
 `tests/services/agents-core-service.test.ts` (new-agent flags; link does not),
 RED-verified first.
 
+## 13. Governance security audit — authz/IDOR/sudo-binding fixes (2026-06-21)
+
+A delegated multi-agent audit (coverage → find-and-fix → adversarial
+verify) hardened the governance API surface. 24 fixes landed in commit
+`e54e2de4`; every CRITICAL/HIGH fix passed an independent adversarial
+verifier, `tsc --noEmit` is clean, and the full suite (1867 tests) is
+green. **No wire change** — every endpoint accepts the same JSON; the
+fixes ADD the authentication the `/api` middleware defers (it is a
+structural credential-shape check that defers crypto verification to the
+handler) or TIGHTEN a fail path. No gate was weakened.
+
+| Commit | Surface | Severity | What changed |
+|---|---|---|---|
+| `e54e2de4` | `PUT /api/teams/[id]` | CRITICAL | The strict `manage-team` gate ran only when the body carried `agentIds`, so `name`/`description`/`githubProject` edits fell through to member-only `checkTeamAccess`. A non-MANAGER member/orchestrator agent could rename the team and relink `team.githubProject` (the gh-CLI issue target). Gate now fires for every agent caller and for the user path on privileged fields. |
+| `e54e2de4` | `POST /api/v1/governance/requests/[id]/approve` | HIGH (IDOR) | Dropped the `auth.agentId \|\| body.approverAgentId` fallback. `approveCrossHostRequest` checks only the global password then derives the vote + MANAGER/COS authority from `approverAgentId`, so the fallback let any password-knower approve AS any MANAGER/COS agent. Now auth-derived only (401 on absence), matching the reject route. |
+| `e54e2de4` | `POST /api/teams` | HIGH | System-owner password-skip used legacy `!auth.agentId`, treating a model-ON non-maestro user as system-owner. Now model-aware via `buildAuthContext(auth).isSystemOwner`. |
+| `e54e2de4` | `GET/POST /api/auth/webauthn/register`, `GET/DELETE /api/auth/webauthn/credentials` | HIGH ×4 | Raw `validateSession` admits any logged-in user under the R36/R37 user-authority model → a normal user could register/list/delete the host owner's passkeys. Now `enforceSystemOwner`. Sudo consume was unbound (ignored subject/operation → replay); added `consumeOwnerSudoToken` (SUDO-01 op-binding + SUDO-02 subject-binding, fail-secure, after SUDO-04 authenticate-first). Model-off behavior byte-identical. |
+| `e54e2de4` | `GET /api/agents/role-plugins`, `GET /api/agents/role-plugins/status` | HIGH/MEDIUM | No `authenticateFromRequest`/`enforceAuth`, leaking every agent's name/title/absolute `workingDirectory` to a forged-but-well-formed cookie. Added, matching the sibling routes. |
+| `e54e2de4` | `GET /api/governance/reachable` | MEDIUM | Added `enforceAuth` (was structural-middleware only). |
+| `e54e2de4` | `GET/PUT /api/teams/[id]/kanban-config` | MEDIUM | Forwarded `buildAuthContext(auth)` to match the headless mirror, fixing a FULL-vs-headless drift that 403'd a verified system-owner. |
+| `e54e2de4` | `lib/manager-trust.ts`, `lib/governance-peers.ts` | MEDIUM | A malformed-but-valid-JSON trust file / a network-origin peer-cache entry with a non-array `teams` crashed every consumer (incl. the cross-host auto-approve gate). Both normalize fail-closed (bad input can only reduce trust/membership). |
+
+**Frozen-CLI (R22/R23) — verb interfaces unchanged; failure paths only.**
+The same audit hardened the wrapper scripts without touching any verb's
+name/args/output: `aimaestro-governance.sh`/`aimaestro-teams.sh` `_api`
+now fail-close on a missing/non-numeric HTTP status (was treated as 2xx);
+`aimaestro-teams.sh add-agent` no longer clobbers all members on an
+unparseable team body; `requests` help lists the route's real 6 statuses
++ 8 types; `resolve`/`restart` added to `agent` help/header (help must
+list exactly the dispatched verbs); `cmd_create` dir validation no longer
+silently no-ops `realpath -m` on BSD/macOS; 10 inline AID-auth idioms
+consolidated onto `_build_auth_args`. **Coverage was found 100% clean** —
+all 17 script verbs hit a real endpoint with the correct method.
+
+**Effect on plugins:** none. No endpoint shape changed and no frozen-CLI
+verb interface changed. Callers that relied on an *unauthenticated* read
+of `role-plugins`/`reachable`, or on approving cross-host requests with a
+body-asserted `approverAgentId`, must now authenticate as the acting
+agent — those were the vulnerabilities being closed.
+
 ## How plugins should consume this doc
 
 1. The role-plugins use `https://raw.githubusercontent.com/Emasoft/ai-maestro/governance-rules/docs/GOVERNANCE-RULES.md` (and similar for other docs) to learn about API surface.

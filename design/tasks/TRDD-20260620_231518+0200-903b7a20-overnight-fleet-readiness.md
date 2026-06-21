@@ -3,7 +3,7 @@ trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-06-21T16:46:33+0200
+updated: 2026-06-21T17:39:58+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -20,6 +20,32 @@ labels: [overnight, fleet-readiness, governance, security, scripts, scenarios]
 # TRDD-903b7a20 — Overnight fleet-readiness campaign
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-06-20
+
+**▶ UPDATE 2026-06-21T17:40 (DELEGATED GOVERNANCE SECURITY AUDIT — fixes committed):**
+User mandate: "delegate, do not act directly; launch many opus agents (or an ultracode
+workflow) to examine the governance API + scripts in depth (esp. skill→script coverage),
+verify correct API usage, fix all shortcomings as-you-go incl. pre-existing, leave no hole;
+update docs + memories + help screens; then push, then resume." Ran a 3-phase ultracode
+`Workflow` (coverage → 10 disjoint find-and-fix spark agents → adversarial verify). First
+run's fix phase was wiped by a transient server rate-limit (all 10 agents returned null →
+0 changes); re-ran with a rate-limit-resilient pool (concurrency 4, staggered ramp,
+retry-on-null backoff) — that run landed **24 fixes / 17 flags across 19 files**.
+**VERIFIED BY ME (not blind-trusted):** `tsc --noEmit` = 0 errors; full suite **1867
+passed / 0 failed**; adversarial-verify `verifyConcerns: []`; I read the 4 highest-risk
+diffs myself (CRITICAL teams PUT RBAC, HIGH approve IDOR, HIGH teams POST sysowner-class,
+HIGH webauthn enforceSystemOwner+sudo-binding) — all grounded, all strictly tightening,
+all with WHY comments. **Committed `e54e2de4`** on `governance-rules`. Docs updated:
+`docs/API-CHANGES.md` §13 (the authz/IDOR/sudo table) — R23 frozen-CLI rule confirmed
+already present+correct in GOVERNANCE-RULES.md by the audit. Coverage finding (grounded):
+skill→script coverage 100% clean (17/17 verbs hit real endpoints, correct methods);
+gov-gates (element-management-service) audited clean (R9.13 / ~/agents confinement /
+manager-block / no-IDOR all verified, 0 edits). **NEXT:** write the wikimem memory →
+push `governance-rules` to fork → post findings to MANAGER #35 → resume pending.
+Flagged-not-fixed (correct, out-of-scope): #37 `.cjs` 6 direct /api calls (gated tier-2,
+proposal c94c60e9); `consumeOwnerSudoToken` DRY dup (canonical = shared lib + strict-reg);
+kanban-config write RBAC belongs in the services layer. Per-slice evidence:
+`reports/governance-examination/` (gitignored). **SUPERSEDES** the 16:46 "HEAD 90c4ca52 /
+32 commits" head — HEAD is now `e54e2de4` (+ the docs commit); still NO PR (user-gated).
 
 **▶ UPDATE 2026-06-21T16:46 (USER AWAKE — pushed to fork on request):** User read the
 open issues and asked to "ensure all fixes are done, then push to the github fork"

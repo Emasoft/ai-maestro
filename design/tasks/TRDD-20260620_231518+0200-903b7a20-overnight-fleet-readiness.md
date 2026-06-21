@@ -3,7 +3,7 @@ trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-06-21T03:08:47+0200
+updated: 2026-06-21T03:16:51+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -75,9 +75,10 @@ amp-send MF-023, #45 verbs → `reports/cli-deployment-audit/`; FIX = USER runs
 wikimem repaired (3 pages schema-migrated; ~60 backlog drains via the heartbeat repair
 cadence). NEXT — all remaining items need the USER or are gated: Phase D scenarios
 (dev-browser UI — risky unattended: live-server restart + real-agent spawning + quota),
-#3b bearer-downstream (deep/design-sensitive), #37 decoupling (gated on MANAGER #35), the
-user's version bump + push approval. **The autonomous-SAFE campaign work is substantially
-COMPLETE + independently verified; the branch is PR-ready modulo the version bump.**
+#3b bearer-downstream (now SPECCED → `TRDD-f1d89143`, backburner; implementation
+security-gated on review), #37 decoupling (gated on MANAGER #35), the user's version
+bump + push approval. **The autonomous-SAFE campaign work is substantially COMPLETE +
+independently verified; the branch is PR-ready modulo the version bump.**
 
 **Load-bearing facts / gotchas:**
 - Every GitHub write self-identifies (R22): `_Posted by the Claude developing **ai-maestro** (via the shared @Emasoft gh auth)._`

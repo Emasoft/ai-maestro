@@ -40,7 +40,7 @@ function normalizeGhStatus(name: string): string {
  * Build prefixed issue labels for the TRDD-v2 metadata fields that GitHub
  * Projects has no native field for. Array fields emit one label per entry.
  */
-function trddMetadataLabels(data: {
+export function trddMetadataLabels(data: {
   severity?: Task['severity']
   effort?: Task['effort']
   parentTask?: string
@@ -87,7 +87,7 @@ function trddMetadataLabels(data: {
  * everything else. Inverse of buildBodyWithAttachments — the two keep the body and the
  * Task.attachments field in sync across create/read/update.
  */
-function splitBodyAttachments(body: string): { prose: string; attachments: NonNullable<Task['attachments']> } {
+export function splitBodyAttachments(body: string): { prose: string; attachments: NonNullable<Task['attachments']> } {
   const attachments: NonNullable<Task['attachments']> = []
   const match = body.match(/##\s*Attachments\s*\n([\s\S]*?)(?=\n##\s|\n---|$)/i)
   if (match) {
@@ -104,7 +104,7 @@ function splitBodyAttachments(body: string): { prose: string; attachments: NonNu
 }
 
 /** Build an issue body from prose + attachments (inverse of splitBodyAttachments). */
-function buildBodyWithAttachments(prose: string, attachments?: Task['attachments']): string {
+export function buildBodyWithAttachments(prose: string, attachments?: Task['attachments']): string {
   let body = prose || ''
   if (attachments?.length) {
     const lines = attachments.map(a => `- [${a.name || a.url}](${a.url})`).join('\n')
@@ -114,7 +114,7 @@ function buildBodyWithAttachments(prose: string, attachments?: Task['attachments
 }
 
 /** Parsed TRDD-v2 metadata extracted from issue labels (inverse of trddMetadataLabels). */
-interface ParsedTrddMetadata {
+export interface ParsedTrddMetadata {
   severity?: Task['severity']
   effort?: Task['effort']
   parentTask?: string
@@ -138,7 +138,7 @@ interface ParsedTrddMetadata {
  * when the label was a TRDD metadata label (so the caller can drop it from the
  * display labels), false otherwise.
  */
-function consumeTrddMetadataLabel(label: string, acc: ParsedTrddMetadata): boolean {
+export function consumeTrddMetadataLabel(label: string, acc: ParsedTrddMetadata): boolean {
   const lower = label.toLowerCase()
   if (lower.startsWith('severity:')) {
     acc.severity = label.slice(9).trim() as Task['severity']

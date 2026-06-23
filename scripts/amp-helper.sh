@@ -1829,8 +1829,16 @@ upload_attachment() {
 
     local confirm_http
     confirm_http=$(echo "$confirm_response" | tail -n1)
-    local confirm_result
-    confirm_result=$(echo "$confirm_response" | sed '$d')
+
+    # Fail fast if the confirm step did not succeed — mirrors the Step 2 check
+    # above. The confirm HTTP status used to be captured but never checked, so a
+    # failed confirm fell through to polling and surfaced as a confusing scan
+    # timeout instead of a clear error. (The confirm response body was likewise
+    # captured and never used; removed.)
+    if [ "$confirm_http" != "200" ] && [ "$confirm_http" != "201" ]; then
+        echo "Error: Failed to confirm attachment upload (HTTP ${confirm_http})" >&2
+        return 1
+    fi
 
     # Step 4: Poll for scan status with exponential backoff
     # Default timeout: 60s (configurable via AMP_SCAN_TIMEOUT)

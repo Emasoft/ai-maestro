@@ -3,7 +3,7 @@ trdd-id: N1FYP2AW
 title: Token-optimized scenario-runner — Sonnet[1m] executor + Opus screenshot-interpreter
 column: dev
 created: 2026-06-23T20:14:21+0200
-updated: 2026-06-23T20:55:55+0200
+updated: 2026-06-23T21:00:16+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -153,6 +153,34 @@ Hard findings:
 5. **Super-linear in run length:** SCEN-001 had 1.7× the turns of SCEN-013 but
    2.0× the cost (longer run ⇒ bigger per-turn context). Cost ≈ ½·turns·peak.
    ⇒ L3 (cap per-turn growth) makes cost LINEAR in turns, the single biggest win.
+
+## §1c. FULL-WEEK correction (989-session export — supersedes §1b's "94%")
+
+§1b's "94% from dev-browser runs" was 94% of a 12-session SNIPPET — a biased
+subset. The full 989-session export (`~/Downloads/export_sessions_20260623_202034.json`,
+**13.15B input tokens / 38,031 turns**) shows the scenario runner is only ~7%
+of the real burn:
+
+| category | sessions | turns | input | %week | in/turn |
+|---|---|---|---|---|---|
+| MAIN sessions (long-lived) | 11 | 14,720 | 7.80B | **59%** | 530K |
+| other subagents (feature/CPV/janitor) | 968 | 20,879 | 4.47B | **34%** | 214K |
+| scenario dev-browser subagents | 10 | 2,432 | 0.88B | **7%** | 363K |
+
+Dominant culprits at full scale:
+1. **Two marathon MAIN sessions** — the current one (`e1b4c900`, 4.86B / 9,557
+   turns / 11 days) + an iOS-app one (`aadcdba9`, 2.80B / 4,612 turns) = **58%
+   alone**. Mechanism: thousands of turns × ~530K accumulated context, re-read
+   every turn.
+2. **The ~95K CLAUDE.md+rules FLOOR re-read every turn × 38,031 turns ≈ 3.6B =
+   27%+** of the week (lower bound; excludes tool/MCP schemas). Cross-cuts ALL
+   categories.
+
+**This redesign addresses the 7% scenario slice.** The bigger ecosystem levers —
+(a) a CLAUDE.md + `~/.claude/rules/` diet (helps every turn of every session),
+and (b) main-session hygiene (don't run one session for days/thousands of
+turns) — are OUT OF SCOPE here and warrant their own TRDD + user direction
+(the global config is the user's to trim).
 
 ## §2. Root-cause model
 

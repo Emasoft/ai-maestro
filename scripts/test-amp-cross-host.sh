@@ -231,14 +231,16 @@ test_cross_host_send() {
     local sender_host_name="$4"
     local recipient_name="$5"
     local recipient_host_name="$6"
-    local recipient_host_id="$7"
+    # 7th arg (recipient host id) is intentionally unused: the recipient is
+    # addressed by bare name and located via the sender host's mesh discovery.
 
     TESTS_RUN=$((TESTS_RUN + 1))
 
     local test_id
     test_id=$(generate_test_id)
     local subject="CrossHost ${test_id}"
-    local message="Cross-host test from ${sender_host_name} to ${recipient_host_name} at $(date)"
+    local message
+    message="Cross-host test from ${sender_host_name} to ${recipient_host_name} at $(date)"
 
     log_info "Sending: ${sender_name}@${sender_host_name} -> ${recipient_name}@${recipient_host_name}"
 
@@ -290,7 +292,8 @@ test_cross_host_reply() {
     local original_recipient_host_name="$4"
     local original_sender_name="$5"
     local original_sender_host_name="$6"
-    local original_sender_host_id="$7"
+    # 7th arg (original sender host id) is intentionally unused: addressed by
+    # bare name and located via mesh discovery.
 
     TESTS_RUN=$((TESTS_RUN + 1))
 

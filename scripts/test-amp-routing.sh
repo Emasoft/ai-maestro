@@ -265,7 +265,8 @@ test_internal_to_internal() {
     local test_id
     test_id=$(generate_test_id)
     local subject="Test ${test_id}"
-    local message="Hello from ${sender_name} at $(date)"
+    local message
+    message="Hello from ${sender_name} at $(date)"
 
     # Send message
     local send_response

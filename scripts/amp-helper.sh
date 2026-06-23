@@ -253,7 +253,6 @@ AMP_MAESTRO_URL="${AMP_MAESTRO_URL:-http://localhost:23000}"
 
 # Provider domain (AMP v1)
 AMP_PROVIDER_DOMAIN="${AMP_PROVIDER_DOMAIN:-aimaestro.local}"
-AMP_LOCAL_DOMAIN="${AMP_PROVIDER_DOMAIN}"
 
 # =============================================================================
 # Directory Setup
@@ -330,7 +329,8 @@ create_identity_file() {
     local fingerprint="$4"
 
     local identity_file="${AMP_DIR}/IDENTITY.md"
-    local updated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    local updated_at
+    updated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
     # Build addresses section - collect all registered addresses
     local addresses_section=""
@@ -346,8 +346,11 @@ create_identity_file() {
         while IFS= read -r reg_file; do
             [ -z "$reg_file" ] && continue
             if [ -f "$reg_file" ]; then
-                local provider=$(jq -r '.provider // empty' "$reg_file" 2>/dev/null)
-                local ext_address=$(jq -r '.address // empty' "$reg_file" 2>/dev/null)
+                local provider ext_address
+                # tolerate a malformed/partial registration file: empty values
+                # fall through to the -n guard below (skip that registration)
+                provider=$(jq -r '.provider // empty' "$reg_file" 2>/dev/null) || true
+                ext_address=$(jq -r '.address // empty' "$reg_file" 2>/dev/null) || true
 
                 if [ -n "$ext_address" ] && [ -n "$provider" ]; then
                     provider_count=$((provider_count + 1))
@@ -476,10 +479,13 @@ update_identity_file() {
 get_identity() {
     # First try config.json (authoritative)
     if [ -f "${AMP_CONFIG}" ]; then
-        local name=$(jq -r '.agent.name // empty' "${AMP_CONFIG}" 2>/dev/null)
-        local tenant=$(jq -r '.agent.tenant // empty' "${AMP_CONFIG}" 2>/dev/null)
-        local address=$(jq -r '.agent.address // empty' "${AMP_CONFIG}" 2>/dev/null)
-        local fingerprint=$(jq -r '.agent.fingerprint // empty' "${AMP_CONFIG}" 2>/dev/null)
+        # tolerate an absent/partial config: empty fields fall through to the
+        # -n "$name" guard + fallback below (set -euo pipefail would else abort)
+        local name tenant address fingerprint
+        name=$(jq -r '.agent.name // empty' "${AMP_CONFIG}" 2>/dev/null) || true
+        tenant=$(jq -r '.agent.tenant // empty' "${AMP_CONFIG}" 2>/dev/null) || true
+        address=$(jq -r '.agent.address // empty' "${AMP_CONFIG}" 2>/dev/null) || true
+        fingerprint=$(jq -r '.agent.fingerprint // empty' "${AMP_CONFIG}" 2>/dev/null) || true
 
         if [ -n "$name" ]; then
             # Build addresses array with primary
@@ -490,8 +496,9 @@ get_identity() {
                 while IFS= read -r reg_file; do
                     [ -z "$reg_file" ] && continue
                     if [ -f "$reg_file" ]; then
-                        local provider=$(jq -r '.provider // empty' "$reg_file" 2>/dev/null)
-                        local ext_address=$(jq -r '.address // empty' "$reg_file" 2>/dev/null)
+                        local provider ext_address
+                        provider=$(jq -r '.provider // empty' "$reg_file" 2>/dev/null) || true
+                        ext_address=$(jq -r '.address // empty' "$reg_file" 2>/dev/null) || true
 
                         if [ -n "$ext_address" ] && [ -n "$provider" ]; then
                             addresses_json=$(echo "$addresses_json" | jq \
@@ -570,8 +577,9 @@ check_identity() {
             while IFS= read -r reg_file; do
                 [ -z "$reg_file" ] && continue
                 if [ -f "$reg_file" ]; then
-                    local provider=$(jq -r '.provider // empty' "$reg_file" 2>/dev/null)
-                    local ext_address=$(jq -r '.address // empty' "$reg_file" 2>/dev/null)
+                    local provider ext_address
+                    provider=$(jq -r '.provider // empty' "$reg_file" 2>/dev/null) || true
+                    ext_address=$(jq -r '.address // empty' "$reg_file" 2>/dev/null) || true
 
                     if [ -n "$ext_address" ] && [ -n "$provider" ]; then
                         printf "    %-10s %s\n" "${provider}:" "${ext_address}"
@@ -823,8 +831,9 @@ sign_message() {
     fi
 
     # Use temporary files for signing (OpenSSL 3.x has issues with Ed25519 + stdin)
-    local tmp_msg=$(mktemp)
-    local tmp_sig=$(mktemp)
+    local tmp_msg tmp_sig
+    tmp_msg=$(mktemp)
+    tmp_sig=$(mktemp)
     trap 'rm -f "$tmp_msg" "$tmp_sig"' RETURN
 
     echo -n "${message}" > "$tmp_msg"
@@ -841,8 +850,9 @@ verify_signature() {
     local public_key_file="$3"
 
     # Use temporary files for verification (Ed25519 requires -rawin flag)
-    local tmp_msg=$(mktemp)
-    local tmp_sig=$(mktemp)
+    local tmp_msg tmp_sig
+    tmp_msg=$(mktemp)
+    tmp_sig=$(mktemp)
     trap 'rm -f "$tmp_msg" "$tmp_sig"' RETURN
 
     echo -n "${message}" > "$tmp_msg"
@@ -906,6 +916,7 @@ parse_address() {
                 for ((i=0; i<num_parts-3; i++)); do
                     scope_parts+=("${parts[$i]}")
                 done
+                # shellcheck disable=SC2034  # documented parse_address output (see header); read by external callers
                 ADDR_SCOPE=$(IFS='.'; echo "${scope_parts[*]}")
             fi
         elif [ "$num_parts" -eq 2 ]; then
@@ -996,8 +1007,9 @@ create_message() {
         return 1
     fi
 
-    local id=$(generate_message_id)
-    local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    local id timestamp
+    id=$(generate_message_id)
+    timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     # Default expiration: 7 days from now
     local expires_at
     expires_at=$(compute_expiry_date 7)
@@ -1006,7 +1018,8 @@ create_message() {
 
     # Parse destination address
     parse_address "$to"
-    local full_to=$(build_address "$ADDR_NAME" "$ADDR_TENANT" "$ADDR_PROVIDER")
+    local full_to
+    full_to=$(build_address "$ADDR_NAME" "$ADDR_TENANT" "$ADDR_PROVIDER")
 
     # Build message JSON
     local message_json
@@ -1280,9 +1293,10 @@ save_to_inbox() {
 save_to_sent() {
     local message_json="$1"
 
-    local id=$(echo "$message_json" | jq -r '.envelope.id')
-    local to=$(echo "$message_json" | jq -r '.envelope.to')
-    local recipient_dir=$(sanitize_address_for_path "$to")
+    local id to recipient_dir
+    id=$(echo "$message_json" | jq -r '.envelope.id')
+    to=$(echo "$message_json" | jq -r '.envelope.to')
+    recipient_dir=$(sanitize_address_for_path "$to")
 
     # Create recipient subdirectory
     local sent_recipient_dir="${AMP_SENT_DIR}/${recipient_dir}"

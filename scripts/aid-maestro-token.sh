@@ -125,7 +125,8 @@ cache_key() {
 }
 
 check_cache() {
-    local cache_file="${MAESTRO_CACHE_DIR}/$(cache_key).json"
+    local cache_file
+    cache_file="${MAESTRO_CACHE_DIR}/$(cache_key).json"
 
     if [ ! -f "$cache_file" ]; then
         return 1
@@ -149,7 +150,8 @@ check_cache() {
 
 save_cache() {
     local response="$1"
-    local cache_file="${MAESTRO_CACHE_DIR}/$(cache_key).json"
+    local cache_file
+    cache_file="${MAESTRO_CACHE_DIR}/$(cache_key).json"
 
     local expires_in
     expires_in=$(echo "$response" | jq -r '.expires_in // 3600')

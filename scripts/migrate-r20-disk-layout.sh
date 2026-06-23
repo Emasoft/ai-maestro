@@ -86,7 +86,8 @@ remove_empty_dir() {
 #   <name>-codex → codex, <name>-gemini → gemini, <name> (no suffix) → claude
 detect_client() {
   local plugin_dir="$1"
-  local name=$(basename "$plugin_dir")
+  local name
+  name=$(basename "$plugin_dir")
 
   # Role-plugins: check .agent.toml compatible-clients
   local toml_file=""
@@ -95,7 +96,11 @@ detect_client() {
   done
   if [[ -n "$toml_file" ]]; then
     # Extract first quoted string after compatible-clients
-    local raw_client=$(grep 'compatible-clients' "$toml_file" 2>/dev/null | grep -oP '"[^"]+"' | head -1 | tr -d '"')
+    local raw_client
+    # pipefail is on; grep may legitimately find no compatible-clients line —
+    # tolerate the no-match (empty raw_client falls through to the name-suffix
+    # detection below) instead of aborting the migration.
+    raw_client=$(grep 'compatible-clients' "$toml_file" 2>/dev/null | grep -oP '"[^"]+"' | head -1 | tr -d '"') || true
     # Normalize to short directory name
     case "$raw_client" in
       claude-code|claude) echo "claude"; return ;;

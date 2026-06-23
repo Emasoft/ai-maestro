@@ -32,7 +32,6 @@ AUTH_URL=""
 SCOPE=""
 OUTPUT_FORMAT="text"
 NO_CACHE=false
-QUIET=false
 
 show_help() {
     echo "Usage: aid-token --auth <url> [options]"
@@ -135,7 +134,8 @@ cache_key_for_auth() {
 }
 
 check_cache() {
-    local cache_file="${AID_CACHE_DIR}/$(cache_key_for_auth).json"
+    local cache_file
+    cache_file="${AID_CACHE_DIR}/$(cache_key_for_auth).json"
 
     if [ ! -f "$cache_file" ]; then
         return 1
@@ -167,7 +167,8 @@ check_cache() {
 
 save_cache() {
     local response="$1"
-    local cache_file="${AID_CACHE_DIR}/$(cache_key_for_auth).json"
+    local cache_file
+    cache_file="${AID_CACHE_DIR}/$(cache_key_for_auth).json"
 
     local expires_in
     expires_in=$(echo "$response" | jq -r '.expires_in // 3600')

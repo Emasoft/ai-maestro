@@ -377,13 +377,24 @@ export function useGovernance(agentId: string | null): GovernanceState {
 
         // Server enforces team membership rules; no client-side allTeams check needed
 
-        const res = await fetch(`/api/teams/${teamId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agentIds: updatedAgentIds }),
-        })
+        // PUT /api/teams/[id] is a STRICT (sudo-protected) route in
+        // security-registry.json. A raw fetch() gets a bare 403 sudo_required
+        // and surfaces "sudo_required" to the user instead of prompting for the
+        // governance password — which left the Agent Profile → "Assign to Team"
+        // flow completely broken (SCEN-001 BUG-001). sudoFetch catches the first
+        // 403 sudo_required, pops the sudo modal, and retries with the
+        // X-Sudo-Token header, exactly like the leave-team path above.
+        const res = await sudoFetch(
+          `/api/teams/${teamId}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentIds: updatedAgentIds }),
+          },
+          requestSudoToken,
+        )
         if (!res.ok) {
-          const errData = await res.json()
+          const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
           return { success: false, error: errData.error || 'Failed to add agent to team' }
         }
         // Phase 3: ChangeTeam (called by team PUT route) handles title + plugin automatically.
@@ -429,13 +440,21 @@ export function useGovernance(agentId: string | null): GovernanceState {
         // Defensive: agentIds may be null/undefined if team data is incomplete from API
         const updatedAgentIds = (team.agentIds ?? []).filter((id: string) => id !== targetAgentId)
 
-        const res = await fetch(`/api/teams/${teamId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agentIds: updatedAgentIds }),
-        })
+        // PUT /api/teams/[id] is STRICT (sudo-protected). Same fix as
+        // addAgentToTeam (SCEN-001 BUG-001): use sudoFetch so the first
+        // 403 sudo_required pops the password modal and retries with the
+        // X-Sudo-Token, instead of leaking a bare "sudo_required" string.
+        const res = await sudoFetch(
+          `/api/teams/${teamId}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentIds: updatedAgentIds }),
+          },
+          requestSudoToken,
+        )
         if (!res.ok) {
-          const errData = await res.json()
+          const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
           return { success: false, error: errData.error || 'Failed to remove agent from team' }
         }
         // Phase 3: Revert to AUTONOMOUS role + uninstall team plugin when agent leaves.

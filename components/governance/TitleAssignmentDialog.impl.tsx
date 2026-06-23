@@ -524,14 +524,25 @@ export default function TitleAssignmentDialog({
             throw new Error(`Failed to remove COS from: ${failures.join(', ')}`)
           }
         } else if (currentTitle === 'architect' || currentTitle === 'integrator' || currentTitle === 'orchestrator') {
-          // Clear simple governanceTitle field when demoting to member
-          await clearGovernanceTitle()
-          // Clear orchestratorId on team if leaving orchestrator role
+          // SCEN-001 BUG-002 fix: do NOT clearGovernanceTitle() here.
+          // ARCHITECT/INTEGRATOR/ORCHESTRATOR and MEMBER are ALL team titles,
+          // so the agent is still in its team during this transition. The old
+          // code first PATCHed governanceTitle:null — which ChangeTitle treats
+          // as "revert to AUTONOMOUS" (a STANDALONE title) and Gate 9b (R3)
+          // rejects with "AUTONOMOUS is a standalone title and cannot be
+          // assigned while the agent is in a team". That left the demotion
+          // stuck with the inline error "Title change failed: Failed to clear
+          // governance title". Go DIRECTLY architect→member via a single
+          // setGovernanceTitle('member') — ChangeTitle handles the team-title
+          // → team-title swap (and the role-plugin uninstall/install) in one
+          // pipeline run. Only the orchestrator team-authority slot needs an
+          // explicit clear, because that is a team field, not the title.
           if (currentTitle === 'orchestrator') {
             await updateTeamOrchestratorId(null)
           }
         }
         // Set MEMBER title — ChangeTitle pipeline handles programmer plugin install
+        // and the direct demotion from the previous team title.
         await setGovernanceTitle('member')
       } else if (selectedTitle === 'architect' || selectedTitle === 'integrator' || selectedTitle === 'orchestrator') {
         // Transitioning TO a simple governance title (including orchestrator)

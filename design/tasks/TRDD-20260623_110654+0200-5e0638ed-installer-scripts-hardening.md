@@ -3,7 +3,7 @@ trdd-id: 5e0638ed-511b-4234-8f1c-7c95c9ddbc14
 title: Harden the ai-maestro installer + CLI scripts — shellcheck-found real bugs + fail-fast cleanup
 column: dev
 created: 2026-06-23T11:06:54+0200
-updated: 2026-06-23T11:06:54+0200
+updated: 2026-06-23T12:06:58+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 3
@@ -67,8 +67,32 @@ string), SC1090×2 (dynamic source — false positive).
 - **SC2088** (install-messaging.sh:666): false positive (display string `~/.local/bin`);
   leave as-is or add an inline `# shellcheck disable=SC2088`.
 
-**NEXT ACTION:** Phase 1 — apply the 3 fixes, re-shellcheck the 2 files to confirm the
-findings clear, commit by name (NO push). Then Phase 2 in a separate commit.
+### PROGRESS (2026-06-23T12:07)
+- **Phase 1 DONE** — 3 real bugs committed: `9415e1f2` (amp-delete SC2115 rm-rf guard,
+  remote-install api_url SC2154), `e3ce0e0d` (remote-install safe_dir_repl + resolved guard),
+  `1c49b1cd` (ecosystem-config SC2034 file-wide disable).
+- **Phase 2 SC2155 (39/39) DONE** — `1a4a8bcf` amp-security (10), `d59ad1e4` test-amp-routing/
+  cross-host (2 + 2 dead-param), `d403321c` aid-token/aid-maestro-token/migrate-r20 (6 + QUIET
+  orphan; migrate-r20's pipefail grep got `|| true`), `ad20ff53` amp-helper (21 + AMP_LOCAL_DOMAIN
+  remove + ADDR_SCOPE disable). Method per site: clean split where the cmd can't legit-fail
+  (fail-fast); split + `|| true` for registration/config jq reads whose missing/partial case is
+  a deliberate skip under set -euo pipefail.
+- **BONUS BUG FIX** `d68802a1` — amp-helper upload_attachment Step 3 never checked the confirm
+  HTTP status (parallel Step 2 does); surfaced by SC2034 on confirm_http/confirm_result. Added
+  the status guard, removed the unused body capture.
+- **Phase 2 SC2034 tail (14) + SC1090 (2) + SC2088 (1)** — DELEGATED to a background spark agent
+  (write-guarded, no-commit) with a per-site classification: false-positives (AMP_ADDRESS read by
+  7 sourcing scripts; GREEN/YELLOW/CYAN palette; SC1090 dynamic-source; SC2088 display-string) →
+  inline disable; plugin_key dead → remove; extracted-but-unused (att_id/thread_id/status/amp-init
+  dirs) → remove if truly dead; **latent unimplemented flags** (`--check`/`--include-data`/
+  `--include-folder` parsed but never honored) → disable+TODO + flag as findings (NOT implemented —
+  out of scope). Review its diff + `bash -n`/shellcheck, then commit by name.
+
+**NEXT ACTION:** On the spark agent's return — review its uncommitted diff, run
+`shellcheck --severity=warning install-messaging.sh scripts/*.sh` (target: 0 warnings), commit by
+name (NO push). Then Phase 2 is COMPLETE → move `column: dev` → testing/complete as appropriate.
+Optionally open a follow-up TRDD for the latent unimplemented flags + the info/style items observed
+out-of-scope (SC2086, SC2001, SC2012, SC2329).
 
 **GIT SAFETY:** the SCEN-001 scenario-runner is live on the same branch; it stages
 app files by name and won't touch these shell scripts (disjoint file set). Commit my

@@ -8,6 +8,7 @@ color: cyan
 skills:
   - scenarios-rules
   - dev-browser:dev-browser
+  - scenario-region-capture
 hooks:
   PreToolUse:
     - matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash"
@@ -121,6 +122,12 @@ You run on **`sonnet[1m]`**, not Opus. The earlier Opus runner cost ~10–12M co
 1. **Never let a raw dev-browser snapshot or screenshot accumulate in your context.** A `page.snapshotForAI()` accessibility tree can be 5–20K tokens; a screenshot is large. After each snapshot, **extract only the 2–3 facts you need** (is element X present? its `ref`/bbox? the visible text?) and proceed. Do NOT echo the raw snapshot back, do NOT re-print it, do NOT keep narrating it. The accumulation of raw snapshots is the single biggest avoidable cost — every retained blob is re-read on every subsequent turn.
 2. **Prefer the accessibility tree (text) over pixels for ALL verification.** "Is the modal open?", "did the title change?", "is the button enabled?" are answerable from `snapshotForAI()` text — no vision needed. Screenshots are for the Rule 10 PHOTOSTORY audit trail, NOT for your decisions. Save the screenshot to disk and move on; do not load it back into context to "look at it" unless step 3 applies.
 3. **Vision is the rare exception (L4 policy).** Only when a step's verification genuinely cannot be answered from the a11y tree (e.g. a canvas-rendered chart, a pixel-level layout regression) do you interpret an image. When you do: read exactly ONE screenshot, answer ONE focused question, extract the concise finding (≤5 lines), and drop the image from your working set immediately. (A dedicated Opus `screenshot-interpreter` agent exists for the hardest pixel cases; the orchestrator invokes it when you flag `NEEDS-OPUS-VISION: <path> — <question>` in your report and cannot resolve it yourself. Do not attempt to spawn it — you have no `Agent` tool, by design.)
+
+4. **Observe only the REGION OF INTEREST — never the whole page (L5).** This applies to BOTH snapshots and screenshots, and the snapshot half is the bigger win. Use the preloaded **`scenario-region-capture`** skill — its `references/region-capture.js` provides `scopedAria(target)` (cheap text), `captureRegion(target,{margin})` (clipped image), and `captureLandmarks()` (global check, decomposed). Resolve `target` by ARIA role/name or selector from the snapshot you already took.
+   - **Accessibility snapshots:** scope `snapshotForAI()` to the subtree you are verifying (the toolbar, the modal, the sidebar), not the whole document. A full-page a11y tree is 5–20K tokens; a scoped subtree is 0.2–2K. If the dev-browser API exposes a root/selector option for the snapshot, use it; otherwise query the specific element/subtree (e.g. evaluate against `document.querySelector(sel)`) and snapshot/extract only that. Whole-page snapshots are the dominant accumulator — avoid them.
+   - **Screenshots:** capture the element's clip box, not the page. Get `element.boundingBox()`, expand it by a margin, and `page.screenshot({ clip: {x,y,width,height} })` (or `page.locator(sel).screenshot()`). A full page is ~1,365 tokens; a clipped element is ~16–320. Use a **generous margin (~32px)** when the check is bleed-out / overflow / shadow-clipping (the margin IS the test); a small margin (~16px) for truncation / gradient / focus-ring / alignment checks.
+   - **What to capture for which defect:** element+small-margin → truncated text, wrong gradient, missing highlight, focus ring; parent-container+margin → misaligned siblings; element+generous-margin → bleed-out/overflow; the overlap region (or, rarely, full-page) → z-index/obstructing-overlay/modal-over-page.
+   - Default to clipped/scoped. Reach for a full-page capture ONLY when the check is genuinely global (cross-viewport stacking). A clipped image also makes the Opus `screenshot-interpreter` call cheap (its base + a ~40-token image instead of ~1,540).
 
 These rules cut the per-turn context that gets multiplied by ~284 turns. Honoring them is the whole point of this redesign.
 

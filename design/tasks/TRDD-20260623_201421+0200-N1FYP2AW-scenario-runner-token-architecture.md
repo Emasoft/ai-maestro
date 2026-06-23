@@ -3,7 +3,7 @@ trdd-id: N1FYP2AW
 title: Token-optimized scenario-runner — Sonnet[1m] executor + Opus screenshot-interpreter
 column: dev
 created: 2026-06-23T20:14:21+0200
-updated: 2026-06-23T21:00:16+0200
+updated: 2026-06-23T21:22:15+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -61,6 +61,10 @@ to ~445K) re-read on every one of ~284 turns — billed at **Opus** rate × ~7 r
    `scenarios-rules` skill); kept the IRON write-guard hook + all Rule-0 safety.
 2. `.claude/agents/screenshot-interpreter.md` — NEW: `model: opus`, tools
    `Read, Glob` only, no MCP/skills, ≤5-line output contract.
+3. `.claude/skills/scenario-region-capture/` — NEW skill (L5): DOM/ARIA-guided
+   clipped screenshots + scoped aria snapshots. Lean SKILL.md (base-cheap) +
+   `references/region-capture.js` (loaded on demand). Wired into the runner's
+   `skills:` frontmatter + the L5 Token-discipline rule.
 
 **NEXT ACTION (Phase 2 — needs explicit user go; COSTS TOKENS):** single-scenario
 A/B — run ONE self-contained scenario (e.g. SCEN-002/003) with the curated
@@ -210,6 +214,7 @@ re-read of (base + accumulated snapshots) every turn, at Opus rate.
 | **L2** | **Curated minimal-tool agent** (no MCP, tiny `tools:`) | the controllable ~118K of base, re-read every turn | base ~213K→~100K ⇒ ~113K×284 ≈ **33M fewer** cache_read |
 | **L3** | **Offload dev-browser bulk to the interpreter; keep only a concise digest in the executor** | the 213K→445K accumulation | removes the ~38M growth component |
 | **L4** | **Opus screenshot-interpreter sub-agent, concise output, invoked rarely** | preserves vision quality WITHOUT paying Opus on 284 turns | Opus billed only on the few steps the a11y tree can't answer |
+| **L5** | **DOM/ARIA-scoped observation** (`scenario-region-capture` skill) | the per-observation SIZE — scoped aria 0.2–2K vs 5–20K full-page; clipped screenshot ~16–320 vs ~1,365 full | shrinks every snapshot/screenshot L3 still keeps; compounds with L2/L3 and makes the L4 interpreter call cheap too |
 
 Combined projection: cache_read ~98M → ~25–30M (base ~100K re-read + minimal
 growth), then L1 makes that ~5× cheaper in dollars → **order ~15× dollar
@@ -275,6 +280,9 @@ reduction per run**. To be confirmed by the §7 A/B.
     Token-discipline section (L3 + L4); removed the Phase-A 22K rules double-Read;
     IRON write-guard + Rule-0 safety retained verbatim.
   - `screenshot-interpreter.md` (NEW): opus, `Read, Glob` only, ≤5-line contract.
+  - `scenario-region-capture` skill (NEW, L5): DOM/ARIA-guided clipped
+    screenshots + scoped aria snapshots; lean SKILL.md + on-demand
+    `references/region-capture.js`; wired into the runner frontmatter + L5 rule.
   - Commit (no push; ai-maestro is commit-only).
 - **Phase 2 (on explicit user go — costs tokens):**
   - Single-scenario A/B validation (§7) on a self-contained scenario (e.g.

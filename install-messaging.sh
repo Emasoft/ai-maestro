@@ -663,6 +663,7 @@ if [ "$INSTALL_SCRIPTS" = true ]; then
     # Dual guard: check runtime PATH and shell config marker to avoid duplicates
     if [[ ":$PATH:" == *":$HOME/.local/bin:"* ]]; then
         # Already in runtime PATH - no action needed
+        # shellcheck disable=SC2088  # display string, not a path
         print_info "~/.local/bin already in PATH"
     else
         # Detect shell config file

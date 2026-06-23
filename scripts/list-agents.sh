@@ -17,11 +17,14 @@ if [ -z "$AIMAESTRO_API" ]; then
     fi
 fi
 
-# Colors for output
+# Colors for output (ANSI palette kept whole; RED/BLUE/NC are used below)
 RED='\033[0;31m'
+# shellcheck disable=SC2034  # ANSI palette kept whole
 GREEN='\033[0;32m'
+# shellcheck disable=SC2034  # ANSI palette kept whole
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+# shellcheck disable=SC2034  # ANSI palette kept whole
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 

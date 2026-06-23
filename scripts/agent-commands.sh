@@ -1050,6 +1050,7 @@ cmd_export() {
     local agent="" output="" include_data=false include_folder=false
 
     while [[ $# -gt 0 ]]; do
+        # shellcheck disable=SC2034  # TODO(TRDD-5e0638ed): --include-data/--include-folder parsed but not yet honored
         case "$1" in
             -o|--output)
                 [[ $# -lt 2 ]] && { print_error "-o/--output requires a value"; return 1; }

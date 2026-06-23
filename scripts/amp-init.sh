@@ -171,13 +171,15 @@ fi
 # Set AMP_DIR to UUID-based path
 AMP_DIR="${AMP_AGENTS_BASE}/${AGENT_UUID}"
 
-# Re-derive all dependent paths (since AMP_DIR changed)
+# Re-derive AMP_DIR-dependent paths used here + by ensure_amp_dirs().
+# (AMP_INBOX_DIR/AMP_SENT_DIR are intentionally not re-derived here: amp-init does
+#  no message ops, and ensure_amp_dirs builds inbox/sent from AMP_MESSAGES_DIR.)
 AMP_CONFIG="${AMP_DIR}/config.json"
 AMP_KEYS_DIR="${AMP_DIR}/keys"
+# shellcheck disable=SC2034  # re-derived after AMP_DIR change; read as a global by ensure_amp_dirs() in amp-helper.sh
 AMP_MESSAGES_DIR="${AMP_DIR}/messages"
-AMP_INBOX_DIR="${AMP_MESSAGES_DIR}/inbox"
-AMP_SENT_DIR="${AMP_MESSAGES_DIR}/sent"
 AMP_REGISTRATIONS_DIR="${AMP_DIR}/registrations"
+# shellcheck disable=SC2034  # re-derived after AMP_DIR change; read as a global by ensure_amp_dirs() in amp-helper.sh
 AMP_ATTACHMENTS_DIR="${AMP_DIR}/attachments"
 
 # Ensure directories exist

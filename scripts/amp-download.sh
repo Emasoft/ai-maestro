@@ -160,8 +160,6 @@ FAILED=0
 download_single_attachment() {
     local att_json="$1"
 
-    local att_id
-    att_id=$(echo "$att_json" | jq -r '.id')
     local att_filename
     att_filename=$(echo "$att_json" | jq -r '.filename')
     local att_size

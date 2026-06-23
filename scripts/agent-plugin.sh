@@ -825,7 +825,6 @@ HELP
     # Save current enabled state
     local settings_json="$HOME/.claude/settings.json"
     local was_enabled=false
-    local plugin_key="$plugin"
 
     if [[ -f "$settings_json" ]]; then
         # Check various possible key formats

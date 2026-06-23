@@ -266,6 +266,7 @@ load_config() {
     fi
 
     AMP_AGENT_NAME=$(jq -r '.agent.name // .name // .agent_name // empty' "$AMP_CONFIG" 2>/dev/null)
+    # shellcheck disable=SC2034  # set here; read by scripts that source this file
     AMP_ADDRESS=$(jq -r '.agent.address // .address // .amp_address // empty' "$AMP_CONFIG" 2>/dev/null)
     AMP_FINGERPRINT=$(jq -r '.agent.fingerprint // .fingerprint // empty' "$AMP_CONFIG" 2>/dev/null)
 

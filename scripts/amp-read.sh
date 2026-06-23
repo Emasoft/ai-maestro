@@ -128,14 +128,11 @@ to=$(echo "$MESSAGE" | jq -r '.envelope.to')
 subject=$(echo "$MESSAGE" | jq -r '.envelope.subject')
 priority=$(echo "$MESSAGE" | jq -r '.envelope.priority')
 timestamp=$(echo "$MESSAGE" | jq -r '.envelope.timestamp')
-thread_id=$(echo "$MESSAGE" | jq -r '.envelope.thread_id')
 in_reply_to=$(echo "$MESSAGE" | jq -r '.envelope.in_reply_to // empty')
 
 msg_type=$(echo "$MESSAGE" | jq -r '.payload.type // "notification"')
 body=$(echo "$MESSAGE" | jq -r '.payload.message')
 context=$(echo "$MESSAGE" | jq '.payload.context // null')
-
-status=$(echo "$MESSAGE" | jq -r '(.local.status // .metadata.status // "unread")')
 
 # Format timestamp
 ts_display=$(format_timestamp "$timestamp")

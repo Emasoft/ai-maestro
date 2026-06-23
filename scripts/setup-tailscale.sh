@@ -45,6 +45,7 @@ warn() { echo -e "  ${YELLOW}WARN${NC}  $1"; WARNINGS=$((WARNINGS + 1)); }
 info() { echo -e "  ${CYAN}INFO${NC}  $1"; }
 
 for arg in "$@"; do
+  # shellcheck disable=SC2034  # TODO(TRDD-5e0638ed): --check parsed (sets CHECK_ONLY) but not yet honored
   case "$arg" in
     --check)   CHECK_ONLY=true ;;
     --install) INSTALL=true ;;

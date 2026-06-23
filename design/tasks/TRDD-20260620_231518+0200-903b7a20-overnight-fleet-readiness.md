@@ -21,6 +21,54 @@ labels: [overnight, fleet-readiness, governance, security, scripts, scenarios]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-06-20
 
+**▶ UPDATE 2026-06-23T10:30 (QUOTA BACK — directive B DONE, directive A piloting):**
+- **WEEKLY QUOTA RESET** — a probe agent returned PROBE_OK (210k tokens) at 10:19. Remaining
+  risk is only TRANSIENT server RL on agent BURSTS; mitigated by low-concurrency ramped pools
+  + rate-limit-as-returned-string backoff (the proven `feedback_workflow_rate_limit_in_script`
+  pattern).
+- **Directive B COMPLETE** — pooled scan/revise Workflow (`scenario-governance-revision-wf`,
+  cap-3 scan/cap-2 revise, RL-backoff, schema-less) scanned all 27: 21 already compliant,
+  1 flagged-no-edit (SCEN-008), **5 revised + COMMITTED `88eceef7`**: SCEN-001/002/006/007
+  (D3 role-less — AUTONOMOUS revert now SWAPS in `ai-maestro-autonomous-agent`, NOT role-less,
+  per R9.13/ChangeTitle G1+G15/16/G17); SCEN-011 (D1 — MANAGER routes the design task through
+  the COS, R6 v3; R15.6 exemption kept distinct from R6 routing). Each diff verified (minimal,
+  structure/numbering preserved, rules cited). Confirmed: no scenario cites R6/R22/R38/R39.
+- **Directive A STARTING** — piloting SCEN-001 via the self-contained `scenario-runner` agent
+  (BARE name; runs its OWN setup-SCEN-NNN.sh + cleanup-SCEN-NNN.sh; has the IRON write-guard
+  hook), spawned in BACKGROUND (resumable, one-at-a-time → no burst RL). On each completion:
+  commit any fix-as-you-go changes on `governance-rules` (NO worktree/PR/push) + append
+  SCENARIO_DONE to batch-progress.log + spawn the next pending. Prereqs verified: server UP
+  (401=auth-required), dev-browser daemon UP (0 browsers), pm2 ai-maestro online.
+  NEXT ACTION: await SCEN-001 verdict → if clean, continue the batch one runner at a time.
+
+**▶ UPDATE 2026-06-23 (USER DIRECTIVES — Phase D scenarios; weekly-limit-interrupted):**
+USER (2026-06-22/23) gave two directives: **(A)** leave memory-split/consolidate/etc.
+passes to the janitor daemon — do NOT run them myself; **priority = the ai-maestro
+server + running the scenarios.** **(B)** "since certain governance rules changed,
+revise ALL scenario files" — the 27 `tests/scenarios/SCEN-*.scen.md` were written
+against older governance; update them to current `docs/GOVERNANCE-RULES.md` **v4.0.2
+(R1-R40)** — esp. R6 v3 (MANAGER can't bypass COS), the comm-graph (R38/R39 user-user
+forbidden + ASSISTANT-panel), R21 AIO, R22 authorship self-id, R23 frozen-CLI, R20.30/31
+install scope, R6.11-R6.14 canonical agent-id — THEN run them. So: **revise (B) → run (A).**
+- **SCEN-001:** ran (160 tool-uses) but the **WEEKLY USAGE LIMIT** killed it pre-commit;
+  per Rule 6 the RUN is invalidated (re-run fresh after revision). Its 2 fix-as-you-go
+  governance-UI bug fixes were independently valid, **tsc-verified (0 errors), COMMITTED
+  `5285e722`**: BUG-001 `useGovernance.ts` raw fetch→`sudoFetch` on the strict team PUT;
+  BUG-002 `TitleAssignmentDialog.impl.tsx` architect/integrator/orchestrator→member goes
+  directly to `setGovernanceTitle('member')` (the old clearGovernanceTitle()→AUTONOMOUS
+  tripped R3 Gate 9b). Tree CLEAN after the commit.
+- **WEEKLY-LIMIT REALITY:** repeated hits this campaign (reset shifted Jun 23 5pm→10am;
+  API returned after a ~22.5h gap). **Agent bursts re-trigger it** (a 38-agent audit
+  Workflow + even a trivial probe RL'd). **RL-SAFE rule: pace, never burst** — probe
+  (`general-purpose`, "reply PROBE_OK") before any heavy scenario-runner; one scenario at
+  a time; resume from `tests/scenarios/state/batch-progress.log` (window started
+  2026-06-22, 0 done yet). Ultracode audit `wf_23f696c3-21d` is parked (33/34 slices RL'd).
+- **PLAN for B:** (1) build the governance-change spec from `docs/API-CHANGES.md` +
+  GOVERNANCE-RULES.md v4.0.2; (2) map each scenario's governance assertions → revise the
+  affected ones to current rules (paced; small agent batches only when the API proves
+  stable — NEVER a 27-agent burst); (3) run the batch (A). NEXT ACTION: scope the
+  governance delta, then revise scenarios.
+
 **▶ UPDATE 2026-06-21T17:40 (DELEGATED GOVERNANCE SECURITY AUDIT — fixes committed):**
 User mandate: "delegate, do not act directly; launch many opus agents (or an ultracode
 workflow) to examine the governance API + scripts in depth (esp. skill→script coverage),

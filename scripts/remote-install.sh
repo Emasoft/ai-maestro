@@ -175,8 +175,11 @@ cleanup() {
         # Safety: only auto-remove paths under $HOME (never system dirs)
         local resolved
         resolved=$(cd -P "$INSTALL_DIR" 2>/dev/null && pwd 2>/dev/null)
+        # Guard on the SYMLINK-RESOLVED path ($resolved), not the raw $INSTALL_DIR, so a
+        # symlinked install dir cannot smuggle the auto-rm outside $HOME. If resolution
+        # failed ($resolved empty), refuse the rm.
         if [ -n "$INSTALL_DIR" ] && [ -d "$INSTALL_DIR" ] && [ ! -f "$INSTALL_DIR/package.json" ] \
-           && [[ "$INSTALL_DIR" == "${HOME}"/* ]]; then
+           && [ -n "$resolved" ] && [[ "$resolved" == "${HOME}"/* ]]; then
             if [ "$NON_INTERACTIVE" = true ]; then
                 rm -rf "$INSTALL_DIR"
                 maestro_info "Removed partial installation at $INSTALL_DIR"
@@ -747,7 +750,6 @@ act2_install_prerequisites() {
         # Detect if npm global dir is writable (system Node needs sudo)
         local npm_prefix
         npm_prefix=$(npm config get prefix 2>/dev/null || echo "/usr/local")
-        local yarn_installed=false
         if [ -w "$npm_prefix/lib" ] 2>/dev/null; then
             npm install -g yarn || { maestro_fail "Failed to install Yarn. Aborting."; exit 1; }
         else
@@ -1466,11 +1468,9 @@ act5_grand_finale() {
         echo "   Dashboard: http://localhost:${PORT}"
         echo ""
 
+        # NOTE: INITIAL_PROMPT is a fixed, quote-safe constant; the tmux launches below pass
+        # it single-quoted. If this is ever made dynamic/user-supplied, switch to printf %q.
         INITIAL_PROMPT='Hi! I just installed AI Maestro. Can you verify everything is working and help me get started?'
-
-        # Shell-quote INITIAL_PROMPT so special characters are safely passed to the AI tool
-        local quoted_prompt
-        printf -v quoted_prompt '%q' "$INITIAL_PROMPT"
 
         if [ -n "$TMUX" ]; then
             # Already in tmux — create a new window and switch to it
@@ -1485,7 +1485,6 @@ act5_grand_finale() {
             # Not in tmux — create session only if it doesn't already exist, then attach.
             # The sleep is only needed when a new session was just created to let it start.
             if tmux has-session -t "my-first-agent" 2>/dev/null; then
-                session_preexisted=true
                 maestro_info "Reattaching to existing 'my-first-agent' session..."
                 # Attempt to attach; if the session exists but attach fails (e.g. the session
                 # exited between has-session and attach-session), kill the stale session and

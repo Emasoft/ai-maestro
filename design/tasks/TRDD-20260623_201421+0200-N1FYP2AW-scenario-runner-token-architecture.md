@@ -3,7 +3,7 @@ trdd-id: N1FYP2AW
 title: Token-optimized scenario-runner — Sonnet[1m] executor + Opus screenshot-interpreter
 column: dev
 created: 2026-06-23T20:14:21+0200
-updated: 2026-06-23T20:14:21+0200
+updated: 2026-06-23T20:22:26+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -51,15 +51,23 @@ via the `usage` blocks on assistant turns (the method is reproducible — see §
 **cache_read ≈ 98M tokens** — the full accumulated context (base ~213K growing
 to ~445K) re-read on every one of ~284 turns — billed at **Opus** rate × ~7 runs.
 
-**NEXT ACTION:** build the two curated agent definitions (Phase 1) — they are
-file writes only, no agent spawns, no token risk:
-1. `.claude/agents/scenario-executor.md` — `model: sonnet[1m]`, minimal `tools:`
-   (Bash, Read, Write, Edit, Glob, Grep — NO MCP), loads ONLY the dev-browser
-   skill, keeps the IRON `PreToolUse` write-guard, drives the UI, delegates
-   pixel questions to the interpreter, returns the 2-line verdict.
-2. `.claude/agents/screenshot-interpreter.md` — `model: opus`, tools: Read only
-   (+ the one dev-browser screenshot read path), CONCISE structured output
-   (≤5 lines per call), invoked ONLY when the a11y snapshot is insufficient.
+**Phase 1 (file writes): DONE 2026-06-23.**
+1. `.claude/agents/scenario-runner.md` — CURATED IN PLACE (NOT a new
+   scenario-executor.md — DRY, and the batch skill + Rule 13 cron reference it
+   by the name `scenario-runner`): `model: opus → sonnet[1m]`; added explicit
+   `tools: Bash, Read, Write, Edit, Glob, Grep, Skill` (NO MCP — the L2 win);
+   added a Token-discipline section (L3 snapshot-digest + L4 vision policy);
+   stopped the Phase-A double-Read of the 22K rules file (already loaded via the
+   `scenarios-rules` skill); kept the IRON write-guard hook + all Rule-0 safety.
+2. `.claude/agents/screenshot-interpreter.md` — NEW: `model: opus`, tools
+   `Read, Glob` only, no MCP/skills, ≤5-line output contract.
+
+**NEXT ACTION (Phase 2 — needs explicit user go; COSTS TOKENS):** single-scenario
+A/B — run ONE self-contained scenario (e.g. SCEN-002/003) with the curated
+runner, extract its subagent `usage` (§7), compare cost-weighted tokens to the
+§1 Opus baseline. Confirm: (a) turn-1 base dropped well below 213K (proves the
+no-MCP `tools:` sheds the schemas), (b) peak context stays manageable, (c) the
+scenario still PASSes. Do NOT run until the user OKs a paid validation run.
 
 **DO NOT** spawn any scenario-runner / scenario-executor to "validate" until the
 user OKs a paid validation run — the batch is HALTED over the token incident.
@@ -192,13 +200,18 @@ reduction per run**. To be confirmed by the §7 A/B.
 
 ## §6. Implementation plan (phased)
 
-- **Phase 1 (this session — file writes only, no spawns, no token risk):**
-  - Write `.claude/agents/scenario-executor.md` (sonnet[1m], curated tools, no
-    MCP, dev-browser skill only, IRON write-guard hook retained, L3 digest
-    discipline in the prompt, 2-line return).
-  - Write `.claude/agents/screenshot-interpreter.md` (opus, Read-only, concise
-    output contract).
-  - Add the executor→interpreter delegation protocol to both prompts.
+- **Phase 1 (this session — file writes only, no spawns, no token risk): DONE.**
+  - DECISION: curate `scenario-runner.md` IN PLACE rather than fork a new
+    `scenario-executor.md`. Reasons: single-source-of-truth (two near-identical
+    280-line agent files would drift — the user's own recheck/DRY principle);
+    the `run-scenarios-batch` skill + the Rule 13 cron reference the agent by
+    the name `scenario-runner`, so in-place is least-disruptive; the Opus
+    baseline survives in git history + the measured §1 numbers, so no separate
+    file is needed for A/B.
+  - `scenario-runner.md`: `model: sonnet[1m]`; explicit `tools:` (no MCP, L2);
+    Token-discipline section (L3 + L4); removed the Phase-A 22K rules double-Read;
+    IRON write-guard + Rule-0 safety retained verbatim.
+  - `screenshot-interpreter.md` (NEW): opus, `Read, Glob` only, ≤5-line contract.
   - Commit (no push; ai-maestro is commit-only).
 - **Phase 2 (on explicit user go — costs tokens):**
   - Single-scenario A/B validation (§7) on a self-contained scenario (e.g.
@@ -240,6 +253,17 @@ The plugin is the place where L2 can go past the harness-injection limit.
   base-context tax (~95K harness floor + its tiny tools). Mitigation: invoke it
   RARELY (a11y tree answers most steps); consider one persistent interpreter
   fed via SendMessage instead of N fresh spawns. Measure in Phase 2.
+- **Subagents likely cannot nest-spawn other subagents.** The runner's own
+  rules say "NEVER spawn nested subagents," and the curated runner has NO
+  `Agent` tool (deliberate — the agent-type registry is itself large base
+  context that would defeat L2). CONSEQUENCE: the Sonnet executor does NOT
+  spawn the Opus interpreter directly. The L4 path is (a) the executor uses its
+  OWN Sonnet vision for the rare pixel question (Sonnet has vision; the a11y
+  tree covers almost everything anyway), and (b) for a genuinely Opus-grade
+  pixel case it flags `NEEDS-OPUS-VISION: <path> — <question>` in its report and
+  the ORCHESTRATOR (or user) invokes `screenshot-interpreter`. Whether nesting
+  is allowed in this Claude Code build is unconfirmed; the design does not
+  depend on it.
 - **Sonnet UI-driving quality:** Sonnet may need more explicit step instructions
   than Opus. Mitigation: the scenario files are already explicit; FIX-AS-YOU-GO
   + the interpreter cover the gaps. Validate in Phase 2.

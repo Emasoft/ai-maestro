@@ -514,12 +514,28 @@ author: AI Maestro Team
 
 ## Phase 12: RBAC Probe -- No Self-Modification
 
-#### S054: Attempt agent self-modification via API
-- **Action:** Get scen-test-agent-alpha's ID. Attempt `PATCH /api/agents/<alphaId>` with header `X-Agent-Id: <alphaId>` and body `{"label": "self-hacked"}`.
-- **Goal:** API returns 403 -- no agent can modify itself
+> **Context (AUTHORING-002 fix during 20260623T094045Z run):** The original
+> S054 instructed a direct `PATCH /api/agents/<id>` curl carrying an
+> agent-identity header `X-Agent-Id`. That is forbidden by Rule 0 (the
+> scenario runner is the HUMAN USER, never an agent — it has no AID and may
+> not send agent-authenticated API calls) AND by Rule 6 (state-mutating
+> `curl -X PATCH` to agent/team/governance endpoints is blocked by the
+> subagent write-guard; reads only). A negative test expecting 403 does not
+> change that the *method* is forbidden user tooling, and the human user has
+> no UI path to make an agent modify itself. S054 is therefore DEFERRED — the
+> RBAC no-self-modification rule is a backend `authorize()` concern best
+> covered by a unit test, not a UI scenario step. The whole scenario already
+> demonstrates the USER-authority model: every title change required the
+> governance password / sudo modal (the USER's authority), and no agent ever
+> acted on itself through the UI.
+
+#### S054: DEFERRED — RBAC no-self-modification probe (requires forbidden agent-auth API call)
+- **Action:** N/A via the UI. The probe needs a direct `PATCH /api/agents/<id>` with an `X-Agent-Id` header — forbidden user tooling (Rule 0 + Rule 6). Read-only verification only: confirm `scen-test-agent-alpha`'s `label` is still its name (unchanged), demonstrating no out-of-band self-mutation occurred.
+- **Goal:** Document that the no-self-modification RBAC rule cannot be exercised through the human-user surface; it belongs in a backend unit test.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response status 403. Error mentions self-modification forbidden. Agent label unchanged. Screenshot: SCEN-002/S054-no-self-mod.png
+- **Verify:** `scen-test-agent-alpha.label` unchanged in the registry (read-only). Screenshot: SCEN-002/S054-no-self-mod.png
+- **DEFERRED:** Move RBAC self-modification coverage to `tests/unit/` (server `authorize()`), or rewrite as a UI-observable check if one exists. Tracked in proposals.
 
 ---
 

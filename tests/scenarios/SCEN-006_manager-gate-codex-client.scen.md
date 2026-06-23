@@ -263,10 +263,10 @@ author: AI Maestro Team
 
 #### S023: Click "Leave team" on Codex agent
 - **Action:** Profile -> Leave team
-- **Goal:** Agent removed, title -> AUTONOMOUS, plugin removed
+- **Goal:** Agent removed from team, title -> AUTONOMOUS, team role-plugin swapped for `ai-maestro-autonomous-agent` (per R9.13/R11.5: every agent must carry exactly one role-plugin, so leaving a team installs the AUTONOMOUS role-plugin in place of the team plugin — the agent is never left role-less)
 - **Creates:** nothing
-- **Modifies:** Team agentIds, agent title, plugin
-- **Verify:** AUTONOMOUS, no plugin. Screenshot: SCEN-006/S022-codex-autonomous.png
+- **Modifies:** Team agentIds, agent title, role-plugin (`ai-maestro-programmer-agent` uninstalled, `ai-maestro-autonomous-agent` installed)
+- **Verify:** AUTONOMOUS title, `ai-maestro-autonomous-agent` role-plugin installed (NOT role-less), agent stays online. Screenshot: SCEN-006/S022-codex-autonomous.png
 
 ---
 
@@ -292,9 +292,9 @@ author: AI Maestro Team
 
 #### S026: Delete team with governance password
 - **Action:** Teams tab -> delete `scen006-governance-team` -> Delete -> password `mYkri1-xoxrap-gogtan` -> "Keep Agents"
-- **Goal:** Team deleted via 8-gate pipeline, agents revert
+- **Goal:** Team deleted via 8-gate pipeline, kept agents revert to AUTONOMOUS (each kept agent's team role-plugin is swapped for `ai-maestro-autonomous-agent` per R9.13/R11.5 — never left role-less)
 - **Creates:** nothing
-- **Modifies:** Team removed, titles -> AUTONOMOUS, plugins removed
+- **Modifies:** Team removed, titles -> AUTONOMOUS, team role-plugins swapped for `ai-maestro-autonomous-agent`
 - **Verify:** Team gone. Screenshot: SCEN-006/S025-team-deleted.png
 
 #### S027: Verify all former agents are AUTONOMOUS

@@ -193,15 +193,15 @@ author: AI Maestro Team
 - **Verify:** Idle prompt visible. Screenshot: SCEN-011/S014-claude-running.png
 
 #### S015: Send task to MANAGER
-- **Action:** In Prompt Builder: "Send a design task to the team: Design the data model for a TODO app with tags, priorities, and due dates. The ARCHITECT should produce a design document and share it with the team via a GitHub issue. Use the /team-governance skill. If any operation requires the governance password, ask the user to enter it in the AI Maestro UI popup -- do NOT use the password directly."
+- **Action:** In Prompt Builder: "Send a design task to the COS (the sole team gateway -- per R6 v3 you cannot message ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER directly): Design the data model for a TODO app with tags, priorities, and due dates. The ARCHITECT should produce a design document and share it with the team via a GitHub issue. Use the /team-governance skill. If any operation requires the governance password, ask the user to enter it in the AI Maestro UI popup -- do NOT use the password directly."
 - **Goal:** MANAGER processes task
 - **Creates:** AMP messages
 - **Modifies:** nothing
 - **Verify:** Terminal shows MANAGER working. Screenshot: SCEN-011/S015-task-sent.png
 
 #### S016: Wait for MANAGER to delegate
-- **Action:** Wait for MANAGER to send AMP message to COS or team
-- **Goal:** Message delivered
+- **Action:** Wait for MANAGER to send AMP message to the COS (the sole team gateway -- R6 v3 blocks a direct MANAGER->member edge)
+- **Goal:** Message delivered to COS
 - **Creates:** AMP message files
 - **Modifies:** nothing
 - **Verify:** Check AMP inbox of COS. Screenshot: SCEN-011/S016-delegation.png
@@ -221,11 +221,11 @@ author: AI Maestro Team
 - **Verify:** `find ~/agents/scen-r15-*/` for new .md files. Screenshot: SCEN-011/S018-md-files.png
 
 #### S019: Verify MANAGER exemption from R15
-- **Action:** Analyze MANAGER's conversation log for direct AMP messages (without GitHub issues)
-- **Goal:** MANAGER is EXEMPT from R15 -- may send direct AMP instructions
+- **Action:** Analyze MANAGER's conversation log for direct AMP messages to the COS (without GitHub issues)
+- **Goal:** MANAGER is EXEMPT from R15 -- may send direct AMP instructions (R15.6), but the recipient must still be the COS (R6 v3 forbids a direct MANAGER->ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER edge)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** MANAGER may have sent direct AMP (exempt). Non-MANAGER agents must use .md + GitHub. Screenshot: SCEN-011/S019-mgr-exemption.png
+- **Verify:** MANAGER may have sent direct AMP to the COS (R15-exempt yet R6-routed). Non-MANAGER agents must use .md + GitHub. Screenshot: SCEN-011/S019-mgr-exemption.png
 
 ---
 

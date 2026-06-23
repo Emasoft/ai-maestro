@@ -429,22 +429,22 @@ author: AI Maestro Team
 - **Action:** Click "Save" / "Update Team" button
 - **Goal:** Modal closes, team updated with only scen-test-agent-beta
 - **Creates:** nothing
-- **Modifies:** Team agentIds (alpha removed), alpha's team membership, alpha's title (-> AUTONOMOUS), alpha's plugin (uninstalled)
+- **Modifies:** Team agentIds (alpha removed), alpha's team membership, alpha's title (-> AUTONOMOUS), alpha's role-plugin (orchestrator plugin swapped for `ai-maestro-autonomous-agent` per R9.13)
 - **Verify:** Wait 2s, team card shows count 1. Screenshot: SCEN-002/S043-team-updated.png
 
 #### S044: Verify scen-test-agent-alpha reverted to AUTONOMOUS
 - **Action:** Switch to "Agents" tab, click on `scen-test-agent-alpha`
-- **Goal:** Agent's title reverted to AUTONOMOUS, no team, no role-plugin
+- **Goal:** Agent's title reverted to AUTONOMOUS, no team (AUTONOMOUS still carries its mandatory role-plugin per R9.13 — checked in S045)
 - **Creates:** nothing
 - **Modifies:** nothing
 - **Verify:** Title badge shows "AUTONOMOUS", team shows "No team". Screenshot: SCEN-002/S044-alpha-autonomous.png
 
-#### S045: Verify role-plugin removed
+#### S045: Verify role-plugin swapped to ai-maestro-autonomous-agent (R9.13)
 - **Action:** Click "Config" tab in profile panel
-- **Goal:** No locked role-plugin
+- **Goal:** Role-plugin is `ai-maestro-autonomous-agent` (the orchestrator plugin was uninstalled on team-leave; AUTONOMOUS is NOT a role-less state — ChangeTitle Gate 17 auto-installs the mandatory AUTONOMOUS role-plugin per R9.13)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Role Plugin section shows "None" or is empty. Screenshot: SCEN-002/S045-no-plugin.png
+- **Verify:** Role Plugin section shows `ai-maestro-autonomous-agent` (locked by AUTONOMOUS), NOT "None"/empty. The previous `ai-maestro-orchestrator-agent` is gone. Screenshot: SCEN-002/S045-autonomous-plugin.png
 
 ---
 

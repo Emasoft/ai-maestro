@@ -266,10 +266,10 @@ author: AI Maestro Team
 
 #### S023: Remove Codex agent from team
 - **Action:** Profile -> Leave team on `scen7-codex-member`
-- **Goal:** Title -> AUTONOMOUS, Codex-converted plugin removed
+- **Goal:** Title -> AUTONOMOUS, role-plugin swapped to Codex-converted `ai-maestro-autonomous-agent` (R9.13: every agent carries exactly one role-plugin; the title revert swaps the plugin, it does NOT leave the agent role-less)
 - **Creates:** nothing
 - **Modifies:** Team agentIds, title, plugin
-- **Verify:** AUTONOMOUS, no plugin. Screenshot: SCEN-007/S023-codex-autonomous.png
+- **Verify:** AUTONOMOUS badge, `ai-maestro-autonomous-agent` installed (Codex format). Screenshot: SCEN-007/S023-codex-autonomous.png
 
 ---
 
@@ -284,10 +284,10 @@ author: AI Maestro Team
 
 #### S025: Verify all former agents are AUTONOMOUS
 - **Action:** Check all former team agents
-- **Goal:** All AUTONOMOUS, no plugins
+- **Goal:** All AUTONOMOUS, each carrying the `ai-maestro-autonomous-agent` role-plugin (R9.13: title revert swaps the plugin per-client, never strips it; an agent left role-less would be hibernated by ChangeTitle Gate 17, so a surviving AUTONOMOUS agent always has its autonomous role-plugin)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** All AUTONOMOUS. Screenshot: SCEN-007/S025-all-autonomous.png
+- **Verify:** All AUTONOMOUS, each with `ai-maestro-autonomous-agent` installed (native for Claude agents, Codex-converted for the Codex agent). Screenshot: SCEN-007/S025-all-autonomous.png
 
 ---
 

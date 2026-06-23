@@ -360,10 +360,10 @@ author: AI Maestro Team
 
 #### S034: Revert title to AUTONOMOUS
 - **Action:** Open title dialog, leave team first (click "Leave team"), then verify title auto-reverts
-- **Goal:** Agent removed from team, title becomes AUTONOMOUS, all plugins removed
+- **Goal:** Agent removed from team, title becomes AUTONOMOUS, role-plugin swapped to ai-maestro-autonomous-agent (R9.13: every agent carries exactly one role-plugin; the leave-team path's ChangeTitle Gate 1 normalizes null -> autonomous and Gate 15/16 auto-installs ai-maestro-autonomous-agent, so the agent stays online — it is NOT left role-less)
 - **Creates:** nothing
-- **Modifies:** Team membership (removed), agent title (-> AUTONOMOUS), plugins (cleared)
-- **Verify:** Title shows AUTONOMOUS, no team, no role-plugin. Screenshot: SCEN-001/S034-reverted-autonomous.png
+- **Modifies:** Team membership (removed), agent title (-> AUTONOMOUS), role-plugin (-> ai-maestro-autonomous-agent, replacing the previous team role-plugin)
+- **Verify:** Title shows AUTONOMOUS, no team, Config tab shows exactly one role-plugin: ai-maestro-autonomous-agent (NOT empty — R9.13 forbids a persisted role-less agent). Agent remains online. Screenshot: SCEN-001/S034-reverted-autonomous.png
 
 #### S034a: Delete the second scen-prefixed test agent (scen001-title-agent-2)
 - **Action:** Click `scen001-title-agent-2` in sidebar. Profile → Danger Zone → "Delete Agent" → check "Also delete agent folder" → type `scen001-title-agent-2` → click "Delete Forever". When the sudo password modal appears, enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.

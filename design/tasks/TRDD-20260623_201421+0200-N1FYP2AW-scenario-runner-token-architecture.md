@@ -3,7 +3,7 @@ trdd-id: N1FYP2AW
 title: Token-optimized scenario-runner — Sonnet[1m] executor + Opus screenshot-interpreter
 column: dev
 created: 2026-06-23T20:14:21+0200
-updated: 2026-06-23T20:22:26+0200
+updated: 2026-06-23T20:55:55+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -74,8 +74,14 @@ user OKs a paid validation run — the batch is HALTED over the token incident.
 Verification (§7) is a single 1-scenario A/B, run only on explicit go.
 
 **Load-bearing facts / gotchas:**
-- Peak context ~445K > 200K ⇒ the executor MUST be a **1M-context** model
-  (`sonnet[1m]`), not base Sonnet. Confirmed by `maxRead ≈ 445K` in the data.
+- Peak context reaches **~505–557K** (per-tool ledger §1b; corrects the earlier
+  ~445K estimate) ⇒ the executor MUST be a **1M-context** model (`sonnet[1m]`)
+  UNLESS L3 caps per-turn growth near the base. If L3 holds per-turn context to
+  ~100–150K, base Sonnet (200K) would suffice and save even more. Measure in Ph2.
+- **L3 is the #1 lever** (per-tool ledger): cost is super-linear in run length
+  because per-turn context GROWS with accumulated snapshots; capping that growth
+  makes cost linear in turns. 94% of the week's input came from the 6
+  dev-browser runs; Bash/dev-browser was 73–88% of their tool calls.
 - ~95K of the 213K base (both CLAUDE.md + all 27 `~/.claude/rules/`) is
   **harness-injected into every agent** and CANNOT be shed by the agent.md.
   The **sheddable** ~118K is tool/MCP schemas + the dev-browser skill + the
@@ -118,6 +124,35 @@ real subagent transcripts (one run = one `scenario-runner` subagent):
 
 Across ~7 Opus runs that is ~70–80M cost-weighted tokens at **Opus** rate — the
 observed week-in-hours burn.
+
+## §1b. Per-tool ledger (richer evidence — `reports_dev/tools-use-log.json`)
+
+A per-session tool log (12 sessions, 2026-06-23) sharpens §1 and supersedes the
+peak estimate. The 6 dev-browser scenario runs vs the 6 non-browser sessions:
+
+| scenario | turns | Bash% | input tok | in/turn | est peak |
+|---|---|---|---|---|---|
+| SCEN-001 | 367 | 88% | 141.3M | 385K | ~557K |
+| SCEN-002 | 349 | 88% | 133.5M | 382K | ~552K |
+| SCEN-003 | 294 | 73% | 105.6M | 359K | ~505K |
+| SCEN-015 | 240 | 81% | 85.9M | 358K | ~503K |
+| SCEN-012 | 227 | 81% | 79.8M | 352K | ~490K |
+| SCEN-013 | 214 | 81% | 70.8M | 331K | ~448K |
+| 6 non-browser | 10–75 | ≤60% | 2–19M | ~240K | — |
+
+Hard findings:
+1. **94% of all 655M input tokens came from the 6 dev-browser runs** (616.8M);
+   the non-browser sessions were 6%. The dev-browser runs ARE the week.
+2. **Bash (= dev-browser CLI) is 73–88% of each run's tool calls** — each returns
+   a large a11y snapshot that lands in context and never leaves.
+3. **Accumulation signature:** `in/turn` climbs monotonically with run length
+   (214 turns→330K, 367 turns→385K) — per-turn context is NOT flat at the 213K
+   base; it grows to **~505–557K** peak. (Corrects the earlier ~445K estimate.)
+4. NOT a caching problem: hit rate 98%, cache_creation ~1M/run. The cost is the
+   VOLUME of cache_READS — a huge, growing context re-read every turn.
+5. **Super-linear in run length:** SCEN-001 had 1.7× the turns of SCEN-013 but
+   2.0× the cost (longer run ⇒ bigger per-turn context). Cost ≈ ½·turns·peak.
+   ⇒ L3 (cap per-turn growth) makes cost LINEAR in turns, the single biggest win.
 
 ## §2. Root-cause model
 

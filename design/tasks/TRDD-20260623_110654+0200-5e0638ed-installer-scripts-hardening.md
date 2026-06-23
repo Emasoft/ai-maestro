@@ -1,0 +1,91 @@
+---
+trdd-id: 5e0638ed-511b-4234-8f1c-7c95c9ddbc14
+title: Harden the ai-maestro installer + CLI scripts — shellcheck-found real bugs + fail-fast cleanup
+column: dev
+created: 2026-06-23T11:06:54+0200
+updated: 2026-06-23T11:06:54+0200
+current-owner: ai-maestro-dev-session
+assignee: ai-maestro-dev-session
+priority: 3
+severity: MEDIUM
+effort: M
+labels: [installer, scripts, shell, hardening, shellcheck]
+task-type: bugfix
+parent-trdd: null
+relevant-rules: []
+release-via: none
+delivery: pull-request
+target-branch: main
+feature-branch: governance-rules
+test-requirements: [lint]
+audit-requirements: []
+review-requirements: [human-review]
+impacts: [install-script]
+runtime-targets: [macos, linux]
+---
+
+# Harden the ai-maestro installer + CLI scripts
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-06-23
+
+User directive (2026-06-23, while the SCEN batch runs in background): "continue
+working on the ai-maestro installer and scripts." Approach per `/go-on-yourself`:
+evaluate on FACTS (shellcheck), fix real bugs, no bloat, commit (NO push — ai-maestro
+is not a plugin), write this TRDD.
+
+**FACTUAL SCAN:** `shellcheck 0.11.0 --severity=warning` over `install-messaging.sh`
++ all 63 `scripts/*.sh` → **0 error-severity**, 96 warnings. Codes: SC2034×51 (mostly
+false-positive "unused" in the sourced `ecosystem-config.sh`), SC2155×39 (fail-fast:
+`local x=$(cmd)` masks `cmd`'s exit code), SC2154×2 (undefined var — REAL bugs),
+SC2115×1 (unguarded `rm -rf` — REAL), SC2088×1 (false-positive: tilde in a display
+string), SC1090×2 (dynamic source — false positive).
+
+### Phase 1 — THREE REAL BUGS (this commit)
+1. **`scripts/amp-delete.sh:156` (SC2115)** — `rm -rf "${AMP_ATTACHMENTS_DIR}/${MESSAGE_ID}"`.
+   The line-155 guard `[ -d "${...}/${...}" ]` does NOT protect both-empty: `[ -d "/" ]`
+   is TRUE → `rm -rf /`. Even one-empty wipes all attachments. FIX: fail-fast guards
+   `"${AMP_ATTACHMENTS_DIR:?}/${MESSAGE_ID:?}"` (errors out instead of deleting `/`).
+2. **`scripts/remote-install.sh:1188` (SC2154)** — `echo "AIMAESTRO_API=${api_url}"` but
+   `api_url` is never assigned → a FRESH `.env` (no existing key) gets `AIMAESTRO_API=`
+   (empty), breaking the agent's server connection. The sibling `if` branch (line 1186)
+   correctly writes `http://127.0.0.1:${PORT}`. FIX: match it.
+3. **`scripts/remote-install.sh:1351` (SC2154)** — `s|{{INSTALL_DIR}}|${safe_dir_repl}|`
+   but `safe_dir_repl` is never assigned → the agent's seeded `CLAUDE.md` gets
+   `{{INSTALL_DIR}}` blanked. Sibling escapes `safe_version`/`safe_gateways` (1348/1349)
+   but lines 1352/1355 then use the RAW vars, leaving those two assigned-but-unused.
+   FIX: add `safe_dir_repl=$(printf '%s' "$INSTALL_DIR" | sed <escape>)`; wire
+   `safe_version` into line 1352 (defensive escaping, consistent); drop the dead
+   `safe_gateways` (gateways are intentionally not escaped per the 1353-54 comment).
+
+### Phase 2 — fail-fast + scan hygiene (next commit, after Phase 1 verified)
+- **SC2155×39** (amp-helper.sh 21, amp-security.sh 10, aid-token/aid-maestro-token 2+2,
+  migrate-r20 2, test-amp-* 2): split `local x=$(cmd)` → `local x; x=$(cmd)` so a failing
+  `cmd` propagates (fail-fast). Mechanical; do per-file, re-shellcheck each.
+- **SC2034×51** in `ecosystem-config.sh` (24): it's a CONSTANTS file meant to be SOURCED,
+  so "unused" is expected. Resolve with a single top-of-file `# shellcheck disable=SC2034`
+  (NOT export — these are config values, not env). Verify other SC2034 sites individually.
+- **SC2088** (install-messaging.sh:666): false positive (display string `~/.local/bin`);
+  leave as-is or add an inline `# shellcheck disable=SC2088`.
+
+**NEXT ACTION:** Phase 1 — apply the 3 fixes, re-shellcheck the 2 files to confirm the
+findings clear, commit by name (NO push). Then Phase 2 in a separate commit.
+
+**GIT SAFETY:** the SCEN-001 scenario-runner is live on the same branch; it stages
+app files by name and won't touch these shell scripts (disjoint file set). Commit my
+fixes by explicit name only; never `git add -A`. Sequence commits so they don't race
+the runner's git access (commit in a clean window or accept index-lock serialization).
+
+## Acceptance criteria
+- shellcheck (severity=warning) on the 3 fixed files shows the SC2115 + both SC2154
+  findings GONE.
+- No behavior regression: amp-delete still deletes a real message+attachments; a fresh
+  `remote-install` writes a correct non-empty `AIMAESTRO_API=` and a fully-substituted
+  agent `CLAUDE.md` (`{{INSTALL_DIR}}` replaced with the real install dir).
+- Phase 2: total shellcheck warning count drops from 96 toward ~0 (false positives
+  suppressed with documented directives, not blanket).
+
+## Why
+The installer + CLI scripts are the ai-maestro distribution surface (install-messaging.sh
+copies them to `~/.local/bin/`). A blanked `AIMAESTRO_API`/`{{INSTALL_DIR}}` silently
+breaks fresh remote installs; an unguarded `rm -rf` is a latent catastrophe. These are
+exactly the "shortcomings" `/go-on-yourself` asks to find and fix on real evidence.

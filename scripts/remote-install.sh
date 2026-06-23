@@ -1185,7 +1185,9 @@ act3_clone_and_build() {
                             # rest of the script's portable_sed convention
                             portable_sed "s|AIMAESTRO_API=.*|AIMAESTRO_API=http://127.0.0.1:${PORT}|" .env
                         else
-                            echo "AIMAESTRO_API=${api_url}" >> .env
+                            # Match the sed-replace branch above; `api_url` was never set
+                            # (a fresh .env would otherwise get an empty AIMAESTRO_API=).
+                            echo "AIMAESTRO_API=http://127.0.0.1:${PORT}" >> .env
                         fi
                         if grep -q 'DEFAULT_AGENT' .env 2>/dev/null; then
                             # Use | as delimiter for consistency
@@ -1344,12 +1346,14 @@ act4_start_and_register() {
         cp "$INSTALL_DIR/scripts/FIRST-RUN-CLAUDE.md" "$AGENT_DIR/CLAUDE.md"
         # Escape sed metacharacters in substitution values before use in portable_sed
         # Escapes: \ & | [ ] . * ^ $ / (covers regex specials + our | delimiter)
-        local safe_version safe_gateways
+        local safe_version safe_dir_repl
         safe_version=$(printf '%s' "$VERSION" | sed 's/[[\.*^$|&\\\/]/\\&/g')
-        safe_gateways=$(printf '%s' "$SELECTED_GATEWAYS" | sed 's/[[\.*^$|&\\\/]/\\&/g')
+        # safe_dir_repl was referenced below but never computed -> {{INSTALL_DIR}} was
+        # being substituted with an empty string. Escape INSTALL_DIR for the sed RHS.
+        safe_dir_repl=$(printf '%s' "$INSTALL_DIR" | sed 's/[[\.*^$|&\\\/]/\\&/g')
         # Substitute install-time variables (portable sed)
         portable_sed "s|{{INSTALL_DIR}}|${safe_dir_repl}|g" "$AGENT_DIR/CLAUDE.md"
-        portable_sed "s|{{VERSION}}|$VERSION|g" "$AGENT_DIR/CLAUDE.md"
+        portable_sed "s|{{VERSION}}|${safe_version}|g" "$AGENT_DIR/CLAUDE.md"
         # {{SELECTED_GATEWAYS}} expects a raw comma-separated list (e.g. "slack,discord");
         # do NOT escape it — gateway names contain only alphanumeric chars, no sed specials.
         portable_sed "s|{{SELECTED_GATEWAYS}}|${SELECTED_GATEWAYS}|g" "$AGENT_DIR/CLAUDE.md"

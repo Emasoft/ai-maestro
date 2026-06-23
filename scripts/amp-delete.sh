@@ -153,7 +153,8 @@ rm "$MSG_FILE"
 
 # Clean up downloaded attachments for this message
 if [ -d "${AMP_ATTACHMENTS_DIR}/${MESSAGE_ID}" ]; then
-    rm -rf "${AMP_ATTACHMENTS_DIR}/${MESSAGE_ID}"
+    # Fail-fast (:?): abort if either var is empty so this can never collapse to `rm -rf /`
+    rm -rf "${AMP_ATTACHMENTS_DIR:?}/${MESSAGE_ID:?}"
 fi
 
 # Clean up empty sender/recipient directory

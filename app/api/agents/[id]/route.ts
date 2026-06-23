@@ -96,13 +96,29 @@ export async function PATCH(
     // (via `satisfies readonly (keyof UpdateAgentRequest)[]` in
     // services/agents-core-service.ts — PROP #3).
     //
-    // Path template: `/api/agents/[id]/title` is reused as the strict-
-    // route registry key. security-registry.json already classifies this
-    // key as strict. The route handler itself is /api/agents/[id]
-    // (rewrite-neutral), so the key is a logical tag for the "agent
-    // destructive-op" family, not a literal path.
+    // Path template: this guard MUST use the REAL request-path template
+    // `/api/agents/[id]` — the actual URL this handler serves — NOT a
+    // logical tag.
+    //
+    // SCEN-016 (2026-06-23, P0): the prior code reused
+    // `/api/agents/[id]/title` as a "logical tag" for the whole agent
+    // destructive-op family. That worked for UNBOUND sudo tokens, but it
+    // permanently broke op-bound tokens (SUDO-01 / R32). sudoFetch's
+    // deriveOperation() sends the LITERAL request URL (`/api/agents/<id>`)
+    // to the mint route, which normalizes it via matchedEntryKey(). With
+    // only `PATCH_/api/agents/[id]/title` in the registry, the literal
+    // `/api/agents/<id>` (no `/title` suffix) matched NO strict entry, so
+    // the mint fell back to binding the literal path. The verify side then
+    // compared that literal-bound operation against the `/title` tag passed
+    // here and ALWAYS failed with `sudo_operation_mismatch` → a hard 403
+    // that made ChangeClient (and every Change* PATCH on this route)
+    // unreachable through the UI. The fix: use the real template here AND
+    // register `PATCH_/api/agents/[id]` as strict so mint-time normalization
+    // and verify-time comparison agree on the SAME template. The route still
+    // only invokes the guard when bodyHasChangeableField() is true, so
+    // simple-field PATCHes (label, model, tags) keep their normal-auth gate.
     if (bodyHasChangeableField(body)) {
-      const sudoErr = requireSudoToken(request, 'PATCH', '/api/agents/[id]/title')
+      const sudoErr = requireSudoToken(request, 'PATCH', '/api/agents/[id]')
       if (sudoErr) return sudoErr
     }
 

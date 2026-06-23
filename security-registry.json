@@ -50,6 +50,7 @@
     "DELETE_/api/agents/role-plugins/install": "strict",
     "POST_/api/agents/role-plugins/install": "strict",
     "PATCH_/api/agents/[id]/title": "strict",
+    "PATCH_/api/agents/[id]": "strict",
     "POST_/api/sessions/[id]/stop": "strict",
     "POST_/api/sessions/[id]/restart": "strict",
     "POST_/api/sessions/[id]/kill": "strict",

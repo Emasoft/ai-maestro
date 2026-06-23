@@ -9,6 +9,11 @@
 #   source "$SCRIPT_DIR/ecosystem-config.sh"   # or adjust path
 # ──────────────────────────────────────────────────────────────
 
+# This file is SOURCED, never executed directly. Every constant below is consumed
+# by the scripts that source it, not within this file, so shellcheck's "appears
+# unused" (SC2034) is a guaranteed false positive here — disable it file-wide.
+# shellcheck disable=SC2034
+
 # ── Marketplace ──────────────────────────────────────────────
 MARKETPLACE_REPO="Emasoft/ai-maestro-plugins"
 MARKETPLACE_NAME="ai-maestro-plugins"

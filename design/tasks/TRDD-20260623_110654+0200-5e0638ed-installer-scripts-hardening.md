@@ -1,9 +1,9 @@
 ---
 trdd-id: 5e0638ed-511b-4234-8f1c-7c95c9ddbc14
 title: Harden the ai-maestro installer + CLI scripts — shellcheck-found real bugs + fail-fast cleanup
-column: dev
+column: complete
 created: 2026-06-23T11:06:54+0200
-updated: 2026-06-23T12:06:58+0200
+updated: 2026-06-23T12:19:05+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 3
@@ -88,11 +88,23 @@ string), SC1090×2 (dynamic source — false positive).
   `--include-folder` parsed but never honored) → disable+TODO + flag as findings (NOT implemented —
   out of scope). Review its diff + `bash -n`/shellcheck, then commit by name.
 
-**NEXT ACTION:** On the spark agent's return — review its uncommitted diff, run
-`shellcheck --severity=warning install-messaging.sh scripts/*.sh` (target: 0 warnings), commit by
-name (NO push). Then Phase 2 is COMPLETE → move `column: dev` → testing/complete as appropriate.
-Optionally open a follow-up TRDD for the latent unimplemented flags + the info/style items observed
-out-of-scope (SC2086, SC2001, SC2012, SC2329).
+### COMPLETE (2026-06-23T12:19)
+Phase 2 DONE — spark's 17-finding tail reviewed + independently re-verified (bash -n +
+shellcheck 0) and committed `8fba8730`. **Whole target set (install-messaging.sh + scripts/*.sh)
+is now 0 `shellcheck --severity=warning` findings (was 96 at start).** att_id removal verified safe
+(download_attachment takes the full att_json + extracts .id itself); amp-init.sh inbox/sent
+re-derivations removed (ensure_amp_dirs builds them from AMP_MESSAGES_DIR) + block comment corrected.
+
+**FOLLOW-UP FINDINGS (for a future TRDD — deliberately NOT done here):**
+1. Latent unimplemented CLI flags (advertised but no-op): `agent-commands.sh --include-data` &
+   `--include-folder` (cmd_export), `setup-tailscale.sh --check` (CHECK_ONLY). Decide per flag:
+   implement or remove. Marked with `# TODO(TRDD-5e0638ed)` disables in-code.
+2. Info/style items left out-of-scope (below --severity=warning): SC2086, SC2001, SC2012, SC2015,
+   SC2016, SC2129, SC2162, SC2181, SC2329, SC1091. A `--severity=info` pass could address these.
+
+**NEXT ACTION:** none — TRDD complete. 9 code commits (9415e1f2 e3ce0e0d 1c49b1cd 1a4a8bcf
+d59ad1e4 d403321c d68802a1 ad20ff53 8fba8730). Human-review = USER reviewing the commits when back.
+NO push (ai-maestro is not a plugin).
 
 **GIT SAFETY:** the SCEN-001 scenario-runner is live on the same branch; it stages
 app files by name and won't touch these shell scripts (disjoint file set). Commit my

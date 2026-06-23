@@ -61,7 +61,8 @@ detect_injection_patterns() {
 
     # Convert content to lowercase for case-insensitive matching
     # Use LC_ALL=C for consistent behavior across locales with UTF-8 content
-    local content_lower=$(echo "$content" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+    local content_lower
+    content_lower=$(echo "$content" | LC_ALL=C tr '[:upper:]' '[:lower:]')
 
     for pattern_def in "${INJECTION_PATTERNS[@]}"; do
         # Parse pattern definition
@@ -73,7 +74,8 @@ detect_injection_patterns() {
         # Check if pattern matches (case-insensitive)
         if echo "$content_lower" | grep -qiE "$regex" 2>/dev/null; then
             # Extract matched text
-            local matched=$(echo "$content_lower" | grep -oiE "$regex" | head -1)
+            local matched
+            matched=$(echo "$content_lower" | grep -oiE "$regex" | head -1)
 
             # Add to flags array
             flags=$(echo "$flags" | jq \
@@ -135,7 +137,8 @@ wrap_content() {
     local trust="$3"
     local flags_json="$4"
 
-    local flags_count=$(echo "$flags_json" | jq 'length')
+    local flags_count
+    flags_count=$(echo "$flags_json" | jq 'length')
     local warning=""
 
     if [ "$flags_count" -gt 0 ]; then
@@ -173,14 +176,18 @@ apply_content_security() {
     local signature_valid="${3:-false}"
 
     # Extract message details
-    local from_address=$(echo "$message_json" | jq -r '.envelope.from')
-    local content=$(echo "$message_json" | jq -r '.payload.message')
+    local from_address
+    from_address=$(echo "$message_json" | jq -r '.envelope.from')
+    local content
+    content=$(echo "$message_json" | jq -r '.payload.message')
 
     # Determine trust level
-    local trust=$(determine_trust_level "$from_address" "$signature_valid" "$local_tenant")
+    local trust
+    trust=$(determine_trust_level "$from_address" "$signature_valid" "$local_tenant")
 
     # Detect injection patterns in message body
-    local injection_flags=$(detect_injection_patterns "$content")
+    local injection_flags
+    injection_flags=$(detect_injection_patterns "$content")
 
     # Also scan attachment filenames for injection patterns (S-NEW-1)
     local att_fn_list
@@ -195,7 +202,8 @@ apply_content_security() {
         fi
     fi
 
-    local flags_count=$(echo "$injection_flags" | jq 'length')
+    local flags_count
+    flags_count=$(echo "$injection_flags" | jq 'length')
 
     # Determine if wrapping is needed
     local wrapped=false
@@ -214,10 +222,12 @@ apply_content_security() {
     fi
 
     # Extract just the category names for injection_flags array
-    local flag_categories=$(echo "$injection_flags" | jq '[.[].category] | unique')
+    local flag_categories
+    flag_categories=$(echo "$injection_flags" | jq '[.[].category] | unique')
 
     # Update message with security metadata
-    local updated_message=$(echo "$message_json" | jq \
+    local updated_message
+    updated_message=$(echo "$message_json" | jq \
         --arg content "$final_content" \
         --arg trust "$trust" \
         --argjson flags "$flag_categories" \

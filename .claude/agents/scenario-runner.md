@@ -9,6 +9,7 @@ skills:
   - scenarios-rules
   - dev-browser:dev-browser
   - scenario-region-capture
+  - scenario-step-batch
 hooks:
   PreToolUse:
     - matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash"
@@ -133,6 +134,8 @@ These rules cut the per-turn context that gets multiplied by ~284 turns. Honorin
 
 ## Phase A — Read the inputs
 
+**Context load order (L7) — fixed-first, volatile-last.** Read the FIXED inputs (steps 1–3: rules, scenario file, MEMORY) ONCE, upfront, before the first dev-browser snapshot — they then sit in the stable, cached prefix. **NEVER re-read a fixed input mid-run** (a re-read appends a 2nd copy that rides forward every turn — if you need a fact again, recall it; it is already in context). Keep VOLATILE observations (snapshots, screenshots, tool output) at the tail and DROP them after extracting the fact (L3). The more often a thing changes, the later you read it.
+
 1. The project rules (`SCENARIOS_TESTS_RULES.md`) are ALREADY in your context — the `scenarios-rules` skill (frontmatter `skills:`) loads them. **Do NOT Read that file again; it double-loads ~22K tokens that then get re-read on every turn.** Apply the 15 rules (0–14) from the loaded skill content. The load-bearing ones: Rule 0 (you are the HUMAN USER, never an agent), Rule 6 STICK-TO-UI (every mutation via the browser UI; reads are always allowed), Rule 4 FIX-AS-YOU-GO, Rule 8 DEV-BROWSER, Rule 12 SUDO-MODE, Rule 14 REPORTS-TO-PROJECT-ROOT. Only Read the file directly if the skill content is somehow NOT present in your context.
 2. Read the scenario .md file at `tests/scenarios/SCEN-NNN_*.scen.md`. Its frontmatter lists prerequisites, required tools, expected data, phases, and cleanup steps. The frontmatter is authoritative.
 3. Read your own `MEMORY.md` for relevant prior-run context.
@@ -173,7 +176,9 @@ The parent harness's master setup (per Rule 13) has already provisioned fixtures
 
 ## Phase C — Execute the scenario
 
-For each numbered step in the scenario file:
+**Batch deterministic step-groups into ONE turn (L6) — use the `scenario-step-batch` skill.** Each dev-browser call is a turn; the per-step pattern below (snapshot→act→screenshot→verify) is 3–4 turns/step, and turns are a linear cost multiplier. For a run of deterministic actions with known outcomes (a wizard page, a cleanup sequence), take ONE scoped snapshot to get selectors, then drive the whole group with `runSteps(page, [...])` in a single dev-browser call — it stops at the first failed assertion, so FIX-AS-YOU-GO is intact. Break the turn (drop to the per-step pattern below) only when the next action depends on reading UI state, or to diagnose a failure.
+
+For each numbered step (or step-group) in the scenario file:
 
 1. **Snapshot first** — use `page.snapshotForAI()` (per the loaded dev-browser skill) to discover elements. Use `track: "main"` for incremental snapshots after the first call.
 2. **Perform the action** via Playwright methods on the page (click, fill, waitForSelector, etc.).
@@ -198,9 +203,9 @@ For the API specifics (which methods to call, how to pass selectors, how to use 
 When a step fails:
 
 1. STOP — don't continue to the next step
-2. Diagnose: read source files, tail server logs via the project's log command (whatever the project uses), take a fresh `take_snapshot`
+2. Diagnose: read source SCOPED, never whole files (L8). Locate the symbol with `tldr search "<name>" <dir>` (returns file:line; `tldr extract <file>` lists a file's symbols), then `Read` that file with `offset`/`limit` for just the symbol's body — a whole >300-line source read rides forward in context every turn. Do NOT add an MCP server (e.g. SERENA) to this runner for reads — it would blow up the base context (L2); `tldr` + ranged `Read` give scoped reads with zero MCP. Tail server logs; take a fresh scoped snapshot.
 3. Check `MEMORY.md` for prior fixes to the same pattern
-4. Edit the source code with the Edit tool. Run the project's type-check command if one is configured (e.g., `npx tsc --noEmit`, `mypy`, `cargo check`). The project's type-check command is read from `tests/scenarios/scenarios.config.json` (`typeCheckCommand` field) or auto-detected from project markers (`package.json` → npm/yarn, `Cargo.toml` → cargo, `go.mod` → go, `pyproject.toml` → python).
+4. Edit the source code with the Edit tool. Run checks through the LEAN wrapper (L9), never the raw tool — raw tsc/eslint/vitest output floods context with passes/progress/banners that ride forward every turn. Use `python3 tests/scenarios/scripts/lean/leantool.py tsc|eslint|vitest` — it prints errors-only (count + one line per error `file:line  CODE msg`) and mirrors the tool's exit code. (It never swallows a real failure; on parse-uncertainty it falls back to the tool's own error lines.)
 5. Run the project's build command (e.g., `yarn build`, `npm run build`, `cargo build`, `go build`), then restart the app (the restart command also comes from the config file or falls back to the project's conventional command). Wait for the server to come up.
 6. Retry the failed step. Loop diagnose→fix→retry until pass (no attempt cap)
 7. Record the fix in the report: file:line, root cause, verifying step ID

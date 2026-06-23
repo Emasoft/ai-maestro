@@ -3,7 +3,7 @@ trdd-id: N1FYP2AW
 title: Token-optimized scenario-runner — Sonnet[1m] executor + Opus screenshot-interpreter
 column: dev
 created: 2026-06-23T20:14:21+0200
-updated: 2026-06-23T21:22:15+0200
+updated: 2026-06-23T21:43:37+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -65,6 +65,12 @@ to ~445K) re-read on every one of ~284 turns — billed at **Opus** rate × ~7 r
    clipped screenshots + scoped aria snapshots. Lean SKILL.md (base-cheap) +
    `references/region-capture.js` (loaded on demand). Wired into the runner's
    `skills:` frontmatter + the L5 Token-discipline rule.
+4. Four child TRDDs spawned + implemented (more levers): **L6** TRDD-63K2WJ26
+   batch steps/turn (`scenario-step-batch` skill + `references/step-driver.js`);
+   **L7** TRDD-LLGW31JX context load-order (Phase A rule); **L8** TRDD-H3F2DFP7
+   scoped source reads (`tldr search/extract` + ranged Read, no MCP — Phase D);
+   **L9** TRDD-UDFMS3UN lean tool wrappers (`tests/scenarios/scripts/lean/leantool.py`,
+   selftest-passing — Phase D). All wired into `scenario-runner.md`.
 
 **NEXT ACTION (Phase 2 — needs explicit user go; COSTS TOKENS):** single-scenario
 A/B — run ONE self-contained scenario (e.g. SCEN-002/003) with the curated

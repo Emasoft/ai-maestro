@@ -3,7 +3,7 @@ trdd-id: H3F2DFP7
 title: Symbol-scoped source reads — read function bodies, not whole files (L8)
 column: dev
 created: 2026-06-23T21:34:06+0200
-updated: 2026-06-23T21:34:06+0200
+updated: 2026-06-23T21:43:37+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 2
@@ -44,8 +44,10 @@ Read just the relevant symbol + its body. Two interfaces give this:
 
 ## Decision — use `tldr` for the runner; keep SERENA for a fix-only path
 - **Default (in the curated Sonnet runner): `tldr` via Bash.** Preserves L2
-  (no MCP). For a precise read, `tldr structure` to get the symbol's line range,
-  then `Read` with `offset`/`limit` for exactly that range — scoped, no MCP.
+  (no MCP). For a precise read, `tldr search "<name>" <dir>` to get the symbol's
+  file:line (or `tldr extract <file>` for a file's symbol/import inventory), then
+  `Read` with `offset`/`limit` for exactly that range — scoped, no MCP.
+  (`tldr structure` returns EMPTY on this repo's `.ts`/`.tsx` — do not rely on it.)
 - **If a fix is genuinely complex** (multi-symbol, cross-file refactor), that is
   better handled by a SEPARATE fixer agent that DOES carry SERENA MCP — the
   runner flags `NEEDS-FIXER: <file> <symptom>` and the orchestrator dispatches
@@ -59,9 +61,11 @@ Read just the relevant symbol + its body. Two interfaces give this:
   "helpfully" add SERENA MCP back to the runner and silently blow up its base.
 
 ## Risks / Phase-2 validation
-- `tldr` TS coverage: confirm `tldr structure`/`extract` parse this project's
-  `.ts`/`.tsx`. Fallback: `Read` with `offset`/`limit` on a grepped line number
-  (still scoped, no MCP).
+- `tldr` TS coverage (VERIFIED 2026-06-23): `tldr structure` returns empty on
+  this repo's `.ts`/`.tsx`, but `tldr search "<name>" <dir>` (→ file:line) and
+  `tldr extract <file>` (→ per-file symbols + imports) both work. Use those, then
+  ranged `Read`. Pure fallback: grep the symbol's line, ranged `Read` (still
+  scoped, no MCP).
 - The fixer-agent split is deferred (nesting constraint) — for now the runner
   uses tldr + ranged Read; complex fixes are flagged for the orchestrator.
 

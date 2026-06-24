@@ -478,6 +478,20 @@ of `role-plugins`/`reachable`, or on approving cross-host requests with a
 body-asserted `approverAgentId`, must now authenticate as the acting
 agent — those were the vulnerabilities being closed.
 
+## PATCH `/api/agents/[id]/session` — curated `commandKey` (TRDD-TBGGUA2V, 2026-06-24)
+
+The PATCH handler now accepts an optional **`commandKey`** alongside the legacy
+`command` field. When `commandKey` is present it is resolved against the
+server-side allowlist `lib/agent-commands.ts` and ONLY the fixed literal
+slash-command for that key is sent — arbitrary text is never accepted on the key
+path, and an unknown key returns `400` with the allowed-keys list. Each allowlist
+entry forces its own `requiresIdle`. Current keys: `reload-plugins`, `compact`,
+`clear` (destructive), `janitor-arm`, `janitor-disarm`, `janitor-pause`,
+`janitor-unpause`, `janitor-audit`. The legacy free-text `command` field is
+unchanged (backward-compatible). Delivery still goes through the no-shell
+`sendAgentSessionCommand` → `tmux send-keys -l` path; the allowlist is
+defense-in-depth (injection-proof by construction).
+
 ## How plugins should consume this doc
 
 1. The role-plugins use `https://raw.githubusercontent.com/Emasoft/ai-maestro/governance-rules/docs/GOVERNANCE-RULES.md` (and similar for other docs) to learn about API surface.

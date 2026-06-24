@@ -3,7 +3,7 @@ trdd-id: TBGGUA2V
 title: Overnight autonomous supervision — token validation, universal rules, ai-maestro API/UI/governance/install, cross-repo coordination
 column: dev
 created: 2026-06-24T03:22:18+0200
-updated: 2026-06-24T16:52:27+0200
+updated: 2026-06-24T17:23:25+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -58,7 +58,7 @@ external-refs: []
 - **P4 — DONE** (this session): audited the 2.1.179–2.1.187 changelog delta (CLI now 2.1.187) against the install/extensions API surface → NO code change needed (every entry AWARENESS/N/A; skill-frontmatter-case-leniency, agent-frontmatter model-deprecation warning, and `claude mcp login/logout` are the only install-adjacent items, none breaking). Recorded in `docs/CLAUDE-CODE-COMPATIBILITY-AUDIT.md` (fourth pass). One future ENHANCEMENT noted: surface `claude mcp login/logout` as an MCP-auth control via the CLI script layer.
 - **P6** — further optional governance/API/agent-control polish beyond the state-surfacing already shipped.
 
-**⚠ INSTALL FINDING (open — relevant to "make install flawless", NOT yet fixed):** machine Node = **v26.3.0** but `package.json engines.node = ">=22.0.0 <26.0.0"` → `yarn build` / `yarn install` REFUSE with `engine "node" is incompatible` (bails BEFORE compiling). Direct `./node_modules/.bin/next build` builds GREEN (evidence Next 14 + deps run on Node 26). Blocks any yarn-driven install/deploy/`pm2` rebuild until either `engines` is widened to admit 26 (compat decision — the green direct build is supporting evidence) or Node is pinned <26. **NOT unilaterally changed** (compat claim + the live server may be on older Node) — USER decision.
+**✅ INSTALL FINDING — RESOLVED (no repo change; `engines <26` is CORRECT):** machine Node v26.3.0 vs `engines.node ">=22.0.0 <26.0.0"` made `yarn` refuse. **Investigated with runtime evidence:** `node-pty` (native, ABI-bound) is compiled for `NODE_MODULE_VERSION 127` and FAILS to load on Node 26 (`require('node-pty')` → "compiled against a different Node.js version… requires 147"). So `<26` is RIGHT — widening it would let installs land on a broken Node-26 + stale-binary combo (`next build` passing was misleading: it never exercises node-pty at runtime). The repo is already CONSISTENTLY pinned: `.nvmrc`=22 (tracked) + engines `>=22<26` + CI Node 22 + node-pty<26. The only issue was THIS interactive shell defaulting to Node 26 instead of honoring `.nvmrc` (an nvm/fnm shell-hook / machine-config matter, OUTSIDE repo scope). yarn's engine gate already fails loudly with the correct message — proper fail-fast. **Resolution: keep `engines` as-is; run the project on Node 22 (`nvm use` honors `.nvmrc`).** Almost widened `engines` — the node-pty ABI check is why "verify before acting" matters.
 
 **ZERO token-blowup risk maintained throughout.** No agents spawned, no scenario batch, no push, no risky large edit.
 

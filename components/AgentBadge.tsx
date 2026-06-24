@@ -14,11 +14,18 @@ import {
   Mail,
   Box,
   Lock,
+  Clock,
+  AlertCircle,
   AlertTriangle,
 } from 'lucide-react'
 import { Agent } from '@/types/agent'
 import { SessionActivityStatus } from '@/hooks/useSessionActivity'
 import { resolveAgentStatus } from '@/lib/agent-status'
+
+// Maps the semantic icon hint from resolveAgentStatus() to a concrete lucide
+// glyph. Kept in the UI layer so lib/agent-status.ts stays free of any lucide
+// import (it decides WHICH states get a glyph; the component decides the glyph).
+const STATUS_GLYPH = { lock: Lock, clock: Clock, alert: AlertCircle } as const
 
 interface AgentBadgeProps {
   agent: Agent
@@ -103,32 +110,34 @@ function isEmoji(str: string): boolean {
 /**
  * Resolve the visual status indicator for an agent badge.
  *
- * Returns a color, ring highlight, label, and pulse flag used by both
- * AgentBadge and AgentStatusIndicator to render the colored dot next to
- * each agent in the sidebar.
+ * Returns a color, ring highlight, label, pulse flag, and an optional semantic
+ * `icon` hint, used to render the colored dot (+ optional glyph) next to each
+ * agent in the sidebar.
  *
- * The 5 online sub-states are checked in strict priority order so that
+ * The 7 online sub-states are checked in strict priority order so that
  * higher-priority states always win when multiple conditions overlap:
  *
- * | Priority | State        | Color   | Pulse | When it occurs                                         |
- * |----------|------------- |---------|-------|--------------------------------------------------------|
- * | 1        | Exited       | gray    | no    | tmux session alive but the AI program (Claude) stopped |
- * | 2        | Permission   | orange  | yes   | Claude is blocked asking the user to approve a tool    |
- * | 3        | Waiting      | amber   | yes   | Claude finished processing, shows its input prompt     |
- * | 4        | Active       | green   | yes   | Claude is running a tool or generating output          |
- * | 5        | Idle         | green   | no    | Session online but no recent terminal activity         |
+ * | Priority | State        | Color   | Pulse | Icon  | When it occurs                                          |
+ * |----------|------------- |---------|-------|-------|---------------------------------------------------------|
+ * | 1        | Exited       | gray    | no    | —     | tmux session alive but the AI program (Claude) stopped  |
+ * | 2        | Rate limited | purple  | yes   | clock | last turn died throttled/overloaded — auto-resumes      |
+ * | 3        | API error    | red     | yes   | alert | last turn died on an API failure (auth/billing/5xx)     |
+ * | 4        | Permission   | orange  | yes   | lock  | Claude is blocked asking the user to approve a tool     |
+ * | 5        | Waiting      | amber   | yes   | —     | Claude finished processing, shows its input prompt      |
+ * | 6        | Active       | green   | yes   | —     | Claude is running a tool or generating output           |
+ * | 7        | Idle         | green   | no    | —     | Session online but no recent terminal activity          |
  *
  * Two additional states apply when the session is NOT online:
  *   - Hibernated (slate, no pulse): tmux session suspended
  *   - Offline (gray, no pulse): no tmux session found
  *
- * Thin wrapper around the shared resolveAgentStatus() utility.
- * Kept as a local function so callers inside this file don't change.
+ * Thin wrapper around the shared resolveAgentStatus() utility — the return type
+ * is inferred so it can never drift from the single source (lib/agent-status.ts).
  *
  * @param isOnline       Whether the tmux session exists and is running
  * @param isHibernated   Whether the agent has a suspended tmux session
  * @param activityStatus Terminal activity level from useSessionActivity hook
- * @param notificationType Hook-reported prompt type: 'idle_prompt' | 'permission_prompt'
+ * @param notificationType Hook-reported event type: 'idle_prompt' | 'permission_prompt' | 'rate_limited' | 'api_error'
  * @param programRunning Whether the AI program is running inside tmux (false = shell prompt)
  */
 function getStatusInfo(
@@ -137,7 +146,7 @@ function getStatusInfo(
   activityStatus?: SessionActivityStatus,
   notificationType?: string,
   programRunning?: boolean,
-): { color: string; ringColor: string; label: string; pulse: boolean } {
+) {
   return resolveAgentStatus(isOnline, isHibernated, activityStatus, notificationType, programRunning)
 }
 
@@ -168,6 +177,9 @@ export default function AgentBadge({
   const isHibernated = !isOnline && agent.sessions && agent.sessions.length > 0
 
   const statusInfo = getStatusInfo(isOnline, isHibernated, activityStatus, notificationType, programRunning)
+  // Optional glyph beside the status dot (lock/clock/alert) for the actionable
+  // states — resolved from the single-source semantic hint, not re-derived here.
+  const StatusGlyph = statusInfo.icon ? STATUS_GLYPH[statusInfo.icon] : null
   const ringColor = stringToRingColor(agent.name)
 
   // Avatar priority: stored URL > stored emoji > computed from ID
@@ -278,12 +290,13 @@ export default function AgentBadge({
           </div>
         )}
 
-        {/* Status LED — exact same style as compact view, scaled up */}
+        {/* Status LED + optional semantic glyph (lock/clock/alert) so the
+            actionable states (permission / rate-limited / API error) are
+            distinguishable at a glance, not by dot colour alone. */}
         <div className="flex items-center justify-center gap-1" title={statusInfo.label}>
           <div className={`w-3 h-3 rounded-full ${statusInfo.color} ring-[3px] ${statusInfo.ringColor} ${statusInfo.pulse ? 'animate-pulse' : ''}`} />
-          {/* Lock icon shown when agent is blocked on a permission prompt */}
-          {statusInfo.label === 'Permission' && (
-            <Lock className="w-3 h-3 text-orange-500" />
+          {StatusGlyph && (
+            <StatusGlyph className={`w-3 h-3 ${statusInfo.color.replace('bg-', 'text-').replace(/-\d+$/, '-400')}`} />
           )}
         </div>
       </div>

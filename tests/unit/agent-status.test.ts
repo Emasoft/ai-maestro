@@ -45,3 +45,22 @@ describe('resolveAgentStatus — pre-existing states (regression)', () => {
     expect(resolveAgentStatus(false, false, undefined, undefined, undefined).label).toBe('Offline')
   })
 })
+
+describe('resolveAgentStatus — icon hint (P6 surfacing)', () => {
+  // The icon hint is what makes the new states VISIBLE (a glyph beside the dot,
+  // like Permission's lock). Pin the semantic mapping so a UI consumer can render
+  // it without re-deriving which states deserve a glyph.
+  it('attaches a semantic icon to the three actionable states', () => {
+    expect(resolveAgentStatus(true, false, undefined, 'rate_limited', true).icon).toBe('clock')
+    expect(resolveAgentStatus(true, false, undefined, 'api_error', true).icon).toBe('alert')
+    expect(resolveAgentStatus(true, false, undefined, 'permission_prompt', true).icon).toBe('lock')
+  })
+
+  it('leaves plain-dot states without an icon', () => {
+    expect(resolveAgentStatus(true, false, 'active', undefined, true).icon).toBeUndefined()
+    expect(resolveAgentStatus(true, false, undefined, 'idle_prompt', true).icon).toBeUndefined()
+    expect(resolveAgentStatus(true, false, undefined, undefined, true).icon).toBeUndefined()
+    expect(resolveAgentStatus(true, false, undefined, undefined, false).icon).toBeUndefined()
+    expect(resolveAgentStatus(false, true, undefined, undefined, undefined).icon).toBeUndefined()
+  })
+})

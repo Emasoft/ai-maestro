@@ -20,8 +20,14 @@ import type { SessionActivityStatus } from '@/hooks/useSessionActivity'
  * 'rate_limited'/'api_error' notificationType means the last event WAS the
  * StopFailure; it self-clears on the agent's next turn).
  *
- * Shared by AgentBadge (sidebar) and TaskKanbanBoard (kanban card avatars)
- * to avoid duplicated priority logic.
+ * The optional `icon` field is a SEMANTIC hint ('lock' | 'clock' | 'alert') for
+ * the states that warrant a glyph next to the dot; callers map it to a concrete
+ * icon component (this module stays free of any UI/lucide import). Absent for the
+ * plain-dot states.
+ *
+ * Single source of truth for the status ladder — shared by AgentBadge (sidebar
+ * cards), AgentStatusIndicator (sidebar list rows) and TaskKanbanBoard (kanban
+ * card avatars) so the priority logic is never re-implemented per consumer.
  */
 export function resolveAgentStatus(
   isOnline: boolean,
@@ -29,7 +35,7 @@ export function resolveAgentStatus(
   activityStatus?: SessionActivityStatus,
   notificationType?: string,
   programRunning?: boolean,
-): { color: string; ringColor: string; label: string; pulse: boolean } {
+): { color: string; ringColor: string; label: string; pulse: boolean; icon?: 'lock' | 'clock' | 'alert' } {
 
   if (isOnline) {
     // Priority 1: Program exited — tmux session alive but the AI program stopped.
@@ -39,27 +45,29 @@ export function resolveAgentStatus(
     // Priority 2: Rate limited — the last turn died throttled/overloaded. Distinct
     // from a hard error: it auto-resumes when the quota window clears. (Set by the
     // hook's classifyStopFailure on a StopFailure event — TRDD-TBGGUA2V P3.)
+    // icon:'clock' — conveys "throttled, time-windowed" so the purple dot is not
+    // mistaken for any other state at a glance (mirrors the Permission lock pattern).
     if (notificationType === 'rate_limited') {
-      return { color: 'bg-purple-500', ringColor: 'ring-purple-500/30', label: 'Rate limited', pulse: true }
+      return { color: 'bg-purple-500', ringColor: 'ring-purple-500/30', label: 'Rate limited', pulse: true, icon: 'clock' }
     }
     // Priority 3: API error — the last turn died with an API-class failure
     // (auth/billing/5xx). The process is alive but stuck and needs attention.
     if (notificationType === 'api_error') {
-      return { color: 'bg-red-600', ringColor: 'ring-red-600/30', label: 'API error', pulse: true }
+      return { color: 'bg-red-600', ringColor: 'ring-red-600/30', label: 'API error', pulse: true, icon: 'alert' }
     }
     // Priority 4: Permission prompt — Claude is blocked asking for tool approval.
     if (notificationType === 'permission_prompt') {
-      return { color: 'bg-orange-500', ringColor: 'ring-orange-500/30', label: 'Permission', pulse: true }
+      return { color: 'bg-orange-500', ringColor: 'ring-orange-500/30', label: 'Permission', pulse: true, icon: 'lock' }
     }
-    // Priority 3: Waiting — Claude finished and shows its input prompt (safe state).
+    // Priority 5: Waiting — Claude finished and shows its input prompt (safe state).
     if (notificationType === 'idle_prompt' || activityStatus === 'waiting') {
       return { color: 'bg-amber-500', ringColor: 'ring-amber-500/30', label: 'Waiting', pulse: true }
     }
-    // Priority 4: Active — Claude is currently processing.
+    // Priority 6: Active — Claude is currently processing.
     if (activityStatus === 'active') {
       return { color: 'bg-green-500', ringColor: 'ring-green-500/30', label: 'Active', pulse: true }
     }
-    // Priority 5: Idle — online but no specific activity signal yet.
+    // Priority 7: Idle — online but no specific activity signal yet.
     return { color: 'bg-green-500', ringColor: 'ring-green-500/30', label: 'Idle', pulse: false }
   }
 

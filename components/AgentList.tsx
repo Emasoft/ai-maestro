@@ -23,11 +23,12 @@ import {
   Search,
   X,
   Brain,
-  CheckCircle,
   ChevronDown,
   XCircle,
   Users,
   Lock,
+  Clock,
+  AlertCircle,
   Wrench,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -38,6 +39,12 @@ import { useSessionActivity, type SessionActivityStatus } from '@/hooks/useSessi
 import { useClientAvailability } from '@/hooks/useClientAvailability'
 import { SubconsciousStatus } from './SubconsciousStatus'
 import AgentBadge from './AgentBadge'
+import { resolveAgentStatus } from '@/lib/agent-status'
+
+// Semantic-icon hint → lucide glyph for the sidebar list rows (same mapping the
+// AgentBadge cards use). Lives in the UI layer so lib/agent-status.ts stays
+// free of any lucide import.
+const STATUS_GLYPH = { lock: Lock, clock: Clock, alert: AlertCircle } as const
 import SidebarViewSwitcher, { type SidebarView } from './sidebar/SidebarViewSwitcher'
 import TeamListView from './sidebar/TeamListView'
 import GroupListView from './sidebar/GroupListView'
@@ -1712,70 +1719,21 @@ function AgentStatusIndicator({
   notificationType?: string
   programRunning?: boolean
 }) {
-  if (isOnline) {
-    // 1. Exited — session alive but AI program stopped
-    if (programRunning === false) {
-      return (
-        <div className="flex items-center gap-1.5 flex-shrink-0" title="Program exited">
-          <div className="w-2 h-2 rounded-full bg-gray-400 ring-2 ring-gray-400/30" />
-          <span className="text-xs text-gray-400 hidden lg:inline">Exited</span>
-        </div>
-      )
-    }
-
-    // 2. Permission — agent blocked waiting for user permission
-    if (notificationType === 'permission_prompt') {
-      return (
-        <div className="flex items-center gap-1.5 flex-shrink-0" title="Waiting for permission">
-          <div className="w-2 h-2 rounded-full bg-orange-500 ring-2 ring-orange-500/30 animate-pulse" />
-          <Lock className="w-3 h-3 text-orange-500" />
-          <span className="text-xs text-orange-400 hidden lg:inline">Permission</span>
-        </div>
-      )
-    }
-
-    // 3. Waiting — idle prompt or generic waiting state
-    if (notificationType === 'idle_prompt' || activityStatus === 'waiting') {
-      return (
-        <div className="flex items-center gap-1.5 flex-shrink-0" title="Waiting for input">
-          <div className="w-2 h-2 rounded-full bg-amber-500 ring-2 ring-amber-500/30 animate-pulse" />
-          <span className="text-xs text-amber-400 hidden lg:inline">Waiting</span>
-        </div>
-      )
-    }
-
-    // 4. Active — agent is processing
-    if (activityStatus === 'active') {
-      return (
-        <div className="flex items-center gap-1.5 flex-shrink-0" title="Processing">
-          <div className="w-2 h-2 rounded-full bg-green-500 ring-2 ring-green-500/30 animate-pulse" />
-          <span className="text-xs text-green-400 hidden lg:inline">Active</span>
-        </div>
-      )
-    }
-
-    // 5. Idle — online but not doing anything
-    return (
-      <div className="flex items-center gap-1.5 flex-shrink-0" title="Online - Idle">
-        <div className="w-2 h-2 rounded-full bg-green-500 ring-2 ring-green-500/30" />
-        <span className="text-xs text-gray-400 hidden lg:inline">Idle</span>
-      </div>
-    )
-  }
-
-  if (isHibernated) {
-    return (
-      <div className="flex items-center gap-1.5 flex-shrink-0" title="Hibernated">
-        <div className="w-2 h-2 rounded-full bg-slate-500 ring-2 ring-slate-500/30" />
-        <span className="text-xs text-gray-500 hidden lg:inline">Hiber</span>
-      </div>
-    )
-  }
-
+  // Single source of truth for the status ladder (lib/agent-status.ts). This row
+  // indicator USED to re-implement the priority logic, which is why it silently
+  // omitted the rate_limited / api_error states (TRDD-TBGGUA2V P3). Delegating
+  // means it gains those (and any future state) automatically, and the ladder
+  // lives in exactly one place — no duplicate to drift.
+  const s = resolveAgentStatus(isOnline, isHibernated ?? false, activityStatus, notificationType, programRunning)
+  const Glyph = s.icon ? STATUS_GLYPH[s.icon] : null
+  // Text colour tracks the dot hue (bg-<hue>-NNN → text-<hue>-400) so labels stay
+  // legible without a second colour table to keep in sync with the dot.
+  const textColor = s.color.replace('bg-', 'text-').replace(/-\d+$/, '-400')
   return (
-    <div className="flex items-center gap-1.5 flex-shrink-0" title="Offline">
-      <div className="w-2 h-2 rounded-full bg-gray-500 ring-2 ring-gray-500/30" />
-      <span className="text-xs text-gray-400 hidden lg:inline">Offline</span>
+    <div className="flex items-center gap-1.5 flex-shrink-0" title={s.label}>
+      <div className={`w-2 h-2 rounded-full ${s.color} ring-2 ${s.ringColor} ${s.pulse ? 'animate-pulse' : ''}`} />
+      {Glyph && <Glyph className={`w-3 h-3 ${textColor}`} />}
+      <span className={`text-xs ${textColor} hidden lg:inline`}>{s.label}</span>
     </div>
   )
 }

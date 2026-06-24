@@ -3,7 +3,7 @@ trdd-id: TBGGUA2V
 title: Overnight autonomous supervision — token validation, universal rules, ai-maestro API/UI/governance/install, cross-repo coordination
 column: dev
 created: 2026-06-24T03:22:18+0200
-updated: 2026-06-24T17:23:25+0200
+updated: 2026-06-24T19:57:13+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -31,6 +31,22 @@ external-refs: []
 ---
 
 # TRDD-TBGGUA2V — Overnight autonomous supervision mandate
+
+## ⏵ STATE — READ FIRST — 2026-06-24T19:57+0200 (P8 PROBE FINDING — scenario-runner needs 1M context; cheap path gated on a usage-credits toggle)
+
+**P8 calibration probe RAN and produced a decisive FACT (commits `1c3002ca` then revert `0a1c4323`):**
+- Fixed the original launch blocker (`model: sonnet[1m]` → `sonnet`) and launched ONE SCEN-020 probe (background, sonnet, kill-switch armed-closed = the exempt calibration run).
+- The probe died in 7s with **"Prompt is too long"** (3 subagent tokens, 2 tool uses) — a NEW failure, NOT the earlier [1m] usage-credits error.
+- **ROOT CAUSE (evidenced):** plain `sonnet` (200K) is too small for the scenario-runner. The forked agent inherits a large floor — project CLAUDE.md + global `~/.claude/CLAUDE.md` + the dozen `~/.claude/rules/*.md` + the `scenarios-rules` skill's huge SCENARIOS_TESTS_RULES.md + the dev-browser skill — that alone approaches 200K, so it overflows before step 1. Same environmental-saturation root cause noted 2026-06-24T03:52; the floor is largely GLOBAL/project config, outside this project's clean reach to trim.
+- **CONSEQUENCE:** the original `[1m]` pin was CORRECT. Reverted to `model: sonnet[1m]` (`0a1c4323`) with an accurate WHY annotation in the agent def so the mistake can't recur. `sonnet[1m]` is the cheapest model that FITS.
+
+**THE GENUINE GATE (probe-proven, USER-only — NOT parked work):** `sonnet[1m]` needs **1M usage-credits enabled on the account** (`/usage-credits` or the Anthropic Console). They are OFF (that was the very first launch error). I cannot flip a billing toggle autonomously.
+- 1M credits ON → the bounded SCEN-020 probe + the capped batch run CHEAPLY on sonnet[1m]; NO code change needed (config already correct, `0a1c4323`).
+- RUN-NOW alternative (NOT recommended for the batch): `opus[1m]` IS credit-enabled (main session uses it), so a single SCEN-020 probe could run on opus[1m] (~10–12M cost-weighted tokens — bounded, kill-switch-protected, ≪ the 13B blowup, but it measures OPUS cost not sonnet, and a 27-scenario opus batch is INFEASIBLE under the 6M ceiling). Did NOT spend this autonomously — it's the user's cost call.
+
+**NEXT ACTION:** USER enables 1M Sonnet usage-credits → re-launch SCEN-020 probe (now sonnet[1m], runs cheaply) → `batch-budget-guard.sh validate <toks>` + `arm <h>` → capped batch (≤27, 6M ceiling, STOP sentinel). Kill-switch STAYS armed-closed until measured. No further autonomous P8 action is available without the toggle.
+
+**Unchanged:** P0–P7 done (P6 state-surfacing shipped); scenario-tester plugin (`f181a4ae`) build-complete/CPV-validated/publish-eligible, held for USER go; NO push.
 
 ## ⏵ STATE — READ FIRST — 2026-06-24T16:42+0200 (daytime resume; supersedes the 04:24 "NIGHT OUTCOME (FINAL)" framing — work reopened by the USER, who correctly noted P4/P6 were never gated, just parked)
 

@@ -25,7 +25,6 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const os = require('os');
 const { statePath } = require('../lib/ecosystem-state-paths.cjs');
 
 // Read stdin as JSON
@@ -124,6 +123,35 @@ function writeState(cwd, state) {
 
     // Broadcast status update via WebSocket (fire and forget)
     broadcastStatusUpdate(cwd, state).catch(() => {});
+}
+
+/**
+ * Classify a StopFailure event into a notificationType the dashboard maps to a
+ * distinct visual state (TRDD-TBGGUA2V P3). Claude Code's StopFailure fires
+ * whenever a turn ends with an API-class error — the PROCESS stays alive, only
+ * the turn died (verified empirically — see ~/.claude/CLAUDE.md learned rules).
+ * We split those into:
+ *   - 'rate_limited' — throttled / overloaded; auto-resumes once the window
+ *     clears (HTTP 429/529, "rate limit", "overloaded", "temporarily limiting",
+ *     "too many requests", quota). NOT broken — just waiting on quota.
+ *   - 'api_error'    — any other API-class failure (auth, billing, 5xx, unknown)
+ *     that needs attention.
+ * Pure + side-effect-free so it is unit-testable (exported below). The patterns
+ * mirror the established rate-limit detection used elsewhere in the ecosystem;
+ * keeping them HERE (one place) and letting the model switch on the already-
+ * classified string avoids duplicating the regex on the consumer side.
+ */
+function classifyStopFailure(input) {
+    const haystack = [
+        input && input.error,
+        input && input.message,
+        input && input.error_type,
+        input && input.stop_reason,
+    ].filter(Boolean).join(' ').toLowerCase();
+    if (/rate.?limit|temporarily limiting|overloaded|too many requests|quota|\b429\b|\b529\b/.test(haystack)) {
+        return 'rate_limited';
+    }
+    return 'api_error';
 }
 
 // Log to debug file
@@ -421,9 +449,15 @@ async function main() {
             break;
 
         case 'StopFailure':
-            // Turn ended due to API error (rate limit, auth failure, billing, etc.)
+            // Turn ended due to API error (rate limit, auth failure, billing, etc.).
+            // Classify into 'rate_limited' vs 'api_error' so the dashboard shows a
+            // distinct visual state — notificationType is the channel resolveAgentStatus
+            // reads end-to-end (status:'error' + errorType are kept for back-compat /
+            // richer detail). The next non-error event fully rewrites state, so the
+            // error indicator self-clears on the agent's next turn.
             writeState(cwd, {
                 status: 'error',
+                notificationType: classifyStopFailure(input),
                 message: input.error || input.message || 'API error',
                 errorType: input.error_type || input.stop_reason || 'unknown',
                 sessionId,
@@ -531,7 +565,15 @@ async function main() {
     console.log('{}');
 }
 
-main().catch(err => {
-    console.error('[ai-maestro-hook] Error:', err);
-    process.exit(0); // Don't block Claude
-});
+// Run only when invoked directly as a hook (node ai-maestro-hook.cjs). Guarding
+// on require.main keeps the module side-effect-free on `require()` so the pure
+// helpers (classifyStopFailure) are unit-testable without reading stdin / firing
+// a fetch (TRDD-TBGGUA2V P3).
+if (require.main === module) {
+    main().catch(err => {
+        console.error('[ai-maestro-hook] Error:', err);
+        process.exit(0); // Don't block Claude
+    });
+}
+
+module.exports = { classifyStopFailure };

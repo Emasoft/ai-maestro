@@ -3,7 +3,7 @@ trdd-id: TBGGUA2V
 title: Overnight autonomous supervision — token validation, universal rules, ai-maestro API/UI/governance/install, cross-repo coordination
 column: dev
 created: 2026-06-24T03:22:18+0200
-updated: 2026-06-24T03:52:00+0200
+updated: 2026-06-24T04:11:18+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -43,12 +43,16 @@ external-refs: []
 - L1–L9 token levers (commit `c4d65da6`, earlier this session).
 - **P1 install security ("above all") — VERIFIED CLEAN on the high-risk surfaces** (deterministic): shell installers shellcheck-clean (0 err/warn, 9 style notes); TS install/session routes (`role-plugins/install`, `[id]/session`, `global-elements/install-skill`, `[id]/install-skills`) have NO command-interpolation injection, ARE auth-gated (`lib/route-auth` `enforceSystemOwner`/`enforceMaestro`), name-validated + path-traversal-guarded. A grep "auth=0" scare was a FALSE POSITIVE (disproved by reading). Evidence: `reports/install-security-audit/*`. DEFERRED: deep audit of `element-management-service.ts` (7303 lines) install-gates (needs an agent → thrash).
 - Scenario-tester plugin (`f181a4ae`): publish HOLD **CLEARED** (CPV is now 2.145.1 > the 2.141.1 gate). Port L1–L9 → /tmp clone → `publish.py` is READY but NOT done (needs agents/large work → blocked by saturation).
+- **P2 API curated-command injection — DONE** (commits `3bf491bb` allowlist+test, `27d17e03` route `commandKey` wiring, `aede643d` docs). Done DETERMINISTICALLY in-session (no agents): `lib/agent-commands.ts` allowlist (8 keys: reload-plugins/compact/clear/janitor-*) → PATCH `/api/agents/[id]/session` accepts a KEY → sends only the fixed literal slash-command (injection-proof by construction). tsc 0 / vitest 5/5 / eslint 0.
+- **P3 API richer agent-state — DONE** (this turn): hook `classifyStopFailure` on StopFailure → writes `notificationType: rate_limited|api_error` (reuses the fully-plumbed channel, no new fields); `resolveAgentStatus` gains the 2 visual states (purple/red, ranked above permission/idle). Made the hook `require`-safe (main-guard + export) so the classifier is unit-tested; removed a dead `os` require. Context-usage(%) honestly DEFERRED (no non-fabricated hook signal; PreCompact→'compacting' is the existing pressure signal). tsc 0 / vitest 9/9 / eslint 0. Docs in API-CHANGES.md.
 
-**PHASE STATUS:** P2/P3/P4/P5/P6/P7 = **BLOCKED-BY-ENVIRONMENT** (not failed) — need a leaner env (fewer MCP servers/skills) or fresh focused sessions. P8 scenarios = still GATED (server down + kill-switch enabled=false/validated=false).
+**KEY METHOD CORRECTION (supersedes the 03:52 "BLOCKED-BY-ENVIRONMENT" verdict for scoped work):** small, bounded backend work IS safely doable in-session via DETERMINISTIC self-authored edits gated by tsc/vitest/eslint. The thrash verdict applies to AGENT-based broad work (3/3 thrashed), NOT to scoped main-session edits. P2 + P3 prove the pattern (each ~a handful of edits + green gates + commit, no blowup).
+
+**PHASE STATUS:** P0/P1/P2/P3 = ✅ DONE. P4/P5/P6/P7 = pending (P5 + any broad multi-file refactor still want a lean env or a careful deterministic plan; P4/P6/P7 partly doable in-session). P8 scenarios = still GATED (server down + kill-switch enabled=false/validated=false).
 
 **RECOMMENDATION (the real #1 token lever):** the env's MCP/skill/rule load is the root cause of BOTH the blowup AND the agent thrash. Trimming it (disable unused MCP servers; prune the skill/rule set loaded per session) is the highest-impact token fix AND the precondition for reliable autonomous agent work. Until then: do heavy work in fresh lean sessions; deterministic tools first.
 
-**NEXT ACTION on resume (in a lean env):** (1) port L1–L9 into the scenario-tester plugin via a /tmp clone, publish via `publish.py` (now unblocked); (2) P2 curated-command API + P3 richer agent-state (small scoped edits, feasible once env is lean); (3) only then P8 with the kill-switch validated+armed.
+**NEXT ACTION on resume:** P2 + P3 DONE. Continue the deterministic in-session pattern: (1) P4 — install/extensions API vs latest Claude changelog (scoped reads, additive edits); (2) P6 — UI surfacing of the P2 curated commands + the P3 states in AgentProfile/AgentBadge (UI files are larger — scope carefully, gate by build); (3) P5 — other-client graceful degradation (lib/converter emitters: hard-throw → `warnings.lossyField` pattern, like emitters/kiro.ts); (4) scenario-tester plugin port+publish (heavy/multi-file → best with user available); (5) P8 LAST, with the kill-switch validated+armed + server up.
 
 ---
 

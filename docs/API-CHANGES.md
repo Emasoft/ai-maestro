@@ -492,6 +492,39 @@ unchanged (backward-compatible). Delivery still goes through the no-shell
 `sendAgentSessionCommand` → `tmux send-keys -l` path; the allowlist is
 defense-in-depth (injection-proof by construction).
 
+## Agent activity — two API-class states: `rate_limited`, `api_error` (TRDD-TBGGUA2V, 2026-06-24)
+
+The agent-status model gained two states beyond
+`idle/waiting/permission/active/exited`. When a turn ends with an API-class
+error (Claude Code's **StopFailure** — the process stays alive, only the turn
+dies), the hook (`scripts/ai-maestro-hook.cjs`) now classifies the failure and
+writes a `notificationType` of either:
+
+- **`rate_limited`** — throttled / overloaded; auto-resumes when the quota
+  window clears (HTTP 429/529, "rate limit", "overloaded", "temporarily
+  limiting", "too many requests", quota). Rendered purple, pulsing.
+- **`api_error`** — any other API-class failure (auth, billing, 5xx, unknown).
+  Rendered red, pulsing.
+
+This value flows through the existing generic `notificationType` channel
+end-to-end with NO new fields:
+`StopFailure` → `chat-state/<hash>.json` → `getHookState()` →
+`broadcastStatusUpdate` → `POST /api/sessions/activity/update` →
+`useSessionActivity` → `resolveAgentStatus()` (`lib/agent-status.ts`). The
+`/api/sessions/activity/update` payload and the session-status read therefore
+surface the new states automatically — a consumer just reads `notificationType`
+(plus the existing `errorType`/`message`/`status:'error'` detail the hook still
+writes). The state self-clears on the agent's next non-error event (the hook
+rewrites the whole state object per event). It ranks above permission/idle in
+`resolveAgentStatus` since it is the most recent + most actionable signal.
+
+**Context-usage (%) is intentionally NOT yet exposed.** Claude Code's hook
+events carry no token/context-window field, so a precise percentage cannot be
+derived without fabricating it. The closest real signal already shipped is
+`status:'compacting'` (from the `PreCompact` event = context pressure high). A
+numeric context-usage gauge is deferred until a non-fabricated source exists
+(e.g. a future Claude Code hook field or an opt-in transcript-size estimate).
+
 ## How plugins should consume this doc
 
 1. The role-plugins use `https://raw.githubusercontent.com/Emasoft/ai-maestro/governance-rules/docs/GOVERNANCE-RULES.md` (and similar for other docs) to learn about API surface.

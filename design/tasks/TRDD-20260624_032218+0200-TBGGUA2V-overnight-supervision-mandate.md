@@ -3,7 +3,7 @@ trdd-id: TBGGUA2V
 title: Overnight autonomous supervision — token validation, universal rules, ai-maestro API/UI/governance/install, cross-repo coordination
 column: dev
 created: 2026-06-24T03:22:18+0200
-updated: 2026-06-24T04:24:38+0200
+updated: 2026-06-24T16:42:27+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -32,25 +32,30 @@ external-refs: []
 
 # TRDD-TBGGUA2V — Overnight autonomous supervision mandate
 
-## ⏵ NIGHT OUTCOME (FINAL, authoritative) — 2026-06-24T04:24+0200 — READ FIRST
+## ⏵ STATE — READ FIRST — 2026-06-24T16:42+0200 (daytime resume; supersedes the 04:24 "NIGHT OUTCOME (FINAL)" framing — work reopened by the USER, who correctly noted P4/P6 were never gated, just parked)
 
-**Delivered tonight, all gated (tsc 0 / vitest / eslint 0) + committed to `governance-rules`, NO push (per the commit-not-push rule for ai-maestro):**
+**Delivered, all gated (tsc 0 / vitest / eslint 0; UI also `next build` 0) + committed to `governance-rules`, NO push (per the commit-not-push rule for ai-maestro):**
 - **P0** `a5cffe3a` — token kill-switch (`batch-budget-guard.sh`, fail-closed) + universal token rule + this TRDD.
 - **P1** — install security VERIFIED CLEAN on high-risk surfaces (deterministic: shellcheck + read; no command-injection, all routes auth-gated). Evidence in `reports/install-security-audit/`.
 - **P2** `3bf491bb`/`27d17e03`/`aede643d` — curated agent-command API: `lib/agent-commands.ts` allowlist → PATCH `/api/agents/[id]/session` accepts a KEY → fixed literal slash-command (injection-proof). 5 tests.
 - **P3** `9914a370` — richer agent state: hook classifies StopFailure → `notificationType: rate_limited|api_error` → `resolveAgentStatus` renders them (reuses the plumbed channel). 9 tests. Context-usage(%) honestly DEFERRED (no non-fabricated hook signal).
 - **P5** `430f5e41` — `isMarketplaceSupported()` graceful-degradation detection primitive (non-Claude clients). 4 tests. FINDING: element conversion ALREADY degrades (warnings pattern); the 17 converter throws are legit fail-fast that MUST stay.
 - **P7** — answered core-plugin spec-request **ai-maestro#49** with verified facts (gov=v4.0.2/R40 max + the 4.0.1/4.0.2 R38/R39 sub-rule delta; `reassign-cos` built; no standalone assign-title verb → deferred to MANAGER/USER).
+- **P6 UI surfacing — DONE** `c1d7299c`+`63f1456a` (daytime, deterministic): the P3 `rate_limited`/`api_error` states were backend-only/invisible → now shown in sidebar cards + sidebar list rows + the AgentProfile detail panel (distinct colour + clock/alert glyph), all from the single-source `resolveAgentStatus` (added an `icon` hint). Killed the duplicated `AgentStatusIndicator` ladder (One-Source-of-Truth) + removed a dead import. AgentProfile: Stop/Restart now ENABLED in the API-class states (a StopFailure = the turn already ended → no tool mid-flight → safe; this is when the user needs to recover a stuck agent) + a live-status chip. tsc 0 / vitest 7/7 / eslint 0 / **`next build` exit 0**.
 
-**METHOD PROVEN:** small bounded backend edits done DETERMINISTICALLY in this (saturated) session, gated + committed. Agents stay unusable for broad work (3/3 thrashed) — do NOT spawn them here.
+**METHOD PROVEN:** small bounded edits done DETERMINISTICALLY in-session, gated (tsc/vitest/eslint/build) + committed — no agents, no thrash, no blowup. This is the lane for all remaining non-gated work. (Agents stay unusable for broad work — 3/3 thrashed on saturation; do NOT spawn them here.)
 
-**DELIBERATELY NOT DONE (unsafe to force unsupervised — would risk the token/quality mandate):**
-- **P4** install-spec currency — needs open-ended docs research; cheaper in a FRESH session (not this giant transcript).
-- **P6** UI surfacing of P2/P3 — large UI files + server is DOWN, so no screenshot-verify (violates the UI-verify discipline). Do with the server up.
-- **scenario-tester plugin** first public publish — imprudent unattended; do with user available.
-- **P8** scenarios — correctly GATED (server down + kill-switch enabled=false/validated=false). Bring server up → run ONE scenario → `batch-budget-guard.sh validate <toks>` + `arm <h>` → only then a capped batch.
+**THE TWO GENUINELY-GATED ITEMS (keep gated):**
+- **scenario-tester plugin** first public publish — outward-facing + effectively irreversible; do WITH the user + a lean session (CPV hold already cleared 2.145.1; not a code blocker).
+- **P8** scenarios — the blowup-risk item: bring server up → run ONE scenario → `batch-budget-guard.sh validate <toks>` + `arm <h>` → only then a capped batch.
 
-**ZERO token-blowup risk taken.** No agents spawned, no scenario batch run, no push, no risky large edit. Next session (ideally fresh/lean, server up) picks up P4 → P6 → plugin-publish → P8.
+**NOT GATED, just remaining work (deterministic lane):**
+- **P4** install/extensions API ↔ latest Claude changelog + Anthropic specs — open-ended docs research + additive edits.
+- **P6** — further optional governance/API/agent-control polish beyond the state-surfacing already shipped.
+
+**⚠ INSTALL FINDING (open — relevant to "make install flawless", NOT yet fixed):** machine Node = **v26.3.0** but `package.json engines.node = ">=22.0.0 <26.0.0"` → `yarn build` / `yarn install` REFUSE with `engine "node" is incompatible` (bails BEFORE compiling). Direct `./node_modules/.bin/next build` builds GREEN (evidence Next 14 + deps run on Node 26). Blocks any yarn-driven install/deploy/`pm2` rebuild until either `engines` is widened to admit 26 (compat decision — the green direct build is supporting evidence) or Node is pinned <26. **NOT unilaterally changed** (compat claim + the live server may be on older Node) — USER decision.
+
+**ZERO token-blowup risk maintained throughout.** No agents spawned, no scenario batch, no push, no risky large edit.
 
 ---
 

@@ -17,6 +17,8 @@ Subcommands:
   tsc     [extra tsc args]      -> npx tsc --noEmit --pretty false
   eslint  [paths...]            -> npx eslint -f json (defaults to ".")
   vitest  [extra vitest args]   -> npx vitest run --reporter=json
+  pytest  [extra pytest args]   -> python3 -m pytest -q -rf --tb=line (failures only)
+  log     <path> [--tail N] [--pattern RE]  -> error/fail/exception lines only, never the whole log
   selftest                      -> parse synthetic fixtures, assert lean output
 """
 import json
@@ -78,6 +80,39 @@ def parse_vitest(text):
                 out.append(f"  {fname} > {title}  {fm}")
     return failed, passed, out
 
+# pytest -q -rf --tb=line emits "FAILED nodeid - msg" / "ERROR nodeid - msg" short-summary lines.
+_PYTEST_RE = re.compile(r"^(?:FAILED|ERROR)\s+(?P<node>\S+)\s*(?:-\s*(?P<msg>.*))?$")
+
+def parse_pytest(text):
+    """pytest short-summary -> (failed, passed, [lines]). Failures/errors only."""
+    out = []
+    for ln in text.splitlines():
+        m = _PYTEST_RE.match(ln.strip())
+        if m:
+            msg = re.sub(r"\s+", " ", (m["msg"] or "")).strip()[:160]
+            out.append(f"  {m['node']}  {msg}".rstrip())
+    msum = re.search(r"(\d+) failed", text)
+    psum = re.search(r"(\d+) passed", text)
+    # Never under-report: if the summary line claims more failures than parsed, trust the summary.
+    failed = max(int(msum.group(1)) if msum else 0, len(out))
+    passed = int(psum.group(1)) if psum else 0
+    return failed, passed, out
+
+# Default log signal: the substrings that actually mean "something went wrong".
+_LOG_RE = re.compile(
+    r"\berror\b|\bfail(?:ed|ure)?\b|\bexception\b|\bfatal\b|\bpanic\b|"
+    r"\bunhandled\b|traceback|\bECONN|\bEADDR|\bEPERM\b|\b5\d\d\b",
+    re.I,
+)
+
+def parse_log(text, pattern=None, tail=40):
+    """Log text -> (count, [last `tail` matching lines], omitted). ONLY matching lines — never the whole log."""
+    rx = re.compile(pattern, re.I) if pattern else _LOG_RE
+    matches = [ln.rstrip() for ln in text.splitlines() if rx.search(ln)]
+    count = len(matches)
+    shown = matches[-tail:] if (tail and count > tail) else matches
+    return count, shown, count - len(shown)
+
 # ───────────────────────── runners ─────────────────────────
 
 def _run(cmd):
@@ -131,6 +166,43 @@ def cmd_vitest(args):
         _fallback("VITEST", rc, out, err)
     return rc
 
+def cmd_pytest(args):
+    rc, out, err = _run(["python3", "-m", "pytest", "-q", "-rf", "--tb=line", *args])
+    text = out + "\n" + err
+    try:
+        f, p, lines = parse_pytest(text)
+        print(f"PYTEST: {f} failed / {p} passed")
+        for l in lines:
+            print(l)
+    except Exception:
+        _fallback("PYTEST", rc, out, err)
+    return rc
+
+def cmd_log(args):
+    """Print ONLY the error/fail/exception lines of a log — never the whole file (L9, technique 7)."""
+    path = None; tail = 40; pattern = None; i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--tail" and i + 1 < len(args):
+            tail = int(args[i + 1]); i += 2
+        elif a == "--pattern" and i + 1 < len(args):
+            pattern = args[i + 1]; i += 2
+        else:
+            path = a; i += 1
+    if not path:
+        print("usage: leantool.py log <path> [--tail N] [--pattern REGEX]"); return 2
+    try:
+        with open(path, "r", errors="replace") as fh:
+            text = fh.read()
+    except OSError as e:
+        print(f"LOG: cannot read {path}: {e}"); return 2
+    count, shown, omitted = parse_log(text, pattern, tail)
+    suffix = f" (last {len(shown)}; {omitted} earlier matches omitted)" if omitted else ""
+    print(f"LOG {path}: {count} matching line{'' if count == 1 else 's'}{suffix}")
+    for l in shown:
+        print("  " + l)
+    return 0  # extraction succeeded; the count line is the signal (a log is not a pass/fail gate)
+
 # ───────────────────────── selftest ─────────────────────────
 
 def selftest():
@@ -164,6 +236,26 @@ def selftest():
     if f != 1 or p != 12 or "rejects empty token" not in lines[0]:
         print("FAIL vitest parse:", f, p, lines); ok = False
 
+    pf, pp, lines = parse_pytest(
+        "FAILED tests/test_auth.py::test_rejects_empty_token - AssertionError: expected 401\n"
+        "ERROR tests/test_db.py::test_conn - fixture 'pg' not found\n"
+        "tests/test_ok.py::test_passes PASSED\n"
+        "=== 1 failed, 1 error, 12 passed in 0.4s ===\n"
+    )
+    if pf < 2 or pp != 12 or "test_rejects_empty_token" not in lines[0]:
+        print("FAIL pytest parse:", pf, pp, lines); ok = False
+
+    lc, lshown, lomit = parse_log(
+        "INFO server started on :23000\n"
+        "GET /api/sessions 200 ok\n"
+        "ERROR failed to bind pty: EADDRINUSE\n"
+        "WARN slow query\n"
+        "Unhandled exception in worker: TypeError\n",
+        tail=40,
+    )
+    if lc != 2 or lomit != 0 or "EADDRINUSE" not in lshown[0]:
+        print("FAIL log parse:", lc, lshown, lomit); ok = False
+
     print("SELFTEST: PASS" if ok else "SELFTEST: FAIL")
     return 0 if ok else 1
 
@@ -173,7 +265,8 @@ def main():
     sub, rest = sys.argv[1], sys.argv[2:]
     if sub == "selftest":
         return selftest()
-    handler = {"tsc": cmd_tsc, "eslint": cmd_eslint, "vitest": cmd_vitest}.get(sub)
+    handler = {"tsc": cmd_tsc, "eslint": cmd_eslint, "vitest": cmd_vitest,
+               "pytest": cmd_pytest, "log": cmd_log}.get(sub)
     if handler is None:
         print(f"unknown subcommand: {sub}")
         return 2

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
   X, User, Code2, Cpu, Tag,
-  Activity, MessageSquare, CheckCircle, Clock, Zap, Square,
+  Activity, MessageSquare, CheckCircle, Clock, Zap, Square, Lock, AlertCircle,
   DollarSign, Database, BookOpen, Link2, Edit2,
   ChevronDown, ChevronRight, Plus, Trash2, TrendingUp, TrendingDown,
   Cloud, Monitor, Server, Play, Wifi, WifiOff, Folder, Download, Send, RotateCcw,
@@ -20,6 +20,7 @@ import AvatarPicker from './AvatarPicker'
 import EmailAddressesSection from './EmailAddressesSection'
 import { useGovernance } from '@/hooks/useGovernance'
 import { useSessionActivity } from '@/hooks/useSessionActivity'
+import { resolveAgentStatus } from '@/lib/agent-status'
 import { useRestartQueue } from '@/hooks/useRestartQueue'
 import { useAgentLocalConfig } from '@/hooks/useAgentLocalConfig'
 import TitleBadge from '@/components/governance/TitleBadge'
@@ -28,6 +29,10 @@ import TeamMembershipSection from '@/components/governance/TeamMembershipSection
 import GroupSubscriptionSection from '@/components/governance/GroupSubscriptionSection'
 import { sudoFetch } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
+
+// Semantic-icon hint (from resolveAgentStatus) → lucide glyph, same mapping the
+// sidebar uses, so the profile's live-status chip is consistent with the badges.
+const STATUS_GLYPH = { lock: Lock, clock: Clock, alert: AlertCircle } as const
 
 interface AgentProfileProps {
   isOpen: boolean
@@ -328,7 +333,14 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
    */
   const isIdlePrompt = isProgramRunning && notificationType === 'idle_prompt'
   const isPermissionPrompt = isProgramRunning && notificationType === 'permission_prompt'
-  // Safe to send commands when: hook reported idle_prompt, OR hook state is stale/missing.
+  // API-class states (TRDD-TBGGUA2V P3): the hook's StopFailure classifier set
+  // 'rate_limited' / 'api_error', which means the LAST TURN ALREADY TERMINATED —
+  // no tool or subagent is mid-flight. Stop/Restart are therefore safe in these
+  // states, and this is exactly when the user needs them to recover a stuck or
+  // throttled agent (without it, the controls were dead precisely when most needed).
+  const isApiClassState = isProgramRunning && (notificationType === 'rate_limited' || notificationType === 'api_error')
+  // Safe to send commands when: hook reported idle_prompt, OR an API-class state
+  // (turn already ended), OR hook state is stale/missing.
   // After fresh startup, Claude sits at prompt but idle_prompt hasn't fired yet (only fires
   // after first turn completes). We treat idle/active with no notificationType as safe when
   // the program is running — the worst case is the user clicks Stop while Claude is processing,
@@ -336,8 +348,24 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
   // hookStatus carries the raw status from the hook (including 'subagents_running')
   const isIdleNoHook = isProgramRunning && !notificationType && activityInfo?.hookStatus !== 'subagents_running'
   const isNoActivityData = isProgramRunning && !activityInfo
-  const isSafeToCommand = isIdlePrompt || isIdleNoHook || isNoActivityData
+  const isSafeToCommand = isIdlePrompt || isIdleNoHook || isNoActivityData || isApiClassState
   const [restarting, setRestarting] = useState(false)
+
+  // Live-status chip for the control area — uses the SAME single-source resolver
+  // the sidebar badges use, so the detail panel shows the identical state (incl.
+  // the rate_limited / api_error states from P3) instead of only implying it via
+  // button availability. isHibernated = not online but a session config exists.
+  const isOnlineForStatus = sessionStatus?.status === 'online'
+  const isHibernatedForStatus = !isOnlineForStatus && !!agent?.sessions?.length
+  const liveStatus = resolveAgentStatus(
+    isOnlineForStatus,
+    isHibernatedForStatus,
+    activityInfo?.status,
+    notificationType,
+    sessionStatus?.programRunning,
+  )
+  const LiveStatusGlyph = liveStatus.icon ? STATUS_GLYPH[liveStatus.icon] : null
+  const liveStatusTextColor = liveStatus.color.replace('bg-', 'text-').replace(/-\d+$/, '-400')
 
   // Resolve display program name (e.g. "claude-code", "Claude Code") to CLI binary name
   const resolveProgram = (program: string): string => {
@@ -805,6 +833,18 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
 
                     {/* Session action buttons — inject command into terminal, wait 500ms, send Enter */}
                     <div className="flex flex-wrap items-center gap-3">
+                      {/* Live status chip — resolves the agent state from the same
+                          single source as the sidebar badges, so the detail panel
+                          shows it explicitly (incl. the rate-limited / API-error
+                          states), not just implied by which buttons are enabled. */}
+                      <div
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/70 border border-slate-700/60"
+                        title={liveStatus.label}
+                      >
+                        <span className={`w-2.5 h-2.5 rounded-full ${liveStatus.color} ${liveStatus.pulse ? 'animate-pulse' : ''}`} />
+                        {LiveStatusGlyph && <LiveStatusGlyph className={`w-3.5 h-3.5 ${liveStatusTextColor}`} />}
+                        <span className={`text-xs font-medium ${liveStatusTextColor}`}>{liveStatus.label}</span>
+                      </div>
                       <button
                         onClick={handleNewSession}
                         disabled={isProgramRunning}

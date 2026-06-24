@@ -3,7 +3,7 @@ trdd-id: TBGGUA2V
 title: Overnight autonomous supervision — token validation, universal rules, ai-maestro API/UI/governance/install, cross-repo coordination
 column: dev
 created: 2026-06-24T03:22:18+0200
-updated: 2026-06-24T04:18:06+0200
+updated: 2026-06-24T04:24:38+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -31,6 +31,29 @@ external-refs: []
 ---
 
 # TRDD-TBGGUA2V — Overnight autonomous supervision mandate
+
+## ⏵ NIGHT OUTCOME (FINAL, authoritative) — 2026-06-24T04:24+0200 — READ FIRST
+
+**Delivered tonight, all gated (tsc 0 / vitest / eslint 0) + committed to `governance-rules`, NO push (per the commit-not-push rule for ai-maestro):**
+- **P0** `a5cffe3a` — token kill-switch (`batch-budget-guard.sh`, fail-closed) + universal token rule + this TRDD.
+- **P1** — install security VERIFIED CLEAN on high-risk surfaces (deterministic: shellcheck + read; no command-injection, all routes auth-gated). Evidence in `reports/install-security-audit/`.
+- **P2** `3bf491bb`/`27d17e03`/`aede643d` — curated agent-command API: `lib/agent-commands.ts` allowlist → PATCH `/api/agents/[id]/session` accepts a KEY → fixed literal slash-command (injection-proof). 5 tests.
+- **P3** `9914a370` — richer agent state: hook classifies StopFailure → `notificationType: rate_limited|api_error` → `resolveAgentStatus` renders them (reuses the plumbed channel). 9 tests. Context-usage(%) honestly DEFERRED (no non-fabricated hook signal).
+- **P5** `430f5e41` — `isMarketplaceSupported()` graceful-degradation detection primitive (non-Claude clients). 4 tests. FINDING: element conversion ALREADY degrades (warnings pattern); the 17 converter throws are legit fail-fast that MUST stay.
+- **P7** — answered core-plugin spec-request **ai-maestro#49** with verified facts (gov=v4.0.2/R40 max + the 4.0.1/4.0.2 R38/R39 sub-rule delta; `reassign-cos` built; no standalone assign-title verb → deferred to MANAGER/USER).
+
+**METHOD PROVEN:** small bounded backend edits done DETERMINISTICALLY in this (saturated) session, gated + committed. Agents stay unusable for broad work (3/3 thrashed) — do NOT spawn them here.
+
+**DELIBERATELY NOT DONE (unsafe to force unsupervised — would risk the token/quality mandate):**
+- **P4** install-spec currency — needs open-ended docs research; cheaper in a FRESH session (not this giant transcript).
+- **P6** UI surfacing of P2/P3 — large UI files + server is DOWN, so no screenshot-verify (violates the UI-verify discipline). Do with the server up.
+- **scenario-tester plugin** first public publish — imprudent unattended; do with user available.
+- **P8** scenarios — correctly GATED (server down + kill-switch enabled=false/validated=false). Bring server up → run ONE scenario → `batch-budget-guard.sh validate <toks>` + `arm <h>` → only then a capped batch.
+
+**ZERO token-blowup risk taken.** No agents spawned, no scenario batch run, no push, no risky large edit. Next session (ideally fresh/lean, server up) picks up P4 → P6 → plugin-publish → P8.
+
+---
+
 
 ## ⏵ STATE UPDATE — 2026-06-24T03:52+0200 — environmental saturation halts heavy autonomous work (READ THIS FIRST)
 

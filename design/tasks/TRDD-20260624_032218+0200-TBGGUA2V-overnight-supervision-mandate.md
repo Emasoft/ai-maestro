@@ -3,7 +3,7 @@ trdd-id: TBGGUA2V
 title: Overnight autonomous supervision — token validation, universal rules, ai-maestro API/UI/governance/install, cross-repo coordination
 column: dev
 created: 2026-06-24T03:22:18+0200
-updated: 2026-06-24T19:57:13+0200
+updated: 2026-06-24T23:04:20+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -32,19 +32,17 @@ external-refs: []
 
 # TRDD-TBGGUA2V — Overnight autonomous supervision mandate
 
-## ⏵ STATE — READ FIRST — 2026-06-24T19:57+0200 (P8 PROBE FINDING — scenario-runner needs 1M context; cheap path gated on a usage-credits toggle)
+## ⏵ STATE — READ FIRST — 2026-06-24T20:30+0200 (P8 UNBLOCKED — USER chose `opus[1m]`; runner switched; calibration probe is the next action)
 
-**P8 calibration probe RAN and produced a decisive FACT (commits `1c3002ca` then revert `0a1c4323`):**
-- Fixed the original launch blocker (`model: sonnet[1m]` → `sonnet`) and launched ONE SCEN-020 probe (background, sonnet, kill-switch armed-closed = the exempt calibration run).
-- The probe died in 7s with **"Prompt is too long"** (3 subagent tokens, 2 tool uses) — a NEW failure, NOT the earlier [1m] usage-credits error.
-- **ROOT CAUSE (evidenced):** plain `sonnet` (200K) is too small for the scenario-runner. The forked agent inherits a large floor — project CLAUDE.md + global `~/.claude/CLAUDE.md` + the dozen `~/.claude/rules/*.md` + the `scenarios-rules` skill's huge SCENARIOS_TESTS_RULES.md + the dev-browser skill — that alone approaches 200K, so it overflows before step 1. Same environmental-saturation root cause noted 2026-06-24T03:52; the floor is largely GLOBAL/project config, outside this project's clean reach to trim.
-- **CONSEQUENCE:** the original `[1m]` pin was CORRECT. Reverted to `model: sonnet[1m]` (`0a1c4323`) with an accurate WHY annotation in the agent def so the mistake can't recur. `sonnet[1m]` is the cheapest model that FITS.
+**DECISION (USER, 2026-06-24):** run the scenario suite on **`opus[1m]`**, NOT `sonnet[1m]`. Rationale VERIFIED against Anthropic docs (web-fetched this session, not guessed):
+- On a Max subscription **Opus auto-upgrades to 1M context for free** — that is why this session's main loop already uses `claude-opus-4-8[1m]` cleanly. **Sonnet's 1M window is gated behind usage-based billing** (`/usage-credits`) on EVERY tier incl. Max; the USER chose not to enable it. (Sources: support.claude.com articles 8606394, 14552983, 12429409; claude.com/blog/1m-context-ga.)
+- CORRECTION to the prior STATE note: the gate is NOT a "long-context premium" — 1M is standard-priced, no premium past 200K. The real reason is the **auto-upgrade POLICY** (Opus yes, Sonnet no). `/usage-credits` is a toggle on the SAME account (Settings → Usage), NOT a separate API org; once on, over-allowance usage bills pay-as-you-go at standard API rates.
 
-**THE GENUINE GATE (probe-proven, USER-only — NOT parked work):** `sonnet[1m]` needs **1M usage-credits enabled on the account** (`/usage-credits` or the Anthropic Console). They are OFF (that was the very first launch error). I cannot flip a billing toggle autonomously.
-- 1M credits ON → the bounded SCEN-020 probe + the capped batch run CHEAPLY on sonnet[1m]; NO code change needed (config already correct, `0a1c4323`).
-- RUN-NOW alternative (NOT recommended for the batch): `opus[1m]` IS credit-enabled (main session uses it), so a single SCEN-020 probe could run on opus[1m] (~10–12M cost-weighted tokens — bounded, kill-switch-protected, ≪ the 13B blowup, but it measures OPUS cost not sonnet, and a 27-scenario opus batch is INFEASIBLE under the 6M ceiling). Did NOT spend this autonomously — it's the user's cost call.
+**DONE this turn:** scenario-runner frontmatter `model: sonnet[1m]` → `model: opus[1m]` + rewritten WHY annotation recording the verified billing reason. The P8 "Prompt is too long" wall is gone: `opus[1m]`'s 1M window holds the >200K forked-agent floor that broke plain `sonnet`.
 
-**NEXT ACTION:** USER enables 1M Sonnet usage-credits → re-launch SCEN-020 probe (now sonnet[1m], runs cheaply) → `batch-budget-guard.sh validate <toks>` + `arm <h>` → capped batch (≤27, 6M ceiling, STOP sentinel). Kill-switch STAYS armed-closed until measured. No further autonomous P8 action is available without the toggle.
+**THE COST REALITY (why the L1–L9 techniques are load-bearing now):** Opus is the EXPENSIVE model (~$5/$25 per MTok). The earlier UNCAPPED Opus fleet caused the ~13B-token blowup. Protection now: the kill-switch (`tests/scenarios/state/batch-budget.json` — `enabled:false`, `validated:false`, `hard_token_ceiling_per_run: 6000000`, `max_scenarios_per_run: 27`, STOP sentinel; `batch-budget-guard.sh` fail-closed). The token levers (curated tools, zero MCP, region-scoped capture, step-batching, no-blob-accumulation) must keep per-scenario cost low enough that a SMALL batch fits under 6M.
+
+**NEXT ACTION:** fire ONE bounded SCEN-020 probe on `opus[1m]` (background, kill-switch armed-closed = the exempt calibration run) → MEASURE its real token cost → STOP and report the per-scenario number BEFORE any multi-scenario batch (the batch size must be data-driven; at the old ~10–12M/scenario estimate even ONE scenario blows the 6M cap, so the techniques MUST cut it). Then `batch-budget-guard.sh validate <toks>` → size a batch that fits 6M → `arm <h>` → run capped batch. Kill-switch STAYS armed-closed until measured.
 
 **Unchanged:** P0–P7 done (P6 state-surfacing shipped); scenario-tester plugin (`f181a4ae`) build-complete/CPV-validated/publish-eligible, held for USER go; NO push.
 

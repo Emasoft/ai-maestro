@@ -1,9 +1,9 @@
 ---
 trdd-id: f181a4ae-36a2-4524-abb1-3eab554999d9
 title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-plugin (dev-browser integrated)
-column: testing
+column: complete
 created: 2026-06-21T22:46:13+0200
-updated: 2026-06-24T04:32:00+0200
+updated: 2026-06-25T00:48:57+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -22,6 +22,13 @@ external-refs: []
 # TRDD-f181a4ae — Standalone scenario-UI-testing plugin
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME — 2026-06-21
+
+### ⏵ UPDATE 2026-06-25T00:49 (heartbeat resume) — plugin SUBSTANTIALLY RESTRUCTURED (TRDD-74ZS7P9U); publish STILL USER-gated
+- A USER work-order — tracked separately as **TRDD-74ZS7P9U** (now `complete`) — restructured the plugin for token economy + a **2-agent run flow**. The "BUILD COMPLETE 2026-06-22" + "CPV-VALIDATED 2026-06-22" snapshots below are SUPERSEDED on the plugin's CONTENTS (the gating + the deps are unchanged).
+- **New shape, synced to `~/Code/ai-maestro-web-scenario-tester/` @ `cd68adb` (FF, clean tree):** 6 agents (added `amwst-scenario-proposer`), **13** `amwst-` skills (added `amwst-phase-execute` / `-fixasyougo` / `-proposals` load-on-demand, `amwst-validate-scenario`, `amwst-region-capture`, `amwst-step-batch`), **11** scripts (added `amwst-leantool.py`, `amwst-scenario-step.sh`, `amwst-validate-scenario.py`). The runner is now token-disciplined and writes ONLY the Rule 9 report; the SEPARATE `amwst-scenario-proposer` writes the Rule 11 proposals (req: fix-as-you-go ≠ proposals); per-step `.scen.md` reading is greppable; README documents the 13 skills, the 2-agent flow, helper scripts, and the 14 rules. `pyproject.toml` + `.python-version` added (plugin now ships Python).
+- **Re-validated 2026-06-25** — CPV `remote_validation` strict on the synced tree: **CRITICAL=0 MAJOR=0 MINOR=2 NIT=0**. The 2 MINORs are the SAME pre-existing publish-pipeline scaffolding (pre-push hook + CI workflow) noted below — still publish-eligible by the gate.
+- **PUBLISH STILL USER-GATED — NOT auto-run.** All 3 standing reasons below hold (explicit do-not-publish gate; first public + effectively irreversible release; CPV publish AGENT thrash risk in a saturated env). The restructure changed nothing about the gating. → The USER publishes from the plugin folder with a clean/lean session.
+- column `testing` → `complete` (engineering done + re-validated; the publish transition is the USER's, non-exempt).
 
 ### ⏵ UPDATE 2026-06-24T04:32 (heartbeat resume) — CPV-hold CLEARED, publish still USER-gated; RC-120 fixed in the ai-maestro original
 - **CPV hold condition CLEARED (verified):** installed CPV is now **2.145.1** (> the 2.141.1 gate). Per the RESUME PROTOCOL the plugin is publish-eligible.

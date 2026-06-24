@@ -3,7 +3,7 @@ trdd-id: TBGGUA2V
 title: Overnight autonomous supervision — token validation, universal rules, ai-maestro API/UI/governance/install, cross-repo coordination
 column: dev
 created: 2026-06-24T03:22:18+0200
-updated: 2026-06-24T16:42:27+0200
+updated: 2026-06-24T16:52:27+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -43,7 +43,12 @@ external-refs: []
 - **P7** — answered core-plugin spec-request **ai-maestro#49** with verified facts (gov=v4.0.2/R40 max + the 4.0.1/4.0.2 R38/R39 sub-rule delta; `reassign-cos` built; no standalone assign-title verb → deferred to MANAGER/USER).
 - **P6 UI surfacing — DONE** `c1d7299c`+`63f1456a` (daytime, deterministic): the P3 `rate_limited`/`api_error` states were backend-only/invisible → now shown in sidebar cards + sidebar list rows + the AgentProfile detail panel (distinct colour + clock/alert glyph), all from the single-source `resolveAgentStatus` (added an `icon` hint). Killed the duplicated `AgentStatusIndicator` ladder (One-Source-of-Truth) + removed a dead import. AgentProfile: Stop/Restart now ENABLED in the API-class states (a StopFailure = the turn already ended → no tool mid-flight → safe; this is when the user needs to recover a stuck agent) + a live-status chip. tsc 0 / vitest 7/7 / eslint 0 / **`next build` exit 0**.
 
+- **P5 caller-wiring — DONE** `733dc28a` (this session) — P5 is now COMPLETE (primitive + wiring): gated plugin-storage's two `writeMarketplaceManifest` callers (`ensureCustomClientMarketplace`, `updateCustomClientMarketplaceManifest`) on `isMarketplaceSupported`, so converting/emitting a plugin to gemini/kiro/opencode/cursor now SKIPS the not-yet-serializable manifest with a warning (folder + plugin still emitted) instead of THROWING from `spec.serialize()` and crashing the whole conversion. This matches the file's own documented "pure folder scaffolding until their CLI lands" intent. +2 real (no-mock, temp-dir) hazard tests. tsc 0 / vitest 6/6 / eslint 0.
+- **P4 — DONE** `10b00ff7` (this session) — Claude Code 2.1.179–2.1.187 delta audited vs the install/extensions API: no code change needed (all AWARENESS/N/A). `docs/CLAUDE-CODE-COMPATIBILITY-AUDIT.md` fourth pass.
+
 **METHOD PROVEN:** small bounded edits done DETERMINISTICALLY in-session, gated (tsc/vitest/eslint/build) + committed — no agents, no thrash, no blowup. This is the lane for all remaining non-gated work. (Agents stay unusable for broad work — 3/3 thrashed on saturation; do NOT spawn them here.)
+
+**ALL NON-GATED ENGINEERING IS NOW DONE.** P0–P7 complete (P6 = state-surfacing shipped; further polish optional). Only the 3 USER/budget-gated items remain (below).
 
 **THE TWO GENUINELY-GATED ITEMS (keep gated):**
 - **scenario-tester plugin** first public publish — outward-facing + effectively irreversible; do WITH the user + a lean session (CPV hold already cleared 2.145.1; not a code blocker).

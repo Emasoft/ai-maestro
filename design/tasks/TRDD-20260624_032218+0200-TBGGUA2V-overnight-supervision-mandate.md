@@ -50,7 +50,7 @@ external-refs: []
 - **P8** scenarios — the blowup-risk item: bring server up → run ONE scenario → `batch-budget-guard.sh validate <toks>` + `arm <h>` → only then a capped batch.
 
 **NOT GATED, just remaining work (deterministic lane):**
-- **P4** install/extensions API ↔ latest Claude changelog + Anthropic specs — open-ended docs research + additive edits.
+- **P4 — DONE** (this session): audited the 2.1.179–2.1.187 changelog delta (CLI now 2.1.187) against the install/extensions API surface → NO code change needed (every entry AWARENESS/N/A; skill-frontmatter-case-leniency, agent-frontmatter model-deprecation warning, and `claude mcp login/logout` are the only install-adjacent items, none breaking). Recorded in `docs/CLAUDE-CODE-COMPATIBILITY-AUDIT.md` (fourth pass). One future ENHANCEMENT noted: surface `claude mcp login/logout` as an MCP-auth control via the CLI script layer.
 - **P6** — further optional governance/API/agent-control polish beyond the state-surfacing already shipped.
 
 **⚠ INSTALL FINDING (open — relevant to "make install flawless", NOT yet fixed):** machine Node = **v26.3.0** but `package.json engines.node = ">=22.0.0 <26.0.0"` → `yarn build` / `yarn install` REFUSE with `engine "node" is incompatible` (bails BEFORE compiling). Direct `./node_modules/.bin/next build` builds GREEN (evidence Next 14 + deps run on Node 26). Blocks any yarn-driven install/deploy/`pm2` rebuild until either `engines` is widened to admit 26 (compat decision — the green direct build is supporting evidence) or Node is pinned <26. **NOT unilaterally changed** (compat claim + the live server may be on older Node) — USER decision.

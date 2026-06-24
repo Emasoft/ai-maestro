@@ -1,10 +1,10 @@
-# Claude Code 2.1.113 - 2.1.178 Compatibility Audit
+# Claude Code 2.1.113 - 2.1.187 Compatibility Audit
 
-**Audited:** 2026-05-07 (2.1.113–2.1.132), extended 2026-05-28 (2.1.133–2.1.154), extended 2026-06-16 (2.1.156–2.1.178)
+**Audited:** 2026-05-07 (2.1.113–2.1.132), extended 2026-05-28 (2.1.133–2.1.154), extended 2026-06-16 (2.1.156–2.1.178), extended 2026-06-24 (2.1.179–2.1.187)
 **Branch:** `governance-rules`
 **Server version:** v0.29.x
 
-This file enumerates every entry in the Claude Code 2.1.113-2.1.178
+This file enumerates every entry in the Claude Code 2.1.113-2.1.187
 changelog that COULD have affected AI Maestro, the audit verdict for
 each, and the action (or non-action) we took.
 
@@ -32,6 +32,30 @@ for 2.1.154.
                     integration, OAuth refinements not on our path)
 
 ## Per-entry verdicts
+
+### 2.1.179–2.1.187 — June 24, 2026 (fourth pass)
+
+Triggered by the TRDD-TBGGUA2V **P4** "install/extensions API ↔ latest Claude
+changelog + Anthropic specs" mandate (CLI now at **2.1.187**). **No code change**
+in this range — every entry is AWARENESS / N/A for AI Maestro's install/extension
+API surface. The install/marketplace/plugin endpoints (`role-plugins/install`,
+`settings/marketplaces`, `install-skills`, `local-plugins`,
+`creation-helper/publish-plugin`) are unaffected.
+
+| Change (version) | Verdict | Notes |
+|---|---|---|
+| Skill frontmatter keys now accept kebab/snake/camelCase; malformed `SKILL.md` YAML loads the body with empty metadata instead of failing (2.1.186) | AWARENESS | Upstream is now MORE LENIENT on READ. AI Maestro's converter/emitters still EMIT canonical kebab-case frontmatter — being stricter than the lenient reader is safe, so no change. (Helps if we ever PARSE third-party skills.) |
+| Model-deprecation / auto-update warning now also covers models set in AGENT FRONTMATTER (2.1.183) | AWARENESS | Already handled: the cross-client model mapping emits FAMILY ALIASES (opus/sonnet/haiku) that auto-resolve to the current model, so emitted agent frontmatter never carries a deprecated pinned id |
+| `claude mcp login <name>` / `logout <name>` CLI for MCP auth, with `--no-browser` stdin (2.1.186) | AWARENESS | New non-interactive MCP-auth surface. The dashboard's ChangeMCP / mcp-discovery don't manage MCP auth today; a future "authenticate this MCP server" control could shell out via the CLI script layer (per the decoupling invariant). Deferred — worth a future TRDD |
+| `Agent(type)` deny / `Agent(x,y)` allowed-types now enforced for NAMED subagent spawns (2.1.186); background subagents surface permission prompts in the main session (2.1.186) | AWARENESS | Permission semantics for subagent spawning; role-plugins may tighten their `Agent(...)` rules (plugin-side). No dashboard install-API impact |
+| Auto-mode blocks destructive git / `terraform\|pulumi\|cdk destroy` unless asked (2.1.183); scheduled-task & webhook deliveries classify as task notifications, can't approve actions in auto mode (2.1.183) | AWARENESS | Agent runtime-safety; complements the project's own git_safety_guard. No dashboard code path |
+| `sandbox.credentials` (2.1.187), `sandbox.allowAppleEvents` (2.1.181), org-configured model restrictions in the picker (2.1.187), bundled Bun → 1.4 (2.1.181), `CLAUDE_CLIENT_PRESENCE_FILE` (2.1.181) | N/A | Sandbox / runtime / managed-settings features; not on the AI Maestro install/extension path |
+| `!` bash commands auto-trigger a response unless `respondToBashCommands:false` (2.1.186); `StructuredOutput` no-infinite-recall + 5-attempt abort (2.1.186/2.1.187); remote-MCP idle-timeout (2.1.187); numerous TUI / remote / VSCode / startup fixes (2.1.181–2.1.187) | N/A | Terminal / SDK / IDE / startup behavior; no AI Maestro code depends on these |
+
+**Net:** the install/extensions API is CURRENT with Claude Code 2.1.187 — no
+update required. The one item worth a future TRDD (an enhancement, not a gap) is
+surfacing `claude mcp login/logout` as an MCP-auth control in the dashboard, via
+the CLI script layer per the Plugin Abstraction decoupling invariant.
 
 ### 2.1.156–2.1.178 — June 16, 2026 (third pass)
 

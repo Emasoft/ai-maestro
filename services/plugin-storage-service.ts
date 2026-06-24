@@ -55,7 +55,7 @@ import {
   getCoreMarketplacePathForClient,
   MAIN_PLUGIN_NAME,
 } from '@/lib/ecosystem-constants'
-import { writeMarketplaceManifest, type MarketplacePluginEntry } from '@/lib/converter/marketplace-emitters'
+import { writeMarketplaceManifest, isMarketplaceSupported, type MarketplacePluginEntry } from '@/lib/converter/marketplace-emitters'
 
 // Container roots
 const CUSTOM_PLUGINS_DIR = getCustomPluginsContainerPath()
@@ -882,12 +882,23 @@ async function ensureCustomClientMarketplace(targetClient: string): Promise<void
   // Seed an empty manifest for this client if one doesn't exist yet.
   const existingPlugins = await readCustomClientMarketplacePlugins(targetClient)
   if (existingPlugins.length === 0) {
-    await writeMarketplaceManifest(
-      marketplaceDir,
-      targetClient,
-      `${CUSTOM_MARKETPLACE_NAME}-${targetClient}`,
-      []
-    )
+    // Graceful degradation (TRDD-TBGGUA2V P5): stub clients (gemini/kiro/
+    // opencode/cursor) have no marketplace serializer yet, so writing the
+    // manifest would THROW from spec.serialize() and crash the whole conversion.
+    // That contradicts this function's own "pure folder scaffolding until their
+    // CLI lands" intent — so for an unsupported client skip the manifest (the
+    // folder + the emitted plugin files still exist) and warn, instead of
+    // crashing. The supported clients (claude/codex) write as before.
+    if (isMarketplaceSupported(targetClient)) {
+      await writeMarketplaceManifest(
+        marketplaceDir,
+        targetClient,
+        `${CUSTOM_MARKETPLACE_NAME}-${targetClient}`,
+        []
+      )
+    } else {
+      console.warn(`[plugin-storage] marketplace manifest skipped for unsupported client "${targetClient}" — no serializer yet (folder scaffolding kept, plugin still emitted). TRDD-TBGGUA2V P5.`)
+    }
   }
 
   // Register with Claude CLI only (the other clients' CLIs don't support
@@ -933,10 +944,18 @@ async function updateCustomClientMarketplaceManifest(
     version,
     relativePath: `./${pluginName}`,
   })
-  await writeMarketplaceManifest(
-    marketplaceDir,
-    targetClient,
-    `${CUSTOM_MARKETPLACE_NAME}-${targetClient}`,
-    filtered
-  )
+  // Graceful degradation (TRDD-TBGGUA2V P5): see ensureCustomClientMarketplace —
+  // a stub client's serializer throws, so skip-with-warning for unsupported
+  // clients rather than crashing. The plugin is emitted; only its manifest entry
+  // is deferred until the client's marketplace surrogate is built.
+  if (isMarketplaceSupported(targetClient)) {
+    await writeMarketplaceManifest(
+      marketplaceDir,
+      targetClient,
+      `${CUSTOM_MARKETPLACE_NAME}-${targetClient}`,
+      filtered
+    )
+  } else {
+    console.warn(`[plugin-storage] marketplace manifest update skipped for unsupported client "${targetClient}" — no serializer yet (plugin "${pluginName}" emitted but not indexed). TRDD-TBGGUA2V P5.`)
+  }
 }

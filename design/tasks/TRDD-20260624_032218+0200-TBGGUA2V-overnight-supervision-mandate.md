@@ -3,7 +3,7 @@ trdd-id: TBGGUA2V
 title: Overnight autonomous supervision — token validation, universal rules, ai-maestro API/UI/governance/install, cross-repo coordination
 column: dev
 created: 2026-06-24T03:22:18+0200
-updated: 2026-06-24T03:22:18+0200
+updated: 2026-06-24T03:52:00+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -31,6 +31,26 @@ external-refs: []
 ---
 
 # TRDD-TBGGUA2V — Overnight autonomous supervision mandate
+
+## ⏵ STATE UPDATE — 2026-06-24T03:52+0200 — environmental saturation halts heavy autonomous work (READ THIS FIRST)
+
+**DECISIVE FINDING: 3/3 background agents thrashed** (aegis×2 install audits + spark×1 P5 code task) — identical signature "autocompact thrashing: context refilled to the limit within 3 turns, 3× in a row"; P5 ran ~10 min / 20 tools then died with no output. Root cause = **ENVIRONMENTAL CONTEXT SATURATION** (dozens of connected MCP servers + hundreds of skills + the harness floor inflate every agent's BASE past the window, so any real read tips it into a thrash loop). This is the SAME root cause as the week-of-tokens blowup. The main session is also compacting nearly every turn.
+
+**CONSEQUENCE:** heavy autonomous engineering (P2/P3/P5/plugin-port — anything needing an agent or a large read) is NOT safely doable in this environment tonight; retrying just burns tokens (violates the prime directive). DETERMINISTIC tools (shellcheck, grep) do NOT thrash and were the only viable execution mode — so I stopped launching agents after 3/3 failures.
+
+**DONE + verified tonight (committed, no push):**
+- P0 (commit `a5cffe3a`): token kill-switch `batch-budget-guard.sh` (fail-closed; verified) + `~/.claude/rules/token-economy-agents-and-scenarios.md` (universal rule) + this TRDD.
+- L1–L9 token levers (commit `c4d65da6`, earlier this session).
+- **P1 install security ("above all") — VERIFIED CLEAN on the high-risk surfaces** (deterministic): shell installers shellcheck-clean (0 err/warn, 9 style notes); TS install/session routes (`role-plugins/install`, `[id]/session`, `global-elements/install-skill`, `[id]/install-skills`) have NO command-interpolation injection, ARE auth-gated (`lib/route-auth` `enforceSystemOwner`/`enforceMaestro`), name-validated + path-traversal-guarded. A grep "auth=0" scare was a FALSE POSITIVE (disproved by reading). Evidence: `reports/install-security-audit/*`. DEFERRED: deep audit of `element-management-service.ts` (7303 lines) install-gates (needs an agent → thrash).
+- Scenario-tester plugin (`f181a4ae`): publish HOLD **CLEARED** (CPV is now 2.145.1 > the 2.141.1 gate). Port L1–L9 → /tmp clone → `publish.py` is READY but NOT done (needs agents/large work → blocked by saturation).
+
+**PHASE STATUS:** P2/P3/P4/P5/P6/P7 = **BLOCKED-BY-ENVIRONMENT** (not failed) — need a leaner env (fewer MCP servers/skills) or fresh focused sessions. P8 scenarios = still GATED (server down + kill-switch enabled=false/validated=false).
+
+**RECOMMENDATION (the real #1 token lever):** the env's MCP/skill/rule load is the root cause of BOTH the blowup AND the agent thrash. Trimming it (disable unused MCP servers; prune the skill/rule set loaded per session) is the highest-impact token fix AND the precondition for reliable autonomous agent work. Until then: do heavy work in fresh lean sessions; deterministic tools first.
+
+**NEXT ACTION on resume (in a lean env):** (1) port L1–L9 into the scenario-tester plugin via a /tmp clone, publish via `publish.py` (now unblocked); (2) P2 curated-command API + P3 richer agent-state (small scoped edits, feasible once env is lean); (3) only then P8 with the kill-switch validated+armed.
+
+---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-06-24T03:22+0200
 

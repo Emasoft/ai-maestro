@@ -9,6 +9,7 @@ import {
 } from '@/services/agents-core-service'
 import { isValidUuid } from '@/lib/validation'
 import { enforceAuth, requireAuth } from '@/lib/route-auth'
+import { getAgentCommand, agentCommandKeys } from '@/lib/agent-commands'
 
 /**
  * POST /api/agents/[id]/session
@@ -65,9 +66,28 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
     }
 
+    // P2 (TRDD-TBGGUA2V): curated-command path. If the caller passes a
+    // `commandKey`, resolve it against the allowlist and send ONLY the fixed
+    // literal command — arbitrary text is never accepted via the key path, and
+    // an unknown key is rejected (the allowlist is the security boundary). The
+    // legacy `command` field is preserved for backward compatibility.
+    let command = body.command
+    let requireIdle = body.requireIdle
+    if (typeof body.commandKey === 'string') {
+      const allowed = getAgentCommand(body.commandKey)
+      if (!allowed) {
+        return NextResponse.json(
+          { success: false, error: `Unknown command key. Allowed: ${agentCommandKeys().join(', ')}` },
+          { status: 400 }
+        )
+      }
+      command = allowed.command
+      requireIdle = allowed.requiresIdle
+    }
+
     const result = await sendAgentSessionCommand(id, {
-      command: body.command,
-      requireIdle: body.requireIdle,
+      command,
+      requireIdle,
       addNewline: body.addNewline,
     }, auth.context)
 

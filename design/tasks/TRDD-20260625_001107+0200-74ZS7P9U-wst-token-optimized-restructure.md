@@ -1,9 +1,9 @@
 ---
 trdd-id: 74ZS7P9U
 title: web-scenario-tester — token-optimized restructure (per-phase skills, split agents, greppable steps, lean wrappers, validator)
-column: dev
+column: complete
 created: 2026-06-25T00:11:07+0200
-updated: 2026-06-25T00:11:07+0200
+updated: 2026-06-25T00:48:57+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -29,7 +29,7 @@ external-refs: []
 
 **Current plugin baseline (verified 2026-06-25):** 7 `amwst-` skills, 5 agents, 8 scripts; scenario format `.scen.md` (`#### S<NNN>:` steps with Action/Goal/Creates/Modifies/Verify; `## Phase N:`) — already step-greppable. The runner (`amwst-scenario-runner`, 265 lines) is a MONOLITH: run + fix-as-you-go + report + 11th-hour proposals in one agent. The plugin has NO lean wrapper, NO region-capture, NO step-batch, NO step-extractor, NO validator. ai-maestro HAS portable versions: `scenario-region-capture` skill, `scenario-step-batch` skill, `tests/scenarios/scripts/lean/leantool.py`.
 
-**NEXT ACTION:** Phase 2 — author the 3 scripts in `/tmp/wst-edit/scripts/` (amwst-leantool.py, amwst-scenario-step.sh, amwst-validate-scenario.py) + test them.
+**NEXT ACTION:** DONE — all phases P2-P8 complete. The restructure is committed in `/tmp/wst-edit` (9 commits, base `16620ea` → HEAD `cd68adb`) AND fast-forward-synced into `~/Code/ai-maestro-web-scenario-tester/` (clean tree, HEAD `cd68adb`). CPV `remote_validation` strict on the synced tree: **CRITICAL=0 MAJOR=0 MINOR=2 NIT=0**. The 2 residual MINORs (no pre-push hook, no `.github/workflows`) are PRE-EXISTING publish infra the canonical `publish.py` scaffolds — out of scope per "don't publish". The USER's publish session can proceed in the plugin folder. (Follow-up: the ai-maestro copy `tests/scenarios/scripts/lean/leantool.py` got the same ruff fix for consistency.)
 
 ## The USER work-order (8 requirements)
 
@@ -70,10 +70,10 @@ external-refs: []
 - `README.md` — a well-documented "Scenario rules" section (summary of the rules) + the new skills/scripts + when-to-use + the greppable step format + the validator.
 
 ## Execution phases
-- [ ] P2 — author + test the 3 scripts (/tmp/wst-edit/scripts).
-- [ ] P3 — port the 2 helper skills (region-capture, step-batch).
-- [ ] P4 — author the 3 phase skills + the validate skill.
-- [ ] P5 — add the proposer agent; refactor the runner (remove proposals, load phase skills); rewire main agent + run-scenario/-batch orchestration; touch create/edit-scenario.
-- [ ] P6 — README scenario-rules + new-tooling docs.
-- [ ] P7 — CPV `validate_plugin --strict` GREEN in /tmp; fix findings.
-- [ ] P8 — sync /tmp/wst-edit → ~/Code/ai-maestro-web-scenario-tester (no push); report to USER.
+- [x] P2 — 3 scripts authored + tested (`c24570f`): `amwst-leantool.py` (tsc/eslint/vitest/pytest/log, ruff-clean, SELFTEST PASS), `amwst-scenario-step.sh` (list/phases/S<NNN>), `amwst-validate-scenario.py` (frontmatter+phases+steps; examples validate 0/0).
+- [x] P3 — ported 2 helper skills (`89c076d`): `amwst-region-capture` + `amwst-step-batch` (de-referenced; JS `node --check` OK).
+- [x] P4 — 3 phase skills + validate skill (`ffe9112`): `amwst-phase-execute` / `-fixasyougo` / `-proposals` (load-on-demand) + `amwst-validate-scenario`.
+- [x] P5 — proposer agent + runner refactor (`2c9ab98`) + orchestration rewire (`00fe41a`): `amwst-scenario-proposer` (separate 11th-hour agent); runner token-disciplined, loads phase skills on demand, writes ONLY the report; `amwst-run-scenario` + `amwst-run-scenarios-batch`(+procedure-details) spawn runner→proposer; main-agent tooling map; create/edit-scenario validate step.
+- [x] P6 — README (`7553f10`): "The skills" (13), 2-agent flow, helper scripts, the 14 scenario-rules table.
+- [x] P7 — CPV `remote_validation` strict GREEN (`e1cac6f`): CRITICAL=0 MAJOR=0 MINOR=2 NIT=0 (started 2 MAJOR / 3 MINOR / 3 NIT; fixed leantool ruff, the skill/script false-positive, pyproject + version-sync, NIT rewords, 3 Done-when checklists). 2 residual MINORs = pre-existing publish infra the pipeline owns.
+- [x] P8 — synced `/tmp/wst-edit` → `~/Code/ai-maestro-web-scenario-tester` via FF pull (HEAD `cd68adb`, clean). No push, no publish — USER's session does that. `.gitignore` updated for `uv.lock` + py artifacts (`cd68adb`).

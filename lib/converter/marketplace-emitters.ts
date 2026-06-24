@@ -41,6 +41,16 @@ export interface MarketplacePluginEntry {
 
 export interface MarketplaceSpec {
   client: MarketplaceClient
+  /**
+   * Whether this client has a REAL marketplace spec. A stub spec (no CLI /
+   * serializer yet) sets this `false` so callers can degrade GRACEFULLY —
+   * detect via isMarketplaceSupported() and skip-with-warning instead of
+   * calling the stub's throwing serialize/cliRegister/cliUpdate functions
+   * (TRDD-TBGGUA2V P5 — "make other clients work even when a Claude feature
+   * isn't available yet; surrogates land later"). Absent ⇒ supported: a real
+   * spec opts IN by omission; only stubs opt OUT.
+   */
+  supported?: boolean
   /** Filename of the manifest (e.g. 'marketplace.json') */
   manifestFilename: string
   /** Subfolder inside the marketplace where the manifest lives, or '' for root */
@@ -251,6 +261,10 @@ export const MARKETPLACE_SPECS: Record<MarketplaceClient, MarketplaceSpec> = {
 function stubSpec(client: MarketplaceClient): MarketplaceSpec {
   return {
     client,
+    // Opt OUT of "supported" — this client has no real CLI/serializer yet, so
+    // the functions below throw. isMarketplaceSupported() reads this so callers
+    // skip-with-warning rather than crash (TRDD-TBGGUA2V P5).
+    supported: false,
     manifestFilename: 'marketplace.json',
     manifestSubfolder: '',
     defaultName: `ai-maestro-local-marketplace-${client}`,
@@ -267,6 +281,27 @@ export function getMarketplaceSpec(client: string): MarketplaceSpec {
   const spec = MARKETPLACE_SPECS[client as MarketplaceClient]
   if (!spec) throw new Error(`Unknown marketplace client: ${client}`)
   return spec
+}
+
+/**
+ * Whether the given client has a REAL marketplace spec (vs a throwing stub).
+ * The graceful-degradation primitive (TRDD-TBGGUA2V P5): a caller/UI can ask
+ * this BEFORE invoking a spec's serialize / cliRegisterCommand / cliUpdateCommand
+ * (which throw for stub clients) and instead skip-with-warning or grey out the
+ * marketplace op — so other clients (gemini/kiro/opencode/cursor) WORK (no
+ * crash) even though their marketplace surrogate isn't built yet.
+ *
+ * Unknown clients return false (NO throw — unlike getMarketplaceSpec, this is a
+ * safe boolean query). Supported unless the spec explicitly opted out.
+ *
+ * NOTE: this is the DETECTION primitive only. Wiring the crash-causing callers
+ * (the ChangeClient marketplace ops in element-management-service.ts) to gate
+ * on it is the deferred follow-up — see the TRDD.
+ */
+export function isMarketplaceSupported(client: string): boolean {
+  const spec = MARKETPLACE_SPECS[client as MarketplaceClient]
+  if (!spec) return false
+  return spec.supported !== false
 }
 
 /**

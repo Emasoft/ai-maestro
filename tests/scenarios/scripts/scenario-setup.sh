@@ -48,6 +48,36 @@ parse_list() {
   printf '%s' "$out"
 }
 
+# Safe path expansion (RC-120 fix): expand a leading ~ and $VAR/${VAR} env-var
+# references WITHOUT eval. The old eval-based expansion of "$path" executed any
+# shell metacharacters / command substitutions embedded in a frontmatter path
+# (rewipe-list / dir-fixtures) → command injection. Mirrors the CPV-validated
+# helper shipped in the web-scenario-tester plugin's copy of this script
+# (TRDD-f181a4ae — keep the two copies in sync).
+expand_path() {
+  local path="$1"
+  # Leading tilde → $HOME (only the very first char, like a shell would).
+  # shellcheck disable=SC2088  # the '~' here are LITERAL match-patterns on the
+  # input string (we are detecting a leading tilde to expand it ourselves), not
+  # an attempt to have the shell tilde-expand — expansion is done via $HOME below.
+  case "$path" in
+    '~')   path="$HOME" ;;
+    '~/'*) path="${HOME}/${path#'~/'}" ;;
+  esac
+  # Resolve ${VAR} and $VAR references with no eval. Loop until no more
+  # well-formed references remain (handles multiple/adjacent vars).
+  local out="" rest="$path" pre name val
+  while [[ "$rest" =~ \$\{?([A-Za-z_][A-Za-z0-9_]*)\}? ]]; do
+    name="${BASH_REMATCH[1]}"
+    pre="${rest%%"${BASH_REMATCH[0]}"*}"   # text before the match
+    val="${!name-}"                         # env value (empty if unset)
+    out+="${pre}${val}"
+    rest="${rest#*"${BASH_REMATCH[0]}"}"    # text after the match
+  done
+  out+="$rest"
+  printf '%s' "$out"
+}
+
 REWIPE=$(parse_list "rewipe-list")
 GITFIX=$(parse_list "git-fixtures")
 FOLDFIX=$(parse_list "dir-fixtures")
@@ -63,7 +93,7 @@ echo "SETUP_BEGIN SCEN-$NNN ts=$TS"
 if [ -n "$REWIPE" ]; then
   while IFS= read -r f; do
     [ -z "$f" ] && continue
-    f_exp=$(eval echo "$f")
+    f_exp=$(expand_path "$f")
     if [ -f "$f_exp" ]; then
       if [[ "$f_exp" == "$HOME"* ]]; then
         rel="HOME${f_exp#$HOME}"
@@ -108,7 +138,7 @@ if [ -n "$FOLDFIX" ]; then
   idx=0
   while IFS= read -r p; do
     [ -z "$p" ] && continue
-    p_exp=$(eval echo "$p")
+    p_exp=$(expand_path "$p")
     if [ ! -d "$p_exp" ]; then
       echo "SETUP_FAIL dir-fixture[$idx] $p_exp missing — scenario author must prepare fixture in advance" >&2
       exit 1

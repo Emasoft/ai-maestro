@@ -3,7 +3,7 @@ trdd-id: f181a4ae-36a2-4524-abb1-3eab554999d9
 title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-plugin (dev-browser integrated)
 column: testing
 created: 2026-06-21T22:46:13+0200
-updated: 2026-06-22T01:50:00+0200
+updated: 2026-06-24T04:32:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -23,6 +23,12 @@ external-refs: []
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME — 2026-06-21
 
+### ⏵ UPDATE 2026-06-24T04:32 (heartbeat resume) — CPV-hold CLEARED, publish still USER-gated; RC-120 fixed in the ai-maestro original
+- **CPV hold condition CLEARED (verified):** installed CPV is now **2.145.1** (> the 2.141.1 gate). Per the RESUME PROTOCOL the plugin is publish-eligible.
+- **BUT publish was NOT auto-run — held for the USER.** Standing reasons: (1) line 84 is an explicit "do NOT publish without USER approval" gate; (2) it is a FIRST PUBLIC release → outward-facing + effectively irreversible; (3) the publish path runs the CPV publish AGENT, and agents THRASH in the current saturated env (3/3 failed this session) → high risk of a half-published/broken first release done unattended, which contradicts the "make the install flawless" mandate. → **Awaiting USER go (publish with the user available + a clean/lean session).**
+- **RC-120 follow-up (line 37b) DONE EARLY:** the ai-maestro ORIGINAL `tests/scenarios/scripts/scenario-setup.sh` eval-based path expansion → safe `expand_path()` (mirrors the CPV-validated plugin helper). Independent in-project security fix (no publish dependency) so done now. Verified: bash -n OK, shellcheck rc=0, zero eval-echo calls remain, and an injection-safety test confirms `$(…)`/backtick payloads no longer execute. Committed.
+- Still pending (line 37a, AFTER publish): repoint `tests/scenarios/` to CONSUME the plugin + `scenarios.config.json` + de-path `fixture-helpers.sh:21`.
+
 **⚠ PIVOT 2026-06-22 (USER directive) — this is now an AI-MAESTRO ROLE-PLUGIN, not a generic harness.**
 
 **✅ BUILD COMPLETE 2026-06-22 — plugin built + self-verified at `~/Code/ai-maestro-web-scenario-tester/` (local git, 4 commits, NOT pushed — publish is USER-gated).**
@@ -34,7 +40,7 @@ external-refs: []
 - **✅ CPV-VALIDATED 2026-06-22 — publish gate `validate_plugin --strict` GREEN** (CRITICAL/MAJOR/MINOR/NIT = 0; the only 2 MINOR left are the pre-push-hook + CI workflow = publish-pipeline scaffolding CPV creates AT publish). 3 CRITICAL fixed (write-guard hook: explicit `bash` + `timeout:10`; `eval echo` RC-120 → safe `expand_path()`) + 6 MAJOR (MIT LICENSE, `color:` removed, SKILL desc trim, `context: fork`, `/var/folders` de-path). 26 deep-security findings = confirmed structural FALSE POSITIVES. Write-guard re-verified 6/6. Fixer report: `reports/plugin-fixer/20260622_014221+0200-web-scenario-tester-fix.md`.
 - **⏸ PUBLISH ON HOLD (USER directive 2026-06-22): do NOT publish with the current CPV.** CPV is mid-update (new Claude Code specs + fixes from Anthropic). WAIT for the updated CPV to be published, THEN re-run the CPV publish agent. Current CPV = **2.141.1** (`Emasoft/claude-plugins-validation`).
   - **RESUME PROTOCOL (every resume/heartbeat):** check installed CPV version (`ls ~/.claude/plugins/cache/*/claude-plugins-validation/`). If **> 2.141.1** → new CPV is live → run the CPV publish flow for `~/Code/ai-maestro-web-scenario-tester/` → `Emasoft/ai-maestro-plugins` (its marketplace.json needs `allowCrossMarketplaceDependenciesOn: ["dev-browser-marketplace"]`). If still **2.141.1** → keep holding, stay silent. Do NOT rebuild — the plugin is DONE + validated.
-- **AFTER PUBLISH** (separate ai-maestro follow-ups): (a) repoint `tests/scenarios/` to CONSUME the plugin + add `scenarios.config.json` + de-path `fixture-helpers.sh:21`; (b) the ai-maestro ORIGINAL `tests/scenarios/scripts/scenario-setup.sh` still carries the same `eval echo` RC-120 shape CPV flagged in the plugin copy — fix it there too.
+- **AFTER PUBLISH** (separate ai-maestro follow-ups): (a) repoint `tests/scenarios/` to CONSUME the plugin + add `scenarios.config.json` + de-path `fixture-helpers.sh:21`; (b) ✅ **DONE 2026-06-24** (early — independent in-project security fix, no publish dependency): the ai-maestro ORIGINAL `tests/scenarios/scripts/scenario-setup.sh` eval-based path expansion → safe `expand_path()`, verified injection-safe.
 
 The USER specified: repo `Emasoft/ai-maestro-web-scenario-tester`; a ROLE-plugin whose main-agent is
 `web-scenario-tester-main-agent`; skills + subagents prefixed `amwst-`. Research done (2 opus agents) +

@@ -187,3 +187,79 @@ describe('/context parser — no captured snapshot at all', () => {
     expect(typeof result.modelContextLimit).toBe('number')
   })
 })
+
+/**
+ * MODERN dump with the "Skills" line REMOVED — simulates the NEXT line Claude
+ * Code might drop, exactly the way it already dropped "Autocompact buffer".
+ * Regression lock for the re-armed whole-snapshot-drop class. (TRDD-3339cc45.)
+ */
+const MODERN_DUMP_NO_SKILLS = [
+  'Context Usage',
+  'claude-opus-4-8',
+  '494k/1m tokens (49%)',
+  'Estimated usage by category',
+  'System prompt: 2.2k tokens (0.2%)',
+  'Custom agents: 19.5k tokens (1.9%)',
+  'Memory files: 134.2k tokens (13.4%)',
+  // ← "Skills" line intentionally removed
+  'Messages: 338.9k tokens (33.9%)',
+  'Free space: 443.9k (44.4%)',
+].join('\n')
+
+/**
+ * Dump with NO header "<used>/<limit> tokens" line — the load-bearing total is
+ * gone, so the snapshot is genuinely meaningless and MUST still be dropped (the
+ * resilience fix must NOT make a totalless snapshot survive).
+ */
+const DUMP_NO_TOTAL = [
+  'Context Usage',
+  'claude-opus-4-8',
+  // ← header "<used>/<limit> tokens" line intentionally removed
+  'Estimated usage by category',
+  'System prompt: 2.2k tokens (0.2%)',
+  'Skills: 61.3k tokens (6.1%)',
+  'Messages: 338.9k tokens (33.9%)',
+  'Free space: 443.9k (44.4%)',
+].join('\n')
+
+describe('/context parser — resilience to a future dropped bucket line (TRDD-3339cc45)', () => {
+  it('still yields a recordedSnapshot when the "Skills" line is absent (no whole-snapshot drop)', async () => {
+    const jsonl = await writeFixture('no-skills.jsonl', [
+      userTurn('hello', tmpDir),
+      localCommandRecord(MODERN_DUMP_NO_SKILLS, tmpDir),
+    ])
+    const snap = (await computeLocalContextBreakdown(jsonl)).recordedSnapshot
+    expect(snap).not.toBeNull()
+  })
+
+  it('0-defaults the missing bucket and records its key in missingFields', async () => {
+    const jsonl = await writeFixture('no-skills2.jsonl', [
+      userTurn('hi', tmpDir),
+      localCommandRecord(MODERN_DUMP_NO_SKILLS, tmpDir),
+    ])
+    const snap = (await computeLocalContextBreakdown(jsonl)).recordedSnapshot
+    expect(snap?.skills).toBe(0)
+    expect(snap?.missingFields).toContain('skills')
+    // surviving buckets are unaffected and NOT flagged missing
+    expect(snap?.messages).toBe(338_900)
+    expect(snap?.missingFields).not.toContain('messages')
+  })
+
+  it('leaves missingFields empty when every bucket line is present', async () => {
+    const jsonl = await writeFixture('all-present.jsonl', [
+      userTurn('q', tmpDir),
+      localCommandRecord(MODERN_CONTEXT_DUMP, tmpDir),
+    ])
+    const snap = (await computeLocalContextBreakdown(jsonl)).recordedSnapshot
+    expect(snap?.missingFields).toEqual([])
+  })
+
+  it('STILL drops the snapshot when the load-bearing header total line is absent', async () => {
+    const jsonl = await writeFixture('no-total.jsonl', [
+      userTurn('x', tmpDir),
+      localCommandRecord(DUMP_NO_TOTAL, tmpDir),
+    ])
+    const result = await computeLocalContextBreakdown(jsonl)
+    expect(result.recordedSnapshot).toBeNull()
+  })
+})

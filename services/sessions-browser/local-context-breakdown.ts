@@ -135,6 +135,9 @@ export interface RecordedContextSnapshot {
   total: number
   modelContextLimit: number
   modelId: string | null
+  /** Bucket keys whose `/context` line was ABSENT and therefore 0-defaulted
+   * (TRDD-3339cc45). Lets the panel skip a misleading Δ on a defaulted bucket. */
+  missingFields: string[]
   /** 0-based JSONL line index where Claude wrote the snapshot. */
   capturedAtLineIndex: number
   /** ISO timestamp on the captured record (when present). */
@@ -883,6 +886,9 @@ interface ParsedContextSnapshot {
   total: number
   modelContextLimit: number
   modelId: string | null
+  /** Bucket keys whose `/context` line was ABSENT and therefore 0-defaulted
+   * (TRDD-3339cc45). Lets the panel skip a misleading Δ on a defaulted bucket. */
+  missingFields: string[]
   /** 0-based JSONL line index of the captured `system / local_command` record. */
   capturedAtLineIndex: number
   /** ISO timestamp Claude wrote on the captured record, when present. */
@@ -962,6 +968,7 @@ function parseContextFields(text: string): {
   total: number
   modelContextLimit: number
   modelId: string | null
+  missingFields: string[]
 } | null {
   // Helper: parse "8.2k", "33k", "860.2k", "1m" → integer tokens.
   const parseTokenStr = (s: string): number => {
@@ -1010,33 +1017,45 @@ function parseContextFields(text: string): {
   const modelMatch = /\b(claude-(?:opus|sonnet|haiku)-[\d-]+(?:-[a-z0-9]+)?)/i.exec(text)
   const modelId = modelMatch ? (modelMatch[1] ?? null) : null
 
-  // NOTE: `autocompactBuffer` is intentionally NOT in this guard — it now
-  // always resolves to a number (captured value or constant fallback
-  // above), so the missing-line case no longer drops the snapshot.
-  if (
-    systemPrompt === null
-    || customAgents === null
-    || memory === null
-    || skills === null
-    || messages === null
-    || freeSpace === null
-    || total === null
-    || modelContextLimit === null
-  ) {
+  // Load-bearing fields ONLY: the header "<used>/<limit> tokens" line. Without
+  // the printed total + model-window limit the snapshot has no meaning, so those
+  // two stay hard-required. (`autocompactBuffer` already resolves to a number via
+  // the constant fallback above, so it is intentionally not in this guard.)
+  if (total === null || modelContextLimit === null) {
     return null
   }
 
+  // Per-bucket lines: a future Claude Code version may drop ANY of these the way
+  // it dropped "Autocompact buffer" (TRDD-1657a5f4). Hard-requiring every bucket
+  // RE-ARMED that exact regression — one missing line silently dropped the WHOLE
+  // recorded snapshot for every session. Instead, default a missing bucket to 0
+  // and RECORD it in `missingFields`, so (a) the snapshot survives a single
+  // dropped line, and (b) the panel can skip the recorded-vs-heuristic Δ for a
+  // 0-defaulted bucket instead of rendering a misleading full-value
+  // discrepancy. (TRDD-3339cc45.) `missingFields` carries the camelCase bucket
+  // keys so the panel matches them against its bucket list directly.
+  const bucketEntries: Array<[string, number | null]> = [
+    ['systemPrompt', systemPrompt],
+    ['customAgents', customAgents],
+    ['memory', memory],
+    ['skills', skills],
+    ['messages', messages],
+    ['freeSpace', freeSpace],
+  ]
+  const missingFields = bucketEntries.filter(([, v]) => v === null).map(([k]) => k)
+
   return {
-    systemPrompt,
-    customAgents,
-    memory,
-    skills,
-    messages,
+    systemPrompt: systemPrompt ?? 0,
+    customAgents: customAgents ?? 0,
+    memory: memory ?? 0,
+    skills: skills ?? 0,
+    messages: messages ?? 0,
     autocompactBuffer,
-    freeSpace,
+    freeSpace: freeSpace ?? 0,
     total,
     modelContextLimit,
     modelId,
+    missingFields,
   }
 }
 
@@ -1147,6 +1166,7 @@ export async function computeLocalContextBreakdown(
         total: snapshot.total,
         modelContextLimit: snapshot.modelContextLimit,
         modelId: snapshot.modelId,
+        missingFields: snapshot.missingFields,
         capturedAtLineIndex: snapshot.capturedAtLineIndex,
         capturedAtTimestamp: snapshot.capturedAtTimestamp,
       }

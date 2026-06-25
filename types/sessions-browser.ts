@@ -154,6 +154,9 @@ export interface RecordedContextSnapshotWire {
   total: number
   modelContextLimit: number
   modelId: string | null
+  /** Bucket keys whose /context line was absent → 0-defaulted (TRDD-3339cc45);
+   *  the panel suppresses the recorded-vs-heuristic Δ for these. */
+  missingFields?: string[]
   capturedAtLineIndex: number
   capturedAtTimestamp: string | null
 }

@@ -26,6 +26,9 @@ const RecordedSnapshotSchema = z.object({
   total: z.number().int().nonnegative(),
   modelContextLimit: z.number().int().nonnegative(),
   modelId: z.string().nullable(),
+  // TRDD-3339cc45: bucket keys whose /context line was absent (0-defaulted).
+  // Optional so older cached payloads still validate; zod would otherwise strip it.
+  missingFields: z.array(z.string()).optional(),
   capturedAtLineIndex: z.number().int().nonnegative(),
   capturedAtTimestamp: z.string().nullable(),
 })

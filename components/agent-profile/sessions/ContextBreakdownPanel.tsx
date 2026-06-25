@@ -290,8 +290,15 @@ function BarRow({
   const safeLimit = Math.max(modelLimit, 1)
   const pct = (value / safeLimit) * 100
 
+  // Suppress the recorded value (and therefore the Δ badge) for a bucket whose
+  // /context line was ABSENT and 0-defaulted (TRDD-3339cc45) — the stored 0 is
+  // synthetic, so a recorded-vs-heuristic Δ against it would be a misleading
+  // full-value discrepancy. A bucket actually captured as 0 is NOT in
+  // missingFields, so its real Δ still shows.
   const recordedValue =
-    recorded && bucket.recordedKey !== null ? recorded[bucket.recordedKey] : null
+    recorded && bucket.recordedKey !== null && !recorded.missingFields?.includes(bucket.recordedKey)
+      ? recorded[bucket.recordedKey]
+      : null
   const delta = typeof recordedValue === 'number'
     ? formatDelta(value, recordedValue)
     : null
@@ -555,8 +562,15 @@ function SegmentDetailView({
   const value = breakdown[bucket.key] ?? 0
   const elements = breakdown.elements ?? null
   const recorded = breakdown.recordedSnapshot ?? null
+  // Suppress the recorded value (and therefore the Δ badge) for a bucket whose
+  // /context line was ABSENT and 0-defaulted (TRDD-3339cc45) — the stored 0 is
+  // synthetic, so a recorded-vs-heuristic Δ against it would be a misleading
+  // full-value discrepancy. A bucket actually captured as 0 is NOT in
+  // missingFields, so its real Δ still shows.
   const recordedValue =
-    recorded && bucket.recordedKey !== null ? recorded[bucket.recordedKey] : null
+    recorded && bucket.recordedKey !== null && !recorded.missingFields?.includes(bucket.recordedKey)
+      ? recorded[bucket.recordedKey]
+      : null
 
   // Derive what to render for this bucket. Constant buckets carry a
   // `note` instead of an element list. The messages bucket carries

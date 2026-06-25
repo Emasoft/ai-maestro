@@ -3,7 +3,7 @@ trdd-id: 979dbdaa-d73c-4041-8dd7-406c0d546b4b
 title: AMP sessions self-resolve identity from CWD — fix #46 (keystone, unblocks all amp-* coordination)
 column: design
 created: 2026-06-21T20:35:01+0200
-updated: 2026-06-21T22:44:25+0200
+updated: 2026-06-25T06:49:20+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -21,6 +21,19 @@ external-refs: ["github.com/Emasoft/ai-maestro/issues/46", "github.com/Emasoft/a
 # TRDD-979dbdaa — AMP session identity self-resolution (#46)
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME — 2026-06-21T20:35:01+0200
+
+**▶ DESIGN SYNTHESIS 2026-06-25 (authoritative — supersedes the CWD-only design below).**
+A verified read-only research pass upgraded the design from CWD-only to an ENV-FIRST
+LAYERED resolver: **P2.5** uses the already-server-injected `AIM_AGENT_ID`/`AIM_AGENT_NAME`
+(more deterministic AND less spoofable than a directory) → **P3.5** CWD fallback (the
+genuine env-scrubbed case), with **spoofing hardening** (when in-env identity is present,
+the CWD-derived name MUST agree with it, else refuse — never relax security). It also
+RESOLVED the "shared identity" confusion (it was the `.agent.address` display field, not
+the distinct `.index.json` name key) and REFRAMED the gap (it only bites when `AMP_DIR` is
+scrubbed — spawn already injects it). Read **"## Design synthesis (2026-06-25)"** at the
+bottom + `reports/amp-identity-design/20260625_064631+0200-46-design-inputs.md`. Two items
+now gate the build (beyond the USER-go gate): **(NPT)** reproduce the exact env of one
+failing `amp-*` call; **(MANAGER)** scope-check delivery-vs-resolution. Still PLAN ONLY.
 
 **PLAN ONLY — NOT yet built. `/go-on-yourself` authorizes autonomous DESIGN; the BUILD
 waits for the USER's explicit go, and is gated behind the `governance-rules` MERGE
@@ -142,3 +155,77 @@ fi
   changes. A genuine interface change needs MANAGER coordination first.
 - Does NOT touch the shared `gh`/OAuth identity (#33) or the AID crypto layer.
 - Prune (Phase 2) uses safe-delete (`.trashcan/`), never `rm -rf` on agent stores.
+
+## Design synthesis (2026-06-25) — env-first layered resolver + spoofing hardening
+
+A read-only research pass (`reports/amp-identity-design/20260625_064631+0200-46-design-inputs.md`,
+every claim verified against code + live data) confirmed the CWD approach is viable and
+surfaced three improvements the CWD-only design above does not capture. This section is the
+authoritative design for the build; the P3.5 pseudocode above is retained as the
+CWD-fallback *component* of it.
+
+### Finding A — the "shared identity" was a display-layer artifact, not the index key
+The ~26 entries reported as "all named `ai-maestro@emasoft.aimaestro.local`" are the
+`.agent.address` field that the P4 error LISTS (`amp-helper.sh:182`), NOT the `.index.json`
+KEY. The index is keyed by DISTINCT agent NAMES (live: 40 distinct name keys, 0 addresses;
+`amp-init.sh:441-459`). So CWD→basename→`_index_lookup(name)`→uuid is deterministic and the
+shared-address collision does NOT block it — the single biggest surface-reading confusion
+in #46, now resolved.
+
+### Finding B — the gap only manifests when the env is SCRUBBED (reframes the fix)
+Both spawn paths ALREADY inject `AMP_DIR` (+ `AIM_AGENT_ID`, `AIM_AGENT_NAME`,
+`AGENT_WORK_DIR`, `AID_AUTH`) into the tmux session env (`services/sessions-service.ts:766-823`,
+`services/agents-core-service.ts:1980-2019`). So for a normally-spawned session **P1 already
+resolves and #46 never triggers.** The P4 failure the 3 sessions hit occurs only when
+`AMP_DIR` is ABSENT — an env-scrubbing subprocess (`env -i`, `sudo`, some hook subshells), a
+manually-launched terminal, or a re-sourced shell that lost the var. **NPT (prerequisite,
+blocks the build):** reproduce the EXACT env of one failing `amp-*` call (report Q2) and
+record whether `AIM_AGENT_ID`/`AIM_AGENT_NAME` SURVIVE when `AMP_DIR` is lost — this
+determines which layer below is the actual #46 fix.
+
+### Decision — a LAYERED resolver, env-first then CWD (integrate both, don't pick one)
+The resolver ignores TWO deterministic keys, not one. Add BOTH, ordered by trustworthiness,
+before the P4 error:
+- **Priority 2.5 — server-injected identity env (preferred when present):** if `AIM_AGENT_ID`
+  set → `AMP_DIR="${AMP_AGENTS_BASE}/$AIM_AGENT_ID"`; elif `AIM_AGENT_NAME` set →
+  `_index_lookup("$AIM_AGENT_NAME")` → uuid. The server injects these at spawn and a peer
+  cannot forge them into ITS OWN session, so they are strictly MORE deterministic and LESS
+  spoofable than CWD.
+- **Priority 3.5 — CWD fallback (the genuine env-scrubbed #46 case):** the corrected P3.5
+  pseudocode above, with precedence **`AGENT_WORK_DIR` → `$PWD`**. Drop `CLAUDE_PROJECT_DIR`
+  entirely — AI Maestro NEVER sets it (grep of `services/`+`lib/` = 0 hits), so the TRDD's
+  Q1 "CPD-first" lean is dead weight; correct Q1 to "AGENT_WORK_DIR-first, $PWD fallback."
+  This is the ONLY layer that fires when the full env (incl. `AIM_AGENT_*`) was scrubbed.
+
+If the Finding-B NPT shows `AIM_AGENT_*` is scrubbed together with `AMP_DIR`, P2.5 helps only
+PARTIAL-scrub cases and P3.5 (CWD) is the #46 fix — but P2.5 is still worth adding (cheaper +
+safer for partial-scrub + future callers). Both layers are additive ⇒ R23 frozen-CLI-safe.
+
+### Security hardening — bind the spoofable CWD handle to the trusted env (never relax)
+The `amp-*` filesystem layer has NO crypto auth (no secret/signature in `amp-helper.sh:108-213`);
+the shell guard confines `cd` inside a guarded session but FAILS OPEN without `AGENT_WORK_DIR`
+and is explicitly not a sandbox (`lib/agent-shell-guard.ts:8-20,55-57`). CWD-resolution lowers
+the impersonation bar from "know a uuid" to "type a workdir name." Built into the design:
+- In **P3.5**, when `AIM_AGENT_ID`/`AIM_AGENT_NAME` ARE present, the CWD-derived name MUST
+  AGREE with them — a mismatch REFUSES (never silently trusts CWD). Binds the spoofable
+  handle to the server-injected one whenever both exist.
+- When ONLY CWD is present (the genuine scrubbed case), accept it under the EXISTING user-UID
+  trust boundary (the same boundary `--id` already accepts per #46) but emit a one-line
+  stderr note that identity was CWD-derived, so the path is auditable.
+- Adds NO interface change (additive, R23-safe) and relaxes NO existing check — it only
+  refuses a newly-detectable mismatch.
+
+### Still needs an external decision before #46 closes
+- **Delivery vs resolution (report Q8 / TRDD Q3):** the resolver makes a session KNOW its
+  inbox; it does NOT make idle agents POLL (no poll loop in the `amp-*` scripts). MANAGER
+  acceptance criterion 2 says "addressable delivery" — MANAGER scope-check whether closing
+  #46 needs only self-resolution or also a push/poll loop (likely a follow-up TRDD). A scope
+  decision, not a code question.
+
+### Build prerequisites (gating Phase-1 build, in addition to the existing USER-go gate)
+1. **NPT** — reproduce one failing `amp-*` env (Finding B) → confirm the live failing layer.
+2. **MANAGER** — scope-check delivery (above) → confirm #46's closing criteria.
+3. **Then build** P2.5 + P3.5 + the cross-validation, with tests: the mandated regression
+   (`~/agents/` ABSENT + 1 indexed agent → still resolves via P4) PLUS a P2.5 test
+   (`AIM_AGENT_ID` set, no `AMP_DIR` → resolves) PLUS a cross-validation test (CWD name ≠
+   `AIM_AGENT_NAME` → refuses).

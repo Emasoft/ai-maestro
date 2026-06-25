@@ -1,9 +1,9 @@
 ---
 trdd-id: 3339cc45-c6ed-4704-9ccf-e8a473b5e471
 title: De-fragilize the /context snapshot parser against future Claude Code line removals
-status: not-started
+status: completed
 created: 2026-06-14T11:42:34+0200
-updated: 2026-06-14T11:42:34+0200
+updated: 2026-06-25T06:15:50+0200
 ---
 
 # TRDD-3339cc45 — Make the /context snapshot parser resilient to dropped lines
@@ -24,3 +24,20 @@ Make per-bucket fields default to 0 (or omit them from the hard null-guard) rath
 ## Acceptance
 - A `/context` block missing any single non-total line still yields a recorded snapshot.
 - New parser test locks the resilience; `yarn test` + `tsc --noEmit` green.
+
+## Implementation (2026-06-25)
+Landed in two atomic commits:
+- **`e7130809`** — parser fix in `local-context-breakdown.ts`: the null-guard now
+  hard-requires ONLY the load-bearing header (`total` + `modelContextLimit`); every
+  per-bucket line (systemPrompt/customAgents/memory/skills/messages/freeSpace) 0-defaults
+  when absent and is recorded in a new `missingFields: string[]` on `ParsedContextSnapshot`
+  + `RecordedContextSnapshot`. A snapshot missing the header total is still dropped. +4
+  no-mock tests (real temp-JSONL fixtures) in `tests/unit/local-context-breakdown-parser.test.ts`:
+  Skills-line-removed still yields a snapshot (skills=0, missingFields=['skills']); surviving
+  buckets unaffected; all-present → missingFields=[]; total-removed still drops. 10/10 green.
+- **`26481ae4`** — Δ-degradation (the "don't render a misleading Δ" derived task): wired
+  `missingFields` through `RecordedContextSnapshotWire` (`types/sessions-browser.ts`) + the
+  route's `RecordedSnapshotSchema` (zod would otherwise strip it) so the panel's BarRow +
+  drill-down null out `recordedValue` for a 0-defaulted bucket → no Δ badge, no "captured
+  /context" tooltip. A bucket genuinely captured as 0 is NOT in missingFields, so its real Δ
+  still shows; the total Δ is untouched (load-bearing). tsc 0; route-isolation 24/24.

@@ -865,6 +865,24 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
                   onPinLineIndex(isPinned ? null : line.lineIndex)
                 }
               : undefined
+            // TRDD-4c31cabd: keyboard a11y for the pin affordance. The row
+            // is a role="button" div (NOT a <button> — it wraps the export
+            // checkbox, copy button, reasoning <summary> and cost toggle; a
+            // <button> wrapper would nest interactives → hydration error +
+            // the no-nested-button rule). Enter/Space pin/unpin; we
+            // preventDefault on Space so it doesn't also scroll the page.
+            // The `e.target !== e.currentTarget` guard makes the row act
+            // ONLY when IT is focused — a key event bubbling up from a
+            // focused inner control (its own tab stop) must not also pin.
+            const handlePinKeyDown = onPinLineIndex
+              ? (e: React.KeyboardEvent<HTMLDivElement>) => {
+                  if (e.target !== e.currentTarget) return
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onPinLineIndex(isPinned ? null : line.lineIndex)
+                  }
+                }
+              : undefined
             // Two visual states only: pinned (emerald ring on the
             // inner card) or default (no chrome change). The earlier
             // "faded" dim of every non-pinned row was rejected by user
@@ -909,13 +927,16 @@ const ChatTranscript = forwardRef<ChatTranscriptHandle, ChatTranscriptProps>(fun
                   cursor: handlePinClick ? 'pointer' : undefined,
                 }}
                 onClick={handlePinClick}
+                onKeyDown={handlePinKeyDown}
+                role={handlePinClick ? 'button' : undefined}
+                tabIndex={handlePinClick ? 0 : undefined}
                 aria-label={
                   isPinned
                     ? 'Pinned to context breakdown panel — click to unpin'
                     : 'Click to pin context breakdown to this message'
                 }
                 data-pinned={isPinned || undefined}
-                className="group rounded-md transition-shadow duration-200 ease-out"
+                className="group rounded-md transition-shadow duration-200 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500/70 focus-visible:[outline-offset:-1px]"
               >
                 {/* Comic two-sided layout. The OUTER flex justifies the
                     bubble group to its side (human → end/right, agent →

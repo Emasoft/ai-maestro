@@ -32,6 +32,24 @@ external-refs: []
 
 # TRDD-TBGGUA2V — Overnight autonomous supervision mandate
 
+## ⏵ STATE — READ FIRST — 2026-06-25T18:04+0200 (P8 CALIBRATION PROBE DONE — SCEN-020 PASS; real cost MEASURED; batch gated on a USER cost-decision)
+
+**USER gave the go (2026-06-25 ~17:34); ran ONE exempt SCEN-020 calibration probe on `opus[1m]`** (background `scenario-runner`, agentId ac1266b7; kill-switch NOT consulted — the calibration run is exempt). **Result: PASS 17/17, 0 application bugs**; R17 core-plugin lockdown + ChangeTitle-Gate-15 title-locked-role-plugin swap verified; 0-IMPACT 18→18; STATE-WIPE 4/4; git tree clean (no source edits). Reports: `reports/scenarios-runner/SCEN-020_20260625T153541Z.report.md` + `scenario_proposed-improvements_020_20260625T153541Z.md`.
+
+**MEASURED per-scenario cost (transcript-summed — the number the batch size MUST use, NOT the harness `subagent_tokens=399737` which UNDERCOUNTS by excluding cache):** input 50,428 + output 74,000 + cache-creation 1,021,588 = **NEW tokens ~1.15M**; **cache-read 62,107,494**; **TOTAL processed ~63.3M / scenario ≈ ~$40** on Opus 4.8 (cache-read at $0.50/M is ~$31 of it). 202 usage-turns over ~26 min (~12 turns/step).
+
+**FINDINGS (these change the plan — supersede the "~10-12M/scenario estimate" framing at line ~45 below):**
+- ✅ **Runner FUNCTIONALLY VALIDATED** — opus[1m] passes cleanly, NO thrash, NO "prompt too long". The L1–L9 levers cut NEW tokens (the controllable part) to ~1.15M.
+- ⚠ **But opus[1m]'s 1M context × ~200 turns makes cache-read dominate (62M)** → TOTAL ~63.3M/scenario, **~10× the `hard_token_ceiling_per_run: 6000000`**. The 6M ceiling was set against a cost model that did NOT account for cache-read on a 1M-context model; by its own "usage-export" frame ONE scenario blows it 10×.
+- Full 27-suite ≈ **~1.7B total tokens ≈ ~$1,070**. Bounded + predictable — NOT a runaway (the week-13B blowup was uncapped vision+snapshot with no cap) — but real money → USER cost-decision.
+- Biggest lever to cut it: cache-read scales with (turns × base-context); trimming the runner's base (the huge SCENARIOS_TESTS_RULES.md + env MCP/skill load — the root cause already flagged at line ~102) could cut ~3× → ~$13/scenario → ~$350 suite.
+
+**11th-HOUR proposals (Rule 11, DELAYED per the two-phase protocol — surfaced, NOT implemented):** P1 BUG-004 (`aim_delete_agent` helper false-positive ok:true — test-infra), P1 PROP-001 (S012 must fill MAINTAINER's mandatory GitHub-repo field, R19.3), P2 BUG-005 (ChangeTitle leaves a stale `githubRepo` on the registry when leaving MAINTAINER — real app finding), P2 PROP-002/003, P3 BUG-006/PROP-004. Full report in the improvements file.
+
+**NEXT ACTION (gated — the design's STOP-and-report checkpoint is reached):** reported the cost to the USER; awaiting the batch decision: (a) run full 27 (raise ceiling to reality, ~$1,070), (b) run a chosen subset, (c) skip the batch (the probe already validated the runner + R17/Gate-15 → close #59), or (d) optimize the runner base first (~3× cheaper) then run. Did NOT `validate`/`arm`/run — `enabled`/`validated` stay false until the USER chooses. The runner itself needs NO further work.
+
+---
+
 ## ⏵ STATE — READ FIRST — 2026-06-24T20:30+0200 (P8 UNBLOCKED — USER chose `opus[1m]`; runner switched; calibration probe is the next action)
 
 **DECISION (USER, 2026-06-24):** run the scenario suite on **`opus[1m]`**, NOT `sonnet[1m]`. Rationale VERIFIED against Anthropic docs (web-fetched this session, not guessed):

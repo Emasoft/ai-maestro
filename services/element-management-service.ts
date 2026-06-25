@@ -2833,7 +2833,13 @@ export async function ChangeTitle(
           })
           if (activeRolePlugins.length > 1) {
             ops.push(`G17: WARN — ${activeRolePlugins.length} role-plugins active (expected 0 or 1). Cleaning.`)
-            await uninstallAllRolePlugins(g17Dir)
+            // SF5 (TRDD-47a35ba2): catch+log — never let a throwing uninstall escape
+            // here. An uncaught throw would jump to the G17 `catch` below and SKIP the
+            // post-block R9.13 re-scan recovery (~2865+), leaving a titled agent with 0
+            // role-plugins (worse than a no-op — the prior plugin is already gone). We
+            // log to `ops` (NOT a silent swallow), so flow continues to the reinstall
+            // AND the post-block re-scan, which is what actually enforces R9.13.
+            await uninstallAllRolePlugins(g17Dir).catch((e) => ops.push(`G17: WARN — cleanup uninstall failed; R9.13 post-scan recovers: ${e instanceof Error ? e.message : String(e)}`))
             if (targetPluginName) {
               await installPluginLocally(targetPluginName, g17Dir, targetMarketplace).catch(() => {})
             }
@@ -2842,7 +2848,9 @@ export async function ChangeTitle(
             const activeName = activeRolePlugins[0].split('@')[0]
             if (activeName !== targetPluginName) {
               ops.push(`G17: MISMATCH — active "${activeName}" != expected "${targetPluginName}" for ${effectiveTitle}. Fixing.`)
-              await uninstallAllRolePlugins(g17Dir)
+              // SF5: same as the >1 branch — catch+log so a throwing uninstall can't
+              // bypass the post-block R9.13 re-scan recovery (see comment above).
+              await uninstallAllRolePlugins(g17Dir).catch((e) => ops.push(`G17: WARN — cleanup uninstall failed; R9.13 post-scan recovers: ${e instanceof Error ? e.message : String(e)}`))
               await installPluginLocally(targetPluginName, g17Dir, targetMarketplace).catch(() => {})
             } else {
               ops.push(`G17: Plugin state consistent (${activeName} matches ${effectiveTitle})`)

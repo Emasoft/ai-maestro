@@ -1,3 +1,11 @@
+---
+trdd-id: ef0c6c0a-0712-4506-9f6b-57bcfee2b22e
+title: R21 AIO compliance audit (post-v3.9.1 verification)
+status: completed
+created: 2026-05-06T00:00:00+0200
+updated: 2026-06-25T06:49:20+0200
+---
+
 # TRDD-ef0c6c0a-0712-4506-9f6b-57bcfee2b22e — R21 AIO compliance audit (post-v3.9.1 verification)
 
 **TRDD ID:** `ef0c6c0a-0712-4506-9f6b-57bcfee2b22e`

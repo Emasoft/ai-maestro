@@ -1,3 +1,11 @@
+---
+trdd-id: 70a521d9-5641-4a11-975f-2ca6f5bd9b0c
+title: Remove RAG-based memory system (keep subconscious)
+status: completed
+created: 2026-04-17T00:00:00+0200
+updated: 2026-06-25T06:49:20+0200
+---
+
 # TRDD-70a521d9-5641-4a11-975f-2ca6f5bd9b0c — Remove RAG-based memory system (keep subconscious)
 
 **TRDD ID:** `70a521d9-5641-4a11-975f-2ca6f5bd9b0c`

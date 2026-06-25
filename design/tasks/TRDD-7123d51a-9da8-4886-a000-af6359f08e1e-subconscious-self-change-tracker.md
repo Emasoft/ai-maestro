@@ -1,3 +1,11 @@
+---
+trdd-id: 7123d51a-9da8-4886-a000-af6359f08e1e
+title: Subconscious self-change tracker (registry + ledger sync)
+status: completed
+created: 2026-04-20T00:00:00+0200
+updated: 2026-06-25T06:49:20+0200
+---
+
 # TRDD-7123d51a-9da8-4886-a000-af6359f08e1e — Subconscious self-change tracker (registry + ledger sync)
 
 **TRDD ID:** `7123d51a-9da8-4886-a000-af6359f08e1e`

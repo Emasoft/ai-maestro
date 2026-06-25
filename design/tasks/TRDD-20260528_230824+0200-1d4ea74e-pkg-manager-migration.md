@@ -1,12 +1,17 @@
 ---
 trdd-id: 1d4ea74e-8a9b-41a4-a5d6-3bd8ee99e195
 title: Migrate from Yarn Classic to pnpm or Yarn Berry for release-age cooldown
-status: not-started
+status: cancelled
 created: 2026-05-28T23:08:24+0200
-updated: 2026-05-28T23:08:24+0200
+updated: 2026-06-25T06:15:50+0200
 ---
 
 # TRDD-1d4ea74e — Migrate from Yarn Classic to pnpm or Yarn Berry for release-age cooldown
+
+> ❌ **WON'T DO — USER decision 2026-06-25.** "do not migrate to pnpm, we are
+> making a PR here, not a revolution." A package-manager migration is too large
+> a blast radius for the current PR-scoped work. Cancelled, not deferred — do not
+> pick this up autonomously. Re-open only on an explicit USER request.
 
 **Filename:** `design/tasks/TRDD-20260528_230824+0200-1d4ea74e-pkg-manager-migration.md`
 **Tracked in:** this repo (design/tasks/ is git-tracked)

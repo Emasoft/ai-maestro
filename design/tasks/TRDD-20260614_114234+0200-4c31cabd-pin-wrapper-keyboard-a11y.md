@@ -1,10 +1,22 @@
 ---
 trdd-id: 4c31cabd-2638-40be-aa44-b98f53dbc9f2
 title: Make the chat-bubble pin-on-click affordance keyboard accessible
-status: not-started
+status: completed
 created: 2026-06-14T11:42:34+0200
-updated: 2026-06-14T11:42:34+0200
+updated: 2026-06-25T06:29:00+0200
 ---
+
+> ✅ **DONE 2026-06-25 (commit `cfc39169`).** Added `role="button"` + `tabIndex={0}`
+> + an `onKeyDown` (Enter/Space → pin/unpin, `preventDefault` on Space) + a
+> `focus-visible` emerald ring to the pin-row wrapper in `ChatTranscript.tsx`,
+> all gated on `onPinLineIndex` so a non-pinnable row stays inert. Kept it a
+> `<div role="button">` (NOT a `<button>`) per the no-nested-button rule. An
+> `e.target !== e.currentTarget` guard stops a key bubbling from a focused inner
+> control (checkbox/copy/summary/cost-toggle) from double-firing the pin.
+> Verify: tsc 0; eslint 0 (jsx-a11y `click-events-have-key-events` now satisfied);
+> full vitest 1937 passed / 2 skipped. Browser keyboard-tab is the optional final
+> confirmation (env=node, no React component-test infra — adding jsdom for one NIT
+> was out of scope).
 
 # TRDD-4c31cabd — Keyboard-accessible pin affordance in the chat transcript
 

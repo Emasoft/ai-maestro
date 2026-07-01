@@ -5,7 +5,6 @@ import { isValidUuid } from '@/lib/validation'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { getAgent } from '@/lib/agent-registry'
 import { PLUGIN_COMPATIBLE_TITLES } from '@/lib/ecosystem-constants'
-import type { AgentRole } from '@/types/agent'
 
 /**
  * POST /api/agents/[id]/wake
@@ -38,7 +37,13 @@ export async function POST(
     // compatibility map in ecosystem-constants.ts).
     const agent = getAgent(id)
     if (agent?.roleMissing) {
-      const title = (agent.governanceTitle ?? 'autonomous') as AgentRole
+      // governanceTitle is stored lowercase (AgentRole: 'member', 'autonomous', …)
+      // but PLUGIN_COMPATIBLE_TITLES keys its title arrays UPPERCASE ('MEMBER',
+      // 'AUTONOMOUS', …). Uppercase before the membership test — matching the
+      // canonical convention in getPluginsForTitle() (`title.toUpperCase()`) —
+      // otherwise the filter never matches and the UI role-plugin picker receives
+      // an empty list, leaving a roleMissing agent with no recovery path. (TRDD-c7a81642)
+      const title = (agent.governanceTitle ?? 'autonomous').toUpperCase()
       const compatibleOptions = Object.entries(PLUGIN_COMPATIBLE_TITLES)
         .filter(([, titles]) => (titles as readonly string[]).includes(title))
         .map(([plugin]) => plugin)

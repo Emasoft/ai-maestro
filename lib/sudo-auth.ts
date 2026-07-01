@@ -11,8 +11,10 @@
  *   3. Server generates a random 32-byte token, stores it with expiry, and
  *      returns it to the caller (who keeps it in memory, NOT in a cookie).
  *   4. Caller sends it on the next strict request as `X-Sudo-Token: ...`.
- *   5. Strict route handlers call validateAndConsumeSudoToken(token) which
- *      deletes the token (one-shot use) and returns ok/expired/missing.
+ *   5. Strict route handlers call verifyAndConsumeSudoToken(token, spec) which
+ *      AUTHENTICATES the token (validity, subject, operation) BEFORE it deletes
+ *      it — the delete (one-shot use) happens ONLY on a full match, so a
+ *      wrong-subject / wrong-operation attempt cannot burn a still-valid token.
  *
  * Tokens are stored in an in-memory map attached to globalThis so they
  * survive Next.js HMR in dev mode (same pattern as session-auth). On actual
@@ -166,17 +168,51 @@ export async function issueSudoToken(
   return { token: raw, expiresAt }
 }
 
-type ValidationResult =
+/**
+ * What a strict route asks of a sudo token when consuming it (SUDO-01/02).
+ * The store enforces "verify BEFORE burn" using this spec, so no caller can
+ * accidentally consume a token that does not fully match the request.
+ */
+export interface SudoConsumeSpec {
+  /**
+   * The (method, pathTemplate) this consume is FOR. An op-bound token MUST
+   * match it exactly; an unbound (legacy) token — one minted with no
+   * operation — matches any operation.
+   */
+  operation: SudoOperation
+  /**
+   * Does the token's stored subject belong to the caller on THIS request?
+   * "Who is the owner subject" is a governance concept the CALLER owns (it may
+   * depend on the user-authority model / active-maestro id); the store only
+   * enforces that the predicate passes BEFORE the token is burned (SUDO-02).
+   */
+  acceptSubject: (subject: string) => boolean
+}
+
+type ConsumeResult =
   | { ok: true; subject: string; operation?: SudoOperation }
-  | { ok: false; reason: 'missing' | 'expired' | 'unknown' }
+  | { ok: false; reason: 'missing' | 'expired' | 'unknown' | 'subject_mismatch' | 'operation_mismatch' }
 
 /**
- * One-shot validation: if the token is valid, consume it (delete from map)
- * and return the subject. Otherwise return a reason. One-shot means an
- * attacker who captures the token can't replay it — but the caller must
- * handle network retries by re-issuing a new sudo token.
+ * One-shot, AUTHENTICATE-BEFORE-CONSUME token check. The token is deleted
+ * (burned) ONLY when it is valid AND its subject is accepted AND its operation
+ * matches — so a wrong-subject or wrong-operation attempt returns a mismatch
+ * reason WITHOUT consuming a still-valid token (SUDO-01/02 token-burn
+ * hardening). One-shot means an attacker who captures a MATCHING token can't
+ * replay it — but the caller must handle network retries by re-issuing a new
+ * sudo token.
+ *
+ * WHY the ordering is load-bearing: a previous version consumed the token as
+ * soon as it was valid and let each caller check subject/operation afterward,
+ * so a mismatched request still deleted the victim's token — a token-burn DoS.
+ * Verifying subject + operation here, before the single `tokens.delete`, closes
+ * that gap atomically (this function is fully synchronous, so there is no
+ * peek-then-consume race — the whole check runs in one event-loop turn).
  */
-export function validateAndConsumeSudoToken(rawToken: string | null | undefined): ValidationResult {
+export function verifyAndConsumeSudoToken(
+  rawToken: string | null | undefined,
+  spec: SudoConsumeSpec
+): ConsumeResult {
   if (!rawToken || typeof rawToken !== 'string') {
     return { ok: false, reason: 'missing' }
   }
@@ -193,10 +229,27 @@ export function validateAndConsumeSudoToken(rawToken: string | null | undefined)
     return { ok: false, reason: 'unknown' }
   }
   if (rec.expiresAt <= Date.now()) {
+    // An EXPIRED record is already dead; sweeping it is housekeeping, not
+    // "burning a live token". The no-burn guarantee below concerns VALID tokens.
     tokens.delete(tokenHash)
     return { ok: false, reason: 'expired' }
   }
-  tokens.delete(tokenHash) // one-shot
+  // ── AUTHENTICATE BEFORE CONSUME ────────────────────────────────────────────
+  // SUDO-02: the token's subject must belong to the caller. Return WITHOUT
+  // deleting — a wrong-subject request must not burn a victim's token.
+  if (!spec.acceptSubject(rec.subject)) {
+    return { ok: false, reason: 'subject_mismatch' }
+  }
+  // SUDO-01: an op-bound token may be consumed ONLY for its exact operation.
+  // Return WITHOUT deleting — a wrong-operation request must not burn the token.
+  if (
+    rec.operation &&
+    (rec.operation.method !== spec.operation.method || rec.operation.path !== spec.operation.path)
+  ) {
+    return { ok: false, reason: 'operation_mismatch' }
+  }
+  // Full match — NOW consume (one-shot).
+  tokens.delete(tokenHash)
   return { ok: true, subject: rec.subject, operation: rec.operation }
 }
 

@@ -18,7 +18,7 @@ import {
   type StoredCredential,
 } from '@/lib/webauthn-server'
 import { enforceSystemOwner } from '@/lib/route-auth'
-import { validateAndConsumeSudoToken } from '@/lib/sudo-auth'
+import { verifyAndConsumeSudoToken } from '@/lib/sudo-auth'
 import { isUserAuthorityModelEnabled } from '@/lib/governance'
 import { getActiveMaestroUserId } from '@/lib/user-registry'
 import type { RegistrationResponseJSON } from '@simplewebauthn/types'
@@ -41,10 +41,6 @@ function consumeOwnerSudoToken(
   method: string,
   path: string
 ): { ok: true } | { ok: false; status: number; body: Record<string, unknown> } {
-  const result = validateAndConsumeSudoToken(rawToken)
-  if (!result.ok) {
-    return { ok: false, status: 403, body: { error: 'sudo_required', reason: result.reason } }
-  }
   // SUDO-02 subject binding — accept the legacy 'system-owner' sentinel always,
   // and the active-maestro id when the user-authority model is on (mirrors the
   // mint, which binds subject to ctx.userId ?? 'system-owner'). Fail-safe: on any
@@ -58,14 +54,21 @@ function consumeOwnerSudoToken(
   } catch {
     /* fail-secure: never widen the subject set on error */
   }
-  if (!validSubjects.has(result.subject)) {
+  // AUTHENTICATE-BEFORE-CONSUME: the store verifies subject (SUDO-02) AND
+  // operation (SUDO-01) BEFORE it burns the token, so a wrong-subject or
+  // wrong-op replay is rejected WITHOUT consuming a still-valid token.
+  const result = verifyAndConsumeSudoToken(rawToken, {
+    operation: { method, path },
+    acceptSubject: (subject) => validSubjects.has(subject),
+  })
+  if (result.ok) return { ok: true }
+  if (result.reason === 'subject_mismatch') {
     return { ok: false, status: 403, body: { error: 'sudo_subject_mismatch' } }
   }
-  // SUDO-01 operation binding — a bound token may be used only for its operation.
-  if (result.operation && (result.operation.method !== method || result.operation.path !== path)) {
+  if (result.reason === 'operation_mismatch') {
     return { ok: false, status: 403, body: { error: 'sudo_operation_mismatch' } }
   }
-  return { ok: true }
+  return { ok: false, status: 403, body: { error: 'sudo_required', reason: result.reason } }
 }
 
 // ============================================================================
@@ -135,12 +138,13 @@ export async function POST(request: NextRequest) {
   const authErr = enforceSystemOwner(request)
   if (authErr) return authErr
 
-  // STRICT (sudo). WHY: the previous code consumed the token with a bare
-  // validateAndConsumeSudoToken() and IGNORED the returned subject/operation,
-  // so a token minted for a different operation or subject could be replayed to
-  // register a passkey. consumeOwnerSudoToken enforces subject-binding (SUDO-02)
-  // and operation-binding (SUDO-01) inline (this route is not in the strict
-  // registry, so requireSudoToken would no-op — see the helper's doc-comment).
+  // STRICT (sudo). WHY: a bare consume that ignored the token's subject/operation
+  // would let a token minted for a different operation or subject be replayed to
+  // register a passkey. consumeOwnerSudoToken uses verifyAndConsumeSudoToken to
+  // enforce subject-binding (SUDO-02) and operation-binding (SUDO-01) BEFORE it
+  // burns the token (a mismatch does not consume a still-valid token). This route
+  // is not in the strict registry, so requireSudoToken would no-op — see the
+  // helper's doc-comment.
   const sudo = consumeOwnerSudoToken(request.headers.get('x-sudo-token'), 'POST', '/api/auth/webauthn/register')
   if (!sudo.ok) return NextResponse.json(sudo.body, { status: sudo.status })
 

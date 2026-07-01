@@ -3,13 +3,15 @@
  * (security remediation: sudo-subject-model — finding L2).
  *
  * WHY THIS FILE EXISTS (separate from tests/lib/sudo-guard.test.ts):
- *   The canonical adjacent guard test mocks validateAndConsumeSudoToken
+ *   The canonical adjacent guard test mocks verifyAndConsumeSudoToken
  *   wholesale, so it only ever exercises the legacy 'system-owner' subject and
  *   NEVER proves that a token whose subject is the active-maestro user id is
  *   ACCEPTED with the user-authority model ON. That is the exact path of the
  *   L2 fix. These tests close that gap with a GENUINE round-trip: a real token
  *   is minted via the real issueSudoToken into the real globalThis token store,
- *   then consumed by the guard's own real call to validateAndConsumeSudoToken.
+ *   then consumed by the guard's own real call to verifyAndConsumeSudoToken.
+ *   They also prove the SUDO-01/02 token-burn hardening end-to-end: a rejected
+ *   (wrong-op / wrong-subject) consume leaves the still-valid token consumable.
  *
  * THE FIX UNDER TEST (lib/sudo-guard.ts ~line 148):
  *   The mint binds a sudo token's subject to ctx.userId under the model, so the
@@ -228,6 +230,45 @@ describe('model ON — mint→consume round-trip (the L2 fix)', () => {
     const second = requireSudoToken(reqWithToken(token), 'DELETE', '/api/agents/[id]')
     expect(second?.status).toBe(403)
     expect((await bodyOf(second)).reason).toBe('unknown') // token already burned
+  })
+
+  it('TOKEN-BURN HARDENING — a wrong-OPERATION consume does NOT burn the token', async () => {
+    g.__sudoGuardModelOnFlag = true
+    // Mint a real token bound to DELETE /api/agents/[id] for the active maestro.
+    const { token } = await issueSudoToken('pw', MAESTRO_UUID, {
+      method: 'DELETE',
+      path: '/api/agents/[id]',
+    })
+    // Present it for the WRONG operation → 403 op-mismatch. Pre-fix this would
+    // have consumed (burned) the token; post-fix it must NOT.
+    const wrong = requireSudoToken(reqWithToken(token, '/api/teams/team-1'), 'PUT', '/api/teams/[id]')
+    expect(wrong?.status).toBe(403)
+    expect((await bodyOf(wrong)).error).toBe('sudo_operation_mismatch')
+    // THE assertion: the token survived — a legitimate consume for its real
+    // operation still succeeds.
+    const right = requireSudoToken(reqWithToken(token), 'DELETE', '/api/agents/[id]')
+    expect(right).toBeNull()
+  })
+
+  it('TOKEN-BURN HARDENING — a wrong-SUBJECT consume does NOT burn the token', async () => {
+    g.__sudoGuardModelOnFlag = true
+    // Active maestro is MAESTRO_UUID; mint a token whose subject is OTHER_UUID.
+    urState().activeMaestroId = MAESTRO_UUID
+    const { token } = await issueSudoToken('pw', OTHER_UUID, {
+      method: 'DELETE',
+      path: '/api/agents/[id]',
+    })
+    // First consume: the guard's accepted set is {system-owner, MAESTRO_UUID},
+    // so OTHER_UUID is rejected. This must NOT burn the token.
+    const rejected = requireSudoToken(reqWithToken(token), 'DELETE', '/api/agents/[id]')
+    expect(rejected?.status).toBe(403)
+    expect((await bodyOf(rejected)).error).toBe('sudo_subject_mismatch')
+    // Now make OTHER_UUID the active maestro so the guard accepts its subject.
+    // If the earlier rejection had burned the token, this would 403 'unknown';
+    // because it did NOT burn, the same token is now consumable → allow.
+    urState().activeMaestroId = OTHER_UUID
+    const accepted = requireSudoToken(reqWithToken(token), 'DELETE', '/api/agents/[id]')
+    expect(accepted).toBeNull()
   })
 
   it('does not widen when getActiveMaestroUserId() returns null (model on, no active maestro)', async () => {

@@ -747,6 +747,48 @@ if [ "$INSTALL_SKILL" = true ]; then
 fi
 
 # ═══════════════════════════════════════════════════════════════
+# OPTIONAL: code-analysis tooling (TRDD-ZFHY7UGU)
+#
+# tldr (deliberate READ CLI) + fastedit (deliberate AST WRITE CLI) +
+# distill (generic output-compression pipe) + lean-ctx (generic shell/read
+# interceptor). The dedicated installer is FAIL-SOFT (a failure here never
+# aborts the ai-maestro install) and seeds the lean-ctx allowlist with every
+# ai-maestro CLI so agent shells don't break.
+# ═══════════════════════════════════════════════════════════════
+TOOLING_INSTALLER="$SCRIPT_DIR/scripts/install-code-analysis-tooling.sh"
+if [ -f "$TOOLING_INSTALLER" ]; then
+    echo ""
+    INSTALL_TOOLING=false
+    TOOLING_ARGS=(-y)
+    if [ "$NON_INTERACTIVE" = true ]; then
+        # Non-interactive: install the CLIs, but never the 3GB model, never force cargo.
+        INSTALL_TOOLING=true
+        print_info "Non-interactive mode: installing code-analysis tooling (no model, no source build)..."
+    else
+        echo "🔎 Code-analysis tooling: tldr, fastedit, distill, lean-ctx"
+        read -r -p "   Install now? (y/N): " TOOLING_CHOICE
+        case "$TOOLING_CHOICE" in
+            [Yy]*)
+                INSTALL_TOOLING=true
+                read -r -p "   Also download the ~3GB fastedit local merge model? (y/N): " TOOLING_MODEL
+                case "$TOOLING_MODEL" in
+                    [Yy]*) TOOLING_ARGS=(-y --with-model) ;;
+                esac
+                ;;
+            *)
+                print_info "Skipping code-analysis tooling (install later: scripts/install-code-analysis-tooling.sh)"
+                ;;
+        esac
+    fi
+
+    if [ "$INSTALL_TOOLING" = true ]; then
+        # Fail-soft: tooling install must NEVER abort the ai-maestro install.
+        bash "$TOOLING_INSTALLER" "${TOOLING_ARGS[@]}" \
+            || print_warning "Code-analysis tooling install returned non-zero (continuing)"
+    fi
+fi
+
+# ═══════════════════════════════════════════════════════════════
 # Set up ALL local marketplaces (R20.3 v3.7.0 per-client layout)
 #
 # Two containers, each with per-client marketplace dirs:

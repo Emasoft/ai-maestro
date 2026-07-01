@@ -135,6 +135,26 @@ claude
 # Type 'exit' or press Ctrl+D to quit
 ```
 
+### 3.4 Code-analysis tooling (installed by `scripts/install-code-analysis-tooling.sh`)
+
+Four CLIs that Claude Code (and other coding-agent clients) use while working
+in this repo. Installed automatically by `install-messaging.sh`, which calls
+`scripts/install-code-analysis-tooling.sh` — no separate manual step needed.
+
+| Tool | What it is | Install method |
+|------|------------|-----------------|
+| **tldr-code** | Read-only AST code-analysis CLI (Rust) | Prebuilt binary from [github.com/parcadei/tldr-code/releases](https://github.com/parcadei/tldr-code/releases), or `cargo install --git https://github.com/parcadei/tldr-code tldr-cli --features semantic` if Rust/cargo is present. Binaries: `tldr`, `tldr-daemon`, `tldr-mcp` |
+| **fastedit** | AST-aware WRITE companion to tldr (Python) | `uv tool install 'fastedits[mlx,mcp]'` — requires `tldr` on PATH first. Its ~3GB local MLX merge model (`fastedit pull --model mlx-8bit`) is opt-in |
+| **distill** | Output-compression pipe | `npm install -g @samuelfaj/distill` |
+| **lean-ctx** | Shell allowlist + output-compression interceptor + `ctx_*` MCP | `brew install yvgude/lean-ctx/lean-ctx` |
+
+**Underlying prerequisites:** `uv` (Python) and Node.js/npm (already required in 3.1); Rust/cargo only if you use the tldr cargo fallback instead of the prebuilt binary.
+
+**Check if already installed:**
+```bash
+tldr --version && fastedit --version && distill --version && lean-ctx --version
+```
+
 ---
 
 ## 4. Network and Port Requirements

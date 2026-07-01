@@ -38,6 +38,40 @@ tmux kill-session -t test-session    # Clean up test session
 
 **Health Check:** Do NOT use `/api/health` to check if the site is live (it doesn't exist). Use `/api/sessions` instead - it returns the list of agents and confirms the server is running.
 
+## Code-analysis tooling (official deps — TRDD-ZFHY7UGU)
+
+Four CLIs are official ai-maestro dependencies, installed by
+`scripts/install-code-analysis-tooling.sh` (called from `install-messaging.sh`)
+alongside the rest of the install:
+
+- **tldr-code** (`tldr`/`tldr-daemon`/`tldr-mcp`) — read-only AST code-analysis
+  CLI. A **deliberate, intentionally-invoked** instrument: agents call it to
+  read only the relevant symbol/lines instead of whole files.
+- **fastedit** — the AST-aware WRITE companion to tldr. Also **deliberate** —
+  invoked explicitly for symbol-level edits; requires tldr on PATH first.
+- **distill** — output-compression pipe. A **generic, non-discriminating**
+  interceptor: wraps command output regardless of which tool produced it.
+- **lean-ctx** — shell command allowlist + output-compression interceptor +
+  `ctx_*` MCP tools. Also **generic, non-discriminating** — wraps every shell
+  call by default.
+
+**Coexistence model:** lean-ctx + distill wrap every tool call; tldr and
+fastedit are invoked on purpose when an agent wants deliberate, scoped code
+analysis or edits. **The tldr hooks stay UNWIRED** — never wire
+`tldr-read-enforcer` alongside lean-ctx (the two are mutually exclusive
+interception layers; wiring both double-intercepts every read).
+
+**lean-ctx allowlist gotcha:** lean-ctx enforces a command **allowlist**, so
+the installer MUST seed it with every ai-maestro CLI the agent shells rely on
+(`aimaestro-*.sh`, `amp-*.sh`, `aid-*.sh`, `tldr*`, `fastedit*`, `node`, `uv`,
+`git`, `[`, …) or those shells break. `$(...)` command-substitution is
+**warn-only** (not blocked), and is **not intercepted inside a script an agent
+invokes** — only the agent's top-level Bash-tool calls pass through the
+allowlist check.
+
+See `~/.claude/rules/tldr-cli.md` and the `tldr-code` skill for the full
+command reference.
+
 ## Version Management
 
 **IMPORTANT:** When bumping the version, ALWAYS use the centralized script:

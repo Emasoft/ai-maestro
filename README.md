@@ -112,6 +112,7 @@ This installs everything you need:
 - AI Maestro dashboard and service
 - Agent messaging system (AMP)
 - Claude Code plugin with 9 skills and 32 CLI scripts
+- Code-analysis tooling (tldr-code, fastedit, distill, lean-ctx) for agent-driven code reading and editing
 
 **Time:** 5-10 minutes · **Requires:** Node.js 20+, tmux
 

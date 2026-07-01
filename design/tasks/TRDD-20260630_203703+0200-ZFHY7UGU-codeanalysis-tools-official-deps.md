@@ -1,9 +1,10 @@
 ---
 trdd-id: ZFHY7UGU
 title: Make tldr-code + fastedit + lean-ctx + distill official ai-maestro dependencies
-column: todo
+column: complete
 created: 2026-06-30T20:37:03+0200
-updated: 2026-06-30T20:37:03+0200
+updated: 2026-07-01T13:09:15+0200
+implementation-commits: [7d018813]
 current-owner: main
 assignee: main
 priority: 3
@@ -30,8 +31,10 @@ external-refs: ["github.com/parcadei/tldr-code"]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-06-30
 
-- **Status:** PLAN authored (column `todo`). Awaiting USER greenlight to implement
-  (USER chose "plan first via TRDDs" on 2026-06-30).
+- **Status:** DONE — implemented + committed (`7d018813`) on 2026-07-01. column:
+  complete. Installer `scripts/install-code-analysis-tooling.sh` + wiring in
+  `install-messaging.sh` + docs shipped. Rechecked (script read, vars verified,
+  bash -n + shellcheck clean).
 - **Origin:** USER intends to make **distill + lean-ctx + tldr-code + fastedit**
   official ai-maestro deps "installed along the other dependencies", conflict-free
   with the app + agents. This session (2026-06-30) prototyped all FOUR at USER

@@ -1,9 +1,10 @@
 ---
 trdd-id: ANYCPRTX
 title: Author cross-client tldr-code+fastedit skill variants for all CLI ai-code clients
-column: todo
+column: complete
 created: 2026-06-30T20:37:03+0200
-updated: 2026-07-01T11:37:13+0200
+updated: 2026-07-01T13:09:15+0200
+implementation-commits: [a5909778]
 current-owner: main
 assignee: main
 priority: 4
@@ -29,9 +30,13 @@ external-refs: ["github.com/parcadei/tldr-code", "github.com/parcadei/fastedit"]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-06-30
 
-- **Status:** PLAN authored (column `todo`). Client scope RESOLVED by USER
-  2026-07-01 (BOTH Kiro + KiloCode; ALL CLI ai-code clients; NOT aider, NOT
-  GUI/IDE) — see "Target clients (RESOLVED)". Awaiting USER greenlight to implement.
+- **Status:** DONE — implemented + committed (`a5909778`) on 2026-07-01. column:
+  complete. Approach B shipped: 7 in-repo per-client variants under
+  `scripts/code-analysis-skill/` (claude canonical + codex/gemini/opencode/kiro +
+  hand-authored copilot/kilocode) + conservative `distribute-code-analysis-skill.sh`.
+  Follow-ups (out of scope, documented): verify exact per-client skill frontmatter/
+  load-path against each client's docs; optional converter-path DRY migration needs
+  the skill added to ai-maestro-plugin (separate repo).
 - **Depends on (NPT):** TRDD-ZFHY7UGU (the 4 tools installed as deps on the client
   machine: tldr-code, **fastedit**, lean-ctx, distill).
 - **Origin:** ai-maestro runs ANY CLI ai-code client. The 4 tools are

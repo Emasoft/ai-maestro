@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic'
  *     reason?: string,
  *     asOfIso?: string,
  *     scanAgeSec?: number | null,
- *     components: Array<{ name: string; type: string; scope?: string; installedAtIso?: string | null }>
+ *     components: Array<{ name: string; type: string; scope?: string }>
  *   }
  *
  * STATUS CODES:
@@ -36,7 +36,8 @@ const LifelineComponentSchema = z.object({
   name: z.string(),
   type: z.string(),
   scope: z.string().optional(),
-  installedAtIso: z.string().nullable().optional(),
+  // No installedAtIso: the PSS as-of schema emits no per-element install timestamp, so the
+  // field was always null and is omitted at the source (TRDD-e1a79be0, option b).
 })
 
 const LifelineResultSchema = z.object({

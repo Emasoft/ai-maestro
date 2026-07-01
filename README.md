@@ -249,6 +249,24 @@ AI Maestro uses three categories of plugins:
 - **7 local-scope role-plugins** (installed on-demand per agent): `architect-agent`, `orchestrator-agent`, `integrator-agent`, `programmer-agent`, `chief-of-staff`, `assistant-manager-agent`, `maintainer-agent` — from the local roles marketplace
 - **External dependencies** from the `Emasoft/emasoft-plugins` marketplace: `claude-plugins-validation`, `perfect-skill-suggester`, `code-auditor-agent`, `llm-externalizer-plugin`
 
+### Cross-Client Conversion
+
+*AI Maestro drives agents on any terminal AI client, not just Claude Code.* Plugins and skills authored for Claude Code are machine-converted to each target client through a universal intermediate representation (`claude-extension → universal IR → client-extension`), so a role-plugin or skill written once runs everywhere its client supports it.
+
+**Client support** (🚧 = work in progress, partial element coverage — you decide when to rely on it):
+
+| Client | Skills | Agents / Commands | Hooks / MCP | State |
+|---|---|---|---|---|
+| Claude Code | ✅ | ✅ | ✅ | source (native) |
+| Codex | ✅ | ✅ | ✅ | ✅ supported |
+| Gemini CLI | ✅ | ✅ | partial | ✅ supported |
+| OpenCode | ✅ | ✅ | partial | ✅ supported |
+| Kiro | ✅ | ✅ | partial | ✅ supported |
+| GitHub Copilot | ✅ (→ `.github/copilot-instructions.md`) | — | — | 🚧 instructions-only |
+| KiloCode | ✅ (→ `.kilocode/rules/`) | — | — | 🚧 rules-only |
+
+**Plugin coverage:** the core `ai-maestro` plugin and all 8 role-plugins convert to every supported client. **Not converted** (Claude-Code-specific by design): `claude-plugin` (plugin authoring), `claude-plugins-validation` (CPV), and `ai-maestro-janitor`.
+
 ---
 
 ## Who Is This For

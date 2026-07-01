@@ -94,12 +94,19 @@ require_openssl() {
 #   This ensures inboxes, sent folders, keys, and config are completely isolated
 #   and survive agent renames.
 #
-# Resolution order for AMP_DIR:
-#   1. Explicit AMP_DIR env var (set by AI Maestro wake/create routes)
-#   2. CLAUDE_AGENT_ID env var → ~/.agent-messaging/agents/<uuid>/
-#   3. CLAUDE_AGENT_NAME env var → ~/.agent-messaging/agents/<name>/
-#      (symlink resolves to UUID dir if migrated)
-#   4. tmux session name → ~/.agent-messaging/agents/<name>/
+# Resolution order for AMP_DIR (layered, most-trusted first — TRDD-979dbdaa/#46):
+#   1.   Explicit AMP_DIR env var (set by AI Maestro wake/create routes)
+#   2.   CLAUDE_AGENT_ID env var (--id) → ~/.agent-messaging/agents/<uuid>/
+#   2.5. AIM_AGENT_ID / AIM_AGENT_NAME — server-injected identity env. More
+#        deterministic + less spoofable than a tmux name or the CWD (a peer
+#        cannot forge them into ANOTHER agent's session env).
+#   3.   CLAUDE_AGENT_NAME env var or tmux session name → index lookup
+#      (symlink/legacy name dir resolves to UUID dir if migrated)
+#   3.5. Working directory ~/agents/<name>/ → index lookup. The ONLY layer that
+#        fires when the full server env (AMP_DIR + AIM_AGENT_*) was scrubbed
+#        (env -i / sudo / re-sourced shell). Anti-spoofing: when AIM_AGENT_NAME
+#        is present it MUST agree with the CWD-derived name, else refuse.
+#   4.   Single-agent auto-select, else "Multiple AMP agents" error.
 #      If the directory doesn't exist, it is auto-created.
 #
 AMP_AGENTS_BASE="${HOME}/.agent-messaging/agents"
@@ -135,6 +142,28 @@ if [ -z "${AMP_DIR:-}" ]; then
         _amp_resolved=true
     fi
 
+    # Priority 2.5: server-injected identity env (AIM_AGENT_ID / AIM_AGENT_NAME).
+    # AI Maestro injects these into every agent's tmux pane at spawn
+    # (services/sessions-service.ts, services/agents-core-service.ts). They are
+    # strictly MORE deterministic and LESS spoofable than the tmux session name
+    # (P3) or the CWD (P3.5): a peer cannot forge them into ANOTHER agent's
+    # session env, so they are preferred over those fallbacks. Explicit --id (P2)
+    # still wins — an operator override outranks the server default.
+    # TRDD-979dbdaa / #46 (env-first layered resolver).
+    if [ "$_amp_resolved" = false ]; then
+        if [ -n "${AIM_AGENT_ID:-}" ]; then
+            AMP_DIR="${AMP_AGENTS_BASE}/${AIM_AGENT_ID}"
+            _amp_resolved=true
+        elif [ -n "${AIM_AGENT_NAME:-}" ]; then
+            _amp_uuid=$(_index_lookup "${AIM_AGENT_NAME}" 2>/dev/null) || true
+            if [ -n "$_amp_uuid" ]; then
+                AMP_DIR="${AMP_AGENTS_BASE}/${_amp_uuid}"
+                _amp_resolved=true
+            fi
+            unset _amp_uuid
+        fi
+    fi
+
     # Priority 3: CLAUDE_AGENT_NAME env var or tmux → index lookup
     if [ "$_amp_resolved" = false ]; then
         _amp_agent_name=""
@@ -156,6 +185,56 @@ if [ -z "${AMP_DIR:-}" ]; then
             _amp_resolved=true
         fi
         unset _amp_agent_name _amp_uuid
+    fi
+
+    # Priority 3.5: derive identity from the session's working directory.
+    # An AI Maestro agent runs in ~/agents/<name>/ — a deterministic self-identity
+    # key. This is the ONLY layer that fires when the full server-injected env
+    # (AMP_DIR + AIM_AGENT_*) was SCRUBBED (env -i / sudo / a re-sourced shell);
+    # a normally-spawned session resolves at P1/P2.5 and never reaches here.
+    # TRDD-979dbdaa / #46.
+    #
+    # set -e safety (audit-mandated, R23 frozen-CLI): a bare
+    # `_x="$(cd … && pwd)"` cmd-sub exits non-zero on a host WITHOUT ~/agents/,
+    # and under `set -euo pipefail` that would KILL the script before Priority 4 —
+    # turning the existing single-agent success path into an exit 1. The
+    # `[ -d "$HOME/agents" ]` precondition + `|| _agents_base=""` + the non-empty
+    # base guard keep this a TRUE no-op on such hosts. AGENT_WORK_DIR is the var
+    # AI Maestro actually injects for the workdir; fall back to $PWD
+    # (CLAUDE_PROJECT_DIR is never set by AI Maestro — 0 hits in services/).
+    #
+    # Anti-spoofing (security-adjacent — never relax): the CWD is user-typable, so
+    # it lowers the impersonation bar from "know a uuid" to "cd into a name". When
+    # a server-injected AIM_AGENT_NAME IS present but did not resolve above, the
+    # CWD-derived name MUST agree with it, else REFUSE — binding the spoofable
+    # handle to the trusted one. (AIM_AGENT_ID, when present, resolves at P2.5 and
+    # short-circuits this layer, so it needs no separate check here.) This adds a
+    # NEW refusal only; it relaxes no existing check. The genuine env-scrubbed
+    # case (no AIM_AGENT_* at all) is accepted under the SAME user-UID trust
+    # boundary that --id already accepts, with an auditable stderr note.
+    if [ "$_amp_resolved" = false ] && [ -d "$HOME/agents" ]; then
+        _amp_cwd="${AGENT_WORK_DIR:-$PWD}"
+        _agents_base="$(cd "$HOME/agents" && pwd -P)" || _agents_base=""
+        _cwd_real="$(cd "$_amp_cwd" 2>/dev/null && pwd -P || echo "$_amp_cwd")"
+        if [ -n "$_agents_base" ]; then
+            case "$_cwd_real/" in
+              "$_agents_base"/*/)
+                _amp_name="${_cwd_real#"$_agents_base"/}"; _amp_name="${_amp_name%%/*}"
+                if [ -n "${AIM_AGENT_NAME:-}" ] && [ "$_amp_name" != "${AIM_AGENT_NAME}" ]; then
+                    echo "Error: AMP identity refused — working dir '${_amp_name}' does not match injected AIM_AGENT_NAME '${AIM_AGENT_NAME}'." >&2
+                    echo "Refusing to resolve identity from a mismatched directory (anti-spoofing). Use --id <uuid> or run from your own ~/agents/<name>/." >&2
+                    exit 1
+                fi
+                _amp_uuid="$(_index_lookup "$_amp_name" 2>/dev/null || true)"
+                if [ -n "$_amp_uuid" ]; then
+                    AMP_DIR="${AMP_AGENTS_BASE}/$_amp_uuid"
+                    _amp_resolved=true
+                    echo "Note: AMP identity '${_amp_name}' derived from working directory (server env was absent)." >&2
+                fi
+                ;;
+            esac
+        fi
+        unset _amp_cwd _agents_base _cwd_real _amp_name _amp_uuid
     fi
 
     # Priority 4: Single agent auto-select (convenience for solo setups)

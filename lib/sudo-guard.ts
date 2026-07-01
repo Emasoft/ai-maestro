@@ -8,7 +8,9 @@
  *
  *   USER / SYSTEM-OWNER path (valid aim_session cookie, no Bearer → no agentId):
  *     1. Read the X-Sudo-Token header.
- *     2. Validate + consume it (one-shot, TTL, subject-bound, op-bound).
+ *     2. verifyAndConsumeSudoToken checks validity, TTL, subject AND operation
+ *        binding, then consumes (one-shot) ONLY on a full match — a wrong-subject
+ *        or wrong-op attempt is rejected WITHOUT burning a still-valid token.
  *     3. On failure, return a 403 NextResponse to short-circuit.
  *     4. On success, return null and the handler proceeds.
  *   This is the ONLY path that consumes a sudo token — a sudo password is
@@ -20,7 +22,7 @@
  *     reaches the agent branch), (2) TITLE privilege via the shared
  *     lib/authorization.ts::authorize(), and (3) a portfolio/mandate token
  *     (a future R28 check, pre-wired here as a no-op). The agent branch goes
- *     to `requireAidTitle` and NEVER touches validateAndConsumeSudoToken.
+ *     to `requireAidTitle` and NEVER touches verifyAndConsumeSudoToken.
  *
  * SECURITY (SUDO-04): the guard AUTHENTICATES FIRST. A forged/expired session
  * cookie sets `auth.error` and the guard returns 401 BEFORE the sudo token is
@@ -42,7 +44,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { validateAndConsumeSudoToken } from './sudo-auth'
+import { verifyAndConsumeSudoToken } from './sudo-auth'
 import { requiresSudo } from './security-registry'
 import {
   authenticateFromRequest,
@@ -85,45 +87,10 @@ export function requireSudoToken(
     return requireAidTitle(auth, method, pathTemplate, request)
   }
 
-  // ── USER / SYSTEM-OWNER path: sudo token, now subject- and op-bound ──────
+  // ── USER / SYSTEM-OWNER path: sudo token, subject- and op-bound ──────────
   const token = request.headers.get('x-sudo-token')
-  const result = validateAndConsumeSudoToken(token)
 
-  if (!result.ok) {
-    const reason = result.reason
-    // Clean, user-facing copy that the sudo modal displays verbatim.
-    // Keep these short and free of API plumbing — the modal body already
-    // explains the TTL and "cannot be replayed" invariant separately.
-    const message =
-      reason === 'missing'
-        ? 'Confirm with your governance password to continue.'
-        : reason === 'expired'
-          ? 'Your confirmation expired. Please re-enter your governance password.'
-          : 'That confirmation could not be used. Please enter your governance password again.'
-
-    // Developer-facing hint that explains the exact API contract. Separate
-    // from `message` so the modal never leaks API plumbing into end-user UX
-    // (Issue A from SCEN-016 smoke test, 2026-04-12).
-    const devHint =
-      reason === 'missing'
-        ? 'POST /api/auth/sudo-password with the governance password to obtain a token, then retry with X-Sudo-Token header.'
-        : reason === 'expired'
-          ? 'Sudo token expired. Request a fresh one.'
-          : 'Sudo token invalid or already used (tokens are one-shot).'
-
-    return NextResponse.json(
-      {
-        error: 'sudo_required',
-        reason,
-        message,
-        devHint,
-        route: `${method} ${pathTemplate}`,
-      },
-      { status: 403 }
-    )
-  }
-
-  // SUDO-02: the consumed token must belong to the USER on THIS session.
+  // SUDO-02: which subjects may this session consume a token for?
   //
   // R37.4 SUBJECT-BINDING (the model-ON fix): the mint route binds the token's
   // subject to `ctx.userId ?? 'system-owner'` (sudo-password/route.ts), so the
@@ -142,9 +109,12 @@ export function requireSudoToken(
   // complete fail-secure feature break (assign-delegate, set-password, …).
   //
   // The legacy sentinel is ALWAYS accepted (covers model-OFF and any unbound
-  // token minted before the flip). One-shot, op-binding, and subject-binding
-  // are all preserved — this only WIDENS the subject set under the model, never
-  // weakens it: a non-active-maestro UUID subject is still rejected.
+  // token minted before the flip). This only WIDENS the subject set under the
+  // model, never weakens it: a non-active-maestro UUID subject is still rejected.
+  //
+  // Computed BEFORE the consume (below) because verifyAndConsumeSudoToken checks
+  // the subject BEFORE it burns the token — a wrong-subject attempt must not
+  // consume a still-valid token (SUDO-02 token-burn hardening).
   const validSubjects = new Set<string>(['system-owner'])
   try {
     const { isUserAuthorityModelEnabled } = require('./governance') as typeof import('./governance')
@@ -158,37 +128,74 @@ export function requireSudoToken(
     // the legacy {'system-owner'}-only set — never widen the subject set on an
     // error, so a misconfiguration can only DENY (fail-secure), never grant.
   }
-  if (!validSubjects.has(result.subject)) {
+
+  // AUTHENTICATE-BEFORE-CONSUME (SUDO-01/02): the store verifies validity, the
+  // subject predicate, AND the operation binding, and burns the token ONLY on a
+  // full match. A wrong-subject / wrong-op / expired / replayed request returns
+  // a reason WITHOUT consuming a still-valid token.
+  const result = verifyAndConsumeSudoToken(token, {
+    operation: { method, path: pathTemplate },
+    acceptSubject: (subject) => validSubjects.has(subject),
+  })
+
+  if (result.ok) return null
+
+  if (result.reason === 'subject_mismatch') {
     return NextResponse.json(
       {
         error: 'sudo_subject_mismatch',
         message: 'That confirmation does not belong to this session. Please re-enter your governance password.',
-        devHint: `Sudo token subject "${result.subject}" is not an accepted subject (expected "system-owner"${validSubjects.size > 1 ? ' or the active-maestro user id' : ''}).`,
+        devHint: `Sudo token subject is not an accepted subject (expected "system-owner"${validSubjects.size > 1 ? ' or the active-maestro user id' : ''}).`,
         route: `${method} ${pathTemplate}`,
       },
       { status: 403 }
     )
   }
 
-  // SUDO-01 (two-phase, R-3): if the token was minted for a specific operation,
-  // it may be consumed ONLY for that exact (method, pathTemplate). A token with
-  // no `operation` (legacy / unbound) is tolerated during the rollout.
-  if (
-    result.operation &&
-    (result.operation.method !== method || result.operation.path !== pathTemplate)
-  ) {
+  if (result.reason === 'operation_mismatch') {
     return NextResponse.json(
       {
         error: 'sudo_operation_mismatch',
         message: 'That confirmation was for a different action. Please re-enter your governance password.',
-        devHint: `Sudo token bound to ${result.operation.method} ${result.operation.path}, but the request is ${method} ${pathTemplate}.`,
+        devHint: `Sudo token was minted for a different operation than ${method} ${pathTemplate}.`,
         route: `${method} ${pathTemplate}`,
       },
       { status: 403 }
     )
   }
 
-  return null
+  // missing | expired | unknown → sudo_required
+  const reason = result.reason
+  // Clean, user-facing copy that the sudo modal displays verbatim.
+  // Keep these short and free of API plumbing — the modal body already
+  // explains the TTL and "cannot be replayed" invariant separately.
+  const message =
+    reason === 'missing'
+      ? 'Confirm with your governance password to continue.'
+      : reason === 'expired'
+        ? 'Your confirmation expired. Please re-enter your governance password.'
+        : 'That confirmation could not be used. Please enter your governance password again.'
+
+  // Developer-facing hint that explains the exact API contract. Separate
+  // from `message` so the modal never leaks API plumbing into end-user UX
+  // (Issue A from SCEN-016 smoke test, 2026-04-12).
+  const devHint =
+    reason === 'missing'
+      ? 'POST /api/auth/sudo-password with the governance password to obtain a token, then retry with X-Sudo-Token header.'
+      : reason === 'expired'
+        ? 'Sudo token expired. Request a fresh one.'
+        : 'Sudo token invalid or already used (tokens are one-shot).'
+
+  return NextResponse.json(
+    {
+      error: 'sudo_required',
+      reason,
+      message,
+      devHint,
+      route: `${method} ${pathTemplate}`,
+    },
+    { status: 403 }
+  )
 }
 
 /**

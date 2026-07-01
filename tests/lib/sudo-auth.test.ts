@@ -2,8 +2,10 @@
  * Unit tests for lib/sudo-auth.ts — the R32 sudo-token store.
  *
  * Covers: operation + subject stored at issue and returned at consume,
- * one-shot consumption, expiry, countBySubject quota math, and the legacy
- * unbound-token (operation===undefined) round-trip.
+ * one-shot consumption, expiry, countBySubject quota math, the legacy
+ * unbound-token (operation===undefined) round-trip, AND the SUDO-01/02
+ * token-burn hardening: a wrong-subject or wrong-operation consume attempt is
+ * rejected WITHOUT burning a still-valid token (authenticate-before-consume).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -27,10 +29,14 @@ vi.mock('@/lib/security-config', () => ({
 
 import {
   issueSudoToken,
-  validateAndConsumeSudoToken,
+  verifyAndConsumeSudoToken,
   countBySubject,
   activeSudoTokenCount,
 } from '@/lib/sudo-auth'
+
+// Predicate that accepts any subject — used where a test cares only about
+// validity / one-shot / operation binding, not the subject decision.
+const acceptAny = () => true
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -44,11 +50,11 @@ beforeEach(() => {
   // fake time far enough to expire everything, then sweep via a count call.
 })
 
-describe('issueSudoToken + validateAndConsumeSudoToken', () => {
-  it('stores operation + subject at issue and returns them at consume', async () => {
+describe('issueSudoToken + verifyAndConsumeSudoToken', () => {
+  it('stores operation + subject at issue and returns them at a matching consume', async () => {
     const op = { method: 'DELETE', path: '/api/agents/[id]' }
     const { token } = await issueSudoToken('pw', 'system-owner', op)
-    const result = validateAndConsumeSudoToken(token)
+    const result = verifyAndConsumeSudoToken(token, { operation: op, acceptSubject: acceptAny })
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.subject).toBe('system-owner')
@@ -57,28 +63,35 @@ describe('issueSudoToken + validateAndConsumeSudoToken', () => {
   })
 
   it('is one-shot — a second consume returns unknown', async () => {
-    const { token } = await issueSudoToken('pw', 'system-owner', { method: 'PUT', path: '/api/teams/[id]' })
-    const first = validateAndConsumeSudoToken(token)
+    const op = { method: 'PUT', path: '/api/teams/[id]' }
+    const { token } = await issueSudoToken('pw', 'system-owner', op)
+    const first = verifyAndConsumeSudoToken(token, { operation: op, acceptSubject: acceptAny })
     expect(first.ok).toBe(true)
-    const second = validateAndConsumeSudoToken(token)
+    const second = verifyAndConsumeSudoToken(token, { operation: op, acceptSubject: acceptAny })
     expect(second.ok).toBe(false)
     if (!second.ok) expect(second.reason).toBe('unknown')
   })
 
   it('returns missing for a null/empty token', () => {
-    expect(validateAndConsumeSudoToken(null)).toEqual({ ok: false, reason: 'missing' })
-    expect(validateAndConsumeSudoToken('')).toEqual({ ok: false, reason: 'missing' })
+    const op = { method: 'DELETE', path: '/api/agents/[id]' }
+    expect(verifyAndConsumeSudoToken(null, { operation: op, acceptSubject: acceptAny })).toEqual({ ok: false, reason: 'missing' })
+    expect(verifyAndConsumeSudoToken('', { operation: op, acceptSubject: acceptAny })).toEqual({ ok: false, reason: 'missing' })
   })
 
   it('returns unknown for a token never issued', () => {
-    const result = validateAndConsumeSudoToken('totally-made-up-token')
+    const op = { method: 'DELETE', path: '/api/agents/[id]' }
+    const result = verifyAndConsumeSudoToken('totally-made-up-token', { operation: op, acceptSubject: acceptAny })
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.reason).toBe('unknown')
   })
 
-  it('legacy unbound token (no operation) round-trips with operation===undefined', async () => {
+  it('legacy unbound token (no operation) matches any operation and returns operation===undefined', async () => {
     const { token } = await issueSudoToken('pw', 'system-owner')
-    const result = validateAndConsumeSudoToken(token)
+    // An unbound token is consumable for ANY operation.
+    const result = verifyAndConsumeSudoToken(token, {
+      operation: { method: 'POST', path: '/api/governance/password' },
+      acceptSubject: acceptAny,
+    })
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.subject).toBe('system-owner')
@@ -90,13 +103,16 @@ describe('issueSudoToken + validateAndConsumeSudoToken', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-19T00:00:00Z'))
     const { token } = await issueSudoToken('pw', 'system-owner')
-    // Advance well past the 60s TTL. NOTE: validateAndConsumeSudoToken calls
+    // Advance well past the 60s TTL. NOTE: verifyAndConsumeSudoToken calls
     // sweep() first, which purges expired records — so a long-expired token
     // surfaces as 'unknown' (record already swept) rather than 'expired'
     // (record still present but past expiry). Both mean "rejected"; the
     // invariant under test is that an expired token is NEVER ok.
     vi.setSystemTime(new Date('2026-06-19T00:05:00Z'))
-    const result = validateAndConsumeSudoToken(token)
+    const result = verifyAndConsumeSudoToken(token, {
+      operation: { method: 'DELETE', path: '/api/agents/[id]' },
+      acceptSubject: acceptAny,
+    })
     expect(result.ok).toBe(false)
     if (!result.ok) expect(['expired', 'unknown']).toContain(result.reason)
     vi.useRealTimers()
@@ -110,6 +126,71 @@ describe('issueSudoToken + validateAndConsumeSudoToken', () => {
   it('throws sudo_mode_unavailable when no governance password is configured', async () => {
     mockLoadGovernance.mockReturnValue({})
     await expect(issueSudoToken('pw', 'system-owner')).rejects.toThrow(/sudo_mode_unavailable/)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUDO-01/02 token-burn hardening — authenticate BEFORE consume. The load-
+// bearing property: a mismatched attempt must return a mismatch reason AND leave
+// the still-valid token consumable, so it cannot be burned by a wrong request.
+describe('verifyAndConsumeSudoToken — verify BEFORE burn (no token-burn on mismatch)', () => {
+  it('rejects a SUBJECT mismatch and does NOT burn the token (a later matching consume still works)', async () => {
+    const op = { method: 'DELETE', path: '/api/agents/[id]' }
+    const { token } = await issueSudoToken('pw', 'system-owner', op)
+
+    // Attacker request: correct token + operation, but the subject predicate
+    // rejects the token's stored subject.
+    const mismatch = verifyAndConsumeSudoToken(token, { operation: op, acceptSubject: () => false })
+    expect(mismatch.ok).toBe(false)
+    if (!mismatch.ok) expect(mismatch.reason).toBe('subject_mismatch')
+
+    // THE assertion: the victim's token was NOT burned — a legitimate consume
+    // (subject accepted, op matches) still succeeds.
+    const legit = verifyAndConsumeSudoToken(token, { operation: op, acceptSubject: acceptAny })
+    expect(legit.ok).toBe(true)
+  })
+
+  it('rejects an OPERATION mismatch and does NOT burn the token (a later matching consume still works)', async () => {
+    const boundOp = { method: 'DELETE', path: '/api/agents/[id]' }
+    const { token } = await issueSudoToken('pw', 'system-owner', boundOp)
+
+    // Attacker request: correct token + subject, but a DIFFERENT operation.
+    const mismatch = verifyAndConsumeSudoToken(token, {
+      operation: { method: 'POST', path: '/api/governance/password' },
+      acceptSubject: acceptAny,
+    })
+    expect(mismatch.ok).toBe(false)
+    if (!mismatch.ok) expect(mismatch.reason).toBe('operation_mismatch')
+
+    // THE assertion: the token survived the wrong-op attempt and is still
+    // consumable for its real operation.
+    const legit = verifyAndConsumeSudoToken(token, { operation: boundOp, acceptSubject: acceptAny })
+    expect(legit.ok).toBe(true)
+  })
+
+  it('subject is checked BEFORE operation (a wrong-subject wrong-op attempt reports subject_mismatch, no burn)', async () => {
+    const boundOp = { method: 'DELETE', path: '/api/agents/[id]' }
+    const { token } = await issueSudoToken('pw', 'system-owner', boundOp)
+
+    const both = verifyAndConsumeSudoToken(token, {
+      operation: { method: 'POST', path: '/api/governance/password' },
+      acceptSubject: () => false,
+    })
+    expect(both.ok).toBe(false)
+    if (!both.ok) expect(both.reason).toBe('subject_mismatch')
+
+    // Still not burned.
+    const legit = verifyAndConsumeSudoToken(token, { operation: boundOp, acceptSubject: acceptAny })
+    expect(legit.ok).toBe(true)
+  })
+
+  it('happy path: a fully-matching consume burns the token (one-shot) so a replay fails', async () => {
+    const op = { method: 'PUT', path: '/api/teams/[id]' }
+    const { token } = await issueSudoToken('pw', 'system-owner', op)
+    expect(verifyAndConsumeSudoToken(token, { operation: op, acceptSubject: acceptAny }).ok).toBe(true)
+    const replay = verifyAndConsumeSudoToken(token, { operation: op, acceptSubject: acceptAny })
+    expect(replay.ok).toBe(false)
+    if (!replay.ok) expect(replay.reason).toBe('unknown')
   })
 })
 
@@ -146,7 +227,11 @@ describe('countBySubject', () => {
     const before = countBySubject('system-owner')
     const { token } = await issueSudoToken('pw', 'system-owner')
     expect(countBySubject('system-owner')).toBe(before + 1)
-    validateAndConsumeSudoToken(token)
+    // Unbound token → any operation matches; accept any subject to consume it.
+    verifyAndConsumeSudoToken(token, {
+      operation: { method: 'DELETE', path: '/api/agents/[id]' },
+      acceptSubject: acceptAny,
+    })
     expect(countBySubject('system-owner')).toBe(before)
 
     vi.useRealTimers()

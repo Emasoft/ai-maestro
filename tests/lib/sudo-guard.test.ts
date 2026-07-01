@@ -3,8 +3,11 @@
  *
  * USER path: valid op-bound token → allow; wrong op → sudo_operation_mismatch;
  * wrong subject → sudo_subject_mismatch; missing/expired/replayed → sudo_required;
- * forged cookie (auth fails) → 401 with validateAndConsumeSudoToken NOT CALLED
- * (the SUDO-04 regression).
+ * forged cookie (auth fails) → 401 with verifyAndConsumeSudoToken NOT CALLED
+ * (the SUDO-04 regression). The store's verifyAndConsumeSudoToken is mocked here,
+ * so these tests pin the guard's REASON→HTTP mapping and that it passes the
+ * op+subject spec; the real verify-before-burn behavior is proven against the
+ * real store in tests/lib/sudo-auth.test.ts and tests/lib/sudo-guard-model-on.test.ts.
  *
  * AGENT path: MANAGER AID on a delete route → allow (no token consumed);
  * MEMBER AID → 403 aid_title_forbidden; agent on a system-owner-only route →
@@ -26,11 +29,12 @@ vi.mock('@/lib/security-registry', () => ({
   requiresSudo: (m: string, p: string) => mockRequiresSudo(m, p),
 }))
 
-// The token validator — we assert it is NOT called on the agent path NOR on a
-// failed-auth USER request (SUDO-04).
-const mockValidateAndConsume = vi.fn()
+// The token verify-and-consume — we assert it is NOT called on the agent path
+// NOR on a failed-auth USER request (SUDO-04), and that the guard passes it the
+// op+subject spec.
+const mockVerifyAndConsume = vi.fn()
 vi.mock('@/lib/sudo-auth', () => ({
-  validateAndConsumeSudoToken: (t: unknown) => mockValidateAndConsume(t),
+  verifyAndConsumeSudoToken: (t: unknown, spec: unknown) => mockVerifyAndConsume(t, spec),
 }))
 
 // The discriminator: a controlled AgentAuthResult per test. buildAuthContext is
@@ -93,7 +97,7 @@ describe('non-strict routes', () => {
     const res = requireSudoToken(fakeRequest(), 'GET', '/api/agents/[id]')
     expect(res).toBeNull()
     expect(mockAuthenticate).not.toHaveBeenCalled()
-    expect(mockValidateAndConsume).not.toHaveBeenCalled()
+    expect(mockVerifyAndConsume).not.toHaveBeenCalled()
   })
 })
 
@@ -104,7 +108,7 @@ describe('USER / system-owner path', () => {
   })
 
   it('allows when a valid op-bound token matches the route', () => {
-    mockValidateAndConsume.mockReturnValue({
+    mockVerifyAndConsume.mockReturnValue({
       ok: true,
       subject: 'system-owner',
       operation: { method: 'DELETE', path: '/api/agents/[id]' },
@@ -114,31 +118,45 @@ describe('USER / system-owner path', () => {
   })
 
   it('allows a legacy unbound token (no operation)', () => {
-    mockValidateAndConsume.mockReturnValue({ ok: true, subject: 'system-owner' })
+    mockVerifyAndConsume.mockReturnValue({ ok: true, subject: 'system-owner' })
     const res = requireSudoToken(fakeRequest({ sudoToken: 't' }), 'DELETE', '/api/agents/[id]')
     expect(res).toBeNull()
   })
 
-  it('rejects a token bound to a DIFFERENT operation → sudo_operation_mismatch', async () => {
-    mockValidateAndConsume.mockReturnValue({
-      ok: true,
-      subject: 'system-owner',
-      operation: { method: 'PUT', path: '/api/teams/[id]' },
-    })
+  it('maps an operation_mismatch from the store → 403 sudo_operation_mismatch', async () => {
+    // The store (verifyAndConsumeSudoToken) decides op binding and returns the
+    // reason WITHOUT burning the token; the guard maps it to the HTTP shape.
+    mockVerifyAndConsume.mockReturnValue({ ok: false, reason: 'operation_mismatch' })
     const res = requireSudoToken(fakeRequest({ sudoToken: 't' }), 'DELETE', '/api/agents/[id]')
     expect(res?.status).toBe(403)
     expect((await bodyOf(res)).error).toBe('sudo_operation_mismatch')
   })
 
-  it('rejects a token whose subject is not system-owner → sudo_subject_mismatch', async () => {
-    mockValidateAndConsume.mockReturnValue({ ok: true, subject: 'agent-xyz' })
+  it('maps a subject_mismatch from the store → 403 sudo_subject_mismatch', async () => {
+    mockVerifyAndConsume.mockReturnValue({ ok: false, reason: 'subject_mismatch' })
     const res = requireSudoToken(fakeRequest({ sudoToken: 't' }), 'DELETE', '/api/agents/[id]')
     expect(res?.status).toBe(403)
     expect((await bodyOf(res)).error).toBe('sudo_subject_mismatch')
   })
 
+  it('passes the (method, pathTemplate) operation + an acceptSubject predicate to the store', () => {
+    mockVerifyAndConsume.mockReturnValue({ ok: true, subject: 'system-owner' })
+    requireSudoToken(fakeRequest({ sudoToken: 't' }), 'DELETE', '/api/agents/[id]')
+    expect(mockVerifyAndConsume).toHaveBeenCalledWith(
+      't',
+      expect.objectContaining({
+        operation: { method: 'DELETE', path: '/api/agents/[id]' },
+        acceptSubject: expect.any(Function),
+      })
+    )
+    // The guard's default acceptSubject accepts 'system-owner' and rejects others.
+    const spec = mockVerifyAndConsume.mock.calls[0][1] as { acceptSubject: (s: string) => boolean }
+    expect(spec.acceptSubject('system-owner')).toBe(true)
+    expect(spec.acceptSubject('agent-xyz')).toBe(false)
+  })
+
   it('rejects a missing token → sudo_required (reason missing)', async () => {
-    mockValidateAndConsume.mockReturnValue({ ok: false, reason: 'missing' })
+    mockVerifyAndConsume.mockReturnValue({ ok: false, reason: 'missing' })
     const res = requireSudoToken(fakeRequest(), 'DELETE', '/api/agents/[id]')
     expect(res?.status).toBe(403)
     const body = await bodyOf(res)
@@ -147,14 +165,14 @@ describe('USER / system-owner path', () => {
   })
 
   it('rejects an expired token → sudo_required (reason expired)', async () => {
-    mockValidateAndConsume.mockReturnValue({ ok: false, reason: 'expired' })
+    mockVerifyAndConsume.mockReturnValue({ ok: false, reason: 'expired' })
     const res = requireSudoToken(fakeRequest({ sudoToken: 't' }), 'DELETE', '/api/agents/[id]')
     expect(res?.status).toBe(403)
     expect((await bodyOf(res)).reason).toBe('expired')
   })
 
   it('rejects a replayed/unknown token → sudo_required (reason unknown)', async () => {
-    mockValidateAndConsume.mockReturnValue({ ok: false, reason: 'unknown' })
+    mockVerifyAndConsume.mockReturnValue({ ok: false, reason: 'unknown' })
     const res = requireSudoToken(fakeRequest({ sudoToken: 't' }), 'DELETE', '/api/agents/[id]')
     expect(res?.status).toBe(403)
     expect((await bodyOf(res)).reason).toBe('unknown')
@@ -163,13 +181,13 @@ describe('USER / system-owner path', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe('SUDO-04 regression — auth-first, never burn a token on a forged cookie', () => {
-  it('returns 401 and does NOT call validateAndConsumeSudoToken when auth fails', async () => {
+  it('returns 401 and does NOT call verifyAndConsumeSudoToken when auth fails', async () => {
     mockAuthenticate.mockReturnValue({ error: 'Authentication required.', status: 401 })
     const res = requireSudoToken(fakeRequest({ sudoToken: 'forged' }), 'DELETE', '/api/agents/[id]')
     expect(res?.status).toBe(401)
     expect((await bodyOf(res)).error).toBe('Authentication required.')
     // THE assertion: the token validator must not have run.
-    expect(mockValidateAndConsume).not.toHaveBeenCalled()
+    expect(mockVerifyAndConsume).not.toHaveBeenCalled()
   })
 })
 
@@ -184,7 +202,7 @@ describe('AGENT path (R32 — never sudo)', () => {
       '/api/agents/[id]'
     )
     expect(res).toBeNull()
-    expect(mockValidateAndConsume).not.toHaveBeenCalled()
+    expect(mockVerifyAndConsume).not.toHaveBeenCalled()
     // authorize() called with the path-id target.
     expect(mockAuthorize).toHaveBeenCalledWith(
       expect.objectContaining({ agentId: 'mgr' }),
@@ -203,7 +221,7 @@ describe('AGENT path (R32 — never sudo)', () => {
     )
     expect(res?.status).toBe(403)
     expect((await bodyOf(res)).error).toBe('aid_title_forbidden')
-    expect(mockValidateAndConsume).not.toHaveBeenCalled()
+    expect(mockVerifyAndConsume).not.toHaveBeenCalled()
   })
 
   it('agent on POST /api/governance/password → 403 (system-owner-only set)', async () => {
@@ -217,7 +235,7 @@ describe('AGENT path (R32 — never sudo)', () => {
     expect((await bodyOf(res)).error).toBe('aid_title_forbidden')
     // System-owner-only routes short-circuit before authorize() is consulted.
     expect(mockAuthorize).not.toHaveBeenCalled()
-    expect(mockValidateAndConsume).not.toHaveBeenCalled()
+    expect(mockVerifyAndConsume).not.toHaveBeenCalled()
   })
 
   it('MANAGER on PUT /api/teams/[id] → allow (manage-team)', () => {
@@ -279,7 +297,7 @@ describe('AGENT path — session routes (D1 session→agentId resolution)', () =
       'restart-session',
       'resolved-agent-uuid'
     )
-    expect(mockValidateAndConsume).not.toHaveBeenCalled()
+    expect(mockVerifyAndConsume).not.toHaveBeenCalled()
   })
 
   it('an own-team COS restarting a resolvable own-team session is allowed', () => {

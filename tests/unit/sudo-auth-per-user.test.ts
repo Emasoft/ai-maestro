@@ -63,7 +63,13 @@ const userStub = require('@/lib/user-registry') as {
   __reset: () => void
 }
 
-import { issueSudoToken, validateAndConsumeSudoToken } from '@/lib/sudo-auth'
+import { issueSudoToken, verifyAndConsumeSudoToken } from '@/lib/sudo-auth'
+
+// These tests exercise MINT-time password-hash resolution (R37.4), not
+// consume-time subject binding — so consume with an accept-any subject and (for
+// the unbound tokens minted here) any operation, just to assert consumability.
+const acceptAny = () => true
+const anyOp = { method: 'DELETE', path: '/api/agents/[id]' }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -79,7 +85,7 @@ describe('FLAG OFF — global governance password (legacy, unchanged)', () => {
   it('verifies against the GLOBAL hash, ignoring the subject', async () => {
     const { token } = await issueSudoToken('pw-for-GLOBAL_HASH', 'system-owner')
     expect(mockVerify).toHaveBeenCalledWith('GLOBAL_HASH', 'pw-for-GLOBAL_HASH')
-    const r = validateAndConsumeSudoToken(token)
+    const r = verifyAndConsumeSudoToken(token, { operation: anyOp, acceptSubject: acceptAny })
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.subject).toBe('system-owner')
   })
@@ -114,7 +120,7 @@ describe('FLAG ON — per-user password (R37.4)', () => {
     // delegate's OWN password must be accepted.
     const { token } = await issueSudoToken('pw-for-DELEGATE_HASH', 'delegate-1')
     expect(mockVerify).toHaveBeenCalledWith('DELEGATE_HASH', 'pw-for-DELEGATE_HASH')
-    expect(validateAndConsumeSudoToken(token).ok).toBe(true)
+    expect(verifyAndConsumeSudoToken(token, { operation: anyOp, acceptSubject: acceptAny }).ok).toBe(true)
   })
 
   it("rejects the maestro's password when the subject is the delegate (R37.4)", async () => {
@@ -128,7 +134,7 @@ describe('FLAG ON — per-user password (R37.4)', () => {
     userStub.__setUsers([{ id: 'user-7', passwordHash: 'USER7_HASH', title: 'user' }])
     const { token } = await issueSudoToken('pw-for-USER7_HASH', 'user-7')
     expect(mockVerify).toHaveBeenCalledWith('USER7_HASH', 'pw-for-USER7_HASH')
-    expect(validateAndConsumeSudoToken(token).ok).toBe(true)
+    expect(verifyAndConsumeSudoToken(token, { operation: anyOp, acceptSubject: acceptAny }).ok).toBe(true)
   })
 
   it('R32 GUARD — an unknown/agent-id subject is REJECTED (never falls back to global)', async () => {

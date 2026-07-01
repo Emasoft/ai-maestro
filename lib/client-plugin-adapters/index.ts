@@ -23,6 +23,8 @@ export async function getAdapter(clientType: ClientType): Promise<ClientPluginAd
     case 'gemini':
     case 'opencode':
     case 'kiro':
+    case 'github-copilot':
+    case 'kilocode':
     case 'aider':
       return (await import('./element-adapter')).createElementAdapter(clientType)
 

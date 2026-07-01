@@ -350,7 +350,7 @@ export async function getConversionTargets(
   sourceClient: 'claude' | 'codex' | 'gemini'
 ): Promise<string[]> {
   const providerMap: Record<string, ProviderId> = { claude: 'claude-code', codex: 'codex', gemini: 'gemini', opencode: 'opencode', kiro: 'kiro' }
-  const reverseMap: Record<ProviderId, string> = { 'claude-code': 'claude', 'codex': 'codex', 'gemini': 'gemini', 'opencode': 'opencode', 'kiro': 'kiro' }
+  const reverseMap: Record<ProviderId, string> = { 'claude-code': 'claude', 'codex': 'codex', 'gemini': 'gemini', 'opencode': 'opencode', 'kiro': 'kiro', 'github-copilot': 'github-copilot', 'kilocode': 'kilocode' }
   const targets = getAvailableTargets(providerMap[sourceClient] || 'claude-code')
   return targets.map(t => reverseMap[t] || t)
 }

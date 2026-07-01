@@ -4,10 +4,11 @@
  * The profile panel adapts its visible sections based on client capabilities.
  *
  * Supported (converter + tmux launch): claude, codex, gemini, opencode, kiro
+ * Converter/skill TARGET only (NO tmux launch, NOT in SUPPORTED_CLIENTS): github-copilot, kilocode
  * Deprecated: aider (kept for backward compat, CreateAgent will auto-fallback)
  */
 
-export type ClientType = 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'aider' | 'unknown'
+export type ClientType = 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'github-copilot' | 'kilocode' | 'aider' | 'unknown'
 
 /**
  * Single source of truth for the supported AI client list shown in any UI
@@ -37,6 +38,7 @@ export function clientTypeToProviderId(ct: ClientType): ProviderId | null {
   const map: Record<string, ProviderId> = {
     claude: 'claude-code', codex: 'codex', gemini: 'gemini',
     opencode: 'opencode', kiro: 'kiro',
+    'github-copilot': 'github-copilot', kilocode: 'kilocode',
   }
   return map[ct] ?? null
 }
@@ -46,6 +48,7 @@ export function providerIdToClientType(pid: ProviderId): ClientType {
   const map: Record<ProviderId, ClientType> = {
     'claude-code': 'claude', 'codex': 'codex', 'gemini': 'gemini',
     'opencode': 'opencode', 'kiro': 'kiro',
+    'github-copilot': 'github-copilot', 'kilocode': 'kilocode',
   }
   return map[pid] ?? 'unknown'
 }
@@ -208,6 +211,31 @@ const CAPABILITIES: Record<ClientType, ClientCapabilities> = {
       noAltScreen: '',
     },
   },
+  'github-copilot': {
+    // Converter/skill TARGET only (NOT tmux-launchable, NOT in SUPPORTED_CLIENTS).
+    // GitHub Copilot reads ONE .github/copilot-instructions.md — no skills dir, no plugins.
+    skills: false, plugins: false, marketplaces: false, agents: false, hooks: false,
+    rules: true, commands: false, mcpServers: true, lspServers: false, rolePlugins: false,
+    configFile: '.github/copilot-instructions.md',
+    skillPaths: { project: '.github', user: '' },
+    // Inert cli — never launched (not in SUPPORTED_CLIENTS). Promotable later with a verified block.
+    cli: {
+      binary: '', resume: '', skipPermissions: '', useAgent: '', exit: '/exit',
+      compact: '', clearLine: 'C-u', cancel: 'C-c', update: '', envVars: {}, noAltScreen: '',
+    },
+  },
+  kilocode: {
+    // Converter/skill TARGET only (IDE extension, no CLI → never tmux-launchable).
+    // KiloCode reads per-rule markdown under .kilocode/rules/ — no skills dir, no plugins.
+    skills: false, plugins: false, marketplaces: false, agents: false, hooks: false,
+    rules: true, commands: false, mcpServers: false, lspServers: false, rolePlugins: false,
+    configFile: '.kilocode/rules',
+    skillPaths: { project: '.kilocode/rules', user: '' },
+    cli: {
+      binary: '', resume: '', skipPermissions: '', useAgent: '', exit: '/exit',
+      compact: '', clearLine: 'C-u', cancel: 'C-c', update: '', envVars: {}, noAltScreen: '',
+    },
+  },
   aider: {
     skills: true, plugins: false, marketplaces: false, agents: false, hooks: false,
     rules: false, commands: false, mcpServers: false, lspServers: false, rolePlugins: false,
@@ -258,6 +286,8 @@ export function detectClientType(program: string): ClientType {
   if (p.includes('gemini')) return 'gemini'
   if (p.includes('opencode')) return 'opencode'
   if (p.includes('kiro')) return 'kiro'  // binary is 'kiro-cli' on all platforms
+  if (p.includes('copilot')) return 'github-copilot'  // converter/skill target only
+  if (p.includes('kilocode')) return 'kilocode'       // converter/skill target only (IDE ext)
   if (p.includes('aider')) return 'aider'  // deprecated — kept for backward compat
   return 'unknown'
 }
@@ -378,6 +408,8 @@ export function clientTypeLabel(clientType: ClientType): string {
     gemini: 'Gemini CLI',
     opencode: 'OpenCode',
     kiro: 'Kiro',
+    'github-copilot': 'GitHub Copilot',
+    kilocode: 'KiloCode',
     aider: 'Aider (deprecated)',
     unknown: 'Unknown',
   }

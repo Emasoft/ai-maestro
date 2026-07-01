@@ -10,6 +10,8 @@ const emitters: Record<string, () => Promise<Emitter>> = {
   'gemini': () => import('./gemini').then(m => m.default),
   'opencode': () => import('./opencode').then(m => m.default),
   'kiro': () => import('./kiro').then(m => m.default),
+  'github-copilot': () => import('./github-copilot').then(m => m.default),
+  'kilocode': () => import('./kilocode').then(m => m.default),
 }
 
 /** Get an emitter for a given provider ID */

@@ -23,6 +23,8 @@ const CLIENT_ICONS: Record<ProviderId, string> = {
   'gemini': 'G',
   'opencode': 'O',
   'kiro': 'K',
+  'github-copilot': 'P',
+  'kilocode': 'L',
 }
 
 export default function ClientTabBar({

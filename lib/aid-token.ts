@@ -57,6 +57,18 @@ export interface ProofVerificationResult {
   error?: string
 }
 
+/**
+ * Result of verifying a NONCE-bound proof (TRDD-15ff13ae). `nonce` is the
+ * server-issued nonce the client signed — returned ONLY when the Ed25519
+ * signature is valid, so the caller never consumes a nonce for an unverified
+ * proof (authenticate-before-consume).
+ */
+export interface NonceProofResult {
+  valid: boolean
+  nonce?: string
+  error?: string
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -246,6 +258,99 @@ export function verifyProofWithPublicKeyHex(
     const publicKeyPem = pubKey.export({ type: 'spki', format: 'pem' }) as string
 
     return verifyProofOfPossession(proofB64url, publicKeyPem, serverUrl)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { valid: false, error: `Public key reconstruction error: ${msg}` }
+  }
+}
+
+// ============================================================================
+// Ed25519 NONCE-bound Proof-of-Possession (TRDD-15ff13ae)
+// ============================================================================
+//
+// This is the challenge/response replacement for the timestamp-windowed
+// verifyProofOfPossession above. The proof carries a SERVER-ISSUED nonce
+// instead of a client timestamp; freshness + single-use are enforced by the
+// nonce store (lib/aid-nonce.ts) at consume time, NOT by a drift window here.
+//
+// The two verifiers coexist deliberately: /api/v1/auth/token uses the nonce
+// path below; /api/v1/auth/ibct still uses the timestamp path above (its
+// client was not part of this change). IBCT carries the identical replay gap
+// and should migrate to the nonce path in a follow-up.
+
+/**
+ * Verify a NONCE-bound Ed25519 proof-of-possession.
+ *
+ * The proof is base64url-encoded: [Ed25519 signature bytes (64)][nonce string]
+ * Signing input: "aid-token-exchange\n{nonce}\n{server_url}"
+ *
+ * On success the caller MUST consume the returned nonce via
+ * consumeNonce(nonce, fingerprint) to enforce single-use. This function does
+ * NOT touch the nonce store — it only proves the signature is valid over the
+ * nonce, so proof verification and nonce consumption stay cleanly separated
+ * (authenticate-before-consume).
+ *
+ * @param proofB64url - base64url-encoded proof (signature + nonce)
+ * @param publicKeyPem - PEM-encoded Ed25519 public key (agent's registered key)
+ * @param serverUrl - AI Maestro server URL bound into the signing input
+ */
+export function verifyNonceProof(
+  proofB64url: string,
+  publicKeyPem: string,
+  serverUrl: string
+): NonceProofResult {
+  try {
+    const proofBytes = Buffer.from(proofB64url, 'base64url')
+    if (proofBytes.length <= 64) {
+      return { valid: false, error: 'Proof too short — must contain 64-byte signature + nonce' }
+    }
+
+    // Split: first 64 bytes = Ed25519 signature, rest = nonce string
+    const signatureBytes = proofBytes.subarray(0, 64)
+    const nonceStr = proofBytes.subarray(64).toString('utf-8')
+    if (!nonceStr) {
+      return { valid: false, error: 'Empty nonce in proof' }
+    }
+
+    // Reconstruct signing input (must match agent-side construction).
+    const signingInput = `aid-token-exchange\n${nonceStr}\n${serverUrl}`
+
+    const pubKey = createPublicKey(publicKeyPem)
+    const valid = verify(null, Buffer.from(signingInput), pubKey, signatureBytes)
+
+    // Only surface the nonce when the signature verifies — the route must not
+    // consume a nonce for a proof it could not authenticate.
+    return valid
+      ? { valid: true, nonce: nonceStr }
+      : { valid: false, error: 'Ed25519 signature verification failed' }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { valid: false, error: `Proof verification error: ${msg}` }
+  }
+}
+
+/**
+ * Verify a NONCE-bound Ed25519 proof using raw public key hex (from amp-keys
+ * storage). Reconstructs PEM from the 32-byte public key hex, then delegates
+ * to verifyNonceProof.
+ */
+export function verifyNonceProofWithPublicKeyHex(
+  proofB64url: string,
+  publicKeyHex: string,
+  serverUrl: string
+): NonceProofResult {
+  try {
+    // Ed25519 SPKI header (12 bytes) + raw public key (32 bytes)
+    const header = Buffer.from([
+      0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00
+    ])
+    const publicKeyBytes = Buffer.from(publicKeyHex, 'hex')
+    const spkiDer = Buffer.concat([header, publicKeyBytes])
+
+    const pubKey = createPublicKey({ key: spkiDer, format: 'der', type: 'spki' })
+    const publicKeyPem = pubKey.export({ type: 'spki', format: 'pem' }) as string
+
+    return verifyNonceProof(proofB64url, publicKeyPem, serverUrl)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return { valid: false, error: `Public key reconstruction error: ${msg}` }

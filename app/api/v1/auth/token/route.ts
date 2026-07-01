@@ -12,9 +12,10 @@
 
 import { NextResponse } from 'next/server'
 import {
-  verifyProofWithPublicKeyHex,
+  verifyNonceProofWithPublicKeyHex,
   issueGovernanceToken
 } from '@/lib/aid-token'
+import { consumeNonce } from '@/lib/aid-nonce'
 import { loadKeyPair } from '@/lib/amp-keys'
 import { loadTeams } from '@/lib/team-registry'
 
@@ -123,18 +124,42 @@ export async function POST(request: Request) {
       )
     }
 
-    // 6. Verify proof-of-possession
+    // 6. Verify NONCE-bound proof-of-possession (TRDD-15ff13ae).
     // The server URL is what the agent signed — use localhost only.
     // SECURITY: Never trust x-forwarded-host for proof verification.
     // An attacker could set x-forwarded-host to a domain they control,
     // then replay a proof signed for that domain.
     const serverUrl = `http://localhost:${process.env.PORT || 23000}`
 
-    const proofResult = verifyProofWithPublicKeyHex(body.proof, keyPair.publicHex, serverUrl)
-    if (!proofResult.valid) {
+    // Authenticate FIRST (Ed25519 over the server nonce), then consume the
+    // nonce — authenticate-before-consume, so a caller who cannot produce a
+    // valid proof can never burn a nonce.
+    const proofResult = verifyNonceProofWithPublicKeyHex(body.proof, keyPair.publicHex, serverUrl)
+    if (!proofResult.valid || !proofResult.nonce) {
       console.warn(`[AID Token] Proof verification failed for agent ${agent.name}: ${proofResult.error}`)
       return NextResponse.json(
         { error: 'invalid_proof', message: proofResult.error || 'Ed25519 signature verification failed' },
+        { status: 401 }
+      )
+    }
+
+    // 6b. Consume the server-issued nonce — SINGLE-USE + subject-bound.
+    // This is the anti-replay gate: the nonce was issued by
+    // POST /api/v1/auth/challenge, bound to the CLAIMED fingerprint, with a
+    // short TTL. consumeNonce() atomically deletes it, so a replay of this
+    // exact proof (same nonce) is rejected here ('unknown'), and the presented
+    // fingerprint must match the nonce's binding (authz-hole pattern 5:
+    // one-shot token bound to operation+subject; the operation is bound by the
+    // "aid-token-exchange" signing-input prefix the verifier enforces).
+    // We bind on the CLAIMED fingerprint (identity.fingerprint) — the same
+    // value the client sent to the challenge endpoint — NOT on the resolved
+    // agent id, so no agent-existence is leaked at challenge time. The
+    // registered-key Ed25519 verify above is what proves the claim.
+    const consumed = consumeNonce(proofResult.nonce, identity.fingerprint || '')
+    if (!consumed.ok) {
+      console.warn(`[AID Token] Nonce rejected for agent ${agent.name}: ${consumed.reason}`)
+      return NextResponse.json(
+        { error: 'invalid_nonce', message: `Challenge nonce ${consumed.reason} — request a fresh challenge` },
         { status: 401 }
       )
     }

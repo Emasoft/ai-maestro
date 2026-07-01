@@ -1622,6 +1622,21 @@ const routes: Route[] = [
   { method: 'POST', pattern: /^\/api\/v1\/auth\/rotate-keys$/, paramNames: [], handler: async (req, res) => {
     sendServiceResult(res, await rotateKeypair(getHeader(req, 'Authorization')))
   }},
+  { method: 'POST', pattern: /^\/api\/v1\/auth\/challenge$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-15ff13ae — headless parity for the AID PoP challenge endpoint.
+    // Same dispatch shape as /api/v1/auth/token below so both modes behave
+    // identically. Anonymous (whitelisted above); the handler enforces its own
+    // rate limits + store cap.
+    const { POST } = await import('../app/api/v1/auth/challenge/route')
+    const body = await readJsonBody(req)
+    const url = `http://localhost:${process.env.PORT || 23000}/api/v1/auth/challenge`
+    const headers = new Headers()
+    if (getHeader(req, 'content-type')) headers.set('content-type', getHeader(req, 'content-type')!)
+    const fakeRequest = new Request(url, { method: 'POST', headers, body: JSON.stringify(body) })
+    const response = await POST(fakeRequest)
+    const json = await response.json()
+    sendServiceResult(res, { status: response.status, body: json })
+  }},
   { method: 'POST', pattern: /^\/api\/v1\/auth\/token$/, paramNames: [], handler: async (req, res) => {
     const { POST } = await import('../app/api/v1/auth/token/route')
     // Build a Request-like object for the Next.js route handler
@@ -3800,6 +3815,10 @@ const HEADLESS_AUTH_WHITELIST: ReadonlyArray<RegExp> = [
   /^\/api\/v1\/health\/?$/,
   /^\/api\/v1\/info\/?$/,
   /^\/api\/v1\/register\/?$/,
+  // AID proof-of-possession challenge (TRDD-15ff13ae) — anonymous bootstrap
+  // (mirrors middleware.ts WHITELIST). Returns only a random single-use nonce;
+  // the real auth is the Ed25519 proof at /api/v1/auth/token.
+  /^\/api\/v1\/auth\/challenge\/?$/,
 ]
 
 /**

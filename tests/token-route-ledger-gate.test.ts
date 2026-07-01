@@ -39,11 +39,18 @@ vi.mock('@/lib/rate-limit', () => ({
 }))
 
 vi.mock('@/lib/aid-token', () => ({
-  verifyProofWithPublicKeyHex: () => ({ valid: true }),
+  // TRDD-15ff13ae: the token route now uses the nonce-bound verifier + consume.
+  // This test isolates the LEDGER gate, so we stub a valid proof (with a nonce)
+  // and a successful nonce consume — the gate is exercised downstream of both.
+  verifyNonceProofWithPublicKeyHex: () => ({ valid: true, nonce: 'test-nonce' }),
   issueGovernanceToken: async (agentId: string, name: string, title: string, teamId: string | null, scope: string) => {
     h.issuedWith = { agentId, name, title, teamId, scope }
     return { access_token: 'aim_tk_test', token_type: 'Bearer', expires_in: 3600 }
   },
+}))
+
+vi.mock('@/lib/aid-nonce', () => ({
+  consumeNonce: () => ({ ok: true }),
 }))
 
 vi.mock('@/lib/amp-keys', () => ({

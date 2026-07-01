@@ -43,6 +43,12 @@ const WHITELIST: ReadonlyArray<RegExp> = [
   /^\/api\/v1\/info(\/|$)/,
   // AMP agent registration — bootstrap credential for new agents
   /^\/api\/v1\/register(\/|$)/,
+  // AID proof-of-possession challenge (TRDD-15ff13ae) — anonymous bootstrap,
+  // like /register: the agent has no governance token yet (getting one is the
+  // point of the challenge→token exchange). Returns only a random single-use
+  // 30s-TTL nonce (no lookup, no secret); the real auth is the Ed25519 proof
+  // verified at /api/v1/auth/token. Rate-limited + store-capped in the handler.
+  /^\/api\/v1\/auth\/challenge(\/|$)/,
 ]
 
 /**

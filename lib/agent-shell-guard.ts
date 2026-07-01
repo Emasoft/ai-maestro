@@ -19,6 +19,20 @@
  * exists to make accidental damage hard, not to defeat hostile shell
  * users.
  *
+ * ── TRDD-a1019073 coupling (READ BEFORE CHANGING THE ALLOWLIST) ──
+ * The allowlist below PERMITS /tmp, /private/tmp and /var/folders. That
+ * permissive posture is the INTERIM bridge for the world-shared-/tmp seam
+ * (findings F20/F21), acceptable ONLY while agents share the human UID.
+ * When the controlled-execution-environment work lands (dedicated
+ * `aimaestro` UID + OS-level private /tmp + TMPDIR redirect into the
+ * ai-maestro space + dedicated non-human-writable toolchain), this
+ * allowlist MUST be tightened IN LOCKSTEP to FORBID world /tmp — never
+ * before: on a shared UID the flip buys no isolation, and agents that
+ * legitimately stage under /tmp would break. Do NOT treat the /tmp
+ * allowance as a permanent design. See
+ * design/tasks/TRDD-…-a1019073-controlled-execution-environment.md
+ * (§11.1 interim bridge, §2.3 F20/F21, §4.2 temp redirect).
+ *
  * Sourcing strategy:
  *   1. AI Maestro writes this script to `~/.aimaestro/agent-shell-guard.sh`
  *      atomically (tmp+rename) on first wake of the process, and on every

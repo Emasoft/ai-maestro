@@ -42,6 +42,16 @@ function validateSessionName(name: string, label: string = 'session name'): void
 const HOME_DIR = os.homedir()
 const AGENTS_ROOT = path.join(HOME_DIR, 'agents')
 
+// ── TRDD-a1019073 coupling (interim posture — do NOT mistake for permanent) ──
+// The ~/agents-only rule below is the current cwd policy for the SHARED-UID era.
+// It is NOT the controlled-execution-environment boundary: on a shared UID no
+// cwd policy is a security boundary (a same-UID process can chdir anywhere the
+// kernel allows). When the dedicated `aimaestro` UID + host sandbox land, this
+// check must be tightened IN LOCKSTEP with the OS-level enforcement (private
+// /tmp, TMPDIR redirect, dedicated non-human-writable toolchain, cross-UID
+// perms) — never relaxed to re-admit external workdirs without that enforcement.
+// See design/tasks/TRDD-…-a1019073-controlled-execution-environment.md §11.1
+// (interim bridge) and §4.1 (UID separation, the load-bearing foundation).
 function validateCwd(cwd: string): void {
   if (typeof cwd !== 'string') {
     throw new Error('[agent-runtime] Invalid cwd: must be a string')

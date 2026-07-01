@@ -138,6 +138,60 @@ async function gate0Auth(
   return null
 }
 
+// ── IRON RULE (TRDD-a6d93b9c) — an agent may NEVER install host-wide (user scope) ──
+//
+// The plugin-abstraction decoupling invariant + the standing "AI Maestro never
+// installs user-scope" rule reserve host-wide (`~/.claude`) element mutations for
+// the HUMAN system owner alone (the Settings → Plugins page), never an agent. When
+// the plugin/skill CLI verbs are routed through the server (TRDD-a6d93b9c items
+// 1-3), the caller becomes an agent token; WITHOUT this belt a privileged agent
+// (e.g. a MANAGER, which passes gate0Auth on other agents) could route
+// `plugin install X --scope user` and gain host-wide, cross-project, cross-user
+// persistence — the exact escalation the rule exists to prevent.
+//
+// Enforced at the SERVICE layer (not one route) so it holds for EVERY caller —
+// current routes, the headless-router, and the soon-to-be-routed CLI verbs alike
+// (authz-hole pattern 3: headless parity for free). Authority to use user scope is
+// bound to BEING the system owner, read from the VERIFIED AuthContext — never
+// derived from a request-body field (pattern 2), the service self-authorizes
+// (pattern 1), and the authority is bound to op[state-adding action] +
+// subject[user scope] (pattern 5).
+//
+// Only STATE-ADDING actions are gated: install|enable|update|convert grant or
+// refresh host-wide code. uninstall|remove|disable REMOVE reach (not a
+// persistence gain), and the pipeline's own PG03/PG07 user-scope cleanup already
+// runs under a buildSystemAuthContext() system context, so it is unaffected.
+const USER_SCOPE_STATE_ADDING_ACTIONS: ReadonlySet<string> = new Set([
+  'install', 'enable', 'update', 'convert',
+])
+
+/**
+ * IRON-rule gate — deny an AGENT-token caller any state-adding element mutation at
+ * user scope. Returns an error string (deny) or null (allowed / not applicable).
+ * Callers MUST invoke this AFTER gate0Auth and BEFORE any side effect, and return
+ * the error immediately when non-null.
+ */
+function assertAgentMayNotUserScope(
+  scope: 'local' | 'user',
+  action: string,
+  authContext: AuthContext,
+  ops: string[],
+): string | null {
+  if (scope !== 'user') return null
+  if (!USER_SCOPE_STATE_ADDING_ACTIONS.has(action)) return null
+  // The human system owner (web UI / Settings page) and internal system flows
+  // (buildSystemAuthContext → isSystemOwner:true) are the ONLY callers permitted
+  // at user scope. An agent-token caller has isSystemOwner=false.
+  if (authContext.isSystemOwner) {
+    ops.push(`IRON: user-scope ${action} permitted — caller is the system owner`)
+    return null
+  }
+  ops.push(`IRON: DENIED — an agent may not ${action} at user scope (never-user-scope rule, TRDD-a6d93b9c)`)
+  return `SECURITY: user-scope "${action}" is reserved for the human system owner ` +
+    `(Settings → Plugins). An agent may only mutate elements at local (per-agent) ` +
+    `scope. (never-user-scope rule, TRDD-a6d93b9c)`
+}
+
 // ── R40 foreign-user per-command guard ──────────────────────────
 //
 // R40.1: a non-native (foreign) USER needs MAESTRO approval for EVERY agent or
@@ -488,6 +542,14 @@ export async function InstallElement(
       return result
     }
     ops.push(`G03: Scope "${scope}" valid`)
+
+    // ── G03b: IRON rule — no agent may state-add at user scope ─
+    // (never-user-scope rule, TRDD-a6d93b9c). Fails BEFORE any context
+    // resolution, shell, or settings write.
+    {
+      const ironErr = assertAgentMayNotUserScope(scope, action, authContext, ops)
+      if (ironErr) { result.error = ironErr; return result }
+    }
 
     // ── G04: Resolve agent context ────────────────────────────
     if (scope === 'local' && !agentDir && desired.agentId) {
@@ -3088,6 +3150,13 @@ export async function ChangePlugin(
       ops.push('G00b: IBCT scope check passed')
     }
 
+    // ── G00c: IRON rule — no agent may state-add at user scope ─
+    // (never-user-scope rule, TRDD-a6d93b9c). Fails BEFORE any settings read.
+    {
+      const ironErr = assertAgentMayNotUserScope(desired.scope, desired.action, authContext, ops)
+      if (ironErr) { result.error = ironErr; return result }
+    }
+
     // ── G01: Validate plugin name format ──────────────────────
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(desired.name)) {
       result.error = `Invalid plugin name "${desired.name}". Must match /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/`
@@ -3970,6 +4039,15 @@ export async function ChangeSkill(agentId: string | null, desired: {
     }
     const g0err = await gate0Auth('manage-skills', agentId || '', authContext, ops)
     if (g0err) { result.error = g0err; return result }
+
+    // ── G00b: IRON rule — no agent may state-add at user scope ─
+    // (never-user-scope rule, TRDD-a6d93b9c). Gates install|convert into the
+    // shared ~/.claude/skills tree; 'remove' is allowed (reduces reach). Fails
+    // BEFORE any mkdir/copy/rm.
+    {
+      const ironErr = assertAgentMayNotUserScope(desired.scope, desired.action, authContext, ops)
+      if (ironErr) { result.error = ironErr; return result }
+    }
 
     // ── G01: Validate skill name ──────────────────────────────
     if (!isSafePathComponent(desired.name)) {

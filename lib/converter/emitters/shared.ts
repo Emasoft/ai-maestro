@@ -149,7 +149,7 @@ export function emitMarkdownAgent(
 
 /**
  * Build argument-hint string from args array.
- * Used by Codex and Copilot emitters.
+ * Used by the Codex emitter.
  */
 export function buildArgumentHint(args: { name: string; required: boolean }[]): string {
   return args.map(a => a.required ? `<${a.name}>` : `[${a.name}]`).join(' ')
@@ -311,5 +311,13 @@ export const PLATFORM_PATHS: Record<ProviderId, PlatformPaths> = {
     skills: '.kiro/skills',
     agents: '.kiro/agents',
     mcp: '.kiro/mcp.json',
+  },
+  'github-copilot': {
+    metaDir: '.github',
+    manifestFile: 'plugin.json',
+  },
+  'kilocode': {
+    metaDir: '.kilocode',
+    manifestFile: 'plugin.json',
   },
 }

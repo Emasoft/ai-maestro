@@ -1,19 +1,20 @@
 ---
 name: tldr-code
 description: >
-  Token-efficient code analysis (READ, via `tldr`) AND AST-scoped editing (WRITE, via `fastedit` — edit/insert/rename/move/delete/refactor a symbol without repeating old code) for 18 languages (
-  Python, TypeScript, JavaScript, Go, Rust, Java, C, C++, Ruby, Kotlin, Swift,
-  C#, Scala, PHP, Lua, Luau, Elixir, OCaml). Reach for it BEFORE reading whole
-  files or editing unfamiliar code: it extracts ONLY the lines that define a
-  symbol, that it calls, or that call it — plus call graphs, reverse-impact,
-  program slices, taint/security flows, complexity metrics, dead code, design
-  patterns, and BM25 + natural-language semantic search. Invoke it INTENTIONALLY
-  (you choose what to query) — it is dramatically cheaper than dumping source
-  into context. Use when you need to understand, navigate, locate, or assess
-  impact in a codebase: "where is X defined / who calls X / what breaks if I
-  change X / show me only the code that affects line N / is this input tainted /
-  what's the structure of this module / find dead code / find the function that
-  does Y".
+  Token-efficient code analysis (READ, via `tldr`) AND AST-scoped editing
+  (WRITE, via `fastedit` — edit/insert/rename/move/delete/refactor a symbol
+  without repeating old code) for 18 languages ( Python, TypeScript, JavaScript,
+  Go, Rust, Java, C, C++, Ruby, Kotlin, Swift, C#, Scala, PHP, Lua, Luau,
+  Elixir, OCaml). Reach for it BEFORE reading whole files or editing unfamiliar
+  code: it extracts ONLY the lines that define a symbol, that it calls, or that
+  call it — plus call graphs, reverse-impact, program slices, taint/security
+  flows, complexity metrics, dead code, design patterns, and BM25 +
+  natural-language semantic search. Invoke it INTENTIONALLY (you choose what to
+  query) — it is dramatically cheaper than dumping source into context. Use when
+  you need to understand, navigate, locate, or assess impact in a codebase:
+  "where is X defined / who calls X / what breaks if I change X / show me only
+  the code that affects line N / is this input tainted / what's the structure of
+  this module / find dead code / find the function that does Y".
 ---
 
 # tldr — surgical, token-efficient code analysis
@@ -28,10 +29,13 @@ it works." Ask `tldr` the precise question and it returns ONLY the relevant
 lines: the symbol's definition, the lines it depends on, the lines that depend on
 it, the callers, the slice. You decide the query; `tldr` returns the signal.
 
-> `tldr` is invoked **deliberately by you** — it is NOT a passive interceptor.
-> It is a precise instrument you reach for on purpose. (If your client runs
-> commands through a shell allowlist/wrapper and it ever blocks `tldr`, add
-> `tldr` to that wrapper's allowlist.)
+> `tldr` is invoked **deliberately by you**. It is NOT a passive interceptor.
+> The generic output-compression / read-interception layer is **lean-ctx** and
+> **distill** (they wrap every tool call indiscriminately). `tldr` is the
+> opposite: a precise instrument you reach for on purpose. The three coexist —
+> lean-ctx/distill make every call cheaper; `tldr` makes you ask better
+> questions. (If a shell call to `tldr` is ever blocked by lean-ctx's allowlist,
+> run `lean-ctx allow tldr` once.)
 
 ## When to reach for tldr (instead of Read/Grep)
 
@@ -177,9 +181,8 @@ Per-command flags & detail: run `tldr <cmd> --help`, or read `references/`.
 - `stats` — tldr usage statistics
 - `embed` `[emb]` * — generate embeddings for code chunks
 
-\* `semantic`, `similar`, `embed` require the `semantic` build feature (present
-only if tldr was built with it — the ai-maestro installer's `--semantic` flag).
-First semantic run downloads the arctic-embed-m model (~110 MB, cached).
+\* `semantic`, `similar`, `embed` require the `semantic` build feature (installed
+here). First semantic run downloads the arctic-embed-m model (~110 MB, cached).
 
 ## Global flags & output formats
 
@@ -254,19 +257,30 @@ strings/comments). 13 languages (Python, JS, TS, Rust, Go, Java, C, C++, Ruby,
 Swift, Kotlin, C#, PHP). Backend: local MLX (Apple Silicon) / vLLM (GPU), or any
 OpenAI-compatible server via `FASTEDIT_BACKEND=llm` + `FASTEDIT_LLM_API_BASE=<url>`.
 An optional MCP server (`fastedit-mcp`, 12 tools) + an Edit→fast_edit hook
-(`fastedit-hook`) exist but are best left disabled — intentional-CLI use keeps
-per-turn token cost at zero.
+(`fastedit-hook`) exist but are NOT enabled here — intentional-CLI use keeps
+per-turn token cost at zero, and the Edit-redirect hook must not run alongside
+lean-ctx.
 
-## tldr + fastedit are deliberate instruments
+## Coexistence with lean-ctx & distill
 
-- `tldr` (read) and `fastedit` (write) are precise, intentionally-invoked CLIs —
-  NOT passive interceptors. Reach for them on purpose, by symbol.
-- If your client runs commands through a shell allowlist/wrapper, ensure `tldr`,
-  `tldr-daemon`, `tldr-mcp`, and `fastedit` are allowed.
-- An MCP server (`tldr-mcp`) is available for tool-style access.
+- **lean-ctx** and **distill** are generic, non-discriminating interceptors
+  (they wrap/compress every tool call). `tldr` is a deliberate instrument — it
+  does not duplicate or replace them, and it is not a Read-interceptor.
+- `tldr` binaries (`tldr`, `tldr-daemon`, `tldr-mcp`, `fastedit`) are in
+  lean-ctx's shell allowlist. If a future binary/alias is blocked: `lean-ctx allow <name>`.
+- An MCP server (`tldr-mcp`) is available for tool-style access — see
+  `references/mcp-integration.md`.
 
 ## Per-command reference
 
-For the exact arguments and flags of any command, run `tldr <cmd> --help`
-(ground truth) — e.g. `tldr impact --help`, `tldr slice --help`. Use
-`fastedit <cmd> --help` for the write side. Prefer `--help` over memory.
+`references/` holds the verbatim upstream docs — read the one for the category
+you need:
+
+- `references/command-overview.md` — the full README catalog
+- `references/ast.md`, `callgraph.md`, `dataflow.md`, `metrics.md`,
+  `patterns.md`, `quality.md`, `search.md`, `security.md`, `tools.md`,
+  `daemon.md` — per-category command detail
+- `references/mcp-integration.md` — using the `tldr-mcp` server
+
+When the exact arguments of a command matter, prefer `tldr <cmd> --help` (ground
+truth) over memory.

@@ -106,6 +106,48 @@ const PROVIDERS: Provider[] = [
     supportsPlugins: false,
     userConfigDir: '~/.kiro',
   },
+  {
+    // GitHub Copilot — converter/skill TARGET only (NOT tmux-launchable; NOT in
+    // SUPPORTED_CLIENTS). A skill converts to ONE .github/copilot-instructions.md.
+    id: 'github-copilot',
+    displayName: 'GitHub Copilot',
+    configDir: '.github',
+    skillsPath: '.github',
+    userSkillsPath: '',
+    agentsPath: '.github',
+    agentsFormat: 'markdown-yaml',
+    agentsExtension: '.md',
+    modelName: 'GitHub Copilot',
+    configFile: '.github/copilot-instructions.md',
+    askInstruction: 'ask the user directly to clarify what you cannot infer.',
+    argSyntax: 'none',
+    mcpConfigPath: null,
+    commandsPath: null,
+    hooksPath: null,
+    supportsPlugins: false,
+    userConfigDir: '~/.config/github-copilot',
+  },
+  {
+    // KiloCode — IDE extension; converter/skill TARGET only (no CLI, never launchable).
+    // A skill converts to one .kilocode/rules/<name>.md rule file.
+    id: 'kilocode',
+    displayName: 'KiloCode',
+    configDir: '.kilocode',
+    skillsPath: '.kilocode/rules',
+    userSkillsPath: '',
+    agentsPath: '.kilocode',
+    agentsFormat: 'markdown-yaml',
+    agentsExtension: '.md',
+    modelName: 'Claude',
+    configFile: '.kilocode/rules',
+    askInstruction: 'ask the user directly to clarify what you cannot infer.',
+    argSyntax: 'none',
+    mcpConfigPath: null,
+    commandsPath: null,
+    hooksPath: null,
+    supportsPlugins: false,
+    userConfigDir: '~/.kilocode',
+  },
 ]
 
 /** All supported provider IDs */

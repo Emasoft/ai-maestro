@@ -3,7 +3,7 @@
  *
  * IR (Intermediate Representation) types for bidirectional conversion
  * of skills, agents, instructions, MCP, commands, and hooks between
- * AI coding clients (Claude, Codex, Gemini, OpenCode, Kiro, Copilot).
+ * AI coding clients (Claude, Codex, Gemini, OpenCode, Kiro, GitHub Copilot, KiloCode).
  *
  * Architecture: crucible IR hub pattern + acplugin element breadth.
  * Reference: docs_dev/2026-04-01-acplugin-vs-crucible-comparison.md
@@ -20,6 +20,8 @@ export type ProviderId =
   | 'gemini'
   | 'opencode'
   | 'kiro'
+  | 'github-copilot'
+  | 'kilocode'
 
 /** Argument syntax category for body rewriting */
 export type ArgSyntax = 'mustache' | 'dollar' | 'collapsed' | 'none'

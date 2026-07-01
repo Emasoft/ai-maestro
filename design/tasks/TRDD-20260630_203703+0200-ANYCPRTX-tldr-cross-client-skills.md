@@ -3,7 +3,7 @@ trdd-id: ANYCPRTX
 title: Author cross-client tldr-code+fastedit skill variants for all CLI ai-code clients
 column: complete
 created: 2026-06-30T20:37:03+0200
-updated: 2026-07-01T13:09:15+0200
+updated: 2026-07-01T16:16:00+0200
 implementation-commits: [a5909778]
 current-owner: main
 assignee: main
@@ -30,6 +30,11 @@ external-refs: ["github.com/parcadei/tldr-code", "github.com/parcadei/fastedit"]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-06-30
 
+- **▶ PIVOT 2026-07-01 (USER-directed):** the hand-authored variants shipped here are being
+  SUPERSEDED by CONVERTER-GENERATED variants (all 6 clients from the single Claude source) via
+  **TRDD-S4YA67F5** (converter gains github-copilot+kilocode) + its generator. This TRDD stays
+  `complete` for its original hand-authored scope; the authoritative cross-client variants now
+  come from S4YA67F5.
 - **Status:** DONE — implemented + committed (`a5909778`) on 2026-07-01. column:
   complete. Approach B shipped: 7 in-repo per-client variants under
   `scripts/code-analysis-skill/` (claude canonical + codex/gemini/opencode/kiro +

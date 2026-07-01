@@ -3,7 +3,7 @@ trdd-id: RYJD3R9E
 title: Incorporate ALL pending TRDDs into the governance PR — decisions, scope, exclusions
 column: dev
 created: 2026-07-01T16:14:48+0200
-updated: 2026-07-01T16:14:48+0200
+updated: 2026-07-01T19:05:00+0200
 current-owner: main
 assignee: main
 priority: 1
@@ -37,6 +37,37 @@ external-refs: []
 
 This TRDD is the DURABLE RECORD of the USER's 2026-07-01 directives (per "write
 everything I said down in TRDD"). It governs the incorporation program.
+
+### ✅ EXECUTION COMPLETE — 2026-07-01 (all actionable TRDDs merged into `governance-rules`)
+
+All actionable pending TRDDs are MERGED into `governance-rules` (the PR branch), each
+individually `tsc --noEmit`=0 + test-gated; the integrated tree is GREEN:
+**tsc 0 · full vitest suite 120 test files pass · `next build` exit 0.** Version bumped
+0.27.3 → **0.28.0**.
+
+**Merged (verified):**
+- 47a35ba2 — info-leak GET auth + status-route ReDoS + headless-router parity
+- S4YA67F5 — converter github-copilot + kilocode clients + 6-variant skill generator (README client-state table)
+- f1d89143 — /term WS deep-validate before PTY attach (forged-bearer hole; non-consuming, 4 tests)
+- 15ff13ae — AID PoP single-use subject-bound nonce challenge (replaces replayable ±300s window; 15 tests)
+- bb344037 — sudo tokens bound to op+subject, authenticate-before-consume, no burn-on-mismatch (34+ tests)
+- a6d93b9c — service-layer IRON belt: agents may NOT state-add at user scope (fail-closed, owner/system only; 10 tests)
+- 979dbdaa — env-first layered AMP identity resolver + anti-spoof cross-check + `set -e` crash fix (8 shell tests)
+- e1a79be0 — PSS lifeline installedAt option-b (always-null field removed, absence asserted)
+- c7a81642 — role-plugin-or-hibernate wake-recovery case fix (compatible-options picker populated)
+- eac02238 — per-op ledger audit: already shipped + 7/7 tests (TRDD status was stale)
+- 1ee4a3c1 — portable agents Phase-1 (sessions reconcile) already shipped; added its missing test
+- a1019073 — §11.1 bridge-code coupling comment done; 4 XL sandbox layers DEFERRED (see below)
+
+**Documented follow-ups (deferred by design — NOT half-baked; security-king):**
+- a1019073 XL sandbox (UID separation / host sandbox / supply-chain / containers) — security-reviewed phasing M-A..M-I in `reports/exec-env/…-a1019073-defer-breakdown.md`. A partial sandbox is a vuln.
+- 1ee4a3c1 Phases 2-4 (.aimaestro workdir mirror, export/import redesign, chat portability) — scoping in `reports/portable-agents/…`.
+- a6d93b9c items 1-3 + 5 (flip CLI verbs to route through API; client shell hardening) — high blast radius, sequenced after the belt per the proposal.
+- IBCT `/api/v1/auth/token` shares the timestamp-replay gap (aidnonce follow-up); nonce burn-on-mismatch consistency NIT (negligible — distinct nonce per caller).
+- 979dbdaa live-env characterization NPT + MANAGER delivery-scope decision (owner-gated).
+- `b02f376b` (manager user-scope writes) — BLOCKED: needs a core API that does not exist yet.
+
+**Remaining finalize:** focused derived docs (GOVERNANCE-RULES security-surface note + API-CHANGES entry + security-registry `/auth/challenge` classification) · push `governance-rules` → fork (the PR). Scenario RUNS stay DEFERRED (token gate).
 
 ### USER directives captured (2026-07-01, verbatim intent)
 

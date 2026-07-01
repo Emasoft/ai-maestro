@@ -322,3 +322,58 @@ describe('headless-router auth mirror — SF1/SF2 new gates (commit 9d7065c7)', 
     expect(res.statusCode).not.toBe(200)
   })
 })
+
+/**
+ * Info-leak GET drift-fix coverage (TRDD-47a35ba2 §B items (a)+(b)).
+ *
+ * Two headless GET handlers were the still-open siblings of already-hardened
+ * Next.js routes:
+ *   - GET /api/agents/role-plugins/status — enumerated EVERY agent's name,
+ *     governanceTitle, absolute workingDirectory and role-plugin state with NO
+ *     auth, AND compiled a user-controlled `new RegExp(filter)` (ReDoS) BEFORE
+ *     any auth. Now: authenticateAgent() first (401 on forged token) + a plain
+ *     case-insensitive substring match (no RegExp).
+ *   - GET /api/governance/reachable — exposed the comm-reachability graph with
+ *     NO auth. Now: authenticateAgent() first, mirroring the route's enforceAuth.
+ *
+ * Same forged-bearer harness: shape-valid `aim_tk_AAAA…` passes the structural
+ * gate and reaches the per-handler auth, where authenticateAgent rejects it (401,
+ * NOT 'auth_required'), and no data is returned.
+ */
+describe('headless-router auth mirror — info-leak GETs (TRDD-47a35ba2)', () => {
+  it('role-plugins/status: credential-less request is rejected (401), no roster leak', async () => {
+    const res = await call('GET', '/api/agents/role-plugins/status')
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.agents).toBeUndefined()
+  })
+
+  it('role-plugins/status: forged token rejected by handler auth (401), no roster/path leak', async () => {
+    const res = await call('GET', '/api/agents/role-plugins/status', { Authorization: FORGED_BEARER })
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.agents).toBeUndefined()
+  })
+
+  it('role-plugins/status: a catastrophic-backtracking filter is auth-gated and no longer a user-controlled RegExp', async () => {
+    // Pre-fix this compiled `new RegExp('(a+)+$')` before any auth (ReDoS). Now
+    // auth runs first (forged token → 401) and the filter is a plain substring
+    // match, so the evil pattern can neither hang nor be reached.
+    const evil = encodeURIComponent('(a+)+$')
+    const res = await call('GET', `/api/agents/role-plugins/status?filter=${evil}`, { Authorization: FORGED_BEARER })
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.agents).toBeUndefined()
+  })
+
+  it('governance/reachable: credential-less request is rejected (401)', async () => {
+    const res = await call('GET', '/api/governance/reachable?agentId=victim')
+    expect(res.statusCode).toBe(401)
+  })
+
+  it('governance/reachable: forged token rejected by handler auth (401), no comm-graph leak', async () => {
+    const res = await call('GET', '/api/governance/reachable?agentId=victim', { Authorization: FORGED_BEARER })
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+  })
+})

@@ -1777,7 +1777,13 @@ const routes: Route[] = [
     const data = await response.json()
     sendJson(res, response.status, data)
   }},
-  { method: 'GET', pattern: /^\/api\/governance\/reachable$/, paramNames: [], handler: async (_req, res, _params, query) => {
+  { method: 'GET', pattern: /^\/api\/governance\/reachable$/, paramNames: [], handler: async (req, res, _params, query) => {
+    // SECURITY (headless parity with app/api/governance/reachable/route.ts's enforceAuth):
+    // the reachability graph leaks who any agent can message. authenticateAgent performs
+    // the real cryptographic verification the credential-shape prefilter does not — without
+    // it an unauthenticated caller could enumerate the comm-graph via a client-supplied agentId.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     sendServiceResult(res, getReachableAgents(query.agentId || null))
   }},
   { method: 'POST', pattern: /^\/api\/governance\/transfers\/([^/]+)\/resolve$/, paramNames: ['id'], handler: async (req, res, params) => {
@@ -2998,6 +3004,12 @@ const routes: Route[] = [
   // Title → required role-plugin lookup
   // Role-plugin status: list agents with their installed role-plugins
   { method: 'GET', pattern: /^\/api\/agents\/role-plugins\/status$/, paramNames: [], handler: async (req, res) => {
+    // SECURITY (headless parity with app/api/agents/role-plugins/status/route.ts's
+    // authenticateFromRequest): this enumerates EVERY agent's name, governanceTitle,
+    // absolute workingDirectory and role-plugin state, so verify identity before responding.
+    // authenticateAgent is the real crypto verifier (the credential-shape prefilter is not).
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const { existsSync, readFileSync } = await import('fs')
     const { join } = await import('path')
     const { homedir } = await import('os')
@@ -3031,11 +3043,9 @@ const routes: Route[] = [
     const pluginParam = url.searchParams.get('plugin')
     const agentIdParam = url.searchParams.get('agentId')
 
-    let filterRegex: RegExp | null = null
-    if (filterParam) {
-      try { filterRegex = new RegExp(filterParam, 'i') }
-      catch { return sendJson(res, 400, { error: `Invalid regex: "${filterParam}"` }) }
-    }
+    // Safe case-insensitive substring match instead of a user-controlled RegExp
+    // (ReDoS prevention) — mirrors app/api/agents/role-plugins/status/route.ts.
+    const filterLower = filterParam ? filterParam.toLowerCase() : null
 
     const userScopePlugins = findRolePlugins(join(HOME, '.claude', 'settings.json'))
     const agents = loadAgents()
@@ -3064,7 +3074,7 @@ const routes: Route[] = [
         rolePlugin, warnings,
       }
 
-      if (filterRegex && !filterRegex.test(`${agent.name} ${agent.label || ''} ${rolePlugin?.name || ''}`)) continue
+      if (filterLower && !`${agent.name} ${agent.label || ''} ${rolePlugin?.name || ''}`.toLowerCase().includes(filterLower)) continue
       if (pluginParam && rolePlugin?.name !== pluginParam) continue
       results.push(info)
     }

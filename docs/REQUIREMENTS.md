@@ -155,6 +155,13 @@ in this repo. Installed automatically by `install-messaging.sh`, which calls
 tldr --version && fastedit --version && distill --version && lean-ctx --version
 ```
 
+**Cross-client skill variants (TRDD-ANYCPRTX):** the unified tldr+fastedit skill
+ships per-client source under `scripts/code-analysis-skill/<client>/` (claude,
+codex, gemini, opencode, kiro, plus hand-authored github-copilot + kilocode).
+`scripts/distribute-code-analysis-skill.sh` (invoked by the installer) copies each
+variant into a detected client's global config dir; github-copilot + kilocode are
+per-workspace, so their placement is printed for you to apply per repo.
+
 ---
 
 ## 4. Network and Port Requirements

@@ -440,6 +440,17 @@ install_fastedit
 install_distill
 install_leanctx
 seed_leanctx_allowlist
+
+# Distribute the cross-client skill variants (TRDD-ANYCPRTX) — fail-soft; never aborts.
+DISTRIBUTE="$(dirname "${BASH_SOURCE[0]}")/distribute-code-analysis-skill.sh"
+if [ -f "$DISTRIBUTE" ]; then
+    if [ "$NON_INTERACTIVE" = true ]; then
+        bash "$DISTRIBUTE" -y || print_warning "skill-variant distribution returned non-zero (continuing)"
+    else
+        bash "$DISTRIBUTE" || print_warning "skill-variant distribution returned non-zero (continuing)"
+    fi
+fi
+
 print_summary
 
 # Fail-soft contract: never propagate a non-zero status to the parent installer.

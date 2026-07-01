@@ -72,6 +72,16 @@ allowlist check.
 See `~/.claude/rules/tldr-cli.md` and the `tldr-code` skill for the full
 command reference.
 
+**Cross-client variants (TRDD-ANYCPRTX):** ai-maestro drives agents on any CLI
+coding-agent client, so the unified skill ships per-client source under
+`scripts/code-analysis-skill/<client>/` — `claude`, `codex`, `gemini`,
+`opencode`, `kiro` (adapted SKILL.md), plus hand-authored `github-copilot`
+(`.github/copilot-instructions.md`) and `kilocode` (`.kilocode/rules/`).
+`scripts/distribute-code-analysis-skill.sh` (run by the installer, fail-soft)
+copies each variant into a detected client's global config dir; github-copilot +
+kilocode are per-workspace, so their placement is printed rather than
+auto-applied. Non-Claude variants drop the Claude-only lean-ctx allowlist note.
+
 ## Version Management
 
 **IMPORTANT:** When bumping the version, ALWAYS use the centralized script:

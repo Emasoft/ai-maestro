@@ -1101,6 +1101,28 @@ async function startServer(handleRequest) {
       return
     }
 
+    // ── SF3 / TRDD-f1d89143 — deep-validate the credential BEFORE PTY attach ──
+    // The pre-handshake upgrade gate (wsHasCredential) checks the Bearer on
+    // PRESENCE only, so a forged-shape `Bearer aim_tk_AAAA…` previously reached
+    // terminal read/write here (this handler validated only the session NAME).
+    // Re-validate the cookie + bearer via the canonical, NON-consuming
+    // authenticator (all classes: aim_tk_/amp_live_sk_/mst_/eyJ + aim_session
+    // cookie); a forged credential now closes the socket before any PTY attach.
+    // Non-consuming, so a one-shot AID token is left intact for its real
+    // downstream consumer. Fail-closed on any error. Runs before local AND
+    // remote-host routing so proxied /term connections are authorised locally too.
+    try {
+      const { isWsRequestAuthorized } = await import('./lib/ws-auth-gate.ts')
+      if (!(await isWsRequestAuthorized(request?.headers))) {
+        ws.close(1008, 'Unauthorized')
+        return
+      }
+    } catch (authErr) {
+      console.error('[WS /term] credential validation error, denying:', authErr)
+      ws.close(1011, 'Authorization error')
+      return
+    }
+
     // Check if this is a remote host connection
     if (query.host && typeof query.host === 'string') {
       try {

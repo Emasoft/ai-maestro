@@ -17,6 +17,23 @@ two branches — confirmed by `git diff fork/governance-rules HEAD --
 docs/GOVERNANCE-RULES.md` returning zero output. The deltas below
 are about the SERVER-side API surface that those rules govern.
 
+## 🔐 0.28.0 — security spine + converter incorporation (2026-07-01, HEAD `8f936f1d`)
+
+The 0.28.0 PR incorporates all actionable pending TRDDs. Server-side API-surface deltas since the prior audit (each merge individually `tsc`+test gated; integrated tree green — `tsc` 0, 120 vitest files pass, `next build` ok):
+
+| Surface | Change | Wire impact |
+|---|---|---|
+| `POST /api/v1/auth/challenge` | **NEW** — anonymous single-use nonce bootstrap for AID proof-of-possession (TRDD-15ff13ae). | New endpoint (additive); mirrored in headless-router. |
+| `POST /api/v1/auth/token` | Proof must now be signed over a server-issued single-use, subject-bound nonce (replaces the replayable ±300s timestamp window). | A client GETs a challenge first; `aid-maestro-token.sh` updated to do so. |
+| `X-Sudo-Token` (all strict routes) | Sudo tokens bound to operation+subject, authenticate-before-consume — a token minted for op X / subject A is rejected for op Y / subject B, and a mismatch no longer burns a valid token (TRDD-bb344037). | No wire change; wrong op/subject now 403s. |
+| `InstallElement` / `ChangePlugin` / `ChangeSkill` | Agents may no longer state-add (install/enable/update/convert) at **user** scope — only the human system owner / internal system context (TRDD-a6d93b9c). uninstall/disable/remove unchanged. | Agent-token caller gets 403 on a user-scope install. |
+| `WS /term` | Deep-validates the credential (cookie + every bearer class, non-consuming) before PTY attach — a forged-shape bearer no longer reaches terminal read/write (TRDD-f1d89143). | Forged/absent credential → socket close 1008. |
+| `GET role-plugins/status`, `GET governance/reachable` | Now authenticated (were leaking agent name/title/workingDirectory); status-route `new RegExp(filter)` ReDoS closed (TRDD-47a35ba2). | Unauthenticated GET → 401. |
+| `scripts/amp-helper.sh` | Env-first layered AMP identity resolver (AIM_AGENT_ID/NAME → CWD) with anti-spoof cross-check + `set -e` crash fix (TRDD-979dbdaa). | CLI-only; resolves identity where it previously errored. |
+| Cross-client converter | Adds **github-copilot** + **kilocode** as first-class emit targets; one generator regenerates all 6 non-Claude tldr/fastedit skill variants from the Claude source (TRDD-S4YA67F5). | New converter capability. |
+
+**Deferred by design** (documented follow-ups, NOT in this PR — security-king: no half-baked security): a1019073 XL sandbox (UID separation / host sandbox / supply-chain), portable-agents Phases 2-4, a6d93b9c CLI-verb routing items 1-3, IBCT token replay, `b02f376b` (blocked on a not-yet-existing API). Excludes `c94c60e9` (signed-code) + `OZZB3DJA` (janitor→server). Full record: TRDD-RYJD3R9E.
+
 ## 1. AIO migrations (R21 enforcement)
 
 Per R21 (AIO Composition Rule, IRON), every mutation must go through

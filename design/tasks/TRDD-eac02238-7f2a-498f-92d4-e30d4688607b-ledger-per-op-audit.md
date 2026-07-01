@@ -3,7 +3,7 @@
 **TRDD ID:** `eac02238-7f2a-498f-92d4-e30d4688607b`
 **Filename:** `design/tasks/TRDD-eac02238-7f2a-498f-92d4-e30d4688607b-ledger-per-op-audit.md`
 **Tracked in:** this repo (design/tasks/ is git-tracked)
-**Status:** Not started
+**Status:** Completed — shipped under follow-up work (`c7a81642`, `7123d51a`, step-6 fan-out); status was stale. Verified 2026-07-01 by reading `types/ledger.ts` + `lib/signed-ledger.ts` + `lib/ledger-emit.ts` + `services/element-management-service.ts` (42 ledger refs) + `tests/signed-ledger.test.ts` (7/7 pass). Only the `docs/GOVERNANCE-RULES.md` per-op audit-trail section remains (trivial docs follow-up).
 **Created:** 2026-04-20
 **Owner:** TBD
 **Priority:** P1 — foundation for TRDDs `c7a81642` and `7123d51a`, and a prerequisite for any state-restore tool built on top of the ledger.

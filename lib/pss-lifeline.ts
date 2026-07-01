@@ -69,12 +69,16 @@ export interface LifelineComponent {
   type: string
   /** PSS scope: user | project | local | plugin | marketplace. Lets the UI flag over-reporting (P-1). */
   scope?: string
-  /**
-   * Best-effort install timestamp (ISO). On a freshly-seeded PSS DB this is usually the
-   * migration date, NOT the true install date (P-4) — the UI should present it as "first seen".
-   * null when PSS has no usable timestamp.
-   */
-  installedAtIso?: string | null
+  //
+  // NO install-timestamp field (TRDD-e1a79be0, option b). The PSS `as-of` row schema
+  // emits no per-element install/observed timestamp — the verified fields are element_id,
+  // element_name, element_type, scope, scope_path, path, content_hash, file_size,
+  // token_count, enabled, event_type (see the header VERIFIED note). The former
+  // `installedAtIso` read `installed_at`/`observed_at`, which the schema never emits, so it
+  // was ALWAYS null — a silently non-functional field presenting as available data. We omit
+  // it locally rather than surface PSS's synthetic migration-date timestamps
+  // (Emasoft/perfect-skill-suggester#10). Re-add it (and derive it in rowToComponent) only
+  // once PSS emits a real per-element install instant.
 }
 
 /**
@@ -264,27 +268,25 @@ async function newestScanAgeSec(bin: string, nowMs: number): Promise<number | nu
 }
 
 /**
- * Shape of a single `as-of` JSON row (the fields we consume). Extra fields are ignored.
+ * Coerce one raw `as-of` JSON row into a LifelineComponent, or null if it lacks a usable
+ * name/type. Reads ONLY `element_name` / `element_type` / `scope` — the fields the verified
+ * PSS schema actually emits (see the header VERIFIED note). Extra fields are ignored.
+ *
+ * NO install timestamp is derived (TRDD-e1a79be0, option b): the `as-of` schema carries none,
+ * so any value would be null — or PSS's synthetic migration date (Emasoft/perfect-skill-suggester#10),
+ * which is worse than absent because it masquerades as a real install instant. The field is
+ * therefore OMITTED from the returned component entirely, not set to null. A future PSS that
+ * emits a real per-element timestamp is re-integrated HERE.
+ *
+ * Exported so the field-omission contract can be unit-tested directly (mock-free): the input
+ * is arbitrary parsed JSON, hence `Record<string, unknown>`.
  */
-interface AsOfRow {
-  element_name?: unknown
-  element_type?: unknown
-  scope?: unknown
-  observed_at?: unknown
-  installed_at?: unknown
-}
-
-/** Coerce one as-of row into a LifelineComponent, or null if it lacks a usable name/type. */
-function rowToComponent(row: AsOfRow): LifelineComponent | null {
+export function rowToComponent(row: Record<string, unknown>): LifelineComponent | null {
   const name = typeof row.element_name === 'string' ? row.element_name : null
   const type = typeof row.element_type === 'string' ? row.element_type : null
   if (!name || !type) return null
   const scope = typeof row.scope === 'string' ? row.scope : undefined
-  // as-of rows don't carry a dedicated install timestamp; best-effort from observed_at/installed_at.
-  let installedAtIso: string | null = null
-  if (typeof row.installed_at === 'string' && row.installed_at) installedAtIso = row.installed_at
-  else if (typeof row.observed_at === 'string' && row.observed_at) installedAtIso = row.observed_at
-  return { name, type, scope, installedAtIso }
+  return { name, type, scope }
 }
 
 /**
@@ -311,7 +313,7 @@ async function asOfComponents(
     const components: LifelineComponent[] = []
     for (const raw of parsed) {
       if (raw && typeof raw === 'object') {
-        const c = rowToComponent(raw as AsOfRow)
+        const c = rowToComponent(raw as Record<string, unknown>)
         if (c) components.push(c)
       }
     }

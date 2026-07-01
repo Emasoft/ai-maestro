@@ -847,7 +847,8 @@ interface LifelineComponent {
   name: string
   type: string
   scope?: string
-  installedAtIso?: string | null
+  // No installedAtIso — the PSS as-of schema emits no install timestamp, so the field was
+  // always null and is omitted at the source (TRDD-e1a79be0, option b).
 }
 /** Mirrors lib/pss-lifeline.ts LifelineResult (the route's JSON body). */
 interface LifelineResult {
@@ -1010,16 +1011,11 @@ function ComponentsLifelineSection({
               <ScopePill scope={c.scope} />
               <span className="text-gray-500 text-[9px] uppercase tracking-wide flex-shrink-0">{c.type}</span>
               <span className="font-mono text-gray-100 break-all min-w-0">{c.name}</span>
-              {c.installedAtIso && (
-                <span
-                  className="ml-auto text-gray-500 text-[9px] flex-shrink-0 tabular-nums"
-                  // On a freshly-seeded PSS DB this is the migration date, not
-                  // the true install date — present as "first seen", per P-4.
-                  title={`First seen: ${c.installedAtIso}`}
-                >
-                  {new Date(c.installedAtIso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </span>
-              )}
+              {/*
+                No "installed when" date: the PSS as-of schema emits no per-element install
+                timestamp, so it was always null (TRDD-e1a79be0, option b). Re-add a date pill
+                here only once lib/pss-lifeline emits a real installedAtIso.
+              */}
             </li>
           ))}
         </ul>

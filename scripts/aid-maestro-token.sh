@@ -232,13 +232,53 @@ SIGNED_IDENTITY=$(echo "$AGENT_IDENTITY" | jq --arg sig "$IDENTITY_SIGNATURE" '.
 AGENT_IDENTITY_B64=$(echo -n "$SIGNED_IDENTITY" | base64 | tr '+/' '-_' | tr -d '=\n')
 
 # =============================================================================
-# Build Proof of Possession
+# Fetch a single-use challenge nonce (TRDD-15ff13ae)
+# =============================================================================
+#
+# Anti-replay is now a SERVER-ISSUED nonce, not a client timestamp. We fetch a
+# fresh nonce bound to our fingerprint, sign THAT, and the server consumes it on
+# first use — so a captured proof cannot be replayed (its nonce is already gone).
+
+if [ -z "$AMP_FINGERPRINT" ]; then
+    echo "Error: Missing agent fingerprint; cannot request a challenge nonce." >&2
+    exit 1
+fi
+
+CHALLENGE_URL="${MAESTRO_URL}/api/v1/auth/challenge"
+CHALLENGE_BODY=$(jq -n --arg fp "$AMP_FINGERPRINT" '{fingerprint: $fp}')
+
+CHALLENGE_RESPONSE=$(curl -s -w "\n%{http_code}" \
+    -X POST "$CHALLENGE_URL" \
+    -H "Content-Type: application/json" \
+    -d "$CHALLENGE_BODY" \
+    --connect-timeout 10 \
+    --max-time 30 \
+    2>/dev/null) || {
+    echo "Error: Failed to connect to AI Maestro at ${CHALLENGE_URL}" >&2
+    exit 1
+}
+
+CHALLENGE_HTTP_BODY=$(echo "$CHALLENGE_RESPONSE" | sed '$d')
+CHALLENGE_HTTP_STATUS=$(echo "$CHALLENGE_RESPONSE" | tail -1)
+
+if [ "$CHALLENGE_HTTP_STATUS" != "200" ]; then
+    CHALLENGE_ERR=$(echo "$CHALLENGE_HTTP_BODY" | jq -r '.message // .error // "Unknown error"' 2>/dev/null || echo "HTTP ${CHALLENGE_HTTP_STATUS}")
+    echo "Error: Challenge request failed (${CHALLENGE_HTTP_STATUS}): ${CHALLENGE_ERR}" >&2
+    exit 1
+fi
+
+NONCE=$(echo "$CHALLENGE_HTTP_BODY" | jq -r '.nonce // empty' 2>/dev/null)
+if [ -z "$NONCE" ]; then
+    echo "Error: Challenge response did not contain a nonce" >&2
+    exit 1
+fi
+
+# =============================================================================
+# Build Proof of Possession (over the server nonce)
 # =============================================================================
 
-TIMESTAMP=$(date +%s)
-
 SIGN_INPUT="aid-token-exchange
-${TIMESTAMP}
+${NONCE}
 ${MAESTRO_URL}"
 
 # Sign the proof
@@ -248,11 +288,11 @@ if [ -z "$PROOF_SIGNATURE_B64" ]; then
     exit 1
 fi
 
-# Proof = [signature bytes (64)][timestamp string], then base64url encode
+# Proof = [signature bytes (64)][nonce string], then base64url encode
 PROOF_B64=$(
     {
         echo -n "$PROOF_SIGNATURE_B64" | base64 -d
-        echo -n "$TIMESTAMP"
+        echo -n "$NONCE"
     } | base64 | tr '+/' '-_' | tr -d '=\n'
 )
 

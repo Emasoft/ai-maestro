@@ -3,7 +3,7 @@ trdd-id: 5KKO25RO
 title: AMP local-delivery cryptographic binding — verify sigs, lock keys, host identity
 column: dev
 created: 2026-07-02T13:58:14+0200
-updated: 2026-07-02T18:42:00+0200
+updated: 2026-07-02T19:05:00+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -125,8 +125,13 @@ setups; the resolver ambiguity it targeted is fixed by the LIVE 979dbdaa env-fir
 fix-3a, and the orphan accumulation is cleaned by fix-3c. Net: no edit — the meaningful dedup
 already holds. SECURITY IS KING is satisfied without touching code.
 
-**EHT remaining (doc-only, deferrable):** a GOVERNANCE-RULES.md line stating local AMP delivery
-is now signature-verified.
+**▶ EHT DONE 2026-07-02** — recorded that local AMP delivery is now signature-verified in
+`docs/API-CHANGES.md` §0.28.0 security table (the security-surface change-log, alongside the
+existing amp-helper.sh resolver row) rather than minting a new GOVERNANCE-RULES.md R-number:
+the constitution's rules are USER-set/IRON, so autonomously adding one would over-reach — the
+change-log is the correct, low-risk home for "what changed". One row covers all of Layer A
+(local-delivery verify, key-perm guard, AMP_HOST identity, orphan GC) + the USER-run installer
+migration. **Layer A now fully complete.**
 
 **N (no-go under the active token-burn emergency):** Layer B (a1019073) implementation; fix-3b
 (above); the ~$40 scenario validation run (N1FYP2AW Phase-2 / task #59) — authorization

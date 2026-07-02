@@ -3,7 +3,7 @@ trdd-id: 5KKO25RO
 title: AMP local-delivery cryptographic binding — verify sigs, lock keys, host identity
 column: dev
 created: 2026-07-02T13:58:14+0200
-updated: 2026-07-02T13:58:14+0200
+updated: 2026-07-02T14:42:00+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -83,11 +83,20 @@ UUID-named (not address-named), Path 1 MISSES → legitimate local messages beco
 `sanitize_address_for_path` + the `AMP_AGENTS_BASE` assignment) BEFORE applying; then add the
 TDD test (fake local sender + bad sig ⇒ REJECTED) + bash selftest.
 
-**NEXT ACTION:** verify the OPEN QUESTION above, then implement **fix-1** with TDD (a local
-message with a bad/absent signature must be REJECTED, not `sig_valid=true`) in
-`scripts/amp-helper.sh` + a bash selftest.
-Gates: `tsc --noEmit` 0 (fix-3b TS) + `vitest` + amp selftest. Fix in-place on
-`governance-rules`, commit with WHY + `TRDD-5KKO25RO`, no relaxed gates.
+**▶ fix-1 DONE 2026-07-02 — OPEN QUESTION RESOLVED.** Confirmed Path 1 MISSES co-located keys
+(agent dirs are UUID-named; `.index.json` maps name→UUID; `sanitize_address_for_path` yields the
+ADDRESS form). So fix-1 is TWO parts in `scripts/amp-helper.sh`: (1) `save_to_inbox` drops the
+`aimaestro.local ⇒ sig_valid=true` shortcut (elif→if) → LOCAL senders verify like external;
+(2) `resolve_sender_public_key` gains **Path 1b** (name→UUID via `.index.json`) so genuine
+co-located mail resolves its registered key (no UNTRUSTED regression; a forgery still fails —
+can't sign without the private key). Proven by `scripts/test-amp-local-delivery-sig.sh` — 4/4,
+real openssl, no mocks: Path 1b resolves · valid local sig VERIFIES · BAD sig REJECTED (hole
+closed) · unknown sender → no key (untrusted). `bash -n` clean. Canonical byte-match + Ed25519
+round-trip independently verified.
+
+**NEXT ACTION:** committing fix-1 now (WHY + `TRDD-5KKO25RO`). Then fix-2 [HIGH] per-agent key
+perms 0644→0600 + load-time guard; fix-3 [MEDIUM] host first-class identity / dedup-on-register /
+orphan GC + the one-time migration snippet in install-messaging.sh (USER runs it).
 
 **N (no-go under the active token-burn emergency):** Layer B (a1019073) implementation;
 the ~$40 scenario validation run (N1FYP2AW Phase-2 / task #59) — authorization recorded,

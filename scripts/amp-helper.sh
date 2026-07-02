@@ -1199,11 +1199,34 @@ resolve_sender_public_key() {
     local sender_dir
     sender_dir=$(sanitize_address_for_path "$sender_address")
 
-    # Path 1: co-located agent on same host
+    # Path 1: co-located agent whose dir name is the ADDRESS form
     local local_agent_key="${AMP_AGENTS_BASE}/${sender_dir}/keys/public.pem"
     if [ -f "$local_agent_key" ]; then
         echo "$local_agent_key"
         return 0
+    fi
+
+    # Path 1b (TRDD-5KKO25RO): co-located agent whose dir is UUID-named.
+    # Registered ai-maestro agents store keys under a UUID dir, and
+    # .index.json maps the agent NAME (address local-part) -> that UUID.
+    # sanitize_address_for_path() yields an address-form name, so Path 1
+    # misses these; without this branch, local delivery — now that it is
+    # signature-verified — would flag every legitimate co-located message
+    # UNTRUSTED. Resolving name->UUID binds the CLAIMED sender to its real
+    # registered key, so a forgery still fails verification (can't sign
+    # without the private key) while genuine local mail verifies cleanly.
+    local sender_name="${sender_address%%@*}"
+    local index_file="${AMP_AGENTS_BASE}/.index.json"
+    if [ -n "$sender_name" ] && [ -f "$index_file" ]; then
+        local mapped_uuid
+        mapped_uuid=$(jq -r --arg n "$sender_name" '.[$n] // empty' "$index_file" 2>/dev/null || true)
+        if [ -n "$mapped_uuid" ]; then
+            local uuid_agent_key="${AMP_AGENTS_BASE}/${mapped_uuid}/keys/public.pem"
+            if [ -f "$uuid_agent_key" ]; then
+                echo "$uuid_agent_key"
+                return 0
+            fi
+        fi
     fi
 
     # Path 2: manual key drop
@@ -1283,16 +1306,18 @@ save_to_inbox() {
         signature=$(echo "$message_json" | jq -r '.envelope.signature // empty')
         local sig_valid="false"
 
-        # Determine sender provider (lower-cased, validated form)
-        local _save_from_provider=""
-        parse_address "$from"
-        _save_from_provider="$ADDR_PROVIDER"
-
-        if [ "$_save_from_provider" = "${AMP_PROVIDER_DOMAIN}" ] || \
-           [ "$_save_from_provider" = "aimaestro.local" ]; then
-            # Local provider domain — implicit trust (filesystem-delivered).
-            sig_valid="true"
-        elif [ -n "$signature" ]; then
+        # TRDD-5KKO25RO [CRITICAL]: verify signatures on ALL delivery, LOCAL
+        # included. The old code implicit-trusted any aimaestro.local sender
+        # (sig_valid=true, ZERO verification) — any same-UID process could
+        # forge a local inbox file from any agent. amp-send.sh always signs
+        # (:342-343), so a legitimate local message arrives here WITH a
+        # signature and passes verification below; a forgery with a bad or
+        # absent signature is REJECTED (known sender) or delivered UNTRUSTED
+        # (unknown sender). Fail-closed: sig_valid stays "false" unless a
+        # signature actually verifies. (The one sanctioned unsigned-local
+        # exception is the server guarantor path in amp-service.ts:966-988,
+        # which is explicit and logged there — not this filesystem path.)
+        if [ -n "$signature" ]; then
             # SH-MAJOR-05: External message. Verify the Ed25519 signature
             # against a known sender public key. The canonical signing
             # input is RECONSTRUCTED (not extracted) — it MUST match

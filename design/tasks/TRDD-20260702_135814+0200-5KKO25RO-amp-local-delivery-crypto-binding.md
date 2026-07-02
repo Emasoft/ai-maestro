@@ -3,7 +3,7 @@ trdd-id: 5KKO25RO
 title: AMP local-delivery cryptographic binding — verify sigs, lock keys, host identity
 column: dev
 created: 2026-07-02T13:58:14+0200
-updated: 2026-07-02T15:10:00+0200
+updated: 2026-07-02T18:16:00+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -102,12 +102,30 @@ a BSD-first probe silently no-ops on a coreutils-stat box, caught by the test). 
 chmods every existing `private.pem` to 0600 (idempotent, USER-run — writes outside the project).
 Selftest 6/6; `bash -n` clean on both scripts.
 
-**NEXT ACTION:** commit fix-2 (amp-helper.sh sign_message + install-messaging.sh + selftest +
-this STATE), then fix-3 [MEDIUM] host first-class identity / dedup-on-register / orphan GC.
+**▶ fix-2 committed** 22a58bd3 (sign_message perm-guard + installer 0600 migration).
+**▶ fix-3a committed** 3fb18518 (AMP_HOST=1 P0 host-identity layer; selftest now 7/7).
 
-**N (no-go under the active token-burn emergency):** Layer B (a1019073) implementation;
-the ~$40 scenario validation run (N1FYP2AW Phase-2 / task #59) — authorization recorded,
-execution deferred.
+**▶ fix-3c DONE 2026-07-02** — installer orphan-GC step (`install-messaging.sh`, right after
+the fix-2 block): per RULE 0 it **MOVES** (never deletes) each `~/.agent-messaging/agents/<uuid>/`
+dir NOT present in `.index.json` into a timestamped, recoverable backup staging dir; fail-closed
+if `.index.json` is missing/unparseable (GC nothing); UUID-shape-guarded + idempotent (the
+backup dir is not UUID-shaped, so re-runs skip it). USER-run (writes outside the project):
+`./install-messaging.sh -y`. `bash -n` clean; no new shellcheck findings in the block.
+
+**▶ fix-3b DEFERRED (token-burn emergency).** Dedup-on-register by fingerprint/address
+(`services/element-management-service.ts` + `scripts/amp-init.sh`, tsc+vitest-gated) is a
+"secondary safe follow-up" per the plan. Its acute symptom — the resolver "Multiple AMP agents
+found" — is ALREADY handled by the LIVE 979dbdaa env-first resolver + fix-3a host identity, and
+the orphan-dir accumulation is now cleaned by fix-3c. Editing the large TS service + running the
+full tsc/vitest surface is too costly under the active emergency. Re-open as its own TRDD when
+the emergency lifts.
+
+**EHT remaining (doc-only, deferrable):** a GOVERNANCE-RULES.md line stating local AMP delivery
+is now signature-verified.
+
+**N (no-go under the active token-burn emergency):** Layer B (a1019073) implementation; fix-3b
+(above); the ~$40 scenario validation run (N1FYP2AW Phase-2 / task #59) — authorization
+recorded, execution deferred.
 
 ## Body
 

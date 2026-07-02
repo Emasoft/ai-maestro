@@ -601,6 +601,47 @@ if [ "$INSTALL_SCRIPTS" = true ]; then
     done
     print_success "Ensured 0600 on $KEY_FIXED AMP private key(s)"
 
+    # TRDD-5KKO25RO fix-3c [MEDIUM]: GC orphan per-agent AMP dirs.
+    # The registry historically never pruned ~/.agent-messaging/agents/<uuid>/
+    # dirs, so hundreds of stale UUID dirs accumulate vs the few actually
+    # indexed in .index.json. Stale dirs feed the resolver ambiguity that trips
+    # "Multiple AMP agents found". This does NOT delete: per RULE 0 it MOVES
+    # each unindexed UUID dir into a timestamped, recoverable backup staging dir
+    # (a single mv restores it). Fail-closed: if .index.json is missing or
+    # unparseable we cannot know what is live, so we GC NOTHING. Idempotent: the
+    # backup dir is not UUID-shaped, so a re-run never re-processes it.
+    echo ""
+    print_info "Pruning orphan AMP agent dirs (unindexed UUIDs -> recoverable backup)..."
+    _amp_agents="$HOME/.agent-messaging/agents"
+    _amp_index="$_amp_agents/.index.json"
+    if [ -d "$_amp_agents" ] && [ -f "$_amp_index" ] && \
+       command -v jq >/dev/null 2>&1 && jq -e . "$_amp_index" >/dev/null 2>&1; then
+        # The .index.json VALUES are the UUIDs that ARE live; anything else is orphan.
+        _indexed="$(jq -r '.[]' "$_amp_index" 2>/dev/null | tr '\n' '|')"
+        _stage="$_amp_agents/.orphan-backup-$(date +%Y%m%d_%H%M%S)"
+        _orphans=0
+        for _d in "$_amp_agents"/*/; do
+            [ -d "$_d" ] || continue
+            _name="$(basename "$_d")"
+            # Only UUID-shaped dirs are candidates (leave anything unexpected).
+            case "$_name" in
+                [0-9a-fA-F]*-[0-9a-fA-F]*-[0-9a-fA-F]*-[0-9a-fA-F]*-[0-9a-fA-F]*) : ;;
+                *) continue ;;
+            esac
+            # Indexed UUID -> keep (substring match against the pipe-joined set).
+            case "|$_indexed" in *"|$_name|"*) continue ;; esac
+            mkdir -p "$_stage"
+            mv "$_d" "$_stage/" && _orphans=$((_orphans + 1))
+        done
+        if [ "$_orphans" -gt 0 ]; then
+            print_success "Backed up $_orphans orphan agent dir(s) to $_stage (restore: mv \"$_stage\"/* \"$_amp_agents\"/)"
+        else
+            print_success "No orphan agent dirs to prune"
+        fi
+    else
+        print_info "Skipped orphan prune (no readable .index.json -> nothing GC'd, fail-closed)"
+    fi
+
     # Remove old messaging scripts that have been replaced by AMP
     echo ""
     print_info "Cleaning up old messaging scripts..."

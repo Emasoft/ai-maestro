@@ -3,7 +3,7 @@ trdd-id: 5KKO25RO
 title: AMP local-delivery cryptographic binding — verify sigs, lock keys, host identity
 column: dev
 created: 2026-07-02T13:58:14+0200
-updated: 2026-07-02T18:16:00+0200
+updated: 2026-07-02T18:42:00+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -112,13 +112,18 @@ if `.index.json` is missing/unparseable (GC nothing); UUID-shape-guarded + idemp
 backup dir is not UUID-shaped, so re-runs skip it). USER-run (writes outside the project):
 `./install-messaging.sh -y`. `bash -n` clean; no new shellcheck findings in the block.
 
-**▶ fix-3b DEFERRED (token-burn emergency).** Dedup-on-register by fingerprint/address
-(`services/element-management-service.ts` + `scripts/amp-init.sh`, tsc+vitest-gated) is a
-"secondary safe follow-up" per the plan. Its acute symptom — the resolver "Multiple AMP agents
-found" — is ALREADY handled by the LIVE 979dbdaa env-first resolver + fix-3a host identity, and
-the orphan-dir accumulation is now cleaned by fix-3c. Editing the large TS service + running the
-full tsc/vitest surface is too costly under the active emergency. Re-open as its own TRDD when
-the emergency lifts.
+**▶ fix-3b RESOLVED — verify-only, NO code change 2026-07-02.** On "resume", inspected both
+surfaces: the SECURITY-critical dedup is ALREADY present — `amp-init.sh:205-233` refuses a
+keypair whose FINGERPRINT collides with an existing indexed agent (the only path that can
+IMPORT/copy keys — the real forgery risk), with an explicit key-sharing rationale; and the TS
+`CreateAgent` G12 path (`element-management-service.ts:7357-7375`) generates a FRESH keypair per
+agent (G10) so a fingerprint collision is cryptographically impossible and `name` is already
+uniqueness-gated (atomic `.index.json` write). The plan's other sub-item ("refuse a colliding
+ADDRESS") is consciously DROPPED as mis-framed: `.agent.address` is a NON-UNIQUE display field
+(established by the 979dbdaa research), so refusing on it would break legitimate multi-agent
+setups; the resolver ambiguity it targeted is fixed by the LIVE 979dbdaa env-first resolver +
+fix-3a, and the orphan accumulation is cleaned by fix-3c. Net: no edit — the meaningful dedup
+already holds. SECURITY IS KING is satisfied without touching code.
 
 **EHT remaining (doc-only, deferrable):** a GOVERNANCE-RULES.md line stating local AMP delivery
 is now signature-verified.

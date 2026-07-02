@@ -1,0 +1,109 @@
+/**
+ * Curated agent-command allowlist (TRDD-TBGGUA2V, P2).
+ *
+ * The dashboard lets the user inject a small set of KNOWN, SAFE slash-commands
+ * into an agent's Claude Code REPL via tmux (reload-plugins, compact, janitor
+ * controls, …). Rather than accept arbitrary command text, the API accepts a
+ * stable KEY from this allowlist and sends the corresponding FIXED literal
+ * command string. That makes the surface injection-proof BY CONSTRUCTION:
+ *   - the caller never supplies the command text, only a key;
+ *   - each `command` below is a compile-time constant (no interpolation);
+ *   - an unknown key resolves to `undefined` → the route rejects it.
+ * This is defense-in-depth ON TOP OF the existing no-shell send path
+ * (sendCommand → tmux send-keys -l, literal mode) — never a replacement for it.
+ */
+
+export interface AgentCommand {
+  /** Stable key the API/UI references (kebab-case). */
+  key: string
+  /** Short human label for a UI button. */
+  label: string
+  /** The exact slash-command sent to the REPL. A constant literal — never interpolated. */
+  command: string
+  /**
+   * Only deliver when the agent is at its idle prompt (the safe state with no
+   * subagents running / no permission prompt pending). The route enforces this
+   * by passing requireIdle to sendCommand.
+   */
+  requiresIdle: boolean
+  /** Needs an explicit extra confirmation in the UI (irreversible / wipes context). */
+  destructive?: boolean
+  /** One-line explanation shown in the UI tooltip. */
+  description: string
+}
+
+/**
+ * The allowlist. Keep it SMALL and curated — every entry is a command we are
+ * confident is safe to send to an agent at idle. Add new entries only after
+ * confirming the slash-command exists and is non-destructive (or mark
+ * `destructive: true`).
+ */
+export const AGENT_COMMANDS: readonly AgentCommand[] = [
+  {
+    key: 'reload-plugins',
+    label: 'Reload plugins',
+    command: '/reload-plugins',
+    requiresIdle: true,
+    description: 'Reload plugin hooks and skills after an update.',
+  },
+  {
+    key: 'compact',
+    label: 'Compact context',
+    command: '/compact',
+    requiresIdle: true,
+    description: 'Compact the conversation to reclaim context window.',
+  },
+  {
+    key: 'clear',
+    label: 'Clear context',
+    command: '/clear',
+    requiresIdle: true,
+    destructive: true,
+    description: 'Clear the conversation — WIPES the agent context. Irreversible.',
+  },
+  {
+    key: 'janitor-arm',
+    label: 'Janitor: arm',
+    command: '/janitor-arm',
+    requiresIdle: true,
+    description: 'Arm the janitor heartbeat cron for this agent.',
+  },
+  {
+    key: 'janitor-disarm',
+    label: 'Janitor: disarm',
+    command: '/janitor-disarm',
+    requiresIdle: true,
+    description: 'Disarm the janitor heartbeat cron for this agent.',
+  },
+  {
+    key: 'janitor-pause',
+    label: 'Janitor: pause',
+    command: '/janitor-pause',
+    requiresIdle: true,
+    description: 'Pause the janitor detectors without removing the heartbeat.',
+  },
+  {
+    key: 'janitor-unpause',
+    label: 'Janitor: unpause',
+    command: '/janitor-unpause',
+    requiresIdle: true,
+    description: 'Resume previously-paused janitor detectors.',
+  },
+  {
+    key: 'janitor-audit',
+    label: 'Janitor: audit',
+    command: '/janitor-audit',
+    requiresIdle: true,
+    description: 'Run the janitor drift/security detectors once now.',
+  },
+] as const
+
+/** Resolve a command by key. Returns undefined for any key not in the allowlist. */
+export function getAgentCommand(key: string): AgentCommand | undefined {
+  return AGENT_COMMANDS.find((c) => c.key === key)
+}
+
+/** All allowlisted keys (for UI enumeration / validation messages). */
+export function agentCommandKeys(): string[] {
+  return AGENT_COMMANDS.map((c) => c.key)
+}

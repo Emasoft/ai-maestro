@@ -21,8 +21,13 @@ _init_self_host() {
     fi
 
     # Try identity API first (most reliable)
+    # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate
+    local -a _id_auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        _id_auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
     local identity
-    identity=$(curl -s --max-time 5 "http://127.0.0.1:23000/api/hosts/identity" 2>/dev/null)
+    identity=$(curl -s --max-time 5 "${_id_auth_args[@]}" "http://127.0.0.1:23000/api/hosts/identity" 2>/dev/null)
     if [ -n "$identity" ]; then
         _SELF_HOST_ID=$(echo "$identity" | jq -r '.host.id // empty' 2>/dev/null)
         _SELF_HOST_URL=$(echo "$identity" | jq -r '.host.url // empty' 2>/dev/null)
@@ -188,8 +193,14 @@ lookup_agent_by_session() {
     local api_url
     api_url=$(get_api_base)
 
+    # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate
+    local -a _lookup_auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        _lookup_auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+
     local response
-    response=$(curl -s --max-time 5 "${api_url}/api/agents" 2>/dev/null)
+    response=$(curl -s --max-time 5 "${_lookup_auth_args[@]}" "${api_url}/api/agents" 2>/dev/null)
 
     if [ -z "$response" ]; then
         return 1
@@ -231,9 +242,15 @@ lookup_agent_by_directory() {
     local api_url
     api_url=$(get_api_base)
 
+    # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate
+    local -a _lookup_auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        _lookup_auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+
     # Query the agents API and find agent with matching workingDirectory
     local response
-    response=$(curl -s --max-time 5 "${api_url}/api/agents" 2>/dev/null)
+    response=$(curl -s --max-time 5 "${_lookup_auth_args[@]}" "${api_url}/api/agents" 2>/dev/null)
 
     if [ -z "$response" ]; then
         return 1
@@ -350,20 +367,47 @@ init_common() {
     export HOST_ID
 }
 
+# Get AID auth header for API calls (if AID_AUTH env var is set)
+# Usage: AUTH_ARGS=($(get_auth_args))
+#        curl "${AUTH_ARGS[@]}" ...
+# Returns: -H "Authorization: Bearer <token>" or empty
+get_auth_header() {
+    if [ -n "${AID_AUTH:-}" ]; then
+        echo "-H \"Authorization: Bearer $AID_AUTH\""
+    fi
+}
+
+# Build auth args array for curl calls
+# Usage: local -a auth_args; get_auth_args auth_args; curl "${auth_args[@]}" ...
+get_auth_args() {
+    local -n _arr="$1"
+    _arr=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        _arr=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+}
+
 # Make an API query with common error handling
 # Usage: api_query "GET" "/api/agents/${AGENT_ID}/endpoint" [extra_curl_args...]
+# Automatically includes AID_AUTH Bearer header if available.
 api_query() {
     local method="$1"
     local endpoint="$2"
     shift 2
     local extra_args=("$@")
 
+    # Inject AID auth header if available
+    local -a auth_args=()
+    if [ -n "${AID_AUTH:-}" ]; then
+        auth_args=(-H "Authorization: Bearer $AID_AUTH")
+    fi
+
     local api_base
     api_base=$(get_api_base)
     local url="${api_base}${endpoint}"
     local response
 
-    response=$(curl -s --max-time 30 -X "$method" "${extra_args[@]}" "$url" 2>/dev/null)
+    response=$(curl -s --max-time 30 -X "$method" "${auth_args[@]}" "${extra_args[@]}" "$url" 2>/dev/null)
 
     if [ -z "$response" ]; then
         echo "Error: API request failed" >&2
@@ -436,17 +480,19 @@ setup_local_bin_path() {
         return 0
     fi
 
-    # Check if already in shell config
-    if grep -q 'export PATH=.*\.local/bin' "$SHELL_RC" 2>/dev/null; then
+    # Dual guard: check for AI Maestro marker OR existing .local/bin PATH entry
+    # Use pattern that requires /.local/bin to end at a word boundary (: " ' or EOL) to prevent
+    # false positives like /.local/bin-extra matching
+    if grep -qF "# AI Maestro" "$SHELL_RC" 2>/dev/null || grep -qE '/\.local/bin(["'"'"':]|$)' "$SHELL_RC" 2>/dev/null; then
         [ "$quiet" = false ] && echo "✅ PATH configured in $SHELL_RC (restart terminal or run: source $SHELL_RC)"
         # Add to current session
         export PATH="$HOME/.local/bin:$PATH"
         return 0
     fi
 
-    # Add to shell config
+    # Add to shell config with marker comment to prevent future duplicates
     echo "" >> "$SHELL_RC"
-    echo "# AI Maestro - Added by installer" >> "$SHELL_RC"
+    echo "# AI Maestro PATH (added by installer)" >> "$SHELL_RC"
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
 
     # Add to current session

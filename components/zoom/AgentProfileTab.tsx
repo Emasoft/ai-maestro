@@ -1,23 +1,29 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
-  User, Building2, Briefcase, Code2, Cpu, Tag,
+  User, Briefcase, Code2, Cpu, Tag,
   Activity, MessageSquare, CheckCircle, Clock, Zap,
   DollarSign, Database, BookOpen, Link2, Edit2, Save,
   ChevronDown, ChevronRight, Trash2,
   Cloud, Monitor, Wifi, WifiOff, Folder, Download, Send,
   GitBranch, FolderGit2, RefreshCw, AlertTriangle,
-  FolderTree, X
+  FolderTree, X, Terminal, Shield
 } from 'lucide-react'
+import Image from 'next/image'
 import type { Agent, AgentDocumentation, Repository } from '@/types/agent'
 import TransferAgentDialog from '@/components/TransferAgentDialog'
 import ExportAgentDialog from '@/components/ExportAgentDialog'
 import DeleteAgentDialog from '@/components/DeleteAgentDialog'
-import SkillsSection from '@/components/SkillsSection'
 import { AgentSkillEditor } from '@/components/marketplace'
 import AvatarPicker from '@/components/AvatarPicker'
 import EmailAddressesSection from '@/components/EmailAddressesSection'
+import { useGovernance } from '@/hooks/useGovernance'
+import TitleBadge from '@/components/governance/TitleBadge'
+import TitleAssignmentDialog from '@/components/governance/TitleAssignmentDialog'
+import TeamMembershipSection from '@/components/governance/TeamMembershipSection'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface AgentProfileTabProps {
   agent: Agent
@@ -26,6 +32,7 @@ interface AgentProfileTabProps {
 }
 
 export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose }: AgentProfileTabProps) {
+  const { requestSudoToken } = useSudo()
   const baseUrl = hostUrl || ''
   const [agent, setAgent] = useState<Agent>(initialAgent)
   const [saving, setSaving] = useState(false)
@@ -36,12 +43,16 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
+  const [showTitleDialog, setShowTitleDialog] = useState(false)
   const [usedAvatars, setUsedAvatars] = useState<string[]>([])
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
   // Repository state
   const [repositories, setRepositories] = useState<Repository[]>([])
   const [loadingRepos, setLoadingRepos] = useState(false)
   const [detectingRepos, setDetectingRepos] = useState(false)
+  // NT-012: Guard to prevent re-fetching repos on every section expand toggle
+  const [reposLoaded, setReposLoaded] = useState(false)
 
   // Collapsible sections
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -51,19 +62,32 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
     email: false,
     repositories: false,
     installedSkills: false,
-    skillSettings: false,
     metrics: false,
     documentation: false,
     dangerZone: false
   })
 
+  // Governance hook for role and team membership
+  const governance = useGovernance(agent.id || null)
+
+  // Clear save timer on unmount to prevent state updates on unmounted component
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [])
+
   // Sync with parent agent prop
   useEffect(() => {
     setAgent(initialAgent)
+    // NT-012: Reset repos loaded state when agent changes so repos are re-fetched for new agent
+    setReposLoaded(false)
   }, [initialAgent])
 
-  // Fetch repositories when component mounts
+  // Fetch repositories only when the repos section is first expanded (NT-012: skip if already loaded)
   useEffect(() => {
+    if (!expandedSections.repositories || reposLoaded) return
+
     const fetchRepos = async () => {
       setLoadingRepos(true)
       try {
@@ -71,6 +95,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
         if (response.ok) {
           const data = await response.json()
           setRepositories(data.repositories || [])
+          setReposLoaded(true)
         }
       } catch (error) {
         console.error('Failed to fetch repos:', error)
@@ -80,7 +105,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
     }
 
     fetchRepos()
-  }, [agent.id, baseUrl])
+  }, [agent.id, baseUrl, expandedSections.repositories, reposLoaded])
 
   // Fetch used avatars
   useEffect(() => {
@@ -133,26 +158,34 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
 
     setSaving(true)
     try {
-      const response = await fetch(`${baseUrl}/api/agents/${agent.id}`, {
+      // SCEN-016 BUG-001: strict-route PATCH must route through sudoFetch so a
+      // 403 sudo_required response triggers the governance password modal.
+      const response = await sudoFetch(`${baseUrl}/api/agents/${agent.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: agent.name || agent.alias,
+          name: agent.name,
           label: agent.label,
           avatar: agent.avatar,
           owner: agent.owner,
           team: agent.team,
+          program: agent.program,
           model: agent.model,
           taskDescription: agent.taskDescription,
+          programArgs: agent.programArgs,
           tags: agent.tags,
           documentation: agent.documentation,
           metadata: agent.metadata
         })
-      })
+      }, requestSudoToken)
 
       if (response.ok) {
         setHasChanges(false)
-        setTimeout(() => setSaving(false), 500)
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = setTimeout(() => setSaving(false), 500)
+      } else {
+        // SF-001: Reset saving state on non-OK response so button is not stuck
+        setSaving(false)
       }
     } catch (error) {
       console.error('Failed to save agent:', error)
@@ -160,7 +193,8 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
     }
   }
 
-  const updateField = (field: string, value: any) => {
+  // MF-009: Narrowed value type from `any` to the union of actual field value types
+  const updateField = (field: string, value: string | string[] | undefined) => {
     setAgent({ ...agent, [field]: value })
     setHasChanges(true)
   }
@@ -169,7 +203,8 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
     setAgent({
       ...agent,
       documentation: {
-        ...agent.documentation,
+        // Guard against agent.documentation being undefined; spreading undefined throws a TypeError
+        ...(agent.documentation || {}),
         [field]: value
       }
     })
@@ -196,14 +231,17 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
     updateField('tags', agent.tags?.filter(t => t !== tag) || [])
   }
 
-  const displayName = agent.label || agent.name || agent.alias || 'Unnamed Agent'
+  const displayName = agent.label || agent.name || 'Unnamed Agent'
   const isAvatarUrl = agent.avatar && (agent.avatar.startsWith('http://') || agent.avatar.startsWith('https://') || agent.avatar.startsWith('/'))
 
   return (
     <div className="h-full flex flex-col">
       {/* Header with Save Button */}
       <div className="flex-shrink-0 px-6 py-4 border-b border-gray-700 bg-gray-800/50 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-white">Agent Profile</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-white">Agent Profile</h3>
+          <TitleBadge title={governance.agentTitle} size="sm" onClick={() => setShowTitleDialog(true)} />
+        </div>
         <div className="flex items-center gap-2">
           {/* Export Button */}
           <button
@@ -318,7 +356,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
                   title="Click to change avatar"
                 >
                   {isAvatarUrl ? (
-                    <img src={agent.avatar} alt={displayName} className="w-full h-full object-cover" />
+                    <Image src={agent.avatar!} alt={displayName} fill sizes="96px" className="object-cover" />
                   ) : agent.avatar ? (
                     agent.avatar
                   ) : (
@@ -330,22 +368,22 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
                 </button>
                 <div className="flex-1 space-y-3">
                   <EditableField
-                    label="Agent Name"
-                    value={agent.name || agent.alias || ''}
+                    label="Agent ID"
+                    value={agent.name || ''}
                     onChange={(value) => updateField('name', value)}
                     icon={<User className="w-4 h-4" />}
                   />
                   <EditableField
-                    label="Display Label"
+                    label="Persona Name"
                     value={agent.label || ''}
                     onChange={(value) => updateField('label', value)}
                     icon={<Tag className="w-4 h-4" />}
-                    placeholder={agent.name || agent.alias || 'Same as agent name'}
+                    placeholder={agent.name || 'Same as agent ID'}
                   />
                 </div>
               </div>
-              {/* Owner and Team */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Owner and Governance */}
+              <div className="space-y-4">
                 <EditableField
                   label="Owner"
                   value={agent.owner || ''}
@@ -353,12 +391,30 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
                   icon={<User className="w-4 h-4" />}
                   placeholder="Owner name"
                 />
-                <EditableField
-                  label="Team"
-                  value={agent.team || ''}
-                  onChange={(value) => updateField('team', value)}
-                  icon={<Building2 className="w-4 h-4" />}
-                  placeholder="Team name"
+
+                {/* Governance Title */}
+                <div className="flex items-center justify-between py-1">
+                  <div className="flex items-center gap-2 text-sm text-gray-400">
+                    <Shield className="w-4 h-4" />
+                    <span>Governance Title</span>
+                  </div>
+                  <TitleBadge
+                    title={governance.agentTitle}
+                    onClick={() => setShowTitleDialog(true)}
+                  />
+                </div>
+
+                {/* Team Membership */}
+                <TeamMembershipSection
+                  agentId={agent.id}
+                  agentTitle={governance.agentTitle}
+                  memberTeam={governance.memberTeam}
+                  allTeams={governance.allTeams}
+                  onJoinTeam={(teamId) => governance.addAgentToTeam(teamId, agent.id)}
+                  onLeaveTeam={(teamId) => governance.removeAgentFromTeam(teamId, agent.id)}
+                  pendingTransfers={governance.pendingTransfers}
+                  onRequestTransfer={(aid, from, to) => governance.requestTransfer(aid, from, to)}
+                  onResolveTransfer={(tid, action) => governance.resolveTransfer(tid, action)}
                 />
               </div>
             </div>
@@ -399,6 +455,13 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
                 onChange={(value) => updateField('taskDescription', value)}
                 icon={<Code2 className="w-4 h-4" />}
                 multiline
+              />
+
+              <EditableField
+                label="Program Arguments (e.g. --continue)"
+                value={agent.programArgs || ''}
+                onChange={(value) => updateField('programArgs', value)}
+                icon={<Terminal className="w-4 h-4" />}
               />
 
               {/* Tags */}
@@ -564,7 +627,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
                 <>
                   {repositories.map((repo, idx) => (
                     <div
-                      key={idx}
+                      key={repo.remoteUrl || repo.localPath || idx}
                       className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-all"
                     >
                       <div className="flex items-start gap-3">
@@ -623,21 +686,7 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
           )}
         </section>
 
-        {/* Skill Settings Section */}
-        <section>
-          <button
-            onClick={() => toggleSection('skillSettings')}
-            className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 hover:text-gray-400 transition-all"
-          >
-            {expandedSections.skillSettings ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-            <Cpu className="w-4 h-4" />
-            Skill Settings
-          </button>
-
-          {expandedSections.skillSettings && (
-            <SkillsSection agentId={agent.id} hostUrl={hostUrl} />
-          )}
-        </section>
+        {/* Skill Settings section removed 2026-04-20 — RAG/consolidation gone (TRDD-70a521d9 Phase-2 cleanup). */}
 
         {/* Metrics Section */}
         <section>
@@ -833,8 +882,8 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
       {showTransferDialog && (
         <TransferAgentDialog
           agentId={agent.id}
-          agentAlias={agent.name || agent.alias || ''}
-          agentDisplayName={agent.label}
+          agentAlias={agent.name || ''}
+          agentDisplayName={displayName}
           currentHostId={agent.hostId}
           onClose={() => setShowTransferDialog(false)}
           onTransferComplete={(result) => {
@@ -852,8 +901,8 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
         isOpen={showExportDialog}
         onClose={() => setShowExportDialog(false)}
         agentId={agent.id}
-        agentAlias={agent.name || agent.alias || ''}
-        agentDisplayName={agent.label}
+        agentAlias={agent.name || ''}
+        agentDisplayName={displayName}
         hostUrl={hostUrl}
       />
 
@@ -862,11 +911,13 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
         isOpen={showDeleteDialog}
         onClose={() => setShowDeleteDialog(false)}
         onConfirm={async () => {
+          // DeleteAgentDialog already calls the DELETE API directly.
+          // This callback is for parent-level UI cleanup only.
           onClose?.()
         }}
         agentId={agent.id}
-        agentAlias={agent.name || agent.alias || ''}
-        agentDisplayName={agent.label}
+        agentAlias={agent.name || ''}
+        agentDisplayName={displayName}
       />
 
       {/* Avatar Picker */}
@@ -878,6 +929,17 @@ export default function AgentProfileTab({ agent: initialAgent, hostUrl, onClose 
         }}
         currentAvatar={agent.avatar}
         usedAvatars={usedAvatars}
+      />
+
+      {/* Role Assignment Dialog */}
+      <TitleAssignmentDialog
+        isOpen={showTitleDialog}
+        onClose={() => setShowTitleDialog(false)}
+        agentId={agent.id}
+        agentName={agent.label || agent.name || ''}
+        currentTitle={governance.agentTitle}
+        governance={governance}
+        onTitleChanged={() => governance.refresh()}
       />
     </div>
   )
@@ -954,7 +1016,7 @@ function EditableField({ label, value, onChange, icon, placeholder, multiline }:
   )
 }
 
-// Metric Card Component
+// Metric Card Component (simplified variant — AgentProfile.tsx has a trend prop; this zoom view omits it)
 interface MetricCardProps {
   icon: React.ReactNode
   value: string | number

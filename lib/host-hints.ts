@@ -57,7 +57,11 @@ class HostHintBroadcaster {
         agentId,
         timestamp: Date.now()
       }
-      listener(hint)
+      try {
+        listener(hint)
+      } catch (err) {
+        console.error(`[HostHints] Listener error for agent ${agentId.substring(0, 8)}:`, err)
+      }
     }
   }
 
@@ -72,7 +76,11 @@ class HostHintBroadcaster {
         agentId,
         timestamp
       }
-      listener(hint)
+      try {
+        listener(hint)
+      } catch (err) {
+        console.error(`[HostHints] Listener error for agent ${agentId.substring(0, 8)}:`, err)
+      }
     }
     console.log(`[HostHints] Broadcast ${type} to ${this.listeners.size} agent(s)`)
   }

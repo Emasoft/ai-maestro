@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# pre-push — project-scoped git hook
+#
+# Runs before every `git push`. Does two things in order:
+#
+# 1. Auto-archive stale agent reports: files under reports/ older than
+#    the ARCHIVE_THRESHOLD_DAYS threshold (default 48h) are moved to
+#    reports_dev/ (gitignored archive). The resulting deletions in
+#    reports/ are auto-committed so the push includes them — the remote
+#    never sees stale reports.
+#
+# 2. Delegate to Git LFS pre-push (preserves LFS object upload behavior).
+#
+# Safety: refuses to move files that have uncommitted changes in reports/
+# (won't clobber in-flight work). Runs only on the actual ref-push side
+# of the hook (skips the "no refs to push" case).
+#
+# Activation: `git config core.hooksPath .githooks` (one-time, per clone).
+
+set -e
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+
+# ─── 1. Auto-archive stale reports ──────────────────────────────────
+archive_script="$REPO_ROOT/.claude/scripts/archive-old-reports.sh"
+if [ -x "$archive_script" ] && [ -d reports ]; then
+  # Refuse to run if reports/ has uncommitted changes (protects in-flight work)
+  if [ -n "$(git status --porcelain reports/ 2>/dev/null)" ]; then
+    echo "[pre-push] reports/ has uncommitted changes — skipping auto-archive." >&2
+    echo "[pre-push] Commit or stash those changes and re-push to trigger archival." >&2
+  else
+    # Bypass the throttle — push is a discrete event, not a periodic sweep
+    archive_out=$(ARCHIVE_FORCE=1 CLAUDE_PROJECT_DIR="$REPO_ROOT" bash "$archive_script" 2>&1 || true)
+
+    # After the script runs, check for resulting deletions under reports/
+    deleted=$(git ls-files --deleted -- reports/ 2>/dev/null)
+    if [ -n "$deleted" ]; then
+      deleted_count=$(printf '%s\n' "$deleted" | wc -l | tr -d ' ')
+      echo "[pre-push] Auto-archived $deleted_count report(s) from reports/ → reports_dev/" >&2
+      # Stage deletions explicitly — NO `git add -A`, only the reports/ path
+      printf '%s\n' "$deleted" | while IFS= read -r f; do
+        [ -n "$f" ] && git rm --quiet -- "$f"
+      done
+      # Commit the rotation
+      git commit --quiet -m "chore(reports): auto-archive reports older than ${ARCHIVE_THRESHOLD_DAYS:-2} day(s) to reports_dev/
+
+Moved by the pre-push hook per the rotation rule.
+See .claude/scripts/archive-old-reports.sh and .githooks/pre-push."
+      echo "[pre-push] Committed archive rotation — push continues with updated HEAD." >&2
+    fi
+  fi
+fi
+
+# ─── 2. Delegate to Git LFS pre-push ────────────────────────────────
+if command -v git-lfs >/dev/null 2>&1; then
+  exec git lfs pre-push "$@"
+else
+  printf '\n%s\n\n' "This repository is configured for Git LFS but 'git-lfs' was not found on your PATH." >&2
+  exit 2
+fi

@@ -1,79 +1,15 @@
-import { resolveAlias, getAgent, getAgentBySession } from './agent-registry'
+import { resolveAlias, getAgent } from './agent-registry'
 import * as sessionMessaging from './messageQueue'
 
 /**
  * Agent-based messaging layer
  *
- * Messages are stored by agent ID in the new architecture.
- * For backward compatibility, symlinks are created from session names to agent IDs.
- * This allows the system to work with both old session-based paths and new agent-based paths.
+ * Messages are stored in AMP per-agent directories:
+ *   ~/.agent-messaging/agents/<agentName>/messages/inbox/
+ *   ~/.agent-messaging/agents/<agentName>/messages/sent/
  *
- * Migration process:
- * 1. Messages are moved from ~/.aimaestro/messages/<box>/<session-name>/ to /<agent-id>/
- * 2. Symlinks are created from old session paths to new agent paths
- * 3. New messages are always stored by agent ID
+ * This layer resolves agent aliases/IDs and delegates to messageQueue.ts.
  */
-
-/**
- * Send a message from one agent to another
- * Accepts agent IDs or aliases
- */
-export async function sendAgentMessage(
-  from: string,  // Agent ID or alias
-  to: string,    // Agent ID or alias
-  subject: string,
-  content: sessionMessaging.Message['content'],
-  options?: {
-    priority?: sessionMessaging.Message['priority']
-    inReplyTo?: string
-  }
-): Promise<sessionMessaging.Message> {
-  // Resolve from and to to actual agents
-  const fromAgentId = resolveAlias(from) || from
-  const toAgentId = resolveAlias(to) || to
-
-  const fromAgent = getAgent(fromAgentId)
-  const toAgent = getAgent(toAgentId)
-
-  if (!fromAgent) {
-    throw new Error(`Sender agent not found: ${from}`)
-  }
-
-  if (!toAgent) {
-    throw new Error(`Recipient agent not found: ${to}`)
-  }
-
-  // Use agent IDs for message storage (not session names)
-  // This stores messages in ~/.aimaestro/messages/<box>/<agent-id>/
-  return sessionMessaging.sendMessage(fromAgentId, toAgentId, subject, content, options)
-}
-
-/**
- * Forward a message from one agent to another
- */
-export async function forwardAgentMessage(
-  originalMessageId: string,
-  fromAgent: string,  // Agent ID or alias
-  toAgent: string,    // Agent ID or alias
-  forwardNote?: string
-): Promise<sessionMessaging.Message> {
-  const fromAgentId = resolveAlias(fromAgent) || fromAgent
-  const toAgentId = resolveAlias(toAgent) || toAgent
-
-  const from = getAgent(fromAgentId)
-  const to = getAgent(toAgentId)
-
-  if (!from) {
-    throw new Error(`Sender agent not found: ${fromAgent}`)
-  }
-
-  if (!to) {
-    throw new Error(`Recipient agent not found: ${toAgent}`)
-  }
-
-  // Use agent IDs for message storage
-  return sessionMessaging.forwardMessage(originalMessageId, fromAgentId, toAgentId, forwardNote)
-}
 
 /**
  * List inbox messages for an agent

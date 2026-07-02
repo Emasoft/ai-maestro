@@ -456,10 +456,13 @@ export default function ConversationDetailPanel({ conversationFile, projectPath,
         const data = await response.json()
         // Map results to message indices
         const results = data.results.map((result: any) => {
-          // Find the message index that matches this result's text
+          // Find the message index that best matches this result's text.
+          // result.text is a RAG chunk (substring), not the full message text,
+          // so exact equality fails. Use includes() for robust matching.
+          const resultTextLower = (result.text || '').toLowerCase()
           const index = messages.findIndex(msg => {
             const msgText = getSearchableText(msg)
-            return msgText === result.text.toLowerCase()
+            return msgText.includes(resultTextLower)
           })
           return { msg_id: result.msg_id, score: result.score, index }
         }).filter((r: any) => r.index !== -1)

@@ -39,10 +39,15 @@ export default function WebhooksSection() {
         const data = await response.json()
         setWebhooks(data.webhooks || [])
       } else {
-        const err = await response.json()
-        setError(err.error || 'Failed to load webhooks')
+        try {
+          const err = await response.json()
+          setError(err.error || `Failed to load webhooks (HTTP ${response.status})`)
+        } catch {
+          setError(`Failed to load webhooks (HTTP ${response.status})`)
+        }
       }
     } catch (err) {
+      console.error('[WebhooksSection] fetchWebhooks failed:', err)
       setError('Failed to connect to server')
     } finally {
       setLoading(false)
@@ -82,10 +87,15 @@ export default function WebhooksSection() {
         setNewDescription('')
         fetchWebhooks()
       } else {
-        const err = await response.json()
-        setError(err.error || 'Failed to create webhook')
+        try {
+          const err = await response.json()
+          setError(err.error || `Failed to create webhook (HTTP ${response.status})`)
+        } catch {
+          setError(`Failed to create webhook (HTTP ${response.status})`)
+        }
       }
     } catch (err) {
+      console.error('[WebhooksSection] handleCreate failed:', err)
       setError('Failed to connect to server')
     } finally {
       setSaving(false)
@@ -121,6 +131,7 @@ export default function WebhooksSection() {
         method: 'POST',
       })
 
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const data = await response.json()
       setTestResult({
         id,

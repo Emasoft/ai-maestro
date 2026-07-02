@@ -1,0 +1,273 @@
+/**
+ * User Session Authentication
+ *
+ * Browser-based session management for the web UI user.
+ * User logs in with governance password → gets httpOnly session cookie.
+ * Closes SF-058: "no auth headers = system-owner" bypass.
+ *
+ * Sessions are in-memory (Map). `pm2 restart` invalidates all sessions (security measure).
+ * `pm2 start` after `pm2 stop` also starts fresh — this is by design.
+ * Sessions expire on explicit logout or after 7 days (safety measure).
+ *
+ * Cookie: aim_session=<token>, HttpOnly, SameSite=Strict, Path=/
+ */
+
+import { createHash, randomBytes } from 'crypto'
+
+// ============================================================================
+// Types
+// ============================================================================
+
+interface SessionRecord {
+  token_hash: string
+  created_at: number   // unix ms
+  expires_at: number   // unix ms
+  ip?: string          // optional: source IP for audit
+}
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+export const SESSION_COOKIE_NAME = 'aim_session'
+const SESSION_TOKEN_BYTES = 32
+const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000 // 7 days — expires on logout or after this
+const MAX_SESSIONS = 50 // Prevent memory leak — oldest evicted
+
+// ============================================================================
+// In-Memory Store (cleared on server restart — security measure)
+// ============================================================================
+//
+// HMR note: Next.js dev-mode hot module replacement re-evaluates this file
+// on every save, which would reset `sessions` to an empty Map and force the
+// user to log in again after every file edit. To survive HMR we attach the
+// Map to `globalThis` — the global is preserved across module re-evaluations
+// in the same Node process. On actual server restart (pm2 restart), the
+// Node process is killed and `globalThis` is wiped, so the original
+// "sessions cleared on restart" security posture is preserved.
+
+interface SessionGlobals {
+  __aiMaestroSessionsMap?: Map<string, SessionRecord>
+  __aiMaestroSessionMutex?: Promise<void>
+}
+const g = globalThis as unknown as SessionGlobals
+
+const sessions: Map<string, SessionRecord> =
+  g.__aiMaestroSessionsMap ?? new Map<string, SessionRecord>()
+if (!g.__aiMaestroSessionsMap) g.__aiMaestroSessionsMap = sessions
+
+// In-memory mutex: serializes createSession to prevent concurrent calls from
+// exceeding MAX_SESSIONS. Works as a Promise chain — each call awaits the
+// previous one before proceeding. This is necessary because eviction check +
+// insert is a non-atomic read-then-write on the shared Map.
+let sessionMutex: Promise<void> = g.__aiMaestroSessionMutex ?? Promise.resolve()
+// Keep the mutex global-linked so HMR doesn't create a fresh chain
+// underneath an in-flight createSession.
+Object.defineProperty(g, '__aiMaestroSessionMutex', {
+  get: () => sessionMutex,
+  set: (v: Promise<void>) => { sessionMutex = v },
+  configurable: true,
+})
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+// ============================================================================
+// Session Operations
+// ============================================================================
+
+/**
+ * Create a new user session. Returns the raw token for the cookie.
+ *
+ * Serialized via in-memory mutex to prevent race conditions where concurrent
+ * calls both pass the MAX_SESSIONS check and both insert, exceeding the limit.
+ */
+export async function createSession(ip?: string): Promise<string> {
+  // Chain onto the mutex so only one createSession runs at a time
+  const result = new Promise<string>((resolve, reject) => {
+    sessionMutex = sessionMutex.then(() => {
+      try {
+        // Purge expired records first — they're dead weight and must never
+        // cost a live session its slot. Uses the same expiry check as
+        // validateSession (single source of truth for "is this expired").
+        if (sessions.size >= MAX_SESSIONS) {
+          const now = Date.now()
+          for (const [hash, record] of sessions) {
+            if (now > record.expires_at) sessions.delete(hash)
+          }
+        }
+        // Still at capacity after purging? Evict the oldest live session.
+        if (sessions.size >= MAX_SESSIONS) {
+          let oldest: string | null = null
+          let oldestTime = Infinity
+          for (const [hash, record] of sessions) {
+            if (record.created_at < oldestTime) {
+              oldestTime = record.created_at
+              oldest = hash
+            }
+          }
+          if (oldest) sessions.delete(oldest)
+        }
+
+        const token = randomBytes(SESSION_TOKEN_BYTES).toString('hex')
+        const now = Date.now()
+        const tokenHash = hashToken(token)
+
+        sessions.set(tokenHash, {
+          token_hash: tokenHash,
+          created_at: now,
+          expires_at: now + SESSION_LIFETIME_MS,
+          ip,
+        })
+
+        resolve(token)
+      } catch (err) {
+        reject(err)
+      }
+    })
+  })
+
+  return result
+}
+
+/**
+ * Validate a session token from the cookie.
+ * Returns true if valid and not expired.
+ *
+ * LIB2-MIN-05: NO ASYNC OPERATIONS in this function or `invalidateSession`.
+ * `createSession` is serialized via `sessionMutex` to prevent races on the
+ * sessions Map; `validateSession` and `invalidateSession` are SYNCHRONOUS
+ * AND therefore safe in JavaScript's single-threaded model — no two
+ * synchronous handlers ever interleave. If a future refactor adds an
+ * `await` inside either function (e.g. a `getRecord(hash)` that fetches
+ * from Redis), the mutex serialization assumption breaks: a second
+ * handler could run between the await and the subsequent .get/.delete,
+ * creating a TOCTOU race. If async ops become necessary, EITHER take
+ * the same `sessionMutex` here, OR migrate the entire session store to
+ * a TOCTOU-safe primitive (Redis WATCH/MULTI, Postgres SERIALIZABLE
+ * transaction, etc.). Do NOT leave this function async-tainted without
+ * one of those guards.
+ */
+export function validateSession(token: string): boolean {
+  if (!token) return false
+
+  const hash = hashToken(token)
+  const record = sessions.get(hash)
+  if (!record) return false
+
+  if (Date.now() > record.expires_at) {
+    sessions.delete(hash)
+    return false
+  }
+
+  return true
+}
+
+/**
+ * R36/R37 session→user resolution. Returns whether the session is valid AND,
+ * when the user-authority model is ENABLED, the id of the user the web session
+ * represents — the active MAESTRO under the single-operator model (a logged-in
+ * web session IS the host operator).
+ *
+ * BACKWARD-COMPATIBLE: `validateSession(token): boolean` above is UNCHANGED, so
+ * the webauthn / auth-session / headless callers keep working untouched. This
+ * is the additive variant agent-auth uses to populate AuthContext.userId.
+ *
+ * When the model is OFF, `userId` is undefined → AuthContext stays exactly as
+ * before (anonymous system owner). The userId resolution is intentionally done
+ * here via the registry (not a session→userId map) so no change to
+ * createSession or its callers is required.
+ *
+ * SYNCHRONOUS — same TOCTOU-safety contract as validateSession (no awaits).
+ */
+export function validateSessionWithUser(token: string): { valid: boolean; userId?: string } {
+  if (!validateSession(token)) return { valid: false }
+  // Resolve the active-maestro user id only when the model is on. Runtime
+  // require avoids a static cycle (governance/user-registry pull in this file's
+  // siblings) and keeps session-auth dependency-light.
+  try {
+    const { isUserAuthorityModelEnabled } = require('./governance') as typeof import('./governance')
+    if (!isUserAuthorityModelEnabled()) return { valid: true }
+    const { getActiveMaestroUserId } = require('./user-registry') as typeof import('./user-registry')
+    const userId = getActiveMaestroUserId() ?? undefined
+    return { valid: true, userId }
+  } catch (err) {
+    // A registry read failure must not invalidate an otherwise-valid session;
+    // fall back to "valid, no userId" (legacy-equivalent).
+    console.warn('[session-auth] validateSessionWithUser registry read failed, no userId resolved:', err)
+    return { valid: true }
+  }
+}
+
+/**
+ * Invalidate a session (logout).
+ *
+ * LIB2-MIN-05: synchronous — see `validateSession` doc-comment.
+ */
+export function invalidateSession(token: string): boolean {
+  if (!token) return false
+  const hash = hashToken(token)
+  return sessions.delete(hash)
+}
+
+/**
+ * Invalidate all sessions (e.g., when governance password changes).
+ */
+export function invalidateAllSessions(): void {
+  sessions.clear()
+}
+
+/**
+ * Count active (non-expired) sessions.
+ */
+export function activeSessionCount(): number {
+  const now = Date.now()
+  let count = 0
+  for (const [hash, record] of sessions) {
+    if (record.expires_at > now) {
+      count++
+    } else {
+      sessions.delete(hash)
+    }
+  }
+  return count
+}
+
+/**
+ * Build Set-Cookie header value for a session token.
+ */
+export function buildSessionCookie(token: string, secure: boolean = false): string {
+  const maxAge = Math.floor(SESSION_LIFETIME_MS / 1000)
+  const parts = [
+    `${SESSION_COOKIE_NAME}=${token}`,
+    'HttpOnly',
+    'SameSite=Strict',
+    'Path=/',
+    `Max-Age=${maxAge}`,
+  ]
+  if (secure) parts.push('Secure')
+  return parts.join('; ')
+}
+
+/**
+ * Build Set-Cookie header value to clear the session cookie.
+ */
+export function buildClearSessionCookie(): string {
+  return `${SESSION_COOKIE_NAME}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`
+}
+
+/**
+ * Extract session token from a cookie header string.
+ */
+export function extractSessionFromCookie(cookieHeader: string | null): string | null {
+  if (!cookieHeader) return null
+  const prefix = `${SESSION_COOKIE_NAME}=`
+  const cookies = cookieHeader.split(';').map(c => c.trim())
+  for (const cookie of cookies) {
+    if (cookie.startsWith(prefix)) {
+      return cookie.substring(prefix.length) || null
+    }
+  }
+  return null
+}

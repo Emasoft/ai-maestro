@@ -87,7 +87,7 @@ export default function SingleComputerGuide({ onBack, onComplete }: SingleComput
                 <code className="text-sm bg-gray-900 px-2 py-1 rounded text-blue-400">
                   level1-level2-sessionName
                 </code>
-                <p className="text-sm text-gray-400 mt-1">Use hyphens to create automatic hierarchy</p>
+                <p className="text-sm text-gray-400 mt-1">Hyphens split the name into sidebar tags for visual grouping (purely UX). Messaging always uses the bare <code>agent-id</code> or <code>{'agent-id@host'}</code> per R6.11 — never a hierarchical path.</p>
               </div>
 
               <div className="border-t border-gray-700 pt-3">

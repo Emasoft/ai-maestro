@@ -1,30 +1,15 @@
 import { NextResponse } from 'next/server'
-import os from 'os'
-import fs from 'fs'
-import path from 'path'
+import { getSystemConfig } from '@/services/config-service'
 
 export async function GET() {
-  // Read the global logging configuration
-  const globalLoggingEnabled = process.env.ENABLE_LOGGING === 'true'
-
-  // Read version from version.json
-  let version = 'unknown'
   try {
-    const versionPath = path.join(process.cwd(), 'version.json')
-    const versionData = JSON.parse(fs.readFileSync(versionPath, 'utf-8'))
-    version = versionData.version || 'unknown'
-  } catch (err) {
-    console.error('[Config API] Failed to read version.json:', err)
+    const result = getSystemConfig()
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data, { status: result.status })
+  } catch (error) {
+    console.error('[Config] Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
-  // System information
-  const systemInfo = {
-    version,
-    loggingEnabled: globalLoggingEnabled,
-    platform: os.platform(),
-    nodeVersion: process.version,
-    port: process.env.PORT || '23000',
-  }
-
-  return NextResponse.json(systemInfo)
 }

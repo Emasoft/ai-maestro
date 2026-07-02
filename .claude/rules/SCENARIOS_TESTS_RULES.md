@@ -1,0 +1,1 @@
+../../tests/scenarios/SCENARIOS_TESTS_RULES.md

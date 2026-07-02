@@ -23,5 +23,16 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "downloads_dev",
+    "libs_dev",
+    "samples_dev",
+    "examples_dev",
+    "tests_dev",
+    "scripts_dev",
+    "docs_dev",
+    "builds_dev",
+    "reports_dev"
+  ]
 }

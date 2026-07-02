@@ -1,235 +1,132 @@
+import path from 'path'
 import { NextRequest, NextResponse } from 'next/server'
-import { exec } from 'child_process'
-import { promisify } from 'util'
-import { getAgent, loadAgents, saveAgents } from '@/lib/agent-registry'
-import { persistSession } from '@/lib/session-persistence'
-import { computeSessionName, AgentSession } from '@/types/agent'
-
-const execAsync = promisify(exec)
-
-/**
- * Check if a tmux session exists
- */
-async function tmuxSessionExists(sessionName: string): Promise<boolean> {
-  try {
-    await execAsync(`tmux has-session -t "${sessionName}" 2>/dev/null`)
-    return true
-  } catch {
-    return false
-  }
-}
+import { wakeAgent } from '@/services/agents-core-service'
+import { isValidUuid } from '@/lib/validation'
+import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
+import { getAgent } from '@/lib/agent-registry'
+import { PLUGIN_COMPATIBLE_TITLES } from '@/lib/ecosystem-constants'
 
 /**
  * POST /api/agents/[id]/wake
- *
- * Wake a hibernated agent by:
- * 1. Creating a new tmux session with the stored working directory
- * 2. Starting Claude Code (or configured program) in the session
- * 3. Updating agent status to 'active' and session status to 'online'
- *
- * Optional body parameters:
- * - startProgram: boolean - Whether to start Claude Code automatically (default: true)
- * - sessionIndex: number - Which session to wake (default: 0)
- * - program: string - Override the program to start (claude, codex, aider, cursor)
+ * Wake a hibernated agent.
+ * Identity auth only — all governance checks (MANAGER/COS, team-agent gate)
+ * are inside wakeAgent Gate 0.
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const { id } = await params
+    // SF-009: Validate UUID format for agent ID (defense-in-depth)
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
+
+    // Identity auth: verify caller identity, build auth context for Gate 0
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+
+    // TRDD-c7a81642 (R9.13 extension, 2026-04-20): refuse wake when the
+    // agent is marked roleMissing. A role-plugin must be assigned via
+    // Profile → Config tab before the agent can be awakened. We compute
+    // the list of compatible plugin options so the UI can offer them
+    // directly (no registry drift — the source of truth is the TOML
+    // compatibility map in ecosystem-constants.ts).
+    const agent = getAgent(id)
+    if (agent?.roleMissing) {
+      // governanceTitle is stored lowercase (AgentRole: 'member', 'autonomous', …)
+      // but PLUGIN_COMPATIBLE_TITLES keys its title arrays UPPERCASE ('MEMBER',
+      // 'AUTONOMOUS', …). Uppercase before the membership test — matching the
+      // canonical convention in getPluginsForTitle() (`title.toUpperCase()`) —
+      // otherwise the filter never matches and the UI role-plugin picker receives
+      // an empty list, leaving a roleMissing agent with no recovery path. (TRDD-c7a81642)
+      const title = (agent.governanceTitle ?? 'autonomous').toUpperCase()
+      const compatibleOptions = Object.entries(PLUGIN_COMPATIBLE_TITLES)
+        .filter(([, titles]) => (titles as readonly string[]).includes(title))
+        .map(([plugin]) => plugin)
+      return NextResponse.json({
+        error: 'role_plugin_required',
+        message: `Agent "${agent.label ?? agent.name}" cannot be awakened until a compatible role-plugin is assigned. Open Profile → Config tab and choose a role-plugin from the picker.`,
+        profileDeepLink: `/?agent=${encodeURIComponent(id)}&tab=config`,
+        compatibleOptions,
+        governanceTitle: agent.governanceTitle ?? null,
+      }, { status: 409 })
+    }
+
+    // SCEN-013 PROP-P0-002 FIX (013.05): refuse wake when the core plugin
+    // (ai-maestro-plugin / R17) is missing. Same shape as R9.13 above so
+    // the UI can render a single "core dependency missing" alert. PG02 in
+    // InstallElement sets corePluginMissing=true after every failed install
+    // attempt (and clears it on success), so this check covers all paths
+    // through which the registry can drift out of sync with reality.
+    if (agent?.corePluginMissing) {
+      return NextResponse.json({
+        error: 'role_missing_core',
+        message: `Agent "${agent.label ?? agent.name}" cannot be awakened: the core ai-maestro-plugin is missing or disabled. ` +
+          `Without this plugin, the agent has no hooks, no state detection, and no messaging — it cannot function. ` +
+          `The wake endpoint will retry installation automatically; if it keeps failing, install manually via Profile → Config → Plugins.`,
+        profileDeepLink: `/?agent=${encodeURIComponent(id)}&tab=config`,
+      }, { status: 400 })
+    }
 
     // Parse optional body
     let startProgram = true
     let sessionIndex = 0
-    let programOverride: string | undefined
+    let program: string | undefined
     try {
       const body = await request.json()
-      console.log(`[Wake] Received body:`, JSON.stringify(body))
       if (body.startProgram === false) {
         startProgram = false
       }
       if (typeof body.sessionIndex === 'number') {
+        // SF-061: Bounds check sessionIndex to prevent out-of-range values
+        if (body.sessionIndex < 0 || body.sessionIndex > 99) {
+          return NextResponse.json({ error: 'Invalid sessionIndex' }, { status: 400 })
+        }
         sessionIndex = body.sessionIndex
       }
       if (typeof body.program === 'string') {
-        programOverride = body.program.toLowerCase()
-        console.log(`[Wake] Program override set to: ${programOverride}`)
+        // SF-010: Do not lowercase program name -- case-sensitive filesystems need exact case
+        // SF-064: Sanitize program name to prevent path traversal (strip directory components)
+        program = path.basename(String(body.program))
       }
-    } catch (e) {
-      console.log(`[Wake] No body or invalid JSON, using defaults. Error:`, e)
+    } catch {
+      // No body or invalid JSON — use defaults (CC-P1-611: removed debug logging)
     }
 
-    // Get the agent
-    const agent = getAgent(id)
-    if (!agent) {
-      return NextResponse.json(
-        { error: 'Agent not found' },
-        { status: 404 }
-      )
-    }
-
-    // Get agent name (new field, fallback to deprecated alias)
-    const agentName = agent.name || agent.alias
-    if (!agentName) {
-      return NextResponse.json(
-        { error: 'Agent has no name configured' },
-        { status: 400 }
-      )
-    }
-
-    // Get working directory (agent-level, or from preferences)
-    const workingDirectory = agent.workingDirectory ||
-                            agent.preferences?.defaultWorkingDirectory ||
-                            process.cwd()
-
-    // Compute the tmux session name from agent name and index
-    const sessionName = computeSessionName(agentName, sessionIndex)
-
-    // Check if session already exists
-    const exists = await tmuxSessionExists(sessionName)
-    if (exists) {
-      // Session already running, just update status
-      const agents = loadAgents()
-      const index = agents.findIndex(a => a.id === id)
-      if (index !== -1) {
-        // Update or add session in sessions array
-        if (!agents[index].sessions) {
-          agents[index].sessions = []
-        }
-        const sessionIdx = agents[index].sessions.findIndex(s => s.index === sessionIndex)
-        if (sessionIdx >= 0) {
-          agents[index].sessions[sessionIdx].status = 'online'
-          agents[index].sessions[sessionIdx].lastActive = new Date().toISOString()
-        } else {
-          agents[index].sessions.push({
-            index: sessionIndex,
-            status: 'online',
-            workingDirectory,
-            createdAt: new Date().toISOString(),
-            lastActive: new Date().toISOString(),
-          })
-        }
-        agents[index].status = 'active'
-        agents[index].lastActive = new Date().toISOString()
-        saveAgents(agents)
-      }
-
-      return NextResponse.json({
-        success: true,
-        agentId: id,
-        name: agentName,
-        sessionName,
-        sessionIndex,
-        woken: true,
-        alreadyRunning: true,
-        message: `Agent "${agentName}" session ${sessionIndex} was already running`
-      })
-    }
-
-    // Create new tmux session
-    try {
-      await execAsync(`tmux new-session -d -s "${sessionName}" -c "${workingDirectory}"`)
-    } catch (error) {
-      console.error(`[Wake] Failed to create tmux session:`, error)
-      return NextResponse.json(
-        { error: 'Failed to create tmux session' },
-        { status: 500 }
-      )
-    }
-
-    // Persist session metadata
-    persistSession({
-      id: sessionName,
-      name: sessionName,
-      workingDirectory,
-      createdAt: new Date().toISOString(),
-      agentId: id
-    })
-
-    // Start the AI program if requested
-    if (startProgram) {
-      // Determine which program to start - use override if provided, else use agent.program
-      const program = programOverride || agent.program?.toLowerCase() || 'claude code'
-      console.log(`[Wake] Final program selection: "${program}" (override: ${programOverride}, agent.program: ${agent.program})`)
-
-      // Check if user wants terminal only (no AI program)
-      if (program === 'none' || program === 'terminal') {
-        // Skip starting any program - just leave the shell
-        console.log(`[Wake] Terminal only mode - no AI program started`)
-      } else {
-        let startCommand = ''
-        if (program.includes('claude') || program.includes('claude code')) {
-          startCommand = 'claude'
-        } else if (program.includes('codex')) {
-          startCommand = 'codex'
-        } else if (program.includes('aider')) {
-          startCommand = 'aider'
-        } else if (program.includes('cursor')) {
-          startCommand = 'cursor'
-        } else {
-          // Default to claude for unknown programs
-          startCommand = 'claude'
-        }
-
-        // Small delay to let the session initialize
-        await new Promise(resolve => setTimeout(resolve, 300))
-
-        // Send the command to start the program
-        try {
-          await execAsync(`tmux send-keys -t "${sessionName}" "${startCommand}" Enter`)
-        } catch (error) {
-          console.error(`[Wake] Failed to start program:`, error)
-          // Don't fail the whole operation, session is still created
-        }
-      }
-    }
-
-    // Update agent status in registry
-    const agents = loadAgents()
-    const index = agents.findIndex(a => a.id === id)
-    if (index !== -1) {
-      // Update or add session in sessions array
-      if (!agents[index].sessions) {
-        agents[index].sessions = []
-      }
-      const sessionIdx = agents[index].sessions.findIndex(s => s.index === sessionIndex)
-      const sessionData: AgentSession = {
-        index: sessionIndex,
-        status: 'online',
-        workingDirectory,
-        createdAt: new Date().toISOString(),
-        lastActive: new Date().toISOString(),
-      }
-      if (sessionIdx >= 0) {
-        agents[index].sessions[sessionIdx] = sessionData
-      } else {
-        agents[index].sessions.push(sessionData)
-      }
-      agents[index].status = 'active'
-      agents[index].lastActive = new Date().toISOString()
-      saveAgents(agents)
-    }
-
-    console.log(`[Wake] Agent ${agentName} (${id}) session ${sessionIndex} woken up successfully`)
-
-    return NextResponse.json({
-      success: true,
-      agentId: id,
-      name: agentName,
-      sessionName,
+    // Delegate to wakeAgent — Gate 0 handles authorization internally
+    const result = await wakeAgent(id, {
+      startProgram,
       sessionIndex,
-      workingDirectory,
-      woken: true,
-      programStarted: startProgram,
-      message: `Agent "${agentName}" session ${sessionIndex} has been woken up and is ready to use.`
+      program,
+      authContext: buildAuthContext(auth),
     })
 
+    if (result.error) {
+      // SCEN-013 013.05: expand the role_missing_core sentinel from
+      // wakeAgent's R17 gate into the same rich JSON body the route-level
+      // pre-check above produces, so callers see one consistent shape
+      // regardless of whether the violation was detected before or after
+      // the InstallElement attempt.
+      if (result.error === 'role_missing_core') {
+        const a = getAgent(id)
+        return NextResponse.json({
+          error: 'role_missing_core',
+          message: `Agent "${a?.label ?? a?.name ?? id}" cannot be awakened: automatic install of the core ai-maestro-plugin failed. ` +
+            `Without this plugin, the agent has no hooks, no state detection, and no messaging — it cannot function. ` +
+            `Open Profile → Config → Plugins and install ai-maestro-plugin manually, or check pm2 logs for the underlying install error.`,
+          profileDeepLink: `/?agent=${encodeURIComponent(id)}&tab=config`,
+        }, { status: result.status })
+      }
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data)
   } catch (error) {
-    console.error('[Wake] Error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to wake agent' },
-      { status: 500 }
-    )
+    // MF-003: Outer try-catch for unhandled service throws
+    console.error('[Wake POST] Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

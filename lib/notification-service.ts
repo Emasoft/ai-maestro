@@ -7,13 +7,10 @@
  * RFC: Message Delivery Notifications (Lola, 2026-01-24)
  */
 
-import { exec } from 'child_process'
-import { promisify } from 'util'
 import { getAgent, getAgentByName } from '@/lib/agent-registry'
 import { computeSessionName } from '@/types/agent'
 import { getSelfHostId, isSelf } from '@/lib/hosts-config-server.mjs'
-
-const execAsync = promisify(exec)
+import { getRuntime } from '@/lib/agent-runtime'
 
 // Configuration (can be overridden via environment variables)
 const NOTIFICATIONS_ENABLED = process.env.NOTIFICATIONS_ENABLED !== 'false'
@@ -43,33 +40,25 @@ export interface NotificationResult {
 }
 
 /**
- * Check if a tmux session exists
- */
-async function tmuxSessionExists(sessionName: string): Promise<boolean> {
-  try {
-    await execAsync(`tmux has-session -t "${sessionName}" 2>/dev/null`)
-    return true
-  } catch {
-    return false
-  }
-}
-
-/**
  * Send a notification to a tmux session
  * Uses echo to display the message without interrupting the agent's work
  */
 async function sendTmuxNotification(sessionName: string, message: string): Promise<void> {
-  // Escape single quotes in the message
-  const escapedMessage = message.replace(/'/g, "'\\''")
-
+  const runtime = getRuntime()
   // Target the first pane of the first window
   const target = `${sessionName}:0.0`
 
-  // Send message first, then Enter separately (tmux quirk - Enter must be separate for reliability)
-  // See: https://github.com/23blocks-OS/ai-maestro/issues/95
-  await execAsync(`tmux send-keys -t "${target}" "echo '${escapedMessage}'"`)
-  await new Promise(resolve => setTimeout(resolve, 100)) // 100ms delay
-  await execAsync(`tmux send-keys -t "${target}" Enter`)
+  // Uses literal flag to prevent tmux from misinterpreting key names in notification text
+  // NT-027: KNOWN LIMITATION — If the session is running a non-shell program (vim, REPL, TUI),
+  // this echo command will be typed as input to that program. Notifications are designed for
+  // idle shell prompts. Phase 2 should consider using `tmux display-message` as an alternative
+  // that overlays text without injecting keystrokes into the active program.
+  // Defense-in-depth: strip control characters to prevent terminal injection
+  const sanitized = message.replace(/[\x00-\x1F\x7F]/g, '')
+  // CC-P1-801: Escape single quotes to prevent shell injection when interpolated into echo '...'
+  // Replace ' with '\'' which ends the single-quoted string, adds an escaped literal quote, and reopens
+  const safeMessage = sanitized.replace(/'/g, "'\\''")
+  await runtime.sendKeys(target, `echo '${safeMessage}'`, { literal: true, enter: true })
 }
 
 /**
@@ -83,15 +72,16 @@ function formatNotification(options: NotificationOptions): string {
     ? `${fromName}@${fromHost}`
     : fromName
 
-  // Add priority indicator for urgent/high
-  const priorityPrefix = priority === 'urgent' ? '🔴 [URGENT] '
-    : priority === 'high' ? '🟠 [HIGH] '
+  // NT-028/NT-042: Plain text priority indicators for tmux notifications. Configurable in Phase 2.
+  const priorityPrefix = priority === 'urgent' ? '[URGENT] '
+    : priority === 'high' ? '[HIGH] '
     : ''
 
   // Format using template
+  // NT-024: Use replaceAll to handle templates with multiple occurrences of the same placeholder
   let message = NOTIFICATION_FORMAT
-    .replace('{from}', senderWithHost)
-    .replace('{subject}', subject)
+    .replaceAll('{from}', senderWithHost)
+    .replaceAll('{subject}', subject)
 
   return priorityPrefix + message
 }
@@ -148,7 +138,8 @@ export async function notifyAgent(options: NotificationOptions): Promise<Notific
     const sessionName = computeSessionName(agent.name, primarySession.index)
 
     // Check if tmux session exists
-    const sessionExists = await tmuxSessionExists(sessionName)
+    const runtime = getRuntime()
+    const sessionExists = await runtime.sessionExists(sessionName)
     if (!sessionExists) {
       console.log(`[Notify] tmux session ${sessionName} not found`)
       return { success: true, notified: false, reason: 'Session not active' }

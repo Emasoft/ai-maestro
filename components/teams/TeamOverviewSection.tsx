@@ -1,0 +1,321 @@
+'use client'
+
+import { useState, useEffect, useMemo } from 'react'
+import { Users, Save, X, Plus, Trash2, ListTodo, FileText, Clock, RefreshCw, AlertCircle, Shield } from 'lucide-react'
+import type { Team } from '@/types/team'
+import type { Agent } from '@/types/agent'
+
+interface TeamOverviewSectionProps {
+  team: Team
+  agents: Agent[]
+  agentsLoading?: boolean
+  agentsError?: string | null
+  onRetryAgents?: () => void
+  taskCount: number
+  docCount: number
+  onUpdateTeam: (updates: { name?: string; description?: string; agentIds?: string[] }) => Promise<void>
+}
+
+export default function TeamOverviewSection({ team, agents, agentsLoading, agentsError, onRetryAgents, taskCount, docCount, onUpdateTeam }: TeamOverviewSectionProps) {
+  const [editingName, setEditingName] = useState(false)
+  const [editingDesc, setEditingDesc] = useState(false)
+  const [name, setName] = useState(team.name)
+  const [description, setDescription] = useState(team.description || '')
+  const [showAddAgent, setShowAddAgent] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Sync local state when team prop changes (e.g. team switch or external update)
+  useEffect(() => {
+    setName(team.name)
+    setDescription(team.description || '')
+  }, [team.id, team.name, team.description])
+
+  const teamAgents = agents.filter(a => team.agentIds.includes(a.id))
+  const availableAgents = agents.filter(a => !team.agentIds.includes(a.id))
+
+  // Compute chief-of-staff display name from agents list
+  const cosDisplay = useMemo(() => {
+    const cosAgent = agents.find(a => a.id === team.chiefOfStaffId)
+    return cosAgent
+      ? (cosAgent.label || cosAgent.name || team.chiefOfStaffId)
+      : (team.chiefOfStaffId ? `Unknown (${team.chiefOfStaffId.slice(0, 8)}...)` : null)
+  }, [agents, team.chiefOfStaffId])
+
+  const handleSaveName = async () => {
+    try {
+      setError(null)
+      if (name.trim().length < 4) {
+        setError('Team name must be at least 4 characters')
+        return
+      }
+      if (name.trim() && name !== team.name) {
+        await onUpdateTeam({ name: name.trim() })
+      }
+      setEditingName(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save name')
+    }
+  }
+
+  const handleSaveDesc = async () => {
+    try {
+      setError(null)
+      if (description !== (team.description || '')) {
+        await onUpdateTeam({ description })
+      }
+      setEditingDesc(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save description')
+    }
+  }
+
+  const handleRemoveAgent = async (targetAgentId: string) => {
+    try {
+      setError(null)
+      // CC-P1-710: Prevent removing the Chief-of-Staff via the direct update path
+      if (team.chiefOfStaffId === targetAgentId) {
+        setError('Cannot remove the Chief-of-Staff from team members. Unassign them first.')
+        return
+      }
+      const newIds = team.agentIds.filter(id => id !== targetAgentId)
+      await onUpdateTeam({ agentIds: newIds })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove agent')
+    }
+  }
+
+  const handleAddAgent = async (agentId: string) => {
+    try {
+      setError(null)
+      // CC-007: Prevent adding duplicate agent members
+      if (team.agentIds.includes(agentId)) { setError('Agent is already a member'); return }
+      const newIds = [...team.agentIds, agentId]
+      await onUpdateTeam({ agentIds: newIds })
+      setShowAddAgent(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add agent')
+    }
+  }
+
+  return (
+    <div className="p-6 max-w-3xl">
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError(null)} className="p-0.5 hover:text-red-300"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+
+      {/* Team Name */}
+      <div className="mb-6">
+        {editingName ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="text-2xl font-bold bg-gray-800 border border-gray-700 rounded-lg px-3 py-1 text-white focus:outline-none focus:border-emerald-500 flex-1"
+              maxLength={64}
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') { setName(team.name); setEditingName(false) } }}
+            />
+            <button onClick={handleSaveName} className="p-2 hover:bg-gray-800 rounded-lg text-emerald-400"><Save className="w-4 h-4" /></button>
+            <button onClick={() => { setName(team.name); setEditingName(false) }} className="p-2 hover:bg-gray-800 rounded-lg text-gray-400"><X className="w-4 h-4" /></button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <h1
+              className="text-2xl font-bold text-white cursor-pointer hover:text-emerald-400 transition-colors"
+              onClick={() => setEditingName(true)}
+              title="Click to edit"
+            >
+              {team.name}
+            </h1>
+            {/* Team badge — all teams are closed (governance simplification) */}
+          </div>
+        )}
+      </div>
+
+      {/* COS info (all teams have a COS) */}
+      {team.chiefOfStaffId && (
+        <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+          <Shield className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+          <span className="text-sm text-indigo-300">
+            Chief-of-Staff: <strong>{cosDisplay}</strong>
+          </span>
+        </div>
+      )}
+
+      {/* Description */}
+      <div className="mb-8">
+        <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Description</label>
+        {editingDesc ? (
+          <div className="flex flex-col gap-2">
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') { setEditingDesc(false); setDescription(team.description || '') } }}
+              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500 resize-none"
+              rows={3}
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button onClick={handleSaveDesc} className="text-xs px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors">Save</button>
+              <button onClick={() => { setDescription(team.description || ''); setEditingDesc(false) }} className="text-xs px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <p
+            className="text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors"
+            onClick={() => setEditingDesc(true)}
+            title="Click to edit"
+          >
+            {team.description || 'No description. Click to add one.'}
+          </p>
+        )}
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-gray-400 mb-1">
+            <ListTodo className="w-4 h-4" />
+            <span className="text-xs">Tasks</span>
+          </div>
+          <p className="text-2xl font-bold text-white">{taskCount}</p>
+        </div>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-gray-400 mb-1">
+            <FileText className="w-4 h-4" />
+            <span className="text-xs">Documents</span>
+          </div>
+          <p className="text-2xl font-bold text-white">{docCount}</p>
+        </div>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-gray-400 mb-1">
+            <Clock className="w-4 h-4" />
+            <span className="text-xs">Last Meeting</span>
+          </div>
+          <p className="text-sm font-medium text-white">
+            {team.lastMeetingAt
+              ? new Date(team.lastMeetingAt).toLocaleDateString()
+              : 'Never'}
+          </p>
+        </div>
+      </div>
+
+      {/* Agent Roster */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-gray-400" />
+            <h3 className="text-sm font-medium text-white">Agents ({teamAgents.length})</h3>
+          </div>
+          <button
+            onClick={() => setShowAddAgent(!showAddAgent)}
+            className="text-xs px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors flex items-center gap-1"
+          >
+            <Plus className="w-3 h-3" />
+            Add Agent
+          </button>
+        </div>
+
+        {/* Add agent dropdown */}
+        {showAddAgent && (
+          <div className="mb-3 bg-gray-800 border border-gray-700 rounded-lg p-2 max-h-48 overflow-y-auto">
+            {agentsLoading ? (
+              <div className="flex items-center gap-2 px-2 py-3 justify-center">
+                <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs text-gray-400">Loading agents...</span>
+              </div>
+            ) : agentsError ? (
+              <div className="flex flex-col items-center gap-2 px-2 py-3">
+                <div className="flex items-center gap-1.5 text-red-400">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span className="text-xs">Failed to load agents</span>
+                </div>
+                <p className="text-xs text-gray-500 text-center">{agentsError}</p>
+                {onRetryAgents && (
+                  <button
+                    onClick={onRetryAgents}
+                    className="flex items-center gap-1 text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Retry
+                  </button>
+                )}
+              </div>
+            ) : availableAgents.length === 0 ? (
+              <p className="text-xs text-gray-500 px-2 py-1">No available agents to add</p>
+            ) : (
+              availableAgents.map(agent => (
+                <button
+                  key={agent.id}
+                  onClick={() => handleAddAgent(agent.id)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-700 transition-colors text-left"
+                >
+                  <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-[10px] text-gray-300 flex-shrink-0">
+                    {(agent.label || agent.name || '?')[0].toUpperCase()}
+                  </div>
+                  <span className="text-sm text-gray-300 truncate">{agent.label || agent.name || agent.id.slice(0, 8)}</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Agent list */}
+        <div className="space-y-1">
+          {agentsLoading ? (
+            <div className="flex items-center gap-2 py-4 justify-center">
+              <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-gray-400">Loading agents...</span>
+            </div>
+          ) : teamAgents.length === 0 ? (
+            <p className="text-sm text-gray-500 py-4 text-center">No agents in this team yet</p>
+          ) : (
+            teamAgents.map(agent => {
+              // Proposal 9 (2026-04-20): disable the Remove button for the
+              // Chief-of-Staff so the user doesn't click it and then hit the
+              // "Cannot remove the Chief-of-Staff" error toast. The server
+              // already rejects this path, but the UI should not even look
+              // clickable — COS removal requires unassigning the title
+              // first via the Title Assignment dialog (R9 governance).
+              const isCos = team.chiefOfStaffId === agent.id
+              return (
+                <div
+                  key={agent.id}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800/50 transition-colors group"
+                >
+                  <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs text-gray-300 flex-shrink-0">
+                    {(agent.label || agent.name || '?')[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-200 truncate">{agent.label || agent.name || agent.id.slice(0, 8)}</p>
+                    <p className="text-xs text-gray-500 truncate">{agent.session?.status === 'online' ? 'Online' : 'Offline'}</p>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveAgent(agent.id)}
+                    disabled={isCos}
+                    className={`p-1 rounded transition-all ${
+                      isCos
+                        ? 'text-gray-700 cursor-not-allowed opacity-40'
+                        : 'text-gray-600 hover:bg-red-900/30 hover:text-red-400 opacity-0 group-hover:opacity-100'
+                    }`}
+                    title={isCos
+                      ? 'Chief-of-Staff cannot be removed directly — reassign the CHIEF-OF-STAFF title first, then remove.'
+                      : 'Remove from team'}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

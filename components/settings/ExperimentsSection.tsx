@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { FlaskConical, Users, Layers, ToggleLeft, ToggleRight, AlertTriangle } from 'lucide-react'
+import { FlaskConical, ToggleLeft, ToggleRight, AlertTriangle } from 'lucide-react'
 
 interface FeatureFlag {
   id: string
@@ -20,7 +20,7 @@ const FEATURE_FLAGS: FeatureFlag[] = [
 export default function ExperimentsSection() {
   const [flags, setFlags] = useState<Record<string, boolean>>({})
 
-  // Load initial state from localStorage
+  // Load initial state from localStorage (client-side experiments)
   useEffect(() => {
     const loadedFlags: Record<string, boolean> = {}
     FEATURE_FLAGS.forEach((flag) => {
@@ -30,13 +30,17 @@ export default function ExperimentsSection() {
   }, [])
 
   const toggleFlag = (flag: FeatureFlag) => {
-    const newValue = !flags[flag.id]
-    setFlags((prev) => ({ ...prev, [flag.id]: newValue }))
-    localStorage.setItem(flag.storageKey, String(newValue))
+    // Derive newValue from the previous state inside the updater to avoid stale-closure reads
+    setFlags((prev) => {
+      const newValue = !prev[flag.id]
+      try { localStorage.setItem(flag.storageKey, String(newValue)) } catch { /* storage unavailable */ }
+      return { ...prev, [flag.id]: newValue }
+    })
   }
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      {/* Client-side Experiments */}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <FlaskConical className="w-6 h-6 text-purple-400" />

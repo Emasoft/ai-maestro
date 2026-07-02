@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # AI Maestro - Version Bump Script
 # Centralizes version management across all files
 #
@@ -20,6 +20,16 @@ NC='\033[0m'
 # Get script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Source ecosystem constants (single source of truth for marketplace/plugin names).
+# Fallback to hardcoded values if the file is missing (e.g. during early bootstrap).
+if [ -f "$SCRIPT_DIR/ecosystem-config.sh" ]; then
+    # shellcheck source=./ecosystem-config.sh
+    source "$SCRIPT_DIR/ecosystem-config.sh"
+fi
+: "${MARKETPLACE_REPO:=Emasoft/ai-maestro-plugins}"
+: "${MAIN_PLUGIN_NAME:=ai-maestro-plugin}"
+: "${MARKETPLACE_NAME:=ai-maestro-plugins}"
 
 # Read current version from version.json
 VERSION_FILE="$PROJECT_ROOT/version.json"
@@ -63,9 +73,11 @@ case "$1" in
         exit 0
         ;;
     *)
-        # Validate version format
+        # Validate version format (digits and dots only).
+        # SF-043: This also guards against characters like '|' that would
+        # break the sed delimiter used in update_file().
         if [[ ! "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo -e "${RED}Error: Invalid version format. Use X.Y.Z${NC}"
+            echo -e "${RED}Error: Invalid version format. Use X.Y.Z (digits and dots only)${NC}"
             exit 1
         fi
         NEW_VERSION="$1"
@@ -75,9 +87,36 @@ esac
 echo -e "${GREEN}New version: ${NEW_VERSION}${NC}"
 echo ""
 
+# Early exit if version is already at target (v0.21.25 fix).
+# Without this guard, running `bump-version.sh 0.21.25` when already at 0.21.25
+# would proceed to sed replacements where pattern == replacement, which on some
+# BSD sed versions causes confusing errors.
+if [ "$CURRENT_VERSION" = "$NEW_VERSION" ]; then
+    echo -e "${YELLOW}Version is already ${NEW_VERSION}, nothing to do${NC}"
+    exit 0
+fi
+
 # Files to update
 FILES_UPDATED=0
 
+# Escape dots in version strings so they match literally in regex patterns.
+# Without this, "0.21.25" would match "0X21Y25" since dot is a regex wildcard.
+CURRENT_VERSION_RE=$(echo "$CURRENT_VERSION" | sed 's/\./\\./g')
+
+# Portable in-place sed — works on both macOS (BSD) and Linux (GNU).
+# The old `sed -i '' ...` syntax is BSD-specific and breaks on Linux.
+# Using `sed -i.bak` creates a temporary backup file (works everywhere),
+# then we remove the .bak file immediately after.
+_sed_inplace() {
+    local file="$1"
+    shift
+    sed -i.bak "$@" "$file" && rm -f "${file}.bak"
+}
+
+# update_file uses escaped dots in the sed pattern (via CURRENT_VERSION_RE)
+# but literal dots in grep (grep -F for fixed-string match).
+# SF-043: The sed delimiter is '|'. Version strings are validated to contain
+# only digits and dots, so they cannot break the delimiter.
 update_file() {
     local file="$1"
     local pattern="$2"
@@ -85,20 +124,26 @@ update_file() {
     local description="$4"
 
     if [ -f "$file" ]; then
-        if grep -q "$pattern" "$file" 2>/dev/null; then
-            sed -i '' "s|$pattern|$replacement|g" "$file"
+        if grep -qF "$pattern" "$file" 2>/dev/null; then
+            # Build a regex-safe version of the pattern by escaping dots in the version
+            local regex_pattern="${pattern//$CURRENT_VERSION/$CURRENT_VERSION_RE}"
+            _sed_inplace "$file" "s|$regex_pattern|$replacement|g"
             echo -e "  ${GREEN}✓${NC} $description"
             FILES_UPDATED=$((FILES_UPDATED + 1))
         fi
     fi
 }
 
+# Compute "Month Year" string for display versions in ai-index.html
+# e.g. "February 2026"
+MONTH_YEAR=$(date +"%B %Y")
+
 echo "Updating files..."
 echo ""
 
 # 1. version.json
-sed -i '' "s|\"version\": \"$CURRENT_VERSION\"|\"version\": \"$NEW_VERSION\"|g" "$VERSION_FILE"
-sed -i '' "s|\"releaseDate\": \"[^\"]*\"|\"releaseDate\": \"$(date +%Y-%m-%d)\"|g" "$VERSION_FILE"
+_sed_inplace "$VERSION_FILE" "s|\"version\": \"$CURRENT_VERSION_RE\"|\"version\": \"$NEW_VERSION\"|g"
+_sed_inplace "$VERSION_FILE" "s|\"releaseDate\": \"[^\"]*\"|\"releaseDate\": \"$(date +%Y-%m-%d)\"|g"
 echo -e "  ${GREEN}✓${NC} version.json"
 FILES_UPDATED=$((FILES_UPDATED + 1))
 
@@ -132,30 +177,69 @@ update_file "$PROJECT_ROOT/docs/index.html" \
     "<span>v$NEW_VERSION</span>" \
     "docs/index.html (display)"
 
-# 7. docs/ai-index.html
+# 7. docs/ai-index.html (schema softwareVersion)
 update_file "$PROJECT_ROOT/docs/ai-index.html" \
     "\"softwareVersion\": \"$CURRENT_VERSION\"" \
     "\"softwareVersion\": \"$NEW_VERSION\"" \
-    "docs/ai-index.html"
+    "docs/ai-index.html (schema)"
 
-# 8. docs/BACKLOG.md (current version header)
+# 7b. docs/ai-index.html (prose "Version:" line)
+update_file "$PROJECT_ROOT/docs/ai-index.html" \
+    "<p><strong>Version:</strong> $CURRENT_VERSION" \
+    "<p><strong>Version:</strong> $NEW_VERSION" \
+    "docs/ai-index.html (prose version)"
+
+# 7c. docs/ai-index.html (Quick Facts "Current Version:" line)
+update_file "$PROJECT_ROOT/docs/ai-index.html" \
+    "<li><strong>Current Version:</strong> $CURRENT_VERSION" \
+    "<li><strong>Current Version:</strong> $NEW_VERSION" \
+    "docs/ai-index.html (quick facts)"
+
+# 8. docs/ai-index.html (Version: display text)
+if [ -f "$PROJECT_ROOT/docs/ai-index.html" ]; then
+    _sed_inplace "$PROJECT_ROOT/docs/ai-index.html" \
+        "s|<strong>Version:</strong> $CURRENT_VERSION_RE ([A-Za-z][A-Za-z]* [0-9][0-9]*)|<strong>Version:</strong> $NEW_VERSION ($MONTH_YEAR)|g"
+    echo -e "  ${GREEN}✓${NC} docs/ai-index.html (Version display)"
+    FILES_UPDATED=$((FILES_UPDATED + 1))
+fi
+
+# 9. docs/ai-index.html (Current Version: display text)
+if [ -f "$PROJECT_ROOT/docs/ai-index.html" ]; then
+    _sed_inplace "$PROJECT_ROOT/docs/ai-index.html" \
+        "s|<strong>Current Version:</strong> $CURRENT_VERSION_RE ([A-Za-z][A-Za-z]* [0-9][0-9]*)|<strong>Current Version:</strong> $NEW_VERSION ($MONTH_YEAR)|g"
+    echo -e "  ${GREEN}✓${NC} docs/ai-index.html (Current Version display)"
+    FILES_UPDATED=$((FILES_UPDATED + 1))
+fi
+
+# 10. docs/BACKLOG.md (current version header)
 if [ -f "$PROJECT_ROOT/docs/BACKLOG.md" ]; then
-    sed -i '' "s|\*\*Current Version:\*\* v$CURRENT_VERSION|\*\*Current Version:\*\* v$NEW_VERSION|g" "$PROJECT_ROOT/docs/BACKLOG.md"
+    _sed_inplace "$PROJECT_ROOT/docs/BACKLOG.md" "s|\*\*Current Version:\*\* v$CURRENT_VERSION_RE|\*\*Current Version:\*\* v$NEW_VERSION|g"
     echo -e "  ${GREEN}✓${NC} docs/BACKLOG.md (header)"
     FILES_UPDATED=$((FILES_UPDATED + 1))
 fi
 
 echo ""
-echo -e "${GREEN}Updated $FILES_UPDATED files${NC}"
+echo -e "${GREEN}Applied $FILES_UPDATED replacements across files${NC}"
 echo ""
 
+# R17: Update ai-maestro-plugin from marketplace for all agents
+echo "Updating ai-maestro-plugin from marketplace..."
+# Ensure marketplace is registered
+claude plugin marketplace add "$MARKETPLACE_REPO" 2>/dev/null || true
+# Update the plugin (pulls latest version)
+claude plugin update "${MAIN_PLUGIN_NAME}@${MARKETPLACE_NAME}" 2>/dev/null && \
+  echo -e "  ${GREEN}✓${NC} ${MAIN_PLUGIN_NAME} updated from marketplace" || \
+  echo -e "  ${YELLOW}⚠${NC} ${MAIN_PLUGIN_NAME} update skipped (marketplace or plugin not available)"
+
 # Show what changed
+echo ""
 echo "Changes:"
 git diff --stat 2>/dev/null || true
 echo ""
 
 echo -e "${YELLOW}Next steps:${NC}"
 echo "  1. Review changes: git diff"
-echo "  2. Commit: git add -A && git commit -m \"chore: bump version to $NEW_VERSION\""
-echo "  3. Push: git push"
+echo "  2. Stage: git add version.json package.json scripts/remote-install.sh README.md docs/index.html docs/ai-index.html docs/BACKLOG.md"
+echo "  3. Commit: git commit -m \"chore: bump version to $NEW_VERSION\""
+echo "  4. Push: git push"
 echo ""

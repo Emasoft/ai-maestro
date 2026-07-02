@@ -1,9 +1,6 @@
-import { NextResponse } from 'next/server'
-import { exec } from 'child_process'
-import { promisify } from 'util'
-import { loadPersistedSessions, unpersistSession } from '@/lib/session-persistence'
-
-const execAsync = promisify(exec)
+import { NextRequest, NextResponse } from 'next/server'
+import { enforceAuth } from '@/lib/route-auth'
+import { listRestorableSessions, restoreSessions, deletePersistedSession } from '@/services/sessions-service'
 
 /**
  * GET /api/sessions/restore
@@ -11,23 +8,13 @@ const execAsync = promisify(exec)
  */
 export async function GET() {
   try {
-    const persistedSessions = loadPersistedSessions()
-
-    // Get currently active tmux sessions
-    const { stdout } = await execAsync('tmux list-sessions -F "#{session_name}" 2>/dev/null || echo ""')
-    const activeSessions = stdout.trim().split('\n').filter(Boolean)
-
-    // Filter to only sessions that don't currently exist
-    const restorableSessions = persistedSessions.filter(
-      session => !activeSessions.includes(session.id)
-    )
-
-    return NextResponse.json({
-      sessions: restorableSessions,
-      count: restorableSessions.length
-    })
+    // NT-013: listRestorableSessions returns raw data, not a ServiceResult.
+    // Phase 2 standardization will migrate this to the { data, error, status } pattern.
+    const result = await listRestorableSessions()
+    return NextResponse.json(result)
   } catch (error) {
-    console.error('Failed to load restorable sessions:', error)
+    const errMsg = error instanceof Error ? error.message : String(error)
+    console.error('Failed to load restorable sessions:', errMsg)
     return NextResponse.json({ error: 'Failed to load restorable sessions' }, { status: 500 })
   }
 }
@@ -36,59 +23,36 @@ export async function GET() {
  * POST /api/sessions/restore
  * Restores one or all persisted sessions
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
-    const { sessionId, all } = await request.json()
+    let body
+    try { body = await request.json() } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    const { sessionId, all } = body
 
-    const persistedSessions = loadPersistedSessions()
-    const sessionsToRestore = all
-      ? persistedSessions
-      : persistedSessions.filter(s => s.id === sessionId)
-
-    if (sessionsToRestore.length === 0) {
-      return NextResponse.json({ error: 'No sessions to restore' }, { status: 404 })
+    // Validate types: sessionId must be string if provided, all must be boolean if provided
+    if (sessionId !== undefined && typeof sessionId !== 'string') {
+      return NextResponse.json({ error: 'Invalid sessionId — must be a string' }, { status: 400 })
+    }
+    if (all !== undefined && typeof all !== 'boolean') {
+      return NextResponse.json({ error: 'Invalid all — must be a boolean' }, { status: 400 })
     }
 
-    const results = []
+    const result = await restoreSessions({ sessionId, all })
 
-    for (const session of sessionsToRestore) {
-      try {
-        // Check if session already exists
-        const { stdout: existingCheck } = await execAsync(
-          `tmux has-session -t "${session.id}" 2>&1 || echo "not_found"`
-        )
-
-        if (existingCheck.includes('not_found')) {
-          // Create the session
-          await execAsync(
-            `tmux new-session -d -s "${session.id}" -c "${session.workingDirectory}"`
-          )
-          results.push({ sessionId: session.id, status: 'restored' })
-        } else {
-          results.push({ sessionId: session.id, status: 'already_exists' })
-        }
-      } catch (error) {
-        console.error(`Failed to restore session ${session.id}:`, error)
-        results.push({ sessionId: session.id, status: 'failed' })
-      }
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    const restored = results.filter(r => r.status === 'restored').length
-    const failed = results.filter(r => r.status === 'failed').length
-    const alreadyExisted = results.filter(r => r.status === 'already_exists').length
-
-    return NextResponse.json({
-      success: true,
-      results,
-      summary: {
-        restored,
-        failed,
-        alreadyExisted,
-        total: results.length
-      }
-    })
+    return NextResponse.json({ success: true, ...result.data }, { status: result.status })
   } catch (error) {
-    console.error('Failed to restore sessions:', error)
+    const errMsg = error instanceof Error ? error.message : String(error)
+    console.error('Failed to restore sessions:', errMsg)
     return NextResponse.json({ error: 'Failed to restore sessions' }, { status: 500 })
   }
 }
@@ -97,24 +61,25 @@ export async function POST(request: Request) {
  * DELETE /api/sessions/restore?sessionId=<id>
  * Permanently deletes a persisted session from storage
  */
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
+  // #114: Authenticate before any side effect.
+  const authErr = enforceAuth(request)
+  if (authErr) return authErr
+
   try {
     const { searchParams } = new URL(request.url)
     const sessionId = searchParams.get('sessionId')
 
-    if (!sessionId) {
-      return NextResponse.json({ error: 'Session ID is required' }, { status: 400 })
+    const result = await deletePersistedSession(sessionId || '')
+
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    const success = unpersistSession(sessionId)
-
-    if (!success) {
-      return NextResponse.json({ error: 'Failed to delete session' }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
-    console.error('Failed to delete persisted session:', error)
+    const errMsg = error instanceof Error ? error.message : String(error)
+    console.error('Failed to delete persisted session:', errMsg)
     return NextResponse.json({ error: 'Failed to delete session' }, { status: 500 })
   }
 }

@@ -1,0 +1,171 @@
+/**
+ * MCP Server Discovery API
+ *
+ * Discovers tools, resources, and prompts exposed by an MCP server
+ * using the mcp_discovery.py script.
+ *
+ * POST /api/settings/mcp-discover
+ *
+ * Request body:
+ *   configPath: string     — path to .mcp.json file (must be under ~/.claude/plugins/)
+ *   serverName: string     — name of the server inside the config file
+ *   format?: 'json' | 'text' | 'llm'  — output format (default: 'json')
+ *   raw?: boolean          — if true, returns raw unprocessed output from the script
+ *   method?: string        — JSON-RPC method to execute (e.g. 'tools/list', 'resources/list', 'prompts/list')
+ *   toolName?: string      — tool name for tools/call method
+ *   toolArgs?: Record<string, string>  — arguments for tools/call
+ *   timeout?: number       — max seconds to wait (default: 25)
+ *
+ * Response (format=json):
+ *   { tools: [...], resources: [...], prompts: [...], serverInfo: {...}, capabilities: {...} }
+ *
+ * Response (format=text or raw=true):
+ *   { output: string }
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { readFile, realpath } from 'fs/promises'
+import { existsSync, writeFileSync, unlinkSync } from 'fs'
+import { dirname, join, resolve } from 'path'
+import os from 'os'
+import { enforceAuth } from '@/lib/route-auth'
+
+export const dynamic = 'force-dynamic'
+
+const PLUGINS_BASE = `${os.homedir()}/.claude/plugins`
+const PROJECT_ROOT = process.cwd()
+const SCRIPT_PATH = join(PROJECT_ROOT, 'scripts_dev', 'mcp_discovery.py')
+
+/** Sanitize a string for safe shell use */
+function shellSafe(input: string): string {
+  return input.replace(/[^a-zA-Z0-9._/@:+=-]/g, '')
+}
+
+export async function POST(req: NextRequest) {
+  // MCP discovery spawns a Python subprocess that reads the caller-
+  // supplied configPath. Any authenticated caller may discover tools;
+  // agents legitimately need this for the mcp-discovery skill.
+  const authErr = enforceAuth(req)
+  if (authErr) return authErr
+
+  const body = await req.json()
+  const { configPath, serverName, format, raw, method, toolName, toolArgs, timeout } = body as {
+    configPath?: string
+    serverName?: string
+    format?: 'json' | 'text' | 'llm'
+    raw?: boolean
+    method?: string
+    toolName?: string
+    toolArgs?: Record<string, string>
+    timeout?: number
+  }
+
+  if (!serverName) {
+    return NextResponse.json({ error: 'serverName is required' }, { status: 400 })
+  }
+  if (!existsSync(SCRIPT_PATH)) {
+    return NextResponse.json({ error: 'MCP discovery script not found at scripts_dev/mcp_discovery.py' }, { status: 500 })
+  }
+
+  // Two modes:
+  // 1. configPath — plugin-based MCP with .mcp.json file (must be under ~/.claude/plugins/)
+  // 2. serverConfig — inline JSON for standalone MCP (from ~/.claude.json, no file on disk)
+  const { serverConfig } = body as { serverConfig?: Record<string, unknown> }
+  let tmpFile: string
+
+  if (configPath) {
+    // Plugin-based: read from .mcp.json file
+    // Security: use realpath to resolve symlinks and ".." before containment check
+    const resolved = resolve(configPath)
+    if (!existsSync(resolved)) {
+      return NextResponse.json({ error: 'Config file not found' }, { status: 404 })
+    }
+    let realResolved: string
+    try {
+      realResolved = await realpath(resolved)
+    } catch {
+      return NextResponse.json({ error: 'Config file not accessible' }, { status: 404 })
+    }
+    if (!realResolved.startsWith(PLUGINS_BASE + '/')) {
+      return NextResponse.json({ error: 'Access denied — configPath must be under ~/.claude/plugins/' }, { status: 403 })
+    }
+    // Resolve ${CLAUDE_PLUGIN_ROOT} and other variables in .mcp.json
+    const pluginRoot = dirname(resolved)
+    let mcpJsonContent = await readFile(resolved, 'utf-8')
+    mcpJsonContent = mcpJsonContent.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, pluginRoot)
+    tmpFile = join(os.tmpdir(), `mcp-discover-${Date.now()}.json`)
+    writeFileSync(tmpFile, mcpJsonContent)
+  } else if (serverConfig && typeof serverConfig === 'object') {
+    // Standalone: create temp .mcp.json from inline server config
+    const safeName = shellSafe(serverName)
+    const mcpJson = { mcpServers: { [safeName]: serverConfig } }
+    tmpFile = join(os.tmpdir(), `mcp-discover-${Date.now()}.json`)
+    writeFileSync(tmpFile, JSON.stringify(mcpJson))
+  } else {
+    return NextResponse.json({ error: 'Either configPath or serverConfig is required' }, { status: 400 })
+  }
+
+  // Build command arguments as an array for execFileSync (no shell interpolation)
+  const safeName = shellSafe(serverName)
+  const execArgs: string[] = [
+    'run',
+    SCRIPT_PATH,
+    tmpFile,
+    safeName,
+  ]
+
+  // Output format
+  const fmt = format || (raw ? 'text' : 'json')
+  execArgs.push('--format', shellSafe(fmt))
+
+  if (raw) execArgs.push('--dangerously-output-the-raw-response')
+
+  // Timeout
+  execArgs.push('--timeout', String(Math.min(timeout || 25, 60)))
+  execArgs.push('--no-prompt-key')
+
+  // Method execution
+  if (method) {
+    execArgs.push('--method', shellSafe(method))
+    if (toolName) execArgs.push('--tool-name', shellSafe(toolName))
+    if (toolArgs) {
+      for (const [k, v] of Object.entries(toolArgs)) {
+        execArgs.push('--tool-arg', `${shellSafe(k)}=${shellSafe(String(v))}`)
+      }
+    }
+  }
+
+  try {
+    const { execFileSync } = await import('child_process')
+    // execFileSync bypasses the shell, preventing command injection via interpolated args
+    const output = execFileSync('uv', execArgs, {
+      timeout: (Math.min(timeout || 25, 60) + 5) * 1000,
+      maxBuffer: 2 * 1024 * 1024,
+      stdio: ['pipe', 'pipe', 'ignore'],
+      env: { ...process.env, ...(configPath ? { CLAUDE_PLUGIN_ROOT: dirname(resolve(configPath)) } : {}) },
+    }).toString()
+
+    // Clean up temp file
+    try { unlinkSync(tmpFile) } catch { /* ignore */ }
+
+    // Return based on format
+    if (fmt === 'json' && !raw) {
+      try {
+        const data = JSON.parse(output)
+        return NextResponse.json({
+          tools: data.tools || [],
+          resources: data.resources || [],
+          prompts: data.prompts || [],
+          serverInfo: data.serverInfo || null,
+          capabilities: data.capabilities || null,
+        })
+      } catch {
+        return NextResponse.json({ output, error: 'Failed to parse JSON output' })
+      }
+    }
+    return NextResponse.json({ output })
+  } catch (err) {
+    try { unlinkSync(tmpFile) } catch { /* ignore */ }
+    return NextResponse.json({ error: `MCP discovery failed: ${String(err).substring(0, 500)}`, tools: [] }, { status: 500 })
+  }
+}

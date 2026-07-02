@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Mail, Send, Inbox, Archive, Trash2, AlertCircle, Clock, CheckCircle, Forward, Copy, ChevronDown, Server, ShieldCheck, Globe, HelpCircle, ExternalLink } from 'lucide-react'
+import { Mail, Send, Inbox, Archive, Trash2, AlertCircle, Clock, CheckCircle, Forward, Copy, ChevronDown, Server, ShieldCheck, Globe, HelpCircle, Lock, AlertTriangle, X } from 'lucide-react'
 import type { Message, MessageSummary } from '@/lib/messageQueue'
 
 /**
@@ -19,11 +19,11 @@ interface MessageCenterProps {
   sessionName: string
   agentId?: string  // Primary identifier when available
   allAgents: AgentRecipient[]
-  isVisible?: boolean
   hostUrl?: string  // Base URL for remote hosts (e.g., http://100.80.12.6:23000)
+  isActive?: boolean  // Only fetch data when active (prevents API flood with many agents)
 }
 
-export default function MessageCenter({ sessionName, agentId, allAgents, isVisible = true, hostUrl }: MessageCenterProps) {
+export default function MessageCenter({ sessionName, agentId, allAgents, hostUrl, isActive = false }: MessageCenterProps) {
   // Use agentId as primary identifier if available, fall back to sessionName
   const messageIdentifier = agentId || sessionName
   // Base URL for API calls - empty for local, full URL for remote hosts
@@ -33,11 +33,13 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [view, setView] = useState<'inbox' | 'sent' | 'compose'>('inbox')
   const [unreadCount, setUnreadCount] = useState(0)
-  const [sentCount, setSentCount] = useState(0)
   const [loading, setLoading] = useState(false)
-  const [hasInitialized, setHasInitialized] = useState(false)
   const [isForwarding, setIsForwarding] = useState(false)
   const [forwardingOriginalMessage, setForwardingOriginalMessage] = useState<Message | null>(null)
+  const [inboxLimit, setInboxLimit] = useState(25)  // Pagination: number of inbox messages to load
+  const [sentLimit, setSentLimit] = useState(25)    // Pagination: number of sent messages to load
+  const [hasMoreInbox, setHasMoreInbox] = useState(false)
+  const [hasMoreSent, setHasMoreSent] = useState(false)
 
   // Compose form state
   const [composeTo, setComposeTo] = useState('')
@@ -56,36 +58,87 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
   const toInputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
+  const copyDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Toast notification state (replaces native alert/confirm)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Show a toast notification that auto-dismisses
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast({ message, type })
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000)
+  }, [])
+
+  // Cleanup toast and delete confirmation timers on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current)
+    }
+  }, [])
+
+  // Governance reachability state
+  const [reachableAgentIds, setReachableAgentIds] = useState<string[] | null>(null) // null = not loaded yet
+  const [governanceError, setGovernanceError] = useState<string | null>(null)
 
   // External agent info toggle
   const [showExternalAgentInfo, setShowExternalAgentInfo] = useState(false)
 
-  // Fetch inbox messages
-  const fetchMessages = useCallback(async () => {
+  // Fetch inbox messages with pagination
+  const fetchMessages = useCallback(async (limit?: number) => {
     try {
-      const response = await fetch(`${apiBaseUrl}/api/messages?agent=${encodeURIComponent(messageIdentifier)}&box=inbox`)
+      const fetchLimit = limit ?? inboxLimit
+      const response = await fetch(`${apiBaseUrl}/api/messages?agent=${encodeURIComponent(messageIdentifier)}&box=inbox&limit=${fetchLimit}`)
+      if (!response.ok) return
       const data = await response.json()
-      setMessages(data.messages || [])
+      const msgs = data.messages || []
+      setMessages(msgs)
+      // If we got exactly the limit, there may be more
+      setHasMoreInbox(msgs.length === fetchLimit)
     } catch (error) {
       console.error('Error fetching messages:', error)
     }
-  }, [messageIdentifier, apiBaseUrl])
+  }, [messageIdentifier, apiBaseUrl, inboxLimit])
 
-  // Fetch sent messages
-  const fetchSentMessages = useCallback(async () => {
+  // Fetch sent messages with pagination
+  const fetchSentMessages = useCallback(async (limit?: number) => {
     try {
-      const response = await fetch(`${apiBaseUrl}/api/messages?agent=${encodeURIComponent(messageIdentifier)}&box=sent`)
+      const fetchLimit = limit ?? sentLimit
+      const response = await fetch(`${apiBaseUrl}/api/messages?agent=${encodeURIComponent(messageIdentifier)}&box=sent&limit=${fetchLimit}`)
+      if (!response.ok) return
       const data = await response.json()
-      setSentMessages(data.messages || [])
+      const msgs = data.messages || []
+      setSentMessages(msgs)
+      // If we got exactly the limit, there may be more
+      setHasMoreSent(msgs.length === fetchLimit)
     } catch (error) {
       console.error('Error fetching sent messages:', error)
     }
-  }, [messageIdentifier, apiBaseUrl])
+  }, [messageIdentifier, apiBaseUrl, sentLimit])
+
+  // Load more inbox messages
+  const loadMoreInbox = useCallback(() => {
+    const newLimit = inboxLimit + 25
+    setInboxLimit(newLimit)
+    fetchMessages(newLimit)
+  }, [inboxLimit, fetchMessages])
+
+  // Load more sent messages
+  const loadMoreSent = useCallback(() => {
+    const newLimit = sentLimit + 25
+    setSentLimit(newLimit)
+    fetchSentMessages(newLimit)
+  }, [sentLimit, fetchSentMessages])
 
   // Fetch unread count
   const fetchUnreadCount = useCallback(async () => {
     try {
       const response = await fetch(`${apiBaseUrl}/api/messages?agent=${encodeURIComponent(messageIdentifier)}&action=unread-count`)
+      if (!response.ok) return
       const data = await response.json()
       setUnreadCount(data.count || 0)
     } catch (error) {
@@ -93,21 +146,11 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
     }
   }, [messageIdentifier, apiBaseUrl])
 
-  // Fetch sent count
-  const fetchSentCount = useCallback(async () => {
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/messages?agent=${encodeURIComponent(messageIdentifier)}&action=sent-count`)
-      const data = await response.json()
-      setSentCount(data.count || 0)
-    } catch (error) {
-      console.error('Error fetching sent count:', error)
-    }
-  }, [messageIdentifier, apiBaseUrl])
-
   // Load message details
-  const loadMessage = async (messageId: string, box: 'inbox' | 'sent' = 'inbox') => {
+  const loadMessage = useCallback(async (messageId: string, box: 'inbox' | 'sent' = 'inbox') => {
     try {
       const response = await fetch(`${apiBaseUrl}/api/messages?agent=${encodeURIComponent(messageIdentifier)}&id=${messageId}&box=${box}`)
+      if (!response.ok) return
       const message = await response.json()
       setSelectedMessage(message)
 
@@ -122,12 +165,15 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
     } catch (error) {
       console.error('Error loading message:', error)
     }
-  }
+  }, [messageIdentifier, apiBaseUrl, fetchMessages, fetchUnreadCount])
 
   // Send message
   const sendMessage = async () => {
+    // SF-017: Prevent double-submit while a send is already in flight
+    if (loading) return
+
     if (!composeTo || !composeSubject || !composeMessage) {
-      alert('Please fill in all fields')
+      showToast('Please fill in all fields', 'error')
       return
     }
 
@@ -143,7 +189,7 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messageId: forwardingOriginalMessage.id,
-            fromSession: sessionName,
+            fromSession: messageIdentifier,
             toSession: composeTo,
             forwardNote: forwardNote || undefined,
           }),
@@ -159,12 +205,13 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
           setIsForwarding(false)
           setForwardingOriginalMessage(null)
           setView('inbox')
-          alert('Message forwarded successfully!')
+          showToast('Message forwarded successfully!', 'success')
           fetchMessages()
           fetchUnreadCount()
+          fetchSentMessages()
         } else {
           const error = await response.json()
-          alert(`Failed to forward message: ${error.error}`)
+          showToast(`Failed to forward: ${error.error}`, 'error')
         }
       } else {
         // Regular message send
@@ -172,7 +219,7 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            from: sessionName,
+            from: messageIdentifier,
             to: composeTo,
             subject: composeSubject,
             priority: composePriority,
@@ -191,23 +238,37 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
           setComposePriority('normal')
           setComposeType('request')
           setView('inbox')
-          alert('Message sent successfully!')
+          showToast('Message sent successfully!', 'success')
+          fetchSentMessages()
         } else {
-          alert('Failed to send message')
+          const errorData = await response.json().catch(() => ({ error: 'Send failed' }))
+          if (errorData.error?.includes('governance') || errorData.error?.includes('closed team') || response.status === 403) {
+            setGovernanceError(errorData.error || 'Message blocked by team governance policy')
+          }
+          showToast(errorData.error || 'Failed to send message', 'error')
         }
       }
     } catch (error) {
       console.error('Error sending message:', error)
-      alert('Error sending message')
+      showToast('Error sending message', 'error')
     } finally {
       setLoading(false)
     }
   }
 
-  // Delete message
+  // Delete message (with confirmation via pendingDelete state)
   const deleteMessage = async (messageId: string) => {
-    if (!confirm('Are you sure you want to delete this message?')) return
+    if (pendingDelete !== messageId) {
+      // First click: show confirmation
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current)
+      setPendingDelete(messageId)
+      showToast('Click delete again to confirm', 'info')
+      deleteTimerRef.current = setTimeout(() => setPendingDelete(null), 5000) // Reset after 5s
+      return
+    }
 
+    // Second click: actually delete
+    setPendingDelete(null)
     try {
       await fetch(`${apiBaseUrl}/api/messages?agent=${encodeURIComponent(messageIdentifier)}&id=${messageId}`, {
         method: 'DELETE',
@@ -215,8 +276,10 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
       setSelectedMessage(null)
       fetchMessages()
       fetchUnreadCount()
+      showToast('Message deleted', 'success')
     } catch (error) {
       console.error('Error deleting message:', error)
+      showToast('Failed to delete message', 'error')
     }
   }
 
@@ -324,35 +387,48 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
     setView('compose')
   }
 
-  // Only fetch messages when visible for the first time, then set up polling
+  // Fetch reachable agents for governance filtering (guarded by isActive to prevent API flood with 40+ agents)
   useEffect(() => {
-    if (!isVisible || hasInitialized) return
+    if (!isActive) return
+    const fetchReachable = async () => {
+      try {
+        if (!agentId) return
+        const res = await fetch(`${apiBaseUrl}/api/governance/reachable?agentId=${agentId}`)
+        if (res.ok) {
+          const data = await res.json()
+          setReachableAgentIds(data.reachableAgentIds)
+        }
+      } catch {
+        // If endpoint not available, allow all agents (backwards compatible)
+        setReachableAgentIds(null)
+      }
+    }
+    fetchReachable()
+  }, [agentId, apiBaseUrl, isActive])
 
-    setHasInitialized(true)
+  // Only fetch when this agent is active (prevents API flood with 40+ agents)
+  useEffect(() => {
+    if (!isActive) return
     fetchMessages()
     fetchSentMessages()
     fetchUnreadCount()
-    fetchSentCount()
-  }, [isVisible, hasInitialized, fetchMessages, fetchSentMessages, fetchUnreadCount, fetchSentCount])
+  }, [messageIdentifier, isActive, fetchMessages, fetchSentMessages, fetchUnreadCount])
 
-  // Set up polling interval only when visible
+  // Polling - only when active
   useEffect(() => {
-    if (!isVisible || !hasInitialized) return
-
+    if (!isActive) return
     const interval = setInterval(() => {
       fetchMessages()
       fetchSentMessages()
       fetchUnreadCount()
-      fetchSentCount()
-    }, 10000) // Refresh every 10 seconds
+    }, 10000)
     return () => clearInterval(interval)
-  }, [isVisible, hasInitialized, fetchMessages, fetchSentMessages, fetchUnreadCount, fetchSentCount])
+  }, [messageIdentifier, isActive, fetchMessages, fetchSentMessages, fetchUnreadCount])
 
-  // Close dropdown when clicking outside
+  // Close copy dropdown when clicking outside its container
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement
-      if (!target.closest('.relative')) {
+      if (copyDropdownRef.current && !copyDropdownRef.current.contains(event.target as Node)) {
         setShowCopyDropdown(false)
       }
     }
@@ -375,10 +451,10 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
     // Filter out current agent and match by alias or host
     const filtered = allAgents.filter(agent => {
       if (agent.id === agentId) return false
-      const aliasMatch = agent.alias.toLowerCase().includes(searchTerm)
+      const nameMatch = agent.name.toLowerCase().includes(searchTerm)
       const hostMatch = agent.hostId?.toLowerCase().includes(searchTerm)
-      const fullMatch = `${agent.alias}@${agent.hostId || 'unknown-host'}`.toLowerCase().includes(searchTerm)
-      return aliasMatch || hostMatch || fullMatch
+      const fullMatch = `${agent.name}@${agent.hostId || 'unknown-host'}`.toLowerCase().includes(searchTerm)
+      return nameMatch || hostMatch || fullMatch
     })
 
     setFilteredAgents(filtered)
@@ -419,7 +495,8 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
         break
       case 'Enter':
         e.preventDefault()
-        if (selectedSuggestionIndex >= 0) {
+        // SF-044: Bounds-check selectedSuggestionIndex against filteredAgents length
+        if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < filteredAgents.length) {
           selectAgent(filteredAgents[selectedSuggestionIndex])
         }
         break
@@ -431,6 +508,11 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
 
   // Select an agent from suggestions
   const selectAgent = (agent: AgentRecipient) => {
+    // Block selection of unreachable agents per governance policy
+    if (reachableAgentIds !== null && !reachableAgentIds.includes(agent.id)) {
+      setGovernanceError(`Cannot message ${agent.name} — agent is in a closed team you cannot reach`)
+      return
+    }
     // Use technical name for messaging, include host for cross-host compatibility
     const hostId = agent.hostId || 'unknown-host'
     const value = `${agent.name}@${hostId}`
@@ -443,7 +525,7 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
   const formatAgentDisplay = (agent: AgentRecipient) => {
     const hostId = agent.hostId || 'unknown-host'
     return {
-      primary: agent.alias,
+      primary: agent.name,
       secondary: `@${hostId}`,
       hasHost: !!agent.hostId
     }
@@ -456,21 +538,13 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
     return `${displayName}@${hostName}`
   }
 
-  // Get agent display parts - display name and technical address separately
-  const getAgentDisplayParts = (agentId: string, alias?: string, host?: string) => {
-    const displayName = alias || agentId
-    const hostName = host || 'unknown-host'
-    const technicalAddress = `${agentId}@${hostName}`
-    return { displayName, technicalAddress }
-  }
-
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'urgent': return 'text-red-600 bg-red-100'
-      case 'high': return 'text-orange-600 bg-orange-100'
-      case 'normal': return 'text-blue-600 bg-blue-100'
-      case 'low': return 'text-gray-600 bg-gray-100'
-      default: return 'text-gray-600 bg-gray-100'
+      case 'urgent': return 'text-red-400 bg-red-900/30'
+      case 'high': return 'text-orange-400 bg-orange-900/30'
+      case 'normal': return 'text-blue-400 bg-blue-900/30'
+      case 'low': return 'text-gray-400 bg-gray-700'
+      default: return 'text-gray-400 bg-gray-700'
     }
   }
 
@@ -488,15 +562,25 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
     // If it matches any agent in the list, it's not external
     const matchesAgent = allAgents.some(agent =>
       agent.name.toLowerCase() === toValue.toLowerCase() ||
-      agent.alias.toLowerCase() === toValue.toLowerCase() ||
-      `${agent.name}@${agent.hostId || 'unknown-host'}`.toLowerCase() === toValue.toLowerCase() ||
-      `${agent.alias}@${agent.hostId || 'unknown-host'}`.toLowerCase() === toValue.toLowerCase()
+      agent.name.toLowerCase() === toValue.toLowerCase() ||
+      `${agent.name}@${agent.hostId || 'unknown-host'}`.toLowerCase() === toValue.toLowerCase()
     )
     return !matchesAgent && toValue.length > 0
   }
 
   return (
-    <div className="flex flex-col h-full w-full bg-gray-900">
+    <div className="flex flex-col h-full w-full bg-gray-900 relative">
+      {/* Toast notification */}
+      {toast && (
+        <div className={`absolute top-2 right-2 z-50 px-4 py-2 rounded-md text-sm font-medium shadow-lg transition-opacity ${
+          toast.type === 'success' ? 'bg-green-800 text-green-200' :
+          toast.type === 'error' ? 'bg-red-800 text-red-200' :
+          'bg-gray-700 text-gray-200'
+        }`}>
+          {toast.message}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between p-4 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center gap-3">
@@ -512,7 +596,7 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setView('inbox')}
+            onClick={() => { setView('inbox'); setSelectedMessage(null) }}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
               view === 'inbox'
                 ? 'bg-blue-600 text-white'
@@ -528,7 +612,7 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
             )}
           </button>
           <button
-            onClick={() => setView('sent')}
+            onClick={() => { setView('sent'); setSelectedMessage(null) }}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
               view === 'sent'
                 ? 'bg-blue-600 text-white'
@@ -632,58 +716,68 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
                 <p>No inbox messages</p>
               </div>
             ) : (
-              messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  onClick={() => loadMessage(msg.id)}
-                  className={`p-4 border-b border-gray-700 cursor-pointer hover:bg-gray-700 transition-colors ${
-                    msg.status === 'unread' ? 'bg-blue-900/30' : ''
-                  } ${selectedMessage?.id === msg.id ? 'bg-blue-900/50' : ''}`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-start gap-2">
-                      {/* Verified/External indicator */}
-                      <div className="mt-0.5">
-                        {msg.fromVerified !== false ? (
-                          <span title="AI Maestro Agent">
-                            <ShieldCheck className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
-                          </span>
-                        ) : (
-                          <span title="External Agent">
-                            <Globe className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
-                          </span>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-sm font-semibold truncate ${msg.status === 'unread' ? 'text-gray-100' : 'text-gray-300'}`}>
-                            {(msg as any).fromLabel || msg.fromAlias || msg.from}
-                          </span>
-                          {getPriorityIcon(msg.priority)}
+              <>
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    onClick={() => loadMessage(msg.id)}
+                    className={`p-4 border-b border-gray-700 cursor-pointer hover:bg-gray-700 transition-colors ${
+                      msg.status === 'unread' ? 'bg-blue-900/30' : ''
+                    } ${selectedMessage?.id === msg.id ? 'bg-blue-900/50' : ''}`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-start gap-2">
+                        {/* Verified/External indicator */}
+                        <div className="mt-0.5">
+                          {msg.fromVerified !== false ? (
+                            <span title="AI Maestro Agent">
+                              <ShieldCheck className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+                            </span>
+                          ) : (
+                            <span title="External Agent">
+                              <Globe className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                            </span>
+                          )}
                         </div>
-                        <div className="text-xs text-gray-500 truncate">
-                          {msg.fromAlias || msg.from}@{msg.fromHost || 'unknown-host'}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-semibold truncate ${msg.status === 'unread' ? 'text-gray-100' : 'text-gray-300'}`}>
+                              {msg.fromLabel || msg.fromAlias || msg.from}
+                            </span>
+                            {getPriorityIcon(msg.priority)}
+                          </div>
+                          <div className="text-xs text-gray-500 truncate">
+                            {msg.fromAlias || msg.from}@{msg.fromHost || 'unknown-host'}
+                          </div>
                         </div>
                       </div>
+                      <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${getPriorityColor(msg.priority)}`}>
+                        {msg.priority}
+                      </span>
                     </div>
-                    <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${getPriorityColor(msg.priority)}`}>
-                      {msg.priority}
-                    </span>
+                    <h3 className={`text-sm mb-1 ${msg.status === 'unread' ? 'font-semibold text-gray-200' : 'font-medium text-gray-300'}`}>
+                      {msg.subject}
+                    </h3>
+                    <p className="text-xs text-gray-400 line-clamp-2">{msg.preview}</p>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-xs text-gray-500">
+                        {new Date(msg.timestamp).toLocaleString()}
+                      </span>
+                      {msg.status === 'unread' && (
+                        <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                      )}
+                    </div>
                   </div>
-                  <h3 className={`text-sm mb-1 ${msg.status === 'unread' ? 'font-semibold text-gray-200' : 'font-medium text-gray-300'}`}>
-                    {msg.subject}
-                  </h3>
-                  <p className="text-xs text-gray-400 line-clamp-2">{msg.preview}</p>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-xs text-gray-500">
-                      {new Date(msg.timestamp).toLocaleString()}
-                    </span>
-                    {msg.status === 'unread' && (
-                      <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                    )}
-                  </div>
-                </div>
-              ))
+                ))}
+                {hasMoreInbox && (
+                  <button
+                    onClick={loadMoreInbox}
+                    className="w-full p-3 text-sm text-blue-400 hover:bg-gray-700 transition-colors border-t border-gray-700"
+                  >
+                    Load more messages...
+                  </button>
+                )}
+              </>
             )}
           </div>
 
@@ -700,10 +794,10 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
                       <span className="font-medium text-sm text-gray-400 mt-0.5 flex-shrink-0">From:</span>
                       {/* Verified/External indicator */}
                       <span
-                        className={`flex items-center mt-0.5 flex-shrink-0 ${(selectedMessage as any).fromVerified !== false ? 'text-green-400' : 'text-blue-400'}`}
-                        title={(selectedMessage as any).fromVerified !== false ? 'AI Maestro Agent' : 'External Agent'}
+                        className={`flex items-center mt-0.5 flex-shrink-0 ${selectedMessage.fromVerified !== false ? 'text-green-400' : 'text-blue-400'}`}
+                        title={selectedMessage.fromVerified !== false ? 'AI Maestro Agent' : 'External Agent'}
                       >
-                        {(selectedMessage as any).fromVerified !== false ? (
+                        {selectedMessage.fromVerified !== false ? (
                           <ShieldCheck className="w-4 h-4" />
                         ) : (
                           <Globe className="w-4 h-4" />
@@ -711,7 +805,7 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
                       </span>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-gray-200 truncate">
-                          {(selectedMessage as any).fromLabel || selectedMessage.fromAlias || selectedMessage.from}
+                          {selectedMessage.fromLabel || selectedMessage.fromAlias || selectedMessage.from}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-gray-500">
                           <span className="truncate">{selectedMessage.fromAlias || selectedMessage.from}@{selectedMessage.fromHost || 'unknown-host'}</span>
@@ -722,8 +816,10 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
                     </div>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
-                    {/* Copy Button with Dropdown */}
-                    <div className="relative">
+                    {/* Copy Button with Dropdown
+                       Single ref is correct — only one copy dropdown can be open at a time
+                       regardless of view, since inbox and sent views are mutually exclusive */}
+                    <div ref={copyDropdownRef} className="relative">
                       <button
                         onClick={() => setShowCopyDropdown(!showCopyDropdown)}
                         className={`p-2 rounded-md transition-colors flex items-center gap-1 ${
@@ -785,7 +881,7 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
                   <span className={`text-xs px-2 py-1 rounded ${getPriorityColor(selectedMessage.priority)}`}>
                     {selectedMessage.priority}
                   </span>
-                  <span className="text-xs px-2 py-1 rounded bg-purple-100 text-purple-600">
+                  <span className="text-xs px-2 py-1 rounded bg-purple-900/30 text-purple-400">
                     {selectedMessage.content.type}
                   </span>
                 </div>
@@ -810,8 +906,9 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
                 <div className="mt-6 pt-4 border-t border-gray-800 flex gap-3">
                   <button
                     onClick={() => {
-                      // Use alias for reply if available, with host suffix for remote agents
-                      setComposeTo(formatAgentName(selectedMessage.from, selectedMessage.fromAlias, selectedMessage.fromHost))
+                      // Use technical name (from) for routing, not display alias
+                      const replyHost = selectedMessage.fromHost || 'unknown-host'
+                      setComposeTo(`${selectedMessage.from}@${replyHost}`)
                       setComposeSubject(`Re: ${selectedMessage.subject}`)
                       setComposeType('response')
                       setIsForwarding(false)
@@ -855,45 +952,55 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
                 <p>No sent messages</p>
               </div>
             ) : (
-              sentMessages.map((msg) => (
-                <div
-                  key={msg.id}
-                  onClick={() => loadMessage(msg.id, 'sent')}
-                  className={`p-4 border-b border-gray-700 cursor-pointer hover:bg-gray-700 transition-colors ${
-                    selectedMessage?.id === msg.id ? 'bg-blue-900/50' : ''
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-start gap-2">
-                      <span className="text-xs text-green-400 font-medium mt-0.5">To:</span>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-gray-300 truncate">
-                            {(msg as any).toLabel || msg.toAlias || msg.to}
-                          </span>
-                          {getPriorityIcon(msg.priority)}
-                        </div>
-                        <div className="text-xs text-gray-500 truncate">
-                          {msg.toAlias || msg.to}@{msg.toHost || 'unknown-host'}
+              <>
+                {sentMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    onClick={() => loadMessage(msg.id, 'sent')}
+                    className={`p-4 border-b border-gray-700 cursor-pointer hover:bg-gray-700 transition-colors ${
+                      selectedMessage?.id === msg.id ? 'bg-blue-900/50' : ''
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-start gap-2">
+                        <span className="text-xs text-green-400 font-medium mt-0.5">To:</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-gray-300 truncate">
+                              {msg.toLabel || msg.toAlias || msg.to}
+                            </span>
+                            {getPriorityIcon(msg.priority)}
+                          </div>
+                          <div className="text-xs text-gray-500 truncate">
+                            {msg.toAlias || msg.to}@{msg.toHost || 'unknown-host'}
+                          </div>
                         </div>
                       </div>
+                      <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${getPriorityColor(msg.priority)}`}>
+                        {msg.priority}
+                      </span>
                     </div>
-                    <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${getPriorityColor(msg.priority)}`}>
-                      {msg.priority}
-                    </span>
+                    <h3 className="text-sm mb-1 font-medium text-gray-300">
+                      {msg.subject}
+                    </h3>
+                    <p className="text-xs text-gray-400 line-clamp-2">{msg.preview}</p>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-xs text-gray-500">
+                        {new Date(msg.timestamp).toLocaleString()}
+                      </span>
+                      <CheckCircle className="w-3 h-3 text-green-500" />
+                    </div>
                   </div>
-                  <h3 className="text-sm mb-1 font-medium text-gray-300">
-                    {msg.subject}
-                  </h3>
-                  <p className="text-xs text-gray-400 line-clamp-2">{msg.preview}</p>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-xs text-gray-500">
-                      {new Date(msg.timestamp).toLocaleString()}
-                    </span>
-                    <CheckCircle className="w-3 h-3 text-green-500" />
-                  </div>
-                </div>
-              ))
+                ))}
+                {hasMoreSent && (
+                  <button
+                    onClick={loadMoreSent}
+                    className="w-full p-3 text-sm text-blue-400 hover:bg-gray-700 transition-colors border-t border-gray-700"
+                  >
+                    Load more messages...
+                  </button>
+                )}
+              </>
             )}
           </div>
 
@@ -914,7 +1021,7 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
                       <span className="font-medium text-sm text-gray-400 mt-0.5 flex-shrink-0">To:</span>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-gray-200 truncate">
-                          {(selectedMessage as any).toLabel || selectedMessage.toAlias || selectedMessage.to}
+                          {selectedMessage.toLabel || selectedMessage.toAlias || selectedMessage.to}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-gray-500">
                           <span className="truncate">{selectedMessage.toAlias || selectedMessage.to}@{selectedMessage.toHost || 'unknown-host'}</span>
@@ -925,8 +1032,10 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
                     </div>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
-                    {/* Copy Button with Dropdown */}
-                    <div className="relative">
+                    {/* Copy Button with Dropdown
+                       Single ref is correct — only one copy dropdown can be open at a time
+                       regardless of view, since inbox and sent views are mutually exclusive */}
+                    <div ref={copyDropdownRef} className="relative">
                       <button
                         onClick={() => setShowCopyDropdown(!showCopyDropdown)}
                         className={`p-2 rounded-md transition-colors flex items-center gap-1 ${
@@ -966,7 +1075,7 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
                   <span className={`text-xs px-2 py-1 rounded ${getPriorityColor(selectedMessage.priority)}`}>
                     {selectedMessage.priority}
                   </span>
-                  <span className="text-xs px-2 py-1 rounded bg-purple-100 text-purple-600">
+                  <span className="text-xs px-2 py-1 rounded bg-purple-900/30 text-purple-400">
                     {selectedMessage.content.type}
                   </span>
                 </div>
@@ -1021,7 +1130,7 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
 
           <div className="space-y-4 max-w-2xl">
             <div className="relative">
-              <label className="block text-sm font-medium text-gray-300 mb-1">
+              <label htmlFor="compose-to" className="block text-sm font-medium text-gray-300 mb-1">
                 To (Agent Name):
               </label>
               <input
@@ -1029,8 +1138,11 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
                 id="compose-to"
                 name="to"
                 type="text"
+                aria-label="Recipient agent name"
+                aria-autocomplete="list"
+                aria-expanded={showAgentSuggestions}
                 value={composeTo}
-                onChange={(e) => setComposeTo(e.target.value)}
+                onChange={(e) => { setComposeTo(e.target.value); setGovernanceError(null) }}
                 onKeyDown={handleToKeyDown}
                 onFocus={() => composeTo && filteredAgents.length > 0 && setShowAgentSuggestions(true)}
                 autoComplete="off"
@@ -1042,16 +1154,23 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
               {showAgentSuggestions && filteredAgents.length > 0 && (
                 <div
                   ref={suggestionsRef}
+                  role="listbox"
+                  aria-label="Agent suggestions"
                   className="absolute z-20 w-full mt-1 bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto"
                 >
                   {filteredAgents.map((agent, index) => {
                     const display = formatAgentDisplay(agent)
                     const isSelected = index === selectedSuggestionIndex
+                    const isUnreachable = reachableAgentIds !== null && !reachableAgentIds.includes(agent.id)
                     return (
                       <div
                         key={agent.id}
+                        role="option"
+                        aria-selected={isSelected}
                         onClick={() => selectAgent(agent)}
                         className={`px-3 py-2 cursor-pointer flex items-center justify-between ${
+                          isUnreachable ? 'opacity-50' : ''
+                        } ${
                           isSelected
                             ? 'bg-blue-600 text-white'
                             : 'hover:bg-gray-700 text-gray-200'
@@ -1063,9 +1182,17 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
                             {display.secondary}
                           </span>
                         </div>
-                        {display.hasHost && (
-                          <Server className={`w-4 h-4 ${isSelected ? 'text-blue-200' : 'text-gray-500'}`} />
-                        )}
+                        <div className="flex items-center gap-2">
+                          {isUnreachable && (
+                            <span className="text-xs text-amber-400 flex items-center gap-1">
+                              <Lock className="w-3 h-3" />
+                              Restricted
+                            </span>
+                          )}
+                          {display.hasHost && (
+                            <Server className={`w-4 h-4 ${isSelected ? 'text-blue-200' : 'text-gray-500'}`} />
+                          )}
+                        </div>
                       </div>
                     )
                   })}
@@ -1088,14 +1215,25 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
               )}
             </div>
 
+            {governanceError && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-sm">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>{governanceError}</span>
+                <button onClick={() => setGovernanceError(null)} className="ml-auto text-amber-400 hover:text-amber-300">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">
+              <label htmlFor="compose-subject" className="block text-sm font-medium text-gray-300 mb-1">
                 Subject:
               </label>
               <input
                 id="compose-subject"
                 name="subject"
                 type="text"
+                aria-label="Message subject"
                 value={composeSubject}
                 onChange={(e) => setComposeSubject(e.target.value)}
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1105,12 +1243,13 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
 
             <div className="flex gap-4">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-300 mb-1">
+                <label htmlFor="compose-priority" className="block text-sm font-medium text-gray-300 mb-1">
                   Priority:
                 </label>
                 <select
+                  id="compose-priority"
                   value={composePriority}
-                  onChange={(e) => setComposePriority(e.target.value as any)}
+                  onChange={(e) => setComposePriority(e.target.value as 'low' | 'normal' | 'high' | 'urgent')}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="low">Low</option>
@@ -1121,12 +1260,13 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
               </div>
 
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-300 mb-1">
+                <label htmlFor="compose-type" className="block text-sm font-medium text-gray-300 mb-1">
                   Type:
                 </label>
                 <select
+                  id="compose-type"
                   value={composeType}
-                  onChange={(e) => setComposeType(e.target.value as any)}
+                  onChange={(e) => setComposeType(e.target.value as 'request' | 'response' | 'notification' | 'update')}
                   className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="request">Request</option>
@@ -1138,12 +1278,13 @@ export default function MessageCenter({ sessionName, agentId, allAgents, isVisib
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">
+              <label htmlFor="compose-message" className="block text-sm font-medium text-gray-300 mb-1">
                 Message:
               </label>
               <textarea
                 id="compose-message"
                 name="message"
+                aria-label="Message body"
                 value={composeMessage}
                 onChange={(e) => setComposeMessage(e.target.value)}
                 rows={10}

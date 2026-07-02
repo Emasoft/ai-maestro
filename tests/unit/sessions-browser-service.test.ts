@@ -1,0 +1,496 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+
+// getAgent must be mocked before we import the service module.
+vi.mock('@/lib/agent-registry', () => ({
+  getAgent: vi.fn(),
+}))
+
+// Avoid spawning the real reader during ensureOpenForPath tests.
+vi.mock('@/lib/jsonl-reader', () => ({
+  getJsonlReader: vi.fn(),
+}))
+
+import {
+  slugifyWorkingDirectory,
+  projectDirForWorkingDirectory,
+  listSessionsInProjectDir,
+  getSessionsForAgent,
+  getSessionsForAgentWithMetadata,
+  clearMetadataCache,
+  resolveSessionPath,
+  recordSessionMapping,
+  clearSessionMappings,
+  hasValidSession,
+  ensureOpenForPath,
+} from '@/services/sessions-browser-service'
+import { getAgent } from '@/lib/agent-registry'
+import { getJsonlReader } from '@/lib/jsonl-reader'
+import { createSession, invalidateSession } from '@/lib/session-auth'
+
+// ---------------------------------------------------------------------------
+// slugifyWorkingDirectory
+// ---------------------------------------------------------------------------
+
+describe('slugifyWorkingDirectory', () => {
+  it('replaces / with - and preserves the leading dash', () => {
+    // Claude Code's on-disk convention KEEPS the leading dash on absolute
+    // paths (verified: `ls ~/.claude/projects/ | awk '{print substr($0,1,1)}' | sort -u`
+    // returns only `-`). Stripping it produced slugs that never matched any
+    // real project dir and made every agent look session-less.
+    expect(slugifyWorkingDirectory('/Users/alice/proj')).toBe(
+      '-Users-alice-proj',
+    )
+    expect(slugifyWorkingDirectory('/Users/e/code/ai-maestro')).toBe(
+      '-Users-e-code-ai-maestro',
+    )
+  })
+
+  it('strips trailing slashes before substitution (no trailing dash)', () => {
+    expect(slugifyWorkingDirectory('/Users/alice/proj/')).toBe(
+      '-Users-alice-proj',
+    )
+    expect(slugifyWorkingDirectory('/a/b///')).toBe('-a-b')
+  })
+
+  it('preserves the leading dash even for short paths', () => {
+    expect(slugifyWorkingDirectory('/a/b')).toBe('-a-b')
+  })
+
+  it('returns null for empty input or a bare root slash', () => {
+    expect(slugifyWorkingDirectory('')).toBeNull()
+    expect(slugifyWorkingDirectory('/')).toBeNull()
+  })
+
+  it('normalizes Windows-style separators without inventing a leading dash', () => {
+    // Windows paths don't start with '/', so no leading dash is added.
+    // This defensive branch exists because node code occasionally ingests
+    // them; Claude Code on macOS/Linux only ever produces Unix paths.
+    expect(slugifyWorkingDirectory('C:\\Users\\e')).toBe('C:-Users-e')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// projectDirForWorkingDirectory
+// ---------------------------------------------------------------------------
+
+describe('projectDirForWorkingDirectory', () => {
+  it('builds the full ~/.claude/projects/<slug> path with the leading dash preserved', () => {
+    const result = projectDirForWorkingDirectory('/Users/e/code/a')
+    expect(result).toBe(
+      path.join(os.homedir(), '.claude', 'projects', '-Users-e-code-a'),
+    )
+  })
+
+  it('returns null when slug fails', () => {
+    expect(projectDirForWorkingDirectory('/')).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// listSessionsInProjectDir
+// ---------------------------------------------------------------------------
+
+describe('listSessionsInProjectDir', () => {
+  const tmpDir = path.join(os.tmpdir(), `aim-sb-test-${Date.now()}`)
+
+  beforeEach(() => {
+    fs.mkdirSync(tmpDir, { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('returns empty array for missing directory', () => {
+    const missing = path.join(tmpDir, 'does-not-exist')
+    expect(listSessionsInProjectDir(missing)).toEqual([])
+  })
+
+  it('returns .jsonl files sorted by mtime DESC with messageCount null', () => {
+    const aPath = path.join(tmpDir, 'aaa.jsonl')
+    const bPath = path.join(tmpDir, 'bbb.jsonl')
+    fs.writeFileSync(aPath, 'a\n')
+    fs.writeFileSync(bPath, 'b\n')
+    // Force bbb to be newer.
+    const older = new Date(Date.now() - 60_000)
+    fs.utimesSync(aPath, older, older)
+
+    const result = listSessionsInProjectDir(tmpDir)
+    expect(result).toHaveLength(2)
+    expect(result[0].displayName).toBe('bbb')
+    expect(result[1].displayName).toBe('aaa')
+    expect(result[0].messageCount).toBeNull()
+    expect(result[0].size).toBeGreaterThan(0)
+    expect(result[0].id).toBe('bbb')
+  })
+
+  it('ignores non-.jsonl files, hidden files, and .aimidx sidecars', () => {
+    fs.writeFileSync(path.join(tmpDir, 'x.jsonl'), 'x')
+    fs.writeFileSync(path.join(tmpDir, 'x.jsonl.aimidx'), '')
+    fs.writeFileSync(path.join(tmpDir, '.hidden.jsonl'), '')
+    fs.writeFileSync(path.join(tmpDir, 'readme.txt'), 'hi')
+
+    const result = listSessionsInProjectDir(tmpDir)
+    expect(result).toHaveLength(1)
+    expect(result[0].displayName).toBe('x')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getSessionsForAgent
+// ---------------------------------------------------------------------------
+
+describe('getSessionsForAgent', () => {
+  beforeEach(() => {
+    clearSessionMappings()
+    vi.mocked(getAgent).mockReset()
+  })
+
+  it('returns 404 when agent does not exist', () => {
+    vi.mocked(getAgent).mockReturnValue(null)
+    const res = getSessionsForAgent('ghost', {
+      agentFetcher: () => null,
+    })
+    expect(res.ok).toBe(false)
+    expect(res.status).toBe(404)
+    expect(res.error).toBe('agent_not_found')
+  })
+
+  it('returns empty list (200) for agent with no workingDirectory', () => {
+    const res = getSessionsForAgent('a1', {
+      agentFetcher: () => ({ id: 'a1' }),
+    })
+    expect(res.ok).toBe(true)
+    expect(res.data?.projectDir).toBeNull()
+    expect(res.data?.sessions).toEqual([])
+  })
+
+  it('populates the sid→path reverse map on success', () => {
+    const fakeSessions = [
+      {
+        path: '/abs/sess-abc.jsonl',
+        size: 100,
+        messageCount: null,
+        lastModified: '2026-04-20T00:00:00.000Z',
+        displayName: 'sess-abc',
+        id: 'sess-abc',
+      },
+    ]
+    const res = getSessionsForAgent('a1', {
+      agentFetcher: () => ({ id: 'a1', workingDirectory: '/Users/e/x' }),
+      lister: () => fakeSessions,
+    })
+    expect(res.ok).toBe(true)
+    expect(res.data?.sessions).toHaveLength(1)
+    expect(resolveSessionPath('sess-abc')).toBe('/abs/sess-abc.jsonl')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Cookie parser
+// ---------------------------------------------------------------------------
+
+describe('hasValidSession', () => {
+  // TRDD-9e1e4b29: the gate VALIDATES the aim_session token against the server
+  // session store — presence is NOT enough. These are real round-trips against
+  // the live session store (createSession is the same call the login routes use),
+  // never a mock, so a regression in the validating gate is actually caught.
+  it('returns false for null/empty/absent cookie', () => {
+    expect(hasValidSession(null)).toBe(false)
+    expect(hasValidSession(undefined)).toBe(false)
+    expect(hasValidSession('')).toBe(false)
+  })
+
+  it('returns false for a forged aim_session the store never issued', () => {
+    // The whole point of the fix: a junk value that passed the old presence
+    // check must now be rejected.
+    expect(hasValidSession('aim_session=forged-never-issued')).toBe(false)
+    expect(hasValidSession('other=x; aim_session=also-forged; yet=y')).toBe(false)
+    expect(hasValidSession('aim_session=')).toBe(false)
+    expect(hasValidSession('aim_session= ')).toBe(false)
+  })
+
+  it('returns true only for a token the store actually issued', async () => {
+    const token = await createSession()
+    try {
+      expect(hasValidSession(`aim_session=${token}`)).toBe(true)
+      expect(hasValidSession(`other=x; aim_session=${token}; yet=y`)).toBe(true)
+    } finally {
+      invalidateSession(token)
+    }
+  })
+
+  it('returns false once the issued session is invalidated (logout)', async () => {
+    const token = await createSession()
+    invalidateSession(token)
+    expect(hasValidSession(`aim_session=${token}`)).toBe(false)
+  })
+
+  it('does not false-match substring cookie names even with a valid token', async () => {
+    const token = await createSession()
+    try {
+      expect(hasValidSession(`my_aim_session=${token}`)).toBe(false)
+      expect(hasValidSession(`aim_session_x=${token}`)).toBe(false)
+    } finally {
+      invalidateSession(token)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// recordSessionMapping / clearSessionMappings
+// ---------------------------------------------------------------------------
+
+describe('recordSessionMapping', () => {
+  beforeEach(() => clearSessionMappings())
+
+  it('stores and retrieves path by session id', () => {
+    recordSessionMapping('sid-1', '/abs/1.jsonl')
+    recordSessionMapping('sid-2', '/abs/2.jsonl')
+    expect(resolveSessionPath('sid-1')).toBe('/abs/1.jsonl')
+    expect(resolveSessionPath('sid-2')).toBe('/abs/2.jsonl')
+  })
+
+  it('clearSessionMappings wipes everything', () => {
+    recordSessionMapping('sid-x', '/abs/x.jsonl')
+    clearSessionMappings()
+    expect(resolveSessionPath('sid-x')).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// ensureOpenForPath
+// ---------------------------------------------------------------------------
+
+describe('ensureOpenForPath', () => {
+  it('delegates to getJsonlReader().open() and returns the Rust sessionId', async () => {
+    const openMock = vi.fn().mockResolvedValue({
+      ok: true,
+      sessionId: 'rust-sid-xyz',
+      lineCount: 100,
+      indexed: false,
+    })
+    vi.mocked(getJsonlReader).mockReturnValue({
+      open: openMock,
+    } as any)
+
+    const sid = await ensureOpenForPath('/abs/a.jsonl')
+    expect(sid).toBe('rust-sid-xyz')
+    expect(openMock).toHaveBeenCalledWith(path.resolve('/abs/a.jsonl'))
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Phase 5 §4 — getSessionsForAgentWithMetadata
+// ---------------------------------------------------------------------------
+
+describe('getSessionsForAgentWithMetadata', () => {
+  const tmpDir = path.join(os.tmpdir(), `aim-sb-meta-test-${Date.now()}`)
+
+  beforeEach(() => {
+    clearSessionMappings()
+    clearMetadataCache()
+    vi.mocked(getAgent).mockReset()
+    vi.mocked(getJsonlReader).mockReset()
+    fs.mkdirSync(tmpDir, { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  function mkFakeJsonl(name: string, content = 'line1\n'): string {
+    const p = path.join(tmpDir, name)
+    fs.writeFileSync(p, content)
+    return p
+  }
+
+  it('enriches each session with firstUserText, isOngoing, compactionCount', async () => {
+    const fakePath = mkFakeJsonl('abc.jsonl', '{}\n')
+    const analyzeMock = vi.fn().mockResolvedValue({
+      ok: true,
+      firstUserMessagePreview: 'hello from user',
+      isOngoing: true,
+      compactionCount: 2,
+      phaseTokenBreakdown: [],
+      shutdownToolCalls: 0,
+      rejections: 0,
+      requestIdDedupedAssistantTokens: 100,
+      hasSubagentSpawns: false,
+      hasCompactSummary: true,
+    })
+    vi.mocked(getJsonlReader).mockReturnValue({
+      analyzeFileMetadata: analyzeMock,
+    } as any)
+
+    const res = await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1', workingDirectory: '/Users/e/x' }),
+      lister: () => [
+        {
+          path: fakePath,
+          size: 10,
+          messageCount: null,
+          lastModified: new Date().toISOString(),
+          displayName: 'abc',
+          id: 'abc',
+        },
+      ],
+    })
+
+    expect(res.ok).toBe(true)
+    expect(res.data?.sessions).toHaveLength(1)
+    const s = res.data!.sessions[0]
+    expect(s.firstUserText).toBe('hello from user')
+    expect(s.isOngoing).toBe(true)
+    expect(s.compactionCount).toBe(2)
+    expect(analyzeMock).toHaveBeenCalledWith(fakePath)
+  })
+
+  it('caches metadata keyed by path+size+mtime', async () => {
+    const fakePath = mkFakeJsonl('cache-me.jsonl', '{}\n')
+    const stat = fs.statSync(fakePath)
+    const analyzeMock = vi.fn().mockResolvedValue({
+      ok: true,
+      firstUserMessagePreview: 'cached preview',
+      isOngoing: false,
+      compactionCount: 0,
+      phaseTokenBreakdown: [],
+      shutdownToolCalls: 0,
+      rejections: 0,
+      requestIdDedupedAssistantTokens: 0,
+      hasSubagentSpawns: false,
+      hasCompactSummary: false,
+    })
+    vi.mocked(getJsonlReader).mockReturnValue({
+      analyzeFileMetadata: analyzeMock,
+    } as any)
+
+    const summary = {
+      path: fakePath,
+      size: stat.size,
+      messageCount: null,
+      lastModified: stat.mtime.toISOString(),
+      displayName: 'cache-me',
+      id: 'cache-me',
+    }
+
+    // First call — analyze runs.
+    await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1', workingDirectory: '/Users/e/x' }),
+      lister: () => [summary],
+    })
+    expect(analyzeMock).toHaveBeenCalledTimes(1)
+
+    // Second call — cache hit, analyze must NOT run again.
+    const second = await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1', workingDirectory: '/Users/e/x' }),
+      lister: () => [summary],
+    })
+    expect(analyzeMock).toHaveBeenCalledTimes(1)
+    expect(second.data?.sessions[0].firstUserText).toBe('cached preview')
+  })
+
+  it('invalidates cache when mtime changes', async () => {
+    const fakePath = mkFakeJsonl('mtime.jsonl', '{}\n')
+    const originalStat = fs.statSync(fakePath)
+    let callNum = 0
+    const analyzeMock = vi.fn().mockImplementation(() => {
+      callNum += 1
+      return Promise.resolve({
+        ok: true,
+        firstUserMessagePreview: `preview-${callNum}`,
+        isOngoing: false,
+        compactionCount: 0,
+        phaseTokenBreakdown: [],
+        shutdownToolCalls: 0,
+        rejections: 0,
+        requestIdDedupedAssistantTokens: 0,
+        hasSubagentSpawns: false,
+        hasCompactSummary: false,
+      })
+    })
+    vi.mocked(getJsonlReader).mockReturnValue({
+      analyzeFileMetadata: analyzeMock,
+    } as any)
+
+    const summary1 = {
+      path: fakePath,
+      size: originalStat.size,
+      messageCount: null,
+      lastModified: originalStat.mtime.toISOString(),
+      displayName: 'mtime',
+      id: 'mtime',
+    }
+    await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1', workingDirectory: '/Users/e/x' }),
+      lister: () => [summary1],
+    })
+    expect(analyzeMock).toHaveBeenCalledTimes(1)
+
+    // Advance the mtime — cache must invalidate.
+    const summary2 = {
+      ...summary1,
+      lastModified: new Date(Date.parse(summary1.lastModified) + 60_000).toISOString(),
+    }
+    await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1', workingDirectory: '/Users/e/x' }),
+      lister: () => [summary2],
+    })
+    expect(analyzeMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves metadata fields undefined when analyzer fails (other fields intact)', async () => {
+    const fakePath = mkFakeJsonl('failing.jsonl', '{}\n')
+    const analyzeMock = vi
+      .fn()
+      .mockRejectedValue(new Error('simulated reader failure'))
+    vi.mocked(getJsonlReader).mockReturnValue({
+      analyzeFileMetadata: analyzeMock,
+    } as any)
+
+    const res = await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1', workingDirectory: '/Users/e/x' }),
+      lister: () => [
+        {
+          path: fakePath,
+          size: 10,
+          messageCount: null,
+          lastModified: new Date().toISOString(),
+          displayName: 'failing',
+          id: 'failing',
+        },
+      ],
+    })
+
+    expect(res.ok).toBe(true)
+    const s = res.data!.sessions[0]
+    // Core fields still present.
+    expect(s.displayName).toBe('failing')
+    expect(s.id).toBe('failing')
+    // Metadata fields are undefined (not crashed, not poisoned with null).
+    expect(s.firstUserText).toBeUndefined()
+    expect(s.isOngoing).toBeUndefined()
+    expect(s.compactionCount).toBeUndefined()
+  })
+
+  it('still returns 404 when agent does not exist', async () => {
+    const res = await getSessionsForAgentWithMetadata('ghost', {
+      agentFetcher: () => null,
+    })
+    expect(res.ok).toBe(false)
+    expect(res.status).toBe(404)
+    expect(res.error).toBe('agent_not_found')
+  })
+
+  it('returns an empty list for an agent without workingDirectory', async () => {
+    const res = await getSessionsForAgentWithMetadata('a1', {
+      agentFetcher: () => ({ id: 'a1' }),
+    })
+    expect(res.ok).toBe(true)
+    expect(res.data?.projectDir).toBeNull()
+    expect(res.data?.sessions).toEqual([])
+  })
+})

@@ -1,0 +1,319 @@
+'use client'
+
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { Search, Plus, Check, Package, Brain, BookOpen, GitBranch, Code, Loader2 } from 'lucide-react'
+import RepoScanner from './RepoScanner'
+import type { MarketplaceSkill } from '@/types/marketplace'
+import type { PluginSkillSelection } from '@/types/plugin-builder'
+import { getSkillKey } from '@/types/plugin-builder'
+import type { RepoSkillInfo } from '@/types/plugin-builder'
+
+// Core AI Maestro skills (from ai-maestro plugin in marketplace)
+const CORE_SKILLS = [
+  { name: 'memory-search', description: 'Search conversation history and semantic memory', icon: Brain },
+  { name: 'graph-query', description: 'Query code graph database for relationships', icon: GitBranch },
+  { name: 'docs-search', description: 'Search auto-generated codebase documentation', icon: BookOpen },
+  { name: 'planning', description: 'Persistent markdown files for complex task execution', icon: Code },
+  { name: 'ai-maestro-agents-management', description: 'Create, manage, and orchestrate AI agents', icon: Package },
+]
+
+interface SkillPickerProps {
+  selectedSkills: PluginSkillSelection[]
+  onAddSkill: (skill: PluginSkillSelection) => void
+  onRemoveSkill: (key: string) => void
+}
+
+// getSkillKey is imported from @/types/plugin-builder (canonical source of truth)
+
+export default function SkillPicker({ selectedSkills, onAddSkill, onRemoveSkill }: SkillPickerProps) {
+  const [searchQuery, setSearchQuery] = useState('')
+  const [marketplaceSkills, setMarketplaceSkills] = useState<MarketplaceSkill[]>([])
+  const [loadingMarketplace, setLoadingMarketplace] = useState(true)
+  // null = no error; string = error message to display in the marketplace tab
+  const [marketplaceError, setMarketplaceError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'core' | 'marketplace' | 'repo'>('core')
+  // Track the count of skills found by the repo scanner so the tab badge stays accurate
+  const [repoSkillsCount, setRepoSkillsCount] = useState<number | null>(null)
+
+  // Track skills found by the last RepoScanner scan so the parent component
+  // is aware of available repo skills, honoring the onSkillsFound contract.
+  const [_repoScanResults, setRepoScanResults] = useState<RepoSkillInfo[]>([])
+
+  // Build a set of selected skill keys for fast lookup
+  const selectedKeys = useMemo(() => {
+    const keys = new Set<string>()
+    for (const skill of selectedSkills) {
+      keys.add(getSkillKey(skill))
+    }
+    return keys
+  }, [selectedSkills])
+
+  // Load marketplace skills with abort support
+  const abortRef = useRef<AbortController | null>(null)
+  useEffect(() => {
+    abortRef.current = new AbortController()
+    const signal = abortRef.current.signal
+    async function load() {
+      try {
+        const res = await fetch('/api/marketplace/skills?includeContent=false', { signal })
+        if (res.ok) {
+          const data = await res.json()
+          if (!signal.aborted) setMarketplaceSkills(data.skills || [])
+        } else {
+          // Server returned a non-OK status; log it so errors are not silently hidden
+          console.error('Failed to load marketplace skills:', res.status, res.statusText)
+          if (!signal.aborted) setMarketplaceSkills([])
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          // Request was intentionally aborted on cleanup — not an error
+        } else {
+          // Genuine network or parse error
+          console.error('Error loading marketplace skills:', error)
+          if (!signal.aborted) setMarketplaceSkills([])
+        }
+      } finally {
+        if (!signal.aborted) setLoadingMarketplace(false)
+      }
+    }
+    load()
+    return () => { abortRef.current?.abort() }
+  // Empty dependency array: effect runs once on mount, cleans up on unmount.
+  // useState setters are guaranteed stable — they must NOT be in the deps array
+  // because their presence would allow a lint rule to trigger spurious re-runs.
+  }, [])
+
+  // Filter skills by search query
+  const filteredCoreSkills = useMemo(() => {
+    if (!searchQuery) return CORE_SKILLS
+    const q = searchQuery.toLowerCase()
+    return CORE_SKILLS.filter(
+      s => s.name.toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q)
+    )
+  }, [searchQuery])
+
+  const filteredMarketplaceSkills = useMemo(() => {
+    if (!searchQuery) return marketplaceSkills
+    const q = searchQuery.toLowerCase()
+    return marketplaceSkills.filter(
+      s => s.name.toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q)
+    )
+  }, [searchQuery, marketplaceSkills])
+
+  // Use filtered counts so the badge reflects what is currently visible (respects search query)
+  const tabs = useMemo(() => [
+    // Use filtered lengths so the count always matches the visible list
+    { id: 'core' as const, label: 'Core', count: filteredCoreSkills.length },
+    { id: 'marketplace' as const, label: 'Marketplace', count: filteredMarketplaceSkills.length },
+    { id: 'repo' as const, label: 'GitHub Repo', count: null },
+  ], [filteredCoreSkills.length, filteredMarketplaceSkills.length])
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="p-4 border-b border-gray-800">
+        <h2 className="text-lg font-semibold text-white mb-3">Select Skills</h2>
+
+        {/* Search */}
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <input
+            type="text"
+            placeholder="Search skills..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
+          />
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                // Clear stale repo scan results when leaving the repo tab so
+                // the count badge never shows data that is no longer visible.
+                if (activeTab === 'repo' && tab.id !== 'repo') setRepoScanResults([])
+                setActiveTab(tab.id)
+              }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                activeTab === tab.id
+                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                  : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800'
+              }`}
+            >
+              {tab.label}
+              {tab.count !== null && (
+                <span className="ml-1.5 text-gray-500">({tab.count})</span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Skill Lists */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {activeTab === 'core' && (
+          <div className="space-y-2">
+            {filteredCoreSkills.map(skill => {
+              // Use getSkillKey so the React list key matches the identifier used in selectedKeys
+              const key = getSkillKey({ type: 'core', name: skill.name })
+              const isSelected = selectedKeys.has(key)
+              const Icon = skill.icon
+              // Single toggle handler reused by both onClick and onKeyDown
+              const handleCoreToggle = () => {
+                if (isSelected) {
+                  onRemoveSkill(key)
+                } else {
+                  onAddSkill({ type: 'core', name: skill.name })
+                }
+              }
+              return (
+                <div
+                  key={key}
+                  role="button"
+                  tabIndex={0}
+                  className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-cyan-500/10 border-cyan-500/30'
+                      : 'bg-gray-800/50 border-gray-700/50 hover:border-gray-600'
+                  }`}
+                  onClick={handleCoreToggle}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleCoreToggle()
+                    }
+                  }}
+                  aria-pressed={isSelected}
+                  aria-label={`${skill.name}: ${skill.description}`}
+                >
+                  <div className={`p-1.5 rounded-md ${
+                    isSelected ? 'bg-cyan-500/20' : 'bg-gray-700/50'
+                  }`}>
+                    <Icon className={`w-4 h-4 ${isSelected ? 'text-cyan-400' : 'text-gray-400'}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-200">{skill.name}</p>
+                    <p className="text-xs text-gray-500 truncate">{skill.description}</p>
+                  </div>
+                  <div className="flex-shrink-0">
+                    {isSelected ? (
+                      <Check className="w-4 h-4 text-cyan-400" />
+                    ) : (
+                      <Plus className="w-4 h-4 text-gray-500" />
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+            {filteredCoreSkills.length === 0 && (
+              <p className="text-sm text-gray-500 text-center py-4">No matching core skills</p>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'marketplace' && (
+          <div className="space-y-2">
+            {loadingMarketplace ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 text-gray-500 animate-spin" />
+              </div>
+            ) : marketplaceError ? (
+              <p className="text-sm text-red-400 text-center py-4">{marketplaceError}</p>
+            ) : filteredMarketplaceSkills.length > 0 ? (
+              filteredMarketplaceSkills.map(skill => {
+                // Use getSkillKey so the React list key matches the identifier used in selectedKeys
+                const key = getSkillKey({ type: 'marketplace', id: skill.id, marketplace: skill.marketplace, plugin: skill.plugin, name: skill.name })
+                const isSelected = selectedKeys.has(key)
+                // Single toggle handler reused by both onClick and onKeyDown
+                const handleMarketplaceToggle = () => {
+                  if (isSelected) {
+                    onRemoveSkill(key)
+                  } else {
+                    onAddSkill({
+                      type: 'marketplace',
+                      id: skill.id,
+                      marketplace: skill.marketplace,
+                      plugin: skill.plugin,
+                      name: skill.name,
+                    })
+                  }
+                }
+                return (
+                  <div
+                    key={key}
+                    role="button"
+                    tabIndex={0}
+                    className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-cyan-500/10 border-cyan-500/30'
+                        : 'bg-gray-800/50 border-gray-700/50 hover:border-gray-600'
+                    }`}
+                    onClick={() => {
+                      if (isSelected) {
+                        onRemoveSkill(key)
+                      } else if (skill.id != null) {
+                        // Only add if the skill has a valid id — skills without an id cannot
+                        // be keyed, deduped, or referenced reliably by downstream consumers.
+                        onAddSkill({
+                          type: 'marketplace',
+                          id: skill.id,
+                          name: skill.name,
+                          marketplace: skill.marketplace,
+                          plugin: skill.plugin,
+                          description: skill.description,
+                        })
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        if (isSelected) onRemoveSkill(key)
+                        else onAddSkill({ type: 'marketplace', id: skill.id, marketplace: skill.marketplace, plugin: skill.plugin, name: skill.name, description: skill.description })
+                      }
+                    }}
+                    aria-pressed={isSelected}
+                    aria-label={`${skill.name}: ${skill.description && skill.description.trim() !== '' ? skill.description : `${skill.plugin} / ${skill.marketplace}`}`}
+                  >
+                    <div className={`p-1.5 rounded-md ${
+                      isSelected ? 'bg-cyan-500/20' : 'bg-gray-700/50'
+                    }`}>
+                      <Package className={`w-4 h-4 ${isSelected ? 'text-cyan-400' : 'text-gray-400'}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-200">{skill.name ?? 'Unnamed'}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {skill.description && skill.description.trim() !== '' ? skill.description : `${skill.plugin} / ${skill.marketplace}`}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      {isSelected ? (
+                        <Check className="w-4 h-4 text-cyan-400" />
+                      ) : (
+                        <Plus className="w-4 h-4 text-gray-500" />
+                      )}
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-4">
+                {searchQuery ? 'No matching marketplace skills' : 'No marketplace skills installed. Install a marketplace first.'}
+              </p>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'repo' && (
+          <RepoScanner
+            onAddSkill={onAddSkill}
+            onRemoveSkill={onRemoveSkill}
+            selectedSkillKeys={selectedKeys}
+            getSkillKey={getSkillKey}
+          />
+        )}
+      </div>
+    </div>
+  )
+}

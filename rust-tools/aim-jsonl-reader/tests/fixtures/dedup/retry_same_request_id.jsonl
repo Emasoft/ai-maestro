@@ -1,0 +1,2 @@
+{"uuid":"aaa-1","requestId":"req-xyz","role":"assistant","model":"claude-sonnet-4-6","message":{"usage":{"output_tokens":80,"cache_read_input_tokens":5}}}
+{"uuid":"aaa-2","requestId":"req-xyz","role":"assistant","model":"claude-sonnet-4-6","message":{"usage":{"output_tokens":80,"cache_read_input_tokens":5}}}

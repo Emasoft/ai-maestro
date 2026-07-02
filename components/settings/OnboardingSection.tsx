@@ -1,20 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Compass, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 export default function OnboardingSection() {
   const router = useRouter()
   const [status, setStatus] = useState<'idle' | 'restarting'>('idle')
+  const [onboardingCompleted, setOnboardingCompleted] = useState<string | null>(null)
+  const [selectedUseCase, setSelectedUseCase] = useState<string | null>(null)
 
-  const onboardingCompleted = typeof window !== 'undefined'
-    ? localStorage.getItem('aimaestro-onboarding-completed')
-    : null
-
-  const selectedUseCase = typeof window !== 'undefined'
-    ? localStorage.getItem('aimaestro-onboarding-use-case')
-    : null
+  // Read localStorage after mount to avoid SSR hydration mismatch
+  useEffect(() => {
+    setOnboardingCompleted(localStorage.getItem('aimaestro-onboarding-completed'))
+    setSelectedUseCase(localStorage.getItem('aimaestro-onboarding-use-case'))
+  }, [])
 
   const handleRestartOnboarding = () => {
     setStatus('restarting')

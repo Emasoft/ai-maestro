@@ -6,7 +6,7 @@ import type { Agent } from '@/types/agent'
 
 interface ChatViewProps {
   agent: Agent
-  isVisible?: boolean
+  isActive?: boolean  // Only fetch data when active (prevents API flood with many agents)
 }
 
 interface Message {
@@ -35,7 +35,7 @@ interface ContentBlock {
   [key: string]: any
 }
 
-export default function ChatView({ agent, isVisible = true }: ChatViewProps) {
+export default function ChatView({ agent, isActive = false }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [pendingMessages, setPendingMessages] = useState<Array<{ text: string; timestamp: string }>>([])
   const [input, setInput] = useState('')
@@ -70,6 +70,8 @@ export default function ChatView({ agent, isVisible = true }: ChatViewProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  // Track pending timeouts for cleanup on unmount
+  const pendingTimersRef = useRef<Set<NodeJS.Timeout>>(new Set())
 
   // Track if we've done initial load
   const hasLoadedRef = useRef(false)
@@ -77,6 +79,22 @@ export default function ChatView({ agent, isVisible = true }: ChatViewProps) {
   const prevMessageCountRef = useRef(0)
   // Track previous hookState for change detection
   const prevHookStateRef = useRef<string | null>(null)
+
+  // UI2-MAJ-24: keep refs in sync with the latest state so fetchMessages can
+  // read them without depending on the state values. Previously, fetchMessages
+  // had `messages.length`, `messages`, `pendingMessages.length` in its deps —
+  // which made the callback identity churn on every state change. The polling
+  // useEffect deps `[agent?.id, isActive]` did NOT include fetchMessages, so
+  // setInterval captured the FIRST callback at mount and reused it forever,
+  // calling a stale closure with stale `messages` for every "hasChanges"
+  // comparison — leading to false positives that fired setMessages even when
+  // the new fetched array was identical. The refs let us drop these deps;
+  // the callback is now stable across renders, and the comparison reads the
+  // current values from the refs.
+  const messagesRef = useRef(messages)
+  const pendingMessagesLengthRef = useRef(pendingMessages.length)
+  useEffect(() => { messagesRef.current = messages }, [messages])
+  useEffect(() => { pendingMessagesLengthRef.current = pendingMessages.length }, [pendingMessages.length])
 
   // Fetch messages from the JSONL-based API
   const fetchMessages = useCallback(async (showLoading = false) => {
@@ -88,7 +106,7 @@ export default function ChatView({ agent, isVisible = true }: ChatViewProps) {
 
     try {
       const hostUrl = agent.hostUrl || ''
-      const response = await fetch(`${hostUrl}/api/agents/${agent.id}/chat?limit=200`)
+      const response = await fetch(`${hostUrl}/api/agents/${agent.id}/chat?limit=25`)
       const data = await response.json()
 
       if (!response.ok) {
@@ -97,15 +115,18 @@ export default function ChatView({ agent, isVisible = true }: ChatViewProps) {
 
       if (data.success) {
         // Only update if messages actually changed (compare length and last timestamp)
+        // UI2-MAJ-24: read current messages from the ref, not from a stale closure.
         const newMessages = data.messages || []
-        const hasChanges = newMessages.length !== messages.length ||
-          (newMessages.length > 0 && messages.length > 0 &&
-           newMessages[newMessages.length - 1]?.timestamp !== messages[messages.length - 1]?.timestamp)
+        const currentMessages = messagesRef.current
+        const hasChanges = newMessages.length !== currentMessages.length ||
+          (newMessages.length > 0 && currentMessages.length > 0 &&
+           newMessages[newMessages.length - 1]?.timestamp !== currentMessages[currentMessages.length - 1]?.timestamp)
 
         if (hasChanges || !hasLoadedRef.current) {
           setMessages(newMessages)
-          // Clear pending messages when we get new activity
-          if (hasChanges && pendingMessages.length > 0) {
+          // Clear pending messages when we get new activity. Read length from
+          // ref so this branch isn't a dep of fetchMessages.
+          if (hasChanges && pendingMessagesLengthRef.current > 0) {
             setPendingMessages([])
           }
         }
@@ -130,21 +151,30 @@ export default function ChatView({ agent, isVisible = true }: ChatViewProps) {
     } finally {
       setIsLoading(false)
     }
-  }, [agent?.id, agent?.hostUrl, messages.length, messages, pendingMessages.length])
+    // UI2-MAJ-24: stable deps — only agent identity. State values read via refs above.
+  }, [agent?.id, agent?.hostUrl])
 
-  // Start polling when visible, but don't clear messages on tab switch
+  // Cleanup all pending timers on unmount
   useEffect(() => {
-    if (isVisible && agent?.id) {
-      // Only fetch with loading indicator if we haven't loaded yet
-      if (!hasLoadedRef.current) {
-        fetchMessages(true)
-      }
-
-      // Poll every 2 seconds for new messages
-      pollIntervalRef.current = setInterval(() => {
-        fetchMessages(false)
-      }, 2000)
+    return () => {
+      pendingTimersRef.current.forEach(t => clearTimeout(t))
+      pendingTimersRef.current.clear()
     }
+  }, [])
+
+  // Only fetch when this agent is active (prevents API flood with 40+ agents)
+  useEffect(() => {
+    if (!agent?.id || !isActive) return
+
+    // Initial fetch with loading indicator
+    if (!hasLoadedRef.current) {
+      fetchMessages(true)
+    }
+
+    // Poll every 2 seconds for new messages
+    pollIntervalRef.current = setInterval(() => {
+      fetchMessages(false)
+    }, 2000)
 
     return () => {
       if (pollIntervalRef.current) {
@@ -152,12 +182,11 @@ export default function ChatView({ agent, isVisible = true }: ChatViewProps) {
         pollIntervalRef.current = null
       }
     }
-  }, [isVisible, agent?.id, fetchMessages])
+  }, [agent?.id, isActive]) // Re-run when agent changes or becomes active
 
-  // Auto-scroll to bottom ONLY when new messages arrive (not on tab switch)
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    // Only scroll when new messages arrive while visible
-    if (!isVisible || messages.length === 0) return
+    if (messages.length === 0) return
 
     const hasNewMessages = messages.length > prevMessageCountRef.current
     const isInitialLoad = prevMessageCountRef.current === 0
@@ -170,16 +199,7 @@ export default function ChatView({ agent, isVisible = true }: ChatViewProps) {
     } else if (hasNewMessages) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-    // Tab switch: do nothing, let browser preserve scroll position
-  }, [messages, isVisible])
-
-  // Focus input when visible
-  useEffect(() => {
-    if (isVisible) {
-      const timer = setTimeout(() => inputRef.current?.focus(), 100)
-      return () => clearTimeout(timer)
-    }
-  }, [isVisible])
+  }, [messages])
 
   // Send message via API
   const handleSend = async () => {
@@ -209,12 +229,18 @@ export default function ChatView({ agent, isVisible = true }: ChatViewProps) {
 
       // Clear pending message after a delay (it was sent successfully)
       // The hookState should change, indicating the message was processed
-      setTimeout(() => {
+      const clearTimer = setTimeout(() => {
         setPendingMessages(prev => prev.filter(p => p.timestamp !== pendingMsg.timestamp))
+        pendingTimersRef.current.delete(clearTimer)
       }, 3000)
+      pendingTimersRef.current.add(clearTimer)
 
       // Fetch updated messages after a short delay
-      setTimeout(() => fetchMessages(false), 500)
+      const fetchTimer = setTimeout(() => {
+        fetchMessages(false)
+        pendingTimersRef.current.delete(fetchTimer)
+      }, 500)
+      pendingTimersRef.current.add(fetchTimer)
     } catch (err) {
       console.error('[ChatView] Error sending message:', err)
       setError(err instanceof Error ? err.message : 'Failed to send message')
@@ -250,7 +276,11 @@ export default function ChatView({ agent, isVisible = true }: ChatViewProps) {
     try {
       await navigator.clipboard.writeText(text)
       setCopiedIndex(index)
-      setTimeout(() => setCopiedIndex(null), 2000)
+      const copyTimer = setTimeout(() => {
+        setCopiedIndex(null)
+        pendingTimersRef.current.delete(copyTimer)
+      }, 2000)
+      pendingTimersRef.current.add(copyTimer)
     } catch (err) {
       console.error('Failed to copy:', err)
     }

@@ -1,53 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { forwardMessage } from '@/lib/messageQueue'
+import { forwardMessage } from '@/services/messages-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
 
+// CC-P1-412: Wrap request.json() in try/catch for malformed JSON
 export async function POST(request: NextRequest) {
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+  let body
   try {
-    const body = await request.json()
-    const { messageId, originalMessage, fromSession, toSession, forwardNote } = body
-
-    // Validate required fields
-    // Either messageId (local forward) or originalMessage (remote forward) must be provided
-    if ((!messageId && !originalMessage) || !fromSession || !toSession) {
-      return NextResponse.json(
-        { error: 'Either messageId or originalMessage, plus fromSession and toSession are required' },
-        { status: 400 }
-      )
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+  if (!body.to || !body.message) {
+    return NextResponse.json({ error: 'to and message are required' }, { status: 400 })
+  }
+  try {
+    const result = await forwardMessage(body)
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
-
-    // Validate that from and to sessions are different
-    if (fromSession === toSession) {
-      return NextResponse.json(
-        { error: 'Cannot forward message to the same session' },
-        { status: 400 }
-      )
-    }
-
-    // Forward the message
-    // If originalMessage is provided (remote forward), use it directly
-    // Otherwise use messageId (local forward)
-    const forwardedMessage = await forwardMessage(
-      messageId,
-      fromSession,
-      toSession,
-      forwardNote || undefined,
-      originalMessage || undefined
-    )
-
-    return NextResponse.json({
-      success: true,
-      message: 'Message forwarded successfully',
-      forwardedMessage: {
-        id: forwardedMessage.id,
-        to: forwardedMessage.to,
-        subject: forwardedMessage.subject,
-      },
-    })
+    return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
-    console.error('Error forwarding message:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to forward message' },
-      { status: 500 }
-    )
+    console.error('[Forward] Error:', error)
+    return NextResponse.json({ error: 'Failed to forward message' }, { status: 500 })
   }
 }

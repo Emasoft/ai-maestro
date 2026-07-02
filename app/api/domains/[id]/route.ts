@@ -1,5 +1,9 @@
-import { NextResponse } from 'next/server'
-import { getDomain, deleteDomain, updateDomain } from '@/lib/domain-service'
+import { NextRequest, NextResponse } from 'next/server'
+import { getDomainById, updateDomainById, deleteDomainById } from '@/services/domains-service'
+import { enforceSystemOwner } from '@/lib/route-auth'
+
+// Force dynamic -- reads runtime filesystem state
+export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/domains/[id]
@@ -10,22 +14,16 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const domain = getDomain(params.id)
+    const { id } = await params
+    const result = await getDomainById(id)
 
-    if (!domain) {
-      return NextResponse.json(
-        { error: 'Domain not found' },
-        { status: 404 }
-      )
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
-
-    return NextResponse.json({ domain })
+    return NextResponse.json(result.data)
   } catch (error) {
-    console.error('Failed to get domain:', error)
-    return NextResponse.json(
-      { error: 'Failed to get domain' },
-      { status: 500 }
-    )
+    console.error('[Domains] GET error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -34,31 +32,27 @@ export async function GET(
  * Update a domain (description or isDefault)
  */
 export async function PATCH(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
-    const body = await request.json()
-
-    const domain = updateDomain(params.id, {
-      description: body.description,
-      isDefault: body.isDefault,
-    })
-
-    if (!domain) {
-      return NextResponse.json(
-        { error: 'Domain not found' },
-        { status: 404 }
-      )
+    const { id } = await params
+    let body
+    try { body = await request.json() } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
+    const result = await updateDomainById(id, body)
 
-    return NextResponse.json({ domain })
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data)
   } catch (error) {
-    console.error('Failed to update domain:', error)
-    return NextResponse.json(
-      { error: 'Failed to update domain' },
-      { status: 500 }
-    )
+    console.error('[Domains] PATCH error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -67,25 +61,22 @@ export async function PATCH(
  * Delete a domain
  */
 export async function DELETE(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authErr = enforceSystemOwner(request)
+  if (authErr) return authErr
+
   try {
-    const success = deleteDomain(params.id)
+    const { id } = await params
+    const result = await deleteDomainById(id)
 
-    if (!success) {
-      return NextResponse.json(
-        { error: 'Domain not found' },
-        { status: 404 }
-      )
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result.data)
   } catch (error) {
-    console.error('Failed to delete domain:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete domain' },
-      { status: 500 }
-    )
+    console.error('[Domains] DELETE error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

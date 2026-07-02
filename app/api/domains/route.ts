@@ -1,6 +1,9 @@
-import { NextResponse } from 'next/server'
-import { listDomains, createDomain } from '@/lib/domain-service'
-import type { CreateDomainRequest } from '@/types/agent'
+import { NextRequest, NextResponse } from 'next/server'
+import { listAllDomains, createNewDomain } from '@/services/domains-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+
+// Force dynamic -- reads runtime filesystem state
+export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/domains
@@ -8,59 +11,42 @@ import type { CreateDomainRequest } from '@/types/agent'
  */
 export async function GET() {
   try {
-    const domains = listDomains()
+    const result = await listAllDomains()
 
-    return NextResponse.json({ domains })
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data)
   } catch (error) {
-    console.error('Failed to list domains:', error)
-    return NextResponse.json(
-      { error: 'Failed to list domains' },
-      { status: 500 }
-    )
+    console.error('[Domains] GET list error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 /**
  * POST /api/domains
  * Create a new email domain
- *
- * Request body:
- * {
- *   "domain": "example.com",
- *   "description": "Optional description",
- *   "isDefault": false
- * }
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // Authenticate -- domain creation is a write path (MF-003 pattern)
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status ?? 401 })
+  }
+
   try {
-    const body: CreateDomainRequest = await request.json()
-
-    // Validate required fields
-    if (!body.domain) {
-      return NextResponse.json(
-        { error: 'Domain is required' },
-        { status: 400 }
-      )
+    let body
+    try { body = await request.json() } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
+    const result = await createNewDomain(body)
 
-    const domain = createDomain(body)
-
-    return NextResponse.json(
-      { domain },
-      { status: 201 }
-    )
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data, { status: result.status })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to create domain'
-
-    if (message.includes('already exists')) {
-      return NextResponse.json({ error: message }, { status: 409 })
-    }
-
-    if (message.includes('Invalid domain')) {
-      return NextResponse.json({ error: message }, { status: 400 })
-    }
-
-    console.error('Failed to create domain:', error)
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error('[Domains] POST error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

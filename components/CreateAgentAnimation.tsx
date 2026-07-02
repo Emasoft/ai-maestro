@@ -1,15 +1,16 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { Sparkles, Star, Cpu, Terminal, Zap, Heart, Code, Folder, GitBranch, FolderOpen, Play, MessageSquare, Server } from 'lucide-react'
+import { Sparkles, Star, Cpu, Terminal, Zap, Heart, Code, Folder, GitBranch, FolderOpen, Play, MessageSquare, Server, Users, Moon } from 'lucide-react'
 
 interface CreateAgentAnimationProps {
   phase: 'naming' | 'preparing' | 'creating' | 'ready' | 'error'
   agentName: string
-  agentAlias?: string  // Fun AI-themed nickname (e.g., MarIA, LunAI)
+  agentAlias?: string  // Persona name — the agent's personal name (e.g., Peter-Parker, Lucy)
   avatarUrl?: string   // Preview avatar URL based on agent name
   progress?: number
   showNextSteps?: boolean  // Show next steps guide in ready phase
+  teamName?: string | null  // If set, agent belongs to this team (shows team-specific next steps)
 }
 
 // Generate a preview avatar URL from agent name (same logic as AgentBadge)
@@ -22,7 +23,7 @@ export function getPreviewAvatarUrl(agentName: string): string {
   }
   const index = Math.abs(hash) % 100
   const gender = (Math.abs(hash >> 8) % 2 === 0) ? 'men' : 'women'
-  return `/avatars/${gender}_${index.toString().padStart(2, '0')}.png`
+  return `/avatars/${gender}_${index.toString().padStart(2, '0')}.jpg`
 }
 
 const PHASE_CONFIG = {
@@ -82,6 +83,7 @@ export default function CreateAgentAnimation({
   avatarUrl,
   progress = 0,
   showNextSteps = false,
+  teamName = null,
 }: CreateAgentAnimationProps) {
   const config = PHASE_CONFIG[phase]
   const messageIndex = Math.floor((progress / 100) * config.messages.length)
@@ -109,7 +111,7 @@ export default function CreateAgentAnimation({
           {phase === 'naming' && <NamingAnimation key="naming" agentName={agentName} />}
           {phase === 'preparing' && <PreparingAnimation key="preparing" />}
           {phase === 'creating' && <CreatingAnimation key="creating" avatarUrl={avatarUrl} />}
-          {phase === 'ready' && <ReadyAnimation key="ready" agentName={agentName} agentAlias={agentAlias} avatarUrl={avatarUrl} showNextSteps={showNextSteps} />}
+          {phase === 'ready' && <ReadyAnimation key="ready" agentName={agentName} agentAlias={agentAlias} avatarUrl={avatarUrl} showNextSteps={showNextSteps} teamName={teamName} />}
           {phase === 'error' && <ErrorAnimation key="error" />}
         </AnimatePresence>
       </div>
@@ -418,12 +420,13 @@ function CreatingAnimation({ avatarUrl }: { avatarUrl?: string }) {
 }
 
 // Ready Animation - Agent comes to life!
-function ReadyAnimation({ agentName, agentAlias, avatarUrl, showNextSteps }: { agentName: string; agentAlias?: string; avatarUrl?: string; showNextSteps?: boolean }) {
-  const nextSteps = [
+function ReadyAnimation({ agentName, agentAlias, avatarUrl, showNextSteps, teamName }: { agentName: string; agentAlias?: string; avatarUrl?: string; showNextSteps?: boolean; teamName?: string | null }) {
+  // Team agents get different next steps: they start hibernated and are managed by the team
+  const autonomousNextSteps = [
     {
       icon: FolderOpen,
-      title: 'Set Working Directory',
-      description: 'Choose a repo or folder as your agent\'s home',
+      title: 'Agent Folder Created',
+      description: `Your agent lives at ~/agents/${agentName}/`,
       color: 'text-blue-400',
       bgColor: 'bg-blue-500/10',
       borderColor: 'border-blue-500/30',
@@ -445,6 +448,31 @@ function ReadyAnimation({ agentName, agentAlias, avatarUrl, showNextSteps }: { a
       borderColor: 'border-purple-500/30',
     },
   ]
+
+  // Team agents show the spec text split across two cards (Rule: SPARK-5 / ISSUE-007).
+  // The first card covers "Your agent is registered in team '<name>'.", the second covers
+  // "It starts hibernated — the MANAGER, you, or the Chief-of-Staff can wake it from the dashboard."
+  // The card titles act as visual headings; descriptions carry the literal spec sentence.
+  const teamNextSteps = [
+    {
+      icon: Users,
+      title: `Registered in Team`,
+      description: `Your agent is registered in team '${teamName}'.`,
+      color: 'text-blue-400',
+      bgColor: 'bg-blue-500/10',
+      borderColor: 'border-blue-500/30',
+    },
+    {
+      icon: Moon,
+      title: 'Starts Hibernated',
+      description: 'It starts hibernated — the MANAGER, you, or the Chief-of-Staff can wake it from the dashboard.',
+      color: 'text-amber-400',
+      bgColor: 'bg-amber-500/10',
+      borderColor: 'border-amber-500/30',
+    },
+  ]
+
+  const nextSteps = teamName ? teamNextSteps : autonomousNextSteps
 
   return (
     <motion.div

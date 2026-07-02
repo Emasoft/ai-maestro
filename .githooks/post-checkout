@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# post-checkout — project-scoped git hook
+# Delegates to Git LFS post-checkout (preserves LFS smudge after checkout).
+
+if command -v git-lfs >/dev/null 2>&1; then
+  exec git lfs post-checkout "$@"
+else
+  printf '\n%s\n\n' "This repository is configured for Git LFS but 'git-lfs' was not found on your PATH." >&2
+  exit 2
+fi

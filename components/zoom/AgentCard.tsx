@@ -42,7 +42,7 @@ export default function AgentCard({
   const [isShuttingDown, setIsShuttingDown] = useState(false)
   const [showEmailPopup, setShowEmailPopup] = useState(false)
 
-  const displayName = agent.label || agent.name || agent.alias || 'Unnamed Agent'
+  const displayName = agent.label || agent.name || 'Unnamed Agent'
   const initials = displayName
     .split(/[\s-_]+/)
     .map(word => word[0])
@@ -87,17 +87,18 @@ export default function AgentCard({
     setIsShuttingDown(true)
     try {
       const baseUrl = agent.hostUrl || ''
-      const response = await fetch(`${baseUrl}/api/agents/${agent.id}/shutdown`, {
+      // Use hibernate endpoint (shutdown doesn't exist)
+      const response = await fetch(`${baseUrl}/api/agents/${agent.id}/hibernate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })
 
       if (!response.ok) {
-        throw new Error('Failed to shutdown agent')
+        throw new Error('Failed to hibernate agent')
       }
       onShutdown?.()
     } catch (error) {
-      console.error('Failed to shutdown agent:', error)
+      console.error('Failed to hibernate agent:', error)
     } finally {
       setIsShuttingDown(false)
     }
@@ -111,9 +112,21 @@ export default function AgentCard({
   }
 
   return (
+    // UI2-MAJ-03: Card flip is the primary zoom-view interaction. Add
+    // role + tabIndex + onKeyDown so keyboard users can flip the card.
     <div
-      className={`zoom-card-container cursor-pointer group ${isFlipped ? 'is-flipped' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-label={`Flip card for ${displayName}`}
+      aria-pressed={isFlipped}
+      className={`zoom-card-container cursor-pointer group focus:outline-none focus:ring-2 focus:ring-violet-400/70 ${isFlipped ? 'is-flipped' : ''}`}
       onClick={onFlip}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+          e.preventDefault()
+          onFlip()
+        }
+      }}
     >
       {/* Front Face */}
       <div className="zoom-card-face zoom-card-front h-full transition-all duration-300 group-hover:scale-[1.02] relative overflow-hidden">
@@ -167,7 +180,7 @@ export default function AgentCard({
                 onClick={handleShutdown}
                 disabled={isShuttingDown}
                 className="text-red-400 hover:text-red-300 disabled:text-red-600 transition-colors"
-                title="Shutdown Agent"
+                title="Hibernate Agent"
               >
                 {isShuttingDown ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

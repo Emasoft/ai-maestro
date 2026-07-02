@@ -1,0 +1,432 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+/**
+ * Unit tests for Ed25519 signature verification on governance endpoints (SR-001, SR-002, SR-007)
+ *
+ * Coverage: 12 tests across 3 security fixes
+ * - SR-001 (signature on outbound): broadcastGovernanceSync signs requests, sendRequestToRemoteHost signs, notifyRemoteHostOfRejection signs
+ * - SR-007 (type whitelist): submitCrossHostRequest rejects unimplemented types (manager + COS roles)
+ * - Signature header format: correct header names and values
+ *
+ * External dependencies mocked: host-keys, hosts-config, governance, agent-registry, team-registry,
+ *                                governance-peers, governance-request-registry, file-lock, manager-trust,
+ *                                rate-limit, fetch
+ */
+
+// ============================================================================
+// Mocks -- all external dependencies
+// ============================================================================
+
+const mockSignHostAttestation = vi.fn().mockReturnValue('mock-signature-base64')
+const mockGetHostPublicKeyHex = vi.fn().mockReturnValue('mock-public-key-hex')
+vi.mock('@/lib/host-keys', () => ({
+  signHostAttestation: (...args: unknown[]) => mockSignHostAttestation(...args),
+  getHostPublicKeyHex: (...args: unknown[]) => mockGetHostPublicKeyHex(...args),
+  verifyHostAttestation: vi.fn(),
+}))
+
+const mockGetHosts = vi.fn()
+const mockGetSelfHostId = vi.fn().mockReturnValue('host-local')
+const mockIsSelf = vi.fn()
+const mockGetHostById = vi.fn()
+vi.mock('@/lib/hosts-config', () => ({
+  getHosts: (...args: unknown[]) => mockGetHosts(...args),
+  getSelfHostId: (...args: unknown[]) => mockGetSelfHostId(...args),
+  isSelf: (...args: unknown[]) => mockIsSelf(...args),
+  getHostById: (...args: unknown[]) => mockGetHostById(...args),
+}))
+
+const mockGetManagerId = vi.fn()
+vi.mock('@/lib/governance', () => ({
+  getManagerId: (...args: unknown[]) => mockGetManagerId(...args),
+  verifyPassword: vi.fn().mockResolvedValue(true),
+  isManager: vi.fn().mockReturnValue(true),
+  isChiefOfStaffAnywhere: vi.fn().mockReturnValue(false),
+}))
+
+const mockGetAgent = vi.fn()
+vi.mock('@/lib/agent-registry', () => ({
+  getAgent: (...args: unknown[]) => mockGetAgent(...args),
+}))
+
+const mockLoadTeams = vi.fn().mockReturnValue([])
+vi.mock('@/lib/team-registry', () => ({
+  loadTeams: (...args: unknown[]) => mockLoadTeams(...args),
+  saveTeams: vi.fn(),
+}))
+
+const mockSavePeerGovernance = vi.fn()
+vi.mock('@/lib/governance-peers', () => ({
+  savePeerGovernance: (...args: unknown[]) => mockSavePeerGovernance(...args),
+}))
+
+const mockCreateGovernanceRequest = vi.fn()
+vi.mock('@/lib/governance-request-registry', () => ({
+  createGovernanceRequest: (...args: unknown[]) => mockCreateGovernanceRequest(...args),
+  getGovernanceRequest: vi.fn(),
+  listGovernanceRequests: vi.fn().mockReturnValue([]),
+  approveGovernanceRequest: vi.fn(),
+  rejectGovernanceRequest: vi.fn(),
+}))
+
+vi.mock('@/lib/file-lock', () => ({
+  withLock: vi.fn(),
+}))
+
+// CC-P4-005: Intentional end-to-end mock strategy for broadcastGovernanceSync.
+// Uses real broadcastGovernanceSync to test Ed25519 header signing end-to-end.
+// This mock keeps real exports while mocking sub-dependencies (governance-sync internals).
+//
+// NOTE: When new imports are added to governance-sync.ts, this mock must be updated.
+// Sub-dependencies of governance-sync that MUST be mocked for this to work:
+//   - @/lib/host-keys        (signHostAttestation, getHostPublicKeyHex) — Ed25519 signing
+//   - @/lib/hosts-config     (getHosts, getSelfHostId, isSelf) — peer host discovery
+//   - @/lib/governance       (getManagerId) — manager resolution for snapshot
+//   - @/lib/governance-peers (savePeerGovernance) — peer state persistence
+//   - @/lib/team-registry    (loadTeams) — team snapshot data
+//   - @/lib/agent-registry   (getAgent) — manager name resolution
+// If broadcastGovernanceSync adds new imports, add the corresponding mocks above.
+vi.mock('@/lib/governance-sync', async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>
+  return {
+    ...actual,
+    // Keep all real exports so broadcastGovernanceSync tests work
+  }
+})
+
+vi.mock('@/lib/manager-trust', () => ({
+  shouldAutoApprove: vi.fn().mockReturnValue(false),
+}))
+
+// SF-017: Mock rate-limit to prevent cross-host-governance-service from loading real rate-limit module
+// SF-058: recordFailure alias removed -- only canonical names remain
+vi.mock('@/lib/rate-limit', () => ({
+  checkRateLimit: vi.fn(() => ({ allowed: true, retryAfterMs: 0 })),
+  checkAndRecordAttempt: vi.fn(() => ({ allowed: true, retryAfterMs: 0 })),
+  recordAttempt: vi.fn(),
+  resetRateLimit: vi.fn(),
+}))
+
+// ============================================================================
+// Import modules under test (after mocks)
+// ============================================================================
+
+// NT-013: Removed unused buildLocalGovernanceSnapshot import (tested in governance-sync.test.ts)
+import {
+  broadcastGovernanceSync,
+} from '@/lib/governance-sync'
+
+import {
+  submitCrossHostRequest,
+} from '@/services/cross-host-governance-service'
+
+// ============================================================================
+// Test data
+// ============================================================================
+
+const HOST_LOCAL = { id: 'host-local', url: 'http://localhost:23000', name: 'host-local' }
+const HOST_REMOTE = { id: 'host-remote', url: 'http://10.0.0.5:23000', name: 'host-remote' }
+
+// ============================================================================
+// Setup
+// ============================================================================
+
+const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 })
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.stubGlobal('fetch', mockFetch)
+  mockGetSelfHostId.mockReturnValue('host-local')
+  mockGetHosts.mockReturnValue([HOST_LOCAL, HOST_REMOTE])
+  mockIsSelf.mockImplementation((id: string) => id === 'host-local')
+  mockGetManagerId.mockReturnValue(null)
+  mockLoadTeams.mockReturnValue([])
+  mockSignHostAttestation.mockReturnValue('mock-signature-base64')
+})
+
+// NT-010: Restore stubbed globals (especially fetch) after each test to prevent
+// leaking the mock into other test files that run in the same vitest worker.
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+// ============================================================================
+// SR-001: broadcastGovernanceSync includes Ed25519 signature headers
+// ============================================================================
+
+describe('SR-001: broadcastGovernanceSync signs outbound requests', () => {
+  it('includes X-Host-Id, X-Host-Timestamp, and X-Host-Signature headers in fetch calls', async () => {
+    /** Verifies that governance sync broadcasts include all 3 authentication headers */
+    await broadcastGovernanceSync('team-updated', {})
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    const fetchCall = mockFetch.mock.calls[0]
+    const headers = fetchCall[1].headers
+
+    expect(headers['X-Host-Id']).toBe('host-local')
+    expect(headers['X-Host-Timestamp']).toBeDefined()
+    expect(headers['X-Host-Signature']).toBe('mock-signature-base64')
+  })
+
+  it('signs data with format gov-sync|{hostId}|{timestamp}|{bodyHash}', async () => {
+    /** Verifies the signed data string follows the correct format for governance sync (SF-059: includes body hash) */
+    await broadcastGovernanceSync('team-updated', {})
+
+    expect(mockSignHostAttestation).toHaveBeenCalledTimes(1)
+    const signedData = mockSignHostAttestation.mock.calls[0][0] as string
+    expect(signedData).toMatch(/^gov-sync\|host-local\|/)
+    // Verify the format: gov-sync|hostId|timestamp|sha256hash
+    const parts = signedData.split('|')
+    expect(parts).toHaveLength(4)
+    expect(() => new Date(parts[2]).toISOString()).not.toThrow()
+    // SF-059: Fourth part must be a 64-char hex SHA-256 hash of the request body
+    expect(parts[3]).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('uses the same timestamp in headers and signed data', async () => {
+    /** Verifies consistency between X-Host-Timestamp header and the signed data string */
+    await broadcastGovernanceSync('team-updated', {})
+
+    const signedData = mockSignHostAttestation.mock.calls[0][0] as string
+    const signedTimestamp = signedData.split('|')[2]
+
+    const fetchCall = mockFetch.mock.calls[0]
+    const headerTimestamp = fetchCall[1].headers['X-Host-Timestamp']
+
+    expect(signedTimestamp).toBe(headerTimestamp)
+  })
+})
+
+// ============================================================================
+// SR-001: sendRequestToRemoteHost and notifyRemoteHostOfRejection sign requests
+// ============================================================================
+
+describe('SR-001: cross-host governance service signs outbound requests', () => {
+  it('sendRequestToRemoteHost includes signature headers when sending governance request', async () => {
+    /** Verifies that outbound governance requests to remote hosts include auth headers */
+    mockGetAgent.mockReturnValue({ id: 'manager-agent', name: 'mgr' })
+    mockCreateGovernanceRequest.mockResolvedValue({
+      id: 'req-001',
+      type: 'add-to-team',
+      sourceHostId: 'host-local',
+      targetHostId: 'host-remote',
+      requestedBy: 'manager-agent',
+      requestedByRole: 'manager',
+      payload: { agentId: 'agent-001', teamId: 'team-001' },
+      approvals: {},
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    })
+
+    await submitCrossHostRequest({
+      type: 'add-to-team',
+      targetHostId: 'host-remote',
+      requestedBy: 'manager-agent',
+      requestedByRole: 'manager',
+      payload: { agentId: 'agent-001', teamId: 'team-001' },
+      password: 'test-pw',
+    })
+
+    // CC-P4-004: Use deterministic vi.waitFor instead of fragile setTimeout for fire-and-forget fetch
+    // vi.waitFor handles the fire-and-forget fetch timing. If flaky in CI, add { timeout: 5000 }.
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    const fetchCall = mockFetch.mock.calls[0]
+    const headers = fetchCall[1].headers
+
+    expect(headers['X-Host-Id']).toBeDefined()
+    expect(headers['X-Host-Timestamp']).toBeDefined()
+    expect(headers['X-Host-Signature']).toBe('mock-signature-base64')
+  })
+
+  it('sendRequestToRemoteHost signs data with gov-request format', async () => {
+    /** Verifies the signed data uses gov-request|{hostId}|{timestamp} format */
+    mockGetAgent.mockReturnValue({ id: 'manager-agent', name: 'mgr' })
+    mockCreateGovernanceRequest.mockResolvedValue({
+      id: 'req-001',
+      type: 'add-to-team',
+      sourceHostId: 'host-local',
+      targetHostId: 'host-remote',
+      requestedBy: 'manager-agent',
+      requestedByRole: 'manager',
+      payload: { agentId: 'agent-001', teamId: 'team-001' },
+      approvals: {},
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    })
+
+    await submitCrossHostRequest({
+      type: 'add-to-team',
+      targetHostId: 'host-remote',
+      requestedBy: 'manager-agent',
+      requestedByRole: 'manager',
+      payload: { agentId: 'agent-001', teamId: 'team-001' },
+      password: 'test-pw',
+    })
+
+    // CC-P4-004: Use deterministic vi.waitFor instead of fragile setTimeout for fire-and-forget fetch
+    await vi.waitFor(() => expect(mockSignHostAttestation).toHaveBeenCalled())
+    const signedData = mockSignHostAttestation.mock.calls[0][0] as string
+    expect(signedData).toMatch(/^gov-request\|/)
+  })
+})
+
+// ============================================================================
+// SR-007: submitCrossHostRequest rejects unimplemented request types
+// ============================================================================
+
+describe('SR-007: submitCrossHostRequest type whitelist', () => {
+  const baseParams = {
+    targetHostId: 'host-remote',
+    requestedBy: 'manager-agent',
+    requestedByRole: 'manager' as const,
+    payload: { agentId: 'agent-001' },
+    password: 'test-pw',
+  }
+
+  beforeEach(() => {
+    mockGetAgent.mockReturnValue({ id: 'manager-agent', name: 'mgr' })
+  })
+
+  it('rejects create-agent type as unimplemented', async () => {
+    /** Verifies that create-agent request type returns 400 with not-implemented error */
+    const result = await submitCrossHostRequest({
+      ...baseParams,
+      type: 'create-agent',
+    })
+    expect(result.status).toBe(400)
+    expect(result.error).toContain('not yet implemented')
+  })
+
+  it('rejects delete-agent type as unimplemented', async () => {
+    /** Verifies that delete-agent request type returns 400 with not-implemented error */
+    const result = await submitCrossHostRequest({
+      ...baseParams,
+      type: 'delete-agent',
+    })
+    expect(result.status).toBe(400)
+    expect(result.error).toContain('not yet implemented')
+  })
+
+  it('rejects configure-agent without configuration payload', async () => {
+    /** Verifies that configure-agent passes the type whitelist but requires a configuration payload */
+    const result = await submitCrossHostRequest({
+      ...baseParams,
+      type: 'configure-agent',
+    })
+    expect(result.status).toBe(400)
+    expect(result.error).toContain('configuration payload')
+  })
+
+  it('allows add-to-team type (implemented)', async () => {
+    /** Verifies that add-to-team passes the type whitelist check and proceeds */
+    mockCreateGovernanceRequest.mockResolvedValue({
+      id: 'req-001',
+      type: 'add-to-team',
+      sourceHostId: 'host-local',
+      targetHostId: 'host-remote',
+      requestedBy: 'manager-agent',
+      requestedByRole: 'manager',
+      payload: { agentId: 'agent-001', teamId: 'team-001' },
+      approvals: {},
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    })
+
+    const result = await submitCrossHostRequest({
+      ...baseParams,
+      type: 'add-to-team',
+    })
+    expect(result.status).toBe(201)
+  })
+
+  it('allows transfer-agent type (implemented)', async () => {
+    /** Verifies that transfer-agent passes the type whitelist check and proceeds */
+    mockCreateGovernanceRequest.mockResolvedValue({
+      id: 'req-001',
+      type: 'transfer-agent',
+      sourceHostId: 'host-local',
+      targetHostId: 'host-remote',
+      requestedBy: 'manager-agent',
+      requestedByRole: 'manager',
+      payload: { agentId: 'agent-001' },
+      approvals: {},
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    })
+
+    const result = await submitCrossHostRequest({
+      ...baseParams,
+      type: 'transfer-agent',
+    })
+    expect(result.status).toBe(201)
+  })
+
+  // NT-028: Verify SR-007 type whitelist allows add-to-team with chief-of-staff role
+  it('allows add-to-team type when requestedByRole is chief-of-staff', async () => {
+    /** Verifies that the type whitelist is role-independent — COS can use implemented types */
+    const governance = await import('@/lib/governance')
+    vi.mocked(governance.isChiefOfStaffAnywhere).mockImplementation((id: string) => id === 'cos-agent')
+    mockGetAgent.mockImplementation((id: string) => {
+      if (id === 'cos-agent') return { id: 'cos-agent', name: 'COS' }
+      return null
+    })
+    mockCreateGovernanceRequest.mockResolvedValue({
+      id: 'req-cos-001',
+      type: 'add-to-team',
+      sourceHostId: 'host-local',
+      targetHostId: 'host-remote',
+      requestedBy: 'cos-agent',
+      requestedByRole: 'chief-of-staff',
+      payload: { agentId: 'agent-001', teamId: 'team-001' },
+      approvals: {},
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    })
+
+    const result = await submitCrossHostRequest({
+      ...baseParams,
+      type: 'add-to-team',
+      requestedBy: 'cos-agent',
+      requestedByRole: 'chief-of-staff' as const,
+    })
+    expect(result.status).toBe(201)
+  })
+
+  // NT-016: Verify type whitelist also works with chief-of-staff role
+  it('rejects create-agent type when requestedByRole is chief-of-staff', async () => {
+    /** Verifies that type whitelist applies regardless of the requester role */
+    // Import the mocked module to override isChiefOfStaffAnywhere for this test
+    const governance = await import('@/lib/governance')
+    vi.mocked(governance.isChiefOfStaffAnywhere).mockImplementation((id: string) => id === 'cos-agent')
+    mockGetAgent.mockImplementation((id: string) => {
+      if (id === 'cos-agent') return { id: 'cos-agent', name: 'COS' }
+      return null
+    })
+
+    const result = await submitCrossHostRequest({
+      ...baseParams,
+      type: 'create-agent',
+      requestedBy: 'cos-agent',
+      requestedByRole: 'chief-of-staff' as const,
+    })
+    expect(result.status).toBe(400)
+    expect(result.error).toContain('not yet implemented')
+  })
+})
+
+// ============================================================================
+// Header format verification
+// ============================================================================
+
+describe('Signature header format', () => {
+  it('X-Host-Timestamp is a valid ISO 8601 string', async () => {
+    /** Verifies timestamp header is parseable as ISO 8601 datetime */
+    await broadcastGovernanceSync('team-updated', {})
+
+    const fetchCall = mockFetch.mock.calls[0]
+    const timestamp = fetchCall[1].headers['X-Host-Timestamp']
+    const parsed = new Date(timestamp)
+    expect(parsed.getTime()).not.toBeNaN()
+    expect(timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+  })
+})

@@ -1,46 +1,20 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Brain, Activity, Clock, MessageSquare, Database, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Brain, Activity, MessageSquare, Database, AlertCircle, CheckCircle2 } from 'lucide-react'
 interface ExtendedSubconsciousStatus {
   success: boolean
   discoveredAgents: number
   activeAgents: number
   runningSubconscious: number
   isWarmingUp: boolean
-  totalMemoryRuns: number
   totalMessageRuns: number
-  lastMemoryRun: number | null
   lastMessageRun: number | null
-  lastMemoryResult: {
-    success: boolean
-    messagesProcessed?: number
-    conversationsDiscovered?: number
-    error?: string
-  } | null
   lastMessageResult: {
     success: boolean
     unreadCount?: number
     error?: string
   } | null
-  cumulativeMessagesIndexed?: number
-  cumulativeConversationsIndexed?: number
-  databaseStats?: {
-    totalMessages: number
-    totalConversations: number
-  }
-}
-
-function formatTimeAgo(timestamp: number | null): string {
-  if (!timestamp) return 'Never'
-  const seconds = Math.floor((Date.now() - timestamp) / 1000)
-  if (seconds < 60) return `${seconds}s ago`
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
 }
 
 interface SubconsciousStatusProps {
@@ -104,7 +78,7 @@ export function SubconsciousStatus({ refreshTrigger }: SubconsciousStatusProps =
   const isActive = status?.runningSubconscious && status.runningSubconscious > 0
   const isWarmingUp = status?.isWarmingUp || false
   const hasDiscoveredAgents = (status?.discoveredAgents || 0) > 0
-  const hasError = error || (status?.lastMemoryResult?.error) || (status?.lastMessageResult?.error)
+  const hasError = error || (status?.lastMessageResult?.error)
 
   // Determine status text and color
   const getStatusInfo = () => {
@@ -180,7 +154,7 @@ export function SubconsciousStatus({ refreshTrigger }: SubconsciousStatusProps =
               <h3 className="text-sm font-semibold text-gray-100">Subconscious Status</h3>
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Background processes that maintain agent memory
+              Background processes that track agent messaging
             </p>
           </div>
 
@@ -206,11 +180,11 @@ export function SubconsciousStatus({ refreshTrigger }: SubconsciousStatusProps =
                   <span className="text-gray-200">{status.discoveredAgents || 0}</span>
                 </div>
 
-                {/* Active in Memory */}
+                {/* Active */}
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-400 flex items-center gap-2">
                     <Activity className="w-4 h-4" />
-                    Active in Memory
+                    Active
                   </span>
                   <span className={isWarmingUp ? 'text-yellow-400' : 'text-gray-200'}>
                     {status.activeAgents}
@@ -227,60 +201,6 @@ export function SubconsciousStatus({ refreshTrigger }: SubconsciousStatusProps =
                   <span className={isActive ? 'text-purple-400' : 'text-gray-200'}>
                     {status.runningSubconscious}
                   </span>
-                </div>
-
-                <div className="border-t border-gray-700 pt-3 mt-3">
-                  <p className="text-xs text-gray-500 mb-2">Memory Database</p>
-
-                  {/* Database Stats - Total Messages Indexed */}
-                  {status.databaseStats && (
-                    <>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-400 flex items-center gap-2">
-                          <Database className="w-4 h-4" />
-                          Total Messages
-                        </span>
-                        <span className="text-purple-400 font-medium">
-                          {status.databaseStats.totalMessages.toLocaleString()}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-sm mt-1">
-                        <span className="text-gray-400 flex items-center gap-2">
-                          <MessageSquare className="w-4 h-4" />
-                          Conversations
-                        </span>
-                        <span className="text-gray-200">
-                          {status.databaseStats.totalConversations.toLocaleString()}
-                        </span>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Last Memory Run */}
-                  <div className="flex items-center justify-between text-sm mt-1">
-                    <span className="text-gray-400 flex items-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      Last Scan
-                    </span>
-                    <span className="text-gray-200">
-                      {formatTimeAgo(status.lastMemoryRun)}
-                    </span>
-                  </div>
-
-                  {/* Session stats - new messages this session */}
-                  {(status.cumulativeMessagesIndexed !== undefined && status.cumulativeMessagesIndexed > 0) && (
-                    <div className="flex items-center justify-between text-sm mt-1">
-                      <span className="text-gray-400">New This Session</span>
-                      <span className="text-green-400">+{status.cumulativeMessagesIndexed.toLocaleString()}</span>
-                    </div>
-                  )}
-
-                  {/* Total Runs */}
-                  <div className="flex items-center justify-between text-sm mt-1">
-                    <span className="text-gray-400">Total Scans</span>
-                    <span className="text-gray-200">{status.totalMemoryRuns}</span>
-                  </div>
                 </div>
 
                 <div className="border-t border-gray-700 pt-3 mt-3">

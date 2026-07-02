@@ -62,7 +62,7 @@ export default function EmailAddressesSection({
       body: JSON.stringify({
         address,
         displayName,
-        primary: addresses.length === 0, // First address is primary
+        primary: false, // Backend handles primary assignment for first address
       })
     })
 

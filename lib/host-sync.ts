@@ -19,7 +19,7 @@ import {
   PeerExchangeRequest,
   PeerExchangeResponse,
 } from '@/types/host-sync'
-import { getHosts, getSelfHost, addHost, addHostAsync, getHostById, clearHostsCache, getSelfAliases, isSelf } from './hosts-config'
+import { getHosts, getSelfHost, addHost, addHostAsync, getHostById, clearHostsCache, getSelfAliases, isSelf, getOrganizationInfo, adoptOrganization } from './hosts-config'
 import os from 'os'
 
 // Track processed propagation IDs to prevent infinite loops
@@ -47,7 +47,31 @@ export function hasProcessedPropagation(propagationId: string): boolean {
 }
 
 /**
- * Mark a propagation as processed
+ * Atomically check-and-mark a propagation as processed.
+ * Returns true if the propagation was newly marked (first caller wins).
+ * Returns false if it was already marked (duplicate / concurrent caller).
+ *
+ * WHY: hasProcessedPropagation + markPropagationProcessed as two separate
+ * calls has a TOCTOU race — two concurrent requests with the same ID can
+ * both pass the check before either marks it. This function eliminates
+ * that gap by doing both in a single synchronous operation.
+ */
+export function tryMarkPropagationProcessed(propagationId: string): boolean {
+  if (processedPropagations.has(propagationId)) {
+    return false  // Already processed — caller should skip
+  }
+  processedPropagations.add(propagationId)
+  // Clean up after TTL
+  setTimeout(() => {
+    processedPropagations.delete(propagationId)
+  }, PROPAGATION_CACHE_TTL)
+  return true  // Newly marked — caller should proceed
+}
+
+/**
+ * Mark a propagation as processed.
+ * @deprecated Use tryMarkPropagationProcessed() for atomic check-and-mark.
+ * Kept for callers that have already checked separately.
  */
 export function markPropagationProcessed(propagationId: string): void {
   processedPropagations.add(propagationId)
@@ -216,13 +240,12 @@ export async function addHostWithSync(
     return result
   }
 
-  // Check if we've already processed this propagation
-  if (hasProcessedPropagation(propagationId)) {
+  // Atomically check-and-mark to prevent TOCTOU race with concurrent requests
+  if (!tryMarkPropagationProcessed(propagationId)) {
     console.log(`[Host Sync] Already processed propagation ${propagationId}, skipping`)
     result.errors.push('Already processed this propagation')
     return result
   }
-  markPropagationProcessed(propagationId)
 
   // Step 1: Add host locally (using async version with lock for concurrent safety)
   const existingHost = getHostById(host.id)
@@ -307,11 +330,15 @@ async function registerWithPeer(
   success: boolean
   alreadyKnown: boolean
   knownHosts: HostIdentity[]
+  organizationAdopted?: boolean
   error?: string
 }> {
   try {
     // Include all aliases for duplicate detection on remote host
     const aliases = getSelfAliases()
+
+    // Include organization info for propagation
+    const orgInfo = getOrganizationInfo()
 
     const request: PeerRegistrationRequest = {
       host: {
@@ -327,6 +354,10 @@ async function registerWithPeer(
         propagationId: propagation?.propagationId,
         propagationDepth: propagation?.propagationDepth,
       },
+      // Include organization for mesh propagation
+      organization: orgInfo.organization || undefined,
+      organizationSetAt: orgInfo.setAt || undefined,
+      organizationSetBy: orgInfo.setBy || undefined,
     }
 
     const response = await fetchWithTimeout(
@@ -350,10 +381,35 @@ async function registerWithPeer(
     }
 
     const data: PeerRegistrationResponse = await response.json()
+
+    // Handle organization sync - adopt from peer if we don't have one
+    let organizationAdopted = false
+    if (data.organization && data.organizationSetAt && data.organizationSetBy) {
+      const adoptResult = adoptOrganization(
+        data.organization,
+        data.organizationSetAt,
+        data.organizationSetBy
+      )
+      if (adoptResult.success && adoptResult.adopted) {
+        organizationAdopted = true
+        console.log(`[Host Sync] Adopted organization "${data.organization}" from peer`)
+      } else if (!adoptResult.success && adoptResult.error?.includes('mismatch')) {
+        // Organization mismatch - this is a serious error
+        console.error(`[Host Sync] Organization mismatch with peer: ${adoptResult.error}`)
+        return {
+          success: false,
+          alreadyKnown: false,
+          knownHosts: [],
+          error: adoptResult.error,
+        }
+      }
+    }
+
     return {
       success: data.success,
       alreadyKnown: data.alreadyKnown,
       knownHosts: data.knownHosts || [],
+      organizationAdopted,
       error: data.error,
     }
   } catch (error) {
@@ -377,10 +433,12 @@ async function processPeerExchange(
   propagationId?: string
 ): Promise<{
   newlyAdded: number
+  organizationAdopted?: boolean
   errors: string[]
 }> {
   const errors: string[] = []
   let newlyAdded = 0
+  let organizationAdopted = false
 
   // Deduplicate incoming hosts
   const uniqueHosts = deduplicateHosts(peerKnownHosts)
@@ -434,8 +492,11 @@ async function processPeerExchange(
   }
 
   // Share our known hosts with the peer (with response checking)
+  // Also include our organization info for mesh sync
   const ourKnownHosts = getKnownHostIdentities(localHost.id)
-  if (ourKnownHosts.length > 0) {
+  const orgInfo = getOrganizationInfo()
+
+  if (ourKnownHosts.length > 0 || orgInfo.organization) {
     try {
       const request: PeerExchangeRequest = {
         fromHost: {
@@ -445,6 +506,10 @@ async function processPeerExchange(
         },
         knownHosts: ourKnownHosts,
         propagationId,
+        // Include organization info
+        organization: orgInfo.organization || undefined,
+        organizationSetAt: orgInfo.setAt || undefined,
+        organizationSetBy: orgInfo.setBy || undefined,
       }
 
       const response = await fetchWithTimeout(
@@ -460,6 +525,22 @@ async function processPeerExchange(
       if (!response.ok) {
         console.error(`[Host Sync] Peer exchange failed: HTTP ${response.status}`)
         errors.push(`Peer exchange returned ${response.status}`)
+      } else {
+        // Check if peer has organization we should adopt
+        const exchangeResponse: PeerExchangeResponse = await response.json()
+        if (exchangeResponse.organization && exchangeResponse.organizationSetAt && exchangeResponse.organizationSetBy) {
+          const adoptResult = adoptOrganization(
+            exchangeResponse.organization,
+            exchangeResponse.organizationSetAt,
+            exchangeResponse.organizationSetBy
+          )
+          if (adoptResult.success && adoptResult.adopted) {
+            organizationAdopted = true
+            console.log(`[Host Sync] Adopted organization "${exchangeResponse.organization}" from peer exchange`)
+          } else if (!adoptResult.success && adoptResult.error?.includes('mismatch')) {
+            errors.push(adoptResult.error)
+          }
+        }
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
@@ -468,7 +549,7 @@ async function processPeerExchange(
     }
   }
 
-  return { newlyAdded, errors }
+  return { newlyAdded, organizationAdopted, errors }
 }
 
 /**

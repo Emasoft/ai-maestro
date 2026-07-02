@@ -1,38 +1,24 @@
 import { NextResponse } from 'next/server'
-import { getSelfHost } from '@/lib/hosts-config'
-import { HostIdentityResponse } from '@/types/host-sync'
+import { getHostIdentity } from '@/services/hosts-service'
 
-// Get package version
-const packageJson = require('@/package.json')
+// Force dynamic rendering - organization can change at runtime
+export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/hosts/identity
  *
  * Returns this host's identity information for peer registration.
- * Used by remote hosts to know who we are when registering.
- *
- * Uses centralized getPublicUrl() for consistent URL detection.
  */
-export async function GET(): Promise<NextResponse<HostIdentityResponse>> {
-  const selfHost = getSelfHost()
-
-  // ALWAYS use the configured URL from hosts.json
-  // NEVER use localhost - it's useless in a mesh network
-  // The URL in hosts.json should already be a reachable IP (set by getDefaultSelfHost)
-  const url = selfHost.url
-
-  // Detect if running on Tailscale (IPs start with 100.)
-  const tailscale = selfHost.tailscale || url.includes('100.')
-
-  return NextResponse.json({
-    host: {
-      id: selfHost.id,
-      name: selfHost.name,
-      url,
-      description: selfHost.description,
-      version: packageJson.version || '0.0.0',
-      tailscale,
-      isSelf: true,  // Always true - this is the host serving the API
+export async function GET() {
+  try {
+    const result = getHostIdentity()
+    // SF-013 fix: Check for error in result before returning data
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
-  })
+    return NextResponse.json(result.data, { status: result.status })
+  } catch (error) {
+    console.error('[Host Identity GET] error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }

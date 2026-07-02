@@ -1,0 +1,342 @@
+/**
+ * Unit tests for Layer 5: Agent Configuration Governance
+ *
+ * Tests the governance enforcement added to updateAgentById in
+ * services/agents-core-service.ts.
+ *
+ * Note: createNewAgent and deleteAgentById were removed (deprecated wrappers).
+ * Their callers now use CreateAgent/DeleteAgent from element-management-service directly.
+ *
+ * Coverage: 7 tests
+ *   - updateAgentById: 7 tests (no auth, manager, COS, self-update, owning COS, non-owning regular, 404)
+ *
+ * NT-013: Test count discrepancy note
+ *   The total governance test suite across all 9 files contains ~628 discrete test functions
+ *   (it() blocks). However, vitest reports ~836 tests because vitest counts each expansion
+ *   of parameterized tests (it.each / describe.each) as a separate test. For example, a
+ *   single it.each with 4 parameter sets counts as 4 tests in vitest output.
+ *   The CHANGELOG claim of "167 tests across 9 files" refers to the original count before
+ *   extended test files were added, while "836" is vitest's parametric-expanded count.
+ *
+ * Mocking strategy:
+ *   - @/lib/governance: isManager, isChiefOfStaffAnywhere (governance role checks)
+ *   - @/lib/team-registry: loadTeams (team membership for owning-COS check)
+ *   - @/lib/agent-registry: createAgent, getAgent, updateAgent, deleteAgent, searchAgents,
+ *     plus other exports that the module imports at load time
+ *   - External I/O modules: fs, uuid, hosts-config, session-persistence, amp-inbox-writer,
+ *     agent-startup, shared-state, agent-runtime, messageQueue (all stubbed to prevent real I/O)
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { Agent, CreateAgentRequest, UpdateAgentRequest } from '@/types/agent'
+import type { Team } from '@/types/team'
+
+// ============================================================================
+// Mocks — all external dependencies stubbed before module import
+// ============================================================================
+
+// --- fs: prevent any real filesystem access ---
+vi.mock('fs', () => ({
+  existsSync: vi.fn(() => false),
+  mkdirSync: vi.fn(),
+  readFileSync: vi.fn(() => '{}'),
+  writeFileSync: vi.fn(),
+  renameSync: vi.fn(),
+  copyFileSync: vi.fn(),
+}))
+
+// --- uuid: deterministic IDs ---
+let uuidCounter = 0
+vi.mock('uuid', () => ({
+  v4: vi.fn(() => `test-uuid-${++uuidCounter}`),
+}))
+
+// --- Governance: isManager and isChiefOfStaffAnywhere are the core of Layer 5 ---
+const mockIsManager = vi.fn<(agentId: string) => boolean>(() => false)
+const mockIsChiefOfStaffAnywhere = vi.fn<(agentId: string) => boolean>(() => false)
+vi.mock('@/lib/governance', () => ({
+  isManager: (...args: [string]) => mockIsManager(...args),
+  isChiefOfStaffAnywhere: (...args: [string]) => mockIsChiefOfStaffAnywhere(...args),
+}))
+
+// --- Team registry: loadTeams returns array of Team objects ---
+const mockLoadTeams = vi.fn<() => Team[]>(() => [])
+vi.mock('@/lib/team-registry', () => ({
+  loadTeams: () => mockLoadTeams(),
+}))
+
+// --- Agent registry: CRUD operations ---
+const mockCreateAgent = vi.fn<(body: CreateAgentRequest) => Agent>()
+const mockGetAgent = vi.fn<(id: string, includeDeleted?: boolean) => Agent | null>(() => null)
+const mockUpdateAgent = vi.fn<(id: string, body: UpdateAgentRequest) => Agent | null>()
+const mockDeleteAgent = vi.fn<(id: string, hard: boolean) => boolean>(() => true)
+const mockSearchAgents = vi.fn(() => [])
+
+vi.mock('@/lib/agent-registry', () => ({
+  loadAgents: vi.fn(() => ({ version: 1, agents: [] })),
+  saveAgents: vi.fn(),
+  createAgent: (...args: [CreateAgentRequest]) => mockCreateAgent(...args),
+  getAgent: (...args: [string, boolean?]) => mockGetAgent(...args),
+  getAgentByName: vi.fn(() => null),
+  getAgentBySession: vi.fn(() => null),
+  updateAgent: (...args: [string, UpdateAgentRequest]) => mockUpdateAgent(...args),
+  deleteAgent: (...args: [string, boolean]) => mockDeleteAgent(...args),
+  searchAgents: () => mockSearchAgents(),
+  linkSession: vi.fn(),
+  unlinkSession: vi.fn(),
+}))
+
+// --- Other imports the service module requires at load time ---
+vi.mock('@/lib/messageQueue', () => ({
+  resolveAgentIdentifier: vi.fn(() => null),
+}))
+
+vi.mock('@/lib/hosts-config', () => ({
+  getHosts: vi.fn(() => []),
+  getSelfHost: vi.fn(() => ({ id: 'local', name: 'local', url: 'http://localhost:23000' })),
+  getSelfHostId: vi.fn(() => 'local'),
+  isSelf: vi.fn(() => true),
+}))
+
+vi.mock('@/lib/session-persistence', () => ({
+  persistSession: vi.fn(),
+  unpersistSession: vi.fn(),
+}))
+
+vi.mock('@/lib/amp-inbox-writer', () => ({
+  initAgentAMPHome: vi.fn(),
+  getAgentAMPDir: vi.fn(() => '/tmp/amp'),
+}))
+
+vi.mock('@/lib/agent-startup', () => ({
+  initializeAllAgents: vi.fn(),
+  getStartupStatus: vi.fn(() => ({ status: 'idle' })),
+}))
+
+vi.mock('@/services/shared-state', () => ({
+  sessionActivity: new Map(),
+  // updateAgentById dynamically imports broadcastAgentUpdate to push status_update
+  // events to /status WebSocket subscribers after every successful field change
+  // (lines ~921, ~941 of services/agents-core-service.ts). The function is a
+  // no-op side-effect in unit tests — we only need a stub that exists on the
+  // mock object so the dynamic import does not throw "No export defined".
+  broadcastAgentUpdate: vi.fn(),
+}))
+
+vi.mock('@/lib/agent-runtime', () => ({
+  getRuntime: vi.fn(() => null),
+}))
+
+vi.mock('@/lib/file-lock', () => ({
+  withLock: vi.fn((_name: string, fn: () => unknown) => Promise.resolve(fn())),
+}))
+
+// SF-035: governance.ts imports broadcastGovernanceSync — mock to prevent real HTTP calls
+vi.mock('@/lib/governance-sync', () => ({
+  broadcastGovernanceSync: vi.fn(),
+  handleGovernanceSyncMessage: vi.fn(),
+}))
+
+// --- element-management-service: agents-core-service delegates to these pipelines ---
+const mockDeleteAgentPipeline = vi.fn()
+const mockCreateAgentPipeline = vi.fn()
+vi.mock('@/services/element-management-service', () => ({
+  DeleteAgent: (...args: unknown[]) => mockDeleteAgentPipeline(...args),
+  CreateAgent: (...args: unknown[]) => mockCreateAgentPipeline(...args),
+}))
+
+// ============================================================================
+// Import module under test (after all mocks are declared)
+// ============================================================================
+
+import {
+  updateAgentById,
+} from '@/services/agents-core-service'
+
+// ============================================================================
+// Test helpers
+// ============================================================================
+
+const MANAGER_ID = 'agent-manager-001'
+const COS_ID = 'agent-cos-002'
+const MEMBER_ID = 'agent-member-003'
+const TARGET_AGENT_ID = 'agent-target-004'
+const OWNING_COS_ID = 'agent-owning-cos-005'
+
+/** Build a realistic Agent object with sensible defaults */
+function makeAgent(overrides: Partial<Agent> = {}): Agent {
+  return {
+    id: TARGET_AGENT_ID,
+    name: 'test-target-agent',
+    program: 'Claude Code',
+    taskDescription: 'Testing governance enforcement',
+    hostId: 'local',
+    sessions: [],
+    role: 'member',
+    status: 'active',
+    createdAt: '2026-01-15T10:00:00.000Z',
+    updatedAt: '2026-01-15T10:00:00.000Z',
+    lastActive: '2026-01-15T10:00:00.000Z',
+    ...overrides,
+  } as Agent
+}
+
+/** Build a realistic UpdateAgentRequest */
+function makeUpdateRequest(overrides: Partial<UpdateAgentRequest> = {}): UpdateAgentRequest {
+  return {
+    taskDescription: 'Updated task description for governance testing',
+    ...overrides,
+  }
+}
+
+/** Build a Team object for owning-COS tests */
+function makeClosedTeam(overrides: Partial<Team> = {}): Team {
+  return {
+    id: 'team-closed-001',
+    name: 'Closed Backend Team',
+    type: 'closed',
+    agentIds: [TARGET_AGENT_ID, OWNING_COS_ID],
+    chiefOfStaffId: OWNING_COS_ID,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+// ============================================================================
+// Setup
+// ============================================================================
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  uuidCounter = 0
+
+  // Default: all role checks return false (regular member)
+  mockIsManager.mockReturnValue(false)
+  mockIsChiefOfStaffAnywhere.mockReturnValue(false)
+  mockLoadTeams.mockReturnValue([])
+
+  // Default: agent exists and is not deleted
+  mockGetAgent.mockReturnValue(makeAgent())
+
+  // Default: CRUD operations succeed
+  mockCreateAgent.mockImplementation((body) => makeAgent({ name: body.name }))
+  // Place id after ...body so the explicit id parameter always wins over any id field in body
+  mockUpdateAgent.mockImplementation((id, body) => makeAgent({ ...body, id }))
+  mockDeleteAgent.mockReturnValue(true)
+  // Default: Pipeline mocks for element-management-service (used by updateAgentById Change* functions)
+  mockDeleteAgentPipeline.mockResolvedValue({ success: true, agentId: TARGET_AGENT_ID, hard: false, operations: [] })
+  mockCreateAgentPipeline.mockResolvedValue({ success: true, agentId: 'test-uuid-1', operations: [], restartNeeded: false })
+})
+
+// ============================================================================
+// updateAgentById — 7 tests
+// ============================================================================
+
+describe('updateAgentById governance', () => {
+  it('allows update when requestingAgentId is null (backward compatibility)', async () => {
+    /** Verifies that omitting requestingAgentId skips governance role checks on the requester.
+     *  Note: isManager may still be called for title detection (BUG-014 fix), but NOT for auth. */
+    const result = await updateAgentById(TARGET_AGENT_ID, makeUpdateRequest())
+
+    expect(result.status).toBe(200)
+    expect(result.data?.agent).toBeDefined()
+    // Governance role checks for the requester should not be called with the requestingAgentId
+    // (isManager may be called with the TARGET agent id for title detection, which is acceptable)
+    expect(mockIsManager).not.toHaveBeenCalledWith(undefined)
+    expect(mockIsManager).not.toHaveBeenCalledWith(null)
+  })
+
+  it('allows update when requestingAgentId is MANAGER', async () => {
+    /** Verifies that a MANAGER role agent is permitted to update any agent */
+    mockIsManager.mockReturnValue(true)
+
+    const result = await updateAgentById(TARGET_AGENT_ID, makeUpdateRequest(), MANAGER_ID)
+
+    expect(result.status).toBe(200)
+    expect(result.data?.agent).toBeDefined()
+    expect(mockIsManager).toHaveBeenCalledWith(MANAGER_ID)
+  })
+
+  it('allows update when requestingAgentId is Chief-of-Staff', async () => {
+    /** Verifies that a COS role agent is permitted to update agents */
+    mockIsManager.mockReturnValue(false)
+    mockIsChiefOfStaffAnywhere.mockReturnValue(true)
+
+    const result = await updateAgentById(TARGET_AGENT_ID, makeUpdateRequest(), COS_ID)
+
+    expect(result.status).toBe(200)
+    expect(result.data?.agent).toBeDefined()
+    expect(mockIsChiefOfStaffAnywhere).toHaveBeenCalledWith(COS_ID)
+  })
+
+  it('blocks self-update (CC-GOV-005: no self-modification)', async () => {
+    /** CC-GOV-005: Agents cannot modify themselves via API — consistent with RBAC authorization.ts */
+    mockIsManager.mockReturnValue(false)
+    mockIsChiefOfStaffAnywhere.mockReturnValue(false)
+    mockGetAgent.mockReturnValue(makeAgent({ id: TARGET_AGENT_ID }))
+
+    const result = await updateAgentById(TARGET_AGENT_ID, makeUpdateRequest(), TARGET_AGENT_ID)
+
+    expect(result.status).toBe(403)
+    expect(result.error).toContain('Only MANAGER or owning Chief-of-Staff can update this agent')
+    expect(result.data).toBeUndefined()
+    // updateAgent should NOT have been called
+    expect(mockUpdateAgent).not.toHaveBeenCalled()
+  })
+
+  it('allows update when requestingAgentId is COS of a closed team the target belongs to', async () => {
+    /** Verifies that the COS of a closed team containing the target agent can update it */
+    mockIsManager.mockReturnValue(false)
+    mockIsChiefOfStaffAnywhere.mockReturnValue(false)
+    // The requesting agent is the owning COS, not the global COS check
+    mockLoadTeams.mockReturnValue([
+      makeClosedTeam({
+        agentIds: [TARGET_AGENT_ID, OWNING_COS_ID],
+        chiefOfStaffId: OWNING_COS_ID,
+      }),
+    ])
+
+    const result = await updateAgentById(TARGET_AGENT_ID, makeUpdateRequest(), OWNING_COS_ID)
+
+    expect(result.status).toBe(200)
+    expect(result.data?.agent).toBeDefined()
+    expect(mockLoadTeams).toHaveBeenCalled()
+  })
+
+  it('rejects update when requestingAgentId is a regular member (not self, not owning COS)', async () => {
+    /** Verifies that a non-privileged agent that is not updating itself is denied with 403 */
+    mockIsManager.mockReturnValue(false)
+    mockIsChiefOfStaffAnywhere.mockReturnValue(false)
+    // No closed teams contain this member as COS
+    mockLoadTeams.mockReturnValue([
+      makeClosedTeam({
+        agentIds: [TARGET_AGENT_ID, OWNING_COS_ID],
+        chiefOfStaffId: OWNING_COS_ID,
+      }),
+    ])
+
+    const result = await updateAgentById(TARGET_AGENT_ID, makeUpdateRequest(), MEMBER_ID)
+
+    expect(result.status).toBe(403)
+    expect(result.error).toContain('Only MANAGER or owning Chief-of-Staff can update this agent')
+    expect(result.data).toBeUndefined()
+    // updateAgent should NOT have been called
+    expect(mockUpdateAgent).not.toHaveBeenCalled()
+  })
+
+  it('returns 404 when target agent does not exist', async () => {
+    /** Verifies that attempting to update a non-existent agent returns 404 before governance check */
+    mockGetAgent.mockReturnValue(null)
+
+    const result = await updateAgentById('nonexistent-agent', makeUpdateRequest(), MANAGER_ID)
+
+    expect(result.status).toBe(404)
+    expect(result.error).toContain('Agent not found')
+    // Governance checks should not be reached
+    expect(mockIsManager).not.toHaveBeenCalled()
+  })
+})
+
+// Note: deleteAgentById tests were removed — the deprecated wrapper was eliminated.
+// DeleteAgent is now called directly from route handlers.

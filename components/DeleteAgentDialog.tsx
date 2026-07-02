@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AlertTriangle, Trash2, X, Zap, Skull } from 'lucide-react'
+import { AlertTriangle, Download, Trash2, X, Zap } from 'lucide-react'
+import { useSudo } from '@/contexts/SudoContext'
+import { sudoFetch } from '@/lib/sudo-fetch'
 
 interface DeleteAgentDialogProps {
   isOpen: boolean
@@ -11,6 +13,8 @@ interface DeleteAgentDialogProps {
   agentId: string
   agentAlias: string
   agentDisplayName?: string
+  workingDirectory?: string
+  hostUrl?: string
 }
 
 export default function DeleteAgentDialog({
@@ -20,10 +24,18 @@ export default function DeleteAgentDialog({
   agentId,
   agentAlias,
   agentDisplayName,
+  workingDirectory,
+  hostUrl,
 }: DeleteAgentDialogProps) {
+  const { requestSudoToken } = useSudo()
   const [deleting, setDeleting] = useState(false)
   const [confirmText, setConfirmText] = useState('')
   const [phase, setPhase] = useState<'confirm' | 'deleting' | 'done'>('confirm')
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteFolder, setDeleteFolder] = useState(false)
+  const autoCloseTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const displayName = agentDisplayName || agentAlias
 
@@ -32,30 +44,124 @@ export default function DeleteAgentDialog({
 
     setPhase('deleting')
     setDeleting(true)
+    setDeleteError(null)
 
     try {
+      // Call the API with hard=true (always) + deleteFolder param. DELETE
+      // /api/agents/[id] is classified "strict" in security-registry.json,
+      // so the request will come back 403 sudo_required on the first try;
+      // sudoFetch transparently prompts the user for the governance password
+      // and retries with the X-Sudo-Token header.
+      //
+      // CRITICAL (SCEN-002 P0-003): This dialog is the "Delete Forever"
+      // UI — the user has typed the agent name verbatim to confirm a
+      // permanent deletion. The API defaults to soft-delete (`hard=false`)
+      // which only marks the entry as deletedAt in registry.json; the
+      // agent keeps appearing in the registry file AND the G09 folder
+      // deletion is guarded by `if (hard && deleteFolder)`, so without
+      // `hard=true` the folder is also kept. The UI must pass hard=true
+      // so the registry entry is actually removed and the folder cleanup
+      // runs when requested.
+      const baseUrl = hostUrl || ''
+      const params = new URLSearchParams()
+      params.set('hard', 'true')
+      if (deleteFolder) params.set('deleteFolder', 'true')
+      const qs = `?${params.toString()}`
+      const res = await sudoFetch(
+        `${baseUrl}/api/agents/${agentId}${qs}`,
+        { method: 'DELETE' },
+        (reason) => requestSudoToken(
+          `Delete agent "${displayName}"${deleteFolder ? ' and its working directory' : ''}. ${reason}`
+        )
+      )
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || `Delete failed (${res.status})`)
+      }
+      // Also call onConfirm for parent-level UI cleanup (close panel, refresh list)
       await onConfirm()
       setPhase('done')
-      // Auto-close after showing success
-      setTimeout(() => {
+      // Auto-close after showing success (tracked for cleanup on unmount)
+      if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current)
+      autoCloseTimerRef.current = setTimeout(() => {
+        autoCloseTimerRef.current = null
         onClose()
         // Reset state
         setPhase('confirm')
         setConfirmText('')
         setDeleting(false)
+        setDeleteError(null)
       }, 1500)
     } catch (error) {
       console.error('Failed to delete agent:', error)
+      const errorMsg = error instanceof Error ? error.message : 'Delete failed'
+      setDeleteError(errorMsg)
       setDeleting(false)
+      // Reset confirmText so user must re-type before retrying —
+      // this forces attention back to the form where the error is visible
+      setConfirmText('')
       setPhase('confirm')
     }
   }
 
+  // Cleanup auto-close timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current)
+        autoCloseTimerRef.current = null
+      }
+    }
+  }, [])
+
   const handleClose = () => {
     if (deleting) return
+    if (autoCloseTimerRef.current) {
+      clearTimeout(autoCloseTimerRef.current)
+      autoCloseTimerRef.current = null
+    }
     onClose()
     setPhase('confirm')
     setConfirmText('')
+    setExportError(null)
+    setDeleteError(null)
+    setDeleteFolder(false)
+  }
+
+  // Download agent data as ZIP via fetch() with proper error handling
+  const handleExport = async () => {
+    setExporting(true)
+    setExportError(null)
+    try {
+      const res = await fetch(`/api/agents/${agentId}/export`)
+      if (!res.ok) {
+        const errBody = await res.text()
+        throw new Error(errBody || `Export failed (${res.status})`)
+      }
+      // Trigger browser download from the response blob
+      const blob = await res.blob()
+      if (blob.size === 0) {
+        setExportError('Export returned empty file')
+        return
+      }
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      // Derive filename from Content-Disposition header or fall back to agent alias
+      const disposition = res.headers.get('Content-Disposition')
+      const filenameMatch = disposition?.match(/filename\*=UTF-8''([^;]+)/) || disposition?.match(/filename="?([^"]+)"?/)
+      a.download = filenameMatch?.[1] || `${agentAlias}-export.zip`
+      document.body.appendChild(a)
+      a.click()
+      // Cleanup the temporary link and object URL
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Agent export failed:', err)
+      setExportError(err instanceof Error ? err.message : 'Export failed')
+    } finally {
+      setExporting(false)
+    }
   }
 
   if (!isOpen) return null
@@ -99,6 +205,21 @@ export default function DeleteAgentDialog({
 
               {/* Content */}
               <div className="p-6 space-y-4">
+                {/* API error banner — shown at the top so it's impossible to miss */}
+                {deleteError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-red-500/15 border-2 border-red-500/50 rounded-lg p-4 flex items-start gap-3"
+                  >
+                    <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm text-red-300 font-semibold">Delete failed</p>
+                      <p className="text-sm text-red-200/90 mt-1">{deleteError}</p>
+                    </div>
+                  </motion.div>
+                )}
+
                 <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
                   <p className="text-sm text-gray-300 mb-3">
                     You are about to permanently delete:
@@ -131,6 +252,45 @@ export default function DeleteAgentDialog({
                   </ul>
                 </div>
 
+                {/* Option to also delete agent working directory folder */}
+                {workingDirectory && (
+                  <label className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg cursor-pointer hover:bg-amber-500/15 transition-all">
+                    <input
+                      type="checkbox"
+                      checked={deleteFolder}
+                      onChange={(e) => setDeleteFolder(e.target.checked)}
+                      className="mt-0.5 accent-amber-500"
+                    />
+                    <div>
+                      <p className="text-sm text-amber-400 font-medium">Also delete agent folder</p>
+                      <p className="text-xs text-gray-400 mt-0.5 font-mono">{workingDirectory}</p>
+                    </div>
+                  </label>
+                )}
+
+                {/* Export prompt -- lets user download agent data before confirming deletion */}
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-blue-400 font-medium">Want to keep a backup?</p>
+                      <p className="text-xs text-zinc-400 mt-1">
+                        Export this agent as a ZIP file before deleting.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleExport}
+                      disabled={exporting || deleting}
+                      className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors flex items-center gap-1.5"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      {exporting ? 'Exporting...' : 'Export'}
+                    </button>
+                  </div>
+                  {exportError && (
+                    <p className="text-xs text-red-400 mt-2">Export failed: {exportError}</p>
+                  )}
+                </div>
+
                 <div className="pt-2">
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Type <span className="font-mono text-red-400">{agentAlias}</span> to confirm:
@@ -139,6 +299,7 @@ export default function DeleteAgentDialog({
                     type="text"
                     value={confirmText}
                     onChange={(e) => setConfirmText(e.target.value)}
+                    onInput={(e) => setConfirmText((e.target as HTMLInputElement).value)}
                     placeholder={agentAlias}
                     className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors"
                     autoFocus
@@ -156,7 +317,7 @@ export default function DeleteAgentDialog({
                 </button>
                 <button
                   onClick={handleDelete}
-                  disabled={confirmText !== agentAlias}
+                  disabled={confirmText !== agentAlias || deleting || exporting}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
                 >
                   <Trash2 className="w-4 h-4" />

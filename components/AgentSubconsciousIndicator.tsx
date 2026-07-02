@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Brain, Clock, Database, MessageSquare, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Brain, AlertCircle, CheckCircle2 } from 'lucide-react'
 interface ExtendedAgentSubconsciousStatus {
   success: boolean
   exists: boolean
@@ -10,45 +10,15 @@ interface ExtendedAgentSubconsciousStatus {
   isWarmingUp: boolean
   status: {
     startedAt: number | null
-    memoryCheckInterval: number
     messageCheckInterval: number
-    lastMemoryRun: number | null
     lastMessageRun: number | null
-    lastMemoryResult: {
-      success: boolean
-      messagesProcessed?: number
-      conversationsDiscovered?: number
-      error?: string
-    } | null
     lastMessageResult: {
       success: boolean
       unreadCount?: number
       error?: string
     } | null
-    totalMemoryRuns: number
     totalMessageRuns: number
-    cumulativeMessagesIndexed?: number
-    cumulativeConversationsIndexed?: number
   } | null
-  memoryStats?: {
-    totalMessages: number
-    totalConversations: number
-    totalVectors: number
-    oldestMessage: number | null
-    newestMessage: number | null
-  }
-}
-
-function formatTimeAgo(timestamp: number | null): string {
-  if (!timestamp) return 'Never'
-  const seconds = Math.floor((Date.now() - timestamp) / 1000)
-  if (seconds < 60) return `${seconds}s ago`
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
 }
 
 interface Props {
@@ -113,7 +83,7 @@ export function AgentSubconsciousIndicator({ agentId, hostUrl }: Props) {
 
   const isRunning = status?.isRunning || false
   const isWarmingUp = status?.isWarmingUp || false
-  const hasError = error || status?.status?.lastMemoryResult?.error || status?.status?.lastMessageResult?.error
+  const hasError = error || status?.status?.lastMessageResult?.error
 
   // Determine icon color and animation
   const getIndicatorClass = () => {
@@ -159,7 +129,7 @@ export function AgentSubconsciousIndicator({ agentId, hostUrl }: Props) {
               <h3 className="text-sm font-semibold text-gray-100">Agent Subconscious</h3>
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Background memory maintenance
+              Background message tracking
             </p>
           </div>
 
@@ -192,77 +162,12 @@ export function AgentSubconsciousIndicator({ agentId, hostUrl }: Props) {
                 </div>
 
                 {status.status && (
-                  <>
-                    <div className="border-t border-gray-700 pt-2 mt-2">
-                      <p className="text-[10px] text-gray-500 mb-1.5">Memory Database</p>
-
-                      {/* Database Stats - Total Messages */}
-                      {status.memoryStats && (
-                        <>
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-400 flex items-center gap-1.5">
-                              <Database className="w-3 h-3" />
-                              Total Messages
-                            </span>
-                            <span className="text-purple-400 font-medium">
-                              {status.memoryStats.totalMessages.toLocaleString()}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center justify-between text-xs mt-1">
-                            <span className="text-gray-400 flex items-center gap-1.5">
-                              <MessageSquare className="w-3 h-3" />
-                              Conversations
-                            </span>
-                            <span className="text-gray-200">
-                              {status.memoryStats.totalConversations.toLocaleString()}
-                            </span>
-                          </div>
-                        </>
-                      )}
-
-                      <div className="flex items-center justify-between text-xs mt-1">
-                        <span className="text-gray-400 flex items-center gap-1.5">
-                          <Clock className="w-3 h-3" />
-                          Last Scan
-                        </span>
-                        <span className="text-gray-200">
-                          {formatTimeAgo(status.status.lastMemoryRun)}
-                        </span>
-                      </div>
-
-                      {/* New this session */}
-                      {(status.status.cumulativeMessagesIndexed !== undefined && status.status.cumulativeMessagesIndexed > 0) && (
-                        <div className="flex items-center justify-between text-xs mt-1">
-                          <span className="text-gray-400">New This Session</span>
-                          <span className="text-green-400">+{status.status.cumulativeMessagesIndexed.toLocaleString()}</span>
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between text-xs mt-1">
-                        <span className="text-gray-400">Total Scans</span>
-                        <span className="text-gray-200">{status.status.totalMemoryRuns}</span>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-gray-700 pt-2 mt-2">
-                      <p className="text-[10px] text-gray-500 mb-1.5">Notifications</p>
-
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-400 flex items-center gap-1.5">
-                          <MessageSquare className="w-3 h-3" />
-                          Delivery
-                        </span>
-                        <span className="text-green-400">
-                          Push (instant)
-                        </span>
-                      </div>
-
-                      <p className="text-[10px] text-gray-500 mt-1.5">
-                        Messages delivered via tmux
-                      </p>
-                    </div>
-                  </>
+                  <div className="border-t border-gray-700 pt-2 mt-2">
+                    <p className="text-[10px] text-gray-500 mb-1.5">Notifications</p>
+                    <p className="text-[10px] text-gray-500">
+                      Messages delivered instantly via tmux push
+                    </p>
+                  </div>
                 )}
               </>
             ) : null}

@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from 'next'
 import { Space_Grotesk } from 'next/font/google'
 import './globals.css'
+import { GlobalTouchScrollbars } from '@/components/GlobalTouchScrollbars'
+import LoginGate from '@/components/LoginGate'
+import { SudoProvider } from '@/contexts/SudoContext'
+import { HelpPanelProvider } from '@/contexts/HelpPanelContext'
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] })
 
@@ -30,7 +34,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={spaceGrotesk.className}>{children}</body>
+      <body className={spaceGrotesk.className}>
+        <GlobalTouchScrollbars />
+        <SudoProvider>
+          <HelpPanelProvider>
+            <LoginGate>{children}</LoginGate>
+          </HelpPanelProvider>
+        </SudoProvider>
+      </body>
     </html>
   )
 }

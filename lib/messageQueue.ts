@@ -1,21 +1,26 @@
 import { promises as fs } from 'fs'
+import * as fsSync from 'fs'
 import path from 'path'
 import os from 'os'
-import { getHostById, getSelfHost, getSelfHostId, isSelf } from './hosts-config-server.mjs'
-import { loadAgents, getAgentBySession, getAgentByName, getAgentByNameAnyHost, getAgentByAlias, getAgentByAliasAnyHost, getAgent } from './agent-registry'
-import { applyContentSecurity } from './content-security'
+import { getSelfHost, getSelfHostId, isSelf } from './hosts-config-server.mjs'
+import { getAgentBySession, getAgentByName, getAgentByNameAnyHost, getAgentByAlias, getAgentByAliasAnyHost, getAgentByLabel, getAgentByLabelAnyHost, getAgentByPartialName, getAgent } from './agent-registry'
+import { parseSessionName, computeSessionName } from '@/types/agent'
 import type { Agent } from '@/types/agent'
+// SF-052: File locking for read-modify-write message operations
+import { withLock } from '@/lib/file-lock'
 
 /**
- * Get this host's name for messages
+ * NT-030: Canonical getSelfHostName -- message-send.ts imports from here
  * Uses the hostname (e.g., 'macbook-pro', 'mac-mini') for cross-host compatibility
  */
-function getSelfHostName(): string {
+export function getSelfHostName(): string {
+  // Call getSelfHostId() once to avoid duplicate calls across try/catch branches
+  const selfHostId = getSelfHostId()
   try {
     const selfHost = getSelfHost()
-    return selfHost.name || getSelfHostId() || 'unknown-host'
+    return selfHost.name || selfHostId || 'unknown-host'
   } catch {
-    return getSelfHostId() || 'unknown-host'
+    return selfHostId || 'unknown-host'
   }
 }
 
@@ -37,9 +42,9 @@ export interface Message {
   priority: 'low' | 'normal' | 'high' | 'urgent'
   status: 'unread' | 'read' | 'archived'
   content: {
-    type: 'request' | 'response' | 'notification' | 'update'
+    type: 'request' | 'response' | 'notification' | 'alert' | 'task' | 'status' | 'handoff' | 'ack' | 'update' | 'system' // Aligned with AMPPayload.type in lib/types/amp.ts
     message: string
-    context?: Record<string, any>
+    context?: Record<string, unknown>
     attachments?: Array<{
       name: string
       path: string
@@ -55,6 +60,14 @@ export interface Message {
     forwardedBy: string
     forwardedAt: string
     forwardNote?: string
+  }
+  // AMP Protocol fields (for cryptographic verification)
+  amp?: {
+    signature?: string           // Ed25519 signature of envelope (base64)
+    senderPublicKey?: string     // Sender's public key (hex)
+    signatureVerified?: boolean  // True if signature was cryptographically verified
+    ampAddress?: string          // Full AMP address (name@tenant.provider)
+    envelopeId?: string          // Original AMP envelope ID
   }
 }
 
@@ -73,12 +86,13 @@ export interface MessageSummary {
   subject: string
   priority: 'low' | 'normal' | 'high' | 'urgent'
   status: 'unread' | 'read' | 'archived'
-  type: 'request' | 'response' | 'notification' | 'update'
+  type: 'request' | 'response' | 'notification' | 'alert' | 'task' | 'status' | 'handoff' | 'ack' | 'update' | 'system' // Aligned with Message.content.type
   preview: string
   viaSlack?: boolean  // True if message originated from Slack bridge
 }
 
-interface ResolvedAgent {
+// NT-029: Canonical definition of ResolvedAgent -- message-send.ts re-exports from here
+export interface ResolvedAgent {
   agentId: string
   alias: string
   displayName?: string
@@ -87,34 +101,425 @@ interface ResolvedAgent {
   hostUrl?: string      // Full URL to reach this agent's host (e.g., 'http://localhost:23000')
 }
 
-const MESSAGE_DIR = path.join(os.homedir(), '.aimaestro', 'messages')
+const AMP_AGENTS_DIR = path.join(os.homedir(), '.agent-messaging', 'agents')
+const CLEANUP_FLAG = path.join(os.homedir(), '.agent-messaging', '.cleanup-old-duplicates-done')
 
-/**
- * GAP8 FIX: Track legacy location access for deprecation monitoring
- * This helps identify when legacy fallbacks are still being used
- */
-const legacyAccessLog = new Map<string, number>()
+// === One-time cleanup: remove old-format duplicate messages (msg-*.json) ===
+// Migration scripts created dash-format copies alongside underscore-format originals.
+// The dash copies lack proper status fields, causing phantom unread counts.
+// Runs once on first message read, then writes a flag file to never run again.
+let _cleanupTriggered = false
+function triggerOldDuplicateCleanup(): void {
+  if (_cleanupTriggered) return
+  _cleanupTriggered = true
 
-function logLegacyAccess(location: string, operation: string): void {
-  const key = `${operation}:${location}`
-  const count = legacyAccessLog.get(key) || 0
-  legacyAccessLog.set(key, count + 1)
+  // Check flag file synchronously to avoid async race
+  try {
+    fsSync.accessSync(CLEANUP_FLAG)
+    return // Already done
+  } catch {
+    // Not done yet — run cleanup in background
+  }
 
-  // Log every 10th access to avoid log spam
-  if ((count + 1) % 10 === 1) {
-    console.log(`[MessageQueue] GAP8 DEPRECATION: Legacy location access - ${operation} from "${location}" (access #${count + 1})`)
+  // Run cleanup async, non-blocking
+  ;(async () => {
+    let totalDeleted = 0
+    try {
+      const agents = await fs.readdir(AMP_AGENTS_DIR)
+      for (const agentId of agents) {
+        if (agentId.startsWith('.')) continue
+        for (const box of ['inbox', 'sent']) {
+          const boxDir = path.join(AMP_AGENTS_DIR, agentId, 'messages', box)
+          let senderDirs: string[]
+          try { senderDirs = await fs.readdir(boxDir) } catch { continue }
+          for (const senderDir of senderDirs) {
+            const senderPath = path.join(boxDir, senderDir)
+            let stat
+            try { stat = await fs.stat(senderPath) } catch { continue }
+            if (!stat.isDirectory()) continue
+            let files: string[]
+            try { files = await fs.readdir(senderPath) } catch { continue }
+            for (const file of files) {
+              if (file.startsWith('msg-') && file.endsWith('.json')) {
+                // SF-051: Only delete old flat-format duplicates, not current AMP envelope messages.
+                // Old format has {id, from, to, status, ...} directly; new format has {envelope, payload}.
+                const filePath = path.join(senderPath, file)
+                try {
+                  const content = await fs.readFile(filePath, 'utf-8')
+                  const parsed = JSON.parse(content)
+                  // Skip current AMP envelope-format messages (they have envelope+payload)
+                  if (parsed.envelope && parsed.payload) continue
+                  // Only delete old flat-format files that have the duplicate markers
+                  await fs.unlink(filePath)
+                  totalDeleted++
+                } catch { /* best effort */ }
+              }
+            }
+          }
+        }
+      }
+
+      // Write flag file
+      await fs.mkdir(path.dirname(CLEANUP_FLAG), { recursive: true })
+      await fs.writeFile(CLEANUP_FLAG, `Cleaned ${totalDeleted} old-format duplicates at ${new Date().toISOString()}\n`)
+
+      if (totalDeleted > 0) {
+        console.log(`[MessageQueue] Cleaned ${totalDeleted} old-format duplicate messages (one-time migration)`)
+      }
+    } catch (error) {
+      console.error('[MessageQueue] Old duplicate cleanup failed (non-fatal):', error)
+    }
+  })()
+}
+
+// === AMP Per-Agent Directory Support (AMP Protocol) ===
+// ALL directories are keyed by agent UUID. NEVER use agent names.
+
+function getAMPInboxDir(agentUUID: string): string {
+  return path.join(AMP_AGENTS_DIR, agentUUID, 'messages', 'inbox')
+}
+
+function getAMPSentDir(agentUUID: string): string {
+  return path.join(AMP_AGENTS_DIR, agentUUID, 'messages', 'sent')
+}
+
+function extractAgentNameFromAddress(address: string): string {
+  const atIndex = address.indexOf('@')
+  if (atIndex === -1) return address
+  return address.substring(0, atIndex)
+}
+
+function extractHostFromAddress(address: string): string | undefined {
+  const atIndex = address.indexOf('@')
+  if (atIndex === -1) return undefined
+  const hostPart = address.substring(atIndex + 1)
+  return hostPart.split('.')[0]
+}
+
+/** Normalize AMP message IDs (underscores) to internal format (dashes) */
+function normalizeMessageId(id: string): string {
+  return id.replace(/_/g, '-')
+}
+
+/** SF-050: Minimal structural type for AMP envelope messages parsed from JSON files */
+interface AMPEnvelopeMsg {
+  envelope: {
+    id: string
+    from: string
+    to: string
+    subject: string
+    timestamp?: string
+    priority?: string
+    in_reply_to?: string
+    signature?: string
+    sender_public_key?: string
+  }
+  payload: {
+    type?: string
+    message?: string
+    context?: unknown
+  }
+  metadata?: { status?: string }
+  local?: { status?: string }
+  fromVerified?: boolean
+  signature?: string
+  sender_public_key?: string
+}
+
+/** Convert an AMP envelope-format message to internal Message format */
+function convertAMPToMessage(ampMsg: AMPEnvelopeMsg): Message | null {
+  const envelope = ampMsg.envelope
+  const payload = ampMsg.payload
+  if (!envelope || !payload) return null
+
+  // Validate required envelope fields individually (defense-in-depth against malformed AMP messages)
+  if (!envelope.id || !envelope.from || !envelope.to || !envelope.subject) {
+    console.warn('[MessageQueue] Skipping message with missing required envelope fields:', {
+      id: envelope.id || 'unknown',
+      hasId: !!envelope.id,
+      hasFrom: !!envelope.from,
+      hasTo: !!envelope.to,
+      hasSubject: !!envelope.subject,
+    })
+    return null
+  }
+
+  const fromName = extractAgentNameFromAddress(envelope.from)
+  const toName = extractAgentNameFromAddress(envelope.to)
+  const fromHost = extractHostFromAddress(envelope.from)
+  const toHost = extractHostFromAddress(envelope.to)
+  const id = normalizeMessageId(envelope.id)
+  // CC-P1-416: Validate status before casting to prevent invalid states from malformed files
+  const rawStatus = ampMsg.metadata?.status || ampMsg.local?.status || 'unread'
+  const validStatuses: Message['status'][] = ['unread', 'read', 'archived']
+  const status: Message['status'] = validStatuses.includes(rawStatus as Message['status']) ? (rawStatus as Message['status']) : 'unread'
+
+  // Resolve display labels from agent registry (best-effort, non-blocking)
+  const fromAgent = getAgentByName(fromName) || getAgentByNameAnyHost(fromName)
+  const toAgent = getAgentByName(toName) || getAgentByNameAnyHost(toName)
+
+  return {
+    id,
+    // Use the full AMP address as the unique identifier; alias holds the extracted name
+    from: envelope.from,
+    fromAlias: fromName,
+    fromLabel: fromAgent?.label || undefined,
+    fromHost,
+    // MF-025/MF-027: Propagate fromVerified from AMP envelope; infer from signature presence
+    // when fromVerified is not explicitly set (AMP messages with valid signatures are verified)
+    // NT-026: Removed trailing `?? false` — Boolean() always returns a boolean, making it dead code
+    fromVerified: ampMsg.fromVerified ?? Boolean(envelope.signature || ampMsg.signature),
+    // Use the full AMP address as the unique identifier; alias holds the extracted name
+    to: envelope.to,
+    toAlias: toName,
+    toLabel: toAgent?.label || undefined,
+    toHost,
+    timestamp: envelope.timestamp || new Date().toISOString(),
+    subject: envelope.subject,
+    // SF-001/NT-002: Validate priority and type before casting (same pattern as status validation above)
+    priority: (() => {
+      const validPriorities: Message['priority'][] = ['low', 'normal', 'high', 'urgent']
+      const rawPriority = envelope.priority || 'normal'
+      return validPriorities.includes(rawPriority as Message['priority']) ? (rawPriority as Message['priority']) : 'normal'
+    })(),
+    status,
+    content: {
+      type: (() => {
+        const validTypes: Message['content']['type'][] = ['status', 'system', 'alert', 'request', 'response', 'notification', 'update', 'task', 'handoff', 'ack']
+        const rawType = payload.type || 'notification'
+        return validTypes.includes(rawType as Message['content']['type']) ? (rawType as Message['content']['type']) : 'notification'
+      })(),
+      message: payload.message || '',
+      // SF-001: Validate context is an object before casting (prevents silent miscast of strings/arrays)
+      context: (payload.context && typeof payload.context === 'object' && !Array.isArray(payload.context))
+        ? payload.context as Record<string, unknown>
+        : undefined,
+    },
+    inReplyTo: envelope.in_reply_to || undefined,
+    // Preserve AMP cryptographic fields from envelope for signature verification
+    amp: (envelope.signature || ampMsg.signature || envelope.sender_public_key || ampMsg.sender_public_key) ? {
+      signature: envelope.signature || ampMsg.signature || undefined,
+      senderPublicKey: envelope.sender_public_key || ampMsg.sender_public_key || undefined,
+      envelopeId: envelope.id || undefined,
+    } : undefined,
   }
 }
 
 /**
- * GAP8 FIX: Get legacy access statistics for monitoring
+ * Collect messages from an AMP per-agent directory (inbox or sent).
+ * AMP directories have sender/recipient subdirectories containing JSON files.
  */
-export function getLegacyAccessStats(): Record<string, number> {
-  const stats: Record<string, number> = {}
-  legacyAccessLog.forEach((count, key) => {
-    stats[key] = count
-  })
-  return stats
+async function collectMessagesFromAMPDir(
+  ampDir: string,
+  filter: {
+    status?: Message['status']
+    priority?: Message['priority']
+    from?: string
+    to?: string
+    previewLength?: number  // Max chars for preview (default: 100)
+  } | undefined,
+  results: MessageSummary[],
+  seenIds: Set<string>,
+): Promise<void> {
+  const maxPreview = filter?.previewLength ?? 100
+  let entries: string[]
+  try {
+    entries = await fs.readdir(ampDir)
+  } catch {
+    return // Directory doesn't exist
+  }
+
+  for (const entry of entries) {
+    const entryPath = path.join(ampDir, entry)
+    let stat
+    try {
+      stat = await fs.stat(entryPath)
+    } catch {
+      continue
+    }
+
+    const filesToRead: string[] = []
+
+    if (stat.isDirectory()) {
+      try {
+        const files = await fs.readdir(entryPath)
+        for (const file of files) {
+          if (file.endsWith('.json')) {
+            filesToRead.push(path.join(entryPath, file))
+          }
+        }
+      } catch { continue }
+    } else if (entry.endsWith('.json')) {
+      filesToRead.push(entryPath)
+    }
+
+    for (const filePath of filesToRead) {
+      try {
+        const content = await fs.readFile(filePath, 'utf-8')
+        const ampMsg = JSON.parse(content)
+
+        let summary: MessageSummary | null = null
+
+        if (ampMsg.envelope && ampMsg.payload) {
+          // AMP envelope format
+          const msg = convertAMPToMessage(ampMsg)
+          if (!msg) continue
+          summary = {
+            id: msg.id,
+            from: msg.from,
+            fromAlias: msg.fromAlias,
+            fromLabel: msg.fromLabel,
+            fromHost: msg.fromHost,
+            // MF-025: Propagate fromVerified into summary for AMP envelope messages
+            fromVerified: msg.fromVerified,
+            to: msg.to,
+            toAlias: msg.toAlias,
+            toLabel: msg.toLabel,
+            toHost: msg.toHost,
+            timestamp: msg.timestamp,
+            subject: msg.subject,
+            priority: msg.priority,
+            status: msg.status,
+            type: msg.content.type,
+            preview: msg.content.message.substring(0, maxPreview),
+          }
+        } else if (ampMsg.id && ampMsg.subject && !ampMsg.envelope) {
+          // Old flat format — ignore files without explicit status
+          // (migration duplicates often lack status, causing phantom unread counts)
+          if (!ampMsg.status) continue
+          summary = {
+            id: ampMsg.id,
+            from: ampMsg.from,
+            fromAlias: ampMsg.fromAlias,
+            fromLabel: ampMsg.fromLabel,
+            fromHost: ampMsg.fromHost,
+            fromVerified: ampMsg.fromVerified,
+            to: ampMsg.to,
+            toAlias: ampMsg.toAlias,
+            toLabel: ampMsg.toLabel,
+            toHost: ampMsg.toHost,
+            timestamp: ampMsg.timestamp,
+            subject: ampMsg.subject,
+            priority: ampMsg.priority || 'normal',
+            status: ampMsg.status,
+            type: ampMsg.content?.type || 'notification',
+            preview: (ampMsg.content?.message || '').substring(0, maxPreview),
+          }
+        }
+
+        if (!summary) continue
+
+        // Deduplicate across ID formats (dashes vs underscores)
+        const normalizedId = normalizeMessageId(summary.id)
+        const altId = summary.id.replace(/-/g, '_')
+        if (seenIds.has(normalizedId) || seenIds.has(altId)) continue
+
+        // Apply filters
+        if (filter?.status && summary.status !== filter.status) continue
+        if (filter?.priority && summary.priority !== filter.priority) continue
+        if (filter?.from) {
+          if (summary.from !== filter.from && summary.fromAlias !== filter.from) continue
+        }
+        if (filter?.to) {
+          if (summary.to !== filter.to && summary.toAlias !== filter.to) continue
+        }
+
+        seenIds.add(normalizedId)
+        seenIds.add(altId)
+        summary.id = normalizedId
+        results.push(summary)
+      } catch {
+        // Skip malformed files
+      }
+    }
+  }
+}
+
+/**
+ * Find a message file in an AMP per-agent directory by message ID.
+ * Searches through sender/recipient subdirectories.
+ * Returns the file path and whether it's in AMP envelope format.
+ */
+async function findMessageInAMPDir(
+  ampDir: string,
+  messageId: string,
+): Promise<{ path: string; isAMP: boolean } | null> {
+  const normalizedId = normalizeMessageId(messageId)
+  const ampId = messageId.replace(/-/g, '_')
+  const possibleFilenames = [`${normalizedId}.json`, `${ampId}.json`]
+
+  let entries: string[]
+  try {
+    entries = await fs.readdir(ampDir)
+  } catch {
+    return null
+  }
+
+  for (const entry of entries) {
+    const entryPath = path.join(ampDir, entry)
+    let stat
+    try {
+      stat = await fs.stat(entryPath)
+    } catch {
+      continue
+    }
+
+    if (stat.isDirectory()) {
+      for (const filename of possibleFilenames) {
+        const filePath = path.join(entryPath, filename)
+        try {
+          await fs.access(filePath)
+          const content = await fs.readFile(filePath, 'utf-8')
+          const msg = JSON.parse(content)
+          return { path: filePath, isAMP: !!(msg.envelope && msg.payload) }
+        } catch {
+          continue
+        }
+      }
+    } else if (possibleFilenames.includes(entry)) {
+      try {
+        const content = await fs.readFile(entryPath, 'utf-8')
+        const msg = JSON.parse(content)
+        return { path: entryPath, isAMP: !!(msg.envelope && msg.payload) }
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return null
+}
+
+// In-memory cache for resolved agent addresses (avoids expensive 8-step resolution on every call).
+// Entries expire after AGENT_CACHE_TTL_MS. Primary use case: when a message arrives from an external
+// agent, the sender's address is cached so that replies route back without re-resolving.
+const AGENT_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+const agentAddressCache = new Map<string, { resolved: ResolvedAgent; resolvedAt: number }>()
+
+// CC-P4-005: Store interval handle so it can be cleaned up in tests or on shutdown
+// Proactive cache sweep every 5 minutes to prevent unbounded memory growth
+const _agentCacheSweepInterval = setInterval(() => {
+  const now = Date.now()
+  for (const [key, entry] of agentAddressCache) {
+    if (now - entry.resolvedAt > AGENT_CACHE_TTL_MS) {
+      agentAddressCache.delete(key)
+    }
+  }
+}, 5 * 60 * 1000)
+_agentCacheSweepInterval.unref()
+
+/**
+ * CC-P4-005: Clean up the agent address cache sweep interval.
+ * Call this in tests to prevent timer leaks (vitest/jest open handle warnings).
+ * SF-053: In production, .unref() above ensures the timer won't block process exit,
+ * so explicit cleanup is only needed in test environments.
+ * NT-028: Exported solely for test cleanup. In production, the .unref() call on the
+ * interval handle (line above) ensures Node.js can exit even if this is never called.
+ * When a graceful shutdown handler is added (e.g., SIGTERM), it should call this function.
+ */
+export function cleanupAgentCacheSweep(): void {
+  clearInterval(_agentCacheSweepInterval)
+  agentAddressCache.clear()
 }
 
 /**
@@ -125,16 +530,28 @@ export function getLegacyAccessStats(): Record<string, number> {
  *   - "name" → resolve on self host, then any host
  *   - "session_name" → parse and resolve
  *
- * Priority: 1) name@host, 2) exact ID match, 3) name on self host, 4) session name, 5) partial match
+ * Results are cached in-memory for 5 minutes to speed up reply routing.
+ *
+ * Priority: 1) cache hit, 2) name@host, 3) exact ID match, 4) name on self host, 5) session name, 6) partial match
  */
 function resolveAgent(identifier: string): ResolvedAgent | null {
-  const agents = loadAgents()
-  const { parseSessionName, computeSessionName } = require('@/types/agent')
+  // Normalize cache key to lowercase since all getAgentBy* functions use case-insensitive matching;
+  // without this, "Alice" and "alice" would resolve to the same agent but cache as separate entries
+  const cacheKey = identifier.toLowerCase()
+
+  // Check in-memory cache first (avoids the expensive 8-step resolution chain)
+  const cached = agentAddressCache.get(cacheKey)
+  if (cached && (Date.now() - cached.resolvedAt) < AGENT_CACHE_TTL_MS) {
+    return cached.resolved
+  }
   let agent: Agent | null = null
 
   // 0. Check for name@host format first (explicit host targeting)
+  // MF-024: Use indexOf to split on first '@' only, so hostIds containing '@' are preserved
   if (identifier.includes('@')) {
-    const [name, hostId] = identifier.split('@')
+    const atIndex = identifier.indexOf('@')
+    const name = identifier.substring(0, atIndex)
+    const hostId = identifier.substring(atIndex + 1)
     // Try name first, then alias (alias searches both name and alias fields)
     agent = getAgentByName(name, hostId) || getAgentByAlias(name, hostId) || null
   }
@@ -154,6 +571,11 @@ function resolveAgent(identifier: string): ResolvedAgent | null {
     agent = getAgentByAlias(identifier) || null
   }
 
+  // 2.7. Try persona name (label) match on SELF HOST
+  if (!agent) {
+    agent = getAgentByLabel(identifier) || null
+  }
+
   // 3. Try exact name match on ANY HOST (for backward compat)
   if (!agent) {
     agent = getAgentByNameAnyHost(identifier)
@@ -162,6 +584,11 @@ function resolveAgent(identifier: string): ResolvedAgent | null {
   // 3.5. Try alias match on ANY HOST
   if (!agent) {
     agent = getAgentByAliasAnyHost(identifier)
+  }
+
+  // 3.7. Try persona name (label) match on ANY HOST
+  if (!agent) {
+    agent = getAgentByLabelAnyHost(identifier)
   }
 
   // 4. Try session name match (parse identifier as potential session name)
@@ -177,11 +604,7 @@ function resolveAgent(identifier: string): ResolvedAgent | null {
 
   // 5. Try partial match in name's LAST segment (e.g., "crm" matches "23blocks-api-crm")
   if (!agent) {
-    agent = agents.find(a => {
-      const agentName = a.name || a.alias || ''
-      const segments = agentName.split(/[-_]/)
-      return segments.length > 0 && segments[segments.length - 1].toLowerCase() === identifier.toLowerCase()
-    }) || null
+    agent = getAgentByPartialName(identifier)
   }
 
   if (!agent) return null
@@ -201,13 +624,32 @@ function resolveAgent(identifier: string): ResolvedAgent | null {
   const selfHost = getSelfHost()
   const hostUrl = agent.hostUrl || selfHost?.url || `http://${os.hostname().toLowerCase()}:23000`
 
-  return {
+  const result: ResolvedAgent = {
     agentId: agent.id,
     alias: agentName,
     displayName: agent.label,
     sessionName,
     hostId,
     hostUrl
+  }
+
+  // Cache the successful resolution so subsequent lookups (e.g., reply routing) skip the 8-step chain
+  agentAddressCache.set(cacheKey, { resolved: result, resolvedAt: Date.now() })
+
+  return result
+}
+
+/**
+ * Invalidate the agent address resolution cache.
+ * Call when agents are renamed, deleted, or re-registered to prevent stale routing.
+ * With no argument, clears the entire cache. With an identifier, removes only that entry.
+ */
+export function invalidateAgentCache(identifier?: string): void {
+  if (identifier) {
+    // Normalize to lowercase to match the cache key format used in resolveAgent()
+    agentAddressCache.delete(identifier.toLowerCase())
+  } else {
+    agentAddressCache.clear()
   }
 }
 
@@ -219,510 +661,11 @@ export function getAgentIdFromSession(sessionName: string): string | null {
   return agent?.id || null
 }
 
-/**
- * Parse a qualified name (identifier@host-id)
- */
-function parseQualifiedName(qualifiedName: string): { identifier: string; hostId: string | null } {
-  const parts = qualifiedName.split('@')
-  if (parts.length === 2) {
-    return { identifier: parts[0], hostId: parts[1] }
-  }
-  return { identifier: qualifiedName, hostId: null }
-}
 
 /**
- * GAP8 FIX: Migrate messages from legacy locations to agent-ID folders
- * This function consolidates messages that may exist in session-name based folders
- * to the canonical agent-ID folder format.
- *
- * @param dryRun - If true, only report what would be migrated without making changes
- * @returns Migration report with counts and details
- */
-export async function migrateMessagesToAgentIdFolders(dryRun: boolean = false): Promise<{
-  scanned: number
-  migrated: number
-  errors: string[]
-  details: Array<{ from: string; to: string; messageId: string }>
-}> {
-  const report = {
-    scanned: 0,
-    migrated: 0,
-    errors: [] as string[],
-    details: [] as Array<{ from: string; to: string; messageId: string }>
-  }
-
-  await ensureMessageDirectories()
-  const agents = loadAgents()
-
-  for (const agent of agents) {
-    const agentId = agent.id
-    const agentName = agent.name || agent.alias || ''
-
-    if (!agentId || !agentName) continue
-
-    // Check if session-name based folder exists with messages that should be in agent-ID folder
-    for (const boxType of ['inbox', 'sent', 'archived'] as const) {
-      const legacyDir = path.join(MESSAGE_DIR, boxType, agentName)
-      const canonicalDir = path.join(MESSAGE_DIR, boxType, agentId)
-
-      if (legacyDir === canonicalDir) continue // Same folder, skip
-
-      try {
-        const files = await fs.readdir(legacyDir)
-
-        for (const file of files) {
-          if (!file.endsWith('.json')) continue
-          report.scanned++
-
-          const legacyPath = path.join(legacyDir, file)
-          const canonicalPath = path.join(canonicalDir, file)
-
-          // Check if file already exists in canonical location
-          try {
-            await fs.access(canonicalPath)
-            // Already migrated, skip (but don't delete legacy to be safe)
-            continue
-          } catch {
-            // Canonical doesn't exist, should migrate
-          }
-
-          if (dryRun) {
-            report.details.push({
-              from: legacyPath,
-              to: canonicalPath,
-              messageId: file.replace('.json', '')
-            })
-            report.migrated++
-          } else {
-            try {
-              // Ensure canonical directory exists
-              await fs.mkdir(canonicalDir, { recursive: true })
-
-              // Copy message to canonical location (copy, don't move, for safety)
-              const content = await fs.readFile(legacyPath, 'utf-8')
-              await fs.writeFile(canonicalPath, content)
-
-              report.details.push({
-                from: legacyPath,
-                to: canonicalPath,
-                messageId: file.replace('.json', '')
-              })
-              report.migrated++
-
-              console.log(`[MessageQueue] GAP8 MIGRATION: Copied ${file} from ${agentName}/${boxType} to ${agentId}/${boxType}`)
-            } catch (error) {
-              report.errors.push(`Failed to migrate ${legacyPath}: ${error}`)
-            }
-          }
-        }
-      } catch {
-        // Legacy directory doesn't exist, nothing to migrate
-      }
-    }
-  }
-
-  if (report.migrated > 0) {
-    console.log(`[MessageQueue] GAP8 MIGRATION: ${dryRun ? 'Would migrate' : 'Migrated'} ${report.migrated} messages`)
-  }
-
-  return report
-}
-
-/**
- * Ensures the message directory structure exists
- */
-export async function ensureMessageDirectories(): Promise<void> {
-  const dirs = [
-    MESSAGE_DIR,
-    path.join(MESSAGE_DIR, 'inbox'),
-    path.join(MESSAGE_DIR, 'sent'),
-    path.join(MESSAGE_DIR, 'archived'),
-  ]
-
-  for (const dir of dirs) {
-    await fs.mkdir(dir, { recursive: true })
-  }
-}
-
-/**
- * Generate a unique message ID
- */
-function generateMessageId(): string {
-  const timestamp = Date.now()
-  const random = Math.random().toString(36).substring(2, 9)
-  return `msg-${timestamp}-${random}`
-}
-
-/**
- * Get the inbox directory for an agent (by ID)
- */
-function getInboxDir(agentId: string): string {
-  return path.join(MESSAGE_DIR, 'inbox', agentId)
-}
-
-/**
- * Get the sent directory for an agent (by ID)
- */
-function getSentDir(agentId: string): string {
-  return path.join(MESSAGE_DIR, 'sent', agentId)
-}
-
-/**
- * Get the archived directory for an agent (by ID)
- */
-function getArchivedDir(agentId: string): string {
-  return path.join(MESSAGE_DIR, 'archived', agentId)
-}
-
-/**
- * Ensure agent-specific directories exist
- */
-async function ensureAgentDirectories(agentId: string): Promise<void> {
-  await fs.mkdir(getInboxDir(agentId), { recursive: true })
-  await fs.mkdir(getSentDir(agentId), { recursive: true })
-  await fs.mkdir(getArchivedDir(agentId), { recursive: true })
-}
-
-/**
- * Send a message from one agent to another
- * Accepts agent alias, ID, or session name as identifiers
- * Supports cross-host messaging via fromHost/toHost options
- */
-export async function sendMessage(
-  from: string,
-  to: string,
-  subject: string,
-  content: Message['content'],
-  options?: {
-    priority?: Message['priority']
-    inReplyTo?: string
-    fromHost?: string      // Host ID where sender is (for cross-host messages)
-    toHost?: string        // Host ID where recipient is
-    fromAlias?: string     // Pre-resolved alias (from remote host)
-    toAlias?: string       // Pre-resolved alias (from remote host)
-    fromLabel?: string     // Pre-resolved label (from remote host)
-    toLabel?: string       // Pre-resolved label (from remote host)
-    fromVerified?: boolean // Explicitly set verified status (for cross-host messages)
-  }
-): Promise<Message> {
-  await ensureMessageDirectories()
-
-  // Parse qualified name (identifier@host-id)
-  const { identifier: toIdentifier, hostId: targetHostId } = parseQualifiedName(to)
-
-  // Resolve sender agent (may fail for remote senders - that's ok, use provided info)
-  const fromAgent = resolveAgent(from)
-
-  // Determine if target is on this host BEFORE resolution
-  const selfHost = getSelfHost()
-  const selfHostId = selfHost?.id || getSelfHostId()
-  const isTargetLocal = !targetHostId || isSelf(targetHostId)
-
-  // Resolve recipient agent
-  // GAP4 FIX: For remote targets, allow sending without local resolution
-  // EXTERNAL AGENTS: Also allow unregistered local recipients (creates inbox on demand)
-  const toAgent = resolveAgent(toIdentifier)
-
-  // For unresolved recipients (local or remote), create minimal resolved info
-  // This allows external agents to receive messages without full registration
-  const toResolved: ResolvedAgent = toAgent || {
-    agentId: toIdentifier,
-    alias: options?.toAlias || toIdentifier,
-    hostId: targetHostId || undefined,
-    hostUrl: undefined
-  }
-
-  // Ensure directories exist for sender (registered or external)
-  const senderIdForDirs = fromAgent?.agentId || from
-  await ensureAgentDirectories(senderIdForDirs)
-
-  // Create local directories for local recipients (registered or external)
-  if (isTargetLocal && toResolved.agentId) {
-    await ensureAgentDirectories(toResolved.agentId)
-  }
-
-  // Determine host info - use provided values or resolve from agent
-  // Always use the actual hostname for cross-host compatibility
-  const fromHostId = options?.fromHost || fromAgent?.hostId || getSelfHostName()
-  const toHostId = options?.toHost || targetHostId || toResolved?.hostId || getSelfHostName()
-
-  // Determine if sender is a verified AI Maestro agent:
-  // 1. If explicitly provided (for cross-host messages), use that
-  // 2. If found in local registry, it's verified
-  // 3. If fromHost is provided and it's a known host in the mesh (not self), it's verified
-  let isFromVerified: boolean
-  if (options?.fromVerified !== undefined) {
-    isFromVerified = options.fromVerified
-  } else if (fromAgent) {
-    isFromVerified = true
-  } else if (options?.fromHost && !isSelf(options.fromHost)) {
-    // Message from a remote host - check if it's a known host in the mesh
-    const remoteFromHost = getHostById(options.fromHost)
-    isFromVerified = !!remoteFromHost  // Verified if the host is registered in our mesh
-  } else {
-    isFromVerified = false  // Unknown sender, treat as external
-  }
-
-  const message: Message = {
-    id: generateMessageId(),
-    from: fromAgent?.agentId || from,
-    fromAlias: options?.fromAlias || fromAgent?.alias,
-    fromLabel: options?.fromLabel || fromAgent?.displayName,
-    fromSession: fromAgent?.sessionName,
-    fromHost: fromHostId,
-    fromVerified: isFromVerified,
-    to: toResolved.agentId,
-    toAlias: options?.toAlias || toResolved.alias,
-    toLabel: options?.toLabel || toResolved.displayName,
-    toSession: toResolved.sessionName,
-    toHost: toHostId,
-    timestamp: new Date().toISOString(),
-    subject,
-    priority: options?.priority || 'normal',
-    status: 'unread',
-    content,
-    inReplyTo: options?.inReplyTo,
-  }
-
-  // Content security: wrap unverified sender content as backstop
-  const { flags: securityFlags } = applyContentSecurity(
-    message.content,
-    isFromVerified,
-    message.fromAlias || from,
-    fromHostId
-  )
-  if (securityFlags.length > 0) {
-    console.log(`[SECURITY] Message from ${message.fromAlias || from}: ${securityFlags.length} injection pattern(s) flagged`)
-  }
-
-  // Determine if recipient is on a remote host (reuse isTargetLocal computed above)
-  let recipientIsRemote = false
-  let remoteHostUrl: string | null = null
-
-  if (targetHostId && !isTargetLocal) {
-    // Target is explicitly on a remote host - look it up
-    const remoteHost = getHostById(targetHostId)
-    if (!remoteHost) {
-      // CRITICAL: Don't silently fall back to local delivery
-      throw new Error(`Target host '${targetHostId}' not found. Ensure the host is registered in ~/.aimaestro/hosts.json`)
-    }
-    recipientIsRemote = true
-    remoteHostUrl = remoteHost.url
-  }
-
-  if (recipientIsRemote && remoteHostUrl) {
-    // Send message to remote host via HTTP
-    console.log(`[MessageQueue] Sending message to remote agent ${toResolved.alias}@${targetHostId} at ${remoteHostUrl}`)
-
-    try {
-      const remoteResponse = await fetch(`${remoteHostUrl}/api/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: message.from,
-          fromAlias: message.fromAlias,
-          fromLabel: message.fromLabel,
-          fromHost: message.fromHost,
-          fromVerified: message.fromVerified,  // Pass verified status to remote host
-          to: message.to,
-          toAlias: message.toAlias,
-          toLabel: message.toLabel,
-          toHost: message.toHost,
-          subject,
-          content,
-          priority: options?.priority,
-          inReplyTo: options?.inReplyTo,
-        }),
-      })
-
-      if (!remoteResponse.ok) {
-        throw new Error(`Remote host returned ${remoteResponse.status}`)
-      }
-
-      console.log(`[MessageQueue] Message delivered to remote host ${remoteHostUrl}`)
-    } catch (error) {
-      console.error(`[MessageQueue] Failed to send message to remote host:`, error)
-      throw new Error(`Failed to deliver message to remote agent: ${error}`)
-    }
-  } else {
-    // Local recipient - write to filesystem using agent ID
-    const inboxPath = path.join(getInboxDir(toResolved.agentId), `${message.id}.json`)
-    await fs.writeFile(inboxPath, JSON.stringify(message, null, 2))
-  }
-
-  // Always write to sender's sent folder (locally) using agent ID
-  // For local senders, use resolved agent ID; for remote senders, use the from field
-  const senderAgentId = fromAgent?.agentId || message.from
-  await ensureAgentDirectories(senderAgentId)
-  const sentPath = path.join(getSentDir(senderAgentId), `${message.id}.json`)
-  await fs.writeFile(sentPath, JSON.stringify(message, null, 2))
-
-  return message
-}
-
-/**
- * Forward a message to another agent
- */
-export async function forwardMessage(
-  originalMessageId: string,
-  fromAgent: string,
-  toAgent: string,
-  forwardNote?: string,
-  providedOriginalMessage?: Message
-): Promise<Message> {
-  // Parse qualified name
-  const { identifier: toIdentifier, hostId: targetHostId } = parseQualifiedName(toAgent)
-
-  // Determine if target is on this host BEFORE resolution (GAP4 FIX)
-  const selfHost = getSelfHost()
-  const isTargetLocal = !targetHostId || isSelf(targetHostId)
-
-  // Resolve sender agent
-  const fromResolved = resolveAgent(fromAgent)
-  if (!fromResolved) {
-    throw new Error(`Unknown sender: ${fromAgent}`)
-  }
-
-  // Resolve recipient agent
-  // GAP4 FIX: For remote targets, allow forwarding without local resolution
-  const toResolvedLocal = resolveAgent(toIdentifier)
-  if (!toResolvedLocal && isTargetLocal) {
-    throw new Error(`Unknown recipient: ${toAgent}`)
-  }
-
-  // For remote targets without local resolution, create minimal resolved info
-  const toResolved: ResolvedAgent = toResolvedLocal || {
-    agentId: toIdentifier,
-    alias: toIdentifier,
-    hostId: targetHostId || undefined,
-    hostUrl: undefined
-  }
-
-  // Get the original message
-  let originalMessage: Message | null
-
-  if (providedOriginalMessage) {
-    originalMessage = providedOriginalMessage
-  } else {
-    originalMessage = await getMessage(fromResolved.agentId, originalMessageId)
-    if (!originalMessage) {
-      throw new Error(`Message ${originalMessageId} not found`)
-    }
-  }
-
-  await ensureMessageDirectories()
-  await ensureAgentDirectories(fromResolved.agentId)
-  // Only create local directories for local recipients
-  if (isTargetLocal && toResolved.agentId) {
-    await ensureAgentDirectories(toResolved.agentId)
-  }
-
-  // Build forwarded content
-  let forwardedContent = ''
-  if (forwardNote) {
-    forwardedContent += `${forwardNote}\n\n`
-  }
-  forwardedContent += `--- Forwarded Message ---\n`
-  forwardedContent += `From: ${originalMessage.fromAlias || originalMessage.from}\n`
-  forwardedContent += `To: ${originalMessage.toAlias || originalMessage.to}\n`
-  forwardedContent += `Sent: ${new Date(originalMessage.timestamp).toLocaleString()}\n`
-  forwardedContent += `Subject: ${originalMessage.subject}\n\n`
-  forwardedContent += `${originalMessage.content.message}\n`
-  forwardedContent += `--- End of Forwarded Message ---`
-
-  // Determine host info for forwarded message
-  const fromHostId = fromResolved.hostId || getSelfHostName()
-  const toHostId = targetHostId || toResolved.hostId || getSelfHostName()
-
-  // Create forwarded message
-  const forwardedMessage: Message = {
-    id: generateMessageId(),
-    from: fromResolved.agentId,
-    fromAlias: fromResolved.alias,
-    fromSession: fromResolved.sessionName,
-    fromHost: fromHostId,
-    to: toResolved.agentId,
-    toAlias: toResolved.alias,
-    toSession: toResolved.sessionName,
-    toHost: toHostId,
-    timestamp: new Date().toISOString(),
-    subject: `Fwd: ${originalMessage.subject}`,
-    priority: originalMessage.priority,
-    status: 'unread',
-    content: {
-      type: 'notification',
-      message: forwardedContent,
-    },
-    forwardedFrom: {
-      originalMessageId: originalMessage.id,
-      originalFrom: originalMessage.from,
-      originalTo: originalMessage.to,
-      originalTimestamp: originalMessage.timestamp,
-      forwardedBy: fromResolved.agentId,
-      forwardedAt: new Date().toISOString(),
-      forwardNote,
-    },
-  }
-
-  // Determine if recipient is on a remote host (reuse isTargetLocal computed above)
-  let recipientIsRemote = false
-  let remoteHostUrl: string | null = null
-
-  if (targetHostId && !isTargetLocal) {
-    // Target is explicitly on a remote host - look it up
-    const remoteHost = getHostById(targetHostId)
-    if (!remoteHost) {
-      // CRITICAL: Don't silently fall back to local delivery
-      throw new Error(`Target host '${targetHostId}' not found. Ensure the host is registered in ~/.aimaestro/hosts.json`)
-    }
-    recipientIsRemote = true
-    remoteHostUrl = remoteHost.url
-  }
-
-  if (recipientIsRemote && remoteHostUrl) {
-    console.log(`[MessageQueue] Forwarding message to remote agent ${toResolved.alias}@${targetHostId} at ${remoteHostUrl}`)
-
-    try {
-      const remoteResponse = await fetch(`${remoteHostUrl}/api/messages/forward`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          originalMessage: originalMessage,
-          fromAgent: fromResolved.agentId,
-          toAgent: toResolved.agentId,
-          forwardNote,
-        }),
-      })
-
-      if (!remoteResponse.ok) {
-        throw new Error(`Remote host returned ${remoteResponse.status}`)
-      }
-
-      console.log(`[MessageQueue] Forwarded message to remote host ${remoteHostUrl}`)
-    } catch (error) {
-      console.error(`[MessageQueue] Failed to forward message to remote host:`, error)
-      throw new Error(`Failed to forward message to remote agent: ${error}`)
-    }
-  } else {
-    // Local recipient - write to filesystem using agent ID
-    const inboxPath = path.join(getInboxDir(toResolved.agentId), `${forwardedMessage.id}.json`)
-    await fs.writeFile(inboxPath, JSON.stringify(forwardedMessage, null, 2))
-  }
-
-  // Write to sender's sent folder
-  const sentPath = path.join(getSentDir(fromResolved.agentId), `fwd_${forwardedMessage.id}.json`)
-  await fs.writeFile(sentPath, JSON.stringify(forwardedMessage, null, 2))
-
-  return forwardedMessage
-}
-
-/**
- * List messages in an agent's inbox
- * Accepts agent alias, ID, or session name
- *
- * Checks multiple locations for backward compatibility:
- * 1. Agent ID folder (new format)
- * 2. Session name folder (legacy, may be symlink to old UUID)
+ * List messages in an agent's inbox.
+ * Accepts agent alias, ID, or session name.
+ * Resolves to UUID and reads from UUID-keyed directory only.
  */
 export async function listInboxMessages(
   agentIdentifier: string,
@@ -730,370 +673,105 @@ export async function listInboxMessages(
     status?: Message['status']
     priority?: Message['priority']
     from?: string
+    limit?: number  // Maximum number of messages to return (default: unlimited)
+    previewLength?: number  // Max chars for preview (default: 100)
   }
 ): Promise<MessageSummary[]> {
-  // Resolve agent
+  // One-time cleanup of old-format duplicate messages (runs once, non-blocking)
+  triggerOldDuplicateCleanup()
+
+  // Resolve agent - MUST resolve to get UUID
   const agent = resolveAgent(agentIdentifier)
-  if (!agent) {
-    // Fallback: try as direct folder name (LEGACY)
-    logLegacyAccess(agentIdentifier, 'listInboxFallback')
-    return listInboxMessagesByFolder(agentIdentifier, filter)
+  if (!agent?.agentId) {
+    return []
   }
 
-  await ensureAgentDirectories(agent.agentId)
-
-  // Collect messages from multiple possible locations
-  // GAP8 FIX: Legacy locations are now tracked for deprecation monitoring
+  // UUID-only directory lookup
   const allMessages: MessageSummary[] = []
   const seenIds = new Set<string>()
-
-  // Location 1: Agent ID folder (new/canonical format)
-  const agentIdDir = getInboxDir(agent.agentId)
-  await collectMessagesFromDir(agentIdDir, filter, allMessages, seenIds, false)
-
-  // Location 2: Session name folder (LEGACY - will be deprecated)
-  if (agent.sessionName && agent.sessionName !== agent.agentId) {
-    const sessionDir = path.join(MESSAGE_DIR, 'inbox', agent.sessionName)
-    await collectMessagesFromDir(sessionDir, filter, allMessages, seenIds, true)
-  }
-
-  // Location 3: Original identifier if different (LEGACY fallback)
-  if (agentIdentifier !== agent.agentId && agentIdentifier !== agent.sessionName) {
-    const identifierDir = path.join(MESSAGE_DIR, 'inbox', agentIdentifier)
-    await collectMessagesFromDir(identifierDir, filter, allMessages, seenIds, true)
-  }
+  const ampInboxDir = getAMPInboxDir(agent.agentId)
+  await collectMessagesFromAMPDir(ampInboxDir, filter, allMessages, seenIds)
 
   // Sort by timestamp (newest first)
   allMessages.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
+  // Apply limit if specified
+  if (filter?.limit && filter.limit > 0) {
+    return allMessages.slice(0, filter.limit)
+  }
+
   return allMessages
 }
 
-/**
- * Helper to collect messages from a directory into the results array
- * GAP8 FIX: Now tracks when legacy locations are accessed for deprecation monitoring
- */
-async function collectMessagesFromDir(
-  dirPath: string,
-  filter: {
-    status?: Message['status']
-    priority?: Message['priority']
-    from?: string
-  } | undefined,
-  results: MessageSummary[],
-  seenIds: Set<string>,
-  isLegacyLocation: boolean = false
-): Promise<void> {
-  let files: string[]
-  try {
-    files = await fs.readdir(dirPath)
-  } catch (error) {
-    return // Directory doesn't exist, skip
-  }
-
-  // GAP8 FIX: Log legacy location access if messages are found
-  if (isLegacyLocation && files.some(f => f.endsWith('.json'))) {
-    logLegacyAccess(dirPath, 'collectInbox')
-  }
-
-  for (const file of files) {
-    if (!file.endsWith('.json')) continue
-
-    const filePath = path.join(dirPath, file)
-    try {
-      const content = await fs.readFile(filePath, 'utf-8')
-      const message: Message = JSON.parse(content)
-
-      // Skip if we've already seen this message ID
-      if (seenIds.has(message.id)) continue
-
-      // Apply filters
-      if (filter?.status && message.status !== filter.status) continue
-      if (filter?.priority && message.priority !== filter.priority) continue
-      if (filter?.from) {
-        const fromMatches = message.from === filter.from ||
-                          message.fromAlias === filter.from ||
-                          message.fromSession === filter.from
-        if (!fromMatches) continue
-      }
-
-      seenIds.add(message.id)
-      results.push({
-        id: message.id,
-        from: message.from,
-        fromAlias: message.fromAlias,
-        fromLabel: message.fromLabel,
-        fromHost: message.fromHost,
-        fromVerified: message.fromVerified,
-        to: message.to,
-        toAlias: message.toAlias,
-        toLabel: message.toLabel,
-        toHost: message.toHost,
-        timestamp: message.timestamp,
-        subject: message.subject,
-        priority: message.priority,
-        status: message.status,
-        type: message.content.type,
-        preview: message.content.message.substring(0, 100),
-        // Check if message came from Slack bridge (has slack context)
-        viaSlack: !!(message.content as any).slack,
-      })
-    } catch (error) {
-      console.error(`Error reading message file ${file}:`, error)
-    }
-  }
-}
 
 /**
- * Fallback: list messages by folder name (backward compatibility)
- */
-async function listInboxMessagesByFolder(
-  folderName: string,
-  filter?: {
-    status?: Message['status']
-    priority?: Message['priority']
-    from?: string
-  }
-): Promise<MessageSummary[]> {
-  const inboxDir = path.join(MESSAGE_DIR, 'inbox', folderName)
-
-  let files: string[]
-  try {
-    files = await fs.readdir(inboxDir)
-  } catch (error) {
-    return []
-  }
-
-  const messages: MessageSummary[] = []
-
-  for (const file of files) {
-    if (!file.endsWith('.json')) continue
-
-    const filePath = path.join(inboxDir, file)
-    try {
-      const content = await fs.readFile(filePath, 'utf-8')
-      const message: Message = JSON.parse(content)
-
-      if (filter?.status && message.status !== filter.status) continue
-      if (filter?.priority && message.priority !== filter.priority) continue
-      if (filter?.from && message.from !== filter.from) continue
-
-      messages.push({
-        id: message.id,
-        from: message.from,
-        fromAlias: message.fromAlias,
-        fromLabel: message.fromLabel,
-        fromHost: message.fromHost,
-        fromVerified: message.fromVerified,
-        to: message.to,
-        toAlias: message.toAlias,
-        toLabel: message.toLabel,
-        toHost: message.toHost,
-        timestamp: message.timestamp,
-        subject: message.subject,
-        priority: message.priority,
-        status: message.status,
-        type: message.content.type,
-        preview: message.content.message.substring(0, 100),
-        // Check if message came from Slack bridge (has slack context)
-        viaSlack: !!(message.content as any).slack,
-      })
-    } catch (error) {
-      console.error(`Error reading message file ${file}:`, error)
-    }
-  }
-
-  messages.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-  return messages
-}
-
-/**
- * List messages in an agent's sent folder
- * GAP8 FIX: Checks multiple locations with legacy access tracking
+ * List messages in an agent's sent folder.
+ * Resolves to UUID and reads from UUID-keyed directory only.
  */
 export async function listSentMessages(
   agentIdentifier: string,
   filter?: {
     priority?: Message['priority']
     to?: string
+    limit?: number  // Maximum number of messages to return (default: unlimited)
+    previewLength?: number  // Max chars for preview (default: 100)
   }
 ): Promise<MessageSummary[]> {
   const agent = resolveAgent(agentIdentifier)
-  if (!agent) {
-    // Fallback to direct folder (LEGACY)
-    logLegacyAccess(agentIdentifier, 'listSentFallback')
-    return listSentMessagesByFolder(agentIdentifier, filter)
-  }
-
-  await ensureAgentDirectories(agent.agentId)
-
-  // Collect messages from multiple possible locations
-  // GAP8 FIX: Legacy locations are now tracked for deprecation monitoring
-  const allMessages: MessageSummary[] = []
-  const seenIds = new Set<string>()
-
-  // Location 1: Agent ID folder (new/canonical format)
-  const agentIdDir = getSentDir(agent.agentId)
-  await collectSentMessagesFromDir(agentIdDir, filter, allMessages, seenIds, false)
-
-  // Location 2: Session name folder (LEGACY - will be deprecated)
-  if (agent.sessionName && agent.sessionName !== agent.agentId) {
-    const sessionDir = path.join(MESSAGE_DIR, 'sent', agent.sessionName)
-    await collectSentMessagesFromDir(sessionDir, filter, allMessages, seenIds, true)
-  }
-
-  // Location 3: Original identifier if different (LEGACY fallback)
-  if (agentIdentifier !== agent.agentId && agentIdentifier !== agent.sessionName) {
-    const identifierDir = path.join(MESSAGE_DIR, 'sent', agentIdentifier)
-    await collectSentMessagesFromDir(identifierDir, filter, allMessages, seenIds, true)
-  }
-
-  allMessages.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-  return allMessages
-}
-
-/**
- * Helper to collect sent messages from a directory
- * GAP8 FIX: Now tracks when legacy locations are accessed
- */
-async function collectSentMessagesFromDir(
-  dirPath: string,
-  filter: {
-    priority?: Message['priority']
-    to?: string
-  } | undefined,
-  results: MessageSummary[],
-  seenIds: Set<string>,
-  isLegacyLocation: boolean = false
-): Promise<void> {
-  let files: string[]
-  try {
-    files = await fs.readdir(dirPath)
-  } catch (error) {
-    return // Directory doesn't exist, skip
-  }
-
-  // GAP8 FIX: Log legacy location access if messages are found
-  if (isLegacyLocation && files.some(f => f.endsWith('.json'))) {
-    logLegacyAccess(dirPath, 'collectSent')
-  }
-
-  for (const file of files) {
-    if (!file.endsWith('.json')) continue
-
-    const filePath = path.join(dirPath, file)
-    try {
-      const content = await fs.readFile(filePath, 'utf-8')
-      const message: Message = JSON.parse(content)
-
-      // Skip if we've already seen this message ID
-      if (seenIds.has(message.id)) continue
-
-      if (filter?.priority && message.priority !== filter.priority) continue
-      if (filter?.to) {
-        const toMatches = message.to === filter.to ||
-                         message.toAlias === filter.to ||
-                         message.toSession === filter.to
-        if (!toMatches) continue
-      }
-
-      seenIds.add(message.id)
-      results.push({
-        id: message.id,
-        from: message.from,
-        fromAlias: message.fromAlias,
-        fromLabel: message.fromLabel,
-        fromHost: message.fromHost,
-        to: message.to,
-        toAlias: message.toAlias,
-        toLabel: message.toLabel,
-        toHost: message.toHost,
-        timestamp: message.timestamp,
-        subject: message.subject,
-        priority: message.priority,
-        status: message.status,
-        type: message.content.type,
-        preview: message.content.message.substring(0, 100),
-        // Check if message has Slack context (reply to Slack thread)
-        viaSlack: !!(message.content as any).slack,
-      })
-    } catch (error) {
-      console.error(`Error reading sent message file ${file}:`, error)
-    }
-  }
-}
-
-/**
- * Fallback: list sent messages by folder name
- */
-async function listSentMessagesByFolder(
-  folderName: string,
-  filter?: {
-    priority?: Message['priority']
-    to?: string
-  }
-): Promise<MessageSummary[]> {
-  const sentDir = path.join(MESSAGE_DIR, 'sent', folderName)
-
-  let files: string[]
-  try {
-    files = await fs.readdir(sentDir)
-  } catch (error) {
+  if (!agent?.agentId) {
     return []
   }
 
-  const messages: MessageSummary[] = []
+  // UUID-only directory lookup
+  const allMessages: MessageSummary[] = []
+  const seenIds = new Set<string>()
+  const ampSentDir = getAMPSentDir(agent.agentId)
+  await collectMessagesFromAMPDir(ampSentDir, filter, allMessages, seenIds)
 
-  for (const file of files) {
-    if (!file.endsWith('.json')) continue
+  allMessages.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
-    const filePath = path.join(sentDir, file)
-    try {
-      const content = await fs.readFile(filePath, 'utf-8')
-      const message: Message = JSON.parse(content)
-
-      if (filter?.priority && message.priority !== filter.priority) continue
-      if (filter?.to && message.to !== filter.to) continue
-
-      messages.push({
-        id: message.id,
-        from: message.from,
-        fromAlias: message.fromAlias,
-        fromLabel: message.fromLabel,
-        fromHost: message.fromHost,
-        to: message.to,
-        toAlias: message.toAlias,
-        toLabel: message.toLabel,
-        toHost: message.toHost,
-        timestamp: message.timestamp,
-        subject: message.subject,
-        priority: message.priority,
-        status: message.status,
-        type: message.content.type,
-        preview: message.content.message.substring(0, 100),
-        // Check if message has Slack context (reply to Slack thread)
-        viaSlack: !!(message.content as any).slack,
-      })
-    } catch (error) {
-      console.error(`Error reading sent message file ${file}:`, error)
-    }
+  // Apply limit if specified
+  if (filter?.limit && filter.limit > 0) {
+    return allMessages.slice(0, filter.limit)
   }
 
-  messages.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-  return messages
+  return allMessages
 }
 
+
 /**
- * Get sent message count for an agent
+ * Get sent message count for an agent.
+ * SF-030: Optimized to count directory entries directly instead of loading + parsing all messages.
  */
 export async function getSentCount(agentIdentifier: string): Promise<number> {
-  const messages = await listSentMessages(agentIdentifier)
-  return messages.length
+  const agent = resolveAgent(agentIdentifier)
+  if (!agent?.agentId) return 0
+  const sentDir = getAMPSentDir(agent.agentId)
+  try {
+    // MF-012: Recurse into subdirectories because writeToAMPSent() stores messages
+    // in sent/{recipientDir}/{messageId}.json, not directly in sent/
+    // Files directly in sentDir are NOT counted — only files inside subdirectories are valid.
+    let count = 0
+    const entries = await fs.readdir(sentDir, { withFileTypes: true })
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        try {
+          const subEntries = await fs.readdir(path.join(sentDir, entry.name))
+          count += subEntries.filter(e => e.endsWith('.json')).length
+        } catch {
+          // Skip inaccessible subdirectories
+        }
+      }
+    }
+    return count
+  } catch {
+    return 0 // Directory does not exist -- no sent messages
+  }
 }
 
 /**
- * Get a specific message by ID
- * GAP8 FIX: Checks multiple locations with legacy access tracking
+ * Get a specific message by ID.
+ * Resolves agent to UUID and searches UUID-keyed directory.
  */
 export async function getMessage(
   agentIdentifier: string,
@@ -1101,41 +779,21 @@ export async function getMessage(
   box: 'inbox' | 'sent' = 'inbox'
 ): Promise<Message | null> {
   const agent = resolveAgent(agentIdentifier)
-  const boxDir = box === 'sent' ? 'sent' : 'inbox'
+  if (!agent?.agentId) return null
 
-  // Build list of directories to check with legacy flag
-  // GAP8 FIX: Track which locations are legacy for deprecation monitoring
-  const dirsToCheck: Array<{ path: string; isLegacy: boolean }> = []
-
-  // 1. Agent ID folder - canonical location (if resolved)
-  if (agent) {
-    dirsToCheck.push({ path: path.join(MESSAGE_DIR, boxDir, agent.agentId), isLegacy: false })
-  }
-
-  // 2. Session name folder (LEGACY - may be symlink to old UUID)
-  if (agent?.sessionName && agent.sessionName !== agent.agentId) {
-    dirsToCheck.push({ path: path.join(MESSAGE_DIR, boxDir, agent.sessionName), isLegacy: true })
-  }
-
-  // 3. Original identifier as fallback (LEGACY)
-  if (!agent || (agentIdentifier !== agent.agentId && agentIdentifier !== agent.sessionName)) {
-    dirsToCheck.push({ path: path.join(MESSAGE_DIR, boxDir, agentIdentifier), isLegacy: true })
-  }
-
-  // Try each directory
-  for (const { path: dir, isLegacy } of dirsToCheck) {
-    const messagePath = path.join(dir, `${messageId}.json`)
+  // UUID-only directory lookup
+  const ampDir = box === 'sent' ? getAMPSentDir(agent.agentId) : getAMPInboxDir(agent.agentId)
+  const found = await findMessageInAMPDir(ampDir, messageId)
+  if (found) {
     try {
-      const content = await fs.readFile(messagePath, 'utf-8')
-
-      // GAP8 FIX: Log if message was found in legacy location
-      if (isLegacy) {
-        logLegacyAccess(dir, 'getMessage')
+      const content = await fs.readFile(found.path, 'utf-8')
+      const ampMsg = JSON.parse(content)
+      if (found.isAMP) {
+        return convertAMPToMessage(ampMsg)
       }
-
-      return JSON.parse(content)
-    } catch (error) {
-      // Continue to next location
+      return ampMsg as Message
+    } catch {
+      // File read error
     }
   }
 
@@ -1143,30 +801,44 @@ export async function getMessage(
 }
 
 /**
- * Mark a message as read
- * Finds message in any legacy location and updates it in place
+ * Mark a message as read.
+ * Finds message in UUID-keyed directory and updates it in place.
  */
 export async function markMessageAsRead(agentIdentifier: string, messageId: string): Promise<boolean> {
-  const message = await getMessage(agentIdentifier, messageId)
-  if (!message) return false
+  // SF-052: Serialize the entire find+read+modify+write under lock to prevent TOCTOU races.
+  // Path resolution MUST happen inside the lock — if resolved outside, concurrent delete/archive
+  // can invalidate the path between resolution and lock acquisition.
+  return withLock(`msg-${messageId}`, async () => {
+    const messagePath = await findMessagePath(agentIdentifier, messageId, 'inbox')
+    if (!messagePath) return false
 
-  message.status = 'read'
+    try {
+      const content = await fs.readFile(messagePath, 'utf-8')
+      const raw = JSON.parse(content)
 
-  // Find where the message actually exists
-  const messagePath = await findMessagePath(agentIdentifier, messageId, 'inbox')
-  if (!messagePath) return false
+      // Handle AMP envelope format vs old flat format
+      if (raw.envelope && raw.payload) {
+        // CC-P1-402: Initialize metadata/local if missing so status is always set
+        if (!raw.metadata) raw.metadata = {}
+        if (!raw.local) raw.local = {}
+        raw.metadata.status = 'read'
+        raw.local.status = 'read'
+      } else {
+        // Old flat format
+        raw.status = 'read'
+      }
 
-  try {
-    await fs.writeFile(messagePath, JSON.stringify(message, null, 2))
-    return true
-  } catch (error) {
-    return false
-  }
+      await fs.writeFile(messagePath, JSON.stringify(raw, null, 2))
+      return true
+    } catch (error) {
+      console.warn(`[MessageQueue] markMessageAsRead failed for ${messageId}:`, error)
+      return false
+    }
+  }) // end withLock
 }
 
 /**
- * Helper to find the actual path of a message file
- * GAP8 FIX: Tracks legacy location access for deprecation monitoring
+ * Helper to find the actual path of a message file in AMP per-agent directory
  */
 async function findMessagePath(
   agentIdentifier: string,
@@ -1174,91 +846,79 @@ async function findMessagePath(
   box: 'inbox' | 'sent'
 ): Promise<string | null> {
   const agent = resolveAgent(agentIdentifier)
-  const boxDir = box === 'sent' ? 'sent' : 'inbox'
-
-  // Build list of directories to check with legacy flag
-  // GAP8 FIX: Track which locations are legacy
-  const dirsToCheck: Array<{ path: string; isLegacy: boolean }> = []
-
-  if (agent) {
-    dirsToCheck.push({ path: path.join(MESSAGE_DIR, boxDir, agent.agentId), isLegacy: false })
-  }
-
-  if (agent?.sessionName && agent.sessionName !== agent.agentId) {
-    dirsToCheck.push({ path: path.join(MESSAGE_DIR, boxDir, agent.sessionName), isLegacy: true })
-  }
-
-  if (!agent || (agentIdentifier !== agent.agentId && agentIdentifier !== agent.sessionName)) {
-    dirsToCheck.push({ path: path.join(MESSAGE_DIR, boxDir, agentIdentifier), isLegacy: true })
-  }
-
-  // Try each directory
-  for (const { path: dir, isLegacy } of dirsToCheck) {
-    const messagePath = path.join(dir, `${messageId}.json`)
-    try {
-      await fs.access(messagePath)
-
-      // GAP8 FIX: Log if message was found in legacy location
-      if (isLegacy) {
-        logLegacyAccess(dir, 'findMessagePath')
-      }
-
-      return messagePath
-    } catch (error) {
-      // Continue to next location
-    }
-  }
-
-  return null
+  if (!agent?.agentId) return null
+  // UUID-only directory lookup
+  const ampDir = box === 'sent' ? getAMPSentDir(agent.agentId) : getAMPInboxDir(agent.agentId)
+  const found = await findMessageInAMPDir(ampDir, messageId)
+  return found ? found.path : null
 }
 
 /**
- * Archive a message
- * Finds message in any legacy location, moves to archive
+ * Archive a message.
+ * Finds message in UUID-keyed directory and sets status to archived.
  */
 export async function archiveMessage(agentIdentifier: string, messageId: string): Promise<boolean> {
-  const message = await getMessage(agentIdentifier, messageId)
-  if (!message) return false
+  // SF-052: Serialize the entire find+read+modify+write under lock to prevent TOCTOU races.
+  // Path resolution MUST happen inside the lock — if resolved outside, concurrent delete/archive
+  // can invalidate the path between resolution and lock acquisition.
+  return withLock(`msg-${messageId}`, async () => {
+    const inboxPath = await findMessagePath(agentIdentifier, messageId, 'inbox')
+    if (!inboxPath) return false
 
-  message.status = 'archived'
+    try {
+      const content = await fs.readFile(inboxPath, 'utf-8')
+      const raw = JSON.parse(content)
 
-  // Find where the message actually exists
-  const inboxPath = await findMessagePath(agentIdentifier, messageId, 'inbox')
-  if (!inboxPath) return false
-
-  const agent = resolveAgent(agentIdentifier)
-  const agentId = agent?.agentId || agentIdentifier
-  const archivedPath = path.join(getArchivedDir(agentId), `${messageId}.json`)
-
-  try {
-    await fs.mkdir(path.dirname(archivedPath), { recursive: true })
-    await fs.writeFile(archivedPath, JSON.stringify(message, null, 2))
-    await fs.unlink(inboxPath)
-    return true
-  } catch (error) {
-    return false
-  }
+      if (raw.envelope && raw.payload) {
+        // CC-P1-406: Initialize metadata/local if missing so status is always set
+        if (!raw.metadata) raw.metadata = {}
+        if (!raw.local) raw.local = {}
+        raw.metadata.status = 'archived'
+        raw.local.status = 'archived'
+      } else {
+        // Old flat format - update status in place
+        raw.status = 'archived'
+      }
+      await fs.writeFile(inboxPath, JSON.stringify(raw, null, 2))
+      return true
+    } catch (error) {
+      console.warn(`[MessageQueue] archiveMessage failed for ${messageId}:`, error)
+      return false
+    }
+  }) // end withLock
 }
 
 /**
- * Delete a message permanently
- * Finds message in any legacy location and deletes it
+ * Delete a message permanently.
+ * Finds message in UUID-keyed directory and deletes the file.
+ * CC-P1-414: Intentionally searches inbox only -- sent messages are retained for audit trail.
  */
 export async function deleteMessage(agentIdentifier: string, messageId: string): Promise<boolean> {
-  // Find where the message actually exists
-  const messagePath = await findMessagePath(agentIdentifier, messageId, 'inbox')
-  if (!messagePath) return false
+  // SF-023: Serialize the entire find+unlink under per-message lock to prevent TOCTOU races.
+  // Path resolution MUST happen inside the lock — if resolved outside, concurrent archive/delete
+  // can invalidate the path between resolution and lock acquisition.
+  // Inbox-only: sent messages cannot be deleted (retained for audit trail).
+  return withLock(`msg-${messageId}`, async () => {
+    const messagePath = await findMessagePath(agentIdentifier, messageId, 'inbox')
+    if (!messagePath) return false
 
-  try {
-    await fs.unlink(messagePath)
-    return true
-  } catch (error) {
-    return false
-  }
+    try {
+      await fs.unlink(messagePath)
+      return true
+    } catch (error) {
+      console.warn(`[MessageQueue] deleteMessage failed for ${messageId}:`, error)
+      return false
+    }
+  }) // end withLock
 }
 
 /**
- * Get unread message count for an agent
+ * Get unread message count for an agent.
+ * SF-043: Delegates to listInboxMessages for correctness -- filter logic, AMP envelope
+ * conversion, and governance filtering all affect the count. A count-only optimized
+ * path would need to replicate all that logic.
+ * TODO(Phase 2): Add an optimized count-only code path that reads status headers
+ * without full message deserialization for better performance.
  */
 export async function getUnreadCount(agentIdentifier: string): Promise<number> {
   const messages = await listInboxMessages(agentIdentifier, { status: 'unread' })
@@ -1269,12 +929,24 @@ export async function getUnreadCount(agentIdentifier: string): Promise<number> {
  * List all agents with messages
  */
 export async function listAgentsWithMessages(): Promise<string[]> {
-  await ensureMessageDirectories()
-  const inboxDir = path.join(MESSAGE_DIR, 'inbox')
-
+  // Read from AMP per-agent directories only
   try {
-    const folders = await fs.readdir(inboxDir)
-    return folders
+    const agents = await fs.readdir(AMP_AGENTS_DIR)
+    const agentsWithMessages: string[] = []
+
+    for (const agent of agents) {
+      const inboxDir = path.join(AMP_AGENTS_DIR, agent, 'messages', 'inbox')
+      try {
+        const entries = await fs.readdir(inboxDir)
+        if (entries.length > 0) {
+          agentsWithMessages.push(agent)
+        }
+      } catch {
+        // No inbox dir for this agent
+      }
+    }
+
+    return agentsWithMessages
   } catch (error) {
     return []
   }
@@ -1304,8 +976,11 @@ export async function getMessageStats(agentIdentifier: string): Promise<{
     },
   }
 
+  // SF-036: Guard against undefined priority keys producing NaN increments
   messages.forEach(m => {
-    stats.byPriority[m.priority]++
+    if (m.priority in stats.byPriority) {
+      stats.byPriority[m.priority]++
+    }
   })
 
   return stats

@@ -1,6 +1,9 @@
+// NT-031: This file dynamically imports .ts files (e.g., lib/agent-runtime.ts,
+// lib/agent.ts, lib/governance-request-registry.ts, services/headless-router.ts).
+// These imports rely on tsx or Next.js runtime transpilation. Running this file
+// with plain `node` (without tsx) will fail. In full mode Next.js provides the
+// transpiler; in headless mode `tsx server.mjs` must be used.
 import { createServer } from 'http'
-import { parse } from 'url'
-import next from 'next'
 import { WebSocketServer } from 'ws'
 import WebSocket from 'ws'
 import pty from 'node-pty'
@@ -8,23 +11,141 @@ import os from 'os'
 import fs from 'fs'
 import path from 'path'
 import { getHostById, isSelf } from './lib/hosts-config-server.mjs'
+import { statePath } from './lib/ecosystem-state-paths.mjs'
 import { hostHints } from './lib/host-hints-server.mjs'
+import { getOrCreateBuffer } from './lib/cerebellum/session-bridge.mjs'
+import { validateSessionCookie } from './lib/session-validate-server.mjs'
+import {
+  sessionActivity,
+  terminalSessions,
+  statusSubscribers,
+  companionClients,
+  broadcastStatusUpdate,
+  setOnStatusUpdateCallback
+} from './services/shared-state-bridge.mjs'
+
+// Guard against concurrent PTY spawns for the same session name.
+// When two WebSocket clients connect simultaneously for the same session,
+// both can pass the `!sessionState` check before either registers in
+// terminalSessions. This Set tracks session names with an in-progress
+// PTY spawn so the second caller waits instead of spawning a duplicate.
+const ptySpawnLocks = new Set()
+
+// =============================================================================
+// GLOBAL ERROR HANDLERS - Must be first to catch all errors
+// =============================================================================
+// These handlers prevent the server from crashing on unhandled errors.
+// On Ubuntu 24.04 and other Linux systems, native modules (node-pty, cozo-node)
+// can occasionally throw errors that would otherwise crash the process.
+
+process.on('uncaughtException', (error, origin) => {
+  console.error(`[CRASH-GUARD] Uncaught exception from ${origin}:`)
+  console.error(error)
+
+  // Log to file for debugging
+  const logsDir = path.join(process.cwd(), 'logs')
+  if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true })
+  const crashLogPath = path.join(logsDir, 'crash.log')
+  const timestamp = new Date().toISOString()
+  const logEntry = `[${timestamp}] Uncaught exception (${origin}):\n${error.stack || error}\n\n`
+
+  try {
+    fs.appendFileSync(crashLogPath, logEntry)
+  } catch (fsError) {
+    // Ignore file write errors
+  }
+
+  // Don't exit - allow the server to continue running
+  // Only exit for truly fatal errors
+  if (error.code === 'EADDRINUSE' || error.code === 'EACCES') {
+    console.error('[CRASH-GUARD] Fatal error, exiting...')
+    process.exit(1)
+  }
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[CRASH-GUARD] Unhandled promise rejection:')
+  console.error('Reason:', reason)
+
+  // Log to file for debugging
+  // MF-015: Ensure logs directory exists before writing (same guard as uncaughtException)
+  const logsDir = path.join(process.cwd(), 'logs')
+  if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true })
+  const crashLogPath = path.join(logsDir, 'crash.log')
+  const timestamp = new Date().toISOString()
+  const logEntry = `[${timestamp}] Unhandled rejection:\n${reason?.stack || reason}\n\n`
+
+  try {
+    fs.appendFileSync(crashLogPath, logEntry)
+  } catch (fsError) {
+    // Ignore file write errors
+  }
+
+  // Don't exit - allow the server to continue running
+})
+
+// Catch SIGPIPE errors (common on Linux when clients disconnect abruptly)
+process.on('SIGPIPE', () => {
+  console.log('[CRASH-GUARD] SIGPIPE received (client disconnected), ignoring')
+})
+
+// =============================================================================
 
 const dev = process.env.NODE_ENV !== 'production'
-const hostname = process.env.HOSTNAME || '0.0.0.0' // 0.0.0.0 allows network access
+const hostname = process.env.HOSTNAME || '127.0.0.1' // Primary bind address (localhost-only by default)
 const port = parseInt(process.env.PORT || '23000', 10)
+
+// Auto-detect Tailscale IP for VPN access (iPad, mobile, remote hosts)
+let tailscaleIp = null
+try {
+  const { execSync: execSyncBind } = await import('child_process')
+  tailscaleIp = execSyncBind('tailscale ip -4', { encoding: 'utf8', timeout: 3000 }).trim()
+  if (!/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(tailscaleIp)) tailscaleIp = null // Only Tailscale CGNAT (100.64.0.0/10)
+} catch (err) {
+  // Log the failure so operators can distinguish "not installed" from "misconfigured"
+  const msg = err?.message || String(err)
+  if (msg.includes('ENOENT') || msg.includes('not found')) {
+    console.log('[SECURITY] Tailscale CLI not found — binding to localhost only')
+  } else {
+    console.warn(`[SECURITY] Tailscale detection failed: ${msg.slice(0, 120)} — binding to localhost only`)
+  }
+}
+
+// IP filter: when bound to 0.0.0.0, only allow localhost + Tailscale IPs
+// This prevents LAN exposure while allowing VPN access.
+//
+// SRV-MIN-01 fix: removed the unreachable `ip === 'localhost'` branch.
+// Node.js's net.Socket#remoteAddress returns an IP string (never the hostname
+// 'localhost'), so that branch was dead code.
+//
+// SRV-MIN-02 fix: documented the Tailscale CGNAT regex below explaining the
+// 100.64.0.0/10 range it covers. The /10 prefix is 100.64.x.x through
+// 100.127.x.x. The regex captures: 64-69 (6[4-9]), 70-99 ([7-9]\d), 100-119
+// (1[01]\d), 120-127 (12[0-7]). Anything outside that band is rejected.
+function isAllowedSource(remoteAddress) {
+  if (!remoteAddress) return false
+  const ip = remoteAddress.replace(/^::ffff:/, '') // Strip IPv4-mapped IPv6 prefix
+  if (ip === '127.0.0.1' || ip === '::1') return true
+  // 100.64.0.0/10 = 100.64.x.x – 100.127.x.x (Tailscale CGNAT range, RFC 6598)
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip)) return true
+  if (/^fd7a:115c:a1e0:/.test(ip)) return true // Tailscale IPv6 ULA range
+  return false
+}
+
+// Server mode: 'full' (default) = Next.js + UI, 'headless' = API-only (no Next.js)
+const MAESTRO_MODE = process.env.MAESTRO_MODE || 'full'
 
 // Global logging master switch - set ENABLE_LOGGING=true to enable all logging
 const globalLoggingEnabled = process.env.ENABLE_LOGGING === 'true'
 
-// Initialize Next.js
-const app = next({ dev, hostname, port })
-const handle = app.getRequestHandler()
-
 // Session state management
-const sessions = new Map() // sessionName -> { clients: Set, ptyProcess, logStream, lastActivity: timestamp }
-const sessionActivity = new Map() // sessionName -> lastActivityTimestamp
+// sessionActivity, terminalSessions, statusSubscribers, companionClients, broadcastStatusUpdate
+// are imported from shared-state-bridge.mjs (backed by globalThis._sharedState)
 const idleTimers = new Map() // sessionName -> { timer, wasActive }
+
+// Auto-continue timers: when an agent is waiting at prompt for too long, auto-send "continue"
+const autoContinueTimers = new Map() // sessionName -> { timer, startedAt }
+const AUTO_CONTINUE_DEFAULT_MS = 4 * 60 * 1000 // 4 minutes default
 
 // Idle threshold in milliseconds (30 seconds)
 const IDLE_THRESHOLD_MS = 30 * 1000
@@ -108,7 +229,7 @@ function killPtyProcess(ptyProcess, sessionName, alreadyExited = false) {
  */
 function cleanupSession(sessionName, sessionState, reason = 'unknown', ptyAlreadyExited = false) {
   if (!sessionState) {
-    sessionState = sessions.get(sessionName)
+    sessionState = terminalSessions.get(sessionName)
   }
   if (!sessionState) {
     return
@@ -157,8 +278,16 @@ function cleanupSession(sessionName, sessionState, reason = 'unknown', ptyAlread
     sessionState.clients.clear()
   }
 
-  // Remove from sessions map
-  sessions.delete(sessionName)
+  // Release cerebellum terminal buffer to prevent memory leaks.
+  // Null the reference rather than awaiting — cleanupSession may be called
+  // from synchronous contexts (e.g. graceful shutdown forEach).
+  if (sessionState.terminalBuffer) {
+    sessionState.terminalBuffer.listeners?.clear?.()
+    sessionState.terminalBuffer = null
+  }
+
+  // Remove from terminal sessions map
+  terminalSessions.delete(sessionName)
 
   // Clean up activity tracking
   sessionActivity.delete(sessionName)
@@ -168,7 +297,7 @@ function cleanupSession(sessionName, sessionState, reason = 'unknown', ptyAlread
   }
   idleTimers.delete(sessionName)
 
-  console.log(`[PTY] Session ${sessionName} cleaned up. Active sessions: ${sessions.size}`)
+  console.log(`[PTY] Session ${sessionName} cleaned up. Active sessions: ${terminalSessions.size}`)
 }
 
 /**
@@ -210,7 +339,7 @@ function startOrphanedPtyCleanup() {
   setInterval(() => {
     let orphanedCount = 0
 
-    sessions.forEach((sessionState, sessionName) => {
+    terminalSessions.forEach((sessionState, sessionName) => {
       // Skip if already cleaned up or being cleaned up
       if (sessionState.cleanedUp) {
         return
@@ -226,7 +355,7 @@ function startOrphanedPtyCleanup() {
     })
 
     if (orphanedCount > 0) {
-      console.log(`[PTY] Cleaned up ${orphanedCount} orphaned session(s). Active: ${sessions.size}`)
+      console.log(`[PTY] Cleaned up ${orphanedCount} orphaned session(s). Active: ${terminalSessions.size}`)
     }
   }, ORPHAN_CLEANUP_INTERVAL_MS)
 
@@ -250,7 +379,7 @@ function getAgentIdForSession(sessionName) {
     const agentId = atIndex > 0 ? sessionName.substring(0, atIndex) : sessionName
 
     // Verify the agent database directory exists
-    const agentDbPath = path.join(os.homedir(), '.aimaestro', 'agents', agentId)
+    const agentDbPath = statePath('agents', agentId)
     if (fs.existsSync(agentDbPath) && fs.statSync(agentDbPath).isDirectory()) {
       return agentId
     }
@@ -297,50 +426,202 @@ function trackSessionActivity(sessionName) {
   idleTimers.set(sessionName, { timer, wasActive: true })
 }
 
+/**
+ * Auto-continue: keeps Claude sessions alive by sending "continue" when idle.
+ *
+ * REQUIRES: Agent must have --dangerously-skip-permissions in programArgs.
+ * This eliminates permission prompts entirely, so the only remaining
+ * interruptions are choice menus — handled by sending Escape first.
+ *
+ * Sequence on idle timeout:
+ *   1. Send Escape (dismiss any choice menu / question if present)
+ *   2. Wait 500ms for prompt to stabilize
+ *   3. Send "continue" + Enter
+ *
+ * This loop repeats indefinitely, keeping the context cache warm
+ * and avoiding massive token reprocessing costs on resume.
+ */
+function startAutoContinueTimer(sessionName, delayMs) {
+  // Cancel any existing timer for this session
+  cancelAutoContinueTimer(sessionName)
+
+  const timer = setTimeout(async () => {
+    autoContinueTimers.delete(sessionName)
+    try {
+      // Defense-in-depth: re-validate sessionName before execSync (original validation was at WS connect time)
+      if (!/^[a-zA-Z0-9_@.-]+$/.test(sessionName)) return
+      const { getAgentBySession } = await import('./lib/agent-registry.ts')
+      const agent = getAgentBySession(sessionName)
+      if (!agent?.preferences?.autoContinue) return // preference was toggled off
+
+      // SAFETY: require --dangerously-skip-permissions to avoid permission prompt interference
+      // Split into array and check exact match to prevent partial-match bypasses
+      // (e.g. '--not-dangerously-skip-permissions' must NOT pass)
+      const argsArray = (agent.programArgs || '').split(/\s+/).filter(Boolean)
+      if (!argsArray.includes('--dangerously-skip-permissions')) {
+        console.log(`[AutoContinue] ${sessionName}: skipped — missing --dangerously-skip-permissions`)
+        return
+      }
+
+      // Re-check the hook state before sending
+      const stateDir = statePath('chat-state')
+      const crypto = await import('crypto')
+      const cwdHash = crypto.createHash('md5').update(agent.workingDirectory || '').digest('hex').substring(0, 16)
+      const stateFile = path.join(stateDir, `${cwdHash}.json`)
+
+      if (fs.existsSync(stateFile)) {
+        const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'))
+        // Only proceed if waiting_for_input (any notification type — Escape handles menus)
+        if (state.status !== 'waiting_for_input') {
+          console.log(`[AutoContinue] ${sessionName}: skipped — state=${state.status}`)
+          return
+        }
+      } else {
+        return // no state file means we can't confirm it's safe
+      }
+
+      // SRV-MAJOR-04 fix (2026-05-04) — replace execSync with the async
+      // execFile + Promise wrapper. execSync blocks the Node event loop
+      // for the duration of the tmux send-keys command (typically a few
+      // ms but can stack with many concurrent sessions). execFile with
+      // an explicit argv bypasses the shell entirely, so even if the
+      // sessionName regex were ever loosened the only consequence is
+      // tmux receiving a literal arg — no shell injection possible.
+      const { execFile } = await import('child_process')
+      const { promisify } = await import('util')
+      const execFileAsync = promisify(execFile)
+
+      // Step 1: Send Escape to dismiss any choice menu or question
+      try {
+        await execFileAsync(
+          'tmux',
+          ['send-keys', '-t', sessionName, 'Escape'],
+          { timeout: 5000 }
+        )
+      } catch (escErr) {
+        // Treat as non-fatal — tmux may already be at idle prompt
+        console.log(`[AutoContinue] ${sessionName}: Escape send failed (non-fatal): ${escErr.message}`)
+      }
+
+      // Step 2: Wait 500ms for prompt to stabilize after Escape
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Step 3: Send "continue" + Enter (one execFile call so the two
+      // keystrokes land in the same tmux command — preserves prior
+      // ordering semantics).
+      await execFileAsync(
+        'tmux',
+        ['send-keys', '-t', sessionName, 'continue', 'Enter'],
+        { timeout: 5000 }
+      )
+      console.log(`[AutoContinue] ${sessionName}: sent Escape + "continue" after ${delayMs / 1000}s idle`)
+    } catch (err) {
+      console.error(`[AutoContinue] ${sessionName}: failed —`, err.message)
+    }
+  }, delayMs)
+
+  autoContinueTimers.set(sessionName, { timer, startedAt: Date.now() })
+}
+
+function cancelAutoContinueTimer(sessionName) {
+  const existing = autoContinueTimers.get(sessionName)
+  if (existing?.timer) {
+    clearTimeout(existing.timer)
+    autoContinueTimers.delete(sessionName)
+  }
+}
+
+/**
+ * Called when a session's activity status changes.
+ * Manages auto-continue timers based on waiting/idle state.
+ * Triggers on both idle_prompt and permission_prompt (Escape handles menus).
+ */
+async function checkAutoContinue(sessionName, status, hookStatus, notificationType) {
+  // Start timer when waiting for input (any notification type)
+  if (status === 'waiting') {
+    try {
+      const { getAgentBySession } = await import('./lib/agent-registry.ts')
+      const agent = getAgentBySession(sessionName)
+      if (agent?.preferences?.autoContinue) {
+        const delay = agent.preferences.autoContinueDelayMs || AUTO_CONTINUE_DEFAULT_MS
+        // Don't restart timer if one is already running for this session
+        if (!autoContinueTimers.has(sessionName)) {
+          startAutoContinueTimer(sessionName, delay)
+          console.log(`[AutoContinue] ${sessionName}: timer started (${delay / 1000}s, notification=${notificationType})`)
+        }
+      }
+    } catch {
+      // Agent registry not available yet during startup
+    }
+  } else if (status === 'active') {
+    // Agent became active — cancel timer (it's working again)
+    if (autoContinueTimers.has(sessionName)) {
+      cancelAutoContinueTimer(sessionName)
+      console.log(`[AutoContinue] ${sessionName}: timer cancelled (active)`)
+    }
+  }
+  // Note: 'idle' status does NOT cancel — agent may just be between output chunks
+}
+
 // Create logs directory if it doesn't exist
 const logsDir = path.join(process.cwd(), 'logs')
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true })
 }
 
-// Status WebSocket subscribers (for real-time status updates)
-const statusSubscribers = new Set()
+// statusSubscribers, broadcastStatusUpdate imported from shared-state-bridge.mjs
 
-// Broadcast status update to all subscribers
-function broadcastStatusUpdate(sessionName, status, hookStatus, notificationType) {
-  const message = JSON.stringify({
-    type: 'status_update',
-    sessionName,
-    status,
-    hookStatus,
-    notificationType,
-    timestamp: new Date().toISOString()
-  })
+// Register auto-continue callback to fire on every status broadcast
+setOnStatusUpdateCallback((sessionName, status, hookStatus, notificationType) => {
+  checkAutoContinue(sessionName, status, hookStatus, notificationType)
+})
 
-  statusSubscribers.forEach(ws => {
-    if (ws.readyState === 1) { // WebSocket.OPEN
-      ws.send(message)
-    }
-  })
-}
-
-// Expose session state globally for API routes
-global.sessionActivity = sessionActivity
-global.terminalSessions = sessions  // PTY processes per session
-global.statusSubscribers = statusSubscribers
-global.broadcastStatusUpdate = broadcastStatusUpdate
-
-app.prepare().then(() => {
+/**
+ * Start the HTTP server with the given request handler.
+ * All WebSocket servers, PTY handling, startup tasks, and graceful shutdown
+ * are shared between full and headless modes.
+ */
+async function startServer(handleRequest) {
   const server = createServer(async (req, res) => {
     try {
-      const parsedUrl = parse(req.url, true)
+      // Use the WHATWG URL API instead of the deprecated url.parse().
+      // Construct a Next.js-compatible { pathname, query } object so that both
+      // the internal endpoint check and app.getRequestHandler() work correctly.
+      const _url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
+      const parsedUrl = {
+        pathname: _url.pathname,
+        query: Object.fromEntries(_url.searchParams),
+        search: _url.search,
+        href: _url.href
+      }
 
       // Internal endpoint for PTY debug info - served directly from server.mjs
-      // This allows access to the in-memory sessions map
+      // This allows access to the in-memory sessions map.
+      //
+      // SRV-CRIT-01 fix (2026-05-04): require a credential (session cookie OR
+      // bearer token). The endpoint is bypassed by Next.js middleware because
+      // it's handled here in server.mjs before req hand-off, so we replicate
+      // the same credential check inline. The session COOKIE is now deep-validated
+      // (#3, 2026-06-21) against the shared in-memory store (globalThis.__aiMaestroSessionsMap)
+      // so a forged aim_session value can no longer pass; the BEARER stays a presence
+      // check because the bearer tokens (one-shot AID tokens, JWTs) must be validated
+      // downstream where their consumption/crypto semantics live — deep-validating
+      // them at this pre-handshake gate would consume a one-shot token before its
+      // real consumer runs.
       if (parsedUrl.pathname === '/api/internal/pty-sessions') {
+        const cookieHdr = req.headers.cookie || ''
+        const authHdr = req.headers.authorization || ''
+        const hasSessionCookie = validateSessionCookie(cookieHdr)
+        const hasBearer = /^Bearer\s+(aim_tk_|amp_live_sk_|mst_|eyJ)[A-Za-z0-9_\-\.]{10,}$/.test(authHdr.trim())
+        if (!hasSessionCookie && !hasBearer) {
+          res.statusCode = 401
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: 'Authentication required' }))
+          return
+        }
         res.setHeader('Content-Type', 'application/json')
         const sessionInfo = []
-        sessions.forEach((state, name) => {
+        terminalSessions.forEach((state, name) => {
           sessionInfo.push({
             name,
             clients: state.clients?.size || 0,
@@ -351,14 +632,14 @@ app.prepare().then(() => {
           })
         })
         res.end(JSON.stringify({
-          activeSessions: sessions.size,
+          activeSessions: terminalSessions.size,
           sessions: sessionInfo,
           timestamp: new Date().toISOString()
         }))
         return
       }
 
-      await handle(req, res, parsedUrl)
+      await handleRequest(req, res, parsedUrl)
     } catch (err) {
       console.error('Error handling request:', err)
       res.statusCode = 500
@@ -430,6 +711,35 @@ app.prepare().then(() => {
         // Track activity for remote sessions
         sessionActivity.set(sessionName, Date.now())
 
+        // Remove stale listeners from previous retry attempts to avoid duplicates.
+        // MF-016: Only remove client listeners added inside the 'open' handler (message
+        // proxying and per-connection close/error). The early-close handler registered
+        // outside attemptConnection() is re-established immediately after clearing to
+        // prevent a gap where client disconnection would go unhandled.
+        clientWs.removeAllListeners('message')
+        clientWs.removeAllListeners('close')
+        clientWs.removeAllListeners('error')
+
+        // MF-016: Re-register client close and error handlers immediately after
+        // clearing to prevent any gap where client disconnection goes unhandled.
+        // These replace both the early-close handler (registered outside
+        // attemptConnection) and the previous per-connection handlers.
+        clientWs.on('close', () => {
+          clientClosed = true
+          console.log(`🌐 [REMOTE] Client disconnected from ${sessionName}`)
+          if (workerWs && workerWs.readyState === WebSocket.OPEN) {
+            workerWs.close()
+          }
+        })
+
+        clientWs.on('error', (error) => {
+          clientClosed = true
+          console.error(`🌐 [REMOTE] Client error for ${sessionName}:`, error.message)
+          if (workerWs && workerWs.readyState === WebSocket.OPEN) {
+            workerWs.close()
+          }
+        })
+
         // Proxy messages: browser → remote worker
         clientWs.on('message', (data) => {
           if (workerWs.readyState === WebSocket.OPEN) {
@@ -468,22 +778,8 @@ app.prepare().then(() => {
           }
         })
 
-        // Handle client disconnection
-        clientWs.on('close', () => {
-          clientClosed = true
-          console.log(`🌐 [REMOTE] Client disconnected from ${sessionName}`)
-          if (workerWs.readyState === WebSocket.OPEN) {
-            workerWs.close()
-          }
-        })
-
-        clientWs.on('error', (error) => {
-          clientClosed = true
-          console.error(`🌐 [REMOTE] Client error for ${sessionName}:`, error.message)
-          if (workerWs.readyState === WebSocket.OPEN) {
-            workerWs.close()
-          }
-        })
+        // Client close/error handlers are registered immediately after
+        // removeAllListeners above (MF-016) -- no duplicate registration needed here.
       })
 
       workerWs.on('error', (error) => {
@@ -525,6 +821,20 @@ app.prepare().then(() => {
   // NOTE: Container agent handling removed - not yet implemented
   // Future: Add handleContainerAgent() when cloud deployment is supported
 
+  // WebSocket server for AMP real-time delivery (/v1/ws)
+  const ampWss = new WebSocketServer({ noServer: true })
+
+  ampWss.on('connection', async (ws) => {
+    try {
+      // Dynamically import the AMP WebSocket handler (compiled from TypeScript)
+      const { handleAMPWebSocket } = await import('./lib/amp-websocket.ts')
+      handleAMPWebSocket(ws)
+    } catch (err) {
+      console.error('[AMP-WS] Failed to load handler:', err)
+      ws.close(1011, 'Internal error')
+    }
+  })
+
   // WebSocket server for status updates
   const statusWss = new WebSocketServer({ noServer: true })
 
@@ -532,9 +842,13 @@ app.prepare().then(() => {
     console.log('[STATUS-WS] Client connected')
     statusSubscribers.add(ws)
 
-    // Send current status to new subscriber (including hook states)
+    // Send current status to new subscriber (including hook states).
+    // NT-034: This uses a loopback HTTP request to self. Ideally we would call
+    // the handler function directly, but the session activity endpoint lives in
+    // a Next.js API route that is only accessible via HTTP. The fallback below
+    // handles the case where the loopback fetch fails (e.g., during startup).
     try {
-      const response = await fetch(`http://localhost:${port}/api/sessions/activity`)
+      const response = await fetch(`http://127.0.0.1:${port}/api/sessions/activity`)
       const data = await response.json()
       ws.send(JSON.stringify({ type: 'initial_status', activity: data.activity || {} }))
     } catch (err) {
@@ -561,16 +875,242 @@ app.prepare().then(() => {
     })
   })
 
+  // WebSocket server for companion speech events (/companion-ws)
+  const companionWss = new WebSocketServer({ noServer: true })
+
+  // companionClients imported from shared-state-bridge.mjs
+
+  companionWss.on('connection', async (ws, query) => {
+    const agentId = query.agent
+    if (!agentId || typeof agentId !== 'string') {
+      ws.close(1008, 'agent parameter required')
+      return
+    }
+
+    console.log(`[COMPANION-WS] Client connected for agent ${agentId.substring(0, 8)}`)
+
+    // Add to subscribers for this agent
+    let clients = companionClients.get(agentId)
+    if (!clients) {
+      clients = new Set()
+      companionClients.set(agentId, clients)
+    }
+    clients.add(ws)
+
+    // Notify cerebellum that companion connected
+    try {
+      const { agentRegistry } = await import('./lib/agent.ts')
+      const agent = agentRegistry.getExistingAgent(agentId)
+      if (agent) {
+        const cerebellum = agent.getCerebellum()
+        if (cerebellum) {
+          cerebellum.setCompanionConnected(true)
+
+          // Subscribe to voice:speak events for this agent
+          const listener = (event) => {
+            if (event.type === 'voice:speak' && event.agentId === agentId) {
+              const message = JSON.stringify({
+                type: 'speech',
+                text: event.payload?.text || '',
+                timestamp: Date.now(),
+              })
+              // Send to all companion clients for this agent
+              const agentClients = companionClients.get(agentId)
+              if (agentClients) {
+                for (const client of agentClients) {
+                  if (client.readyState === 1) { // WebSocket.OPEN
+                    try { client.send(message) } catch { /* ignore */ }
+                  }
+                }
+              }
+            }
+          }
+          cerebellum.on('voice:speak', listener)
+
+          // Also attach the voice subsystem to the terminal buffer if available
+          const voiceSub = cerebellum.getSubsystem('voice')
+          if (voiceSub && voiceSub.attachBuffer) {
+            const { getBuffer } = await import('./lib/cerebellum/session-bridge.mjs')
+            // Find the session name for this agent
+            const { getAgent: getRegistryAgent } = await import('./lib/agent-registry.ts')
+            const registryAgent = getRegistryAgent(agentId)
+            const sessionName = registryAgent?.name || registryAgent?.alias
+            if (sessionName) {
+              const buffer = getBuffer(sessionName)
+              if (buffer) {
+                voiceSub.attachBuffer(buffer)
+                console.log(`[COMPANION-WS] Attached voice buffer for session ${sessionName}`)
+              }
+            }
+          }
+
+          // Store cleanup info on the ws
+          ws._companionCleanup = { listener, agentId }
+        }
+      }
+    } catch (err) {
+      console.error('[COMPANION-WS] Error setting up cerebellum connection:', err)
+    }
+
+    // Handle user messages forwarded from the companion UI
+    ws.on('message', (raw) => {
+      try {
+        const data = JSON.parse(raw.toString())
+        if (data.type === 'user_message' && typeof data.text === 'string') {
+          // Forward to voice subsystem's user message buffer
+          import('./lib/agent.ts').then(({ agentRegistry }) => {
+            const agent = agentRegistry.getExistingAgent(agentId)
+            const cerebellum = agent?.getCerebellum()
+            if (cerebellum) {
+              const voiceSub = cerebellum.getSubsystem('voice')
+              if (voiceSub?.addUserMessage) {
+                voiceSub.addUserMessage(data.text)
+              }
+            }
+          }).catch(() => { /* ignore */ })
+        } else if (data.type === 'repeat') {
+          // Repeat the last spoken message
+          import('./lib/agent.ts').then(({ agentRegistry }) => {
+            const agent = agentRegistry.getExistingAgent(agentId)
+            const cerebellum = agent?.getCerebellum()
+            if (cerebellum) {
+              const voiceSub = cerebellum.getSubsystem('voice')
+              if (voiceSub?.repeatLast) {
+                voiceSub.repeatLast()
+              }
+            }
+          }).catch(() => { /* ignore */ })
+        }
+      } catch {
+        // Ignore non-JSON messages
+      }
+    })
+
+    ws.on('close', () => {
+      console.log(`[COMPANION-WS] Client disconnected from agent ${agentId.substring(0, 8)}`)
+
+      // SF-040: Each client removes its own listener on close to prevent
+      // event listener leaks when multiple companion clients connect.
+      if (ws._companionCleanup?.listener) {
+        import('./lib/agent.ts').then(({ agentRegistry }) => {
+          const agent = agentRegistry.getExistingAgent(agentId)
+          const cerebellum = agent?.getCerebellum()
+          if (cerebellum) {
+            cerebellum.off('voice:speak', ws._companionCleanup.listener)
+          }
+        }).catch(() => { /* ignore */ })
+      }
+
+      const agentClients = companionClients.get(agentId)
+      if (agentClients) {
+        agentClients.delete(ws)
+        if (agentClients.size === 0) {
+          companionClients.delete(agentId)
+          // Notify cerebellum no companion connected
+          import('./lib/agent.ts').then(({ agentRegistry }) => {
+            const agent = agentRegistry.getExistingAgent(agentId)
+            const cerebellum = agent?.getCerebellum()
+            if (cerebellum) {
+              cerebellum.setCompanionConnected(false)
+            }
+          }).catch(() => { /* ignore */ })
+        }
+      }
+    })
+
+    ws.on('error', (err) => {
+      console.error('[COMPANION-WS] Error:', err.message)
+    })
+  })
+
+  // SRV-CRIT-03 fix (2026-05-04): structural credential gate for ALL
+  // WebSocket upgrades. Previous version accepted any TCP connection from
+  // an allow-listed IP and proceeded to attach a PTY (for /term), broadcast
+  // status (/status), stream AMP messages (/v1/ws), or relay companion
+  // voice I/O (/companion-ws) without any auth check. The IP filter was the
+  // only gate, which meant any localhost process or Tailscale peer could
+  // open a terminal to any agent's tmux session and read/write commands.
+  //
+  // We replicate the same credential check used by middleware.ts hasCredential() —
+  // the request must carry a valid aim_session cookie OR a Bearer token. The COOKIE
+  // is now deep-validated (#3, 2026-06-21) against the shared in-memory store so a
+  // forged aim_session can no longer pass; the BEARER stays a presence check (deep
+  // bearer validation is a downstream responsibility — one-shot AID tokens must not
+  // be consumed at this pre-handshake gate). Untracked paths still hit
+  // socket.destroy() below.
+  const wsHasCredential = (request) => {
+    const cookieHdr = request.headers.cookie || ''
+    if (validateSessionCookie(cookieHdr)) return true
+    const authHdr = request.headers.authorization || ''
+    if (/^Bearer\s+(aim_tk_|amp_live_sk_|mst_|eyJ)[A-Za-z0-9_\-\.]{10,}$/.test(authHdr.trim())) return true
+    return false
+  }
+
   server.on('upgrade', (request, socket, head) => {
-    const { pathname, query } = parse(request.url, true)
+    // Use WHATWG URL API instead of deprecated url.parse().
+    // Convert searchParams to a plain object so downstream handlers can use query.name, query.host, etc.
+    const _upgradeUrl = new URL(request.url, `http://${request.headers.host || 'localhost'}`)
+    const pathname = _upgradeUrl.pathname
+    const query = Object.fromEntries(_upgradeUrl.searchParams)
+
+    // Auth gate — reject anonymous upgrades for known WS routes before
+    // the handshake completes. Unknown paths still fall through to
+    // socket.destroy() below.
+    const knownPaths = new Set(['/term', '/status', '/v1/ws', '/companion-ws'])
+    if (knownPaths.has(pathname) && !wsHasCredential(request)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n' +
+                   'Content-Length: 0\r\n' +
+                   'Connection: close\r\n\r\n')
+      socket.destroy()
+      return
+    }
 
     if (pathname === '/term') {
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request, query)
       })
-    } else if (pathname === '/status') {
-      statusWss.handleUpgrade(request, socket, head, (ws) => {
-        statusWss.emit('connection', ws)
+    } else if (pathname === '/status' || pathname === '/companion-ws') {
+      // SRV-CRIT-03 follow-up (WS deep-auth parity): the /status and /companion-ws
+      // connection handlers receive no `request` and validate the credential ONLY
+      // via the pre-handshake wsHasCredential SHAPE check above — so a forged-shape
+      // `Bearer aim_tk_AAAA…` would reach the status stream / companion voice relay.
+      // The other two privileged sockets are already covered: /term deep-validates
+      // in its own connection handler, and /v1/ws self-authenticates in-band via an
+      // {type:'auth'} frame + validateApiKey (lib/amp-websocket.ts). Deep-validate
+      // these two here with the same NON-consuming authenticator /term uses (cookie
+      // + every bearer class) BEFORE the handshake; fail closed on any error, and
+      // never consume a one-shot AID token at this gate.
+      import('./lib/ws-auth-gate.ts')
+        .then(async ({ isWsRequestAuthorized }) => {
+          if (!(await isWsRequestAuthorized(request?.headers))) {
+            socket.write('HTTP/1.1 401 Unauthorized\r\n' +
+                         'Content-Length: 0\r\n' +
+                         'Connection: close\r\n\r\n')
+            socket.destroy()
+            return
+          }
+          if (pathname === '/status') {
+            statusWss.handleUpgrade(request, socket, head, (ws) => {
+              statusWss.emit('connection', ws)
+            })
+          } else {
+            companionWss.handleUpgrade(request, socket, head, (ws) => {
+              companionWss.emit('connection', ws, query)
+            })
+          }
+        })
+        .catch((authErr) => {
+          console.error('[WS upgrade] credential validation error, denying:', authErr)
+          try {
+            socket.write('HTTP/1.1 401 Unauthorized\r\n' +
+                         'Content-Length: 0\r\n' +
+                         'Connection: close\r\n\r\n')
+          } catch { /* socket may already be closed */ }
+          socket.destroy()
+        })
+    } else if (pathname === '/v1/ws') {
+      ampWss.handleUpgrade(request, socket, head, (ws) => {
+        ampWss.emit('connection', ws)
       })
     } else {
       socket.destroy()
@@ -582,6 +1122,35 @@ app.prepare().then(() => {
 
     if (!sessionName || typeof sessionName !== 'string') {
       ws.close(1008, 'Session name required')
+      return
+    }
+
+    // Validate session name to prevent command injection in tmux attach.
+    // Only allow alphanumeric, underscore, hyphen, at-sign, and dot.
+    if (!/^[a-zA-Z0-9_@.-]+$/.test(sessionName)) {
+      ws.close(1008, 'Invalid session name')
+      return
+    }
+
+    // ── SF3 / TRDD-f1d89143 — deep-validate the credential BEFORE PTY attach ──
+    // The pre-handshake upgrade gate (wsHasCredential) checks the Bearer on
+    // PRESENCE only, so a forged-shape `Bearer aim_tk_AAAA…` previously reached
+    // terminal read/write here (this handler validated only the session NAME).
+    // Re-validate the cookie + bearer via the canonical, NON-consuming
+    // authenticator (all classes: aim_tk_/amp_live_sk_/mst_/eyJ + aim_session
+    // cookie); a forged credential now closes the socket before any PTY attach.
+    // Non-consuming, so a one-shot AID token is left intact for its real
+    // downstream consumer. Fail-closed on any error. Runs before local AND
+    // remote-host routing so proxied /term connections are authorised locally too.
+    try {
+      const { isWsRequestAuthorized } = await import('./lib/ws-auth-gate.ts')
+      if (!(await isWsRequestAuthorized(request?.headers))) {
+        ws.close(1008, 'Unauthorized')
+        return
+      }
+    } catch (authErr) {
+      console.error('[WS /term] credential validation error, denying:', authErr)
+      ws.close(1011, 'Authorization error')
       return
     }
 
@@ -616,18 +1185,137 @@ app.prepare().then(() => {
     // Currently all agents are local tmux sessions
 
     // Get or create session state (for traditional local tmux sessions)
-    let sessionState = sessions.get(sessionName)
+    let sessionState = terminalSessions.get(sessionName)
 
     if (!sessionState) {
+      // Atomic guard: if another WebSocket connection is already spawning a PTY
+      // for this session, wait briefly and reuse the result instead of spawning
+      // a duplicate PTY process.
+      if (ptySpawnLocks.has(sessionName)) {
+        await new Promise(r => setTimeout(r, 500))
+        sessionState = terminalSessions.get(sessionName)
+        if (!sessionState) {
+          ws.close(1013, 'PTY spawn in progress by another connection')
+          return
+        }
+        // Fall through to "Add client to session" below
+      } else {
+      ptySpawnLocks.add(sessionName)
+      let ptyProcess
 
-      // Spawn PTY with tmux attach (removed -r flag as it was causing exits)
-      const ptyProcess = pty.spawn('tmux', ['attach-session', '-t', sessionName], {
-        name: 'xterm-256color',
-        cols: 80,
-        rows: 24,
-        cwd: process.env.HOME || process.cwd(),
-        env: process.env
-      })
+      try {
+      // Spawn PTY with tmux attach, with retry logic for transient failures.
+      // Race condition: when a previous PTY cleanup just ran (30s grace period expired),
+      // tmux may still be detaching. Retrying after a short delay resolves this.
+      const PTY_SPAWN_MAX_RETRIES = 3
+      const PTY_SPAWN_RETRY_DELAY_MS = 500
+
+      // ── SRV-MAJOR-01 fix (2026-05-04) — sanitize query.socket ──
+      // The socket query parameter comes from the WebSocket URL and
+      // flows directly into getAttachCommand() which builds the tmux
+      // CLI args. Without validation an authenticated caller could
+      // pass an arbitrary path (`/tmp/evil/sock`, `../../etc/passwd`,
+      // shell-quoted strings) and either point tmux at an attacker-
+      // controlled socket OR break out of the safe argv shape.
+      // Allowlist: only the standard tmux per-uid socket directory
+      // pattern. Reject anything containing `..`, shell metachars, or
+      // a leading non-/ character.
+      let socketPath = query.socket || undefined
+      if (socketPath) {
+        const SAFE_SOCKET_RE = /^\/tmp\/(tmux-\d+|tmate-[\w-]+)\/[a-zA-Z0-9._-]+$/
+        if (typeof socketPath !== 'string' || !SAFE_SOCKET_RE.test(socketPath)) {
+          console.warn(`[WS] Rejecting unsafe socket path: ${String(socketPath)}`)
+          try {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Invalid socket path',
+              details: 'socket query parameter must match /tmp/tmux-<uid>/<name>',
+            }))
+          } catch { /* ignore */ }
+          ws.close(1008, 'unsafe socket path')
+          return
+        }
+      }
+
+      for (let attempt = 1; attempt <= PTY_SPAWN_MAX_RETRIES; attempt++) {
+        try {
+          // Verify tmux session exists before attempting to attach
+          if (attempt === 1) {
+            const { sessionExistsSync } = await import('./lib/agent-runtime.ts')
+            if (!sessionExistsSync(sessionName, socketPath)) {
+              // tmux session does not exist
+              console.error(`[PTY] tmux session "${sessionName}" does not exist`)
+              try {
+                ws.send(JSON.stringify({
+                  type: 'error',
+                  message: `Failed to attach to session "${sessionName}". Make sure tmux is installed and the session exists.`,
+                  details: 'tmux session not found'
+                }))
+              } catch (sendError) { /* ignore */ }
+              ws.close(1011, `tmux session not found: ${sessionName}`)
+              return
+            }
+          }
+
+          const { getRuntime: getRt } = await import('./lib/agent-runtime.ts')
+          const { command: attachCmd, args: attachArgs } = getRt().getAttachCommand(sessionName, socketPath)
+          ptyProcess = pty.spawn(attachCmd, attachArgs, {
+            name: 'xterm-256color',
+            cols: 80,
+            rows: 24,
+            cwd: process.env.HOME || process.cwd(),
+            env: process.env
+          })
+          break // Success, exit retry loop
+        } catch (spawnError) {
+          console.error(`[PTY] Spawn attempt ${attempt}/${PTY_SPAWN_MAX_RETRIES} failed for ${sessionName}:`, spawnError.message)
+
+          if (attempt < PTY_SPAWN_MAX_RETRIES) {
+            // Wait before retrying -- tmux may still be detaching from previous PTY
+            await new Promise(resolve => setTimeout(resolve, PTY_SPAWN_RETRY_DELAY_MS))
+
+            // Check if another client already created the session state while we waited
+            sessionState = terminalSessions.get(sessionName)
+            if (sessionState) {
+              console.log(`[PTY] Session ${sessionName} was created by another client during retry, reusing`)
+              break
+            }
+          } else {
+            // All retries exhausted
+            try {
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: `Failed to attach to session "${sessionName}". Make sure tmux is installed and the session exists.`,
+                details: spawnError.message
+              }))
+            } catch (sendError) { /* ignore */ }
+            ws.close(1011, `PTY spawn failed: ${spawnError.message}`)
+            return
+          }
+        }
+      }
+
+      // SESSION STATE BRANCHING:
+      //
+      // At this point we have two possible paths:
+      //
+      // Path A (existing session): Another WebSocket client already created the
+      //   session state (pty + log stream + client set) while we were retrying
+      //   the PTY spawn. In this case, `sessionState` is truthy from the lookup
+      //   above, so we skip creation and fall through to add this client to the
+      //   existing session's client set.
+      //
+      // Path B (new session): No session state exists yet, so we create it here:
+      //   allocate a new client set, wire up PTY data/exit handlers, start a log
+      //   stream (if logging is enabled), and register everything in the
+      //   terminalSessions map. Subsequent clients will take Path A.
+      if (sessionState) {
+        // Path A: fall through to add client to existing session
+      } else if (!ptyProcess) {
+        // Should not happen, but guard against it
+        ws.close(1011, 'PTY spawn failed unexpectedly')
+        return
+      } else {
 
       // Create log file for this session (only if global logging is enabled)
       let logStream = null
@@ -641,9 +1329,10 @@ app.prepare().then(() => {
         ptyProcess,
         logStream,
         loggingEnabled: true, // Default to enabled (but only works if globalLoggingEnabled is true)
-        cleanupTimer: null // Timer for cleaning up PTY when no clients connected
+        cleanupTimer: null, // Timer for cleaning up PTY when no clients connected
+        terminalBuffer: getOrCreateBuffer(sessionName) // Cerebellum terminal buffer for voice subsystem
       }
-      sessions.set(sessionName, sessionState)
+      terminalSessions.set(sessionName, sessionState)
 
       // Stream PTY output to all clients with flow control (backpressure)
       // This prevents overwhelming xterm.js with too much data at once
@@ -681,6 +1370,11 @@ app.prepare().then(() => {
           trackSessionActivity(sessionName)
         }
 
+        // Feed data to cerebellum terminal buffer (for voice subsystem)
+        if (sessionState.terminalBuffer && hasSubstantialContent) {
+          sessionState.terminalBuffer.write(data)
+        }
+
         // Send data to all clients and wait for write completion
         const writePromises = []
         sessionState.clients.forEach((client) => {
@@ -704,9 +1398,15 @@ app.prepare().then(() => {
           }
         })
 
-        // Resume PTY after all clients have received the data
+        // Resume PTY after all clients have received the data.
+        // SF-041: Wrap resume() in try-catch because the PTY process may have
+        // already exited during the backpressure cycle.
         Promise.all(writePromises).finally(() => {
-          ptyProcess.resume()
+          try {
+            ptyProcess.resume()
+          } catch {
+            // PTY already exited -- nothing to resume
+          }
         })
       })
 
@@ -715,6 +1415,11 @@ app.prepare().then(() => {
         // Pass ptyAlreadyExited=true since the process has already terminated
         cleanupSession(sessionName, sessionState, `pty_exit_${exitCode || signal}`, true)
       })
+      }
+      } finally {
+        ptySpawnLocks.delete(sessionName)
+      }
+      } // end of else (not locked)
     }
 
     // Add client to session
@@ -735,29 +1440,24 @@ app.prepare().then(() => {
     // The client can start typing immediately; history loads in the background
     setTimeout(async () => {
       try {
-        const { exec } = await import('child_process')
-        const { promisify } = await import('util')
-        const execAsync = promisify(exec)
+        const { getRuntime: getRt } = await import('./lib/agent-runtime.ts')
+        const runtime = getRt()
 
         let historyContent = ''
         try {
           // Capture scrollback history (up to 2000 lines) WITHOUT escape sequences
-          // The -e flag was causing terminal query responses like ">0;276;0c" to appear
-          // The -S -2000 flag captures scrollback history, not just visible pane
           // Reduced from 5000 to 2000 for faster loading
-          const { stdout } = await execAsync(
-            `tmux capture-pane -t ${sessionName} -p -S -2000 2>/dev/null || tmux capture-pane -t ${sessionName} -p`,
-            { encoding: 'utf8', timeout: 3000, shell: '/bin/bash' }
-          )
-          historyContent = stdout
+          historyContent = await runtime.capturePane(sessionName, 2000)
         } catch (historyError) {
           console.error('Failed to capture history:', historyError)
         }
 
         if (ws.readyState === 1) {
           if (historyContent) {
-            // Send with proper line endings
-            const formattedHistory = historyContent.replace(/\n/g, '\r\n')
+            // Reset SGR attributes before sending plain-text history so stale
+            // reverse-video / color state from the live PTY stream doesn't bleed
+            // into the history rendering (history is captured without ANSI codes)
+            const formattedHistory = '\x1b[0m' + historyContent.replace(/\n/g, '\r\n')
             ws.send(formattedHistory)
           }
           ws.send(JSON.stringify({ type: 'history-complete' }))
@@ -773,6 +1473,12 @@ app.prepare().then(() => {
     // Handle client input
     ws.on('message', (data) => {
       try {
+        // SF-005: Guard against accessing PTY after cleanup -- the PTY process
+        // may have exited between when the message was queued and processed
+        if (sessionState.cleanedUp || !sessionState.ptyProcess) {
+          return
+        }
+
         const message = data.toString()
 
         // Check if it's a JSON message (for resize events, logging control, etc.)
@@ -818,28 +1524,309 @@ app.prepare().then(() => {
   server.keepAliveTimeout = 15 * 60 * 1000
   server.headersTimeout = 15 * 60 * 1000 + 1000
 
-  server.listen(port, hostname, async () => {
-    console.log(`> Ready on http://${hostname}:${port}`)
+  // Determine bind address: if Tailscale is available, bind to :: (dual-stack IPv4+IPv6)
+  // so both Tailscale IPv4 (100.x) and IPv6 (fd7a:...) addresses work.
+  // Non-allowed IPs are rejected at the TCP level by the connection filter.
+  const isLocalOnly = hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1'
 
-    // Sync agent databases on startup
-    try {
-      const { syncAgentDatabases } = await import('./lib/agent-db-sync.mjs')
-      await syncAgentDatabases()
-    } catch (error) {
-      console.error('[DB-SYNC] Failed to sync agent databases on startup:', error)
+  // SECURITY FAILSAFE: if HOSTNAME is set to a non-localhost address (0.0.0.0, ::, or a LAN IP)
+  // but Tailscale is NOT available, refuse to bind on that address — fall back to 127.0.0.1.
+  // This prevents accidental LAN exposure when Tailscale is misconfigured or uninstalled.
+  let bindAddress
+  if (tailscaleIp && isLocalOnly) {
+    // Tailscale detected + localhost HOSTNAME → bind dual-stack with IP filter
+    bindAddress = '::'
+  } else if (!isLocalOnly && !tailscaleIp) {
+    // Non-localhost HOSTNAME but no Tailscale → REFUSE, fall back to localhost
+    console.warn(`[SECURITY] ⚠ HOSTNAME="${hostname}" requested non-localhost bind but Tailscale is not available`)
+    console.warn('[SECURITY] ⚠ Falling back to 127.0.0.1 to prevent LAN exposure without VPN protection')
+    bindAddress = '127.0.0.1'
+  } else {
+    bindAddress = hostname
+  }
+
+  // IP filter: ALWAYS active on any non-localhost bind, regardless of how we got there.
+  // The previous code only activated when tailscaleIp was truthy — a HOSTNAME=0.0.0.0 with
+  // a broken Tailscale detection would have no filter. Now the filter activates purely on
+  // the bind address, and isAllowedSource is the single authority on what passes.
+  const needsIpFilter = bindAddress === '::' || bindAddress === '0.0.0.0'
+
+  if (needsIpFilter) {
+    server.on('connection', (socket) => {
+      if (!isAllowedSource(socket.remoteAddress)) {
+        socket.destroy()
+      }
+    })
+  }
+
+  server.listen(port, bindAddress, async () => {
+    console.log(`> Ready on http://${hostname}:${port}`)
+    if (needsIpFilter && tailscaleIp) {
+      console.log(`> Tailscale VPN access on http://${tailscaleIp}:${port}`)
+      console.log(`> IP filter active: only localhost + Tailscale (100.64.0.0/10) allowed`)
+    } else if (needsIpFilter && !tailscaleIp) {
+      console.warn(`> IP filter active but Tailscale not detected — only localhost connections will succeed`)
+    } else if (bindAddress === '127.0.0.1') {
+      console.log(`> Localhost-only mode (Tailscale: ${tailscaleIp ? 'available but not needed' : 'not detected'})`)
     }
+
+    // Verify signed ledger chains before any registry writes (configurable)
+    try {
+      const { loadSecurityConfig } = await import('./lib/security-config.ts')
+      const secConfig = loadSecurityConfig()
+      if (secConfig.ledger.verifyOnStartup) {
+        const { verifyAllLedgers } = await import('./lib/ledger-startup.ts')
+        const ledgerResult = await verifyAllLedgers()
+        if (!ledgerResult.ok) {
+          if (secConfig.ledger.readOnlyOnTamper) {
+            console.error('[SECURITY] ⚠ TAMPER DETECTED — server is in READ-ONLY mode')
+            console.error('[SECURITY] Write API routes will return 503 until the tamper is resolved')
+          } else {
+            console.warn('[SECURITY] ⚠ Ledger verification failed but readOnlyOnTamper is disabled — proceeding')
+          }
+        }
+      } else {
+        console.log('[SECURITY] Ledger startup verification: SKIPPED (disabled in security-config.json)')
+      }
+    } catch (error) {
+      console.error('[SECURITY] Ledger verification failed to run:', error)
+    }
+
+    // Check if host keys need rotation (30-day cycle, 7-day overlap)
+    try {
+      const { needsRotation, rotateHostKeys, getRotationStatus } = await import('./lib/key-rotation.ts')
+      if (needsRotation()) {
+        const { rotated, newPublicKeyHex } = rotateHostKeys()
+        if (rotated) {
+          console.log(`[SECURITY] Host key rotated. New public key: ${newPublicKeyHex.substring(0, 32)}...`)
+        }
+      } else {
+        const status = getRotationStatus()
+        const daysUntil = Math.round(status.nextRotationIn / (24 * 60 * 60 * 1000))
+        console.log(`[SECURITY] Host key rotation: next in ${daysUntil} days (rotation #${status.rotationCount})`)
+      }
+    } catch (error) {
+      console.error('[SECURITY] Key rotation check failed:', error)
+    }
+
+    // Manager gate: if no MANAGER exists, block all teams + hibernate team agents
+    try {
+      const { getManagerId } = await import('./lib/governance.ts')
+      if (!getManagerId()) {
+        const { blockAllTeams } = await import('./lib/team-registry.ts')
+        const hibernated = await blockAllTeams()
+        if (hibernated.length > 0) {
+          console.log(`[Startup] No MANAGER detected — blocked all teams, hibernated ${hibernated.length} team agent(s)`)
+        } else {
+          console.log(`[Startup] No MANAGER detected — all teams blocked (no active team agents to hibernate)`)
+        }
+      }
+    } catch (error) {
+      console.error('[Startup] Manager gate check failed:', error)
+    }
+
+    // R17.17: Disable ai-maestro-plugin at USER scope if found.
+    // User-scope installation would make the plugin load in ALL Claude projects on
+    // this host, not just AI Maestro agents. It must be local-scope only. This is
+    // the ONLY startup plugin mutation — per-agent compliance is enforced by the
+    // AIO Change* pipelines (InstallElement, Wake R17 gate), not by startup scans.
+    // Note: user-scope state lives in ~/.claude/settings.json (NOT settings.local.json).
+    // settings.local.json is a project-only override; writing it at the user-home level
+    // is a silent no-op that Claude CLI never reads (see BUG-POLLUTION-001).
+    try {
+      const { existsSync, readFileSync, writeFileSync } = await import('fs')
+      const { join: joinPath } = await import('path')
+      const HOME = process.env.HOME || '/tmp'
+      const userSettingsPath = joinPath(HOME, '.claude', 'settings.json')
+      if (existsSync(userSettingsPath)) {
+        try {
+          const us = JSON.parse(readFileSync(userSettingsPath, 'utf-8'))
+          const userPlugins = us.enabledPlugins || {}
+          // SCEN-012 FIX: Boundary-aware match. `k.includes('ai-maestro-plugin')`
+          // false-positive matched on ai-maestro-autonomous-agent@ai-maestro-plugins
+          // because the marketplace name contains the core plugin name as a
+          // substring. Require exact name match before "@".
+          const userPluginKey = Object.keys(userPlugins).find(k => {
+            const at = k.indexOf('@')
+            const pluginPart = at >= 0 ? k.substring(0, at) : k
+            return pluginPart === 'ai-maestro-plugin'
+          })
+          if (userPluginKey && userPlugins[userPluginKey] !== false) {
+            userPlugins[userPluginKey] = false
+            us.enabledPlugins = userPlugins
+            writeFileSync(userSettingsPath, JSON.stringify(us, null, 2), 'utf-8')
+            console.log(`[Startup] R17.17: Disabled ai-maestro-plugin at user scope (must be local-scope only)`)
+          }
+        } catch { /* ignore */ }
+      }
+
+      // R17 + R20.21: Ensure all marketplaces are registered.
+      //
+      // R21.4 — dispatch through the AIO surface (CreateMarketplace /
+      // UpdateMarketplace / DeleteMarketplace) instead of `execSync(...)`
+      // shelling out to the Claude CLI directly. Going through the AIOs
+      // means each operation runs its own G00..G06 gate pipeline (auth,
+      // input validation, ledger emission, R21.6 cascade for delete) —
+      // one piece of code per concern.
+      //
+      // Best-effort semantics preserved by wrapping each call in try/
+      // catch and ignoring failures: an "already-registered" or "not-
+      // found" CLI exit is normal at boot when the user has previously
+      // started AI Maestro on this machine. A failure here MUST NOT
+      // block server startup.
+      try {
+        const os = await import('os')
+        const { CreateMarketplace, UpdateMarketplace, DeleteMarketplace } =
+          await import('./services/element-management-service.ts')
+        const sysAuth = { isSystemOwner: true }
+
+        const tryCall = async (label, fn) => {
+          try {
+            const r = await fn()
+            if (r && r.success === false && r.error) {
+              // Idempotent/already-exists/not-found are NORMAL on reboot;
+              // log at debug level only.
+              console.log(`[Startup/${label}] noop:`, r.error.slice(0, 80))
+            }
+          } catch (e) {
+            console.log(`[Startup/${label}] threw:`, (e?.message || String(e)).slice(0, 80))
+          }
+        }
+
+        // Remote GitHub marketplace (Emasoft/ai-maestro-plugins)
+        await tryCall('add-remote', () =>
+          CreateMarketplace({ name: 'ai-maestro-plugins', source: { repo: 'Emasoft/ai-maestro-plugins' } }, sysAuth))
+
+        // Local role-plugins container
+        const rolesDir = os.homedir() + '/agents/role-plugins'
+        await tryCall('add-roles', () =>
+          CreateMarketplace({ name: 'ai-maestro-local-roles-marketplace', source: { path: rolesDir } }, sysAuth))
+        await tryCall('update-roles', () =>
+          UpdateMarketplace({ name: 'ai-maestro-local-roles-marketplace' }, sysAuth))
+
+        // Local custom-plugins container
+        const customDir = os.homedir() + '/agents/custom-plugins'
+        await tryCall('add-custom', () =>
+          CreateMarketplace({ name: 'ai-maestro-local-custom-marketplace', source: { path: customDir } }, sysAuth))
+        await tryCall('update-custom', () =>
+          UpdateMarketplace({ name: 'ai-maestro-local-custom-marketplace' }, sysAuth))
+
+        // R20.25 (clarified 2026-04-16): Claude installs the core plugin
+        // from the REMOTE marketplace — there is NO local Claude core
+        // marketplace. Non-Claude clients install via per-client adapter
+        // which copies directly from <client>-core-marketplace/ — no
+        // Claude CLI marketplace registration needed for the core-plugins
+        // container. Cleanup: remove the stale name if a previous server
+        // run created it. The DeleteMarketplace AIO cascades through
+        // UninstallPlugin per plugin (R21.6) — if any agent had a plugin
+        // from this deprecated marketplace, the cascade unblocks the
+        // agent (those plugins were pointing at an already-broken
+        // marketplace registration).
+        await tryCall('remove-stale-core', () =>
+          DeleteMarketplace({ name: 'ai-maestro-local-core-marketplace' }, sysAuth))
+
+        console.log('[Startup] Marketplaces registered via AIOs (remote + 2 Claude containers; per-client core via adapters)')
+      } catch (err) {
+        console.warn('[Startup] Marketplace registration partial:', err?.message?.slice(0, 80))
+      }
+    } catch (error) {
+      console.error('[Startup] R17 user-scope guard failed:', error)
+    }
+
+    // ── Auto-update scheduler (2026-05-06) ──────────────────────────────
+    // Periodic background scheduler that pulls plugin/marketplace updates
+    // when enabled in Settings -> Plugin Updates. Master toggle defaults
+    // OFF, so unconfigured installs never trigger surprise restarts. The
+    // service is idempotent — calling start/stop twice is a no-op — and
+    // it self-unrefs its timer so this scheduler never blocks a graceful
+    // shutdown.
+    try {
+      const { startAutoUpdateScheduler } = await import('./services/auto-update-service.ts')
+      await startAutoUpdateScheduler()
+      console.log('[Startup] Auto-update scheduler initialized (off by default; enable in Settings → Plugin Updates)')
+    } catch (err) {
+      console.warn('[Startup] Auto-update scheduler init failed (non-fatal):', err?.message || err)
+    }
+
+    // R17 compliance is enforced exclusively by the AIO Change* pipelines:
+    //   - InstallElement() PG01/PG02/PG05 post-gates
+    //   - wakeAgent() R17 gate (services/agents-core-service.ts:1530)
+    //   - createSession() R17 defense-in-depth (services/sessions-service.ts:631)
+    // No startup audit, no periodic loop. Stale registry entries are never
+    // mutated outside of an explicit user-initiated Change* operation.
+
+    // Kill any orphaned creation-helper sessions on startup.
+    // These zombie sessions can consume tokens indefinitely if not cleaned up.
+    try {
+      const { execFile } = await import('child_process')
+      const { promisify } = await import('util')
+      const execFileAsync = promisify(execFile)
+      await execFileAsync('tmux', ['kill-session', '-t', '_aim-creation-helper']).catch(() => {})
+      console.log('[Startup] Cleaned up orphaned _aim-creation-helper session (if any)')
+    } catch { /* ignore — session might not exist */ }
+
+    // #242 (TRDD-7123d51a §9 follow-up): system-level tracker.
+    // Runs a single process-wide 60s scan of user-global marketplaces +
+    // client-binary versions. Emits ledger entries for additions,
+    // removals, and version changes. Non-fatal on failure — the agent
+    // subconscious per-agent tracker keeps working regardless.
+    try {
+      const { getSystemTracker } = await import('./lib/system-tracker.ts')
+      getSystemTracker().start()
+      console.log('[Startup] System-tracker started (marketplaces + client-binary versions)')
+    } catch (err) {
+      console.warn('[Startup] System-tracker start failed (non-fatal):', err?.message?.slice(0, 120))
+    }
+
+    // Normalize agent hostIds on startup (Phase 1: AMP Protocol Fix)
+    // This ensures all agents have canonical hostIds for proper AMP addressing
+    setTimeout(async () => {
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/api/agents/normalize-hosts`, {
+          method: 'POST',
+          signal: AbortSignal.timeout(10000)
+        })
+        if (response.ok) {
+          const result = await response.json()
+          if (result.result?.updated > 0) {
+            console.log(`[Host ID Normalization] Fixed ${result.result.updated} agent(s) with inconsistent hostIds`)
+          }
+        }
+      } catch (error) {
+        console.error('[Host ID Normalization] Startup normalization failed:', error.message)
+      }
+    }, 2000) // Run after 2 seconds to ensure routes are ready
+
+    // Sync agent directory with peers on startup (Phase 3: AMP Protocol Fix)
+    setTimeout(async () => {
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/api/agents/directory/sync`, {
+          method: 'POST',
+          signal: AbortSignal.timeout(30000)  // 30s timeout for sync
+        })
+        if (response.ok) {
+          const result = await response.json()
+          if (result.result?.newAgents > 0) {
+            console.log(`[Agent Directory] Startup sync: discovered ${result.result.newAgents} new agent(s)`)
+          }
+        }
+      } catch (error) {
+        console.error('[Agent Directory] Startup sync failed:', error.message)
+      }
+    }, 5000) // Run after 5 seconds (after host sync has a chance to complete)
 
     // Sync with remote hosts on startup (register ourselves with known peers)
     setTimeout(async () => {
       try {
-        const hostsResponse = await fetch(`http://localhost:${port}/api/hosts`)
+        const hostsResponse = await fetch(`http://127.0.0.1:${port}/api/hosts`)
         const hostsData = await hostsResponse.json()
-        const remoteHosts = (hostsData.hosts || []).filter(h => h.type === 'remote' && h.enabled)
+        // SF-055: Use isSelf() + enabled check instead of deprecated h.type === 'remote'
+        const remoteHosts = (hostsData.hosts || []).filter(h => !isSelf(h.id) && h.enabled !== false)
 
         if (remoteHosts.length > 0) {
           console.log(`[Host Sync] Registering with ${remoteHosts.length} remote host(s) on startup...`)
 
-          const selfResponse = await fetch(`http://localhost:${port}/api/hosts/identity`)
+          const selfResponse = await fetch(`http://127.0.0.1:${port}/api/hosts/identity`)
           const selfData = await selfResponse.json()
 
           for (const host of remoteHosts) {
@@ -870,25 +1857,94 @@ app.prepare().then(() => {
       }
     }, 5000) // Wait 5 seconds for server to fully initialize
 
+    // NOTE: tailscale serve is NOT used. The server binds directly to 0.0.0.0
+    // with an IP filter that only allows localhost + Tailscale IPs (100.x.x.x).
+    // This is simpler and avoids the static file serving bugs in tailscale serve's HTTP proxy.
+
     // Agent initialization on startup is DISABLED to avoid CPU spike
     // Agents will be initialized on-demand when accessed via API
     // The subconscious processes will start when an agent is first accessed
     // To manually trigger indexing, call /api/agents/{id}/index-delta
     console.log('[AgentStartup] Startup indexing disabled - agents will initialize on-demand')
 
+    // Purge expired governance requests on startup, then every 24 hours
+    try {
+      const { purgeOldRequests } = await import('./lib/governance-request-registry.ts')
+      const result = await purgeOldRequests()
+      if (result.purged > 0 || result.expired > 0) {
+        console.log(`[Governance] Startup purge: ${result.purged} removed, ${result.expired} expired`)
+      }
+      setInterval(async () => {
+        try {
+          const result = await purgeOldRequests()
+          if (result.purged > 0 || result.expired > 0) {
+            console.log(`[Governance] Periodic purge: ${result.purged} removed, ${result.expired} expired`)
+          }
+        } catch (err) {
+          console.error('[Governance] Periodic purge failed:', err.message)
+        }
+      }, 24 * 60 * 60 * 1000) // 24 hours
+    } catch (error) {
+      console.error('[Governance] Failed to initialize request purge:', error.message)
+    }
+
     // Start periodic orphaned PTY cleanup to prevent leaks
     startOrphanedPtyCleanup()
+
+    // Auto-restore agents that were active before an unclean shutdown.
+    // pm2's LaunchAgent brings this server back after a reboot/power-loss, but
+    // the agent tmux sessions are gone — this re-wakes the personas that were
+    // running at crash time (the registry's frozen status:'active' set).
+    // Delayed ~12s so the host-id / directory-sync / peer-registration tasks
+    // above (which fire on +2s/+5s timers) settle first, and staggered inside
+    // the service so we don't spawn every client at once.
+    // Disable with AIM_DISABLE_BOOT_RESTORE=1.
+    setTimeout(async () => {
+      try {
+        // Bootstrap sessions.json from the registry if it went missing (defensive,
+        // non-destructive — no-op when the file already has entries), then restore.
+        const { ensureSessionsJsonBootstrapped } = await import('./services/session-reconcile-service.ts')
+        ensureSessionsJsonBootstrapped()
+        const { restoreActiveAgentsOnBoot } = await import('./services/boot-restore-service.ts')
+        await restoreActiveAgentsOnBoot()
+      } catch (error) {
+        console.error('[BootRestore] Failed to run startup session bootstrap / agent restore:', error.message)
+      }
+    }, 12000)
   })
 
   // Graceful shutdown - kill PTYs FIRST before closing server
   const gracefulShutdown = (signal) => {
     console.log(`[Server] Received ${signal}, shutting down gracefully...`)
 
+    // Stop the auto-update scheduler so its setInterval doesn't keep the
+    // event loop alive past the rest of the shutdown sequence. The
+    // scheduler's timer is also unref()'d defensively, but explicit stop
+    // is cheaper and clearer than relying on unref alone.
+    try {
+      import('./services/auto-update-service.ts')
+        .then(m => m.stopAutoUpdateScheduler())
+        .catch(() => { /* best-effort */ })
+    } catch { /* best-effort */ }
+
+    // Cancel all auto-continue timers to prevent commands firing during teardown
+    if (autoContinueTimers.size > 0) {
+      console.log(`[Server] Cancelling ${autoContinueTimers.size} auto-continue timers...`)
+      autoContinueTimers.forEach(({ timer }) => clearTimeout(timer))
+      autoContinueTimers.clear()
+    }
+
+    // Close config-transaction SQLite DB (WAL journal flush)
+    try {
+      // Dynamic import because server.mjs can't statically import TypeScript
+      import('./lib/config-transaction.ts').then(m => m.closeDb()).catch(() => {})
+    } catch { /* best-effort */ }
+
     // Kill all PTY processes FIRST and synchronously
-    const sessionCount = sessions.size
+    const sessionCount = terminalSessions.size
     console.log(`[Server] Cleaning up ${sessionCount} PTY sessions...`)
 
-    sessions.forEach((state, sessionName) => {
+    terminalSessions.forEach((state, sessionName) => {
       // Close log stream
       if (state.logStream) {
         try {
@@ -897,32 +1953,61 @@ app.prepare().then(() => {
           // Ignore
         }
       }
-      // Kill PTY process and its entire process group
+      // Kill PTY process only (NOT the process group — that kills tmux sessions)
       if (state.ptyProcess && state.ptyProcess.pid) {
         const pid = state.ptyProcess.pid
         console.log(`[Server] Killing PTY for ${sessionName} (pid: ${pid})`)
         try {
-          // Kill the entire process group (negative PID)
-          process.kill(-pid, 'SIGKILL')
+          // Use node-pty's kill with SIGTERM to let tmux detach cleanly
+          state.ptyProcess.kill()
         } catch (e) {
           try {
-            // Fallback to SIGTERM on direct process
-            process.kill(pid, 'SIGKILL')
+            // Fallback to direct SIGTERM on the process
+            process.kill(pid, 'SIGTERM')
           } catch (e2) {
-            try {
-              // Last resort: use node-pty's kill
-              state.ptyProcess.kill()
-            } catch (e3) {
-              console.error(`[Server] Failed to kill PTY ${sessionName}:`, e3.message)
-            }
+            console.error(`[Server] Failed to kill PTY ${sessionName}:`, e2.message)
           }
         }
       }
     })
 
-    // Clear the sessions map
-    sessions.clear()
+    // Clear the terminal sessions map
+    terminalSessions.clear()
     console.log(`[Server] PTY cleanup complete`)
+
+    // ── SRV-MAJOR-02 fix (2026-05-04) — close every WebSocket server ──
+    // Previous shutdown only called `server.close()` which stops the
+    // HTTP listener. WebSocket clients (browser terminals, AMP clients,
+    // status feed, voice pipeline) stayed connected to a half-dead
+    // server, never receiving a close frame and never reconnecting to
+    // the new instance during a rolling restart.
+    //
+    // Walk every wss instance: terminate each open connection with a
+    // 1001 "going away" close frame so clients trigger their normal
+    // reconnection logic, then close() the server itself so it stops
+    // accepting upgrades.
+    const wsServers = [
+      { name: 'wss', server: wss },
+      { name: 'ampWss', server: ampWss },
+      { name: 'statusWss', server: statusWss },
+      { name: 'companionWss', server: companionWss },
+    ]
+    for (const { name, server: wsServer } of wsServers) {
+      try {
+        for (const client of wsServer.clients) {
+          try {
+            client.close(1001, 'server shutting down')
+          } catch (e) {
+            // Force-terminate stuck clients
+            try { client.terminate() } catch { /* ignore */ }
+          }
+        }
+        wsServer.close()
+        console.log(`[Server] Closed ${name} (${wsServer.clients.size} client(s))`)
+      } catch (e) {
+        console.error(`[Server] Failed to close ${name}:`, e.message)
+      }
+    }
 
     // Now close the server
     server.close(() => {
@@ -940,4 +2025,39 @@ app.prepare().then(() => {
   // Handle both SIGTERM and SIGINT
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
   process.on('SIGINT', () => gracefulShutdown('SIGINT'))
-})
+}
+
+// =============================================================================
+// MODE BRANCHING: full (Next.js + UI) vs headless (API-only)
+// =============================================================================
+
+if (MAESTRO_MODE === 'headless') {
+  // Headless mode: standalone HTTP router, no Next.js
+  import('./services/headless-router.ts').then(({ createHeadlessRouter }) => {
+    const router = createHeadlessRouter()
+
+    startServer(async (req, res, _parsedUrl) => {
+      const handled = await router.handle(req, res)
+      if (!handled) {
+        res.writeHead(404, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Not found' }))
+      }
+    })
+
+    console.log(`> Headless mode (API-only, no UI)`)
+  }).catch((err) => {
+    console.error('[Headless] Failed to load router:', err)
+    process.exit(1)
+  })
+} else {
+  // Full mode: Next.js handles all requests (pages + API routes)
+  const next = (await import('next')).default
+  const app = next({ dev, hostname, port })
+  const handle = app.getRequestHandler()
+
+  await app.prepare()
+
+  startServer(async (req, res, parsedUrl) => {
+    await handle(req, res, parsedUrl)
+  })
+}

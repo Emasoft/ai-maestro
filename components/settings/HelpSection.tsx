@@ -11,7 +11,7 @@ export default function HelpSection() {
       topics: [
         'Creating your first agent',
         'Navigating the dashboard',
-        'Understanding agent hierarchy',
+        'Sidebar tag grouping (visual UX, not addressing)',
         'Working with terminal sessions',
       ],
     },

@@ -1,149 +1,97 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkRemoteHealth } from '@/services/hosts-service'
+import { getHosts } from '@/lib/hosts-config'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/hosts/health?url=<hostUrl>
- * Proxy health check request to remote host
  *
- * Uses native fetch (undici) which works correctly with Tailscale/VPN networks.
- * Note: Node.js http.request module has issues with Tailscale networks.
- *
- * Returns: { success, status, url, version?, sessionCount? }
+ * Proxy health check request to remote host.
  */
 export async function GET(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams
-    const hostUrl = searchParams.get('url')
+  const hostUrl = request.nextUrl.searchParams.get('url') || ''
 
-    if (!hostUrl) {
-      return NextResponse.json(
-        { error: 'url query parameter is required' },
-        { status: 400 }
-      )
-    }
-
-    // Validate URL format
-    let parsedUrl: URL
-    try {
-      parsedUrl = new URL(hostUrl)
-    } catch {
-      return NextResponse.json(
-        { error: 'Invalid URL format' },
-        { status: 400 }
-      )
-    }
-
-    // Make health check request using fetch
-    // Note: /api/sessions can take 5+ seconds on remote hosts due to tmux queries
-    const result = await makeHealthCheckRequest(parsedUrl, 10000)
-
-    if (result.success) {
-      // Also fetch version info from /api/config
-      const versionResult = await fetchVersionInfo(parsedUrl, 3000)
-
-      return NextResponse.json({
-        success: true,
-        status: 'online',
-        url: hostUrl,
-        version: versionResult.version || null,
-        sessionCount: result.sessionCount ?? null
-      })
-    } else {
-      return NextResponse.json({
-        success: false,
-        status: 'offline',
-        url: hostUrl,
-        error: result.error
-      }, { status: 503 })
-    }
-  } catch (error) {
-    console.error('[Health API] Error:', error)
-    return NextResponse.json(
-      {
-        success: false,
-        status: 'offline',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+  // MF-004: Reject empty hostUrl to prevent SSRF bypass via missing parameter
+  if (!hostUrl) {
+    return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 })
   }
-}
 
-/**
- * Make health check request using native fetch
- * Also extracts session count from /api/sessions response
- */
-async function makeHealthCheckRequest(
-  url: URL,
-  timeout: number
-): Promise<{ success: boolean; error?: string; sessionCount?: number }> {
-  try {
-    const sessionsUrl = `${url.protocol}//${url.host}/api/sessions`
-
-    const response = await fetch(sessionsUrl, {
-      method: 'GET',
-      headers: {
-        'User-Agent': 'AI-Maestro-Health-Check',
-        'Accept': 'application/json'
-      },
-      signal: AbortSignal.timeout(timeout),
-      cache: 'no-store'  // Disable Next.js fetch caching
-    })
-
-    if (response.ok || response.status < 500) {
-      // Try to parse session count from response
-      let sessionCount: number | undefined
-      try {
-        const json = await response.json()
-        // Sessions API returns { sessions: [...] }
-        if (json.sessions && Array.isArray(json.sessions)) {
-          sessionCount = json.sessions.length
-        }
-      } catch {
-        // Failed to parse, but host is still online
-      }
-      return { success: true, sessionCount }
-    } else {
-      return { success: false, error: `HTTP ${response.status}` }
-    }
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.name === 'TimeoutError' || error.name === 'AbortError') {
-        return { success: false, error: 'Connection timeout' }
-      }
-      return { success: false, error: error.message }
-    }
-    return { success: false, error: 'Unknown error' }
+  // DoS protection: reject excessively long URLs before parsing
+  if (hostUrl.length > 2048) {
+    return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
   }
-}
 
-/**
- * Fetch version info from remote host's /api/config endpoint
- */
-async function fetchVersionInfo(
-  url: URL,
-  timeout: number
-): Promise<{ version?: string }> {
+  // SSRF protection -- allowlist approach. Only allow URLs whose origin
+  // matches a known host in hosts.json. The old blocklist was bypassable via
+  // octal/hex/decimal/IPv6-mapped IP representations.
+  // Note: hostUrl is guaranteed non-empty by the early return above
+  let parsed: URL
   try {
-    const configUrl = `${url.protocol}//${url.host}/api/config`
-
-    const response = await fetch(configUrl, {
-      method: 'GET',
-      headers: {
-        'User-Agent': 'AI-Maestro-Health-Check',
-        'Accept': 'application/json'
-      },
-      signal: AbortSignal.timeout(timeout),
-      cache: 'no-store'  // Disable Next.js fetch caching
-    })
-
-    if (response.ok) {
-      const config = await response.json()
-      return { version: config.version }
-    }
-    return {}
+    parsed = new URL(hostUrl)
   } catch {
-    return {}
+    return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return NextResponse.json({ error: 'Only http/https URLs are allowed' }, { status: 400 })
+  }
+
+  // Allowlist: only permit health checks to hosts registered in hosts.json
+  // getHosts() is outside the URL try-catch so failures are not misclassified as 'Invalid URL'
+  let knownHosts: ReturnType<typeof getHosts>
+  try {
+    knownHosts = getHosts()
+  } catch (err) {
+    console.error('[Hosts] Failed to load hosts config:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+
+  // Compare origin (protocol+hostname+port) instead of just hostname
+  // to prevent SSRF to arbitrary ports on known hosts (e.g. Redis :6379, Postgres :5432)
+  const requestOrigin = parsed.origin.toLowerCase()
+  const isKnownHost = knownHosts.some(host => {
+    // Check the host's configured URL by origin (protocol+hostname+port)
+    try {
+      const hostParsed = new URL(host.url)
+      if (hostParsed.origin.toLowerCase() === requestOrigin) return true
+    } catch { /* skip malformed host URLs */ }
+    // Check all known aliases (IPs, hostnames, URLs)
+    if (host.aliases) {
+      for (const alias of host.aliases) {
+        // Alias can be an IP, hostname, or full URL
+        try {
+          const aliasParsed = new URL(alias.includes('://') ? alias : `http://${alias}`)
+          if (aliasParsed.origin.toLowerCase() === requestOrigin) return true
+        } catch { /* skip malformed aliases */ }
+        // Direct string match for bare hostnames/IPs -- compare against hostname
+        // AND validate the requested port matches the host's configured port to prevent
+        // SSRF to arbitrary ports on known hostnames (e.g. Redis :6379, Postgres :5432)
+        if (alias.toLowerCase() === parsed.hostname.toLowerCase()) {
+          try {
+            const hostParsed = new URL(host.url)
+            // Extract effective ports (default 80 for http, 443 for https)
+            const requestPort = parsed.port || (parsed.protocol === 'https:' ? '443' : '80')
+            const hostPort = hostParsed.port || (hostParsed.protocol === 'https:' ? '443' : '80')
+            if (requestPort === hostPort) return true
+          } catch { /* skip if host URL is malformed */ }
+        }
+      }
+    }
+    return false
+  })
+  if (!isKnownHost) {
+    return NextResponse.json({ error: 'Host not in allowlist — only registered hosts can be health-checked' }, { status: 403 })
+  }
+
+  try {
+    const result = await checkRemoteHealth(hostUrl)
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result.data, { status: result.status })
+  } catch (error) {
+    console.error('[Hosts] Health check error:', error)
+    return NextResponse.json({ error: 'Health check failed' }, { status: 502 })
   }
 }

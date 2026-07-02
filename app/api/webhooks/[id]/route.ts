@@ -1,64 +1,55 @@
-import { NextResponse } from 'next/server'
-import {
-  getWebhook,
-  deleteWebhook,
-} from '@/lib/webhook-service'
+import { NextRequest, NextResponse } from 'next/server'
+import { getWebhookById, deleteWebhookById } from '@/services/webhooks-service'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { isValidUuid } from '@/lib/validation'
 
 /**
  * GET /api/webhooks/[id]
  * Get a specific webhook subscription
  */
 export async function GET(
-  _request: Request,
-  { params }: { params: { id: string } }
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const webhook = getWebhook(params.id)
-
-    if (!webhook) {
-      return NextResponse.json({ error: 'Webhook not found' }, { status: 404 })
-    }
-
-    // Don't expose secret
-    return NextResponse.json({
-      id: webhook.id,
-      url: webhook.url,
-      events: webhook.events,
-      createdAt: webhook.createdAt,
-      lastDeliveryAt: webhook.lastDeliveryAt,
-      lastDeliveryStatus: webhook.lastDeliveryStatus,
-      failureCount: webhook.failureCount,
-    })
-  } catch (error) {
-    console.error('Failed to get webhook:', error)
-    return NextResponse.json(
-      { error: 'Failed to get webhook' },
-      { status: 500 }
-    )
+  const { id } = await params
+  // Validate webhook ID format to prevent invalid lookups (MF-004)
+  if (!isValidUuid(id)) {
+    return NextResponse.json({ error: 'Invalid webhook ID format' }, { status: 400 })
   }
+  const result = getWebhookById(id)
+
+  if (result.error) {
+    return NextResponse.json({ error: result.error }, { status: result.status })
+  }
+  return NextResponse.json(result.data)
 }
 
 /**
  * DELETE /api/webhooks/[id]
  * Unsubscribe / delete a webhook
+ * Requires authentication to prevent unauthorized deletion (MF-003)
  */
 export async function DELETE(
-  _request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const success = deleteWebhook(params.id)
-
-    if (!success) {
-      return NextResponse.json({ error: 'Webhook not found' }, { status: 404 })
-    }
-
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('Failed to delete webhook:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete webhook' },
-      { status: 500 }
-    )
+  const { id } = await params
+  // Validate webhook ID format (MF-004)
+  if (!isValidUuid(id)) {
+    return NextResponse.json({ error: 'Invalid webhook ID format' }, { status: 400 })
   }
+  // Authenticate -- webhook deletion is a mutating operation
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status ?? 401 })
+  }
+
+  // Ownership check: pass the authenticated agent ID so the service layer
+  // can verify the caller created this webhook (system-owner may delete any).
+  const result = deleteWebhookById(id, auth.agentId)
+
+  if (result.error) {
+    return NextResponse.json({ error: result.error }, { status: result.status })
+  }
+  return NextResponse.json(result.data)
 }

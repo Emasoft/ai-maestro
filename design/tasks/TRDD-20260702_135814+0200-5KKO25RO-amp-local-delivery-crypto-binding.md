@@ -63,8 +63,29 @@ guarantee; marked READY, deferred).
    interim today: `AMP_DIR=~/.agent-messaging amp-send.sh …`); 3b dedup-on-register by
    fingerprint/address (stops the 142-dup leak); 3c orphan-dir GC (211→40, back up first).
 
-**NEXT ACTION:** implement **fix-1** with TDD (a local message with a bad/absent signature
-must be REJECTED, not `sig_valid=true`) in `scripts/amp-helper.sh` + a bash selftest.
+**▶ IMPL PRECHECK (before applying fix-1) — 2026-07-02, verified against the live code.**
+The fix is MINIMAL: in `save_to_inbox` (`amp-helper.sh:1291-1295`) DROP the
+`aimaestro.local ⇒ sig_valid=true` shortcut and change the following `elif [ -n "$signature" ]`
+to `if`, so LOCAL senders go through the SAME verify branch (1295-1347) that already resolves
+the key (`resolve_sender_public_key`, Path 1 = co-located agent, :1202-1206), reconstructs the
+canonical input, `verify_signature` (:948), and REJECTS (return 1, :1336-1337) on a
+known-sender mismatch. amp-send.sh always signs (:342-343). SECURITY holds unconditionally: a
+forger can't produce a valid sig; unknown/unsigned → UNTRUSTED (sig_valid=false), never
+implicit-trusted.
+
+**OPEN QUESTION — verify FIRST (avoid a UX regression):** does `resolve_sender_public_key`
+Path 1 (`${AMP_AGENTS_BASE}/${sanitize_address_for_path(address)}/keys/public.pem`) actually
+resolve co-located agents given the on-disk layout? Explore found 211 UUID-named dirs + a
+40-entry name→dir `.index.json` under `~/.agent-messaging/agents/`. If co-located keys are
+UUID-named (not address-named), Path 1 MISSES → legitimate local messages become UNTRUSTED
+(safe, but a trust-banner regression) → then the fix must ALSO make resolution consult
+`.index.json` (name→dir). Verify the layout (`ls` a co-located agent dir + read
+`sanitize_address_for_path` + the `AMP_AGENTS_BASE` assignment) BEFORE applying; then add the
+TDD test (fake local sender + bad sig ⇒ REJECTED) + bash selftest.
+
+**NEXT ACTION:** verify the OPEN QUESTION above, then implement **fix-1** with TDD (a local
+message with a bad/absent signature must be REJECTED, not `sig_valid=true`) in
+`scripts/amp-helper.sh` + a bash selftest.
 Gates: `tsc --noEmit` 0 (fix-3b TS) + `vitest` + amp selftest. Fix in-place on
 `governance-rules`, commit with WHY + `TRDD-5KKO25RO`, no relaxed gates.
 

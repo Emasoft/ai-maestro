@@ -3,7 +3,7 @@ trdd-id: 5KKO25RO
 title: AMP local-delivery cryptographic binding — verify sigs, lock keys, host identity
 column: dev
 created: 2026-07-02T13:58:14+0200
-updated: 2026-07-02T14:42:00+0200
+updated: 2026-07-02T15:10:00+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -94,9 +94,16 @@ real openssl, no mocks: Path 1b resolves · valid local sig VERIFIES · BAD sig 
 closed) · unknown sender → no key (untrusted). `bash -n` clean. Canonical byte-match + Ed25519
 round-trip independently verified.
 
-**NEXT ACTION:** committing fix-1 now (WHY + `TRDD-5KKO25RO`). Then fix-2 [HIGH] per-agent key
-perms 0644→0600 + load-time guard; fix-3 [MEDIUM] host first-class identity / dedup-on-register /
-orphan GC + the one-time migration snippet in install-messaging.sh (USER runs it).
+**▶ fix-1 committed** f9fddfaf.
+
+**▶ fix-2 DONE 2026-07-02.** `sign_message` refuses a group/other-readable private key
+(fail-closed; GNU-first `stat -c %A` / BSD-fallback `-f %Sp`, and refuse if perms are unreadable —
+a BSD-first probe silently no-ops on a coreutils-stat box, caught by the test). `install-messaging.sh`
+chmods every existing `private.pem` to 0600 (idempotent, USER-run — writes outside the project).
+Selftest 6/6; `bash -n` clean on both scripts.
+
+**NEXT ACTION:** commit fix-2 (amp-helper.sh sign_message + install-messaging.sh + selftest +
+this STATE), then fix-3 [MEDIUM] host first-class identity / dedup-on-register / orphan GC.
 
 **N (no-go under the active token-burn emergency):** Layer B (a1019073) implementation;
 the ~$40 scenario validation run (N1FYP2AW Phase-2 / task #59) — authorization recorded,

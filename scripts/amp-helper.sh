@@ -931,6 +931,30 @@ sign_message() {
         return 1
     fi
 
+    # TRDD-5KKO25RO fix-2 [HIGH]: fail-closed if the private key is group/other
+    # readable. generate_keypair already chmod 600; legacy per-agent keys were
+    # left 0644, so an unrelated local process could read them and forge signed
+    # messages. Symbolic perms look like "-rw-------" (idx 4 = group-read, idx 7
+    # = other-read). Read them with GNU stat (-c %A) FIRST — it errors cleanly
+    # on BSD, whereas GNU `stat -f '%Sp'` mis-parses %Sp as a filesystem query
+    # and prints garbage with a zero exit, silently defeating a BSD-first probe
+    # (observed on a coreutils-on-macOS box — the guard MUST NOT depend on which
+    # stat is on PATH). BSD stat (-f %Sp) is the fallback. If neither yields a
+    # 10-char symbolic mode we cannot verify perms -> refuse (fail closed).
+    # Within one UID this stops OTHER unix users; real cross-agent isolation
+    # arrives with Layer B (per-UID sandbox, TRDD-a1019073). install-messaging.sh
+    # migrates existing keys to 0600.
+    local _keymode
+    _keymode=$(stat -c '%A' "${private_key}" 2>/dev/null || stat -f '%Sp' "${private_key}" 2>/dev/null)
+    case "$_keymode" in
+        ??????????) : ;;   # a 10-char symbolic mode, e.g. -rw-------
+        *) echo "Error: cannot read perms of ${private_key} (got '${_keymode}') — refusing to sign" >&2; return 1 ;;
+    esac
+    if [ "${_keymode:4:1}" = "r" ] || [ "${_keymode:7:1}" = "r" ]; then
+        echo "Error: refusing to sign — ${private_key} is group/other-readable (${_keymode}); run: chmod 600 ${private_key}" >&2
+        return 1
+    fi
+
     # Use temporary files for signing (OpenSSL 3.x has issues with Ed25519 + stdin)
     local tmp_msg tmp_sig
     tmp_msg=$(mktemp)

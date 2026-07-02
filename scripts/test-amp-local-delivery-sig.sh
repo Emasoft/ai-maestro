@@ -129,5 +129,20 @@ else
     bad "unknown local sender unexpectedly resolved a key: '$ghost'"
 fi
 
+# --- Checks 5/6 (fix-2): sign_message refuses a group/other-readable key ------
+"$OPENSSL_BIN" genpkey -algorithm Ed25519 -out "$AMP_KEYS_DIR/private.pem" 2>/dev/null
+chmod 0644 "$AMP_KEYS_DIR/private.pem"
+if sign_message "hello" >/dev/null 2>&1; then
+    bad "sign_message signed with a 0644 group/other-readable key — guard missing"
+else
+    ok "sign_message refuses a group/other-readable (0644) private key"
+fi
+chmod 0600 "$AMP_KEYS_DIR/private.pem"
+if sign_message "hello" >/dev/null 2>&1; then
+    ok "sign_message signs with a correctly-permissioned (0600) private key"
+else
+    bad "sign_message refused a correct 0600 private key"
+fi
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

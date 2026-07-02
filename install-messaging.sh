@@ -585,6 +585,22 @@ if [ "$INSTALL_SCRIPTS" = true ]; then
     echo ""
     print_success "Installed $SCRIPT_COUNT AMP scripts (with symlinks)"
 
+    # TRDD-5KKO25RO fix-2 [HIGH]: migrate legacy 0644 private keys to 0600.
+    # generate_keypair chmods new keys 0600, but keys created by older versions
+    # were left group/other-readable — any same-UID process could read them and
+    # forge signed AMP messages. amp-helper.sh's sign_message now REFUSES a
+    # group/other-readable key (fail-closed), so this one-time chmod is what lets
+    # existing agents keep signing. Idempotent: re-running is harmless.
+    echo ""
+    print_info "Securing AMP private-key permissions (0600)..."
+    KEY_FIXED=0
+    for _priv in "$HOME"/.agent-messaging/keys/private.pem \
+                 "$HOME"/.agent-messaging/agents/*/keys/private.pem; do
+        [ -f "$_priv" ] || continue
+        chmod 600 "$_priv" && KEY_FIXED=$((KEY_FIXED + 1))
+    done
+    print_success "Ensured 0600 on $KEY_FIXED AMP private key(s)"
+
     # Remove old messaging scripts that have been replaced by AMP
     echo ""
     print_info "Cleaning up old messaging scripts..."

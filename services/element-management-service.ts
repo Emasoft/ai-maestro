@@ -352,6 +352,14 @@ const LOCK_MAX_WAIT_MS = 10_000
 
 async function _acquireFileLock(filePath: string): Promise<() => Promise<void>> {
   const lockDir = `${filePath}.lock`
+  // Ensure the parent dir exists before mkdir-ing the lockdir. A fresh
+  // machine/CI runner may not have e.g. ~/.claude/ yet (nothing has
+  // written settings.json there before), so `mkdir(lockDir)` throws
+  // ENOENT — which the catch below only handles for EEXIST, so it was
+  // propagating as a hard failure (surfaced as ChangeMarketplace /
+  // ChangePlugin returning {success:false}). recursive:true is a cheap
+  // idempotent no-op once the dir exists, so this is safe on every call.
+  await mkdir(join(filePath, '..'), { recursive: true })
   const start = Date.now()
   while (true) {
     try {

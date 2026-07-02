@@ -3,7 +3,7 @@ trdd-id: a1019073-a2b8-4dda-9ba0-e668a77b9ccc
 title: Controlled execution environment for AI Maestro agents — UID separation, host sandboxing, supply-chain controls
 status: not-started
 created: 2026-05-22T11:15:03+0200
-updated: 2026-05-22T23:17:43+0200
+updated: 2026-07-02T13:58:14+0200
 ---
 
 # TRDD-a1019073 — Controlled execution environment for AI Maestro agents
@@ -18,6 +18,17 @@ updated: 2026-05-22T23:17:43+0200
 > captures the security architecture that the keychain approach (TRDD-d77a7d6e,
 > now superseded) was reaching for, re-grounded on what the 2026-05-21/22
 > empirical tests actually proved is possible.
+
+## ⏵ STATE — READ THIS FIRST ON RESUME — 2026-07-02
+
+**▶ UNBLOCKED / READY 2026-07-02.** This XL is the **Layer B** true-isolation guarantee
+behind TRDD-5KKO25RO (AMP local-delivery crypto binding). Its prerequisite — the governance
+PR #52 — is MERGED (`a6da60bc`), so it is now READY to pick up as the next security
+milestone: within a single UID, Layer A (5KKO25RO) closes the forge-without-a-key holes but
+keys stay mutually readable; THIS TRDD's per-agent UID/sandbox is what makes key isolation
+real. **Do NOT implement now** — deferred during the active token-burn emergency; scope
+carefully when resourced (a half-done sandbox is a vuln). `status:` stays `not-started`
+(v1 format; work not begun) — this STATE note is the READY signal.
 
 ## 1. Why this TRDD exists (history)
 

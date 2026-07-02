@@ -33,6 +33,12 @@ external-refs: []
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-06-23
 
+**▶ USER GREENLIGHT 2026-07-02 (authorization-only — NOT executed).** The USER authorized
+a paid Phase-2 validation run. Execution is **DEFERRED** during the active token-burn
+emergency (task #59 stays pending); run the single-scenario A/B (§7) ONLY once the
+emergency lifts, hard-capped per SCENARIOS_TESTS_RULES Rule 13. Recorded alongside the
+AMP-crypto-binding security work (TRDD-5KKO25RO).
+
 **Why this exists:** the overnight scenario batch burned a full week of the
 user's token quota in a few hours. The user ordered: investigate the specific
 consumer, then redesign the runner — keep Opus ONLY for screenshot

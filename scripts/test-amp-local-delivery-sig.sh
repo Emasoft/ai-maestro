@@ -144,5 +144,18 @@ else
     bad "sign_message refused a correct 0600 private key"
 fi
 
+# --- Check 7 (fix-3a): AMP_HOST=1 selects the top-level host identity ----------
+# Source amp-helper.sh in a FRESH subshell (the resolver runs once at source
+# time; this shell already resolved via CLAUDE_AGENT_ID). Scrub every identity
+# env so only the P0 host layer can fire, and assert AMP_DIR is the host dir.
+host_amp_dir=$(AMP_HOST=1 HOME="$TMPROOT" SD="$SCRIPT_DIR" bash -c \
+    'unset AMP_DIR CLAUDE_AGENT_ID AIM_AGENT_ID AIM_AGENT_NAME CLAUDE_AGENT_NAME TMUX
+     source "$SD/amp-helper.sh" 2>/dev/null; printf "%s" "$AMP_DIR"')
+if [ "$host_amp_dir" = "$TMPROOT/.agent-messaging" ]; then
+    ok "AMP_HOST=1 resolves the top-level host identity (~/.agent-messaging)"
+else
+    bad "AMP_HOST=1 host identity — got '$host_amp_dir'"
+fi
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

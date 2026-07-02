@@ -135,6 +135,20 @@ if [ -z "${AMP_DIR:-}" ]; then
     # Priority 1: AMP_DIR already set (AI Maestro sets this)
     # (handled by the outer if)
 
+    # Priority 0 (TRDD-5KKO25RO fix-3a): explicit HOST identity. The host — the
+    # AI Maestro server process itself — is a legitimate, comm-graph-exempt
+    # SYSTEM sender with its OWN top-level Ed25519 identity at
+    # ~/.agent-messaging/{config.json,keys/} (0600 key). AMP_HOST=1 selects it
+    # deterministically: no agent UUID, no directory-name spoof, and a FIXED path
+    # (no user input flows into it, so no path-traversal risk). This lets the host
+    # deliver a signed, verified note to a MANAGER without asserting any agent's
+    # identity — it formalizes the interim `AMP_DIR=~/.agent-messaging amp-send.sh`
+    # workaround. An explicit AMP_DIR (P1, the outer guard) still wins over this.
+    if [ "${AMP_HOST:-}" = "1" ]; then
+        AMP_DIR="${HOME}/.agent-messaging"
+        _amp_resolved=true
+    fi
+
     # Priority 2: CLAUDE_AGENT_ID env var (UUID → direct directory)
     #   --id <uuid> sets this in pre-source parsing (see each script)
     if [ -n "${CLAUDE_AGENT_ID:-}" ]; then

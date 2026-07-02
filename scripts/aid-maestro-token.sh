@@ -118,6 +118,10 @@ fi
 
 MAESTRO_CACHE_DIR="${AMP_DIR}/tokens"
 mkdir -p "$MAESTRO_CACHE_DIR"
+# Security: this dir caches bearer governance tokens; mkdir -p leaves it at the
+# process umask (e.g. 755), letting a co-resident user traverse it. Lock it to the
+# owner, mirroring the 700 already applied to the keys dir.
+chmod 700 "$MAESTRO_CACHE_DIR"
 
 # Cache key derived from server URL
 cache_key() {
@@ -158,9 +162,15 @@ save_cache() {
     local expires_at
     expires_at=$(( $(date +%s) + expires_in ))
 
-    echo "$response" | jq --arg ea "$expires_at" --arg url "$MAESTRO_URL" \
+    # Security (TOCTOU token-leak fix): create the cache file under a 077 umask so
+    # it is mode 600 from the instant it exists — never briefly group/world-readable
+    # at the process umask (e.g. 644) in the window between the write and the chmod.
+    # The subshell scopes the umask change to this write only. The trailing
+    # chmod 600 still tightens the case where the file pre-existed with looser perms
+    # (`>` truncates content but preserves an existing file's mode).
+    ( umask 077; echo "$response" | jq --arg ea "$expires_at" --arg url "$MAESTRO_URL" \
         '. + {expires_at: ($ea | tonumber), maestro_url: $url}' \
-        > "$cache_file"
+        > "$cache_file" )
     chmod 600 "$cache_file"
 }
 

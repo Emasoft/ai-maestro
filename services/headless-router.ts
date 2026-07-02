@@ -1628,7 +1628,19 @@ const routes: Route[] = [
     // identically. Anonymous (whitelisted above); the handler enforces its own
     // rate limits + store cap.
     const { POST } = await import('../app/api/v1/auth/challenge/route')
-    const body = await readJsonBody(req)
+    // Parity fix: the full-mode challenge route returns 400 invalid_request on a
+    // malformed JSON body (its own try/catch around request.json()). Here,
+    // readJsonBody() rejects with an Error whose `.status=400` the router's
+    // top-level catch does NOT honor (it maps only `.statusCode===413`), so an
+    // unwrapped readJsonBody would surface as a 500 — a mode divergence. Wrap it to
+    // emit the SAME 400 body/status the full-mode route returns.
+    let body: unknown
+    try {
+      body = await readJsonBody(req)
+    } catch {
+      sendJson(res, 400, { error: 'invalid_request', message: 'Request body must be JSON' })
+      return
+    }
     const url = `http://localhost:${process.env.PORT || 23000}/api/v1/auth/challenge`
     const headers = new Headers()
     if (getHeader(req, 'content-type')) headers.set('content-type', getHeader(req, 'content-type')!)

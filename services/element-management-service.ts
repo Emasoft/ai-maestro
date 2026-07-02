@@ -157,12 +157,17 @@ async function gate0Auth(
 // (pattern 1), and the authority is bound to op[state-adding action] +
 // subject[user scope] (pattern 5).
 //
-// Only STATE-ADDING actions are gated: install|enable|update|convert grant or
+// Only STATE-ADDING actions are gated: install|enable|update|convert|add grant or
 // refresh host-wide code. uninstall|remove|disable REMOVE reach (not a
 // persistence gain), and the pipeline's own PG03/PG07 user-scope cleanup already
 // runs under a buildSystemAuthContext() system context, so it is unaffected.
+// 'add' extends coverage to the code-executing element pipelines whose
+// state-adding verb is 'add' rather than 'install' — ChangeMCP (host-wide MCP
+// server) and ChangeMarketplace (host-wide plugin marketplace). Adding it here is
+// INERT at the 3 original call sites (InstallElement/ChangePlugin/ChangeSkill
+// never use 'add'); it only bites where the new gate calls pass action==='add'.
 const USER_SCOPE_STATE_ADDING_ACTIONS: ReadonlySet<string> = new Set([
-  'install', 'enable', 'update', 'convert',
+  'install', 'enable', 'update', 'convert', 'add',
 ])
 
 /**
@@ -172,7 +177,10 @@ const USER_SCOPE_STATE_ADDING_ACTIONS: ReadonlySet<string> = new Set([
  * the error immediately when non-null.
  */
 function assertAgentMayNotUserScope(
-  scope: 'local' | 'user',
+  // `string` (not the 'local'|'user' union) so callers with a wider scope union
+  // — e.g. ChangeMCP's 'user'|'local'|'project' — pass without a cast. The guard
+  // only acts on the exact value 'user'; every other scope is a no-op below.
+  scope: string,
   action: string,
   authContext: AuthContext,
   ops: string[],
@@ -3890,6 +3898,22 @@ export async function ChangeMarketplace(desired: {
     const g0err = await gate0Auth('manage-skills', '', authContext, ops)
     if (g0err) { result.error = g0err; return result }
 
+    // ── G00b: IRON rule — no agent may state-add a host-wide marketplace ─
+    // (never-user-scope rule, TRDD-a6d93b9c). A marketplace is inherently GLOBAL
+    // (~/.claude/plugins/marketplaces — there is no local scope), so an agent-token
+    // 'add'/'update' is a supply-chain escalation: every agent that later installs
+    // from it inherits its contents. gate0Auth('manage-skills') is title-based and a
+    // MANAGER agent passes it, so owner-only confinement is enforced here off the
+    // VERIFIED authContext.isSystemOwner. Pass scope:'user' because the op is always
+    // host-wide; 'remove' is not gated (reduces reach). The reachable route
+    // (POST /api/settings/marketplaces) is already enforceSystemOwner-gated — this is
+    // the service-layer belt for any future/CLI caller (same intent as the 3
+    // original gate sites: enforce for EVERY caller, not one route).
+    {
+      const ironErr = assertAgentMayNotUserScope('user', desired.action, authContext, ops)
+      if (ironErr) { result.error = ironErr; return result }
+    }
+
     // ── G01: Validate marketplace name format ─────────────────
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(desired.name)) {
       result.error = `Invalid marketplace name "${desired.name}". Must match /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/`
@@ -4175,6 +4199,27 @@ async function changeSimpleElement(
   const result: ChangeResult = { success: false, operations: ops, restartNeeded: false }
 
   try {
+    // ── G00b: IRON rule — no agent may state-add at user scope ─
+    // (never-user-scope rule, TRDD-a6d93b9c). This helper backs ChangeAgentDef/
+    // ChangeCommand/ChangeRule/ChangeOutputStyle, which at scope 'user' write
+    // host-wide ~/.claude/{agents,commands,rules,output-styles}/<name>.md — the
+    // exact cross-project persistence the rule forbids for agents. Coverage gap:
+    // the gate was wired only into InstallElement/ChangePlugin/ChangeSkill, so
+    // these siblings were UNGATED. authContext is optional on this helper, so a
+    // user-scope state-add with NO verified system-owner context fails CLOSED
+    // (an agent-token caller always has isSystemOwner=false → denied). Runs
+    // BEFORE any mkdir/copyFile/writeFile/rm. Local scope and 'remove' are not
+    // gated (not host-wide / reduce reach), so callers that legitimately omit
+    // authContext for those are unaffected.
+    if (desired.scope === 'user' && USER_SCOPE_STATE_ADDING_ACTIONS.has(desired.action)) {
+      if (!authContext) {
+        result.error = 'authContext is mandatory for a user-scope element mutation (never-user-scope rule, TRDD-a6d93b9c)'
+        return result
+      }
+      const ironErr = assertAgentMayNotUserScope(desired.scope, desired.action, authContext, ops)
+      if (ironErr) { result.error = ironErr; return result }
+    }
+
     // ── G01: Validate name ────────────────────────────────────
     if (!isSafePathComponent(desired.name)) {
       result.error = `Invalid ${elementType} name "${desired.name}". Must not contain ".." or "/" characters`
@@ -4315,6 +4360,21 @@ export async function ChangeMCP(agentId: string | null, desired: {
     }
     const g0err = await gate0Auth('manage-skills', agentId || '', authContext, ops)
     if (g0err) { result.error = g0err; return result }
+
+    // ── G00b: IRON rule — no agent may state-add at user scope ─
+    // (never-user-scope rule, TRDD-a6d93b9c). MCP servers execute code in agent
+    // context, so a host-wide (user-scope) 'add' by an agent is the HIGHEST-severity
+    // form of the escalation — yet ChangeMCP was the one code-executing pipeline
+    // left ungated. gate0Auth('manage-skills') is title-based and a MANAGER agent
+    // passes it, so owner-only confinement must be enforced here off the VERIFIED
+    // authContext.isSystemOwner (never a body field). The state-adding verb here is
+    // 'add' (see USER_SCOPE_STATE_ADDING_ACTIONS); scope 'local'/'project' and
+    // 'remove' are not gated (not host-wide / reduce reach). Fails BEFORE the
+    // `claude mcp add-json` shell-out.
+    {
+      const ironErr = assertAgentMayNotUserScope(desired.scope, desired.action, authContext, ops)
+      if (ironErr) { result.error = ironErr; return result }
+    }
 
     // ── G01: Validate server name ─────────────────────────────
     if (!isSafePathComponent(desired.name)) {

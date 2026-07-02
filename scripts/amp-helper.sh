@@ -138,6 +138,16 @@ if [ -z "${AMP_DIR:-}" ]; then
     # Priority 2: CLAUDE_AGENT_ID env var (UUID → direct directory)
     #   --id <uuid> sets this in pre-source parsing (see each script)
     if [ -n "${CLAUDE_AGENT_ID:-}" ]; then
+        # Security (path-traversal guard): CLAUDE_AGENT_ID flows straight into the
+        # AMP_DIR path, and the auto-create block below mkdir's ${AMP_DIR}/keys. An
+        # unvalidated value like '../../../../tmp/x' would escape AMP_AGENTS_BASE and
+        # write keys/config OUTSIDE ~/.agent-messaging/agents/. Accept only a
+        # canonical-shaped agent UUID (hex + hyphens, exactly 36 chars) — that
+        # charset admits no '/' or '.', so traversal is impossible. Fail closed.
+        if ! [[ "$CLAUDE_AGENT_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "Error: CLAUDE_AGENT_ID '${CLAUDE_AGENT_ID}' is not a valid agent UUID — refusing (anti path-traversal)." >&2
+            exit 1
+        fi
         AMP_DIR="${AMP_AGENTS_BASE}/${CLAUDE_AGENT_ID}"
         _amp_resolved=true
     fi
@@ -152,6 +162,18 @@ if [ -z "${AMP_DIR:-}" ]; then
     # TRDD-979dbdaa / #46 (env-first layered resolver).
     if [ "$_amp_resolved" = false ]; then
         if [ -n "${AIM_AGENT_ID:-}" ]; then
+            # Security (path-traversal guard): AIM_AGENT_ID is used raw in the
+            # AMP_DIR path (the auto-create block below mkdir's ${AMP_DIR}/keys),
+            # so an unvalidated '../../../../tmp/x' would escape AMP_AGENTS_BASE.
+            # The AIM_AGENT_NAME branch is already constrained by _index_lookup;
+            # give the raw-ID branch the same fail-closed protection by accepting
+            # only a canonical-shaped agent UUID (hex + hyphens, exactly 36 chars —
+            # no '/' or '.', so traversal is impossible). Anti-spoofing is this
+            # commit's whole theme; the raw-ID layer must not be the soft spot.
+            if ! [[ "$AIM_AGENT_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+                echo "Error: AIM_AGENT_ID '${AIM_AGENT_ID}' is not a valid agent UUID — refusing (anti path-traversal)." >&2
+                exit 1
+            fi
             AMP_DIR="${AMP_AGENTS_BASE}/${AIM_AGENT_ID}"
             _amp_resolved=true
         elif [ -n "${AIM_AGENT_NAME:-}" ]; then

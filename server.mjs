@@ -1069,17 +1069,48 @@ async function startServer(handleRequest) {
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request, query)
       })
-    } else if (pathname === '/status') {
-      statusWss.handleUpgrade(request, socket, head, (ws) => {
-        statusWss.emit('connection', ws)
-      })
+    } else if (pathname === '/status' || pathname === '/companion-ws') {
+      // SRV-CRIT-03 follow-up (WS deep-auth parity): the /status and /companion-ws
+      // connection handlers receive no `request` and validate the credential ONLY
+      // via the pre-handshake wsHasCredential SHAPE check above — so a forged-shape
+      // `Bearer aim_tk_AAAA…` would reach the status stream / companion voice relay.
+      // The other two privileged sockets are already covered: /term deep-validates
+      // in its own connection handler, and /v1/ws self-authenticates in-band via an
+      // {type:'auth'} frame + validateApiKey (lib/amp-websocket.ts). Deep-validate
+      // these two here with the same NON-consuming authenticator /term uses (cookie
+      // + every bearer class) BEFORE the handshake; fail closed on any error, and
+      // never consume a one-shot AID token at this gate.
+      import('./lib/ws-auth-gate.ts')
+        .then(async ({ isWsRequestAuthorized }) => {
+          if (!(await isWsRequestAuthorized(request?.headers))) {
+            socket.write('HTTP/1.1 401 Unauthorized\r\n' +
+                         'Content-Length: 0\r\n' +
+                         'Connection: close\r\n\r\n')
+            socket.destroy()
+            return
+          }
+          if (pathname === '/status') {
+            statusWss.handleUpgrade(request, socket, head, (ws) => {
+              statusWss.emit('connection', ws)
+            })
+          } else {
+            companionWss.handleUpgrade(request, socket, head, (ws) => {
+              companionWss.emit('connection', ws, query)
+            })
+          }
+        })
+        .catch((authErr) => {
+          console.error('[WS upgrade] credential validation error, denying:', authErr)
+          try {
+            socket.write('HTTP/1.1 401 Unauthorized\r\n' +
+                         'Content-Length: 0\r\n' +
+                         'Connection: close\r\n\r\n')
+          } catch { /* socket may already be closed */ }
+          socket.destroy()
+        })
     } else if (pathname === '/v1/ws') {
       ampWss.handleUpgrade(request, socket, head, (ws) => {
         ampWss.emit('connection', ws)
-      })
-    } else if (pathname === '/companion-ws') {
-      companionWss.handleUpgrade(request, socket, head, (ws) => {
-        companionWss.emit('connection', ws, query)
       })
     } else {
       socket.destroy()

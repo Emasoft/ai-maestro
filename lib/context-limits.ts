@@ -33,7 +33,7 @@
 /** Default Claude context window when nothing else matches. */
 export const DEFAULT_CONTEXT_LIMIT = 200_000
 
-/** Extended-context window for the `[1m]` model variants. */
+/** Extended-context window for 1M models (`[1m]`-tagged or natively-1M families). */
 export const EXTENDED_CONTEXT_LIMIT = 1_000_000
 
 /**
@@ -51,12 +51,20 @@ export const CONTEXT_LIMITS = {
 const EXTENDED_CONTEXT_TAG = '[1m]'
 
 /**
- * Substrings identifying model families whose NATIVE (untagged) context
- * window is 1M. Sonnet 5 ships its id as bare `claude-sonnet-5` (no `[1m]`),
- * so the tag test alone would misclassify it as 200K. Kept family-narrow
- * (`sonnet-5`, not `sonnet`) so Sonnet 4.6 stays at its 200K default.
+ * Matches model families whose NATIVE (untagged) context window is 1M.
+ * Sonnet 5 ships its id as bare `claude-sonnet-5` (no `[1m]`), so the tag
+ * test alone would misclassify it as 200K. Kept family-narrow (`sonnet-5`,
+ * not `sonnet`) so Sonnet 4.6 stays at its 200K default.
+ *
+ * The `(?![0-9])` guard anchors `sonnet-5` on a version boundary so it does
+ * NOT substring-over-match a DIFFERENT version number that merely starts with
+ * those digits — `claude-sonnet-50` (major v50) / `claude-sonnet-55` stay
+ * 200K, while `claude-sonnet-5` and its dated snapshots
+ * (`claude-sonnet-5-20260630`) still resolve to 1M. This preserves the
+ * anti-substring-over-report guarantee that motivated the `[1m]`-only rule
+ * (TRDD-1657a5f4); the Rust resolver mirrors the same non-digit boundary.
  */
-const NATIVE_1M_FAMILY_MARKERS = ['sonnet-5'] as const
+const NATIVE_1M_FAMILY_RE = /sonnet-5(?![0-9])/
 
 /**
  * Resolve the context-window size for a Claude model id.
@@ -69,8 +77,6 @@ export function contextLimitForModel(model: string): number {
   const m = model.toLowerCase()
   if (m.includes(EXTENDED_CONTEXT_TAG)) return CONTEXT_LIMITS.extended
   // Natively-1M families (Sonnet 5) advertise no `[1m]` tag — match directly.
-  if (NATIVE_1M_FAMILY_MARKERS.some((marker) => m.includes(marker))) {
-    return CONTEXT_LIMITS.extended
-  }
+  if (NATIVE_1M_FAMILY_RE.test(m)) return CONTEXT_LIMITS.extended
   return CONTEXT_LIMITS.default
 }

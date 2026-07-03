@@ -342,8 +342,18 @@ fn usage_field(v: &Value, field: &str) -> Option<u64> {
 pub fn context_limit_for_model(model_id: &str) -> u64 {
     let m = model_id.to_ascii_lowercase();
     if m.contains("[1m]") { return 1_000_000; }
-    // Sonnet 5 ships a native 1M window with a bare, untagged id.
-    if m.contains("sonnet-5") { return 1_000_000; }
+    // Sonnet 5 ships a native 1M window with a bare, untagged id. Anchor on a
+    // trailing non-digit so a DIFFERENT version number that merely starts with
+    // these digits (e.g. "claude-sonnet-50") is NOT mistaken for the sonnet-5
+    // family — mirrors NATIVE_1M_FAMILY_RE `/sonnet-5(?![0-9])/` in
+    // lib/context-limits.ts. "claude-sonnet-5" and dated snapshots
+    // ("claude-sonnet-5-20260630") stay 1M; "claude-sonnet-50" stays 200K.
+    if let Some(pos) = m.find("sonnet-5") {
+        let after = m.as_bytes().get(pos + "sonnet-5".len()).copied();
+        if !matches!(after, Some(b'0'..=b'9')) {
+            return 1_000_000;
+        }
+    }
     DEFAULT_CONTEXT_LIMIT
 }
 
@@ -370,6 +380,13 @@ mod tests {
     fn sonnet_5_native_one_million_without_marker() {
         assert_eq!(context_limit_for_model("claude-sonnet-5"), 1_000_000);
         assert_eq!(context_limit_for_model("CLAUDE-SONNET-5"), 1_000_000);
+        // Dated snapshot of the sonnet-5 family is still native 1M.
+        assert_eq!(context_limit_for_model("claude-sonnet-5-20260630"), 1_000_000);
         assert_eq!(context_limit_for_model("claude-sonnet-4-6"), 200_000);
+        // Adversarial near-misses that must stay 200K: `claude-sonnet-4-5`
+        // ends in `-5` but is a different family; `claude-sonnet-50` is a
+        // longer version number whose prefix `sonnet-5` must NOT over-match.
+        assert_eq!(context_limit_for_model("claude-sonnet-4-5"), 200_000);
+        assert_eq!(context_limit_for_model("claude-sonnet-50"), 200_000);
     }
 }

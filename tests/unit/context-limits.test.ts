@@ -10,7 +10,8 @@
  *
  * The HIGH bug this guards against (IN-1 §C1): the old heuristic returned
  * 1,000,000 for ANY `claude-opus-4*`, over-reporting standard Opus
- * 4.6/4.7/4.8 free space by ~800K. Only the `[1m]` tag is 1M.
+ * 4.6/4.7/4.8 free space by ~800K. The `[1m]` tag OR a native-1M family
+ * (Sonnet 5, bare `claude-sonnet-5`) grants 1M; nothing else does.
  *
  * No mocks — exercises the real exported function.
  */
@@ -49,7 +50,7 @@ describe('contextLimitForModel — standard-context families default to 200K', (
   })
 })
 
-describe('contextLimitForModel — only the [1m] tag grants the extended window', () => {
+describe('contextLimitForModel — the [1m] tag or a native-1M family grants the extended window', () => {
   it('claude-opus-4-8[1m] → 1000000', () => {
     expect(contextLimitForModel('claude-opus-4-8[1m]')).toBe(1_000_000)
   })
@@ -67,6 +68,19 @@ describe('contextLimitForModel — only the [1m] tag grants the extended window'
 
   it('claude-sonnet-4-6 stays 200000 (sonnet-5 rule must NOT promote Sonnet 4.6)', () => {
     expect(contextLimitForModel('claude-sonnet-4-6')).toBe(200_000)
+  })
+
+  it('adversarial near-misses stay 200000 — a `-5` from another family and a longer version number', () => {
+    // claude-sonnet-4-5 ends in `-5` but is NOT the sonnet-5 family;
+    // claude-sonnet-50 / -55 are different major versions whose prefix
+    // `sonnet-5` must NOT over-match (this pins the `(?![0-9])` boundary).
+    expect(contextLimitForModel('claude-sonnet-4-5')).toBe(200_000)
+    expect(contextLimitForModel('claude-sonnet-50')).toBe(200_000)
+    expect(contextLimitForModel('claude-sonnet-55')).toBe(200_000)
+  })
+
+  it('a dated snapshot of the sonnet-5 family is still native 1M', () => {
+    expect(contextLimitForModel('claude-sonnet-5-20260630')).toBe(1_000_000)
   })
 
   it('matches the tag case-insensitively (an upper-cased [1M] still resolves to 1M)', () => {

@@ -3,7 +3,7 @@ trdd-id: 63K2WJ26
 title: Batch dev-browser steps per turn — a stop-on-failure driver (L6)
 column: dev
 created: 2026-06-23T21:34:06+0200
-updated: 2026-06-23T21:34:06+0200
+updated: 2026-07-03T21:00:06+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 2
@@ -18,10 +18,18 @@ test-requirements: [integration]
 runtime-targets: [macos]
 attempts: 0
 last-test-result: not-run
-implementation-commits: []
+implementation-commits: [c4d65da6, dee0b805, 3e86b80e]
 ---
 
 # TRDD-63K2WJ26 — Batch dev-browser steps per turn (L6)
+
+## ⏵ STATE — READ FIRST (authoritative) — 2026-07-03
+Impl **DONE** in `.claude/agents/scenario-runner.md` (Phase C — the `scenario-step-batch`
+skill + a `runSteps()` stop-on-failure driver in a single dev-browser call; the skill dir
+`.claude/skills/scenario-step-batch/` exists on disk with SKILL.md + references/). Landed in
+`c4d65da6` (L6-L9 origin) → `dee0b805` (gaps #5-#8) → `3e86b80e` (serena→tldr cleanup).
+`column: dev` kept (not `complete`): live Phase-2 validation is gated on the USER
+scenario-run go (~$40 opus[1m], task #59, TRDD-N1FYP2AW Phase 2).
 
 ## Problem
 Cost = `turns × per-turn-context`. **Turns** is a first-class multiplier, and the

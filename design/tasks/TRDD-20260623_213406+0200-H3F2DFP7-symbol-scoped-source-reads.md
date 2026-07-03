@@ -3,7 +3,7 @@ trdd-id: H3F2DFP7
 title: Symbol-scoped source reads — read function bodies, not whole files (L8)
 column: dev
 created: 2026-06-23T21:34:06+0200
-updated: 2026-06-23T21:43:37+0200
+updated: 2026-07-03T21:00:06+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 2
@@ -18,10 +18,18 @@ test-requirements: [integration]
 runtime-targets: [macos]
 attempts: 0
 last-test-result: not-run
-implementation-commits: []
+implementation-commits: [c4d65da6, dee0b805, 3e86b80e]
 ---
 
 # TRDD-H3F2DFP7 — Symbol-scoped source reads (L8)
+
+## ⏵ STATE — READ FIRST (authoritative) — 2026-07-03
+Impl **DONE** in `.claude/agents/scenario-runner.md` (Phase D step 2 — `tldr search "<name>"
+<dir>` → ranged `Read` with `offset`/`limit`, deliberately **NO MCP** to preserve the L2 lean
+base; a `NEEDS-FIXER: <file> <symptom>` escape hands genuinely complex fixes to a separate
+SERENA-carrying fixer). Landed in `c4d65da6` (L6-L9 origin) → `dee0b805` (gaps #5-#8) →
+`3e86b80e` (serena→tldr cleanup). `column: dev` kept (not `complete`): live Phase-2
+validation is gated on the USER scenario-run go (~$40 opus[1m], task #59, TRDD-N1FYP2AW Phase 2).
 
 ## Problem
 During FIX-AS-YOU-GO the runner reads SOURCE files to diagnose a bug. Whole-file

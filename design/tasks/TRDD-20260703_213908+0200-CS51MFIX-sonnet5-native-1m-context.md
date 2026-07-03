@@ -1,9 +1,9 @@
 ---
 trdd-id: CS51MFIX
 title: Align to CC 2.1.197 — Sonnet 5 native 1M context window in the context-breakdown reader
-column: dev
+column: complete
 created: 2026-07-03T21:39:08+0200
-updated: 2026-07-03T21:39:08+0200
+updated: 2026-07-03T21:41:00+0200
 current-owner: alexandre
 assignee: alexandre
 priority: 3
@@ -22,9 +22,9 @@ target-branch: governance-rules
 test-requirements: [unit, typecheck]
 impacts: []
 runtime-targets: [macos]
-attempts: 0
-last-test-result: not-run
-implementation-commits: []
+attempts: 1
+last-test-result: pass
+implementation-commits: [13743bb7]
 external-refs: ["https://docs.claude.com/en/release-notes/claude-code (CC 2.1.197, 2026-06-30 — Sonnet 5 default + native 1M)"]
 ---
 

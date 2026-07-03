@@ -58,6 +58,17 @@ describe('contextLimitForModel — only the [1m] tag grants the extended window'
     expect(contextLimitForModel('claude-sonnet-4-7[1m]')).toBe(1_000_000)
   })
 
+  it('claude-sonnet-5 → 1000000 (native 1M, no [1m] tag — CC 2.1.197, TRDD-CS51MFIX)', () => {
+    // CC writes the bare id `claude-sonnet-5` (verified: 2554 real JSONL records).
+    // Its 1M window is native, so the family must grant 1M without a tag.
+    expect(contextLimitForModel('claude-sonnet-5')).toBe(1_000_000)
+    expect(contextLimitForModel('CLAUDE-SONNET-5')).toBe(1_000_000)
+  })
+
+  it('claude-sonnet-4-6 stays 200000 (sonnet-5 rule must NOT promote Sonnet 4.6)', () => {
+    expect(contextLimitForModel('claude-sonnet-4-6')).toBe(200_000)
+  })
+
   it('matches the tag case-insensitively (an upper-cased [1M] still resolves to 1M)', () => {
     // contextLimitForModel lowercases the input before the substring test,
     // so a model id printed with an upper-case tag must not slip through.

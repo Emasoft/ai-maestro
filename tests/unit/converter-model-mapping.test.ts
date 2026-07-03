@@ -46,6 +46,12 @@ describe('mapModel — Claude → Codex (family-normalized, gpt-5.5 flagship)', 
     expect(mapModel('claude-sonnet-4-6', claude, codex)).toBe('gpt-5.3-codex')
   })
 
+  it('maps the new default claude-sonnet-5 → gpt-5.3-codex (family match, no table edit — TRDD-CS51MFIX)', () => {
+    // CC 2.1.197 made Sonnet 5 the default; claudeFamily normalizes the bare
+    // id to `sonnet`, so the converter tracks it with zero code change.
+    expect(mapModel('claude-sonnet-5', claude, codex)).toBe('gpt-5.3-codex')
+  })
+
   it('maps haiku (claude-haiku-4-5) → gpt-5.4-mini', () => {
     expect(mapModel('claude-haiku-4-5', claude, codex)).toBe('gpt-5.4-mini')
   })

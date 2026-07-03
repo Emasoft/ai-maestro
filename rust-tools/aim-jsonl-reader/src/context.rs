@@ -329,15 +329,21 @@ fn usage_field(v: &Value, field: &str) -> Option<u64> {
 
 /// Context-window table. TRDD §4.5 hard-codes the lookup.
 ///
-/// Only the explicit 1M-context model variants advertise their window via
-/// the `[1m]` marker in the model id (e.g. `claude-opus-4-8[1m]`). Every
-/// other model — opus/sonnet/haiku-4 without the marker, or anything
-/// unknown — resolves to the default 200K window. The previous
-/// `starts_with("claude-opus-4")` rule over-reported ALL Opus-4 ids as 1M.
-// MUST match lib/context-limits.ts contextLimitForModel — TRDD-1657a5f4 Phase 1.
+/// Opus/Haiku 1M variants advertise their window via the `[1m]` marker in
+/// the model id (e.g. `claude-opus-4-8[1m]`). Sonnet 5 (CC 2.1.197, the
+/// current DEFAULT model) instead ships a NATIVE 1M window under the bare
+/// id `claude-sonnet-5` — no `[1m]` tag — so its family is matched directly
+/// (TRDD-CS51MFIX). Everything else — opus/sonnet/haiku-4 without the
+/// marker, or anything unknown — resolves to the default 200K window. The
+/// rule stays sonnet-5-narrow so Sonnet 4.6 keeps its 200K default and the
+/// old `starts_with("claude-opus-4")` over-reporting bug is not revived.
+// MUST match lib/context-limits.ts contextLimitForModel — TRDD-1657a5f4 Phase 1,
+// extended for Sonnet 5 native 1M by TRDD-CS51MFIX.
 pub fn context_limit_for_model(model_id: &str) -> u64 {
     let m = model_id.to_ascii_lowercase();
     if m.contains("[1m]") { return 1_000_000; }
+    // Sonnet 5 ships a native 1M window with a bare, untagged id.
+    if m.contains("sonnet-5") { return 1_000_000; }
     DEFAULT_CONTEXT_LIMIT
 }
 
@@ -355,5 +361,15 @@ mod tests {
         assert_eq!(context_limit_for_model("claude-sonnet-4-6"), 200_000);
         assert_eq!(context_limit_for_model("claude-haiku-4-5"), 200_000);
         assert_eq!(context_limit_for_model("some-unknown-model"), 200_000);
+    }
+
+    // Sonnet 5 (CC 2.1.197) is natively 1M and its id is bare `claude-sonnet-5`
+    // (no `[1m]` tag) — verified against 2554 real JSONL records. The family
+    // rule must grant 1M without a tag, WITHOUT promoting Sonnet 4.6 (TRDD-CS51MFIX).
+    #[test]
+    fn sonnet_5_native_one_million_without_marker() {
+        assert_eq!(context_limit_for_model("claude-sonnet-5"), 1_000_000);
+        assert_eq!(context_limit_for_model("CLAUDE-SONNET-5"), 1_000_000);
+        assert_eq!(context_limit_for_model("claude-sonnet-4-6"), 200_000);
     }
 }

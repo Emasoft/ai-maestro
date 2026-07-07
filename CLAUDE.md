@@ -82,6 +82,29 @@ copies each variant into a detected client's global config dir; github-copilot +
 kilocode are per-workspace, so their placement is printed rather than
 auto-applied. Non-Claude variants drop the Claude-only lean-ctx allowlist note.
 
+## Governance rules — IND base + DEP overlay (TRDD-DE9757LJ)
+
+The 3-pillars governance rules (TRDD, PRRD, universal kanban) are split in two
+layers:
+
+- **IND (universal base)** — ai-maestro-independent; shipped globally to
+  `~/.claude/rules/` by the **ai-maestro-janitor** plugin (handoff source:
+  `design/rules-refactor/independent/`; canonical home = the janitor repo,
+  issue ai-maestro-janitor#73).
+- **DEP (ai-maestro overlay)** — `rules/aimaestro/aimaestro-*.md` in THIS repo
+  (git-tracked, bundled with the app). `lib/agent-rules-seed.ts`
+  (`ensureAgentRules`) copies them into each registered agent workdir's
+  `.claude/rules/` — wired at CreateAgent G05b, at `ensureCorePluginInstalled`
+  (the wake-path monitor: re-seeds missing/stale rules on every wake), and at
+  `importAgent`. Every DEP file carries the `ai-maestro:installed-dep-rule`
+  provenance marker; the seeder only ever overwrites marker-stamped files —
+  a user's same-named file is never touched. DEP files EXPAND the IND base
+  and must never restate it.
+
+This repo self-governs via symlinks `.claude/rules/aimaestro-*.md →
+rules/aimaestro/`. To change a DEP rule, edit `rules/aimaestro/` (agents pick
+the update up on next wake); never hand-edit a seeded copy in a workdir.
+
 ## Version Management
 
 **IMPORTANT:** When bumping the version, ALWAYS use the centralized script:

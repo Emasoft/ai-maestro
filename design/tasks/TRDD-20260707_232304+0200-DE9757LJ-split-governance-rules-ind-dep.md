@@ -1,9 +1,11 @@
 ---
 trdd-id: DE9757LJ
 title: Split the 3-pillars governance rules into IND (janitor-global) and DEP (ai-maestro-workdir) sets
-column: design
+column: dev
 created: 2026-07-07T23:23:04+0200
-updated: 2026-07-07T23:23:04+0200
+updated: 2026-07-08T00:26:41+0200
+implementation-commits: [618f7044, 313fd7a3]
+external-refs: ["github.com/Emasoft/ai-maestro-janitor/issues/73", "github.com/Emasoft/ai-maestro-orchestrator-agent/issues/27"]
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -15,15 +17,45 @@ parent-trdd: null
 npt: []
 eht: []
 relevant-rules: []
-external-refs: []
 ---
 
 # TRDD-DE9757LJ — Split the 3-pillars governance rules into IND (janitor-global) and DEP (ai-maestro-workdir) sets
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-07
 
-**Current state:** DESIGN agreed with the USER (this is a USER-directed task). No
-code/rule files touched yet. This TRDD is the plan-of-record.
+**▶ UPDATE 2026-07-08T00:26 — Phases 1-3 DONE (ai-maestro side complete):**
+- **Phase 1 DONE** (`618f7044`): all 7 rule files authored. IND →
+  `design/rules-refactor/independent/` (trdd-design-tasks.md with the merged
+  folder lifecycle + neutral transition table, prrd-design-rules.md,
+  universal-kanban.md). DEP → `rules/aimaestro/` (aimaestro-trdd-approval.md
+  with the new Part B2 transition-authority table, aimaestro-manager-approval-
+  defaults.md, aimaestro-prrd-governance.md, aimaestro-kanban-multiagent.md),
+  each marker-stamped (`ai-maestro:installed-dep-rule`) + EXPANDS header.
+  Zero-duplication verified by grep.
+- **Phase 2 DONE** (`313fd7a3`): `lib/agent-rules-seed.ts`
+  (ensureAgentRules — content-idempotent, marker-guarded, user-file-safe),
+  wired at CreateAgent G05b + ensureCorePluginInstalled (the wake-path
+  monitor covering wakeAgent / New Session / ensure-core POST) + importAgent.
+  Repo self-governs via 4 symlinks `.claude/rules/aimaestro-*.md →
+  rules/aimaestro/`. 5 unit tests; gate green (tsc, server, vitest 2046/2).
+- **Phase 3 DONE**: janitor issue filed —
+  github.com/Emasoft/ai-maestro-janitor/issues/73 (ship the 3 IND rules via
+  rules_installer; includes the marker-vs-unmarked-takeover question the
+  implementer must answer). Phase 4 rides the EXISTING orchestrator issue
+  #27 (extended with the DEP-contract comment) — no duplicate filed.
+
+**NEXT ACTION:** wait on janitor#73 (IND ships globally) and orch#27
+(script rewire) — both other-repo work. THEN Phase 5, ONLY with explicit
+USER ok: back up + remove the orphaned global `trdd-approval-tiers.md` +
+`manager-approval-defaults.md` from `~/.claude/rules/` (the other two
+global copies are superseded by the janitor's IND versions — takeover
+semantics per the janitor#73 answer).
+
+**SUPERSEDED — do NOT carry forward:** "No code/rule files touched yet"
+(pre-Phase-1 state below).
+
+**Original state (2026-07-07):** DESIGN agreed with the USER (this is a
+USER-directed task). This TRDD is the plan-of-record.
 
 **Load-bearing facts:**
 - 4 governance rule files currently live ONLY at global `~/.claude/rules/`
@@ -40,13 +72,9 @@ code/rule files touched yet. This TRDD is the plan-of-record.
 - Rule-file LOADING ignores the filename — only the body is injected into
   context. So filenames are a human/git convenience only.
 
-**NEXT ACTION (Phase 1, awaiting USER "GO"):** do the rule-by-rule
-classification of the 4 files; produce the IND set (trimmed base) + the DEP set
-(`aimaestro-`-prefixed overlay) with cross-references and ZERO duplication;
-commit the drafts into a staging dir in this repo. Build NOTHING else; open no
-issue yet.
-
-**SUPERSEDED — do NOT carry forward:** none yet.
+**[HISTORICAL — completed by the 2026-07-08 update above] NEXT ACTION
+(Phase 1):** the rule-by-rule classification + both rule sets, done in
+`618f7044`.
 
 ## Problem
 

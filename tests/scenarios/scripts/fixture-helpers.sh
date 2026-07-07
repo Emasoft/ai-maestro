@@ -123,44 +123,59 @@ fixture_github_project_v2() {
     local columns="${3:-Backburner,Todo,Design,Dispatch,Dev,Testing,AI Review,Human Review,Complete,Publish,Published,Deploy,Live,Live Auditing,Blocked,Failed,Superseded}"
     need gh
 
+    # All log lines go to stderr in this function: callers capture stdout as
+    # the project number ($(fixture_github_project_v2 ...)), and a stdout log
+    # line would contaminate the captured value (found on the first live run,
+    # TRDD-QB5PWIG3 provisioning).
+    local num
     local existing
     existing=$(gh project list --owner "$owner" --format json \
         | jq -r --arg t "$title" '.projects[] | select(.title==$t) | .number' \
         | head -1)
 
     if [ -n "$existing" ]; then
-        log "project '$title' already exists (number $existing)"
-        echo "$existing"
-        return 0
+        log "project '$title' already exists (number $existing) — reconciling Status options" >&2
+        num="$existing"
+    else
+        log "creating project '$title' under $owner" >&2
+        local out
+        out=$(gh project create --owner "$owner" --title "$title" --format json)
+        num=$(echo "$out" | jq -r '.number')
     fi
 
-    log "creating project '$title' under $owner"
-    local out
-    out=$(gh project create --owner "$owner" --title "$title" --format json)
-    local num
-    num=$(echo "$out" | jq -r '.number')
-
-    # Configure Status field — get its ID
+    # Configure Status field — get its ID. Runs on the existing-project branch
+    # too: replacing the options is idempotent, and skipping it left a
+    # pre-existing/default-options board silently unconfigured.
     local status_field_id
     status_field_id=$(gh project field-list "$num" --owner "$owner" --format json \
         | jq -r '.fields[] | select(.name=="Status") | .id')
+    if [ -z "$status_field_id" ]; then
+        log "FATAL: project $num has no Status field" >&2
+        return 1
+    fi
 
-    local mutation_query='
-mutation($input: UpdateProjectV2SingleSelectFieldInput!) {
-  updateProjectV2SingleSelectField(input: $input) {
-    projectV2Field { ... on ProjectV2SingleSelectField { id } }
-  }
-}'
+    # updateProjectV2Field is the CURRENT GraphQL mutation (verified by
+    # introspection 2026-07-07); the older updateProjectV2SingleSelectField
+    # no longer exists. Variables go as one JSON body via --input so the
+    # nested singleSelectOptions list survives intact.
     local options_json
     options_json=$(echo "$columns" | tr ',' '\n' | jq -R -s -c '
         split("\n") | map(select(length > 0))
         | map({name: ., color: "GRAY", description: ""})')
-    gh api graphql -f query="$mutation_query" \
-        --field "input[fieldId]=$status_field_id" \
-        --field "input[name]=Status" \
-        --raw-field "input[singleSelectOptions]=$options_json" >/dev/null
+    local payload
+    payload=$(jq -n -c --arg fid "$status_field_id" --argjson opts "$options_json" '{
+        query: "mutation($input: UpdateProjectV2FieldInput!) { updateProjectV2Field(input: $input) { projectV2Field { ... on ProjectV2SingleSelectField { id } } } }",
+        variables: { input: { fieldId: $fid, singleSelectOptions: $opts } }
+    }')
+    # Fail-fast: a failed mutation must fail the helper — do not report a
+    # configured board that is not (the original silent >/dev/null swallow
+    # produced exactly that false success on the first live run).
+    if ! echo "$payload" | gh api graphql --input - >/dev/null; then
+        log "FATAL: Status-field option mutation failed for project $num" >&2
+        return 1
+    fi
 
-    log "project $num configured with columns: $columns"
+    log "project $num configured with columns: $columns" >&2
     echo "$num"
 }
 

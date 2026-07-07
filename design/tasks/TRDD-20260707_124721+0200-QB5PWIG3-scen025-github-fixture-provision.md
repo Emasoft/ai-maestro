@@ -134,3 +134,4 @@ vocabulary from the start rather than needing a follow-up correction.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T15:05:00+0200 — IMPLEMENTED (wave W7, by the orchestrator directly — outward-facing ops): repo Emasoft/scen025-kanban-fixture created (public, README, "safe to ignore" description); `scenario-start` tag pushed; local clone at tests/scenarios/fixtures/git/scen025-kanban-fixture (tag exact-match verified); Project #2 "SCEN-025 Fixture Board" provisioned via fixture_github_project_v2 with the 17 ratified Status options (verified via field-list) and linked to the repo (verified via GraphQL repository.projectsV2). fixtures/git/ tree gitignored.

@@ -126,6 +126,15 @@ GitHub Project v2's Status field option limit and `gh` CLI GraphQL
 surface should be re-verified against the current `gh` version before
 landing (the mutation shape may have changed since 2026-04).
 
+**Risk note CONFIRMED by the first live run (2026-07-07, QB5PWIG3
+provisioning):** `updateProjectV2SingleSelectField` no longer exists —
+the current mutation is `updateProjectV2Field` (verified by GraphQL
+introspection). Three defects fixed post-landing: stale mutation name;
+`log` on stdout contaminating the captured project number; a silent
+`>/dev/null` swallow reporting false success on mutation failure. The
+existing-project branch now also reconciles Status options instead of
+skipping configuration.
+
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).

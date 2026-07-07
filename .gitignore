@@ -258,3 +258,6 @@ rust-tools/**/target/
 !/.trashcan/README.txt
 /reports/
 /reports_dev/
+
+# SCEN fixture clones (local git repos — never commit; provisioned by setup scripts / TRDD-QB5PWIG3)
+/tests/scenarios/fixtures/git/

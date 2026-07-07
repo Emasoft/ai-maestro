@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AlertTriangle, Download, Trash2, X, Zap } from 'lucide-react'
+import { AlertTriangle, Archive, Download, Trash2, X, Zap } from 'lucide-react'
 import { useSudo } from '@/contexts/SudoContext'
 import { sudoFetch } from '@/lib/sudo-fetch'
 
@@ -39,7 +39,26 @@ export default function DeleteAgentDialog({
 
   const displayName = agentDisplayName || agentAlias
 
-  const handleDelete = async () => {
+  // TRDD-0301PUYW + TRDD-UMT9HIEB: the dialog now exposes BOTH delete
+  // semantics instead of hardcoding hard=true.
+  //   hard=false ("Move to Cemetery") -> the server (element-management-service
+  //     DeleteAgent G03) archives a <name>-export-<ts>.zip into
+  //     ~/.aimaestro/cemetery/ and tombstones the registry entry (deletedAt).
+  //     The agent is RECOVERABLE from Settings -> Cemetery. This is the safe
+  //     default (UMT9HIEB) so a fat-fingered delete is never unrecoverable.
+  //     Server G09 guards folder deletion with `if (hard && deleteFolder)`, so
+  //     the working directory is always PRESERVED on a soft delete regardless
+  //     of the checkbox -- that's what makes the agent revivable.
+  //   hard=true ("Delete Forever") -> no cemetery archive, registry entry
+  //     removed for good, and the folder is removed too when the checkbox is
+  //     set. This is the old always-hard behavior, now opt-in.
+  // Previously the dialog hardcoded hard=true on EVERY delete, which made the
+  // cemetery unreachable from the UI (always empty) -- the SCEN-002 P0-003
+  // tombstone-pollution concern that motivated the hardcoding is instead
+  // fixed at the SOURCE: GET /api/agents (services/agents-core-service.ts
+  // listAgents) already filters `!a.deletedAt`, so tombstones never pollute
+  // the active list.
+  const handleDelete = async (hard: boolean) => {
     if (confirmText !== agentAlias) return
 
     setPhase('deleting')
@@ -47,31 +66,23 @@ export default function DeleteAgentDialog({
     setDeleteError(null)
 
     try {
-      // Call the API with hard=true (always) + deleteFolder param. DELETE
-      // /api/agents/[id] is classified "strict" in security-registry.json,
-      // so the request will come back 403 sudo_required on the first try;
-      // sudoFetch transparently prompts the user for the governance password
-      // and retries with the X-Sudo-Token header.
-      //
-      // CRITICAL (SCEN-002 P0-003): This dialog is the "Delete Forever"
-      // UI — the user has typed the agent name verbatim to confirm a
-      // permanent deletion. The API defaults to soft-delete (`hard=false`)
-      // which only marks the entry as deletedAt in registry.json; the
-      // agent keeps appearing in the registry file AND the G09 folder
-      // deletion is guarded by `if (hard && deleteFolder)`, so without
-      // `hard=true` the folder is also kept. The UI must pass hard=true
-      // so the registry entry is actually removed and the folder cleanup
-      // runs when requested.
+      // DELETE /api/agents/[id] is classified "strict" in
+      // security-registry.json, so the request comes back 403 sudo_required on
+      // the first try; sudoFetch transparently prompts for the governance
+      // password and retries with the X-Sudo-Token header.
       const baseUrl = hostUrl || ''
       const params = new URLSearchParams()
-      params.set('hard', 'true')
-      if (deleteFolder) params.set('deleteFolder', 'true')
-      const qs = `?${params.toString()}`
+      if (hard) params.set('hard', 'true')
+      // deleteFolder is only honored server-side on a hard delete (G09 guard);
+      // on a soft delete the folder is always kept so the agent stays revivable.
+      if (hard && deleteFolder) params.set('deleteFolder', 'true')
+      const qs = params.toString() ? `?${params.toString()}` : ''
+      const modeLabel = hard ? 'Permanently delete' : 'Move to cemetery'
       const res = await sudoFetch(
         `${baseUrl}/api/agents/${agentId}${qs}`,
         { method: 'DELETE' },
         (reason) => requestSudoToken(
-          `Delete agent "${displayName}"${deleteFolder ? ' and its working directory' : ''}. ${reason}`
+          `${modeLabel} agent "${displayName}"${hard && deleteFolder ? ' and its working directory' : ''}. ${reason}`
         )
       )
       if (!res.ok) {
@@ -264,6 +275,9 @@ export default function DeleteAgentDialog({
                     <div>
                       <p className="text-sm text-amber-400 font-medium">Also delete agent folder</p>
                       <p className="text-xs text-gray-400 mt-0.5 font-mono">{workingDirectory}</p>
+                      {/* TRDD-UMT9HIEB: only "Delete Forever" removes the folder;
+                          "Move to Cemetery" always keeps it so the agent is revivable. */}
+                      <p className="text-[11px] text-gray-500 mt-1">Applies to &ldquo;Delete Forever&rdquo; only — a cemetery move always keeps the folder.</p>
                     </div>
                   </label>
                 )}
@@ -315,10 +329,25 @@ export default function DeleteAgentDialog({
                 >
                   Cancel
                 </button>
+                {/* TRDD-0301PUYW + TRDD-UMT9HIEB: two explicit destinations.
+                    "Move to Cemetery" is the safe, recoverable default
+                    (hard=false); "Delete Forever" is the opt-in permanent
+                    path (hard=true). SCEN-001 clicks the former, SCEN-002 the
+                    latter. */}
                 <button
-                  onClick={handleDelete}
+                  onClick={() => handleDelete(false)}
+                  disabled={confirmText !== agentAlias || deleting || exporting}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                  title="Archive this agent to the cemetery (recoverable). The working directory is preserved."
+                >
+                  <Archive className="w-4 h-4" />
+                  Move to Cemetery
+                </button>
+                <button
+                  onClick={() => handleDelete(true)}
                   disabled={confirmText !== agentAlias || deleting || exporting}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                  title="Permanently delete this agent with no cemetery archive and no recovery."
                 >
                   <Trash2 className="w-4 h-4" />
                   Delete Forever

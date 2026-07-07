@@ -9,7 +9,7 @@ import {
   Cloud, Monitor, Server, Play, Wifi, WifiOff, Folder, Download, Send, RotateCcw,
   GitBranch, FolderGit2, RefreshCw, AlertTriangle,
   Terminal, Shield, Webhook, ScrollText, Users, Puzzle, Palette,
-  ToggleLeft, ToggleRight, Loader2
+  ToggleLeft, ToggleRight, Loader2, Power
 } from 'lucide-react'
 import type { Agent, AgentDocumentation, LiveAgentSessionStatus, Repository } from '@/types/agent'
 import TransferAgentDialog from './TransferAgentDialog'
@@ -350,6 +350,11 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
   const isNoActivityData = isProgramRunning && !activityInfo
   const isSafeToCommand = isIdlePrompt || isIdleNoHook || isNoActivityData || isApiClassState
   const [restarting, setRestarting] = useState(false)
+  // TRDD-8HTHE4LA: separate loading flag for the Wake button (see
+  // handleWakeAgent below) -- distinct from `restarting` so the two
+  // mutually-exclusive actions (Wake vs Restart, gated by isProgramRunning)
+  // never share a spinner state.
+  const [waking, setWaking] = useState(false)
 
   // Live-status chip for the control area — uses the SAME single-source resolver
   // the sidebar badges use, so the detail panel shows the identical state (incl.
@@ -503,6 +508,38 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
       console.error('Restart failed:', err)
     } finally {
       setRestarting(false)
+    }
+  }
+
+  /**
+   * TRDD-8HTHE4LA: Wake a hibernated/offline agent through the R17-gated
+   * wake path (POST /api/agents/[id]/wake), which reinstalls a missing core
+   * plugin BEFORE starting the program (see agents-core-service.ts
+   * ensureCorePluginInstalled). "New Session" above only injects a launch
+   * command into an ALREADY-RUNNING tmux pane via sendCommandToSession and
+   * never calls wakeAgent, so it has no way to reach that gate when the
+   * agent has no live tmux session at all (offline or hibernated) -- this
+   * was the missing entry point TRDD-13MZ7EFO's discovery/startup
+   * reconciliation makes reachable.
+   */
+  const handleWakeAgent = async () => {
+    if (isProgramRunning || waking || !agentId) return
+    setWaking(true)
+    try {
+      const res = await fetch(`${baseUrl}/api/agents/${agentId}/wake`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        console.error('Wake failed:', data.error || res.statusText)
+      }
+      onDataChanged?.()
+    } catch (err) {
+      console.error('Failed to wake agent:', err)
+    } finally {
+      setWaking(false)
     }
   }
 
@@ -869,6 +906,23 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
                         {LiveStatusGlyph && <LiveStatusGlyph className={`w-3.5 h-3.5 ${liveStatusTextColor}`} />}
                         <span className={`text-xs font-medium ${liveStatusTextColor}`}>{liveStatus.label}</span>
                       </div>
+                      {/* Wake button — TRDD-8HTHE4LA: the R17-gated entry point.
+                          Shown whenever the program isn't running (offline OR
+                          hibernated) alongside New Session/Resume Session, since
+                          those two only inject a command into an ALREADY-running
+                          tmux pane and never reach the wake-gate that reinstalls
+                          a missing core plugin. */}
+                      {!isProgramRunning && (
+                        <button
+                          onClick={handleWakeAgent}
+                          disabled={waking}
+                          className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-all shadow-lg hover:shadow-teal-500/25"
+                          title="Wake this agent via the gated wake path — reinstalls the core plugin first if it is missing, then starts the program"
+                        >
+                          {waking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />}
+                          {waking ? 'Waking...' : 'Wake'}
+                        </button>
+                      )}
                       <button
                         onClick={handleNewSession}
                         disabled={isProgramRunning}

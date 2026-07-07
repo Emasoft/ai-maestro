@@ -28,7 +28,7 @@ import path from 'path'
 import os from 'os'
 import type { Session } from '@/types/session'
 import { getAgentBySession, getAgentByName, createAgent, deleteAgentBySession, renameAgentSession } from '@/lib/agent-registry'
-import { loadAgents } from '@/lib/agent-registry'
+import { loadAgents, linkSession, unlinkSession } from '@/lib/agent-registry'
 import { getHosts, getSelfHost, getSelfHostId, isSelf, getHostById } from '@/lib/hosts-config'
 import { persistSession, loadPersistedSessions, unpersistSession } from '@/lib/session-persistence'
 import { parseNameForDisplay } from '@/types/agent'
@@ -214,6 +214,52 @@ async function fetchRemoteSessions(hostUrl: string, hostId: string): Promise<Ses
   } catch (error) {
     console.error(`[Sessions] Error fetching from ${hostUrl}:`, error)
     return []
+  }
+}
+
+/**
+ * TRDD-13MZ7EFO: persist discovered tmux sessions back into the registry so
+ * GET /api/agents/<id> (which reads agent.sessions[] straight from the
+ * registry with no live tmux probe -- see agents-core-service.ts
+ * getAgentById) doesn't diverge from what the /api/sessions discovery path
+ * shows the UI. Before this fix, a freshly-created agent could show "Online"
+ * in the profile Overview (derived from this live discovery response) while
+ * the registry still recorded sessions: [], which meant the lifecycle button
+ * derivation (AgentBadge.tsx isHibernated = !isOnline && sessions.length>0)
+ * could never render Wake/Hibernate for that agent -- making the R17
+ * wake-gate (agents-core-service.ts wakeAgent) unreachable from the UI.
+ *
+ * Reconciles both directions: a live tmux session gets written into the
+ * matching agent's sessions[], and a registry-online agent with no live
+ * tmux session discovered here gets flipped offline. Extracted out of
+ * fetchLocalSessions to keep that function's cognitive complexity in check.
+ */
+async function reconcileRegistrySessions(sessions: Session[]): Promise<void> {
+  try {
+    const registryAgents = loadAgents().filter(a => !a.deletedAt)
+    const onlineByAgentId = new Map<string, Session>()
+    for (const s of sessions) {
+      if (s.agentId) onlineByAgentId.set(s.agentId, s)
+    }
+    for (const regAgent of registryAgents) {
+      const live = onlineByAgentId.get(regAgent.id)
+      const hasOnlineInRegistry = (regAgent.sessions || []).some(s => s.status === 'online')
+      if (live) {
+        const alreadyReconciled = (regAgent.sessions || []).some(
+          s => s.status === 'online' && s.workingDirectory === live.workingDirectory
+        )
+        if (!alreadyReconciled) {
+          await linkSession(regAgent.id, live.name, live.workingDirectory)
+        }
+      } else if (hasOnlineInRegistry) {
+        // Registry says online but no live tmux session was discovered for
+        // this agent -- flip it offline so the lifecycle buttons and the
+        // R17 wake-gate become reachable again on the next wake.
+        await unlinkSession(regAgent.id)
+      }
+    }
+  } catch (err) {
+    console.error('[Sessions] Registry reconciliation failed:', err instanceof Error ? err.message : err)
   }
 }
 
@@ -412,6 +458,10 @@ async function fetchLocalSessions(hostId: string): Promise<Session[]> {
     } catch {
       // OpenClaw not installed or socket dir doesn't exist
     }
+
+    // TRDD-13MZ7EFO: reconcile discovered tmux sessions into the registry
+    // (see reconcileRegistrySessions doc comment above for the full why).
+    await reconcileRegistrySessions(sessions)
 
     return sessions
   } catch (error) {

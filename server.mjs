@@ -1903,8 +1903,14 @@ async function startServer(handleRequest) {
       try {
         // Bootstrap sessions.json from the registry if it went missing (defensive,
         // non-destructive — no-op when the file already has entries), then restore.
-        const { ensureSessionsJsonBootstrapped } = await import('./services/session-reconcile-service.ts')
+        const { ensureSessionsJsonBootstrapped, reconcileOrphanPanesOnBoot } = await import('./services/session-reconcile-service.ts')
         ensureSessionsJsonBootstrapped()
+        // TRDD-13MZ7EFO: kill any tmux pane that survived the restart but has
+        // no program running inside it (bare shell prompt) BEFORE restoring
+        // active agents below -- otherwise the restore's wakeAgent call sees
+        // `runtime.sessionExists() === true`, short-circuits, and never
+        // reaches the R17 wake-gate that reinstalls a missing core plugin.
+        await reconcileOrphanPanesOnBoot()
         const { restoreActiveAgentsOnBoot } = await import('./services/boot-restore-service.ts')
         await restoreActiveAgentsOnBoot()
       } catch (error) {

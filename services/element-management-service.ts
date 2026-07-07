@@ -6332,6 +6332,14 @@ export async function DeleteAgent(
         ops.push(`G03: WARN — cemetery archive failed: ${err instanceof Error ? err.message : err}. Proceeding without archive.`)
       }
     } else {
+      // TRDD-0301PUYW (SCEN-024 P2-PROP-002): a HARD delete intentionally
+      // skips the cemetery archive. hard=true is the UI's explicit "Delete
+      // Forever" path (DeleteAgentDialog "Delete Forever" button) — the user
+      // asked for a permanent, non-recoverable deletion, so producing a
+      // cemetery zip would contradict that intent and leave recoverable data
+      // behind. The recoverable path is hard=false ("Move to Cemetery"), which
+      // takes the archive branch above. This asymmetry is by design, not an
+      // oversight.
       ops.push('G03: Hard-delete — skipping cemetery archive')
     }
 

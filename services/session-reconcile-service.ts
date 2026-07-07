@@ -2,6 +2,8 @@ import fs from 'fs'
 import { loadAgents } from '@/lib/agent-registry'
 import { loadPersistedSessions, savePersistedSessions, type PersistedSession } from '@/lib/session-persistence'
 import { computeSessionName } from '@/types/agent'
+import { getRuntime } from '@/lib/agent-runtime'
+import { getPaneCommand } from '@/services/agents-core-service'
 
 /**
  * Bootstrap `~/.aimaestro/sessions.json` from the registry IF it is missing/empty.
@@ -62,4 +64,61 @@ export function ensureSessionsJsonBootstrapped(): { bootstrapped: boolean; writt
     `from registry (${skipped} skipped: workdir gone)`,
   )
   return { bootstrapped: true, written: synthesized.length, skipped }
+}
+
+/**
+ * TRDD-13MZ7EFO (part 2/2 — reconcile on startup): after a `pm2 restart` (or
+ * any server bounce) a tmux pane can survive while the Claude process inside
+ * it does not -- the pane sits at a bare shell prompt. If left alone, the
+ * next `wakeAgent` call short-circuits on `runtime.sessionExists()` being
+ * true and never reaches the R17 wake-gate (the ONLY path that reinstalls a
+ * missing core plugin -- agents-core-service.ts wakeAgent ~1895-1978),
+ * because it assumes an existing session means Claude is already running.
+ *
+ * We kill (not reuse) any registered agent's pane that exists but is not
+ * running its program, so the next wake creates a fresh, R17-gated session.
+ * Killing is preferred over reusing here specifically because a fresh
+ * session is the only way to force the gate to re-run.
+ */
+export async function reconcileOrphanPanesOnBoot(): Promise<{ checked: number; killed: number }> {
+  const runtime = getRuntime()
+  let checked = 0
+  let killed = 0
+
+  for (const agent of loadAgents()) {
+    if (agent.deletedAt) continue // skip soft-deleted (tombstone) agents
+    const sessionName = agent.name
+    if (!sessionName) continue
+
+    let exists: boolean
+    try {
+      exists = await runtime.sessionExists(sessionName)
+    } catch {
+      continue // tmux unavailable / transient error -- skip, don't misreport
+    }
+    if (!exists) continue
+    checked++
+
+    const { programRunning } = getPaneCommand(sessionName)
+    if (programRunning) continue // Claude (or another program) is alive -- leave it
+
+    try {
+      await runtime.killSession(sessionName)
+      killed++
+      console.log(
+        `[SessionReconcile] Killed orphan shell-only pane for "${sessionName}" ` +
+        `(no program running) -- next wake will re-run the R17 gate`,
+      )
+    } catch (err) {
+      console.error(
+        `[SessionReconcile] Failed to kill orphan pane for "${sessionName}":`,
+        err instanceof Error ? err.message : err,
+      )
+    }
+  }
+
+  if (checked > 0) {
+    console.log(`[SessionReconcile] Orphan pane sweep: checked ${checked} live session(s), killed ${killed} shell-only orphan(s)`)
+  }
+  return { checked, killed }
 }

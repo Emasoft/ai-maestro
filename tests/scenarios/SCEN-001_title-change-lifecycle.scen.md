@@ -378,7 +378,7 @@ author: AI Maestro Team
 - **Verify:** Teams tab no longer shows `scen001-title-team`. `cos-scen001-title-team` no longer in sidebar. Screenshot: SCEN-001/S034b-team-deleted.png
 
 #### S035: Soft-delete primary test agent via UI (cemetery path)
-- **Action:** Click delete button in profile panel -> Danger Zone -> "Delete Agent". Proposal 3 (2026-04-20) — DO NOT check "Also delete agent folder"; leaving the checkbox unchecked triggers a soft-delete that preserves the workdir AND archives to the cemetery. Type `scen-test-title-agent` -> click "Delete Forever". When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Click delete button in profile panel -> Danger Zone -> "Delete Agent". Type `scen-test-title-agent` -> click **"Move to Cemetery"** (TRDD-0301PUYW: the soft-delete button — `hard=false` — which archives to the cemetery AND preserves the workdir; the checkbox is irrelevant on this path because a cemetery move always keeps the folder). When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Test agent removed from registry, archived to cemetery, workdir on disk preserved for revive.
 - **Creates:** Cemetery archive entry (zip file with manifest + registry snapshot + agent.db). Workdir at `~/agents/scen-test-title-agent/` remains.
 - **Modifies:** Agent registry (entry removed)

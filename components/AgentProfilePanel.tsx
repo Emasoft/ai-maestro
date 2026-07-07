@@ -22,6 +22,8 @@ import {
   Lock,
   MoreVertical,
   Trash2,
+  Moon,
+  Power,
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { useAgentLocalConfig } from '@/hooks/useAgentLocalConfig'
@@ -121,6 +123,57 @@ export default function AgentProfilePanel({
     await rawRefetch() // Wait for config to fully reload
     onAgentDataChangedRef.current?.() // Sidebar refresh last
   }, [rawRefetch])
+
+  // TRDD-8HTHE4LA: Hibernate/Wake in the profile-panel "Agent Actions" kebab.
+  // Before this, the ONLY hibernate affordance anywhere was the sidebar
+  // AgentBadge's hover-gated MoreVertical dropdown (components/AgentBadge.tsx)
+  // -- a user looking at an online agent's PROFILE had no way to hibernate it
+  // from there, and this panel had no Wake entry point either. These call the
+  // same POST /api/agents/[id]/{hibernate,wake} endpoints AgentList.tsx's
+  // handleHibernate/handleWake use, then reuse this file's own `refetch` (the
+  // same reload-then-notify-sidebar path every other mutation in this panel
+  // already goes through) so the profile panel and the sidebar converge on
+  // the same registry state.
+  const [lifecycleBusy, setLifecycleBusy] = useState(false)
+  const handleHibernateFromMenu = useCallback(async () => {
+    if (!agentId || lifecycleBusy) return
+    setLifecycleBusy(true)
+    try {
+      const res = await fetch(`${hostUrl || ''}/api/agents/${agentId}/hibernate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        console.error('[AgentProfilePanel] Hibernate failed:', data.error || res.statusText)
+      }
+      await refetch()
+    } catch (err) {
+      console.error('[AgentProfilePanel] Failed to hibernate agent:', err)
+    } finally {
+      setLifecycleBusy(false)
+    }
+  }, [agentId, hostUrl, lifecycleBusy, refetch])
+  const handleWakeFromMenu = useCallback(async () => {
+    if (!agentId || lifecycleBusy) return
+    setLifecycleBusy(true)
+    try {
+      const res = await fetch(`${hostUrl || ''}/api/agents/${agentId}/wake`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        console.error('[AgentProfilePanel] Wake failed:', data.error || res.statusText)
+      }
+      await refetch()
+    } catch (err) {
+      console.error('[AgentProfilePanel] Failed to wake agent:', err)
+    } finally {
+      setLifecycleBusy(false)
+    }
+  }, [agentId, hostUrl, lifecycleBusy, refetch])
   const [topTab, setTopTab] = useState<TopTab>('overview')
   const [activeTab, setActiveTab] = useState<TabId>('role')
   const [browsePath, setBrowsePath] = useState<string | null>(null)
@@ -416,6 +469,41 @@ export default function AgentProfilePanel({
                 role="menu"
                 className="absolute right-0 top-full mt-1 w-52 rounded-md border border-gray-700 bg-gray-900 shadow-xl z-20"
               >
+                {/* TRDD-8HTHE4LA: Hibernate (online) / Wake (offline or
+                    hibernated) -- see handleHibernateFromMenu/handleWakeFromMenu
+                    doc comment above for why these live here instead of only
+                    in the sidebar's AgentBadge dropdown. */}
+                {agentId && (
+                  sessionStatus?.status === 'online' ? (
+                    <button
+                      role="menuitem"
+                      type="button"
+                      disabled={lifecycleBusy}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        handleHibernateFromMenu()
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-amber-300 hover:bg-amber-900/30 hover:text-amber-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-left"
+                    >
+                      <Moon className="w-3.5 h-3.5" />
+                      Hibernate
+                    </button>
+                  ) : (
+                    <button
+                      role="menuitem"
+                      type="button"
+                      disabled={lifecycleBusy}
+                      onClick={() => {
+                        setActionsOpen(false)
+                        handleWakeFromMenu()
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-emerald-300 hover:bg-emerald-900/30 hover:text-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-left"
+                    >
+                      <Power className="w-3.5 h-3.5" />
+                      Wake
+                    </button>
+                  )
+                )}
                 <button
                   role="menuitem"
                   type="button"

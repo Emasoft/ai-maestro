@@ -3,7 +3,7 @@ trdd-id: 13MZ7EFO
 title: Reconcile registry sessions with live tmux state so lifecycle buttons and the R17 wake-gate become reachable
 column: planned
 created: 2026-07-07T03:43:13+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T15:43:12+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 0
@@ -71,3 +71,4 @@ buttons) and the wake-gate scenarios.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Implement together with 8HTHE4LA.
+- 2026-07-07T15:43:12+0200 — IMPLEMENTED (wave W5): reconcileRegistrySessions() persists discovered tmux sessions into registry sessions[] (flips online↔offline) on the /api/sessions discovery path; reconcileOrphanPanesOnBoot() kills shell-only panes at server.mjs startup before boot-restore so the next wake re-runs the R17 gate.

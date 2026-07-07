@@ -1189,12 +1189,22 @@ Normal plugins are general-purpose tools (skills, MCP servers, hooks, etc.) inst
 **Normal plugins are NEVER put in `~/agents/role-plugins/`.** They are managed entirely by Claude CLI's standard plugin system (`~/.claude/plugins/cache/`, `settings.json`, `settings.local.json`).
 
 **Role-plugin conversion rules:**
-- When converting a role-plugin from one client to another, the converter:
-  - PRESERVES the original plugin name (no suffix)
+- When converting a role-plugin from one client to another, the converter
+  (per R20.1 naming, R20.23 duplication, R20.26 no-renaming — TRDD-39ABGST4
+  resolved the old "no suffix / never overwrite" wording here as stale):
+  - Computes the TARGET name: a Claude target keeps the bare `<name>`; every
+    other client gets the `-<client>` suffix (`ai-maestro-programmer-agent` →
+    `ai-maestro-programmer-agent-codex`). The suffix is load-bearing: role
+    marketplaces share the bare `ai-maestro-local-roles-marketplace` name
+    across clients, so the suffixed plugin name is what keeps
+    `<name>@<marketplace>` keys unique per client.
   - CHANGES `compatible-clients` in `.agent.toml` to the target client
-  - Enforces fourfold identity with the same name
-  - Stores in `~/agents/role-plugins/` (same location)
-  - NEVER overwrites an existing folder — conversion fails if folder exists
+  - Enforces fourfold identity with the TARGET name (folder, plugin.json,
+    `.agent.toml`, main-agent .md all carry the suffixed name for non-Claude)
+  - Stores under the per-client marketplace dir inside `~/agents/role-plugins/`
+    (`<client>-roles-marketplace/`; bare `roles-marketplace/` for Claude)
+  - OVERWRITES an existing same-named folder (update in place, R20.26) —
+    plugin names are immutable identifiers; there is no rename path
 - When converting an ordinary (non-role) plugin, the converter:
   - ADDS `-<client>` suffix to the name for non-Claude targets (e.g., `my-formatter-codex`); Claude-targeted customs keep their original name
   - Stores under `~/agents/custom-plugins/<client>-custom-marketplace/<name>-<client>/` (per R20.28; use `custom-marketplace/` for Claude)

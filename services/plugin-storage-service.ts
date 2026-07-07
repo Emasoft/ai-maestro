@@ -185,8 +185,12 @@ export async function convertAndStorePlugin(
   for (const targetClient of targetClients) {
     if (isRolePlugin) {
       // Role-plugin: emit to ~/agents/role-plugins/<client>-roles-marketplace/<name>/
-      // R20.3: each client gets its own marketplace dir; plugin stored directly inside (no plugins/ subfolder)
-      // R20.4: multi-client plugins are duplicated — one copy per marketplace
+      // R20.1 (naming convention, ex-"R20.3 v3.7.0" before renumbering): each client
+      // gets its own marketplace dir; plugin stored directly inside (no plugins/
+      // subfolder); non-Claude names carry the -<client> suffix (load-bearing —
+      // role marketplaces share the bare LOCAL_MARKETPLACE_NAME across clients,
+      // so the suffix keeps <name>@<marketplace> keys unique per client).
+      // R20.23: multi-client plugins are duplicated — one copy per marketplace
       const rolePluginName = targetClient === 'claude' ? sourceName : `${sourceName}-${targetClient}`
       const roleMarketplaceDir = getRoleMarketplacePathForClient(targetClient)
       const targetDir = path.join(roleMarketplaceDir, rolePluginName)

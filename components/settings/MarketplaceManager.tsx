@@ -81,6 +81,11 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
   const [securityReport, setSecurityReport] = useState<{ name: string; summary: string; report: string } | null>(null)
   const [addUrl, setAddUrl] = useState('')
   const [addingMkt, setAddingMkt] = useState(false)
+  // TRDD-4IYPNZWT: 'url' registers a GitHub-hosted marketplace, 'path' registers a
+  // local directory (e.g. a fixture or a Haephestos-built marketplace). Same input,
+  // different submit payload — kept as plain text in both modes (no native file
+  // picker) so headless UI automation can drive it via page.fill(...).
+  const [addMode, setAddMode] = useState<'url' | 'path'>('url')
   // Lazy version + metadata check state
   const [updateChecks, setUpdateChecks] = useState<Record<string, {
     checking: boolean
@@ -266,12 +271,16 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
     if (!addUrl.trim()) return
     setAddingMkt(true)
     try {
+      // TRDD-4IYPNZWT: send url or path depending on the selected mode.
+      const payload = addMode === 'path'
+        ? { action: 'add-marketplace', path: addUrl.trim() }
+        : { action: 'add-marketplace', url: addUrl.trim() }
       const res = await sudoFetch(
         '/api/settings/marketplaces',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'add-marketplace', url: addUrl.trim() }),
+          body: JSON.stringify(payload),
         },
         (reason) => requestSudoToken(reason),
       )
@@ -346,27 +355,52 @@ export default function MarketplaceManager({ expandMarketplace, onNavigateComple
       )}
 
       {/* Add marketplace */}
-      <div className="flex items-center gap-2 mb-3">
-        <div className="relative flex-1">
-          <Plus className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
-          <input
-            type="text"
-            placeholder="Add marketplace from GitHub URL..."
-            value={addUrl}
-            onChange={e => setAddUrl(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleAddMarketplace()}
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-800/50 border border-gray-700 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500"
-          />
+      <div className="mb-3">
+        {/* TRDD-4IYPNZWT: GitHub URL vs local directory mode toggle */}
+        <div className="flex items-center gap-3 mb-1.5 text-[10px] text-gray-400">
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input
+              type="radio"
+              name="add-marketplace-mode"
+              checked={addMode === 'url'}
+              onChange={() => setAddMode('url')}
+              className="accent-blue-500"
+            />
+            GitHub URL
+          </label>
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input
+              type="radio"
+              name="add-marketplace-mode"
+              checked={addMode === 'path'}
+              onChange={() => setAddMode('path')}
+              className="accent-blue-500"
+            />
+            Local directory
+          </label>
         </div>
-        {addUrl.trim() && (
-          <button
-            onClick={handleAddMarketplace}
-            disabled={addingMkt}
-            className="px-2.5 py-1.5 text-[10px] font-medium rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/20 hover:bg-blue-500/30 transition-colors disabled:opacity-50"
-          >
-            {addingMkt ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Add'}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Plus className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+            <input
+              type="text"
+              placeholder={addMode === 'path' ? 'Add marketplace from local directory path...' : 'Add marketplace from GitHub URL...'}
+              value={addUrl}
+              onChange={e => setAddUrl(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAddMarketplace()}
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-800/50 border border-gray-700 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+          {addUrl.trim() && (
+            <button
+              onClick={handleAddMarketplace}
+              disabled={addingMkt}
+              className="px-2.5 py-1.5 text-[10px] font-medium rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/20 hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+            >
+              {addingMkt ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Add'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Search + Update All */}

@@ -3,7 +3,7 @@ trdd-id: VGTXJTZ3
 title: Add a --name flag to the amp CLI scripts resolving through the agents index
 column: planned
 created: 2026-07-07T03:43:13+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T15:00:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -51,3 +51,4 @@ signature-verification path.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Implementer must first verify the gap still exists (recent .index.json resolver work may cover it); downgrade to no-change-needed if moot.
+- 2026-07-07T15:00:52+0200 — IMPLEMENTED (wave W6): verified the gap was still real — grepped scripts/amp-send.sh and found no `--name` handling; the only existing `.index.json` name resolution (`_index_lookup` / the TRDD-5KKO25RO `CLAUDE_AGENT_NAME` env-var path) lives inside amp-helper.sh and requires an env var, not a CLI flag, and silently falls back to picking the first case-insensitive match rather than erroring with candidates on ambiguity — not sufficient for the requested `--name` flag semantics. Added `scripts/amp-name-resolve.sh` (new shared resolver, `_amp_resolve_name_to_id`) sourced on-demand from the pre-source phase of `amp-send.sh`, `amp-inbox.sh`, `amp-read.sh`, `amp-reply.sh`, `amp-download.sh`; `--name <agentName>` now resolves via `~/.agent-messaging/agents/.index.json` (exact match, then case-insensitive with explicit ambiguity detection) and sets `CLAUDE_AGENT_ID` before `amp-helper.sh` is sourced, exactly like `--id`. Bogus/ambiguous names exit 1 with a candidates list on stderr. `install-messaging.sh`'s `amp-*.sh` glob (line 567) already picks up the new file for `~/.local/bin/` reinstall — no installer change needed. `bash -n` clean on all 6 files.

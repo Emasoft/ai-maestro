@@ -45,6 +45,7 @@ import { projectIRToUniversal } from '@/lib/converter/universal-ir'
 import type { ProjectIR, ConvertedFile } from '@/lib/converter/types'
 import {
   CUSTOM_MARKETPLACE_NAME,
+  LOCAL_MARKETPLACE_NAME,
   getCustomPluginsContainerPath,
   getRolePluginsContainerPath,
   getCustomAbstractDir,
@@ -202,11 +203,18 @@ export async function convertAndStorePlugin(
         await writeConvertedAgentProfile(targetDir, universalIR, rolePluginName, targetClients)
         // Ensure fourfold identity
         await ensureFourfoldIdentity(targetDir, rolePluginName)
-        // Register with the local roles marketplace (claude-only, legacy path)
+        // Register with the local roles marketplace. Claude keeps its own
+        // legacy path (role-plugin-service.ts); every other client goes
+        // through the generic per-client ROLE marketplace helpers above,
+        // which always name the manifest LOCAL_MARKETPLACE_NAME — never a
+        // `-<client>`-infixed string (TRDD-YFCNYVYB).
         if (targetClient === 'claude') {
           const { ensureMarketplace, updateMarketplaceManifest } = await import('@/services/role-plugin-service')
           await ensureMarketplace()
           await updateMarketplaceManifest(rolePluginName, universalIR.meta.description || '', universalIR.meta.version)
+        } else {
+          await ensureRoleClientMarketplace(targetClient)
+          await updateRoleClientMarketplaceManifest(targetClient, rolePluginName, universalIR.meta.description || '', universalIR.meta.version)
         }
         emittedDirs[targetClient] = targetDir
       }
@@ -957,5 +965,105 @@ async function updateCustomClientMarketplaceManifest(
     )
   } else {
     console.warn(`[plugin-storage] marketplace manifest update skipped for unsupported client "${targetClient}" — no serializer yet (plugin "${pluginName}" emitted but not indexed). TRDD-TBGGUA2V P5.`)
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Per-client ROLE marketplace manifest (TRDD-YFCNYVYB)
+//
+// Mirrors the custom-client helpers above, but the manifest `name` is the
+// SHARED bare LOCAL_MARKETPLACE_NAME constant for every client — never a
+// `-<client>`-suffixed string. LOCAL_MARKETPLACE_NAME is the canonical
+// logical identifier for "the local role-plugins marketplace" across every
+// client's plugin-key strings (`<plugin>@ai-maestro-local-roles-marketplace`);
+// only the per-client STORAGE folder (`<client>-roles-marketplace/`) varies.
+// Claude itself is handled separately by role-plugin-service.ts's own
+// ensureMarketplace()/updateMarketplaceManifest() (its `.claude-plugin/`
+// manifest already uses LOCAL_MARKETPLACE_NAME) — these helpers cover every
+// OTHER client, which previously had no manifest writer at all.
+// ═══════════════════════════════════════════════════════════════
+
+/** Load the current plugin entries from a per-client ROLE marketplace manifest. */
+async function readRoleClientMarketplacePlugins(
+  targetClient: string
+): Promise<MarketplacePluginEntry[]> {
+  const marketplaceDir = getRoleMarketplacePathForClient(targetClient)
+  const claudePath = path.join(marketplaceDir, '.claude-plugin', 'marketplace.json')
+  const codexPath = path.join(marketplaceDir, 'marketplace.json')
+  const manifestPath = existsSync(claudePath) ? claudePath : existsSync(codexPath) ? codexPath : null
+  if (!manifestPath) return []
+
+  const raw = await loadJsonSafe(manifestPath)
+  const plugins = (raw.plugins || []) as unknown[]
+  const out: MarketplacePluginEntry[] = []
+  for (const p of plugins) {
+    if (!p || typeof p !== 'object') continue
+    const plug = p as Record<string, unknown>
+    let relativePath = ''
+    const src = plug.source
+    if (typeof src === 'string') relativePath = src
+    else if (src && typeof src === 'object' && typeof (src as Record<string, unknown>).path === 'string') {
+      relativePath = (src as Record<string, string>).path
+    }
+    out.push({
+      name: String(plug.name ?? ''),
+      description: String(plug.description ?? ''),
+      version: String(plug.version ?? '0.0.0'),
+      relativePath,
+      category: typeof plug.category === 'string' ? plug.category : undefined,
+    })
+  }
+  return out
+}
+
+/**
+ * Ensure the per-client ROLE marketplace folder + manifest exist for
+ * `targetClient` (any client except 'claude', which manages its own
+ * manifest via role-plugin-service.ts). Seeds an empty manifest named
+ * LOCAL_MARKETPLACE_NAME when absent — never a `-<client>`-suffixed name.
+ */
+async function ensureRoleClientMarketplace(targetClient: string): Promise<void> {
+  if (targetClient === 'claude') return
+  const marketplaceDir = getRoleMarketplacePathForClient(targetClient)
+  await mkdir(marketplaceDir, { recursive: true })
+
+  const existingPlugins = await readRoleClientMarketplacePlugins(targetClient)
+  if (existingPlugins.length === 0) {
+    // Graceful degradation (TRDD-TBGGUA2V P5), same rationale as
+    // ensureCustomClientMarketplace: an unsupported client's serializer
+    // throws, so skip-with-warning instead of crashing the conversion.
+    if (isMarketplaceSupported(targetClient)) {
+      await writeMarketplaceManifest(marketplaceDir, targetClient, LOCAL_MARKETPLACE_NAME, [])
+    } else {
+      console.warn(`[plugin-storage] role marketplace manifest skipped for unsupported client "${targetClient}" — no serializer yet (folder scaffolding kept). TRDD-TBGGUA2V P5.`)
+    }
+  }
+}
+
+/**
+ * Register (or update) a converted role-plugin inside a per-client ROLE
+ * marketplace manifest, always naming the manifest LOCAL_MARKETPLACE_NAME
+ * (TRDD-YFCNYVYB Option A) instead of a per-client-infixed string.
+ */
+async function updateRoleClientMarketplaceManifest(
+  targetClient: string,
+  pluginName: string,
+  description: string,
+  version: string
+): Promise<void> {
+  if (targetClient === 'claude') return
+  const marketplaceDir = getRoleMarketplacePathForClient(targetClient)
+  const existing = await readRoleClientMarketplacePlugins(targetClient)
+  const filtered = existing.filter(p => p.name !== pluginName)
+  filtered.push({
+    name: pluginName,
+    description,
+    version,
+    relativePath: `./${pluginName}`,
+  })
+  if (isMarketplaceSupported(targetClient)) {
+    await writeMarketplaceManifest(marketplaceDir, targetClient, LOCAL_MARKETPLACE_NAME, filtered)
+  } else {
+    console.warn(`[plugin-storage] role marketplace manifest update skipped for unsupported client "${targetClient}" — no serializer yet (plugin "${pluginName}" emitted but not indexed). TRDD-TBGGUA2V P5.`)
   }
 }

@@ -18,11 +18,20 @@
 
 set -eo pipefail
 
-# Pre-source: extract --id to set agent identity before helper resolves it
+# Pre-source: extract --id/--name to set agent identity before helper resolves it
+# (TRDD-VGTXJTZ3: --name resolves through ~/.agent-messaging/agents/.index.json)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _amp_prev=""
 for _amp_arg in "$@"; do
     if [ "$_amp_prev" = "--id" ]; then
         export CLAUDE_AGENT_ID="$_amp_arg"
+        break
+    fi
+    if [ "$_amp_prev" = "--name" ]; then
+        source "${SCRIPT_DIR}/amp-name-resolve.sh"
+        _amp_resolved_id="$(_amp_resolve_name_to_id "$_amp_arg")" || exit 1
+        export CLAUDE_AGENT_ID="$_amp_resolved_id"
+        unset _amp_resolved_id
         break
     fi
     _amp_prev="$_amp_arg"
@@ -30,7 +39,6 @@ done
 unset _amp_prev _amp_arg
 
 # Source helper functions
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/amp-helper.sh"
 
 # Parse arguments
@@ -54,6 +62,7 @@ show_help() {
     echo "  --dest, -d DIR    Destination directory (default: ~/.agent-messaging/attachments/<msg-id>/)"
     echo "  --sent, -s        Download from sent folder instead of inbox"
     echo "  --id UUID         Operate as this agent (UUID from config.json)"
+    echo "  --name NAME       Operate as this agent, resolved by name (TRDD-VGTXJTZ3)"
     echo "  --help, -h        Show this help"
     echo ""
     echo "Examples:"
@@ -79,6 +88,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --id)
             shift 2  # Already handled in pre-source parsing
+            ;;
+        --name)
+            shift 2  # Already handled in pre-source parsing (TRDD-VGTXJTZ3)
             ;;
         --help|-h)
             show_help

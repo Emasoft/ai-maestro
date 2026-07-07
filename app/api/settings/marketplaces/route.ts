@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { readFile, readdir, stat, rm, writeFile, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { join, basename } from 'path'
 import os from 'os'
 import semver from 'semver'
 import { LOCAL_MARKETPLACE_NAME, MAIN_PLUGIN_NAME, MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
@@ -677,7 +677,8 @@ export async function POST(req: NextRequest) {
       return await handleUpdateMarketplace(body.marketplaceName)
     }
     if (action === 'add-marketplace') {
-      return await handleAddMarketplace(url)
+      // TRDD-4IYPNZWT: accept either a GitHub URL or a local directory path.
+      return await handleAddMarketplace({ url, path: (body as { path?: string }).path })
     }
     if (action === 'security-check') {
       return await handleSecurityCheck(pluginKey)
@@ -1326,10 +1327,71 @@ async function handleCheckUpdates(marketplaceName?: string, force?: boolean) {
   return NextResponse.json(result)
 }
 
-/** Clone a GitHub marketplace repo */
-async function handleAddMarketplace(url?: string) {
+/**
+ * Allow-listed roots for a local-directory marketplace source (TRDD-4IYPNZWT).
+ * A `path` source is an arbitrary local read — restrict it to the user's own
+ * home directory (fixtures, cloned repos, Haephestos output all live there)
+ * and explicitly block common system directories even if they happen to sit
+ * under HOME on some install. This mirrors the isSystemOwner/sudo gating
+ * CreateMarketplace already requires — this is a defense-in-depth narrowing
+ * of WHICH local paths are eligible, not a replacement for that auth check.
+ */
+const MARKETPLACE_PATH_BLOCKLIST = ['/etc', '/usr', '/private/etc', '/private/var/db', '/System']
+
+function isPathAllowedForMarketplace(candidate: string): boolean {
+  if (!candidate || !candidate.startsWith('/')) return false
+  for (const blocked of MARKETPLACE_PATH_BLOCKLIST) {
+    if (candidate === blocked || candidate.startsWith(`${blocked}/`)) return false
+  }
+  return candidate === HOME || candidate.startsWith(`${HOME}/`)
+}
+
+/** Register a local-directory marketplace (TRDD-4IYPNZWT). */
+async function handleAddMarketplaceFromPath(localPath: string) {
+  if (!isPathAllowedForMarketplace(localPath)) {
+    return NextResponse.json({ error: 'path must be inside the home directory and not a system directory' }, { status: 400 })
+  }
+  if (!existsSync(localPath)) {
+    return NextResponse.json({ error: `Directory not found: ${localPath}` }, { status: 400 })
+  }
+
+  // Prefer the manifest's own declared name; fall back to the directory basename.
+  const manifestJson = await readJsonSafe(join(localPath, '.claude-plugin', 'marketplace.json'))
+  const manifestName = manifestJson && typeof manifestJson.name === 'string' ? manifestJson.name : null
+  const marketplaceName = manifestName || basename(localPath)
+
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(marketplaceName)) {
+    return NextResponse.json({ error: `Invalid marketplace name "${marketplaceName}" derived from path. Must match /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/` }, { status: 400 })
+  }
+
+  const result = await CreateMarketplace({ name: marketplaceName, source: { path: localPath } }, { isSystemOwner: true as const })
+  if (!result.success) {
+    const errStr = String(result.error || '')
+    if (errStr.includes('already') || errStr.includes('exists')) {
+      return NextResponse.json({ error: `Marketplace "${marketplaceName}" already exists` }, { status: 409 })
+    }
+    return NextResponse.json({ error: `Failed to add marketplace: ${errStr.substring(0, 500)}` }, { status: 500 })
+  }
+
+  const settings = await readJsonSafe(SETTINGS_PATH) || {}
+  const ekm = (settings.extraKnownMarketplaces || {}) as Record<string, unknown>
+  ekm[marketplaceName] = { source: { source: 'local', path: localPath } }
+  settings.extraKnownMarketplaces = ekm
+  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
+
+  return NextResponse.json({ success: true, action: 'add-marketplace', marketplaceName, path: localPath })
+}
+
+/** Clone a GitHub marketplace repo, or register a local directory marketplace (TRDD-4IYPNZWT). */
+async function handleAddMarketplace({ url, path: localPath }: { url?: string; path?: string }) {
+  if (!url && !localPath) {
+    return NextResponse.json({ error: 'url or path is required' }, { status: 400 })
+  }
+  if (localPath) {
+    return await handleAddMarketplaceFromPath(localPath)
+  }
   if (!url) {
-    return NextResponse.json({ error: 'url is required' }, { status: 400 })
+    return NextResponse.json({ error: 'url or path is required' }, { status: 400 })
   }
 
   // Extract owner/repo from GitHub URL

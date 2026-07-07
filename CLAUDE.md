@@ -1639,9 +1639,9 @@ Two test scripts exist for validating the Agent Messaging Protocol:
 
 ### UI Scenario Tests
 
-Browser-based UI scenario tests that verify end-to-end workflows through Chrome DevTools Protocol (CDP).
+Browser-based UI scenario tests that verify end-to-end workflows through the `dev-browser` CLI (sandboxed JS driving a shared headless Chromium).
 
-**Rules & Format:** `tests/scenarios/SCENARIOS_TESTS_RULES.md` — 12 mandatory rules: SAFE-SETUP, 0-IMPACT, STATE-WIPE, FIX-AS-YOU-GO, TRACK-AND-REPORT, STICK-TO-UI, CHROME-TOOL CDP, REPORT-FORMAT, PHOTOSTORY, 11th-HOUR analysis, SUDO-MODE.
+**Rules & Format:** `tests/scenarios/SCENARIOS_TESTS_RULES.md` — 15 mandatory rules (Rule 0–14): WHO-YOU-ARE, CLEAN-AFTER-YOURSELF, 0-IMPACT, STATE-WIPE, FIX-AS-YOU-GO, TRACK-AND-REPORT, STICK-TO-UI, SAFE-SETUP, DEV-BROWSER, REPORT-FORMAT, PHOTOSTORY, 11th-HOUR analysis, SUDO-MODE, AUTONOMOUS-PROTOCOL, REPORTS-TO-PROJECT-ROOT.
 
 > **Canonical vs loaded copy:** the rules file is git-tracked at `tests/scenarios/SCENARIOS_TESTS_RULES.md`. The Claude Code harness also auto-loads `.claude/rules/SCENARIOS_TESTS_RULES.md` on every session start, but that path is a **symlink** to the tracked file so the two CAN NOT drift. When updating the rules, edit only the tracked file; the symlink picks up changes automatically.
 
@@ -1735,7 +1735,7 @@ Cross-client model conversion is in `lib/converter/rewrite/model.ts`.
 **Family-based, version-proof.** Claude ships frontier models faster than a
 static table can track — Opus went 4.6 → 4.7 → 4.8 inside one month (Claude
 Code 2.1.142 → 2.1.154, Opus 4.8 GA on 2026-05-28). So the **Claude → X**
-direction is keyed by *family alias* (`opus`/`sonnet`/`haiku`) and any concrete
+direction is keyed by *family alias* (`opus`/`sonnet`/`haiku`/`fable`) and any concrete
 id is normalized to its family before lookup via `claudeFamily()`:
 `claude-opus-4-8`, the 1M variant `claude-opus-4-8[1m]`, and a hypothetical
 `claude-opus-5` all collapse to `opus`. New Claude releases need **no edit** to
@@ -1749,8 +1749,9 @@ version, so a converted agent always resolves to the current Claude model.
 | `opus` | `gpt-5.5` | Newest Codex frontier model (the recommended default) |
 | `sonnet` | `gpt-5.3-codex` | Industry-leading coding model |
 | `haiku` | `gpt-5.4-mini` | Fast, efficient for subagents |
+| `fable` | `gpt-5.5` | Claude 5 flagship family (`claude-fable-*`) → Codex frontier default |
 
-**Codex → Claude** (reverse — emits the alias, which tracks the latest model):
+**Codex → Claude** (reverse — emits the alias, which tracks the latest model; the reverse direction never emits `fable` — flagship Codex ids reverse-map to `opus`, a deliberate choice in `model.ts`):
 
 | Codex Model | Claude alias |
 |-------------|-------------|
@@ -1772,8 +1773,9 @@ A Codex `gpt-5.x` id the table doesn't list yet (a freshly-released frontier mod
 | `opus` | gemini-2-pro |
 | `sonnet` | gemini-2-flash |
 | `haiku` | gemini-3-flash |
+| `fable` | gemini-2-pro |
 
-Tests: `tests/unit/converter-model-mapping.test.ts` (14 cases incl. Opus 4.8 `[1m]`, future `claude-opus-5`, round-trip stability).
+Tests: `tests/unit/converter-model-mapping.test.ts` (incl. Opus 4.8 `[1m]`, the Claude 5 family — `claude-sonnet-5`, `claude-fable-*` — and round-trip stability).
 
 ### Universal Plugin IR Architecture
 

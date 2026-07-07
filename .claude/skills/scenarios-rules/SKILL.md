@@ -75,7 +75,7 @@ Incorrect: curl DELETE /api/agents — bypasses sudo-mode, blocked by auth.
 
 **Example 2 — Rule 10 screenshot path**:
 Input: step 14 of SCEN-009 at run time 2026-04-14T14:30:00Z.
-Output: tests/scenarios/screenshots/SCEN-009_20260414T143000Z/S014_20260414T143000Z_task-sent.jpg
+Output: reports/scenarios-runner/screenshots/SCEN-009_20260414T143000Z/S014_20260414T143000Z_task-sent.jpg
 Incorrect: screenshots/SCEN-009/baseline.png — no timestamp, wrong format, cross-run contamination risk.
 
 ## Resources

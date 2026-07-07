@@ -3,7 +3,7 @@ trdd-id: 5KKO25RO
 title: AMP local-delivery cryptographic binding — verify sigs, lock keys, host identity
 column: dev
 created: 2026-07-02T13:58:14+0200
-updated: 2026-07-02T19:05:00+0200
+updated: 2026-07-07T03:25:00+0200
 current-owner: claude-opus-session
 assignee: claude-opus-session
 priority: 1
@@ -32,6 +32,12 @@ external-refs: []
 # TRDD-5KKO25RO — AMP local-delivery cryptographic binding
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-02
+
+**▶ GATE NOTE 2026-07-07 (fork audit C1):** Layer A is CODE-complete (fix-1..fix-3c +
+EHT all landed and commit-verified). `column: dev` is HELD deliberately: the frontmatter
+`review-requirements: [human-review]` gate is the one remaining step — on USER sign-off,
+transition to `complete`. Recorded because the previous STATE said "fully complete"
+without stating this gate, which read as a column contradiction.
 
 **Approved plan:** `/Users/emanuelesabetta/.claude/plans/ticklish-dreaming-rabbit.md`
 (user-approved 2026-07-02). **Grounding report:** `reports/amp-identity-security/…`

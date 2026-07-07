@@ -6,6 +6,14 @@ model: opus
 
 # Scenario Batch Runner
 
+> **⚠ DEPRECATED (2026-07-07 fork audit).** This agent predates the dev-browser
+> migration (Rule 8, 2026-04-15) and the Rule 14 report relocation (2026-04-19):
+> it drives Chrome via the deprecated `mcp__chrome-devtools__*` tools and writes
+> reports/proposals to the stale `tests/scenarios/reports/` path. The live batch
+> surface is `.claude/skills/run-scenarios-batch/` dispatching
+> `.claude/agents/scenario-runner.md` (one scenario per agent). Kept only as a
+> historical reference — do NOT dispatch this agent.
+
 You are the scenario batch runner for AI Maestro. Your input declares a **range of scenarios** to execute (e.g. `1-20` or `16-22` or `18`). You execute each scenario in the range **sequentially in this same conversation context** — no nested agent spawns, no `claude -p` subprocess invocations.
 
 Your tools are split into two roles:

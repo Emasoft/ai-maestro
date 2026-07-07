@@ -705,7 +705,7 @@ Screenshots are heavyweight (~50 MB per 22-scenario batch even at JPEG 97%). Onc
 **The exact rule:** at the END of every scenario run, the runner inspects the verdict. If the verdict is `PASS` AND every bug found during the run was fixed AND the fix was verified (the previously failing step now passes), the runner deletes its own per-run screenshot directory:
 
 ```bash
-rm -rf "${CLAUDE_PROJECT_DIR}/tests/scenarios/screenshots/SCEN-${NNN}_${RUN_ID}"
+rm -rf "${MAIN_PROJECT_ROOT}/reports/scenarios-runner/screenshots/SCEN-${NNN}_${RUN_ID}"
 ```
 
 **Exceptions where screenshots MUST be kept** (do NOT delete in any of these cases):
@@ -716,7 +716,7 @@ rm -rf "${CLAUDE_PROJECT_DIR}/tests/scenarios/screenshots/SCEN-${NNN}_${RUN_ID}"
 
 **The runner reports the deletion in its summary line** so the parent batch conductor can verify (the report's `screenshots_purged: true|false` field). The conductor logs total disk reclaimed at the end of the batch.
 
-**Why this is safe:** the per-run screenshot directory uses the timestamped naming convention from earlier in this rule (`SCEN-NNN_<RUN_ID>/...`). A purge of one run's directory cannot ever affect a different run's screenshots, even for the same scenario. The git-tracked report file (`reports/scenarios-runner/SCEN-NNN_<timestamp>.report.md`) survives the purge — it records every step, every bug, every fix, and the path to the (now-deleted) screenshots, so the audit trail is intact even if a future investigation needs to re-create the visual evidence (which can be done by re-running the scenario).
+**Why this is safe:** the per-run screenshot directory uses the timestamped naming convention from earlier in this rule (`SCEN-NNN_<RUN_ID>/...`). A purge of one run's directory cannot ever affect a different run's screenshots, even for the same scenario. The report file (`reports/scenarios-runner/SCEN-NNN_<timestamp>.report.md` — gitignored per Rule 14, but retained on disk and janitor-archived) survives the purge — it records every step, every bug, every fix, and the path to the (now-deleted) screenshots, so the audit trail is intact even if a future investigation needs to re-create the visual evidence (which can be done by re-running the scenario).
 
 ---
 
@@ -1139,7 +1139,7 @@ worktrees should be minimal. Implementation is fast.
 ### SCEN-018 FAIL
 - **Reason:** <one-line>
 - **Report:** reports/scenarios-runner/SCEN-018_<ts>.report.md
-- **Screenshots:** tests/scenarios/screenshots/SCEN-018_<RUN_ID>/ (kept because verdict != PASS)
+- **Screenshots:** reports/scenarios-runner/screenshots/SCEN-018_<RUN_ID>/ (kept because verdict != PASS)
 - **Recommended action:** re-run manually after investigating, or delete the scenario if it's no longer relevant
 
 ## Rate-limit events during this batch
@@ -1301,14 +1301,15 @@ tests/scenarios/
   NEXT_SCEN_NUMBER                ← Next available scenario number (plain text)
   SCEN-001_<name>.scen.md         ← Scenario definition files
   SCEN-002_<name>.scen.md
-  reports/
-    SCEN-001_<timestamp>.report.md ← Execution reports
-  screenshots/
-    SCEN-001/                      ← Screenshots per scenario run
-      S001-<description>.png
-      S002-<description>.png
   state-backups/
     SCEN-001_<timestamp>/          ← Config file backups for STATE-WIPE
+
+# Reports + screenshots moved OUT of tests/scenarios/ on 2026-04-19 (Rule 14):
+reports/scenarios-runner/          ← gitignored (janitor archives >48h to reports_dev/)
+  SCEN-001_<timestamp>.report.md   ← Execution reports
+  screenshots/
+    SCEN-001_<RUN_ID>/             ← Screenshots per run (timestamped dir AND files)
+      S001_<RUN_ID>_<description>.jpg
 ```
 
 ---

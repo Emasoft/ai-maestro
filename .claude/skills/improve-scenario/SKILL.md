@@ -21,7 +21,7 @@ You are the scenario improver. Look at a scenario's **run history** — its repo
 
 ## Prerequisites
 
-- At least one report file at `${CLAUDE_PROJECT_DIR}/tests/scenarios/reports/SCEN-<padded-id>_*.report.md`
+- At least one report file at `${CLAUDE_PROJECT_DIR}/reports/scenarios-runner/SCEN-<padded-id>_*.report.md` (canonical since 2026-04-19; older runs may sit in the deprecated `tests/scenarios/reports/`)
 - Scenario file at `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCEN-<padded-id>_*.scen.md`
 - Scenario rules file (bundled or project override)
 
@@ -37,7 +37,7 @@ Copy this checklist and track your progress:
 - [ ] Read reports in chronological order (oldest first)
 - [ ] Identify patterns across runs
 - [ ] Draft proposed changes with evidence and priority
-- [ ] Write analysis report to `tests/scenarios/reports/`
+- [ ] Write analysis report to `reports/scenarios-runner/`
 - [ ] Return 3-line summary
 
 ### Workflow
@@ -48,7 +48,7 @@ Copy this checklist and track your progress:
 4. Read reports in chronological order (oldest first).
 5. Identify patterns: flaky steps, repeated bugs, missing coverage, Rule 6 violations, cleanup drift.
 6. Draft proposed changes with pattern, evidence, proposed edit, and priority.
-7. Write the analysis report to `tests/scenarios/reports/`.
+7. Write the analysis report to `reports/scenarios-runner/`.
 8. Return a 3-line summary.
 
 ### Rules reference

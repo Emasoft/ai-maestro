@@ -7,7 +7,9 @@
 # which is always available and needs no external install.
 #
 # Usage:
-#   bash compress-screenshots.sh                  # compress all PNG under tests/scenarios/screenshots/
+#   bash compress-screenshots.sh                  # compress all PNG under the canonical tree
+#                                                 # (reports/scenarios-runner/screenshots/; falls back
+#                                                 # to the deprecated tests/scenarios/screenshots/)
 #   bash compress-screenshots.sh <dir>            # compress all PNG under <dir>
 #   bash compress-screenshots.sh <dir> <quality>  # override quality (default 97)
 #
@@ -23,9 +25,20 @@
 set -eu
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_DIR="/Users/emanuelesabetta/ai-maestro/tests/scenarios/screenshots"
-
-TARGET_DIR="${1:-$DEFAULT_DIR}"
+# Repo-root-relative (was a hardcoded /Users/... path — broke on any other
+# checkout). Canonical screenshot tree per Rule 10/14 (2026-04-19+) is
+# reports/scenarios-runner/screenshots/; the old tests/scenarios/screenshots/
+# is deprecated but still used as fallback so legacy runs get compressed too.
+REPO_ROOT="$(cd "$SCRIPTS_DIR/../../.." && pwd)"
+CANONICAL_DIR="$REPO_ROOT/reports/scenarios-runner/screenshots"
+LEGACY_DIR="$REPO_ROOT/tests/scenarios/screenshots"
+if [ -n "${1:-}" ]; then
+    TARGET_DIR="$1"
+elif [ -d "$CANONICAL_DIR" ]; then
+    TARGET_DIR="$CANONICAL_DIR"
+else
+    TARGET_DIR="$LEGACY_DIR"
+fi
 QUALITY="${2:-97}"
 
 if [ ! -d "$TARGET_DIR" ]; then

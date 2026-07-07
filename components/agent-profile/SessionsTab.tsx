@@ -40,27 +40,33 @@ export default function SessionsTab({ agentId, assistantAvatarUrl = null }: Sess
 
   const transcriptRef = useRef<ChatTranscriptHandle | null>(null)
 
-  // Latest rendered lines, read by the scroll-to-match effect WITHOUT being a
-  // dependency of it — so that effect still fires only when the match changes,
-  // not on every incremental line append (preserving the original behaviour).
-  const linesRef = useRef(api.lines)
-  useEffect(() => {
-    linesRef.current = api.lines
-  }, [api.lines])
-
-  // Scroll to the current match whenever the match index (or match set) changes.
-  useEffect(() => {
-    if (api.matchIndex === null || api.matches.length === 0) return
+  // `match.line` is the RAW jsonl line offset; ChatTranscript.scrollToLine
+  // indexes its per-row `offsets[]` by ARRAY position. Filtered-out metadata
+  // records make the two diverge, and — per TRDD-W0841DFE — a match whose
+  // line hasn't been progressively loaded yet isn't in `api.lines` at all,
+  // so this resolves to a CLAMPED position (the last loaded row) until
+  // useJsonlSession's jump-load effect fetches enough pages. Recomputed
+  // whenever `api.lines` grows (cheap binary search) so the value
+  // transitions from "clamped" to "exact" once the target line lands.
+  // (TRDD-1657a5f4 Phase 1 — C4, extended by TRDD-W0841DFE/S7V7PMDZ.)
+  const currentMatchArrayPos = useMemo(() => {
+    if (api.matchIndex === null) return null
     const match = api.matches[api.matchIndex]
-    if (!match) return
-    // `match.line` is the RAW jsonl line offset; ChatTranscript.scrollToLine
-    // indexes its per-row `offsets[]` by ARRAY position. Filtered-out metadata
-    // records make the two diverge (a match in a session with hidden records
-    // would scroll to the wrong row, or — when lineIndex >= lines.length —
-    // nowhere). Translate once, here, before scrolling. The helper is exported
-    // + unit-tested in useJsonlSession. (TRDD-1657a5f4 Phase 1 — C4.)
-    transcriptRef.current?.scrollToLine(lineIndexToArrayPos(linesRef.current, match.line))
-  }, [api.matchIndex, api.matches])
+    if (!match) return null
+    return lineIndexToArrayPos(api.lines, match.line)
+  }, [api.matchIndex, api.matches, api.lines])
+
+  // Scroll to the current match whenever its RESOLVED array position
+  // changes value — not merely whenever `api.lines` grows (an unrelated
+  // live-tail append shouldn't re-trigger a scroll), and not merely when
+  // `matchIndex`/`matches` change (that alone missed the "line just
+  // finished loading" transition, TRDD-W0841DFE's exact symptom: the
+  // match counter advanced but the transcript never scrolled because the
+  // target row wasn't in the DOM yet at the time of the original scroll).
+  useEffect(() => {
+    if (currentMatchArrayPos === null) return
+    transcriptRef.current?.scrollToLine(currentMatchArrayPos)
+  }, [currentMatchArrayPos])
 
   const totalUsage = useMemo(() => (api.lines.length > 0 ? sumUsage(api.lines) : null), [api.lines])
   const currentMatchLine = api.matchIndex !== null ? api.matches[api.matchIndex]?.line ?? null : null

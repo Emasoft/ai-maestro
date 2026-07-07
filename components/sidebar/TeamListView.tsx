@@ -13,9 +13,18 @@ import { useSudo } from '@/contexts/SudoContext'
 interface TeamListViewProps {
   agents: Agent[]
   searchQuery: string
+  /**
+   * TRDD-1CMK59SB: notify the parent (AgentList) after a team is created,
+   * edited, or deleted so it can re-fetch ITS OWN `teams` state — the
+   * Agents-tab sidebar's team-based grouping is derived from that
+   * component-local state, which otherwise only ever fetches once on
+   * mount and goes stale the instant a team mutates while the sidebar is
+   * already mounted (the overwhelmingly common case).
+   */
+  onTeamsChanged?: () => void
 }
 
-export default function TeamListView({ agents, searchQuery }: TeamListViewProps) {
+export default function TeamListView({ agents, searchQuery, onTeamsChanged }: TeamListViewProps) {
   const [teams, setTeams] = useState<Team[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
@@ -155,6 +164,9 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
         return
       }
       setTeams(prev => prev.filter(t => t.id !== deleteTarget.id))
+      // TRDD-1CMK59SB: deleted team's (possibly reverted-to-AUTONOMOUS)
+      // members must fall back to NO-TEAM in the sidebar immediately.
+      onTeamsChanged?.()
       resetDeleteModal()
     } catch {
       setDeleteError('Network error')
@@ -205,6 +217,9 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
         if (!res.ok) return data.error || 'Failed to update team'
         if (data.team) {
           setTeams(prev => prev.map(t => t.id === teamId ? data.team : t))
+          // TRDD-1CMK59SB: membership may have changed — refresh the
+          // sidebar's team-grouping state too.
+          onTeamsChanged?.()
         }
       } else {
         const body: Record<string, unknown> = { name, description, agentIds }
@@ -220,6 +235,9 @@ export default function TeamListView({ agents, searchQuery }: TeamListViewProps)
         if (!res.ok) return data.error || 'Failed to create team'
         if (data.team) {
           setTeams(prev => [...prev, data.team])
+          // TRDD-1CMK59SB: new team's members must move out of NO-TEAM in
+          // the sidebar immediately, not after a full page reload.
+          onTeamsChanged?.()
         }
       }
       if (!mountedRef.current) return null

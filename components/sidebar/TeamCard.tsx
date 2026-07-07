@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Pencil, Trash2, AlertTriangle } from 'lucide-react'
 import type { Team } from '@/types/team'
 import type { Agent } from '@/types/agent'
@@ -20,7 +20,6 @@ export default function TeamCard({ team, agents, onStartMeeting: _onStartMeeting
   // _onStartMeeting is intentionally ignored — team meetings were removed in
   // favor of AMP + kanban, but the prop is kept for call-site compatibility.
   void _onStartMeeting
-  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const memberAgents = team.agentIds
     .map(id => agents.find(a => a.id === id))
@@ -125,23 +124,20 @@ export default function TeamCard({ team, agents, onStartMeeting: _onStartMeeting
           >
             <Pencil className="w-3.5 h-3.5" />
           </button>
-          {confirmDelete ? (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(team); setConfirmDelete(false) }}
-              className="p-1 rounded bg-red-500/20 text-red-400 text-[10px] font-medium transition-all"
-              onMouseLeave={() => setConfirmDelete(false)}
-            >
-              Confirm
-            </button>
-          ) : (
-            <button
-              onClick={(e) => { e.stopPropagation(); setConfirmDelete(true) }}
-              className="p-1 rounded hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-all"
-              title="Delete team"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          )}
+          {/* TRDD-RR883ETW: the old inline Trash→"Confirm"(onMouseLeave-reset)
+              pattern reset itself the instant a real (or scripted) mouse
+              cursor transited near the button, making it automation-hostile
+              and inconsistent with DeleteAgentDialog's proper modal. The
+              Trash icon now opens the parent's password+checkbox delete
+              modal directly (TeamListView's `deleteTarget` state), matching
+              the Delete Agent flow exactly. */}
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(team) }}
+            className="p-1 rounded hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-all"
+            title="Delete team"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </div>

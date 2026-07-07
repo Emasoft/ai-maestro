@@ -3,7 +3,7 @@ trdd-id: 0EZG26KI
 title: Sidebar search returns 0 results for hibernated agents while ACTIVE filter is selected
 column: planned
 created: 2026-07-07T12:35:24+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T14:17:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -76,3 +76,4 @@ place — this fix makes the ones that do land there actually findable.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T14:17:52+0200 — IMPLEMENTED (wave W3): `components/AgentList.tsx`'s `filteredAgents` `useMemo` now skips the ACTIVE/HIBER bucket filter entirely whenever `searchQuery` is non-empty (host-filter scoping is preserved), so search spans the full agent list regardless of which tab is selected.

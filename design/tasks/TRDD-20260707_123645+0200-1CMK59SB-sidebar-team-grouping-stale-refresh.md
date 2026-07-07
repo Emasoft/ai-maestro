@@ -3,7 +3,7 @@ trdd-id: 1CMK59SB
 title: Sidebar team-grouping does not refresh after team creation
 column: planned
 created: 2026-07-07T12:36:45+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T14:17:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -87,3 +87,4 @@ chosen instead of a targeted callback.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T14:17:52+0200 — IMPLEMENTED (wave W3): option 1 (callback prop) — added `onTeamsChanged?: () => void` to `TeamListView`, wired `AgentList.tsx` to pass its own `fetchTeams`; `TeamListView.tsx` now calls it after a successful create, edit, and delete, so the Agents-tab sidebar grouping refreshes immediately instead of requiring a full page reload.

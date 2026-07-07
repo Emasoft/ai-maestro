@@ -3,7 +3,7 @@ trdd-id: RR883ETW
 title: Replace onMouseLeave reset on Delete-Team confirm with modal or timeout
 column: planned
 created: 2026-07-07T12:35:40+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T14:17:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 0
@@ -85,3 +85,4 @@ imported/available for use from `TeamCard.tsx`, or plumb a callback from the par
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Prefer the modal route (matches DeleteAgentDialog pattern).
+- 2026-07-07T14:17:52+0200 — IMPLEMENTED (wave W3): took the preferred modal route — `components/sidebar/TeamCard.tsx`'s Trash icon now calls `onDelete(team)` directly (removed `confirmDelete` state + the onMouseLeave-reset 2-step affordance); `TeamListView.tsx` already owns the password+checkbox delete modal via `onDelete`, so no new wiring was needed there.

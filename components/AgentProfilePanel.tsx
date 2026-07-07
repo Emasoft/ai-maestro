@@ -34,7 +34,7 @@ import RolePluginModal from './agent-profile/RolePluginModal'
 import ClientSection from './agent-profile/ClientSection'
 import { detectClientType, getClientCapabilities, isTabSupported, clientTypeLabel, type ClientType } from '@/lib/client-capabilities'
 import { TITLE_PLUGIN_MAP as ECOSYSTEM_TITLE_MAP, ROLE_PLUGIN_PROGRAMMER } from '@/lib/ecosystem-constants'
-import { sudoFetch } from '@/lib/sudo-fetch'
+import { sudoFetch, SudoRetryRejected } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
 
 // Lazy-load AgentProfile — only mounted when Overview tab is active
@@ -112,7 +112,7 @@ export default function AgentProfilePanel({
   scrollToDangerZone,
   hostUrl,
 }: AgentProfilePanelProps) {
-  const { requestSudoToken } = useSudo()
+  const { requestSudoToken, reportSudoError } = useSudo()
   const { config, error, loading, refetch: rawRefetch } = useAgentLocalConfig(agentId)
   const onAgentDataChangedRef = useRef(onAgentDataChanged)
   onAgentDataChangedRef.current = onAgentDataChanged
@@ -225,11 +225,16 @@ export default function AgentProfilePanel({
         onAgentDataChangedRef.current?.()
       }
     } catch (err) {
+      // TRDD-HZDD1CUD: an op/subject mismatch on the sudo retry used to be
+      // a silent revert — surface it via the shared toast instead.
+      if (err instanceof SudoRetryRejected) {
+        reportSudoError(err.message)
+      }
       console.error('[AgentProfilePanel] Failed to toggle autoContinue:', err)
     } finally {
       setAutoContinueLoading(false)
     }
-  }, [agentId, autoContinue, autoContinueLoading, requestSudoToken])
+  }, [agentId, autoContinue, autoContinueLoading, requestSudoToken, reportSudoError])
 
   // Switch role plugin: uninstall old → install new → restart agent session
   const handleSwitchPlugin = useCallback(async (newPluginName: string) => {
@@ -299,11 +304,15 @@ export default function AgentProfilePanel({
       // Notify parent and refresh config — role plugin change should update sidebar + panel
       await refetch()
     } catch (err) {
+      // TRDD-HZDD1CUD: surface an op/subject mismatch instead of a silent revert.
+      if (err instanceof SudoRetryRejected) {
+        reportSudoError(err.message)
+      }
       console.error('[RolePluginSelector] Switch failed:', err)
     } finally {
       setSwitchingPlugin(false)
     }
-  }, [config, agentId, agentName, switchingPlugin, sessionStatus, queueRestart, agentInfo, refetch, requestSudoToken])
+  }, [config, agentId, agentName, switchingPlugin, sessionStatus, queueRestart, agentInfo, refetch, requestSudoToken, reportSudoError])
 
   // Callback for child components (RoleTab, PluginsTab, MarketplacesTab,
   // ExpandableElementCard, McpTab) to enqueue restart after ANY plugin or
@@ -335,11 +344,25 @@ export default function AgentProfilePanel({
   // refresh local config and notify the sidebar.
   const handleProgramChange = useCallback(async (newClient: ClientType) => {
     if (!agentId) return
-    const res = await sudoFetch(`/api/agents/${agentId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ program: newClient }),
-    }, requestSudoToken)
+    let res: Response
+    try {
+      res = await sudoFetch(`/api/agents/${agentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ program: newClient }),
+      }, requestSudoToken)
+    } catch (err) {
+      // TRDD-HZDD1CUD: this used to be the textbook silent revert — the
+      // sudo modal closes on a successful MINT, then the op-bound RETRY
+      // fails, and the caller (ClientSection) only resets its own saving
+      // state in a `finally` with no `catch`. Report the reason via the
+      // shared toast before re-throwing so ClientSection's dialog-closing
+      // finally still runs unchanged.
+      if (err instanceof SudoRetryRejected) {
+        reportSudoError(err.message)
+      }
+      throw err
+    }
     if (!res.ok) {
       // Surface the server's error message in console; the dialog closes
       // either way and the user sees the unchanged dropdown value.
@@ -350,7 +373,7 @@ export default function AgentProfilePanel({
     // Reload Config (so plugin list / IR re-emission state is fresh) and
     // bump the sidebar (so the program badge updates in the agent card).
     await refetch()
-  }, [agentId, requestSudoToken, refetch])
+  }, [agentId, requestSudoToken, refetch, reportSudoError])
 
   if (!agentId) {
     return (

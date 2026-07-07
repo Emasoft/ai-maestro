@@ -3,7 +3,7 @@ trdd-id: S7V7PMDZ
 title: Smooth-scroll to the current search match even when its row is already rendered
 column: planned
 created: 2026-07-07T12:44:38+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T14:17:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 2
@@ -87,3 +87,4 @@ LOW — a single `scrollIntoView` call, no data-loading logic involved.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Implement together with W0841DFE.
+- 2026-07-07T14:17:52+0200 — IMPLEMENTED (wave W3, as-satisfied): per this TRDD's own "Relationship to TRDD-W0841DFE" note, this case was already fully covered by the EXISTING geometry-based `scrollToLine`/`lineIndexToArrayPos` wiring (already-loaded-but-off-screen resolves to the exact array position and scrolls via `offsets[]`, independent of DOM mount state) — no separate `scrollIntoView`-on-DOM-node implementation was needed. W0841DFE's jump-load fix (implemented in the same wave) covers the remaining not-yet-loaded case. Recommend this TRDD be transitioned to `column: superseded` (superseded-by W0841DFE) on the next TRDD-screening pass — left untouched here per this wave's "do not change column" constraint.

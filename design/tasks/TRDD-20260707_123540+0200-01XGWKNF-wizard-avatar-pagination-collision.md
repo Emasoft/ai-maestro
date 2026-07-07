@@ -3,7 +3,7 @@ trdd-id: 01XGWKNF
 title: Fix Agent Creation Wizard avatar-pagination vs advance-arrow coordinate collision
 column: planned
 created: 2026-07-07T12:35:40+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T14:17:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 3
@@ -62,3 +62,4 @@ the Agent Creation Wizard.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T14:17:52+0200 — IMPLEMENTED (wave W3, partial): re-reading `components/AgentCreationWizard.tsx` found the two controls are NOT visually adjacent in the current chat-widget layout (the name-submit chevron sits in the persona-name row at the TOP of the widget; the avatar-grid Prev/Next pagination sits BELOW the avatar grid) — no overlapping-coordinate reproduction was possible via static reading. Implemented the layout-independent, always-beneficial part of the proposed fix: added `data-testid="wizard-advance"`/`aria-label` to the submit chevron and `data-testid="avatar-page-prev"`/`"avatar-page-next"` + aria-labels to the pagination buttons, so future automated tests target them deterministically instead of a size-based SVG heuristic regardless of whether the original pixel-collision still reproduces on any given viewport.

@@ -421,6 +421,9 @@ function renderBubbleText(text: string, lowerQuery: string, currentMatch: boolea
           <mark
             key={key++}
             style={seg.style}
+            // TRDD-W0841DFE: deterministic hook for automated tests to
+            // locate the current match without scanning highlight classes.
+            data-current-match={currentMatch || undefined}
             className={
               currentMatch
                 ? 'inline align-baseline bg-amber-300/55 rounded-sm px-0.5 outline outline-1 outline-amber-300/80'

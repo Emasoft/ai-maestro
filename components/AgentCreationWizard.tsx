@@ -938,6 +938,13 @@ function AvatarPickerWidget({
           <button
             onClick={onSubmit}
             disabled={!nameInput.trim()}
+            // TRDD-01XGWKNF: distinct data-testid/aria-label so automated
+            // drivers can target this "advance to next step" control
+            // unambiguously instead of a "largest SVG-only button"
+            // heuristic, which risked colliding with the avatar grid's own
+            // Prev/Next pagination controls below.
+            data-testid="wizard-advance"
+            aria-label="Continue to avatar selection"
             className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <ChevronRight className="w-4 h-4" />
@@ -1004,6 +1011,10 @@ function AvatarPickerWidget({
             <button
               onClick={() => onPageChange(Math.max(0, page - 1))}
               disabled={page === 0}
+              // TRDD-01XGWKNF: distinct testid/aria-label — this control is
+              // NOT the wizard's own step-advance arrow above.
+              data-testid="avatar-page-prev"
+              aria-label="Previous avatar page"
               className="text-xs text-gray-400 hover:text-gray-200 disabled:opacity-30 transition-colors"
             >
               ← Prev
@@ -1012,6 +1023,8 @@ function AvatarPickerWidget({
             <button
               onClick={() => onPageChange(Math.min(totalPages - 1, page + 1))}
               disabled={page === totalPages - 1}
+              data-testid="avatar-page-next"
+              aria-label="Next avatar page"
               className="text-xs text-gray-400 hover:text-gray-200 disabled:opacity-30 transition-colors"
             >
               Next →

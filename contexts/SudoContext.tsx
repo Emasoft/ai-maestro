@@ -46,6 +46,14 @@ interface SudoContextValue {
    * route. Omitted → an unbound token (two-phase rollout, R-3).
    */
   requestSudoToken: (reason: string, operation?: SudoOperation) => Promise<string | null>
+
+  /**
+   * TRDD-HZDD1CUD: surface a sudo-retry rejection (op/subject mismatch) as a
+   * transient toast instead of the caller silently reverting its own state
+   * with no visible explanation. Callers catch `SudoRetryRejected` from
+   * `sudoFetch` and pass its `.message` here.
+   */
+  reportSudoError: (message: string) => void
 }
 
 const SudoContext = createContext<SudoContextValue | null>(null)
@@ -61,6 +69,19 @@ export function SudoProvider({ children }: { children: ReactNode }) {
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // TRDD-HZDD1CUD: independent of the password-modal state above — the
+  // mismatch happens AFTER a token was already successfully minted (the
+  // modal has already closed), so it needs its own transient surface.
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const reportSudoError = useCallback((message: string) => {
+    setToastMessage(message)
+  }, [])
+  useEffect(() => {
+    if (!toastMessage) return
+    const timer = setTimeout(() => setToastMessage(null), 8000)
+    return () => clearTimeout(timer)
+  }, [toastMessage])
 
   const requestSudoToken = useCallback((r: string, op?: SudoOperation): Promise<string | null> => {
     return new Promise<string | null>((resolve) => {
@@ -148,8 +169,27 @@ export function SudoProvider({ children }: { children: ReactNode }) {
   const open = resolver !== null
 
   return (
-    <SudoContext.Provider value={{ requestSudoToken }}>
+    <SudoContext.Provider value={{ requestSudoToken, reportSudoError }}>
       {children}
+      {/* TRDD-HZDD1CUD: op/subject-mismatch toast. Rendered independently
+          of the password modal (`open`) since the mismatch surfaces AFTER
+          the modal already closed with a "successfully minted" token. */}
+      {toastMessage && (
+        <div
+          role="alert"
+          className="fixed bottom-4 right-4 z-[9999] max-w-sm rounded-lg border border-amber-500/40 bg-gray-900 shadow-2xl p-3 flex items-start gap-2"
+        >
+          <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-gray-200 flex-1">{toastMessage}</p>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="p-0.5 rounded hover:bg-gray-800 text-gray-500 hover:text-gray-300 flex-shrink-0"
+            aria-label="Dismiss"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
       {open && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"

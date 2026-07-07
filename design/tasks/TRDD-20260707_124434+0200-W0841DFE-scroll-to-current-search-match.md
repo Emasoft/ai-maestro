@@ -3,7 +3,7 @@ trdd-id: W0841DFE
 title: Scroll the JSONL session transcript to the current search match
 column: planned
 created: 2026-07-07T12:44:38+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T14:17:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -118,3 +118,4 @@ requesting more data.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Implement together with S7V7PMDZ (same surface).
+- 2026-07-07T14:17:52+0200 — IMPLEMENTED (wave W3): re-reading the current code found the scroll-to-match wiring (offsets-based `ChatTranscript.scrollToLine` + `lineIndexToArrayPos`, `SessionsTab.tsx`) ALREADY EXISTED (landed under TRDD-1657a5f4), and `lineIndexToArrayPos` already handles the "already loaded but off-screen" case correctly via geometry, not DOM presence — so S7V7PMDZ's narrower case was already satisfied. The genuinely missing piece was progressive loading: a match beyond the currently-loaded page resolved to a CLAMPED (wrong) position. Added a jump-load effect in `useJsonlSession.ts` (generation-token-guarded loop over `appendRange` keyed on `nextFromRef`/`endReachedRef`) that keeps loading pages until the target raw line is covered or EOF; refactored `SessionsTab.tsx`'s scroll effect to depend on the RESOLVED array position (a memo) instead of only `matchIndex`/`matches`, so it re-fires once the jump-load lands the target line. Also added `data-current-match` to the `<mark>` in `MessageBubble.tsx` for deterministic test targeting.

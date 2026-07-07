@@ -347,21 +347,32 @@ export default function AgentList({
       ? agents
       : agents.filter((a) => a.hostId === selectedHostFilter)
 
-    // Apply status filter (active/hiber/all)
+    // TRDD-0EZG26KI: a non-empty search query bypasses the ACTIVE/HIBER
+    // bucket narrowing entirely — the search box previously only searched
+    // WITHIN the currently-selected bucket, so a hibernated agent was
+    // invisible to search while the ACTIVE tab was selected (and vice
+    // versa), forcing the user to guess-and-switch tabs before finding an
+    // agent they knew existed. Host-filter scoping is left intact — that's
+    // an explicit user narrowing, not a stale-bucket trap.
+    const hasSearchQuery = searchQuery.trim().length > 0
+
+    // Apply status filter (active/hiber/all) — skipped while searching.
     // Use sessions[0] (array form) consistently — a.session (singular) is legacy/may be null
-    if (statusFilter === 'active') {
-      result = result.filter(a => a.sessions?.[0]?.status === 'online')
-    } else if (statusFilter === 'hiber') {
-      // HIBER tab includes:
-      //  - agents with sessions but currently offline (classic hibernated)
-      //  - agents that were just created and never had a tmux session (sessions empty/missing)
-      // Without the second case, brand-new auto-COS agents and freshly created agents
-      // disappear from both ACTIVE and HIBER until their first session is started.
-      result = result.filter(a => a.sessions?.[0]?.status !== 'online')
+    if (!hasSearchQuery) {
+      if (statusFilter === 'active') {
+        result = result.filter(a => a.sessions?.[0]?.status === 'online')
+      } else if (statusFilter === 'hiber') {
+        // HIBER tab includes:
+        //  - agents with sessions but currently offline (classic hibernated)
+        //  - agents that were just created and never had a tmux session (sessions empty/missing)
+        // Without the second case, brand-new auto-COS agents and freshly created agents
+        // disappear from both ACTIVE and HIBER until their first session is started.
+        result = result.filter(a => a.sessions?.[0]?.status !== 'online')
+      }
     }
 
     // Apply search filter (name, label, or host)
-    if (searchQuery.trim()) {
+    if (hasSearchQuery) {
       const query = searchQuery.toLowerCase().trim()
       result = result.filter((a) =>
         a.name?.toLowerCase().includes(query) ||
@@ -910,9 +921,14 @@ export default function AgentList({
       )}
 
       {/* Teams View */}
+      {/* TRDD-1CMK59SB: pass fetchTeams down so TeamListView's create/edit/
+          delete success handlers can refresh THIS component's `teams`
+          state — without it, the Agents-tab sidebar kept new members
+          grouped under NO-TEAM until a full page reload (fetchTeams here
+          only ever ran once, on mount). */}
       {sidebarView === 'teams' && (
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          <TeamListView agents={agents} searchQuery={searchQuery} />
+          <TeamListView agents={agents} searchQuery={searchQuery} onTeamsChanged={fetchTeams} />
         </div>
       )}
 

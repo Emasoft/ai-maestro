@@ -47,6 +47,51 @@ interface SudoErrorBody {
   reason?: string
   message?: string
   route?: string
+  devHint?: string
+}
+
+/**
+ * TRDD-HZDD1CUD: thrown by `sudoFetch` when the RETRY (the request re-sent
+ * with a freshly-minted X-Sudo-Token) itself comes back 403
+ * `sudo_operation_mismatch` / `sudo_subject_mismatch`. Before this, the
+ * function returned that failed Response opaquely — most callers only
+ * `console.error`'d it, so the user saw the sudo modal close and the
+ * change silently revert with NO visible explanation (they'd re-enter the
+ * password forever, since the server-side devHint never reached the UI).
+ * Callers that want to surface the reason should catch this specific type
+ * (e.g. via `err instanceof SudoRetryRejected`) and show `err.message`.
+ */
+export class SudoRetryRejected extends Error {
+  readonly code: 'sudo_operation_mismatch' | 'sudo_subject_mismatch'
+  readonly devHint?: string
+  readonly route?: string
+
+  constructor(body: SudoErrorBody) {
+    super(body.message || 'That confirmation could not be used. Please re-enter your governance password.')
+    this.name = 'SudoRetryRejected'
+    this.code = (body.error as 'sudo_operation_mismatch' | 'sudo_subject_mismatch')
+    this.devHint = body.devHint
+    this.route = body.route
+  }
+}
+
+/**
+ * TRDD-HZDD1CUD: inspect a sudo-token RETRY response for the two op-binding
+ * mismatch reasons and throw a typed `SudoRetryRejected` when found.
+ * Extracted out of `sudoFetch` to keep that function's branching flat.
+ */
+async function rejectIfMismatch(response: Response): Promise<Response> {
+  if (response.status !== 403) return response
+  let body: SudoErrorBody
+  try {
+    body = await response.clone().json() as SudoErrorBody
+  } catch {
+    return response // not JSON — not our mismatch case
+  }
+  if (body.error === 'sudo_operation_mismatch' || body.error === 'sudo_subject_mismatch') {
+    throw new SudoRetryRejected(body)
+  }
+  return response
 }
 
 /** Best-effort extraction of the method + path from a fetch input/init so the
@@ -106,7 +151,12 @@ export async function sudoFetch(
   const mergedHeaders = new Headers(init.headers)
   mergedHeaders.set('X-Sudo-Token', token)
   const retryInit: RequestInit = { ...init, headers: mergedHeaders }
-  return fetch(input, retryInit)
+  // TRDD-HZDD1CUD: a fresh, correctly-minted token can still be rejected by
+  // the op-binding check on the retry (bound to a different (method, path)
+  // than sudoFetch derived, or a different subject). rejectIfMismatch turns
+  // that specific case into a typed throw so callers can show the reason
+  // instead of silently reverting; every other outcome passes through.
+  return rejectIfMismatch(await fetch(input, retryInit))
 }
 
 /**

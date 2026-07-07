@@ -3,7 +3,7 @@ trdd-id: HZDD1CUD
 title: Surface sudo operation and subject mismatch errors in the sudo modal instead of failing silently
 column: planned
 created: 2026-07-07T03:43:13+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T14:17:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -52,3 +52,4 @@ LOW — error-surface only; no change to token semantics.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T14:17:52+0200 — IMPLEMENTED (wave W3): `lib/sudo-fetch.ts` now throws a typed `SudoRetryRejected` (carrying the server's `message`) when the retry itself 403s with `sudo_operation_mismatch`/`sudo_subject_mismatch`; `contexts/SudoContext.tsx` gained a `reportSudoError` toast surface (independent of the password modal, since the mismatch happens after a token was already minted); `AgentProfilePanel.tsx`'s three sudoFetch call sites (`toggleAutoContinue`, `handleSwitchPlugin`, `handleProgramChange`) now catch the typed error and call `reportSudoError` instead of only console.error-ing. Other sudoFetch call sites (TeamListView, PluginsTab, RoleTab, etc.) can adopt the same catch pattern in a follow-up — out of scope for this small-effort fix.

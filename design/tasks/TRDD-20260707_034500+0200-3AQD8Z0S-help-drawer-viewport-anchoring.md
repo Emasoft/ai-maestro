@@ -3,7 +3,7 @@ trdd-id: 3AQD8Z0S
 title: Anchor the Help-Assistant drawer inside the viewport and unmount it when closed
 column: planned
 created: 2026-07-07T03:45:00+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T14:17:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 2
@@ -47,3 +47,4 @@ LOW — presentation-layer change. Dependencies: none.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T14:17:52+0200 — IMPLEMENTED (wave W3): `components/HelpPanel.tsx` — clamped `w-[420px]` to `w-full max-w-[420px]` (prevents left-edge overflow on narrow viewports) and added a `shouldRender` state that unmounts the panel's DOM entirely ~300ms after close (once the slide-out transition finishes), so its tutorial text no longer leaks into `document.body.innerText` while closed.

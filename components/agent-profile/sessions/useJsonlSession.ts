@@ -1300,6 +1300,42 @@ export function useJsonlSession(options: UseJsonlSessionOptions): UseJsonlSessio
 
   const setQuery = useCallback((q: string) => setQueryRaw(q), [])
 
+  // TRDD-W0841DFE: the server-side search scans the WHOLE file, so a match
+  // can point at a raw line offset that hasn't been progressively loaded
+  // into `lines` yet. Without this, SessionsTab's scroll-to-match effect
+  // (lineIndexToArrayPos + ChatTranscript.scrollToLine) silently clamps to
+  // the last CURRENTLY-loaded row instead of reaching the actual match —
+  // the match counter advances but nothing visible changes. Keep calling
+  // `appendRange` (the same progressive-load path `loadMore` uses) until
+  // the target raw line is covered or EOF is reached.
+  //
+  // Reads `nextFromRef`/`endReachedRef` (refs, not React state) so each
+  // loop iteration sees the TRUE up-to-date cursor rather than a stale
+  // closure over `lines` — `appendRange` updates those refs synchronously
+  // before this effect's `await` resumes. A monotonically-increasing
+  // generation token (rather than a simple boolean lock) makes a NEWER
+  // match (the user clicked next/prev again before the previous jump
+  // finished) win over a stale in-flight one, instead of the stale one's
+  // mutex permanently blocking the fresh request.
+  const jumpToMatchGenRef = useRef(0)
+  useEffect(() => {
+    if (matchIndex === null) return
+    const target = matches[matchIndex]
+    if (!target) return
+    const myGeneration = ++jumpToMatchGenRef.current
+    const ensureMatchLineLoaded = async () => {
+      while (
+        jumpToMatchGenRef.current === myGeneration &&
+        nextFromRef.current <= target.line &&
+        !endReachedRef.current
+      ) {
+        const gotMore = await appendRange(false)
+        if (!gotMore) break
+      }
+    }
+    void ensureMatchLineLoaded()
+  }, [matchIndex, matches, appendRange])
+
   const nextMatch = useCallback(() => {
     setMatchIndex(prev => {
       if (matches.length === 0) return null

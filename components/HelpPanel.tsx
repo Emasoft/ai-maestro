@@ -182,6 +182,22 @@ export default function HelpPanel() {
     }
   }, [isOpen])
 
+  // TRDD-3AQD8Z0S: the closed panel used to stay DOM-mounted (only
+  // translated off-screen via CSS + aria-hidden/inert), so its tutorial
+  // text still leaked into `document.body.innerText` and full-page text
+  // queries even though it was invisible and non-interactive. Unmount the
+  // content entirely once closed — but only AFTER the 300ms slide-out
+  // transition finishes, so the closing animation still plays.
+  const [shouldRender, setShouldRender] = useState(isOpen)
+  useEffect(() => {
+    if (isOpen) {
+      setShouldRender(true)
+      return
+    }
+    const timer = setTimeout(() => setShouldRender(false), 300)
+    return () => clearTimeout(timer)
+  }, [isOpen])
+
   // Handle escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -208,9 +224,17 @@ export default function HelpPanel() {
     tutorials: tutorials.filter(t => t.category === category),
   }))
 
+  // TRDD-3AQD8Z0S: fully unmount once the close transition has finished —
+  // no DOM, no text, nothing for a full-page query to pick up.
+  if (!shouldRender) return null
+
   return (
     <div
-      className={`fixed top-0 right-0 h-full w-[420px] z-50 transform transition-transform duration-300 ease-out ${
+      // TRDD-3AQD8Z0S: `w-full max-w-[420px]` (was a fixed `w-[420px]`)
+      // clamps the drawer to the viewport width on narrow/mobile viewports
+      // instead of letting it overflow past the left edge, while still
+      // capping at 420px on desktop.
+      className={`fixed top-0 right-0 h-full w-full max-w-[420px] z-50 transform transition-transform duration-300 ease-out ${
         isOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
       }`}
       // Proposal 4 (2026-04-20): when the panel is closed it is translated

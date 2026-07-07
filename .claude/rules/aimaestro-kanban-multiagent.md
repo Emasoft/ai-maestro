@@ -1,0 +1,1 @@
+../../rules/aimaestro/aimaestro-kanban-multiagent.md

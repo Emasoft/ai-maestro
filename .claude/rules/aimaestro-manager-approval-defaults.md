@@ -1,0 +1,1 @@
+../../rules/aimaestro/aimaestro-manager-approval-defaults.md

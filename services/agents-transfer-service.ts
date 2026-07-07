@@ -1080,6 +1080,20 @@ export async function importAgent(
     fs.rmSync(tempDir, { recursive: true, force: true })
     tempDir = null
 
+    // TRDD-DE9757LJ: seed the DEP governance-rule overlay into the imported
+    // agent's workdir. The registry copy may carry a workingDirectory set
+    // later in this flow (repo restore), so read the freshest value. Seeding
+    // is best-effort — the wake-path monitor re-seeds on first wake anyway.
+    try {
+      const finalWorkdir = getAgent(agentToImport.id)?.workingDirectory || agentToImport.workingDirectory
+      if (finalWorkdir && fs.existsSync(finalWorkdir)) {
+        const { ensureAgentRules } = await import('@/lib/agent-rules-seed')
+        await ensureAgentRules(finalWorkdir)
+      }
+    } catch (rulesErr) {
+      warnings.push(`DEP governance rules seeding failed (non-fatal — re-seeded on first wake): ${rulesErr instanceof Error ? rulesErr.message : rulesErr}`)
+    }
+
     const result: AgentImportResult = {
       success: true,
       agent: agentToImport,

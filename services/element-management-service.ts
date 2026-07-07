@@ -7086,6 +7086,18 @@ export async function CreateAgent(
       const claudeDir = join(workDir, '.claude')
       await mkdir(claudeDir, { recursive: true })
       ops.push(`G05: .claude/ directory ensured in working dir`)
+
+      // ── G05b: Seed the DEP governance-rule overlay (TRDD-DE9757LJ) ──
+      // The aimaestro-* rules load only inside registered agent workdirs;
+      // the wake path (ensureCorePluginInstalled) re-seeds on drift, so a
+      // failure here is best-effort — it must never abort agent creation.
+      try {
+        const { ensureAgentRules } = await import('@/lib/agent-rules-seed')
+        const rulesResult = await ensureAgentRules(workDir)
+        ops.push(`G05b: DEP rules seeded=[${rulesResult.seeded.join(',')}] updated=[${rulesResult.updated.join(',')}] preserved=[${rulesResult.preserved.join(',')}]`)
+      } catch (rulesErr) {
+        ops.push(`G05b: WARN — DEP rules seeding failed (non-fatal): ${rulesErr instanceof Error ? rulesErr.message : rulesErr}`)
+      }
     } else {
       ops.push(`G05: Non-Claude agent — skip .claude/ creation`)
     }

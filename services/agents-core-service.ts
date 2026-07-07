@@ -1854,6 +1854,22 @@ export async function ensureCorePluginInstalled(
   // install path uses .codex/.
   fs.mkdirSync(path.join(workingDirectory, '.claude'), { recursive: true })
 
+  // TRDD-DE9757LJ: seed/refresh the DEP governance-rule overlay at the same
+  // choke point as the R17 plugin self-heal — this function runs on wake
+  // (wakeAgent), on New Session (sessions-service createSession), and on the
+  // ensure-core POST, so it doubles as the "missing rules" monitor: a rule
+  // deleted from the workdir (or gone stale after an app update) is restored
+  // on the next wake. Best-effort by design — rules I/O must never block a wake.
+  try {
+    const { ensureAgentRules } = await import('@/lib/agent-rules-seed')
+    const rulesResult = await ensureAgentRules(workingDirectory)
+    if (rulesResult.seeded.length || rulesResult.updated.length) {
+      console.log(`[ensureCorePluginInstalled] DEP rules for agent ${agentId}: seeded=[${rulesResult.seeded.join(',')}] updated=[${rulesResult.updated.join(',')}]`)
+    }
+  } catch (rulesErr) {
+    console.warn(`[ensureCorePluginInstalled] DEP rules seeding failed for agent ${agentId} (non-fatal):`, rulesErr)
+  }
+
   const hasPlugin = await isCorePluginPresent(agentId)
 
   if (!hasPlugin) {

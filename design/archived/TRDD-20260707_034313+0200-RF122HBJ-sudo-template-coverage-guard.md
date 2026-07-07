@@ -1,9 +1,9 @@
 ---
 trdd-id: RF122HBJ
 title: Build-time guard that every requireSudoToken template is a reachable strict-registry entry
-column: planned
+column: complete
 created: 2026-07-07T03:43:13+0200
-updated: 2026-07-07T15:11:42+0200
+updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 0
@@ -11,6 +11,7 @@ severity: HIGH
 effort: M
 labels: [scenario-improvement, scen-016, batch-backlog-20260707]
 task-type: security
+implementation-commits: [c9b77089]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_016_2026-06-23T13-18-05Z.md"]
 ---
 
@@ -55,3 +56,4 @@ surface, not just the dispatcher.
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
 - 2026-07-07T15:11:42+0200 — IMPLEMENTED (wave W4): tests/security/sudo-template-coverage.test.ts scans every requireSudoToken() call site against security-registry.json (forward + reverse/orphan checks); found and removed one orphaned registry entry (PATCH_/api/agents/[id]/title) during implementation.
+- 2026-07-07T15:48:02+0200 — COMPLETED (implementation-commits recorded); archived per the TRDD lifecycle.

@@ -1,9 +1,9 @@
 ---
 trdd-id: 0301PUYW
 title: Reconcile soft-delete vs cemetery vs orphan-folder semantics in the Delete Agent dialog
-column: planned
+column: complete
 created: 2026-07-07T03:45:00+0200
-updated: 2026-07-07T15:43:12+0200
+updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -15,6 +15,7 @@ parent-trdd: null
 npt: []
 eht: []
 relevant-rules: []
+implementation-commits: [d34d7546]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_001_2026-06-23T08-44-04Z.md", "reports_dev/scenarios-runner/scenario_proposed-improvements_002_2026-06-23T10-24-11Z.md", "reports_dev/scenarios-runner/scenario_proposed-improvements_024_2026-05-04T11-36-31Z.md"]
 ---
 
@@ -63,3 +64,4 @@ preserve-zip-on-hard-delete extension).
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Implement together with UMT9HIEB.
 - 2026-07-07T15:43:12+0200 — IMPLEMENTED (wave W5): DeleteAgentDialog exposes both "Move to Cemetery" (hard=false) and "Delete Forever" (hard=true); tombstone source-filtering confirmed already correct (listAgents filters !deletedAt); G03 hard-skip comment added; Cemetery empty-state banner already present. SCEN-001 S035 aligned to "Move to Cemetery". SKIPPED the SCEN-002 hunk — its S055/S056/S058 delete steps + S059/S060 verify/purge already DEPEND on cemetery entries (soft path), so "keep Delete Forever" conflicts with the scenario's own downstream steps and exceeds the "minimal S059-S060 hunk" scope; per HARD CONSTRAINT logged instead of breaking it.
+- 2026-07-07T15:48:02+0200 — COMPLETED (implementation-commits recorded); archived per the TRDD lifecycle.

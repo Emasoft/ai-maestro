@@ -1,9 +1,9 @@
 ---
 trdd-id: 4IYPNZWT
 title: Allow Add Marketplace to accept a local directory path, not only GitHub URLs
-column: planned
+column: complete
 created: 2026-07-07T12:41:00+0200
-updated: 2026-07-07T15:00:52+0200
+updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 0
@@ -15,6 +15,7 @@ parent-trdd: null
 npt: []
 eht: []
 relevant-rules: []
+implementation-commits: [48ac2273]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_026_2026-05-04T12-26-52Z.md"]
 ---
 
@@ -134,3 +135,4 @@ capability instead of describing the old restriction.
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
 - 2026-07-07T15:00:52+0200 — IMPLEMENTED (wave W6): backend `handleAddMarketplace`/`handleAddMarketplaceFromPath` in `app/api/settings/marketplaces/route.ts` now accepts `{ path }` (name derived from `.claude-plugin/marketplace.json` or basename, home-dir-only + system-dir-blocklist check, routes through `CreateMarketplace({source:{path}})`, stamps `extraKnownMarketplaces` with `source:'local'`); UI `components/settings/MarketplaceManager.tsx` adds a GitHub-URL/Local-directory radio toggle (plain text input in both modes) feeding the same submit handler. `npx tsc --noEmit`: 0 errors.
+- 2026-07-07T15:48:02+0200 — COMPLETED (implementation-commits recorded); archived per the TRDD lifecycle.

@@ -1,9 +1,9 @@
 ---
 trdd-id: UMT9HIEB
 title: Offer a soft-delete (archive to cemetery) option in DeleteAgentDialog
-column: planned
+column: complete
 created: 2026-07-07T03:43:13+0200
-updated: 2026-07-07T15:43:12+0200
+updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -11,6 +11,7 @@ severity: MEDIUM
 effort: S
 labels: [scenario-improvement, scen-015, batch-backlog-20260707]
 task-type: feature
+implementation-commits: [d34d7546]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_015_2026-06-23T12-19-36Z.md"]
 ---
 
@@ -54,3 +55,4 @@ becomes the norm, so pair with TRDD-WHAE30E7 (cemetery TTL/purge).
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Implement together with 0301PUYW.
 - 2026-07-07T15:43:12+0200 — IMPLEMENTED (wave W5, with 0301PUYW in the same DeleteAgentDialog): "Move to Cemetery" is the recoverable soft-delete action (hard=false, folder always kept for revive); "Delete Forever" is the opt-in permanent path (hard=true + deleteFolder per checkbox). Folder-checkbox helper text clarifies it applies to Delete Forever only.
+- 2026-07-07T15:48:02+0200 — COMPLETED (implementation-commits recorded); archived per the TRDD lifecycle.

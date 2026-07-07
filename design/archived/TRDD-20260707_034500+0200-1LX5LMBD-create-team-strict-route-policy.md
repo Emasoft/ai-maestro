@@ -1,9 +1,9 @@
 ---
 trdd-id: 1LX5LMBD
 title: Decide whether Create Team is a strict sudo route and align SCEN-001 S017
-column: planned
+column: complete
 created: 2026-07-07T03:45:00+0200
-updated: 2026-07-07T15:11:42+0200
+updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 2
@@ -15,6 +15,7 @@ parent-trdd: null
 npt: []
 eht: []
 relevant-rules: []
+implementation-commits: [c9b77089]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_001_2026-06-23T08-44-04Z.md"]
 ---
 
@@ -50,3 +51,4 @@ none.
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Implementer follows the proposal's recommended option.
 - 2026-07-07T15:11:42+0200 — IMPLEMENTED (wave W4): classified POST_/api/teams strict in security-registry.json + sudo-guard.ts STRICT_AGENT_RULES (manage-team); app/api/teams/route.ts now calls requireSudoToken, replacing the old ad-hoc in-body governancePassword check; TeamListView.tsx's create-team fetch now uses sudoFetch; SCEN-001 S017 updated to require the sudo modal. NOTE: tests/team-api.test.ts's 6 POST tests still pass because that file mocks fs and never populates security-registry.json in its fixture store, so requiresSudo() sees no file and the gate is inert there — flagged as a follow-up: that test file should be updated to exercise the strict gate for real (out of this task's write-scope).
+- 2026-07-07T15:48:02+0200 — COMPLETED (implementation-commits recorded); archived per the TRDD lifecycle.

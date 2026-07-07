@@ -1,9 +1,9 @@
 ---
 trdd-id: 0IPK36MS
 title: Add the missing RBAC-403 authorization unit test that SCEN-001 defers to
-column: planned
+column: complete
 created: 2026-07-07T03:45:00+0200
-updated: 2026-07-07T15:11:42+0200
+updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -15,6 +15,7 @@ parent-trdd: null
 npt: []
 eht: []
 relevant-rules: []
+implementation-commits: [c9b77089]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_001_2026-06-23T08-44-04Z.md"]
 ---
 
@@ -50,3 +51,4 @@ LOW — additive test. Dependencies: none.
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
 - 2026-07-07T15:11:42+0200 — IMPLEMENTED (wave W4): tests/authorization.test.ts tests the real lib/authorization.ts::authorize() RBAC matrix with real AID Bearer tokens (real fs-store fixtures, no auth-layer mocks). Discovered and fixed a real testability bug: lib/authorization.ts's lookupGovernanceTitle/lookupTeamIdForAgent used lazy require('./...') calls that never resolve under Vitest (production bundlers handle them fine, but the COS-own-team authorize() path had ZERO real test coverage in this codebase before this TRDD) — converted to static imports, zero behavior change, 486 pre-existing tests re-verified green.
+- 2026-07-07T15:48:02+0200 — COMPLETED (implementation-commits recorded); archived per the TRDD lifecycle.

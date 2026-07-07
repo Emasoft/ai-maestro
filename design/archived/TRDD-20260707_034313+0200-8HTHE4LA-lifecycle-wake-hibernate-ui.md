@@ -1,9 +1,9 @@
 ---
 trdd-id: 8HTHE4LA
 title: Surface Wake and Hibernate lifecycle actions in the profile panel and for offline agents
-column: planned
+column: complete
 created: 2026-07-07T03:43:13+0200
-updated: 2026-07-07T15:43:12+0200
+updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -11,6 +11,7 @@ severity: MEDIUM
 effort: S
 labels: [scenario-improvement, scen-012, scen-013, batch-backlog-20260707]
 task-type: feature
+implementation-commits: [d34d7546]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_012_20260623T114625Z.md", "reports_dev/scenarios-runner/scenario_proposed-improvements_013_20260623T115232Z.md"]
 ---
 
@@ -53,3 +54,4 @@ reconciliation) for the online/offline derivation to be trustworthy.
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Implement together with 13MZ7EFO.
 - 2026-07-07T15:43:12+0200 — IMPLEMENTED (wave W5): AgentProfile.tsx now renders a Wake button (R17-gated POST /wake) whenever the program isn't running; AgentProfilePanel.tsx kebab gained Hibernate (online) / Wake (offline) actions reusing the same endpoints as AgentList, both refreshing via the panel's reload-then-notify-sidebar path.
+- 2026-07-07T15:48:02+0200 — COMPLETED (implementation-commits recorded); archived per the TRDD lifecycle.

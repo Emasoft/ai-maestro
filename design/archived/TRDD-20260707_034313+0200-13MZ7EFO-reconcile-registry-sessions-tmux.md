@@ -1,9 +1,9 @@
 ---
 trdd-id: 13MZ7EFO
 title: Reconcile registry sessions with live tmux state so lifecycle buttons and the R17 wake-gate become reachable
-column: planned
+column: complete
 created: 2026-07-07T03:43:13+0200
-updated: 2026-07-07T15:43:12+0200
+updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 0
@@ -11,6 +11,7 @@ severity: HIGH
 effort: M
 labels: [scenario-improvement, scen-012, scen-013, batch-backlog-20260707]
 task-type: bugfix
+implementation-commits: [d34d7546]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_013_20260623T115232Z.md", "reports_dev/scenarios-runner/scenario_proposed-improvements_012_20260623T114625Z.md"]
 ---
 

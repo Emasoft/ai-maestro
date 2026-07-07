@@ -1,9 +1,9 @@
 ---
 trdd-id: AOFL94O3
 title: COS-demotion ungated in Title Assignment Dialog and ChangeTitle Gate 8
-column: planned
+column: complete
 created: 2026-07-07T12:36:45+0200
-updated: 2026-07-07T15:11:42+0200
+updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -15,6 +15,7 @@ parent-trdd: null
 npt: []
 eht: []
 relevant-rules: []
+implementation-commits: [c9b77089]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_002_2026-06-23T10-24-11Z.md", "reports_dev/scenarios-runner/SCEN-002_2026-06-23T10-24-11Z.report.md"]
 ---
 
@@ -104,3 +105,4 @@ dependencies.
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Check COS-transfer pipeline ordering before landing Gate-8 guard.
 - 2026-07-07T15:11:42+0200 — IMPLEMENTED (wave W4): client guard in TitleAssignmentDialog.impl.tsx (isCurrentCos disables non-COS titles) + server Gate 8b in element-management-service.ts ChangeTitle; verified against the real COS-transfer route (POST /api/teams/[id]/chief-of-staff clears chiefOfStaffId before calling ChangeTitle) — ordering confirmed safe, no regression.
+- 2026-07-07T15:48:02+0200 — COMPLETED (implementation-commits recorded); archived per the TRDD lifecycle.

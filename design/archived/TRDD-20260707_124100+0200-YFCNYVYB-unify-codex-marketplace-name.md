@@ -1,9 +1,9 @@
 ---
 trdd-id: YFCNYVYB
 title: Unify the local Codex marketplace name across constant and on-disk manifest
-column: planned
+column: complete
 created: 2026-07-07T12:41:00+0200
-updated: 2026-07-07T15:00:52+0200
+updated: 2026-07-07T15:48:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -15,6 +15,7 @@ parent-trdd: null
 npt: []
 eht: []
 relevant-rules: []
+implementation-commits: [48ac2273]
 external-refs: ["reports_dev/scenarios-runner/scenario_proposed-improvements_026_2026-05-04T12-26-52Z.md"]
 ---
 
@@ -123,3 +124,4 @@ inconsistent naming scheme.
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Implement together with QXRWQ232.
 - 2026-07-07T15:00:52+0200 — IMPLEMENTED (wave W6), Option A: verified NO current write path constructs the infixed name any more (`grep` across services/lib/app found zero hits — the stale on-disk `~/agents/role-plugins/{gemini,kiro,codex}-roles-marketplace/marketplace.json` files with the `ai-maestro-local-<client>-roles-marketplace` name were produced by an earlier code version and are no longer reproducible by any current writer for those clients, since `convertAndStorePlugin`'s role-plugin branch only ever registered a manifest for `targetClient === 'claude'`). Added `ensureRoleClientMarketplace`/`updateRoleClientMarketplaceManifest`/`readRoleClientMarketplacePlugins` to `services/plugin-storage-service.ts` (mirrors the existing custom-plugin helpers) and wired them into the non-Claude branch of `convertAndStorePlugin`'s role-plugin emission — every future per-client role-marketplace manifest write now names itself `LOCAL_MARKETPLACE_NAME` (bare, no client infix), never a `-<client>`-suffixed string. Scope note: regenerating the pre-existing stale on-disk manifest files under `~/agents/role-plugins/` was OUT OF SCOPE for this wave (write-scope restricted to the git-tracked source tree) — they will self-correct on the next role-plugin conversion for that client, or can be regenerated manually by deleting them and re-running a conversion. `npx tsc --noEmit`: 0 errors.
+- 2026-07-07T15:48:02+0200 — COMPLETED (implementation-commits recorded); archived per the TRDD lifecycle.

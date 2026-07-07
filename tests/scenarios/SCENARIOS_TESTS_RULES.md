@@ -853,6 +853,8 @@ v3.6.0 the strict routes are:
 | `POST /api/sessions/[id]/stop` | SCEN-011 stop session tests |
 | `POST /api/sessions/[id]/restart` | Element restart queue tests |
 | `PATCH /api/settings/security` | Security settings updates |
+| `POST /api/teams` | Team creation (spawns an auto-COS agent) — TRDD-1LX5LMBD; SCEN-001 S017 |
+| `POST /api/agents/[id]/ensure-core` | R17 core-plugin self-heal before "New Session" — TRDD-I75EMTK0 |
 
 When a NEW strict route is added to `security-registry.json`, update
 this table AND every scenario that touches that route.

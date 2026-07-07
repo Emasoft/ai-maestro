@@ -256,6 +256,12 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   // sudo-token modal, AGENT gets the authorize('manage-team') MANAGER-only
   // check — identical rules to DELETE/PUT/orchestrator below.
   'POST /api/teams': { action: 'manage-team' },
+  // code-review F2: create-with-project is the same createNewTeam operation
+  // as POST /api/teams (with an optional GitHub Project link bolted on) --
+  // it was gated ONLY by an in-body password (verifyPassword), missing this
+  // entry entirely, which let ANY non-MANAGER agent create a team merely by
+  // knowing the governance password string. Gated identically to POST /api/teams.
+  'POST /api/teams/create-with-project': { action: 'manage-team' },
   'DELETE /api/teams/[id]': { action: 'manage-team' },
   'PUT /api/teams/[id]': { action: 'manage-team' },
   'PUT /api/teams/[id]/orchestrator': { action: 'manage-team' },
@@ -312,6 +318,9 @@ function extractPathId(pathname: string, pathTemplate: string): string | undefin
  */
 const STRICT_ROUTE_TO_PORTFOLIO_OP: Record<string, string> = {
   'POST /api/teams': 'CreateTeam',
+  // code-review F2: create-with-project delegates to the same createNewTeam
+  // service call as POST /api/teams -- mirror its portfolio-op mapping.
+  'POST /api/teams/create-with-project': 'CreateTeam',
   'POST /api/agents': 'CreateAgent',
 }
 

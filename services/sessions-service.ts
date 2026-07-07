@@ -19,7 +19,7 @@
  *   POST   /api/sessions/activity/update -> broadcastActivityUpdate
  */
 
-import { exec, execFile } from 'child_process'
+import { execFile } from 'child_process'
 import { promisify } from 'util'
 import http from 'http'
 import https from 'https'
@@ -29,7 +29,7 @@ import os from 'os'
 import type { Session } from '@/types/session'
 import { getAgentBySession, getAgentByName, createAgent, deleteAgentBySession, renameAgentSession } from '@/lib/agent-registry'
 import { loadAgents, linkSession, unlinkSession } from '@/lib/agent-registry'
-import { getHosts, getSelfHost, getSelfHostId, isSelf, getHostById } from '@/lib/hosts-config'
+import { getHosts, getSelfHost, isSelf, getHostById } from '@/lib/hosts-config'
 import { persistSession, loadPersistedSessions, unpersistSession } from '@/lib/session-persistence'
 import { parseNameForDisplay } from '@/types/agent'
 import { initAgentAMPHome, getAgentAMPDir } from '@/lib/amp-inbox-writer'
@@ -42,7 +42,6 @@ import { statePath } from '@/lib/ecosystem-constants'
 // by wakeAgent, this defense-in-depth path, and POST /api/agents/[id]/ensure-core).
 import { ensureCorePluginInstalled } from '@/services/agents-core-service'
 
-const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
 
 // ---------------------------------------------------------------------------
@@ -234,13 +233,32 @@ async function fetchRemoteSessions(hostUrl: string, hostId: string): Promise<Ses
  * tmux session discovered here gets flipped offline. Extracted out of
  * fetchLocalSessions to keep that function's cognitive complexity in check.
  */
-async function reconcileRegistrySessions(sessions: Session[]): Promise<void> {
+async function reconcileRegistrySessions(sessions: Session[], tmuxDiscoveryCount: number): Promise<void> {
   try {
     const registryAgents = loadAgents().filter(a => !a.deletedAt)
     const onlineByAgentId = new Map<string, Session>()
     for (const s of sessions) {
       if (s.agentId) onlineByAgentId.set(s.agentId, s)
     }
+
+    // code-review F1 (Defect A): TmuxRuntime.listSessions() fails OPEN to []
+    // on ANY exec error (pm2 restart window, transient spawn/timeout blip --
+    // see lib/agent-runtime.ts). Left unguarded, a single transient failure
+    // is indistinguishable from "every agent's tmux session vanished at
+    // once", so the unlink branch below would mass-flip every online
+    // registry agent to offline -- and repeat on every ~10s poll until
+    // discovery recovers. Treat a zero-count tmux discovery against a
+    // registry that believes agents are online as SUSPECT and skip only the
+    // destructive (offline) branch this cycle; the link branch is left
+    // unconditional below so a genuinely-live session is never ignored, and
+    // a real mass-death is still caught on the next tmux discovery that
+    // actually succeeds.
+    const registryHasOnlineAgents = registryAgents.some(a => (a.sessions || []).some(s => s.status === 'online'))
+    const discoverySuspect = tmuxDiscoveryCount === 0 && registryHasOnlineAgents
+    if (discoverySuspect) {
+      console.warn('[Sessions] tmux discovery returned 0 sessions while the registry has online agents -- skipping offline reconciliation this cycle (suspected transient tmux failure)')
+    }
+
     for (const regAgent of registryAgents) {
       const live = onlineByAgentId.get(regAgent.id)
       const hasOnlineInRegistry = (regAgent.sessions || []).some(s => s.status === 'online')
@@ -251,7 +269,7 @@ async function reconcileRegistrySessions(sessions: Session[]): Promise<void> {
         if (!alreadyReconciled) {
           await linkSession(regAgent.id, live.name, live.workingDirectory)
         }
-      } else if (hasOnlineInRegistry) {
+      } else if (hasOnlineInRegistry && !discoverySuspect) {
         // Registry says online but no live tmux session was discovered for
         // this agent -- flip it offline so the lifecycle buttons and the
         // R17 wake-gate become reachable again on the next wake.
@@ -461,7 +479,11 @@ async function fetchLocalSessions(hostId: string): Promise<Session[]> {
 
     // TRDD-13MZ7EFO: reconcile discovered tmux sessions into the registry
     // (see reconcileRegistrySessions doc comment above for the full why).
-    await reconcileRegistrySessions(sessions)
+    // discovered.length (the raw tmux discovery count, not the merged
+    // sessions list which also includes cloud/docker/openclaw entries) is
+    // passed separately so reconcile can detect a suspect all-zero tmux
+    // discovery (code-review F1 Defect A).
+    await reconcileRegistrySessions(sessions, discovered.length)
 
     return sessions
   } catch (error) {

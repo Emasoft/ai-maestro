@@ -26,7 +26,7 @@
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { execSync, execFileSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import { v4 as uuidv4 } from 'uuid'
 import type { AuthContext } from '@/lib/agent-auth'
 import type {
@@ -34,12 +34,10 @@ import type {
   AgentSession,
   AgentSessionStatus,
   AgentStats,
-  CreateAgentRequest,
   UpdateAgentRequest,
 } from '@/types/agent'
 import {
   parseSessionName,
-  parseNameForDisplay,
   computeSessionName,
 } from '@/types/agent'
 import {
@@ -47,7 +45,6 @@ import {
   saveAgents,
   createAgent,
   getAgent,
-  getAgentByName,
   getAgentBySession,
   updateAgent,
   deleteAgent,
@@ -1823,6 +1820,26 @@ export async function handleTrustAutoAccept(sessionName: string, agentName: stri
  * `role_missing_core` sentinel; createSession's defense-in-depth path only
  * warns and lets the wake-gate retry later).
  */
+/**
+ * code-review F5: read-only presence check factored out of
+ * ensureCorePluginInstalled (below) so a cheap caller (the ensure-core GET
+ * route) can ask "is the core plugin already installed?" without going
+ * through the sudo-gated POST mutation path. Never writes anything --
+ * ensureCorePluginInstalled itself calls this first and only performs the
+ * privileged InstallElement write when it returns false.
+ */
+export async function isCorePluginPresent(agentId: string): Promise<boolean> {
+  const { scanAgentLocalConfig } = await import('@/services/agent-local-config-service')
+  const { isCorePlugin } = await import('@/lib/ecosystem-constants')
+
+  // Client-aware presence check via the unified scanner. Returns true when
+  // ai-maestro-plugin is present and enabled at the client-native path
+  // (Claude -> .claude/settings.local.json, Codex -> .codex/installed-plugins/).
+  const scanResult = scanAgentLocalConfig(agentId)
+  if (!scanResult.data) return false
+  return scanResult.data.plugins.some(p => isCorePlugin(p.name, p.marketplace) && p.enabled !== false)
+}
+
 export async function ensureCorePluginInstalled(
   agentId: string,
   workingDirectory: string,
@@ -1830,8 +1847,6 @@ export async function ensureCorePluginInstalled(
   authContext?: AuthContext
 ): Promise<{ success: boolean; installed: boolean; error?: string; operations?: string[] }> {
   const { InstallElement } = await import('@/services/element-management-service')
-  const { scanAgentLocalConfig } = await import('@/services/agent-local-config-service')
-  const { isCorePlugin } = await import('@/lib/ecosystem-constants')
   const { getAgent, updateAgent } = await import('@/lib/agent-registry')
 
   // Ensure .claude/ exists so the (legacy) Claude install path can write
@@ -1839,17 +1854,7 @@ export async function ensureCorePluginInstalled(
   // install path uses .codex/.
   fs.mkdirSync(path.join(workingDirectory, '.claude'), { recursive: true })
 
-  // Client-aware presence check via the unified scanner. Returns true when
-  // ai-maestro-plugin is present and enabled at the client-native path
-  // (Claude -> .claude/settings.local.json, Codex -> .codex/installed-plugins/).
-  let hasPlugin = false
-  const scanResult = scanAgentLocalConfig(agentId)
-  if (scanResult.data) {
-    const corePlugin = scanResult.data.plugins.find(p =>
-      isCorePlugin(p.name, p.marketplace) && p.enabled !== false
-    )
-    hasPlugin = !!corePlugin
-  }
+  const hasPlugin = await isCorePluginPresent(agentId)
 
   if (!hasPlugin) {
     console.log(`[ensureCorePluginInstalled] R17: ai-maestro-plugin missing or disabled for agent ${agentId} (client=${clientType}) — installing...`)

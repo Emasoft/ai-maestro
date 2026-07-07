@@ -403,17 +403,41 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
   // a failure here is logged but does not block the launch — the agent may
   // still work (e.g. plugin already present) and the user should not be
   // stuck unable to start a session because of a transient install error.
+  //
+  // code-review F5: the strict POST below pops the governance-password sudo
+  // modal on EVERY click. In the overwhelmingly common case the plugin is
+  // already installed and the POST would be a no-op, so probe the cheap,
+  // non-strict GET presence check first and only pay the sudo prompt when a
+  // reinstall is actually needed. A failed/ambiguous probe (network error,
+  // non-boolean response) falls through to the strict POST rather than
+  // silently skipping the self-heal, to keep the R17 security/self-heal
+  // intent unchanged for the case that actually matters.
   const handleNewSession = async () => {
     if (isProgramRunning) return
     if (agentId) {
       try {
-        const res = await sudoFetch(
-          `${baseUrl}/api/agents/${agentId}/ensure-core`,
-          { method: 'POST' },
-          (reason) => requestSudoToken(reason),
-        )
-        if (!res.ok) {
-          console.warn('New Session: ensure-core self-heal failed', await res.text().catch(() => ''))
+        let needsEnsureCore = true
+        try {
+          const checkRes = await fetch(`${baseUrl}/api/agents/${agentId}/ensure-core`)
+          if (checkRes.ok) {
+            const checkData = await checkRes.json().catch(() => null)
+            if (typeof checkData?.hasPlugin === 'boolean') {
+              needsEnsureCore = !checkData.hasPlugin
+            }
+          }
+        } catch {
+          // presence check failed -- fall through to the strict POST below
+        }
+
+        if (needsEnsureCore) {
+          const res = await sudoFetch(
+            `${baseUrl}/api/agents/${agentId}/ensure-core`,
+            { method: 'POST' },
+            (reason) => requestSudoToken(reason),
+          )
+          if (!res.ok) {
+            console.warn('New Session: ensure-core self-heal failed', await res.text().catch(() => ''))
+          }
         }
       } catch (error) {
         console.warn('New Session: ensure-core self-heal failed:', error)

@@ -7,12 +7,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { readFile, readdir, stat, rm, writeFile, mkdir } from 'fs/promises'
-import { existsSync } from 'fs'
-import { join, basename } from 'path'
+import { readFile, readdir, stat, rm, writeFile } from 'fs/promises'
+import { existsSync, realpathSync } from 'fs'
+import { join, basename, resolve } from 'path'
 import os from 'os'
 import semver from 'semver'
-import { LOCAL_MARKETPLACE_NAME, MAIN_PLUGIN_NAME, MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
+import { MAIN_PLUGIN_NAME, MARKETPLACE_NAME } from '@/lib/ecosystem-constants'
 import { enforceSystemOwner } from '@/lib/route-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 // SCEN-017 P0-001 / P0-002: route marketplace lifecycle through the central
@@ -695,15 +695,18 @@ export async function POST(req: NextRequest) {
       const safeName = shellSafe(elementName)
       const { execSync } = await import('child_process')
 
-      // Resolve target path for snapshotting
-      let rmTargetPath: string | null = null
+      // Validate elementType is one of the supported kinds before continuing —
+      // the actual removal happens in the second switch below. (rmTargetPath
+      // used to be computed here for a filesystem snapshot that was never
+      // read; removed as dead code — the case list itself is what performs
+      // the validation, via the 'lsp' and 'default' early returns.)
       switch (elementType) {
-        case 'mcp': rmTargetPath = null; break // CLI-managed, no filesystem snapshot
+        case 'mcp': break // CLI-managed, no filesystem snapshot
         case 'lsp': return NextResponse.json({ error: 'LSP servers can only be managed through their parent plugin' }, { status: 400 })
-        case 'skill': rmTargetPath = join(HOME, '.claude', 'skills', elementName); break
-        case 'rule': rmTargetPath = elementPath || join(HOME, '.claude', 'rules', `${elementName}.md`); break
-        case 'agent': rmTargetPath = elementPath || join(HOME, '.claude', 'agents', `${elementName}.md`); break
-        case 'outputStyle': rmTargetPath = elementPath || null; break
+        case 'skill': break
+        case 'rule': break
+        case 'agent': break
+        case 'outputStyle': break
         default: return NextResponse.json({ error: `Unsupported element type for removal: ${elementType}` }, { status: 400 })
       }
 
@@ -1338,22 +1341,49 @@ async function handleCheckUpdates(marketplaceName?: string, force?: boolean) {
  */
 const MARKETPLACE_PATH_BLOCKLIST = ['/etc', '/usr', '/private/etc', '/private/var/db', '/System']
 
-function isPathAllowedForMarketplace(candidate: string): boolean {
-  if (!candidate || !candidate.startsWith('/')) return false
-  for (const blocked of MARKETPLACE_PATH_BLOCKLIST) {
-    if (candidate === blocked || candidate.startsWith(`${blocked}/`)) return false
+/**
+ * code-review F4: the allow/deny check used to run on the RAW candidate
+ * string, so a HOME-nested path containing `..` segments (e.g.
+ * `/Users/<u>/../../etc`) passed `startsWith(HOME)` as a plain string
+ * comparison yet resolved OUTSIDE HOME / into a blocked directory once
+ * Node's path/fs functions actually consumed it. Normalize via resolve()
+ * FIRST (and, when the path exists, realpath through any symlinks) and run
+ * every check against that normalized absolute path -- returning it so the
+ * caller operates on the SAME string that was actually validated, instead
+ * of re-checking one string and using a different (unnormalized) one.
+ */
+function resolveAllowedMarketplacePath(candidate: string): string | null {
+  if (!candidate || !candidate.startsWith('/')) return null
+  let resolved = resolve(candidate)
+  if (existsSync(resolved)) {
+    try {
+      resolved = realpathSync(resolved)
+    } catch {
+      // existsSync already confirmed presence; a realpath failure here is
+      // unexpected (race, permissions) — fall back to the resolve()d path.
+    }
   }
-  return candidate === HOME || candidate.startsWith(`${HOME}/`)
+  for (const blocked of MARKETPLACE_PATH_BLOCKLIST) {
+    if (resolved === blocked || resolved.startsWith(`${blocked}/`)) return null
+  }
+  if (resolved !== HOME && !resolved.startsWith(`${HOME}/`)) return null
+  return resolved
 }
 
 /** Register a local-directory marketplace (TRDD-4IYPNZWT). */
 async function handleAddMarketplaceFromPath(localPath: string) {
-  if (!isPathAllowedForMarketplace(localPath)) {
+  const resolvedPath = resolveAllowedMarketplacePath(localPath)
+  if (!resolvedPath) {
     return NextResponse.json({ error: 'path must be inside the home directory and not a system directory' }, { status: 400 })
   }
-  if (!existsSync(localPath)) {
+  if (!existsSync(resolvedPath)) {
     return NextResponse.json({ error: `Directory not found: ${localPath}` }, { status: 400 })
   }
+  // Use the normalized/realpath'd path for every downstream operation (the
+  // manifest read, CreateMarketplace, and the settings.json record) so a
+  // `..`-laden or symlinked candidate can never diverge from what was
+  // actually validated above.
+  localPath = resolvedPath
 
   // Prefer the manifest's own declared name; fall back to the directory basename.
   const manifestJson = await readJsonSafe(join(localPath, '.claude-plugin', 'marketplace.json'))
@@ -1643,17 +1673,4 @@ async function handleSecurityCheck(pluginKey?: string) {
     }
     return NextResponse.json({ error: `Security check failed: ${execErr.message || stderr}` }, { status: 500 })
   }
-}
-
-/** Update enabledPlugins[key] in settings.json */
-async function setPluginEnabled(key: string, enabled: boolean) {
-  const settings = await readJsonSafe(SETTINGS_PATH) || {}
-  const ep = (settings.enabledPlugins || {}) as Record<string, boolean>
-  if (enabled) {
-    ep[key] = true
-  } else {
-    delete ep[key]
-  }
-  settings.enabledPlugins = ep
-  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
 }

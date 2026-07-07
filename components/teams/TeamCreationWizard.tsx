@@ -19,6 +19,8 @@ import {
   LayoutDashboard,
   UserCheck,
 } from 'lucide-react'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 // ──────────────────────────────────────────────────────────────────────
 // Props
@@ -141,6 +143,10 @@ export default function TeamCreationWizard({
   const [step, setStep] = useState(0)
   const [data, setData] = useState<WizardData>({ ...INITIAL_DATA })
   const [nameValidation, setNameValidation] = useState<{ error: string | null }>({ error: null })
+  // code-review F2: POST /api/teams/create-with-project is now strict
+  // (sudo-gated, at parity with POST /api/teams) -- requestSudoToken backs
+  // the sudoFetch call in handleCreate below.
+  const { requestSudoToken } = useSudo()
 
   // Step 2 state
   const [ghAuth, setGhAuth] = useState<GitHubAuthStatus | null>(null)
@@ -391,11 +397,14 @@ export default function TeamCreationWizard({
         }
       }
 
-      const res = await fetch('/api/teams/create-with-project', {
+      // code-review F2: route is now strict (sudo-gated) -- sudoFetch
+      // transparently handles the 403 sudo_required -> password modal ->
+      // retry-with-token loop (same pattern as TeamListView's POST /api/teams).
+      const res = await sudoFetch('/api/teams/create-with-project', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-      })
+      }, requestSudoToken)
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: 'Failed to create team' }))
         const issuesMsg = Array.isArray(errData.issues) && errData.issues.length > 0

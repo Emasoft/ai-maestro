@@ -2187,14 +2187,31 @@ export async function ChangeTitle(
     // reassign, etc.) the check must still trigger. G13b below sets
     // these fields after a successful title change, so this gate is the
     // pre-write counterpart.
-    // TRDD-AOFL94O3: the team lookup now runs UNCONDITIONALLY (not only when
-    // newTitle is a singleton title) so Gate 8b below can also see
-    // memberTeamG8 when newTitle is e.g. 'member' — the whole point of 8b is
-    // to guard the REVERSE direction (demoting the CURRENT COS away), which
-    // has nothing to do with newTitle being a singleton title itself.
-    const { loadTeams: loadTeamsG8 } = await import('@/lib/team-registry')
-    const allTeamsG8 = loadTeamsG8()
-    const memberTeamG8 = allTeamsG8.find(t => t.agentIds.includes(agentId))
+    // TRDD-AOFL94O3: Gate 8b below also needs memberTeamG8, to guard the
+    // REVERSE direction (demoting the CURRENT COS away) — which has nothing
+    // to do with newTitle being a singleton title. loadTeams() has no mtime
+    // cache, so loading it unconditionally on every ChangeTitle call (e.g.
+    // MANAGER<->AUTONOMOUS, MAINTAINER edits, agents on no team) is a real
+    // I/O cost paid on the common, team-irrelevant path. Instead, load only
+    // when a team-related outcome is actually possible:
+    //   (a) newTitle targets a per-team singleton (chief-of-staff/orchestrator)
+    //       — Gate 8 itself needs the team to check the singleton, OR
+    //   (b) oldTitle is already 'chief-of-staff' — the agent may currently
+    //       hold a team's chiefOfStaffId slot, which is exactly what Gate 8b
+    //       must verify before allowing a demotion away from the title.
+    // oldTitle is a reliable signal for (b): Gate 5 above already reconciles
+    // it from agent.governanceTitle (or, when that's empty, a teams.json scan
+    // via isChiefOfStaffAnywhere()), so an agent whose registry title truly is
+    // 'chief-of-staff' is always caught here — matching the documented threat
+    // model (a caller bypassing the UI's PATCH without first clearing
+    // team.chiefOfStaffId; see G08b below).
+    const needsTeamLookupG8 = (newTitle !== null && SINGLETON_TEAM_TITLES.has(newTitle)) || oldTitle === 'chief-of-staff'
+    let memberTeamG8: import('@/types/team').Team | undefined
+    if (needsTeamLookupG8) {
+      const { loadTeams: loadTeamsG8 } = await import('@/lib/team-registry')
+      const allTeamsG8 = loadTeamsG8()
+      memberTeamG8 = allTeamsG8.find(t => t.agentIds.includes(agentId))
+    }
 
     if (newTitle && SINGLETON_TEAM_TITLES.has(newTitle)) {
       if (memberTeamG8) {

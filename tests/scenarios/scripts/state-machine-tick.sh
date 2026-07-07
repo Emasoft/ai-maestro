@@ -115,9 +115,23 @@ preflight_scenario() {
   local p p_exp
   while IFS= read -r p; do
     [ -z "$p" ] && continue
+    # SC2088 false positive on the '~/'* arm below: it is a CASE PATTERN
+    # matching a literal leading ~/ (a fixture path a human wrote as ~/foo);
+    # the body expands via $HOME and never relies on shell tilde expansion.
+    # shellcheck disable=SC2088
     case "$p" in
       '~')   p_exp="$HOME" ;;
       '~/'*) p_exp="${HOME}/${p#'~/'}" ;;
+      '~'*)
+        # ~username-form paths (e.g. ~otheruser/fixture) are deliberately NOT
+        # expanded — resolving another user's home dir needs getent/dscl and
+        # is platform-specific. Rejecting explicitly avoids silently checking
+        # the literal unexpanded string, which would misreport this as a
+        # plain "missing" fixture instead of an unsupported path form
+        # (code-review S4).
+        echo "PREFLIGHT_FAIL SCEN-$nnn — dir-fixture $p uses unsupported ~username syntax (use an absolute path instead)"
+        return 1
+        ;;
       *)     p_exp="$p" ;;
     esac
     if [ ! -d "$p_exp" ]; then

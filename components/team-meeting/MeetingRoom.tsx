@@ -8,6 +8,11 @@ import { useAgents } from '@/hooks/useAgents'
 import { useTasks } from '@/hooks/useTasks'
 import { useMeetingMessages } from '@/hooks/useMeetingMessages'
 import { TerminalProvider } from '@/contexts/TerminalContext'
+// code-review F3: POST /api/teams is now strict (TRDD-1LX5LMBD) -- every
+// POST /api/teams call in this file must go through sudoFetch or it 403s
+// with no password-modal retry, silently producing no-team meetings.
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 import AgentPicker from '@/components/team-meeting/AgentPicker'
 import SelectedAgentsBar from '@/components/team-meeting/SelectedAgentsBar'
 import MeetingHeader from '@/components/team-meeting/MeetingHeader'
@@ -195,6 +200,7 @@ interface MeetingRoomProps {
 
 export default function MeetingRoom({ meetingId, teamParam, groupParam }: MeetingRoomProps) {
   const router = useRouter()
+  const { requestSudoToken } = useSudo()
   const { agents, loading: agentsLoading } = useAgents()
   const [state, dispatch] = useReducer(meetingReducer, initialState)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
@@ -324,14 +330,14 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
           if (existing) {
             resolvedTeamId = existing.id
           } else {
-            const createRes = await fetch('/api/teams', {
+            const createRes = await sudoFetch('/api/teams', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 name: state.teamName,
                 agentIds: state.selectedAgentIds,
               }),
-            })
+            }, requestSudoToken)
             if (!mounted) return
             const createData = await createRes.json()
             resolvedTeamId = createData.team?.id || null
@@ -443,14 +449,14 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
           if (existing) {
             setTeamId(existing.id)
           } else {
-            fetch('/api/teams', {
+            sudoFetch('/api/teams', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 name: state.teamName || 'Untitled Meeting',
                 agentIds: state.selectedAgentIds,
               }),
-            })
+            }, requestSudoToken)
               .then(r => r.json())
               .then(data => { if (mounted) setTeamId(data.team?.id || null) })
               .catch((err) => console.error('[MeetingRoom] Team create failed:', err))
@@ -560,7 +566,7 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
 
   const handleSaveTeam = useCallback(async (name: string, description: string) => {
     try {
-      await fetch('/api/teams', {
+      const res = await sudoFetch('/api/teams', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -568,12 +574,15 @@ export default function MeetingRoom({ meetingId, teamParam, groupParam }: Meetin
           description,
           agentIds: state.selectedAgentIds,
         }),
-      })
-      setShowSaveDialog(false)
+      }, requestSudoToken)
+      // code-review F3: fetch() never throws on a 4xx/5xx, so the dialog was
+      // previously closed unconditionally even on a 403 -- the user would see
+      // "success" while no team was actually created. Only close on 2xx.
+      if (res.ok) setShowSaveDialog(false)
     } catch (error) {
       console.error('Failed to save team:', error)
     }
-  }, [state.selectedAgentIds])
+  }, [state.selectedAgentIds, requestSudoToken])
 
   const handleLoadTeam = useCallback((team: Team) => {
     dispatch({ type: 'LOAD_TEAM', agentIds: team.agentIds, teamName: team.name })

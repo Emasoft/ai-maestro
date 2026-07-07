@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { verifyPassword } from '@/lib/governance'
 import { createNewTeam } from '@/services/teams-service'
 import { requireAuth } from '@/lib/route-auth'
+import { requireSudoToken } from '@/lib/sudo-guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +11,15 @@ const safeOwnerRepo = /^[a-zA-Z0-9_.-]+$/
 const CreateWithProjectSchema = z.object({
   name: z.string().min(1).max(128),
   description: z.string().max(512).optional(),
-  password: z.string().min(1).max(256),
+  // code-review F2: this route used to gate SOLELY on this in-body password
+  // via verifyPassword() -- the exact "any agent that knows the governance
+  // password string can create a team" bypass TRDD-1LX5LMBD closed for the
+  // sibling POST /api/teams (which is strict + STRICT_AGENT_RULES
+  // 'manage-team'). Kept OPTIONAL and UNVALIDATED-BUT-IGNORED (same
+  // treatment as `governancePassword` in app/api/teams/route.ts) so an
+  // older client that still sends it gets a normal 200/403 from the sudo
+  // gate below instead of a schema-validation 400.
+  password: z.string().max(256).optional(),
   githubProject: z.object({
     owner: z.string().min(1).max(64).regex(safeOwnerRepo, 'Must be alphanumeric with _.-'),
     repo: z.string().min(1).max(64).regex(safeOwnerRepo, 'Must be alphanumeric with _.-'),
@@ -31,6 +39,15 @@ export async function POST(request: NextRequest) {
   const auth = requireAuth(request)
   if (!auth.ok) return auth.error
 
+  // code-review F2: strict-route gate, at parity with POST /api/teams
+  // (TRDD-1LX5LMBD). For a USER/web-UI caller this requires a fresh sudo
+  // token (the UI must call this route via sudoFetch); for an AGENT caller
+  // it runs authorize('manage-team') -- MANAGER-only, matching R9.1. This
+  // REPLACES the ad-hoc in-body `password` check below, which let ANY
+  // caller who merely knew the governance password string create a team.
+  const sudoErr = requireSudoToken(request, 'POST', '/api/teams/create-with-project')
+  if (sudoErr) return sudoErr
+
   try {
     let raw: unknown
     try { raw = await request.json() } catch {
@@ -45,12 +62,6 @@ export async function POST(request: NextRequest) {
       )
     }
     const body = parsed.data
-
-    // Verify governance password
-    const passwordValid = await verifyPassword(body.password)
-    if (!passwordValid) {
-      return NextResponse.json({ error: 'Invalid governance password' }, { status: 403 })
-    }
 
     // Delegate to createNewTeam — the All-In-One function that handles:
     // - MANAGER existence check

@@ -90,6 +90,10 @@ while [[ $# -gt 0 ]]; do
             shift 2  # Already handled in pre-source parsing
             ;;
         --name)
+            # Guard the value arg like amp-send.sh does — without it, --name as
+            # the last CLI token makes `shift 2` fail under `set -euo pipefail`
+            # and the script aborts with NO error message (ABD-A/D).
+            [[ $# -lt 2 ]] && { echo "Error: $1 requires a value" >&2; exit 1; }
             shift 2  # Already handled in pre-source parsing (TRDD-VGTXJTZ3)
             ;;
         --help|-h)

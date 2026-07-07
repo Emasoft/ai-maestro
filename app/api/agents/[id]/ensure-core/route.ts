@@ -3,8 +3,52 @@ import { isValidUuid } from '@/lib/validation'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { getAgent } from '@/lib/agent-registry'
-import { ensureCorePluginInstalled } from '@/services/agents-core-service'
+import { ensureCorePluginInstalled, isCorePluginPresent } from '@/services/agents-core-service'
 import { detectClientType } from '@/lib/client-capabilities'
+
+/**
+ * GET /api/agents/[id]/ensure-core
+ *
+ * code-review F5: the "New Session" button (AgentProfile.tsx
+ * handleNewSession) used to await the POST below on EVERY click, popping
+ * the governance-password sudo modal even in the overwhelmingly common
+ * case where the core plugin is already installed and nothing needs to
+ * change. This GET does ONLY the read-only presence check
+ * (isCorePluginPresent -- never calls InstallElement, never writes
+ * anything), so it is intentionally left OUT of security-registry.json
+ * (defaults to "normal" -- standard session/agent auth via the global
+ * middleware still applies, no sudo token required). The caller skips the
+ * strict POST entirely when this reports the plugin already present, and
+ * falls back to POST only when a reinstall is actually needed -- the
+ * privileged write path keeps its full sudo/R17 gate unchanged.
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    if (!isValidUuid(id)) {
+      return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
+
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+
+    const agent = getAgent(id)
+    if (!agent) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    }
+
+    const hasPlugin = await isCorePluginPresent(id)
+    return NextResponse.json({ hasPlugin })
+  } catch (error) {
+    console.error('[Agents ensure-core GET] Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
 
 /**
  * POST /api/agents/[id]/ensure-core

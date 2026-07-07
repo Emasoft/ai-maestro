@@ -65,7 +65,13 @@ if [ -z "$OUT" ]; then
 fi
 mkdir -p "$(dirname "$OUT")"
 
-[ -d "$PROPOSALS_DIR" ] || { echo "ERROR proposals-dir-missing: $PROPOSALS_DIR" >&2; exit 2; }
+# A missing proposals dir is a LEGITIMATE empty state (fresh checkout, or a
+# batch that authored zero Rule-11 proposals) — NOT an error. Hard-exiting
+# here made master-cleanup step 4 silently lose the BATCH_SUMMARY index on
+# an otherwise-clean run (code-review S3). The for-loop below already
+# tolerates a missing dir (the unexpanded glob fails the `[ -f "$f" ]`
+# check and falls through with TOTAL=0), so we just log and continue.
+[ -d "$PROPOSALS_DIR" ] || echo "INFO proposals-dir-missing: $PROPOSALS_DIR (treating as 0 proposals)" >&2
 
 # ---- Select + extract proposal frontmatter (bash-3.2-safe: temp files, no mapfile) ----
 TMP_DIR="$(mktemp -d)"
@@ -77,7 +83,10 @@ for f in "$PROPOSALS_DIR"/TRDD-*.md; do
   if [ "$ALL_PENDING" -eq 1 ]; then
     grep -q '^column: proposal$' "$f" || continue
   else
-    grep -q "^labels:.*batch-${BATCH_ID}" "$f" || continue
+    # Match the batch label as a FIXED string (grep -F), not a regex — an
+    # unescaped BATCH_ID containing '.', '*', or '[' would otherwise be
+    # interpreted as a BRE and could mis-match or error (code-review S2).
+    grep '^labels:' "$f" | grep -qF "batch-${BATCH_ID}" || continue
   fi
   # Frontmatter is one-field-per-line flow-style (TRDD grep-first invariants),
   # so plain sed extraction is exact — no YAML parser needed.

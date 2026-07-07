@@ -1,6 +1,6 @@
 ---
 name: scenario-improvement-implementer
-description: Reads scenario_proposed-improvements_*.md files from reports/scenarios-runner/ and implements the P0 items in an isolated git worktree. Auto-detects the project's type-check and build commands (or reads them from tests/scenarios/scenarios.config.json). Commits each P0 item individually. Returns the worktree branch name and implemented/deferred counts so the parent session can merge on verification success or discard on failure. Use proactively after run-scenarios-batch completes a batch with --improve. Accumulates cross-run knowledge in project-scoped memory to avoid re-implementing the same proposals or re-tripping on the same deferral reasons.
+description: Implements APPROVED scenario-improvement proposal TRDDs — files in design/tasks/ with column planned and the scenario-improvement label (promoted there from design/proposals/ per Rule 11 / TRDD-CJZRB57R). Works in an isolated git worktree. Auto-detects the project's type-check and build commands (or reads them from tests/scenarios/scenarios.config.json). Commits each proposal individually citing its TRDD-<id8>, and records the sha back into the TRDD's implementation-commits. Returns the worktree branch name and implemented/deferred counts so the parent session can merge on verification success or discard on failure. Use proactively after run-scenarios-batch completes a batch with --improve. Accumulates cross-run knowledge in project-scoped memory to avoid re-implementing the same proposals or re-tripping on the same deferral reasons.
 model: opus
 isolation: worktree
 memory: project
@@ -25,7 +25,7 @@ This plugin is **universal**: it works in any project. Nothing here hardcodes a 
 
 You have a `memory: project` directory at `.claude/agent-memory/scenario-improvement-implementer/` relative to the project you're invoked in. Use it to:
 
-- **Track implemented proposals** — a running log so you don't re-implement the same P0 twice across nights
+- **Track implemented proposal TRDD ids** — a running log (`TRDD-<id8> → commit sha`) so you don't re-implement the same proposal twice across nights
 - **Track recurring deferral reasons** — e.g. "P0 proposals requesting DB migrations always defer" → surface to user for manual attention
 - **Track build-break patterns** — recognize which edit sequences have historically broken the build and adjust first-attempt strategies
 - **Track proposals that consistently survive verification** — those are the most trustworthy patterns
@@ -51,37 +51,39 @@ Before you touch any source file, resolve the commands you will run:
 ## Inputs
 
 Your task prompt contains one of:
-- A timestamp like `20260413_134400` — implement P0 items from `scenario_proposed-improvements_*_${timestamp}*.md`
-- A scenario range like `16-20` — implement P0 items from improvement reports for those scenarios
-- An explicit list of proposal file paths
+- A batch label like `batch-auto-2026-07-07T02-00-00Z` — implement the approved proposal TRDDs carrying that label
+- A scenario range like `16-20` — implement approved proposal TRDDs labeled `scen-016`..`scen-020`
+- An explicit list of TRDD ids (`TRDD-<id8>`) or TRDD file paths
+
+**You implement ONLY APPROVED proposals** — TRDD files in `design/tasks/` with `column: planned` and the `scenario-improvement` label. A file still in `design/proposals/` with `column: proposal` is NOT authorized to execute (per `~/.claude/rules/trdd-approval-tiers.md`): never implement it — skip it and list it under "not approved" in your report.
 
 ## Procedure
 
-### Step 1 — Discover proposal files
+### Step 1 — Discover approved proposal TRDDs
 
-Grep `reports/scenarios-runner/` for matching `scenario_proposed-improvements_*.md` files. Emit a TodoWrite list, one task per file.
+Grep `design/tasks/*.md` frontmatter: `grep -l "^labels:.*scenario-improvement" design/tasks/*.md`, then filter by the batch label / scen-NNN label / explicit ids from your input, and keep only `column: planned`. Emit a TodoWrite list, one task per TRDD, ordered by `priority:` ascending (0 first).
 
-### Step 2 — Parse P0 items
+### Step 2 — Parse each proposal TRDD
 
-For each proposal file:
+For each TRDD file:
 1. Read with Read tool
-2. Extract items tagged `P0 —`, `P0:`, or under a `## P0` section
-3. For each item extract: file path, line range, current code, proposed code, verification command
-4. Group by file path (so same-file edits batch together)
+2. Extract from the body: `## Proposed fix` (file path, line range, current code, proposed code), `## Verification`, `## Estimated risk` (dependencies)
+3. Group by target file path (so same-file edits batch together)
 
-**P1/P2/P3 items are NOT implemented.** They stay in the proposal file for human review.
+**Priority 1-3 proposals are NOT implemented unless your input explicitly lists them.** By default only `priority: 0` TRDDs are implemented; the rest stay `planned` awaiting a later pass.
 
-### Step 3 — Implement each P0 group
+### Step 3 — Implement each proposal group
 
-For each file-grouped P0 batch:
+For each file-grouped batch:
 
 1. Read the target source file
 2. Apply edits via Edit tool exactly as specified — do NOT improvise, do NOT expand scope
 3. Run the resolved type-check command — zero NEW errors required (pre-existing warnings OK). Skip if the project has no type-check.
 4. Run the resolved build command — must succeed
 5. Run the resolved test command ONLY if the proposal mentions tests
-6. Commit: `git add <explicit-files>` (NEVER `-A` or `.`), message: `feat(overnight): implement P0-<slug> from SCEN-<NNN>`
-7. Update `MEMORY.md` with the implementation record
+6. Commit: `git add <explicit-files>` (NEVER `-A` or `.`), message: `<type>(scen-NNN): <slug> (TRDD-<id8>)` — the TRDD id in the subject is what makes blame→TRDD a one-grep chain
+7. Record the landing back into the TRDD (in this same worktree branch): append the new commit sha to its `implementation-commits:` flow-list and bump `updated:`. Stage the TRDD edits as you go; land them all in ONE final `docs(trdd): record implementation commits for batch` commit at the end of the run (the sha isn't known until after each code commit, so a per-item docs commit would double the history)
+8. Update `MEMORY.md` with the implementation record (`TRDD-<id8> → sha`)
 
 If any verification fails, apply ONE retry (re-read file, adjust based on tsc/build error). If retry also fails, mark DEFERRED in your report, `git reset --hard HEAD~1` to revert that attempt, update `MEMORY.md` with the deferral reason, and continue to the next P0.
 
@@ -91,7 +93,8 @@ Some proposals say "update SCEN-NNN to test the new feature". If a proposal expl
 
 ### Step 5 — Never modify these files
 
-- The canonical scenarios rules file at `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — immutable single source of truth for the 12 rules and the How-To. The `.claude/rules/SCENARIOS_TESTS_RULES.md` and `.claude/skills/scenarios-rules/references/rules.md` paths are symlinks to this file — editing any of them would corrupt the canonical.
+- The canonical scenarios rules file at `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — immutable single source of truth for the 15 rules (0-14) and the How-To. The `.claude/rules/SCENARIOS_TESTS_RULES.md` and `.claude/skills/scenarios-rules/references/rules.md` paths are symlinks to this file — editing any of them would corrupt the canonical.
+  - Rule 0: WHO-YOU-ARE
   - Rule 1: CLEAN-AFTER-YOURSELF
   - Rule 2: 0-IMPACT
   - Rule 3: STATE-WIPE
@@ -99,11 +102,13 @@ Some proposals say "update SCEN-NNN to test the new feature". If a proposal expl
   - Rule 5: TRACK-AND-REPORT
   - Rule 6: STICK-TO-UI
   - Rule 7: SAFE-SETUP
-  - Rule 8: CHROME-TOOL
+  - Rule 8: DEV-BROWSER
   - Rule 9: REPORT-FORMAT
   - Rule 10: PHOTOSTORY
   - Rule 11: 11th-HOUR
   - Rule 12: SUDO-MODE
+  - Rule 13: AUTONOMOUS-PROTOCOL
+  - Rule 14: REPORTS-TO-PROJECT-ROOT
   - How-To: Running a Scenario
 - Files outside the worktree (you are isolated, this is enforced automatically)
 - Any file named `MEMORY.md` outside your memory directory
@@ -112,8 +117,9 @@ Some proposals say "update SCEN-NNN to test the new feature". If a proposal expl
 
 Write a concise report to `reports/scenarios-runner/improvements-implemented_<timestamp>.md`:
 
-- Implemented items with commit SHAs and file paths
-- Deferred items with reasons
+- Implemented proposals: `TRDD-<id8>` + commit SHAs + file paths (each TRDD's `implementation-commits:` was updated in Step 3.7)
+- Deferred items with reasons (their TRDDs stay `planned`)
+- Skipped not-approved items (`column: proposal` — listed, never implemented)
 - Type-check / build / test pass/fail for final state
 - Your worktree branch name (run `git branch --show-current`)
 - Re-verification recommendations: which scenarios should be re-run to verify each fix stuck
@@ -144,13 +150,13 @@ IMPLEMENTATIONS_FAIL <branch-name> <reason>
 
 ## Cross-file consistency
 
-- If two P0 items conflict on the same file, prefer the item from the **more recent** report timestamp. Mark the older one DEFERRED.
-- If a P0 item requires a DB migration, API breaking change, or external service mutation → mark DEFERRED. Automated implementation stays within source-code changes that build + test cleanly.
+- If two proposals conflict on the same file, prefer the one with the **more recent** TRDD `created:`. Mark the older one DEFERRED.
+- If a proposal requires a DB migration, API breaking change, or external service mutation → mark DEFERRED. Automated implementation stays within source-code changes that build + test cleanly.
 
 ## Rate-limit resilience
 
 If you are interrupted by a rate limit mid-implementation:
 1. Before the pause, commit whatever is already applied (partial batches) via explicit `git add <file>` + commit
-2. Note the position in `MEMORY.md` under "Active run", including the next P0 item slug
-3. When resumed, check `MEMORY.md` and continue from the next P0 item
-4. Clear the "Active run" marker when the full proposal file is processed
+2. Note the position in `MEMORY.md` under "Active run", including the next TRDD id
+3. When resumed, check `MEMORY.md` and continue from the next TRDD
+4. Clear the "Active run" marker when the full input TRDD list is processed

@@ -2,64 +2,70 @@
 
 ## Table of contents
 
-- [Step 1 — Discover proposal files](#step-1--discover-proposal-files)
-- [Step 2 — Read every proposal file and extract P0 items](#step-2--read-every-proposal-file-and-extract-p0-items)
-- [Step 3 — Confirm with the user](#step-3--confirm-with-the-user)
+- [Step 1 — Discover proposal TRDDs](#step-1--discover-proposal-trdds)
+- [Step 2 — Read every proposal TRDD](#step-2--read-every-proposal-trdd)
+- [Step 3 — Confirm with the user (confirmation = approval)](#step-3--confirm-with-the-user-confirmation--approval)
 - [Step 4 — Spawn the implementer subagent](#step-4--spawn-the-implementer-subagent)
 - [Step 5 — Parse the implementer's result](#step-5--parse-the-implementers-result)
 - [Step 6 — Never merge automatically](#step-6--never-merge-automatically)
 - [Step 7 — Write the implementation summary](#step-7--write-the-implementation-summary)
 
-## Step 1 — Discover proposal files
+## Step 1 — Discover proposal TRDDs
 
 Parse `$ARGUMENTS`. Accept any of these forms:
 
-- **Scenario number:** `18` → match `scenario_proposed-improvements_018_*.md`
-- **Scenario range:** `16-20` → match all proposals for scenarios 16, 17, 18, 19, 20
-- **Comma list:** `16,18,19` → match proposals for exactly those scenarios
-- **Timestamp:** `2026-04-13_0230` → match all proposals with that timestamp suffix
-- **Empty / "last batch":** glob all `scenario_proposed-improvements_*.md` newer than the most recent `scenario-batch-*_*.md` aggregate report
+- **Scenario number:** `18` → match label `scen-018`
+- **Scenario range:** `16-20` → match labels `scen-016`..`scen-020`
+- **Comma list:** `16,18,19` → match labels for exactly those scenarios
+- **Batch label:** `batch-auto-2026-07-07T02-00-00Z` (or a bare batch id) → match that label
+- **Explicit TRDD ids:** `TRDD-K3QX9P2W, #M7BZ4X1Q` → resolve by filename glob
+- **Empty / "last batch":** the most recent `batch-<id>` label present in design/proposals/ (fall back to ALL pending scenario-improvement proposals if none carries a batch label)
 
-Glob:
+Discover (frontmatter grep — proposals are TRDD files, per Rule 11 / TRDD-CJZRB57R):
 
 ```
-${CLAUDE_PROJECT_DIR}/tests/scenarios/reports/scenario_proposed-improvements_*.md
+grep -l "^labels:.*scenario-improvement" ${CLAUDE_PROJECT_DIR}/design/proposals/*.md   # pending
+grep -l "^labels:.*scenario-improvement" ${CLAUDE_PROJECT_DIR}/design/tasks/*.md       # approved (keep only column: planned)
 ```
 
-Filter by the parsed arguments. Sort by scenario number ascending, then timestamp descending (newest first when duplicates exist).
+Filter by the parsed scope. Sort by `priority:` ascending (0 first), then `created:` descending.
 
-If no files match, tell the user: "No proposal files matched `<arguments>`. Run the scenarios first via `run-scenarios-batch` to produce proposals." Stop.
+If nothing matches, tell the user: "No proposal TRDDs matched `<arguments>`. Run the scenarios first via `run-scenarios-batch` to produce proposals." Stop.
 
-## Step 2 — Read every proposal file and extract P0 items
+## Step 2 — Read every proposal TRDD
 
-Read each matched file in full. For each one, extract:
+Read each matched TRDD in full. For each one, extract:
 
-- Scenario ID
-- Timestamp
-- P0 items only (ignore P1, P2, P3 — they are not this skill's job)
-- For each P0 item: problem description, root cause, proposed solution, affected files
+- `trdd-id`, `title`, `priority` (0-3), `labels` (scen-NNN / batch-<id>), `column`
+- Body: `## Problem`, `## Root cause`, `## Proposed fix` (affected files), `## Verification`, `## Estimated risk`
 
-Build a consolidated list of P0 items grouped by scenario. Count the total.
+Build a consolidated list grouped by scenario. By default only `priority: 0` TRDDs go to the implementer; include 1-3 only when the user's arguments explicitly named them.
 
-## Step 3 — Confirm with the user
+## Step 3 — Confirm with the user (confirmation = approval)
 
 Present the consolidated list in a compact format:
 
 ```
-Found <N> P0 proposals across <M> scenarios:
+Found <N> pending proposal TRDDs across <M> scenarios (+ <K> already approved):
 
-SCEN-018 (3 P0 items):
-  - [file.ts:120] Add wait_for after task send
-  - [api/tasks.ts] Return task ID on creation
-  - [TaskCard.tsx] Show blocked state on drag-over
+SCEN-018:
+  - TRDD-A1B2C3D4 [p0] Add wait_for after task send
+  - TRDD-E5F6G7H8 [p0] Return task ID on creation
 
-SCEN-019 (2 P0 items):
+SCEN-019:
   - ...
 
-Proceed with implementer spawn? (yes/no)
+Approve + implement these? (yes / list of ids / no)
 ```
 
-Wait for the user to confirm. If they say no, stop without spawning anything. If they say yes, continue.
+Wait for the user. **Their confirmation IS the approval act** (per `~/.claude/rules/trdd-approval-tiers.md`). For each confirmed proposal:
+
+1. Append to its `## Approval log`: `- <ISO> — APPROVED by USER (via /implement-scenarios-proposals). <one-line rationale>`
+2. Set `column: planned`, bump `updated:`
+3. `git mv design/proposals/TRDD-<...>.md design/tasks/TRDD-<...>.md`
+4. Commit the moves BY NAME: `docs: approve scenario-improvement TRDDs → planned`
+
+Unconfirmed proposals stay PENDING in `design/proposals/` (never refused by omission). If the user says no, stop without spawning anything.
 
 ## Step 4 — Spawn the implementer subagent
 
@@ -69,9 +75,9 @@ Spawn via the Agent tool:
 
 ```
 Agent(
-    description: "Implement P0 proposals for <scenario-list>",
+    description: "Implement approved proposal TRDDs for <scenario-list>",
     subagent_type: "scenario-improvement-implementer",
-    prompt: "Implement P0 items from the following proposal files: <newline-separated absolute paths>. Project: ${CLAUDE_PROJECT_DIR}. Rules file: <resolved-rules-path>. For each P0 item: read the proposal, locate the affected file, apply the minimum surgical fix, run the project's test/build command if one is present, commit each fix as a separate commit with a descriptive message. Do NOT push — leave the branch local for the user to review. Return IMPLEMENTATIONS_DONE <branch-name> <commits-count> or IMPLEMENTATIONS_FAIL <reason> as the final line."
+    prompt: "Implement the following APPROVED scenario-improvement proposal TRDDs (column: planned, in design/tasks/): <newline-separated TRDD ids + absolute paths>. Project: ${CLAUDE_PROJECT_DIR}. Rules file: <resolved-rules-path>. For each TRDD: read its ## Proposed fix, locate the affected file, apply the minimum surgical fix, run the project's test/build command if one is present, commit each fix as a separate commit citing (TRDD-<id8>) in the subject, and append the sha to the TRDD's implementation-commits. Do NOT push — leave the branch local for the user to review. Return IMPLEMENTATIONS_DONE <branch-name> <commits-count> or IMPLEMENTATIONS_FAIL <reason> as the final line."
 )
 ```
 
@@ -88,10 +94,10 @@ The subagent returns one of two result formats as its final line:
 
 ## Step 7 — Write the implementation summary
 
-Save to `${CLAUDE_PROJECT_DIR}/tests/scenarios/reports/scenario-implementations-summary_<timestamp>.md`:
+Save to `${CLAUDE_PROJECT_DIR}/reports/scenarios-runner/scenario-implementations-summary_<timestamp>.md`:
 
-- List of proposal files consumed
-- P0 item count grouped by scenario
+- List of proposal TRDD ids consumed (approved + implemented / approved + deferred / left pending)
+- Count grouped by scenario
 - Implementer final result (DONE/FAIL)
 - Branch name (if DONE)
 - Next steps: "Review commits on `<branch-name>`, re-run affected scenarios via `run-scenarios-batch <range>`, merge when green."

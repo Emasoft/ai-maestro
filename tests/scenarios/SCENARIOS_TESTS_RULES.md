@@ -4,7 +4,7 @@
 
 The ultimate aim of UI scenario tests is NOT just to verify that features work. The real value is the **11th-HOUR analysis** (Rule 11): after each scenario run, a deep investigation produces **concrete improvement proposals** — bug fixes, API redesigns, governance rule changes, workflow optimizations, and new scenarios. These proposals are the primary deliverable. The test steps are the instrument; the improvements are the product.
 
-Every scenario run should produce a `scenario_proposed-improvements_<NNN>_<datetime>.md` report with actionable proposals. These proposals are then reviewed, prioritized, and implemented before the next scenario batch. Over time, this creates a virtuous cycle: tests find issues, issues get fixed, fixes get verified by re-running the same scenarios.
+Every scenario run should author its improvement suggestions as INDIVIDUAL git-tracked TRDD-proposal files under `design/proposals/` — one suggestion = one `TRDD-<TS>-<id8>-<slug>.md` with `column: proposal` (see Rule 11). Proposals are then screened through the standard TRDD approval flow (`~/.claude/rules/trdd-approval-tiers.md`), prioritized, and implemented before the next scenario batch. Over time, this creates a virtuous cycle: tests find issues, issues get fixed, fixes get verified by re-running the same scenarios.
 
 All UI scenario tests in AI Maestro MUST follow these 14 rules. No exceptions.
 
@@ -746,14 +746,49 @@ After the scenario test completes and the report is saved, execute an **in-depth
 | **Test infrastructure** | New tracking/debugging methods for scenario UI tests |
 | **New scenarios** | Propose new scenarios focused on investigating specific issues |
 
-**Output:** Save the writeup to:
+**Output — one TRDD-proposal file PER suggestion (no monolithic report):** every proposal
+becomes its own git-tracked TRDD file at:
+
 ```
-reports/scenarios-runner/scenario_proposed-improvements_<NNN>_<datetime>.md
+design/proposals/TRDD-<YYYYMMDD_HHMMSS±HHMM>-<id8>-<slug>.md
 ```
 
-The file must reference the scenario report it is based on. Each proposal must include: problem description, root cause analysis, proposed solution with specific files/changes, and priority (P0-P3).
+authored per `~/.claude/rules/trdd-design-tasks.md` (v2 frontmatter) and
+`~/.claude/rules/trdd-approval-tiers.md`, with these scenario-specific conventions:
 
-**This is Phase 2 / Phase 3 of the two-phase protocol.** Rule 11 proposals are **DELAYED** — they wait for explicit user approval before ANY implementation. During the overnight run (Phase 1), the scenario runner MUST ONLY write these proposals to disk. It MUST NOT implement them, MUST NOT create worktrees for them, MUST NOT open PRs for them. At end-of-batch, proposals from every scenario are consolidated into a single `CONSOLIDATED_PROPOSALS_<batch_id>.md` file (Rule 13). The user reviews that file, marks approvals, and only then does the `scenario-improvement-implementer` agent run in Phase 3 — one worktree per approved proposal, against a now-bug-free codebase. This separation is what Rule 13 enforces and why the overnight cron NEVER auto-implements Rule 11 output.
+- `trdd-id:` = 8-char UPPERCASE base36 (`LC_ALL=C tr -dc 'A-Z0-9' </dev/urandom | head -c 8`),
+  collision-checked across `design/{tasks,proposals,archived,refused}` (re-roll on hit).
+- `column: proposal` — NEVER `planned`. A scenario proposal always awaits screening.
+- `approval-tier: 2` default (MANAGER); `3` only when it touches GOLDEN rules or the
+  owner identity.
+- `priority:` 0-3 ← the old P0-P3 rank; `severity:`/`effort:`/`task-type:` as judged.
+- `labels: [scenario-improvement, scen-<NNN>, batch-<batch_id>]` — the labels are the
+  query surface (`grep -l "batch-<batch_id>" design/proposals/*.md`).
+- `current-owner: scenario-runner`; `external-refs:` carries the source scenario-report
+  path (gitignored evidence) plus any related GitHub issue.
+- Body sections (all mandatory): `## Problem`, `## Root cause`, `## Proposed fix`
+  (specific files/changes), `## Verification` (how Phase 3 proves it landed),
+  `## Estimated risk` (LOW|MED|HIGH + dependencies), `## Approval log` (empty).
+- Each proposal must reference the scenario report it is based on.
+- DEDUPE before authoring: grep `design/proposals/` + `design/tasks/` for the same
+  symptom/file — if an open TRDD already covers it, add a note to that TRDD's body
+  instead of creating a duplicate.
+- The runner COMMITS its proposal files, staged BY NAME, in the per-scenario commit
+  cycle (Rule 13) — the scenario report itself stays gitignored and uncommitted.
+
+**This is Phase 2 / Phase 3 of the two-phase protocol.** Rule 11 proposals are **DELAYED** —
+`column: proposal` means NOT authorized to execute. During the overnight run (Phase 1) the
+scenario runner MUST ONLY author these proposal TRDDs. It MUST NOT implement them, MUST NOT
+create worktrees for them, MUST NOT open PRs for them. Screening happens through the standard
+TRDD approval flow: the user (or MANAGER within its tier) approves — batch syntax
+`approved: n,n` / `refused: n,n` per the amama-proposal-approvals skill, or a manual
+`column: planned` + `git mv` into `design/tasks/` — and only then does the
+`scenario-improvement-implementer` agent run in Phase 3, one worktree per approved proposal
+TRDD, against a now-bug-free codebase. Unreviewed proposals simply stay PENDING in
+`design/proposals/`. At end-of-batch the master cleanup writes a lightweight
+`BATCH_SUMMARY_<batch_id>.md` INDEX (Rule 13) — an index, never a monolith: the proposals'
+content lives only in `design/proposals/`. The overnight cron NEVER auto-implements Rule 11
+output.
 
 ---
 
@@ -869,11 +904,11 @@ An autonomous scenario batch has **three distinct phases**, and only Phase 1 run
 
 | Phase | When | What runs | What the agent is allowed to do | Output |
 |---|---|---|---|---|
-| **Phase 1 — Scenario execution** | Overnight, unattended | cron fires, spawns `run-scenario-test` skill per scenario | Edit source files to fix bugs **in place on the current branch** (Rule 4 FIX-AS-YOU-GO). Commit fixes per scenario. Save proposals as reports on disk. | Each scenario commits bug fixes on the current branch. Each scenario writes `SCEN-NNN_<ts>.report.md` + `scenario_proposed-improvements_<NNN>_<ts>.md`. Master cleanup writes `CONSOLIDATED_PROPOSALS_<batch_id>.md`. |
-| **Phase 2 — User approval** | When the user wakes up | Interactive — the user reads the consolidated proposals file | Review proposals, edit the file to mark which P0/P1/P2/P3 items are approved, reject, or deferred. | Annotated `CONSOLIDATED_PROPOSALS_<batch_id>.md` with approvals — or an explicit `APPROVED_PROPOSALS_<batch_id>.md` file listing approved proposal IDs. |
-| **Phase 3 — Proposal implementation** | After user approval, unattended but fast | The user invokes `/run-scenarios-batch --improve <range>` OR a dedicated implementer entry point. The `scenario-improvement-implementer` agent runs in `isolation: worktree` for each approved proposal. | Worktree-isolated edits for approved proposals only. Each P0 gets its own commit. Returns worktree branch name. | Each worktree branch becomes a draft PR (or the user merges the worktree back directly). Because Phase 1 already landed bug fixes on the current branch, the implementer sees a clean bug-free codebase and conflicts are minimal. |
+| **Phase 1 — Scenario execution** | Overnight, unattended | cron fires, spawns `run-scenario-test` skill per scenario | Edit source files to fix bugs **in place on the current branch** (Rule 4 FIX-AS-YOU-GO). Commit fixes per scenario. Author each improvement suggestion as its own TRDD-proposal file (Rule 11) and commit those too. | Each scenario commits bug fixes + its `design/proposals/TRDD-*.md` proposal files on the current branch, and writes `SCEN-NNN_<ts>.report.md` (gitignored evidence). Master cleanup writes a lightweight `BATCH_SUMMARY_<batch_id>.md` index. |
+| **Phase 2 — Proposal screening** | When the user wakes up | Standard TRDD approval flow (`~/.claude/rules/trdd-approval-tiers.md`) | Review `design/proposals/` (the batch summary lists this batch's TRDD ids). Approve/refuse per proposal — batch syntax `approved: n,n` / `refused: n,n` (amama-proposal-approvals) or manual `git mv` + `column:` edit. | Approved proposals: `column: planned`, moved to `design/tasks/`. Refused: `column: refused`, moved to `design/refused/`. Unreviewed proposals simply stay PENDING in `design/proposals/`. |
+| **Phase 3 — Proposal implementation** | After approval, unattended but fast | The user invokes `/run-scenarios-batch --improve <batch_id\|range>` OR `/implement-scenarios-proposals`. The `scenario-improvement-implementer` agent runs in `isolation: worktree` for each approved proposal TRDD. | Worktree-isolated edits for APPROVED proposal TRDDs only. Each proposal gets its own commit citing `TRDD-<id8>`; the implementer appends the SHAs to the TRDD's `implementation-commits:`. Returns worktree branch name. | Each worktree branch becomes a draft PR (or the user merges the worktree back directly). Because Phase 1 already landed bug fixes on the current branch, the implementer sees a clean bug-free codebase and conflicts are minimal. |
 
-**The overnight cron does Phase 1 ONLY.** No worktrees. No PR creation. No fork pushes. No implementer spawning. The ONLY output of Phase 1 is bug-fix commits on the current branch + report files + the consolidated proposals file.
+**The overnight cron does Phase 1 ONLY.** No worktrees. No PR creation. No fork pushes. No implementer spawning. The ONLY output of Phase 1 is bug-fix commits + committed proposal TRDDs on the current branch + gitignored report files + the batch-summary index.
 
 **Why this separation exists:** the last overnight batch created ~20 worktree PRs while the main branch also accumulated ~40 bug-fix commits. Rebasing or merging each worktree PR against the drifted main branch was a ~2-hour per-PR nightmare. By deferring proposal implementation until AFTER the user approves and after the codebase is bug-free, Phase 3 becomes a fast series of clean PRs on a stable base.
 
@@ -909,7 +944,7 @@ Path: `tests/scenarios/state/autonomous-batch-state.json` (gitignored — runtim
       "completed_at": null,
       "verdict": null,
       "report_path": null,
-      "improvements_path": null,
+      "proposal_trdd_ids": [],
       "bugs_found": 0,
       "bugs_fixed": 0,
       "bug_fix_commit_shas": [],
@@ -921,7 +956,7 @@ Path: `tests/scenarios/state/autonomous-batch-state.json` (gitignored — runtim
     },
     ...
   },
-  "consolidated_proposals_path": null,
+  "batch_summary_path": null,
   "rate_limit_events": []
 }
 ```
@@ -947,14 +982,15 @@ case "$NEXT" in
       scenarios.<SCEN>.status = "done"
       scenarios.<SCEN>.completed_at = now ISO 8601
       scenarios.<SCEN>.verdict = parsed
-      scenarios.<SCEN>.report_path / improvements_path = parsed
+      scenarios.<SCEN>.report_path / proposal_trdd_ids = parsed
       scenarios.<SCEN>.bugs_found / bugs_fixed / bug_fix_commit_shas = parsed
     Atomic write (.tmp + rename).
     If runner edited source files (Rule 4 FIX-AS-YOU-GO), commit them on the
     CURRENT branch by explicit file name only:
       `fix(scen-NNN): <summary>`
-    Then a separate commit for the report + proposals:
-      `docs(scen-NNN): add scenario report and proposals`
+    Then a separate commit for the proposal TRDDs the runner authored, staged
+    by explicit name (the report is gitignored per Rule 14 — NEVER committed):
+      `docs(scen-NNN): add improvement-proposal TRDDs`
     If verdict==PASS with all bugs verified-fixed, purge the per-run screenshot
     directory per Rule 10 auto-purge.
     Stop. Exit this cron fire. The next fire picks up the next pending entry.
@@ -967,9 +1003,11 @@ case "$NEXT" in
     Run the master cleanup phase (one-time):
       1. Stop dev-browser with `dev-browser stop`.
       2. STATE-WIPE restore per Rule 3.
-      3. Generate reports/scenarios-runner/CONSOLIDATED_PROPOSALS_<batch_id>.md
-         from all scenario_proposed-improvements_*.md produced this batch.
-      4. Stage and commit the consolidated proposals file by explicit name.
+      3. Run tests/scenarios/scripts/generate-consolidated-proposals.sh — it
+         emits reports/scenarios-runner/BATCH_SUMMARY_<batch_id>.md, an INDEX
+         over this batch's design/proposals/ TRDDs (matched by batch-<id> label).
+      4. Nothing to commit here — proposal TRDDs were committed per scenario,
+         and reports/ is gitignored per Rule 14.
       5. Update state.json to phase="consolidated".
       6. Optionally CronDelete this cron (next fire would otherwise no-op).
     ;;
@@ -1026,14 +1064,14 @@ This phase runs ONLY ONCE per batch. Per-scenario runners assume the daemon is u
 
 ### Per-scenario runner (one cron fire = one scenario)
 
-The cron fire spawns the `run-scenario-test` skill with the next pending scenario. The skill (and ultimately the `scenario-runner` agent it invokes) does Phases A-H from the runner agent definition: loads dev-browser, reads the scenario file, runs the steps, applies FIX-AS-YOU-GO for any bug found (editing source in place on the current branch), writes the scenario report, writes the proposals report, returns a 2-line verdict.
+The cron fire spawns the `run-scenario-test` skill with the next pending scenario. The skill (and ultimately the `scenario-runner` agent it invokes) does Phases A-H from the runner agent definition: loads dev-browser, reads the scenario file, runs the steps, applies FIX-AS-YOU-GO for any bug found (editing source in place on the current branch), writes the scenario report, authors its improvement-proposal TRDDs (Rule 11), returns a 2-line verdict.
 
 The cron fire then:
 - Updates state.json with the scenario's verdict and report paths
 - `git add` the explicit modified source files
 - `git commit -m "fix(scen-NNN): <summary>"` — one commit for bug fixes per scenario, on the current branch
-- `git add reports/scenarios-runner/SCEN-NNN_<ts>.report.md reports/scenarios-runner/scenario_proposed-improvements_<NNN>_<ts>.md`
-- `git commit -m "docs(scen-NNN): add scenario report and proposals"` — separate commit for the reports
+- `git add design/proposals/TRDD-<TS>-<id8>-<slug>.md …` — every proposal TRDD the runner authored, by explicit name (the report file is gitignored per Rule 14 and is NEVER committed)
+- `git commit -m "docs(scen-NNN): add improvement-proposal TRDDs"` — separate commit for the proposals
 - If verdict==PASS with all bugs verified fixed, delete the per-run screenshot dir per Rule 10 auto-purge
 - Exit the cron fire
 
@@ -1044,95 +1082,50 @@ No branch creation. No worktree. No `git push`. No PR draft. All of that is Phas
 1. `dev-browser stop` (cleanly shuts down Chromium; note: no `daemon stop` subcommand — use `dev-browser stop`)
 2. Run the project's cleanup script (kill scen* tmux sessions, restore registry/teams)
 3. STATE-WIPE restore from backups
-4. Generate `reports/scenarios-runner/CONSOLIDATED_PROPOSALS_<batch_id>.md` with the format below
-5. Commit the consolidated file
+4. Generate `reports/scenarios-runner/BATCH_SUMMARY_<batch_id>.md` with the format below (via `tests/scenarios/scripts/generate-consolidated-proposals.sh`)
+5. Nothing to commit — proposal TRDDs were committed per scenario; reports/ is gitignored
 6. Set `phase="consolidated"` in state.json — this is the terminal state, the cron will see it and stop firing
 7. Optionally delete the durable cron via CronDelete
 
-### CONSOLIDATED_PROPOSALS file format
+### BATCH_SUMMARY file format
 
-This is the ONE file the user reads when they wake up. Its purpose is to let the user approve / reject every proposal from the entire batch in a single reading session, with all the context they need to make the decision.
+A lightweight, **gitignored INDEX** at `reports/scenarios-runner/BATCH_SUMMARY_<batch_id>.md`.
+It tells the user what happened and WHERE the proposals are — the proposals' CONTENT lives
+ONLY in the individual `design/proposals/TRDD-*.md` files (Rule 11); the summary NEVER
+duplicates it.
 
 ```markdown
-# Autonomous Batch <batch_id> — Consolidated Proposals
+# Autonomous Batch <batch_id> — Summary
 
-**Started:** <iso-ts>
-**Completed:** <iso-ts>
-**Base branch:** <branch-name-batch-started-on>
-**Total scenarios:** <N>
-**Pass:** <N>  **Fail:** <N>  **Partial:** <N>  **Stuck:** <N>
+**Started / Completed:** <iso-ts> / <iso-ts> · **Base branch:** <branch>
+**Scenarios:** <N> total — Pass <N> · Fail <N> · Partial <N> · Stuck <N>
 **Bugs fixed in place (Phase 1):** <N>
-**Proposals pending approval (this file):** <N> P0, <N> P1, <N> P2, <N> P3
+**Proposal TRDDs authored (pending screening):** <N> (P0 <N> · P1 <N> · P2 <N> · P3 <N>)
 **Rate-limit events survived:** <N>
 
----
-
-## Phase 1 summary — bug fixes already committed
-
-These bug fixes were applied in-place to branch `<base_branch>` during the
-overnight run, per Rule 4 FIX-AS-YOU-GO. They are already on disk and in
-git history. No action required from you on these — they are the baseline
-the Phase 3 implementer will build on.
+## Phase 1 — bug fixes already committed (no action needed)
 
 | # | Scenario | Verdict | Bugs fixed | Fix commit SHAs |
 |---|----------|---------|-----------|-----------------|
 | 1 | SCEN-001 | PASS | 2 | abc1234, def5678 |
-| 2 | SCEN-005 | PASS | 1 | 9abcdef |
-...
 
-## Phase 2 — your turn: approve proposals for Phase 3 implementation
+## Phase 2 — screen the proposal TRDDs
 
-Below is every P0/P1/P2/P3 proposal from every scenario in this batch.
-**To approve a proposal, mark it with `[x]` in the checkbox next to it.**
-Save this file when you are done. Then run the Phase 3 command at the bottom.
+All proposals from this batch sit in design/proposals/ labeled batch-<batch_id>
+(list: grep -l "batch-<batch_id>" design/proposals/*.md). Screen them with the
+standard TRDD approval flow — batch syntax per amama-proposal-approvals
+(approved: n,n / refused: n,n) or manual git mv + column edit.
 
-### P0 proposals (highest priority, will be implemented first)
+### Priority 0
+- TRDD-<id8> — <title> (scen-NNN)
+### Priority 1 / 2 / 3
+- TRDD-<id8> — <title> (scen-NNN)
 
-#### SCEN-001: <proposal title>
-- [ ] **Approve**
-- **Scenario:** SCEN-001 — <scenario name>
-- **Source report:** `reports/scenarios-runner/scenario_proposed-improvements_001_<ts>.md`
-- **Problem:** <one paragraph>
-- **Root cause:** <one paragraph>
-- **Proposed fix:** <one paragraph — file paths, line ranges, what to change>
-- **Verification:** <how Phase 3 should verify the fix landed correctly>
-- **Estimated risk:** LOW | MED | HIGH
-- **Dependencies:** <none / depends on P0-<other>>
+## Phase 3 — implement approved proposals
 
-#### SCEN-005: <proposal title>
-- [ ] **Approve**
-...
-
-### P1 proposals
-
-...
-
-### P2 proposals
-
-...
-
-### P3 proposals
-
-...
-
-## Phase 3 — implement approved proposals (runs after you save this file)
-
-After you have checked every `[x]` for the proposals you approve, run:
-
-```bash
-/run-scenarios-batch --improve <batch_id>
-```
-
-This spawns the `scenario-improvement-implementer` agent for each approved
-proposal. Each implementation runs in an ISOLATED git worktree (so the
-current branch is never touched during implementation), commits the change
-in the worktree, and returns the worktree branch name. The parent session
-(you, when the implementer returns) merges each successful worktree back
-into the current branch — or discards it on failure.
-
-Because Phase 1 already landed all bug fixes on the current branch, the
-implementer in Phase 3 sees a CLEAN bug-free codebase. Conflicts between
-worktrees should be minimal. Implementation is fast.
+After approving, run /run-scenarios-batch --improve <batch_id> (or
+/implement-scenarios-proposals). One worktree per approved proposal TRDD; each
+commit cites TRDD-<id8>; the implementer appends implementation-commits: to the TRDD.
 
 ## Failed / stuck scenarios (investigate manually)
 
@@ -1140,17 +1133,17 @@ worktrees should be minimal. Implementation is fast.
 - **Reason:** <one-line>
 - **Report:** reports/scenarios-runner/SCEN-018_<ts>.report.md
 - **Screenshots:** reports/scenarios-runner/screenshots/SCEN-018_<RUN_ID>/ (kept because verdict != PASS)
-- **Recommended action:** re-run manually after investigating, or delete the scenario if it's no longer relevant
 
 ## Rate-limit events during this batch
 
 | Time (UTC) | Active account | Recovery delay | Cron fires queued |
 |---|---|---|---|
 | 2026-04-15T14:23 | emanuele | 8 min | 3 |
-...
 ```
 
-This file is what the user reads when they wake up. One file, every proposal in priority order, with approve checkboxes. No hunting through 22 separate proposal files.
+One glance for status; the per-proposal reading happens where it belongs — in the
+git-tracked TRDD files, each carrying its own `## Approval log` and, after Phase 3,
+its `implementation-commits:` audit trail.
 
 ### Hard rules for Phase 1 (the overnight cron)
 
@@ -1158,9 +1151,9 @@ This file is what the user reads when they wake up. One file, every proposal in 
 2. **Read state.json before EVERY action.** Never assume the previous fire left the system in a known state.
 3. **Write state.json AFTER every action atomically** (write to `.tmp`, then rename).
 4. **Bug fixes go on the CURRENT BRANCH.** Never create a branch. Never create a worktree. Never push. Never draft a PR. Never create a PR.
-5. **One commit for bug fixes per scenario + one commit for reports per scenario.** Keeps git history readable: two commits per scenario.
+5. **One commit for bug fixes per scenario + one commit for that scenario's proposal TRDDs.** Keeps git history readable: two commits per scenario. Reports are gitignored (Rule 14) and never committed.
 6. **Stage files by explicit name.** Never `git add -A`, never `git add .`.
-7. **Never auto-implement proposals.** The improvements file lists them; the cron never reads them except to count P0..P3 for state tracking. Implementation is Phase 3, triggered manually by the user.
+7. **Never auto-implement proposals.** The cron authors the proposal TRDDs and counts P0..P3 for state tracking; it never implements them. Implementation is Phase 3, triggered manually by the user after screening.
 8. **Never delete a scenario's screenshots if the scenario didn't pass.** Rule 10 auto-purge applies only to verified-fixed PASS runs.
 9. **Never spawn the scenario-improvement-implementer agent from the cron.** That agent is invoked only in Phase 3, via the `run-scenarios-batch --improve` skill, by the user.
 10. **The cron is durable** (`CronCreate({ durable: true, ... })`). The cron interval is 5-20 minutes, off-minute schedule. Default: `1-59/13 * * * *` (every 13 min starting at minute 1).
@@ -1439,7 +1432,7 @@ The same override requirement applies to every MCP tool, plugin, or skill that h
 ### What counts as a "report"
 
 - Scenario run reports (`SCEN-NNN_<ts>.report.md`).
-- 11th-HOUR proposal reports (`scenario_proposed-improvements_NNN_<ts>.md`).
+- Batch summary indexes (`BATCH_SUMMARY_<batch_id>.md`). Improvement proposals themselves are NOT reports — they are git-tracked TRDD files in `design/proposals/` (Rule 11).
 - Smoke-test FAIL screenshots.
 - Agent log captures, bug autopsies, audit outputs.
 - Batch-level aggregation reports.

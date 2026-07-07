@@ -50,10 +50,12 @@ For each scenario ID `N` in the parsed list, in numeric order:
    Agent(
        description: "Run SCEN-<padded-id> end-to-end",
        subagent_type: "scenario-runner",
-       prompt: "Run scenario number <N>. Scenario file: ${CLAUDE_PROJECT_DIR}/tests/scenarios/SCEN-<padded-id>_*.scen.md. Rules file: <resolved-rules-path>. Follow rules 1-13, drive the app via the dev-browser CLI (Rule 8 — loaded via Skill(skill: 'dev-browser:dev-browser')), write the report + proposals under ${CLAUDE_PROJECT_DIR}/reports/scenarios-runner/, and return a 2-line summary."
+       prompt: "Run scenario number <N>. Scenario file: ${CLAUDE_PROJECT_DIR}/tests/scenarios/SCEN-<padded-id>_*.scen.md. Rules file: <resolved-rules-path>. Follow rules 0-14, drive the app via the dev-browser CLI (Rule 8 — loaded via Skill(skill: 'dev-browser:dev-browser')), write the report under ${CLAUDE_PROJECT_DIR}/reports/scenarios-runner/, author each improvement proposal as its own TRDD-proposal file in design/proposals/ (Rule 11, labels scen-<padded-id> + batch-<batch-timestamp>), and return a 3-line summary."
    )
    ```
-   Wait for the subagent to return. Parse the 2-line result into pass/fail/partial + report path.
+   Wait for the subagent to return. Parse the 3-line result into pass/fail/partial + report path + proposal counts.
+
+3b. **Commit the scenario's proposal TRDDs.** List the new files with `git status --porcelain -- design/proposals/` (they carry this batch's label — spot-check one), then `git add` each BY NAME and commit: `docs(scen-<padded-id>): add improvement-proposal TRDDs`. The scenario report itself is gitignored (Rule 14) and is never committed.
 
 4. **Per-scenario cleanup script (MANDATORY).** Run `${CLAUDE_PROJECT_DIR}/tests/scenarios/scripts/cleanup-SCEN-<padded-id>.sh` via Bash. This delegates to `scenario-restore.sh` which verifies and replays the MANIFEST.sha256. If it fails, log `SCENARIO_CLEANUP_FAIL <N> <reason>` in `batch-progress.log`, but continue to the next scenario (cleanup failures are noted for operator review, not fatal to the batch).
 
@@ -69,19 +71,26 @@ For each scenario ID `N` in the parsed list, in numeric order:
 After the loop completes, write an aggregated summary to `${CLAUDE_PROJECT_DIR}/reports/scenarios-runner/scenario-batch-<range>_<timestamp>.md` with:
 
 - Per-scenario result table (ID, status, bugs found, bugs fixed, duration, report path)
-- Aggregated P0 proposal count (parse each `scenario_proposed-improvements_NNN_*.md` header)
-- Open issues not covered by P0 proposals
-- Recommended-for-implementer section naming which scenarios produced P0 proposals worth implementing
+- Aggregated proposal counts: `grep -l "^labels:.*batch-<batch-timestamp>" design/proposals/*.md`, then read each hit's `priority:` — sum per priority 0-3
+- Open issues not covered by any proposal TRDD
+- Recommended-for-implementer section naming which scenarios produced priority-0 TRDDs worth implementing (list their `TRDD-<id8>` ids)
 
 ## Step 5 — Optional improvement loop
 
-If `improve=true` AND there are P0 proposal files from scenarios in this batch, spawn the implementer subagent:
+If `improve=true` AND this batch authored priority-0 proposal TRDDs, first PROMOTE them — **the `--improve` flag IS the user's standing approval for this batch's priority-0 proposals** (per `~/.claude/rules/trdd-approval-tiers.md` the approval must be explicit; the user gave it by passing the flag). For each `priority: 0` TRDD in `design/proposals/` carrying label `batch-<batch-timestamp>`:
+
+1. Append to its `## Approval log`: `- <ISO> — APPROVED by USER (via run-scenarios-batch --improve).`
+2. Set `column: planned`, bump `updated:`
+3. `git mv design/proposals/TRDD-<...>.md design/tasks/TRDD-<...>.md`
+4. Commit the moves BY NAME: `docs: approve batch-<batch-timestamp> P0 proposal TRDDs → planned`
+
+Priority 1-3 proposals are NOT promoted by `--improve` — they stay pending in `design/proposals/` for explicit screening. Then spawn the implementer subagent:
 
 ```
 Agent(
-    description: "Implement P0 proposals from batch <range>",
+    description: "Implement approved proposal TRDDs from batch <range>",
     subagent_type: "scenario-improvement-implementer",
-    prompt: "Implement P0 items from scenario_proposed-improvements_*_<batch-timestamp>.md for scenarios <comma-separated-list>. Files: <explicit list of absolute paths>. Rules file: <resolved-rules-path>. Report back with IMPLEMENTATIONS_DONE or IMPLEMENTATIONS_FAIL."
+    prompt: "Implement the approved scenario-improvement proposal TRDDs labeled batch-<batch-timestamp> (column: planned, in design/tasks/): <explicit list of TRDD ids + absolute paths>. Rules file: <resolved-rules-path>. Report back with IMPLEMENTATIONS_DONE or IMPLEMENTATIONS_FAIL."
 )
 ```
 
@@ -93,11 +102,12 @@ If `IMPLEMENTATIONS_FAIL`, log the failure reason in the aggregated report and c
 
 ## Step 6 — Final output
 
-Return ONE 3-line summary as your final message:
+Return ONE short summary as your final message:
 
 ```
 BATCH_DONE <range> <P>/<F>/<X> <aggregated-report-path>
 Per-scenario reports: <space-separated paths>
+Proposals: <n> TRDDs authored in design/proposals/ (P0:<a> P1:<b> P2:<c> P3:<d>)
 Improvements: <branch-name or "skipped">
 ```
 

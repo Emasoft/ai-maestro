@@ -360,4 +360,4 @@ After the run, analyze:
 5. **Cascade protection:** Should `DELETE /api/settings/marketplaces` pre-check whether the target marketplace contains the core plugin and refuse the cascade entirely, rather than relying on per-plugin Gate 7 rejections mid-cascade (which may leave a half-torn state)?
 6. **New scenarios:** Propose SCEN-023 for the same tests on a Codex-format core plugin (once the UI shows ai-maestro-plugin-codex in the same Settings surfaces), and SCEN-024 for the Haephestos publish path (what happens if the user attempts to uninstall the local role-plugin marketplace that also hosts a converted core plugin?).
 
-Save the writeup to `tests/scenarios/reports/scenario_proposed-improvements_017_<datetime>.md` with P0/P1/P2 priority tags and file/line-level fix proposals.
+Author each finding as its own TRDD-proposal file in `design/proposals/` per Rule 11 (`column: proposal`, labels `[scenario-improvement, scen-017]`), with `priority:` 0-2 mapped from P0/P1/P2 and the file/line-level fix in its `## Proposed fix` section.

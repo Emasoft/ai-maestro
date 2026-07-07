@@ -31,22 +31,22 @@ Copy this checklist and track your progress:
 - [ ] Parse `$ARGUMENTS` into scenario IDs list and `improve` flag
 - [ ] Run optional preflight (config file + health probe)
 - [ ] For each scenario: check resume state → run setup script → spawn runner subagent → run cleanup script → log result
-- [ ] Aggregate batch report
-- [ ] If `--improve`: spawn implementer subagent for P0 proposals
-- [ ] Return 3-line final summary
+- [ ] Aggregate batch report (proposal counts come from this batch's `design/proposals/` TRDDs)
+- [ ] If `--improve`: promote this batch's priority-0 proposal TRDDs (the flag IS the user's approval) + spawn implementer
+- [ ] Return final summary
 
 ### Workflow
 
 1. Parse `$ARGUMENTS` into scenario IDs list and `improve` flag.
 2. Run optional preflight: read config file, probe health endpoint.
-3. For each scenario: check resume state, run setup script, spawn runner subagent, run cleanup script, log result.
+3. For each scenario: check resume state, run setup script, spawn runner subagent, commit its new proposal TRDDs by name, run cleanup script, log result.
 4. Aggregate results into the batch report.
-5. If `--improve`: spawn the implementer subagent for P0 proposals.
-6. Return a 3-line final summary.
+5. If `--improve`: promote this batch's priority-0 proposal TRDDs to `planned` (Approval-log line + `git mv` → design/tasks/), then spawn the implementer subagent with the promoted TRDD list.
+6. Return the final summary.
 
 ### Rules reference
 
-Canonical rules file: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — tracked in git, single source of truth for the 13 rules (Rule 13 = AUTONOMOUS-PROTOCOL, added 2026-04-15). Pass this path into every subagent prompt.
+Canonical rules file: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — tracked in git, single source of truth for the 15 rules (0-14). Pass this path into every subagent prompt.
 
 ### Argument formats
 
@@ -64,6 +64,7 @@ See [Detailed Procedure](references/procedure-details.md) for all 6 steps, the s
 ```
 BATCH_DONE <range> <P>/<F>/<X> <aggregated-report-path>
 Per-scenario reports: <space-separated paths>
+Proposals: <n> TRDDs authored in design/proposals/ (P0:<a> P1:<b> P2:<c> P3:<d>)
 Improvements: <branch-name or "skipped">
 ```
 

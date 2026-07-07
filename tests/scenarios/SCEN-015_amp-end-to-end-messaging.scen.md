@@ -292,4 +292,4 @@ After the test completes, analyze:
 6. How long did each phase take? Is there a step that's unexpectedly slow (CLI startup, sign+verify, filesystem sync)?
 7. Are there governance rule gaps exposed by this test? Notably: does the current rule set say anything about what happens when Alice sends a message while Bob is hibernated? (Currently: stored in Bob's inbox until wake.)
 
-Save the proposals to `tests/scenarios/reports/scenario_proposed-improvements_015_<datetime>.md`.
+Author each proposal as its own TRDD-proposal file in `design/proposals/` per Rule 11 (`column: proposal`, labels `[scenario-improvement, scen-015]` plus the batch label when run in a batch).

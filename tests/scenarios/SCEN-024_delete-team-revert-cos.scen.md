@@ -171,7 +171,7 @@ author: AI Maestro Team
 > is a mandatory side-effect of team creation. The BUG-002 regression test is
 > about "any COS reverts on team delete" — so the auto-COS is the valid COS under
 > test. S011 was rewritten to verify the auto-COS instead of promoting
-> scen024-cos-01. Filed as P1-PROP in 11th-HOUR proposals.
+> scen024-cos-01. Filed as a priority-1 TRDD-proposal in `design/proposals/` (Rule 11).
 
 #### S012: Confirm initial state
 - **Action:** `GET /api/agents` and `GET /api/teams/<id>` (Rule 6 verification reads); also read registry.json directly

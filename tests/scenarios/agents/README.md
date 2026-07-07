@@ -20,7 +20,7 @@ Project-scope placement means: any developer who clones ai-maestro gets the full
 
 ```text
 /run-scenarios-batch 16-20                    # via the skill (preferred)
-/run-scenarios-batch 16-20 --improve          # run + auto-implement P0 in worktree
+/run-scenarios-batch 16-20 --improve          # run + promote this batch's P0 proposal TRDDs (design/proposals/ -> planned) + implement in worktree
 "Create a new scenario for <feature>"         # triggers create-scenario skill
 "Edit SCEN-018 to add a cleanup step"         # triggers edit-scenario skill
 "Improve SCEN-016"                            # triggers improve-scenario skill

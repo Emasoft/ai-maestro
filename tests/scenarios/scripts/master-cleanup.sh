@@ -9,8 +9,9 @@
 #   3. Verify no test agents/teams linger in the runtime registry — log
 #      anything that escaped per-scenario cleanup so the operator can take
 #      corrective action manually.
-#   4. Generate the user-facing CONSOLIDATED_PROPOSALS file via the
-#      existing generate-consolidated-proposals.sh script.
+#   4. Generate the user-facing BATCH_SUMMARY index (over the batch's
+#      design/proposals/ TRDD files) via generate-consolidated-proposals.sh
+#      (filename kept for compatibility — see TRDD-CJZRB57R).
 #   5. Set state.phase = "consolidated".
 #
 # The caller (cron prompt OR hand-driven orchestrator) is responsible for

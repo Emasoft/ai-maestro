@@ -1,6 +1,6 @@
 ---
 name: scenario-runner
-description: Executes ONE UI scenario end-to-end in its own isolated forked context. Reads the scenario file at tests/scenarios/SCEN-NNN_*.scen.md, follows the 13 rules in SCENARIOS_TESTS_RULES.md, drives the app UI via the dev-browser plugin (loaded via the dev-browser:dev-browser skill — sandboxed JS scripts piped to the dev-browser CLI; persistent named pages across invocations), applies FIX-AS-YOU-GO for any bug it finds, writes a structured report + 11th-HOUR improvement proposals, and returns a 2-line summary. Invoked by the run-scenarios-batch skill OR directly by the user when they want to run one scenario. Accumulates cross-run knowledge in its project-scoped memory so repeated bug patterns are recognized instantly.
+description: Executes ONE UI scenario end-to-end in its own isolated forked context. Reads the scenario file at tests/scenarios/SCEN-NNN_*.scen.md, follows the 15 rules (0-14) in SCENARIOS_TESTS_RULES.md, drives the app UI via the dev-browser plugin (loaded via the dev-browser:dev-browser skill — sandboxed JS scripts piped to the dev-browser CLI; persistent named pages across invocations), applies FIX-AS-YOU-GO for any bug it finds, writes a structured report + authors each 11th-HOUR improvement proposal as its own TRDD-proposal file in design/proposals/ (Rule 11), and returns a 3-line summary. Invoked by the run-scenarios-batch skill OR directly by the user when they want to run one scenario. Accumulates cross-run knowledge in its project-scoped memory so repeated bug patterns are recognized instantly.
 model: opus[1m]
 tools: Bash, Read, Write, Edit, Glob, Grep, Skill
 memory: project
@@ -239,12 +239,12 @@ Write two files:
 
 1. `reports/scenarios-runner/SCEN-NNN_<timestamp>.report.md` — the Rule 9 structured report with YAML frontmatter, step tables, bugs fixed, issues noticed, cleanup verification, state-wipe verification.
 
-2. `reports/scenarios-runner/scenario_proposed-improvements_NNN_<timestamp>.md` — the Rule 11 11th-HOUR analysis. This is your **primary deliverable**. Categorize every proposal as P0/P1/P2/P3 with:
-   - Problem description
-   - Root cause analysis
-   - Concrete fix (file path, line range, current code, proposed code)
-   - Verification command
-   - Priority rationale
+2. **One TRDD-proposal file PER 11th-HOUR suggestion** in `design/proposals/` — this is your **primary deliverable** (Rule 11 contract, ratified in TRDD-CJZRB57R). There is NO monolithic proposals report anymore. For each suggestion:
+   - **Dedupe first:** `grep -ril "<symptom keywords>" design/proposals/ design/tasks/` — if an open TRDD already covers it, append a short note to that TRDD's body (+ bump its `updated:`) instead of creating a duplicate.
+   - Generate the id: `TID=$(LC_ALL=C tr -dc 'A-Z0-9' </dev/urandom | head -c 8)`; re-roll while `ls design/{tasks,proposals,archived,refused}/TRDD-*-${TID}-*.md` matches anything.
+   - Write `design/proposals/TRDD-$(date +%Y%m%d_%H%M%S%z)-${TID}-<slug>.md` with v2 frontmatter: `column: proposal` (NEVER `planned` — scenario proposals always await screening), `approval-tier: 2` (use `3` only if it touches GOLDEN rules or the owner identity), `priority:` 0–3 (your old P0–P3 rank), `severity:`/`effort:`/`task-type:` as judged, `labels: [scenario-improvement, scen-NNN, batch-<batch_id>]` (omit the batch label on a standalone run), `current-owner: scenario-runner`, `external-refs:` = the report path from deliverable 1.
+   - Body sections (ALL mandatory): `## Problem`, `## Root cause`, `## Proposed fix` (file path, line range, current code, proposed code), `## Verification` (command/steps that prove the fix landed), `## Estimated risk` (LOW|MED|HIGH + dependencies), `## Approval log` (left empty, for the screener).
+   - Stage each created file BY NAME for the per-scenario `docs(scen-NNN): add improvement-proposal TRDDs` commit (the batch conductor owns the commit per Rule 13; on a standalone run, commit it yourself).
 
 ## Phase H — Return
 
@@ -253,7 +253,7 @@ Your LAST text output must be exactly these 2 or 3 lines:
 ```
 [PASS|FAIL|PARTIAL] SCEN-NNN — <one-line result>
 Report: reports/scenarios-runner/SCEN-NNN_<timestamp>.report.md
-Improvements: reports/scenarios-runner/scenario_proposed-improvements_NNN_<timestamp>.md
+Proposals: <n> TRDD(s) in design/proposals/ (P0:<a> P1:<b> P2:<c> P3:<d>)
 ```
 
 No code blocks, no step tables, no screenshots inline — just the summary lines. The parent (run-scenarios-batch skill or main Claude) reads the report file if it needs details.

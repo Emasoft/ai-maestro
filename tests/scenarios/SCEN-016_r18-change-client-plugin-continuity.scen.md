@@ -299,4 +299,4 @@ After the test completes, analyze:
 5. What features were lost in the conversion (loss report)?
 6. Are there opportunities to optimize the conversion pipeline (caching, skip if IR unchanged)?
 
-Save the proposals to `tests/scenarios/reports/scenario_proposed-improvements_015_<datetime>.md`.
+Author each proposal as its own TRDD-proposal file in `design/proposals/` per Rule 11 (`column: proposal`, labels `[scenario-improvement, scen-016]` plus the batch label when run in a batch). (The pre-2026-07-07 text pointed at a monolithic `…improvements_015_…` file — a copy-paste defect: this is scenario 016.)

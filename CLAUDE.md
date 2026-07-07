@@ -1651,7 +1651,7 @@ Currently 24 scenarios live in `tests/scenarios/SCEN-NNN_*.scen.md` (SCEN-001 th
 
 **Running a scenario — ALWAYS use the `run-scenario-test` skill.** Do NOT drive scenarios from the main conversation. The skill is installed at `~/.claude/skills/run-scenario-test/` and uses `context: fork`, `model: opus`, `agent: general-purpose` so a full ~150-step UI walkthrough runs in an isolated subagent context and returns only a 2-line summary to the orchestrator. Trigger phrases: "run scenario 16", "execute SCEN-018", "run the maintainer scenario", "rerun 1 and 19". For parallel runs of multiple scenarios, the orchestrator triggers the skill multiple times in the same turn — one forked agent per scenario.
 
-The forked agent reads the scenario file, follows `SCENARIOS_TESTS_RULES.md`, drives the dashboard via Chrome DevTools MCP, applies Rule 4 fix-as-you-go for any bug it finds, writes its report to `tests/scenarios/reports/`, writes the 11th-HOUR proposals to `tests/scenarios/reports/scenario_proposed-improvements_<NNN>_<timestamp>.md`, and returns the 2-line summary.
+The forked agent reads the scenario file, follows `SCENARIOS_TESTS_RULES.md`, drives the dashboard via the dev-browser CLI (Rule 8), applies Rule 4 fix-as-you-go for any bug it finds, writes its report to `reports/scenarios-runner/`, authors each 11th-HOUR improvement proposal as its own TRDD-proposal file in `design/proposals/` (Rule 11 — `column: proposal`, labeled `scen-<NNN>`), and returns the 2-line summary.
 
 **Prerequisites:** AI Maestro server running, Chrome browser open with DevTools accessible, governance password set. Any per-scenario prereqs (`which codex`, fake GitHub repos, etc.) are listed in the scenario's frontmatter.
 

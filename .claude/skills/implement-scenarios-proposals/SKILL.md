@@ -1,10 +1,12 @@
 ---
 name: implement-scenarios-proposals
 description: >-
-  Use when proposal files need P0 items applied to code. Trigger with
-  "implement proposals from scenario N" or "fix P0 issues from last batch".
-  Spawns implementer in an isolated git worktree.
-argument-hint: timestamp-or-scenario-range
+  Use when scenario improvement-proposal TRDDs need their priority-0 items
+  applied to code. Trigger with "implement proposals from scenario N" or
+  "fix P0 issues from last batch". Screens pending proposal TRDDs with the
+  user (confirmation = approval), promotes them to design/tasks/, then
+  spawns the implementer in an isolated git worktree.
+argument-hint: batch-id-or-scenario-range-or-trdd-ids
 disable-model-invocation: false
 model: opus
 ---
@@ -13,13 +15,13 @@ model: opus
 
 ## Overview
 
-You are the bridge between scenario run analysis and application source code changes. Find the relevant `scenario_proposed-improvements_*.md` files, show them to the user for confirmation, and hand off the actual code changes to the `scenario-improvement-implementer` subagent (which runs in a git worktree).
+You are the bridge between scenario run analysis and application source code changes. Scenario runs author each improvement suggestion as its own TRDD-proposal file (Rule 11 / TRDD-CJZRB57R): PENDING ones live in `design/proposals/` (`column: proposal`, label `scenario-improvement`); APPROVED ones live in `design/tasks/` (`column: planned`). You find the relevant proposal TRDDs, screen the pending ones with the user (their confirmation IS the approval act), promote the confirmed ones, and hand the code changes to the `scenario-improvement-implementer` subagent (which runs in a git worktree).
 
-You do NOT edit application source code directly. Your role is discovery, confirmation, and orchestration.
+You do NOT edit application source code directly. Your role is discovery, screening/promotion, and orchestration.
 
 ## Prerequisites
 
-- Proposal files at `${CLAUDE_PROJECT_DIR}/tests/scenarios/reports/scenario_proposed-improvements_*.md`
+- Proposal TRDDs at `${CLAUDE_PROJECT_DIR}/design/proposals/TRDD-*.md` (pending) and/or `design/tasks/TRDD-*.md` with `column: planned` + label `scenario-improvement` (already approved)
 - Project with a valid git repo (the implementer needs a worktree)
 - Build/test command available in the project (optional but recommended)
 
@@ -29,29 +31,29 @@ You do NOT edit application source code directly. Your role is discovery, confir
 
 Copy this checklist and track your progress:
 
-- [ ] Parse `$ARGUMENTS` to identify which proposal files to consume
-- [ ] Glob `tests/scenarios/reports/scenario_proposed-improvements_*.md` and filter
-- [ ] Read each matched file and extract P0 items only
-- [ ] Present consolidated P0 list to user; wait for confirmation
-- [ ] Spawn `scenario-improvement-implementer` subagent via Agent tool
+- [ ] Parse `$ARGUMENTS` (batch label / scen range / TRDD ids) to scope the proposal TRDDs
+- [ ] Grep `design/proposals/` (column: proposal) + `design/tasks/` (column: planned) for label `scenario-improvement` and filter
+- [ ] Present the pending list to the user (id — title — priority); wait for confirmation
+- [ ] Promote each confirmed proposal: Approval-log line, `column: planned`, `git mv` → `design/tasks/`, commit by name
+- [ ] Spawn `scenario-improvement-implementer` subagent via Agent tool with the approved TRDD list
 - [ ] Parse subagent result (IMPLEMENTATIONS_DONE / IMPLEMENTATIONS_FAIL)
-- [ ] Write implementation summary to `tests/scenarios/reports/`
+- [ ] Write implementation summary to `reports/scenarios-runner/`
 - [ ] Return 3-line final summary
 
 ### Workflow
 
-1. Parse `$ARGUMENTS` to identify which proposal files to consume.
-2. Glob proposal files matching the range or timestamp; stop if none found.
-3. Read each file and extract P0 items only.
-4. Present the consolidated P0 list to the user and wait for confirmation.
-5. Spawn the `scenario-improvement-implementer` subagent via Agent tool.
+1. Parse `$ARGUMENTS` to scope the proposal TRDDs (batch label `batch-<id>`, scenario range → `scen-NNN` labels, explicit `TRDD-<id8>` ids, or "last batch").
+2. Discover: `grep -l "^labels:.*scenario-improvement" design/proposals/*.md design/tasks/*.md`, filter by scope + column (`proposal` = pending, `planned` = already approved); stop if none found.
+3. Present the pending proposals to the user as a numbered list (TRDD-id — title — priority 0-3), plus any already-approved ones that will be included as-is.
+4. Wait for the user's confirmation. **The user's confirmation IS the approval act** (per `~/.claude/rules/trdd-approval-tiers.md`): for each confirmed proposal append to its `## Approval log` `- <ISO> — APPROVED by USER (via /implement-scenarios-proposals). <one-line rationale>`, set `column: planned`, bump `updated:`, `git mv` the file into `design/tasks/`, and commit the moves BY NAME (`docs: approve scenario-improvement TRDDs → planned`). Unconfirmed proposals stay PENDING in `design/proposals/` — never refuse by omission.
+5. Spawn the `scenario-improvement-implementer` subagent via Agent tool, passing the approved TRDD ids/paths.
 6. Parse the subagent result (IMPLEMENTATIONS_DONE or IMPLEMENTATIONS_FAIL).
-7. Write the implementation summary to `tests/scenarios/reports/`.
+7. Write the implementation summary to `reports/scenarios-runner/`.
 8. Return a 3-line final summary.
 
 ### Rules reference
 
-Canonical rules file: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — tracked in git, single source of truth for the 12 rules.
+Canonical rules file: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` — tracked in git, single source of truth for the 15 rules (0-14).
 
 See [Detailed Procedure](references/p0-implementation-patterns.md) for the full 7-step flow, argument format table (range, comma list, timestamp, "last batch"), and implementer subagent spawn template.
 
@@ -67,7 +69,7 @@ Summary: <absolute-path-to-summary-report>
 
 | Error | Action |
 |-------|--------|
-| No matching proposal files | Tell user to run scenarios first; stop |
+| No matching proposal TRDDs | Tell user to run scenarios first; stop |
 | User declines confirmation | Stop; do not spawn subagent |
 | IMPLEMENTATIONS_FAIL | Log reason in batch report; tell user to inspect worktree or re-run proposals |
 | Build fails in worktree | Implementer reports FAIL; worktree is auto-cleaned |

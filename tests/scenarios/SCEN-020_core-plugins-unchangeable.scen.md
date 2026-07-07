@@ -31,6 +31,9 @@ ui_sections:
   - Sudo password modal (Rule 12)
 data_produced:
   - 1 test agent "scen020-autonomous-test" (temporary, deleted during cleanup)
+  - MAINTAINER title assignment binds a githubRepo `Emasoft/scen020-test-repo`
+    (R19.3, temporary — cleared when the title reverts to AUTONOMOUS in S013
+    and again removed entirely when the agent is deleted in S014)
 required_tools:
   - mcp__chrome-devtools__navigate_page
   - mcp__chrome-devtools__take_snapshot
@@ -149,23 +152,30 @@ commit: TBD
 
 ## Phase 3: Verify role-plugin is title-locked (UI only)
 
-### S009: Locate ai-maestro-autonomous-agent row
-- **Action:** Find the role-plugin row in the Plugins section.
-- **Goal:** Row identified.
+### S009: Locate the Role section (Config tab)
+- **Action:** Find the dedicated "Role" / "ROLE PLUGIN" section in the
+  agent's Config tab (the role-plugin no longer renders as a row inside
+  the general Plugins list — it was extracted into its own Config
+  section).
+- **Goal:** Role section identified, showing `ai-maestro-autonomous-agent`
+  as the current role-plugin.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Row has a "role" badge (green) indicating it's the agent's
-  current role-plugin.
+- **Verify:** The Role section shows a "required" badge and, since only
+  one compatible plugin exists for AUTONOMOUS (R9.13), a locked label
+  (not a picker) naming `ai-maestro-autonomous-agent`.
 
-### S010: Verify no uninstall button for the role-plugin row
-- **Action:** Inspect the role-plugin row via `take_snapshot`.
-- **Goal:** The UI hides the uninstall button when the plugin equals the
-  agent's current role-plugin — removal must go through ChangeTitle
-  Gate 15, not direct uninstall.
+### S010: Verify the Role section exposes only a "Change" control, never uninstall
+- **Action:** Inspect the Role section via `take_snapshot`.
+- **Goal:** The UI exposes only a "Change" button for the role-plugin —
+  no uninstall/trash affordance exists there, because swapping or
+  removing the role-plugin must go through ChangeTitle Gate 15, never a
+  direct uninstall.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** No Trash / Uninstall icon in the role-plugin row; only the
-  "role" badge is rendered. Screenshot.
+- **Verify:** The Role section shows the "required" badge + a "Change"
+  button only; no Trash / Uninstall icon is rendered anywhere in the
+  Role section. Screenshot.
 
 ### S011: Confirm role-plugin is installed (state-verification read)
 - **Action:** Read
@@ -183,12 +193,16 @@ commit: TBD
   current AUTONOMOUS badge. Verify the Title Assignment Dialog shows
   the full set of picker-visible titles: AUTONOMOUS, MAINTAINER,
   MANAGER, ARCHITECT, ORCHESTRATOR, INTEGRATOR, CHIEF-OF-STAFF, MEMBER.
-  Pick `MAINTAINER` (standalone title — no team required, per R19).
-  When the sudo password modal appears (Rule 12 — PATCH
-  /api/agents/[id]/title is classified strict), enter governance
-  password `mYkri1-xoxrap-gogtan` and click Confirm.
+  Pick `MAINTAINER` (standalone title — no team required, per R19). When
+  MAINTAINER is selected, a mandatory "GitHub Repository (owner/repo)"
+  field appears (R19.3 — per-repo MAINTAINER constraint); Confirm stays
+  disabled until it is filled. Fill `Emasoft/scen020-test-repo`. Confirm
+  becomes enabled. Click Confirm. When the sudo password modal appears
+  (Rule 12 — PATCH /api/agents/[id]/title is classified strict), enter
+  governance password `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** ChangeTitle Gate 15 uninstalls the AUTONOMOUS role-plugin
-  and installs the MAINTAINER role-plugin (title swap pipeline).
+  and installs the MAINTAINER role-plugin (title swap pipeline), binding
+  the agent's githubRepo to `Emasoft/scen020-test-repo`.
 - **Creates:** nothing
 - **Modifies:** registry (governanceTitle=maintainer),
   `.claude/settings.local.json` (autonomous role-plugin uninstalled,

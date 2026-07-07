@@ -3,7 +3,7 @@ trdd-id: 5BPG69NO
 title: Clarify kanban local-task vs GitHub-linked task model and un-defer SCEN-002 S038/S039
 column: planned
 created: 2026-07-07T12:36:45+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:59:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 2
@@ -87,3 +87,4 @@ underlying GitHub-linkage requirement for that specific route.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Investigation-first; outcome picks branch 2 or 3 of its own Proposed fix.
+- 2026-07-07T13:59:52+0200 — IMPLEMENTED (wave W1, branch 2 confirmed): read-only confirmed the kanban "Add task" form (`TaskKanbanBoard.tsx` `onCreateTask` -> `useTasks.createTask`) posts to `POST /api/teams/[id]/tasks` (the local-task model, no `githubProject` gate at `app/api/teams/[id]/tasks/route.ts`), NOT the GitHub-gated `/api/teams/[id]/kanban/items` route. Rewrote SCEN-002 S038/S039 from DEFERRED to live steps (create -> drag -> verify via `PUT`/`GET`) and added S039b for cleanup; updated Phase 8's AUTHORING note.

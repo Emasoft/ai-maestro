@@ -3,7 +3,7 @@ trdd-id: 12N53KYX
 title: Update SCEN-001 wording — standalone-title dialog shows team titles disabled, not hidden
 column: planned
 created: 2026-07-07T03:45:00+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:59:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 2
@@ -45,3 +45,4 @@ LOW — scenario file only. Dependencies: none.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:59:52+0200 — IMPLEMENTED (wave W1): rewrote S015/S016 to expect all 8 titles shown (team-requiring ones disabled with the team-membership reason, MANAGER disabled naming the holder); bumped `version:` to "2.1".

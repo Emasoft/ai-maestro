@@ -3,7 +3,7 @@ trdd-id: PLXOJYX1
 title: Tighten Rule 10 auto-purge to require zero ISSUE entries, not just PASS
 column: planned
 created: 2026-07-07T12:35:40+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:59:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 3
@@ -64,3 +64,4 @@ Dependencies: none.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:59:52+0200 — IMPLEMENTED (wave W1): Rule 10 auto-purge now requires the `## Issues Noticed (Non-Blocking)` section to be empty in addition to PASS+bugs-fixed, with an explicit `keep_screenshots: false` opt-out override to force-purge anyway.

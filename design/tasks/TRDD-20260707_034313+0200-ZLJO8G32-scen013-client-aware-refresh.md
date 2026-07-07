@@ -3,7 +3,7 @@ trdd-id: ZLJO8G32
 title: Make SCEN-013 client-aware so the Codex variant stops inheriting Claude-only assumptions
 column: planned
 created: 2026-07-07T03:43:13+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:59:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -54,3 +54,4 @@ LOW — scenario doc only.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:59:52+0200 — IMPLEMENTED (wave W1): S017/S023/S027 rewritten to the Codex install record; S018 dropped hardcoded Skills/Commands counts; S013/S014 reworded to R9.13's mandatory role-plugin; `required_tools:` replaced with `browser_stack: dev-browser`; added pre-flight orphan note + TRDD-5681KM4Z dependency note on S023. Note: not every `settings.local.json` occurrence in the file was swept (only the 3 explicitly named steps), so the file may still carry other Claude-only references outside this TRDD's stated scope.

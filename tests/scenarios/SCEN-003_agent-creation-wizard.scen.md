@@ -1,7 +1,7 @@
 ---
 number: 3
 name: Agent Creation Wizard with Title and Role-Plugin
-version: "2.0"
+version: "2.1"
 description: >
   The user logs in, creates a test team, then opens the agent creation
   wizard twice. First they create an INTEGRATOR agent — the wizard locks
@@ -42,13 +42,7 @@ data_produced:
   - Team entries (temporary, cleaned up)
   - Plugin settings.local.json modifications (restored)
   - Cemetery archive entries (temporary, purged)
-required_tools:
-  - mcp__chrome-devtools__navigate_page
-  - mcp__chrome-devtools__take_snapshot
-  - mcp__chrome-devtools__take_screenshot
-  - mcp__chrome-devtools__click
-  - mcp__chrome-devtools__fill
-  - mcp__chrome-devtools__wait_for
+browser_stack: dev-browser
 prerequisites:
   - AI Maestro server running at http://localhost:23000
   - Governance password set
@@ -288,7 +282,7 @@ author: AI Maestro Team
 - **Goal:** Role-plugin selected (custom or default programmer)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Plugin shown as selected. Unlike INTEGRATOR, MEMBER title allows user choice (not locked). Screenshot: SCEN-003/S029-plugin-selected.png
+- **Verify:** Plugin shown as selected. Per R9.13, the MEMBER role-plugin is auto-LOCKED at creation — since only one compatible plugin exists for MEMBER (unless a custom plugin from S023 also qualifies), no dropdown/choice appears; a dropdown appears only when ≥2 compatible plugins exist. The post-creation "Change" affordance is checked separately in S033. Screenshot: SCEN-003/S029-plugin-selected.png
 
 #### S030: Complete wizard
 - **Action:** Click Next to Summary, then Create/Finish
@@ -348,11 +342,11 @@ author: AI Maestro Team
 ## Phase 6: RBAC Probe -- No Self-Modification
 
 #### S037: Attempt self-modification for scen-test-integrator-rex via API
-- **Action:** Get scen-test-integrator-rex's agent ID. Attempt `PATCH /api/agents/<id>` with header `X-Agent-Id: <id>` and body `{"label": "self-hack-integrator"}`.
-- **Goal:** API returns 403 -- no agent can modify itself
+- **Action:** Get scen-test-integrator-rex's agent ID. Attempt `PATCH /api/agents/<id>` with header `X-Agent-Id: <id>` (no Bearer token) and body `{"label": "self-hack-integrator"}`. Record the target agent's current `label` beforehand.
+- **Goal:** The request is rejected and no mutation occurs -- accept 401 OR 403 as the pass condition. AID Bearer-auth is checked BEFORE the no-self-modification AUTHZ rule, so an unauthenticated self-mod attempt returns 401 (not 403); both are equally conclusive "rejected" signals for this route.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Response status 403. Error mentions self-modification forbidden. Screenshot: SCEN-003/S037-no-self-mod.png
+- **Verify:** Response status is 401 OR 403 (not 200). If 401, error mentions authentication/Bearer token required; if 403, error mentions self-modification forbidden. Re-fetch the target agent and assert its `label` is unchanged from the value recorded before the attempt -- this unchanged-label check is the real security property being tested. Screenshot: SCEN-003/S037-no-self-mod.png
 
 ---
 
@@ -382,12 +376,12 @@ author: AI Maestro Team
 - **Modifies:** Agent registry (entry removed), team agentIds (agent removed)
 - **Verify:** Agent no longer appears in sidebar. Screenshot: SCEN-003/S039-member-deleted.png
 
-#### S040: Delete scen-test-wizard-team via DeleteTeam pipeline
-- **Action:** Switch to "Teams" tab, find `scen-test-wizard-team` team card, click delete icon. First dialog: click Delete. Second dialog: enter governance password `mYkri1-xoxrap-gogtan`, click "Delete Agents Too".
-- **Goal:** Test team fully removed via DeleteTeam 8-gate pipeline. Auto-COS agent deleted. Pending transfers cancelled. Team task files deleted.
+#### S040: Delete scen-test-wizard-team via DeleteTeam pipeline (cascade)
+- **Action:** Switch to "Teams" tab, find `scen-test-wizard-team` team card, click delete icon. In the DeleteTeam dialog, CHECK the "Delete member agents too" checkbox, enter governance password `mYkri1-xoxrap-gogtan`, then click the button — labeled "Delete Team + Agents" once the checkbox is checked (or plain "Delete Team" if left unchecked; this step requires it checked).
+- **Goal:** Test team fully removed via DeleteTeam 8-gate pipeline in a single action. Auto-COS agent deleted by the cascade (no separate manual step needed). Pending transfers cancelled. Team task files deleted.
 - **Creates:** nothing
 - **Modifies:** Teams registry (entry removed), auto-COS agent deleted
-- **Verify:** Team card no longer appears in sidebar. Screenshot: SCEN-003/S040-team-deleted.png
+- **Verify:** Team card no longer appears in sidebar. The auto-COS agent no longer appears in the agent list either (the cascade removed it in this one action — no separate "delete the orphaned auto-COS manually" step is needed). Screenshot: SCEN-003/S040-team-deleted.png
 
 #### S041: Verify cemetery entries and purge
 - **Action:** Navigate to Settings -> Cemetery tab. Verify deleted test agents appear. Click "Purge" for each test entry. When the sudo password modal appears each time (`DELETE /api/agents/cemetery` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.

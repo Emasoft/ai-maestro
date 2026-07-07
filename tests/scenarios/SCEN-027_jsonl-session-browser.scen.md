@@ -39,10 +39,10 @@ ui_sections:
   - Login page (governance password login)
   - Sidebar -> Agents tab -> Create new agent
   - Agent Creation Wizard (steps 1-7, client=claude)
-  - Agent Profile -> Sessions tab -> Session list
-  - Agent Profile -> Sessions tab -> Chat transcript (virtualized)
-  - Agent Profile -> Sessions tab -> Context breakdown panel
-  - Agent Profile -> Sessions tab -> Search bar
+  - Agent View -> Sessions tab -> Session list
+  - Agent View -> Sessions tab -> Chat transcript (virtualized)
+  - Agent View -> Sessions tab -> Context breakdown panel
+  - Agent View -> Sessions tab -> Search bar
   - Agent Profile -> Advanced tab -> Danger Zone
   - Sudo password modal (Rule 12)
 data_produced:
@@ -123,19 +123,19 @@ author: AI Maestro Team
 
 ## Phase 2: Open the Sessions tab
 
-#### S007: Navigate to the agent's Profile
-- **Action:** With the agent selected in the sidebar, click "Profile" (or the avatar) to expose the Agent Profile panel.
-- **Goal:** Agent Profile panel is visible with tab bar (Overview / Config / Plugins / Sessions / Advanced / …)
+#### S007: Ensure the agent is selected — Sessions is a peer top-level tab, not a Profile sub-tab
+- **Action:** Ensure the agent is selected in the sidebar. You do NOT need to open Profile — Sessions is a peer top-level tab in the agent-view tab bar (next to Terminal / Chat / Messages / WorkTree / Search / Export / Profile / Pop-Out), not a Profile sub-tab (`components/AgentProfilePanel.tsx` only has `Overview` / `Config` / `Advanced` sub-tabs — no `Sessions`).
+- **Goal:** The agent-view top tab bar is visible with a "Sessions" entry among its peer tabs.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows the tab bar containing a "Sessions" tab. Screenshot: S007_<RUN_ID>_profile-open.jpg
+- **Verify:** Snapshot shows the top-level agent-view tab bar containing a "Sessions" tab (roughly `y < 100` in the snapshot/bounding box, i.e. near the top of the view, not inside the Profile panel's sub-tab region). Screenshot: S007_<RUN_ID>_profile-open.jpg
 
-#### S008: Click the Sessions tab
-- **Action:** Click the "Sessions" tab in the Agent Profile tab bar.
+#### S008: Click the Sessions tab (top-level tab bar)
+- **Action:** Click the "Sessions" tab in the agent-view top tab bar (next to Terminal / Chat).
 - **Goal:** Sessions tab becomes active; the three-pane layout (session list on the left, transcript in the center, context panel on the right) renders within 2 s. If the agent has zero `.jsonl` files the empty-state message is visible instead.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows either (a) ≥1 session row in the left pane with a non-zero session-count badge on the tab label, or (b) the empty-state text `No sessions yet.`. Screenshot: S008_<RUN_ID>_sessions-tab.jpg
+- **Verify:** The clicked "Sessions" button is confirmed to be in the top tab bar (not inside the Profile panel's sub-tab region) — disambiguates if a "Sessions" label ever appears in two places again. Snapshot shows either (a) ≥1 session row in the left pane with a non-zero session-count badge on the tab label, or (b) the empty-state text `No sessions yet.`. Screenshot: S008_<RUN_ID>_sessions-tab.jpg
 
 > **Note:** if S008 shows the empty state, **jump to Phase CLEANUP**. The empty state is a valid PASS for an agent with zero sessions on disk (TRDD §6.3-#9). Record `branch_taken: empty-state` in the report and SKIP Phases 3-5.
 
@@ -157,12 +157,12 @@ author: AI Maestro Team
 - **Modifies:** nothing
 - **Verify:** Snapshot shows a badge matching `/\bin:\s*\d+|\bout:\s*\d+/` on the bubble AND a matching aggregate on the header. Screenshot: S010_<RUN_ID>_token-badge.jpg
 
-#### S011: Verify the context-breakdown panel renders all 7 buckets
+#### S011: Verify the context-breakdown panel renders at least the 7 required buckets
 - **Action:** Look at the right-hand Context Breakdown panel.
-- **Goal:** 7 horizontal bars are present, one per category: `systemPrompt`, `systemTools`, `mcpTools`, `customAgents`, `memory`, `messages`, `freeSpace`. Each bar shows an absolute token count and a percentage. `modelContextLimit` is shown at the top or bottom of the panel.
+- **Goal:** At least 7 horizontal bars are present, covering: System prompt, System tools, MCP tools, Custom agents, Memory files, Messages, Free space. Skills and Autocompact buffer (or any further buckets the context-breakdown API grows) are acceptable additional bars and do not fail the step. Each bar shows an absolute token count and a percentage. `modelContextLimit` is shown at the top or bottom of the panel.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows all 7 labels rendered (some may be zero/grey — that's fine; only their presence is required). Screenshot: S011_<RUN_ID>_context-breakdown.jpg
+- **Verify:** Snapshot shows ≥7 bars rendered AND all 7 originally-required labels (`systemPrompt`/`System prompt`, `systemTools`/`System tools`, `mcpTools`/`MCP tools`, `customAgents`/`Custom agents`, `memory`/`Memory files`, `messages`/`Messages`, `freeSpace`/`Free space`) are present among them (some may be zero/grey — that's fine; only their presence is required). Do NOT assert exactly 7 — the panel is explicitly allowed to grow new categories (current actual: 9, adding Skills and Autocompact buffer). Screenshot: S011_<RUN_ID>_context-breakdown.jpg
 
 #### S012: Scroll to the bottom of the transcript
 - **Action:** Scroll the transcript to its end (send `End` key or scroll with the mouse wheel until `Last message` text/sentinel is visible).
@@ -219,10 +219,17 @@ author: AI Maestro Team
 ## Phase CLEANUP: Delete the test agent and restore config
 
 #### S018: Delete the test agent via the Danger Zone
+<!--
+Regression lock for SCEN-023 P1-PROP-002 (2026-05-04): DeleteAgent's
+"Also delete agent folder" path MUST cascade-delete the Claude Code
+project dir, not just ~/agents/<name>/. Confirmed fixed at SCEN-027
+run 2026-05-23 (94f00b5b); the third Verify check below is the
+regression guard.
+-->
 - **Action:** Click the agent in the sidebar → Profile → Advanced tab → Danger Zone → "Delete Agent". In the confirmation dialog, check "Also delete agent folder", type `scen027-jsonl-session-browser` in the confirmation field, click "Delete Forever". When the sudo modal appears, enter `mYkri1-xoxrap-gogtan` and click Confirm.
 - **Goal:** Agent is removed from the registry, its workdir is deleted, its tmux session is killed, all `.jsonl` files under `~/.claude/projects/-Users-*-agents-scen027-jsonl-session-browser/` are gone (along with any `.aimidx` sidecars)
 - **Removes:** 1 registry entry + 1 workdir + 1 tmux session + 0-N JSONL files + 0-N .aimidx sidecars
-- **Verify:** `GET /api/agents?includeDeleted=false` no longer lists the test agent; `ls ~/agents/scen027-jsonl-session-browser/ 2>&1` returns "No such file or directory". Screenshot: S018_<RUN_ID>_agent-deleted.jpg
+- **Verify:** `GET /api/agents?includeDeleted=false` no longer lists the test agent; `ls ~/agents/scen027-jsonl-session-browser/ 2>&1` returns "No such file or directory"; `ls ~/.claude/projects/-Users-*-agents-scen027-jsonl-session-browser/ 2>&1` returns "No such file or directory" (glob matches zero directories) — this third check is the regression guard for the Claude-projects cascade. Screenshot: S018_<RUN_ID>_agent-deleted.jpg
 
 #### S019: Purge the cemetery entry
 - **Action:** Settings → Cemetery → find `scen027-jsonl-session-browser` → click "Purge".

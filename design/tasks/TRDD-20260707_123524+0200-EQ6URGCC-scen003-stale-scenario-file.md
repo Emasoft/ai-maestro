@@ -3,7 +3,7 @@ trdd-id: EQ6URGCC
 title: SCEN-003 scenario file is stale — 3 recurring step discrepancies + deprecated frontmatter
 column: planned
 created: 2026-07-07T12:35:24+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:59:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 2
@@ -90,3 +90,4 @@ observed behavior either way).
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:59:52+0200 — IMPLEMENTED (wave W1): S029 reworded to auto-lock (R9.13); S040 rewritten to the correct single-dialog cascade-checkbox flow (no separate S040b needed — none existed); S037 now accepts 401 OR 403 + unchanged-label assertion; `required_tools:` replaced with `browser_stack: dev-browser`; bumped `version:` to "2.1".

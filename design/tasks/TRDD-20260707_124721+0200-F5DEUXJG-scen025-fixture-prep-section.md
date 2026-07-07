@@ -3,7 +3,7 @@ trdd-id: F5DEUXJG
 title: Add a Fixture Prep subsection to SCEN-025 documenting its GitHub prereqs
 column: planned
 created: 2026-07-07T12:47:21+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:59:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -95,3 +95,4 @@ recipe and the ratified column vocabulary.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:59:52+0200 — IMPLEMENTED (wave W1): inserted the "Fixture Prep (one-time, before first run)" section into SCEN-025 between the frontmatter close and Phase 0.

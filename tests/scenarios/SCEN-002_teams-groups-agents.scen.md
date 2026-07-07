@@ -36,7 +36,7 @@ data_produced:
   - 2 test agents (temporary, created and deleted)
   - 1 test team (temporary, created and deleted)
   - 1 auto-COS agent (temporary, created and deleted)
-  - 1 kanban task (temporary, deleted with team)
+  - 1 local kanban task (temporary, created in S038 and deleted in S039b — no longer deferred)
   - Agent registry entries (temporary, cleaned up)
   - Team entries (temporary, cleaned up)
   - Plugin settings.local.json modifications (restored)
@@ -365,40 +365,55 @@ author: AI Maestro Team
 
 ## Phase 8: Kanban Board UI Verification
 
-> **Context (AUTHORING-003 fix during 20260426T204800Z run):** As of
-> 2026-03-27 (governance simplification), local kanban tasks were
-> removed in favor of GitHub Projects integration exclusively
-> (see `services/teams-service.ts` line 30 comment). The kanban UI
-> requires a `githubProject` linked to the team to create/list/update
-> tasks. Without a linked GitHub project, the API returns
-> `{"error":"Team has no GitHub project linked"}`. Since the scenario's
-> 0-IMPACT rule forbids creating real GitHub repos for testing, S037 was
-> rewritten to verify the Kanban UI loads + shows columns + responds to
-> Add Task with the expected error, while S038 + S039 are DEFERRED to a
-> future scenario with proper GitHub project fixtures.
+> **Context (AUTHORING-004 fix — 2026-07-07, TRDD-5BPG69NO investigation):**
+> The prior AUTHORING-003 note below (kept for history) claimed the kanban
+> UI is GitHub-Project-gated end-to-end and deferred S038/S039. Investigation
+> on 2026-07-07 found there are TWO separate task/kanban surfaces:
+> `POST /api/teams/[id]/kanban/items` (GitHub-only, gates on
+> `team.githubProject` at `app/api/teams/[id]/kanban/items/route.ts:74`), and
+> `POST /api/teams/[id]/tasks` (the LOCAL-TASK model — no `githubProject`
+> gate — used by `useTasks.createTask` in `hooks/useTasks.ts:112`). The
+> kanban board's "Add task" inline form
+> (`components/team-meeting/TaskKanbanBoard.tsx` `onCreateTask` prop, wired
+> from `useTasks`) posts to the LOCAL route `/api/teams/[id]/tasks`, NOT the
+> GitHub-gated route. So S038/S039 below are now LIVE steps exercising the
+> local-task CRUD path (create -> drag -> verify -> delete) with zero
+> GitHub fixture dependency — they are no longer DEFERRED.
+>
+> **Prior context (AUTHORING-003, 2026-04-26 run, SUPERSEDED — kept for
+> history):** As of 2026-03-27 (governance simplification), local kanban
+> tasks were believed removed in favor of GitHub Projects integration
+> exclusively (see `services/teams-service.ts` line 30 comment). That
+> comment describes the GitHub-linked kanban ITEMS route only — the
+> separate local-task route (`/api/teams/[id]/tasks`) was never actually
+> removed, and it is what the "Add task" inline form on this board uses.
 
 #### S037: Navigate to team dashboard kanban
 - **Action:** Navigate browser to `/teams/<teamId>` (the URL with the team ID), wait for the team dashboard to render, click the "Kanban" tab.
-- **Goal:** Kanban board view loads showing 5 columns (Backlog, To Do, In Progress, Review, Done)
+- **Goal:** Kanban board loads with ≥5 columns matching the project's configured kanban pipeline (see `~/.claude/rules/trdd-design-tasks.md` v2 Column enum and `types/team.ts` `DEFAULT_KANBAN_COLUMNS`), each with a per-column "Add task" control. Do not hardcode a fixed column count or name list — the pipeline shape is allowed to evolve (current actual: the TRDD-v2 14-stage set — Backburner/To Do/Design/Dispatch/Dev/Testing/AI Review/Human Review/Complete/Publish/Published/Deploy/Live/Live-Auditing).
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Kanban board visible with all 5 column headers. Screenshot: SCEN-002/S037-kanban-board.png
+- **Verify:** Kanban board visible with ≥5 column headers, each showing a per-column "Add task" affordance. Screenshot: SCEN-002/S037-kanban-board.png
 
-#### S038: DEFERRED — Create kanban task (requires GitHub project)
-- **Action:** Verify clicking "Add task" in Backlog opens the inline new-task form, fill title "SCEN-002 test task", click "Add Task" — observe the API rejection.
-- **Goal:** Confirm the kanban CRUD path requires a GitHub project link (current implementation gates kanban on team.githubProject).
-- **Creates:** nothing
-- **Modifies:** nothing
-- **Verify:** Network response from `POST /api/teams/<id>/kanban/items` returns `{"error":"Team has no GitHub project linked"}`. Screenshot: SCEN-002/S038-task-created.png
-- **DEFERRED:** Full kanban CRUD test requires a GitHub fixture project; tracked as a future scenario in proposals.
+#### S038: Create a task in the kanban board (local-task model)
+- **Action:** Click "Add task" on the first column (Backburner, the TRDD-v2 entry column). Fill title `SCEN-002 test task`. Click "Add Task" / submit.
+- **Goal:** Task is created via the local-task route `POST /api/teams/<id>/tasks` (no GitHub project required) and appears as a card in the Backburner column.
+- **Creates:** 1 local task (persisted per `lib/task-registry.ts`).
+- **Modifies:** nothing else.
+- **Verify:** Network response from `POST /api/teams/<id>/tasks` returns 200/201 with the new task object. Card with title "SCEN-002 test task" visible in the Backburner column. Screenshot: SCEN-002/S038-task-created.png
 
-#### S039: DEFERRED — Drag task between columns (requires task from S038)
-- **Action:** N/A — depends on S038
-- **Goal:** Verify drag-and-drop status change works
-- **Creates:** nothing
-- **Modifies:** nothing
-- **Verify:** N/A
-- **DEFERRED:** Same reason as S038 — requires GitHub fixture project.
+#### S039: Drag the task to another column and verify status change
+- **Action:** Drag the "SCEN-002 test task" card from Backburner to the next column (To Do) using native HTML5 drag-and-drop (matching the existing `KanbanCard`/`KanbanColumn` pattern — see CLAUDE.md §"Team Meeting Architecture"). Drop.
+- **Goal:** Task status updates to the target column via `PUT /api/teams/<id>/tasks/<taskId>`.
+- **Creates:** nothing.
+- **Modifies:** the task's status field.
+- **Verify:** `GET /api/teams/<id>/tasks` shows the task's status matching the To Do column. Card visually moved to the To Do column. Screenshot: SCEN-002/S039-task-dragged.png
+
+#### S039b: Delete the test task (cleanup)
+- **Action:** Open the "SCEN-002 test task" card's detail view, click delete/remove, confirm.
+- **Goal:** Task removed from the board and from persisted storage via `DELETE /api/teams/<id>/tasks/<taskId>`.
+- **Removes:** 1 local task.
+- **Verify:** `GET /api/teams/<id>/tasks` no longer lists "SCEN-002 test task". Screenshot: SCEN-002/S039b-task-deleted.png
 
 ---
 
@@ -413,17 +428,17 @@ author: AI Maestro Team
 
 #### S041: Switch to Teams tab and open Edit Team modal
 - **Action:** Click "Teams" tab. Hover over `scen-test-team-alpha` team card, click edit (pencil) icon
-- **Goal:** Edit team modal opens with both test agents pre-selected
+- **Goal:** Edit team modal opens with both test agents PLUS the auto-created COS agent pre-selected (per the CreateTeam pipeline's auto-COS creation — see the "Auto-COS creation on team creation" authoring note in `SCENARIOS_TESTS_RULES.md`; the auto-COS is a full `team.agentIds` member, not a UI-only decoration). Do NOT hardcode the auto-COS's persona name (it is randomly generated) — derive it from `team.chiefOfStaffId` via `GET /api/teams/<id>` when verifying which row is the COS.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Modal shows `scen-test-agent-alpha` and `scen-test-agent-beta` selected. Screenshot: SCEN-002/S041-edit-team.png
+- **Verify:** Modal shows `scen-test-agent-alpha`, `scen-test-agent-beta`, AND the auto-COS agent (identified via `team.chiefOfStaffId`) all selected — 3 selected total (N=2 explicit members + 1 auto-COS). Screenshot: SCEN-002/S041-edit-team.png
 
 #### S042: Remove scen-test-agent-alpha from team
 - **Action:** Click `scen-test-agent-alpha` to deselect
-- **Goal:** Agent unhighlighted, count decreases to 1
+- **Goal:** Agent unhighlighted, count decreases from 3 to 2 (beta + auto-COS remain selected)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows count "1 selected". Screenshot: SCEN-002/S042-alpha-deselected.png
+- **Verify:** Snapshot shows count "2 selected". Screenshot: SCEN-002/S042-alpha-deselected.png
 
 #### S043: Save team changes
 - **Action:** Click "Save" / "Update Team" button
@@ -455,7 +470,7 @@ author: AI Maestro Team
 - **Goal:** Alpha re-added to team, title auto-transitions to MEMBER
 - **Creates:** nothing
 - **Modifies:** Team agentIds (alpha added back), alpha's team membership, alpha's title (-> MEMBER)
-- **Verify:** Team card shows count 2. Screenshot: SCEN-002/S046-team-readded.png
+- **Verify:** Team card shows count 3 (beta + auto-COS + re-added alpha — COS-inclusive, per the auto-COS authoring note; do not hardcode the auto-COS persona name, derive it from `team.chiefOfStaffId`). Screenshot: SCEN-002/S046-team-readded.png
 
 #### S047: Verify scen-test-agent-alpha is MEMBER again
 - **Action:** Switch to "Agents" tab, click on `scen-test-agent-alpha`

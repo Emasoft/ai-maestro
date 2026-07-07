@@ -3,7 +3,7 @@ trdd-id: Q91OT6AI
 title: Kanban board columns drifted from docs — update to TRDD-v2 14-stage set
 column: planned
 created: 2026-07-07T12:36:45+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:59:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 2
@@ -69,3 +69,4 @@ LOW. Documentation/scenario-only change; no code or behavior modification.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:59:52+0200 — IMPLEMENTED (wave W1, option b): S037 rewritten as a version-resilient ≥5-column assertion against the TRDD-v2 pipeline; confirmed `types/team.ts` `DEFAULT_KANBAN_COLUMNS` / `types/task.ts` `DEFAULT_STATUSES` as the source of truth; swept `docs/ai-index.html` (2 stale "5 columns (Backlog, To Do, In Progress, Review, Done)" hits fixed). `grep -rn "Backlog.*In Progress.*Review.*Done" docs/ README.md tests/scenarios/` now returns 0 hits.

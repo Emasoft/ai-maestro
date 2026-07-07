@@ -3,7 +3,7 @@ trdd-id: 8CZ1SMCD
 title: Fix SCEN-027 wording — Sessions tab is a peer top tab, not inside Profile
 column: planned
 created: 2026-07-07T12:44:38+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:59:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -101,3 +101,4 @@ LOW — scenario markdown file only, no application code touched.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:59:52+0200 — IMPLEMENTED (wave W1): `ui_sections` + S007/S008 rewritten — Sessions is now correctly described as a peer top-level agent-view tab, not a Profile sub-tab; S008 Verify adds the DOM-position disambiguation.

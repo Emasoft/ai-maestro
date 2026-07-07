@@ -702,17 +702,20 @@ reports/scenarios-runner/screenshots/SCEN-009_20260414T143000Z/S033_20260414T143
 
 Screenshots are heavyweight (~50 MB per 22-scenario batch even at JPEG 97%). Once a scenario PASSES (its bugs are fixed AND verified by a re-run that landed on the same fixed code), its screenshots have served their purpose: the audit trail can be reconstructed from git history alone if needed. **In an autonomous overnight batch (Rule 13), the runner MUST auto-purge per-run screenshot directories after the scenario's fixes are confirmed verified.**
 
-**The exact rule:** at the END of every scenario run, the runner inspects the verdict. If the verdict is `PASS` AND every bug found during the run was fixed AND the fix was verified (the previously failing step now passes), the runner deletes its own per-run screenshot directory:
+**The exact rule:** at the END of every scenario run, the runner inspects the verdict. If the verdict is `PASS` AND every bug found during the run was fixed AND the fix was verified (the previously failing step now passes) AND the report's `## Issues Noticed (Non-Blocking)` section is EMPTY, the runner deletes its own per-run screenshot directory:
 
 ```bash
 rm -rf "${MAIN_PROJECT_ROOT}/reports/scenarios-runner/screenshots/SCEN-${NNN}_${RUN_ID}"
 ```
+
+A report with `bugs_found: 0` but a non-empty `## Issues Noticed (Non-Blocking)` section (WARN/INFO entries, distinct from BUGs) does NOT qualify for auto-purge by default — a later P0/P1 promotion of that issue might need the visual evidence. The default is safer-keep. An author who judges the issues immaterial may explicitly force-purge anyway by setting `keep_screenshots: false` in the scenario's report frontmatter — this is the ONLY override; without it, any non-empty Issues Noticed section blocks the purge regardless of verdict.
 
 **Exceptions where screenshots MUST be kept** (do NOT delete in any of these cases):
 - Verdict is `FAIL`, `PARTIAL`, or `STUCK` — the screenshots are evidence for the postmortem
 - The scenario found a bug it could NOT fix (deferred to a P0 proposal) — screenshots are evidence for the proposal
 - The verification re-run was NOT performed (single-pass run only) — keep until the next batch confirms
 - The scenario is a smoke test or baseline run with no bugs found — screenshots are baseline evidence and stay
+- The report's `## Issues Noticed (Non-Blocking)` section is non-empty AND `keep_screenshots: false` was NOT explicitly set — the default is to keep, since a later promotion of that issue may need the evidence
 
 **The runner reports the deletion in its summary line** so the parent batch conductor can verify (the report's `screenshots_purged: true|false` field). The conductor logs total disk reclaimed at the end of the batch.
 

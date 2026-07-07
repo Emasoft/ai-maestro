@@ -46,6 +46,9 @@ data_produced:
 git-fixtures:
   - https://github.com/Emasoft/scen025-kanban-fixture
 dir-fixtures: []
+github_project_number: 1   # placeholder — set to the REAL number after
+                            # TRDD-QB5PWIG3 fixture provisioning; verify
+                            # via `gh project list --owner Emasoft`
 browser_stack: dev-browser
 prerequisites:
   - AI Maestro server running at http://localhost:23000
@@ -68,6 +71,38 @@ rewipe-list:
 commit: TBD
 author: SCEN-025 proposal 12 (2026-04-20 batch)
 ---
+
+## Fixture Prep (one-time, before first run)
+
+This scenario depends on the following GitHub fixtures. They are NOT
+auto-created by the runner; a maintainer prepares them once via
+`fixture_github_repo` + `fixture_github_project_v2`
+(`tests/scenarios/scripts/fixture-helpers.sh`), and
+`setup-SCEN-025.sh` refreshes them on every run.
+
+### Prereq 1 — GitHub repo
+- Name: `Emasoft/scen025-kanban-fixture`
+- Visibility: public
+- Description: "SCEN-025 scenario test fixture — safe to ignore"
+- Initial state: README + LICENSE only
+- Tag: `scenario-start` at the initial commit
+
+### Prereq 2 — GitHub Project
+- Owner: `Emasoft`
+- Title: `SCEN-025 Fixture Board`
+- Status field options: the ratified TRDD `column:` vocabulary — see
+  `~/.claude/rules/trdd-design-tasks.md` v2 and `docs/GOVERNANCE-RULES.md`
+  R25 (Three-Pillars Task System). This board is a GitHub-Project MIRROR
+  of the TRDD state machine, not an ad-hoc kanban list.
+- Linked to Prereq 1
+
+### One-time provisioning
+See TRDD-QB5PWIG3 for the exact commands, or run:
+```bash
+source tests/scenarios/scripts/fixture-helpers.sh
+fixture_github_repo "Emasoft/scen025-kanban-fixture" empty
+fixture_github_project_v2 Emasoft "SCEN-025 Fixture Board"
+```
 
 ## Phase 0: SAFE-SETUP
 
@@ -150,19 +185,19 @@ author: SCEN-025 proposal 12 (2026-04-20 batch)
 
 ## Phase 3: Link to GitHub Project
 
-#### S010: Open team settings → GitHub Project section
-- **Action:** Close kanban overlay (Escape). Click the team name in MeetingHeader to open team settings. Scroll to "GitHub Project" section.
-- **Goal:** GitHub Project form visible, currently unlinked.
+#### S010: Open team settings → GitHub Project field
+- **Action:** Close kanban overlay (Escape). Click the team name in MeetingHeader to open team settings. Scroll to the "GitHub Project" field — a single URL-paste input (see `TeamFormModal` in `components/sidebar/TeamListView.tsx`, comment "SCEN-005.03 + SCEN-010.02 (second option, 2026-04-30)", and `components/teams/TeamCreationWizard.tsx`). There is no separate owner/repo/project-number field set.
+- **Goal:** GitHub Project URL field visible, currently empty/unlinked.
 - **Creates:** nothing.
 - **Modifies:** nothing.
-- **Verify:** "Link GitHub Project" button is present. Screenshot: SCEN-025/S010_<RUN_ID>_gh-project-form.jpg.
+- **Verify:** The single GitHub Project URL input is present (no "Link GitHub Project" 3-field form). Screenshot: SCEN-025/S010_<RUN_ID>_gh-project-form.jpg.
 
-#### S011: Fill GitHub Project owner/repo + number + link
-- **Action:** Type owner `Emasoft`, repo `scen025-kanban-fixture`, project number `1`. Click "Link GitHub Project". Authenticated call to `/api/teams/<id>/github-project` succeeds.
-- **Goal:** Team.githubProject is set. `GET /api/teams/<id>` returns `githubProject: { owner: 'Emasoft', repo: 'scen025-kanban-fixture', projectNumber: 1 }`.
+#### S011: Paste GitHub Project URL + link
+- **Action:** Paste the URL `https://github.com/orgs/Emasoft/projects/<github_project_number>` (see frontmatter `github_project_number`) into the GitHub Project field. Click Save. `parseGitHubProjectUrl()` parses the org-scoped URL and the authenticated call to `/api/teams/<id>/github-project` succeeds.
+- **Goal:** Team.githubProject is set. `GET /api/teams/<id>` returns `githubProject: { owner: 'Emasoft', repo: 'Emasoft', projectNumber: <github_project_number> }` (note: `parseGitHubProjectUrl()` sets `repo = owner` for org/user-scoped URLs — this is NOT the fixture repo name).
 - **Creates:** nothing on disk beyond teams.json mutation.
 - **Modifies:** teams.json team's githubProject field.
-- **Verify:** API returns updated team. Screenshot: SCEN-025/S011_<RUN_ID>_gh-project-linked.jpg.
+- **Verify:** API returns updated team with the `repo === owner` fallback shape above. Screenshot: SCEN-025/S011_<RUN_ID>_gh-project-linked.jpg.
 
 ---
 
@@ -229,11 +264,11 @@ author: SCEN-025 proposal 12 (2026-04-20 batch)
 - **Removes:** 4 cemetery entries.
 - **Verify:** `GET /api/agents/cemetery` excludes scen025-*. Screenshot: SCEN-025/S019_<RUN_ID>_cemetery-purged.jpg.
 
-#### S020: Reset the GitHub Project fixture board
-- **Action:** `bash: gh project item-list 1 --owner Emasoft --format json | jq -r '.items[] | select(.content.title | test("SCEN-025")) | .id' | xargs -I {} gh project item-delete 1 --owner Emasoft --id {}`. Then `bash: gh issue list --repo Emasoft/scen025-kanban-fixture --state all --search "SCEN-025" --json number --jq '.[].number' | xargs -I {} gh issue delete {} --repo Emasoft/scen025-kanban-fixture --yes`.
-- **Goal:** The fixture GitHub Project has no scen025-* cards and no scen025-* issues — back to its `scenario-start` state.
-- **Removes:** N GitHub cards + N GitHub issues (typically 1 each).
-- **Verify:** Fixture board shows 0 cards. Screenshot: SCEN-025/S020_<RUN_ID>_gh-reset.jpg.
+#### S020: Close and archive the GitHub Project fixture board entries (never delete)
+- **Action:** `bash: gh issue list --state open --repo Emasoft/scen025-kanban-fixture --search "SCEN-025" --json number --jq '.[].number' | xargs -I {} gh issue close {} --repo Emasoft/scen025-kanban-fixture`. Then `bash: gh project item-list <github_project_number> --owner Emasoft --format json | jq -r '.items[] | select(.content.title | test("SCEN-025")) | .id' | xargs -I {} gh project item-archive <github_project_number> --owner Emasoft --id {}` (using the frontmatter `github_project_number` variable, never a literal `1`).
+- **Goal:** The fixture GitHub Project has no active scen025-* cards and no open scen025-* issues, but the audit trail is preserved — issues are CLOSED (still visible via `--state all`), Project items are ARCHIVED (still visible in item history), never permanently deleted.
+- **Removes:** nothing permanently — N GitHub Project cards archived + N GitHub issues closed (typically 1 each).
+- **Verify:** Fixture board shows 0 active (non-archived) cards. `gh issue list --repo Emasoft/scen025-kanban-fixture --state all --search "SCEN-025"` still shows the closed issue(s) for later debugging. Screenshot: SCEN-025/S020_<RUN_ID>_gh-reset.jpg.
 
 #### S021: STATE-WIPE — Restore configuration files
 - **Action:** The `scenario-restore.sh` script runs and compares all files in `rewipe-list` against the backup MANIFEST. Any drift is restored byte-for-byte.

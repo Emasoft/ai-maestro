@@ -3,7 +3,7 @@ trdd-id: BLOV7TYL
 title: Auto-COS member count confuses SCEN-002 Edit Team modal assertions
 column: planned
 created: 2026-07-07T12:36:45+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:59:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 3
@@ -65,3 +65,4 @@ underlying `agentIds`/`chiefOfStaffId` model.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:59:52+0200 — IMPLEMENTED (wave W1, mandatory fix only): S041/S042/S046 expected counts made COS-inclusive (N+1 selected, derived via `team.chiefOfStaffId`, no hardcoded persona name). The optional UX "COS badge" is NOT implemented — it requires an app-source change out of this quick-fix batch's scope.

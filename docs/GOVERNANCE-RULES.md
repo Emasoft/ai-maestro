@@ -1240,6 +1240,8 @@ Read-only operations (queries, lookups, calculations) do NOT need AIO functions 
 | R28.2 | The server verifies, in order: (1) the **AID identity**; (2) the **TITLE** assigned to that id/agent grants the privilege for the operation; (3) when the operation requires approval, the presence in the agent's **portfolio** (a server-stored secure enclave, per agent, holding approval + mandate tokens) of the required **approval/mandate token** issued by the MANAGER or the (own-team) COS | Explicit (USER) |
 | R28.3 | The request is fulfilled **only if all three checks pass**. Missing id, insufficient title, or a missing required token → refused. The server NEVER trusts a client-supplied id / title / scope | Explicit (USER) |
 
+**401-before-403 note (2026-07-07, SCEN-003 S037 observation):** R28.2's ordering — AID identity checked before TITLE/AUTHZ — means an unauthenticated attempt at a rule enforced elsewhere (e.g. R26's no-self-modification invariant on `PATCH /api/agents/[id]`) is rejected at the AUTH layer with **HTTP 401** (Bearer token required) before the AUTHZ rule (which would return **HTTP 403**) is ever reached. Both outcomes block the mutation — callers should treat 401 and 403 as equally conclusive "rejected" signals for such a route, not assume 403 is the only valid rejection code for an AUTHZ-shaped rule.
+
 ---
 
 ## R29. MANAGER Team & Agent Lifecycle Authority (IRON, USER-set)

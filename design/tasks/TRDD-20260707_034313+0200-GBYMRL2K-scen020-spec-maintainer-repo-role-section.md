@@ -3,7 +3,7 @@ trdd-id: GBYMRL2K
 title: Refresh SCEN-020 spec for the mandatory MAINTAINER repo field and the Role-section UI
 column: planned
 created: 2026-07-07T03:43:13+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:59:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -52,3 +52,4 @@ LOW — scenario doc only.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:59:52+0200 — IMPLEMENTED (wave W1): S012 gained the mandatory GitHub Repository (R19.3) field flow; S009/S010 rewritten to the dedicated Role section (required badge + Change-only control); data_produced notes the githubRepo binding.

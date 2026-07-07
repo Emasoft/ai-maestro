@@ -3,7 +3,7 @@ trdd-id: 73OQ8JSV
 title: Loosen SCEN-027 S011 context-breakdown bucket-count assertion to at-least-7
 column: planned
 created: 2026-07-07T12:44:38+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:59:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -81,3 +81,4 @@ LOW — scenario markdown file only, no application code touched.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:59:52+0200 — IMPLEMENTED (wave W1): S011 loosened to an at-least-7-buckets assertion (≥7 bars, all 7 originally-required labels present; no longer asserts exactly 7).

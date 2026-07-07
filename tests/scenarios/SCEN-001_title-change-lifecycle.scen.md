@@ -1,7 +1,7 @@
 ---
 number: 1
 name: Title Change Lifecycle
-version: "2.0"
+version: "2.1"
 description: >
   The user logs in, creates a test agent, then assigns it the ORCHESTRATOR
   title via the Title Assignment Dialog — confirming the role-plugin installs
@@ -180,17 +180,17 @@ author: AI Maestro Team
 
 #### S015: Click "ASSIGN TITLE" button in profile panel
 - **Action:** Click the title button/badge showing current title
-- **Goal:** Title Assignment Dialog opens with radio cards
+- **Goal:** Title Assignment Dialog opens with radio cards showing ALL 8 titles — the dialog does not hide team-requiring titles, it shows them disabled with an explanatory reason (current, correct UX; team-requiring titles are shown-and-disabled, not hidden).
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Dialog shows AUTONOMOUS, MANAGER, and MAINTAINER options (agent is not in a team -> standalone titles only, per R19 MAINTAINER is a standalone title requiring `githubRepo`). MANAGER grayed out if already assigned, with message showing who holds it. Screenshot: SCEN-001/S015-title-dialog-standalone.png
+- **Verify:** Dialog shows all 8 titles: AUTONOMOUS, MAINTAINER, MANAGER, MEMBER, CHIEF-OF-STAFF, ORCHESTRATOR, ARCHITECT, INTEGRATOR. AUTONOMOUS and MAINTAINER are selectable (standalone, per R19 MAINTAINER additionally requires `githubRepo`). MEMBER/CHIEF-OF-STAFF/ORCHESTRATOR/ARCHITECT/INTEGRATOR are disabled with the reason text "Requires team membership. Assign this agent to a team first." MANAGER is disabled (singleton) naming the current holder if already assigned. Screenshot: SCEN-001/S015-title-dialog-standalone.png
 
-#### S016: Verify only standalone titles are shown and MANAGER singleton enforced
+#### S016: Verify team-requiring titles are shown-disabled (not hidden) and MANAGER singleton enforced
 - **Action:** Inspect dialog options
-- **Goal:** Only AUTONOMOUS, MANAGER, and MAINTAINER should be visible (agent has no team -> team titles hidden). If MANAGER is already assigned, it should be disabled with explanation text. MAINTAINER is selectable but requires a `githubRepo` value to be provided before assignment can succeed.
+- **Goal:** All 8 titles are rendered. AUTONOMOUS and MAINTAINER are selectable. MEMBER/CHIEF-OF-STAFF/ORCHESTRATOR/ARCHITECT/INTEGRATOR are rendered but disabled, each showing "Requires team membership. Assign this agent to a team first." MANAGER is disabled (singleton), naming the current holder if already assigned; otherwise selectable. MAINTAINER is selectable but requires a `githubRepo` value to be provided before assignment can succeed.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** No ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER/COS options shown. MANAGER disabled if already taken. MAINTAINER present. Screenshot: SCEN-001/S016-singleton-enforced.png
+- **Verify:** ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER/CHIEF-OF-STAFF options ARE shown (disabled, with the team-membership reason text) — not absent from the dialog. MANAGER disabled if already taken (names the holder), or selectable otherwise. MAINTAINER present and selectable. Screenshot: SCEN-001/S016-singleton-enforced.png
 
 #### S017: Create a dedicated test team for the test agent
 - **Action:** Click Teams tab in sidebar. Click "+" or "Create Team" button. Enter team name EXACTLY `scen001-title-team`. Description: `Isolated test team for SCEN-001 — delete in cleanup`. Click Next. When prompted for initial agents, do NOT select any existing agents. Click "Create Team". Enter governance password `mYkri1-xoxrap-gogtan` when prompted. Wait for team creation to complete and its auto-COS (named `cos-scen001-title-team` per the scen-prefixed convention) to appear.

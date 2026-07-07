@@ -3,7 +3,7 @@ trdd-id: 8W16AN6X
 title: SCEN-025 hardcodes project number 1 and describes a stale 3-field UI
 column: planned
 created: 2026-07-07T12:47:21+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:59:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 0
@@ -95,3 +95,4 @@ TRDD-QB5PWIG3 landing first so the real project number is known.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:59:52+0200 — IMPLEMENTED (wave W1): added `github_project_number` frontmatter placeholder; rewrote S010/S011 to the single GitHub Project URL-field UI with the `repo === owner` fallback shape.

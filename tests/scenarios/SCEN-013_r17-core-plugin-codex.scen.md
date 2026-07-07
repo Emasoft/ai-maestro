@@ -31,13 +31,7 @@ data_produced:
   - Plugin settings.local.json modifications (temporary, cleaned up)
   - Agent registry entry (temporary, deleted)
   - Cemetery archive entry (temporary, purged)
-required_tools:
-  - mcp__chrome-devtools__navigate_page
-  - mcp__chrome-devtools__take_snapshot
-  - mcp__chrome-devtools__take_screenshot
-  - mcp__chrome-devtools__click
-  - mcp__chrome-devtools__fill
-  - mcp__chrome-devtools__wait_for
+browser_stack: dev-browser
 prerequisites:
   - AI Maestro server running at http://localhost:23000
   - Governance password set
@@ -109,6 +103,13 @@ author: AI Maestro Team
 ## Phase 1: Create Agent and Verify Core Plugin Installation
 
 > This phase tests R17.1–R17.6: automatic installation at creation time via CreateAgent G11.
+>
+> **Pre-flight note:** if a prior run left a registry-only orphan for
+> `scen013-codex-r17-test` (an agent entry exists in the registry but its
+> `~/agents/` folder is missing or its tmux session is dead — e.g. from an
+> interrupted previous run), the Wizard will reject the name as
+> already-taken in S009. UI-delete that orphan first (Profile → Advanced
+> tab → Danger Zone → Delete Agent) before proceeding.
 
 #### S007: Open Agent Creation Wizard
 - **Action:** Click the "+" (Create new agent) button in the sidebar
@@ -157,14 +158,14 @@ author: AI Maestro Team
 - **Goal:** Step 6 appears (role plugin)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows Step 6 with plugin selection. Screenshot: SCEN-013/S013-wizard-step6.png
+- **Verify:** Snapshot shows Step 6. Per R9.13 (every persisted agent MUST carry exactly one role-plugin — no zero-plugin agents), AUTONOMOUS resolves to the mandatory `ai-maestro-autonomous-agent` role-plugin, shown pre-selected/locked rather than an open picker. Screenshot: SCEN-013/S013-wizard-step6.png
 
 #### S014: Continue past plugin step
-- **Action:** Click "Continue" (no role plugin for AUTONOMOUS)
+- **Action:** Click "Continue" (the mandatory `ai-maestro-autonomous-agent` role-plugin is auto-assigned for AUTONOMOUS per R9.13 — there is no picker choice to make here)
 - **Goal:** Step 7 appears (summary)
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows Step 7 summary: name=scen013-codex-r17-test, title=AUTONOMOUS, folder=~/agents/scen013-codex-r17-test/. Screenshot: SCEN-013/S014-wizard-step7.png
+- **Verify:** Snapshot shows Step 7 summary: name=scen013-codex-r17-test, title=AUTONOMOUS, folder=~/agents/scen013-codex-r17-test/, role-plugin=ai-maestro-autonomous-agent. Screenshot: SCEN-013/S014-wizard-step7.png
 
 #### S015: Click Create Agent
 - **Action:** Click "Create Agent!" button
@@ -180,12 +181,12 @@ author: AI Maestro Team
 - **Modifies:** nothing
 - **Verify:** Terminal status shows "Connected", agent name in toolbar. Screenshot: SCEN-013/S016-agent-online.png
 
-#### S017: Verify ai-maestro-plugin in settings.local.json
-- **Action:** Read file `~/agents/scen013-codex-r17-test/.claude/settings.local.json`
-- **Goal:** The file contains `"ai-maestro-plugin@ai-maestro-plugins": true` in enabledPlugins
+#### S017: Verify ai-maestro-plugin in the Codex install record
+- **Action:** Read file `~/agents/scen013-codex-r17-test/.codex/installed-plugins/ai-maestro-plugin.json` — the Codex client-native install record (Codex agents have no `~/agents/<name>/.claude/settings.local.json`; that file is Claude-only).
+- **Goal:** The install record exists (presence = installed) and confirms ai-maestro-plugin is installed and enabled for this agent.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** File content confirms plugin is installed and enabled. Screenshot: SCEN-013/S017-settings-local.png
+- **Verify:** The Codex install record file is present. Screenshot: SCEN-013/S017-settings-local.png
 
 ---
 
@@ -199,7 +200,7 @@ author: AI Maestro Team
 - **Goal:** Config tab loads showing element summary: Skills count, Commands count, Plugins count
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Snapshot shows "Plugins 1" (exactly 1 plugin — the ai-maestro-plugin). Also shows Skills 12 and Commands 12 (from the ai-maestro-plugin's bundled elements). Screenshot: SCEN-013/S018-config-tab.png
+- **Verify:** Snapshot shows "Plugins 1" (exactly 1 plugin — the ai-maestro-plugin). Skills/Commands counts are NOT asserted here — they drift as the ai-maestro-plugin's bundled elements grow (current actual: Skills 34, no Commands count shown for Codex); only the plugin count and the "core" label (S020) matter for this scenario. Screenshot: SCEN-013/S018-config-tab.png
 
 #### S019: Expand the Plugins section to see the plugin entry
 - **Action:** Click on the "Plugins 1" row to expand it and reveal the plugin list
@@ -246,12 +247,12 @@ author: AI Maestro Team
 - **Modifies:** Agent session status → hibernated
 - **Verify:** Sidebar shows agent as hibernated. API `GET /api/agents/<id>` reports no active session. Screenshot: SCEN-013/S022-hibernated.png
 
-#### S023: Manually disable the plugin in settings.local.json while hibernated
-- **Action:** Read `~/agents/scen013-codex-r17-test/.claude/settings.local.json`, edit the `ai-maestro-plugin@ai-maestro-plugins` value from `true` to `false`, write back.
-- **Goal:** Plugin is disabled in the config file while agent is asleep (pre-wake state: broken).
+#### S023: Manually disable the plugin in the Codex install record while hibernated
+- **Action:** Read `~/agents/scen013-codex-r17-test/.codex/installed-plugins/ai-maestro-plugin.json` (the Codex client-native install record) and mark it disabled per the Codex adapter's own disabled-representation, write back. **NOTE:** the exact disabled-representation for a Codex install record is defined by TRDD-5681KM4Z — reconcile this step's Action against that definition once it lands; until then, use whatever disabled marker the current Codex adapter actually writes (e.g. an `enabled: false` field in the install record, or removal of the plugin from `~/.codex/config.toml`'s enabled-plugins list).
+- **Goal:** Plugin is disabled in the Codex-native config while agent is asleep (pre-wake state: broken).
 - **Creates:** nothing
-- **Modifies:** settings.local.json (ai-maestro-plugin set to false)
-- **Verify:** File content shows `"ai-maestro-plugin@ai-maestro-plugins": false`. Registry still shows agent hibernated. Screenshot: SCEN-013/S023-manually-disabled.png
+- **Modifies:** Codex install record / config (ai-maestro-plugin marked disabled)
+- **Verify:** The Codex install record / config confirms the plugin is disabled. Registry still shows agent hibernated. Screenshot: SCEN-013/S023-manually-disabled.png
 
 #### S024: Wake the agent via UI and verify wake-gate reconciliation
 - **Action:** In the dashboard, select `scen013-codex-r17-test` and click Wake. The wakeAgent pipeline MUST run the R17 reconciliation gate (part of ChangeClient G06-G07 or InstallElement EXE phase) which detects the disabled ai-maestro-plugin and re-enables it before launching the Claude Code session. Wait for the Claude idle prompt to appear.
@@ -295,12 +296,12 @@ author: AI Maestro Team
 - **Modifies:** Agent session status → hibernated
 - **Verify:** API reports no active session for this agent. Screenshot: SCEN-013/S026-hibernated-again.png
 
-#### S027: Remove plugin from settings.local.json entirely (while hibernated)
-- **Action:** Read `~/agents/scen013-codex-r17-test/.claude/settings.local.json`, remove the `ai-maestro-plugin@ai-maestro-plugins` key entirely from enabledPlugins, write back.
-- **Goal:** Plugin entry completely gone from config (simulates a broken or tampered install while agent sleeps).
+#### S027: Remove plugin from the Codex install record entirely (while hibernated)
+- **Action:** Delete `~/agents/scen013-codex-r17-test/.codex/installed-plugins/ai-maestro-plugin.json` (the Codex client-native install record) entirely.
+- **Goal:** Plugin entry completely gone from the Codex-native config (simulates a broken or tampered install while agent sleeps).
 - **Creates:** nothing
-- **Modifies:** settings.local.json (plugin entry removed)
-- **Verify:** File content shows `enabledPlugins` without any ai-maestro-plugin key. Screenshot: SCEN-013/S027-plugin-removed.png
+- **Modifies:** Codex install record (file removed)
+- **Verify:** `ls ~/agents/scen013-codex-r17-test/.codex/installed-plugins/ai-maestro-plugin.json` returns "No such file or directory". Screenshot: SCEN-013/S027-plugin-removed.png
 
 #### S028: Capture pre-wake registry state
 - **Action:** Read agent from API: `GET /api/agents/<agentId>`. Because the server has not run a startup audit yet, the registry may not have the `corePluginMissing` flag set — the point of this phase is that the wake-gate detects the mismatch at wake time, regardless of what the registry says about it.

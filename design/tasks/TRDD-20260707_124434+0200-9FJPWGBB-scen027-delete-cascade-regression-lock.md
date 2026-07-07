@@ -3,7 +3,7 @@ trdd-id: 9FJPWGBB
 title: Add an explicit regression-lock assertion + comment for the DeleteAgent Claude-projects cascade
 column: planned
 created: 2026-07-07T12:44:38+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:59:52+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 2
@@ -86,3 +86,4 @@ markdown file; no application code touched.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:59:52+0200 — IMPLEMENTED (wave W1): S018 gained an explicit third Verify check asserting the `~/.claude/projects/...` cascade dir is gone, plus a regression-lock comment citing SCEN-023 P1-PROP-002.

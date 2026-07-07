@@ -1,9 +1,9 @@
 ---
 trdd-id: YUGDER9D
 title: 3-pillars kanban supremacy — all surfaces align to the ratified 17-column design
-column: planned
+column: complete
 created: 2026-07-07T12:51:22+0200
-updated: 2026-07-07T12:51:22+0200
+updated: 2026-07-07T13:20:00+0200
 current-owner: claude-fable-session
 assignee: claude-fable-session
 priority: 1
@@ -26,7 +26,7 @@ review-requirements: []
 runtime-targets: [macos]
 impacts: []
 implementation-commits: []
-external-refs: []
+external-refs: ["https://github.com/Emasoft/ai-maestro-orchestrator-agent/issues/27"]
 ---
 
 # TRDD-YUGDER9D — 3-pillars kanban supremacy — all surfaces align to the ratified 17-column design
@@ -37,8 +37,21 @@ USER-ordered 2026-07-07 (verbatim): *"the github kanban, the ai-maestro ui, the 
 the orchestrator plugin, all must align to the 3-pillars kanban design, not the opposite."*
 This TRDD is the durable record of that supremacy rule + the alignment work-list.
 
-**NEXT ACTION:** run the conformance sweep over the `batch-backlog-20260707` proposal TRDDs
-(K3/K4 below), then land the two authoring-surface guards (K5), then the CLAUDE.md §7 doc fix.
+**▶ ALL IN-REPO WORK DONE 2026-07-07T13:20 — column: complete.** Results:
+- **K3/K4 sweep:** 13/65 batch proposals flagged by grep, all 13 read — **0 conflicts**.
+  7 conform incidentally; 6 substantive kanban proposals (Q91OT6AI, 5BPG69NO, TC8TBJEU,
+  QB5PWIG3, 36AUWWHX + F5DEUXJG) already embed the 17-column alignment constraint
+  explicitly (the mid-flight constraint reached the converter agents; TC8TBJEU's helper
+  defaults to the exact 17 ratified labels; QB5PWIG3 explicitly supersedes the old
+  report's 5-value Status list). No rewrites needed.
+- **K5 guards landed:** kanban-conformance clause added to
+  `tests/scenarios/SCENARIOS_TESTS_RULES.md` Rule 11 conventions +
+  `.claude/agents/scenario-runner.md` Phase G deliverable 2.
+- **CLAUDE.md fixed:** 4 stale 5-status/5-column lines (487, 611, 1831, 1834) → 17-column model.
+- **Orchestrator plugin:** confirmed STALE at v1.9.2 (`amoa_sync_kanban.py:29`
+  `STATUS_TO_COLUMN` = old 5-status keys; zero `live_auditing` anywhere) → filed
+  `Emasoft/ai-maestro-orchestrator-agent#27` per the cross-project rule (no direct edits).
+  The external fix is tracked by that issue, not by this TRDD's column.
 
 ## The ruling design (cite this, never restate a divergent one)
 

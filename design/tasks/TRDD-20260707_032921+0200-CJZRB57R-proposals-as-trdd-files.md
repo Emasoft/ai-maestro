@@ -1,9 +1,9 @@
 ---
 trdd-id: CJZRB57R
 title: Scenario 11th-HOUR proposals become individual TRDD-proposal files
-column: dev
+column: complete
 created: 2026-07-07T03:29:21+0200
-updated: 2026-07-07T03:29:21+0200
+updated: 2026-07-07T13:20:00+0200
 current-owner: claude-fable-session
 assignee: claude-fable-session
 priority: 1
@@ -25,7 +25,7 @@ test-requirements: [lint]
 review-requirements: []
 runtime-targets: [macos]
 impacts: []
-implementation-commits: []
+implementation-commits: [f992865c, b53c5134]
 external-refs: []
 ---
 
@@ -46,9 +46,18 @@ not a proposal). Two deliverables:
    `reports_dev/scenarios-runner/`) into individual TRDD-proposal files, deduped and
    actionability-checked against current code.
 
-**NEXT ACTION:** apply the surface rewrites (list below), verify with a repo grep sweep
-(no live surface may still reference the monolithic mechanism), commit, then run the
-backlog conversion.
+**▶ BOTH DELIVERABLES DONE 2026-07-07T13:20 — column: complete.**
+- **Deliverable 1** (Rule-11 redesign, all surface rewrites + grep sweep) landed in
+  `f992865c`.
+- **Deliverable 2** (backlog conversion) landed in `b53c5134`: 65 TRDD-proposal files in
+  `design/proposals/` labeled `batch-backlog-20260707` (17 by the 2 overnight forks +
+  48 by 6 cold Sonnet converter agents — one per report, self-contained prompts, no fork
+  inheritance), covering all 12 pending reports (scen 001/002/003/012/013/015/016/020 +
+  024/025/026/027); 7 report items skipped as duplicate/already-fixed (skip logs in
+  gitignored `reports/backlog-conversion/`). Kanban-touching proposals verified conformant
+  to the 3-pillars 17-column design under TRDD-YUGDER9D (0 conflicts).
+- Pending screening: the user reviews `design/proposals/` (grep label
+  `batch-backlog-20260707`) via the standard approval flow.
 
 ## Touchpoints (from the 2026-07-07 fork-audit proposals-mechanism map)
 

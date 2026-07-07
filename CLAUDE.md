@@ -484,7 +484,7 @@ const getCategoryColor = (category: string) => {
 
 **Task system:**
 - Tasks stored per-team in `~/.aimaestro/teams/tasks-{teamId}.json`
-- 5 statuses: `backlog` → `pending` → `in_progress` → `review` → `completed`
+- Statuses = the ratified 3-pillars kanban vocabulary (17 columns, 1:1 with the TRDD `column:` field): 14 lifecycle (`backburner` → `todo` → `design` → `dispatch` → `dev` → `testing` → `ai_review` → `human_review` → `complete` → `publish` → `published` → `deploy` → `live` → `live_auditing`) + 3 exceptions (`blocked`, `failed`, `superseded`). `TaskStatus` is a string (per-team configurable) but the ratified 17-column default in `types/task.ts` rules every kanban surface — UI boards, GitHub Project mirrors, `amp-kanban-*.sh` — per TRDD-YUGDER9D; consumers align to it, never the reverse
 - Dependency chains: tasks can block other tasks, auto-unblock on completion
 - `useTasks` hook polls every 5s for multi-tab sync
 
@@ -608,7 +608,7 @@ components/
     TaskCard.tsx              - Task card with status, assignee, dependencies
     TaskCreateForm.tsx        - Full task creation form with all fields
     TaskDetailView.tsx        - Detailed task view with edit capabilities
-    TaskKanbanBoard.tsx       - Full-screen kanban overlay with 5 columns + drag-and-drop
+    TaskKanbanBoard.tsx       - Full-screen kanban overlay (17-column ratified config) + drag-and-drop
     KanbanColumn.tsx          - Single kanban column with drop zone
     KanbanCard.tsx            - Compact draggable task card for kanban
     DependencyPicker.tsx      - Dependency selection for task relationships
@@ -1828,10 +1828,10 @@ When implementing features:
 
 **Team Meeting & Kanban (v0.20.19+):**
 10. `app/team-meeting/page.tsx` - Team meeting page with reducer state machine
-11. `components/team-meeting/TaskKanbanBoard.tsx` - Full-screen kanban overlay with 5 columns + drag-and-drop
+11. `components/team-meeting/TaskKanbanBoard.tsx` - Full-screen kanban overlay (17-column ratified config) + drag-and-drop
 12. `components/team-meeting/KanbanColumn.tsx` - Single kanban column with drop zone
 13. `components/team-meeting/KanbanCard.tsx` - Compact draggable task card
-14. `types/task.ts` - Task types with 5 statuses: backlog, pending, in_progress, review, completed
+14. `types/task.ts` - Task types; `TaskStatus` string + the ratified 17-column default (14 lifecycle + 3 exception, 1:1 with TRDD `column:`)
 15. `lib/task-registry.ts` - File-based CRUD for team task persistence
 16. `hooks/useTasks.ts` - Task hook with tasksByStatus, optimistic updates, polling
 

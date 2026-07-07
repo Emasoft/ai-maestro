@@ -773,6 +773,15 @@ authored per `~/.claude/rules/trdd-design-tasks.md` (v2 frontmatter) and
 - DEDUPE before authoring: grep `design/proposals/` + `design/tasks/` for the same
   symptom/file — if an open TRDD already covers it, add a note to that TRDD's body
   instead of creating a duplicate.
+- KANBAN CONFORMANCE (TRDD-YUGDER9D): any suggestion touching kanban columns, task
+  statuses, GitHub Projects sync, or kanban UI options MUST conform to the 3-pillars
+  kanban design — the ratified 17-column TRDD `column:` vocabulary (14 lifecycle +
+  3 exception, 1:1 with server `TaskStatus`; `~/.claude/rules/trdd-design-tasks.md` v2,
+  `docs/GOVERNANCE-RULES.md` R25). Consumers (GitHub Project mirrors, the ai-maestro UI,
+  `amp-kanban-*.sh`, role-plugins) align TO this vocabulary, never the reverse. Author
+  such suggestions only as 17-column-conformant ALIGNMENT proposals, or SKIP them as
+  superseded — never author a proposal introducing a divergent column set or a parallel
+  kanban implementation.
 - The runner COMMITS its proposal files, staged BY NAME, in the per-scenario commit
   cycle (Rule 13) — the scenario report itself stays gitignored and uncommitted.
 

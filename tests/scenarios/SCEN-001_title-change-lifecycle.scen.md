@@ -193,11 +193,11 @@ author: AI Maestro Team
 - **Verify:** ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER/CHIEF-OF-STAFF options ARE shown (disabled, with the team-membership reason text) — not absent from the dialog. MANAGER disabled if already taken (names the holder), or selectable otherwise. MAINTAINER present and selectable. Screenshot: SCEN-001/S016-singleton-enforced.png
 
 #### S017: Create a dedicated test team for the test agent
-- **Action:** Click Teams tab in sidebar. Click "+" or "Create Team" button. Enter team name EXACTLY `scen001-title-team`. Description: `Isolated test team for SCEN-001 — delete in cleanup`. Click Next. When prompted for initial agents, do NOT select any existing agents. Click "Create Team". Enter governance password `mYkri1-xoxrap-gogtan` when prompted. Wait for team creation to complete and its auto-COS (named `cos-scen001-title-team` per the scen-prefixed convention) to appear.
-- **Goal:** New isolated test team exists. An auto-COS with scen001- prefix was created by the system.
+- **Action:** Click Teams tab in sidebar. Click "+" or "Create Team" button. Enter team name EXACTLY `scen001-title-team`. Description: `Isolated test team for SCEN-001 — delete in cleanup`. Click Next. When prompted for initial agents, do NOT select any existing agents. Click "Create Team". A sudo password modal MUST appear (TRDD-1LX5LMBD: `POST /api/teams` is a strict sudo route) — enter governance password `mYkri1-xoxrap-gogtan` in the modal and click Confirm. Wait for team creation to complete and its auto-COS (named `cos-scen001-title-team` per the scen-prefixed convention) to appear.
+- **Goal:** New isolated test team exists, created only after a fresh sudo token was minted via the modal. An auto-COS with scen001- prefix was created by the system.
 - **Creates:** 1 test team (`scen001-title-team`), 1 auto-COS agent (`cos-scen001-title-team`)
 - **Modifies:** teams.json, agent registry (auto-COS)
-- **Verify:** Teams tab shows `scen001-title-team`. Agents tab shows `cos-scen001-title-team` online or hibernated.
+- **Verify:** The sudo password modal appeared before team creation completed — its ABSENCE is a BUG (Rule 4). Teams tab shows `scen001-title-team`. Agents tab shows `cos-scen001-title-team` online or hibernated.
 
 #### S017a: Add the test agent to the new test team
 - **Action:** Back on the Agents tab, click `scen-test-title-agent`. In the Profile panel, click the "Reassign" button next to the Team field. Select ONLY `scen001-title-team` (the scenario's own team — never a pre-existing user team). Click Confirm and provide governance password if prompted.

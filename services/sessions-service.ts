@@ -37,6 +37,10 @@ import { sessionActivity, broadcastStatusUpdate } from '@/services/shared-state'
 import { getRuntime } from '@/lib/agent-runtime'
 import crypto from 'crypto'
 import { statePath } from '@/lib/ecosystem-constants'
+// TRDD-I75EMTK0: shared R17 presence-check + reinstall helper (see
+// agents-core-service.ts for the full rationale — one implementation used
+// by wakeAgent, this defense-in-depth path, and POST /api/agents/[id]/ensure-core).
+import { ensureCorePluginInstalled } from '@/services/agents-core-service'
 
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
@@ -691,24 +695,43 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
   // not a user-facing operation, so a system context is the correct shape.
   if (resolvedCwd) {
     try {
-      const { InstallElement } = await import('@/services/element-management-service')
       const { detectClientType } = await import('@/lib/client-capabilities')
       const { buildSystemAuthContext } = await import('@/lib/agent-auth')
-      const clientType = detectClientType(program || '')
-      const installResult = await InstallElement({
-        name: 'ai-maestro-plugin',
-        marketplace: 'ai-maestro-plugins',
-        action: 'install',
-        scope: 'local',
-        agentDir: resolvedCwd,
-        agentId: agentId || undefined,
-        clientType: clientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
-      }, buildSystemAuthContext('sessions-service-r17-defense'))
-      if (!installResult.success) {
-        console.warn(`[Sessions] R17: Core plugin install failed for "${name}": ${installResult.error}`)
-        // Don't block session creation — the plugin may install on next wake via R17 gate.
-        // But log the full operations for diagnostics.
-        console.warn(`[Sessions] R17 operations: ${installResult.operations.join(' | ')}`)
+      const clientType = detectClientType(program || '') as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown'
+      // TRDD-I75EMTK0: share the same presence-check + reinstall logic the
+      // wake-gate uses (ensureCorePluginInstalled), keyed on the agentId. A
+      // few internal callers (e.g. pre-registration flows) invoke
+      // createSession before an agentId exists — scanAgentLocalConfig /
+      // getAgent need a real id, so those fall back to the original
+      // unconditional InstallElement call (unchanged behavior).
+      if (agentId) {
+        const ensureResult = await ensureCorePluginInstalled(
+          agentId,
+          resolvedCwd,
+          clientType,
+          buildSystemAuthContext('sessions-service-r17-defense')
+        )
+        if (!ensureResult.success) {
+          console.warn(`[Sessions] R17: Core plugin install failed for "${name}": ${ensureResult.error}`)
+          console.warn(`[Sessions] R17 operations: ${(ensureResult.operations || []).join(' | ')}`)
+        }
+      } else {
+        const { InstallElement } = await import('@/services/element-management-service')
+        const installResult = await InstallElement({
+          name: 'ai-maestro-plugin',
+          marketplace: 'ai-maestro-plugins',
+          action: 'install',
+          scope: 'local',
+          agentDir: resolvedCwd,
+          agentId: undefined,
+          clientType,
+        }, buildSystemAuthContext('sessions-service-r17-defense'))
+        if (!installResult.success) {
+          console.warn(`[Sessions] R17: Core plugin install failed for "${name}": ${installResult.error}`)
+          // Don't block session creation — the plugin may install on next wake via R17 gate.
+          // But log the full operations for diagnostics.
+          console.warn(`[Sessions] R17 operations: ${installResult.operations.join(' | ')}`)
+        }
       }
     } catch (r17Err) {
       console.warn(`[Sessions] R17 defense-in-depth failed:`, r17Err instanceof Error ? r17Err.message : r17Err)

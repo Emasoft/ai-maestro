@@ -3,7 +3,7 @@ trdd-id: XTIOLWJH
 title: Regression test for op-bound sudo tokens on the dispatcher PATCH route
 column: planned
 created: 2026-07-07T03:43:13+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T15:11:42+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 0
@@ -57,3 +57,4 @@ whole route surface mechanically); implement together.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T15:11:42+0200 — IMPLEMENTED (wave W4): tests/services/sudo-op-binding.test.ts (~27 real routes, mint-then-consume round trip via real matchedEntryKey/issueSudoToken/verifyAndConsumeSudoToken). Found and fixed a REAL bug in lib/security-registry.ts: DELETE /api/agents/role-plugins and DELETE /api/agents/cemetery ambiguously matched the /api/agents/[id] wildcard, causing op-bound tokens to bind to the wrong template — fixed with specificity-based route matching (wildcardCount + longest-raw tiebreak).

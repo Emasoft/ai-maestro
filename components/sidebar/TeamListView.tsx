@@ -225,11 +225,15 @@ export default function TeamListView({ agents, searchQuery, onTeamsChanged }: Te
         const body: Record<string, unknown> = { name, description, agentIds }
         // For POST: only include when an actual link is provided. null/undefined → omit.
         if (githubProject) body.githubProject = githubProject
-        const res = await fetch('/api/teams', {
+        // TRDD-1LX5LMBD: POST /api/teams is now sudo-gated (team creation
+        // auto-creates an agent + AID keypair + role-plugin). sudoFetch
+        // transparently handles the 403 sudo_required → password modal →
+        // retry-with-token loop, matching the PUT path above.
+        const res = await sudoFetch('/api/teams', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
-        })
+        }, requestSudoToken)
         const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
         if (!mountedRef.current) return null
         if (!res.ok) return data.error || 'Failed to create team'

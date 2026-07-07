@@ -3,7 +3,7 @@ trdd-id: I75EMTK0
 title: Make the New Session path run the R17 core-plugin self-heal (ensureCorePluginInstalled)
 column: planned
 created: 2026-07-07T03:43:13+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T15:11:42+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -57,3 +57,4 @@ classified in security-registry.json (interacts with TRDD-RF122HBJ's template gu
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T15:11:42+0200 — IMPLEMENTED (wave W4): extracted ensureCorePluginInstalled() in agents-core-service.ts, wired into wakeAgent, sessions-service.ts, and a new strict POST /api/agents/[id]/ensure-core route called from AgentProfile.tsx handleNewSession before command injection; classified in security-registry.json + sudo-guard.ts STRICT_AGENT_RULES.

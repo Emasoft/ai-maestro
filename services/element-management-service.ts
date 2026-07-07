@@ -2187,10 +2187,16 @@ export async function ChangeTitle(
     // reassign, etc.) the check must still trigger. G13b below sets
     // these fields after a successful title change, so this gate is the
     // pre-write counterpart.
+    // TRDD-AOFL94O3: the team lookup now runs UNCONDITIONALLY (not only when
+    // newTitle is a singleton title) so Gate 8b below can also see
+    // memberTeamG8 when newTitle is e.g. 'member' — the whole point of 8b is
+    // to guard the REVERSE direction (demoting the CURRENT COS away), which
+    // has nothing to do with newTitle being a singleton title itself.
+    const { loadTeams: loadTeamsG8 } = await import('@/lib/team-registry')
+    const allTeamsG8 = loadTeamsG8()
+    const memberTeamG8 = allTeamsG8.find(t => t.agentIds.includes(agentId))
+
     if (newTitle && SINGLETON_TEAM_TITLES.has(newTitle)) {
-      const { loadTeams: loadTeamsG8 } = await import('@/lib/team-registry')
-      const allTeamsG8 = loadTeamsG8()
-      const memberTeamG8 = allTeamsG8.find(t => t.agentIds.includes(agentId))
       if (memberTeamG8) {
         if (newTitle === 'orchestrator' && memberTeamG8.orchestratorId && memberTeamG8.orchestratorId !== agentId) {
           const currentOrch = getAgent(memberTeamG8.orchestratorId)
@@ -2209,6 +2215,35 @@ export async function ChangeTitle(
     } else {
       ops.push(`G08: Not a per-team singleton title`)
     }
+
+    // ── GATE 8b: COS self-demotion guard (TRDD-AOFL94O3, R4.7) ─
+    // The team's Chief-of-Staff cannot be changed to any OTHER title while
+    // still holding the team's chiefOfStaffId slot — doing so would vacate
+    // the team's COS with no replacement. This is the server-side
+    // belt-and-braces for the client-side disable added in
+    // TitleAssignmentDialog.impl.tsx (SCEN-002 S031): the dialog greys out
+    // every other team title when opened on the current COS, but a direct
+    // API caller (PATCH, MANAGER flow, a future automation) could bypass
+    // the UI and still vacate the slot without this check.
+    //
+    // Does NOT break the existing COS-transfer/removal pipeline — verified
+    // 2026-07-07 (TRDD-AOFL94O3 risk note): BOTH
+    // `POST /api/teams/[id]/chief-of-staff` (agentId=null branch) AND the
+    // Edit-Team agentIds-removal path in teams-service.ts already clear
+    // `team.chiefOfStaffId` (or remove the agent from `team.agentIds`
+    // entirely) via a DIRECT team-registry write BEFORE calling ChangeTitle.
+    // By the time this gate runs for those flows, memberTeamG8 either has
+    // `chiefOfStaffId !== agentId` (already cleared) or is `undefined`
+    // (agent no longer resolvable as a team member), so the guard is a
+    // no-op for the legitimate transfer/removal flow and fires only when a
+    // caller changes the CURRENT COS's title directly, without vacating the
+    // slot first.
+    if (newTitle !== 'chief-of-staff' && memberTeamG8 && memberTeamG8.chiefOfStaffId === agentId) {
+      result.error = 'Cannot change title away from Chief-of-Staff while holding it — the team would be left without a COS. Transfer Chief-of-Staff to another agent first.'
+      ops.push(`G08b: DENIED — cannot demote current COS ${agentId} away from chief-of-staff while team "${memberTeamG8.name}" still lists them as chiefOfStaffId`)
+      return result
+    }
+    ops.push(`G08b: COS self-demotion check passed`)
 
     // ── GATE 9: Team membership validation ───────────────────
     // Team titles (member, chief-of-staff, orchestrator, architect, integrator)

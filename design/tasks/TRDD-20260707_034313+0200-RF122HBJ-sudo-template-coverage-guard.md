@@ -3,7 +3,7 @@ trdd-id: RF122HBJ
 title: Build-time guard that every requireSudoToken template is a reachable strict-registry entry
 column: planned
 created: 2026-07-07T03:43:13+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T15:11:42+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 0
@@ -54,3 +54,4 @@ surface, not just the dispatcher.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T15:11:42+0200 — IMPLEMENTED (wave W4): tests/security/sudo-template-coverage.test.ts scans every requireSudoToken() call site against security-registry.json (forward + reverse/orphan checks); found and removed one orphaned registry entry (PATCH_/api/agents/[id]/title) during implementation.

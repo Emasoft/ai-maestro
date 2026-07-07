@@ -239,9 +239,23 @@ interface StrictAgentRule {
 
 const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   'DELETE /api/agents/[id]': { action: 'delete-agent', targetFromPathId: true },
-  'PATCH /api/agents/[id]/title': { action: 'change-title', targetFromPathId: true },
   'POST /api/agents/[id]/transfer': { action: 'change-title', targetFromPathId: true },
+  // TRDD-I75EMTK0: the "New Session" R17 self-heal route. Same shape as the
+  // agent-UUID-targeted routes above — [id] is the agent, not a session name.
+  'POST /api/agents/[id]/ensure-core': { action: 'restart-session', targetFromPathId: true },
   'DELETE /api/agents/[id]/session': { action: 'delete-session', targetFromPathId: true },
+  // TRDD-1LX5LMBD: team creation is a privileged operation (auto-creates an
+  // agent + AID keypair + installs a role-plugin for the auto-COS) but was
+  // never sudo-gated. Web UI (system-owner) previously created teams with NO
+  // password prompt at all; a non-MANAGER agent could create one by supplying
+  // a matching `governancePassword` in the body — a weaker, untested,
+  // inconsistent mechanism compared to every other team-mutating route
+  // (DELETE/PUT below), which are all uniformly `manage-team`-gated. This
+  // entry retires that legacy body-password path (removed in
+  // app/api/teams/route.ts) in favor of the same dual-path gate: USER gets a
+  // sudo-token modal, AGENT gets the authorize('manage-team') MANAGER-only
+  // check — identical rules to DELETE/PUT/orchestrator below.
+  'POST /api/teams': { action: 'manage-team' },
   'DELETE /api/teams/[id]': { action: 'manage-team' },
   'PUT /api/teams/[id]': { action: 'manage-team' },
   'PUT /api/teams/[id]/orchestrator': { action: 'manage-team' },
@@ -287,11 +301,14 @@ function extractPathId(pathname: string, pathTemplate: string): string | undefin
  * routes whose pipeline ALSO runs the service-layer portfolio check belong
  * here, so the guard and the pipeline agree on which ops are gated.
  *
- * NOTE: none of the routes currently in this map are strict-and-agent-callable
- * today (CreateAgent/CreateTeam are not in STRICT_AGENT_RULES), so the seam is
- * dormant on the live request path until those routes are both classified
- * strict and enabled in OPERATIONS_REQUIRING_TOKEN — at which point the entry
- * below activates with zero further code change.
+ * NOTE (TRDD-1LX5LMBD): `POST /api/teams` is now BOTH strict AND in
+ * STRICT_AGENT_RULES ('manage-team'), so its 'CreateTeam' entry below is no
+ * longer dormant for the AGENT-caller title check — but `matchPortfolioToken`
+ * itself still no-ops until `OPERATIONS_REQUIRING_TOKEN['CreateTeam']` is
+ * populated (it ships `{}` — see portfolio-check.ts D2), so the PORTFOLIO
+ * token requirement specifically remains OFF regardless. `POST /api/agents`
+ * ('CreateAgent') is still absent from STRICT_AGENT_RULES, so that entry
+ * stays fully dormant until it too is classified strict.
  */
 const STRICT_ROUTE_TO_PORTFOLIO_OP: Record<string, string> = {
   'POST /api/teams': 'CreateTeam',

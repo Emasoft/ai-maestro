@@ -277,6 +277,14 @@ export default function TitleAssignmentDialog({
   // Whether this agent is currently a member of any team
   const isInTeam = governance.memberTeam !== null
 
+  // Whether this agent IS the team's current Chief-of-Staff (TRDD-AOFL94O3).
+  // R4.7: the COS cannot be removed while the team exists. This was already
+  // enforced for the agentIds-removal path (Edit Team modal keeps the COS
+  // pre-selected) but was missing here — every other team title rendered
+  // ENABLED when the dialog was opened on the COS agent itself (SCEN-002
+  // S031), letting a user vacate team.chiefOfStaffId with no replacement.
+  const isCurrentCos = isInTeam && governance.memberTeam?.chiefOfStaffId === agentId
+
   // Show every title that could ever be chosen, but disable the ones that
   // the current agent cannot take right now and explain WHY via the disabled
   // reason text. This is the fix for SCEN-016 Issue B (2026-04-12): previously
@@ -294,6 +302,14 @@ export default function TitleAssignmentDialog({
       titleDisabledReason[opt.title] = 'Requires team membership. Assign this agent to a team first.'
     } else if (isInTeam && !teamTitles.includes(opt.title)) {
       titleDisabledReason[opt.title] = 'Only available to standalone agents. Remove this agent from its team first.'
+    } else if (isCurrentCos && opt.title !== 'chief-of-staff') {
+      // TRDD-AOFL94O3: the team's COS cannot self-demote while holding the
+      // slot — doing so would vacate team.chiefOfStaffId with no
+      // replacement (R4.7). Server-side belt-and-braces is ChangeTitle
+      // Gate 8b (services/element-management-service.ts). Does NOT block
+      // the legitimate COS-transfer flow (POST /api/teams/[id]/chief-of-staff),
+      // which clears team.chiefOfStaffId BEFORE calling ChangeTitle.
+      titleDisabledReason[opt.title] = "The team's Chief-of-Staff cannot be demoted while the team exists. Delete the team or transfer COS first."
     } else if (opt.title === 'manager' && managerHeldByOther) {
       const managerName = resolveAgentName(governance.managerId!)
       titleDisabledReason[opt.title] = `Only one Manager is allowed. "${managerName}" already holds this title.`

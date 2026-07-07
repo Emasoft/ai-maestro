@@ -1791,6 +1791,96 @@ export async function handleTrustAutoAccept(sessionName: string, agentName: stri
 }
 
 // ---------------------------------------------------------------------------
+// TRDD-I75EMTK0: shared R17 core-plugin self-heal
+// ---------------------------------------------------------------------------
+
+/**
+ * Ensure the ai-maestro-plugin (R17's core dependency) is installed and
+ * enabled for `agentId` at `workingDirectory`, installing it if it is
+ * missing or disabled.
+ *
+ * Extracted from the wakeAgent R17 gate (TRDD-I75EMTK0) so every
+ * session-launch surface shares ONE implementation of "is the core plugin
+ * actually present, and if not, install it":
+ *   (a) wakeAgent — calls this after its own unsupported-client 501 refusal
+ *       (that refusal stays wake-specific; this helper assumes a supported
+ *       clientType was already chosen by the caller).
+ *   (b) sessions-service::createSession — the pre-existing "defense in depth"
+ *       path that catches callers bypassing wakeAgent (e.g. POST
+ *       /api/sessions/create).
+ *   (c) POST /api/agents/[id]/ensure-core — a new strict route that
+ *       AgentProfile's "New Session" handler awaits BEFORE injecting the
+ *       `claude`/`codex` launch command into an ALREADY-RUNNING tmux pane.
+ *       Before this route existed, "New Session" reused the live pane and
+ *       R17 never ran on that path — an agent whose core plugin was
+ *       disabled/removed/corrupted would relaunch with no ai-maestro-plugin
+ *       hooks, leaving AI Maestro blind to it (SCEN-012 S029).
+ *
+ * Returns `{ success: true, installed }` when the plugin was already present
+ * (`installed: false`) or was freshly (re)installed (`installed: true`).
+ * Returns `{ success: false, error }` when InstallElement's own pipeline
+ * failed — callers decide how to surface that (wakeAgent maps it to the
+ * `role_missing_core` sentinel; createSession's defense-in-depth path only
+ * warns and lets the wake-gate retry later).
+ */
+export async function ensureCorePluginInstalled(
+  agentId: string,
+  workingDirectory: string,
+  clientType: 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
+  authContext?: AuthContext
+): Promise<{ success: boolean; installed: boolean; error?: string; operations?: string[] }> {
+  const { InstallElement } = await import('@/services/element-management-service')
+  const { scanAgentLocalConfig } = await import('@/services/agent-local-config-service')
+  const { isCorePlugin } = await import('@/lib/ecosystem-constants')
+  const { getAgent, updateAgent } = await import('@/lib/agent-registry')
+
+  // Ensure .claude/ exists so the (legacy) Claude install path can write
+  // settings.local.json without falling over. Harmless for Codex since its
+  // install path uses .codex/.
+  fs.mkdirSync(path.join(workingDirectory, '.claude'), { recursive: true })
+
+  // Client-aware presence check via the unified scanner. Returns true when
+  // ai-maestro-plugin is present and enabled at the client-native path
+  // (Claude -> .claude/settings.local.json, Codex -> .codex/installed-plugins/).
+  let hasPlugin = false
+  const scanResult = scanAgentLocalConfig(agentId)
+  if (scanResult.data) {
+    const corePlugin = scanResult.data.plugins.find(p =>
+      isCorePlugin(p.name, p.marketplace) && p.enabled !== false
+    )
+    hasPlugin = !!corePlugin
+  }
+
+  if (!hasPlugin) {
+    console.log(`[ensureCorePluginInstalled] R17: ai-maestro-plugin missing or disabled for agent ${agentId} (client=${clientType}) — installing...`)
+    const { buildSystemAuthContext } = await import('@/lib/agent-auth')
+    const installAuth = authContext || buildSystemAuthContext('ensure-core-plugin-r17-reinstall')
+    const installResult = await InstallElement({
+      name: 'ai-maestro-plugin',
+      marketplace: 'ai-maestro-plugins',
+      action: 'install',
+      scope: 'local',
+      agentDir: workingDirectory,
+      agentId,
+      clientType,
+    }, installAuth)
+
+    if (!installResult.success) {
+      return { success: false, installed: false, error: installResult.error, operations: installResult.operations }
+    }
+    console.log(`[ensureCorePluginInstalled] R17: ai-maestro-plugin installed for agent ${agentId} (${installResult.operations.length} gates)`)
+    return { success: true, installed: true, operations: installResult.operations }
+  }
+
+  // Plugin already present — clear a stale corePluginMissing flag if set.
+  const agent = getAgent(agentId)
+  if (agent?.corePluginMissing) {
+    await updateAgent(agentId, { corePluginMissing: false } as import('@/types/agent').UpdateAgentRequest)
+  }
+  return { success: true, installed: false }
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/agents/[id]/wake -- wake a hibernated agent
 // ---------------------------------------------------------------------------
 
@@ -1909,71 +1999,38 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
         }
       }
 
-      const { InstallElement } = await import('@/services/element-management-service')
-      const { scanAgentLocalConfig } = await import('@/services/agent-local-config-service')
-      const { isCorePlugin } = await import('@/lib/ecosystem-constants')
+      // TRDD-I75EMTK0: presence-check + reinstall now lives in the shared
+      // ensureCorePluginInstalled() helper (defined above wakeAgent) so
+      // createSession's defense-in-depth path and the new
+      // POST /api/agents/[id]/ensure-core route run the SAME logic. Prefer
+      // the route's authContext when available; fall back to a typed
+      // system-owner context for background callers (e.g. server startup
+      // health-check waking an agent whose core plugin was missing).
+      // Without this fallback, background reconciliation would fail Gate 0
+      // even when the call is legitimate.
+      const ensureResult = await ensureCorePluginInstalled(
+        agentId,
+        workingDirectory,
+        clientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
+        params.authContext
+      )
 
-      // Ensure .claude/ exists so the (legacy) Claude install path can write
-      // settings.local.json without falling over. Harmless for Codex since
-      // its install path uses .codex/.
-      const { mkdirSync: mkdirR17 } = await import('fs')
-      const { join: joinR17 } = await import('path')
-      mkdirR17(joinR17(workingDirectory, '.claude'), { recursive: true })
-
-      // Client-aware presence check via the unified scanner. Returns true
-      // when ai-maestro-plugin is present and enabled at the client-native
-      // path (Claude → .claude/settings.local.json, Codex → .codex/installed-plugins/).
-      let hasPlugin = false
-      const scanResult = scanAgentLocalConfig(agentId)
-      if (scanResult.data) {
-        const corePlugin = scanResult.data.plugins.find(p =>
-          isCorePlugin(p.name, p.marketplace) && p.enabled !== false
-        )
-        hasPlugin = !!corePlugin
-      }
-
-      if (!hasPlugin) {
-        console.log(`[Wake] R17: ai-maestro-plugin missing or disabled for "${agentName}" (client=${clientType}) — installing before wake...`)
-        // R17 reinstall: prefer the route's authContext when available; fall
-        // back to a typed system-owner context for background callers (e.g.
-        // server startup health-check waking an agent that was hibernated
-        // because its core plugin was missing). Without this fallback,
-        // background reconciliation would fail Gate 0 even when the call
-        // is legitimate.
-        const { buildSystemAuthContext } = await import('@/lib/agent-auth')
-        const installAuth = params.authContext || buildSystemAuthContext('wake-agent-r17-reinstall')
-        const installResult = await InstallElement({
-          name: 'ai-maestro-plugin',
-          marketplace: 'ai-maestro-plugins',
-          action: 'install',
-          scope: 'local',
-          agentDir: workingDirectory,
-          agentId,
-          clientType: clientType as 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
-        }, installAuth)
-
-        if (!installResult.success) {
-          // Reject the wake — agent cannot function without the plugin.
-          // Status 400 with sentinel error="role_missing_core" mirrors the
-          // R9.13 roleMissing rejection (role_plugin_required, 409) so the
-          // UI can render a single "core dependency missing" alert surface
-          // for both R9.13 (role-plugin) and R17 (core-plugin) violations.
-          // The route handler expands "role_missing_core" into a rich JSON
-          // body with profileDeepLink and remediation hints — see
-          // app/api/agents/[id]/wake/route.ts. PG02 in InstallElement
-          // already set corePluginMissing=true on the registry, so the next
-          // wake will be caught by the route-level check before we even
-          // hit this gate.
-          return {
-            error: 'role_missing_core',
-            status: 400,
-          }
+      if (!ensureResult.success) {
+        // Reject the wake — agent cannot function without the plugin.
+        // Status 400 with sentinel error="role_missing_core" mirrors the
+        // R9.13 roleMissing rejection (role_plugin_required, 409) so the
+        // UI can render a single "core dependency missing" alert surface
+        // for both R9.13 (role-plugin) and R17 (core-plugin) violations.
+        // The route handler expands "role_missing_core" into a rich JSON
+        // body with profileDeepLink and remediation hints — see
+        // app/api/agents/[id]/wake/route.ts. PG02 in InstallElement
+        // already set corePluginMissing=true on the registry, so the next
+        // wake will be caught by the route-level check before we even
+        // hit this gate.
+        return {
+          error: 'role_missing_core',
+          status: 400,
         }
-        console.log(`[Wake] R17: ai-maestro-plugin installed for "${agentName}" (${installResult.operations.length} gates)`)
-      } else if (agent.corePluginMissing) {
-        // Plugin is present — clear stale flag
-        const { updateAgent: updateAgentR17Clear } = await import('@/lib/agent-registry')
-        await updateAgentR17Clear(agentId, { corePluginMissing: false } as import('@/types/agent').UpdateAgentRequest)
       }
     }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { listAllTeams, createNewTeam } from '@/services/teams-service'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
+import { requireSudoToken } from '@/lib/sudo-guard'
 
 // SCEN-005.03 + SCEN-010.02 (second option, 2026-04-30): allow the user to
 // OPTIONALLY link an existing GitHub Projects v2 board to the team at create
@@ -17,6 +18,11 @@ const CreateTeamSchema = z.object({
   agentIds: z.array(z.string().uuid()).max(50).optional(),
   type: z.literal('closed').optional(),
   chiefOfStaffId: z.string().uuid().optional(),
+  // TRDD-1LX5LMBD: superseded by the strict-route sudo gate below (`POST
+  // /api/teams` is now classified "strict" + STRICT_AGENT_RULES
+  // 'manage-team'). Field kept OPTIONAL and UNVALIDATED-BUT-IGNORED so an
+  // older client that still sends it gets a normal 200/403 from the new
+  // gate instead of a schema-validation 400.
   governancePassword: z.string().max(256).optional(),
   // Optional link to an existing GitHub Projects v2 board. Server-side this
   // is forwarded to createNewTeam, which persists it via team-registry and
@@ -45,7 +51,8 @@ export async function GET() {
 }
 
 // POST /api/teams - Create a new team
-// Requires governance password (R9.1 + WF-003: team creation is a governance action)
+// Team creation is a governance action (R9.1 + WF-003) — gated as a strict
+// route (TRDD-1LX5LMBD).
 export async function POST(request: NextRequest) {
   // Authenticate requesting agent identity for governance checks
   const auth = authenticateFromRequest(request)
@@ -53,6 +60,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
   }
   const requestingAgentId = auth.agentId
+
+  // ── strict-route gate (R32 dual-path, TRDD-1LX5LMBD) ──────────────────
+  // `POST_/api/teams` is classified "strict" in security-registry.json, so
+  // requireSudoToken is the load-bearing authz layer here, mirroring
+  // DELETE/PUT /api/teams/[id] below: for a USER/web-UI caller it requires a
+  // fresh sudo token (the Create Team dialog now calls sudoFetch, which
+  // handles the 403→password-modal→retry loop transparently); for an AGENT
+  // caller it runs authorize('manage-team') — MANAGER-only, matching R9.1.
+  //
+  // This REPLACES the previous ad-hoc in-body `governancePassword` check,
+  // which (a) let the web UI create a team with ZERO password prompt
+  // (SCEN-001 S017 caught this — buildAuthContext's isSystemOwner branch
+  // skipped the check entirely) and (b) let ANY non-MANAGER agent create a
+  // team merely by knowing the governance password string, bypassing the
+  // title-based authorize() check every other team-mutating route enforces.
+  const sudoErr = requireSudoToken(request, 'POST', '/api/teams')
+  if (sudoErr) return sudoErr
 
   let raw: unknown
   try { raw = await request.json() } catch {
@@ -67,35 +91,6 @@ export async function POST(request: NextRequest) {
     )
   }
   const body = parsed.data
-
-  // Governance password required for team creation when called by an agent.
-  // Two exemptions:
-  //   1. System-owner (web UI with session cookie) — already authenticated via login.
-  //   2. MANAGER agent (AID/session-secret auth) — team creation is a core MANAGER duty.
-  // All other agents must provide the governance password.
-  //
-  // GOV-AUDIT fix (2026-06-21): derive `isSystemOwner` from the model-aware
-  // buildAuthContext, NOT the hand-rolled `!auth.agentId`. The literal form set
-  // isSystemOwner=true for ANY no-agent caller — including a model-ON non-maestro
-  // USER ({ userId, userTitle:'user' }, no agentId) — which let an ordinary user
-  // SKIP the governance-password gate and create a team. buildAuthContext applies
-  // the R36/R37 flip (system-owner only when userTitle ∈ {maestro, maestro-delegate}),
-  // so a normal user now correctly falls into the password-required branch. This
-  // mirrors the M1 fix already applied to the DELETE handler in [id]/route.ts.
-  // FLAG-OFF: a web session resolves to {} (no userId) → buildAuthContext sets
-  // isSystemOwner = !agentId = true — byte-identical to the old literal for the
-  // only caller class that existed before the user-authority model.
-  const isSystemOwner = buildAuthContext(auth).isSystemOwner
-  const isManager = auth.governanceTitle?.toUpperCase() === 'MANAGER'
-  if (!isSystemOwner && !isManager) {
-    const { verifyPassword } = await import('@/lib/governance')
-    if (!body.governancePassword) {
-      return NextResponse.json({ error: 'Governance password required for team creation. Include "governancePassword" in request body.' }, { status: 403 })
-    }
-    if (!(await verifyPassword(body.governancePassword))) {
-      return NextResponse.json({ error: 'Invalid governance password' }, { status: 403 })
-    }
-  }
 
   const { name, description, agentIds, type, chiefOfStaffId, githubProject } = body
 

@@ -388,8 +388,32 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
     return `${args} --name ${personaName}`.trim()
   }
 
+  // TRDD-I75EMTK0: "New Session" injects a launch command into an already-
+  // running tmux pane — it never calls wakeAgent, so the R17 core-plugin
+  // self-heal never ran on this path. A user whose core plugin was
+  // disabled/removed/corrupted would relaunch Claude/Codex with no
+  // ai-maestro-plugin hooks, leaving AI Maestro blind to it (SCEN-012 S029).
+  // Await the new strict ensure-core route BEFORE sending the launch
+  // command so the plugin is reinstalled first when missing. Best-effort:
+  // a failure here is logged but does not block the launch — the agent may
+  // still work (e.g. plugin already present) and the user should not be
+  // stuck unable to start a session because of a transient install error.
   const handleNewSession = async () => {
     if (isProgramRunning) return
+    if (agentId) {
+      try {
+        const res = await sudoFetch(
+          `${baseUrl}/api/agents/${agentId}/ensure-core`,
+          { method: 'POST' },
+          (reason) => requestSudoToken(reason),
+        )
+        if (!res.ok) {
+          console.warn('New Session: ensure-core self-heal failed', await res.text().catch(() => ''))
+        }
+      } catch (error) {
+        console.warn('New Session: ensure-core self-heal failed:', error)
+      }
+    }
     const program = resolveProgram(agent?.program || 'claude')
     const personaName = agent?.label || agent?.name || sessionName || 'agent'
     const args = ensureNameArg(agent?.programArgs || '', personaName)

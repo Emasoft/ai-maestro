@@ -38,6 +38,22 @@ interface ParsedEntry {
   /** Verbatim pathTemplate for diagnostics */
   raw: string
   level: SecurityLevel
+  /**
+   * Number of `[param]` wildcard segments in the raw path template
+   * (TRDD-XTIOLWJH). Used to prefer the MORE SPECIFIC (fewer wildcards)
+   * entry when a request matches more than one template — e.g. a wildcard
+   * entry like `/api/agents/[id]` (`^/api/agents/[^/]+$`) also matches the
+   * literal sibling routes `/api/agents/role-plugins` and
+   * `/api/agents/cemetery`. Relying on JSON insertion order for this
+   * disambiguation is fragile (a routine registry edit can silently
+   * reorder the false match to win) and was caught live: a sudo token
+   * minted for `DELETE /api/agents/role-plugins` normalized to the WRONG
+   * template (`/api/agents/[id]`) and then 403'd with
+   * `sudo_operation_mismatch` against the route's own
+   * `/api/agents/role-plugins` guard template — the exact SCEN-016
+   * BUG-001 mechanism, on different routes.
+   */
+  wildcardCount: number
 }
 
 let entries: ParsedEntry[] = []
@@ -50,6 +66,33 @@ function compilePattern(rawPath: string): RegExp {
     // \\[ [param] \\] — undo escaping around [ ] and replace with segment matcher
     .replace(/\\\[[^\\\]]+\\\]/g, '[^/]+')
   return new RegExp(`^${escaped}$`)
+}
+
+function countWildcards(rawPath: string): number {
+  const matches = rawPath.match(/\[[^\]]+\]/g)
+  return matches ? matches.length : 0
+}
+
+/**
+ * Among every entry whose method + pattern matches this request, return the
+ * MOST SPECIFIC one — fewest wildcard segments first, then longest raw
+ * template (more literal characters = more specific) as a tie-break.
+ * Deterministic regardless of JSON declaration order (TRDD-XTIOLWJH).
+ */
+function findBestMatch(method: string, pathname: string): ParsedEntry | null {
+  const m = method.toUpperCase()
+  let best: ParsedEntry | null = null
+  for (const entry of entries) {
+    if (entry.method !== m || !entry.pattern.test(pathname)) continue
+    if (
+      !best ||
+      entry.wildcardCount < best.wildcardCount ||
+      (entry.wildcardCount === best.wildcardCount && entry.raw.length > best.raw.length)
+    ) {
+      best = entry
+    }
+  }
+  return best
 }
 
 function parseKey(key: string): { method: string; rawPath: string } | null {
@@ -88,6 +131,7 @@ function loadRegistry(): void {
         pattern: compilePattern(p.rawPath),
         raw: key,
         level,
+        wildcardCount: countWildcards(p.rawPath),
       })
     }
     const strict = entries.filter(e => e.level === 'strict').length
@@ -99,18 +143,14 @@ function loadRegistry(): void {
 
 /**
  * Look up the security level for a request. Matching is done by exact
- * METHOD + path (with `[param]` placeholders expanded to regex). Returns
- * "normal" if no explicit entry matches.
+ * METHOD + path (with `[param]` placeholders expanded to regex), preferring
+ * the MOST SPECIFIC matching entry when more than one template matches
+ * (TRDD-XTIOLWJH — see findBestMatch). Returns "normal" if no explicit
+ * entry matches.
  */
 export function getSecurityLevel(method: string, pathname: string): SecurityLevel {
   loadRegistry()
-  const m = method.toUpperCase()
-  for (const entry of entries) {
-    if (entry.method === m && entry.pattern.test(pathname)) {
-      return entry.level
-    }
-  }
-  return 'normal'
+  return findBestMatch(method, pathname)?.level ?? 'normal'
 }
 
 /** Convenience predicate — returns true only if this route needs sudo-mode. */
@@ -120,17 +160,16 @@ export function requiresSudo(method: string, pathname: string): boolean {
 
 /**
  * For diagnostics: return the matched registry entry key (or null). Used by
- * the sudo-mode failure response to tell the caller which rule rejected them.
+ * the sudo-mode failure response to tell the caller which rule rejected them,
+ * AND by the sudo-password mint route to normalize a literal request URL to
+ * its strict-route template before binding a sudo token (SUDO-01). MUST stay
+ * consistent with getSecurityLevel's specificity preference (TRDD-XTIOLWJH)
+ * — both resolve through the same findBestMatch, so mint-time normalization
+ * and verify-time classification can never disagree on which entry "wins".
  */
 export function matchedEntryKey(method: string, pathname: string): string | null {
   loadRegistry()
-  const m = method.toUpperCase()
-  for (const entry of entries) {
-    if (entry.method === m && entry.pattern.test(pathname)) {
-      return entry.raw
-    }
-  }
-  return null
+  return findBestMatch(method, pathname)?.raw ?? null
 }
 
 /** Test-only: reset the loader state so entries are re-parsed on next call. */

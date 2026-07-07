@@ -12,6 +12,24 @@
  */
 
 import type { AgentAuthResult } from './agent-auth'
+// TRDD-0IPK36MS: these were previously lazy `require('./…')` calls inside
+// lookupGovernanceTitle/lookupTeamIdForAgent. That pattern is invisible to
+// production bundlers (webpack/Turbopack resolve a literal require() fine)
+// but is UNRESOLVABLE under this project's Vitest/vite-node setup — a
+// synchronous `require()` of a relative, extensionless .ts sibling from
+// deep inside a function call is not intercepted by vite-node's transform,
+// so Node's native CJS resolver looks for `./team-registry.js` (no `.ts`
+// fallback) and always throws MODULE_NOT_FOUND. The catch block then
+// silently failed CLOSED (team-less / autonomous) on EVERY call, which
+// meant authorize()'s COS-own-team change-title branch had NEVER been
+// exercised for real by any test in this codebase — every existing test
+// that touches this path fully mocks '@/lib/authorization' instead.
+// Static imports resolve identically in both production and tests, with no
+// circular-import risk (verified: none of these three modules import this
+// file, directly or transitively).
+import { isManager, isChiefOfStaffAnywhere } from './governance'
+import { getAgent } from './agent-registry'
+import { loadTeams } from './team-registry'
 
 // ============================================================================
 // Types
@@ -212,12 +230,10 @@ export function authorize(
 function lookupGovernanceTitle(agentId: string): string {
   try {
     // Check if agent is the MANAGER
-    const { isManager, isChiefOfStaffAnywhere } = require('./governance')
     if (isManager(agentId)) return 'manager'
     if (isChiefOfStaffAnywhere(agentId)) return 'chief-of-staff'
 
     // Fall back to agent record
-    const { getAgent } = require('./agent-registry')
     const agent = getAgent(agentId)
     return (agent?.governanceTitle as string) || 'autonomous'
   } catch (err) {
@@ -234,7 +250,6 @@ function lookupGovernanceTitle(agentId: string): string {
  */
 function lookupTeamIdForAgent(agentId: string): string | null {
   try {
-    const { loadTeams } = require('./team-registry')
     const teams = loadTeams()
     for (const team of teams) {
       if (

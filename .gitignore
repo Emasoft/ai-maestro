@@ -256,3 +256,5 @@ rust-tools/**/target/
 /.trashcan/*
 !/.trashcan/.gitkeep
 !/.trashcan/README.txt
+/reports/
+/reports_dev/

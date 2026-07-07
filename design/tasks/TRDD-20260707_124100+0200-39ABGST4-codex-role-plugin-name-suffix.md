@@ -1,9 +1,9 @@
 ---
 trdd-id: 39ABGST4
 title: Decide and fix codex-emitted role-plugin name suffix vs CLAUDE.md no-suffix rule
-column: todo
+column: design
 created: 2026-07-07T12:41:00+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T21:56:19+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 0
@@ -154,6 +154,55 @@ marketplace name) — both touch the same storage tree and should be
 decided together so the plugin-key story
 (`<name>@<marketplace-name>`) is internally consistent.
 
+## Design decision (2026-07-07, code-review follow-up) — RESOLVED: option (b)
+
+The policy fork is resolved in favor of **(b): the `-codex` suffix +
+overwrite-in-place are intentional; align CLAUDE.md and the scenarios to
+reality.** Evidence gathered at HEAD:
+
+- Role-plugins register under the **shared, bare `LOCAL_MARKETPLACE_NAME`**
+  for *every* client — verified in `services/plugin-storage-service.ts` lines
+  975-976 ("SHARED bare LOCAL_MARKETPLACE_NAME constant for every client —
+  never a `-<client>`-suffixed string"), 1036, 1065. Custom-plugins, by
+  contrast, use a per-client `${CUSTOM_MARKETPLACE_NAME}-${targetClient}`
+  name (lines 904, 918, 963).
+- Therefore the plugin KEY of a role-plugin is
+  `<name>@ai-maestro-local-roles-marketplace` with the marketplace segment
+  IDENTICAL across clients. If two client variants of the same role
+  (`ai-maestro-programmer-agent` for Claude and for Codex) both used the bare
+  name, their keys would **collide**. The `-<client>` name suffix at line 189
+  is the sole disambiguator — it is **load-bearing under the current
+  shared-marketplace-name architecture**, not a bug.
+- Overwrite-in-place (R20.26, lines 193-196) is the correct behavior for a
+  re-emit/refresh flow: failing when the folder already exists would break
+  every plugin update. CLAUDE.md's "conversion fails if folder exists" is the
+  stale line, not the code.
+
+**Why not option (a):** removing the suffix would require ALSO migrating the
+role marketplace to per-client names (mirroring custom-plugins) AND rewriting
+every installed agent's `settings.local.json` plugin key — a strictly larger,
+higher-risk change than (b) with no functional benefit today. Option (a)
+remains a possible *future* consolidation (unify role + custom marketplace
+naming to per-client, then drop all name suffixes), but that is a separate,
+larger effort and is explicitly out of scope here.
+
+**Remaining execution (scoped, still deferred — not an in-place fix):**
+1. Update CLAUDE.md "Role-plugin conversion rules" (≈lines 1167-1174) to state
+   the `-<client>` suffix and overwrite-in-place behavior for non-Claude
+   targets explicitly (drop the "no suffix" and "never overwrites" lines for
+   the non-Claude case; Claude-target keeps the bare name).
+2. Reconcile the stale `R20.x` citations in `plugin-storage-service.ts:186-196`
+   with `docs/GOVERNANCE-RULES.md` (add a dedicated storage-layout rule there
+   if none exists, and repoint the code comments at it).
+3. Update SCEN-026 (and SCEN-016/SCEN-021, which touch the same tree) to grep
+   for the `-<client>`-suffixed folder name when the target client is not
+   Claude.
+
+Risk is now LOW-MED (docs + scenario greps, no on-disk folder migration and no
+`settings.local.json` rewrite — those were the HIGH-risk parts that option (a)
+would have needed and (b) avoids).
+
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Design-first — HIGH-risk on-disk migration + unresolved policy fork; EXCLUDED from the batch auto-implementation wave.
+- 2026-07-07T21:56:19+0200 — DESIGN RESOLVED (code-review follow-up, USER-delegated "decide yourself"): policy fork settled as option (b) with evidence (role marketplace uses a shared bare name → the `-<client>` suffix is load-bearing for key uniqueness). column todo → design. Execution (CLAUDE.md + rule-citation + scenario-grep alignment, LOW-MED risk) left as a scoped follow-up; the HIGH-risk folder/settings migration that option (a) would have required is now avoided.

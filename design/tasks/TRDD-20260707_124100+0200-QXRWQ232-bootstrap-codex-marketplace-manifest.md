@@ -3,7 +3,7 @@ trdd-id: QXRWQ232
 title: Bootstrap the Codex marketplace manifest file when absent
 column: planned
 created: 2026-07-07T12:41:00+0200
-updated: 2026-07-07T15:00:52+0200
+updated: 2026-07-07T21:56:19+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 2
@@ -126,4 +126,5 @@ install/uninstall test path (SCEN-026 Phases 4-5).
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Implement together with YFCNYVYB.
+- 2026-07-07T21:56:19+0200 — DEFERRAL CONFIRMED (code-review follow-up, USER-delegated "decide yourself"): the actionable bootstrap (create-if-missing for the CURRENT path) is DONE via `ensureCustomClientMarketplace` + `ensureRoleClientMarketplace`; the ONLY remaining work is the `.agents/plugins/marketplace.json` path migration, which this TRDD itself forbids finalizing without a live Codex CLI to confirm the runtime-read path (none available on this host). Decision: leave OPEN, do NOT implement the migration on an unverified path. Pick up when a live Codex install + write-scope on `lib/client-capabilities.ts` + `codex-adapter.ts` are available. No column change (stays planned — approved + ready, blocked only on the external Codex-CLI prerequisite, which is not a TRDD blocked-by).
 - 2026-07-07T15:00:52+0200 — PARTIALLY IMPLEMENTED (wave W6): step 1 (path migration to the documented `$REPO_ROOT/.agents/plugins/marketplace.json` repo-scoped convention) SKIPPED — the TRDD itself requires confirming against a live Codex CLI / the `github.com/hon454/codex-marketplace` template before finalizing, which this wave has no live Codex install to verify against; the write sites for a full fix (`lib/client-capabilities.ts`'s "Known gap" comment, and any resulting wiring in `lib/client-plugin-adapters/codex-adapter.ts`) are also outside this wave's write-scope. Verified `codex-adapter.ts` handles per-AGENT plugin file installs (`<agentDir>/.codex-plugin/...`) and has no relationship to any marketplace.json — a bootstrap helper does not belong there under the current architecture. Step 2/3 (idempotent create-if-missing bootstrap for "whichever path is current today", per the TRDD's own split-into-two-changes fallback) is ALREADY satisfied for the CURRENT path by the pre-existing `ensureCustomClientMarketplace` (custom-plugins container) and by the new `ensureRoleClientMarketplace` added in this wave for TRDD-YFCNYVYB (role-plugins container) — both mkdir the marketplace dir and seed an empty manifest via `writeMarketplaceManifest` only when absent, and are safe to call repeatedly. No further code change made. Follow-up: a future wave with write access to `lib/client-capabilities.ts` + `lib/client-plugin-adapters/codex-adapter.ts` and a live Codex CLI should confirm the actual runtime-read path and, if it differs from today's, perform the migration as its own explicitly-tested change.

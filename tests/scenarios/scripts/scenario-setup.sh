@@ -117,7 +117,20 @@ if [ -n "$GITFIX" ]; then
   idx=0
   while IFS= read -r url; do
     [ -z "$url" ] && continue
-    repo_name=$(basename "$url" .git)
+    # RC-4TKDCKD5 fix: derive <owner>__<repo> when the URL matches a
+    # github.com/<owner>/<repo> shape, so two fixtures with the same repo
+    # basename but different owners (e.g. remotion-dev/codex-plugin vs
+    # supabase-community/codex-plugin, SCEN-026) don't collide on-disk.
+    # Falls back to plain basename for any URL that doesn't match, so
+    # existing single-fixture scenarios keep resolving to their current
+    # clone path without a migration.
+    if [[ "$url" =~ github\.com/([^/]+)/([^/]+)$ ]]; then
+      owner="${BASH_REMATCH[1]}"
+      repo="${BASH_REMATCH[2]%.git}"
+      repo_name="${owner}__${repo}"
+    else
+      repo_name=$(basename "$url" .git)
+    fi
     local_path="$FIXTURE_GIT_ROOT/$repo_name"
     if [ ! -d "$local_path/.git" ]; then
       echo "SETUP_FAIL git-fixture[$idx] $url — expected local clone at $local_path; scenario author must prepare the fork in advance" >&2

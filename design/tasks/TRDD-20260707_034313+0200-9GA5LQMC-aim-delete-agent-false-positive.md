@@ -3,7 +3,7 @@ trdd-id: 9GA5LQMC
 title: Gate aim_delete_agent success on a verified post-condition to stop false-positive cleanup
 column: planned
 created: 2026-07-07T03:43:13+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:51:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -53,3 +53,4 @@ LOW — test-infra only; makes every scenario cleanup trustworthy.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:51:02+0200 — IMPLEMENTED (wave W2): aim_delete_agent now propagates aim_sudo_modal's ok:false as a non-zero return, and gates the final ok:true on a dev-browser sidebar check confirming the agent name is gone; bash -n and shellcheck --severity=error clean.

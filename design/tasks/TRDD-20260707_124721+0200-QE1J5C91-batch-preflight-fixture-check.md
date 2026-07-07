@@ -3,7 +3,7 @@ trdd-id: QE1J5C91
 title: Add per-scenario fixture-existence preflight to the batch runner
 column: planned
 created: 2026-07-07T12:47:21+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:51:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -100,3 +100,4 @@ unattended overnight run.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:51:02+0200 — IMPLEMENTED (wave W2): added preflight_scenario()/set_scenario_status() + a "Step 2b" dispatch-time pass to state-machine-tick.sh (marks fixture-blocked scenarios preflight_skipped, self-heals back to pending, logs to recovery.log); also added a WAIT fallback so unresolved preflight_skipped entries no longer trigger premature CLEANUP. Documented as complementary to the batch-wide Step 2 preflight in .claude/skills/run-scenarios-batch/references/procedure-details.md (SCENARIOS_TESTS_RULES.md intentionally left untouched — owned by another wave). bash -n and shellcheck --severity=error clean.

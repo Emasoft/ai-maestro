@@ -3,7 +3,7 @@ trdd-id: 714ACXCM
 title: Migrate aim-helpers.sh screenshot root to the Rule 10 canonical reports path
 column: planned
 created: 2026-07-07T12:44:38+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:51:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 3
@@ -82,3 +82,4 @@ environment is unaffected either way.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:51:02+0200 — IMPLEMENTED (wave W2): AIM_SCREENSHOTS_ROOT default now points at reports/scenarios-runner/screenshots; existing tests/scenarios/screenshots/* left in place as a legacy graveyard per the TRDD's "either is acceptable" allowance (no migration performed). bash -n and shellcheck --severity=error clean.

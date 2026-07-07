@@ -108,6 +108,62 @@ fixture_github_repo_delete() {
     gh repo delete "$repo_full" --yes
 }
 
+# ── GitHub Project v2 provisioner ────────────────────────────
+# Usage: fixture_github_project_v2 <owner> <title> [column1,column2,...]
+#
+# Idempotent: looks up an existing project with the given title; if absent,
+# creates it and configures the Status field options. Returns the project
+# number on stdout. Default columns are the ratified TRDD column:
+# vocabulary (~/.claude/rules/trdd-design-tasks.md v2 + GOVERNANCE-RULES.md
+# R25) so a fixture board is a genuine 1:1 mirror of the TRDD state
+# machine, not an ad-hoc kanban list.
+fixture_github_project_v2() {
+    local owner="${1:?fixture_github_project_v2: missing owner}"
+    local title="${2:?fixture_github_project_v2: missing title}"
+    local columns="${3:-Backburner,Todo,Design,Dispatch,Dev,Testing,AI Review,Human Review,Complete,Publish,Published,Deploy,Live,Live Auditing,Blocked,Failed,Superseded}"
+    need gh
+
+    local existing
+    existing=$(gh project list --owner "$owner" --format json \
+        | jq -r --arg t "$title" '.projects[] | select(.title==$t) | .number' \
+        | head -1)
+
+    if [ -n "$existing" ]; then
+        log "project '$title' already exists (number $existing)"
+        echo "$existing"
+        return 0
+    fi
+
+    log "creating project '$title' under $owner"
+    local out
+    out=$(gh project create --owner "$owner" --title "$title" --format json)
+    local num
+    num=$(echo "$out" | jq -r '.number')
+
+    # Configure Status field — get its ID
+    local status_field_id
+    status_field_id=$(gh project field-list "$num" --owner "$owner" --format json \
+        | jq -r '.fields[] | select(.name=="Status") | .id')
+
+    local mutation_query='
+mutation($input: UpdateProjectV2SingleSelectFieldInput!) {
+  updateProjectV2SingleSelectField(input: $input) {
+    projectV2Field { ... on ProjectV2SingleSelectField { id } }
+  }
+}'
+    local options_json
+    options_json=$(echo "$columns" | tr ',' '\n' | jq -R -s -c '
+        split("\n") | map(select(length > 0))
+        | map({name: ., color: "GRAY", description: ""})')
+    gh api graphql -f query="$mutation_query" \
+        --field "input[fieldId]=$status_field_id" \
+        --field "input[name]=Status" \
+        --raw-field "input[singleSelectOptions]=$options_json" >/dev/null
+
+    log "project $num configured with columns: $columns"
+    echo "$num"
+}
+
 _fixture_apply_buggy_python() {
     mkdir -p src tests scripts .githooks
     cat > src/buggy.py <<'PY'

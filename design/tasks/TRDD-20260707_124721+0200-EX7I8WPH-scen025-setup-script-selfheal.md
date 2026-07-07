@@ -3,7 +3,7 @@ trdd-id: EX7I8WPH
 title: Rewrite setup-SCEN-025.sh to self-heal its GitHub fixtures
 column: planned
 created: 2026-07-07T12:47:21+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:51:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -129,3 +129,4 @@ one-time fixture it assumes already exists) land.
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Sequenced AFTER TC8TBJEU.
+- 2026-07-07T13:51:02+0200 — IMPLEMENTED (wave W2): rewrote tests/scenarios/scripts/setup-SCEN-025.sh to self-heal via TC8TBJEU's fixture_github_project_v2. Note: TRDD-QB5PWIG3 (one-time fixture provisioning) was not part of this wave and has not landed — this rewrite still works because fixture_github_repo is already idempotent/self-provisioning; not executed against live GitHub, static bash -n / shellcheck verification only.

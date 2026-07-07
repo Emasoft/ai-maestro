@@ -24,7 +24,7 @@ set -euo pipefail
 
 AIM_BROWSER="${AIM_BROWSER:-ai-maestro-scenarios}"
 AIM_DASHBOARD_URL="${AIM_DASHBOARD_URL:-http://localhost:23000/}"
-AIM_SCREENSHOTS_ROOT="${AIM_SCREENSHOTS_ROOT:-${CLAUDE_PROJECT_DIR:-$(pwd)}/tests/scenarios/screenshots}"
+AIM_SCREENSHOTS_ROOT="${AIM_SCREENSHOTS_ROOT:-${CLAUDE_PROJECT_DIR:-$(pwd)}/reports/scenarios-runner/screenshots}"
 
 # ----------------------------------------------------------------------------
 # aim_login <governance_password>
@@ -608,9 +608,45 @@ await new Promise(r => setTimeout(r, 1000));
 console.log(JSON.stringify({ ok: true, deleted: "${name}", sudo_pending: true }));
 EOF
 
-  # Handle the sudo modal that appears after clicking Delete Forever
-  aim_sudo_modal "${password}"
+  # Handle the sudo modal that appears after clicking Delete Forever.
+  # RC-9GA5LQMC fix: capture aim_sudo_modal's own {"ok":...} result instead
+  # of discarding it. SCEN-020 (2026-06-25) showed the modal fail internally
+  # ({"ok":false,"reason":"no sudo modal visible"}) while this function kept
+  # going and echoed {"ok":true} anyway — a silent false-positive that left
+  # the agent, its folder, and its tmux session all still present.
+  local sudo_result
+  sudo_result="$(aim_sudo_modal "${password}")"
+  if ! printf '%s' "${sudo_result}" | grep -q '"ok":true'; then
+    # Diagnostic detail goes to stderr, not into the JSON payload — sudo_result
+    # is itself a JSON string, and interpolating it verbatim into another
+    # quoted JSON string would corrupt the output with unescaped quotes.
+    echo "aim_delete_agent: sudo modal did not confirm — ${sudo_result}" >&2
+    echo "{\"ok\":false,\"reason\":\"sudo modal did not confirm\"}"
+    return 1
+  fi
   sleep 3
+
+  # Post-condition gate: verify the agent actually vanished from the
+  # sidebar before claiming success. A delete that silently failed further
+  # upstream (e.g. the confirm click missed, or the backend rejected the
+  # request) must never be reported as ok:true.
+  local still_present
+  still_present="$(dev-browser --browser "${AIM_BROWSER}" --headless --timeout 30 <<EOF
+const page = await browser.getPage("dashboard");
+await new Promise(r => setTimeout(r, 1500));
+const present = await page.evaluate((agentName) => {
+  const sidebar = document.querySelector('aside');
+  if (!sidebar) return false;
+  return (sidebar.textContent || '').includes(agentName);
+}, "${name}");
+console.log(JSON.stringify({ present }));
+EOF
+)"
+  if printf '%s' "${still_present}" | grep -q '"present":true'; then
+    echo "{\"ok\":false,\"reason\":\"agent still present after delete\"}"
+    return 1
+  fi
+
   echo "{\"ok\":true,\"deleted\":\"${name}\"}"
 }
 

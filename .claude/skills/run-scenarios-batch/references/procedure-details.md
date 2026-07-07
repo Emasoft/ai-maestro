@@ -35,6 +35,8 @@ If the config file is present, run the `preflight_command` via Bash (single one-
 
 If no config file exists, skip preflight entirely. The per-scenario Phase 0 SAFE-SETUP in each scenario file is responsible for its own readiness checks.
 
+**Complementary, not duplicative — the autonomous-cron per-scenario preflight (TRDD-QE1J5C91).** The batch-wide check above runs ONCE, before the whole batch, and only probes a generic command + health endpoint — it never inspects an individual scenario's fixtures. The unattended overnight cron (`tests/scenarios/scripts/state-machine-tick.sh`, driven by the autonomous batch protocol in `SCENARIOS_TESTS_RULES.md` Rule 13) runs a SEPARATE, PER-SCENARIO fixture-existence preflight on every tick: before dispatching a `pending` scenario, it verifies that scenario's `git-fixtures`/`dir-fixtures` are actually present on disk. A scenario whose fixtures are missing is marked `preflight_skipped` (skipped, not failed) instead of being handed a full setup-then-fail cycle, and it self-heals back to `pending` the moment its fixture appears. This skill's interactive main loop (Step 3 below) does not use `state-machine-tick.sh` and is unaffected — it still relies on the per-scenario setup script's own fixture check (Step 3.2) to fail fast.
+
 ## Step 3 — Main loop
 
 For each scenario ID `N` in the parsed list, in numeric order:

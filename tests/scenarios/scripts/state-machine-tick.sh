@@ -9,13 +9,19 @@
 #   RUN <SCEN-NNN>          — dispatch this scenario via the scenario-runner agent
 #   CLEANUP                 — phase=master_cleanup, run consolidated proposals
 #   DONE                    — phase=consolidated, nothing to do
-#   WAIT <SCEN-NNN>         — that scenario's heartbeat is fresh, leave it alone
+#   WAIT <SCEN-NNN>         — that scenario's heartbeat is fresh (in_progress), OR
+#                             it is fixture-blocked (preflight_skipped) — leave it alone
 #   ERROR <reason>          — state file unreadable / corrupt / something is wrong
 #
 # Side effects (idempotent):
 #   - If an in_progress scenario's heartbeat is stale (>STALE_THRESHOLD_MIN old, or
 #     no heartbeat file exists and started_at is >STALE_THRESHOLD_MIN ago), the
 #     scenario is reset to pending so the next caller can dispatch it fresh.
+#   - Every pending/preflight_skipped scenario gets a fixture-existence preflight
+#     (TRDD-QE1J5C91) on each tick: a scenario whose git-fixtures/dir-fixtures
+#     aren't cloned/present is flipped to "preflight_skipped" so Step 3 skips it
+#     instead of dispatching a guaranteed setup-then-fail cycle; it flips back to
+#     "pending" automatically the moment its fixture appears on disk.
 #   - The recovery event is logged to state/recovery.log with timestamp + reason.
 #
 # Usage:
@@ -32,7 +38,8 @@ else
   MAIN_ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 fi
 
-STATE_DIR="$MAIN_ROOT/tests/scenarios/state"
+SCEN_ROOT="$MAIN_ROOT/tests/scenarios"
+STATE_DIR="$SCEN_ROOT/state"
 STATE_FILE="$STATE_DIR/autonomous-batch-state.json"
 RECOVERY_LOG="$STATE_DIR/recovery.log"
 STALE_THRESHOLD_MIN=90
@@ -55,6 +62,96 @@ fi
 log_recovery() {
   local msg="$1"
   printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$msg" >> "$RECOVERY_LOG"
+}
+
+# ---- Helper: per-scenario fixture-existence preflight (TRDD-QE1J5C91) ----
+# Usage: preflight_scenario <NNN>   (e.g. "025")
+# Checks ONLY that every git-fixtures/dir-fixtures path already exists on
+# disk — it does NOT run the scenario's real setup script. This lets the
+# dispatch loop below skip a scenario whose fixtures were never cloned
+# instead of burning a cron slot on a guaranteed setup-then-fail cycle.
+# Prints "PREFLIGHT_FAIL SCEN-<nnn> — <reason>" and returns 1 on failure;
+# returns 0 silently on success (or when yq is unavailable — fail OPEN so a
+# missing optional dependency never blocks every scenario in the batch).
+preflight_scenario() {
+  local nnn="$1"
+  local scen_file
+  scen_file=$(ls "$SCEN_ROOT/SCEN-${nnn}_"*.scen.md 2>/dev/null | head -1)
+  if [ ! -f "$scen_file" ]; then
+    echo "PREFLIGHT_FAIL SCEN-$nnn — scenario file not found"
+    return 1
+  fi
+  if ! command -v yq >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local fm
+  fm=$(awk '/^---$/{c++; if(c==2) exit; next} c==1' "$scen_file")
+
+  local git_fixtures dir_fixtures
+  git_fixtures=$(echo "$fm" | yq e '.["git-fixtures"][]? // ""' - 2>/dev/null || echo "")
+  dir_fixtures=$(echo "$fm" | yq e '.["dir-fixtures"][]? // ""' - 2>/dev/null || echo "")
+
+  local url owner repo repo_name local_path
+  while IFS= read -r url; do
+    [ -z "$url" ] && continue
+    # Same <owner>__<repo> derivation as scenario-setup.sh (TRDD-4TKDCKD5) —
+    # keeping the two in sync avoids the preflight wrongly reporting a
+    # fixture missing when it actually lives at the collision-safe path.
+    if [[ "$url" =~ github\.com/([^/]+)/([^/]+)$ ]]; then
+      owner="${BASH_REMATCH[1]}"
+      repo="${BASH_REMATCH[2]%.git}"
+      repo_name="${owner}__${repo}"
+    else
+      repo_name=$(basename "$url" .git)
+    fi
+    local_path="$SCEN_ROOT/fixtures/git/$repo_name"
+    if [ ! -d "$local_path/.git" ]; then
+      echo "PREFLIGHT_FAIL SCEN-$nnn — git-fixture $url not cloned (expected $local_path)"
+      return 1
+    fi
+  done <<< "$git_fixtures"
+
+  local p p_exp
+  while IFS= read -r p; do
+    [ -z "$p" ] && continue
+    case "$p" in
+      '~')   p_exp="$HOME" ;;
+      '~/'*) p_exp="${HOME}/${p#'~/'}" ;;
+      *)     p_exp="$p" ;;
+    esac
+    if [ ! -d "$p_exp" ]; then
+      echo "PREFLIGHT_FAIL SCEN-$nnn — dir-fixture $p_exp missing"
+      return 1
+    fi
+  done <<< "$dir_fixtures"
+
+  return 0
+}
+
+# ---- Helper: atomically set one scenario's status in the state file ----
+# Usage: set_scenario_status <scen_id> <new_status> [reason]
+set_scenario_status() {
+  local scen_id="$1" new_status="$2" reason="${3:-}"
+  python3 - "$STATE_FILE" "$scen_id" "$new_status" "$reason" <<'PYEOF'
+import json, os, sys, datetime
+state_file, scen_id, new_status, reason = sys.argv[1:5]
+with open(state_file) as f:
+    state = json.load(f)
+entry = state.setdefault("scenarios", {}).setdefault(scen_id, {})
+entry["status"] = new_status
+if reason:
+    entry["preflight_reason"] = reason
+    entry["preflight_checked_at"] = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+else:
+    entry.pop("preflight_reason", None)
+    entry.pop("preflight_checked_at", None)
+tmp = state_file + ".tmp"
+with open(tmp, "w") as f:
+    json.dump(state, f, indent=2)
+    f.write("\n")
+os.replace(tmp, state_file)
+PYEOF
 }
 
 # ---- Step 1: validate JSON and read phase ----
@@ -188,6 +285,43 @@ for scen_id, reason in recovery_entries:
     print(f"recovered: {scen_id} ({reason})", file=sys.stderr)
 PYEOF
 
+# ---- Step 2b: per-scenario fixture preflight (TRDD-QE1J5C91) ----
+# Every "pending" scenario, plus every previously "preflight_skipped" one
+# (so it can self-heal the moment its fixture is cloned), is re-checked on
+# each tick. A scenario that fails the check is flipped to
+# "preflight_skipped" instead of being handed to Step 3 for dispatch — this
+# is what stops the batch from burning a cron fire (and the scenario's full
+# setup-then-fail cycle) on a guaranteed-broken scenario.
+if [ "$DRY_RUN" -eq 0 ]; then
+  CANDIDATES="$(python3 - "$STATE_FILE" <<'PYEOF'
+import json, sys
+with open(sys.argv[1]) as f:
+    state = json.load(f)
+scenarios = state.get("scenarios", {})
+order = state.get("scenario_list", list(scenarios.keys()))
+for scen_id in order:
+    st = scenarios.get(scen_id, {}).get("status")
+    if st in ("pending", "preflight_skipped"):
+        print(f"{scen_id}\t{st}")
+PYEOF
+)"
+  while IFS=$'\t' read -r scen_id prev_status; do
+    [ -z "$scen_id" ] && continue
+    nnn="${scen_id#SCEN-}"
+    if preflight_out="$(preflight_scenario "$nnn")"; then
+      if [ "$prev_status" = "preflight_skipped" ]; then
+        set_scenario_status "$scen_id" "pending"
+        log_recovery "PREFLIGHT_RECOVERED $scen_id fixtures now present"
+      fi
+    else
+      if [ "$prev_status" != "preflight_skipped" ]; then
+        set_scenario_status "$scen_id" "preflight_skipped" "$preflight_out"
+        log_recovery "PREFLIGHT_SKIPPED $scen_id — $preflight_out"
+      fi
+    fi
+  done <<< "$CANDIDATES"
+fi
+
 # ---- Step 3: determine next action ----
 NEXT="$(python3 - "$STATE_FILE" <<'PYEOF'
 import json, sys
@@ -210,7 +344,19 @@ for scen_id in order:
         print(f"RUN {scen_id}")
         sys.exit(0)
 
-# Nothing pending and nothing running — time for cleanup
+# Nothing pending and nothing running — but if some scenarios are only
+# fixture-blocked (preflight_skipped, TRDD-QE1J5C91), the batch is NOT done
+# yet: those scenarios self-heal back to "pending" the moment their fixture
+# appears (Step 2b), so declaring CLEANUP here would end the batch while
+# real, still-runnable work is sitting fixture-blocked. WAIT on the first
+# one instead — the cron leaves it alone, same as an in_progress WAIT.
+for scen_id in order:
+    e = scenarios.get(scen_id, {})
+    if e.get("status") == "preflight_skipped":
+        print(f"WAIT {scen_id}")
+        sys.exit(0)
+
+# Nothing pending, nothing running, nothing fixture-blocked — time for cleanup
 print("CLEANUP")
 PYEOF
 )"

@@ -3,7 +3,7 @@ trdd-id: TC8TBJEU
 title: Add fixture_github_project_v2 helper to fixture-helpers.sh
 column: planned
 created: 2026-07-07T12:47:21+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:51:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -129,3 +129,4 @@ landing (the mutation shape may have changed since 2026-04).
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:51:02+0200 — IMPLEMENTED (wave W2): added fixture_github_project_v2() to tests/scenarios/scripts/fixture-helpers.sh (17-value ratified column vocabulary preserved verbatim); bash -n and shellcheck --severity=error clean.

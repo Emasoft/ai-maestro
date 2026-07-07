@@ -3,7 +3,7 @@ trdd-id: 4TKDCKD5
 title: Support publisher-prefixed fixture paths in scenario-setup.sh to avoid basename collisions
 column: planned
 created: 2026-07-07T12:41:00+0200
-updated: 2026-07-07T13:24:46+0200
+updated: 2026-07-07T13:51:02+0200
 current-owner: scenario-runner
 approval-tier: 2
 priority: 1
@@ -129,3 +129,4 @@ preparation being human-only today).
 ## Approval log
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2).
+- 2026-07-07T13:51:02+0200 — IMPLEMENTED (wave W2): scenario-setup.sh git-fixture loop now derives <owner>__<repo> for github.com URLs, falling back to plain basename; bash -n and shellcheck --severity=error clean. Also propagated the same derivation into state-machine-tick.sh's new preflight_scenario() (TRDD-QE1J5C91) to keep the two checks consistent.

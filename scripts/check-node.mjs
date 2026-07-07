@@ -4,9 +4,10 @@
  * `headless`, `headless:prod`) — the belt-and-braces for audit I1
  * (TRDD-47a35ba2 §C).
  *
- * Native deps (node-pty, better-sqlite3) are compiled against a Node
- * ABI. On Node >= 26 they throw `ERR_DLOPEN_FAILED` at require time,
- * which crash-loops the server. `scripts/start-with-ssh.sh` (the
+ * Native deps are compiled against a Node ABI. On Node >= 26, node-pty
+ * throws `ERR_DLOPEN_FAILED` at require time, which crash-loops the
+ * server. (better-sqlite3 loads clean under 26 as of 2026-07-07 — the
+ * cap is kept for node-pty alone; re-probe both before lifting it.) `scripts/start-with-ssh.sh` (the
  * pm2/prod launcher) already pins a <26 keg, and CI forces Node 22 —
  * but the four `yarn` scripts call `tsx server.mjs` under whatever
  * `node` is first on PATH, so on a box whose default node is >= 26
@@ -37,8 +38,8 @@ if (Number.isNaN(major)) {
 if (major >= 26) {
   console.error(
     '\n[prerun-guard] ✗ Refusing to start under Node ' + process.versions.node + '.\n' +
-      '\n  AI Maestro\'s native deps (node-pty, better-sqlite3) have no prebuilt ABI for\n' +
-      '  Node >= 26 and throw ERR_DLOPEN_FAILED at require time → the server crash-loops.\n' +
+      '\n  AI Maestro\'s native dep node-pty has no prebuilt ABI for Node >= 26 and\n' +
+      '  throws ERR_DLOPEN_FAILED at require time → the server crash-loops.\n' +
       '\n  Use a Node 22-25 runtime, then retry:\n' +
       '    1. `nvm use` (repo ships .nvmrc=22), or\n' +
       '    2. PATH="/opt/homebrew/opt/node@22/bin:$PATH" yarn <script>, or\n' +

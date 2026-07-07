@@ -46,7 +46,10 @@ Output rules:
 - Must sound natural when spoken aloud — like a colleague giving you a quick verbal update
 - End with a forward-looking question or statement ONLY at genuine decision points or milestones — not on every update`
 
-export const VOICE_SUMMARY_MODEL = 'claude-3-5-haiku-20241022'
+// Current efficient tier (was claude-3-5-haiku-20241022 — 2 generations stale,
+// retirement-track; bumped 2026-07-07 fork audit). Keep this a pinned dated id:
+// the voice path bills per-call and a family alias could silently jump tiers.
+export const VOICE_SUMMARY_MODEL = 'claude-haiku-4-5-20251001'
 export const VOICE_SUMMARY_MAX_TOKENS = 150
 
 // --- Event Type Classification ---

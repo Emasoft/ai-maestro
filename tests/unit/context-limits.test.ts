@@ -38,6 +38,11 @@ describe('contextLimitForModel — standard-context families default to 200K', (
     expect(contextLimitForModel('claude-haiku-4-5')).toBe(200_000)
   })
 
+  it('claude-fable-5 / bare fable → 200000 (Claude 5 family gets no native-1M grant unless tagged)', () => {
+    expect(contextLimitForModel('claude-fable-5')).toBe(200_000)
+    expect(contextLimitForModel('fable')).toBe(200_000)
+  })
+
   it('older claude-opus-4-6 / 4-7 → 200000 (none of the 4.x line is auto-1M)', () => {
     expect(contextLimitForModel('claude-opus-4-6')).toBe(200_000)
     expect(contextLimitForModel('claude-opus-4-7')).toBe(200_000)
@@ -57,6 +62,10 @@ describe('contextLimitForModel — the [1m] tag or a native-1M family grants the
 
   it('the [1m] tag rides on any family (a hypothetical sonnet 1M variant)', () => {
     expect(contextLimitForModel('claude-sonnet-4-7[1m]')).toBe(1_000_000)
+  })
+
+  it('claude-fable-5[1m] → 1000000 (generic [1m] tag covers new families without a code change)', () => {
+    expect(contextLimitForModel('claude-fable-5[1m]')).toBe(1_000_000)
   })
 
   it('claude-sonnet-5 → 1000000 (native 1M, no [1m] tag — CC 2.1.197, TRDD-CS51MFIX)', () => {

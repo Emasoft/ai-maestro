@@ -480,11 +480,12 @@ HELP
 
     # Validate model format if provided
     if [[ -n "$model" ]]; then
-        # Expected: sonnet, opus, haiku, or claude-{family}-{version}
-        if [[ ! "$model" =~ ^(claude-)?(sonnet|opus|haiku)(-[0-9]+(-[0-9]+)?(-[0-9]{8})?)?$ ]]; then
+        # Expected: sonnet, opus, haiku, fable, or claude-{family}-{version}
+        # (fable added 2026-07-07 — Claude 5 family; regex without it rejected valid ids)
+        if [[ ! "$model" =~ ^(claude-)?(sonnet|opus|haiku|fable)(-[0-9]+(-[0-9]+)?(-[0-9]{8})?)?$ ]]; then
             print_error "Invalid model format: $model"
-            print_error "Expected format: sonnet, opus, haiku, or claude-{family}-{version}"
-            print_error "Examples: sonnet, claude-sonnet-4-5, claude-opus-4-5-20250929"
+            print_error "Expected format: sonnet, opus, haiku, fable, or claude-{family}-{version}"
+            print_error "Examples: sonnet, claude-sonnet-5, claude-opus-4-8, claude-fable-5"
             return 1
         fi
     fi

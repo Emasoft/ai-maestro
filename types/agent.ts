@@ -205,7 +205,7 @@ export interface Agent {
 
   // Metadata
   program: string               // AI program (e.g., "Claude Code", "Aider", "Cursor")
-  model?: string                // Model version (e.g., "Opus 4.1", "GPT-4")
+  model?: string                // Model version (e.g., "Opus 4.8", "Sonnet 5", "GPT-5.5")
   taskDescription: string       // What this agent is working on
   programArgs?: string          // CLI arguments passed to the program on launch (e.g., "--continue --chrome")
   launchCount?: number          // Number of times agent has been woken/launched (0 = never launched)

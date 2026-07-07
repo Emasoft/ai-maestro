@@ -11,10 +11,10 @@
  *
  * Optional AI Tool Configuration:
  *   --program <name>   # AI tool to use (e.g., claude, aider, cursor)
- *   --model <name>     # Model to use (e.g., claude-sonnet-4-5, gpt-4)
+ *   --model <name>     # Model to use (e.g., claude-sonnet-5, gpt-5.5)
  *
  * Examples:
- *   ./scripts/register-agent-from-session.mjs --program aider --model gpt-4
+ *   ./scripts/register-agent-from-session.mjs --program aider --model gpt-5.5
  *   ./scripts/register-agent-from-session.mjs --all -y --program claude
  */
 
@@ -264,7 +264,7 @@ async function registerSession(sessionName, interactive = true, options = {}) {
     // Ask for program/model (optional - leave empty to not specify)
     console.log('\n--- AI Tool Configuration (optional) ---')
     program = options.program || await question('Program (e.g., claude, aider, cursor) [none]: ') || ''
-    model = options.model || await question('Model (e.g., claude-sonnet-4-5, gpt-4) [none]: ') || ''
+    model = options.model || await question('Model (e.g., claude-sonnet-5, gpt-5.5) [none]: ') || ''
   } else {
     // Non-interactive mode: use defaults or CLI options
     alias = parsed.alias

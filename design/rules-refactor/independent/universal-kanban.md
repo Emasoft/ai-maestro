@@ -29,6 +29,15 @@ backburner → todo → design → dispatch → dev → testing → ai_review
 
 plus **3 exception** columns: `blocked`, `failed`, `superseded`.
 
+The folder-lifecycle overlay values (`proposal`, `planned`, `refused`,
+`cancelled`, `completed`, `superseded` — defined in
+`trdd-design-tasks.md`) BRACKET this pipeline; they are states of the
+same `column:` field, not additional work columns. `proposal`/`planned`
+cards sit in an intake antechamber ahead of `backburner`, and the
+terminal values leave the board — `completed`/`cancelled`/`superseded`
+into `design/archived/`, `refused` into `design/refused/`. A board view
+may render them as an intake lane and a done lane.
+
 This vocabulary is CANONICAL. Any tool, script, UI, or mirror that
 displays or mutates tasks aligns TO these 17 columns — never the
 reverse. A consumer must not invent a divergent column set, rename

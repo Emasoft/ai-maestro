@@ -38,7 +38,9 @@ labels: [overnight, fleet-readiness, governance, security, scripts, scenarios]
   janitor DEV session itself), idle fleet agents are cheap. Heartbeat burn is bounded.
 - Remaining pre-fleet blockers: **B2** (maintainer plugin plugin-root readiness — its own repo)
   and **B4 fixes** (amama#24, item 7 gated on janitor#73). WS3 real imports still need USER go.
-- 57EBNB72 parked at `ai_review` (complete is EHT-gated on QH6WD7XI docs + E6MD2FNX scenario).
+- 57EBNB72 **completed + archived 18:22** — EHT gate cleared the same day: QH6WD7XI (docs
+  alignment) and E6MD2FNX (SCEN-028 folder-adoption regression scenario + permanent fixture
+  at `~/agents/scen028-import-fixture`) both completed/archived. WS1 is fully closed.
 - **NEXT: WS2a — publish web-scenario-tester via CPV agents** (fourfold verify → CPV strict →
   gh repo `Emasoft/ai-maestro-web-scenario-tester` → pipeline → marketplace register with
   `allowCrossMarketplaceDependenciesOn: dev-browser-marketplace`), then WS2b webdesign

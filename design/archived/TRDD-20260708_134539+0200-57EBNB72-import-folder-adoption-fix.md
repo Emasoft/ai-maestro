@@ -1,9 +1,9 @@
 ---
 trdd-id: 57EBNB72
 title: Fix folder-adoption import — allowExternalFolder schema + workdir gitignore seeding (G05c)
-column: ai_review
+column: completed
 created: 2026-07-08T13:45:39+0200
-updated: 2026-07-08T17:30:00+0200
+updated: 2026-07-08T18:22:00+0200
 current-owner: main-session
 assignee: main-session
 priority: 0
@@ -69,8 +69,12 @@ adopt → clean-tree assert → idle-burn → delete → re-import) before ANY r
   plugins seeded, **clean tree** (the live run forced the seeder from tracked `.gitignore` to
   `.git/info/exclude` — commit a1724058), tombstone re-adopt 201, idle burn = 0 over 2h44m,
   full zero-remnant cleanup.
-- **Column parked at `ai_review`: `complete` is EHT-gated** on the two open derived tasks
-  TRDD-QH6WD7XI (docs alignment) and TRDD-E6MD2FNX (folder-adoption scenario). The code itself
-  is done and live-verified.
+- ~~Column parked at `ai_review`: EHT-gated~~ **EHT gate CLEARED 2026-07-08T18:22** — all three
+  derived tasks terminal: TRDD-VT6SSI0T (live protocol, completed), TRDD-QH6WD7XI (docs
+  alignment — CLAUDE.md + API-CHANGES.md, completed), TRDD-E6MD2FNX (SCEN-028 regression
+  scenario + fixture + scripts, completed). Parent → `completed`.
 
 ## Approval log
+
+- 2026-07-08T18:22:00+0200 — COMPLETED by main-session (tier 0). Gate green, WS1b live pass,
+  all EHTs terminal. Closes campaign blocker B1 on TRDD-903b7a20.

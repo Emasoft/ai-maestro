@@ -1,9 +1,9 @@
 ---
 trdd-id: 57EBNB72
 title: Fix folder-adoption import — allowExternalFolder schema + workdir gitignore seeding (G05c)
-column: planned
+column: testing
 created: 2026-07-08T13:45:39+0200
-updated: 2026-07-08T13:45:39+0200
+updated: 2026-07-08T14:35:00+0200
 current-owner: main-session
 assignee: main-session
 priority: 0
@@ -18,7 +18,9 @@ test-requirements: [unit, integration, typecheck, lint]
 review-requirements: []
 impacts: [public-api]
 relevant-rules: []
-implementation-commits: []
+implementation-commits: [e5f0481d, f214be8c, 90ebeda2, bc01cb4d]
+last-test-result: pass
+last-test-at: 2026-07-08T14:30:00+0200
 ---
 
 # Fix folder-adoption import — allowExternalFolder schema + workdir gitignore seeding (G05c)

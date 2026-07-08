@@ -79,19 +79,52 @@ slug, i.e. the folder Claude Code actually ran in, holding `.claude/`).** Decode
 | visual-communicator | `~/Code/visual-comunicator/` (note folder typo) |
 | web-scenario-tester | **NO `~/Code/` slug found** — locate before G3 (may live elsewhere or under an unexpected name) |
 
-**Two-marketplace disambiguation (USER, 2026-07-08 — MANDATORY before touching any plugin):**
-a PARALLEL plugin family exists. `Emasoft/ai-maestro-plugins` = the FLEET marketplace
-(`ai-maestro-plugin` core, the 8 `ai-maestro-*` role plugins, `ai-maestro-janitor`,
-`ai-maestro-visual-communicator-plugin`). `Emasoft/emasoft-plugins` = the general marketplace,
-which ships BOTH the external plugins (perfect-skill-suggester, claude-plugins-validation,
-llm-externalizer, code-auditor-agent, claude-plugins-management, token-reporter,
-rechecker-plugin, claude-menu-system, emasoft-chat-history, no-install-linters-expert,
-emasoft-universal-clipboard) AND six `emasoft-*` PARALLEL VARIANTS of the role plugins
-(emasoft-assistant-manager-agent, emasoft-chief-of-staff, emasoft-architect-agent,
-emasoft-orchestrator-agent, emasoft-integrator-agent, emasoft-programmer-agent). For ALL fleet
-work pick the `ai-maestro-*` variant; the externals (PSS, CPV, llm-externalizer, …) correctly
-come from emasoft-plugins. When in doubt, check the plugin's name against the two marketplace
-manifests on GitHub — never guess from the container folder name.
+**Two-marketplace disambiguation (USER, 2026-07-08 — MANDATORY before touching any plugin).**
+A PARALLEL plugin family exists; resolve every plugin name + repo against the two live
+marketplace manifests, never guess from a container folder name. Authoritative name→repo
+tables extracted 2026-07-08 from both `.claude-plugin/marketplace.json` on GitHub:
+
+`Emasoft/ai-maestro-plugins` — the FLEET marketplace (pick THESE for all fleet work):
+
+| name | repo |
+|---|---|
+| ai-maestro-plugin | Emasoft/ai-maestro-plugin |
+| ai-maestro-assistant-manager-agent | Emasoft/ai-maestro-assistant-manager-agent |
+| ai-maestro-chief-of-staff | Emasoft/ai-maestro-chief-of-staff |
+| ai-maestro-architect-agent | Emasoft/ai-maestro-architect-agent |
+| ai-maestro-orchestrator-agent | Emasoft/ai-maestro-orchestrator-agent |
+| ai-maestro-integrator-agent | Emasoft/ai-maestro-integrator-agent |
+| ai-maestro-programmer-agent | Emasoft/ai-maestro-programmer-agent |
+| ai-maestro-maintainer-agent | Emasoft/ai-maestro-maintainer-agent |
+| ai-maestro-autonomous-agent | Emasoft/ai-maestro-autonomous-agent |
+| ai-maestro-janitor | Emasoft/ai-maestro-janitor |
+| ai-maestro-visual-communicator-plugin | Emasoft/ai-maestro-visual-communicator-plugin |
+
+`Emasoft/emasoft-plugins` — the general marketplace: true EXTERNALS (correct to use) plus six
+`emasoft-*` role-plugin PARALLEL VARIANTS (NEVER for fleet work):
+
+| name | repo | class |
+|---|---|---|
+| perfect-skill-suggester | Emasoft/perfect-skill-suggester | external |
+| claude-plugins-validation | Emasoft/claude-plugins-validation | external |
+| llm-externalizer | Emasoft/llm-externalizer-plugin | external (repo name ≠ plugin name) |
+| token-reporter | Emasoft/token-reporter-plugin | external (repo name ≠ plugin name) |
+| code-auditor-agent | Emasoft/code-auditor-agent | external |
+| claude-plugins-management | Emasoft/claude-plugins-management | external |
+| rechecker-plugin | Emasoft/rechecker-plugin | external |
+| claude-menu-system | Emasoft/claude-menu-system | external |
+| emasoft-chat-history | Emasoft/emasoft-chat-history | external |
+| no-install-linters-expert | Emasoft/no-install-linters-expert | external |
+| emasoft-universal-clipboard | Emasoft/emasoft-universal-clipboard | external |
+| emasoft-assistant-manager-agent | Emasoft/emasoft-assistant-manager-agent | PARALLEL VARIANT — avoid |
+| emasoft-chief-of-staff | Emasoft/emasoft-chief-of-staff | PARALLEL VARIANT — avoid |
+| emasoft-architect-agent | Emasoft/emasoft-architect-agent | PARALLEL VARIANT — avoid |
+| emasoft-orchestrator-agent | Emasoft/emasoft-orchestrator-agent | PARALLEL VARIANT — avoid |
+| emasoft-integrator-agent | Emasoft/emasoft-integrator-agent | PARALLEL VARIANT — avoid |
+| emasoft-programmer-agent | Emasoft/emasoft-programmer-agent | PARALLEL VARIANT — avoid |
+
+Gaps vs the gate list: NEITHER marketplace lists a web-scenario-tester (G3) or the webdesign
+plugin (G8) — both still need publish + registration (webdesign belongs in ai-maestro-plugins).
 
 Pilot consequence (amends B1 Path C — REVISED per USER 2026-07-08: most local plugin projects
 are AHEAD of their GitHub origins, pushes held back by pending fixes): fleet agents must NOT

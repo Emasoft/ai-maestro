@@ -1,6 +1,6 @@
-# Claude Code 2.1.113 - 2.1.187 Compatibility Audit
+# Claude Code 2.1.113 - 2.1.204 Compatibility Audit
 
-**Audited:** 2026-05-07 (2.1.113–2.1.132), extended 2026-05-28 (2.1.133–2.1.154), extended 2026-06-16 (2.1.156–2.1.178), extended 2026-06-24 (2.1.179–2.1.187)
+**Audited:** 2026-05-07 (2.1.113–2.1.132), extended 2026-05-28 (2.1.133–2.1.154), extended 2026-06-16 (2.1.156–2.1.178), extended 2026-06-24 (2.1.179–2.1.187), extended 2026-07-08 (2.1.190–2.1.204)
 **Branch:** `governance-rules`
 **Server version:** v0.29.x
 
@@ -32,6 +32,35 @@ for 2.1.154.
                     integration, OAuth refinements not on our path)
 
 ## Per-entry verdicts
+
+### 2.1.190–2.1.204 — July 8, 2026 (fifth pass)
+
+Triggered by the fleet-readiness campaign's "monitoring current with CC changes"
+gate (TRDD-903b7a20; CLI now at **2.1.204** — 2.1.188/189 have no public
+changelog entries). Full per-entry evidence: the gitignored audit report
+`reports/cc-compat-audit/20260708_193122+0200-cc-2.1.133-204-audit.md`.
+**Headline: no hard break** — every hook-relevant change in the range is
+additive (hook events are consumed by NAME and none were renamed; no CC version
+pin exists; `--permission-mode` is only ever passed as
+`bypassPermissions`/`acceptEdits`, so the 2.1.200 `default`→`manual` rename is
+a non-issue). **One APPLIED fix** came out of the pass:
+
+| Change (version) | Verdict | Notes |
+|---|---|---|
+| **Subagents now run in the background by default** (2.1.198); `/exit` warns about running background agents (confirmed by the 2.1.203 fix note) | **APPLIED** | Broke the "`idle_prompt` ⟹ no subagents ⟹ safe to `/exit`" premise behind Stop/Restart. Fixed in TRDD-O8NCNRWO Phase 1 (`lib/session-safe-state.ts` + 409 `subagents_running` gate on stop/restart + abandon-dialog probe in the restart poll). Hook-side counter bug filed as `ai-maestro-plugin#17`; UI awareness = Phase 2 |
+| Transient 429s auto-retried with backoff; `CLAUDE_CODE_RETRY_WATCHDOG` default retries raised (2.1.199) | AWARENESS | The hook's `rate_limited` StopFailure classification stays correct — it just fires less often (only on true window exhaustion) |
+| New `Notification` subtypes `agent_needs_input` / `agent_completed` for `claude agents` background sessions (2.1.198) | AWARENESS | The hook's Notification switch ignores them; they never fire for ai-maestro's tmux-interactive agents. Adopt only if ai-maestro ever manages `claude agents` sessions |
+| Hook matchers: comma-separated matchers fixed (2.1.191), hyphenated identifiers now exact-match (2.1.195) | OUT-OF-REPO | ai-maestro's hook matches EVENT names in `ai-maestro-plugin`'s `hooks.json` — unaffected; role-plugin repos should verify their own matchers |
+| `SessionStart`/`Setup`/`SubagentStart` hooks: exit-2 stderr now surfaces in the transcript (2.1.199); hook events stream during SessionStart in headless sessions (2.1.204) | AWARENESS | The ai-maestro hook always exits 0; the 2.1.204 fix improves remote-worker reliability in our favor |
+| Claude Sonnet 5 GA with native 1M context (2.1.197) | N/A | The cross-client model map is family-keyed (`lib/converter/rewrite/model.ts`) and already covers the `sonnet` family + round-trip tests |
+| Project-scoped plugins now load correctly from git worktrees (2.1.200); skill re-invocation no longer duplicates instructions (2.1.202); `/plugin` enable/disable fixed when plugin.json name ≠ marketplace entry name (2.1.195) | N/A | Upstream fixes in ai-maestro's favor (worktree implementer, fourfold-identity rule already enforces name==entry) |
+| Committed `.mcp.json` servers now require explicit approval in untrusted workspaces (2.1.196); external plugins enabled via project settings require install consent (2.1.195) | AWARENESS | Consent tightening; ai-maestro installs through the CLI script layer, which primes consent. Role-plugins shipping MCP servers get a pending-approval state on first trust |
+| `AskUserQuestion` no longer auto-continues by default (2.1.200) | AWARENESS | Agents may idle longer on questions; the hook still reports `idle_prompt` correctly |
+| Marketplace `renames` maps auto-followed (2.1.193); background-agent draft-PR autonomy, `/dataviz`, workflow OTel attributes (2.1.198–2.1.202) | AWARENESS | Nothing consumes these yet; candidates for future TRDDs |
+
+**Net:** monitoring/session-control is CURRENT with 2.1.204 **after** the
+TRDD-O8NCNRWO gate landed. Open follow-ups from the pass: O8NCNRWO Phase 2
+(UI subagent awareness) and the hook counter fix (`ai-maestro-plugin#17`).
 
 ### 2.1.179–2.1.187 — June 24, 2026 (fourth pass)
 

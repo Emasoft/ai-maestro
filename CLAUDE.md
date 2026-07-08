@@ -552,7 +552,7 @@ All WebSocket messages are JSON. Raw terminal output (ANSI codes) is wrapped in 
 | Active | green-500 | yes | `activityStatus === 'active'` | Claude is processing/generating |
 | Idle | green-500 | no | Default when online | Between turns, no recent activity |
 
-**Safe-state gate:** All control operations (Stop, Restart, Approve) require `idle_prompt` state. This is the only state where Claude has no subagents running, no permission prompts pending, and is genuinely waiting for input.
+**Safe-state gate:** All control operations (Stop, Restart, Approve) require `idle_prompt` state — Claude has no permission prompts pending and is waiting for input. **Since Claude Code 2.1.198, `idle_prompt` no longer implies "no subagents running"** (subagents run in the background by default), so the server adds a second gate (TRDD-O8NCNRWO): stop/restart read the hook's `subagentCount` via `lib/session-safe-state.ts` and refuse with 409 `subagents_running` when it is provably >0 (`?force=true` overrides; a null/0 counter never blocks because the hook can drop the counter — see ai-maestro-plugin#17). The restart poll additionally detects `/exit`'s abandon-confirmation dialog and confirms it rather than timing out blind.
 
 **Session control buttons (AgentProfile.tsx):**
 - **Stop** (red): sends 3-command sequence: `C-c` (clear partial input) → `-l '/exit'` (literal text) → `Enter`. Enabled only at `idle_prompt`.
@@ -1761,7 +1761,7 @@ Changing an agent's client (e.g. `claude` → `codex`) is **NEVER** a simple fie
 - **[docs/OPERATIONS-GUIDE.md](./docs/OPERATIONS-GUIDE.md)** - Agent management, troubleshooting
 - **[docs/CEREBELLUM.md](./docs/CEREBELLUM.md)** - Cerebellum subsystem architecture, voice pipeline, TTS providers
 - **[docs/GOVERNANCE-RULES.md](./docs/GOVERNANCE-RULES.md)** - Team governance rules R1-R20 (semver v3.7.0+): titles, teams, messaging, composition, role boundaries, resilience, written orders, core plugin enforcement, client conversion (R18), marketplace governance (R20)
-- **[docs/CLAUDE-CODE-COMPATIBILITY-AUDIT.md](./docs/CLAUDE-CODE-COMPATIBILITY-AUDIT.md)** - Per-version verdict for Claude Code 2.1.113-2.1.132 changelog entries; lists repo-by-repo follow-up for items that affect role-plugins / ai-maestro-plugin separately
+- **[docs/CLAUDE-CODE-COMPATIBILITY-AUDIT.md](./docs/CLAUDE-CODE-COMPATIBILITY-AUDIT.md)** - Per-version verdict for Claude Code 2.1.113-2.1.204 changelog entries (five passes); lists repo-by-repo follow-up for items that affect role-plugins / ai-maestro-plugin separately
 - **[docs/API-CHANGES.md](./docs/API-CHANGES.md)** - Every API / governance surface change since the `governance-rules` branch was last synced. Plugins that fetch raw markdown from the fork should treat this as the change-log between branches
 
 Refer to these when users ask about setup or usage.

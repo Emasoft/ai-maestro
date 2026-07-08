@@ -48,8 +48,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Directory not found' }, { status: 404 })
   }
 
-  // Build the set of taken directories (all agent working dirs), resolved to canonical paths
-  const agents = loadAgents()
+  // Build the set of taken directories (all LIVE agent working dirs), resolved
+  // to canonical paths. Tombstoned agents (deletedAt set) must NOT hold their
+  // folder — G03-OVERLAP already excludes them, and without this filter a
+  // deleted agent's folder stayed unselectable in the browser forever
+  // (TRDD-57EBNB72).
+  const agents = loadAgents().filter(a => !a.deletedAt)
   const takenDirs = agents
     .filter(a => a.workingDirectory)  // skip agents with no working dir
     .map(a => resolve(a.workingDirectory!).replace(/[/\\]+$/, ''))
@@ -123,11 +127,32 @@ export async function GET(request: NextRequest) {
     // Also check if the current directory itself is selectable
     const currentOverlap = isOverlapping(dirPath)
 
+    // TRDD-57EBNB72: if the CURRENT path is a git repo with a GitHub origin,
+    // surface owner/repo so the wizard can prefill the maintainer github-repo
+    // step. Pure fs read (no exec) and best-effort — enrichment only for the
+    // browsed path itself, never per-entry (would cost a read per row).
+    let githubRepo: string | null = null
+    try {
+      const { readFileSync, existsSync: fsExists, statSync } = await import('fs')
+      let gitConfigPath = join(realDirPath, '.git', 'config')
+      if (fsExists(join(realDirPath, '.git')) && !statSync(join(realDirPath, '.git')).isDirectory()) {
+        // .git FILE (linked worktree/submodule): gitdir points at the real git dir
+        const gitdirLine = readFileSync(join(realDirPath, '.git'), 'utf-8').match(/^gitdir:\s*(.+)$/m)
+        if (gitdirLine) gitConfigPath = join(resolve(realDirPath, gitdirLine[1].trim()), 'config')
+      }
+      const gitConfig = readFileSync(gitConfigPath, 'utf-8')
+      const m = gitConfig.match(/github\.com[:/]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\s*$/m)
+      if (m) githubRepo = `${m[1]}/${m[2]}`
+    } catch {
+      githubRepo = null // not a repo / unreadable — no enrichment
+    }
+
     return NextResponse.json({
       path: dirPath,
       selectable: !currentOverlap.overlaps,
       reason: currentOverlap.reason || null,
       agentName: currentOverlap.agentName || null,
+      githubRepo,
       entries: dirs,
     })
   } catch (err) {

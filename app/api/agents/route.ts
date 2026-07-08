@@ -1,28 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod'
 import { listAgents, searchAgentsByQuery } from '@/services/agents-core-service'
 import { CreateAgent } from '@/services/element-management-service'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { internalError } from '@/lib/error-response'
-
-const CreateAgentSchema = z.object({
-  name: z.string().min(1).max(64).regex(/^[a-zA-Z0-9_@.-]+$/, 'Agent name must be alphanumeric with _@.-'),
-  label: z.string().max(128).optional(),
-  client: z.string().max(32).optional(),
-  program: z.string().max(32).optional(),
-  workingDirectory: z.string().max(512).optional(),
-  governanceTitle: z.string().max(32).optional(),
-  teamId: z.string().uuid().optional(),
-  avatar: z.string().max(512).optional(),
-  programArgs: z.string().max(2048).optional(),
-  pluginName: z.string().max(128).optional(),
-  createSession: z.boolean().optional(),
-  owner: z.string().max(128).optional(),
-  tags: z.array(z.string().max(64)).max(20).optional(),
-  model: z.string().max(64).optional(),
-  taskDescription: z.string().max(1024).optional(),
-  githubRepo: z.string().max(256).regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/, 'Must be owner/repo format').optional(),
-}).strict()
+// Schema extracted to lib/ (TRDD-57EBNB72): Next.js route modules may only
+// export HTTP verbs/config, and the schema must be directly testable.
+import { CreateAgentSchema } from '@/lib/create-agent-schema'
 
 // Force this route to be dynamic (not statically generated at build time)
 export const dynamic = 'force-dynamic'

@@ -3,7 +3,7 @@ trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-06-21T17:51:45+0200
+updated: 2026-07-08T10:50:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -20,6 +20,28 @@ labels: [overnight, fleet-readiness, governance, security, scripts, scenarios]
 # TRDD-903b7a20 — Overnight fleet-readiness campaign
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-06-20
+
+**▶ UPDATE 2026-07-08T10:50 (USER expanded the PR gate — this checklist is now the campaign's authoritative scope):**
+The USER ruled the governance PR to main PREMATURE. It is gated on ALL of the following
+(initial status from 2026-07-08 read-only probes; update in place as each gate is verified):
+
+- **G1 — plugin fleet ready** (umbrella; G2..G11 are its concrete gates)
+- **G2 — 3-pillars system (TRDD/PRRD/kanban) working across role plugins + GitHub** — DEP overlay shipped (TRDD-DE9757LJ); WAITING on janitor#73 (IND global rules) + orch#27 (kanban script rewire)
+- **G3 — web-scenario-tester plugin published + working + token-frugal** — NOT in the remote marketplace (probe 2026-07-08); plugin work = TRDD-f181a4ae, token restructure = TRDD-74ZS7P9U
+- **G4 — HTML side panel in each agent terminal correctly displays agent-pushed content** (visual-communicator surface)
+- **G5 — all Agent Profile tabs working for each agent**
+- **G6 — global (user-scope) extension install via Settings works flawlessly**
+- **G7 — API ↔ external plugins (pss, cpv, llm-externalizer, visual-communication, web-scenario-tester, …) working + tested**
+- **G8 — NEW role plugin `ai-maestro-webdesign-agent` published + working as MEMBER + valid, up-to-date `.agent.toml` (quad-identity)** — repo `Emasoft/ai-maestro-webdesign-agent` NOT FOUND and not in the marketplace (probe 2026-07-08) → creation/publish pending
+- **G9 — janitor heartbeat token burn bounded** (no repeat of the earlier per-heartbeat burn)
+- **G10 — all ai-maestro plugin skills/scripts/API in sync + up to date**
+- **G11 — agent-status monitoring updated to the latest Anthropic Claude Code changes**
+- **DEFERRED by USER: codex + all other non-Claude clients wait for now** (QXRWQ232 stays deferred)
+
+Probe evidence 2026-07-08: remote marketplace (`Emasoft/ai-maestro-plugins`) lists the 8 role
+plugins + `ai-maestro-plugin` + `ai-maestro-janitor` + `ai-maestro-visual-communicator-plugin`
+— NO web-scenario-tester, NO webdesign-agent. TRDD-RYJD3R9E (incorporate pending TRDDs into
+the governance PR) remains the PR-assembly task and now depends on this gate list.
 
 **▶ UPDATE 2026-06-23T10:30 (QUOTA BACK — directive B DONE, directive A piloting):**
 - **WEEKLY QUOTA RESET** — a probe agent returned PROBE_OK (210k tokens) at 10:19. Remaining

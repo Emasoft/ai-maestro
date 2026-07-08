@@ -1870,6 +1870,21 @@ export async function ensureCorePluginInstalled(
     console.warn(`[ensureCorePluginInstalled] DEP rules seeding failed for agent ${agentId} (non-fatal):`, rulesErr)
   }
 
+  // TRDD-57EBNB72: same self-heal for the managed .gitignore block. The rule
+  // seeding above re-ADDS files into the workdir on every wake, so a git-repo
+  // workdir needs its gitignore protection restored at the same cadence —
+  // otherwise a hand-trimmed or drifted .gitignore lets server writes and
+  // runtime artifacts show up as committable changes in an adopted plugin repo.
+  try {
+    const { ensureWorkdirGitignore } = await import('@/lib/workdir-gitignore-seed')
+    const giResult = await ensureWorkdirGitignore(workingDirectory)
+    if (giResult.created || giResult.updated) {
+      console.log(`[ensureCorePluginInstalled] managed .gitignore ${giResult.created ? 'created' : 'updated'} for agent ${agentId}`)
+    }
+  } catch (giErr) {
+    console.warn(`[ensureCorePluginInstalled] gitignore seeding failed for agent ${agentId} (non-fatal):`, giErr)
+  }
+
   const hasPlugin = await isCorePluginPresent(agentId)
 
   if (!hasPlugin) {

@@ -6968,12 +6968,28 @@ export async function CreateAgent(
       }
     }
 
+    // G03-CLAMP (TRDD-57EBNB72): the external-folder escape hatch is bounded to
+    // the user's HOME tree. A request pointing outside $HOME (network mounts,
+    // /Volumes, system dirs) has the flag IGNORED rather than erroring —
+    // G03-ENFORCE below then forces the safe ~/agents/<name>/ default. Kept as
+    // a local so the caller's options object is never mutated.
+    let allowExternal = desired.allowExternalFolder === true
+    if (allowExternal) {
+      const { resolve: resolveClamp } = await import('path')
+      const clampTarget = resolveClamp(workDir.startsWith('~') ? workDir.replace(/^~/, HOME) : workDir)
+      if (clampTarget !== HOME && !clampTarget.startsWith(HOME + '/')) {
+        console.warn(`[CreateAgent] G03-CLAMP: external folder "${workDir}" is outside $HOME — allowExternalFolder ignored`)
+        ops.push(`G03-CLAMP: external folder outside $HOME — allowExternalFolder ignored`)
+        allowExternal = false
+      }
+    }
+
     // G03-ENFORCE: Unless the user explicitly chose "Browse existing folder" in the wizard,
     // the working directory MUST be under ~/agents/. No exceptions. No fallbacks to cwd, /tmp,
     // $HOME, or any other location. This is the primary defense against agents being created
     // in the wrong place.
     const agentsRoot = join(HOME, 'agents')
-    if (!desired.allowExternalFolder) {
+    if (!allowExternal) {
       const normalizedForCheck = workDir.startsWith('~') ? workDir.replace(/^~/, HOME) : workDir
       if (!normalizedForCheck.startsWith(agentsRoot + '/') && normalizedForCheck !== agentsRoot) {
         // Force it back to ~/agents/<name>/
@@ -7100,6 +7116,24 @@ export async function CreateAgent(
       }
     } else {
       ops.push(`G05: Non-Claude agent — skip .claude/ creation`)
+    }
+
+    // ── G05c: Managed .gitignore block for git-repo workdirs (TRDD-57EBNB72) ──
+    // An adopted plugin repo must never end up committing the server's writes
+    // (DEP rules, settings.local.json) or the runtime tool artifacts. Runs for
+    // ALL clients (the artifacts appear regardless of program) and only when
+    // <workDir>/.git exists. Best-effort like G05b — the wake path
+    // (ensureCorePluginInstalled) self-heals drift.
+    try {
+      const { ensureWorkdirGitignore } = await import('@/lib/workdir-gitignore-seed')
+      const giResult = await ensureWorkdirGitignore(workDir)
+      if (giResult.skipped) {
+        ops.push('G05c: workdir is not a git repo — gitignore seeding skipped')
+      } else {
+        ops.push(`G05c: managed .gitignore ${giResult.created ? 'created' : giResult.updated ? 'updated' : 'unchanged'}`)
+      }
+    } catch (giErr) {
+      ops.push(`G05c: WARN — gitignore seeding failed (non-fatal): ${giErr instanceof Error ? giErr.message : giErr}`)
     }
 
     // ── G06: Set governance title if requested ───────────────

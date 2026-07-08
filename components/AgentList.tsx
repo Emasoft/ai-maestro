@@ -1555,7 +1555,10 @@ export default function AgentList({
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                              name: `_${displayName}`,
+                              // TRDD-57EBNB72: was `_${displayName}` — the route regex
+                              // allows a leading '_' but CreateAgent G01 requires
+                              // /^[a-zA-Z0-9]/, so every revive 400'd. Suffix instead.
+                              name: `${displayName}-revived`,
                               label: label,
                               client: session.originalProgram || 'claude',
                               programArgs: session.originalProgramArgs || '',

@@ -76,10 +76,12 @@ const STEP_ORDER_AUTONOMOUS_PLUGINS: WizardStep[] = ['client', 'avatar', 'team',
 const STEP_ORDER_AUTONOMOUS_NO_PLUGINS: WizardStep[] = ['client', 'avatar', 'team', 'title', 'folder', 'summary']
 const STEP_ORDER_TEAM_PLUGINS: WizardStep[] = ['client', 'avatar', 'team', 'title', 'role-plugin', 'summary']
 const STEP_ORDER_TEAM_NO_PLUGINS: WizardStep[] = ['client', 'avatar', 'team', 'title', 'summary']
-// MAINTAINER step order — no folder step (CreateAgent enforces ~/agents/<name>/),
-// no role-plugin step (MAINTAINER title binds to ai-maestro-maintainer-agent automatically).
-// The extra 'github-repo' step captures the required R19.2 githubRepo attribute.
-const STEP_ORDER_MAINTAINER: WizardStep[] = ['client', 'avatar', 'team', 'title', 'github-repo', 'summary']
+// MAINTAINER step order — folder BEFORE github-repo (TRDD-57EBNB72): a maintainer
+// adopting an existing plugin repo picks the folder first, so the github-repo step
+// can be prefilled from the folder's git origin (the /api/agents/folders enrichment).
+// No role-plugin step (MAINTAINER title binds to ai-maestro-maintainer-agent
+// automatically); 'github-repo' captures the required R19.2 attribute.
+const STEP_ORDER_MAINTAINER: WizardStep[] = ['client', 'avatar', 'team', 'title', 'folder', 'github-repo', 'summary']
 
 let msgCounter = 0
 function makeMsg(
@@ -341,9 +343,10 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
     const isFolderTitle = title === 'autonomous' || title === 'manager'
 
     if (title === 'maintainer') {
-      // MAINTAINER: R19.2 requires githubRepo → go straight to the github-repo step.
-      // The title binds the role-plugin automatically and CreateAgent enforces ~/agents/<name>/.
-      advance(title.toUpperCase(), 'github-repo')
+      // MAINTAINER (TRDD-57EBNB72): folder first, so the github-repo step can
+      // be prefilled from the chosen folder's git origin. The title still
+      // binds the role-plugin automatically.
+      advance(title.toUpperCase(), 'folder')
     } else if (isFolderTitle) {
       // AUTONOMOUS or MANAGER: go to folder selection step first
       advance(title.toUpperCase(), 'folder')
@@ -369,6 +372,28 @@ export default function AgentCreationWizard({ onClose, onComplete }: AgentCreati
     setSelectedFolder(folder)
     const agentName = personaName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '')
     const label = folder || `~/agents/${agentName}/`
+
+    if (selectedTitle === 'maintainer') {
+      // MAINTAINER (TRDD-57EBNB72): prefill the github-repo step from the
+      // chosen folder's git origin (the folders route enriches the browsed
+      // path with owner/repo when it is a GitHub clone). Best-effort — an
+      // empty prefill just leaves the input blank as before.
+      if (folder) {
+        try {
+          const res = await fetch(`/api/agents/folders?path=${encodeURIComponent(folder)}`)
+          if (res.ok) {
+            const data = await res.json()
+            if (typeof data?.githubRepo === 'string' && data.githubRepo) {
+              setGithubRepo(data.githubRepo)
+            }
+          }
+        } catch {
+          // no prefill — the user types the repo manually
+        }
+      }
+      advance(label, 'github-repo')
+      return
+    }
 
     // Pre-load plugins; always show role-plugin step when client supports plugins
     const pluginDecision = await checkPluginChoices(selectedTitle, selectedClient)

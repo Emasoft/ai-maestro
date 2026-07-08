@@ -7130,7 +7130,7 @@ export async function CreateAgent(
       if (giResult.skipped) {
         ops.push('G05c: workdir is not a git repo — gitignore seeding skipped')
       } else {
-        ops.push(`G05c: managed .gitignore ${giResult.created ? 'created' : giResult.updated ? 'updated' : 'unchanged'}`)
+        ops.push(`G05c: managed git-exclude ${giResult.created ? 'created' : giResult.updated ? 'updated' : 'unchanged'}`)
       }
     } catch (giErr) {
       ops.push(`G05c: WARN — gitignore seeding failed (non-fatal): ${giErr instanceof Error ? giErr.message : giErr}`)

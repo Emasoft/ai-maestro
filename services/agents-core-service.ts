@@ -1879,7 +1879,7 @@ export async function ensureCorePluginInstalled(
     const { ensureWorkdirGitignore } = await import('@/lib/workdir-gitignore-seed')
     const giResult = await ensureWorkdirGitignore(workingDirectory)
     if (giResult.created || giResult.updated) {
-      console.log(`[ensureCorePluginInstalled] managed .gitignore ${giResult.created ? 'created' : 'updated'} for agent ${agentId}`)
+      console.log(`[ensureCorePluginInstalled] managed git-exclude ${giResult.created ? 'created' : 'updated'} for agent ${agentId}`)
     }
   } catch (giErr) {
     console.warn(`[ensureCorePluginInstalled] gitignore seeding failed for agent ${agentId} (non-fatal):`, giErr)

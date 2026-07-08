@@ -225,7 +225,7 @@ describe('CreateAgent G05c gitignore seeding + allowExternalFolder (TRDD-57EBNB7
 
     const g05cLine = result.operations.find(o => o.startsWith('G05c:'))
     expect(g05cLine).toBeDefined()
-    expect(g05cLine).toMatch(/managed \.gitignore created/)
+    expect(g05cLine).toMatch(/managed git-exclude created/)
     expect(mockEnsureWorkdirGitignore).toHaveBeenCalledWith(join(HOME, 'agents', 'gi-default'))
   })
 

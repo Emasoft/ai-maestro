@@ -1,5 +1,5 @@
 /**
- * Managed .gitignore block for git-repo agent workdirs (TRDD-57EBNB72, WS1
+ * Managed git-exclude block for git-repo agent workdirs (TRDD-57EBNB72, WS1
  * of the fleet-readiness plan — campaign TRDD-903b7a20 blocker B2).
  *
  * When an existing git repository is adopted as an agent working directory
@@ -8,14 +8,21 @@
  * (`.claude/rules/aimaestro-*.md`, re-seeded on every wake), the local-scope
  * plugin enablement (`.claude/settings.local.json`), per-op element installs,
  * and runtime artifacts (`.janitor/`, `reports/`, `.codegraph/`, …). Without
- * gitignore protection those files dirty the repo and can be accidentally
+ * ignore protection those files dirty the repo and can be accidentally
  * committed or published with the plugin.
  *
- * This module idempotently maintains ONE marker-delimited managed block in
- * `<workdir>/.gitignore`:
- *   - runs ONLY when `<workdir>/.git` exists (dir or file — linked worktrees
- *     and submodules use a `.git` FILE, so an existsSync dir-check would skip
- *     exactly the repos that need protection);
+ * The managed block lives in `.git/info/exclude`, NOT in `.gitignore`:
+ * real repos TRACK their .gitignore, so appending there dirties the very
+ * tree this module exists to keep clean (the WS1b dummy adoption proved it —
+ * `git status` showed ` M .gitignore`). info/exclude has identical ignore
+ * semantics, is never tracked, never ships with a publish, and is re-seeded
+ * per clone by the wake self-heal.
+ *
+ * Behavior:
+ *   - runs ONLY when `<workdir>/.git` exists; when `.git` is a FILE (linked
+ *     worktree / submodule) the real git dir is resolved via its `gitdir:`
+ *     pointer, and a `commondir` file (worktrees) is followed so the block
+ *     lands in the COMMON `info/exclude` git actually reads;
  *   - never touches user content outside the markers;
  *   - dedupes: entries already present verbatim outside the block are not
  *     repeated inside it (trim-match);
@@ -23,13 +30,13 @@
  *     byte-wise, so calling it on every wake is cheap.
  *
  * Deliberately NOT listed: `.claude/settings.json` and `CLAUDE.md`.
- * gitignore has no effect on files a repo already tracks, and for repos that
- * do NOT track them, hiding config-deploy edits would silently mask
+ * ignore rules have no effect on files a repo already tracks, and for repos
+ * that do NOT track them, hiding config-deploy edits would silently mask
  * user-initiated configuration pushes that SHOULD show up as diffs.
  */
-import { existsSync } from 'fs'
-import { readFile, writeFile } from 'fs/promises'
-import { join } from 'path'
+import { existsSync, statSync, readFileSync } from 'fs'
+import { mkdir, readFile, writeFile } from 'fs/promises'
+import { isAbsolute, join, resolve, dirname } from 'path'
 
 export const GITIGNORE_BLOCK_BEGIN =
   '# >>> ai-maestro:managed-gitignore — do not edit inside this block >>>'
@@ -76,13 +83,13 @@ export const MANAGED_GITIGNORE_ENTRIES: readonly string[] = [
 ]
 
 export interface EnsureWorkdirGitignoreResult {
-  /** .gitignore did not exist — created with the managed block */
+  /** exclude file did not exist — created with the managed block */
   created: boolean
-  /** existing .gitignore rewritten (block added or regenerated) */
+  /** existing exclude file rewritten (block added or regenerated) */
   updated: boolean
   /** file already byte-identical to the desired state */
   unchanged: boolean
-  /** `<workdir>/.git` absent — not a repo, nothing done */
+  /** `<workdir>/.git` absent or unresolvable — not a repo, nothing done */
   skipped: boolean
 }
 
@@ -94,7 +101,41 @@ const NO_OP: EnsureWorkdirGitignoreResult = {
 }
 
 /**
- * Idempotently maintain the managed gitignore block in a git-repo workdir.
+ * Resolve the `info/exclude` path for a workdir, or null when the workdir is
+ * not a git repo. Handles the three shapes:
+ *   - `.git` directory (normal clone)          → .git/info/exclude
+ *   - `.git` file with `gitdir:` (worktree)    → <gitdir>/<commondir>/info/exclude
+ *   - `.git` file with `gitdir:` (submodule)   → <gitdir>/info/exclude
+ */
+function resolveExcludePath(workdir: string): string | null {
+  const dotGit = join(workdir, '.git')
+  if (!existsSync(dotGit)) return null
+
+  let gitDir: string
+  try {
+    if (statSync(dotGit).isDirectory()) {
+      gitDir = dotGit
+    } else {
+      const m = readFileSync(dotGit, 'utf-8').match(/^gitdir:\s*(.+)\s*$/m)
+      if (!m) return null
+      const pointer = m[1].trim()
+      gitDir = isAbsolute(pointer) ? pointer : resolve(workdir, pointer)
+      // A linked worktree's git dir carries a `commondir` file pointing at the
+      // shared git dir — git reads info/exclude from THERE, not the worktree dir.
+      const commondirFile = join(gitDir, 'commondir')
+      if (existsSync(commondirFile)) {
+        const common = readFileSync(commondirFile, 'utf-8').trim()
+        gitDir = isAbsolute(common) ? common : resolve(gitDir, common)
+      }
+    }
+  } catch {
+    return null
+  }
+  return join(gitDir, 'info', 'exclude')
+}
+
+/**
+ * Idempotently maintain the managed exclude block for a git-repo workdir.
  *
  * Never throws for a non-repo workdir (returns skipped). I/O errors DO
  * propagate so callers can log them — call sites treat this as best-effort
@@ -104,13 +145,12 @@ const NO_OP: EnsureWorkdirGitignoreResult = {
 export async function ensureWorkdirGitignore(
   workdir: string
 ): Promise<EnsureWorkdirGitignoreResult> {
-  // .git may be a directory (normal clone) OR a file (worktree/submodule).
-  if (!existsSync(join(workdir, '.git'))) return NO_OP
+  const excludePath = resolveExcludePath(workdir)
+  if (excludePath === null) return NO_OP
 
-  const gitignorePath = join(workdir, '.gitignore')
   let existing: string | null = null
   try {
-    existing = await readFile(gitignorePath, 'utf-8')
+    existing = await readFile(excludePath, 'utf-8')
   } catch {
     existing = null
   }
@@ -154,12 +194,13 @@ export async function ensureWorkdirGitignore(
 
   if (existing === null) {
     if (block === '') return NO_OP // nothing to add and no file to create
-    await writeFile(gitignorePath, block)
+    await mkdir(dirname(excludePath), { recursive: true })
+    await writeFile(excludePath, block)
     return { created: true, updated: false, unchanged: false, skipped: false }
   }
   if (next === existing) {
     return { created: false, updated: false, unchanged: true, skipped: false }
   }
-  await writeFile(gitignorePath, next)
+  await writeFile(excludePath, next)
   return { created: false, updated: true, unchanged: false, skipped: false }
 }

@@ -41,10 +41,21 @@ labels: [overnight, fleet-readiness, governance, security, scripts, scenarios]
 - 57EBNB72 **completed + archived 18:22** — EHT gate cleared the same day: QH6WD7XI (docs
   alignment) and E6MD2FNX (SCEN-028 folder-adoption regression scenario + permanent fixture
   at `~/agents/scen028-import-fixture`) both completed/archived. WS1 is fully closed.
-- **NEXT: WS2a — publish web-scenario-tester via CPV agents** (fourfold verify → CPV strict →
-  gh repo `Emasoft/ai-maestro-web-scenario-tester` → pipeline → marketplace register with
-  `allowCrossMarketplaceDependenciesOn: dev-browser-marketplace`), then WS2b webdesign
-  (`ai-maestro-webdesign` — author root .agent.toml MEMBER first).
+- **WS2a DONE 2026-07-08T19:35 — web-scenario-tester PUBLISHED + REGISTERED + INSTALLABLE.**
+  CPV agent pipeline: canonical publish wired, strict CLEAN (0/0/0/0), security clean, repo
+  https://github.com/Emasoft/ai-maestro-web-scenario-tester live at v0.1.3 (releases
+  v0.1.1–v0.1.3, ALL CI green; 2 cause-side fixes: pytest-split dev-dep + notify trigger
+  main→master). Marketplace: entry registered (a9b4a0d) + NEW top-level
+  `allowCrossMarketplaceDependenciesOn: ["dev-browser-marketplace"]`. Install smoke PASS:
+  `claude plugin install web-scenario-tester@ai-maestro-plugins --scope local` resolved
+  v0.1.3 AND auto-installed the dev-browser cross-marketplace dependency; root .agent.toml +
+  main-agent present in cache; clean uninstall. G3 publish+install halves closed — runtime
+  token-frugality verification happens at fleet testing. CPV reports:
+  reports/cpv/20260708_174540+0200-wst-publish.md + 20260708_181706+0200-wst-fixer.md.
+- **NEXT: WS2b — publish ai-maestro-webdesign via CPV** (root MEMBER .agent.toml already
+  committed in its repo, 51ab529; fix plugin.json homepage/repository → own repo + add the
+  dev-browser dependencies field; then pipeline → strict → repo create → CI green →
+  marketplace register).
 
 **▶ UPDATE 2026-07-08T11:40 (USER approved the hybrid fleet plan — pre-fleet blockers B1..B5 + first probe results):**
 USER approved: source repo stays OUTSIDE the harness; plugin projects become fleet agents

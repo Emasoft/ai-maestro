@@ -21,6 +21,29 @@ labels: [overnight, fleet-readiness, governance, security, scripts, scenarios]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-06-20
 
+**▶ UPDATE 2026-07-08T17:30 (WS1 + WS1b DONE — blockers B1/B3/B5 resolved; NEXT = WS2a WST publish):**
+
+- **B1 CLOSED.** The folder-adoption import is FIXED and LIVE-VERIFIED (TRDD-57EBNB72, commits
+  e5f0481d..912ce7ca): `allowExternalFolder` accepted at the API, G03-CLAMP ($HOME bound),
+  G05c seeds a managed ignore block into **`.git/info/exclude`** (NOT `.gitignore` — repos track
+  it; caught live), folders-route tombstone filter + githubRepo enrichment, maintainer wizard
+  folder→github-repo flow. Fleet imports may use direct folder ADOPTION (in-place, under
+  ~/agents) — the Path C clone step remains the way to get the folder there.
+- **B3 EVIDENCE.** WS1b dummy live protocol PASSED end-to-end (TRDD-VT6SSI0T, completed):
+  clone → adopt 201 → DEP rules + local plugins seeded → **clean tree** → soft-delete →
+  tombstone re-adopt 201 → hard-delete zero-remnant cleanup. Import mechanics are fleet-ready.
+- **B5 CLOSED (definitive).** The woken dummy agent idled 2h44m with the janitor armed and
+  burned **0 tokens** (absent from the exact-window attribution table; no transcript dir ever
+  created). Combined with the earlier fleet measurement (no runaway; top consumer was the
+  janitor DEV session itself), idle fleet agents are cheap. Heartbeat burn is bounded.
+- Remaining pre-fleet blockers: **B2** (maintainer plugin plugin-root readiness — its own repo)
+  and **B4 fixes** (amama#24, item 7 gated on janitor#73). WS3 real imports still need USER go.
+- 57EBNB72 parked at `ai_review` (complete is EHT-gated on QH6WD7XI docs + E6MD2FNX scenario).
+- **NEXT: WS2a — publish web-scenario-tester via CPV agents** (fourfold verify → CPV strict →
+  gh repo `Emasoft/ai-maestro-web-scenario-tester` → pipeline → marketplace register with
+  `allowCrossMarketplaceDependenciesOn: dev-browser-marketplace`), then WS2b webdesign
+  (`ai-maestro-webdesign` — author root .agent.toml MEMBER first).
+
 **▶ UPDATE 2026-07-08T11:40 (USER approved the hybrid fleet plan — pre-fleet blockers B1..B5 + first probe results):**
 USER approved: source repo stays OUTSIDE the harness; plugin projects become fleet agents
 (MAINTAINER/AUTONOMOUS, no teams); cross-boundary channel = GitHub. Blockers before any import:

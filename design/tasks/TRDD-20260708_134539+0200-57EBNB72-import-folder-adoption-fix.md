@@ -1,9 +1,9 @@
 ---
 trdd-id: 57EBNB72
 title: Fix folder-adoption import — allowExternalFolder schema + workdir gitignore seeding (G05c)
-column: testing
+column: ai_review
 created: 2026-07-08T13:45:39+0200
-updated: 2026-07-08T14:35:00+0200
+updated: 2026-07-08T17:30:00+0200
 current-owner: main-session
 assignee: main-session
 priority: 0
@@ -19,9 +19,9 @@ test-requirements: [unit, integration, typecheck, lint]
 review-requirements: []
 impacts: [public-api]
 relevant-rules: []
-implementation-commits: [e5f0481d, f214be8c, 90ebeda2, bc01cb4d]
+implementation-commits: [e5f0481d, f214be8c, 90ebeda2, bc01cb4d, a1724058, 912ce7ca]
 last-test-result: pass
-last-test-at: 2026-07-08T14:30:00+0200
+last-test-at: 2026-07-08T17:20:00+0200
 ---
 
 # Fix folder-adoption import — allowExternalFolder schema + workdir gitignore seeding (G05c)
@@ -61,5 +61,16 @@ background traces recorded in the campaign STATE.
 `npx tsc --noEmit` · `npx vitest run` (3 new suites + guard createagent-g11/g06/g08) · eslint on
 touched files · `node --check server.mjs`. Then the WS1b dummy live-import protocol (clone →
 adopt → clean-tree assert → idle-burn → delete → re-import) before ANY real fleet import.
+
+## Result — 2026-07-08
+
+- Gate green (tsc 0 · 14/14 affected tests · eslint clean) AND the WS1b live protocol passed
+  end-to-end (TRDD-VT6SSI0T, completed/archived): in-place adoption 201, DEP rules + local
+  plugins seeded, **clean tree** (the live run forced the seeder from tracked `.gitignore` to
+  `.git/info/exclude` — commit a1724058), tombstone re-adopt 201, idle burn = 0 over 2h44m,
+  full zero-remnant cleanup.
+- **Column parked at `ai_review`: `complete` is EHT-gated** on the two open derived tasks
+  TRDD-QH6WD7XI (docs alignment) and TRDD-E6MD2FNX (folder-adoption scenario). The code itself
+  is done and live-verified.
 
 ## Approval log

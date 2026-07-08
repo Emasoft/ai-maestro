@@ -65,6 +65,27 @@ export async function POST(
   // /exit; Codex uses double Ctrl+C; others fall back to Claude semantics.
   const program = (targetAgent?.program || 'claude').toLowerCase()
 
+  // TRDD-O8NCNRWO: CC ≥2.1.198 runs subagents in the background by default, so
+  // an idle-looking session may still have live subagents — /exit would then
+  // land on Claude's abandon-confirmation dialog instead of exiting. Refuse
+  // with a machine-readable 409 when the hook's counter PROVES live subagents
+  // (a null/0 counter never blocks — it can be stale-low per plugin#17).
+  // ?force=true preserves the old unconditional behavior.
+  const force = request.nextUrl.searchParams.get('force') === 'true'
+  const { readSubagentCount, evaluateExitGate } = await import('@/lib/session-safe-state')
+  const workingDir = targetAgent?.workingDirectory || targetAgent?.sessions?.[0]?.workingDirectory
+  const gate = evaluateExitGate(readSubagentCount(workingDir), force)
+  if (gate.blocked) {
+    return NextResponse.json(
+      {
+        error: 'subagents_running',
+        message: `Refusing to stop: ${gate.subagentCount} background subagent(s) still running. Retry with ?force=true to stop anyway.`,
+        subagentCount: gate.subagentCount,
+      },
+      { status: 409 }
+    )
+  }
+
   try {
     const { execFileSync } = require('child_process')
     // CC-GOV-001: Use execFileSync (no shell) to prevent injection even with validated names.

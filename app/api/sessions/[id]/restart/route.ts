@@ -115,6 +115,24 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid programArgs: must be a string' }, { status: 400 })
   }
 
+  // TRDD-O8NCNRWO: same subagent gate as the stop route — CC ≥2.1.198 background
+  // subagents make an idle prompt unsafe; a PROVEN positive counter refuses with
+  // 409 (null/0 never blocks — stale-low per plugin#17); ?force=true overrides.
+  const force = request.nextUrl.searchParams.get('force') === 'true'
+  const { readSubagentCount, evaluateExitGate, looksLikeAbandonPrompt } = await import('@/lib/session-safe-state')
+  const agentWorkingDir = agent?.workingDirectory || agent?.sessions?.[0]?.workingDirectory
+  const gate = evaluateExitGate(readSubagentCount(agentWorkingDir), force)
+  if (gate.blocked) {
+    return NextResponse.json(
+      {
+        error: 'subagents_running',
+        message: `Refusing to restart: ${gate.subagentCount} background subagent(s) still running. Retry with ?force=true to restart anyway.`,
+        subagentCount: gate.subagentCount,
+      },
+      { status: 409 }
+    )
+  }
+
   const program = body.program || agent?.program || 'claude'
   const programArgs = body.programArgs || agent?.programArgs || ''
 
@@ -152,6 +170,7 @@ export async function POST(
     const pollInterval = 500
     let elapsed = 0
     let exited = false
+    let abandonPromptHandled = false
 
     while (elapsed < maxWait) {
       await sleep(pollInterval)
@@ -162,10 +181,35 @@ export async function POST(
         exited = true
         break
       }
+      // TRDD-O8NCNRWO: with CC ≥2.1.198 background subagents, /exit can land on
+      // Claude's abandon-confirmation dialog instead of exiting (the pre-gate
+      // can't catch it when the hook's counter is stale-low — plugin#17). At
+      // half-timeout, probe the pane ONCE: if the dialog is visible, press
+      // Enter (the dialog's default = confirm exit) and keep polling. Only the
+      // detected dialog gets a keystroke — never blind keys into an unknown UI.
+      if (!abandonPromptHandled && elapsed >= 5000) {
+        abandonPromptHandled = true
+        try {
+          const paneTail = execCommandArgs('tmux', ['capture-pane', '-t', sessionName, '-p'])
+            .split('\n').slice(-12).join('\n')
+          if (looksLikeAbandonPrompt(paneTail)) {
+            console.warn('[Sessions Restart] abandon-confirmation dialog detected after /exit — confirming')
+            execCommandArgs('tmux', ['send-keys', '-t', sessionName, 'Enter'])
+          }
+        } catch {
+          // capture failure is non-fatal — the poll loop keeps its own timeout
+        }
+      }
     }
 
     if (!exited) {
-      return NextResponse.json({ error: 'Timeout: program did not exit within 15s' }, { status: 504 })
+      return NextResponse.json(
+        {
+          error: 'Timeout: program did not exit within 15s',
+          hint: 'The session may be sitting on a confirmation dialog (e.g. background subagents still running). Check the terminal, or retry.',
+        },
+        { status: 504 }
+      )
     }
 
     // Step 3: Brief pause for shell readiness (rc files, prompt rendering)

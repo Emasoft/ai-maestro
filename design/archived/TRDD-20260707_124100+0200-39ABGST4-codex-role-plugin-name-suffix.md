@@ -1,9 +1,10 @@
 ---
 trdd-id: 39ABGST4
 title: Decide and fix codex-emitted role-plugin name suffix vs CLAUDE.md no-suffix rule
-column: design
+column: complete
 created: 2026-07-07T12:41:00+0200
-updated: 2026-07-07T21:56:19+0200
+updated: 2026-07-08T01:05:30+0200
+implementation-commits: [77305472]
 current-owner: scenario-runner
 approval-tier: 2
 priority: 0
@@ -206,3 +207,4 @@ would have needed and (b) avoids).
 
 - 2026-07-07T13:24:46+0200 — APPROVED by USER-delegated batch screening (tier 2). Design-first — HIGH-risk on-disk migration + unresolved policy fork; EXCLUDED from the batch auto-implementation wave.
 - 2026-07-07T21:56:19+0200 — DESIGN RESOLVED (code-review follow-up, USER-delegated "decide yourself"): policy fork settled as option (b) with evidence (role marketplace uses a shared bare name → the `-<client>` suffix is load-bearing for key uniqueness). column todo → design. Execution (CLAUDE.md + rule-citation + scenario-grep alignment, LOW-MED risk) left as a scoped follow-up; the HIGH-risk folder/settings migration that option (a) would have required is now avoided.
+- 2026-07-08T01:05:30+0200 — COMPLETED (option b executed, commit 77305472). Authoritative source located per step 1: the suffix was ratified all along — R20.1 (naming: non-Claude names carry `-<client>`; the "R20.3 v3.7.0" label embedded in its text is what the code comments cited pre-renumbering), R20.23 (per-client duplication), R20.26 (immutable names + computed target name + overwrite-in-place). Executed: CLAUDE.md conversion-rules bullets rewritten; plugin-storage-service.ts comments repointed (old R20.3→R20.1, old R20.4→R20.23; comment-only, tsc clean); SCEN-026 fully aligned to the suffixed quad-identity names (folders, config.toml keys, UI card labels, PG04/picker prose — 16 spots); SCEN-016/021 audited clean (no codex-marketplace refs). Step 3 (ecosystem-constants/UI) verified NO-CHANGE-NEEDED: names flow from plugin.json, which already carries the suffix, so display == on-disk. Archived per the TRDD lifecycle.

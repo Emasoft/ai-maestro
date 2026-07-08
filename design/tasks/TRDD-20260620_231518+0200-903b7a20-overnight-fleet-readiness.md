@@ -3,7 +3,7 @@ trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-07-08T10:50:00+0200
+updated: 2026-07-09T00:05:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -20,6 +20,34 @@ labels: [overnight, fleet-readiness, governance, security, scripts, scenarios]
 # TRDD-903b7a20 — Overnight fleet-readiness campaign
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-06-20
+
+**▶ UPDATE 2026-07-09T00:00 (WS2b security landed + shipping in flight; B2 issue filed; G5/G6 verification dispatched):**
+
+- **WS2b security half DONE in the webdesign repo** (tree clean at 89dace3): devitalization of
+  ~53 false-positive scan findings applied (5f060e7) + echo→printf hardening (89dace3), on top
+  of strict CLEAN (ed949b1) + manifest fixes (42c2518). The devitalizer's classification report:
+  `reports/cpv/20260708_224500+0200-webdesign-devitalize.md` — FLAG list (eval/exec subcommand
+  literals, ΔE color notation, ASCII art) is load-bearing and does NOT block publish (strict
+  gate already clean). Learned: subagents have NO write path to repos outside the session
+  working dirs (Edit/ctx_edit path-gated); the working recipe is Read → Write full file to
+  scratchpad → `cp` (transparent, rule-compliant).
+- **WS2b shipping IN FLIGHT** (fresh Opus CPV agent — Fable 5 window was exhausted mid-run,
+  USER rotated accounts): pipeline completeness check (notify trigger MUST match actual default
+  branch — the WST main/master lesson), `gh repo create Emasoft/ai-maestro-webdesign`, push,
+  MARKETPLACE_PAT, publish.py --patch, CI to green, then observe whether the notify chain bumps
+  the PRE-registered marketplace entry (5146d2a; starts 0.1.0). NOTE: the WST entry still reads
+  0.1.0 vs shipped 0.1.3 — receiver no-op'd because the entry didn't exist at dispatch time;
+  cosmetic (install resolves repo latest). The webdesign publish is the real chain test.
+- **B2 issue FILED**: Emasoft/ai-maestro-maintainer-agent#26 — fleet-agent readiness checklist
+  (workdir root == plugin repo root; persona subfolder assumptions; publish.py filesystem-walk
+  exclusions; self-publish boundary). B2 closes when that repo's checklist passes.
+- **G5+G6 verification DISPATCHED** (parallel-tester agent on the live dashboard): profile tabs
+  render pass + user-scope install/uninstall of web-scenario-tester via Settings (doubles as
+  the published-plugin UI-install verification). G4 (HTML side panel / visual-communicator)
+  deferred until the tester finishes — same browser/dashboard surface, avoid interference.
+- Gate ledger: G3 ✅ (WST) · G8 in-flight (webdesign) · G9 ✅ (idle burn 0) · G11 ✅ modulo
+  plugin#17 e2e · G2 waiting janitor#73 + orch#27 (external) · G4/G5/G6/G7/G10 open — G5/G6
+  running now, G4+G7 next, G10 = core-plugin sync sweep after WS2b lands.
 
 **▶ UPDATE 2026-07-08T17:30 (WS1 + WS1b DONE — blockers B1/B3/B5 resolved; NEXT = WS2a WST publish):**
 

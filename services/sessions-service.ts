@@ -58,6 +58,8 @@ export interface SessionActivityInfo {
   status: SessionActivityStatus
   hookStatus?: string
   notificationType?: string
+  /** Hook's background-subagent counter (TRDD-O8NCNRWO) — undefined = unknown, never "safe" */
+  subagentCount?: number
 }
 
 export interface CreateSessionParams {
@@ -169,7 +171,7 @@ function hashCwd(cwd: string): string {
 }
 
 /** Read hook state for a given working directory */
-function getHookState(workingDir: string): { status: string; notificationType?: string } | null {
+function getHookState(workingDir: string): { status: string; notificationType?: string; subagentCount?: number } | null {
   if (!workingDir) return null
 
   const stateDir = statePath('chat-state')
@@ -187,7 +189,16 @@ function getHookState(workingDir: string): { status: string; notificationType?: 
         if (stateAge > 60000) return null
       }
 
-      return { status: state.status, notificationType: state.notificationType }
+      // TRDD-O8NCNRWO: expose the hook's background-subagent counter so the UI
+      // can distinguish "waiting (safe)" from "waiting with live subagents"
+      // (CC ≥2.1.198 runs subagents in the background by default). Only a
+      // validated number ≥0 is forwarded — the counter can be absent/stale-low
+      // (ai-maestro-plugin#17), so consumers treat undefined as unknown.
+      const rawCount = state.subagentCount
+      const subagentCount =
+        typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount >= 0 ? rawCount : undefined
+
+      return { status: state.status, notificationType: state.notificationType, subagentCount }
     }
   } catch {
     // Ignore errors reading state files
@@ -603,7 +614,8 @@ export async function getActivity(): Promise<Record<string, SessionActivityInfo>
       lastActivity: new Date(timestamp).toISOString(),
       status,
       hookStatus: hookState?.status,
-      notificationType: hookState?.notificationType
+      notificationType: hookState?.notificationType,
+      subagentCount: hookState?.subagentCount
     }
   })
 

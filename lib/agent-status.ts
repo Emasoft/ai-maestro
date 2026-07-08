@@ -35,6 +35,7 @@ export function resolveAgentStatus(
   activityStatus?: SessionActivityStatus,
   notificationType?: string,
   programRunning?: boolean,
+  subagentCount?: number,
 ): { color: string; ringColor: string; label: string; pulse: boolean; icon?: 'lock' | 'clock' | 'alert' } {
 
   if (isOnline) {
@@ -59,8 +60,16 @@ export function resolveAgentStatus(
     if (notificationType === 'permission_prompt') {
       return { color: 'bg-orange-500', ringColor: 'ring-orange-500/30', label: 'Permission', pulse: true, icon: 'lock' }
     }
-    // Priority 5: Waiting — Claude finished and shows its input prompt (safe state).
+    // Priority 5: Waiting — Claude finished and shows its input prompt.
+    // TRDD-O8NCNRWO: since CC 2.1.198 subagents run in the background by
+    // default, so an idle prompt with a provably-positive subagent counter is
+    // NOT the safe state — label it distinctly so Stop/Restart affordances and
+    // the human don't mistake it for "nothing running". Same amber family
+    // (still a waiting flavor), clock icon = "work still in flight".
     if (notificationType === 'idle_prompt' || activityStatus === 'waiting') {
+      if (typeof subagentCount === 'number' && subagentCount > 0) {
+        return { color: 'bg-amber-600', ringColor: 'ring-amber-600/30', label: `Waiting (${subagentCount} subagent${subagentCount === 1 ? '' : 's'})`, pulse: true, icon: 'clock' }
+      }
       return { color: 'bg-amber-500', ringColor: 'ring-amber-500/30', label: 'Waiting', pulse: true }
     }
     // Priority 6: Active — Claude is currently processing.

@@ -64,3 +64,32 @@ describe('resolveAgentStatus — icon hint (P6 surfacing)', () => {
     expect(resolveAgentStatus(false, true, undefined, undefined, undefined).icon).toBeUndefined()
   })
 })
+
+describe('resolveAgentStatus — waiting with background subagents (TRDD-O8NCNRWO)', () => {
+  // CC ≥2.1.198 runs subagents in the background by default, so an idle prompt
+  // with a provably-positive counter is NOT the safe state. The flavor must be
+  // visually distinct (darker amber + clock) so Stop/Restart affordances and
+  // the human don't mistake it for "nothing running".
+  it('shows the subagents-running waiting flavor on a positive counter', () => {
+    const s = resolveAgentStatus(true, false, undefined, 'idle_prompt', true, 2)
+    expect(s.label).toBe('Waiting (2 subagents)')
+    expect(s.color).toBe('bg-amber-600')
+    expect(s.pulse).toBe(true)
+    expect(s.icon).toBe('clock')
+  })
+
+  it('singularizes the label for one subagent', () => {
+    expect(resolveAgentStatus(true, false, undefined, 'idle_prompt', true, 1).label).toBe('Waiting (1 subagent)')
+  })
+
+  it('keeps plain Waiting on zero/undefined counters (stale-low tolerance, plugin#17)', () => {
+    expect(resolveAgentStatus(true, false, undefined, 'idle_prompt', true, 0).label).toBe('Waiting')
+    expect(resolveAgentStatus(true, false, undefined, 'idle_prompt', true, undefined).label).toBe('Waiting')
+  })
+
+  it('higher-priority states still win over the subagent flavor', () => {
+    expect(resolveAgentStatus(true, false, undefined, 'permission_prompt', true, 3).label).toBe('Permission')
+    expect(resolveAgentStatus(true, false, undefined, 'rate_limited', true, 3).label).toBe('Rate limited')
+    expect(resolveAgentStatus(true, false, 'active', undefined, false, 3).label).toBe('Exited')
+  })
+})

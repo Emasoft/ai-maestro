@@ -29,6 +29,16 @@ export interface SessionActivityInfo {
    *     or the hook hasn't reported. The badge falls through to 'Active' or 'Idle'.
    */
   notificationType?: string
+  /**
+   * Live background-subagent counter from the session-tracking hook
+   * (TRDD-O8NCNRWO). Since Claude Code 2.1.198 subagents run in the background
+   * by default, so `idle_prompt` alone no longer means "safe to stop/restart".
+   * `> 0` = subagents provably running (the UI shows the subagents-running
+   * waiting flavor and the restart queue holds). `undefined`/`0` = unknown or
+   * none — NOT proof of safety (the hook can drop the counter,
+   * ai-maestro-plugin#17); the server-side 409 gate stays the enforcer.
+   */
+  subagentCount?: number
 }
 
 export type SessionActivityMap = Record<string, SessionActivityInfo>
@@ -135,14 +145,24 @@ export function useSessionActivity() {
             const validStatuses: readonly string[] = ['active', 'idle', 'waiting']
             const status: SessionActivityStatus = validStatuses.includes(data.status) ? data.status : 'idle'
 
-            // Real-time status update — only extract known fields
+            // Real-time status update — only extract known fields.
+            // TRDD-O8NCNRWO: MERGE over the previous entry instead of replacing
+            // it — the WS payload doesn't carry every field (subagentCount
+            // arrives via the initial /api/sessions/activity fetch and the
+            // poll fallback), and a replace would silently drop it on the
+            // first status_update (the exact replace-not-merge bug that
+            // corrupted the hook's own counter, ai-maestro-plugin#17).
             setActivity(prev => ({
               ...prev,
               [data.sessionName]: {
+                ...prev[data.sessionName],
                 lastActivity: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString(),
                 status,
                 hookStatus: typeof data.hookStatus === 'string' ? data.hookStatus : undefined,
                 notificationType: typeof data.notificationType === 'string' ? data.notificationType : undefined,
+                ...(typeof data.subagentCount === 'number' && Number.isFinite(data.subagentCount) && data.subagentCount >= 0
+                  ? { subagentCount: data.subagentCount }
+                  : {}),
               }
             }))
           }

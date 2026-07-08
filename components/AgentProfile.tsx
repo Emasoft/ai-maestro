@@ -368,6 +368,7 @@ export default function AgentProfile({ isOpen, onClose, agentId, sessionStatus, 
     activityInfo?.status,
     notificationType,
     sessionStatus?.programRunning,
+    activityInfo?.subagentCount,
   )
   const LiveStatusGlyph = liveStatus.icon ? STATUS_GLYPH[liveStatus.icon] : null
   const liveStatusTextColor = liveStatus.color.replace('bg-', 'text-').replace(/-\d+$/, '-400')

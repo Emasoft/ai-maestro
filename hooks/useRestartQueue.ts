@@ -129,7 +129,15 @@ export function useRestartQueue() {
         if (activeRestartsRef.current.has(sessionName)) continue
 
         const info = getSessionActivityRef.current(sessionName)
-        if (info?.notificationType === 'idle_prompt') {
+        // TRDD-O8NCNRWO: idle_prompt alone stopped being the safe state at CC
+        // 2.1.198 (background subagents by default). Hold the deferred restart
+        // while the counter PROVES live subagents — a client-side courtesy
+        // check to avoid hammering the server's 409 gate every poll cycle; the
+        // server remains the enforcer (its own fresh read + 409). undefined/0
+        // falls through: the counter can be stale-low (ai-maestro-plugin#17)
+        // and blocking on unknown would wedge the queue forever.
+        const subagentsRunning = typeof info?.subagentCount === 'number' && info.subagentCount > 0
+        if (info?.notificationType === 'idle_prompt' && !subagentsRunning) {
           // Safe state reached — fire restart
           activeRestartsRef.current.add(sessionName)
 

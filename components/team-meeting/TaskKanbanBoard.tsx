@@ -96,7 +96,7 @@ export default function TaskKanbanBoard({
     const activity = getSessionActivity(sessionName)
     const isOnline = agent.sessions?.some(s => s.status === 'online') ?? false
     const resolved = resolveAgentStatus(
-      isOnline, false, activity?.status, activity?.notificationType, undefined
+      isOnline, false, activity?.status, activity?.notificationType, undefined, activity?.subagentCount
     )
     return { color: resolved.color, pulse: resolved.pulse, label: resolved.label }
   }, [agents, getSessionActivity])

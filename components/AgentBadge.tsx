@@ -33,6 +33,8 @@ interface AgentBadgeProps {
   activityStatus?: SessionActivityStatus
   notificationType?: string
   programRunning?: boolean
+  /** Hook's background-subagent counter (TRDD-O8NCNRWO) — >0 shows the "Waiting (N subagents)" flavor */
+  subagentCount?: number
   unreadCount?: number
   onSelect: (agent: Agent) => void
   onRename?: (agent: Agent) => void
@@ -146,8 +148,9 @@ function getStatusInfo(
   activityStatus?: SessionActivityStatus,
   notificationType?: string,
   programRunning?: boolean,
+  subagentCount?: number,
 ) {
-  return resolveAgentStatus(isOnline, isHibernated, activityStatus, notificationType, programRunning)
+  return resolveAgentStatus(isOnline, isHibernated, activityStatus, notificationType, programRunning, subagentCount)
 }
 
 export default function AgentBadge({
@@ -156,6 +159,7 @@ export default function AgentBadge({
   activityStatus,
   notificationType,
   programRunning,
+  subagentCount,
   unreadCount,
   onSelect,
   onRename,
@@ -176,7 +180,7 @@ export default function AgentBadge({
   const isOnline = agent.session?.status === 'online' || agent.sessions?.[0]?.status === 'online'
   const isHibernated = !isOnline && agent.sessions && agent.sessions.length > 0
 
-  const statusInfo = getStatusInfo(isOnline, isHibernated, activityStatus, notificationType, programRunning)
+  const statusInfo = getStatusInfo(isOnline, isHibernated, activityStatus, notificationType, programRunning, subagentCount)
   // Optional glyph beside the status dot (lock/clock/alert) for the actionable
   // states — resolved from the single-source semantic hint, not re-derived here.
   const StatusGlyph = statusInfo.icon ? STATUS_GLYPH[statusInfo.icon] : null

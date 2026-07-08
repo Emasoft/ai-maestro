@@ -1143,6 +1143,7 @@ export default function AgentList({
                                             activityStatus={activityInfo?.status}
                                             notificationType={activityInfo?.notificationType}
                                             programRunning={agent.session?.programRunning}
+                                            subagentCount={activityInfo?.subagentCount}
                                             unreadCount={unreadCounts[agent.id]}
                                             onSelect={handleAgentClick}
                                             onRename={() => onShowAgentProfile(agent)}
@@ -1381,6 +1382,7 @@ export default function AgentList({
                                                   activityStatus={activityStatus}
                                                   notificationType={activityInfo?.notificationType}
                                                   programRunning={agent.session?.programRunning}
+                                                  subagentCount={activityInfo?.subagentCount}
                                                 />
                                               </div>
 
@@ -1731,19 +1733,21 @@ function AgentStatusIndicator({
   activityStatus,
   notificationType,
   programRunning,
+  subagentCount,
 }: {
   isOnline: boolean
   isHibernated?: boolean
   activityStatus?: SessionActivityStatus
   notificationType?: string
   programRunning?: boolean
+  subagentCount?: number
 }) {
   // Single source of truth for the status ladder (lib/agent-status.ts). This row
   // indicator USED to re-implement the priority logic, which is why it silently
   // omitted the rate_limited / api_error states (TRDD-TBGGUA2V P3). Delegating
   // means it gains those (and any future state) automatically, and the ladder
   // lives in exactly one place — no duplicate to drift.
-  const s = resolveAgentStatus(isOnline, isHibernated ?? false, activityStatus, notificationType, programRunning)
+  const s = resolveAgentStatus(isOnline, isHibernated ?? false, activityStatus, notificationType, programRunning, subagentCount)
   const Glyph = s.icon ? STATUS_GLYPH[s.icon] : null
   // Text colour tracks the dot hue (bg-<hue>-NNN → text-<hue>-400) so labels stay
   // legible without a second colour table to keep in sync with the dot.

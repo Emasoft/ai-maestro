@@ -1,9 +1,9 @@
 ---
 trdd-id: QH6WD7XI
 title: Docs alignment for folder adoption — managed gitignore block + allowExternalFolder semantics
-column: planned
+column: completed
 created: 2026-07-08T14:21:32+0200
-updated: 2026-07-08T14:21:32+0200
+updated: 2026-07-08T17:50:00+0200
 current-owner: main-session
 assignee: main-session
 priority: 2
@@ -38,4 +38,23 @@ from code or, worse, "fixes" the managed block away.
    `githubRepo` enrichment field (plugins fetching raw markdown treat that file as the
    between-branches changelog).
 
+## Result — 2026-07-08
+
+Done in one pass (single commit; SHA recorded in implementation-commits):
+
+1. **CLAUDE.md**: `~/agents/<agent-name>/` runtime-tree now documents
+   `.git/info/exclude` (the managed block's REAL home — the scope's original
+   `.gitignore` wording was superseded by the WS1b live catch: repos TRACK
+   `.gitignore`, so the seeder writes info/exclude), and a new
+   "Folder adoption — allowExternalFolder (TRDD-57EBNB72)" subsection in the
+   Element Management Service section covers G03-CLAMP, G05c, the folders-route
+   tombstone filter + `githubRepo` enrichment, the maintainer wizard step order,
+   and the soft/hard delete folder semantics.
+2. **docs/API-CHANGES.md**: new entry "POST /api/agents — allowExternalFolder +
+   managed git-exclude seeding (TRDD-57EBNB72, 2026-07-08)" for raw-markdown
+   plugin consumers.
+
 ## Approval log
+
+- 2026-07-08T17:50:00+0200 — COMPLETED by main-session (tier 0). Docs describe the
+  SHIPPED behavior (info/exclude), not the pre-catch design.

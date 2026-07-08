@@ -40,9 +40,20 @@ USER approved: source repo stays OUTSIDE the harness; plugin projects become fle
   inventory every artifact created in-root, verify .gitignore/publish exclusion, then update
   the maintainer main-agent (its own repo, via issue/its own session), then real imports.
 - **B3 — fleet readiness unknown** — the B2 dry-run pilot IS the test.
-- **B4 — MANAGER (AMAMA) 3-pillars currency** — background audit agent dispatched 2026-07-08
-  (17-column vocab, folder lifecycle + batch-approval semantics, TRDD v2 ids/approval-tier,
-  old-vs-DEP rule filename refs, comm-graph v3, R9.13). Report lands in reports/amama-audit/.
+- **B4 — MANAGER (AMAMA) 3-pillars currency** — AUDIT DONE 2026-07-08 (report:
+  `reports/amama-audit/20260708_120401+0200-3pillars-currency.md`; findings identical in the
+  published v2.12.12 AND the local tree, which is ahead 6 + 27 dirty with orthogonal
+  token-efficiency work; emasoft-* cross-contamination CLEAN). Score 1 CURRENT / 2 STALE /
+  3 PARTIAL: (1) kanban STALE — a parallel 5-status pipeline (backlog/pending/in_progress/
+  review/completed) taught as THE task system, 17-set never enumerated; (2) folder lifecycle +
+  batch approval CURRENT; (3) TRDD v2 PARTIAL — case-sensitive short-id lookup,
+  implementation-commits absent; (4) rule refs STALE — 9 refs to the old global filenames,
+  0 to the IND/DEP names; (5) comm graph PARTIAL — persona exemplary but
+  proactive-kanban-monitoring.md routes MANAGER→orchestrator/specialists (forbidden R6-v3
+  edges); (6) R9.13 PARTIAL — AUTONOMOUS/MAINTAINER role-plugin mappings unnamed. 11-point fix
+  list FILED as **Emasoft/ai-maestro-assistant-manager-agent#24** (item 7 depends on
+  janitor#73; the rest independent). B4 investigation CLOSED — fix execution belongs to the
+  AMAMA repo (its future fleet agent or its own dev session).
 - **B5 — janitor token burn (biggest risk).** Preliminary measurement 2026-07-08
   (token_report --attribution): NO runaway — fleet 5h = 29.1M weighted (~97k/min TOTAL across
   80 projects); top consumer = the janitor's own DEV project (13.3M/5h, 46% — its Claude doing

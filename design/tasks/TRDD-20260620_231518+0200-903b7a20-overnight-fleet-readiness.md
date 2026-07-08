@@ -21,6 +21,48 @@ labels: [overnight, fleet-readiness, governance, security, scripts, scenarios]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-06-20
 
+**▶ UPDATE 2026-07-08T11:40 (USER approved the hybrid fleet plan — pre-fleet blockers B1..B5 + first probe results):**
+USER approved: source repo stays OUTSIDE the harness; plugin projects become fleet agents
+(MAINTAINER/AUTONOMOUS, no teams); cross-boundary channel = GitHub. Blockers before any import:
+
+- **B1 — import system incomplete.** DECISION (recommended, executing for the pilot): **Path C
+  — fresh `git clone` of each plugin repo into `~/agents/<plugin>-dev/`**, NOT folder import.
+  This sidesteps all 6 import defects (unique naming, dotfile copy, absolute-path rewrite,
+  jsonl /resume migration, git-root autodetect, .claude-root ambiguity) AND needs no hook/UI
+  change. Durable knowledge must live in each repo (TRDDs + git-tracked PROJECT wikimem), not
+  in the old session jsonl. Path A (finish folder-import) and Path B (in-place import +
+  relax the ~/agents confinement to $HOME) stay DEFERRED backlog candidates — B is a
+  governance-invariant change (weakens the delete-folder safety net) → proposal-tier if pursued.
+- **B2 — maintainer plugin not plugin-root-ready.** It was designed to clone targets into
+  subfolders/containers; as a fleet agent its OWN workdir root == the plugin repo root (own
+  publish.py + workflows). Risk: local-scoped ai-maestro plugin artifacts polluting the repo /
+  the publish. PLAN: dry-run FIRST with a dummy/cloned plugin repo as a disposable agent,
+  inventory every artifact created in-root, verify .gitignore/publish exclusion, then update
+  the maintainer main-agent (its own repo, via issue/its own session), then real imports.
+- **B3 — fleet readiness unknown** — the B2 dry-run pilot IS the test.
+- **B4 — MANAGER (AMAMA) 3-pillars currency** — background audit agent dispatched 2026-07-08
+  (17-column vocab, folder lifecycle + batch-approval semantics, TRDD v2 ids/approval-tier,
+  old-vs-DEP rule filename refs, comm-graph v3, R9.13). Report lands in reports/amama-audit/.
+- **B5 — janitor token burn (biggest risk).** Preliminary measurement 2026-07-08
+  (token_report --attribution): NO runaway — fleet 5h = 29.1M weighted (~97k/min TOTAL across
+  80 projects); top consumer = the janitor's own DEV project (13.3M/5h, 46% — its Claude doing
+  the reduction work, not heartbeat overhead); ai-maestro = 1.4M/5h. DEFINITIVE test = pilot
+  checkpoint 1: one imported agent left IDLE 1-2h with janitor armed, its project tokens must
+  stay ~0. The "move janitor essentials into the core plugin" idea = existing TRDD-OZZB3DJA
+  (janitor-to-server-migration) — defer, coordinate from inside once the fleet is up.
+- **Coordination channel:** keep GitHub; open ONE pinned "fleet-coordination" issue as the
+  mailbox this session polls cheaply. An AMP liaison identity for the source-repo session
+  (identity without managed-agent status) = future TRDD candidate, post-PR.
+
+**G8 probe (major find):** the webdesign role plugin ALREADY EXISTS locally at
+`~/Code/AI-MAESTRO-WEBDESIGN-AGENT/` — plugin name `ai-maestro-webdesign` (v0.1.0), main agent
+`ai-maestro-webdesign-main-agent.md`, CPV cleared to publishable (commit 40010b0, PR #123),
+dormant since 2026-06-21. MISSING for G8: (1) NO `.agent.toml` (quad-identity #3 → not yet a
+valid role plugin; needs compatible-titles [MEMBER] + compatible-clients), (2) NO git remote →
+no GitHub repo, (3) not in the Emasoft/ai-maestro-plugins marketplace. Naming decision needed
+by ITS project (not ours): main-agent name forces plugin name `ai-maestro-webdesign`, while the
+role-plugin convention is `…-agent` — either rename the quad or keep `ai-maestro-webdesign`.
+
 **▶ UPDATE 2026-07-08T10:50 (USER expanded the PR gate — this checklist is now the campaign's authoritative scope):**
 The USER ruled the governance PR to main PREMATURE. It is gated on ALL of the following
 (initial status from 2026-07-08 read-only probes; update in place as each gate is verified):

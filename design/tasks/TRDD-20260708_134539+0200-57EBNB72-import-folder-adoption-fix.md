@@ -12,6 +12,7 @@ effort: M
 labels: [fleet-readiness, import-system, agent-workdir]
 task-type: bugfix
 parent-trdd: TRDD-903b7a20
+eht: [TRDD-VT6SSI0T, TRDD-QH6WD7XI, TRDD-E6MD2FNX]
 approval-tier: 0
 release-via: none
 test-requirements: [unit, integration, typecheck, lint]

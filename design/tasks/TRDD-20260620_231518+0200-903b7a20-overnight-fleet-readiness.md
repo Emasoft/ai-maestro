@@ -65,12 +65,12 @@ slug, i.e. the folder Claude Code actually ran in, holding `.claude/`).** Decode
 | janitor | `~/Code/AI-MAESTRO-JANITOR/ai-maestro-janitor/` (subfolder) |
 | maintainer | `~/Code/AI-MAESTRO-MAINTAINER-AGENT/ai-maestro-maintainer-agent/` (subfolder) |
 | autonomous | `~/Code/AI-MAESTRO-AUTONOMOUS-AGENT/ai-maestro-autonomous-agent/` (subfolder) |
-| AMAMA (manager) | `~/Code/EMASOFT-ASSISTANT-MANAGER/` |
-| chief-of-staff | `~/Code/EMASOFT-CHIEF-OF-STAFF/` |
-| architect | `~/Code/EMASOFT-ARCHITECT-AGENT/` |
-| orchestrator | `~/Code/EMASOFT-ORCHESTRATOR-AGENT/` |
-| integrator | `~/Code/EMASOFT-INTEGRATOR-AGENT/` |
-| programmer | `~/Code/EMASOFT-PROGRAMMER-AGENT/` |
+| AMAMA (manager) | `~/Code/EMASOFT-ASSISTANT-MANAGER/ai-maestro-assistant-manager-agent/` (container root is NOT a git repo) |
+| chief-of-staff | `~/Code/EMASOFT-CHIEF-OF-STAFF/ai-maestro-chief-of-staff/` — DUAL container: sibling `emasoft-chief-of-staff/` is the OTHER marketplace's variant, independent git, do not touch |
+| architect | `~/Code/EMASOFT-ARCHITECT-AGENT/ai-maestro-architect-agent/` |
+| orchestrator | `~/Code/EMASOFT-ORCHESTRATOR-AGENT/ai-maestro-orchestrator-agent/` |
+| integrator | `~/Code/EMASOFT-INTEGRATOR-AGENT/ai-maestro-integrator-agent/` |
+| programmer | `~/Code/EMASOFT-PROGRAMMER-AGENT/ai-maestro-programmer-agent/` |
 | webdesign | `~/Code/AI-MAESTRO-WEBDESIGN-AGENT/` |
 | code-auditor | `~/Code/EMASOFT-CODE-AUDITOR-AGENT/code-auditor-agent/` — BOTH root and subfolder slugs exist (the ambiguity case) |
 | CPV | `~/Code/CLAUDE-PLUGIN-VALIDATION/` (+ `claude-plugins-validation` subfolder slug via worktree) |
@@ -79,10 +79,29 @@ slug, i.e. the folder Claude Code actually ran in, holding `.claude/`).** Decode
 | visual-communicator | `~/Code/visual-comunicator/` (note folder typo) |
 | web-scenario-tester | **NO `~/Code/` slug found** — locate before G3 (may live elsewhere or under an unexpected name) |
 
-Pilot consequence (amends B1 Path C): before cloning any plugin fresh into `~/agents/`, CHECK its
-local dev folder for divergence (dirty tree / commits ahead of GitHub) — unpushed local work must
-be pushed from that project's OWN session first, else the fleet agent starts from a stale base.
-B4 audit agent updated mid-flight to also diff local AMAMA vs the GitHub clone.
+**Two-marketplace disambiguation (USER, 2026-07-08 — MANDATORY before touching any plugin):**
+a PARALLEL plugin family exists. `Emasoft/ai-maestro-plugins` = the FLEET marketplace
+(`ai-maestro-plugin` core, the 8 `ai-maestro-*` role plugins, `ai-maestro-janitor`,
+`ai-maestro-visual-communicator-plugin`). `Emasoft/emasoft-plugins` = the general marketplace,
+which ships BOTH the external plugins (perfect-skill-suggester, claude-plugins-validation,
+llm-externalizer, code-auditor-agent, claude-plugins-management, token-reporter,
+rechecker-plugin, claude-menu-system, emasoft-chat-history, no-install-linters-expert,
+emasoft-universal-clipboard) AND six `emasoft-*` PARALLEL VARIANTS of the role plugins
+(emasoft-assistant-manager-agent, emasoft-chief-of-staff, emasoft-architect-agent,
+emasoft-orchestrator-agent, emasoft-integrator-agent, emasoft-programmer-agent). For ALL fleet
+work pick the `ai-maestro-*` variant; the externals (PSS, CPV, llm-externalizer, …) correctly
+come from emasoft-plugins. When in doubt, check the plugin's name against the two marketplace
+manifests on GitHub — never guess from the container folder name.
+
+Pilot consequence (amends B1 Path C — REVISED per USER 2026-07-08: most local plugin projects
+are AHEAD of their GitHub origins, pushes held back by pending fixes): fleet agents must NOT
+clone from GitHub (stale for most plugins). Instead **clone from the LOCAL dev repo path**
+(`git clone ~/Code/<container>/<ai-maestro-plugin-subfolder>/ ~/agents/<plugin>-dev/`) then
+re-point origin to the GitHub URL — committed-but-unpushed work carries over automatically,
+and no premature push is forced. Per-plugin pre-clone check reduces to: DIRTY uncommitted
+files in the dev folder must be committed there (by that project's own session) before the
+clone, else that work is left behind. B4 audit agent updated mid-flight to audit the LOCAL
+AMAMA copy as primary and diff it vs the GitHub clone.
 
 **G8 probe (major find):** the webdesign role plugin ALREADY EXISTS locally at
 `~/Code/AI-MAESTRO-WEBDESIGN-AGENT/` — plugin name `ai-maestro-webdesign` (v0.1.0), main agent

@@ -1,9 +1,9 @@
 ---
 trdd-id: O8NCNRWO
 title: Harden the stop/restart safe-state gate for CC ≥2.1.198 background subagents
-column: dev
+column: ai_review
 created: 2026-07-08T19:34:50+0200
-updated: 2026-07-08T19:42:00+0200
+updated: 2026-07-08T20:05:00+0200
 current-owner: main-session
 assignee: main-session
 priority: 1
@@ -18,7 +18,7 @@ release-via: none
 test-requirements: [unit, typecheck]
 impacts: []
 relevant-rules: []
-implementation-commits: [47676228]
+implementation-commits: [47676228, c88ffda8, 3f47dce4]
 external-refs: ["github.com/Emasoft/ai-maestro-plugin/issues/17"]
 ---
 
@@ -82,9 +82,15 @@ the subagents-running flavor; with force, verify the abandon prompt is handled.
   (readSubagentCount / evaluateExitGate / looksLikeAbandonPrompt), the 409 gate in both routes with
   `?force=true`, the restart poll's half-timeout abandon-dialog probe + hinted 504, 12 unit tests.
   Gate: tsc 0 · eslint 0 · 26 tests green.
-- OPEN — **Phase 2 (items 3+4)**: UI awareness — thread `subagentCount` through the WS broadcast →
-  `useSessionActivity` → `lib/agent-status.ts` "waiting (subagents running)" flavor + the
-  `useRestartQueue` hold. OPEN — **item 5 docs**: CLAUDE.md §Session Control premise +
-  `docs/CLAUDE-CODE-COMPATIBILITY-AUDIT.md` 2.1.133→204 extension from the audit report.
+- 2026-07-08T19:55 — **item 5 landed (c88ffda8)**: fifth compat-audit pass 2.1.190–204 in the
+  tracked doc + CLAUDE.md safe-state premise corrected + doc-index range fixed.
+- 2026-07-08T20:05 — **Phase 2 landed (3f47dce4)**: items 3+4 — `subagentCount` threaded
+  getHookState → /api/sessions/activity → `useSessionActivity` (WS handler now MERGES over the
+  prev entry — a replace would drop the counter on the first status_update), the
+  "Waiting (N subagents)" flavor in `resolveAgentStatus` + all four display consumers, and the
+  `useRestartQueue` courtesy hold. **All 6 fix-plan items complete.** Parked at `ai_review`:
+  the positive-path live e2e (an actual 409 + UI flavor with a REAL background subagent) is
+  observable only after the hook stops dropping the counter — gated on ai-maestro-plugin#17.
+  The negative path (unknown counter never blocks) is what ships today and is unit-proven.
 
 ## Approval log

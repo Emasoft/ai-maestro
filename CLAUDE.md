@@ -782,6 +782,12 @@ referenced by current code — confirm before relying on them.
 │   │   └── agents/ rules/ commands/ skills/   # local elements
 │   ├── CLAUDE.md                 #   role/agent instructions (provided by the role-plugin)
 │   ├── .git/                     #   most agent workdirs are git repos
+│   │   └── info/exclude          #     managed ignore block (marker `ai-maestro:managed-gitignore`) —
+│   │                             #     seeded at CreateAgent G05c + self-healed on wake; covers
+│   │                             #     .claude/settings.local.json, .claude/rules/aimaestro-*.md,
+│   │                             #     .mcp.json, runtime artifacts (.janitor/, reports*/, *_dev/, …).
+│   │                             #     Lives in info/exclude (NOT .gitignore — repos TRACK .gitignore,
+│   │                             #     writing there dirties the very tree the seeder protects).
 │   ├── reports_dev/ docs_dev/    #   gitignored per-project dev scratch (_dev folders)
 │   └── .aimaestro/               #   FUTURE — TRDD-1ee4a3c1 Phase 2 portable per-agent mirror. NOT present yet.
 ├── role-plugins/                 # ai-maestro-local-roles-marketplace SOURCE
@@ -1701,6 +1707,16 @@ All plugin/element/agent-property mutations go through `services/element-managem
 - `ChangeName`, `ChangeFolder`, `ChangeAvatar`, `ChangeCLIArgs` — Agent property pipelines
 
 The PATCH `/api/agents/{id}` route is a router that dispatches to the appropriate Change* function based on which fields are in the body.
+
+### Folder adoption — `allowExternalFolder` (TRDD-57EBNB72)
+
+`POST /api/agents` accepts `allowExternalFolder: true` (zod schema in `lib/create-agent-schema.ts`) to ADOPT an existing folder in place instead of creating `~/agents/<name>/`. Pipeline semantics:
+
+- **G03-CLAMP**: the flag is honored only for folders under `$HOME`; anything outside (e.g. `/Volumes/...`) has the flag ignored (ops line `G03-CLAMP`) and the workdir is forced back to `~/agents/<name>/`. G03-ENFORCE/G03-SAFETY are unchanged; team titles remain force-pathed.
+- **G05c**: for git-repo workdirs, a managed ignore block (marker `ai-maestro:managed-gitignore`) is seeded into `.git/info/exclude` — never `.gitignore`, which repos track — via `lib/workdir-gitignore-seed.ts`; the wake path (`ensureCorePluginInstalled`) self-heals it. Resolver covers `.git` dir, submodule gitdir-file, and linked-worktree `commondir` shapes.
+- **Folders route** (`GET /api/agents/folders`): soft-deleted agents' folders are no longer marked taken (tombstone filter), and the browsed path is enriched with `githubRepo` (pure-fs read of `.git/config`).
+- **Maintainer wizard order** is `title → folder → github-repo → summary`, with `githubRepo` prefilled from the browsed folder's origin (Gate 9a requires it for MAINTAINER, R19.3).
+- Deletion semantics: SOFT delete keeps the folder and the registry tombstone (re-adoption over a tombstone works); HARD delete (`?hard=true&deleteFolder=true`) honors `deleteFolder` and removes both — folder removal only ever applies under `~/agents/` (G03-SAFETY guard).
 
 ### ChangeClient — Plugin Continuity (R18)
 

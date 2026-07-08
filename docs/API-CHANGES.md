@@ -543,6 +543,30 @@ derived without fabricating it. The closest real signal already shipped is
 numeric context-usage gauge is deferred until a non-fabricated source exists
 (e.g. a future Claude Code hook field or an opt-in transcript-size estimate).
 
+## POST `/api/agents` — `allowExternalFolder` + managed git-exclude seeding (TRDD-57EBNB72, 2026-07-08)
+
+Folder ADOPTION is now a first-class create path:
+
+- **`allowExternalFolder: boolean`** (optional) joined the `.strict()` request
+  schema (now in `lib/create-agent-schema.ts`). With the flag, an existing
+  folder under `$HOME` is adopted IN PLACE as the agent workdir; outside
+  `$HOME` the flag is ignored (**G03-CLAMP** ops line) and the workdir is
+  forced back to `~/agents/<name>/`. Without the flag, behavior is unchanged.
+- **G05c (new create gate)**: git-repo workdirs get a managed ignore block
+  (marker `ai-maestro:managed-gitignore`) written to **`.git/info/exclude`** —
+  deliberately NOT `.gitignore`, which plugin repos track — covering
+  `.claude/settings.local.json`, `.claude/rules/aimaestro-*.md`, `.mcp.json`,
+  and runtime artifacts. The wake path re-seeds it (self-heal). Consumers must
+  not "fix" agent repos by committing these files; they are intentionally
+  invisible to git.
+- **`GET /api/agents/folders`**: folders owned only by soft-deleted agents are
+  selectable again (tombstone filter), and the response for the browsed path
+  now carries **`githubRepo`** (parsed from `.git/config`) — used by the
+  maintainer wizard's new `title → folder → github-repo` step order.
+- Deletion semantics clarified: soft delete keeps folder + tombstone
+  (re-adoption works); `?hard=true&deleteFolder=true` removes both (folder
+  removal only under `~/agents/`).
+
 ## How plugins should consume this doc
 
 1. The role-plugins use `https://raw.githubusercontent.com/Emasoft/ai-maestro/governance-rules/docs/GOVERNANCE-RULES.md` (and similar for other docs) to learn about API surface.

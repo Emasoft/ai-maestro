@@ -1,9 +1,9 @@
 ---
 trdd-id: VT6SSI0T
 title: WS1b — dummy live-import verification protocol (adopt a cloned repo end-to-end)
-column: dev
+column: completed
 created: 2026-07-08T14:21:32+0200
-updated: 2026-07-08T14:21:32+0200
+updated: 2026-07-08T17:28:00+0200
 current-owner: main-session
 assignee: main-session
 priority: 0
@@ -53,7 +53,28 @@ blockers B3 (fleet-readiness evidence) and B5 (definitive idle-burn measurement)
 - Step 6: soft delete (200, `hard:false` — note: `?deleteFolder=true` does NOT remove the
   folder on soft delete) then re-adopt of the SAME folder over the tombstone: **201** —
   tombstone fixes hold. Agent 3d4b21f3-1f67-4f10-8cdd-3f8e85553ee3 now owns the workdir.
-- OPEN: step 5 — wake `dummy-fleet-pilot`, idle 1-2h janitor-armed, assert clean tree +
-  idle burn ~0 (token_report on its project slug), then final delete + cemetery purge.
+- **Step 5 PASS (2026-07-08T17:20):** woken 14:35:43, left idle 2h44m with the janitor armed.
+  Pane confirmed claude v2.1.204 ALIVE at the idle prompt (0% ctx, 0 turns). Idle burn =
+  **literally 0** — the dummy never appeared in the token-attribution table over the exact
+  14:35→17:20 window and never even created a `~/.claude/projects/` transcript dir.
+  `git status --porcelain` = 0 entries after the whole window.
+- **Final cleanup PASS:** soft delete (200) → cemetery purge of both export zips
+  (`DELETE /api/agents/cemetery` takes a JSON body `{filename}`, one fresh one-shot sudo
+  token per call) → `?hard=true&deleteFolder=true` on BOTH agent ids (3d4b21f3 current +
+  549d1dc4 first-cycle tombstone). End state: registry mentions 0, per-agent dirs 0,
+  workdir folder GONE (deleteFolder IS honored on hard delete — only soft delete skips it),
+  cemetery 0, tmux sessions 0.
+- Minor observations (non-blocking, for the backlog):
+  1. `GET /api/agents?includeDeleted=true` did NOT return the soft-deleted tombstone
+     (registry.json had it; the API filtered it) — param possibly unwired.
+  2. A user/plugin-scope `SessionStart:startup` hook errors with a non-blocking traceback in
+     any fresh agent workdir (the workdir itself has no SessionStart hooks) — cosmetic today,
+     every fleet agent will show it.
+
+**VERDICT: WS1b PASS end-to-end.** Closes B1 (import mechanics live-verified) and B5
+(definitive idle-burn = 0) on TRDD-903b7a20; parent TRDD-57EBNB72 test-verified live.
 
 ## Approval log
+
+- 2026-07-08T17:28:00+0200 — COMPLETED by main-session (tier 0). All 7 protocol steps PASS;
+  system restored to pre-test state (zero dummy remnants).

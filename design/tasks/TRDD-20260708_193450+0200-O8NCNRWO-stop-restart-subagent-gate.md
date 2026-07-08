@@ -1,9 +1,9 @@
 ---
 trdd-id: O8NCNRWO
 title: Harden the stop/restart safe-state gate for CC ≥2.1.198 background subagents
-column: planned
+column: dev
 created: 2026-07-08T19:34:50+0200
-updated: 2026-07-08T19:34:50+0200
+updated: 2026-07-08T19:42:00+0200
 current-owner: main-session
 assignee: main-session
 priority: 1
@@ -18,7 +18,7 @@ release-via: none
 test-requirements: [unit, typecheck]
 impacts: []
 relevant-rules: []
-implementation-commits: []
+implementation-commits: [47676228]
 external-refs: ["github.com/Emasoft/ai-maestro-plugin/issues/17"]
 ---
 
@@ -75,5 +75,16 @@ Architecture) — is broken:
 `npx tsc --noEmit` + targeted vitest suites green; manual: wake an agent, spawn a
 long-running background subagent, verify Stop returns 409 without force and the UI shows
 the subagents-running flavor; with force, verify the abandon prompt is handled.
+
+## Progress
+
+- 2026-07-08T19:42 — **Phase 1 landed (47676228)**: fix-plan items 1+2+6 — `lib/session-safe-state.ts`
+  (readSubagentCount / evaluateExitGate / looksLikeAbandonPrompt), the 409 gate in both routes with
+  `?force=true`, the restart poll's half-timeout abandon-dialog probe + hinted 504, 12 unit tests.
+  Gate: tsc 0 · eslint 0 · 26 tests green.
+- OPEN — **Phase 2 (items 3+4)**: UI awareness — thread `subagentCount` through the WS broadcast →
+  `useSessionActivity` → `lib/agent-status.ts` "waiting (subagents running)" flavor + the
+  `useRestartQueue` hold. OPEN — **item 5 docs**: CLAUDE.md §Session Control premise +
+  `docs/CLAUDE-CODE-COMPATIBILITY-AUDIT.md` 2.1.133→204 extension from the audit report.
 
 ## Approval log

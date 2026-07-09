@@ -26,7 +26,7 @@ review-requirements: []
 runtime-targets: [macos, linux]
 impacts: []
 attempts: 0
-implementation-commits: [4b1a9b48, c7d9f8a7]
+implementation-commits: [4b1a9b48, c7d9f8a7, 6c905104]
 external-refs: []
 ---
 
@@ -52,7 +52,7 @@ a control surface because it is called "chat".
 | `amp-init` | POST | hand-rolled `isManager` | re-mint AMP keys; **self allowed** | needs a decision, not a fix |
 | `export` | POST | `enforceAuth` | export ANY agent's full transcripts | **OPEN — confidentiality** |
 | `messages/[messageId]` | PATCH DELETE POST | `authenticateFromRequest`, unused | delete/edit ANY agent's AMP messages | **OPEN — governance channel** |
-| `email/addresses/[address]` | PATCH DELETE | ~~`enforceAuth`~~ → **`authorize('modify-agent')`** | mutate ANY agent's address book | **FIXED** `?` |
+| `email/addresses/[address]` | PATCH DELETE | ~~`enforceAuth`~~ → **`authorize('modify-agent')`** | mutate ANY agent's address book | **FIXED** `6c905104` |
 | `subconscious` | POST | `enforceAuth` | `triggerSubconsciousAction` on ANY agent | **OPEN** |
 | `element-inventory` | POST | `enforceAuth` | writes agent element state | **OPEN** |
 | `metrics` | PATCH | `enforceAuth` | `updateMetrics` on ANY agent | **OPEN — low blast radius** |
@@ -103,12 +103,15 @@ D3RP7KQZ. Driving your own terminal is permitted; refusing an order is not. So
 Falsified before it was believed: with the guard removed, exactly the seven
 refusal assertions fail and the seven permissive ones still pass.
 
-**NEXT ACTION:** file ONE Tier-2 proposal covering everything left, because all of
-it is policy: the four routes needing new AuthActions (`export`,
-`messages/[messageId]`, `subconscious`, `element-inventory`), the `amp-init`
+**NEXT ACTION:** none in this TRDD — the Tier-0 work is done. Everything left is
+policy and is carried by **TRDD-YEE33F3A** (`design/proposals/`, tier 2, awaiting
+the USER or MANAGER): the five routes needing new AuthActions, the `amp-init`
 self-remint question, and the dead `manage-amp-address` action. Do NOT invent
-those actions inside this Tier-0 EHT. `metrics` is the one remaining route that
-may be a pure mapping (`modify-agent`); check whether the hook writes it.
+those actions here.
+
+This TRDD closes when YEE33F3A is decided and its fixes land — at which point
+`UNREVIEWED_INVENTORY` reaches `[]` and the coverage guardrail alone keeps the
+surface honest.
 
 **Load-bearing facts.**
 - `requireAuth` / `enforceAuth` AUTHENTICATE only. Neither authorizes. Treating

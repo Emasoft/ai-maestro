@@ -4,7 +4,7 @@ title: Decide the AuthActions for the five remaining unauthorized agent-scoped r
 column: planned
 approval-tier: 2
 created: 2026-07-09T19:01:42+0200
-updated: 2026-07-09T23:34:05+0200
+updated: 2026-07-10T00:44:00+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -24,17 +24,85 @@ test-requirements: [unit]
 review-requirements: [human-review]
 runtime-targets: [macos, linux]
 impacts: [public-api]
-attempts: 1
-implementation-commits: [f56b79f2]
+attempts: 2
+implementation-commits: [f56b79f2, 28593ed7]
 external-refs: []
 ---
 
 # TRDD-YEE33F3A — the five routes that need an AuthAction that does not exist
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-09
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
 
-**1 of 5 done, and it was far worse than the body below says.** Severity raised
-HIGH → **CRITICAL** while implementing `export`.
+**2 of 5 done. Both were worse than the body below says, and in both cases the
+body was wrong because it was written from the route's NAME.** Severity stays
+**CRITICAL**.
+
+### `messages/[messageId]` — DONE (`28593ed7`). Sender forgery, not "delete".
+
+The Part-1 table says the risk is "an agent can delete the directives its COS
+sent it". Reading the code found three defects, and DELETE is the least of them.
+
+- **POST is not "mark read"** (that is PATCH). It is `forwardMessage`, and its
+  path `id` becomes `forwardFromUI`'s `fromAgent` — which lands verbatim in the
+  new message's `from`/`fromAlias`/`forwardedBy`, is written to THAT agent's
+  `sent/` folder, is the identity the governance filter is evaluated against, and
+  for a cross-host recipient is signed with the **HOST key** so the remote
+  accepts it. **Any authenticated caller could send mail AS any agent.**
+- **The same POST, aimed at the caller (`{to: <self>}`), reads any agent's mail.**
+- `sendMessage` in the same file already carries the identical fix, commented
+  SVC2-MAJ-06. Forward was missed.
+
+**The same hole one path over:** `POST /api/messages/forward` took its sender
+from `body.fromSession` and authenticated-then-discarded. Not agent-scoped, so
+the coverage guardrail could not see it. And `headless-router.ts` had all five
+handlers with **no auth at all** — TRDD-f4a8fa1c applied exactly this fix to the
+global `/api/messages` family sitting beside them and skipped these.
+
+**Decision — NO new AuthAction.** The proposed `manage-messages` is REJECTED. A
+mailbox has an OWNER, and this codebase already authorizes mailboxes by
+ownership (`listMessages` here; `denyForeignMailbox` in messages-service).
+Adding `manage-messages` would create two mechanisms for one capability — the
+split-brain the parent audit rejected for `manage-amp-address`. No governance
+title, MANAGER and the owner's own COS included, may read another agent's mail.
+
+**Self-delete PERMITTED, contra the body's suggestion.** The session-scoped twin
+`removeMessage` already permits it (with a test), so forbidding it here only
+moves an attacker one path over. And a mailbox delete is not the queue cancel:
+cancel PREVENTS execution (a live control plane); deleting a delivered message
+does not un-deliver it — the hook already surfaced it, the sender keeps a `sent/`
+copy this route cannot touch, and R15.5 puts the durable record in the
+git-tracked TRDD, not the inbox.
+
+**Incidental bug fixed:** `/api/messages/forward` required `body.to` and
+`body.message` — two fields the service never reads. Both Message Centers post
+`{messageId, fromSession, toSession, forwardNote}`, so the **legitimate UI 400'd
+while an attacker passed by adding two ignored keys.** The guard checked the
+wrong contract.
+
+### CARRIED FORWARD — forward bypasses the R6 title graph (NEW, MEDIUM)
+
+`validateMessageRoute` is enforced only in `send-message-service` and
+`amp-service`. `forwardFromUI` calls `checkMessageAllowed` (the team filter) and
+never consults the title matrix. So **forward is a send primitive that skips R6
+even for a legitimate sender** — a MEMBER may forward to another MEMBER, a blank
+edge. With the forgery closed this is no longer impersonation; it is a distinct
+defect with a distinct mechanism (a missing call, not a missing guard). Fix it
+as its own unit: mirror `send-message-service.ts:366-379`, and keep the web UI
+working (HUMAN has full `Y` to every node).
+
+### The lesson, and it cost a false claim in a doc comment
+
+The first version of the new suite was **vacuous**. Disabling the ROUTE guard
+left all 16 tests green — the service guard silently covered for it, because two
+layers returning an identical 403 are indistinguishable from the HTTP surface. I
+had already *written* "removing it from only ONE layer still fails" as a comment
+before testing it. Falsification caught my own comment lying.
+
+The fix is `layer isolation`: fault-inject an inconsistent AuthContext that
+disarms exactly one guard (unreachable in production, where
+`isSystemOwner === !agentId`). Now route-guard-off fails exactly 1 test;
+service-guard-off fails exactly 4. **Defence-in-depth needs per-layer tests, or
+the layers cover for each other while being deleted one at a time.**
 
 ### `export` — DONE (`f56b79f2`). Key exfiltration, not confidentiality.
 
@@ -79,28 +147,35 @@ a wide margin.
 that emit secrets, **every** verb). The exfil class has **no debt ledger** — a
 route handing out a private key has no acceptable interim state.
 
-### NEXT ACTION — four routes remain, sharpest first
+### NEXT ACTION — three routes remain, sharpest first
 
-1. `messages/[messageId]` — **read the route before choosing.** It has PATCH,
-   DELETE **and POST**. A new action with no special rule denies self-target,
-   which is right for DELETE (an agent must not delete its COS's directives) but
-   may break a legitimate self "mark read" on POST. Do not assume the three verbs
-   share one capability.
-2. `subconscious` — read `triggerSubconsciousAction` first; decide `send-command`
-   (own surface) vs a new `drive-subconscious`.
-3. `element-inventory` — confirm what it writes; likely `modify-agent`.
-4. `metrics` — check the caller (if the agent's own hook writes it, self-drive
+Read the service before choosing the action. Twice now the body's guess, made
+from a route's name, has been wrong in a way that changed the severity.
+
+1. `subconscious` — read `triggerSubconsciousAction` first; decide `send-command`
+   (own surface, self-drive allowed) vs a new `drive-subconscious`. It is already
+   on the dangerous-primitive debt ledger, so fixing it also delists it there.
+2. `element-inventory` — confirm what it writes; likely `modify-agent`.
+3. `metrics` — check the caller (if the agent's own hook writes it, self-drive
    matters); likely `modify-agent`.
 
-Then Part 2 (`amp-init` self-remint) and Part 3 (dead `manage-amp-address`).
-`UNREVIEWED_INVENTORY` reaches `[]` only when all four land — which is what closes
-the parent TRDD-4Q7WMPZK.
+Then the R6 graph bypass on forward (above), Part 2 (`amp-init` self-remint) and
+Part 3 (dead `manage-amp-address`). `UNREVIEWED_INVENTORY` reaches `[]` only when
+all three land — which is what closes the parent TRDD-4Q7WMPZK.
 
-**SUPERSEDED — do NOT carry forward.** The Part-1 table's `export` row
-(`POST` / confidentiality) and the "Suggested shape" bullet proposing
-`view-transcript` for it. Both were written from the route's name and its POST
-handler, without reading `exportAgentZip`. They are kept below only so the error
-stays legible.
+**SUPERSEDED — do NOT carry forward.**
+
+- The Part-1 table's `export` row (`POST` / confidentiality) and the "Suggested
+  shape" bullet proposing `view-transcript` for it. Written from the route's name
+  and its POST handler, without reading `exportAgentZip`.
+- The Part-1 table's `messages/[messageId]` row ("`deleteMessageById` etc." /
+  integrity of the governance channel) and the `manage-messages` suggested shape,
+  including its claim that the delete verb "should almost certainly NOT be
+  self-drive". The sharp verb is POST (sender forgery + arbitrary mailbox read),
+  no new action was warranted, and self-delete is permitted. See the top of this
+  STATE block.
+
+Both are kept below only so the errors stay legible.
 
 **Tier 2.** Successor to the Tier-0 audit TRDD-4Q7WMPZK, which triaged all ten
 agent-scoped routes that authorize nothing, fixed the three that were pure
@@ -228,3 +303,19 @@ other agent's transcripts, and delete the messages its COS sent it.
   the code that justifies it. Every suggested shape in the body is re-verified
   against the implementation before it is adopted — the body's suggestions are
   hypotheses, not findings.
+
+### Decisions made under that mandate
+
+- 2026-07-09 — `export` → new action `export-agent`, **system-owner only**; every
+  agent title denied, MANAGER / COS / self included. The archive carries
+  `keys/private.pem`. (`f56b79f2`)
+- 2026-07-10 — `messages/[messageId]` and `/api/messages/forward` → **ownership,
+  no new action.** `manage-messages` REJECTED (it would duplicate the mailbox
+  authorization this codebase already performs, exactly as `manage-amp-address`
+  would have for the address book). Self-delete PERMITTED. MANAGER and COS denied
+  another agent's mailbox. Rationale and the code that justifies each half are in
+  the STATE block. (`28593ed7`)
+- Both decisions took the security-conservative fork where the evidence was
+  ambiguous, and the LESS restrictive fork (self-delete) only where a shipped
+  sibling already permitted it — because a restriction on one path that its twin
+  does not carry is not a restriction, it is a detour.

@@ -3,7 +3,7 @@ trdd-id: 4Q7WMPZK
 title: Audit the ten agent-scoped mutation routes that authorize nothing
 column: dev
 created: 2026-07-09T17:51:47+0200
-updated: 2026-07-09T19:12:00+0200
+updated: 2026-07-10T00:45:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -51,7 +51,7 @@ a control surface because it is called "chat".
 | `metadata` | PATCH DELETE | `ChangeMetadata` G00 | — | detector artifact, authorized |
 | `amp-init` | POST | hand-rolled `isManager` | re-mint AMP keys; **self allowed** | needs a decision, not a fix |
 | `export` | POST | `enforceAuth` | export ANY agent's full transcripts | **OPEN — confidentiality** |
-| `messages/[messageId]` | PATCH DELETE POST | `authenticateFromRequest`, unused | delete/edit ANY agent's AMP messages | **OPEN — governance channel** |
+| `messages/[messageId]` | PATCH DELETE POST | ~~`authenticateFromRequest`, unused~~ → **mailbox ownership** | POST forwarded AS any agent (sender forgery + arbitrary mailbox read); PATCH/DELETE mutated any mailbox | **FIXED** `28593ed7` |
 | `email/addresses/[address]` | PATCH DELETE | ~~`enforceAuth`~~ → **`authorize('modify-agent')`** | mutate ANY agent's address book | **FIXED** `6c905104` |
 | `subconscious` | POST | `enforceAuth` | `triggerSubconsciousAction` on ANY agent | **OPEN** |
 | `element-inventory` | POST | `enforceAuth` | writes agent element state | **OPEN** |

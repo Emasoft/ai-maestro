@@ -3,7 +3,7 @@ trdd-id: SCLSRS6E
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
 column: complete
 created: 2026-07-09T10:23:21+0200
-updated: 2026-07-09T15:58:00+0200
+updated: 2026-07-09T16:45:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -26,6 +26,31 @@ external-refs: []
 # TRDD-SCLSRS6E — AI Maestro control/monitor API + script layer for governance agents
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-09
+
+**▶ CORRECTION 2026-07-09T16:45 — `complete` means "code landed", NOT "the janitor can
+use it". Do not read this epic as delivered.**
+
+The verification task TRDD-6A2I6ZO0 established empirically that **all eight strict
+routes this epic shipped refuse every agent caller** with `403 aid_title_forbidden`.
+`lib/sudo-guard.ts::requireAidTitle` fails closed for a strict route absent from
+`STRICT_AGENT_RULES`, and none of `panel`, `queue`, `prompt/answer`, or the five
+`/api/trdd/*` verbs were ever added. The janitor — this epic's sole intended consumer —
+cannot call any of them. The read-only surface (`state`, `read-prompt`, `queue-list`,
+`trdd search/read`, `agent config`) is non-strict and does work.
+
+Consequences, all open:
+- `Emasoft/ai-maestro-janitor#76` (the command reference I filed) says the opposite and
+  must be corrected once the policy is decided.
+- Deciding the policy is Tier 2 — proposal **TRDD-D3RP7KQZ** (`design/proposals/`). The
+  obvious mapping is wrong: it would deny an agent driving its OWN panel/queue.
+- The USER path is throttled to 5 strict ops/minute machine-wide — proposal
+  **TRDD-X8R2HP9D**.
+- The wrapper layer has no USER auth path at all (`get_auth_args` reads only `AID_AUTH`),
+  so `aimaestro-*.sh` returns 401 for a human at a terminal. Folded into D3RP7KQZ.
+
+TRDD-6A2I6ZO0 declared the 14 affected strict routes (8 from this epic + 6 older) in a
+new `AGENT_POLICY_PENDING` ledger with a coverage guardrail, so no strict route can ship
+undeclared again. That changed no authorization — it made the refusal honest.
 
 **Origin (USER directive 2026-07-09):** give the **janitor** (and every governance
 agent) the full API + permanent `aimaestro-*`/`amp-*` script surface to MONITOR and

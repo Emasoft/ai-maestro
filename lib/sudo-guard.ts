@@ -207,6 +207,11 @@ export function requireSudoToken(
  * GUARDRAIL (Risk R-2): a test asserts this set is a SUPERSET of every strict
  * route whose handler imports `enforceSystemOwner`. Drift here would let an
  * agent slip past a system-owner-only route via the guard's title branch.
+ *
+ * GUARDRAIL (TRDD-6A2I6ZO0): a second test asserts every strict route in
+ * security-registry.json is DECLARED — in this set, in STRICT_AGENT_RULES, or
+ * in AGENT_POLICY_PENDING. A strict route in none of them still fails closed,
+ * but silently and with a misleading "not available to agents" message.
  */
 export const SYSTEM_OWNER_ONLY_STRICT = new Set<string>([
   'POST /api/governance/password',
@@ -215,6 +220,50 @@ export const SYSTEM_OWNER_ONLY_STRICT = new Set<string>([
   'PATCH /api/settings/auto-update',
   'POST /api/settings/auto-update/run',
   'POST /api/agents/import',
+])
+
+/**
+ * Strict routes whose AGENT policy has never been decided (TRDD-6A2I6ZO0).
+ *
+ * These behave exactly as they did before this set existed — `requireAidTitle`
+ * refuses every agent caller. Nothing here is a new restriction. What changes
+ * is that the refusal is now a STATED position rather than the fall-through
+ * default, and that adding a strict route without deciding its agent policy
+ * fails a test instead of shipping a dead endpoint.
+ *
+ * Why they are here rather than in SYSTEM_OWNER_ONLY_STRICT: "system-owner
+ * only" is itself a policy claim, and for several of these it is probably the
+ * wrong one. `POST /api/agents/[id]/panel` exists so a visualizer plugin —
+ * i.e. an AGENT — can show the human something; the eight epic routes below
+ * were built for the janitor, which is an agent. Declaring them owner-only
+ * would quietly ratify the bug.
+ *
+ * The open question for the epic routes is not "may agents call them" but
+ * "with what target semantics": `authorize()`'s universal self-target rule
+ * refuses an agent acting on itself, yet an agent pushing HTML to its OWN
+ * panel, or enqueuing `/compact` on ITSELF, is the primary use case. That is a
+ * governance decision (see the proposal TRDD), not a mapping detail.
+ *
+ * This set is a DEBT LEDGER: the coverage test pins it to an exact inventory,
+ * so it can shrink as policies are decided but cannot silently grow.
+ */
+export const AGENT_POLICY_PENDING = new Set<string>([
+  // Pre-existing (predate epic TRDD-SCLSRS6E; found by the coverage guardrail).
+  'PATCH /api/agents/[id]',
+  'POST /api/governance/maestro-delegate',
+  'DELETE /api/governance/maestro-delegate',
+  'POST /api/agents/foreign-approvals/[id]/approve',
+  'POST /api/agents/foreign-approvals/[id]/reject',
+  'POST /api/system/aid-recover',
+  // Shipped by epic TRDD-SCLSRS6E — the agent-control + TRDD-lifecycle surface.
+  'POST /api/agents/[id]/panel',
+  'POST /api/agents/[id]/queue',
+  'POST /api/agents/[id]/prompt/answer',
+  'PATCH /api/trdd/[id]',
+  'POST /api/trdd/[id]/approve',
+  'POST /api/trdd/[id]/refuse',
+  'POST /api/trdd/[id]/promote',
+  'POST /api/trdd/[id]/archive',
 ])
 
 /**
@@ -425,6 +474,25 @@ export function requireAidTitle(
       {
         error: 'aid_title_forbidden',
         message: 'This operation is restricted to the system owner.',
+        route: routeKey,
+      },
+      { status: 403 }
+    )
+  }
+
+  // (a2) TRDD-6A2I6ZO0 — strict routes whose agent policy is undecided. Same
+  // refusal as the fail-closed default below, but the caller is told the truth:
+  // this is an unanswered governance question, not a deliberate exclusion. An
+  // agent (the janitor) hitting "not available to agents" on the very routes
+  // built for it is how the epic's whole write surface stayed inert unnoticed.
+  if (AGENT_POLICY_PENDING.has(routeKey)) {
+    return NextResponse.json(
+      {
+        error: 'agent_policy_undefined',
+        message: 'Agent access to this operation has not been defined yet.',
+        devHint:
+          'The route is strict but absent from STRICT_AGENT_RULES. Decide its agent policy ' +
+          '(AuthAction + target semantics) and move it out of AGENT_POLICY_PENDING in lib/sudo-guard.ts.',
         route: routeKey,
       },
       { status: 403 }

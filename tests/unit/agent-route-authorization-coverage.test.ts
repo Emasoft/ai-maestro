@@ -80,6 +80,11 @@ const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bauth\.cont
  *   - `chat` POST ends in `sendKeys(..., {literal:true, enter:true})` — arbitrary
  *     text plus Enter into any agent's pane. It was the unguarded twin of the
  *     `send-command` route. Pinned by tests/unit/chat-send-authorization.test.ts.
+ *   - `email/addresses/[address]` PATCH+DELETE let any agent rewrite any agent's
+ *     address book, while its THREE siblings already authorized with
+ *     `modify-agent`. A missed route, not a policy gap. Pinned by
+ *     tests/unit/email-address-authorization.test.ts, which also asserts all four
+ *     address routes agree on one action (no split-brain).
  *
  * TWO KNOWN DETECTOR ARTIFACTS in the list below — do NOT "fix" them blindly:
  *   - `metadata/route.ts` DOES authorize, at `ChangeMetadata` gate G00. It only
@@ -94,7 +99,6 @@ const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bauth\.cont
 const UNREVIEWED_INVENTORY = [
   'amp-init/route.ts',
   'element-inventory/route.ts',
-  'email/addresses/[address]/route.ts',
   'export/route.ts',
   'messages/[messageId]/route.ts',
   'metadata/route.ts',

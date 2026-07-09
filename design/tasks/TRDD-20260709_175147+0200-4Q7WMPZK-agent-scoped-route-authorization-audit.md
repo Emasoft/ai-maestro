@@ -36,7 +36,7 @@ Derived (EHT) from TRDD-D3RP7KQZ. Tier 0: in-scope, own repo, tightening only.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-09
 
-**All ten triaged. 2 fixed, 2 are detector artifacts, 6 remain open.** Severity
+**All ten triaged. 3 fixed, 2 are detector artifacts, 5 remain open.** Severity
 raised MEDIUM → **CRITICAL**: this was never a paperwork gap. The second route
 audited (`chat` POST) is a full bypass of the `send-command` matrix AND of
 sudo-mode, reachable by any agent, through the one endpoint nobody thought of as
@@ -52,7 +52,7 @@ a control surface because it is called "chat".
 | `amp-init` | POST | hand-rolled `isManager` | re-mint AMP keys; **self allowed** | needs a decision, not a fix |
 | `export` | POST | `enforceAuth` | export ANY agent's full transcripts | **OPEN — confidentiality** |
 | `messages/[messageId]` | PATCH DELETE POST | `authenticateFromRequest`, unused | delete/edit ANY agent's AMP messages | **OPEN — governance channel** |
-| `email/addresses/[address]` | PATCH DELETE | `enforceAuth` | mutate ANY agent's address book | **OPEN** |
+| `email/addresses/[address]` | PATCH DELETE | ~~`enforceAuth`~~ → **`authorize('modify-agent')`** | mutate ANY agent's address book | **FIXED** `?` |
 | `subconscious` | POST | `enforceAuth` | `triggerSubconsciousAction` on ANY agent | **OPEN** |
 | `element-inventory` | POST | `enforceAuth` | writes agent element state | **OPEN** |
 | `metrics` | PATCH | `enforceAuth` | `updateMetrics` on ANY agent | **OPEN — low blast radius** |
@@ -64,11 +64,22 @@ even if it wanted to. Every route above using it is unauthorized by construction
 ### Which of the six is a mapping, and which is a policy call
 
 Fixing `chat` needed no decision: the route *is* `send-command`, and the openly
-named twin (`PATCH …/session`) already carries that action. `email/addresses`
-is the same shape — the `manage-amp-address` AuthAction already exists and was
-simply never wired (note: wiring it also DENIES an agent its own address, since
-`manage-amp-address` is not a self-drive action; confirm that breaks no
-`amp-register` flow before landing).
+named twin (`PATCH …/session`) already carries that action.
+
+`email/addresses/[address]` needed no decision either, but NOT for the reason
+first assumed. The plan was to wire the `manage-amp-address` action, which exists
+for exactly this. Reading the code first showed the three siblings —
+`email/addresses` POST, `amp/addresses` POST, `amp/addresses/[address]`
+PATCH+DELETE — all authorize with **`modify-agent`**. Wiring `manage-amp-address`
+into the fourth would have created a split-brain: two actions for one capability.
+Matching the siblings is a consistency fix; changing all four to
+`manage-amp-address` would be a policy call. Only caller is the dashboard UI
+(`components/EmailAddressesSection.tsx`), so no self-claim flow breaks.
+
+**`manage-amp-address` is DEAD.** Declared in the `AuthAction` union (SVC2-MAJ-18)
+and asserted in `tests/authorization.test.ts`'s SELF_FORBIDDEN list, but wired to
+zero routes. Either the four address routes should adopt it, or it should be
+deleted. That is a decision, not a cleanup — it belongs in the proposal below.
 
 The rest need an action that does not exist yet — reading another agent's
 transcripts, deleting its messages, driving its subconscious. Inventing four
@@ -92,12 +103,12 @@ D3RP7KQZ. Driving your own terminal is permitted; refusing an order is not. So
 Falsified before it was believed: with the guard removed, exactly the seven
 refusal assertions fail and the seven permissive ones still pass.
 
-**NEXT ACTION:** wire `email/addresses/[address]` PATCH+DELETE to the existing
-`manage-amp-address` action (a mapping, Tier 0) — after grepping for a self-claim
-caller that the self-target ban would break. Then file ONE proposal covering the
-four routes that need new AuthActions (`export`, `messages/[messageId]`,
-`subconscious`, `element-inventory`) plus the `amp-init` self-remint question.
-Do NOT invent those actions inside this Tier-0 EHT.
+**NEXT ACTION:** file ONE Tier-2 proposal covering everything left, because all of
+it is policy: the four routes needing new AuthActions (`export`,
+`messages/[messageId]`, `subconscious`, `element-inventory`), the `amp-init`
+self-remint question, and the dead `manage-amp-address` action. Do NOT invent
+those actions inside this Tier-0 EHT. `metrics` is the one remaining route that
+may be a pure mapping (`modify-agent`); check whether the hook writes it.
 
 **Load-bearing facts.**
 - `requireAuth` / `enforceAuth` AUTHENTICATE only. Neither authorizes. Treating

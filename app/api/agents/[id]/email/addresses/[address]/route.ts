@@ -5,7 +5,8 @@ import {
   removeEmailAddressFromAgent,
 } from '@/services/agents-messaging-service'
 import { isValidUuid } from '@/lib/validation'
-import { enforceAuth } from '@/lib/route-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 
 // SF-047: Basic format validation for email address parameter
 // Allows local-part@domain or simple names (alphanumeric, dots, hyphens, underscores)
@@ -51,10 +52,6 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string; address: string } }
 ) {
-  // #114: Authenticate before mutating agent address book.
-  const authErr = enforceAuth(request)
-  if (authErr) return authErr
-
   try {
     const { id, address } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
@@ -64,6 +61,21 @@ export async function PATCH(
     // SF-047: Validate address format (defense-in-depth)
     if (!ADDRESS_PATTERN.test(address) || address.length > 254) {
       return NextResponse.json({ error: 'Invalid address format' }, { status: 400 })
+    }
+    // TRDD-4Q7WMPZK: this route carried `enforceAuth` alone — it AUTHENTICATED
+    // and discarded the identity, so any agent could rewrite any other agent's
+    // address book. Its three siblings (email/addresses POST, amp/addresses POST,
+    // amp/addresses/[address] PATCH+DELETE) all authorize with `modify-agent`;
+    // this one was simply missed. Matching them is a consistency fix, not a new
+    // policy. (`modify-agent` is not a self-drive action, so an agent may not
+    // rewrite its own address book either — same as the siblings already behave.)
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
     let body
     try { body = await request.json() } catch {
@@ -91,10 +103,6 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string; address: string } }
 ) {
-  // #114: Authenticate before removing an agent address.
-  const authErr = enforceAuth(request)
-  if (authErr) return authErr
-
   try {
     const { id, address } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
@@ -104,6 +112,15 @@ export async function DELETE(
     // SF-047: Validate address format (defense-in-depth)
     if (!ADDRESS_PATTERN.test(address) || address.length > 254) {
       return NextResponse.json({ error: 'Invalid address format' }, { status: 400 })
+    }
+    // TRDD-4Q7WMPZK — see PATCH above. Same guard, same reason.
+    const auth = authenticateFromRequest(request)
+    if (auth.error) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+    }
+    const authz = authorize(auth, 'modify-agent', id)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
 
     const result = await removeEmailAddressFromAgent(id, address)

@@ -3,7 +3,7 @@ trdd-id: SCLSRS6E
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
 column: dev
 created: 2026-07-09T10:23:21+0200
-updated: 2026-07-09T15:52:00+0200
+updated: 2026-07-09T15:53:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -194,17 +194,37 @@ and the TRDD-file task tooling. Verdict per area (✅ exists · ◑ partial · �
   screenshots). Deferred D→E, now its own task. The panel's SERVER half is fully covered (6 unit
   tests + live `delivered`-count + sudo gate).
 
-**NEXT ACTION:** Phase F (cross-repo, GitHub issues only — NEVER edit another repo's tree):
-D7 (TRDD-GT0TAJFL) on `Emasoft/ai-maestro-plugin` — (a) add `dev-browser` as a CORE-plugin
-dependency (`dependencies: [{name: "dev-browser", marketplace: "dev-browser-marketplace"}]`; the
-`ai-maestro-plugins` marketplace already carries the matching
-`allowCrossMarketplaceDependenciesOn`), and (b) teach `ai-maestro-hook.cjs` to CAPTURE
-AskUserQuestion (today it fires `idle_prompt`, so the question text + choices never reach the
-chat-state file; `PendingPrompt.question` in `services/sessions-service.ts` is the forward-compat
-slot already waiting for it). Then Phase G — the whole point of this epic: write
-`Emasoft/ai-maestro-janitor` an issue carrying the FULL command reference (every new script, its
-verbs, when to use it, the sudo/AID auth rules) and instruct its Claude to adopt the script layer
-and test it. Nothing ships to the janitor that is not reachable through a wrapper.
+**PROGRESS — Phase F DONE (2026-07-09).** D7 (TRDD-GT0TAJFL) → `complete`. Three issues filed on
+`Emasoft/ai-maestro-plugin` (issues only; that tree is NEVER edited from here):
+**#19** dev-browser core dependency · **#20** AskUserQuestion capture · **#21** the
+`elicitation_dialog` dead-code bug found while verifying. Two spec corrections, both recorded on
+D7 so neither is re-derived wrong later:
+
+- The marketplace precondition was ALREADY satisfied (`allowCrossMarketplaceDependenciesOn`
+  already lists `dev-browser-marketplace`), so only the plugin-level `dependencies` entry is
+  missing. Surfaced for an explicit decision: that marketplace is the THIRD-PARTY repo
+  `sawyerhood/dev-browser`, so a core dep auto-installs it on every agent.
+- The AskUserQuestion capture point is **`PreToolUse` (`matcher: "^AskUserQuestion$"`)**, not the
+  hook's existing `Notification` path — the hook has NO `PreToolUse` case today and `hooks.json`
+  routes `PreToolUse` to a different script (`directory-guard.cjs`). A `Notification` carries no
+  `tool_input`, so it CANNOT supply the question text. A paired `PostToolUse` clear is also
+  required, or an answered question stays "pending" until `Stop` and a polling agent answers it
+  twice.
+
+**NEXT ACTION:** Phase G — the whole point of this epic. Write `Emasoft/ai-maestro-janitor` an
+issue carrying the FULL command reference for the script layer Phase E shipped: `aimaestro-session.sh`
+(inject / slash / slash-keys / state / read-prompt / answer / queue / queue-list / queue-cancel),
+`aimaestro-panel.sh` (open / close / refresh / set / status / feedback), `aimaestro-trdd.sh`
+(search / read / edit / approve / refuse / promote / archive), `aimaestro-agent.sh config`,
+`amp-kanban-get.sh`, `amp-kanban-edit.sh`, and `amp-kanban-list.sh --query` — each with its verbs,
+when to use it, and the auth rules (`AID_AUTH` bearer for agents; `AIMAESTRO_SUDO_TOKEN` for
+strict routes; `AIMAESTRO_API_BASE` to retarget). Instruct its Claude to adopt the script layer and
+test it. **Nothing ships to the janitor that is not reachable through a wrapper** — per the Plugin
+Abstraction Principle, no plugin may call the server API directly. Flag that `read-prompt` returns
+no `question` for AskUserQuestion until plugin #20 lands.
+
+**STILL DEFERRED (do NOT roll forward a third time):** the dev-browser headless PANEL walkthrough
+(see the Phase E note above).
 
 **Load-bearing facts / gotchas:**
 - The decoupling invariant (project CLAUDE.md "Plugin Abstraction Principle"): plugins call

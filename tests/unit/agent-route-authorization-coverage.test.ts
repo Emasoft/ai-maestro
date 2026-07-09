@@ -70,11 +70,13 @@ const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bauth\.cont
  * not a list of routes judged safe. It may SHRINK as each is decided; it must
  * never grow without a deliberate edit here, which is the point.
  *
- * Several are probably fine (a metrics PATCH is not a reconfiguration). At least
- * one is probably not: `queue/[entryId]` DELETE documents, deliberately, that
- * "any authenticated caller may cancel a queued entry" — which lets an agent
- * cancel a `/compact` its own COS queued for it. That is a governance-evasion
- * question, not an oversight, so it is recorded rather than silently changed.
+ * Several are probably fine (a metrics PATCH is not a reconfiguration).
+ *
+ * `queue/[entryId]` DELETE was the one that was not. It documented, deliberately,
+ * that "any authenticated caller may cancel a queued entry" — which let ANY agent
+ * delete the commands a MANAGER had queued for the entire fleet, and let an agent
+ * veto an order queued for itself. Fixed and removed from this ledger; the guard
+ * is pinned by tests/unit/queue-cancel-authorization.test.ts.
  *
  * The audit is TRDD-4Q7WMPZK.
  */
@@ -87,7 +89,6 @@ const UNREVIEWED_INVENTORY = [
   'messages/[messageId]/route.ts',
   'metadata/route.ts',
   'metrics/route.ts',
-  'queue/[entryId]/route.ts',
   'subconscious/route.ts',
 ]
 

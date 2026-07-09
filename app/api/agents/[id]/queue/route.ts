@@ -53,6 +53,10 @@ export async function POST(
     commandKey: body.commandKey,
     when: body.when,
     wakeFirst: body.wakeFirst,
+    // Provenance, taken from the VERIFIED auth result — never from the body, or
+    // a caller could forge an owner and cancel anything. A system-owner has no
+    // agentId; record it as 'user' so no agentId can ever collide with it.
+    enqueuedBy: auth.agentId ?? 'user',
   })
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status })

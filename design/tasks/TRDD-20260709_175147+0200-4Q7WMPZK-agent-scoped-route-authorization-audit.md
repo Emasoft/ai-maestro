@@ -1,13 +1,13 @@
 ---
 trdd-id: 4Q7WMPZK
 title: Audit the ten agent-scoped mutation routes that authorize nothing
-column: planned
+column: dev
 created: 2026-07-09T17:51:47+0200
-updated: 2026-07-09T17:51:47+0200
+updated: 2026-07-09T19:12:00+0200
 current-owner: ai-maestro-session
-assignee: null
+assignee: ai-maestro-session
 priority: 1
-severity: MEDIUM
+severity: HIGH
 effort: M
 approval-tier: 0
 task-type: security
@@ -33,6 +33,47 @@ external-refs: []
 # TRDD-4Q7WMPZK — the ten agent-scoped routes that authorize nothing
 
 Derived (EHT) from TRDD-D3RP7KQZ. Tier 0: in-scope, own repo, tightening only.
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-09
+
+**1 of 10 reviewed and fixed. Nine remain.** Severity raised MEDIUM → HIGH: the
+first route audited turned out to be a live fleet-wide denial-of-governance, not
+a paperwork gap.
+
+**FIXED — `DELETE /api/agents/[id]/queue/[entryId]`.** It called `requireAuth`
+alone. Enqueue is gated (MANAGER anywhere, COS in-team, an agent on itself);
+cancel was gated by *nothing*, and the sibling `GET` hands any authenticated
+caller the entry ids. So one valid agent token could silently delete every
+command a MANAGER had queued across every agent — and an agent could veto an
+order queued for itself. The POST gate protected nothing: you could not inject,
+but you could nullify, which lands in the same place.
+
+The fix is two checks, because there are two attacks (see the route's doc
+comment): cross-agent goes through the `send-command` matrix; self-target needs
+ownership, because `send-command` alone would ALLOW it — self-drive is exempt per
+D3RP7KQZ. Driving your own terminal is permitted; refusing an order is not. So
+`CommandQueueEntry` grew an `enqueuedBy` recorded from the *verified* auth result
+(never the body), and an entry with no `enqueuedBy` is not yours (fail closed).
+
+Falsified before it was believed: with the guard removed, exactly the seven
+refusal assertions fail and the seven permissive ones still pass.
+
+**NEXT ACTION:** audit the nine remaining routes in `UNREVIEWED_INVENTORY`
+(`tests/unit/agent-route-authorization-coverage.test.ts`), in this order — the
+mutating ones first: `subconscious`, `metadata`, `metrics`, `element-inventory`,
+`amp-init`, `chat`, `export`, `messages/[messageId]`, `email/addresses/[address]`.
+
+**Load-bearing facts.**
+- `requireAuth` / `enforceAuth` AUTHENTICATE only. Neither authorizes. Treating
+  "non-strict" as "no authorization needed" is what produced this bug; non-strict
+  is a statement about the *sudo* gate and nothing else.
+- The open `GET .../queue` is retained (a documented fleet-monitor surface, like
+  `/full` and `/prompt`). It was the reconnaissance half of the exploit; with
+  cancel authorized, knowing an entry id buys nothing. Revisit if that changes.
+
+**SUPERSEDED — do NOT carry forward.** The coverage ledger's note that
+`queue/[entryId]` is "a governance-evasion question, not an oversight, recorded
+rather than silently changed" — it was both, and it is now decided and fixed.
 
 ## Problem
 

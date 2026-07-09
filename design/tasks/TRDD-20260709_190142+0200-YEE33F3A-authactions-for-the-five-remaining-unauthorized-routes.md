@@ -290,9 +290,31 @@ Either the four address routes adopt it, or delete it. A decision, not a cleanup
 
 Then the three follow-ups this TRDD surfaced but did not fix:
 
-1. **R6 graph bypass on forward** — `forwardFromUI` never calls
-   `validateMessageRoute`; mirror `services/send-message-service.ts:366-379`. The
-   web UI must keep working (HUMAN has full `Y` to every node). MEDIUM.
+1. **R6 graph bypass on forward** — CONFIRMED, and it is NOT a two-line mirror.
+   `forwardFromUI` (`lib/message-send.ts:399`) runs `checkMessageAllowed` — the
+   TEAM-GOVERNANCE filter — but never `validateMessageRoute`, the R6 TITLE graph.
+   Different rules. `sendFromUI` skips the graph too, but the `SendMessage` AIO
+   enforces it ABOVE that primitive (G05 resolves titles, G06 gates); forward has
+   no AIO above it, so both `forwardMessage` services reach the primitive raw.
+
+   Do NOT copy `send-message-service.ts:366-379` into `forwardFromUI`. G06 is a
+   ~70-line gate carrying an R38.2 relational branch (`resolveUserSenderContext`,
+   `resolveRecipientUserTitle`, the `userModelEnabled` flag), a fail-CLOSED catch
+   (SVC2-MAJ-19), and `ops` logging. `validateMessageRoute`'s own contract is
+   fail-closed for a `human` sender with no `userSender` block. A second copy of a
+   governance rule WILL diverge.
+
+   **Design (verified, not yet built):** extract G05+G06 into one shared gate —
+   e.g. `lib/message-route-gate.ts::assertRouteAllowed({ senderAgentId, to,
+   authContext, inReplyTo }) -> { allowed, reason, ops[] }` — and call it from BOTH
+   the AIO and `forwardFromUI`. `forwardFromUI` already threads `authContext` (the
+   two `forwardMessage` services gained it in `28593ed7`), so the plumbing exists.
+   A system-owner caller is the HUMAN sender (full `Y` to every node); an agent
+   caller is its own `governanceTitle`, and after the ownership fix it can only
+   forward from its OWN mailbox, so `fromAgent === caller`. A MISSING authContext
+   must enforce (agent-initiated) rather than skip — skipping is the bypass.
+
+   Regression risk is on the core send path; it needs its own suite. MEDIUM.
 2. **`agentRegistry.getAgent()` constructs and evicts on read** (`lib/agent.ts:905`)
    — audit every caller; switch READ paths to `getExistingAgent()`.
 3. **`element-inventory` POST validation gauntlet** — cognitive 34. Pure refactor.

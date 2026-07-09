@@ -42,6 +42,7 @@ ASSIGNEE=""
 LABEL=""
 TASK_TYPE=""
 TEAM_ID=""
+QUERY_TEXT=""
 
 show_help() {
     echo "Usage: amp-kanban-list.sh [options]"
@@ -56,6 +57,7 @@ show_help() {
     echo "  --assignee, -a AGENT_ID    Filter by assignee agent UUID"
     echo "  --label, -l LABEL          Filter by label"
     echo "  --task-type TYPE           Filter by task type (bug|feature|chore)"
+    echo "  --query, -q TEXT           Free-text keyword search over subject, description, labels"
     echo "  --team TEAM_ID             Team UUID (auto-detected from agent if omitted)"
     echo "  --id UUID                  Operate as this agent (UUID from config.json)"
     echo "  --help, -h                 Show this help"
@@ -65,6 +67,7 @@ show_help() {
     echo "  amp-kanban-list.sh --status dev"
     echo "  amp-kanban-list.sh --assignee agent-uuid --status ai_review"
     echo "  amp-kanban-list.sh --label bug --team team-uuid"
+    echo "  amp-kanban-list.sh --query \"login redirect\""
 }
 
 # Parse arguments
@@ -84,6 +87,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --task-type)
             TASK_TYPE="$2"
+            shift 2
+            ;;
+        --query|-q)
+            QUERY_TEXT="$2"
             shift 2
             ;;
         --team)
@@ -149,6 +156,12 @@ fi
 if [ -n "$TASK_TYPE" ]; then
     [ -n "$QUERY" ] && QUERY="${QUERY}&"
     QUERY="${QUERY}taskType=$(printf '%s' "$TASK_TYPE" | jq -sRr @uri)"
+fi
+# Free-text search. The server applies `q` AFTER the structured filters above,
+# matching subject + description + labels, so it narrows rather than widens.
+if [ -n "$QUERY_TEXT" ]; then
+    [ -n "$QUERY" ] && QUERY="${QUERY}&"
+    QUERY="${QUERY}q=$(printf '%s' "$QUERY_TEXT" | jq -sRr @uri)"
 fi
 
 URL="$API/api/teams/$TEAM_ID/tasks"

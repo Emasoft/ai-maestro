@@ -24,6 +24,7 @@ Usage: aimaestro-agent.sh <command> [options]
 Commands:
   list                          List all agents
   show <agent>                  Show agent details
+  config <agent>                Consolidated config JSON (teams, repo, docker, tasks, AID)
   resolve <agent>|--cwd <path>  Resolve an agent to its tmux session name
   create <name>                 Create a new agent
   delete <agent>                Delete an agent
@@ -209,6 +210,64 @@ cmd_presence() {
         return 1
     fi
     echo "$response"
+}
+
+# cmd_config — the consolidated agent config a monitoring agent (the janitor,
+# MANAGER, …) needs in ONE call: the full registry record (launch program +
+# programArgs, governance title, workdir, hooks, deployment.cloud), the teams it
+# belongs to (reverse lookup), its normalized GitHub repo, whether that repo is
+# docker-based, its pending non-terminal kanban tasks, and its AID PUBLIC key.
+#
+# Deliberately a separate verb from `show`: `show` is the human-facing summary of
+# the agent record, `config` is the machine-facing superset. Read-only, so the
+# route is non-strict and any authenticated caller may read any agent (this is a
+# fleet-MONITOR surface — it exposes the public key only, never the private one).
+cmd_config() {
+    local agent=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                echo "Usage: aimaestro-agent.sh config <agent>"
+                echo ""
+                echo "Print the consolidated agent configuration as JSON:"
+                echo "  agent, teams, githubRepo, repoDocker, pendingTasks, aidPublicKey"
+                return 0 ;;
+            -*) print_error "Unknown option for 'config': $1"; return 1 ;;
+            *)  agent="$1"; shift ;;
+        esac
+    done
+
+    if [[ -z "$agent" ]]; then
+        print_error "Usage: aimaestro-agent.sh config <agent>"
+        return 1
+    fi
+
+    resolve_agent "$agent" || return 1
+
+    local api_base
+    api_base=$(get_api_base) || return 1
+    local -a auth_args=()
+    _build_auth_args auth_args
+
+    local response
+    response=$(curl -s --max-time 30 "${auth_args[@]}" \
+        "${api_base}/api/agents/${RESOLVED_AGENT_ID}/full" 2>/dev/null)
+    if [[ -z "$response" ]]; then
+        print_error "Failed to fetch config for agent '${agent}'"
+        return 1
+    fi
+
+    # Surface a server-side error instead of printing an error object as if it
+    # were the config (the caller pipes this into jq and would read `.agent` as
+    # null rather than seeing the 403/404).
+    local err
+    err=$(echo "$response" | jq -r '.error // empty' 2>/dev/null)
+    if [[ -n "$err" ]]; then
+        print_error "$err"
+        return 1
+    fi
+
+    echo "$response" | jq '.'
 }
 
 cmd_show() {

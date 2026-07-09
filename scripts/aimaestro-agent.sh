@@ -8,6 +8,7 @@
 # Commands:
 #   list        List all agents
 #   show        Show agent details
+#   config      Print an agent's consolidated config (teams, repo, docker, tasks, AID)
 #   resolve     Resolve an agent (by name or --cwd) to its tmux session name
 #   create      Create a new agent
 #   delete      Delete an agent
@@ -92,6 +93,7 @@ main() {
     case "${1:-help}" in
         list)      shift; cmd_list "$@" ;;
         show)      shift; cmd_show "$@" ;;
+        config)    shift; cmd_config "$@" ;;
         resolve)   shift; cmd_resolve "$@" ;;
         create)    shift; cmd_create "$@" ;;
         delete)    shift; cmd_delete "$@" ;;

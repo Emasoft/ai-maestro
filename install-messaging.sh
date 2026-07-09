@@ -1085,6 +1085,41 @@ if [ "$INSTALL_SCRIPTS" = true ]; then
     if [ "$AID_OK" = false ]; then
         print_warning "Some AID scripts were not installed correctly"
     fi
+
+    # Verify the control-plane scripts (TRDD-280DF70U). Like the AID scripts,
+    # these ride the generic globs above (`amp-*.sh` and `*.sh`) rather than an
+    # explicit copy list, so a rename or a permission failure would install
+    # NOTHING and say NOTHING. These are the decoupling layer the janitor and
+    # every governance agent call instead of the HTTP API — a silent miss here
+    # means the agent falls back to nothing at all, so check them by name.
+    echo ""
+    print_info "Checking AI Maestro control-plane scripts..."
+
+    CONTROL_SCRIPTS=(
+        "aimaestro-session.sh"    # inject / slash / state / prompt / queue
+        "aimaestro-panel.sh"      # dashboard HTML side panel
+        "aimaestro-trdd.sh"       # TRDD search / read / edit / lifecycle
+        "amp-kanban-get.sh"       # read one kanban task
+        "amp-kanban-edit.sh"      # full-field kanban task edit
+    )
+    CONTROL_OK=true
+
+    for script in "${CONTROL_SCRIPTS[@]}"; do
+        if [ -x ~/.local/bin/"$script" ]; then
+            print_success "$script"
+        else
+            if [ -f "$SCRIPTS_DIR/$script" ]; then
+                print_error "$script not installed (source exists at $SCRIPTS_DIR/$script)"
+                CONTROL_OK=false
+            else
+                print_info "$script not in source tree — skipping"
+            fi
+        fi
+    done
+
+    if [ "$CONTROL_OK" = false ]; then
+        print_warning "Some control-plane scripts were not installed correctly"
+    fi
 fi
 
 # Verify plugin installation

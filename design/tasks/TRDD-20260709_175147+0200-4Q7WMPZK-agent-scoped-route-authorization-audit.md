@@ -26,7 +26,7 @@ review-requirements: []
 runtime-targets: [macos, linux]
 impacts: []
 attempts: 0
-implementation-commits: [4b1a9b48]
+implementation-commits: [4b1a9b48, c7d9f8a7]
 external-refs: []
 ---
 
@@ -46,7 +46,7 @@ a control surface because it is called "chat".
 
 | Route (agent-scoped) | Verbs | Guard today | What a caller can do | Verdict |
 |---|---|---|---|---|
-| `chat` | POST | ~~`enforceAuth`~~ → **`authorize('send-command')`** | `sendKeys(literal, enter)` into ANY pane | **FIXED** `d?` |
+| `chat` | POST | ~~`enforceAuth`~~ → **`authorize('send-command')`** | `sendKeys(literal, enter)` into ANY pane | **FIXED** `c7d9f8a7` |
 | `queue/[entryId]` | DELETE | ~~`requireAuth`~~ → **ownership + matrix** | delete any queued command, fleet-wide | **FIXED** `4b1a9b48` |
 | `metadata` | PATCH DELETE | `ChangeMetadata` G00 | — | detector artifact, authorized |
 | `amp-init` | POST | hand-rolled `isManager` | re-mint AMP keys; **self allowed** | needs a decision, not a fix |

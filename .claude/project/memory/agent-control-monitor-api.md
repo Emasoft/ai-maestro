@@ -92,6 +92,16 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   (never dropped) and drains at its next `idle_prompt`; `--wake-first` wakes it now. `/janitor-global-arm`
   therefore always succeeds — armed now, or armed later. Fan-out across the fleet still needs MANAGER or
   the human, since `queue` maps to `send-command`.
+- **There are THREE terminal-injection routes, not one.** `PATCH …/session`, `POST …/queue` (drains into
+  the pane), and `POST …/chat` — the last ends in `sendKeys(msg, {literal:true, enter:true})` and was
+  unguarded until `c7d9f8a7`. All three now carry `send-command`. Before adding any route that reaches
+  `runtime.sendKeys`, wire the action first.[^4]
+- `middleware.ts` authenticates EVERY request globally, so a route with no auth call is still
+  authenticated. It is not authorized. `enforceAuth` is worse than it looks: it authenticates and
+  **discards the result**, so a route using it *cannot* authorize even if it wanted to. As of
+  `c7d9f8a7` six agent-scoped routes still authorize nothing — `export` (any agent reads any agent's
+  transcripts) and `messages/[messageId]` (any agent deletes any agent's AMP messages) are the sharp
+  ones. Ledger: `tests/unit/agent-route-authorization-coverage.test.ts`; audit: TRDD-4Q7WMPZK.
 - The USER path is barely usable: the script wrappers carry no session-cookie support
   (`get_auth_args` reads only `AID_AUTH`, so a human gets 401), and `POST /api/auth/sudo-password` is a
   **global 5-per-60s bucket that successful mints consume** — 5 strict ops/minute machine-wide
@@ -136,3 +146,14 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   correctly and self-cancel not at all, because self-target is exempt. Asking "does this action mean DRIVE,
   or does it mean REFUSE?" separates them — driving your own surface is allowed, vetoing an order is not.
   Always falsify the guard: strip it, and confirm the refusal tests actually fail.
+
+[^4]: [ocd:2026-07-09 lmd:2026-07-09] `POST /api/agents/[id]/chat` typed arbitrary text + Enter into ANY
+  agent's tmux pane with `enforceAuth` alone — a total bypass of both the `send-command` matrix and
+  sudo-mode, while the openly-named `PATCH …/session` was gated by both. It survived because auditors read
+  the endpoint's NAME. "chat" sounds like messaging; the code called `sendKeys(literal, enter)`. Lesson:
+  **a capability is defined by what the code does, not by what the route is called** — read through to the
+  service call, and enumerate routes by the dangerous primitive they reach (grep `sendKeys`, `startProgram`,
+  `writeFileSync`) rather than by plausible-sounding names. Second lesson, from falsifying the fix: an
+  ordering assertion `indexOf(A) < indexOf(B)` passes VACUOUSLY when A is absent (`-1 < n`), so it passed on
+  the exact code it existed to reject — assert presence before order. Third: `enforceAuth` returns
+  `NextResponse | null` and throws the identity away; grep for it as a SMELL, not as a guard.

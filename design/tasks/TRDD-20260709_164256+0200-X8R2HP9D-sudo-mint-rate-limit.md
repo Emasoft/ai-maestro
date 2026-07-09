@@ -1,10 +1,10 @@
 ---
 trdd-id: X8R2HP9D
 title: Successful sudo-token mints consume a global 5-per-minute bucket
-column: proposal
+column: planned
 approval-tier: 2
 created: 2026-07-09T16:42:56+0200
-updated: 2026-07-09T16:42:56+0200
+updated: 2026-07-10T00:11:36+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 2
@@ -102,3 +102,25 @@ per-key change must keep a global backstop so an attacker cannot mint unbounded
 buckets by rotating sessions.
 
 ## Approval log
+
+- 2026-07-09T23:34:05+0200 — HELD BACK from the batch of four. The USER approved
+  it against a description I had written from the label in a pending list without
+  opening the file: "add a global rate limit on sudo-token minting — narrow,
+  self-contained hardening." That is backwards. The limit already exists; this
+  proposal RELAXES it. An approval obtained on a wrong description is not an
+  approval for the actual change, least of all on a password endpoint's rate
+  limit under a standing "prioritize security" directive. Re-asked instead of
+  assuming.
+- 2026-07-10T00:11:36+0200 — APPROVED by USER (tier 2), on the corrected
+  description: **options 1 + 2 together.**
+  - Option 1 — call `resetRateLimit` on a SUCCESSFUL mint, mirroring
+    `/api/auth/login`. Failed guesses still throttle, so brute-force resistance
+    is unchanged: an attacker supplying the correct governance password has
+    already won, and charging them for it protects nothing.
+  - Option 2 — key the bucket per session/user instead of the constant
+    `'sudo-password'`, with a generous global cap on top. This is the shape
+    `/api/v1/auth/token` already uses (`aid-token-exchange:global` 200 +
+    `aid-token-exchange:<identity>` 30), so it is a codebase pattern rather than
+    an invention. The global backstop is load-bearing per the risk note: without
+    it, an attacker mints unbounded buckets by rotating sessions.
+  Promoted `proposal → planned`, moved to `design/tasks/`.

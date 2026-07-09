@@ -70,10 +70,42 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
 ## Gotchas
 
 - New control routes (inject/answer/queue/panel/trdd-mutate) are destructive → classify **strict** in
-  `security-registry.json` (need `X-Sudo-Token`); agent callers need AID proof-of-possession.
+  `security-registry.json`. Classifying strict is only HALF the job: the route must ALSO be declared on
+  the agent branch of `lib/sudo-guard.ts`, or `requireAidTitle` fails closed and **every agent caller
+  gets 403** — silently, with a message that reads like intent.[^1] Three sets exist: `STRICT_AGENT_RULES`
+  (agent-callable, mapped to an `AuthAction`), `SYSTEM_OWNER_ONLY_STRICT` (human-only), and
+  `AGENT_POLICY_PENDING` (undecided debt ledger). `tests/unit/sudo-guard-strict-agent-coverage.test.ts`
+  fails the build if a strict route is in none of them.
+- The natural mapping for the agent-control routes (`send-command` + `targetFromPathId`) would DENY an
+  agent driving its OWN panel/queue, because `authorize()` universally refuses self-targeting. Deciding
+  that is Tier-2 governance (proposal TRDD-D3RP7KQZ), not a mapping detail.
+- The USER path is barely usable: the script wrappers carry no session-cookie support
+  (`get_auth_args` reads only `AID_AUTH`, so a human gets 401), and `POST /api/auth/sudo-password` is a
+  **global 5-per-60s bucket that successful mints consume** — 5 strict ops/minute machine-wide
+  (TRDD-X8R2HP9D).
 - The hook is in the **ai-maestro-plugin** repo, not here — its changes are cross-project (issue/PR).
 - HTML panel content must obey the no-nested-scrollbars rule (sandboxed iframe, let the page expand).
 - See also [[marketplace-plugin-registration]] (dev-browser cross-marketplace dependency shape) and
   [[session-control-subagent-gate]] (the idle/subagent safety gate the queue reuses).
 
 ## Notes and lessons learned
+
+[^1]: [ocd:2026-07-09 lmd:2026-07-09] This page previously said "agent callers need AID
+  proof-of-possession", implying the agent path worked. It did not. All 8 strict routes the epic
+  shipped 403'd every agent — the janitor included — for the entire life of the epic, and the epic
+  was marked `complete`. I read `requireSudoToken`'s R32 dual-path, saw the agent branch, and stopped;
+  I never checked that the routes were registered in `STRICT_AGENT_RULES`. Verified 2026-07-09 by
+  calling `requireAidTitle` directly (TRDD-6A2I6ZO0). Lesson: reading the dispatcher is not reading the
+  table it dispatches on. When a doc/comment asserts a capability, exercise it — a design that is
+  correct on paper can be unregistered in practice.
+
+[^2]: [ocd:2026-07-09 lmd:2026-07-09] The HTML panel's feedback channel never worked, and every health
+  signal said it did: the server reported `connectedClients: 1`, the UI rendered "Panel channel
+  connected", and control messages kept arriving. `usePanelWebSocket`'s `ws.onclose` nulled
+  `wsRef.current` unconditionally, so an agent switch let the OLD socket's late close wipe the ref to
+  the LIVE one; `sendFeedback` — the sole reader — then no-op'd forever. It was silent because `onopen`
+  restores `connected` but never restores the ref. Six unit tests passed over it; a browser found it in
+  minutes. Lesson: **a health signal that does not exercise the write path can report green while the
+  write path is dead.** Corollary for WS hooks: capture the socket per connection (`const sock`) and
+  guard every handler on `wsRef.current === sock`; a handler that closes over a reassignable `ws`
+  variable acts on whatever socket is current when it fires, not its own.

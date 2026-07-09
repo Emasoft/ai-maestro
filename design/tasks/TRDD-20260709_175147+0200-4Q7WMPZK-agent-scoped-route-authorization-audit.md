@@ -3,7 +3,7 @@ trdd-id: 4Q7WMPZK
 title: Audit the ten agent-scoped mutation routes that authorize nothing
 column: dev
 created: 2026-07-09T17:51:47+0200
-updated: 2026-07-10T01:03:00+0200
+updated: 2026-07-10T01:18:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -54,7 +54,7 @@ a control surface because it is called "chat".
 | `messages/[messageId]` | PATCH DELETE POST | ~~`authenticateFromRequest`, unused~~ → **mailbox ownership** | POST forwarded AS any agent (sender forgery + arbitrary mailbox read); PATCH/DELETE mutated any mailbox | **FIXED** `28593ed7` |
 | `email/addresses/[address]` | PATCH DELETE | ~~`enforceAuth`~~ → **`authorize('modify-agent')`** | mutate ANY agent's address book | **FIXED** `6c905104` |
 | `subconscious` | ~~POST~~ GET | ~~`enforceAuth`~~ → **POST DELETED; GET ownership** | POST drove NOTHING (400 for every input, 0 callers); GET had no auth and `getAgent()` constructs+evicts | **FIXED** `505ae8c9` |
-| `element-inventory` | POST | `enforceAuth` | writes agent element state | **OPEN** |
+| `element-inventory` | POST | ~~`enforceAuth`~~ → **ledger ownership** | append forged snapshots to ANY agent's audit ledger | **FIXED** `1ad04ade` |
 | `metrics` | PATCH | `enforceAuth` | `updateMetrics` on ANY agent | **OPEN — low blast radius** |
 
 `enforceAuth` returns `NextResponse | null`. It authenticates and **discards the

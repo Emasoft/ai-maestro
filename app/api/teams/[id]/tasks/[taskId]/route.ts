@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { updateTeamTask, deleteTeamTask, UpdateTaskParams } from '@/services/teams-service'
+import { getTeamTask, updateTeamTask, deleteTeamTask, UpdateTaskParams } from '@/services/teams-service'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
 
@@ -55,6 +55,34 @@ const UpdateTaskSchema = z.object({
   })).max(50).optional(),
   dueDate: z.string().max(64).optional(),
 }).strict()
+
+// GET /api/teams/[id]/tasks/[taskId] - Read one task
+// Wires the existing getTeamTask service fn (previously reachable only through
+// the team-wide GET /tasks list) so a governance agent can fetch a single task
+// by id. Same auth + param validation as the sibling PUT/DELETE below.
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; taskId: string }> }
+) {
+  const { id, taskId } = await params
+  if (!isValidUuid(id)) {
+    return NextResponse.json({ error: 'Invalid team ID format' }, { status: 400 })
+  }
+  // taskId can be a UUID (local storage) or a GitHub Project item node_id (PVTI_...)
+  if (!taskId || taskId.length > 200) {
+    return NextResponse.json({ error: 'Invalid task ID format' }, { status: 400 })
+  }
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
+
+  const result = await getTeamTask(id, taskId, auth.agentId, buildAuthContext(auth))
+  if (result.error) {
+    return NextResponse.json({ error: result.error }, { status: result.status })
+  }
+  return NextResponse.json(result.data)
+}
 
 // PUT /api/teams/[id]/tasks/[taskId] - Update a task
 export async function PUT(

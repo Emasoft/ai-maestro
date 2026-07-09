@@ -1,12 +1,12 @@
 ---
 trdd-id: D3RP7KQZ
-title: Decide the agent authorization policy for the 14 pending strict routes
-column: proposal
+title: An agent may drive its own surface, never reconfigure itself
+column: human_review
 approval-tier: 2
 created: 2026-07-09T16:42:56+0200
-updated: 2026-07-09T16:42:56+0200
+updated: 2026-07-09T17:51:47+0200
 current-owner: ai-maestro-session
-assignee: null
+assignee: ai-maestro-session
 priority: 1
 severity: HIGH
 effort: M
@@ -14,7 +14,7 @@ task-type: security
 release-via: none
 parent-trdd: TRDD-SCLSRS6E
 npt: []
-eht: []
+eht: [TRDD-4Q7WMPZK]
 blocked-by: []
 relevant-rules: []
 labels: [authorization, sudo-guard, agent-path, janitor]
@@ -22,8 +22,37 @@ test-requirements: [unit]
 review-requirements: [human-review]
 runtime-targets: [macos, linux]
 impacts: [public-api]
+last-test-result: pass
+last-test-at: 2026-07-09T17:30:00+0200
+implementation-commits: [4e507bfd, 11cd98a6]
 external-refs: ["https://github.com/Emasoft/ai-maestro-janitor/issues/76"]
 ---
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-09
+
+**DECIDED by the USER on 2026-07-09, and implemented.** The proposal below asked
+a compound question. The USER answered the central half; the rest was carved out
+into a successor proposal. Read the Approval log first — it is the decision.
+
+**Why `human_review` and not `complete`:** the code landed and the gates are
+green, but this TRDD has an open EHT (`TRDD-4Q7WMPZK`), and a parent may not
+reach `complete` while an EHT child is non-terminal. It also carries
+`review-requirements: [human-review]`. Both are satisfied by the same act: the
+USER reviewing the shipped invariant and the audit closing.
+
+- **Decided + shipped:** the self-drive / self-configure split. `SELF_DRIVE_ACTIONS
+  = {send-command, hibernate-agent}` in `lib/authorization.ts`; the panel / queue /
+  prompt-answer trio mapped to `send-command`, `PATCH /api/agents/[id]` to
+  `modify-agent`. Commits `4e507bfd`, `11cd98a6`.
+- **Also shipped, not asked for:** `install-skills` never authorized at all
+  (`enforceAuth` authenticates only). Fixed, plus a coverage guardrail over the
+  whole agent-scoped mutation surface. Follow-up: **TRDD-4Q7WMPZK** (EHT).
+- **NOT decided, carried forward:** the ten routes still in `AGENT_POLICY_PENDING`
+  (five `/api/trdd/*` verbs, maestro-delegate ×2, foreign-approvals ×2,
+  aid-recover), and the script layer's missing USER auth path.
+- **SUPERSEDED — do NOT carry forward:** the "Options" section's four-way choice.
+  Option 2 was taken. `AGENT_POLICY_PENDING` no longer contains the four decided
+  routes, so the "Problem" section's "fourteen" is now ten.
 
 # TRDD-D3RP7KQZ — agent authorization policy for the 14 pending strict routes
 
@@ -147,3 +176,41 @@ already the single source of truth and is well covered. The risk of NOT deciding
 is that the epic stays inert and the janitor's command reference stays wrong.
 
 ## Approval log
+
+- 2026-07-09T17:45:00+0200 — **APPROVED by the USER (tier 2; USER is the tier-3
+  authority and may decide a tier-2 proposal directly).** The decision, verbatim:
+
+  > an agent cannot change its own configuration. only the chief of staff or the
+  > manager can. so the skills to uninstall role plugins, extensions, mcp, hooks,
+  > subagents, etc. are all forbidden to it. only COS and MANAGER can (and of
+  > course the user via the UI). but it can use the skills to hibernate itself, or
+  > to send commands directly to the terminal (the same way the janitor does), to
+  > open the html panel, to get info on the team or the projects assigned (but not
+  > changing them). this is essential to prevent an agent to accidentally
+  > reconfigure itself and lose its own ability to work its role correctly, or to
+  > remove itself from the team, or to change role or to install plugins.
+
+  Resolves the "self-target semantics" question as **Option 2**: map the control
+  routes to `send-command` and exempt self-targeting for a narrow, closed set of
+  DRIVE actions. The USER's rationale supplies the principle the proposal was
+  missing — the exempted actions are precisely those an agent could already
+  perform by typing into its own terminal; configuration is not one of them, and
+  a self-reconfigure is the one mistake an agent cannot recover from.
+
+  `hibernate-agent` is in the set on the USER's explicit instruction ("it can use
+  the skills to hibernate itself"). `wake-agent` is not, and cannot be: a sleeping
+  agent is not there to wake itself.
+
+  The USER further noted a limit of this decision, recorded as **TRDD-B6XN2VKD**:
+  an agent can always shell out to `claude` and install plugins anyway. Team
+  agents are to be discouraged; blocking `claude` execution via
+  `settings.local.json` deny permissions is future work that must be TESTED
+  before it is believed.
+
+- 2026-07-09T17:51:47+0200 — **SCOPE NARROWED, then COMPLETED.** The USER's
+  decision covered the agent-control surface and the self-configuration ban. It
+  did not cover the five `/api/trdd/*` verbs (which need a new `manage-trdd`
+  action whose matrix mirrors the approval tiers), nor `maestro-delegate`,
+  `foreign-approvals`, or `aid-recover`, nor the script layer's missing USER auth
+  path. Those ten routes remain in `AGENT_POLICY_PENDING` and are carried into a
+  successor proposal rather than decided by silence.

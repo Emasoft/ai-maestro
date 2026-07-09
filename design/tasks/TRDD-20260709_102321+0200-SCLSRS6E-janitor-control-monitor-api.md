@@ -3,7 +3,7 @@ trdd-id: SCLSRS6E
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
 column: dev
 created: 2026-07-09T10:23:21+0200
-updated: 2026-07-09T13:20:31+0200
+updated: 2026-07-09T13:55:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -141,15 +141,35 @@ and the TRDD-file task tooling. Verdict per area (✅ exists · ◑ partial · �
   Phase E live-server checks. The optional TRDD→kanban one-way mirror was NOT built (explicitly
   optional; TRDD `column:` stays sole SSOT — adding a mirror now would be speculative coupling).
 
-**NEXT ACTION:** Phase D (this repo): D4 (TRDD-229CJGYH) HTML side-panel subsystem = campaign gate
-G4 — `components/HtmlSidePanel.tsx` + a new `html` tab in app/page.tsx, a NEW panel-content WS in
-server.mjs (mirror the `companionWss` per-agent client-registry pattern), `POST /api/agents/[id]/panel`
-(open/close/refresh, STRICT) + a feedback callback channel, sandboxed `<iframe srcdoc>` obeying the
-no-nested-scrollbars rule, dev-browser integration for live-site preview. Then E (script layer D6 —
-the decoupling wrappers the janitor actually calls; NOTHING ships to the janitor before this), F
+**PROGRESS 2026-07-09T13:55+0200 — Phase D DONE (this repo):**
+- D4 (TRDD-229CJGYH) landed as `230ea125` — closes campaign gate G4 (TRDD-903b7a20).
+  panelClients/panelFeedback in BOTH shared-state files (NT-039 mirror + a load-order BACK-FILL:
+  whichever file loads second must add the panel keys or state silently splits);
+  `broadcastPanelMessage` / `pushPanelFeedback` / `drainPanelFeedback` (bounded 200, drop-oldest);
+  server.mjs `panelWss` (/panel-ws, companionWss pattern, inbound = panel:feedback ONLY, added to
+  knownPaths + the SRV-CRIT-03 deep-auth branch); `lib/panel-messages.ts` (pure action→message,
+  html XOR url, 2MB cap, http(s)-only); `hooks/usePanelWebSocket.ts` (PAGE-level WS + open/close
+  SIGNAL counters so remote open switches the tab from anywhere); `components/HtmlSidePanel.tsx`
+  (sandboxed iframe — srcdoc WITHOUT allow-same-origin, url preview WITH; injected click-feedback
+  script → postMessage → WS relay, source-window filtered; no-nested-scrollbars); new `html` tab
+  in app/page.tsx; `POST /api/agents/[id]/panel` (STRICT) + GET status + feedback drain GET.
+  6 unit tests; full suite 2121 pass / 0 fail; tsc 0; next lint clean; node --check OK.
+- Deferred (not skipped): dev-browser headless walkthrough (render/open/close/refresh via the DOM,
+  feedback round-trip, light+dark screenshots) = integration-level → the Phase E live-server checks,
+  same pattern as A/B/C. Live-URL preview covers the dev-browser "show the app" case natively.
+
+**NEXT ACTION:** Phase E (this repo): D6 (TRDD-280DF70U) — the permanent SCRIPT layer, the
+decoupling wrappers the janitor actually calls (NOTHING ships to the janitor before this): NEW
+`aimaestro-session.sh` (inject/slash/state/read-prompt/answer/queue), `aimaestro-agent.sh config`
+(→ /full), `aimaestro-panel.sh` (open/close/refresh/set/feedback), `aimaestro-trdd.sh`
+(search/read/edit/approve/refuse/promote/archive), `amp-kanban-get.sh`, `amp-kanban-edit.sh` (+ `q`
+search on list) — auth via the established agent-helper/amp-helper patterns; wire ALL into
+`install-messaging.sh`; live-server checks (yarn dev :23000) exercising each new endpoint through
+its wrapper — this is where the A-D deferred integration checks (cross-agent auth, queue drain
+end-to-end, git-mv lifecycle on a real repo, panel dev-browser walkthrough) get executed. Then F
 (D7 cross-repo issues on ai-maestro-plugin: dev-browser core dep + hook AskUserQuestion capture),
-G (write the janitor its full command reference + adopt instruction — the whole point of this epic).
-Cross-repo items are GitHub issues.
+G (write the janitor its full command reference + adopt instruction — the whole point of this
+epic). Cross-repo items are GitHub issues.
 
 **Load-bearing facts / gotchas:**
 - The decoupling invariant (project CLAUDE.md "Plugin Abstraction Principle"): plugins call

@@ -3,7 +3,8 @@ trdd-id: 229CJGYH
 title: HTML side-panel subsystem for visualizer plugins with open close refresh and feedback callback
 column: dev
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-09T10:27:08+0200
+updated: 2026-07-09T13:55:00+0200
+implementation-commits: [230ea125]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2

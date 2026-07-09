@@ -76,9 +76,22 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   (agent-callable, mapped to an `AuthAction`), `SYSTEM_OWNER_ONLY_STRICT` (human-only), and
   `AGENT_POLICY_PENDING` (undecided debt ledger). `tests/unit/sudo-guard-strict-agent-coverage.test.ts`
   fails the build if a strict route is in none of them.
-- The natural mapping for the agent-control routes (`send-command` + `targetFromPathId`) would DENY an
-  agent driving its OWN panel/queue, because `authorize()` universally refuses self-targeting. Deciding
-  that is Tier-2 governance (proposal TRDD-D3RP7KQZ), not a mapping detail.
+- **An agent may DRIVE its own surface, never RECONFIGURE itself** (USER decision, TRDD-D3RP7KQZ, shipped
+  `4e507bfd`+`11cd98a6`). `SELF_DRIVE_ACTIONS = {send-command, hibernate-agent}` in `lib/authorization.ts`
+  is the closed exemption to the universal self-target ban; the panel / queue / prompt-answer trio all map
+  to `send-command`, so an agent drives its own panel and queue. `wake-agent` is deliberately absent — a
+  sleeping agent cannot wake itself. The mechanical membership test: nothing in the set writes the agent's
+  registry record.[^3]
+- **The self-drive exemption makes `send-command` INSUFFICIENT for any "refuse / cancel / veto" verb.**
+  `DELETE …/queue/[entryId]` proved it: mapping cancel to `send-command` closes the cross-agent hole and
+  leaves the governance-evasion one open, because self-target is exempt — a MEMBER could delete the
+  `/compact` its COS queued for it. Cancel is decided by OWNERSHIP: `CommandQueueEntry.enqueuedBy` (taken
+  from the verified auth result, never the body; missing ⇒ not yours, fail closed). An agent retracts only
+  what it queued itself. Cross-agent cancel still goes through the `send-command` matrix.
+- **A hibernated agent is never waited on.** `queue` persists, so a command to a sleeping agent is HELD
+  (never dropped) and drains at its next `idle_prompt`; `--wake-first` wakes it now. `/janitor-global-arm`
+  therefore always succeeds — armed now, or armed later. Fan-out across the fleet still needs MANAGER or
+  the human, since `queue` maps to `send-command`.
 - The USER path is barely usable: the script wrappers carry no session-cookie support
   (`get_auth_args` reads only `AID_AUTH`, so a human gets 401), and `POST /api/auth/sudo-password` is a
   **global 5-per-60s bucket that successful mints consume** — 5 strict ops/minute machine-wide
@@ -109,3 +122,17 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   write path is dead.** Corollary for WS hooks: capture the socket per connection (`const sock`) and
   guard every handler on `wsRef.current === sock`; a handler that closes over a reassignable `ws`
   variable acts on whatever socket is current when it fires, not its own.
+
+[^3]: [ocd:2026-07-09 lmd:2026-07-09] This page previously said the `send-command` mapping "would DENY an
+  agent driving its OWN panel/queue" and that deciding it was open Tier-2 governance. The USER decided it
+  on 2026-07-09 (self-drive allowed, self-reconfigure never), and the code shipped. Two lessons, and the
+  second cost a real vulnerability. **(a)** `requireAuth` / `enforceAuth` AUTHENTICATE and stop — they
+  prove WHO the caller is and say nothing about what they may do. "Non-strict" is a statement about the
+  *sudo* gate ONLY; treating it as "no authorization needed" is what left `DELETE …/queue/[entryId]`
+  ungated, where any valid agent token could delete every command the MANAGER had queued across the whole
+  fleet (`4b1a9b48`, TRDD-4Q7WMPZK). A gate on the CREATE verb is worthless if the DESTROY verb is open —
+  you cannot inject, but you can nullify, and the fleet lands in the same place. **(b)** Once an exemption
+  exists, every later mapping must be re-checked against it: `send-command` gates cross-agent cancel
+  correctly and self-cancel not at all, because self-target is exempt. Asking "does this action mean DRIVE,
+  or does it mean REFUSE?" separates them — driving your own surface is allowed, vetoing an order is not.
+  Always falsify the guard: strip it, and confirm the refusal tests actually fail.

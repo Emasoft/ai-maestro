@@ -40,7 +40,7 @@ import { statePath } from '@/lib/ecosystem-constants'
 // TRDD-I75EMTK0: shared R17 presence-check + reinstall helper (see
 // agents-core-service.ts for the full rationale — one implementation used
 // by wakeAgent, this defense-in-depth path, and POST /api/agents/[id]/ensure-core).
-import { ensureCorePluginInstalled } from '@/services/agents-core-service'
+import { ensureCorePluginInstalled, drainCommandQueueForSession } from '@/services/agents-core-service'
 
 const execFileAsync = promisify(execFile)
 
@@ -732,6 +732,18 @@ export function broadcastActivityUpdate(
 
   try {
     broadcastStatusUpdate(sessionName, status, hookStatus, notificationType)
+
+    // TRDD-41FJM8A8 — the hook posts here on every activity change; an idle_prompt
+    // is exactly the safe window to inject a queued command. Fire-and-forget so
+    // the (frequent) activity broadcast never blocks on the drain, and swallow
+    // drain errors here (they are logged inside the drainer) so a queue problem
+    // can never fail a status broadcast.
+    if (notificationType === 'idle_prompt') {
+      void drainCommandQueueForSession(sessionName).catch((err) =>
+        console.error(`[Sessions] command-queue drain failed for ${sessionName}:`, err),
+      )
+    }
+
     return { data: { success: true }, status: 200 }
   } catch (error) {
     console.error(`[Sessions] Error broadcasting activity update for ${sessionName}:`, error)

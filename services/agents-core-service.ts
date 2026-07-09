@@ -63,6 +63,10 @@ import { isManager, isChiefOfStaffAnywhere } from '@/lib/governance'
 import { isValidUuid } from '@/lib/validation'
 import { loadTeams } from '@/lib/team-registry'
 import { statePath } from '@/lib/ecosystem-constants'
+import { getAgentCommand } from '@/lib/agent-commands'
+import { readSubagentCount, evaluateExitGate } from '@/lib/session-safe-state'
+import { peekNext, dequeueNext } from '@/lib/command-queue'
+import type { CommandQueueEntry } from '@/lib/command-queue'
 import type { Host } from '@/types/host'
 
 // ---------------------------------------------------------------------------
@@ -1628,6 +1632,130 @@ export async function sendAgentSessionCommand(
       error: error instanceof Error ? error.message : 'Unknown error',
       status: 500,
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TRDD-41FJM8A8 -- hook-driven command-queue drain
+// ---------------------------------------------------------------------------
+
+/**
+ * Pop ONE FIFO command-queue entry for the agent behind `sessionName` and inject
+ * it, when it is safe to do so. Called fire-and-forget by broadcastActivityUpdate
+ * whenever a hook activity update reports the agent hit an idle prompt.
+ *
+ * ONE command per idle window: successive idle events drain successive entries,
+ * so a multi-command queue runs in FIFO order and two commands are never typed
+ * into the same pane at once (each command tends to make the agent busy again,
+ * and the next idle event drains the next entry).
+ *
+ * Gates before sending (defense in depth):
+ *   1. the session must resolve to a known agent,
+ *   2. evaluateExitGate must pass — never inject while background subagents are
+ *      PROVABLY running (TRDD-O8NCNRWO), else the head entry waits for the next
+ *      safe window.
+ *
+ * The FIFO head is popped BEFORE the send: a send failure is logged, not retried
+ * (fail-fast), so a persistently-failing entry can never wedge the queue head on
+ * every idle tick. A hibernated agent never reaches this path (no idle events),
+ * so its entries are simply held until it is woken.
+ */
+export async function drainCommandQueueForSession(sessionName: string): Promise<void> {
+  const agent = getAgentBySession(sessionName)
+  if (!agent) return
+
+  // Safe-point gate: refuse to inject while background subagents are provably
+  // running. A null (unknown) count never blocks — same trust model as stop/restart.
+  const gate = evaluateExitGate(readSubagentCount(agent.workingDirectory), false)
+  if (gate.blocked) return
+
+  const next = peekNext(agent.id)
+  if (!next) return
+
+  // Resolve a commandKey against the allowlist at drain time — the key path never
+  // sends arbitrary text (the allowlist is the security boundary, mirroring the
+  // PATCH /api/agents/[id]/session route). A stale/removed key is dropped so it
+  // can't wedge the FIFO head forever.
+  let command = next.command
+  if (!command && next.commandKey) {
+    const allowed = getAgentCommand(next.commandKey)
+    if (!allowed) {
+      dequeueNext(agent.id)
+      console.warn(`[CommandQueue] dropped entry ${next.id} for ${agent.id}: unknown commandKey "${next.commandKey}"`)
+      return
+    }
+    command = allowed.command
+  }
+  if (!command) {
+    dequeueNext(agent.id)
+    return
+  }
+
+  // Pop before send (fail-fast — no infinite retry on a bad entry).
+  dequeueNext(agent.id)
+
+  // The enqueue route already authorized the caller; the deferred execution runs
+  // as a system-internal action (mirrors createSession's internal-caller
+  // fallback). requireIdle:false because we have already gated on the idle_prompt
+  // hook signal + the subagent gate above -- a stronger, hook-driven idleness
+  // proof than the activity-timestamp heuristic isSessionIdle uses.
+  const { buildSystemAuthContext } = await import('@/lib/agent-auth')
+  const result = await sendAgentSessionCommand(
+    agent.id,
+    { command, requireIdle: false, addNewline: true },
+    buildSystemAuthContext('command-queue-drain'),
+  )
+  if (result.error) {
+    console.error(`[CommandQueue] drain send failed for ${agent.id} (entry ${next.id}): ${result.error}`)
+  }
+}
+
+/**
+ * TRDD-41FJM8A8 — best-effort enqueue-side dispatch, called by the queue POST
+ * route after an entry lands. Two side effects, both fire-and-forget:
+ *
+ *   - HIBERNATED + wakeFirst: the agent has no live session, so the entry can't
+ *     drain on an idle event yet. Wake it (startProgram) so it reaches idle and
+ *     the hook-driven drain runs the entry. Without wakeFirst the entry is simply
+ *     held until the agent is woken by any other means (never dropped).
+ *   - LIVE + when='now-if-idle-else-queue' + currently idle: run the FIFO head
+ *     immediately instead of waiting for the next idle event. (Older queued
+ *     entries still drain first — FIFO is preserved.)
+ *
+ * Errors are logged, never thrown: enqueue already succeeded and persisted, so a
+ * failed wake/immediate-drain must not fail the enqueue response.
+ */
+export async function onQueueEnqueued(
+  agentId: string,
+  entry: CommandQueueEntry,
+  authContext: AuthContext,
+): Promise<void> {
+  const agent = getAgent(agentId)
+  if (!agent) return
+
+  const primarySession = agent.sessions?.find((s) => s.index === 0)
+  const sessionName = computeSessionName(agent.name, primarySession?.index ?? 0)
+
+  let live = false
+  try {
+    live = await getRuntime().sessionExists(sessionName)
+  } catch {
+    live = false
+  }
+
+  if (!live) {
+    if (entry.wakeFirst) {
+      void wakeAgent(agentId, { startProgram: true, authContext }).catch((err) =>
+        console.error(`[CommandQueue] wakeFirst wake failed for ${agentId}:`, err),
+      )
+    }
+    return
+  }
+
+  if (entry.when === 'now-if-idle-else-queue' && isSessionIdle(sessionName)) {
+    void drainCommandQueueForSession(sessionName).catch((err) =>
+      console.error(`[CommandQueue] immediate drain failed for ${sessionName}:`, err),
+    )
   }
 }
 

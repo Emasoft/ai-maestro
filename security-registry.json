@@ -54,6 +54,7 @@
     "PATCH_/api/agents/[id]": "strict",
     "POST_/api/agents/[id]/ensure-core": "strict",
     "POST_/api/agents/[id]/prompt/answer": "strict",
+    "POST_/api/agents/[id]/queue": "strict",
     "POST_/api/sessions/[id]/stop": "strict",
     "POST_/api/sessions/[id]/restart": "strict",
     "POST_/api/sessions/[id]/kill": "strict",

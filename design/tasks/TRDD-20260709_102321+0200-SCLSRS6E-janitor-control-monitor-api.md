@@ -236,6 +236,36 @@ D7 so neither is re-derived wrong later:
   required, or an answered question stays "pending" until `Stop` and a polling agent answers it
   twice.
 
+**PROGRESS — Phase G ADOPTION FOLLOW-THROUGH (2026-07-10).** Handing the janitor a command
+reference was not enough; I read its tree and the plugin's, which changed the ask.
+
+- **The janitor is already decoupled — nothing to fix.** `scripts/lib/terminal_trigger.py:348`:
+  *"Repointed off the direct `/api/...` calls to `aimaestro-agent.sh`"*. No `fetch`, no `:23000`
+  anywhere outside comments. Two other suspected violations (the core plugin's hook; five plugin
+  skills naming `localhost:23000`) were also FALSE — the hook's `/api/` strings are comments
+  documenting the migration, and the skills' lines are prerequisites, not embedded API syntax.
+  Three greps that looked like findings, three sources that said otherwise.
+- **The real adoption target is `fleet_inject.py`.** It prefers raw `tmux send-keys` (ESC, settle,
+  literal, Enter) with `aimaestro-agent.sh session command <tmux>` only as a fallback. Both write
+  into a live pane with no idle gate and no subagent gate. `queue` exists precisely for this:
+  `drainCommandQueueForSession` resolves `commandKey` against the allowlist AND calls
+  `evaluateExitGate(readSubagentCount(...))`. Posted on **janitor#76**.
+- **BLOCKER, and it is ours.** `queue` maps to `send-command`, which is self-drive only, so an agent
+  enqueues only on itself. The janitor's per-project HEARTBEAT holds `AID_AUTH` (inside an agent
+  session) and can self-queue today; its machine-wide DAEMON is not a registered agent, holds no
+  AID, and `get_auth_args` emits only the AID bearer — so every verb 401s for it. Fleet-wide arm
+  (**janitor#77**) is therefore blocked on **ai-maestro#55** (filed): session-cookie auth, or a
+  MANAGER service identity for the daemon (Tier-2 — a machine-wide daemon with MANAGER authority is
+  a large blast radius), or a narrow scoped `fleet-arm` verb. Posted on janitor#77.
+- **The core plugin ships ZERO skills for the new surface** (verified against the installed v2.8.0,
+  not from memory): nothing references `aimaestro-session.sh`, `aimaestro-panel.sh`, or
+  `aimaestro-trdd.sh`; `team-kanban` knows `list/create-task/move/archive` but not `get`/`edit`;
+  `ai-maestro-agents-management` knows twelve `aimaestro-agent.sh` verbs but not `config`. Filed as
+  **ai-maestro-plugin#23**, with the self-drive rule every such skill must state and the two gaps
+  (trdd write verbs 403 for agents; no USER auth path) it must not promise around.
+
+The epic's code is complete; adoption is now tracked on janitor#76/#77, plugin#23, and ai-maestro#55.
+
 **PROGRESS — Phase G DONE (2026-07-09). THE EPIC IS COMPLETE.** Filed
 `Emasoft/ai-maestro-janitor` **#76** — the full command reference for the script layer, every verb
 verified against the source rather than from memory: `aimaestro-session.sh` (inject / slash /

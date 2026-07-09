@@ -70,7 +70,7 @@ const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bauth\.cont
  * not a list of routes judged safe. It may SHRINK as each is decided; it must
  * never grow without a deliberate edit here, which is the point.
  *
- * Two are now CLOSED and gone from this list, and both were worse than the
+ * Eight are now CLOSED and gone from this list, and every one was worse than the
  * ledger's original guess that "several are probably fine":
  *
  *   - `queue/[entryId]` DELETE documented, deliberately, that "any authenticated
@@ -94,6 +94,21 @@ const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bauth\.cont
  *     including MANAGER. Pinned by tests/unit/export-authorization.test.ts, and
  *     by the EXFIL_FUNCTIONS net in dangerous-primitive-authorization.test.ts,
  *     which — unlike this file — scans reads as well as writes.
+ *   - `messages/[messageId]` POST forwards a message AS the agent named in the
+ *     path: sender forgery, plus a read of any mailbox. The ledger had guessed
+ *     the sharp verb was DELETE. Pinned by message-mailbox-authorization.test.ts.
+ *   - `subconscious` POST drove nothing — it returned 400 for every input once
+ *     the RAG subsystem was removed, and had zero callers. Deleted, not
+ *     authorized. Its GET, which the ledger could not see, had no auth at all
+ *     and reached a getAgent() that CONSTRUCTS the agent on read.
+ *   - `element-inventory` POST let any agent append forged snapshots to any
+ *     agent's append-only audit ledger. Its proposed `modify-agent` would have
+ *     DENIED the endpoint's only intended caller (an agent posting its own
+ *     inventory), because that action is not self-drive.
+ *   - `metrics` PATCH validated none of its three inputs — not who, not which
+ *     field, not what value. The ledger called it "low blast radius"; a string
+ *     `amount` was stored into estimatedCost, which the profile UI renders with
+ *     .toFixed(2). Pinned by tests/unit/metrics-authorization.test.ts.
  *
  * TWO KNOWN DETECTOR ARTIFACTS in the list below — do NOT "fix" them blindly:
  *   - `metadata/route.ts` DOES authorize, at `ChangeMetadata` gate G00. It only
@@ -108,7 +123,6 @@ const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bauth\.cont
 const UNREVIEWED_INVENTORY = [
   'amp-init/route.ts',
   'metadata/route.ts',
-  'metrics/route.ts',
 ]
 
 function unauthorizedRoutes(): string[] {

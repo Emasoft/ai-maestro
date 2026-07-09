@@ -1163,12 +1163,24 @@ const routes: Route[] = [
   }},
 
   // Metrics (memory/search/tracking/index-delta routes removed — TRDD-70a521d9 Phase 2)
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/metrics$/, paramNames: ['id'], handler: async (_req, res, params) => {
+  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/metrics$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // Parity with the Next.js GET, which calls requireAuth. Neither layer gates
+    // metrics by ownership — the full-record GET already returns them — but both
+    // must actually verify the credential rather than trust its shape.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     sendServiceResult(res, getMetrics(params.id))
   }},
   { method: 'PATCH', pattern: /^\/api\/agents\/([^/]+)\/metrics$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-YEE33F3A: this handler had no auth call at all, so headless mode was
+    // strictly weaker than Next.js — where enforceAuth at least authenticated.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    if (auth.agentId && auth.agentId !== params.id) {
+      sendJson(res, 403, { error: 'Forbidden — you may only update your own metrics' }); return
+    }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await updateMetrics(params.id, body))
+    sendServiceResult(res, await updateMetrics(params.id, body, buildAuthContext(auth)))
   }},
 
   // Graph/Database/Docs routes removed — TRDD-70a521d9 Phase 4 (RAG feature retired)

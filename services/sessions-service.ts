@@ -207,6 +207,101 @@ function getHookState(workingDir: string): { status: string; notificationType?: 
   return null
 }
 
+// TRDD-TDFSELI1 — one selectable choice on a pending prompt, mirroring the
+// shape the hook (ai-maestro-hook.cjs, PermissionRequest branch) writes into
+// the chat-state file: {key, label, action?, rule?}. `key` is the digit the
+// terminal menu expects, so it doubles as the keystroke to send when answering.
+export interface PendingPromptOption {
+  key: string
+  label: string
+  action?: string
+  rule?: string
+}
+
+// The FULL pending question/permission prompt for one agent. Unlike getHookState
+// (which surfaces only status/notificationType/subagentCount for the activity
+// ladder), this carries the rich fields the hook captures so a governance agent
+// can READ what a stuck agent is asking and ANSWER it by option or free text.
+export interface PendingPrompt {
+  status: string
+  notificationType?: string
+  toolName?: string
+  toolInput?: unknown
+  description?: string
+  message?: string
+  // Forward-compat slot for the AskUserQuestion question text — captured only
+  // once TRDD-GT0TAJFL (D7) lands the hook enhancement in the ai-maestro-plugin
+  // repo (AskUserQuestion fires idle_prompt, not permission_request, so its text
+  // + choices are not written today). Until then this stays undefined.
+  question?: string
+  options: PendingPromptOption[]
+  updatedAt?: string
+}
+
+/**
+ * TRDD-TDFSELI1 — PURE parser: given an already-parsed chat-state object, return
+ * the rich pending prompt, or null when nothing is pending. Split out from
+ * readPendingPrompt (which does the fs read) so it is unit-testable without a
+ * statePath override.
+ *
+ * A prompt is "pending" ONLY when the agent is actually offering a choice:
+ *   - status === 'permission_request' (a tool-permission menu the hook captured), OR
+ *   - a non-empty options[] / question was captured (the future AskUserQuestion).
+ * A plain idle_prompt (waiting_for_input with just a message, no options) is NOT
+ * a pending prompt — the agent is idle with nothing to select — so this returns
+ * null for it. The answer route can still inject free text, but there is no menu
+ * to read.
+ */
+export function parsePendingPromptState(state: unknown): PendingPrompt | null {
+  if (!state || typeof state !== 'object') return null
+  const s = state as Record<string, unknown>
+
+  const options: PendingPromptOption[] = Array.isArray(s.options)
+    ? s.options
+        .filter((o): o is Record<string, unknown> => !!o && typeof o === 'object' && 'key' in o)
+        .map((o) => ({
+          key: String(o.key),
+          label: typeof o.label === 'string' ? o.label : String(o.label ?? ''),
+          action: typeof o.action === 'string' ? o.action : undefined,
+          rule: typeof o.rule === 'string' ? o.rule : undefined,
+        }))
+    : []
+
+  const question = typeof s.question === 'string' ? s.question : undefined
+  const isPending = s.status === 'permission_request' || options.length > 0 || !!question
+  if (!isPending) return null
+
+  return {
+    status: String(s.status),
+    notificationType: typeof s.notificationType === 'string' ? s.notificationType : undefined,
+    toolName: typeof s.toolName === 'string' ? s.toolName : undefined,
+    toolInput: s.toolInput,
+    description: typeof s.description === 'string' ? s.description : undefined,
+    message: typeof s.message === 'string' ? s.message : undefined,
+    question,
+    options,
+    updatedAt: typeof s.updatedAt === 'string' ? s.updatedAt : undefined,
+  }
+}
+
+/**
+ * TRDD-TDFSELI1 — read the pending prompt for a working directory from the hook
+ * chat-state file (same file getHookState reads), or null when none is pending.
+ * The route layer resolves the agent's workingDirectory and calls this.
+ */
+export function readPendingPrompt(workingDir: string): PendingPrompt | null {
+  if (!workingDir) return null
+
+  const stateFile = path.join(statePath('chat-state'), `${hashCwd(workingDir)}.json`)
+  try {
+    if (!fs.existsSync(stateFile)) return null
+    return parsePendingPromptState(JSON.parse(fs.readFileSync(stateFile, 'utf-8')))
+  } catch {
+    // A missing/corrupt state file means "no readable prompt" — never throw.
+    return null
+  }
+}
+
 /** Check if a session is idle based on activity threshold */
 function isSessionIdle(sessionName: string): boolean {
   const activity = sessionActivity.get(sessionName)

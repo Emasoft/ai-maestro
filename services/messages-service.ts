@@ -33,7 +33,6 @@ import {
   resolveAgentIdentifier,
 } from '@/lib/messageQueue'
 import type { MessageSummary } from '@/lib/messageQueue'
-import { sendFromUI } from '@/lib/message-send'
 import { forwardFromUI } from '@/lib/message-send'
 import { searchAgents } from '@/lib/agent-registry'
 import { getSelfHostId, getSelfHost } from '@/lib/hosts-config'
@@ -400,10 +399,11 @@ export interface ForwardMessageParams {
   fromSession: string
   toSession: string
   forwardNote?: string
+  authContext?: AuthContext
 }
 
 export async function forwardMessage(params: ForwardMessageParams): Promise<ServiceResult<any>> {
-  const { messageId, originalMessage, fromSession, toSession, forwardNote } = params
+  const { messageId, originalMessage, fromSession, toSession, forwardNote, authContext } = params
 
   // Validate required fields
   if ((!messageId && !originalMessage) || !fromSession || !toSession) {
@@ -412,6 +412,14 @@ export async function forwardMessage(params: ForwardMessageParams): Promise<Serv
       status: 400,
     }
   }
+
+  // `fromSession` becomes the forwarded message's `from`/`forwardedBy` and is
+  // the identity the governance filter is evaluated against, so an unguarded
+  // caller could forward AS any agent (and read any mailbox by forwarding to
+  // itself). The three sibling functions in this file already call this guard;
+  // forward was the one that never did.
+  const ownershipDenial = denyForeignMailbox(fromSession, authContext)
+  if (ownershipDenial) return ownershipDenial
 
   // Validate session identifier format: length limit and no control characters
   const SESSION_MAX_LEN = 200

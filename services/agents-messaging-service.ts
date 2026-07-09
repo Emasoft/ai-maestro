@@ -36,7 +36,7 @@ import {
   archiveAgentMessage,
   deleteAgentMessage,
 } from '@/lib/agent-messaging'
-import { sendFromUI, forwardFromUI } from '@/lib/message-send'
+import { forwardFromUI } from '@/lib/message-send'
 import type { Message } from '@/lib/messageQueue'
 import {
   getAgent,
@@ -67,6 +67,35 @@ import type { AuthContext } from '@/lib/agent-auth'
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Object-level authz for the agent-scoped mailbox routes (defence-in-depth).
+ *
+ * A mailbox has an OWNER, so it is authorized by ownership rather than by the
+ * title matrix: no governance title — not MANAGER, not the owner's own COS —
+ * reads or mutates another agent's mail. This mirrors `messages-service`'s
+ * `denyForeignMailbox`, except that here `agentId` is always a path-param UUID,
+ * so no identifier resolution is needed.
+ *
+ * - `authContext` undefined → no enforcement (internal / headless callers that
+ *   don't carry a verified identity; the route guard is authoritative).
+ * - `isSystemOwner`         → exempt (web UI may touch any mailbox).
+ * - authenticated agent     → the path agentId must be its own, else 403.
+ *
+ * Returns a `ServiceResult` error envelope on denial, or null when allowed.
+ */
+function denyForeignMailbox(
+  agentId: string,
+  authContext?: AuthContext,
+): ServiceResult<never> | null {
+  if (!authContext || authContext.isSystemOwner) return null
+  // An authenticated agent without a resolvable own-identity owns no mailbox —
+  // refuse rather than fall through.
+  if (!authContext.agentId || authContext.agentId !== agentId) {
+    return { error: 'Forbidden — you may only access your own mailbox', status: 403 }
+  }
+  return null
+}
 
 const FEDERATED_TIMEOUT = 5000
 
@@ -234,9 +263,8 @@ export async function listMessages(
     // identity. Mirrors sendMessage's reject below (R28/R32/R38; never a sudo
     // gate). System owner exempt; no authContext → the route guard is
     // authoritative (the GET route already enforces own-mailbox-only).
-    if (authContext && !authContext.isSystemOwner && authContext.agentId !== agentId) {
-      return { error: 'Forbidden — you may only read your own mailbox', status: 403 }
-    }
+    const denial = denyForeignMailbox(agentId, authContext)
+    if (denial) return denial
 
     // SF-026: Validate agent exists as basic identity check (full auth deferred to Phase 2)
     const agent = getAgent(agentId)
@@ -320,9 +348,13 @@ export async function sendMessage(
 export async function getMessage(
   agentId: string,
   messageId: string,
-  box: 'inbox' | 'sent' = 'inbox'
+  box: 'inbox' | 'sent' = 'inbox',
+  authContext?: AuthContext,
 ): Promise<ServiceResult<any>> {
   try {
+    const denial = denyForeignMailbox(agentId, authContext)
+    if (denial) return denial
+
     const msg = await getAgentMessage(agentId, messageId, box)
 
     if (!msg) {
@@ -340,9 +372,13 @@ export async function getMessage(
 export async function updateMessage(
   agentId: string,
   messageId: string,
-  body: { action: string }
+  body: { action: string },
+  authContext?: AuthContext,
 ): Promise<ServiceResult<any>> {
   try {
+    const denial = denyForeignMailbox(agentId, authContext)
+    if (denial) return denial
+
     const { action } = body
 
     if (action === 'read') {
@@ -369,9 +405,13 @@ export async function updateMessage(
 
 export async function deleteMessageById(
   agentId: string,
-  messageId: string
+  messageId: string,
+  authContext?: AuthContext,
 ): Promise<ServiceResult<any>> {
   try {
+    const denial = denyForeignMailbox(agentId, authContext)
+    if (denial) return denial
+
     const success = await deleteAgentMessage(agentId, messageId)
 
     if (!success) {
@@ -389,9 +429,20 @@ export async function deleteMessageById(
 export async function forwardMessage(
   agentId: string,
   messageId: string,
-  body: { to: string; note?: string }
+  body: { to: string; note?: string },
+  authContext?: AuthContext,
 ): Promise<ServiceResult<any>> {
   try {
+    // `agentId` becomes forwardFromUI's `fromAgent`, which lands verbatim in the
+    // forwarded message's `from` / `fromAlias` / `forwardedBy`, is written to
+    // THAT agent's sent folder, and is the identity the governance filter is
+    // evaluated against. Without this guard any authenticated caller could pass
+    // another agent's id and send a message AS them (and, by forwarding to
+    // itself, read their mail). `sendMessage` above already rejects the same
+    // sender/caller mismatch — SVC2-MAJ-06 — and forward was simply missed.
+    const denial = denyForeignMailbox(agentId, authContext)
+    if (denial) return denial
+
     const { to, note } = body
 
     if (!to) {

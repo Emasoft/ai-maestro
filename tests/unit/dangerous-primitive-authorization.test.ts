@@ -65,6 +65,16 @@ const DANGEROUS_FUNCTIONS = [
   'renameSession',
   'restoreSessions',
   'triggerSubconsciousAction',
+  // A FOURTH KIND OF DANGER — identity, not the terminal (TRDD-YEE33F3A).
+  // `forwardMessage` (both services) passes its caller-supplied sender straight
+  // to `forwardFromUI`, where it becomes the new message's `from`/`forwardedBy`,
+  // is written to THAT agent's sent folder, is the identity the governance
+  // filter is evaluated against, and — for a cross-host target — is signed with
+  // the HOST key so the remote accepts it. Unguarded, it let any authenticated
+  // caller send AS any agent. Aimed back at the caller, it also READ any agent's
+  // mail. Neither guardrail saw it: it is not a terminal primitive and not a
+  // credential-emitting read.
+  'forwardMessage',
 ] as const
 
 /**
@@ -76,6 +86,27 @@ const DANGEROUS_FUNCTIONS = [
  * than most writes; it is silent, repeatable, and grants forgery forever.
  */
 const EXFIL_FUNCTIONS = ['exportAgentZip'] as const
+
+/**
+ * WHY `getMessage` IS NOT IN `EXFIL_FUNCTIONS` — a boundary, chosen, not forgotten.
+ *
+ * Reading another agent's mail is a confidentiality breach, and the single-message
+ * route's GET was indeed unauthorized until TRDD-YEE33F3A. But this class means
+ * "emits a CREDENTIAL": `keys/private.pem` grants forgery FOREVER, silently, and
+ * no later fix revokes what was taken. A message grants knowledge. Collapsing the
+ * two makes the class mean "anything confidential", i.e. everything, and a class
+ * that matches everything stops being read.
+ *
+ * Mailbox confidentiality is instead held by the ownership guard on the route and
+ * the service (`denyForeignMailbox`), plus the agent-scoped coverage ledger.
+ *
+ * The concrete cost of widening it: `getMessage` is also imported by
+ * `v1/mesh/chat/route.ts` and `v1/mesh/chat/history/route.ts`, which authorize
+ * under a different regime entirely (AMP api-keys + the AID challenge, not
+ * `authorize()`). Since this class has no debt ledger, adding `getMessage` would
+ * fail the build until someone sprinkled an `authContext` token into those routes
+ * to satisfy a regex — a fake fix, which is worse than an honest boundary.
+ */
 
 /** Anything that constitutes an authorization decision. Presence, not correctness. */
 const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bauth\.context\b|\bauthContext\b/

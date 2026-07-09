@@ -1378,21 +1378,37 @@ const routes: Route[] = [
   }},
 
   // Agent messages
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/messages\/([^/]+)$/, paramNames: ['id', 'messageId'], handler: async (_req, res, params, query) => {
+  //
+  // TRDD-YEE33F3A: all four handlers authenticated NOTHING and passed no
+  // authContext, so `denyForeignMailbox` in the service was a no-op and any
+  // credential-shaped caller could read, mutate, delete or FORWARD any agent's
+  // mailbox by UUID. The forward verb was a sender-forgery primitive (the path
+  // `id` becomes the message's `from`). TRDD-f4a8fa1c applied exactly this
+  // authenticate + thread-authContext treatment to the global `/api/messages`
+  // family below and skipped this agent-scoped family. Same fix, same shape.
+  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/messages\/([^/]+)$/, paramNames: ['id', 'messageId'], handler: async (req, res, params, query) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     // Validate box against the two allowed values; default to 'inbox' for any unrecognised value
     const box: 'inbox' | 'sent' = query.box === 'sent' ? 'sent' : 'inbox'
-    sendServiceResult(res, await getAgentMessage(params.id, params.messageId, box))
+    sendServiceResult(res, await getAgentMessage(params.id, params.messageId, box, buildAuthContext(auth)))
   }},
   { method: 'PATCH', pattern: /^\/api\/agents\/([^/]+)\/messages\/([^/]+)$/, paramNames: ['id', 'messageId'], handler: async (req, res, params) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await updateAgentMessage(params.id, params.messageId, body))
+    sendServiceResult(res, await updateAgentMessage(params.id, params.messageId, body, buildAuthContext(auth)))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/messages\/([^/]+)$/, paramNames: ['id', 'messageId'], handler: async (req, res, params) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await forwardAgentMessage(params.id, params.messageId, body))
+    sendServiceResult(res, await forwardAgentMessage(params.id, params.messageId, body, buildAuthContext(auth)))
   }},
-  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/messages\/([^/]+)$/, paramNames: ['id', 'messageId'], handler: async (_req, res, params) => {
-    sendServiceResult(res, await deleteAgentMessage(params.id, params.messageId))
+  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/messages\/([^/]+)$/, paramNames: ['id', 'messageId'], handler: async (req, res, params) => {
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    sendServiceResult(res, await deleteAgentMessage(params.id, params.messageId, buildAuthContext(auth)))
   }},
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/messages$/, paramNames: ['id'], handler: async (_req, res, params, query) => {
     // Explicitly extract query params to match listMessages expected types
@@ -1722,8 +1738,15 @@ const routes: Route[] = [
     sendServiceResult(res, await getMeetingMessages(meetingParams))
   }},
   { method: 'POST', pattern: /^\/api\/messages\/forward$/, paramNames: [], handler: async (req, res) => {
+    // TRDD-YEE33F3A: authenticate + override the client-supplied sender with the
+    // verified identity + thread authContext (mirrors the POST /api/messages
+    // `body.from` override below). Previously this forwarded AS whatever
+    // `fromSession` the body claimed, for any credential-shaped caller.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const body = await readJsonBody(req)
-    sendServiceResult(res, await forwardGlobalMessage(body))
+    if (auth.agentId) body.fromSession = auth.agentId
+    sendServiceResult(res, await forwardGlobalMessage({ ...body, authContext: buildAuthContext(auth) }))
   }},
   { method: 'GET', pattern: /^\/api\/messages$/, paramNames: [], handler: async (req, res, _params, query) => {
     // H1 (audit, TRDD f4a8fa1c): the Next.js GET authenticates and overrides

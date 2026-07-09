@@ -108,7 +108,6 @@ const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bauth\.cont
 const UNREVIEWED_INVENTORY = [
   'amp-init/route.ts',
   'element-inventory/route.ts',
-  'messages/[messageId]/route.ts',
   'metadata/route.ts',
   'metrics/route.ts',
   'subconscious/route.ts',

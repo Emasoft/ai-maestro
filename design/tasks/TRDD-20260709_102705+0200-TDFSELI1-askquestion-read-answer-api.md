@@ -3,7 +3,8 @@ trdd-id: TDFSELI1
 title: Read and answer AskQuestion and permission prompts via API
 column: dev
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-09T10:27:08+0200
+updated: 2026-07-09T12:42:10+0200
+implementation-commits: [f401728d]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1

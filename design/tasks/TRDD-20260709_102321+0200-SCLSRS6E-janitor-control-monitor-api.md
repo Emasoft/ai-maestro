@@ -3,7 +3,7 @@ trdd-id: SCLSRS6E
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
 column: dev
 created: 2026-07-09T10:23:21+0200
-updated: 2026-07-09T11:46:00+0200
+updated: 2026-07-09T12:42:10+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -102,13 +102,37 @@ and the TRDD-file task tooling. Verdict per area (✅ exists · ◑ partial · �
   every reuse target is absent → worktree isolation is UNUSABLE here; implement inline (or a
   manually `governance-rules`-based worktree).
 
-**NEXT ACTION:** Phase B (control primitives, this repo): D2 (TRDD-TDFSELI1 — AskQuestion/
-permission read+answer API) FIRST, then D1 (TRDD-41FJM8A8 — server-side persistent command
-queue). D2's hook-capture half is gated on D7. Then Phase C (D5 rest), D (panel/G4), E
-(script layer D6 — the decoupling wrappers the janitor actually calls), F (D7 cross-repo
-issues), G (janitor adoption). Cross-repo items are GitHub issues. Final EHT: write the
-janitor its command reference + adopt instruction (Emasoft/ai-maestro-janitor issue) — the
-whole point of this epic.
+**PROGRESS 2026-07-09T12:42+0200 — Phase B DONE (this repo):**
+- D2 (TRDD-TDFSELI1) landed as `f401728d`: `parsePendingPromptState` (PURE) +
+  `readPendingPrompt` in sessions-service; `GET /api/agents/[id]/prompt` (fleet-monitor read,
+  requireAuth, non-strict); `POST /api/agents/[id]/prompt/answer` ({optionKey}→menu keystroke
+  validated against live options, OR {text}; STRICT; requireIdle:false so a WAITING prompt is
+  answerable). 5 unit tests over the pure parser. The AskUserQuestion capture half stays gated
+  on D7 (cross-repo, ai-maestro-plugin) — the `question` field is a forward-compat slot.
+- D1 (TRDD-41FJM8A8) landed as `e292afbc`: `lib/command-queue.ts` (persistent
+  `~/.aimaestro/command-queue/<id>.json`, atomic tmp+rename, dedupe, FIFO, `dir` test seam);
+  `drainCommandQueueForSession` (HOOK-DRIVEN — fires from broadcastActivityUpdate on
+  `idle_prompt`, ONE FIFO entry per idle window, gated by `evaluateExitGate` so it never
+  injects while subagents provably run; commandKey resolved against the allowlist at drain
+  time; pop-before-send fail-fast); `onQueueEnqueued` (wakeFirst wakes a hibernated agent;
+  now-if-idle-else-queue runs immediately when live+idle); `POST /api/agents/[id]/queue`
+  (STRICT) + `GET` (list) + `DELETE .../queue/[entryId]` (cancel, non-strict de-escalation).
+  9 unit tests. Full suite 2104 pass / 0 fail; `tsc` 0; `next lint` clean.
+- Deferred (not skipped): the drain wiring end-to-end + wakeFirst/hibernation are integration-
+  level (need a live agent + tmux) → verified by the Phase E live-server checks, same pattern
+  as Phase A's cross-agent-auth deferral. The queue MODULE (persist/FIFO/dedupe/cancel) + the
+  gate DECISION (evaluateExitGate) are unit-covered.
+
+**NEXT ACTION:** Phase C (task lifecycle, this repo): D5 rest (TRDD-KJQZEYXW) — `lib/trdd-store.ts`
+(parse/search/edit the `design/{proposals,tasks,archived,refused}/*.md` corpus, frontmatter-aware,
+`git mv` lifecycle for approve/promote/archive + `## Approval log` append per the
+`aimaestro-trdd-approval.md` overlay) + routes `GET /api/trdd`, `GET/PATCH /api/trdd/[id]`,
+`POST /api/trdd/[id]/{approve,promote,archive}` (strict on the mutating ones); plus the kanban
+keyword-search query param + a full-field edit path. TRDD `column:` stays SSOT; optional one-way
+mirror to kanban `status`. Then D (panel/G4), E (script layer D6 — the decoupling wrappers the
+janitor actually calls; nothing ships to the janitor before this), F (D7 cross-repo issues), G
+(janitor adoption). Cross-repo items are GitHub issues. Final EHT: write the janitor its command
+reference + adopt instruction (Emasoft/ai-maestro-janitor issue) — the whole point of this epic.
 
 **Load-bearing facts / gotchas:**
 - The decoupling invariant (project CLAUDE.md "Plugin Abstraction Principle"): plugins call

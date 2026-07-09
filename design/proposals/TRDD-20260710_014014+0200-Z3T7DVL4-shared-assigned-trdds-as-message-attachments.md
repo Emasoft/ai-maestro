@@ -242,7 +242,7 @@ The TRDD file has exactly **one canonical location**: the `design/` tree of the
   part is that the **assignee's** project board must also show a TRDD it does not
   own. That means a board query over handles, not over the local filesystem only.
 
-## 6. Hard questions this proposal does NOT settle
+## 6. Hard questions — ALL SEVEN ANSWERED IN §8. Read §8, not this list.
 
 1. **Sequencing.** "Ready to use this system in its fullness" spans four
    deliverables, and they are not independent: (a) the `manage-trdd` AuthAction
@@ -275,12 +275,39 @@ The TRDD file has exactly **one canonical location**: the `design/` tree of the
    message, so it inherits the comm graph. Confirm that assignment cannot route
    around R6.
 
-## 7. Why this is Tier 2
+## 7. The edit taxonomy — the one artifact everything else is read off
+
+The USER says *"any change to a TRDD by a receiver must be approved by the sender."*
+Taken literally that would gate `test-failures: 3`, and no one wants a MANAGER
+approving a counter. The metaphor resolves it: **a cell's position and its readings
+change constantly — that *is* circulation. What requires a compatibility check is a
+change to the cell's markers.**
+
+So the split is not new policy. It is `rules/aimaestro/aimaestro-manager-approval-defaults.md`'s
+EXEMPT / NON-EXEMPT lists, **applied one layer down** — to file edits instead of
+column moves.
+
+| Class | Fields / transitions | Write from `assignee` |
+|---|---|---|
+| **CIRCULATION** (the cell reports where it is and what it carries) | `implementation-commits`, `ci-runs`, `last-test-result`, `last-test-at`, `test-failures`, `attempts`, `feature-branch`, `audit-evidence`, appended review notes / post-mortems; mechanical column moves (`dev↔testing`, `testing→ai_review`, `ai_review→dev`) | **applies directly** |
+| **IDENTITY** (the cell's markers) | `title`, body scope / acceptance criteria, `approval-tier`, `relevant-rules`, `release-via`, `test-`/`audit-`/`review-requirements`, `npt`, `eht`, `blocked-by`, `parent-trdd`, `assignee`, `priority`, `severity`, `effort`, `impacts`; governance-crossing moves (`complete→publish\|deploy`, `→failed`, `→superseded`, `ai_review→human_review`) | **pending edit → owner approves** |
+
+And the third pillar closes the loop: for an IDENTITY edit the **tier-floor evaluator**
+(§3.5) reads the proposed diff against the project's PRRD and decides whether the
+*owner's* approval suffices, or whether it escalates to COS / MANAGER / USER. The
+receiver's edit inherits the approval-tier machinery it already lives under. Nothing
+new is invented — the TRDD carries its own antigens, and the PRRD is the immune
+system that reads them.
+
+## 9. Why this is Tier 2
 
 It creates a governance object (an approval gate on a file edit), changes AMP
 message semantics, and gives an agent write-influence over a file in another
 project's git repository. Any one of those is a MANAGER call; together they are
-architectural. The `manage-trdd` AuthAction it depends on (§6.6) is itself an
-unmade policy decision.
+architectural.
+
+What is **no longer** blocking: `manage-trdd` is not an independent unmade decision —
+§8 Q6 shows its matrix is read off §7. The residue genuinely reserved to the USER is
+the approval of this proposal, and a nod to the walking-skeleton order in §8 Q1.
 
 ## Approval log

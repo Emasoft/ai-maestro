@@ -1,12 +1,13 @@
 ---
 trdd-id: a6d93b9c-4f4d-459a-8ba4-055a815a93b3
 title: Route CLI plugin skill and local-message mutations through the server API and forbid agent user-scope
-status: proposal
-column: proposal
+column: planned
 approval-tier: 2
 created: 2026-06-16T23:38:54+0200
-updated: 2026-06-16T23:38:54+0200
-current-owner: null
+updated: 2026-07-09T23:34:05+0200
+current-owner: ai-maestro-session
+blocked-by: [TRDD-YEE33F3A]
+implementation-commits: []
 task-type: security
 priority: 2
 severity: HIGH
@@ -59,3 +60,20 @@ Three whole capability surfaces in the CLI never reach `app/api/**` — they do 
 High — these are behavior changes to widely-used CLI verbs and the hook/agent flows that depend on them. Sequence carefully: ship the server endpoints + user-scope refusal first, then flip each CLI verb, then deprecate the local-CLI/local-FS code paths. The amp-send local→API change must preserve same-host delivery latency.
 
 ## Approval log
+
+- 2026-07-09T23:34:05+0200 — APPROVED by USER (tier 2), in the batch of four.
+  Promoted `proposal → planned`, moved to `design/tasks/`. Migrated v1→v2
+  frontmatter on this edit (dropped the redundant `status:`; `column:` is the
+  state machine).
+- Scoped AFTER TRDD-YEE33F3A (`blocked-by`). Both touch the authorization surface,
+  and this one's server-side refusals should land on a matrix that already has the
+  new AuthActions in it.
+- Sharper than the one-line summary it was approved from. It is not only an
+  architectural tidy-up: `agent-skill.sh uninstall` accepts a traversed `--name`
+  that defeats its substring guard and reaches `rm -rf` outside the skills dir;
+  `amp-send.sh --id` selects ANY local agent's identity + signing key from the
+  shared `~/.agent-messaging/agents/` store, forging a fully-valid signed message
+  from that agent; and both `agent-plugin.sh` and `agent-skill.sh` install at
+  `--scope user`, violating the IRON never-user-scope rule. Sequence per the
+  body's risk note: server endpoints + user-scope refusal first, then flip each
+  CLI verb, then delete the local-FS paths.

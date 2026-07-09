@@ -1,10 +1,10 @@
 ---
 trdd-id: K2WJH7RF
 title: Decide the agent authorization policy for the ten remaining strict routes
-column: proposal
+column: planned
 approval-tier: 2
 created: 2026-07-09T18:03:01+0200
-updated: 2026-07-09T18:03:01+0200
+updated: 2026-07-09T23:34:05+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 2
@@ -15,7 +15,7 @@ release-via: none
 parent-trdd: TRDD-D3RP7KQZ
 npt: []
 eht: []
-blocked-by: []
+blocked-by: [TRDD-YEE33F3A]
 supersedes: []
 superseded-by: []
 relevant-rules: []
@@ -135,3 +135,9 @@ janitor can read the board and cannot touch it, and every agent that tries gets 
 403 that correctly says nobody has decided.
 
 ## Approval log
+
+- 2026-07-09T23:34:05+0200 — APPROVED by USER (tier 2), in the batch of four.
+  Promoted `proposal → planned`, moved to `design/tasks/`. Sequenced AFTER
+  TRDD-YEE33F3A: both extend the same `AuthAction` union and the same
+  `authorize()` matrix, so landing them concurrently would conflict on every
+  shared file. `blocked-by: [TRDD-YEE33F3A]` set accordingly.

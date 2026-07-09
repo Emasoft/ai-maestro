@@ -1,10 +1,10 @@
 ---
 trdd-id: YEE33F3A
 title: Decide the AuthActions for the five remaining unauthorized agent-scoped routes
-column: proposal
+column: planned
 approval-tier: 2
 created: 2026-07-09T19:01:42+0200
-updated: 2026-07-09T19:01:42+0200
+updated: 2026-07-09T23:34:05+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -145,3 +145,15 @@ The risk of NOT deciding is concrete and current: **`export` and
 other agent's transcripts, and delete the messages its COS sent it.
 
 ## Approval log
+
+- 2026-07-09T23:34:05+0200 — APPROVED by USER (tier 2), via the batch approval of
+  four Tier-2 proposals. Rationale: `export` and `messages/[messageId]` are open
+  right now; the standing directive is to prioritize security. Promoted
+  `proposal → planned` and moved to `design/tasks/`.
+- The proposal poses policy questions rather than answering them. Approval is read
+  as a mandate to decide them under the USER's standing rule ("decide yourself,
+  base decisions on verified facts, prioritize security"), taking the
+  security-conservative fork at each choice and recording each decision here with
+  the code that justifies it. Every suggested shape in the body is re-verified
+  against the implementation before it is adopted — the body's suggestions are
+  hypotheses, not findings.

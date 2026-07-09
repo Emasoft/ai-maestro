@@ -1264,7 +1264,28 @@ const routes: Route[] = [
   // Playback routes removed — TRDD-70a521d9
 
   // Export / Transfer
-  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/export$/, paramNames: ['id'], handler: async (_req, res, params) => {
+  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/export$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-YEE33F3A drift-fix — mirror app/api/agents/[id]/export/route.ts GET.
+    // This handler called exportAgentZip() directly with NO auth call of any kind.
+    // The router's structural credential gate (SRV-MAJOR-03) only proves a
+    // credential is PRESENT, exactly as middleware.ts does for the Next.js
+    // surface, so any valid agent token reached the victim's keys/private.pem.
+    // Calling the SAME authorize() here reproduces the Next.js decision
+    // drift-free; a system-owner session (no agentId) is granted by authorize().
+    const auth = authenticateAgent(
+      getHeader(req, 'Authorization'),
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
+    )
+    if (auth.error) {
+      sendJson(res, auth.status || 401, { error: auth.error })
+      return
+    }
+    const decision = authorize(auth, 'export-agent', params.id)
+    if (!decision.allowed) {
+      sendJson(res, 403, { error: decision.reason || 'Not authorized to export this agent' })
+      return
+    }
     try {
       const result = await exportAgentZip(params.id)
       if (result.error || !result.data) {
@@ -1293,6 +1314,23 @@ const routes: Route[] = [
     }
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/export$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-YEE33F3A drift-fix — mirror the Next.js POST, which gates on the same
+    // `export-agent` action. Authorize BEFORE reading the body, so an unauthorized
+    // caller cannot make us parse its payload.
+    const auth = authenticateAgent(
+      getHeader(req, 'Authorization'),
+      getHeader(req, 'X-Agent-Id'),
+      getHeader(req, 'Cookie')
+    )
+    if (auth.error) {
+      sendJson(res, auth.status || 401, { error: auth.error })
+      return
+    }
+    const decision = authorize(auth, 'export-agent', params.id)
+    if (!decision.allowed) {
+      sendJson(res, 403, { error: decision.reason || 'Not authorized to export this agent' })
+      return
+    }
     const body = await readJsonBody(req)
     sendServiceResult(res, createTranscriptExportJob(params.id, body))
   }},

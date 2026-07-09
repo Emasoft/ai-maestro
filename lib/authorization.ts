@@ -51,6 +51,7 @@ export type AuthAction =
   | 'manage-skills'     // Install/remove skills on an agent
   | 'manage-group'      // SVC2-MAJ-07/08: create/update/delete groups + subscribe/notify
   | 'manage-amp-address' // SVC2-MAJ-18: claim or remove an AMP address on an agent record
+  | 'export-agent'      // TRDD-YEE33F3A: download an agent's full archive — INCLUDING keys/private.pem
   | 'view-agent'        // Read agent data (currently open, for future lockdown)
 
 export interface AuthorizationResult {
@@ -216,6 +217,38 @@ export function authorize(
   // agent records. Use createAgent + ChangeTitle pipelines for in-band agent creation.
   if (action === 'register-agent') {
     return { allowed: false, reason: 'Only the system owner can register agent records' }
+  }
+
+  // ── Special rule: export-agent ─────────────────────────────
+  // TRDD-YEE33F3A. The export archive is not "the agent's data" — it is the
+  // agent's IDENTITY. exportAgentZip() does `archive.directory(getKeysDir(id),
+  // 'keys')` (services/agents-transfer-service.ts), copying the directory whose
+  // private.pem lib/amp-keys.ts annotates "Agent's private key (NEVER shared)".
+  // The same archive carries registrations/ (external AMP provider API keys),
+  // agent.db, and every inbox/sent/archived message.
+  //
+  // Handing that to ANY agent — MANAGER and the target's own COS included —
+  // creates an unbounded, undetectable impersonation capability. The holder can
+  // forge Ed25519-signed AMP messages as the victim forever, and no downstream
+  // governance check can tell those from the real thing, because they ARE
+  // correctly signed. MANAGER already governs an agent completely without ever
+  // needing its signing key; COS coordinates a team, it does not impersonate its
+  // members. There is no role here for which "can sign as you" is the right
+  // grant.
+  //
+  // So this mirrors `register-agent`: system-owner ONLY. The `!auth.agentId`
+  // branch above has already granted the human/web caller, so by the time
+  // control reaches this line the caller is provably an agent. Deny, always.
+  //
+  // Self-export is denied too, and deliberately. It grants an agent nothing it
+  // lacks (it can read its own keys off disk today) while turning the API into a
+  // single-request exfiltration channel for a compromised one. If a real
+  // self-backup flow ever needs this, widen it here, on purpose, with a test.
+  if (action === 'export-agent') {
+    return {
+      allowed: false,
+      reason: 'Only the system owner can export an agent — the archive contains keys/private.pem',
+    }
   }
 
   // ── Universal rule: no agent can RECONFIGURE itself via API ─

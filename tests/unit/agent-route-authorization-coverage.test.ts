@@ -85,6 +85,15 @@ const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bauth\.cont
  *     `modify-agent`. A missed route, not a policy gap. Pinned by
  *     tests/unit/email-address-authorization.test.ts, which also asserts all four
  *     address routes agree on one action (no split-brain).
+ *   - `export` (TRDD-YEE33F3A) was the worst of them, and this ledger UNDERSTATED
+ *     it, because a ledger that inspects only mutating verbs cannot see that the
+ *     sharp end of `export` is its GET: a zip that contains keys/private.pem —
+ *     "NEVER shared", per lib/amp-keys.ts — plus registrations/, agent.db, and
+ *     every message. Any agent token could take any other agent's signing key and
+ *     forge its messages forever. Now `export-agent`, denied to every agent title
+ *     including MANAGER. Pinned by tests/unit/export-authorization.test.ts, and
+ *     by the EXFIL_FUNCTIONS net in dangerous-primitive-authorization.test.ts,
+ *     which — unlike this file — scans reads as well as writes.
  *
  * TWO KNOWN DETECTOR ARTIFACTS in the list below — do NOT "fix" them blindly:
  *   - `metadata/route.ts` DOES authorize, at `ChangeMetadata` gate G00. It only
@@ -99,7 +108,6 @@ const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bauth\.cont
 const UNREVIEWED_INVENTORY = [
   'amp-init/route.ts',
   'element-inventory/route.ts',
-  'export/route.ts',
   'messages/[messageId]/route.ts',
   'metadata/route.ts',
   'metrics/route.ts',

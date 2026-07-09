@@ -1068,11 +1068,16 @@ The same scripts are also bundled in the plugin (for slash commands). When the A
 **Hibernated agents are never waited on.** A command addressed to a hibernated
 agent is *enqueued*, not blocked on — `aimaestro-session.sh queue <agent>
 --command-key <key> [--wake-first]` persists server-side and fires when that
-agent next reaches a safe idle prompt. So a fleet-wide command like
-`/janitor-global-arm` always succeeds: live agents run it now, hibernated agents
-run it on wake. Delivery is eventual, never conditional. The queue does not
-widen authorization — `queue` maps to `send-command`, so an agent may enqueue
-only on itself; fanning out across the fleet requires MANAGER or the USER. See
+agent next reaches a safe idle prompt. So an enqueued `/janitor-arm` always
+succeeds: live agents run it now, hibernated agents run it on wake. Delivery is
+eventual, never conditional. The queue does not widen authorization — `queue`
+maps to `send-command`, so an agent may enqueue only on itself; fanning out
+across the fleet requires MANAGER or the USER.
+
+`/janitor-arm` is per-project (it arms the heartbeat of the project whose session
+runs it), which is why it must be delivered into each agent's own session. It is
+NOT `/janitor-global-arm` — that one clears the machine-wide kill-switch and
+pause flags and arms no heartbeat. No fleet-wide arm command exists today. See
 [docs/SCRIPT-LAYER.md](./docs/SCRIPT-LAYER.md) § *a hibernated agent is never
 waited on*.
 

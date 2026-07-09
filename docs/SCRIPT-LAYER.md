@@ -57,11 +57,23 @@ aimaestro-session.sh queue <agent> --command-key janitor-arm --when idle
 aimaestro-session.sh queue <agent> --command-key janitor-arm --when idle --wake-first
 ```
 
-The consequence the janitor depends on: **`/janitor-global-arm` always
-succeeds.** It fans out one `queue` call per agent and returns. Live agents arm
-at their next idle window; hibernated agents arm on wake. There is no "some
-agents were asleep so this partially failed" outcome — only "armed now" and
+The consequence: **arming the janitor on an agent always succeeds.** Live agents
+arm at their next idle window; hibernated agents arm on wake. There is no "the
+agent was asleep, so this partially failed" outcome — only "armed now" and
 "armed later".
+
+The command being enqueued is `/janitor-arm`, and it is **per-project**: its
+skill calls `CronCreate` and stamps
+`$CLAUDE_PROJECT_DIR/.janitor/state/heartbeat-armed-at.ts`, so it arms only the
+project whose session runs it. That is precisely why it must be *delivered into
+each agent's own session* instead of invoked once centrally — and why the queue
+is the right carrier.
+
+Do not confuse it with `/janitor-global-arm`, which clears the machine-wide
+kill-switch and global-pause flags (`global_control_cli.py arm`, the reverse of
+`/janitor-global-disarm`). That command arms no heartbeat, enqueues nothing, and
+never touches an agent. **No fleet-wide arm command exists today**; the queue is
+what would make one possible.
 
 Verified end-to-end in this repo (TRDD-41FJM8A8):
 
@@ -89,10 +101,9 @@ the `send-command` action. Who may enqueue *on whom* is the ordinary
 | any agent | **itself only** (`send-command` is a self-drive action) |
 
 So the janitor running inside a MEMBER's session can arm *that* agent and no
-other. A true fleet-wide `/janitor-global-arm` must run from the MANAGER's
-session, or from the human user. This is not a defect to route around: an agent
-that could enqueue commands into its peers' terminals would have bypassed the
-governance graph entirely.
+other. A fleet-wide arm must run from the MANAGER's session, or from the human
+user. This is not a defect to route around: an agent that could enqueue commands
+into its peers' terminals would have bypassed the governance graph entirely.
 
 ### `aimaestro-panel.sh` — drive the dashboard HTML side panel
 

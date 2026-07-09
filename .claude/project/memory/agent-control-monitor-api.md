@@ -89,9 +89,12 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   from the verified auth result, never the body; missing ⇒ not yours, fail closed). An agent retracts only
   what it queued itself. Cross-agent cancel still goes through the `send-command` matrix.
 - **A hibernated agent is never waited on.** `queue` persists, so a command to a sleeping agent is HELD
-  (never dropped) and drains at its next `idle_prompt`; `--wake-first` wakes it now. `/janitor-global-arm`
-  therefore always succeeds — armed now, or armed later. Fan-out across the fleet still needs MANAGER or
-  the human, since `queue` maps to `send-command`.
+  (never dropped) and drains at its next `idle_prompt`; `--wake-first` wakes it now. An enqueued
+  `/janitor-arm` therefore always succeeds — armed now, or armed later. `/janitor-arm` is PER-PROJECT (its
+  skill calls `CronCreate` and stamps `$CLAUDE_PROJECT_DIR/.janitor/state/heartbeat-armed-at.ts`), which is
+  exactly why it must be delivered into each agent's own session rather than invoked centrally. It is NOT
+  `/janitor-global-arm`, and no fleet-wide arm command exists.[^5] Fan-out across the fleet still needs
+  MANAGER or the human, since `queue` maps to `send-command`.
 - **There are THREE terminal-injection routes, not one.** `PATCH …/session`, `POST …/queue` (drains into
   the pane), and `POST …/chat` — the last ends in `sendKeys(msg, {literal:true, enter:true})` and was
   unguarded until `c7d9f8a7`. All three now carry `send-command`. Before adding any route that reaches
@@ -157,3 +160,16 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   ordering assertion `indexOf(A) < indexOf(B)` passes VACUOUSLY when A is absent (`-1 < n`), so it passed on
   the exact code it existed to reject — assert presence before order. Third: `enforceAuth` returns
   `NextResponse | null` and throws the identity away; grep for it as a SMELL, not as a guard.
+
+[^5]: [ocd:2026-07-09 lmd:2026-07-09] This page previously said "`/janitor-global-arm` therefore always
+  succeeds — armed now, or armed later", and `docs/SCRIPT-LAYER.md` went further: "It fans out one `queue`
+  call per agent and returns." Both were fabricated. `/janitor-global-arm` runs `global_control_cli.py arm`,
+  which clears the machine-wide kill-switch + global-pause flags and is the exact reverse of
+  `/janitor-global-disarm` — it arms no heartbeat, enqueues nothing, and contains zero agent awareness. The
+  enqueue MECHANISM was right and `janitor-arm` IS a real allowlisted key (`lib/agent-commands.ts:65`); only
+  the command it was attached to was wrong. Root cause: the USER's directive named `/janitor-global-arm`, and
+  I wrote the mechanism against that NAME without ever reading the skill. That is the same failure as the
+  `chat` route in [^4] — a capability is what the code does, not what it is called — except the name came
+  from a human, which made it feel already-verified. **A name supplied by anyone, the user included, is a
+  hypothesis.** Read the implementation before committing the fact, especially into PROJECT-scope memory,
+  where a wrong fact is pushed to every contributor.

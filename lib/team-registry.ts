@@ -544,3 +544,22 @@ export function isAgentInAnyTeam(agentId: string): boolean {
     t.orchestratorId === agentId
   )
 }
+
+/**
+ * Reverse lookup: every team this agent belongs to — as member, chief-of-staff,
+ * or orchestrator — returning the FULL Team objects, not just a yes/no.
+ *
+ * isAgentInAnyTeam above answers only the boolean the wake-guard needs; the
+ * consolidated agent-config endpoint (TRDD-OOCL7ABZ) needs the resolved team
+ * objects so a governance agent can see WHICH team(s) an agent sits in. Kept as
+ * a sibling (not a refactor of isAgentInAnyTeam) so the hot wake-guard path
+ * keeps its cheap `.some()` short-circuit.
+ */
+export function getTeamsForAgent(agentId: string): Team[] {
+  const teams = loadTeams()
+  return teams.filter(t =>
+    t.agentIds.includes(agentId) ||
+    t.chiefOfStaffId === agentId ||
+    t.orchestratorId === agentId
+  )
+}

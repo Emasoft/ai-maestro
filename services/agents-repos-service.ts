@@ -131,6 +131,24 @@ export function listRepos(agentIdOrName: string): ServiceResult<Record<string, u
 }
 
 /**
+ * Parse a raw git remote URL into a normalized `owner/repo` identity, but ONLY
+ * for github.com remotes. Both the SSH form (`git@github.com:owner/repo.git`)
+ * and the HTTPS form (`https://github.com/owner/repo.git`) normalize to the same
+ * `owner/repo`; a non-GitHub remote returns null so a consumer never misreports
+ * it as a GitHub repo. The `(?:^|[@/])` anchor before `github.com` is what stops
+ * a look-alike host (`mygithub.com`, `evilgithub.com`) from matching.
+ */
+export function parseGithubRepo(remoteUrl: string | null | undefined): string | null {
+  if (!remoteUrl) return null
+  const m = remoteUrl.trim().match(/(?:^|[@/])github\.com[:/]+([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i)
+  if (!m) return null
+  const owner = m[1]
+  const repo = m[2]
+  if (!owner || !repo) return null
+  return `${owner}/${repo}`
+}
+
+/**
  * Add or update repositories for an agent.
  */
 export function updateRepos(

@@ -34,9 +34,17 @@ vi.mock('@/lib/kill-switch', () => ({
   recordAuthSuccess: vi.fn(),
 }))
 
-const mockCheckRate = vi.fn<() => { allowed: boolean }>(() => ({ allowed: true }))
+// TRDD-X8R2HP9D: the route now charges TWO buckets — `sudo-password:global`
+// (pre-auth flood guard, never reset) and `sudo-password:<subject>` (per-caller,
+// reset on success) — so the mock must be key-aware and must export
+// resetRateLimit. Vitest's mocked modules are Proxies that THROW on an undefined
+// export, so omitting resetRateLimit fails every test in this file at the
+// destructure, not just the ones that reach a success path.
+const mockCheckRate = vi.fn<(key?: string, max?: number) => { allowed: boolean }>(() => ({ allowed: true }))
+const mockResetRate = vi.fn<(key: string) => void>()
 vi.mock('@/lib/rate-limit', () => ({
-  checkAndRecordAttempt: () => mockCheckRate(),
+  checkAndRecordAttempt: (key: string, max?: number) => mockCheckRate(key, max),
+  resetRateLimit: (key: string) => mockResetRate(key),
 }))
 
 const mockMatchedEntryKey = vi.fn<(m: string, p: string) => string | null>()

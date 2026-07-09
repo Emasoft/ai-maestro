@@ -28,6 +28,29 @@ import { matchedEntryKey } from '@/lib/security-registry'
 // flood of mints from accumulating.
 const MAX_OUTSTANDING_USER_SUDO_TOKENS = 2
 
+// TRDD-X8R2HP9D. Two buckets, mirroring /api/v1/auth/token (API2-MAJ-05).
+//
+// The bug: this route used a single `checkAndRecordAttempt('sudo-password', 5)`
+// on a CONSTANT key and never called resetRateLimit on success. Since
+// checkAndRecordAttempt records every ALLOWED attempt, a *successful* mint was
+// charged to the same bucket as a failed password guess. Sudo tokens are
+// one-shot and bound to one (method, pathTemplate), so each strict operation
+// costs exactly one mint — which capped the WHOLE MACHINE at five strict
+// operations per minute. Deleting six agents 429'd on the sixth.
+//
+// The fix keeps brute-force resistance exactly where it belongs. Failed guesses
+// still accumulate against the caller's own bucket; correct passwords reset it.
+// An attacker who supplies the correct governance password has already won —
+// charging them for it protects nothing and only punishes the real user.
+const SUDO_GLOBAL_MAX_ATTEMPTS = 200
+const SUDO_SUBJECT_MAX_ATTEMPTS = 5
+
+/** Per-caller bucket. Under the user-authority model this is per-user; with the
+ *  model off, `subject` is the legacy 'system-owner' sentinel for everyone, so it
+ *  degrades to one shared bucket — still reset-on-success, which is the half of
+ *  the fix that actually unblocks the UI. */
+const subjectRateKey = (subject: string) => `sudo-password:${subject}`
+
 const SudoSchema = z.object({
   password: z.string().min(1).max(256),
   // SUDO-01 (R32, two-phase / optional): bind the minted token to one
@@ -53,9 +76,12 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const { checkAndRecordAttempt } = await import('@/lib/rate-limit')
-  const rateCheck = checkAndRecordAttempt('sudo-password', 5)
-  if (!rateCheck.allowed) {
+  // Outer, generous, PRE-AUTH flood guard. Deliberately never reset on success
+  // (same reasoning as `aid-token-exchange:global`): a successful mint must not
+  // launder away the failures an attacker has already accumulated.
+  const { checkAndRecordAttempt, resetRateLimit } = await import('@/lib/rate-limit')
+  const globalCheck = checkAndRecordAttempt('sudo-password:global', SUDO_GLOBAL_MAX_ATTEMPTS)
+  if (!globalCheck.allowed) {
     return NextResponse.json(
       { error: 'Too many sudo attempts. Try again later.' },
       { status: 429 }
@@ -93,6 +119,21 @@ export async function POST(request: NextRequest) {
   // assert. The per-subject quota cap (countBySubject) therefore caps per-user
   // when the model is on, and globally when it is off.
   const subject = ctx.userId ?? 'system-owner'
+
+  // TRDD-X8R2HP9D: the per-caller bucket. It can only be charged HERE, after
+  // authentication, because before this line the subject is unknown — which is
+  // exactly why the original code used a constant key and became a machine-wide
+  // cap. Charged before the body is parsed, so an over-limit caller cannot make
+  // us do work. Agents never reach this line (the isSystemOwner gate refused
+  // them above), so a rejected agent costs only the global bucket.
+  const rateKey = subjectRateKey(subject)
+  const subjectCheck = checkAndRecordAttempt(rateKey, SUDO_SUBJECT_MAX_ATTEMPTS)
+  if (!subjectCheck.allowed) {
+    return NextResponse.json(
+      { error: 'Too many sudo attempts. Try again later.' },
+      { status: 429 }
+    )
+  }
 
   let raw: unknown
   try {
@@ -134,6 +175,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const { token, expiresAt } = await issueSudoToken(password, subject, boundOperation)
+    // TRDD-X8R2HP9D: reset ONLY this subject's bucket on success — the standard
+    // "count attempts, reset on success" pattern lib/rate-limit.ts documents and
+    // /api/auth/login already follows. The global bucket is intentionally NOT
+    // reset (mirroring `aid-token-exchange:global`), so a correct password never
+    // launders another caller's accumulated failures out of the window.
+    resetRateLimit(rateKey)
     recordAuthSuccess()
     return NextResponse.json({ token, expiresAt })
   } catch (err) {

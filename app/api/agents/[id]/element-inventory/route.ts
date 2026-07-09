@@ -58,6 +58,12 @@ function isValidAgentId(id: string): boolean {
   return /^[a-zA-Z0-9_.@-]+$/.test(id)
 }
 
+/**
+ * Cap per snapshot, to bound a runaway write. A fully-instrumented agent should
+ * be well under 1_000.
+ */
+const MAX_ELEMENTS_PER_SNAPSHOT = 5_000
+
 function isValidElement(v: unknown): v is LedgerElement {
   if (!v || typeof v !== 'object') return false
   const o = v as Record<string, unknown>
@@ -69,6 +75,83 @@ function isValidElement(v: unknown): v is LedgerElement {
   return true
 }
 
+/**
+ * An agent owns its own ledger. `modify-agent` is NOT the action: it is absent
+ * from SELF_DRIVE_ACTIONS, so the universal self-target ban would 403 the only
+ * caller this endpoint has ever been written for — an agent's own SessionStart
+ * hook, posting about itself.
+ *
+ * Exact match on the bare agent id: the reader keys the ledger on the UUID from
+ * `deriveAgentIdFromCwd`, so an agent writes exactly `<uuid>.jsonl`. Accepting a
+ * qualified `uuid@host` from an agent caller would let it create a second,
+ * orphaned ledger the reader never reads. The system owner (the `manual`
+ * debugging trigger) carries no agentId and keeps the full id space.
+ */
+function denyBadIdOrForeignLedger(agentId: string, callerAgentId?: string): NextResponse | null {
+  if (!isValidAgentId(agentId)) {
+    return NextResponse.json({ error: 'Invalid agent id format' }, { status: 400 })
+  }
+  if (callerAgentId && callerAgentId !== agentId) {
+    return NextResponse.json(
+      { error: 'Forbidden — you may only write your own element inventory' },
+      { status: 403 },
+    )
+  }
+  return null
+}
+
+/** Distinguishes "the body was not JSON" from a body that legitimately parsed to null. */
+const MALFORMED_JSON = Symbol('malformed-json')
+
+async function readJsonBody(request: NextRequest): Promise<unknown> {
+  try {
+    return await request.json()
+  } catch {
+    return MALFORMED_JSON
+  }
+}
+
+interface ParsedSnapshot {
+  trigger: InventoryTrigger
+  elements: LedgerElement[]
+  ts: string
+}
+
+/**
+ * Decide WHAT is being appended, refusing any shape we cannot name. Kept apart
+ * from POST so the authorization guards stay legible next to the write: this is a
+ * pure function of the body, touching no identity and no ledger. Every refusal is
+ * a 400 — the caller sent something malformed, not something forbidden.
+ */
+function parseSnapshotBody(body: unknown): ParsedSnapshot | { error: string } {
+  if (!body || typeof body !== 'object') {
+    return { error: 'Body must be a JSON object' }
+  }
+  const b = body as Record<string, unknown>
+
+  if (!VALID_TRIGGERS.includes(b.trigger as InventoryTrigger)) {
+    return { error: `Invalid trigger; expected one of ${VALID_TRIGGERS.join(', ')}` }
+  }
+  if (!Array.isArray(b.elements)) {
+    return { error: 'elements must be an array' }
+  }
+  if (b.elements.length > MAX_ELEMENTS_PER_SNAPSHOT) {
+    return { error: `elements array exceeds ${MAX_ELEMENTS_PER_SNAPSHOT}-item cap` }
+  }
+  if (!b.elements.every(isValidElement)) {
+    return { error: 'Invalid element entry — see API docs for required shape' }
+  }
+
+  // An unparseable or absent `ts` falls back to now rather than failing: the
+  // client's clock is advisory, and the ledger is append-ordered by write.
+  const tsRaw = b.ts
+  const ts = typeof tsRaw === 'string' && !Number.isNaN(new Date(tsRaw).getTime())
+    ? tsRaw
+    : new Date().toISOString()
+
+  return { trigger: b.trigger as InventoryTrigger, elements: b.elements as LedgerElement[], ts }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -76,90 +159,34 @@ export async function POST(
   // TRDD-YEE33F3A. This called `enforceAuth`, which authenticates and DISCARDS
   // the identity, so any authenticated agent could append forged snapshots to
   // ANY agent's ledger — an audit surface the Session Browser presents as "what
-  // Claude actually saw".
-  //
-  // The action is OWNERSHIP, not `modify-agent`. Two reasons, and the second is
-  // decisive: appending to an audit ledger is not reconfiguring an agent; and
-  // `modify-agent` is absent from SELF_DRIVE_ACTIONS, so the universal
-  // self-target ban would 403 the only caller this endpoint has ever been
-  // written for — an agent's own SessionStart hook, posting about itself.
-  // Authorizing it with `modify-agent` would have shipped a permanently
-  // uncallable endpoint.
-  //
-  // Exact match on the bare agent id: the reader keys the ledger on the UUID
-  // from `deriveAgentIdFromCwd`, so an agent writes exactly `<uuid>.jsonl`.
-  // Accepting a qualified `uuid@host` from an agent caller would let it create a
-  // second, orphaned ledger the reader never reads. The system owner (the
-  // `manual` debugging trigger) keeps the full id space.
+  // Claude actually saw". Appending to an audit ledger is not reconfiguring an
+  // agent, so the rule is ownership; see `denyBadIdOrForeignLedger`.
   const auth = requireAuth(request)
   if (!auth.ok) return auth.error
 
   try {
     const { id: agentId } = await params
-    if (!isValidAgentId(agentId)) {
-      return NextResponse.json({ error: 'Invalid agent id format' }, { status: 400 })
-    }
-    if (auth.agentId && auth.agentId !== agentId) {
-      return NextResponse.json(
-        { error: 'Forbidden — you may only write your own element inventory' },
-        { status: 403 },
-      )
-    }
+    const denial = denyBadIdOrForeignLedger(agentId, auth.agentId)
+    if (denial) return denial
 
-    let body: unknown
-    try {
-      body = await request.json()
-    } catch {
+    const body = await readJsonBody(request)
+    if (body === MALFORMED_JSON) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    if (!body || typeof body !== 'object') {
-      return NextResponse.json({ error: 'Body must be a JSON object' }, { status: 400 })
+    const snapshot = parseSnapshotBody(body)
+    if ('error' in snapshot) {
+      return NextResponse.json({ error: snapshot.error }, { status: 400 })
     }
-    const b = body as Record<string, unknown>
-
-    if (!VALID_TRIGGERS.includes(b.trigger as InventoryTrigger)) {
-      return NextResponse.json(
-        { error: `Invalid trigger; expected one of ${VALID_TRIGGERS.join(', ')}` },
-        { status: 400 },
-      )
-    }
-
-    if (!Array.isArray(b.elements)) {
-      return NextResponse.json({ error: 'elements must be an array' }, { status: 400 })
-    }
-    // Cap at 5_000 elements per snapshot to prevent runaway writes
-    // (a fully-instrumented agent should be well under 1_000).
-    if (b.elements.length > 5_000) {
-      return NextResponse.json(
-        { error: 'elements array exceeds 5000-item cap' },
-        { status: 400 },
-      )
-    }
-    const elements: LedgerElement[] = []
-    for (const e of b.elements) {
-      if (!isValidElement(e)) {
-        return NextResponse.json(
-          { error: 'Invalid element entry — see API docs for required shape' },
-          { status: 400 },
-        )
-      }
-      elements.push(e)
-    }
-
-    const tsRaw = b.ts
-    const ts = typeof tsRaw === 'string' && !Number.isNaN(new Date(tsRaw).getTime())
-      ? tsRaw
-      : new Date().toISOString()
 
     await appendInventorySnapshot({
-      ts,
-      trigger: b.trigger as InventoryTrigger,
+      ts: snapshot.ts,
+      trigger: snapshot.trigger,
       agentId,
-      elements,
+      elements: snapshot.elements,
     }, auth.context)
 
-    return NextResponse.json({ ok: true, ts, count: elements.length })
+    return NextResponse.json({ ok: true, ts: snapshot.ts, count: snapshot.elements.length })
   } catch (error) {
     // The service's ownership guard throws rather than returning an envelope.
     // Without this branch a denial would be reported as 500 — indistinguishable

@@ -144,6 +144,52 @@ describe('an agent may append only to its own ledger', () => {
   })
 })
 
+describe('the body gauntlet refuses every shape it cannot name (400, not 403)', () => {
+  // These branches existed but were untested, inline, and drove the POST's
+  // cognitive complexity to 34. They now live in a pure `parseSnapshotBody`;
+  // this block is what proves the extraction changed no behavior.
+  beforeEach(() => asAgent(MEMBER))
+
+  it.each([
+    ['a non-object body', 'not-an-object'],
+    ['an unknown trigger', { trigger: 'reboot', elements: [] }],
+    ['a missing trigger', { elements: [] }],
+    ['elements that are not an array', { trigger: 'manual', elements: 'lots' }],
+    ['an element with no name', { trigger: 'manual', elements: [{ ...VALID_ELEMENT, name: '' }] }],
+    ['an element with negative tokens', { trigger: 'manual', elements: [{ ...VALID_ELEMENT, tokens: -1 }] }],
+    ['an element with a non-finite token count', { trigger: 'manual', elements: [{ ...VALID_ELEMENT, tokens: Infinity }] }],
+    ['an element with an unknown bucket', { trigger: 'manual', elements: [{ ...VALID_ELEMENT, bucket: 'vibes' }] }],
+    ['an element with an unknown scope', { trigger: 'manual', elements: [{ ...VALID_ELEMENT, scope: 'galaxy' }] }],
+  ])('%s is 400 and writes nothing', async (_label, body) => {
+    expect((await post(MEMBER, body)).status).toBe(400)
+    ledgerUntouched()
+  })
+
+  it('an over-cap elements array is 400 — the write is bounded', async () => {
+    const elements = Array.from({ length: 5_001 }, () => VALID_ELEMENT)
+    expect((await post(MEMBER, { trigger: 'manual', elements })).status).toBe(400)
+    ledgerUntouched()
+  })
+
+  it('exactly at the cap is accepted — the bound is inclusive', async () => {
+    const elements = Array.from({ length: 5_000 }, () => VALID_ELEMENT)
+    expect((await post(MEMBER, { trigger: 'manual', elements })).status).toBe(200)
+    expect(mockFs.appendFile).toHaveBeenCalledTimes(1)
+  })
+
+  it('a client-supplied ts is preserved', async () => {
+    const ts = '2026-01-02T03:04:05.000Z'
+    expect((await post(MEMBER, { ...VALID_BODY, ts })).status).toBe(200)
+    expect(JSON.parse(String(mockFs.appendFile.mock.calls[0][1]))).toMatchObject({ ts })
+  })
+
+  it('an unparseable ts falls back to now rather than failing — the clock is advisory', async () => {
+    expect((await post(MEMBER, { ...VALID_BODY, ts: 'yesterday-ish' })).status).toBe(200)
+    const written = JSON.parse(String(mockFs.appendFile.mock.calls[0][1]))
+    expect(Number.isNaN(new Date(written.ts).getTime())).toBe(false)
+  })
+})
+
 describe('layer isolation — each guard refuses on its own (fault injection)', () => {
   /** Inconsistent contexts, unreachable in production, so exactly one guard fires. */
   function withSplitIdentity(routeAgentId: string | undefined, ctx: Record<string, unknown>) {

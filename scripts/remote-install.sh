@@ -1098,9 +1098,18 @@ act3_clone_and_build() {
                     # Check each category independently so partially-installed setups are
                     # handled correctly rather than treating one missing file as a signal
                     # to skip all other tool categories.
-                    local tool_flags=""
-                    [ ! -f "$HOME/.local/bin/amp-send.sh" ] && tool_flags="$tool_flags --skip-messaging"
-                    [ ! -f "$HOME/.local/bin/aimaestro-agent.sh" ] && tool_flags="$tool_flags --skip-agent-cli"
+                    #
+                    # tool_flags MUST be a real array. It was a string, and `"${str[@]}"`
+                    # expands a scalar to exactly ONE word — so an empty tool_flags passed
+                    # a bare '' as argv[3], and a populated one passed the single glued word
+                    # ' --skip-messaging --skip-agent-cli'. install.sh exits 1 on any
+                    # unrecognized option, so BOTH shapes killed the "Updating agent tools"
+                    # step on every remote update, and the ~/.local/bin script layer silently
+                    # never refreshed. An empty array expands to ZERO words, which is the
+                    # behaviour this code always meant to have.
+                    local -a tool_flags=()
+                    [ ! -f "$HOME/.local/bin/amp-send.sh" ] && tool_flags+=(--skip-messaging)
+                    [ ! -f "$HOME/.local/bin/aimaestro-agent.sh" ] && tool_flags+=(--skip-agent-cli)
                     chmod +x install.sh
                     ./install.sh --from-remote -y "${tool_flags[@]}"
                 fi

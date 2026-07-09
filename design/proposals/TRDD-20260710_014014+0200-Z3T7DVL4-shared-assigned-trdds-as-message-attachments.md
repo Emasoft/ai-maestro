@@ -4,7 +4,7 @@ title: Assigned TRDDs are shared objects attached to the message, not copies
 column: proposal
 approval-tier: 2
 created: 2026-07-10T01:40:14+0200
-updated: 2026-07-10T01:40:14+0200
+updated: 2026-07-10T01:48:00+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -37,15 +37,28 @@ governance, so it is proposed, never self-approved.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
 
-Authored from a USER directive given 2026-07-10T01:38 (verbatim in §1). **The
-directive's last sentence is TRUNCATED** — it ends `"...the kanban metadata about
-itself) and"`. Ask the USER to complete it before designing past §5. Do not guess
-the tail.
+Authored from a USER directive of 2026-07-10, received COMPLETE on the third send
+(verbatim in §1; the first two sends were truncated mid-clause).
 
-Nothing is built. This is capture + first analysis. The load-bearing finding is
-§4: **a filesystem symlink cannot be the sharing primitive**, because AI Maestro
-agents may live on different hosts. Sharing must be by *reference resolved through
-the server*, not by a link in a filesystem.
+Nothing is built. This is capture + analysis. Four load-bearing findings:
+
+1. **§4 — a filesystem symlink cannot be the sharing primitive.** Agents live on
+   different hosts; for the primary case there is no filesystem between them. The
+   directive's closing constraint kills it a second time: a symlink cannot express
+   "scoped by project and role."
+2. **§3.5 — the third pillar's automation does not exist as code.** `approval-tier:`
+   is hand-written in 13 TRDDs today. Nothing reads the PRRD and computes it.
+   Verified 2026-07-10: no tier-floor evaluator, no watchdog anywhere in `scripts/`,
+   `lib/`, or `services/`. The rules DESCRIBE it (D3/D4 of the DEP overlay
+   `aimaestro-trdd-approval.md`); the code does not exist.
+3. **§3.6 — the shared unit is the `design/` FOLDER, not one file.** Load-bearing,
+   not a wording choice: deciding "does this change need golden/silver approval"
+   requires the owning project's `design/requirements/PRRD.md`. A lone TRDD does not
+   carry its own rules — only its `relevant-rules:` citations.
+4. **§3.7 — sharing is a SCOPED VIEW, per project and per role.** The directive's
+   final clause. Not a blanket share: R6 team isolation and the comm graph already
+   say a MEMBER of team X may not reach team Y, and COS is the sole gateway into a
+   closed team. A share that ignores that is a governance hole, not a convenience.
 
 ## 1. The directive, verbatim
 
@@ -61,9 +74,13 @@ the server*, not by a link in a filesystem.
 > crossplatform), and automatically added to the kanban with the assignee. This is
 > the power of the 3-pillars task system: the TRDD is the atomic element of the
 > design that is at the same time the kanban itself (since each TRDD carry in its
-> own frontmatter the kanban metadata about itself) and
-
-*(message ends here — truncated.)*
+> own frontmatter the kanban metadata about itself) and the governance system (since
+> the TRDD carry the approval requirements of itself, and the first pillar PRRD
+> provides the means to automatically know if a change require a certain level of
+> approval simply comparing it with the project rules of silver or gold level). make
+> sure everything is ready to use this system in its fullness. and make sure the
+> sharing of the design folder is made according to the project and the role,
+> following the governance rules.
 
 ## 2. What this asks for, itemized
 
@@ -78,6 +95,11 @@ the server*, not by a link in a filesystem.
    **auto-adds it to the kanban with the assignee set**.
 6. The unifying claim: the TRDD is simultaneously the atomic unit of design **and**
    the kanban card, because its frontmatter carries its own kanban metadata.
+7. **And the governance system**, because the TRDD carries its own approval
+   requirements, and the PRRD (pillar one) makes the required approval level
+   *computable* — compare the change against the project's golden/silver rules.
+8. **"Ready to use in its fullness"**, and **the `design/` folder is shared according
+   to the project and the role, following the governance rules.**
 
 ## 3. How much of this already exists (verified, not assumed)
 
@@ -102,7 +124,77 @@ do not rebuild it:
   `refuse`, `promote`, `archive`.
 
 So the genuinely new work is: **shared mutable access with an approval gate on the
-receiver's side, across agents that may not share a filesystem.**
+receiver's side, across agents that may not share a filesystem, scoped by project
+and role.**
+
+## 3.5 The third pillar is described but NOT BUILT
+
+The directive's claim — *"the first pillar PRRD provides the means to automatically
+know if a change require a certain level of approval simply comparing it with the
+project rules of silver or gold level"* — is exactly the **objective tier-floor** of
+`rules/aimaestro/aimaestro-trdd-approval.md` §D3, and its lazy **classification
+watchdog** §D4. The design is written. The code is not.
+
+Verified 2026-07-10 across `scripts/`, `lib/`, `services/`:
+
+| Piece | Status |
+|---|---|
+| `approval-tier:` frontmatter field | exists — hand-written in 13 TRDDs |
+| `relevant-rules:` citation field | exists |
+| PRRD golden/silver rule file + `get-prrd.py` / `prrd-edit.py` / `findprrd.py` | exist (per the IND rule) |
+| **Anything that READS the PRRD and COMPUTES a TRDD's minimum tier** | **does not exist** |
+| **The watchdog that compares declared tier to the floor and auto-corrects** | **does not exist** |
+
+So "make sure everything is ready to use this system in its fullness" has a concrete
+first deliverable: **a tier-floor evaluator**. Given a TRDD (and its proposed diff)
+plus the project's PRRD, return the minimum approval tier from the D3 signals, which
+are deliberately mechanical — path globs, keyword greps, dependency names — so the
+cheap script pre-filter runs on every change and the expensive LLM confirm runs only
+on the handful of suspects (§D6's token discipline).
+
+A receiver that can compute this locally can self-classify a change *before* asking
+for approval, which is the whole point of the pillar: the TRDD carries its own
+approval requirements.
+
+## 3.6 The shared unit is the folder, because the rules live outside the TRDD
+
+The directive says *"the sharing of the design folder"* — not "the TRDD file". That
+is necessary, not incidental. A TRDD cites `relevant-rules: [3, 27, 64.134]`; it does
+not contain them. To decide whether an edit crosses a golden rule, the receiver needs
+`design/requirements/PRRD.md` of the **owning** project.
+
+Minimum shared surface for an assigned TRDD, therefore:
+
+- the TRDD file itself (read + gated write),
+- `design/requirements/PRRD.md` (read-only — the rules it is judged against),
+- enough of `design/{tasks,proposals}/` to resolve its `npt:` / `eht:` / `blocked-by:`
+  graph, which is what tells the receiver whether it may start at all.
+
+Not shared by default: the rest of the owning project's board.
+
+## 3.7 "According to the project and the role" — the share is an ACL, not a link
+
+The final clause is the tightest constraint in the directive, and it independently
+rules out every filesystem-link scheme: **a symlink has no notion of who is reading
+it.**
+
+Scoping must fall out of governance rules we already have, not a new ACL language:
+
+- **R6 comm graph** already decides who may send to whom. An attachment rides a
+  message, so it inherits the graph. A MANAGER cannot hand a TRDD directly to an
+  in-team non-COS agent, because MANAGER→ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER
+  edges were deliberately removed in v3 — the COS is the sole gateway. **Assignment
+  must not become a side channel that reintroduces those edges.**
+- **Team isolation** already decides visibility: a MEMBER of team X has no business
+  reading team Y's `design/`.
+- **The governance title** decides the write mode: the TRDD's `current-owner` writes
+  directly; the `assignee` writes as a pending edit; everyone else reads or is
+  refused.
+
+So the share is a **server-mediated, per-(project, agent, title) view** over the
+owning project's `design/` tree. This is the same conclusion §4 reaches from the
+cross-host argument, arrived at independently — which is the strongest evidence it is
+right.
 
 ## 4. Why a symlink cannot be the answer (the load-bearing constraint)
 
@@ -152,7 +244,13 @@ The TRDD file has exactly **one canonical location**: the `design/` tree of the
 
 ## 6. Hard questions this proposal does NOT settle
 
-1. **The truncated sentence.** Ask the USER.
+1. **Sequencing.** "Ready to use this system in its fullness" spans four
+   deliverables, and they are not independent: (a) the `manage-trdd` AuthAction
+   (§6.6) — without it agents cannot write a TRDD at all; (b) the **tier-floor
+   evaluator** (§3.5) — without it the third pillar is prose; (c) the scoped
+   `design/` view (§3.7); (d) the attach + pending-edit + change-channel flow (§5).
+   (a) and (b) are prerequisites, and (a) is itself an unmade policy decision. Does
+   the USER want them landed in that order, or a walking skeleton across all four?
 2. **Which board owns an assigned TRDD?** It belongs to the sender's project but
    appears on the assignee's board. Does it appear on both? Does moving its column
    from the assignee's board write back to the sender's project's git tree?

@@ -84,6 +84,22 @@ export async function GET(
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }
+
+  // TRDD-KJQZEYXW: free-text keyword search (`q`) across subject + description +
+  // labels — the field filters above are exact-match only, so a governance agent
+  // hunting "the auth refactor task" had no way to find it by content. Applied as
+  // a post-fetch filter here (not in listTeamTasks) so the GitHub-Projects query
+  // path is untouched; scoping to the already-authorized team's own tasks.
+  const q = url.searchParams.get('q')?.trim().toLowerCase()
+  if (q && result.data && Array.isArray((result.data as { tasks?: unknown[] }).tasks)) {
+    const data = result.data as { tasks: Array<{ subject?: string; description?: string; labels?: string[] }> }
+    const filtered = data.tasks.filter((t) => {
+      const hay = `${t.subject ?? ''}\n${t.description ?? ''}\n${(t.labels ?? []).join(' ')}`.toLowerCase()
+      return hay.includes(q)
+    })
+    return NextResponse.json({ ...data, tasks: filtered })
+  }
+
   return NextResponse.json(result.data)
 }
 

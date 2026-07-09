@@ -32,6 +32,23 @@
 import { promises as fs } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
+import type { AuthContext } from '@/lib/agent-auth'
+
+/**
+ * Thrown when a caller tries to append to a ledger it does not own.
+ *
+ * This service returns `void`, not a `ServiceResult`, so the ownership guard
+ * cannot hand back a `{ error, status }` envelope like its siblings do. A typed
+ * error keeps the refusal distinguishable from a genuine failure — a route that
+ * let it fall into a generic `catch` would report 500 for a denial, and a 500 is
+ * indistinguishable from "the disk is full". Callers map it to 403.
+ */
+export class ForeignLedgerError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ForeignLedgerError'
+  }
+}
 
 export type InventoryTrigger = 'session_start' | 'reload_plugins' | 'manual'
 
@@ -74,10 +91,25 @@ function ledgerFile(agentId: string): string {
 /**
  * Append a snapshot to the agent's ledger. Creates the parent
  * directory if needed. Atomic via fs.appendFile (single write).
+ *
+ * TRDD-YEE33F3A — object-level authz (defence-in-depth). This ledger is an
+ * AUDIT surface: the Session Browser presents it as "what Claude actually saw".
+ * An agent may append only to its own ledger, so a compromised one cannot
+ * rewrite another's history. The system owner (the `manual` debugging trigger)
+ * may append anywhere. No authContext → internal caller; the route guard is
+ * authoritative.
  */
 export async function appendInventorySnapshot(
   snapshot: Omit<InventorySnapshot, 'ts'> & { ts?: string },
+  authContext?: AuthContext,
 ): Promise<void> {
+  if (authContext && !authContext.isSystemOwner) {
+    if (!authContext.agentId || authContext.agentId !== snapshot.agentId) {
+      throw new ForeignLedgerError(
+        'Forbidden — you may only write your own element inventory',
+      )
+    }
+  }
   const ts = snapshot.ts ?? new Date().toISOString()
   const fullSnapshot: InventorySnapshot = {
     ts,

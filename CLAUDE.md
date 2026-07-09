@@ -1056,10 +1056,20 @@ These skills ARE the authoritative reference. When the API changes, only these s
 
 AI Maestro installs CLI scripts to `~/.local/bin/` that wrap API calls:
 - `aimaestro-agent.sh` — Agent lifecycle CLI (delegates to `agent-*.sh` modules)
-- `amp-send.sh`, `amp-inbox.sh`, `amp-read.sh`, etc. — Messaging CLI
+- `aimaestro-session.sh` — Terminal control: `inject`, `slash`, `state`, `read-prompt`, `answer`, `queue*`
+- `aimaestro-panel.sh` — HTML side panel: `set`, `open`, `close`, `refresh`, `status`, `feedback`
+- `aimaestro-trdd.sh` — 3-pillars task API: `search`, `read`, `edit`, `approve`, `refuse`, `promote`, `archive`
+- `aimaestro-teams.sh`, `aimaestro-governance.sh`, `aimaestro-hook.sh` — teams, governance, the hook shim
+- `amp-send.sh`, `amp-inbox.sh`, `amp-read.sh`, `amp-kanban-*.sh`, etc. — Messaging + kanban CLI
 - `aid-init.sh`, `aid-token.sh`, etc. — Agent Identity CLI
 
 The same scripts are also bundled in the plugin (for slash commands). When the API changes, only these scripts need updating.
+
+**Full reference: [docs/SCRIPT-LAYER.md](./docs/SCRIPT-LAYER.md)** — every subcommand, the
+authorization rules that apply to an agent caller, and the two things that are not
+true yet (`aimaestro-trdd.sh`'s write verbs 403 for agents; the scripts have no
+USER auth path). `install-messaging.sh` copies `scripts/*.sh` by glob, so a new
+wrapper needs no installer edit.
 
 ### The decoupling invariant (the WHY — derive every rule below from THIS)
 

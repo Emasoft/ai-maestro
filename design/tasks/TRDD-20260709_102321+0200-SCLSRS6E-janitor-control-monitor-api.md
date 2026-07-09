@@ -3,7 +3,7 @@ trdd-id: SCLSRS6E
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
 column: dev
 created: 2026-07-09T10:23:21+0200
-updated: 2026-07-09T12:42:10+0200
+updated: 2026-07-09T13:20:31+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -123,16 +123,33 @@ and the TRDD-file task tooling. Verdict per area (✅ exists · ◑ partial · �
   as Phase A's cross-agent-auth deferral. The queue MODULE (persist/FIFO/dedupe/cancel) + the
   gate DECISION (evaluateExitGate) are unit-covered.
 
-**NEXT ACTION:** Phase C (task lifecycle, this repo): D5 rest (TRDD-KJQZEYXW) — `lib/trdd-store.ts`
-(parse/search/edit the `design/{proposals,tasks,archived,refused}/*.md` corpus, frontmatter-aware,
-`git mv` lifecycle for approve/promote/archive + `## Approval log` append per the
-`aimaestro-trdd-approval.md` overlay) + routes `GET /api/trdd`, `GET/PATCH /api/trdd/[id]`,
-`POST /api/trdd/[id]/{approve,promote,archive}` (strict on the mutating ones); plus the kanban
-keyword-search query param + a full-field edit path. TRDD `column:` stays SSOT; optional one-way
-mirror to kanban `status`. Then D (panel/G4), E (script layer D6 — the decoupling wrappers the
-janitor actually calls; nothing ships to the janitor before this), F (D7 cross-repo issues), G
-(janitor adoption). Cross-repo items are GitHub issues. Final EHT: write the janitor its command
-reference + adopt instruction (Emasoft/ai-maestro-janitor issue) — the whole point of this epic.
+**PROGRESS 2026-07-09T13:20+0200 — Phase C DONE (this repo):**
+- D5-rest (TRDD-KJQZEYXW) landed as `40aeab53`: `lib/trdd-store.ts` (gray-matter parse +
+  search by column/id/keyword/zone + read; LINE-BASED frontmatter writers preserving the
+  grep-first format — a YAML re-emit would reorder/quote/block-style and break the contract;
+  lifecycle promoteTrdd/refuseTrdd/archiveTrdd/advanceColumn with `git mv` + `## Approval log`
+  append per the `aimaestro-trdd-approval.md` overlay; never commits — caller commits;
+  gray-matter auto-parses ISO→Date, coerced back for summaries). `lib/trdd-design-dir.ts`
+  (resolveDesignDir(agentId) → an agent's `<workdir>/design` OR the server's own repo;
+  isValidTrddId 8-char base36). Routes: `GET /api/trdd` (search) · `GET /api/trdd/[id]` (read) ·
+  `PATCH /api/trdd/[id]` (edit, STRICT) · `POST .../{approve,refuse,promote,archive}` (STRICT).
+  Kanban: `q` free-text keyword search on the tasks list route (full-field edit already existed
+  via tasks/[taskId] PUT — TRDD-95d23f3b, so that D5 sub-gap was already closed). 11 unit tests.
+  Full suite 2115 pass / 0 fail; `tsc` 0; `next lint` clean.
+- Deferred (not skipped): the git-mv lifecycle + agentId→design-dir resolution against a REAL
+  git repo are integration-level (unit tests use the fs.rename fallback in a non-repo tmp dir) →
+  Phase E live-server checks. The optional TRDD→kanban one-way mirror was NOT built (explicitly
+  optional; TRDD `column:` stays sole SSOT — adding a mirror now would be speculative coupling).
+
+**NEXT ACTION:** Phase D (this repo): D4 (TRDD-229CJGYH) HTML side-panel subsystem = campaign gate
+G4 — `components/HtmlSidePanel.tsx` + a new `html` tab in app/page.tsx, a NEW panel-content WS in
+server.mjs (mirror the `companionWss` per-agent client-registry pattern), `POST /api/agents/[id]/panel`
+(open/close/refresh, STRICT) + a feedback callback channel, sandboxed `<iframe srcdoc>` obeying the
+no-nested-scrollbars rule, dev-browser integration for live-site preview. Then E (script layer D6 —
+the decoupling wrappers the janitor actually calls; NOTHING ships to the janitor before this), F
+(D7 cross-repo issues on ai-maestro-plugin: dev-browser core dep + hook AskUserQuestion capture),
+G (write the janitor its full command reference + adopt instruction — the whole point of this epic).
+Cross-repo items are GitHub issues.
 
 **Load-bearing facts / gotchas:**
 - The decoupling invariant (project CLAUDE.md "Plugin Abstraction Principle"): plugins call

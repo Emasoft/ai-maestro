@@ -2,7 +2,7 @@
 name: marketplace-plugin-registration
 description: "how to register / publish a new plugin into the ai-maestro-plugins marketplace / publish.py hard-exits 'not registered in marketplace' at stage 5 / cross-marketplace dependency won't resolve at install / claude plugin install can't find the plugin / marketplace.json entry shape + allowCrossMarketplaceDependenciesOn"
 ocd: 2026-07-08
-lmd: 2026-07-08
+lmd: 2026-07-09
 metadata:
   node_type: memory
   type: project
@@ -50,6 +50,14 @@ repo that has no releases yet.
   (caught live: trigger said `main`, repo used `master` → notify never fired until fixed).
 - Repos also need the `MARKETPLACE_PAT` secret (set via the canonical
   `set_marketplace_pat.py`) for the notify chain.
+- The notify→receiver auto-bump chain is **proven end-to-end for a PRE-EXISTING entry**
+  (2026-07-09, `ai-maestro-webdesign`): the entry was registered at 0.1.0 before the first
+  publish, and each publish (v0.1.1→v0.1.4) drove the receiver workflow to bump the manifest
+  entry to match — 4 consecutive successful bumps. Contrast with a first publish whose entry
+  did NOT exist at dispatch time (WST): the receiver no-ops (nothing to bump), so the entry
+  version lags the shipped repo version until the next publish. Register the entry FIRST if you
+  want the very first publish to also bump the manifest.
+- **publish.py leaves `uv.lock` one version behind** and it bites the NEXT publish.[^2]
 
 Smoke-test a fresh registration without polluting anything: `claude plugin marketplace
 update ai-maestro-plugins`, then `claude plugin install <name>@ai-maestro-plugins
@@ -64,3 +72,16 @@ update ai-maestro-plugins`, then `claude plugin install <name>@ai-maestro-plugin
   produced a manifest that silently reverted dozens of version bumps. Lesson: for any
   repo that MACHINES push to (notify workflows, bots), treat the local clone as stale by
   default and pull before every edit.
+
+[^2]: [ocd:2026-07-09 lmd:2026-07-09] The CPV `publish.py` bump stage updates
+  `pyproject.toml` + `.claude-plugin/plugin.json` + `marketplace.json` but does NOT run
+  `uv lock`, so the committed `uv.lock`'s own project-version entry stays one version behind
+  pyproject. On the NEXT publish, `uv run scripts/publish.py` re-locks `uv.lock` on invocation
+  (syncing that version) which DIRTIES the working tree BEFORE publish.py's clean-tree
+  pre-flight check runs → the publish aborts with "Working tree is dirty. Commit or stash
+  changes first." Symptom seen live on webdesign v0.1.3: publish exited rc=1 at the pre-flight.
+  Fix each time: `uv lock` then commit `uv.lock` in sync with the current pyproject version
+  BEFORE running publish.py (the diff is a single `version = "x.y.z"` line). Root fix for the
+  plugin's own maintenance: add a `uv lock` step to publish.py's bump stage so the lockfile
+  never lags. Lesson: an on-invocation lockfile re-sync defeats a clean-tree pre-flight — keep
+  `uv.lock` committed in sync, or lock as part of the bump.

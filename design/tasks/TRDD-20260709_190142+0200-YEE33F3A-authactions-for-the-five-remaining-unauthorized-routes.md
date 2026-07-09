@@ -307,14 +307,38 @@ Then the three follow-ups this TRDD surfaced but did not fix:
    **Design (verified, not yet built):** extract G05+G06 into one shared gate —
    e.g. `lib/message-route-gate.ts::assertRouteAllowed({ senderAgentId, to,
    authContext, inReplyTo }) -> { allowed, reason, ops[] }` — and call it from BOTH
-   the AIO and `forwardFromUI`. `forwardFromUI` already threads `authContext` (the
-   two `forwardMessage` services gained it in `28593ed7`), so the plumbing exists.
-   A system-owner caller is the HUMAN sender (full `Y` to every node); an agent
-   caller is its own `governanceTitle`, and after the ownership fix it can only
-   forward from its OWN mailbox, so `fromAgent === caller`. A MISSING authContext
-   must enforce (agent-initiated) rather than skip — skipping is the bypass.
+   the AIO and `forwardFromUI`. The plumbing exists: both `forwardMessage` services
+   gained `authContext` in `28593ed7` (they use it only for the ownership guard;
+   `ForwardFromUIOptions` still has no such field). Precedent for the fail-closed
+   default is already in the AIO: **G04.AUTH denies outright when `authContext` is
+   absent** (`forbidden_no_auth_context`), so a missing context must ENFORCE here
+   too — skipping is the bypass.
 
-   Regression risk is on the core send path; it needs its own suite. MEDIUM.
+   **TRAP — a naive reuse of the agent branch DENIES EVERY CROSS-HOST FORWARD.**
+   `validateMessageRoute` refuses an unresolved recipient
+   (`lib/communication-graph.ts:525` → `Unknown recipient role`), and the AIO
+   leaves `recipientTitle = 'unknown'` for anyone absent from the LOCAL registry
+   (`send-message-service.ts:294`, "may be remote"). `forwardFromUI` explicitly
+   supports remote recipients — `toResolvedLocal || { agentId: '', alias, hostId }`
+   — so a remote forward has no title at all. Before enforcing, either resolve the
+   remote title (`lib/agent-directory.ts` holds peer agents, as `amp-service.ts`
+   does for its own graph check) or scope enforcement to local recipients and say
+   so. Do not discover this from a broken cross-host mesh.
+
+   **BLOCKED ON A POLICY DECISION (escalated, not self-approved).** Forward rewrites
+   the new message's `from` to the mailbox owner — an AGENT. So a HUMAN clicking
+   Forward in the Message Center emits a message that appears to come from agent X.
+   Whose title does the graph then evaluate? R6 exempts the HUMAN (full `Y` to every
+   node), but the message's declared sender is X, and X may not be allowed to reach
+   the recipient. R6 does not state this case. Deciding it is comm-graph semantics,
+   not a mapping — Tier 2. **Recommended split:** ENFORCE for an agent caller (the
+   unambiguous half — an agent forwarding must obey the same graph as an agent
+   sending; after the ownership fix `fromAgent === caller`), and PRESERVE today's
+   behavior (no graph) for a system-owner caller until the USER or MANAGER decides.
+   That closes the security hole while inventing no policy.
+
+   Regression risk is on the core send path AND the cross-host mesh; it needs its
+   own suite. MEDIUM.
 2. **`agentRegistry.getAgent()` constructs and evicts on read** (`lib/agent.ts:905`)
    — audit every caller; switch READ paths to `getExistingAgent()`.
 3. **`element-inventory` POST validation gauntlet** — cognitive 34. Pure refactor.

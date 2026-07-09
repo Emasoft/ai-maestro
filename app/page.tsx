@@ -22,7 +22,9 @@ import TranscriptExport from '@/components/TranscriptExport'
 import { useAgents } from '@/hooks/useAgents'
 import { TerminalProvider } from '@/contexts/TerminalContext'
 import { useHelpPanel } from '@/contexts/HelpPanelContext'
-import { Terminal, Mail, User, GitBranch, MessageSquare, Moon, Power, Loader2, Plus, Search, Download, ExternalLink, History } from 'lucide-react'
+import HtmlSidePanel from '@/components/HtmlSidePanel'
+import { usePanelWebSocket } from '@/hooks/usePanelWebSocket'
+import { Terminal, Mail, User, GitBranch, MessageSquare, Moon, Power, Loader2, Plus, Search, Download, ExternalLink, History, PanelRight } from 'lucide-react'
 import { agentToSession } from '@/lib/agent-utils'
 import { resolveAvatarUrl } from '@/lib/avatar-url'
 import type { Agent, AgentRole } from '@/types/agent'
@@ -90,7 +92,7 @@ export default function DashboardPage() {
   const [isResizing, setIsResizing] = useState(false)
   const { deviceType } = useDeviceType()
   const isMobile = deviceType === 'phone'
-  const [activeTab, setActiveTab] = useState<'terminal' | 'chat' | 'sessions' | 'messages' | 'worktree' | 'search' | 'export'>('terminal')
+  const [activeTab, setActiveTab] = useState<'terminal' | 'chat' | 'sessions' | 'messages' | 'worktree' | 'search' | 'export' | 'html'>('terminal')
   const [unreadCount, setUnreadCount] = useState(0)
   // profileScrollToDangerZone — forwarded to AgentProfilePanel → AgentProfile (embedded)
   const [profileScrollToDangerZone, setProfileScrollToDangerZone] = useState(false)
@@ -109,6 +111,21 @@ export default function DashboardPage() {
 
   // Derive active agent from state
   const activeAgent = agents.find(a => a.id === activeAgentId) || null
+
+  // TRDD-229CJGYH: the panel WS lives HERE (page level, per active agent), not
+  // inside HtmlSidePanel — the panel tab only mounts when selected, but a
+  // plugin's remote panel:open must be able to switch the dashboard TO the
+  // html tab from any other tab. Single-active-agent rendering keeps this to
+  // exactly one WS per dashboard window.
+  const { panel, sendFeedback: sendPanelFeedback } = usePanelWebSocket(activeAgentId)
+  useEffect(() => {
+    if (panel.openSignal > 0) setActiveTab('html')
+  }, [panel.openSignal])
+  useEffect(() => {
+    // Only leave the html tab if the user is actually on it — a close while
+    // they browse another tab must not yank them around.
+    if (panel.closeSignal > 0) setActiveTab(prev => (prev === 'html' ? 'terminal' : prev))
+  }, [panel.closeSignal])
 
   // Compute selectable agents: ALL registered agents (online, hibernated, or offline)
   // Profile panel reads from the API/registry and works regardless of session status
@@ -880,6 +897,21 @@ export default function DashboardPage() {
                       <Download className="w-4 h-4" />
                       Export
                     </button>
+                    <button
+                      onClick={() => setActiveTab('html')}
+                      className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
+                        activeTab === 'html'
+                          ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50'
+                          : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800/30'
+                      }`}
+                      title="HTML panel — content pushed by visualizer plugins"
+                    >
+                      <PanelRight className="w-4 h-4" />
+                      Panel
+                      {(panel.html || panel.url) && activeTab !== 'html' && (
+                        <span className="ml-1 w-2 h-2 rounded-full bg-blue-500/90" title="Panel has content" />
+                      )}
+                    </button>
                     <div className="flex-1" />
                     <div className="flex items-center">
                       <AgentSubconsciousIndicator agentId={agent.id} hostUrl={agent.hostUrl} />
@@ -1059,6 +1091,14 @@ export default function DashboardPage() {
                           className="max-w-4xl mx-auto"
                         />
                       </div>
+                    ) : activeTab === 'html' ? (
+                      <ErrorBoundary fallbackLabel="Panel">
+                        <HtmlSidePanel
+                          agentId={agent.id}
+                          panel={panel}
+                          sendFeedback={sendPanelFeedback}
+                        />
+                      </ErrorBoundary>
                     ) : null}
                     </div>
 

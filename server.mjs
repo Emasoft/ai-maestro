@@ -20,6 +20,8 @@ import {
   terminalSessions,
   statusSubscribers,
   companionClients,
+  panelClients,
+  pushPanelFeedback,
   broadcastStatusUpdate,
   setOnStatusUpdateCallback
 } from './services/shared-state-bridge.mjs'
@@ -1023,6 +1025,59 @@ async function startServer(handleRequest) {
     })
   })
 
+  // TRDD-229CJGYH: WebSocket server for the HTML side panel (/panel-ws).
+  // Mirrors the companionWss per-agent client-registry pattern, but is far
+  // simpler: the server only (a) fans panel:* control messages OUT to the
+  // dashboard (broadcastPanelMessage, called by POST /api/agents/[id]/panel
+  // in-process via the shared-state bridge) and (b) accepts panel:feedback
+  // messages IN from the dashboard, queueing them for the pushing plugin to
+  // drain via GET /api/agents/[id]/panel/feedback.
+  const panelWss = new WebSocketServer({ noServer: true })
+
+  panelWss.on('connection', (ws, query) => {
+    const agentId = query.agent
+    if (!agentId || typeof agentId !== 'string') {
+      ws.close(1008, 'agent parameter required')
+      return
+    }
+
+    console.log(`[PANEL-WS] Client connected for agent ${agentId.substring(0, 8)}`)
+
+    let clients = panelClients.get(agentId)
+    if (!clients) {
+      clients = new Set()
+      panelClients.set(agentId, clients)
+    }
+    clients.add(ws)
+
+    ws.on('message', (raw) => {
+      try {
+        const data = JSON.parse(raw.toString())
+        if (data.type === 'panel:feedback') {
+          // Bounded queue (drop-oldest) — see shared-state-bridge.mjs.
+          pushPanelFeedback(agentId, data.payload)
+        }
+        // Any other inbound type is ignored: the panel channel is
+        // deliberately narrow (control OUT, feedback IN, nothing else).
+      } catch {
+        // Ignore non-JSON frames
+      }
+    })
+
+    ws.on('close', () => {
+      console.log(`[PANEL-WS] Client disconnected from agent ${agentId.substring(0, 8)}`)
+      const agentClients = panelClients.get(agentId)
+      if (agentClients) {
+        agentClients.delete(ws)
+        if (agentClients.size === 0) panelClients.delete(agentId)
+      }
+    })
+
+    ws.on('error', (err) => {
+      console.error('[PANEL-WS] Error:', err.message)
+    })
+  })
+
   // SRV-CRIT-03 fix (2026-05-04): structural credential gate for ALL
   // WebSocket upgrades. Previous version accepted any TCP connection from
   // an allow-listed IP and proceeded to attach a PTY (for /term), broadcast
@@ -1056,7 +1111,7 @@ async function startServer(handleRequest) {
     // Auth gate — reject anonymous upgrades for known WS routes before
     // the handshake completes. Unknown paths still fall through to
     // socket.destroy() below.
-    const knownPaths = new Set(['/term', '/status', '/v1/ws', '/companion-ws'])
+    const knownPaths = new Set(['/term', '/status', '/v1/ws', '/companion-ws', '/panel-ws'])
     if (knownPaths.has(pathname) && !wsHasCredential(request)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n' +
                    'Content-Length: 0\r\n' +
@@ -1069,7 +1124,7 @@ async function startServer(handleRequest) {
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request, query)
       })
-    } else if (pathname === '/status' || pathname === '/companion-ws') {
+    } else if (pathname === '/status' || pathname === '/companion-ws' || pathname === '/panel-ws') {
       // SRV-CRIT-03 follow-up (WS deep-auth parity): the /status and /companion-ws
       // connection handlers receive no `request` and validate the credential ONLY
       // via the pre-handshake wsHasCredential SHAPE check above — so a forged-shape
@@ -1092,6 +1147,14 @@ async function startServer(handleRequest) {
           if (pathname === '/status') {
             statusWss.handleUpgrade(request, socket, head, (ws) => {
               statusWss.emit('connection', ws)
+            })
+          } else if (pathname === '/panel-ws') {
+            // TRDD-229CJGYH: same deep-auth treatment as /companion-ws — the
+            // panel channel carries plugin-pushed HTML to the dashboard and
+            // user feedback back out, so a forged-shape credential must not
+            // reach it.
+            panelWss.handleUpgrade(request, socket, head, (ws) => {
+              panelWss.emit('connection', ws, query)
             })
           } else {
             companionWss.handleUpgrade(request, socket, head, (ws) => {

@@ -40,6 +40,12 @@ export interface StatusUpdate {
 // Shared globalThis initialization
 // ---------------------------------------------------------------------------
 
+// TRDD-229CJGYH: one feedback event bounced back from pushed panel HTML.
+export interface PanelFeedbackEntry {
+  payload: unknown
+  receivedAt: string
+}
+
 declare global {
   // eslint-disable-next-line no-var
   var _sharedState: {
@@ -47,6 +53,8 @@ declare global {
     terminalSessions: Map<string, PTYSessionState>
     statusSubscribers: Set<WebSocket>
     companionClients: Map<string, Set<WebSocket>>
+    panelClients?: Map<string, Set<WebSocket>>
+    panelFeedback?: Map<string, PanelFeedbackEntry[]>
   } | undefined
 }
 
@@ -56,7 +64,20 @@ if (!globalThis._sharedState) {
     terminalSessions: new Map<string, PTYSessionState>(),
     statusSubscribers: new Set<WebSocket>(),
     companionClients: new Map<string, Set<WebSocket>>(),
+    panelClients: new Map<string, Set<WebSocket>>(),
+    panelFeedback: new Map<string, PanelFeedbackEntry[]>(),
   }
+}
+// TRDD-229CJGYH back-fill: _sharedState may have been initialized by the OTHER
+// side (shared-state-bridge.mjs, or an older build of either file) WITHOUT the
+// panel keys — the `if (!globalThis._sharedState)` guard above then skips them.
+// Whichever file loads second must add the missing keys, or panel state would
+// silently split. Mirrored in shared-state-bridge.mjs (NT-039).
+if (!globalThis._sharedState.panelClients) {
+  globalThis._sharedState.panelClients = new Map<string, Set<WebSocket>>()
+}
+if (!globalThis._sharedState.panelFeedback) {
+  globalThis._sharedState.panelFeedback = new Map<string, PanelFeedbackEntry[]>()
 }
 
 const state = globalThis._sharedState
@@ -76,6 +97,71 @@ export const statusSubscribers: Set<WebSocket> = state.statusSubscribers
 
 /** agentId -> connected /companion-ws clients. */
 export const companionClients: Map<string, Set<WebSocket>> = state.companionClients
+
+/** agentId -> connected /panel-ws clients (TRDD-229CJGYH HTML side panel). */
+export const panelClients: Map<string, Set<WebSocket>> = state.panelClients!
+
+/** agentId -> queued panel feedback events awaiting drain (TRDD-229CJGYH). */
+export const panelFeedback: Map<string, PanelFeedbackEntry[]> = state.panelFeedback!
+
+// ---------------------------------------------------------------------------
+// TRDD-229CJGYH — HTML side-panel fan-out + feedback queue
+// NT-039 SYNC: must mirror shared-state-bridge.mjs
+// ---------------------------------------------------------------------------
+
+/**
+ * Send a panel WS message (already-shaped object) to every connected /panel-ws
+ * client of an agent. Returns how many clients actually received it — 0 tells
+ * the API caller no dashboard has the panel channel open right now.
+ */
+export function broadcastPanelMessage(agentId: string, message: object): number {
+  const clients = panelClients.get(agentId)
+  if (!clients || clients.size === 0) return 0
+
+  const payload = JSON.stringify(message)
+  let delivered = 0
+  const dead: WebSocket[] = []
+  for (const ws of [...clients]) {
+    if (ws.readyState === WS_OPEN) {
+      try {
+        ws.send(payload)
+        delivered++
+      } catch {
+        dead.push(ws)
+      }
+    } else {
+      dead.push(ws)
+    }
+  }
+  for (const ws of dead) clients.delete(ws)
+  if (clients.size === 0) panelClients.delete(agentId)
+  return delivered
+}
+
+// Bound the per-agent feedback queue: feedback is click-scale (not a firehose),
+// so 200 undrained events means the consumer is gone — drop the oldest rather
+// than grow without bound.
+const PANEL_FEEDBACK_MAX = 200
+
+/** Queue one panel→plugin feedback event for later drain (FIFO, bounded). */
+export function pushPanelFeedback(agentId: string, payload: unknown): void {
+  let queue = panelFeedback.get(agentId)
+  if (!queue) {
+    queue = []
+    panelFeedback.set(agentId, queue)
+  }
+  queue.push({ payload, receivedAt: new Date().toISOString() })
+  if (queue.length > PANEL_FEEDBACK_MAX) {
+    queue.splice(0, queue.length - PANEL_FEEDBACK_MAX)
+  }
+}
+
+/** Read-and-clear an agent's queued feedback events (FIFO order). */
+export function drainPanelFeedback(agentId: string): PanelFeedbackEntry[] {
+  const queue = panelFeedback.get(agentId) ?? []
+  panelFeedback.delete(agentId)
+  return queue
+}
 
 // ---------------------------------------------------------------------------
 // Broadcast a status update to all /status WebSocket subscribers
@@ -205,5 +291,12 @@ setInterval(() => {
       if (ws.readyState !== WS_OPEN) clients.delete(ws)
     }
     if (clients.size === 0) companionClients.delete(agentId)
+  }
+  // TRDD-229CJGYH: same pruning for the panel channel.
+  for (const [agentId, clients] of panelClients) {
+    for (const ws of [...clients]) {
+      if (ws.readyState !== WS_OPEN) clients.delete(ws)
+    }
+    if (clients.size === 0) panelClients.delete(agentId)
   }
 }, 30_000)

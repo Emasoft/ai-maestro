@@ -55,6 +55,7 @@
     "POST_/api/agents/[id]/ensure-core": "strict",
     "POST_/api/agents/[id]/prompt/answer": "strict",
     "POST_/api/agents/[id]/queue": "strict",
+    "POST_/api/agents/[id]/panel": "strict",
     "PATCH_/api/trdd/[id]": "strict",
     "POST_/api/trdd/[id]/approve": "strict",
     "POST_/api/trdd/[id]/refuse": "strict",

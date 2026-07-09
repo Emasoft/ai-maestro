@@ -3,7 +3,8 @@ trdd-id: OOCL7ABZ
 title: Consolidated agent-config endpoint with teams, normalized github repo, docker detection, tasks, AID
 column: dev
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-09T10:27:08+0200
+updated: 2026-07-09T11:46:00+0200
+implementation-commits: [04676a37]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2

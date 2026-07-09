@@ -3,7 +3,7 @@ trdd-id: SCLSRS6E
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
 column: dev
 created: 2026-07-09T10:23:21+0200
-updated: 2026-07-09T10:23:21+0200
+updated: 2026-07-09T11:46:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -85,10 +85,30 @@ and the TRDD-file task tooling. Verdict per area (✅ exists · ◑ partial · �
   dependencies field**. Adding dev-browser as a core dep + the hook AskUserQuestion capture
   = the **ai-maestro-plugin REPO** (cross-project → issue/PR). → D7.
 
-**NEXT ACTION:** derived TRDDs D1..D7 authored (see `npt:`/`eht:`); then implementation
-phased (see `## Phasing`). Cross-repo items (D7 + janitor adoption) are GitHub issues, not
-in-repo edits. Final EHT after all land: write the janitor its command reference + adopt
-instruction (Emasoft/ai-maestro-janitor issue) — the whole point of this epic.
+**PROGRESS 2026-07-09T11:46+0200 — Phase A DONE (this repo):**
+- D3 (TRDD-OOCL7ABZ) landed as `04676a37`: `GET /api/agents/[id]/full` (base config +
+  reverse team lookup `getTeamsForAgent` + normalized `githubRepo` via `parseGithubRepo` +
+  `repoDocker` via new `lib/repo-docker-detect.ts` + pending non-terminal tasks + AID PUBLIC
+  key). 11 unit tests green (repo-docker-detect ×6, parse-github-repo ×5), `tsc --noEmit` 0,
+  `next lint` clean. The route is DELIBERATELY not own-agent-clamped (fleet-MONITOR surface;
+  public key only) and read-only ⇒ non-strict.
+- D5-trivial (TRDD-KJQZEYXW) landed as `b196337b`: `GET /api/teams/[id]/tasks/[taskId]`
+  wiring the existing `getTeamTask`. The rest of D5 (TRDD-file tooling + kanban search/edit)
+  is Phase C.
+- Deferred (not skipped): `getTeamsForAgent` + the route's cross-agent auth are unit-untested
+  because `statePath()` has no env override — covered by the Phase E live-server checks.
+- GOTCHA for later phases: `isolation: worktree` (both `spark --isolation` and
+  `parallel-worker-agent`) branches off `main`, ~1300 commits behind `governance-rules`, so
+  every reuse target is absent → worktree isolation is UNUSABLE here; implement inline (or a
+  manually `governance-rules`-based worktree).
+
+**NEXT ACTION:** Phase B (control primitives, this repo): D2 (TRDD-TDFSELI1 — AskQuestion/
+permission read+answer API) FIRST, then D1 (TRDD-41FJM8A8 — server-side persistent command
+queue). D2's hook-capture half is gated on D7. Then Phase C (D5 rest), D (panel/G4), E
+(script layer D6 — the decoupling wrappers the janitor actually calls), F (D7 cross-repo
+issues), G (janitor adoption). Cross-repo items are GitHub issues. Final EHT: write the
+janitor its command reference + adopt instruction (Emasoft/ai-maestro-janitor issue) — the
+whole point of this epic.
 
 **Load-bearing facts / gotchas:**
 - The decoupling invariant (project CLAUDE.md "Plugin Abstraction Principle"): plugins call

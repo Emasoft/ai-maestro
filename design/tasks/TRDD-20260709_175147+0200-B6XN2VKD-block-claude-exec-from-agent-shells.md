@@ -43,6 +43,25 @@ that, and so we will just create a TRDD for that to pick in the future."*
 EXPERIMENT in "Open questions" below — a deny rule that does not actually deny
 is worse than no rule, because it is believed.
 
+## Related — read before starting
+
+**TRDD-a6d93b9c** (`design/proposals/`, tier 2, 2026-06-16) — *"Route CLI
+plugin/skill/local-message mutations through the server, and forbid agent
+user-scope"* — already owns the neighbouring question, and was written first. It
+approaches the same danger from the **server** side (make the API the only way to
+mutate) where this TRDD approaches it from the **shell** side (make the shell
+unable to).
+
+They are complements, not duplicates: routing every mutation through the API does
+nothing about an agent that bypasses the API by running `claude` directly, and a
+`claude` deny rule does nothing about a CLI mutation performed by a script the
+agent is still allowed to run. Whoever picks either one up should read both and
+decide whether they land together.
+
+This cross-reference exists because it was nearly missed: this TRDD was authored
+without first grepping `design/proposals/` for the same symptom, which is the one
+step that stops a corpus from growing two half-answers to one question.
+
 ## Problem
 
 TRDD-D3RP7KQZ established the invariant: an agent may drive its own surface but

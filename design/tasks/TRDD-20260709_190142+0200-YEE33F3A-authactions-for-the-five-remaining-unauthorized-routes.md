@@ -4,7 +4,7 @@ title: Decide the AuthActions for the five remaining unauthorized agent-scoped r
 column: planned
 approval-tier: 2
 created: 2026-07-09T19:01:42+0200
-updated: 2026-07-10T00:44:00+0200
+updated: 2026-07-10T01:02:00+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -24,8 +24,8 @@ test-requirements: [unit]
 review-requirements: [human-review]
 runtime-targets: [macos, linux]
 impacts: [public-api]
-attempts: 2
-implementation-commits: [f56b79f2, 28593ed7]
+attempts: 3
+implementation-commits: [f56b79f2, 28593ed7, 505ae8c9]
 external-refs: []
 ---
 
@@ -33,9 +33,10 @@ external-refs: []
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
 
-**2 of 5 done. Both were worse than the body below says, and in both cases the
-body was wrong because it was written from the route's NAME.** Severity stays
-**CRITICAL**.
+**3 of 5 done. Every one of the three was mis-triaged in the body below, because
+every one was triaged from the route's NAME rather than its service.** Severity
+stays **CRITICAL**. Read the service first — this is now a measured pattern, not
+a caution.
 
 ### `messages/[messageId]` — DONE (`28593ed7`). Sender forgery, not "delete".
 
@@ -78,6 +79,51 @@ git-tracked TRDD, not the inbox.
 `{messageId, fromSession, toSession, forwardNote}`, so the **legitimate UI 400'd
 while an attacker passed by adding two ignored keys.** The guard checked the
 wrong contract.
+
+### `subconscious` — DONE (`505ae8c9`). No action; the endpoint was deleted.
+
+Third route, **third time the name produced a wrong severity.**
+`triggerSubconsciousAction` does not drive anything: it returns `Unknown action`
+(400) for **every possible input**, and has since TRDD-70a521d9 Phase 1 removed
+the `consolidate` action with the RAG subsystem. Zero callers. Its own comment
+admits it exists "only so clients that shipped with the old action names get a
+structured 400 instead of a 404".
+
+**Decision: no AuthAction. The POST is DELETED** (Next.js handler, headless twin,
+and the service function). The project keeps one version of the code, and a
+deleted primitive beats an authorized one. A stale client gets 405 rather than
+400 — both errors, one no longer an unauthorized route.
+
+**The real primitive was on the GET, which had no auth call at all.**
+`getSubconsciousStatus` reaches `agentRegistry.getAgent()`, which **never returns
+null**: it CONSTRUCTS an in-memory Agent for any id, runs `initialize()`
+(cerebellum + subconscious + voice, then `start()`), and calls `evictIfNeeded()`
+first. **Sweeping arbitrary UUIDs evicts live agents, one per request.** GET is
+now `requireAuth` + ownership at both layers (self, or system-owner). No new
+action — per-object state, so the mailbox rule applies; MANAGER is not exempt.
+Sole caller is the dashboard indicator (system-owner), so nothing breaks.
+
+Two corollaries, both previously believed otherwise:
+- the service's `if (!agent) return 404` is **dead code**;
+- **reading the status STARTS the thing it measures** — an observer effect on a
+  GET, written in the function's own doc comment as though it were a feature.
+
+Two false comments removed: `headless-router` claimed "the Next.js per-agent
+subconscious GET calls enforceAuth" (it made no auth call at all), and the
+headless POST passed the whole parsed **body** where the service expected an
+`action` **string** — type-checking only because `readJsonBody` returns `any`, so
+every call produced `Unknown action: [object Object]`.
+
+### CARRIED FORWARD — `getAgent()` constructs and evicts on READ (NEW, MEDIUM)
+
+Bounded, not fixed. `agentRegistry.getAgent()` is a *constructor* wearing a
+getter's name; `getExistingAgent()` is the non-constructing sibling. Any read
+path calling the former can evict a live agent. Ownership now bounds the
+subconscious GET to self + system-owner, but the lifecycle bug is a distinct
+mechanism (resource management, not authorization) and other callers may share
+it. Fix separately, with evidence: switching `getSubconsciousStatus` to
+`getExistingAgent` would also make its hardcoded `exists: true, initialized:
+true` tell the truth.
 
 ### CARRIED FORWARD — forward bypasses the R6 title graph (NEW, MEDIUM)
 
@@ -147,21 +193,23 @@ a wide margin.
 that emit secrets, **every** verb). The exfil class has **no debt ledger** — a
 route handing out a private key has no acceptable interim state.
 
-### NEXT ACTION — three routes remain, sharpest first
+### NEXT ACTION — two routes remain
 
-Read the service before choosing the action. Twice now the body's guess, made
-from a route's name, has been wrong in a way that changed the severity.
+**Read the service before choosing the action.** Three times now the body's
+guess, made from a route's name, has been wrong in a way that changed the
+severity — and twice the correct answer was not the action the name implied
+(`export` → system-owner only; `subconscious` → delete the endpoint).
 
-1. `subconscious` — read `triggerSubconsciousAction` first; decide `send-command`
-   (own surface, self-drive allowed) vs a new `drive-subconscious`. It is already
-   on the dangerous-primitive debt ledger, so fixing it also delists it there.
-2. `element-inventory` — confirm what it writes; likely `modify-agent`.
-3. `metrics` — check the caller (if the agent's own hook writes it, self-drive
+1. `element-inventory` — confirm what it writes; likely `modify-agent`.
+2. `metrics` — check the caller (if the agent's own hook writes it, self-drive
    matters); likely `modify-agent`.
 
-Then the R6 graph bypass on forward (above), Part 2 (`amp-init` self-remint) and
-Part 3 (dead `manage-amp-address`). `UNREVIEWED_INVENTORY` reaches `[]` only when
-all three land — which is what closes the parent TRDD-4Q7WMPZK.
+Then the R6 graph bypass on forward and the `getAgent()` construct-on-read
+(both above), Part 2 (`amp-init` self-remint) and Part 3 (dead
+`manage-amp-address`). `UNREVIEWED_INVENTORY` is down to four — `amp-init` (a
+decision, not a fix), `metadata` (a detector artifact, already authorized via
+ChangeMetadata G00), plus the two routes listed above. It reaches `[]` when those
+two land, which is what closes the parent TRDD-4Q7WMPZK.
 
 **SUPERSEDED — do NOT carry forward.**
 
@@ -172,10 +220,16 @@ all three land — which is what closes the parent TRDD-4Q7WMPZK.
   integrity of the governance channel) and the `manage-messages` suggested shape,
   including its claim that the delete verb "should almost certainly NOT be
   self-drive". The sharp verb is POST (sender forgery + arbitrary mailbox read),
-  no new action was warranted, and self-delete is permitted. See the top of this
-  STATE block.
+  no new action was warranted, and self-delete is permitted.
+- The Part-1 table's `subconscious` row ("drives another agent's background
+  process") and the `drive-subconscious` / `send-command` suggested shape. It
+  drives nothing — it returns 400 for every input. The endpoint was deleted; the
+  real primitive was the unauthenticated GET's construct-and-evict.
 
-Both are kept below only so the errors stay legible.
+All three are kept below only so the errors stay legible. Note the shape they
+share: each was written from a route's name or a function's name, and each named
+a capability the code does not have. Two of the three understated the severity;
+one invented one.
 
 **Tier 2.** Successor to the Tier-0 audit TRDD-4Q7WMPZK, which triaged all ten
 agent-scoped routes that authorize nothing, fixed the three that were pure
@@ -315,7 +369,16 @@ other agent's transcripts, and delete the messages its COS sent it.
   would have for the address book). Self-delete PERMITTED. MANAGER and COS denied
   another agent's mailbox. Rationale and the code that justifies each half are in
   the STATE block. (`28593ed7`)
-- Both decisions took the security-conservative fork where the evidence was
+- 2026-07-10 — `subconscious` → **no action; POST DELETED.** `drive-subconscious`
+  REJECTED: the function returns 400 for every input, has zero callers, and is
+  self-described legacy compatibility. Authorizing a dead primitive is theatre;
+  deleting it removes the attack surface. The GET (previously unauthenticated)
+  takes the same ownership rule as the mailbox. (`505ae8c9`)
+- All three decisions took the security-conservative fork where the evidence was
   ambiguous, and the LESS restrictive fork (self-delete) only where a shipped
   sibling already permitted it — because a restriction on one path that its twin
   does not carry is not a restriction, it is a detour.
+- Two of the three ended with **fewer** concepts than proposed (no
+  `view-transcript`, no `manage-messages`, no `drive-subconscious`; one endpoint
+  removed outright). A proposal that asks "which new capability should this
+  have?" presupposes it needs one.

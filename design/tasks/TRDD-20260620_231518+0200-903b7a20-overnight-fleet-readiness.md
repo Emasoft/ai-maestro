@@ -3,7 +3,7 @@ trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-07-09T00:05:00+0200
+updated: 2026-07-09T02:47:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -20,6 +20,41 @@ labels: [overnight, fleet-readiness, governance, security, scripts, scenarios]
 # TRDD-903b7a20 — Overnight fleet-readiness campaign
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-06-20
+
+**▶ UPDATE 2026-07-09T02:45 (G8 DONE — webdesign published + core-CI-green; G5+G6 PASS):**
+
+- **G8 CLOSED — ai-maestro-webdesign PUBLISHED + REGISTERED + INSTALLABLE + core-CI-green.**
+  Repo https://github.com/Emasoft/ai-maestro-webdesign live at **v0.1.4** (releases
+  v0.1.1–v0.1.4). Marketplace entry registered (5146d2a) and **auto-bumped 0.1.0→0.1.4 by
+  the notify→receiver chain — PROVEN 4× end-to-end** (the real chain test WST couldn't give:
+  WST's entry was absent at dispatch, webdesign's pre-existed). Final CI on v0.1.4:
+  **CI ✓ · Release ✓ · Notify-Marketplace ✓** (Validate/Test/Lint/Release all green).
+  Residual: `cross-refs` workflow = 10 see-also danglers (path-filtered; last ran on v0.1.3)
+  — filed as **Emasoft/ai-maestro-webdesign#1** (path typo + non-shipped external/ refs +
+  a few unwritten TECH docs; editorial debt, does NOT block install/use).
+- **Recovered the publish myself on Opus** after the CPV ship agents died repeatedly on the
+  Fable-5 + session limits. 4 CI-fix commit waves, each cause-side (no bypass): (1) stripped
+  the redundant `version:` field from all 66 skill frontmatters (publish version-consistency
+  MAJOR); (2) `.gitleaksignore` for 2 doc-example false positives (a `radius-full=9999px`
+  design-token line + a `Bearer your_token` curl doc example, both in git history at c3e4bd53);
+  (3) reworded a broken `reports_dev/` link (CPV --strict MAJOR); (4) cross-refs validator
+  provenance+glob exemption (123→10 MISSING) + shellcheck SC2015 + ruff/mypy dev-deps for the
+  Release Lint step. LEARNED: (a) native Edit works for the MAIN session on outside-repo files
+  (only sub-agents are path-gated); (b) publish.py leaves uv.lock's project version one bump
+  behind, so `uv run` re-locks and dirties the tree before the clean-tree pre-flight — fix is
+  to commit uv.lock in sync before each publish (recurs; noted for webdesign maintenance).
+- **G5 ✅ + G6 ✅** (parallel-tester report `reports/parallel-tester/20260709_023540+0200-g5g6-gates.md`):
+  G5 — all 3 Agent Profile sub-tabs (Overview/Config/Advanced) render non-blank with 0 console
+  errors on both a disposable AUTONOMOUS agent and a real agent (alexandre, read-only); creation
+  wizard reachable. G6 — Extensions→Marketplaces lists ai-maestro-plugins; user-scope
+  enable/disable of web-scenario-tester verified authoritatively via `~/.claude/settings.json`
+  enabledPlugins (78→79→78). Caveat: the plugin was pre-cached so USER "install" = the Enable
+  toggle; `claude plugin list` didn't reflect it but settings.json (the source of truth) did.
+- Gate ledger now: G3 ✅ · G5 ✅ · G6 ✅ · G8 ✅ · G9 ✅ · G11 ✅ (modulo plugin#17 e2e) ·
+  G2 waiting janitor#73 + orch#27 (external) · G4 (visual-communicator side panel), G7
+  (API↔external plugins), G10 (core-plugin sync sweep) still open · B2 = maintainer#26,
+  B4 = amama#24. Cross-repo board: janitor#73 (commented), amama#24, orch#27, maintainer#26,
+  ai-maestro-plugin#17, webdesign#1 — all OPEN, each repo's own session executes.
 
 **▶ UPDATE 2026-07-09T00:00 (WS2b security landed + shipping in flight; B2 issue filed; G5/G6 verification dispatched):**
 
@@ -198,8 +233,10 @@ tables extracted 2026-07-08 from both `.claude-plugin/marketplace.json` on GitHu
 | emasoft-integrator-agent | Emasoft/emasoft-integrator-agent | PARALLEL VARIANT — avoid |
 | emasoft-programmer-agent | Emasoft/emasoft-programmer-agent | PARALLEL VARIANT — avoid |
 
-Gaps vs the gate list: NEITHER marketplace lists a web-scenario-tester (G3) or the webdesign
-plugin (G8) — both still need publish + registration (webdesign belongs in ai-maestro-plugins).
+Gaps vs the gate list [RESOLVED 2026-07-09 — see the top STATE block]: both web-scenario-tester
+(G3) and ai-maestro-webdesign (G8) are now PUBLISHED to their own Emasoft repos and REGISTERED
+in the ai-maestro-plugins marketplace (entries + notify-chain version bumps live). This snapshot
+predates that.
 
 Pilot consequence (amends B1 Path C — REVISED per USER 2026-07-08: most local plugin projects
 are AHEAD of their GitHub origins, pushes held back by pending fixes): fleet agents must NOT

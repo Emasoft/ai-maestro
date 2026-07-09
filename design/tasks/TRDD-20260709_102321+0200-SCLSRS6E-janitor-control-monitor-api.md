@@ -1,9 +1,9 @@
 ---
 trdd-id: SCLSRS6E
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
-column: dev
+column: complete
 created: 2026-07-09T10:23:21+0200
-updated: 2026-07-09T15:53:00+0200
+updated: 2026-07-09T15:58:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -211,20 +211,46 @@ D7 so neither is re-derived wrong later:
   required, or an answered question stays "pending" until `Stop` and a polling agent answers it
   twice.
 
-**NEXT ACTION:** Phase G — the whole point of this epic. Write `Emasoft/ai-maestro-janitor` an
-issue carrying the FULL command reference for the script layer Phase E shipped: `aimaestro-session.sh`
-(inject / slash / slash-keys / state / read-prompt / answer / queue / queue-list / queue-cancel),
-`aimaestro-panel.sh` (open / close / refresh / set / status / feedback), `aimaestro-trdd.sh`
-(search / read / edit / approve / refuse / promote / archive), `aimaestro-agent.sh config`,
-`amp-kanban-get.sh`, `amp-kanban-edit.sh`, and `amp-kanban-list.sh --query` — each with its verbs,
-when to use it, and the auth rules (`AID_AUTH` bearer for agents; `AIMAESTRO_SUDO_TOKEN` for
-strict routes; `AIMAESTRO_API_BASE` to retarget). Instruct its Claude to adopt the script layer and
-test it. **Nothing ships to the janitor that is not reachable through a wrapper** — per the Plugin
-Abstraction Principle, no plugin may call the server API directly. Flag that `read-prompt` returns
-no `question` for AskUserQuestion until plugin #20 lands.
+**PROGRESS — Phase G DONE (2026-07-09). THE EPIC IS COMPLETE.** Filed
+`Emasoft/ai-maestro-janitor` **#76** — the full command reference for the script layer, every verb
+verified against the source rather than from memory: `aimaestro-session.sh` (inject / slash /
+slash-keys / state / read-prompt / answer / queue / queue-list / queue-cancel), `aimaestro-panel.sh`
+(open / close / refresh / set / status / feedback), `aimaestro-trdd.sh` (search / read / edit /
+approve / refuse / promote / archive), `aimaestro-agent.sh config`, `amp-kanban-get.sh`,
+`amp-kanban-edit.sh`, `amp-kanban-list.sh --query` — with the dual-path auth rules (agent: `AID_AUTH`
++ governance title, never a sudo token; user: a fresh one-shot op-bound `AIMAESTRO_SUDO_TOKEN`), the
+exact strict-verb list, and the instruction to audit the plugin for direct `/api/` use and replace
+every hit with a wrapper. **Nothing shipped to the janitor that is not reachable through a wrapper.**
 
-**STILL DEFERRED (do NOT roll forward a third time):** the dev-browser headless PANEL walkthrough
-(see the Phase E note above).
+Two caveats carried into #76 so the janitor is not surprised by them:
+
+- `read-prompt` returns no `question`/`options` for **AskUserQuestion** menus until plugin **#20**
+  lands (tool-permission menus work today). `answer --text` still works; `answer --option` has
+  nothing to select.
+- **`inject` types arbitrary text into a live terminal and is NOT sudo-gated**, while the safer
+  `queue` (deferred, cancellable, idle-gated) IS. The classification is pre-existing — `inject`
+  wraps the long-standing `PATCH /api/agents/[id]/session`, which is absent from
+  `security-registry.json`. Filed as **Emasoft/ai-maestro#54** for a Tier-2 decision. #76 tells the
+  janitor to treat `inject` as the most dangerous verb regardless of its gate.
+
+**DEFERRAL DISCHARGED — it is now on the board, not buried here.** The dev-browser headless PANEL
+walkthrough became its own Tier-0 task: **TRDD-6A2I6ZO0** (`column: planned`,
+`design/tasks/TRDD-20260709_155632+0200-6A2I6ZO0-devbrowser-panel-walkthrough.md`). It carries the
+gotchas that would otherwise be re-learned: `delivered: 0` means dropped-not-queued, so the panel
+must be opened and `status`-confirmed before any render assertion; `POST …/panel` is strict and one
+sudo token does not cover a whole walkthrough; the server needs Node 22.
+
+**BOOKKEEPING DRIFT FIXED (2026-07-09).** D1-D5 (`41FJM8A8`, `TDFSELI1`, `OOCL7ABZ`, `229CJGYH`,
+`KJQZEYXW`) were all still `column: dev` even though their code shipped in Phases A-D and each
+already carried its `implementation-commits:`. Every phase commit recorded the impl SHAs and this
+ledger but never advanced the CHILD's column, so five TRDDs were lying about their state and the
+epic could not be honestly closed. All five → `complete`, `updated:` bumped. Caught by checking the
+children before marking the parent, not by assuming.
+
+**NEXT ACTION:** none for this epic — every phase (A-G) is done and all seven derived TRDDs are
+terminal. Final acceptance (the janitor actually driving the fleet through the wrappers) is
+verified downstream, on each repo's own cadence: plugin `#19`/`#20`/`#21`, ai-maestro `#54`,
+janitor `#76`, and the panel walkthrough `TRDD-6A2I6ZO0`.
 
 **Load-bearing facts / gotchas:**
 - The decoupling invariant (project CLAUDE.md "Plugin Abstraction Principle"): plugins call

@@ -1,9 +1,9 @@
 ---
 trdd-id: TDFSELI1
 title: Read and answer AskQuestion and permission prompts via API
-column: dev
+column: complete
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-09T12:42:10+0200
+updated: 2026-07-09T15:58:00+0200
 implementation-commits: [f401728d]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -86,5 +86,31 @@ tracked separately in TRDD-GT0TAJFL (filed against the `ai-maestro-plugin` repo)
 - `POST .../prompt/answer` with `{text}` sends the free-text payload as-is.
 - An AskUserQuestion fixture (once the D7 hook capture lands) parses correctly into
   question text + choice labels.
+
+## Outcome (2026-07-09) — complete in THIS repo; the AskUserQuestion half awaits the plugin
+
+`column: complete` refers to this repo's deliverable, which shipped in `f401728d`:
+`GET /api/agents/[id]/prompt` + `POST /api/agents/[id]/prompt/answer`, the pure
+`parsePendingPromptState` parser, and the `aimaestro-session.sh read-prompt|answer`
+wrappers (TRDD-280DF70U). Live-verified in Phase E, including the `409` refusal when
+answering a prompt that is not pending.
+
+**Read this before assuming `read-prompt` works for every menu.** It returns the full
+prompt for **tool-permission** menus today. It returns **no `question` and no
+`options` for AskUserQuestion menus**, because `ai-maestro-hook.cjs` does not capture
+that tool — `PendingPrompt.question` is a forward-compat slot that stays `undefined`
+until the hook lands the capture. That work is cross-repo and cannot be done from here:
+filed as **Emasoft/ai-maestro-plugin#20** (its NPT, TRDD-GT0TAJFL, is `complete` because
+its in-repo deliverable was to file and track that issue).
+
+Consequence for a governance agent: an agent stuck on an AskUserQuestion menu shows as
+blocked, but its choices are unreadable. `answer --text` still works; `answer --option`
+has nothing to select. Verifying #20 landed is the trigger to revisit this TRDD.
+
+Also surfaced while filing #20 and recorded there: the capture point is `PreToolUse`
+(`matcher: "^AskUserQuestion$"`), not the hook's `Notification` path — a `Notification`
+carries no `tool_input` and so cannot supply the question text — and it must be paired
+with a `PostToolUse` clear, or an answered question stays "pending" until the end of the
+turn and a polling agent answers it twice.
 
 ## Approval log

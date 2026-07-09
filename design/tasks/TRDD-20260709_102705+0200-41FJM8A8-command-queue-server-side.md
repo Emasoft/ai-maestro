@@ -1,9 +1,9 @@
 ---
 trdd-id: 41FJM8A8
 title: Server-side persistent command queue for fire-when-idle and fire-when-woken agent commands
-column: dev
+column: complete
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-09T12:42:10+0200
+updated: 2026-07-09T15:58:00+0200
 implementation-commits: [e292afbc]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session

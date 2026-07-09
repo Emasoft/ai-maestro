@@ -1,9 +1,9 @@
 ---
 trdd-id: KJQZEYXW
 title: 3-pillars task API for TRDD-file lifecycle and kanban get-one keyword-search full-edit
-column: dev
+column: complete
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-09T13:20:31+0200
+updated: 2026-07-09T15:58:00+0200
 implementation-commits: [b196337b, 40aeab53]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session

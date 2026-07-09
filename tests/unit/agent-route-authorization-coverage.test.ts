@@ -70,19 +70,29 @@ const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bauth\.cont
  * not a list of routes judged safe. It may SHRINK as each is decided; it must
  * never grow without a deliberate edit here, which is the point.
  *
- * Several are probably fine (a metrics PATCH is not a reconfiguration).
+ * Two are now CLOSED and gone from this list, and both were worse than the
+ * ledger's original guess that "several are probably fine":
  *
- * `queue/[entryId]` DELETE was the one that was not. It documented, deliberately,
- * that "any authenticated caller may cancel a queued entry" — which let ANY agent
- * delete the commands a MANAGER had queued for the entire fleet, and let an agent
- * veto an order queued for itself. Fixed and removed from this ledger; the guard
- * is pinned by tests/unit/queue-cancel-authorization.test.ts.
+ *   - `queue/[entryId]` DELETE documented, deliberately, that "any authenticated
+ *     caller may cancel a queued entry". Any agent could delete the commands a
+ *     MANAGER had queued for the whole fleet, and veto orders queued for itself.
+ *     Pinned by tests/unit/queue-cancel-authorization.test.ts.
+ *   - `chat` POST ends in `sendKeys(..., {literal:true, enter:true})` — arbitrary
+ *     text plus Enter into any agent's pane. It was the unguarded twin of the
+ *     `send-command` route. Pinned by tests/unit/chat-send-authorization.test.ts.
  *
- * The audit is TRDD-4Q7WMPZK.
+ * TWO KNOWN DETECTOR ARTIFACTS in the list below — do NOT "fix" them blindly:
+ *   - `metadata/route.ts` DOES authorize, at `ChangeMetadata` gate G00. It only
+ *     appears here because it forwards `buildAuthContext(auth)` into the pipeline
+ *     rather than calling `authorize()` itself, which the regex cannot see.
+ *   - `amp-init/route.ts` has a hand-rolled `isManager(auth.agentId)` check.
+ *     Correct today, but it bypasses the matrix — including the self-target rule,
+ *     so an agent may re-mint its OWN AMP identity keys. Worth a decision.
+ *
+ * The audit is TRDD-4Q7WMPZK, which records what each remaining route does.
  */
 const UNREVIEWED_INVENTORY = [
   'amp-init/route.ts',
-  'chat/route.ts',
   'element-inventory/route.ts',
   'email/addresses/[address]/route.ts',
   'export/route.ts',

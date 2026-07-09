@@ -10,7 +10,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getConversationMessages, sendChatMessage } from '@/services/agents-chat-service'
 import { isValidUuid } from '@/lib/validation'
-import { enforceAuth } from '@/lib/route-auth'
+import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 
 export async function GET(
   request: NextRequest,
@@ -45,19 +46,48 @@ export async function GET(
   }
 }
 
+/**
+ * POST /api/agents/:id/chat — send a message to the agent's tmux session.
+ *
+ * This route ends in `runtime.sendKeys(sessionName, message, { literal: true,
+ * enter: true })`. It types arbitrary text into a live agent's terminal and
+ * presses Enter. That is the `send-command` capability, whatever the endpoint is
+ * named, so it carries the `send-command` action.
+ *
+ * It previously called `enforceAuth` alone, which AUTHENTICATES and stops — it
+ * does not even return the caller's identity. So any principal holding any valid
+ * agent token could type into any other agent's pane: a MEMBER into the
+ * MANAGER's terminal, an instruction into a peer's prompt, a shell command into
+ * a pane sitting at a shell. It was a complete bypass of the `send-command`
+ * matrix and of sudo-mode, reachable through the one route nobody thought of as
+ * a control surface because it is called "chat".
+ *
+ * Deliberately NOT classified strict: the dashboard's chat box is the human
+ * typing to their own agent, and a sudo prompt per message would be absurd.
+ * `authorize()` grants the system-owner, so the UI is unaffected; an agent is
+ * now held to the same matrix as `PATCH /api/agents/[id]/session` — MANAGER
+ * anywhere, COS in-team, and itself (self-drive: an agent can already type into
+ * its own pane).
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  // #114: Authenticate before any chat dispatch.
-  const authErr = enforceAuth(request)
-  if (authErr) return authErr
+  const auth = authenticateFromRequest(request)
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
+  }
 
   try {
     const { id: agentId } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
     if (!isValidUuid(agentId)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
+    }
+
+    const authz = authorize(auth, 'send-command', agentId)
+    if (!authz.allowed) {
+      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
     }
     // CC-P2-005: Guard against malformed JSON body
     let body

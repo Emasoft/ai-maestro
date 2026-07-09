@@ -36,9 +36,43 @@ Derived (EHT) from TRDD-D3RP7KQZ. Tier 0: in-scope, own repo, tightening only.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-09
 
-**1 of 10 reviewed and fixed. Nine remain.** Severity raised MEDIUM → HIGH: the
-first route audited turned out to be a live fleet-wide denial-of-governance, not
-a paperwork gap.
+**All ten triaged. 2 fixed, 2 are detector artifacts, 6 remain open.** Severity
+raised MEDIUM → **CRITICAL**: this was never a paperwork gap. The second route
+audited (`chat` POST) is a full bypass of the `send-command` matrix AND of
+sudo-mode, reachable by any agent, through the one endpoint nobody thought of as
+a control surface because it is called "chat".
+
+### Triage table (verified 2026-07-09 by reading each route + its service)
+
+| Route (agent-scoped) | Verbs | Guard today | What a caller can do | Verdict |
+|---|---|---|---|---|
+| `chat` | POST | ~~`enforceAuth`~~ → **`authorize('send-command')`** | `sendKeys(literal, enter)` into ANY pane | **FIXED** `d?` |
+| `queue/[entryId]` | DELETE | ~~`requireAuth`~~ → **ownership + matrix** | delete any queued command, fleet-wide | **FIXED** `4b1a9b48` |
+| `metadata` | PATCH DELETE | `ChangeMetadata` G00 | — | detector artifact, authorized |
+| `amp-init` | POST | hand-rolled `isManager` | re-mint AMP keys; **self allowed** | needs a decision, not a fix |
+| `export` | POST | `enforceAuth` | export ANY agent's full transcripts | **OPEN — confidentiality** |
+| `messages/[messageId]` | PATCH DELETE POST | `authenticateFromRequest`, unused | delete/edit ANY agent's AMP messages | **OPEN — governance channel** |
+| `email/addresses/[address]` | PATCH DELETE | `enforceAuth` | mutate ANY agent's address book | **OPEN** |
+| `subconscious` | POST | `enforceAuth` | `triggerSubconsciousAction` on ANY agent | **OPEN** |
+| `element-inventory` | POST | `enforceAuth` | writes agent element state | **OPEN** |
+| `metrics` | PATCH | `enforceAuth` | `updateMetrics` on ANY agent | **OPEN — low blast radius** |
+
+`enforceAuth` returns `NextResponse | null`. It authenticates and **discards the
+auth result** — the route never learns who the caller is, so it *cannot* authorize
+even if it wanted to. Every route above using it is unauthorized by construction.
+
+### Which of the six is a mapping, and which is a policy call
+
+Fixing `chat` needed no decision: the route *is* `send-command`, and the openly
+named twin (`PATCH …/session`) already carries that action. `email/addresses`
+is the same shape — the `manage-amp-address` AuthAction already exists and was
+simply never wired (note: wiring it also DENIES an agent its own address, since
+`manage-amp-address` is not a self-drive action; confirm that breaks no
+`amp-register` flow before landing).
+
+The rest need an action that does not exist yet — reading another agent's
+transcripts, deleting its messages, driving its subconscious. Inventing four
+AuthActions is policy, so it belongs in a proposal, not in this Tier-0 EHT.
 
 **FIXED — `DELETE /api/agents/[id]/queue/[entryId]`.** It called `requireAuth`
 alone. Enqueue is gated (MANAGER anywhere, COS in-team, an agent on itself);
@@ -58,18 +92,29 @@ D3RP7KQZ. Driving your own terminal is permitted; refusing an order is not. So
 Falsified before it was believed: with the guard removed, exactly the seven
 refusal assertions fail and the seven permissive ones still pass.
 
-**NEXT ACTION:** audit the nine remaining routes in `UNREVIEWED_INVENTORY`
-(`tests/unit/agent-route-authorization-coverage.test.ts`), in this order — the
-mutating ones first: `subconscious`, `metadata`, `metrics`, `element-inventory`,
-`amp-init`, `chat`, `export`, `messages/[messageId]`, `email/addresses/[address]`.
+**NEXT ACTION:** wire `email/addresses/[address]` PATCH+DELETE to the existing
+`manage-amp-address` action (a mapping, Tier 0) — after grepping for a self-claim
+caller that the self-target ban would break. Then file ONE proposal covering the
+four routes that need new AuthActions (`export`, `messages/[messageId]`,
+`subconscious`, `element-inventory`) plus the `amp-init` self-remint question.
+Do NOT invent those actions inside this Tier-0 EHT.
 
 **Load-bearing facts.**
 - `requireAuth` / `enforceAuth` AUTHENTICATE only. Neither authorizes. Treating
   "non-strict" as "no authorization needed" is what produced this bug; non-strict
   is a statement about the *sudo* gate and nothing else.
+- `middleware.ts` is a global authenticate-everything gate ("prevents the 'forgot
+  to authenticate' class of bug"). So a route with NO auth call — `chat` GET has
+  none — is still authenticated. It is not, and never was, authorized.
+- **A capability is defined by what the code does, not by what the route is
+  named.** `chat` was `send-command` wearing a friendly name. When auditing, read
+  through to the service call, never stop at the endpoint's title.
 - The open `GET .../queue` is retained (a documented fleet-monitor surface, like
   `/full` and `/prompt`). It was the reconnaissance half of the exploit; with
   cancel authorized, knowing an entry id buys nothing. Revisit if that changes.
+- A test asserting `indexOf(A) < indexOf(B)` passes vacuously when A is absent
+  (`-1 < n`). Assert PRESENCE first. Found by falsifying — the ordering test
+  passed on the very code it existed to reject.
 
 **SUPERSEDED — do NOT carry forward.** The coverage ledger's note that
 `queue/[entryId]` is "a governance-evasion question, not an oversight, recorded

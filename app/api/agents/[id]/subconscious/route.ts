@@ -1,28 +1,47 @@
 /**
  * Agent Subconscious API
  *
- * GET  /api/agents/[id]/subconscious — Get subconscious status
- * POST /api/agents/[id]/subconscious — Trigger subconscious actions
+ * GET /api/agents/[id]/subconscious — Get subconscious status
+ *
+ * The POST verb was removed in TRDD-YEE33F3A: `triggerSubconsciousAction`
+ * returned 400 for every possible input once the RAG subsystem was deleted
+ * (TRDD-70a521d9), had zero callers, and existed only as compatibility for
+ * clients that could not succeed anyway. See the service for the full note.
  *
  * Thin wrapper — business logic in services/agents-subconscious-service.ts
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { enforceAuth } from '@/lib/route-auth'
-import { getSubconsciousStatus, triggerSubconsciousAction } from '@/services/agents-subconscious-service'
+import { requireAuth } from '@/lib/route-auth'
+import { getSubconsciousStatus } from '@/services/agents-subconscious-service'
 import { isValidUuid } from '@/lib/validation'
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // TRDD-YEE33F3A: this GET previously made NO auth call at all, and its
+  // `getSubconsciousStatus` reaches `agentRegistry.getAgent()`, which
+  // CONSTRUCTS an in-memory Agent for any id after evicting the least-recently
+  // used one. Sweeping arbitrary UUIDs therefore evicted live agents. An agent
+  // may read its own status; the system owner (the dashboard indicator, the
+  // only caller) may read any.
+  const auth = requireAuth(request)
+  if (!auth.ok) return auth.error
+
   try {
     const { id: agentId } = await params
     // SF-009: Validate UUID format for agent ID (defense-in-depth)
     if (!isValidUuid(agentId)) {
       return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
     }
-    const result = await getSubconsciousStatus(agentId)
+    if (auth.agentId && auth.agentId !== agentId) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden — you may only read your own subconscious status' },
+        { status: 403 }
+      )
+    }
+    const result = await getSubconsciousStatus(agentId, auth.context)
     if (result.error) {
       return NextResponse.json({ success: false, error: result.error }, { status: result.status })
     }
@@ -37,36 +56,3 @@ export async function GET(
   }
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  // #114: Authenticate before any side effect.
-  const authErr = enforceAuth(request)
-  if (authErr) return authErr
-
-  try {
-    const { id: agentId } = await params
-    // SF-009: Validate UUID format for agent ID (defense-in-depth)
-    if (!isValidUuid(agentId)) {
-      return NextResponse.json({ error: 'Invalid agent ID format' }, { status: 400 })
-    }
-    let body
-    try { body = await request.json() } catch {
-      return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
-    }
-
-    const result = await triggerSubconsciousAction(agentId, body.action)
-    if (result.error) {
-      return NextResponse.json({ success: false, error: result.error }, { status: result.status })
-    }
-    return NextResponse.json(result.data)
-  } catch (error) {
-    console.error('[Agent Subconscious API] POST Error:', error)
-    return NextResponse.json(
-      // API2-MIN-01: don't leak error.message to client; full error is logged above
-      { success: false, error: 'internal_error', code: 'agent-subconscious' },
-      { status: 500 }
-    )
-  }
-}

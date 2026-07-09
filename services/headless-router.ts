@@ -93,7 +93,6 @@ import { deployConfigToAgent } from '@/services/agents-config-deploy-service'
 
 import {
   getSubconsciousStatus as getAgentSubconsciousStatus,
-  triggerSubconsciousAction,
 } from '@/services/agents-subconscious-service'
 
 import {
@@ -1228,17 +1227,28 @@ const routes: Route[] = [
   }},
 
   // Subconscious
+  //
+  // TRDD-YEE33F3A. The comment that stood here claimed "the Next.js per-agent
+  // subconscious GET calls enforceAuth". It did not — that GET made no auth call
+  // whatsoever. A mirror comment asserting a property the mirrored code lacks is
+  // worse than no comment: it retires the question.
+  //
+  // The POST twin is deleted with its Next.js counterpart. It also passed the
+  // whole parsed BODY where the service expected an `action` STRING, which type-
+  // checked only because `readJsonBody` returns `any` — so every call produced
+  // `Unknown action: [object Object]`. A dead endpoint whose one argument was
+  // wrong, and nobody noticed, because nothing ever called it.
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/subconscious$/, paramNames: ['id'], handler: async (req, res, params) => {
-    // Audit mirror: the Next.js per-agent subconscious GET calls enforceAuth
-    // (authenticate; no own-id check). Mirror it — authenticate for real
-    // rather than relying solely on the forgeable structural credential gate.
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
-    sendServiceResult(res, await getAgentSubconsciousStatus(params.id))
-  }},
-  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/subconscious$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    sendServiceResult(res, await triggerSubconsciousAction(params.id, body))
+    // Own-id check + threaded context: `getSubconsciousStatus` reaches
+    // `agentRegistry.getAgent()`, which constructs an Agent for any id and
+    // evicts the least-recently-used one to make room.
+    if (auth.agentId && auth.agentId !== params.id) {
+      sendJson(res, 403, { error: 'Forbidden — you may only read your own subconscious status' })
+      return
+    }
+    sendServiceResult(res, await getAgentSubconsciousStatus(params.id, buildAuthContext(auth)))
   }},
 
   // Repos

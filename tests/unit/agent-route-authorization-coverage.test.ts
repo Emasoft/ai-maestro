@@ -110,7 +110,6 @@ const UNREVIEWED_INVENTORY = [
   'element-inventory/route.ts',
   'metadata/route.ts',
   'metrics/route.ts',
-  'subconscious/route.ts',
 ]
 
 function unauthorizedRoutes(): string[] {

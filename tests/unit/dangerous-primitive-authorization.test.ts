@@ -64,7 +64,12 @@ const DANGEROUS_FUNCTIONS = [
   'wakeAgent',
   'renameSession',
   'restoreSessions',
-  'triggerSubconsciousAction',
+  // `triggerSubconsciousAction` was here. It is DELETED (TRDD-YEE33F3A), not
+  // delisted: the function returned 400 for every input once TRDD-70a521d9
+  // removed the RAG subsystem, and it had zero callers. It earned its place on
+  // this list from its NAME — "drives another agent's background process" — and
+  // the audit never read the body. Deleting a dead primitive beats authorizing
+  // one. If a real subconscious-driving primitive ever ships, add it here.
   // A FOURTH KIND OF DANGER — identity, not the terminal (TRDD-YEE33F3A).
   // `forwardMessage` (both services) passes its caller-supplied sender straight
   // to `forwardFromUI`, where it becomes the new message's `from`/`forwardedBy`,
@@ -117,8 +122,6 @@ const ANY_HANDLER = /export\s+(async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)\
  * Routes that reach a primitive and do NOT authorize. A DEBT LEDGER, not a
  * safelist. It must never grow without a deliberate edit here.
  *
- *  - `agents/[id]/subconscious`  — needs an AuthAction that does not exist
- *    (drive another agent's background process). Proposed in TRDD-YEE33F3A.
  *  - `sessions/[id]/rename`      — `renameSession` is a registry + tmux write.
  *    `modify-agent` probably fits, but the path carries a SESSION id, so the
  *    target agent must be resolved via `getAgentBySession` first.
@@ -129,7 +132,6 @@ const ANY_HANDLER = /export\s+(async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)\
  * The audit is TRDD-4Q7WMPZK; the policy calls are TRDD-YEE33F3A.
  */
 const UNAUTHORIZED_DANGEROUS = [
-  'agents/[id]/subconscious/route.ts',
   'sessions/[id]/rename/route.ts',
   'sessions/restore/route.ts',
 ]

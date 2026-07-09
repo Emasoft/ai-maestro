@@ -232,33 +232,33 @@ export const SYSTEM_OWNER_ONLY_STRICT = new Set<string>([
  * fails a test instead of shipping a dead endpoint.
  *
  * Why they are here rather than in SYSTEM_OWNER_ONLY_STRICT: "system-owner
- * only" is itself a policy claim, and for several of these it is probably the
- * wrong one. `POST /api/agents/[id]/panel` exists so a visualizer plugin —
- * i.e. an AGENT — can show the human something; the eight epic routes below
- * were built for the janitor, which is an agent. Declaring them owner-only
- * would quietly ratify the bug.
+ * only" is itself a policy claim, and for these it may well be the wrong one.
+ * Declaring an undecided route owner-only would quietly ratify a bug — which is
+ * exactly what nearly happened to the panel/queue/prompt trio, built FOR the
+ * janitor (an agent) and reachable by no agent at all.
  *
- * The open question for the epic routes is not "may agents call them" but
- * "with what target semantics": `authorize()`'s universal self-target rule
- * refuses an agent acting on itself, yet an agent pushing HTML to its OWN
- * panel, or enqueuing `/compact` on ITSELF, is the primary use case. That is a
- * governance decision (see the proposal TRDD), not a mapping detail.
+ * That trio, and `PATCH /api/agents/[id]`, were decided by the USER on
+ * 2026-07-09 (TRDD-D3RP7KQZ) and now live in STRICT_AGENT_RULES: an agent may
+ * drive its own surface, never reconfigure itself. What remains below are the
+ * questions that decision did not answer.
  *
  * This set is a DEBT LEDGER: the coverage test pins it to an exact inventory,
  * so it can shrink as policies are decided but cannot silently grow.
  */
 export const AGENT_POLICY_PENDING = new Set<string>([
-  // Pre-existing (predate epic TRDD-SCLSRS6E; found by the coverage guardrail).
-  'PATCH /api/agents/[id]',
+  // Governance-layer routes that predate epic TRDD-SCLSRS6E. Each is a distinct
+  // policy question nobody has answered: who delegates the maestro authority,
+  // who approves a foreign agent, who may recover an AID.
   'POST /api/governance/maestro-delegate',
   'DELETE /api/governance/maestro-delegate',
   'POST /api/agents/foreign-approvals/[id]/approve',
   'POST /api/agents/foreign-approvals/[id]/reject',
   'POST /api/system/aid-recover',
-  // Shipped by epic TRDD-SCLSRS6E — the agent-control + TRDD-lifecycle surface.
-  'POST /api/agents/[id]/panel',
-  'POST /api/agents/[id]/queue',
-  'POST /api/agents/[id]/prompt/answer',
+  // The 3-pillars TRDD lifecycle. These need a `manage-trdd` AuthAction whose
+  // matrix mirrors the approval tiers (aimaestro-trdd-approval.md): approve and
+  // refuse belong to COS / MANAGER / USER by tier, promote belongs to the
+  // proposal's approver, and a `failed` TRDD is never archived. That is a new
+  // action with a new matrix, not a mapping to an existing one.
   'PATCH /api/trdd/[id]',
   'POST /api/trdd/[id]/approve',
   'POST /api/trdd/[id]/refuse',
@@ -315,6 +315,27 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   'PUT /api/teams/[id]': { action: 'manage-team' },
   'PUT /api/teams/[id]/orchestrator': { action: 'manage-team' },
   'DELETE /api/teams/[id]/orchestrator': { action: 'manage-team' },
+  // TRDD-D3RP7KQZ (USER decision, 2026-07-09) — the agent-control surface.
+  // These three DRIVE an agent's surface rather than change its configuration,
+  // so they share `send-command`: self is ALLOWED (SELF_DRIVE_ACTIONS in
+  // lib/authorization.ts), another agent needs MANAGER, or COS within its team.
+  // An agent enqueuing `/compact` on itself or painting its own panel is the
+  // primary use case — it is what the janitor does.
+  //
+  // CAUTION: unlike most entries here, `panel` has NO route-level authorize() of
+  // its own, and `queue` has none at enqueue time (only later, on drain). For
+  // those two this guard is the ONLY authorization check. Do not weaken it on
+  // the assumption that a downstream pipeline re-runs a finer one.
+  'POST /api/agents/[id]/panel': { action: 'send-command', targetFromPathId: true },
+  'POST /api/agents/[id]/queue': { action: 'send-command', targetFromPathId: true },
+  'POST /api/agents/[id]/prompt/answer': { action: 'send-command', targetFromPathId: true },
+  // Configuration, not surface. PATCH is a router: it dispatches ChangeTitle /
+  // ChangePlugin / ChangeClient / ChangeTeam / ChangeName / …. No agent may
+  // reconfigure ITSELF; MANAGER (any) and COS (own team) may reconfigure others.
+  // Coarse by design — the guard never reads the body, and each Change* pipeline
+  // re-runs its own finer authorize() (ChangeTitle's rule is stricter still: it
+  // bans self-title-change even for a MANAGER).
+  'PATCH /api/agents/[id]': { action: 'modify-agent', targetFromPathId: true },
   'POST /api/agents/cemetery': { action: 'delete-agent' },
   'DELETE /api/agents/cemetery': { action: 'delete-agent' },
   'DELETE /api/agents/role-plugins': { action: 'manage-skills' },

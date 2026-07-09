@@ -58,6 +58,41 @@ export interface AuthorizationResult {
   reason?: string
 }
 
+/**
+ * The actions an agent may perform on ITSELF (TRDD-D3RP7KQZ, USER decision
+ * 2026-07-09). Every other action, applied to self, is denied.
+ *
+ * The line is between DRIVING a surface and CHANGING what the agent IS.
+ *
+ * An agent may never reconfigure itself: title, role plugin, skills, MCP
+ * servers, hooks, sub-agents, team membership, name, folder. Only a MANAGER,
+ * the agent's own COS, or the human via the UI may. The reason is that a
+ * self-reconfigure is the one mistake an agent cannot recover from — uninstall
+ * the role plugin that defines your job, or drop yourself from your team, and
+ * nothing is left that can put it back.
+ *
+ * Driving its own surface is not that, and is allowed:
+ *   • send-command    — inject into its own terminal (the janitor's idiom:
+ *                       `/compact`, `/reload-plugins`), answer its own pending
+ *                       permission prompt, enqueue a command on itself, push
+ *                       HTML to its own dashboard panel. All four routes carry
+ *                       this action.
+ *   • hibernate-agent — put itself to sleep. `wake-agent` is deliberately NOT
+ *                       here: a sleeping agent cannot be the one to wake itself.
+ *
+ * The test for membership is mechanical: nothing in this set writes the agent's
+ * registry record; everything outside it does. That is why it is a small closed
+ * set here rather than a per-route exemption scattered across the guard.
+ *
+ * These grant an agent nothing it could not already do by typing into its own
+ * terminal. Configuration is not like that — a self-reconfigure over the API
+ * would bypass the Change* governance pipelines entirely.
+ */
+const SELF_DRIVE_ACTIONS: ReadonlySet<AuthAction> = new Set<AuthAction>([
+  'send-command',
+  'hibernate-agent',
+])
+
 // ============================================================================
 // Authorization
 // ============================================================================
@@ -183,11 +218,18 @@ export function authorize(
     return { allowed: false, reason: 'Only the system owner can register agent records' }
   }
 
-  // ── Universal rule: no agent can modify itself via API ──────
-  // Agents cannot change their own properties, title, skills, or delete themselves.
-  // They operate through their own Claude Code instance directly.
-  // Only the MANAGER or COS (for their team) can modify other agents.
+  // ── Universal rule: no agent can RECONFIGURE itself via API ─
+  // Agents cannot change their own properties, title, skills, plugins, MCP
+  // servers, hooks, sub-agents or team, and cannot delete themselves. Only the
+  // MANAGER, the agent's own COS, or the human via the UI may do that.
+  //
+  // SELF-DRIVE is the exception and returns ALLOWED here. It must return early:
+  // the general rules below deny any non-MANAGER/COS caller that names a target,
+  // and "itself" is a target.
   if (targetAgentId && targetAgentId === auth.agentId) {
+    if (SELF_DRIVE_ACTIONS.has(action)) {
+      return { allowed: true }
+    }
     return { allowed: false, reason: 'No agent can modify itself via the AI Maestro API' }
   }
 

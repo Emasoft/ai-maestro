@@ -214,3 +214,106 @@ describe('TRDD-0IPK36MS — RBAC change-title authorization matrix (real AID Bea
     expect(auth.agentId).toBeUndefined()
   })
 })
+
+/**
+ * TRDD-D3RP7KQZ — the self-drive / self-configure split (USER decision 2026-07-09).
+ *
+ * An agent may DRIVE its own surface and may never RECONFIGURE itself. These
+ * tests are written against the boundary that decides it — `authorize()` — so
+ * they hold regardless of which HTTP routes are wired to which action.
+ *
+ * Read the two groups together: the second is what gives the first its meaning.
+ * A test suite that only asserted the allows would pass just as happily against
+ * an authorize() that allowed an agent everything on itself.
+ */
+describe('TRDD-D3RP7KQZ — an agent may drive its own surface', () => {
+  const asMember = () => {
+    const auth = authenticateFromRequest(requestWith({ Authorization: `Bearer ${memberToken}` }))
+    expect(auth.agentId).toBe('member-a1')
+    return auth
+  }
+
+  it('MEMBER sending a command to its OWN terminal is ALLOWED', () => {
+    expect(authorize(asMember(), 'send-command', 'member-a1').allowed).toBe(true)
+  })
+
+  it('MEMBER hibernating ITSELF is ALLOWED', () => {
+    expect(authorize(asMember(), 'hibernate-agent', 'member-a1').allowed).toBe(true)
+  })
+
+  it('MEMBER sending a command to ANOTHER agent is still DENIED', () => {
+    // The self-drive exemption must not become a general send-command grant:
+    // driving your own terminal says nothing about driving a teammate's.
+    const decision = authorize(asMember(), 'send-command', 'member-a2')
+    expect(decision.allowed).toBe(false)
+    expect(decision.reason).toMatch(/other agents/i)
+  })
+
+  it('CHIEF-OF-STAFF driving an agent in its OWN team is ALLOWED', () => {
+    const auth = authenticateFromRequest(requestWith({ Authorization: `Bearer ${cosAToken}` }))
+    expect(authorize(auth, 'send-command', 'member-a2').allowed).toBe(true)
+  })
+
+  it('CHIEF-OF-STAFF driving an agent OUTSIDE its team is DENIED', () => {
+    const auth = authenticateFromRequest(requestWith({ Authorization: `Bearer ${cosAToken}` }))
+    const decision = authorize(auth, 'send-command', 'member-b1')
+    expect(decision.allowed).toBe(false)
+    expect(decision.reason).toMatch(/own team/i)
+  })
+
+  it('MANAGER driving any agent is ALLOWED', () => {
+    const auth = authenticateFromRequest(requestWith({ Authorization: `Bearer ${managerToken}` }))
+    expect(authorize(auth, 'send-command', 'member-b1').allowed).toBe(true)
+  })
+})
+
+describe('TRDD-D3RP7KQZ — an agent may never reconfigure itself', () => {
+  /**
+   * The whole point of the decision: an agent that could reconfigure itself
+   * could uninstall the role plugin that makes it able to do its job, or walk
+   * itself out of its team, and nothing would be left to put it back.
+   *
+   * Every self-targeted action OUTSIDE the self-drive set must be denied — for
+   * a MANAGER exactly as for a MEMBER, since the MANAGER's blanket grant sits
+   * BELOW the self rule in authorize() and must never be reached by it.
+   */
+  const SELF_FORBIDDEN = [
+    'modify-agent',
+    'manage-skills',
+    'change-title',
+    'delete-agent',
+    'restart-session',
+    'delete-session',
+    'create-session',
+    'link-session',
+    'wake-agent',
+    'manage-amp-address',
+  ] as const
+
+  it.each(SELF_FORBIDDEN)('MEMBER attempting "%s" on ITSELF is DENIED', (action) => {
+    const auth = authenticateFromRequest(requestWith({ Authorization: `Bearer ${memberToken}` }))
+    expect(authorize(auth, action, 'member-a1').allowed).toBe(false)
+  })
+
+  it.each(SELF_FORBIDDEN)('MANAGER attempting "%s" on ITSELF is DENIED', (action) => {
+    const auth = authenticateFromRequest(requestWith({ Authorization: `Bearer ${managerToken}` }))
+    expect(authorize(auth, action, 'manager-1').allowed).toBe(false)
+  })
+
+  it('a MANAGER still holds those same powers over OTHER agents', () => {
+    // Guards against "fixing" the self rule by denying the action outright.
+    const auth = authenticateFromRequest(requestWith({ Authorization: `Bearer ${managerToken}` }))
+    expect(authorize(auth, 'modify-agent', 'member-a1').allowed).toBe(true)
+    expect(authorize(auth, 'manage-skills', 'member-a1').allowed).toBe(true)
+    expect(authorize(auth, 'change-title', 'member-a1').allowed).toBe(true)
+  })
+
+  it('wake-agent is NOT self-drive — a sleeping agent cannot be the one to wake itself', () => {
+    const auth = authenticateFromRequest(requestWith({ Authorization: `Bearer ${memberToken}` }))
+    const decision = authorize(auth, 'wake-agent', 'member-a1')
+    expect(decision.allowed).toBe(false)
+    // Denied by the self rule, not by a title rule — the distinction matters:
+    // wake-agent on ANOTHER agent is allowed for MANAGER/COS.
+    expect(decision.reason).toMatch(/No agent can modify itself/i)
+  })
+})

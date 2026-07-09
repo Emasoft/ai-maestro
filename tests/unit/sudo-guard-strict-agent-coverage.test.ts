@@ -71,22 +71,35 @@ async function messageFor(method: string, template: string): Promise<string | nu
  * The exact inventory of undecided routes, as of 2026-07-09. This list may
  * SHRINK as policies are decided; it must never grow without a deliberate edit
  * here, which is the point.
+ *
+ * TRDD-D3RP7KQZ removed four: the panel/queue/prompt-answer trio and
+ * `PATCH /api/agents/[id]`, now mapped in STRICT_AGENT_RULES.
  */
 const PENDING_INVENTORY = [
-  'PATCH /api/agents/[id]',
   'POST /api/governance/maestro-delegate',
   'DELETE /api/governance/maestro-delegate',
   'POST /api/agents/foreign-approvals/[id]/approve',
   'POST /api/agents/foreign-approvals/[id]/reject',
   'POST /api/system/aid-recover',
-  'POST /api/agents/[id]/panel',
-  'POST /api/agents/[id]/queue',
-  'POST /api/agents/[id]/prompt/answer',
   'PATCH /api/trdd/[id]',
   'POST /api/trdd/[id]/approve',
   'POST /api/trdd/[id]/refuse',
   'POST /api/trdd/[id]/promote',
   'POST /api/trdd/[id]/archive',
+]
+
+/**
+ * The routes TRDD-D3RP7KQZ decided. Leaving the pending list is necessary but
+ * not sufficient — a route dropped from the ledger without a STRICT_AGENT_RULES
+ * entry would fall through to the silent `UNDECLARED_MESSAGE` 403, which is the
+ * exact failure the ledger exists to prevent. Assert they are genuinely
+ * reachable by a MANAGER now.
+ */
+const DECIDED_BY_D3RP7KQZ = [
+  'POST /api/agents/[id]/panel',
+  'POST /api/agents/[id]/queue',
+  'POST /api/agents/[id]/prompt/answer',
+  'PATCH /api/agents/[id]',
 ]
 
 describe('strict-route agent-path coverage (TRDD-6A2I6ZO0)', () => {
@@ -129,6 +142,17 @@ describe('strict-route agent-path coverage (TRDD-6A2I6ZO0)', () => {
     for (const routeKey of PENDING_INVENTORY) {
       const [method, ...rest] = routeKey.split(' ')
       expect(await messageFor(method, rest.join(' ')), routeKey).toBe(PENDING_MESSAGE)
+    }
+  })
+
+  it('the routes decided by TRDD-D3RP7KQZ are mapped, not merely delisted', async () => {
+    for (const routeKey of DECIDED_BY_D3RP7KQZ) {
+      expect(AGENT_POLICY_PENDING.has(routeKey), `${routeKey} is still pending`).toBe(false)
+
+      const [method, ...rest] = routeKey.split(' ')
+      // null ⇒ requireAidTitle allowed it outright. Any message here means the
+      // route resolved to a refusal — including the silent fall-through 403.
+      expect(await messageFor(method, rest.join(' ')), routeKey).toBeNull()
     }
   })
 

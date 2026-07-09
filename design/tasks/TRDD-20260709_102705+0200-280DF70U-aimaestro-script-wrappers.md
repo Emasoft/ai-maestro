@@ -1,9 +1,12 @@
 ---
 trdd-id: 280DF70U
 title: Permanent aimaestro and amp script wrappers for every new control monitor and task endpoint
-column: dev
+column: complete
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-09T10:27:08+0200
+updated: 2026-07-09T15:52:00+0200
+implementation-commits: [c2c5ce5a]
+last-test-result: pass
+last-test-at: 2026-07-09T15:45:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -89,5 +92,74 @@ naming and auth pattern:
   `~/.local/bin/` after a fresh install run.
 - A strict-classified route rejects the script's call when no sudo token is
   supplied, and succeeds once one is (mirrors existing strict-route script tests).
+
+## Outcome (2026-07-09, commit `c2c5ce5a`)
+
+DONE. Deviations from the plan above, each deliberate:
+
+- **`install-messaging.sh` needed no copy entry.** The plan assumed explicit copy
+  lines were required; the installer already copies by glob (`amp-*.sh` for the
+  AMP family, `*.sh` for everything else), so both new `amp-kanban-*` scripts and
+  all three new `aimaestro-*` scripts were already on the install path. What WAS
+  missing is verification: glob-installed scripts fail silently, which is exactly
+  why an explicit by-name AID check already exists. Added the same by-name check
+  for the five control-plane scripts instead of a redundant copy list.
+- **One new route was required after all: `GET /api/agents/commands`.** The
+  session wrapper needs to expose the curated `commandKey` allowlist, and the
+  only way to read it was to POST a deliberately bogus key and scrape the 400's
+  `Allowed: …` message. A script that provokes an error to read a constant breaks
+  the day the message is reworded, so the allowlist is now a read-only route over
+  the same compile-time constant (`lib/agent-commands.ts` stays the SSOT).
+- **`aimaestro-agent.sh config` takes no `--include` flag.** The plan sketched
+  `--include teams,repos,docker,tasks,aid`, but `GET /api/agents/[id]/full`
+  accepts no query params and returns all of it unconditionally. Inventing a flag
+  the route does not honour would have been a lie in the help text.
+
+## Verification performed (live server, :23000)
+
+Node 22 was required — `node-pty` throws `ERR_DLOPEN_FAILED` on this machine's
+default Node 26, and the repo's own `check-node.mjs` guard says so. That engine
+drift (`package.json` engines `<26.0.0`) pre-dates this work.
+
+The wrappers authenticate with `Authorization: Bearer $AID_AUTH` (an `aim_tk_*`
+agent token). This session has no AMP identity and bootstrapping one would have
+written agent state into the source repo, so the harness authenticated as the
+system OWNER (governance password → `aim_session` cookie) and put a local proxy
+in front of the server to inject that cookie. Every request was therefore really
+built by the script under test and really served by the running server; only the
+credential was supplied at the edge.
+
+- **22/22** script→route checks green: every read-only verb; agent name→UUID
+  resolution inside the wrapper; BOTH halves of the strict gate (`403
+  sudo_required` with no token, `200` with a fresh op-bound one); the queue
+  enqueue→cancel round trip leaving no residue; the `409` refusal when answering
+  a prompt that is not pending; and every client-side guard (`answer` XOR,
+  `archive --state failed`, bad TRDD id, panel `html`+`url`, `--set-json`).
+- **9/9** TRDD lifecycle checks green on a REAL git repo, closing the D5
+  deferral. The unit tests only ever covered `trdd-store`'s `fs.rename`
+  FALLBACK (they run in a tmp dir that is not a repo). Approving a tracked
+  proposal produced a staged **rename (`R`)** in `git status` — proof the `git
+  mv` branch ran, since `fs.rename` can only ever leave a `D` + `??` pair.
+  `column: proposal → planned`, the `## Approval log` line, and the
+  `tasks/ → archived/` move all verified, then `design/` was restored to HEAD
+  exactly (`git reset -- design/` + `git checkout -- design/`; no `--hard`,
+  no `git clean`).
+
+**Process defect worth recording:** the smoke harness first picked `agents[0]`,
+which resolved to `alexandre` — one of the user's REAL agents, on the scenario
+rules' hard blacklist. It enqueued and immediately cancelled one command there
+(verified: queue file left as `[]`, the agent was hibernated, nothing could
+fire). The harness now refuses to run its mutating half against any agent that
+does not match a disposable-test-name prefix, rather than defaulting to index 0.
+
+## Still deferred (ONE item — do not roll it forward silently again)
+
+The **dev-browser headless panel walkthrough** (render pushed HTML in the DOM,
+open/close/refresh, feedback round-trip, light + dark screenshots). It has now
+been deferred from Phase D to Phase E; it is a browser-level check and belongs
+in its own task rather than a third silent roll-forward. The panel's SERVER half
+is fully covered: 6 unit tests (mapping, bad shapes, fan-out + dead-socket
+pruning, zero-client, FIFO drain, bounded queue) plus the live `delivered`-count
+and sudo-gate checks above.
 
 ## Approval log

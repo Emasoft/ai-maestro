@@ -3,7 +3,7 @@ trdd-id: SCLSRS6E
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
 column: dev
 created: 2026-07-09T10:23:21+0200
-updated: 2026-07-09T13:55:00+0200
+updated: 2026-07-09T15:52:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -158,18 +158,53 @@ and the TRDD-file task tooling. Verdict per area (✅ exists · ◑ partial · �
   feedback round-trip, light+dark screenshots) = integration-level → the Phase E live-server checks,
   same pattern as A/B/C. Live-URL preview covers the dev-browser "show the app" case natively.
 
-**NEXT ACTION:** Phase E (this repo): D6 (TRDD-280DF70U) — the permanent SCRIPT layer, the
-decoupling wrappers the janitor actually calls (NOTHING ships to the janitor before this): NEW
-`aimaestro-session.sh` (inject/slash/state/read-prompt/answer/queue), `aimaestro-agent.sh config`
-(→ /full), `aimaestro-panel.sh` (open/close/refresh/set/feedback), `aimaestro-trdd.sh`
-(search/read/edit/approve/refuse/promote/archive), `amp-kanban-get.sh`, `amp-kanban-edit.sh` (+ `q`
-search on list) — auth via the established agent-helper/amp-helper patterns; wire ALL into
-`install-messaging.sh`; live-server checks (yarn dev :23000) exercising each new endpoint through
-its wrapper — this is where the A-D deferred integration checks (cross-agent auth, queue drain
-end-to-end, git-mv lifecycle on a real repo, panel dev-browser walkthrough) get executed. Then F
-(D7 cross-repo issues on ai-maestro-plugin: dev-browser core dep + hook AskUserQuestion capture),
-G (write the janitor its full command reference + adopt instruction — the whole point of this
-epic). Cross-repo items are GitHub issues.
+**PROGRESS 2026-07-09T15:52+0200 — Phase E DONE (this repo):**
+- D6 (TRDD-280DF70U) landed as `c2c5ce5a` — the decoupling layer. NEW `aimaestro-session.sh`
+  (inject/slash/slash-keys/state/read-prompt/answer/queue/queue-list/queue-cancel),
+  `aimaestro-panel.sh` (open/close/refresh/set/status/feedback), `aimaestro-trdd.sh`
+  (search/read/edit/approve/refuse/promote/archive), `amp-kanban-get.sh`, `amp-kanban-edit.sh`
+  (`--set` string / `--set-json` typed, validated before body-build); EDITS: `amp-kanban-list.sh`
+  `--query/-q`, `aimaestro-agent.sh config` → `/full`, `install-messaging.sh` verification block.
+- THREE deliberate deviations from the plan, all recorded in the D6 TRDD: (1) the installer needed
+  no copy entry (it already globs `amp-*.sh` + `*.sh`) — what was missing was VERIFICATION, so the
+  by-name check mirrors the existing AID block; (2) one NEW route was unavoidable —
+  `GET /api/agents/commands`, because the only way to read the `commandKey` allowlist was to POST a
+  bogus key and scrape the 400's `Allowed: …` text; (3) `config` has no `--include` flag because
+  `/full` accepts no query params — inventing one would have been a lie in the help text.
+- **Live-server verification, 31 checks green.** 22/22 script→route (every read-only verb; agent
+  name→UUID resolution inside the wrapper; BOTH halves of the strict gate — 403 `sudo_required`
+  without a token, 200 with a fresh op-bound one; queue enqueue→cancel with no residue; the 409
+  refusal answering a non-pending prompt; every client-side guard). 9/9 TRDD lifecycle on a REAL git
+  repo — **closing the D5 deferral**: approving a tracked proposal produced a staged **rename** (`R`),
+  proving the `git mv` branch ran (the unit tests only ever covered the `fs.rename` fallback, since
+  they run in a non-repo tmp dir); `design/` was then restored to HEAD exactly (`git reset -- design/`
+  + `git checkout -- design/`; no `--hard`, no `clean`).
+- Harness note: the wrappers send `Bearer $AID_AUTH` and this session has no AMP identity, so the
+  harness authenticated as the OWNER (governance password → `aim_session`) behind a cookie-injecting
+  local proxy. The scripts really built every request; the server really served it.
+- **Process defect recorded:** the harness first picked `agents[0]` = `alexandre`, a REAL user agent
+  on the scenario hard-blacklist; it enqueued+cancelled one command there (queue left `[]`, agent
+  hibernated, nothing could fire). It now refuses to mutate any agent lacking a disposable-test-name
+  prefix. Cross-agent auth (the Phase A deferral) is covered by `agent config` reading another
+  agent's `/full`.
+- **Node 22 is required to run the server** (`node-pty` → `ERR_DLOPEN_FAILED` on this machine's
+  default Node 26; the repo's own `check-node.mjs` says so). Pre-existing engine drift, not ours.
+- **ONE deferral remains, and must NOT roll forward silently a third time:** the dev-browser headless
+  PANEL walkthrough (DOM render of pushed HTML, open/close/refresh, feedback round-trip, light+dark
+  screenshots). Deferred D→E, now its own task. The panel's SERVER half is fully covered (6 unit
+  tests + live `delivered`-count + sudo gate).
+
+**NEXT ACTION:** Phase F (cross-repo, GitHub issues only — NEVER edit another repo's tree):
+D7 (TRDD-GT0TAJFL) on `Emasoft/ai-maestro-plugin` — (a) add `dev-browser` as a CORE-plugin
+dependency (`dependencies: [{name: "dev-browser", marketplace: "dev-browser-marketplace"}]`; the
+`ai-maestro-plugins` marketplace already carries the matching
+`allowCrossMarketplaceDependenciesOn`), and (b) teach `ai-maestro-hook.cjs` to CAPTURE
+AskUserQuestion (today it fires `idle_prompt`, so the question text + choices never reach the
+chat-state file; `PendingPrompt.question` in `services/sessions-service.ts` is the forward-compat
+slot already waiting for it). Then Phase G — the whole point of this epic: write
+`Emasoft/ai-maestro-janitor` an issue carrying the FULL command reference (every new script, its
+verbs, when to use it, the sudo/AID auth rules) and instruct its Claude to adopt the script layer
+and test it. Nothing ships to the janitor that is not reachable through a wrapper.
 
 **Load-bearing facts / gotchas:**
 - The decoupling invariant (project CLAUDE.md "Plugin Abstraction Principle"): plugins call

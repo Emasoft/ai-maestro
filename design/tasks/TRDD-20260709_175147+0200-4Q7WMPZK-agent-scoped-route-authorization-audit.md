@@ -103,6 +103,41 @@ D3RP7KQZ. Driving your own terminal is permitted; refusing an order is not. So
 Falsified before it was believed: with the guard removed, exactly the seven
 refusal assertions fail and the seven permissive ones still pass.
 
+### The guardrail was keyed on a PATH; capabilities are not paths
+
+Applying the `chat` lesson (enumerate by the dangerous PRIMITIVE, not the path)
+across the whole `app/api` surface found **two more** unauthorized routes that the
+agent-scoped guardrail structurally could not see:
+
+- `sessions/[id]/rename` PATCH → `renameSession` (registry + tmux write).
+  `modify-agent` likely fits, but the path carries a SESSION id, so the target
+  agent must be resolved via `getAgentBySession` first — more than a mapping.
+- `sessions/restore` POST+DELETE → `restoreSessions` (spawns tmux). The
+  `create-session` action already exists and is documented as exactly this
+  primitive.
+
+New guardrail: `tests/unit/dangerous-primitive-authorization.test.ts`, keyed on
+the primitive, covering ALL of `app/api`. Falsified with a probe route — it fails
+loud on any new unauthorized primitive-reaching route.
+
+**Do NOT read `96 of 165 mutating routes lack authorize()` as 96 holes.** Many are
+gated by other means: `governance/manager` verifies the governance password in the
+body; `v1/*` uses AMP api-keys and the AID challenge; `auth/*` is pre-auth by
+nature. The 96 is a *detection* gap, not a vulnerability count.
+
+**But `middleware.ts` is only a structural credential-PRESENCE check** — it does
+not verify the token, does not distinguish an agent from a human, and never
+authorizes. So any holder of a valid `aim_tk_` reaches every route that does not
+authorize for itself. That is why "the middleware protects it" is never an answer.
+
+**Assessed and NOT a hole:** `sessions/activity/update` POST (`enforceAuth` only)
+can be forged by any authenticated caller to fake an `idle_prompt` and force a
+queue drain. But `drainCommandQueueForSession` independently calls
+`evaluateExitGate(readSubagentCount(...))` and resolves `commandKey` against the
+allowlist, so a forged event cannot inject arbitrary text nor run while subagents
+are provably alive. Residual impact is mid-turn timing of an ALREADY-authorized
+command, plus status spoofing to dashboard clients. MEDIUM, recorded not fixed.
+
 **NEXT ACTION:** none in this TRDD — the Tier-0 work is done. Everything left is
 policy and is carried by **TRDD-YEE33F3A** (`design/proposals/`, tier 2, awaiting
 the USER or MANAGER): the five routes needing new AuthActions, the `amp-init`

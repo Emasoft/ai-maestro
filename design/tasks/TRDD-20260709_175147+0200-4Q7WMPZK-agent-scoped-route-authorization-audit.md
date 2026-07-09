@@ -3,7 +3,7 @@ trdd-id: 4Q7WMPZK
 title: Audit the ten agent-scoped mutation routes that authorize nothing
 column: dev
 created: 2026-07-09T17:51:47+0200
-updated: 2026-07-10T01:18:00+0200
+updated: 2026-07-10T01:36:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -36,11 +36,17 @@ Derived (EHT) from TRDD-D3RP7KQZ. Tier 0: in-scope, own repo, tightening only.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-09
 
-**All ten triaged. 3 fixed, 2 are detector artifacts, 5 remain open.** Severity
-raised MEDIUM → **CRITICAL**: this was never a paperwork gap. The second route
-audited (`chat` POST) is a full bypass of the `send-command` matrix AND of
-sudo-mode, reachable by any agent, through the one endpoint nobody thought of as
-a control surface because it is called "chat".
+**All ten triaged. 8 fixed, 1 is a detector artifact, 1 needs a decision
+(`amp-init`).** Severity raised MEDIUM → **CRITICAL**: this was never a paperwork
+gap. The second route audited (`chat` POST) is a full bypass of the `send-command`
+matrix AND of sudo-mode, reachable by any agent, through the one endpoint nobody
+thought of as a control surface because it is called "chat".
+
+**Every route this audit's own table triaged from a NAME was wrong** — five for
+five in the YEE33F3A half, in severity, in verb, or in the proposed action. Twice
+(`element-inventory`, `metrics`) the proposed `modify-agent` would have denied the
+endpoint's only intended caller. `UNREVIEWED_INVENTORY` is now `[amp-init,
+metadata]`; deciding `amp-init` empties it and closes this TRDD.
 
 ### Triage table (verified 2026-07-09 by reading each route + its service)
 
@@ -55,7 +61,7 @@ a control surface because it is called "chat".
 | `email/addresses/[address]` | PATCH DELETE | ~~`enforceAuth`~~ → **`authorize('modify-agent')`** | mutate ANY agent's address book | **FIXED** `6c905104` |
 | `subconscious` | ~~POST~~ GET | ~~`enforceAuth`~~ → **POST DELETED; GET ownership** | POST drove NOTHING (400 for every input, 0 callers); GET had no auth and `getAgent()` constructs+evicts | **FIXED** `505ae8c9` |
 | `element-inventory` | POST | ~~`enforceAuth`~~ → **ledger ownership** | append forged snapshots to ANY agent's audit ledger | **FIXED** `1ad04ade` |
-| `metrics` | PATCH | `enforceAuth` | `updateMetrics` on ANY agent | **OPEN — low blast radius** |
+| `metrics` | PATCH | ~~`enforceAuth`~~ → **ownership + input validation** | rewrite ANY agent's metrics; inject arbitrary registry keys; store a string into `estimatedCost` and crash that agent's profile tab | **FIXED** `c8903197` |
 
 `enforceAuth` returns `NextResponse | null`. It authenticates and **discards the
 auth result** — the route never learns who the caller is, so it *cannot* authorize

@@ -4,7 +4,7 @@ title: Decide the AuthActions for the five remaining unauthorized agent-scoped r
 column: planned
 approval-tier: 2
 created: 2026-07-09T19:01:42+0200
-updated: 2026-07-10T01:17:00+0200
+updated: 2026-07-10T01:35:00+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -24,8 +24,8 @@ test-requirements: [unit]
 review-requirements: [human-review]
 runtime-targets: [macos, linux]
 impacts: [public-api]
-attempts: 4
-implementation-commits: [f56b79f2, 28593ed7, 505ae8c9, 1ad04ade]
+attempts: 5
+implementation-commits: [f56b79f2, 28593ed7, 505ae8c9, 1ad04ade, c8903197]
 external-refs: []
 ---
 
@@ -33,12 +33,19 @@ external-refs: []
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
 
-**4 of 5 done. Every one of the four was mis-triaged in the body below, because
-every one was triaged from the route's NAME rather than its service.** Severity
-stays **CRITICAL**. Read the service first — this is now a measured pattern, not
-a caution. The fourth (`element-inventory`) escalated it: the proposed action
-would have DENIED the endpoint's only intended caller, shipping a permanently
-broken feature under the banner of a security fix.
+**All 5 routes are FIXED. Five for five were mis-triaged in the body below,
+because every one was triaged from the route's NAME rather than its service.**
+Severity stays **CRITICAL**. Read the service first — this is a measured pattern,
+not a caution. Two of the five escalated it beyond "imprecise": `element-inventory`
+and `metrics` were both proposed for `modify-agent`, which is absent from
+`SELF_DRIVE_ACTIONS` and would have DENIED each endpoint's only intended caller —
+shipping a permanently broken feature under the banner of a security fix.
+
+**Exactly ONE new AuthAction was warranted in the whole TRDD: `export-agent`.**
+Three of the five ended with FEWER concepts than proposed (`view-transcript`,
+`manage-messages`, `drive-subconscious` all rejected); one endpoint was deleted
+rather than authorized. What remains is not a mapping problem but two open
+questions: `amp-init` self-remint, and the dead `manage-amp-address` action.
 
 ### `messages/[messageId]` — DONE (`28593ed7`). Sender forgery, not "delete".
 
@@ -228,26 +235,72 @@ a wide margin.
 that emit secrets, **every** verb). The exfil class has **no debt ledger** — a
 route handing out a private key has no acceptable interim state.
 
-### NEXT ACTION — one route remains
+### `metrics` — DONE (`c8903197`). It validated none of its three inputs.
 
-**Read the service before choosing the action.** Four for four now: every route
-this TRDD closed was mis-triaged in its body, because each was triaged from a
-name. `element-inventory` raised the stakes — its proposed `modify-agent` would
-have *denied the endpoint's only intended caller*, shipping a permanently broken
-feature under the banner of a security fix.
+The Part-1 table calls this "low blast radius; data integrity only". Reading the
+service found three independent defects — not who, not which field, not what
+value — and the third refutes the severity.
 
-1. `metrics` — PATCH, `updateMetrics`. **Check the caller first.** If the agent's
-   own hook writes it, `modify-agent` is again inverted (self-target banned) and
-   ownership is the rule. Confirm what `updateMetrics` actually mutates: if it
-   writes registry fields, `modify-agent` may genuinely fit for the cross-agent
-   case while self needs an explicit carve-out. Do not assume from the name.
+- **WHO.** `enforceAuth` again: any agent token rewrote any agent's metrics.
+- **WHICH FIELD.** The `increment` branch returned *before* the whitelist beneath
+  it was ever consulted, so `metric` reached `incrementAgentMetric` as an
+  arbitrary registry key — exactly the "arbitrary key injection" the whitelist's
+  own comment claimed to prevent. And the whitelist was itself wrong: five of its
+  six names (`totalConversations`, `totalTokens`, `lastActiveAt`,
+  `sessionsCreated`, `commandsExecuted`) are not fields of
+  `UpdateAgentMetricsRequest` at all, so a full update of a REAL field filtered to
+  `{}` and returned **200 with the metrics unchanged**.
+- **WHAT VALUE.** `amount` was unvalidated and `incrementAgentMetric` does
+  `existing + amount`, so `amount: "abc"` stored the STRING `"0abc"` into e.g.
+  `estimatedCost` — which `AgentProfile.tsx` renders with `.toFixed(2)`. One PATCH
+  left the target agent's profile tab **permanently un-renderable**. A stored,
+  cross-agent denial of view is not "data integrity only".
 
-Then the R6 graph bypass on forward and the `getAgent()` construct-on-read
-(both above), Part 2 (`amp-init` self-remint) and Part 3 (dead
-`manage-amp-address`). `UNREVIEWED_INVENTORY` is down to three — `amp-init` (a
-decision, not a fix), `metadata` (a detector artifact, already authorized via
-ChangeMetadata G00), plus `metrics`. It reaches `[]` when `metrics` lands and
-`amp-init` is decided, which is what closes the parent TRDD-4Q7WMPZK.
+**Ownership, and `modify-agent` inverted for the second time.** Metrics are
+counters an agent reports about itself; `modify-agent` is not self-drive, so it
+would deny the only sane caller. MANAGER is not exempt — a metric is owned, not
+governed. The whitelist is now pinned to the type with `satisfies`, so a rename is
+a COMPILE error: a whitelist nobody can typo-check is how it came to name five
+fields that never existed.
+
+**Unfinished, not dead — and the distinction decided the outcome.** Zero callers
+anywhere (no UI, no hook, no script, no plugin), and `incrementAgentMetric` /
+`updateAgentMetrics` are reached *only* through this route. But the reader half is
+LIVE: `AgentProfile.tsx` and `zoom/AgentProfileTab.tsx` render all eight metrics —
+today, the zeros CreateAgent wrote. So it is authorized, unlike
+`triggerSubconsciousAction`, which could never succeed for any input.
+
+The GET is left **read-open on purpose**: `GET /api/agents/[id]` already returns
+the whole record, metrics included, to the same caller, so an ownership gate would
+be theater. But it made no auth call at all, and `middleware.ts` only regex-matches
+the credential SHAPE ("the route handler does the full cryptographic verify"), so
+it now calls `requireAuth` — the gap CC-GOV-008 closed on its sibling.
+
+### NEXT ACTION — the five fixes are in; two questions and three follow-ups remain
+
+`UNREVIEWED_INVENTORY` is down to **two**, and neither is a fix:
+
+- `amp-init` — a hand-rolled `isManager` check that bypasses the matrix, letting an
+  agent re-mint its OWN Ed25519 AMP identity keys. **Part 2: a decision.**
+- `metadata` — a detector artifact; already authorized via `ChangeMetadata` G00.
+
+**Part 3:** `manage-amp-address` is declared in the `AuthAction` union and asserted
+in `tests/authorization.test.ts`'s SELF_FORBIDDEN list, but wired to zero routes.
+Either the four address routes adopt it, or delete it. A decision, not a cleanup.
+
+Then the three follow-ups this TRDD surfaced but did not fix:
+
+1. **R6 graph bypass on forward** — `forwardFromUI` never calls
+   `validateMessageRoute`; mirror `services/send-message-service.ts:366-379`. The
+   web UI must keep working (HUMAN has full `Y` to every node). MEDIUM.
+2. **`agentRegistry.getAgent()` constructs and evicts on read** (`lib/agent.ts:905`)
+   — audit every caller; switch READ paths to `getExistingAgent()`.
+3. **`element-inventory` POST validation gauntlet** — cognitive 34. Pure refactor.
+   (The `metrics` fix avoided repeating this: its gauntlet lives in a pure
+   `parseMetricsUpdate`, after the code-health hook caught `updateMetrics` at 38.)
+
+Deciding `amp-init` is what empties `UNREVIEWED_INVENTORY` and closes the parent
+**TRDD-4Q7WMPZK**.
 
 **SUPERSEDED — do NOT carry forward.**
 
@@ -263,6 +316,14 @@ ChangeMetadata G00), plus `metrics`. It reaches `[]` when `metrics` lands and
   process") and the `drive-subconscious` / `send-command` suggested shape. It
   drives nothing — it returns 400 for every input. The endpoint was deleted; the
   real primitive was the unauthenticated GET's construct-and-evict.
+- The Part-1 table's `metrics` row ("low blast radius; data integrity only") and
+  the "likely `modify-agent`" suggested shape. An unvalidated string `amount` is
+  stored into `estimatedCost`, which the profile UI renders with `.toFixed(2)` —
+  a stored, cross-agent denial of view, not a data-integrity nit. And
+  `modify-agent` would have denied the endpoint's only caller, exactly as with
+  `element-inventory`.
+- The `element-inventory` "likely `modify-agent`, but confirm what it writes"
+  bullet. Confirmed: it writes an audit ledger, and the action was inverted.
 - The Part-1 table's `element-inventory` row ("reconfiguration-adjacent") and the
   `modify-agent` suggested shape. It appends to an audit ledger, and
   `modify-agent` bans self-target — which is exactly what the endpoint's only

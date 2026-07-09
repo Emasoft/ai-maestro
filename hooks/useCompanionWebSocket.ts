@@ -70,9 +70,10 @@ export function useCompanionWebSocket({ agentId, onSpeech }: UseCompanionWebSock
         // TRDD-6A2I6ZO0: switching the active agent tears this effect down and
         // re-runs it at once, so the OLD socket's close lands AFTER the new one
         // is already in wsRef. Nulling the ref unconditionally there wiped the
-        // live socket and send() silently no-op'd forever after. (Verified as a
-        // real, silent failure in the panel channel, which had this same code;
-        // fixed here by inspection — same defect, same shape.)
+        // live socket and send() silently no-op'd forever after. Found in the
+        // panel channel, which had this same code; covered here by
+        // tests/unit/ws-hook-lifecycle.test.ts (TRDD-4XQ1PNMV), which fails
+        // against this line removed.
         if (wsRef.current !== sock) return
         wsRef.current = null
         // Only reconnect on abnormal closes — skip graceful disconnects (1000 normal, 1001 going away)

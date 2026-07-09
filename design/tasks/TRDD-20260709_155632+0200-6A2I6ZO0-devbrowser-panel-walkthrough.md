@@ -140,14 +140,18 @@ Fix: capture `sock` per connection; guard every handler on `wsRef.current === so
 Re-verified by driving the exact path that broke it (load → **switch agent** → push →
 click): one `panel:feedback` frame sent, drained once, empty on the second drain.
 
-`hooks/useCompanionWebSocket.ts` carries the same defect and the same `send()` reader —
-fixed by inspection, not verified end-to-end (no companion/voice harness here).
+`hooks/useCompanionWebSocket.ts` carries the same defect and the same `send()` reader.
 `hooks/useWebSocket.ts` (terminal) is already immune: it nulls `onclose` before `close()`.
 
-**No regression test.** The defect is a React lifecycle race; only a rendering test catches
-it, and this repo has neither `jsdom` nor `@testing-library/react`. Adding them is a
-dependency change and does not belong in a bugfix commit — carried as follow-up
-`TRDD-4XQ1PNMV`. The end-to-end re-verification above is the evidence for now.
+**Regression test — landed in `TRDD-4XQ1PNMV`, not in the fix commit.** The defect is a
+React lifecycle race; only a rendering test catches it, and the repo had neither `jsdom` nor
+`@testing-library/react`. Rather than slip devDependencies into a bugfix commit, the harness
+was carried as a follow-up and delivered immediately after:
+`tests/unit/ws-hook-lifecycle.test.ts` (12 tests). Falsified as required — with the guards
+removed, exactly the 4 defect tests fail and the 8 behaviour tests still pass.
+
+**Correction:** the companion fix is no longer "by inspection". Its clobber test fails
+against the pre-fix hook, so it is now verified the same way the panel fix is.
 
 ### BUG-002 (recorded, partially addressed) — every strict route of epic TRDD-SCLSRS6E was unreachable by agents
 

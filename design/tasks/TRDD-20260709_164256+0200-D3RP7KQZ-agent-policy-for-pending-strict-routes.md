@@ -213,4 +213,5 @@ is that the epic stays inert and the janitor's command reference stays wrong.
   action whose matrix mirrors the approval tiers), nor `maestro-delegate`,
   `foreign-approvals`, or `aid-recover`, nor the script layer's missing USER auth
   path. Those ten routes remain in `AGENT_POLICY_PENDING` and are carried into a
-  successor proposal rather than decided by silence.
+  successor proposal rather than decided by silence: **TRDD-K2WJH7RF**
+  (`design/proposals/`, tier 2, awaiting the USER or MANAGER).

@@ -24,12 +24,83 @@ test-requirements: [unit]
 review-requirements: [human-review]
 runtime-targets: [macos, linux]
 impacts: [public-api]
-attempts: 0
-implementation-commits: []
+attempts: 1
+implementation-commits: [f56b79f2]
 external-refs: []
 ---
 
 # TRDD-YEE33F3A — the five routes that need an AuthAction that does not exist
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-09
+
+**1 of 5 done, and it was far worse than the body below says.** Severity raised
+HIGH → **CRITICAL** while implementing `export`.
+
+### `export` — DONE (`f56b79f2`). Key exfiltration, not confidentiality.
+
+The Part-1 table triages `export` as `POST` / "any agent's FULL conversation
+transcripts" / "confidentiality". Both halves are wrong:
+
+- The sharp verb is **GET**, not POST. POST (`createTranscriptExportJob`) has
+  **zero callers**; both dashboard dialogs use GET.
+- GET streams `exportAgentZip()`, which does
+  `archive.directory(getKeysDir(agent.id), 'keys')` — the directory whose
+  `private.pem` `lib/amp-keys.ts` annotates **"Agent's private key (NEVER
+  shared)"**. Plus `registrations/` (external provider API keys), `agent.db`, and
+  every message.
+
+So any agent token could take any other agent's **Ed25519 signing key** and forge
+correctly-signed AMP messages as it, forever. The comm-graph gates who may SEND;
+nothing gates who may SIGN, because a genuine signature is indistinguishable from
+a genuine one.
+
+**Decision** (made under the USER's standing "prioritize security"): new action
+`export-agent`, special rule mirroring `register-agent` — **system-owner only,
+every agent title denied**, MANAGER and the target's own COS included. MANAGER
+governs an agent completely without its key; a COS coordinates a team, it does not
+impersonate its members. Self-export denied too: it grants nothing (an agent reads
+its own keys off disk today) and would make the API a one-request exfiltration
+channel for a compromised agent. Both verbs carry the action; POST having no
+callers means the strict side costs nothing. `view-transcript` was deliberately
+NOT introduced — add it on purpose if a real self-export flow appears.
+
+`services/headless-router.ts` had the same hole and **no auth call at all**; both
+its handlers now call the same `authorize()`, so the two surfaces cannot drift.
+
+### Why the audit missed it — the load-bearing lesson
+
+Both guardrails filter on `export function (POST|PUT|PATCH|DELETE)`. The audit
+equated **dangerous** with **mutating**. Exfiltration is a GET. `export` was even
+*listed* in the coverage ledger — as an unreviewed POST — which understated it by
+a wide margin.
+
+`dangerous-primitive-authorization.test.ts` now carries two classes:
+`DANGEROUS_FUNCTIONS` (write/drive, mutating verbs) and `EXFIL_FUNCTIONS` (reads
+that emit secrets, **every** verb). The exfil class has **no debt ledger** — a
+route handing out a private key has no acceptable interim state.
+
+### NEXT ACTION — four routes remain, sharpest first
+
+1. `messages/[messageId]` — **read the route before choosing.** It has PATCH,
+   DELETE **and POST**. A new action with no special rule denies self-target,
+   which is right for DELETE (an agent must not delete its COS's directives) but
+   may break a legitimate self "mark read" on POST. Do not assume the three verbs
+   share one capability.
+2. `subconscious` — read `triggerSubconsciousAction` first; decide `send-command`
+   (own surface) vs a new `drive-subconscious`.
+3. `element-inventory` — confirm what it writes; likely `modify-agent`.
+4. `metrics` — check the caller (if the agent's own hook writes it, self-drive
+   matters); likely `modify-agent`.
+
+Then Part 2 (`amp-init` self-remint) and Part 3 (dead `manage-amp-address`).
+`UNREVIEWED_INVENTORY` reaches `[]` only when all four land — which is what closes
+the parent TRDD-4Q7WMPZK.
+
+**SUPERSEDED — do NOT carry forward.** The Part-1 table's `export` row
+(`POST` / confidentiality) and the "Suggested shape" bullet proposing
+`view-transcript` for it. Both were written from the route's name and its POST
+handler, without reading `exportAgentZip`. They are kept below only so the error
+stays legible.
 
 **Tier 2.** Successor to the Tier-0 audit TRDD-4Q7WMPZK, which triaged all ten
 agent-scoped routes that authorize nothing, fixed the three that were pure

@@ -102,9 +102,17 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
 - `middleware.ts` authenticates EVERY request globally, so a route with no auth call is still
   authenticated. It is not authorized. `enforceAuth` is worse than it looks: it authenticates and
   **discards the result**, so a route using it *cannot* authorize even if it wanted to. As of
-  `c7d9f8a7` six agent-scoped routes still authorize nothing — `export` (any agent reads any agent's
-  transcripts) and `messages/[messageId]` (any agent deletes any agent's AMP messages) are the sharp
-  ones. Ledger: `tests/unit/agent-route-authorization-coverage.test.ts`; audit: TRDD-4Q7WMPZK.
+  `f56b79f2` five agent-scoped routes still authorize nothing; `messages/[messageId]` (any agent
+  deletes any agent's AMP messages) is the sharp one remaining. Ledger:
+  `tests/unit/agent-route-authorization-coverage.test.ts`; audit: TRDD-4Q7WMPZK.
+- **`GET …/export` shipped the target's Ed25519 PRIVATE KEY**, not "its transcripts": `exportAgentZip`
+  does `archive.directory(getKeysDir(id), 'keys')`, and `lib/amp-keys.ts` calls that `private.pem`
+  "NEVER shared". Any agent token → any agent's signing key → forged, genuinely-valid AMP messages
+  forever. Fixed `f56b79f2`: action `export-agent`, **system-owner only** (MANAGER and COS denied —
+  governing an agent never needs its key; a genuine signature cannot be told from a genuine one). The
+  headless router had the same hole with *no* auth call. **Danger is not the same as mutation**: both
+  guardrails scanned only `POST|PUT|PATCH|DELETE`, so a GET that exfiltrates was structurally
+  invisible. `EXFIL_FUNCTIONS` in `dangerous-primitive-authorization.test.ts` now scans every verb.[^6]
 - The USER path is barely usable: the script wrappers carry no session-cookie support
   (`get_auth_args` reads only `AID_AUTH`, so a human gets 401), and `POST /api/auth/sudo-password` is a
   **global 5-per-60s bucket that successful mints consume** — 5 strict ops/minute machine-wide
@@ -173,3 +181,16 @@ build epic + gap analysis: `design/tasks/TRDD-…-SCLSRS6E-janitor-control-monit
   from a human, which made it feel already-verified. **A name supplied by anyone, the user included, is a
   hypothesis.** Read the implementation before committing the fact, especially into PROJECT-scope memory,
   where a wrong fact is pushed to every contributor.
+
+[^6]: [ocd:2026-07-09 lmd:2026-07-09] This page, the coverage ledger, AND TRDD-YEE33F3A all recorded
+  `export` as "POST — any agent reads any agent's transcripts, confidentiality". Every part was wrong.
+  The dangerous verb is **GET** (POST has zero callers), and the payload is not transcripts but
+  `keys/private.pem` + `registrations/` + `agent.db`. The consequence is not disclosure but permanent,
+  undetectable **impersonation**: the thief signs as the victim and every downstream governance check
+  validates the signature, because it is valid. Two lessons. (1) **Danger ≠ mutation.** Both guardrails
+  enumerated `POST|PUT|PATCH|DELETE`; a read that emits a secret is worse than most writes, and was
+  invisible to both. Classify primitives by *what leaves the process*, not by verb. (2) A route's own
+  doc comment listed "AMP keys, and AID identity" in the zip and the route still only authenticated —
+  so an accurate comment beside an absent guard bought nothing. Comments describe; tests enforce. The
+  `EXFIL_FUNCTIONS` net now asserts `exportAgentZip` really does archive the keys dir, so the
+  justification cannot rot into a lie the way that comment did.

@@ -54,12 +54,16 @@ export function usePanelWebSocket(agentId: string | null): {
     const connect = () => {
       if (disposed) return
       const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      ws = new WebSocket(`${proto}://${window.location.host}/panel-ws?agent=${encodeURIComponent(agentId)}`)
-      wsRef.current = ws
+      // `sock` is captured per-connection. The outer `ws` is REASSIGNED on every
+      // reconnect, so a handler that closed over the identifier `ws` would see
+      // whatever socket is current when it fires — not the socket it belongs to.
+      const sock = new WebSocket(`${proto}://${window.location.host}/panel-ws?agent=${encodeURIComponent(agentId)}`)
+      ws = sock
+      wsRef.current = sock
 
-      ws.onopen = () => setPanel((p) => ({ ...p, connected: true }))
+      sock.onopen = () => setPanel((p) => ({ ...p, connected: true }))
 
-      ws.onmessage = (event) => {
+      sock.onmessage = (event) => {
         let data: { type?: string; html?: string; url?: string }
         try {
           data = JSON.parse(event.data)
@@ -94,16 +98,25 @@ export function usePanelWebSocket(agentId: string | null): {
         }
       }
 
-      ws.onclose = () => {
-        setPanel((p) => ({ ...p, connected: false }))
+      // TRDD-6A2I6ZO0: everything below is guarded on `wsRef.current === sock`.
+      // Switching the active agent tears this effect down and immediately
+      // re-runs it, so the OLD socket's close event lands AFTER the new socket
+      // has already been stored. Nulling the ref unconditionally there wiped the
+      // reference to the LIVE socket, and sendFeedback() — the only reader of
+      // wsRef — then silently no-op'd for the rest of the page's life. It was
+      // silent because onopen restores `connected` but never restores the ref:
+      // the UI kept saying "connected" while feedback went nowhere.
+      sock.onclose = () => {
+        if (wsRef.current !== sock) return // a stale socket closing; the live one owns the ref
         wsRef.current = null
+        setPanel((p) => ({ ...p, connected: false }))
         // Modest fixed backoff: the panel is a secondary channel — no need for
         // the aggressive multi-step strategy the terminal WS uses.
         if (!disposed) retryTimer = setTimeout(connect, 3000)
       }
 
-      ws.onerror = () => {
-        try { ws?.close() } catch { /* already closing */ }
+      sock.onerror = () => {
+        try { sock.close() } catch { /* already closing */ }
       }
     }
 

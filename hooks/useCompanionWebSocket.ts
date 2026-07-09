@@ -44,15 +44,18 @@ export function useCompanionWebSocket({ agentId, onSpeech }: UseCompanionWebSock
     function connect() {
       if (!mounted) return
 
-      ws = new WebSocket(wsUrl)
-      wsRef.current = ws
+      // `sock` is captured per-connection so a handler can tell whether IT is
+      // still the live socket (the outer `ws` is reassigned on reconnect).
+      const sock = new WebSocket(wsUrl)
+      ws = sock
+      wsRef.current = sock
 
-      ws.onopen = () => {
+      sock.onopen = () => {
         retryCount = 0
         console.log('[CompanionWS] Connected for agent', agentId?.substring(0, 8))
       }
 
-      ws.onmessage = (event) => {
+      sock.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
           if (data.type === 'speech' && data.text) {
@@ -63,7 +66,14 @@ export function useCompanionWebSocket({ agentId, onSpeech }: UseCompanionWebSock
         }
       }
 
-      ws.onclose = (event) => {
+      sock.onclose = (event) => {
+        // TRDD-6A2I6ZO0: switching the active agent tears this effect down and
+        // re-runs it at once, so the OLD socket's close lands AFTER the new one
+        // is already in wsRef. Nulling the ref unconditionally there wiped the
+        // live socket and send() silently no-op'd forever after. (Verified as a
+        // real, silent failure in the panel channel, which had this same code;
+        // fixed here by inspection — same defect, same shape.)
+        if (wsRef.current !== sock) return
         wsRef.current = null
         // Only reconnect on abnormal closes — skip graceful disconnects (1000 normal, 1001 going away)
         if (mounted && retryCount < maxRetries && event.code !== 1000 && event.code !== 1001) {
@@ -73,7 +83,7 @@ export function useCompanionWebSocket({ agentId, onSpeech }: UseCompanionWebSock
         }
       }
 
-      ws.onerror = () => {
+      sock.onerror = () => {
         // onclose will handle reconnection
       }
     }

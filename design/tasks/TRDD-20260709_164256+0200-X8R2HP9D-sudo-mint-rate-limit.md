@@ -22,8 +22,48 @@ test-requirements: [unit]
 review-requirements: [human-review]
 runtime-targets: [macos, linux]
 impacts: []
+attempts: 1
+implementation-commits: [916f7f30]
 external-refs: []
 ---
+
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
+
+**DONE (`916f7f30`), both options.** Awaiting `human-review` only.
+
+- **Option 1** — `resetRateLimit(rateKey)` on a successful mint, mirroring
+  `/api/auth/login`.
+- **Option 2** — two buckets, mirroring `/api/v1/auth/token` (API2-MAJ-05):
+  `sudo-password:global` (cap 200, charged PRE-auth, **never reset** — a success
+  must not launder an attacker's accumulated failures) and
+  `sudo-password:<subject>` (cap 5, charged AFTER auth, reset on success).
+
+**Load-bearing detail.** The per-subject bucket can only be charged after
+authentication, because before that the subject is unknown — which is exactly why
+the original code used a constant key and silently became a machine-wide cap. It
+is charged before the body is parsed, so an over-limit caller cannot make the
+process do work. Agents never reach it (the `isSystemOwner` gate refuses them
+first), so a rejected agent costs only the global bucket.
+
+**Honest limitation.** With the user-authority model OFF, `subject` is the legacy
+`'system-owner'` sentinel for every caller, so the per-subject bucket degrades to
+one shared bucket. Option 2's isolation only bites when the model is on. Option 1
+(reset on success) is what actually unblocks the UI today, and it works in both
+modes.
+
+**Falsification (do not skip if you touch this).** Remove `resetRateLimit(rateKey)`
+and exactly the four success-path tests fail while every brute-force,
+per-subject-isolation, and global-flood test keeps passing. That asymmetry is the
+claim: the relaxation applies to correct passwords only. A change that also
+weakened brute-force resistance would show up as those tests passing when they
+should fail.
+
+**Gotcha, learned here.** A `vi.mock()`'d module is a Proxy that THROWS on an
+undefined export — it does not yield `undefined`. Adding the `resetRateLimit`
+destructure to the route broke all seven tests in
+`tests/api/auth-sudo-password.test.ts` at once, including the 401 path that never
+reaches a success. If a whole test file dies at once after a route gains an
+import, look at the mock's exports before anything else.
 
 # TRDD-X8R2HP9D — the sudo mint throttles legitimate work, machine-wide
 

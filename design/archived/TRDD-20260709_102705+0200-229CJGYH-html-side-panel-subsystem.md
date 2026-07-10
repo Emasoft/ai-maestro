@@ -1,9 +1,9 @@
 ---
 trdd-id: 229CJGYH
 title: HTML side-panel subsystem for visualizer plugins with open close refresh and feedback callback
-column: complete
+column: completed
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-10T04:20:51+0200
+updated: 2026-07-10T05:26:00+0200
 implementation-commits: [230ea125]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -104,3 +104,4 @@ browser. This is greenfield work and closes campaign gate G4 (TRDD-903b7a20).
   than introducing an inner scrollbar (per the no-nested-scrollbars rule).
 
 ## Approval log
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

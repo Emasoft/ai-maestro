@@ -3,7 +3,7 @@ trdd-id: d77a7d6e-4888-443e-81a1-bee94e67e3af
 title: Secure auto-restore of active AI Maestro agents after unclean shutdown
 column: superseded
 created: 2026-05-21T17:08:44+0200
-updated: 2026-05-22T11:19:12+0200
+updated: 2026-07-10T05:26:00+0200
 superseded-by: [TRDD-a1019073]
 ---
 
@@ -908,3 +908,7 @@ The dev and prod paths never cross. The only way a binary gets into
 `/opt/aimaestro/bin/` is via the installer (Layer 4), and the only
 way the installer accepts a binary is if Layer 2's CI workflow
 produced it with the right Team ID.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — SUPERSEDED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

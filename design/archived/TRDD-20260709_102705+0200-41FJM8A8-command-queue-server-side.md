@@ -1,9 +1,9 @@
 ---
 trdd-id: 41FJM8A8
 title: Server-side persistent command queue for fire-when-idle and fire-when-woken agent commands
-column: complete
+column: completed
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-10T04:20:51+0200
+updated: 2026-07-10T05:26:00+0200
 implementation-commits: [e292afbc]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -109,3 +109,4 @@ caller having to poll and retry the send itself.
   rather than creating a second identical pending entry.
 
 ## Approval log
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

@@ -1,9 +1,9 @@
 ---
 trdd-id: GT0TAJFL
 title: dev-browser as core-plugin dependency and hook AskUserQuestion capture in ai-maestro-plugin repo
-column: complete
+column: completed
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-09T15:50:00+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -158,3 +158,4 @@ cannot run: an agent blocked on an MCP elicitation dialog surfaces as **idle** i
 Maestro's status ladder rather than blocked. `agent_needs_input` is excluded the same way.
 
 ## Approval log
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

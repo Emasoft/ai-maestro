@@ -3,7 +3,7 @@ trdd-id: 5df6f7da-138f-4486-b716-b33e4adf54ed
 title: Extract the triplicated confineToProjectsStore path-traversal guard into one shared helper
 column: completed
 created: 2026-06-14T11:42:34+0200
-updated: 2026-06-21T00:30:00+0200
+updated: 2026-07-10T05:26:00+0200
 ---
 
 # TRDD-5df6f7da — De-duplicate the confineToProjectsStore path-traversal guard
@@ -32,3 +32,7 @@ Extract `confineToProjectsStore()` into one shared module — `services/sessions
 
 ## Implementation (2026-06-21, landed with TRDD-9e1e4b29)
 `confineToProjectsStore` now lives ONCE in `services/sessions-browser-service.ts` (exported); the range / search / context-breakdown Next routes import it (inline copies + their now-unused `node:os`/`node:path` imports removed). **Scope discovery during implementation:** the headless-router mirror had NO confinement at all — its range/search/context-breakdown handlers passed `?path=` straight to the reader (a path-traversal HOLE, worse than a duplicate). Folded the shared guard into all 3 headless handlers too (400 `invalid_path` on a traversal attempt, matching the Next routes). One source of truth across both mode mirrors. `tests/unit/route-isolation.test.ts` traversal tests green (now 24 tests incl. the new auth-gate block); `tsc --noEmit` clean; full unit suite 1851 passed / 0 failed.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

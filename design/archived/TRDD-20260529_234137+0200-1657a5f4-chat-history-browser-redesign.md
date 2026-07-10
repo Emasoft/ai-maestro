@@ -3,7 +3,7 @@ trdd-id: 1657a5f4-c54b-4e4b-95da-12f9aa149937
 title: Chat-history browser redesign — comic-bubble timeline, parallel lifelines, token economics, context-panel + PSS lifeline, Tailwind migration
 column: completed
 created: 2026-05-29T23:41:37+0200
-updated: 2026-06-14T11:29:35+0200
+updated: 2026-07-10T05:26:00+0200
 ---
 
 # TRDD-1657a5f4 — Chat-history browser redesign
@@ -187,3 +187,7 @@ Fix the bugs that make the current data wrong, so everything built on top is tru
 **Acceptance criteria (§7) — met (code):** all 5 audit CRITICALs (C1/C2/C3 live-tail, C4 scroll-to-match, C5 drawer real-modal) + the 2a data-layer P0s (/context regression, Opus->1M limit) resolved; Tailwind-utility-first (zero bespoke CSS); comic bubbles + pseudo-terminal; token economics (cacheRead shown, money clearly approximate); chronological ruler + prominent timestamps; context panel /context + limits + PSS active-at-T with health-gate + graceful degradation; mobile/touch parity; Markdown + client-side print-to-PDF export.
 
 **PENDING (user-gated):** (1) **visual render verification** (light/dark, desktop + 390px) — held for a safe environment, because running a 2nd ai-maestro server against the live shared `~/.aimaestro` state (startup manager-check + session reconciliation) is unsafe unattended; do it with the user or post-merge on the main instance. (2) **merge** `feat/chat-history-redesign` -> `governance-rules` — held per the review-before-merge rule. (3) **PR**. No merge/PR without the user's word.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

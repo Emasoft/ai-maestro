@@ -1,9 +1,9 @@
 ---
 trdd-id: OOCL7ABZ
 title: Consolidated agent-config endpoint with teams, normalized github repo, docker detection, tasks, AID
-column: complete
+column: completed
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-10T04:20:51+0200
+updated: 2026-07-10T05:26:00+0200
 implementation-commits: [04676a37]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -119,3 +119,4 @@ requiring five separate lookups (some of which don't exist yet).
   MAINTAINER-only `agent.githubRepo` field).
 
 ## Approval log
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

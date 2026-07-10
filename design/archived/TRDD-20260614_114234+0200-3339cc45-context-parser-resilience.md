@@ -3,7 +3,7 @@ trdd-id: 3339cc45-c6ed-4704-9ccf-e8a473b5e471
 title: De-fragilize the /context snapshot parser against future Claude Code line removals
 column: completed
 created: 2026-06-14T11:42:34+0200
-updated: 2026-06-25T06:15:50+0200
+updated: 2026-07-10T05:26:00+0200
 ---
 
 # TRDD-3339cc45 — Make the /context snapshot parser resilient to dropped lines
@@ -41,3 +41,7 @@ Landed in two atomic commits:
   drill-down null out `recordedValue` for a 0-defaulted bucket → no Δ badge, no "captured
   /context" tooltip. A bucket genuinely captured as 0 is NOT in missingFields, so its real Δ
   still shows; the total Δ is untouched (load-bearing). tsc 0; route-isolation 24/24.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

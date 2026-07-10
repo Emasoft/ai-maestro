@@ -1,9 +1,9 @@
 ---
 trdd-id: ba9d6df2-781c-43a3-b931-b67144a642f5
 title: server.mjs full-mode auth gate must deep-validate the session cookie (not presence-only)
-column: complete
+column: completed
 created: 2026-06-21T01:39:45+0200
-updated: 2026-06-21T02:45:00+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: security
@@ -116,3 +116,7 @@ is to mirror the canonical extractor): regex anchor `(?:^|;\s*)` → `(?:^|;)\s*
 (leading space + tab). Still fails closed. tsc 0 errors (the IDE-diagnostic
 "cannot find .mjs module" is a false positive — the project tsconfig resolves it,
 `npx tsc --noEmit` is clean); session-validate test file 6/6 (now 8 assertions).
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

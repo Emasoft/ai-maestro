@@ -1,9 +1,9 @@
 ---
 trdd-id: 67f8b9bd-0484-4a03-adde-2d5c52da67c2
 title: Next.js POST tasks route drops TRDD-v2 kanban fields it validates (dual-mode drift)
-column: complete
+column: completed
 created: 2026-06-21T00:33:52+0200
-updated: 2026-06-21T00:33:52+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: bugfix
@@ -60,3 +60,7 @@ drift). Documented for a later pass.
 ## Implementation (2026-06-21)
 `app/api/teams/[id]/tasks/route.ts` safeParams. TDD: `tests/unit/api-team-tasks-trddv2-fields.test.ts`.
 Landed in the overnight campaign (TRDD-903b7a20). Not pushed.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

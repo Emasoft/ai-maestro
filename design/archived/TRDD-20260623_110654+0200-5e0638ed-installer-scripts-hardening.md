@@ -1,9 +1,9 @@
 ---
 trdd-id: 5e0638ed-511b-4234-8f1c-7c95c9ddbc14
 title: Harden the ai-maestro installer + CLI scripts — shellcheck-found real bugs + fail-fast cleanup
-column: complete
+column: completed
 created: 2026-06-23T11:06:54+0200
-updated: 2026-06-23T12:19:05+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 3
@@ -125,3 +125,7 @@ The installer + CLI scripts are the ai-maestro distribution surface (install-mes
 copies them to `~/.local/bin/`). A blanked `AIMAESTRO_API`/`{{INSTALL_DIR}}` silently
 breaks fresh remote installs; an unguarded `rm -rf` is a latent catastrophe. These are
 exactly the "shortcomings" `/go-on-yourself` asks to find and fix on real evidence.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

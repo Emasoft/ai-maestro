@@ -1,9 +1,9 @@
 ---
 trdd-id: 95d23f3b-54df-4890-b452-e16eeb16d070
 title: Complete the Extended Task Model — carry evidence fields + attachments/dueDate/first-class-epic end-to-end
-column: complete
+column: completed
 created: 2026-06-21T18:57:35+0200
-updated: 2026-06-21T19:35:00+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -96,3 +96,7 @@ Pre-PR (`yarn test` → bump-version → `yarn build`). Commit per phase; push t
 - Do NOT make `task-registry.ts` the live path (github-project is live) — that GitHub-vs-local
   source-of-truth consolidation is a separate, larger decision.
 - Additive only — no existing field/interface removed; `taskType` stays `string`.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

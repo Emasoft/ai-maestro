@@ -1,9 +1,9 @@
 ---
 trdd-id: XV4ANN4P
 title: The receiving-host R6 check is untested and the forward-gate wiring makes it the only gate
-column: complete
+column: completed
 created: 2026-07-10T03:00:06+0200
-updated: 2026-07-10T03:19:24+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -140,3 +140,7 @@ quota dilutes the ones that matter and misstates the blast radius.
 
 Local, reversible, adds a test; no baseline deviation, no governance change, no
 cross-project or release surface. Authored directly as a self-mandate.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

@@ -1,9 +1,9 @@
 ---
 trdd-id: 47effd69-6ca1-462c-931b-f593866265cd
 title: registerAgent must flag roleMissing on the role-less agent it creates from a session (R9.13)
-column: complete
+column: completed
 created: 2026-06-21T01:49:35+0200
-updated: 2026-06-21T01:49:35+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: bugfix
@@ -86,3 +86,7 @@ production uses `.catch`/`.then` on its return.
 `docs/API-CHANGES.md` §12. Landed in the overnight campaign (TRDD-903b7a20). Not
 pushed. With this, all four identified cond-1 governance gaps are fixed
 (sessions-browser auth, ChangeFolder confine, ChangeTitle R9.13, registerAgent R9.13).
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

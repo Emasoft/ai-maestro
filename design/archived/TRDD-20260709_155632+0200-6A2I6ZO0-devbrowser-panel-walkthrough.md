@@ -1,9 +1,9 @@
 ---
 trdd-id: 6A2I6ZO0
 title: dev-browser headless walkthrough of the HTML terminal side panel
-column: complete
+column: completed
 created: 2026-07-09T15:56:32+0200
-updated: 2026-07-09T16:45:00+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 3
@@ -208,3 +208,4 @@ the identical route. Folded into proposal `TRDD-D3RP7KQZ`.
   also cannot mint more than 5 tokens per minute (BUG-003).
 
 ## Approval log
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

@@ -3,7 +3,7 @@ trdd-id: 7123d51a-9da8-4886-a000-af6359f08e1e
 title: Subconscious self-change tracker (registry + ledger sync)
 column: completed
 created: 2026-04-20T00:00:00+0200
-updated: 2026-06-25T06:49:20+0200
+updated: 2026-07-10T05:26:00+0200
 ---
 
 # TRDD-7123d51a-9da8-4886-a000-af6359f08e1e — Subconscious self-change tracker (registry + ledger sync)
@@ -234,3 +234,7 @@ Estimated LOC: ~400 added + ~20 modified.
 ## 11. Tracked in session todo list
 
 Todo item `#208`. UUID `7123d51a-9da8-4886-a000-af6359f08e1e` links back.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

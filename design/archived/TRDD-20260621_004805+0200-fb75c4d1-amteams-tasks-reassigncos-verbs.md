@@ -1,9 +1,9 @@
 ---
 trdd-id: fb75c4d1-df8b-4f58-993c-cf20e1d71b59
 title: Add frozen CLI verbs — teams tasks/reassign-cos + agent presence (decoupling, #45)
-column: complete
+column: completed
 created: 2026-06-21T00:48:05+0200
-updated: 2026-06-21T02:05:00+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: feature
@@ -74,3 +74,7 @@ dispatch, so a bare owner shell 401s at the pre-gate — agents pass AID_AUTH
 deployed `~/.local/bin/aimaestro-teams.sh` needs `install-messaging.sh` re-run to
 pick these up (an outside-project deploy step — flagged, not run). Landed in the
 overnight campaign (TRDD-903b7a20). Not pushed.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

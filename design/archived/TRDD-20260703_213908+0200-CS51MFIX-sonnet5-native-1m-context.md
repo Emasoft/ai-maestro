@@ -1,9 +1,9 @@
 ---
 trdd-id: CS51MFIX
 title: Align to CC 2.1.197 — Sonnet 5 native 1M context window in the context-breakdown reader
-column: complete
+column: completed
 created: 2026-07-03T21:39:08+0200
-updated: 2026-07-03T21:41:00+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: alexandre
 assignee: alexandre
 priority: 3
@@ -93,3 +93,7 @@ so it does not resurrect the old over-reporting bug the `[1m]`-only rule was cre
 - `rust-tools/aim-jsonl-reader` `cargo test` — mirrored assertion green.
 - `tests/unit/converter-model-mapping.test.ts` — `claude-sonnet-5 → gpt-5.3-codex`.
 - `npx tsc --noEmit` clean; `yarn test` green.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

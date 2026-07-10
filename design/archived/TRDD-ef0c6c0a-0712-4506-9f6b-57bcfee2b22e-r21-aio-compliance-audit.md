@@ -3,7 +3,7 @@ trdd-id: ef0c6c0a-0712-4506-9f6b-57bcfee2b22e
 title: R21 AIO compliance audit (post-v3.9.1 verification)
 column: completed
 created: 2026-05-06T00:00:00+0200
-updated: 2026-06-25T06:49:20+0200
+updated: 2026-07-10T05:26:00+0200
 ---
 
 # TRDD-ef0c6c0a-0712-4506-9f6b-57bcfee2b22e — R21 AIO compliance audit (post-v3.9.1 verification)
@@ -159,3 +159,7 @@ Out-of-scope follow-ups identified during migration (each is its own future TRDD
 
 - Persona prompt migrations in the 8 `Emasoft/ai-maestro-*` plugin repos (R6.14). Tracked separately — each plugin repo needs its own commit + `scripts/publish.py` cycle.
 - Doc migrations in `docs/CONCEPTS.md`, `docs/OPERATIONS-GUIDE.md`, `docs/EXTERNAL-SESSION-SETUP.md` — descriptive, not normative; doc-only follow-up commit.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

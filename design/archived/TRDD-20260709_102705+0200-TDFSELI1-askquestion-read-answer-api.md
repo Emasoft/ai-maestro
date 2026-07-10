@@ -1,9 +1,9 @@
 ---
 trdd-id: TDFSELI1
 title: Read and answer AskQuestion and permission prompts via API
-column: complete
+column: completed
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-10T04:20:51+0200
+updated: 2026-07-10T05:26:00+0200
 implementation-commits: [f401728d]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -126,3 +126,4 @@ with a `PostToolUse` clear, or an answered question stays "pending" until the en
 turn and a polling agent answers it twice.
 
 ## Approval log
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

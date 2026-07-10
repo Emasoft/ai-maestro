@@ -1,9 +1,9 @@
 ---
 trdd-id: 4XQ1PNMV
 title: Add a rendering test harness so WebSocket hook lifecycle races are catchable
-column: complete
+column: completed
 created: 2026-07-09T16:42:56+0200
-updated: 2026-07-09T17:10:00+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 last-test-result: pass
@@ -118,3 +118,7 @@ server reported a live client, the UI said "Panel channel connected", and contro
 messages kept flowing — while the only reader of `wsRef` silently no-op'd. Any
 health signal that does not exercise the actual write path can report green while
 the write path is dead.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

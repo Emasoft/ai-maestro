@@ -1,9 +1,9 @@
 ---
 trdd-id: QC8R79G5
 title: The in-memory agent LRU cap of 10 evicts live agents during startup
-column: complete
+column: completed
 created: 2026-07-10T02:11:00+0200
-updated: 2026-07-10T03:47:45+0200
+updated: 2026-07-10T05:26:00+0200
 created-by: ai-maestro-session
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -155,3 +155,7 @@ Local, reversible, inside this project's own scope; no baseline deviation, no
 governance change, no cross-project or release surface. Authored directly rather
 than proposed, as a self-mandate. The design decision was mine to make once the
 memory cost was measured — and measuring it is what dissolved the question.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

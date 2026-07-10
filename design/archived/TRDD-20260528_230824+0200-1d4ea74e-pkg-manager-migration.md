@@ -3,7 +3,7 @@ trdd-id: 1d4ea74e-8a9b-41a4-a5d6-3bd8ee99e195
 title: Migrate from Yarn Classic to pnpm or Yarn Berry for release-age cooldown
 column: cancelled
 created: 2026-05-28T23:08:24+0200
-updated: 2026-06-25T06:15:50+0200
+updated: 2026-07-10T05:26:00+0200
 ---
 
 # TRDD-1d4ea74e — Migrate from Yarn Classic to pnpm or Yarn Berry for release-age cooldown
@@ -204,3 +204,7 @@ A and B are both blocked.
 - Changing the Node version policy (`>=22.0.0` stays).
 - The inert `.npmrc` keys from the original finding — explicitly rejected for
   Yarn v1; the chosen PM's own config replaces them.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — CANCELLED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

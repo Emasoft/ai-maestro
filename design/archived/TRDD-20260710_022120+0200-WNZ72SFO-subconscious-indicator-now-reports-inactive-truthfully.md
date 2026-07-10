@@ -1,9 +1,9 @@
 ---
 trdd-id: WNZ72SFO
 title: The subconscious indicator now says Inactive for eight agents — decide what it should say
-column: complete
+column: completed
 created: 2026-07-10T02:21:20+0200
-updated: 2026-07-10T03:58:00+0200
+updated: 2026-07-10T05:26:00+0200
 created-by: ai-maestro-session
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -197,3 +197,7 @@ Derived from an already-landed Tier-0 fix, local, reversible, no governance or
 release surface. Authored directly per the DERIVED-TASK rule: a TRDD that changes
 observable behavior must ship its EHTs, and the EHT is what makes the parent's
 `complete` transition legitimate.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

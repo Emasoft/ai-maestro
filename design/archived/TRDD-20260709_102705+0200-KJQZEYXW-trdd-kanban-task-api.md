@@ -1,9 +1,9 @@
 ---
 trdd-id: KJQZEYXW
 title: 3-pillars task API for TRDD-file lifecycle and kanban get-one keyword-search full-edit
-column: complete
+column: completed
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-10T04:20:51+0200
+updated: 2026-07-10T05:26:00+0200
 implementation-commits: [b196337b, 40aeab53]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -121,3 +121,4 @@ get-one route, no keyword search, no full-field edit).
   filter-only list route would miss.
 
 ## Approval log
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

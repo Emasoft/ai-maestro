@@ -1,9 +1,9 @@
 ---
 trdd-id: 51ed3b0b-99ad-410e-a68c-1d52ee15a5e7
 title: ChangeTitle Gate 17 must enforce R9.13 when a role-plugin install leaves an agent role-less
-column: complete
+column: completed
 created: 2026-06-21T01:23:53+0200
-updated: 2026-06-21T02:40:00+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: bugfix
@@ -134,3 +134,7 @@ files, 1867 passed / 0 failed** (+1 vs the 1866 before this completeness fix).
 Independent verification turned an incomplete governance fix into a complete one
 BEFORE the PR — exactly the value the "launch ultracode workflows to verify the
 implementations" mandate intended.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

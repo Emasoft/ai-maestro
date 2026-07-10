@@ -1,9 +1,9 @@
 ---
 trdd-id: 2ed177f4-3def-48e3-8ba8-857026078d0b
 title: yarn build broken by stale eslint-disable for an unloaded typescript-eslint rule
-column: complete
+column: completed
 created: 2026-06-21T02:04:12+0200
-updated: 2026-06-21T02:04:12+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: bugfix
@@ -69,3 +69,7 @@ NOT sufficient to prove the branch builds.)
 `lib/portfolio-check.ts` + `lib/portfolio-issue-guard.ts`. Landed in the overnight
 campaign (TRDD-903b7a20). Not pushed. Unblocks `yarn build` for the eventual
 governance PR carrying all 8 campaign fixes.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

@@ -1,9 +1,9 @@
 ---
 trdd-id: 280DF70U
 title: Permanent aimaestro and amp script wrappers for every new control monitor and task endpoint
-column: complete
+column: completed
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-09T15:52:00+0200
+updated: 2026-07-10T05:26:00+0200
 implementation-commits: [c2c5ce5a]
 last-test-result: pass
 last-test-at: 2026-07-09T15:45:00+0200
@@ -163,3 +163,4 @@ pruning, zero-client, FIFO drain, bounded queue) plus the live `delivered`-count
 and sudo-gate checks above.
 
 ## Approval log
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

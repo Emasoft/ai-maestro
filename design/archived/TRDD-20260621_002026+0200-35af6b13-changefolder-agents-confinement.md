@@ -1,9 +1,9 @@
 ---
 trdd-id: 35af6b13-1d0e-489e-97a1-ecfc06a33b60
 title: ChangeFolder must confine an agent's workingDirectory to ~/agents/ — workdir-write escape
-column: complete
+column: completed
 created: 2026-06-21T00:20:26+0200
-updated: 2026-06-21T00:20:26+0200
+updated: 2026-07-10T05:26:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: security
@@ -56,3 +56,7 @@ legitimate flow relocates an agent outside `~/agents/`.
 for `resolve`, matching the file's existing in-function import pattern). Test:
 `tests/integration/change-folder-confinement.test.ts` (real ChangeFolder, `isSystemOwner`
 authContext, no element-mgmt mock). Landed in the overnight campaign (TRDD-903b7a20). Not pushed.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

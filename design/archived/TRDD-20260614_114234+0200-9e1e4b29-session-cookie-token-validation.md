@@ -3,7 +3,7 @@ trdd-id: 9e1e4b29-4fd5-44d1-b021-ceef38ddf557
 title: Validate the aim_session cookie token on sessions-browser routes — hasSessionCookie is presence-only
 column: completed
 created: 2026-06-14T11:42:34+0200
-updated: 2026-06-21T00:30:00+0200
+updated: 2026-07-10T05:26:00+0200
 ---
 
 # TRDD-9e1e4b29 — Validate the aim_session cookie on sessions-browser routes
@@ -39,3 +39,7 @@ The chat-history redesign did NOT introduce this — `hasSessionCookie` is pre-e
 Added `hasValidSession(cookieHeader)` to `services/sessions-browser-service.ts` (`extractSessionFromCookie` → `validateSession`; synchronous, so route gates stay sync). It supersedes the presence-only `hasSessionCookie`, which is REMOVED. Switched ALL 9 `/api/sessions-browser/*` Next routes + the headless-router's 8 gate sites to it. **Login round-trip verified (the key derived risk):** `setup-verify`, `webauthn/authenticate`, and `login` all mint `aim_session` via `createSession()`, whose token `validateSession` accepts — so a legit logged-in user is NOT locked out; `validateSession` is independent of the user-authority-model toggle (only `validateSessionWithUser`'s userId resolution depends on it). Real (non-mocked) round-trip tests: forged/absent cookie → 401, issued token → passes (4xx≠401), invalidate → 401. `tsc --noEmit` clean; full unit suite 1851 passed / 0 failed.
 
 **Separate finding (NOT this TRDD — needs its own):** `server.mjs`'s `hasCredential()` (≈ lines 609 / 1036) uses its own inline presence-only regex `/aim_session=.../` — the same weakness on a broader (full-mode pre-routing) surface. It is `.mjs` and cannot import the TS `validateSession` without a build step, so it needs a dedicated TRDD. Recorded in the overnight campaign TRDD-903b7a20.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

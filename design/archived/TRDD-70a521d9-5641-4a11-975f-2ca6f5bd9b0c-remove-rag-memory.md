@@ -3,7 +3,7 @@ trdd-id: 70a521d9-5641-4a11-975f-2ca6f5bd9b0c
 title: Remove RAG-based memory system (keep subconscious)
 column: completed
 created: 2026-04-17T00:00:00+0200
-updated: 2026-06-25T06:49:20+0200
+updated: 2026-07-10T05:26:00+0200
 ---
 
 # TRDD-70a521d9-5641-4a11-975f-2ca6f5bd9b0c — Remove RAG-based memory system (keep subconscious)
@@ -185,3 +185,7 @@ noted.
 
 10. **`server.mjs:1443` imports `agent-db-sync.mjs`** — confirmed. Phase 5 must
     strip it before `cozo-node` is removed in Phase 8.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

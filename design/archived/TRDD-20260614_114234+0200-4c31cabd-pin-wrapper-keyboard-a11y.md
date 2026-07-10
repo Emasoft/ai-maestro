@@ -3,7 +3,7 @@ trdd-id: 4c31cabd-2638-40be-aa44-b98f53dbc9f2
 title: Make the chat-bubble pin-on-click affordance keyboard accessible
 column: completed
 created: 2026-06-14T11:42:34+0200
-updated: 2026-06-25T06:29:00+0200
+updated: 2026-07-10T05:26:00+0200
 ---
 
 > ✅ **DONE 2026-06-25 (commit `cfc39169`).** Added `role="button"` + `tabIndex={0}`
@@ -36,3 +36,7 @@ Add `role="button"`, `tabIndex={0}`, and an `onKeyDown` handler that fires the p
 ## Acceptance
 - The pin affordance is operable by keyboard (Enter/Space) with a visible focus indicator; no nested-button hydration error.
 - `yarn test` + `tsc --noEmit` green.
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

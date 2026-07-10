@@ -1,9 +1,9 @@
 ---
 trdd-id: ZFHY7UGU
 title: Make tldr-code + fastedit + lean-ctx + distill official ai-maestro dependencies
-column: complete
+column: completed
 created: 2026-06-30T20:37:03+0200
-updated: 2026-07-01T13:09:15+0200
+updated: 2026-07-10T05:26:00+0200
 implementation-commits: [7d018813]
 current-owner: main
 assignee: main
@@ -125,3 +125,7 @@ script layer and the agent tmux sessions.
   `distill` on PATH; ai-maestro's own scripts are NOT blocked by lean-ctx; agents
   can invoke tldr intentionally; docs updated. Commit-only, NO push (ai-maestro is
   the app, not a plugin — USER-gated).
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

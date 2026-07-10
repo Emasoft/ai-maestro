@@ -1,9 +1,9 @@
 ---
 trdd-id: ANYCPRTX
 title: Author cross-client tldr-code+fastedit skill variants for all CLI ai-code clients
-column: complete
+column: completed
 created: 2026-06-30T20:37:03+0200
-updated: 2026-07-10T04:20:51+0200
+updated: 2026-07-10T05:26:00+0200
 implementation-commits: [a5909778]
 current-owner: main
 assignee: main
@@ -145,3 +145,7 @@ an existing format (e.g. VS Code-style) before assuming.
 ## Acceptance
 - Unified skill variants exist + load for each target client; cross-client agents
   can invoke tldr + fastedit intentionally. Commit-only, NO push (USER-gated).
+
+## Approval log
+
+- 2026-07-10T05:26:00+0200 — COMPLETED by a bulk archival sweep (no approver was recorded). The work reached its terminal column long before; only the folder move was missed. Completion evidence is in implementation-commits and git history.

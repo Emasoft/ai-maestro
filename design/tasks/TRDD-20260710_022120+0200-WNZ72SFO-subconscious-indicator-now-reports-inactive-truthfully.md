@@ -1,17 +1,21 @@
 ---
 trdd-id: WNZ72SFO
 title: The subconscious indicator now says Inactive for eight agents — decide what it should say
-column: backburner
+column: complete
 created: 2026-07-10T02:21:20+0200
-updated: 2026-07-10T03:47:45+0200
+updated: 2026-07-10T03:58:00+0200
+created-by: ai-maestro-session
 current-owner: ai-maestro-session
-assignee: null
+assignee: ai-maestro-session
 priority: 2
 severity: MEDIUM
 effort: S
 min-approval-requirement: none
 mandate: true
 mandated-by: self
+approved: true
+approval-judge: ai-maestro-session
+approval-datetime: 2026-07-10T02:21:20+0200
 derived: true
 derived-kind: eht
 task-type: bugfix
@@ -30,15 +34,22 @@ audit-requirements: []
 review-requirements: []
 runtime-targets: [macos, linux]
 impacts: []
-attempts: 0
+attempts: 1
 test-failures: 0
-last-test-result: not-run
-last-test-at: null
-implementation-commits: []
+last-test-result: pass
+last-test-at: 2026-07-10T03:56:00+0200
+implementation-commits: [c2c99e4e]
 external-refs: []
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
+
+**DONE — `c2c99e4e`. `column: complete`. Nothing is left open here.**
+`isWarmingUp` is deleted from the per-agent shape, the badge's mapping lives in
+`lib/subconscious-badge.ts` as a pure function, and it finally has a test:
+`tests/unit/subconscious-badge.test.ts` (11 tests) pins that every state is
+reachable and that `isRunning: false` can never render "Running". Gate: tsc 0 ·
+vitest 154 files / 2399 passed · `next build` OK.
 
 **UNBLOCKED 2026-07-10T03:47 — QC8R79G5 is `complete` (`1dea8431`), and it
 answered this TRDD's question by dissolving it.** The registry no longer evicts,
@@ -56,11 +67,17 @@ sub-millisecond, and the indicator polls every 30 s — so "warming up" is not a
 state that was merely unwired, it is a state that has become **unobservable**.
 Wiring it would be building UI for an event nobody can witness.
 
-**NEXT ACTION — narrowed:** delete `isWarmingUp` and the two branches that render
-it, and give the indicator the test it never had (a component with no test is how
-`initialized: true` and `isWarmingUp: false` both survived as tautologies for so
-long). `Running` / `Inactive` is the whole state space, and both values are now
-reachable.
+**What was done:** deleted `isWarmingUp` (service, both per-agent types, four UI
+branches) and gave the indicator the test it never had — a component with no test
+is how `initialized: true` and `isWarmingUp: false` both survived as tautologies
+for so long. The mapping was extracted to a pure module first, because leaving it
+as inline ternaries is exactly what made it untestable. `Running` / `Inactive` is
+the user-facing state space; `loading` / `error` complete the four the popover
+already handled. All four are reachable, proven by enumerating the eight inputs.
+
+The button's purple dot had re-derived the badge's precedence by hand
+(`isRunning && !loading && !hasError`); it now reads `badge === 'running'`, so the
+dot and the icon cannot disagree.
 
 `Inactive` remains reachable, truthfully, for an agent that is not resident —
 which after `1dea8431` means an agent **created after boot**, since nothing
@@ -125,25 +142,32 @@ tuned — so the third state (`Evicted (not resident)`) is never authored. Decid
 the badge first would have been designing UI for a system whose semantics were
 undecided, and it would have shipped a state that now describes nothing.
 
-### Remaining work
+### The decision, and what shipped
 
-1. **States: `Running` / `Inactive`.** Both reachable, both true. No third state.
-2. **Delete `isWarmingUp`** — the field in `services/agents-subconscious-service.ts`
-   and the two branches in `AgentSubconsciousIndicator.tsx` that render it. It is
-   a tautology of the same family as the `initialized: true` this EHT's parent
-   removed. It is worse than unwired: post-RAG the `initializingAgents` window is
-   sub-millisecond and the poll is 30 s, so no user can ever observe it. A field
-   that cannot be false and a state that cannot be seen both go.
-3. Verify the empty-state: a valid agent with no subconscious object returns
-   `initialized: true, isRunning: false, status: null` — already covered by
+1. **States: `Running` / `Inactive`** (plus `loading` / `error`, which the popover
+   already handled). No third state. No `Evicted (not resident)`: QC8R79G5 removed
+   the eviction, so nothing is left for that word to describe.
+2. **`isWarmingUp` deleted**, not implemented. It was a tautology of the same
+   family as the `initialized: true` this EHT's parent removed — but worse than
+   unwired. Post-RAG, `initialize()` opens no database, so the
+   `initializingAgents` window is sub-millisecond against a 30 s poll: the state
+   is **unobservable**. A field that cannot be false and a state that cannot be
+   seen both go. The GLOBAL `/api/subconscious` keeps its real `isWarmingUp`
+   (`config-service.ts:398`); a note on its type says why, so nobody deletes it by
+   analogy.
+3. Empty-state verified: a valid agent with no subconscious object returns
+   `initialized: true, isRunning: false, status: null` — covered by
    `tests/unit/subconscious-authorization.test.ts`.
 
-### Falsification
+### Falsification (`tests/unit/subconscious-badge.test.ts`, 11 tests)
 
-A unit test on the indicator's state mapping: given `{isRunning:false}` it must
-not render "Running", and given `{isRunning:true}` it must not render "Inactive".
-Today the component has no test at all, which is exactly why the tautology
-survived: nothing ever asserted that the badge could say anything else.
+The mapping was first extracted to `lib/subconscious-badge.ts` — as inline
+ternaries inside a component it could not be tested without a DOM, and *that* is
+why the tautologies lived so long. The tests pin the two properties the constants
+violated: every state is **reachable** (all eight inputs enumerated; the produced
+set equals the declared set, so no branch is dead) and every state is
+**exclusive** (`isRunning: false` never yields "Running"). One test asserts that
+no state is named "Warming Up", so a later hand cannot quietly restore it.
 
 ### Load-bearing facts
 

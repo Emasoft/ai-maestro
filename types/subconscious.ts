@@ -62,7 +62,6 @@ export interface AgentSubconsciousStatus {
   exists: boolean
   initialized: boolean
   isRunning: boolean
-  isWarmingUp: boolean
   status: SubconsciousProcessStatus | null
 }
 
@@ -73,7 +72,6 @@ export interface AgentSubconsciousSummary {
   agentId: string
   isRunning: boolean
   initialized: boolean
-  isWarmingUp: boolean
   status: Omit<SubconsciousProcessStatus, 'startedAt' | 'messageCheckInterval'> | null
 }
 
@@ -86,6 +84,13 @@ export interface GlobalSubconsciousStatus {
   discoveredAgents: number
   activeAgents: number
   runningSubconscious: number
+  /**
+   * Agents were discovered but none is running yet — genuinely computed in
+   * `config-service.getSubconsciousStatus()`, and observable during boot.
+   * Do NOT remove it by analogy with the PER-AGENT `isWarmingUp` that
+   * TRDD-WNZ72SFO deleted: that one was a hardcoded `false`. Same name,
+   * different endpoint, opposite truth value.
+   */
   isWarmingUp: boolean
   totalMessageRuns: number
   lastMessageRun: number | null

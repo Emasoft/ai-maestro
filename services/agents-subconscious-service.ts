@@ -58,13 +58,20 @@ export async function getSubconsciousStatus(
   const agent = agentRegistry.getExistingAgent(agentId)
   const status = agent?.getSubconscious()?.getStatus() || null
 
+  // TRDD-WNZ72SFO — there is no `isWarmingUp` here, and there must not be. It was
+  // a hardcoded `false` the indicator nonetheless branched on, so the UI carried a
+  // colour and a label nothing could ever produce. Wiring it to the registry's
+  // `initializingAgents` would not have helped: post-RAG, `initialize()` opens no
+  // database, so that window is sub-millisecond while this route is polled every
+  // 30s. The state is not unwired — it is unobservable. The GLOBAL
+  // `/api/subconscious` has a real `isWarmingUp` (agents discovered, none running
+  // yet); it is a different endpoint and it keeps its field.
   return {
     data: {
       success: true,
       exists: true,
       initialized: agent !== undefined,
       isRunning: status?.isRunning || false,
-      isWarmingUp: false,
       status: status ? {
         startedAt: status.startedAt,
         messageCheckInterval: status.messageCheckInterval,

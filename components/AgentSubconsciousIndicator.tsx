@@ -2,12 +2,19 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Brain, AlertCircle, CheckCircle2 } from 'lucide-react'
+import {
+  subconsciousBadgeState,
+  SUBCONSCIOUS_BADGE_TITLE,
+  SUBCONSCIOUS_BADGE_LABEL,
+  SUBCONSCIOUS_BADGE_ICON_CLASS,
+  SUBCONSCIOUS_BADGE_LABEL_CLASS,
+} from '@/lib/subconscious-badge'
+
 interface ExtendedAgentSubconsciousStatus {
   success: boolean
   exists: boolean
   initialized: boolean
   isRunning: boolean
-  isWarmingUp: boolean
   status: {
     startedAt: number | null
     messageCheckInterval: number
@@ -82,17 +89,12 @@ export function AgentSubconsciousIndicator({ agentId, hostUrl }: Props) {
   if (!agentId) return null
 
   const isRunning = status?.isRunning || false
-  const isWarmingUp = status?.isWarmingUp || false
   const hasError = error || status?.status?.lastMessageResult?.error
 
-  // Determine icon color and animation
-  const getIndicatorClass = () => {
-    if (loading) return 'text-gray-500 animate-pulse'
-    if (hasError) return 'text-red-400'
-    if (isRunning) return 'text-purple-400 animate-pulse'
-    if (isWarmingUp) return 'text-yellow-400 animate-pulse'
-    return 'text-gray-500'
-  }
+  // The mapping lives in lib/subconscious-badge.ts so it can be tested without a
+  // DOM. Keeping it here as inline ternaries is how it went untested, and how it
+  // came to branch on an `isWarmingUp` that was always false.
+  const badge = subconsciousBadgeState({ loading, hasError: Boolean(hasError), isRunning })
 
   return (
     <div className="relative">
@@ -103,16 +105,10 @@ export function AgentSubconsciousIndicator({ agentId, hostUrl }: Props) {
           setShowPopover(!showPopover)
         }}
         className="flex items-center justify-center p-2 rounded transition-all duration-200 hover:bg-gray-800/50"
-        title={
-          loading ? 'Loading...' :
-          hasError ? 'Subconscious Error' :
-          isRunning ? 'Subconscious Active' :
-          isWarmingUp ? 'Subconscious Warming Up' :
-          'Subconscious Inactive'
-        }
+        title={SUBCONSCIOUS_BADGE_TITLE[badge]}
       >
-        <Brain className={`w-4 h-4 ${getIndicatorClass()}`} />
-        {isRunning && !loading && !hasError && (
+        <Brain className={`w-4 h-4 ${SUBCONSCIOUS_BADGE_ICON_CLASS[badge]}`} />
+        {badge === 'running' && (
           <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-purple-500 rounded-full" />
         )}
       </button>
@@ -152,12 +148,8 @@ export function AgentSubconsciousIndicator({ agentId, hostUrl }: Props) {
                     <CheckCircle2 className={`w-3 h-3 ${isRunning ? 'text-purple-400' : ''}`} />
                     Status
                   </span>
-                  <span className={
-                    isRunning ? 'text-purple-400' :
-                    isWarmingUp ? 'text-yellow-400' :
-                    'text-gray-400'
-                  }>
-                    {isRunning ? 'Running' : isWarmingUp ? 'Warming Up' : 'Inactive'}
+                  <span className={SUBCONSCIOUS_BADGE_LABEL_CLASS[badge]}>
+                    {SUBCONSCIOUS_BADGE_LABEL[badge]}
                   </span>
                 </div>
 

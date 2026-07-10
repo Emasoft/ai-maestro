@@ -27,7 +27,7 @@ review-requirements: [human-review]
 runtime-targets: [macos, linux]
 impacts: [public-api]
 attempts: 5
-implementation-commits: [f56b79f2, 28593ed7, 505ae8c9, 1ad04ade, c8903197, 2fd32899, 03159944]
+implementation-commits: [f56b79f2, 28593ed7, 505ae8c9, 1ad04ade, c8903197, 2fd32899, 03159944, 26c958c3, b4003e4f]
 external-refs: []
 ---
 
@@ -49,6 +49,30 @@ sibling, not a child.** Two structural facts, both from today's USER rules:
 
 XV4ANN4P also records the two **verified non-effects** of the wiring (both message
 centers already render the 403 reason; no CLI forwards), so nobody re-derives them.
+
+**Follow-up 1 is DONE (`26c958c3` gate, `b4003e4f` wiring).** Both senders now call
+`assertAgentRouteAllowed`; forward answers **403** with `MessageRouteDenied` instead
+of a 500; a missing `authContext` is refused, never read as the owner. Two things
+the wiring had to get right, both found by reading rather than assuming:
+
+1. **Cross-host was denied by accident.** G05 stripped the `@hostId`, so a peer
+   agent kept the `'unknown'` title — a truthy string that skips
+   `validateMessageRoute`'s safe default and lands on the invalid-role refusal.
+   G05 now keeps the hostId and remote recipients take the weak sender-side check,
+   with the receiving host running the real graph. That check is now the **only**
+   one on that path, and it is untested — **TRDD-XV4ANN4P**, which blocks this TRDD.
+2. **"Remote" is not "not self".** `to` is split naively on `@`, so
+   `alice@default.local` or a typo arrives as a hostId that merely isn't us.
+   `isRemoteRecipient` now also requires the host to exist in `hosts.json`, or an
+   unknown suffix would skip the graph on the promise that another host will check
+   it. Nothing is there. Pinned by `tests/unit/message-route-gate.test.ts`.
+
+**Still open, and deliberately not decided here:** whether R6 should bind a
+**system-owner** forward (a human forwarding from an agent's mailbox emits a
+message whose declared sender is that agent). Today's no-graph behaviour is
+preserved and the question is a Tier-2 MANAGER call, escalated rather than settled
+inside a bug fix. `tests/unit/message-forward-r6-gate.test.ts` pins the current
+behaviour so the decision, when it lands, changes a test on purpose.
 
 **All 5 routes are FIXED. Five for five were mis-triaged in the body below,
 because every one was triaged from the route's NAME rather than its service.**

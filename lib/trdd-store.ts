@@ -65,14 +65,30 @@ export function defaultDesignDir(): string {
   return path.join(process.cwd(), 'design')
 }
 
-// TRDD-<YYYYMMDD_HHMMSS±HHMM>-<ID8>-<slug>.md — the timestamp itself may contain
-// a `-` (negative GMT offset), so extract the 8-char id positionally, not by
-// naive `-`-split.
-const TRDD_FILENAME_RE = /^TRDD-\d{8}_\d{6}[+-]\d{4}-([A-Za-z0-9]{8})-.+\.md$/
+// v2 — TRDD-<YYYYMMDD_HHMMSS±HHMM>-<ID8>-<slug>.md. The timestamp itself may
+// contain a `-` (negative GMT offset), so extract the 8-char id positionally,
+// not by naive `-`-split.
+const TRDD_V2_FILENAME_RE = /^TRDD-\d{8}_\d{6}[+-]\d{4}-([A-Za-z0-9]{8})-.+\.md$/
+
+// v1 — TRDD-<uuid|8hex>-<slug>.md, no timestamp segment. Ten of these exist; three
+// carry live frontmatter (70a521d9, 7123d51a, ef0c6c0a) and CLAUDE.md cites
+// TRDD-70a521d9 by name. Matching only the v2 shape made every one of them
+// invisible to this store — `readTrdd('70a521d9')` returned 404 for a TRDD that is
+// on disk, and `searchTrdds` silently under-reported the corpus by ten files.
+// Both tails occur, so the uuid remainder is optional: `TRDD-80557822-slug.md` and
+// `TRDD-70a521d9-5641-4a11-975f-2ca6f5bd9b0c-slug.md`. Every cross-reference in the
+// corpus cites the first 8 chars, so that prefix IS the id.
+//
+// A v2 name cannot reach this pattern: its 8 leading digits are followed by `_`,
+// never `-`. v2 is tried first regardless.
+const TRDD_V1_FILENAME_RE =
+  /^TRDD-([0-9a-f]{8})(?:-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?-.+\.md$/i
 
 function idFromFilename(name: string): string | null {
-  const m = name.match(TRDD_FILENAME_RE)
-  return m ? m[1].toUpperCase() : null
+  const v2 = name.match(TRDD_V2_FILENAME_RE)
+  if (v2) return v2[1].toUpperCase()
+  const v1 = name.match(TRDD_V1_FILENAME_RE)
+  return v1 ? v1[1].toUpperCase() : null
 }
 
 // gray-matter (js-yaml) auto-parses an ISO-8601 frontmatter value into a JS Date.
@@ -84,12 +100,13 @@ function toIsoOrNull(v: unknown): string | null {
   return null
 }
 
-function listZoneFiles(designDir: string, zone: TrddZone): string[] {
+/** Every TRDD file in one zone, v1 and v2 filename shapes alike. */
+export function listTrddFiles(designDir: string, zone: TrddZone): string[] {
   const dir = path.join(designDir, zone)
   try {
     return fs
       .readdirSync(dir)
-      .filter((n) => n.endsWith('.md') && TRDD_FILENAME_RE.test(n))
+      .filter((n) => n.endsWith('.md') && idFromFilename(n) !== null)
       .map((n) => path.join(dir, n))
   } catch {
     return []
@@ -132,7 +149,7 @@ export function parseTrddFile(filePath: string, zone: TrddZone): ParsedTrdd | nu
 export function findTrdd(designDir: string, id: string): ParsedTrdd | null {
   const want = id.toUpperCase()
   for (const zone of TRDD_ZONES) {
-    for (const file of listZoneFiles(designDir, zone)) {
+    for (const file of listTrddFiles(designDir, zone)) {
       if (idFromFilename(path.basename(file)) === want) {
         return parseTrddFile(file, zone)
       }
@@ -154,7 +171,7 @@ export function searchTrdds(designDir: string, opts: SearchOpts = {}): TrddSumma
   const out: TrddSummary[] = []
 
   for (const zone of zones) {
-    for (const file of listZoneFiles(designDir, zone)) {
+    for (const file of listTrddFiles(designDir, zone)) {
       const t = parseTrddFile(file, zone)
       if (!t) continue
       if (wantId && t.id !== wantId) continue

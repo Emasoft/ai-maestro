@@ -94,6 +94,33 @@ describe('trdd-store parse + search', () => {
     expect(searchTrdds(designDir, { keyword: 'widgets' }).map((t) => t.id)).toEqual(['AAAA0001'])
     expect(searchTrdds(designDir, { zone: 'tasks' }).map((t) => t.id)).toEqual(['BBBB0002'])
   })
+
+  // v1 filenames carry no timestamp segment. Matching only the v2 shape made ten
+  // real TRDDs unreachable — `readTrdd('70a521d9')` 404'd on a file CLAUDE.md
+  // cites by name, and `searchTrdds` under-reported the corpus without saying so.
+  it('finds a v1 filename with a full-UUID tail', () => {
+    const dir = path.join(designDir, 'tasks')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, 'TRDD-70a521d9-5641-4a11-975f-2ca6f5bd9b0c-remove-rag-memory.md'),
+      '---\ntrdd-id: 70a521d9-5641-4a11-975f-2ca6f5bd9b0c\ntitle: v1 uuid\ncolumn: complete\n---\nbody\n',
+    )
+    expect(findTrdd(designDir, '70a521d9')!.id).toBe('70A521D9')
+  })
+
+  it('finds a v1 filename with a bare 8-hex id and no uuid tail', () => {
+    const dir = path.join(designDir, 'tasks')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, 'TRDD-80557822-comm-graph-downstream-sync.md'), '# no frontmatter\n')
+    expect(findTrdd(designDir, '80557822')!.id).toBe('80557822')
+  })
+
+  it('does not mistake a v2 timestamp for a v1 hex id', () => {
+    // `20260709` is eight valid hex chars. The v2 shape must win, or every v2
+    // TRDD would be filed under the id `20260709`.
+    writeTask('CCCC0003', 'timestamp-vs-hex', 'dev')
+    expect(searchTrdds(designDir, { zone: 'tasks' }).map((t) => t.id)).toEqual(['CCCC0003'])
+  })
 })
 
 describe('trdd-store pure writers preserve the grep-first format', () => {

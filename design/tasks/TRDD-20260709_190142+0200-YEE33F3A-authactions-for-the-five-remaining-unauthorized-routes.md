@@ -4,7 +4,7 @@ title: Decide the AuthActions for the five remaining unauthorized agent-scoped r
 column: planned
 min-approval-requirement: manager
 created: 2026-07-09T19:01:42+0200
-updated: 2026-07-10T03:00:06+0200
+updated: 2026-07-10T03:19:24+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -17,7 +17,7 @@ derived: true
 derived-kind: eht
 npt: []
 eht: []
-blocked-by: [TRDD-XV4ANN4P]
+blocked-by: []
 supersedes: []
 superseded-by: []
 relevant-rules: []
@@ -35,8 +35,9 @@ external-refs: []
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
 
-**▶ 2026-07-10T03:00 — `blocked-by: [TRDD-XV4ANN4P]`, and this TRDD is now a flock
-sibling, not a child.** Two structural facts, both from today's USER rules:
+**▶ 2026-07-10T03:19 — XV4ANN4P is `complete` (`ad7970a4`), so `blocked-by:` is
+empty again.** This TRDD is a flock sibling, not a child. Two structural facts,
+both from today's USER rules:
 
 - Under depth-1, this TRDD (`derived: true`) may not carry an `eht:` of its own, so
   the platelet for follow-up 1's Phase-2 wiring — **XV4ANN4P**, the untested

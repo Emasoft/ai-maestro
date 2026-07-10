@@ -1,9 +1,9 @@
 ---
 trdd-id: XV4ANN4P
 title: The receiving-host R6 check is untested and the forward-gate wiring makes it the only gate
-column: backburner
+column: complete
 created: 2026-07-10T03:00:06+0200
-updated: 2026-07-10T03:00:06+0200
+updated: 2026-07-10T03:19:24+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -29,17 +29,42 @@ audit-requirements: []
 review-requirements: []
 runtime-targets: [macos, linux]
 impacts: []
-attempts: 0
+attempts: 1
 test-failures: 0
-last-test-result: not-run
-last-test-at: null
-implementation-commits: []
+last-test-result: pass
+last-test-at: 2026-07-10T03:19:24+0200
+implementation-commits: [ad7970a4]
 external-refs: []
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
 
-**This is an EHT authored BEFORE the change that opens the hole**, which is the
+**DONE.** `tests/unit/amp-receiving-host-r6.test.ts` covers the receiving-host
+graph check. The gate holds: a mesh-forwarded MEMBER→MEMBER is refused, COS→MEMBER
+is delivered, and an absent **or forged** role attestation yields no sender title
+at all, which the graph fails closed on (`communication-graph.ts:411`).
+
+**Writing the test found that the first version of it was worthless, and this is
+the part worth remembering.** `routeMessage` has **seven** other `403` exits before
+the graph. The initial assertions checked only `status === 403`, and three of four
+"passed" — on `:1008`, *"unsigned messages from mesh-forwarded senders are
+rejected"*. The requests never reached the check under test. A test that asserts a
+status code cannot tell a refusal from a different refusal. The suite now asserts
+the graph's own error code (`title_communication_forbidden`) **and** that `deliver`
+was never called, and the body carries the mandatory `signature` so the request
+actually arrives at `:1286`.
+
+Recorded because it generalises: **when a function has many exits with the same
+status, the status is not evidence.** Assert the reason, and assert the side effect
+that the reason was supposed to prevent.
+
+Second thing learned, not a defect: for a mesh-forwarded sender `senderKeyPair` is
+`null` by construction (`amp-service.ts:937`), so the agent signature is discarded
+unverified (MF-03) — mesh trust rests on the forwarding **host's** signed role
+attestation, not on the agent's own signature. That is why the attestation cases
+above are the ones that matter.
+
+**This is an EHT authored BEFORE the change that opened the hole**, which is the
 order the platelet rule asks for. It is a sibling of `TRDD-YEE33F3A` in the flock of
 `TRDD-SCLSRS6E`, not its child (depth-1). Prose lineage: it is an effect of
 YEE33F3A's Phase-2 wiring of `lib/message-route-gate.ts`.

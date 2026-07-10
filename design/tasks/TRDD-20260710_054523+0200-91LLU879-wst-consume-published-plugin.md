@@ -47,7 +47,40 @@ thing. That is the hole; this is the platelet. Until it closes, f181a4ae is `blo
 on this TRDD, not `published` — a parent that ships a change and leaves its hole open
 has not finished.
 
-**NEXT ACTION:** parts 2 and 3 below. Part 1 (de-path) is **DONE** — see the update.
+**NEXT ACTION:** part 3 — the consume-vs-keep decision. Parts 1 and 2 are **DONE**.
+
+### ⏵ UPDATE 2026-07-10 — part 2 (`scenarios.config.json`) done
+
+Authored at `tests/scenarios/scenarios.config.json`, conforming to the **plugin's own**
+spec (`references/scenarios.config.README.md` + `scenarios.config.template.json` at
+v0.1.3) rather than to an invented schema. Key set is identical to the template's; every
+value is grounded in a fact in this repo, not guessed:
+
+| Key | Value | Where it came from |
+|---|---|---|
+| `browserInstance` | `ai-maestro-scenarios` | the `--browser` name Rule 8 mandates |
+| `healthEndpoint` | `…/api/v1/health` | what `setup-overnight-batch.sh:97` already probes; whitelisted in `middleware.ts:42` so it answers without a credential, and served in headless mode too |
+| `helpersScript` | `…/dev-browser-helpers/aim-helpers.sh` | exists on disk |
+| `cleanupTmuxPattern` | `^(scen[0-9]*-\|cos-scen-)` | the `scenNNN-` prefixes `setup-overnight-batch.sh` kills, plus Rule 7's `scen-` / `cos-scen-` |
+| `buildCommand` / `testCommand` | `yarn build` / `yarn test` | present in `package.json` |
+| `targetBranch` | `governance-rules` | the live branch — **update this when the branch changes** |
+
+Two things worth stating plainly:
+
+- **`governancePasswordRef: env:AIM_GOVERNANCE_PASSWORD`.** The plugin's spec is explicit
+  that this key is "a REFERENCE to the test password — never the literal secret". The
+  published extraction of this harness already handles secrets correctly; the harness it
+  was extracted from still commits the literal in 32 files (TRDD-E9BZ5P7S). This config
+  adds no 33rd copy. The env var does not exist yet — that is E9BZ5P7S's step 2, and the
+  `helpersScript` is what resolves the reference.
+- **The pattern was tested in both directions.** `scen001-foo`, `scen-test-agent-01` and
+  `cos-scen-alpha` match; `_aim-placeholder`, `alexandre` and `luckas-bot` do not. A
+  cleanup pattern that over-matched would kill the owner's real agents' sessions.
+
+Nothing in this repo reads the file yet — it is inert until part 3 decides whether the
+harness is driven by the plugin. `writeGuardAllowlist` is `[]` because scenario fixtures
+under `~/agents/` are created through the UI or by setup scripts running as child
+processes, neither of which the subagent write-guard sees.
 
 ### ⏵ UPDATE 2026-07-10 — part 1 (de-path) done; it was five files, not four
 
@@ -103,11 +136,13 @@ separately; do not "fix" it piecemeal from here.
    artifacts of past scenario runs — leave them; they are captures of a machine's real
    state, not source.
 
-2. **`scenarios.config.json`.** Does not exist. The plugin's runner reads its project
-   config from it (paths, type-check + build commands). Authoring it is what lets any
-   project — not just this one — drive the plugin.
+2. **`scenarios.config.json`.** ✅ **DONE** — see the update above.
 
-3. **Consume the plugin, or keep the copy — decide before moving anything.** The
+3. **Consume the plugin, or keep the copy — decide before moving anything.** ⚠ This may
+   not be a Tier-0 call: making this repo's own test suite depend on a marketplace
+   install is architectural and touches CI. If that reading holds, it is a MANAGER
+   (Tier-2) decision and belongs in `design/proposals/`, not here. Settle the tier
+   before settling the question. The
    plugin ships 6 agents, 14 skills and 11 scripts at v0.1.3 (verified on the tag's
    tree). `tests/scenarios/` still ships its own runner agents and scripts. Deleting
    this repo's copy in favour of the installed plugin is the intent recorded in

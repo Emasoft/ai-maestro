@@ -1,0 +1,17 @@
+{
+  "scenariosDir": "tests/scenarios",
+  "browserInstance": "ai-maestro-scenarios",
+  "dashboardUrl": "http://localhost:23000/",
+  "healthEndpoint": "http://localhost:23000/api/v1/health",
+  "governancePasswordRef": "env:AIM_GOVERNANCE_PASSWORD",
+  "helpersScript": "tests/scenarios/scripts/dev-browser-helpers/aim-helpers.sh",
+  "writeGuardAllowlist": [],
+  "typeCheckCommand": "npx tsc --noEmit",
+  "buildCommand": "yarn build",
+  "testCommand": "yarn test",
+  "restartCommand": "pm2 restart ai-maestro",
+  "targetBranch": "governance-rules",
+  "cleanupTmuxPattern": "^(scen[0-9]*-|cos-scen-)",
+  "registryScanPath": "~/.aimaestro/agents/registry.json",
+  "testAgentPattern": "^(scen[0-9]*-|cos-scen-)"
+}

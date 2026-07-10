@@ -1,9 +1,10 @@
 ---
 trdd-id: f181a4ae-36a2-4524-abb1-3eab554999d9
 title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-plugin (dev-browser integrated)
-column: complete
+column: blocked
+pre-block-column: published
 created: 2026-06-21T22:46:13+0200
-updated: 2026-06-25T00:48:57+0200
+updated: 2026-07-10T05:45:23+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -12,8 +13,12 @@ task-type: feature
 release-via: publish
 delivery: pull-request
 publish-target: ai-maestro-plugins
+published-version: 0.1.3
+published-at: 2026-07-08T18:48:08+0200
 relevant-rules: []
 parent-trdd: TRDD-903b7a20
+eht: [TRDD-91LLU879]
+blocked-by: [TRDD-91LLU879]
 labels: [scenario-testing, plugin, dev-browser, reusable-harness]
 impacts: [install-script]
 external-refs: []
@@ -22,6 +27,29 @@ external-refs: []
 # TRDD-f181a4ae — Standalone scenario-UI-testing plugin
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME — 2026-06-21
+
+### ⏵ UPDATE 2026-07-10T05:45 — PUBLISHED as v0.1.3, and therefore BLOCKED, not done
+
+**The plugin shipped. This TRDD did not.** Verified against the repo, not against a
+STATE block: `Emasoft/ai-maestro-web-scenario-tester` has releases v0.1.1–v0.1.3, the
+latest published `2026-07-08T16:48:08Z`. The restructure of TRDD-74ZS7P9U is *in* that
+tag — `cd68adb...v0.1.3` compares `behind=0`, and the tag's tree carries the split-agent
+`amwst-scenario-proposer`, 14 skills, `pyproject.toml` and `.python-version`. So
+`published-version: 0.1.3` / `published-at:` are recorded here as fact.
+
+`column:` is nonetheless **`blocked`**, with `pre-block-column: published`. Publishing
+opened a hole this TRDD itself named ("AFTER publish: repoint `tests/scenarios/` to
+CONSUME the plugin + `scenarios.config.json` + de-path `fixture-helpers.sh`") and never
+closed. Verified still open on 2026-07-10: no `scenarios.config.json` exists, four
+*git-tracked* files under `tests/scenarios/` still hardcode the author's absolute
+working directory, and the local harness copy is intact. That work is now
+**TRDD-91LLU879**, this TRDD's `eht:` and its `blocked-by:`.
+
+A parent whose flock is still open has not finished — its honest column is `blocked`,
+on itself. Marking this `published` would have put it in `TERMINAL_DONE` and reported a
+half-done change as shipped-and-closed; the corpus invariant checker (`lib/trdd-graph.ts`,
+the flock gate) rejects exactly that. When 91LLU879 reaches a terminal column this
+restores to `published` and archives as `completed`.
 
 ### ⏵ UPDATE 2026-06-25T00:49 (heartbeat resume) — plugin SUBSTANTIALLY RESTRUCTURED (TRDD-74ZS7P9U); publish STILL USER-gated
 - A USER work-order — tracked separately as **TRDD-74ZS7P9U** (now `complete`) — restructured the plugin for token economy + a **2-agent run flow**. The "BUILD COMPLETE 2026-06-22" + "CPV-VALIDATED 2026-06-22" snapshots below are SUPERSEDED on the plugin's CONTENTS (the gating + the deps are unchanged).
@@ -170,3 +198,11 @@ consuming project installs. Carry the guard as a TEMPLATE + install instructions
 - Approach B (no 7 MB vendoring) unless the USER explicitly chooses A.
 - Do NOT break the existing in-repo scenario flow during extraction (repoint, don't delete).
 - Publish is a separate, USER-gated step (release-via: publish).
+
+## Approval log
+
+- 2026-07-10T05:45:23+0200 — PUBLISHED as v0.1.3 (released 2026-07-08T16:48:08Z), verified
+  against the repo's releases and the tag's tree. Recorded, not archived: column → blocked
+  on the new EHT TRDD-91LLU879 (the post-publish repoint this TRDD deferred), with
+  pre-block-column: published. Bookkeeping by ai-maestro-session; no approval was required
+  (a mechanical column transition on evidence, EXEMPT category A/E).

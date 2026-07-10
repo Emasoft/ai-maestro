@@ -1,9 +1,9 @@
 ---
 trdd-id: 74ZS7P9U
 title: web-scenario-tester — token-optimized restructure (per-phase skills, split agents, greppable steps, lean wrappers, validator)
-column: complete
+column: completed
 created: 2026-06-25T00:11:07+0200
-updated: 2026-06-25T00:48:57+0200
+updated: 2026-07-10T05:45:23+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -11,6 +11,8 @@ severity: MEDIUM
 task-type: feature
 release-via: publish
 publish-target: ai-maestro-plugins
+published-version: 0.1.3
+published-at: 2026-07-08T18:48:08+0200
 parent-trdd: TRDD-f181a4ae
 relevant-rules: []
 labels: [scenario-testing, plugin, token-economy, dev-browser]
@@ -77,3 +79,13 @@ external-refs: []
 - [x] P6 — README (`7553f10`): "The skills" (13), 2-agent flow, helper scripts, the 14 scenario-rules table.
 - [x] P7 — CPV `remote_validation` strict GREEN (`e1cac6f`): CRITICAL=0 MAJOR=0 MINOR=2 NIT=0 (started 2 MAJOR / 3 MINOR / 3 NIT; fixed leantool ruff, the skill/script false-positive, pyproject + version-sync, NIT rewords, 3 Done-when checklists). 2 residual MINORs = pre-existing publish infra the pipeline owns.
 - [x] P8 — synced `/tmp/wst-edit` → `~/Code/ai-maestro-web-scenario-tester` via FF pull (HEAD `cd68adb`, clean). No push, no publish — USER's session does that. `.gitignore` updated for `uv.lock` + py artifacts (`cd68adb`).
+
+## Approval log
+
+- 2026-07-10T05:45:23+0200 — COMPLETED, archived. Shipped in `web-scenario-tester` v0.1.3
+  (released 2026-07-08T16:48:08Z). Verified against the repo rather than a STATE block:
+  `cd68adb...v0.1.3` compares `behind=0`, so this restructure's HEAD is an ancestor of the
+  tag, and the tag's own tree carries its distinguishing artifacts — the split-agent
+  `amwst-scenario-proposer`, 14 skills, `pyproject.toml`, `.python-version`. No approver is
+  named because none exists: the work finished and the archival step was simply missed.
+  Bookkeeping by ai-maestro-session (EXEMPT category A/E).

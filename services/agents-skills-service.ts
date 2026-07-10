@@ -263,8 +263,9 @@ export async function getSkillSettings(agentId: string): Promise<ServiceResult<R
   // NT-008 claimed this needed the in-memory `agentRegistry.getAgent` "for runtime
   // operations (subconscious access)". It does not: skill settings are a JSON file
   // keyed by agentId, and the returned Agent was never read. The in-memory call
-  // constructs and starts an Agent for any id (evicting a live one at capacity) and
-  // never returns null, so the 404 below could not fire. The sync file registry is
+  // constructs and starts an Agent for any id (and, back when the registry had a
+  // cap, evicted a live one) and never returns null, so the 404 below could not
+  // fire. The sync file registry is
   // both the existence source of truth and what the sibling functions already use.
   const agent = getAgent(agentId)
   if (!agent) {

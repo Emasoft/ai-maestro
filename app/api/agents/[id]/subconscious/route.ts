@@ -22,8 +22,8 @@ export async function GET(
 ) {
   // TRDD-YEE33F3A: this GET previously made NO auth call at all, and its
   // `getSubconsciousStatus` reached `agentRegistry.getAgent()`, which CONSTRUCTS
-  // and starts an in-memory Agent for any id after evicting the least-recently
-  // used one. Sweeping arbitrary UUIDs therefore evicted live agents. The service
+  // and starts an in-memory Agent for any id — and, back when the registry still
+  // evicted (TRDD-QC8R79G5), shut a live one down to make room. The service
   // now reads with `getExistingAgent()`, so the primitive is gone — but the guard
   // stays: an agent may read only its own status; the system owner (the dashboard
   // indicator, the only caller) may read any.

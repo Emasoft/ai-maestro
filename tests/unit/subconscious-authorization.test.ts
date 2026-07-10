@@ -1,11 +1,12 @@
 /**
  * SECURITY REGRESSION — GET /api/agents/[id]/subconscious made NO auth call, and
- * reading it EVICTS live agents.
+ * reading it STARTED (and, at the time, evicted) live agents.
  *
  * `getSubconsciousStatus` called `agentRegistry.getAgent(agentId)`. That function
  * never returns null: it CONSTRUCTS an in-memory `Agent`, runs `initialize()`
- * (cerebellum + subconscious + voice subsystems, then `start()`), and calls
- * `evictIfNeeded()` BEFORE doing so. So a caller sweeping arbitrary UUIDs evicts
+ * (cerebellum + subconscious + voice subsystems, then `start()`), and — until the
+ * cap was removed in TRDD-QC8R79G5 — called `evictIfNeeded()` BEFORE doing so.
+ * So a caller sweeping arbitrary UUIDs evicted
  * real agents from the registry, one per request. That — not the route's name —
  * is the primitive it reached.
  *

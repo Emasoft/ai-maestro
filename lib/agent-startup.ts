@@ -91,6 +91,26 @@ export async function initializeAllAgents(): Promise<{
 
   console.log(`[AgentStartup] Found ${agentIds.length} agent database(s)`)
 
+  // TRDD-QC8R79G5 — the registry no longer evicts, so this number is the number
+  // of Agents that stay resident, each running a 30s config-scan timer. It is
+  // supposed to be bounded by CreateAgent gate G01c (`maxAgentsPerHost`). If it
+  // is not, the registry was populated some other way — a hand-edited
+  // registry.json, or the limit was lowered after those agents existed. Start
+  // them all anyway: silently shutting agents down is exactly the behaviour this
+  // TRDD removed. Say so loudly instead, where an operator can act on it.
+  try {
+    const { loadSecurityConfig } = require('@/lib/security-config')
+    const maxPerHost = loadSecurityConfig().agentCreation.maxAgentsPerHost
+    if (agentIds.length > maxPerHost) {
+      console.warn(
+        `[AgentStartup] ${agentIds.length} agents exceed the configured maxAgentsPerHost (${maxPerHost}). ` +
+        `All will be initialized. Raise the limit in Security Settings, or delete unused agents.`
+      )
+    }
+  } catch (err) {
+    console.error('[AgentStartup] Could not read the agent limit from security config:', err)
+  }
+
   const initialized: string[] = []
   const failed: Array<{ agentId: string; error: string }> = []
 

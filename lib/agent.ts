@@ -2,7 +2,7 @@
  * Agent - The core abstraction for autonomous agents
  *
  * An Agent is a cognitive entity that:
- * - Maintains its own database (legacy CozoDB — being retired with TRDD-70a521d9)
+ * - Owns a Cerebellum, which runs its subconscious and voice subsystems
  * - Has a subconscious that tracks activity state and writes a status file
  * - Operates independently without central coordination
  *
@@ -10,6 +10,11 @@
  * - Subconscious runs in the background, mirroring lifecycle + activity without
  *   conscious effort. It no longer drives the RAG memory subsystem.
  * - Each agent is truly autonomous and self-sufficient.
+ *
+ * An Agent used to own a CozoDB. It does not; the RAG subsystem went away with
+ * TRDD-70a521d9. What remains is the Cerebellum and its two subsystems, so an
+ * Agent in memory IS a running process, not a cached value. Nothing here may be
+ * discarded to reclaim memory — see the AgentRegistry note below.
  */
 
 import { hostHints } from './host-hints'
@@ -741,7 +746,7 @@ export class Agent {
   }
 
   /**
-   * Initialize the agent (database + cerebellum with subsystems)
+   * Initialize the agent (cerebellum with its subsystems)
    */
   async initialize(subconsciousConfig?: SubconsciousConfig): Promise<void> {
     if (this.initialized) {
@@ -775,7 +780,13 @@ export class Agent {
   }
 
   /**
-   * Shutdown the agent (stop cerebellum + subsystems, close database)
+   * Shutdown the agent (stop cerebellum + subsystems)
+   *
+   * This STOPS A RUNNING PROCESS: the subconscious's timers die, `status.json`
+   * stops updating, and the config-drift tracker stops emitting. It is not a
+   * cache release, and there is no path anywhere that restarts an Agent once
+   * it is down (see AgentRegistry). Call it only when the agent is genuinely
+   * going away, or when the whole server is.
    */
   async shutdown(): Promise<void> {
     console.log(`[Agent ${this.agentId.substring(0, 8)}] Shutting down...`)
@@ -833,71 +844,32 @@ export class Agent {
 }
 
 /**
- * Agent Registry - Manages agent lifecycle with LRU eviction
+ * Agent Registry - supervises the Agents resident in this process
  *
- * This singleton keeps track of active agents with a maximum limit.
- * When the limit is reached, least recently used agents are evicted
- * (properly shutdown including CozoDB) to prevent memory bloat.
+ * This is NOT a cache, and it used to pretend to be one. Exactly one call site
+ * in the codebase puts an Agent in here — `initializeAllAgents()` at boot — and
+ * nothing anywhere loads one on demand (every other caller uses the read-only
+ * `getExistingAgent`). An eviction therefore could never be followed by a
+ * re-population: it just stopped a live subconscious, permanently, until the
+ * next server restart.
  *
- * Default: max 10 agents in memory at once
+ * So the old `maxAgents = 10` LRU bounded nothing. It silently shut down the
+ * last N-10 agents that `readdir` happened to return, and the dashboard hid the
+ * damage because viewing an agent used to re-construct it (evicting a different
+ * one to make room). With that read path fixed in TRDD-YEE33F3A, the eviction
+ * became visible for what it always was: on this machine, 8 of 18 agents lost
+ * their subconscious at every boot.
+ *
+ * The fleet IS bounded, where a fleet is actually created: CreateAgent gate G01c
+ * refuses agent number `maxAgentsPerHost + 1` (Security Settings; default 50,
+ * hard max 500). Residency follows the fleet. It does not get to re-bound it
+ * with a second, tighter, silent limit — that is two sources of truth, and the
+ * tighter one enforced itself by killing processes. See TRDD-QC8R79G5.
  */
-class AgentRegistry {
+export class AgentRegistry {
   private agents = new Map<string, Agent>()
   // Tracks agents currently being initialized to prevent duplicate concurrent initialization
   private initializingAgents = new Map<string, Promise<Agent>>()
-  private accessOrder: string[] = []  // Most recently accessed at the end
-  private maxAgents: number
-
-  constructor(maxAgents = 10) {
-    this.maxAgents = maxAgents
-    console.log(`[AgentRegistry] Initialized with max ${maxAgents} agents (LRU eviction enabled)`)
-  }
-
-  /**
-   * Update access order (move to end = most recently used)
-   */
-  private touch(agentId: string): void {
-    const index = this.accessOrder.indexOf(agentId)
-    if (index !== -1) {
-      this.accessOrder.splice(index, 1)
-    }
-    this.accessOrder.push(agentId)
-  }
-
-  /**
-   * Evict least recently used agent if at capacity
-   */
-  private async evictIfNeeded(): Promise<void> {
-    // Track how many candidates we've skipped due to initialization — if we cycle
-    // through the entire accessOrder without finding an evictable agent, stop.
-    let skippedInitializing = 0
-    while (this.agents.size >= this.maxAgents && this.accessOrder.length > 0) {
-      const lruAgentId = this.accessOrder.shift()!
-      // Do not evict an agent that is currently being initialized — it hasn't been
-      // added to this.agents yet, so evicting would leave us over capacity anyway.
-      if (this.initializingAgents.has(lruAgentId)) {
-        // Put it back so the next iteration can try a different candidate.
-        this.accessOrder.push(lruAgentId)
-        skippedInitializing++
-        // If every entry is initializing we cannot evict; break to avoid an infinite loop.
-        if (skippedInitializing >= this.accessOrder.length) {
-          break
-        }
-        continue
-      }
-      skippedInitializing = 0
-      const agent = this.agents.get(lruAgentId)
-      if (agent) {
-        console.log(`[AgentRegistry] Evicting LRU agent ${lruAgentId.substring(0, 8)} (${this.agents.size}/${this.maxAgents})`)
-        try {
-          await agent.shutdown()
-        } catch (err) {
-          console.error(`[AgentRegistry] Error shutting down evicted agent:`, err)
-        }
-        this.agents.delete(lruAgentId)
-      }
-    }
-  }
 
   /**
    * Get or create an agent
@@ -905,8 +877,6 @@ class AgentRegistry {
   async getAgent(agentId: string, config?: AgentConfig, subconsciousConfig?: SubconsciousConfig): Promise<Agent> {
     const existing = this.agents.get(agentId)
     if (existing) {
-      // Update access order (touch = mark as recently used)
-      this.touch(agentId)
       return existing
     }
 
@@ -918,21 +888,17 @@ class AgentRegistry {
       return inFlight
     }
 
-    // Evict LRU agent if at capacity before creating new one
-    await this.evictIfNeeded()
-
     // Create new agent and register the initialization promise immediately so that
     // any concurrent callers arriving while we await initialize() get the same promise.
-    console.log(`[AgentRegistry] Loading agent ${agentId.substring(0, 8)} (${this.agents.size + 1}/${this.maxAgents})`)
+    console.log(`[AgentRegistry] Loading agent ${agentId.substring(0, 8)} (${this.agents.size + 1} resident)`)
     const agent = new Agent({
       agentId,
       workingDirectory: config?.workingDirectory
     })
 
-    // Pass subconsciousConfig so callers can control memory/consolidation intervals
+    // Pass subconsciousConfig so callers can control the tracker/polling intervals
     const initPromise: Promise<Agent> = agent.initialize(subconsciousConfig).then(() => {
       this.agents.set(agentId, agent)
-      this.touch(agentId)
       this.initializingAgents.delete(agentId)
       return agent
     }).catch(err => {
@@ -947,14 +913,9 @@ class AgentRegistry {
 
   /**
    * Get an existing agent (without creating)
-   * Also updates access order
    */
   getExistingAgent(agentId: string): Agent | undefined {
-    const agent = this.agents.get(agentId)
-    if (agent) {
-      this.touch(agentId)
-    }
-    return agent
+    return this.agents.get(agentId)
   }
 
   /**
@@ -964,14 +925,15 @@ class AgentRegistry {
     // Cancel any in-flight initialization (callers awaiting it will get the rejection)
     this.initializingAgents.delete(agentId)
     const agent = this.agents.get(agentId)
-    if (agent) {
-      await agent.shutdown()
-      this.agents.delete(agentId)
-      const index = this.accessOrder.indexOf(agentId)
-      if (index !== -1) {
-        this.accessOrder.splice(index, 1)
-      }
-    }
+    if (!agent) return
+    // Unindex BEFORE tearing down. `agent.shutdown()` awaits, but the Agent is
+    // already dead the moment it starts (cerebellum stopped, `initialized` false).
+    // Leaving it in the map across that await hands a zombie to any concurrent
+    // `getExistingAgent()`. Removing it first means the window cannot exist —
+    // and if `shutdown()` throws, an unindexed dying agent still beats an
+    // indexed one that callers would keep receiving.
+    this.agents.delete(agentId)
+    await agent.shutdown()
   }
 
   /**
@@ -981,10 +943,9 @@ class AgentRegistry {
     console.log('[AgentRegistry] Shutting down all agents...')
     // Cancel all pending initializations before shutting down initialized agents
     this.initializingAgents.clear()
-    const shutdownPromises = Array.from(this.agents.values()).map(agent => agent.shutdown())
-    await Promise.all(shutdownPromises)
-    this.agents.clear()
-    this.accessOrder = []
+    const agents = Array.from(this.agents.values())
+    this.agents.clear()   // unindex first — same reason as shutdownAgent()
+    await Promise.all(agents.map(agent => agent.shutdown()))
     console.log('[AgentRegistry] ✓ All agents shutdown')
   }
 
@@ -1001,7 +962,6 @@ class AgentRegistry {
   getStatus() {
     return {
       activeAgents: this.agents.size,
-      maxAgents: this.maxAgents,
       agents: Array.from(this.agents.values()).map(agent => agent.getStatus())
     }
   }

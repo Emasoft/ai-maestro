@@ -29,17 +29,17 @@ import type { AuthContext } from '@/lib/agent-auth'
  *
  *   - "does this agent exist?"  → the FILE registry, the source of truth. An
  *     agent exists whether or not it is loaded in memory.
- *   - "is it loaded right now?" → `getExistingAgent`, a Map.get + LRU touch.
+ *   - "is it loaded right now?" → `getExistingAgent`, a plain Map.get.
  *
  * It must NOT be `agentRegistry.getAgent()`. That constructs an Agent for any
- * id, runs `initialize()` (cerebellum → subconscious `start()` → a config-change
- * timer, a hostHints subscription, and an `mkdir` + `status.json` write under
- * `~/.aimaestro/agents/<id>/`), and calls `evictIfNeeded()` first — shutting
- * down the least-recently-used real agent to make room. The dashboard indicator
- * polls this route every 30s, so the endpoint that REPORTS whether a subconscious
- * is running was the thing STARTING it, and evicting a live agent per request
- * once the registry hit its cap of 10. `exists`/`initialized` were hardcoded
- * `true` for the same reason: after the construct they could not be anything else.
+ * id and runs `initialize()` (cerebellum → subconscious `start()` → a
+ * config-change timer, a hostHints subscription, and an `mkdir` + `status.json`
+ * write under `~/.aimaestro/agents/<id>/`). The dashboard indicator polls this
+ * route every 30s, so the endpoint that REPORTS whether a subconscious is
+ * running was the thing STARTING it — and, while the registry still evicted at a
+ * cap of 10 (TRDD-QC8R79G5), shutting a different live agent down per request to
+ * make room. `exists`/`initialized` were hardcoded `true` for the same reason:
+ * after the construct they could not be anything else.
  */
 export async function getSubconsciousStatus(
   agentId: string,
@@ -94,8 +94,8 @@ export async function getSubconsciousStatus(
  * It had zero callers, yet it sat on the dangerous-primitive debt ledger as an
  * unauthorized route that "drives another agent's background process" — a
  * description taken from its NAME. Its only real side effect was the
- * `agentRegistry.getAgent()` construct-and-evict, which this service no longer
- * performs on any path (see `getSubconsciousStatus`).
+ * `agentRegistry.getAgent()` construct (then also an evict), which this service
+ * no longer performs on any path (see `getSubconsciousStatus`).
  *
  * So the answer to "which AuthAction does POST /subconscious need?" is: none.
  * The endpoint is gone. A stale client now gets 405 instead of 400; both are

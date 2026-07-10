@@ -3,7 +3,7 @@ trdd-id: WNZ72SFO
 title: The subconscious indicator now says Inactive for eight agents — decide what it should say
 column: backburner
 created: 2026-07-10T02:21:20+0200
-updated: 2026-07-10T02:49:10+0200
+updated: 2026-07-10T03:47:45+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 2
@@ -19,7 +19,7 @@ release-via: none
 parent-trdd: TRDD-SCLSRS6E
 npt: []
 eht: []
-blocked-by: [TRDD-QC8R79G5]
+blocked-by: []
 pre-block-column: backburner
 supersedes: []
 superseded-by: []
@@ -40,6 +40,35 @@ external-refs: []
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
 
+**UNBLOCKED 2026-07-10T03:47 — QC8R79G5 is `complete` (`1dea8431`), and it
+answered this TRDD's question by dissolving it.** The registry no longer evicts,
+so every registered agent stays resident and `isRunning` is true for all 18. The
+"Inactive for 8 of 18" problem this EHT was opened to handle **does not exist
+any more**. No new badge state is needed: there is nothing left for an
+`Evicted (not resident)` state to describe.
+
+**What survives is smaller, and it is the tautology, not the badge.**
+`isWarmingUp` is a hardcoded `false` (`agents-subconscious-service.ts:67`) and
+always has been, while `AgentSubconsciousIndicator.tsx:85,93` branches on it. So
+the UI carries a colour and a label the user can never see. Post-RAG,
+`initialize()` opens no database; the `initializingAgents` window is now
+sub-millisecond, and the indicator polls every 30 s — so "warming up" is not a
+state that was merely unwired, it is a state that has become **unobservable**.
+Wiring it would be building UI for an event nobody can witness.
+
+**NEXT ACTION — narrowed:** delete `isWarmingUp` and the two branches that render
+it, and give the indicator the test it never had (a component with no test is how
+`initialized: true` and `isWarmingUp: false` both survived as tautologies for so
+long). `Running` / `Inactive` is the whole state space, and both values are now
+reachable.
+
+`Inactive` remains reachable, truthfully, for an agent that is not resident —
+which after `1dea8431` means an agent **created after boot**, since nothing
+outside `initializeAllAgents` ever constructs one. That gap is real and is
+recorded on QC8R79G5 as its own future work; it is not this EHT's to close.
+
+---
+
 **This is an EHT — an Effects Handling Task.** It exists because `03159944`
 (TRDD-4Q7WMPZK) changed an observable behavior, and a change that alters what a
 user sees is not finished when its own tests go green. It is finished when the
@@ -58,12 +87,15 @@ the viewed agent, polling every 30s — renders
 agent now yields `isRunning: false` and `isWarmingUp` is hardcoded `false` in the
 service, so **the badge reads "Inactive"**.
 
-**That is the truth**, and per TRDD-QC8R79G5 it is the truth for **8 of the 18
-registered agents** (LRU cap 10, startup loads 18). Before `03159944` the badge
-read "Running" because polling it had just started the subconscious it was
-reporting on. So this EHT is not a regression to undo — it is the bill for
-telling the truth, and it must be paid deliberately rather than by reverting to
-a comfortable lie.
+**That is the truth.** Before `03159944` the badge read "Running" because polling
+it had just started the subconscious it was reporting on. So this EHT is not a
+regression to undo — it is the bill for telling the truth, and it must be paid
+deliberately rather than by reverting to a comfortable lie.
+
+*(Superseded: this paragraph used to add "and it is the truth for 8 of the 18
+registered agents (LRU cap 10, startup loads 18)". True when written; false since
+`1dea8431` deleted the cap. All 18 are resident. Do not carry that number
+forward.)*
 
 ### Correction 2026-07-10T02:49 — the sibling edge was in the wrong field
 
@@ -83,36 +115,35 @@ in the flock of the nearest non-derived ancestor, **TRDD-SCLSRS6E**. The causal
 lineage — this TRDD is an effect of 4Q7WMPZK's fix — is recorded here in prose,
 which is where a flat graph puts it.
 
-### Why it is BLOCKED on TRDD-QC8R79G5
+### Why it WAS blocked on TRDD-QC8R79G5 (resolved)
 
-What the indicator *should* say depends on what the LRU cap is *for*. If the cap
-decision keeps every registered agent resident, `isRunning` becomes true for all
-of them and this EHT collapses to a one-line no-op. If the cap stays and eviction
-is expected, the badge needs a third state that distinguishes "the subconscious
-stopped because we evicted it" from "the subconscious is broken". Deciding the
-badge first would be designing UI for a system whose semantics are undecided.
+What the indicator *should* say depended on what the LRU cap was *for*. Written
+2026-07-10T02:21, before that decision: *"If the cap decision keeps every
+registered agent resident, `isRunning` becomes true for all of them and this EHT
+collapses to a one-line no-op."* That is what happened — the cap was deleted, not
+tuned — so the third state (`Evicted (not resident)`) is never authored. Deciding
+the badge first would have been designing UI for a system whose semantics were
+undecided, and it would have shipped a state that now describes nothing.
 
-### NEXT ACTION (after QC8R79G5 resolves)
+### Remaining work
 
-1. Decide the states. Candidate: `Running` / `Evicted (not resident)` / `Inactive`
-   / `Warming up`.
-2. **`isWarmingUp` is a hardcoded `false`** in `services/agents-subconscious-service.ts`
-   and always has been — a second tautology of the same family as the
-   `initialized: true` this EHT's parent removed. The registry already tracks
-   `initializingAgents`; there is no accessor for it. If a warming state is kept,
-   make it a fact (add the accessor) or delete the field and the two UI branches
-   that render it. Do not leave a third field that cannot be false.
+1. **States: `Running` / `Inactive`.** Both reachable, both true. No third state.
+2. **Delete `isWarmingUp`** — the field in `services/agents-subconscious-service.ts`
+   and the two branches in `AgentSubconsciousIndicator.tsx` that render it. It is
+   a tautology of the same family as the `initialized: true` this EHT's parent
+   removed. It is worse than unwired: post-RAG the `initializingAgents` window is
+   sub-millisecond and the poll is 30 s, so no user can ever observe it. A field
+   that cannot be false and a state that cannot be seen both go.
 3. Verify the empty-state: a valid agent with no subconscious object returns
    `initialized: true, isRunning: false, status: null` — already covered by
    `tests/unit/subconscious-authorization.test.ts`.
 
 ### Falsification
 
-A unit test on the indicator's state mapping: given `{initialized:false}` it must
-not render "Running", and given whatever "evicted" shape is chosen it must not
-render the same string as a genuinely broken subconscious. Today the component has
-no test at all, which is why the tautology survived: nothing asserted that the
-badge could ever say anything else.
+A unit test on the indicator's state mapping: given `{isRunning:false}` it must
+not render "Running", and given `{isRunning:true}` it must not render "Inactive".
+Today the component has no test at all, which is exactly why the tautology
+survived: nothing ever asserted that the badge could say anything else.
 
 ### Load-bearing facts
 

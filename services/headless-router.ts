@@ -563,6 +563,65 @@ function forwardAuthHeaders(req: IncomingMessage, extra?: Record<string, string>
 }
 
 /**
+ * A Next.js App-Router handler: `(request)` for static routes, `(request, {params})`
+ * for dynamic ones. Every dynamic TRDD route is keyed by exactly one `id` segment,
+ * so the context is typed to that rather than a `Record<string, string>` — which
+ * would not overlap with the handlers' own `{ id: string }` and force an
+ * `unknown` cast that erases the mismatch instead of surfacing it.
+ */
+type NextRouteHandler = (
+  request: never,
+  context?: { params: Promise<{ id: string }> },
+) => Promise<Response>
+
+/**
+ * Serve one `/api/trdd/*` request by delegating to the SAME Next.js handler that
+ * full mode runs (TRDD-KJQZEYXW).
+ *
+ * Five of the eight TRDD handlers are classified `strict` in
+ * security-registry.json, and this router has no sudo layer of its own (see the
+ * note above the `authorize` import). Re-implementing their gates here would
+ * fork the authorization decision into a second copy free to drift from the
+ * first — which is exactly the class of bug TRDD-YEE33F3A found throughout this
+ * file, where headless twins had silently stopped authenticating anything. So we
+ * forward through the one hardened handler, as the governance/password route
+ * already does. Credentials AND `X-Sudo-Token` ride along via forwardAuthHeaders,
+ * so the delegated gate verifies the REAL caller rather than a credential-less
+ * fake request (the I4 trap).
+ *
+ * The body is forwarded as raw bytes, never re-parsed. The four lifecycle POSTs
+ * deliberately treat an unparseable body as `{}` and PATCH answers 400 — but
+ * readJsonBody rejects before either handler is reached, and the outer catch maps
+ * its `status` (not `statusCode`) to a 500. Forwarding verbatim lets each
+ * handler's own JSON handling produce the same answer it does in full mode.
+ */
+async function delegateTrdd(
+  req: IncomingMessage,
+  res: ServerResponse,
+  handler: NextRouteHandler,
+  pathname: string,
+  opts: { method: string; params?: { id: string }; withBody?: boolean },
+): Promise<void> {
+  const { NextRequest } = await import('next/server')
+  const rawUrl = req.url || ''
+  const search = rawUrl.includes('?') ? '?' + rawUrl.split('?').slice(1).join('?') : ''
+
+  const init: RequestInit = {
+    method: opts.method,
+    headers: forwardAuthHeaders(req, opts.withBody ? { 'content-type': 'application/json' } : undefined),
+  }
+  // A GET/HEAD Request may not carry a body — constructing one throws.
+  if (opts.withBody) init.body = (await readRawBody(req)).toString('utf-8')
+
+  const fakeReq = new NextRequest(`http://localhost${pathname}${search}`, init as never)
+  const response = opts.params
+    ? await handler(fakeReq as never, { params: Promise.resolve(opts.params) })
+    : await handler(fakeReq as never)
+
+  sendJson(res, response.status, await response.json())
+}
+
+/**
  * Minimal multipart form-data parser.
  * Handles the single use case: one file field + one text field for /api/agents/import.
  *
@@ -1102,11 +1161,17 @@ const routes: Route[] = [
 
   // Remove local element — delegates to the same logic as the Next.js route
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/remove-element$/, paramNames: ['id'], handler: async (req, res, params) => {
-    // Forward to the Next.js API handler by importing it dynamically
+    // Forward to the Next.js API handler by importing it dynamically.
+    // The delegated POST calls requireAuth, which reads the caller's cookie /
+    // Authorization header off the forwarded Request. This handler used to send
+    // only Content-Type, so the hardened handler saw a credential-less request and
+    // 401'd every authenticated caller — the I4 trap, in the one delegation that
+    // predates forwardAuthHeaders. Forward the credentials so it authenticates the
+    // REAL caller.
     const { POST } = await import('@/app/api/agents/[id]/remove-element/route')
     const nextReq = new Request(`http://localhost/api/agents/${params.id}/remove-element`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: forwardAuthHeaders(req, { 'Content-Type': 'application/json' }),
       body: JSON.stringify(await readJsonBody(req)),
     })
     const nextRes = await POST(nextReq as never, { params: Promise.resolve({ id: params.id }) })
@@ -3858,6 +3923,56 @@ const routes: Route[] = [
       exactAtCursor: result.data.exactAtCursor,
       phaseHistory: result.data.phaseHistory,
     })
+  }},
+
+  // ── TRDD / 3-pillars task API (TRDD-KJQZEYXW) ──────────────────────────────
+  // Every handler delegates to its Next.js twin so the strict routes' sudo gate
+  // runs in headless mode too — see delegateTrdd for why re-implementation is not
+  // an option here.
+  { method: 'GET', pattern: /^\/api\/trdd$/, paramNames: [], handler: async (req, res) => {
+    const mod = await import('@/app/api/trdd/route')
+    await delegateTrdd(req, res, mod.GET as NextRouteHandler, '/api/trdd', { method: 'GET' })
+  }},
+
+  // The static `kanban` sub-path MUST precede the parameterized `[id]` GET below:
+  // matchRoute takes the FIRST match, and `([^/]+)` would otherwise swallow it —
+  // yielding a 400 from isValidTrddId rather than the kanban index.
+  { method: 'GET', pattern: /^\/api\/trdd\/kanban$/, paramNames: [], handler: async (req, res) => {
+    const mod = await import('@/app/api/trdd/kanban/route')
+    await delegateTrdd(req, res, mod.GET as NextRouteHandler, '/api/trdd/kanban', { method: 'GET' })
+  }},
+
+  { method: 'POST', pattern: /^\/api\/trdd\/([^/]+)\/approve$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const mod = await import('@/app/api/trdd/[id]/approve/route')
+    await delegateTrdd(req, res, mod.POST as NextRouteHandler,
+      `/api/trdd/${encodeURIComponent(params.id)}/approve`, { method: 'POST', params: { id: params.id }, withBody: true })
+  }},
+  { method: 'POST', pattern: /^\/api\/trdd\/([^/]+)\/refuse$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const mod = await import('@/app/api/trdd/[id]/refuse/route')
+    await delegateTrdd(req, res, mod.POST as NextRouteHandler,
+      `/api/trdd/${encodeURIComponent(params.id)}/refuse`, { method: 'POST', params: { id: params.id }, withBody: true })
+  }},
+  { method: 'POST', pattern: /^\/api\/trdd\/([^/]+)\/promote$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const mod = await import('@/app/api/trdd/[id]/promote/route')
+    await delegateTrdd(req, res, mod.POST as NextRouteHandler,
+      `/api/trdd/${encodeURIComponent(params.id)}/promote`, { method: 'POST', params: { id: params.id }, withBody: true })
+  }},
+  { method: 'POST', pattern: /^\/api\/trdd\/([^/]+)\/archive$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const mod = await import('@/app/api/trdd/[id]/archive/route')
+    await delegateTrdd(req, res, mod.POST as NextRouteHandler,
+      `/api/trdd/${encodeURIComponent(params.id)}/archive`, { method: 'POST', params: { id: params.id }, withBody: true })
+  }},
+
+  // Parameterized `[id]` — MUST stay after `kanban` and the four sub-paths above.
+  { method: 'GET', pattern: /^\/api\/trdd\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const mod = await import('@/app/api/trdd/[id]/route')
+    await delegateTrdd(req, res, mod.GET as NextRouteHandler,
+      `/api/trdd/${encodeURIComponent(params.id)}`, { method: 'GET', params: { id: params.id } })
+  }},
+  { method: 'PATCH', pattern: /^\/api\/trdd\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const mod = await import('@/app/api/trdd/[id]/route')
+    await delegateTrdd(req, res, mod.PATCH as NextRouteHandler,
+      `/api/trdd/${encodeURIComponent(params.id)}`, { method: 'PATCH', params: { id: params.id }, withBody: true })
   }},
 ]
 

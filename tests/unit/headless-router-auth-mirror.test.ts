@@ -377,3 +377,76 @@ describe('headless-router auth mirror — info-leak GETs (TRDD-47a35ba2)', () =>
     expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
   })
 })
+
+/**
+ * The TRDD / 3-pillars task API in headless mode (TRDD-KJQZEYXW).
+ *
+ * Two distinct claims, and they need two distinct signals:
+ *
+ *  1. REGISTERED. `handle()` returns false for a path no route matches, and the
+ *     caller then 404s. Every one of the eight handlers used to be unregistered
+ *     here — the whole family (search, read, edit, and the four lifecycle
+ *     transitions) existed only in full mode. So we assert on the BOOLEAN, not
+ *     just the status: a 401 alone would also be produced by the structural gate
+ *     bouncing a credential-less request, and would prove nothing about routing.
+ *
+ *  2. AUTHENTICATED. Five of the eight are `strict` in security-registry.json,
+ *     and this router has no sudo layer, so each handler delegates to its Next.js
+ *     twin. A forged-but-shape-valid token must therefore be rejected by the
+ *     DELEGATED gate (401, never 'auth_required', never 200 with data). If a
+ *     future edit "simplifies" the delegation into a direct service call, this
+ *     block fails — which is the drift YEE33F3A found across this file.
+ *
+ * The forged token is the same one used above: it passes `_headlessHasCredential`
+ * and reaches the per-handler auth, so a 401 here is the handler's verdict.
+ */
+describe('headless-router — /api/trdd/* is registered AND authenticates (TRDD-KJQZEYXW)', () => {
+  /** Like `call`, but keeps `handle()`'s boolean — the registration signal. */
+  async function callHandled(method: string, url: string, headers: Record<string, string> = {}, body = '') {
+    const res = makeRes()
+    const handled = await router.handle(makeReq(method, url, headers, body), res)
+    return { res, handled }
+  }
+
+  // A shape-valid 8-char base36 id, so `isValidTrddId` never short-circuits the
+  // auth check we are actually asserting on.
+  const ID = 'ABCD1234'
+
+  const ROUTES: Array<[string, string]> = [
+    ['GET', '/api/trdd'],
+    ['GET', '/api/trdd?column=dev&q=widget'],
+    ['GET', '/api/trdd/kanban'],
+    ['GET', `/api/trdd/${ID}`],
+    ['PATCH', `/api/trdd/${ID}`],
+    ['POST', `/api/trdd/${ID}/approve`],
+    ['POST', `/api/trdd/${ID}/refuse`],
+    ['POST', `/api/trdd/${ID}/promote`],
+    ['POST', `/api/trdd/${ID}/archive`],
+  ]
+
+  it('control: an UNREGISTERED /api/trdd sub-path is still unhandled (the assertions below are not vacuous)', async () => {
+    // Proves `handled === true` is a real signal and not something every request
+    // gets: this path matches no route, so the router declines it and the caller
+    // 404s. Without this control, a router that blindly handled everything would
+    // pass the whole block.
+    const { handled } = await callHandled('GET', `/api/trdd/${ID}/no-such-verb`, { Authorization: FORGED_BEARER })
+    expect(handled).toBe(false)
+  })
+
+  it.each(ROUTES)('%s %s is registered and rejects the forged token (401)', async (method, url) => {
+    const { res, handled } = await callHandled(method, url, { Authorization: FORGED_BEARER }, '{}')
+    expect(handled).toBe(true)                        // claim 1: the route exists here
+    expect(res.statusCode).toBe(401)                  // claim 2: the delegated gate ran
+    expect(res.bodyJson()?.error).not.toBe('auth_required') // …the HANDLER refused, not the structural gate
+    // and nothing leaked on the way out
+    expect(res.bodyJson()?.trdds).toBeUndefined()
+    expect(res.bodyJson()?.trdd).toBeUndefined()
+    expect(res.bodyJson()?.rows).toBeUndefined()
+  })
+
+  it('a credential-less request never reaches the TRDD handlers (structural gate, 401)', async () => {
+    const { res } = await callHandled('POST', `/api/trdd/${ID}/approve`, {}, '{}')
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).toBe('auth_required')
+  })
+})

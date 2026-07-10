@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import { execFileSync } from 'child_process'
 import {
   parseTrddFile,
   findTrdd,
@@ -18,8 +19,14 @@ import {
 let designDir: string
 const ISO = '2026-07-09T13:00:00.000Z'
 
-function writeProposal(id: string, slug: string, column = 'proposal', extra = ''): string {
-  const dir = path.join(designDir, 'proposals')
+function writeProposal(
+  id: string,
+  slug: string,
+  column = 'proposal',
+  extra = '',
+  root = designDir,
+): string {
+  const dir = path.join(root, 'proposals')
   fs.mkdirSync(dir, { recursive: true })
   const file = path.join(dir, `TRDD-20260709_102705+0200-${id}-${slug}.md`)
   fs.writeFileSync(
@@ -43,8 +50,8 @@ Some searchable content about widgets.
   return file
 }
 
-function writeTask(id: string, slug: string, column = 'dev'): string {
-  const dir = path.join(designDir, 'tasks')
+function writeTask(id: string, slug: string, column = 'dev', root = designDir): string {
+  const dir = path.join(root, 'tasks')
   fs.mkdirSync(dir, { recursive: true })
   const file = path.join(dir, `TRDD-20260709_102705+0200-${id}-${slug}.md`)
   fs.writeFileSync(
@@ -277,5 +284,91 @@ describe('trdd-store lifecycle transitions', () => {
     const r = archiveTrdd(designDir, id, { approver: 'm', state: 'completed', iso: ISO })
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.status).toBe(409)
+  })
+})
+
+/**
+ * The suites above run in a plain tmpdir, where `git mv` fails and `moveZone`
+ * falls back to `renameSync` — so the mv-then-edit staging bug is UNREACHABLE
+ * there and no assertion in them could ever have caught it. It needs a real repo.
+ *
+ * The bug: `git mv` stages the rename by carrying over the blob already indexed
+ * for the old path; `editAt` rewrites the file afterwards, leaving the content
+ * change unstaged. A caller committing the index then records `rename (100%)`
+ * with none of the edit — which is exactly what happened to the bulk archival
+ * sweep (124b4e26, repaired by 4d523f4b).
+ */
+describe('trdd-store lifecycle transitions stage the file they moved (real git repo)', () => {
+  let repoRoot: string
+  let repoDesign: string
+
+  // realpath: on macOS os.tmpdir() is a symlink (/var → /private/var) and git
+  // rejects a path that resolves outside the repo it was told to work in.
+  function git(...args: string[]): string {
+    return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf-8', stdio: 'pipe' })
+  }
+
+  beforeEach(() => {
+    repoRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'trdd-git-')))
+    repoDesign = path.join(repoRoot, 'design')
+    git('init', '-q')
+    git('config', 'user.email', 'test@example.invalid')
+    git('config', 'user.name', 'trdd-store test')
+    git('config', 'commit.gpgsign', 'false')
+    // This machine sets a GLOBAL core.hooksPath; a fresh repo inherits it and the
+    // fixture's commits would run the user's real hooks. Point it at nothing.
+    git('config', 'core.hooksPath', path.join(repoRoot, '.no-such-hooks'))
+  })
+  afterEach(() => {
+    fs.rmSync(repoRoot, { recursive: true, force: true })
+  })
+
+  /** Everything the verbs changed is in the index; nothing is left behind. */
+  function expectFullyStaged(expectedColumn: string) {
+    // The porcelain line for a moved-and-edited file is `RM` — R for the staged
+    // rename, M for the unstaged modification. `R ` alone means the edit landed.
+    expect(git('status', '--porcelain', '--', 'design')).not.toMatch(/^RM/m)
+    expect(git('diff', '--cached', '--', 'design')).toContain(`+column: ${expectedColumn}`)
+    expect(git('diff', '--', 'design')).toBe('') // working tree == index
+  }
+
+  function seedAndCommit(write: () => void) {
+    write()
+    git('add', '--', 'design')
+    git('commit', '-q', '-m', 'seed')
+  }
+
+  it('promoteTrdd stages the column edit, not just the rename', () => {
+    seedAndCommit(() => writeProposal('AAAA1111', 'promote-me', 'proposal', '', repoDesign))
+    const r = promoteTrdd(repoDesign, 'AAAA1111', { approver: 'MANAGER', iso: ISO })
+    expect(r.ok).toBe(true)
+    expectFullyStaged('planned')
+    expect(git('diff', '--cached', '--', 'design')).toContain('APPROVED by MANAGER')
+  })
+
+  it('refuseTrdd stages the column edit, not just the rename', () => {
+    seedAndCommit(() => writeProposal('BBBB2222', 'refuse-me', 'proposal', '', repoDesign))
+    const r = refuseTrdd(repoDesign, 'BBBB2222', { approver: 'MANAGER', iso: ISO })
+    expect(r.ok).toBe(true)
+    expectFullyStaged('refused')
+  })
+
+  it('archiveTrdd stages the column edit, not just the rename', () => {
+    seedAndCommit(() => writeTask('CCCC3333', 'archive-me', 'complete', repoDesign))
+    const r = archiveTrdd(repoDesign, 'CCCC3333', { approver: 'm', state: 'completed', iso: ISO })
+    expect(r.ok).toBe(true)
+    expectFullyStaged('completed')
+  })
+
+  it('does not begin tracking a TRDD that git was not already following', () => {
+    // No `git add` — the file is untracked, so `git mv` fails and moveZone falls
+    // back to renameSync. Staging it here would sneak an untracked file into
+    // whatever the caller commits next. The move must still succeed.
+    writeProposal('DDDD4444', 'untracked', 'proposal', '', repoDesign)
+    const r = promoteTrdd(repoDesign, 'DDDD4444', { approver: 'MANAGER', iso: ISO })
+    expect(r.ok).toBe(true)
+    expect(git('ls-files', '--', 'design')).toBe('')
+    expect(git('diff', '--cached', '--', 'design')).toBe('')
+    expect(fs.existsSync(path.join(repoDesign, 'tasks', 'TRDD-20260709_102705+0200-DDDD4444-untracked.md'))).toBe(true)
   })
 })

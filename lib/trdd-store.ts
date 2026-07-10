@@ -16,8 +16,9 @@
  * So every mutation touches only the exact line(s) it changes and appends the
  * `## Approval log` line at EOF (the log is the last section by convention).
  *
- * This module never commits. It edits + git-mv's (staging the rename) and leaves
- * the caller to commit — matching the overlay's protocol (edit, git mv, commit).
+ * This module never commits. It stages the full transition — the rename AND the
+ * content edit — and leaves the caller to commit, matching the overlay's protocol
+ * (edit, git mv, commit).
  */
 import fs from 'fs'
 import path from 'path'
@@ -284,19 +285,56 @@ export function editTrdd(
   return { ok: true, id: trdd.id, column: trdd.column, filePath: trdd.filePath }
 }
 
-/** Move a TRDD file between zone folders, preferring `git mv` (history-preserving). */
-function moveZone(designDir: string, from: ParsedTrdd, toZone: TrddZone): string {
+/**
+ * Move a TRDD file between zone folders, preferring `git mv` (history-preserving).
+ * Reports whether the rename went through git, because only then is the file in
+ * the index and only then may its post-move edit be staged (see `stageMovedFile`).
+ */
+function moveZone(
+  designDir: string,
+  from: ParsedTrdd,
+  toZone: TrddZone,
+): { toPath: string; tracked: boolean } {
   const toDir = path.join(designDir, toZone)
   fs.mkdirSync(toDir, { recursive: true })
   const toPath = path.join(toDir, path.basename(from.filePath))
   const projectRoot = path.dirname(designDir)
   try {
     execFileSync('git', ['mv', from.filePath, toPath], { cwd: projectRoot, stdio: 'pipe' })
+    return { toPath, tracked: true }
   } catch {
     // Untracked file, or not a git repo — plain rename still moves it (no data loss).
     fs.renameSync(from.filePath, toPath)
+    return { toPath, tracked: false }
   }
-  return toPath
+}
+
+/**
+ * Re-stage a file that `moveZone` moved and `editAt` then rewrote.
+ *
+ * `git mv` renames the INDEX ENTRY: it carries over the blob already staged for
+ * the old path (HEAD's, since nothing was staged) and never re-reads the working
+ * tree. Every lifecycle verb below moves BEFORE it edits, so the content change
+ * lands in the working tree only — unstaged, by construction, on every call. A
+ * caller that then commits the index records a `rename (100%)` carrying none of
+ * the edit. That has bitten this corpus three times; the durable fix belongs here,
+ * not in the discipline of whoever commits next.
+ *
+ * Only ever called when `git mv` succeeded, so this updates an entry git already
+ * tracks. It must never begin tracking a file git was not following: an untracked
+ * TRDD is an anomaly for the caller to notice, not for this module to silently
+ * resolve by adding it to someone's next commit.
+ */
+function stageMovedFile(designDir: string, filePath: string): void {
+  try {
+    execFileSync('git', ['add', '--', filePath], {
+      cwd: path.dirname(designDir),
+      stdio: 'pipe',
+    })
+  } catch {
+    // The move and the edit both succeeded; the file on disk is correct. A failed
+    // `git add` leaves the edit unstaged — never fail the transition over it.
+  }
 }
 
 function editAt(filePath: string, edits: Array<[string, string]>, logLine: string): void {
@@ -317,13 +355,14 @@ export function promoteTrdd(
   if (trdd.zone !== 'proposals') {
     return { ok: false, error: `Only a proposal can be approved; ${trdd.id} is in ${trdd.zone}`, status: 409 }
   }
-  const newPath = moveZone(designDir, trdd, 'tasks')
+  const { toPath: newPath, tracked } = moveZone(designDir, trdd, 'tasks')
   const tierStr = opts.tier != null ? ` (tier ${opts.tier})` : ''
   editAt(
     newPath,
     [['column', 'planned'], ['updated', opts.iso]],
     `- ${opts.iso} — APPROVED by ${opts.approver}${tierStr}. ${opts.rationale ?? 'promoted proposal → planned'}.`,
   )
+  if (tracked) stageMovedFile(designDir, newPath)
   return { ok: true, id: trdd.id, from: 'proposals', to: 'tasks', column: 'planned', filePath: newPath }
 }
 
@@ -338,13 +377,14 @@ export function refuseTrdd(
   if (trdd.zone !== 'proposals') {
     return { ok: false, error: `Only a proposal can be refused; ${trdd.id} is in ${trdd.zone}`, status: 409 }
   }
-  const newPath = moveZone(designDir, trdd, 'refused')
+  const { toPath: newPath, tracked } = moveZone(designDir, trdd, 'refused')
   const tierStr = opts.tier != null ? ` (tier ${opts.tier})` : ''
   editAt(
     newPath,
     [['column', 'refused'], ['updated', opts.iso]],
     `- ${opts.iso} — REFUSED by ${opts.approver}${tierStr}. ${opts.reason ?? 'refused at proposal gate'}.`,
   )
+  if (tracked) stageMovedFile(designDir, newPath)
   return { ok: true, id: trdd.id, from: 'proposals', to: 'refused', column: 'refused', filePath: newPath }
 }
 
@@ -389,7 +429,7 @@ export function archiveTrdd(
   if (trdd.zone === 'archived' || trdd.zone === 'refused') {
     return { ok: false, error: `${trdd.id} is already terminal in ${trdd.zone}`, status: 409 }
   }
-  const newPath = moveZone(designDir, trdd, 'archived')
+  const { toPath: newPath, tracked } = moveZone(designDir, trdd, 'archived')
   const edits: Array<[string, string]> = [['column', opts.state], ['updated', opts.iso]]
   if (opts.state === 'superseded' && opts.supersededBy) {
     edits.push(['superseded-by', `[${opts.supersededBy}]`])
@@ -399,5 +439,6 @@ export function archiveTrdd(
     edits,
     `- ${opts.iso} — ${opts.state.toUpperCase()} by ${opts.approver}. ${opts.reason ?? `archived → ${opts.state}`}.`,
   )
+  if (tracked) stageMovedFile(designDir, newPath)
   return { ok: true, id: trdd.id, from: trdd.zone, to: 'archived', column: opts.state, filePath: newPath }
 }

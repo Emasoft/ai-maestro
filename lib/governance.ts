@@ -211,7 +211,21 @@ export async function setPassword(plaintext: string): Promise<void> {
 // Phase 1: No lock on read. Minor TOCTOU with setPassword(). Acceptable for single-user localhost.
 // Returns false for both 'no password set' and 'wrong password'.
 // Callers should check hasPassword (config.passwordHash) separately if they need to distinguish.
-/** Verify plaintext against stored password hash. Auto-detects bcrypt vs argon2id. */
+/**
+ * Verify plaintext against stored password hash. Auto-detects bcrypt vs argon2id.
+ *
+ * WRITES. Despite the name, a successful verify against an outdated hash (a legacy
+ * bcrypt digest, or argon2 params below the current cost) transparently re-hashes the
+ * plaintext and REWRITES governance.json under the 'governance' lock. That upgrade is
+ * the point — a login is the only moment the plaintext is available to rehash with —
+ * but it makes this an authenticated mutation, not a read.
+ *
+ * So do NOT reach for this to answer "is string X the current password?" out of band
+ * (an audit, a migration check, a test fixture): a matching X silently mutates the
+ * credential store you were only trying to inspect. For a pure comparison call
+ * `lib/argon2.ts::verifyPasswordAuto(hash, plaintext)` directly — same dispatch, no
+ * write, no lock.
+ */
 export async function verifyPassword(plaintext: string): Promise<boolean> {
   const config = loadGovernance()
   if (!config.passwordHash) return false

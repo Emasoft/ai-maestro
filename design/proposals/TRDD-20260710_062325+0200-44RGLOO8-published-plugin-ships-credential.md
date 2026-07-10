@@ -3,7 +3,7 @@ trdd-id: 44RGLOO8
 title: The published web-scenario-tester ships the live governance credential in its rules doc
 column: proposal
 created: 2026-07-10T06:23:25+0200
-updated: 2026-07-10T06:23:25+0200
+updated: 2026-07-10T06:47:10+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 priority: 0
@@ -66,6 +66,11 @@ end-to-end (`claude plugin install web-scenario-tester@ai-maestro-plugins`). So 
 credential is not merely *committed to a public branch* — it is **shipped to the
 plugin cache of anyone who installs the plugin**, and it is inside a tagged release
 (v0.1.1–v0.1.3), i.e. in artifacts that a rewrite of `master` would not reach.
+
+**The credential is confirmed live, not stale.** Verified 2026-07-10T06:47 against
+`~/.aimaestro/governance.json` (argon2id, `passwordSetAt: 2026-03-29`): the committed
+literal still verifies. Method and the verify-that-writes trap it avoided are recorded
+on `TRDD-E9BZ5P7S`. So this is not a dead string in an old tag.
 
 **Blast radius, stated honestly.** The password gates sudo-mode: every `strict` route
 in `security-registry.json` (delete agent, delete team, purge cemetery, change title,

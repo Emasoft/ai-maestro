@@ -3,7 +3,7 @@ trdd-id: E9BZ5P7S
 title: The governance password is committed verbatim in 32 tracked files and one published plugin
 column: proposal
 created: 2026-07-10T06:05:03+0200
-updated: 2026-07-10T06:23:25+0200
+updated: 2026-07-10T06:47:10+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 assignee: null
@@ -33,6 +33,32 @@ external-refs: []
 **Blocked on the USER. Credential rotation is never an agent's action, and this cannot
 be fixed by an edit.** Nothing here has been changed. Read the whole page before touching
 any of the 32 files — a partial redaction is worse than none.
+
+### ⏵ UPDATE 2026-07-10T06:47 — VERIFIED: the committed literal is the live credential
+
+Every prior line on this page called it "the live governance password". That was an
+assumption inherited from `CLAUDE.md` and the scenario rules, never checked. It is now
+checked, and it holds:
+
+- `~/.aimaestro/governance.json` stores an **argon2id** hash, `passwordSetAt:
+  2026-03-29T15:06:28.604Z` — untouched for 3.5 months.
+- The literal committed in `tests/e2e/helpers.ts` **verifies against that hash.**
+
+Method, so it can be repeated without widening the exposure: read the constant out of
+the already-committed file into memory, compare it against the stored hash with
+`lib/argon2.ts::verifyPasswordAuto`, print one boolean. The literal is never echoed,
+logged, or written to a new file. `governance.json` was byte-compared before and after
+and is unchanged.
+
+**The trap that comparison avoided, which is a finding in its own right.** The obvious
+call, `lib/governance.ts::verifyPassword(plaintext)`, is **not a read**: on a successful
+verify against an outdated hash it re-hashes the plaintext and *rewrites*
+`governance.json`. An audit that used it would have silently mutated the credential store
+it was auditing — a verify-that-writes, the same shape as the get-or-CREATE accessor
+TRDD-YEE33F3A fixed. A doc comment now says so at the definition.
+
+So the severity on this page is CRITICAL by evidence, not by inference. Nothing else
+changes: rotation is still the USER's, and still the only step that reaches every copy.
 
 ### ⏵ UPDATE 2026-07-10T06:23 — the exposure is bigger than this page said, and it escaped the repo
 

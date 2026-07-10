@@ -1,10 +1,10 @@
 ---
 trdd-id: D3RP7KQZ
 title: An agent may drive its own surface, never reconfigure itself
-column: blocked
+column: human_review
 min-approval-requirement: manager
 created: 2026-07-09T16:42:56+0200
-updated: 2026-07-10T02:49:10+0200
+updated: 2026-07-10T09:12:23+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -17,8 +17,8 @@ derived: true
 derived-kind: eht
 npt: []
 eht: []
-blocked-by: [TRDD-4Q7WMPZK]
-pre-block-column: human_review
+blocked-by: []
+pre-block-column: null
 relevant-rules: []
 labels: [authorization, sudo-guard, agent-path, janitor]
 test-requirements: [unit]

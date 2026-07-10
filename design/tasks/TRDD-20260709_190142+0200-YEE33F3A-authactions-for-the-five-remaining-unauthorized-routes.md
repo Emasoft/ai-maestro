@@ -1,10 +1,10 @@
 ---
 trdd-id: YEE33F3A
 title: Decide the AuthActions for the five remaining unauthorized agent-scoped routes
-column: planned
+column: human_review
 min-approval-requirement: manager
 created: 2026-07-09T19:01:42+0200
-updated: 2026-07-10T03:19:24+0200
+updated: 2026-07-10T09:12:23+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -27,13 +27,39 @@ review-requirements: [human-review]
 runtime-targets: [macos, linux]
 impacts: [public-api]
 attempts: 5
-implementation-commits: [f56b79f2, 28593ed7, 505ae8c9, 1ad04ade, c8903197, 2fd32899, 03159944, 26c958c3, b4003e4f]
+implementation-commits: [f56b79f2, 28593ed7, 505ae8c9, 1ad04ade, c8903197, 2fd32899, 03159944, 26c958c3, b4003e4f, 2f4936f0]
 external-refs: []
 ---
 
 # TRDD-YEE33F3A — the five routes that need an AuthAction that does not exist
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
+
+**▶ 2026-07-10T09:12 — Parts 2 and 3 DECIDED (`2f4936f0`); everything this TRDD
+owns is done, `column: human_review`.** `amp-init` was never the policy question
+Part 2 posed: the route's own doc comment stated the contract ("Per-agent
+self-init is rejected") and the guard inverted it — `if (auth.agentId &&
+auth.agentId !== id)` fires everywhere EXCEPT self. Reading before fixing found a
+second hole the audit's table never listed: a model-ON non-maestro user principal
+({ userId, no agentId }) skipped the agentId-keyed guard entirely. Fix:
+`authorize('modify-agent')` (self ban + M1/U1 user denial + fail-closed) plus a
+tighten-only branch that narrows the matrix's COS-on-team grant back out — the
+documented owner-or-MANAGER contract, for the `export-agent` reason (key rotation
+is an identity operation). Falsified twice: pre-fix route → exactly the 3 closure
+tests fail; narrowing disabled → exactly the COS test fails. Part 3:
+`manage-amp-address` DELETED from the union — zero routes wired, all four address
+routes agree on `modify-agent`, and this TRDD's own decision log had already
+rejected the identical analogue (`manage-messages`). `UNREVIEWED_INVENTORY` is
+`[]`; the coverage regex learned `buildAuthContext(` so the `metadata` detector
+artifact resolved without touching the route. The parent audit 4Q7WMPZK's close
+condition is met.
+
+**What keeps this TRDD out of `complete`:** `review-requirements:
+[human-review]` — the six decisions under the mandate await the USER's eyes. The
+escalated Tier-2 question (does R6 bind a system-owner FORWARD whose declared
+sender is an agent?) also still awaits a MANAGER/USER answer; today's no-graph
+behaviour is pinned by `tests/unit/message-forward-r6-gate.test.ts` so the
+decision, when it lands, changes a test on purpose.**
 
 **▶ 2026-07-10T03:19 — XV4ANN4P is `complete` (`ad7970a4`), so `blocked-by:` is
 empty again.** This TRDD is a flock sibling, not a child. Two structural facts,
@@ -653,3 +679,14 @@ other agent's transcripts, and delete the messages its COS sent it.
   `modify-agent`; one endpoint removed outright). Exactly one new action was
   warranted in the whole TRDD: `export-agent`. A proposal that asks "which new
   capability should this have?" has already presupposed it needs one.
+- 2026-07-10 — `amp-init` (Part 2) → **self-remint DENIED; not a policy call.**
+  The route's own doc comment stated the contract and the guard inverted it, so
+  this was a bug fix within the mandate, not a new rule. Rewired through
+  `authorize('modify-agent')` + a tighten-only MANAGER narrowing, which also
+  closed an unlisted second hole: a model-ON non-maestro user principal skipped
+  the `auth.agentId`-keyed guard entirely. Falsified per layer. (`2f4936f0`)
+- 2026-07-10 — `manage-amp-address` (Part 3) → **DELETED.** Wired to zero
+  routes; all four address routes agree on `modify-agent`; the mailbox decision
+  above had already rejected the identical pattern. An action that exists only
+  in a test's SELF_FORBIDDEN list reads as coverage. Re-adding it means
+  migrating all four address routes at once. (`2f4936f0`)

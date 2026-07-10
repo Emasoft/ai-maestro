@@ -1,9 +1,9 @@
 ---
 trdd-id: 4Q7WMPZK
 title: Audit the ten agent-scoped mutation routes that authorize nothing
-column: dev
+column: completed
 created: 2026-07-09T17:51:47+0200
-updated: 2026-07-10T02:49:10+0200
+updated: 2026-07-10T09:12:23+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -30,7 +30,7 @@ review-requirements: []
 runtime-targets: [macos, linux]
 impacts: []
 attempts: 0
-implementation-commits: [c7d9f8a7, 4b1a9b48, 28593ed7, 6c905104, 505ae8c9, 1ad04ade, c8903197, 2fd32899, 03159944]
+implementation-commits: [c7d9f8a7, 4b1a9b48, 28593ed7, 6c905104, 505ae8c9, 1ad04ade, c8903197, 2fd32899, 03159944, 2f4936f0]
 external-refs: []
 ---
 
@@ -38,10 +38,22 @@ external-refs: []
 
 Derived (EHT) from TRDD-D3RP7KQZ. Tier 0: in-scope, own repo, tightening only.
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-09
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
 
-**All ten triaged. 8 fixed, 1 is a detector artifact, 1 needs a decision
-(`amp-init`).** Severity raised MEDIUM → **CRITICAL**: this was never a paperwork
+**▶ 2026-07-10T09:12 — CLOSED. All ten resolved; `UNREVIEWED_INVENTORY` is `[]`
+(`2f4936f0`).** The close condition this TRDD set for itself is met: YEE33F3A
+decided `amp-init` (self-remint denied — the route's own doc comment stated that
+contract and the guard inverted it; plus an unlisted second hole, the model-ON
+non-maestro user principal that skipped the `agentId`-keyed guard) and deleted
+the dead `manage-amp-address` action. The `metadata` entry resolved as the
+detector artifact it was: the coverage regex learned the `buildAuthContext(`
+spelling; the route was never touched. The guardrail now fails the build on any
+new agent-scoped mutating route that ships without an authorization step, with
+no debt ledger left to hide in. YEE33F3A itself sits in `human_review` — its
+decisions await the USER; that is its gate, not this audit's.
+
+**All ten triaged. 8 fixed, 1 was a detector artifact, 1 needed a decision
+(`amp-init`) — since decided in YEE33F3A.** Severity raised MEDIUM → **CRITICAL**: this was never a paperwork
 gap. The second route audited (`chat` POST) is a full bypass of the `send-command`
 matrix AND of sudo-mode, reachable by any agent, through the one endpoint nobody
 thought of as a control surface because it is called "chat".
@@ -306,9 +318,31 @@ an unauthenticated-in-practice route; the system-owner (web UI) is granted by
 `authorize()` outright, so a UI regression would mean the UI was calling the
 route AS an agent, which is itself worth knowing.
 
+## Approval log
+
+- 2026-07-09T17:51:47+0200 — MANDATE issued as a Tier-0 self-mandate
+  (min-approval-requirement: none, derived EHT of the D3RP7KQZ decision).
+  Pre-approved: issuer authority >= required approver. No approval request sent.
+- 2026-07-10T09:12:23+0200 — COMPLETED by ai-maestro-session. The TRDD's own
+  close condition is met: `UNREVIEWED_INVENTORY` reached `[]` (`2f4936f0`) —
+  `amp-init` decided in YEE33F3A (self-remint denied; the guard inverted the
+  route's own documented contract), `metadata` resolved as a detector artifact
+  (the coverage regex learned `buildAuthContext(`). test-requirements [unit]
+  green; review-requirements empty.
+
 ## Notes and lessons learned
 
 Fail-closed is worth little if nothing tells you a door was never fitted. The
 strict-route ledger (TRDD-6A2I6ZO0) and this one are the same idea applied twice:
 make the absence of a decision fail a test, because the absence of a decision does
 not fail anything on its own.
+
+A guard that authorizes the wrong POPULATION looks identical to a correct one in
+every review that reads only its happy path. `amp-init`'s check was "correct
+today" in the audit's own words — it denied the cross-agent attacker it was
+written against — while permitting the two callers nobody re-derived: the agent
+itself (`agentId === id` skipped the whole branch) and the model-ON ordinary
+user (`no agentId` skipped it too). The matrix exists so that every route
+inherits the denials nobody thinks to hand-roll; the lesson of this audit's
+last route is the same as its first: enumerate by PRINCIPAL, not by the one
+attacker the comment names.

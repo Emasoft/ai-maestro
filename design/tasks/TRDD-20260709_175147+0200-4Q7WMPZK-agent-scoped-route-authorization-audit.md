@@ -3,7 +3,7 @@ trdd-id: 4Q7WMPZK
 title: Audit the ten agent-scoped mutation routes that authorize nothing
 column: dev
 created: 2026-07-09T17:51:47+0200
-updated: 2026-07-10T01:36:00+0200
+updated: 2026-07-10T02:41:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -26,7 +26,7 @@ review-requirements: []
 runtime-targets: [macos, linux]
 impacts: []
 attempts: 0
-implementation-commits: [4b1a9b48, c7d9f8a7, 6c905104]
+implementation-commits: [c7d9f8a7, 4b1a9b48, 28593ed7, 6c905104, 505ae8c9, 1ad04ade, c8903197, 2fd32899, 03159944]
 external-refs: []
 ---
 
@@ -59,7 +59,7 @@ metadata]`; deciding `amp-init` empties it and closes this TRDD.
 | `export` | POST | `enforceAuth` | export ANY agent's full transcripts | **OPEN — confidentiality** |
 | `messages/[messageId]` | PATCH DELETE POST | ~~`authenticateFromRequest`, unused~~ → **mailbox ownership** | POST forwarded AS any agent (sender forgery + arbitrary mailbox read); PATCH/DELETE mutated any mailbox | **FIXED** `28593ed7` |
 | `email/addresses/[address]` | PATCH DELETE | ~~`enforceAuth`~~ → **`authorize('modify-agent')`** | mutate ANY agent's address book | **FIXED** `6c905104` |
-| `subconscious` | ~~POST~~ GET | ~~`enforceAuth`~~ → **POST DELETED; GET ownership** | POST drove NOTHING (400 for every input, 0 callers); GET had no auth and `getAgent()` constructs+evicts | **FIXED** `505ae8c9` |
+| `subconscious` | ~~POST~~ GET | ~~`enforceAuth`~~ → **POST DELETED; GET ownership** | POST drove NOTHING (400 for every input, 0 callers); GET had no auth and `getAgent()` constructs+evicts | **FIXED** `505ae8c9` + `03159944` |
 | `element-inventory` | POST | ~~`enforceAuth`~~ → **ledger ownership** | append forged snapshots to ANY agent's audit ledger | **FIXED** `1ad04ade` |
 | `metrics` | PATCH | ~~`enforceAuth`~~ → **ownership + input validation** | rewrite ANY agent's metrics; inject arbitrary registry keys; store a string into `estimatedCost` and crash that agent's profile tab | **FIXED** `c8903197` |
 
@@ -144,17 +144,65 @@ allowlist, so a forged event cannot inject arbitrary text nor run while subagent
 are provably alive. Residual impact is mid-turn timing of an ALREADY-authorized
 command, plus status spoofing to dashboard clients. MEDIUM, recorded not fixed.
 
-**NEXT ACTION:** none in this TRDD — the Tier-0 work is done. Everything left is
-policy and is carried by **TRDD-YEE33F3A** (`design/proposals/`, tier 2, awaiting
-the USER or MANAGER): the five routes needing new AuthActions, the `amp-init`
-self-remint question, and the dead `manage-amp-address` action. Do NOT invent
-those actions here.
+**NEXT ACTION:** none in this TRDD — the Tier-0 work is done (`03159944` closed
+the last of it: the construct-on-read the route-shaped audit had missed).
+Everything left is policy and is carried by **TRDD-YEE33F3A**
+(`design/proposals/`, tier 2, awaiting the USER or MANAGER): the five routes
+needing new AuthActions, the `amp-init` self-remint question, and the dead
+`manage-amp-address` action. Do NOT invent those actions here.
+
+**SUPERSEDED — do NOT carry forward.** An earlier revision of this line said "the
+Tier-0 work is done" while `getSubconsciousStatus`, `getSkillSettings`, and
+`saveSkillSettings` were all still calling the constructing accessor. Fixing a
+route's AUTH does not fix the primitive the route reaches.
 
 This TRDD closes when YEE33F3A is decided and its fixes land — at which point
 `UNREVIEWED_INVENTORY` reaches `[]` and the coverage guardrail alone keeps the
 surface honest.
 
+### The construct-on-read had spread past the route this audit found it on
+
+`505ae8c9` authorized the subconscious GET but left the primitive it guarded:
+`agentRegistry.getAgent()` is a **get-or-CREATE**. It never returns null; it
+`evictIfNeeded()`s (shutting down the LRU real Agent at the cap of 10), then
+constructs and `initialize()`s an Agent for any id — `cerebellum.start()` →
+subconscious `start()` → a config-change timer, a hostHints subscription, and an
+`mkdir` + `status.json` write under `~/.aimaestro/agents/<id>/`.
+
+Auditing by ROUTE could not see that the same call sat in **two more services**.
+Fixed in `03159944`:
+
+| Caller | Used the returned Agent? | Wanted | Now |
+|---|---|---|---|
+| `agent-startup.ts` | no — initializes it | the construct | unchanged (its ids are disk ∩ registry) |
+| `getSubconsciousStatus` | yes → `getSubconscious()` | a runtime read | file registry for existence + `getExistingAgent` for liveness |
+| `getSkillSettings` / `saveSkillSettings` | **never touched it** | an existence check | the file-registry `getAgent()` the siblings already used |
+
+Three lessons, each a rerun of one this audit already learned:
+
+- **A read accessor already existed** (`getExistingAgent`, Map.get + LRU touch).
+  Nothing had to be designed. The bug was never a missing capability.
+- **The comments described the intent, not the code.** NT-008 annotated the
+  skills call as needed "for runtime operations (subconscious access)" — those
+  functions never call `getSubconscious()`. SF-037 then wrote 20 lines of test
+  scaffolding explaining why two agent-lookup mocks were required and how
+  forgetting one caused "silent test failures". Both existed to serve a call that
+  did nothing. Deleted with it.
+- **`if (!agent) return 404` was dead in all three.** In skills that meant an
+  unknown or soft-deleted agent got a 200. The 404 is live for the first time.
+
+The sharpest version: `AgentSubconsciousIndicator` polls `GET …/subconscious`
+every 30s for the viewed agent. The endpoint that REPORTS whether a subconscious
+is running was the thing STARTING it, and evicting somebody else's to do it.
+`exists: true` / `initialized: true` were hardcoded because after the construct
+they could not have been anything else — a tautology dressed as a status field.
+
 **Load-bearing facts.**
+- `agentRegistry.getAgent()` (in-memory, `lib/agent.ts`) is get-or-CREATE and
+  never returns null. `getAgent()` (file registry, `lib/agent-registry.ts`) is a
+  read and returns `Agent | null`. Same name, opposite contracts, both in scope in
+  the same module. Existence questions belong to the file registry — it is the
+  source of truth, and an agent exists whether or not it is loaded.
 - `requireAuth` / `enforceAuth` AUTHENTICATE only. Neither authorizes. Treating
   "non-strict" as "no authorization needed" is what produced this bug; non-strict
   is a statement about the *sudo* gate and nothing else.

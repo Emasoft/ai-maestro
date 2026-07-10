@@ -343,6 +343,14 @@ give `B` two parents, silently break the invariant above, and re-introduce the d
 the rule exists to forbid. (This is not hypothetical: TRDD-WNZ72SFO carried
 `npt: [TRDD-QC8R79G5]` for its sibling until this rule caught it.)
 
+**A derived TRDD is still gated by its own effects — through `blocked-by:`.** When
+derived TRDD *B* opens a hole, the platelet *C* that closes it is registered in the
+**parent's** `eht:` (because `B.eht` must stay empty), and *B* lists *C* in
+`B.blocked-by`. *B* then cannot reach `complete` while *C* is open, exactly as if
+*C* were its child. The gate is unchanged; only the field carrying it moves. The
+**parent** owns the derivation (who spawned whom); each **member** owns its own
+ordering (who waits on whom); no edge crosses a generation.
+
 #### A parent is COMPLETE only when its whole flock is — else it is BLOCKED (USER, 2026-07-10)
 
 **A TRDD with any derived TRDD still under development is not complete. It is

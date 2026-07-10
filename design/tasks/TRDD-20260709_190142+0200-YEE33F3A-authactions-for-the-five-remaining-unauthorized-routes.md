@@ -4,7 +4,7 @@ title: Decide the AuthActions for the five remaining unauthorized agent-scoped r
 column: planned
 min-approval-requirement: manager
 created: 2026-07-09T19:01:42+0200
-updated: 2026-07-10T02:23:26+0200
+updated: 2026-07-10T03:00:06+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -17,7 +17,7 @@ derived: true
 derived-kind: eht
 npt: []
 eht: []
-blocked-by: []
+blocked-by: [TRDD-XV4ANN4P]
 supersedes: []
 superseded-by: []
 relevant-rules: []
@@ -34,6 +34,21 @@ external-refs: []
 # TRDD-YEE33F3A — the five routes that need an AuthAction that does not exist
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-10
+
+**▶ 2026-07-10T03:00 — `blocked-by: [TRDD-XV4ANN4P]`, and this TRDD is now a flock
+sibling, not a child.** Two structural facts, both from today's USER rules:
+
+- Under depth-1, this TRDD (`derived: true`) may not carry an `eht:` of its own, so
+  the platelet for follow-up 1's Phase-2 wiring — **XV4ANN4P**, the untested
+  receiving-host R6 check that the wiring makes load-bearing — is registered on the
+  **parent** `TRDD-SCLSRS6E`. The gate that would have been `eht:` is carried here
+  by `blocked-by:` instead: this TRDD cannot reach `complete` until XV4ANN4P closes.
+- `parent-trdd:` moved from `TRDD-4Q7WMPZK` (itself derived) to `TRDD-SCLSRS6E`, the
+  nearest non-derived ancestor. Prose lineage, since the graph no longer holds it:
+  this TRDD is an effect of 4Q7WMPZK's audit.
+
+XV4ANN4P also records the two **verified non-effects** of the wiring (both message
+centers already render the 403 reason; no CLI forwards), so nobody re-derives them.
 
 **All 5 routes are FIXED. Five for five were mis-triaged in the body below,
 because every one was triaged from the route's NAME rather than its service.**

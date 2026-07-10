@@ -373,6 +373,15 @@ in the new TRDD's STATE block ("this is an effect of *B*'s fix, commit `<sha>`")
 A finite, decidable flock plus one prose sentence beats an exact tree nobody can
 enumerate.
 
+**So how is a derived TRDD gated by its own effects?** By `blocked-by:`, which is
+the whole reason the runtime edge exists. A derived TRDD *B* that opens a hole
+gets a new sibling *C* covering it — registered in the **parent's** `eht:`, since
+`B.eht` must stay empty — and *B* lists `C` in `B.blocked-by`. *B* then cannot
+reach `complete` while *C* is open, exactly as if *C* were its child. The
+completion gate is unchanged; only the field carrying it moves. Read together:
+the **parent** owns the derivation (who spawned whom), each **member** owns its
+own ordering (who waits on whom), and no edge crosses a generation.
+
 ## The 8-char id reference syntax
 
 Every TRDD's `trdd-id` IS its canonical short form — an 8-char UPPERCASE

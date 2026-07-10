@@ -225,14 +225,42 @@ export function setFrontmatterField(content: string, field: string, value: strin
   return lines.join('\n')
 }
 
-/** Append one `## Approval log` entry (the log is the last section by convention). */
+/**
+ * Append one entry to the `## Approval log` section, creating the section at EOF
+ * when it does not exist.
+ *
+ * The log is the LAST section by convention, but convention is not a guarantee:
+ * a TRDD may carry `## Notes and lessons learned` after it, and at least one in
+ * this corpus does. Appending at end-of-file would then file the approval entry
+ * under whatever section happens to be last — silently, since both are prose. So
+ * the entry is inserted at the end of the log's OWN section (before the next `## `
+ * heading), after its last non-blank line so the blank separator survives.
+ */
 export function appendApprovalLog(content: string, logLine: string): string {
   const marker = '## Approval log'
-  const sep = content.endsWith('\n') ? '' : '\n'
-  if (content.includes(marker)) {
-    return `${content}${sep}${logLine}\n`
+  const lines = content.split('\n')
+  const start = lines.findIndex(l => l.trimEnd() === marker)
+
+  if (start === -1) {
+    const sep = content.endsWith('\n') ? '' : '\n'
+    return `${content}${sep}\n${marker}\n\n${logLine}\n`
   }
-  return `${content}${sep}\n${marker}\n\n${logLine}\n`
+
+  // The section ends at the next `## ` heading, or at EOF.
+  let end = lines.length
+  for (let i = start + 1; i < lines.length; i++) {
+    if (lines[i].startsWith('## ')) {
+      end = i
+      break
+    }
+  }
+  // Back up over the section's trailing blank lines so the entry lands directly
+  // under the last existing entry rather than after the separator.
+  let insertAt = end
+  while (insertAt > start + 1 && lines[insertAt - 1].trim() === '') insertAt--
+
+  lines.splice(insertAt, 0, logLine)
+  return lines.join('\n')
 }
 
 // ── mutations ────────────────────────────────────────────────────────────────

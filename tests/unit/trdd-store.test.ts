@@ -143,6 +143,49 @@ describe('trdd-store pure writers preserve the grep-first format', () => {
     expect(created).toContain('## Approval log')
     expect(created).toContain('- line one')
   })
+
+  it('appendApprovalLog keeps the entry INSIDE its section when the log is not last', () => {
+    // The log is the last section "by convention" — but at least one TRDD in the
+    // real corpus carries `## Notes and lessons learned` after it. Appending at
+    // end-of-file would file an approval entry under the notes, silently, since
+    // both sections are prose. Every lifecycle verb (promote/refuse/advance/
+    // archive) routes through here, so the mistake would be corpus-wide.
+    const content = [
+      'body',
+      '',
+      '## Approval log',
+      '',
+      '- 2026-01-01 — OLD ENTRY.',
+      '',
+      '## Notes and lessons learned',
+      '',
+      '[^1]: the why',
+      '',
+    ].join('\n')
+
+    const out = appendApprovalLog(content, '- 2026-07-10 — NEW ENTRY.')
+
+    // Presence before order — `indexOf(a) < indexOf(b)` passes when a is absent (-1 < n).
+    expect(out).toContain('- 2026-07-10 — NEW ENTRY.')
+    expect(out).toContain('## Notes and lessons learned')
+    expect(out).toContain('- 2026-01-01 — OLD ENTRY.')
+
+    expect(out.indexOf('- 2026-01-01 — OLD ENTRY.')).toBeLessThan(out.indexOf('- 2026-07-10 — NEW ENTRY.'))
+    expect(out.indexOf('- 2026-07-10 — NEW ENTRY.')).toBeLessThan(out.indexOf('## Notes and lessons learned'))
+
+    // the notes section is carried through untouched, footnote and all
+    expect(out).toContain('[^1]: the why')
+    // and the blank separator before the next heading survives
+    expect(out).toContain('- 2026-07-10 — NEW ENTRY.\n\n## Notes and lessons learned')
+  })
+
+  it('appendApprovalLog handles a header with no entries yet, followed by another section', () => {
+    const content = 'body\n\n## Approval log\n\n## Notes and lessons learned\n\nnote\n'
+    const out = appendApprovalLog(content, '- first')
+    expect(out).toContain('## Approval log\n- first')
+    expect(out.indexOf('- first')).toBeLessThan(out.indexOf('## Notes and lessons learned'))
+    expect(out).toContain('note')
+  })
 })
 
 describe('trdd-store lifecycle transitions', () => {

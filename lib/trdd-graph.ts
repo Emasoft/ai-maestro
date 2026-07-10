@@ -1,0 +1,269 @@
+/**
+ * TRDD corpus graph — the structural invariants of the derived-TRDD model.
+ *
+ * The rules live in `rules/aimaestro/aimaestro-trdd-approval.md` (§ "A derived
+ * TRDD has no derived TRDDs", § "A parent is COMPLETE only when its whole flock
+ * is", § D4 "The classification watchdog"). They are stated there as things a
+ * watchdog can check "with two greps, no LLM". This module is those greps, typed.
+ *
+ * Two edges look alike and are not:
+ *   - `npt:` / `eht:` are DERIVATION edges — "I spawned this". They establish
+ *     parenthood, so a TRDD has at most one parent, and a derived TRDD carries no
+ *     children of its own (depth is exactly 1).
+ *   - `blocked-by:` is a RUNTIME edge — "I cannot proceed until this resolves".
+ *     It establishes nothing, and it lists only OPEN blockers.
+ *
+ * Conflating the two is the bug this module exists to catch: on 2026-07-10 five
+ * siblings each named the same shared platelet in their own `eht:`, giving one
+ * child six parents, and two top-level TRDDs each named the other as its child,
+ * giving a cycle. Both were dependencies drawn as derivations.
+ *
+ * A node is checked only once it declares `derived:`. That flag is not cosmetic —
+ * `depth1`, `unclaimed`, `kindMismatch` and `parentMismatch` are all gated on it,
+ * so a TRDD without it is claimed but unguarded. Adding it is migrate-on-touch.
+ */
+import { TRDD_ZONES, listTrddFiles, parseTrddFile, type ParsedTrdd, type TrddZone } from '@/lib/trdd-store'
+
+/** Columns the flock gate treats as done (IND base: complete|published|live|superseded). */
+export const TERMINAL_DONE: ReadonlySet<string> = new Set([
+  'complete',
+  'completed',
+  'published',
+  'live',
+  'superseded',
+])
+
+export interface TrddNode {
+  id: string
+  zone: TrddZone
+  filePath: string
+  column: string
+  derived: boolean
+  hasDerivedField: boolean
+  derivedKind: string | null
+  parent: string | null
+  npt: string[]
+  eht: string[]
+  blockedBy: string[]
+}
+
+export type ViolationKind =
+  | 'depth1'
+  | 'parentIsDerived'
+  | 'unclaimed'
+  | 'twoParents'
+  | 'cycle'
+  | 'kindMismatch'
+  | 'parentMismatch'
+  | 'childMissing'
+  | 'childDerivedFalse'
+  | 'falseComplete'
+  | 'blockedNotBlocked'
+  | 'danglingBlocker'
+  | 'unknownBlocker'
+
+export interface TrddViolation {
+  kind: ViolationKind
+  id: string
+  detail: string
+}
+
+/**
+ * The join key across every TRDD reference is the 8-char PREFIX, not the whole
+ * `trdd-id:`. The corpus mixes v1 full-UUID ids (`903b7a20-bddf-4368-…`) with v2
+ * 8-char base36 ids, and every cross-reference cites the first eight characters.
+ * Matching on the full id invents missing children that are sitting right there.
+ */
+export function normalizeTrddRef(ref: unknown): string {
+  return String(ref).trim().replace(/^TRDD-/i, '').toUpperCase().slice(0, 8)
+}
+
+function refList(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map(normalizeTrddRef).filter(Boolean)
+  // A single bare scalar (`npt: TRDD-X`) is a lone reference, not a list.
+  if (typeof v === 'string' && v.trim() && v.trim() !== 'null') return [normalizeTrddRef(v)]
+  return []
+}
+
+function optionalRef(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const s = v.trim()
+  if (!s || s === 'null') return null
+  return normalizeTrddRef(s)
+}
+
+/**
+ * v1 TRDDs predate `column:` and carry a six-value `status:` instead. The IND base
+ * says tools accept both and apply this mapping read-only. Without it a v1 file
+ * reads as column `''`, which is in neither TERMINAL_DONE nor `blocked` — so the
+ * day a v1 TRDD becomes someone's child, its parent would be reported as a false
+ * completion for a child that finished years ago.
+ */
+const V1_STATUS_TO_COLUMN: Readonly<Record<string, string>> = {
+  'not-started': 'backburner',
+  'in-progress': 'dev',
+  completed: 'complete',
+  failed: 'failed',
+  blocked: 'blocked',
+  superseded: 'superseded',
+}
+
+/**
+ * A parsed TRDD becomes a graph node only if it carries frontmatter. Seven
+ * pre-frontmatter v0 files keep their id in a `**TRDD ID:**` body line and have no
+ * fields to check. They are deliberately absent from the graph, so a parent that
+ * names one is reported as `childMissing` — the right alarm, not silence.
+ */
+export function toGraphNode(t: ParsedTrdd): TrddNode | null {
+  const fm = t.frontmatter
+  if (!('trdd-id' in fm)) return null
+  const status = typeof fm.status === 'string' ? fm.status : ''
+  return {
+    id: t.id,
+    zone: t.zone,
+    filePath: t.filePath,
+    column: t.column || V1_STATUS_TO_COLUMN[status] || '',
+    derived: fm.derived === true,
+    hasDerivedField: 'derived' in fm,
+    derivedKind: typeof fm['derived-kind'] === 'string' ? fm['derived-kind'] : null,
+    parent: optionalRef(fm['parent-trdd']),
+    npt: refList(fm.npt),
+    eht: refList(fm.eht),
+    blockedBy: refList(fm['blocked-by']),
+  }
+}
+
+/** Every frontmatter-bearing TRDD across all four zones. */
+export function loadTrddGraph(designDir: string): TrddNode[] {
+  const nodes: TrddNode[] = []
+  for (const zone of TRDD_ZONES) {
+    for (const file of listTrddFiles(designDir, zone)) {
+      const parsed = parseTrddFile(file, zone)
+      if (!parsed) continue
+      const node = toGraphNode(parsed)
+      if (node) nodes.push(node)
+    }
+  }
+  return nodes
+}
+
+interface Claim {
+  parent: string
+  kind: 'npt' | 'eht'
+}
+
+export function checkTrddInvariants(nodes: TrddNode[]): TrddViolation[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const v: TrddViolation[] = []
+
+  // Who names whom as a child.
+  const claims = new Map<string, Claim[]>()
+  for (const n of nodes) {
+    for (const c of n.npt) claims.set(c, [...(claims.get(c) ?? []), { parent: n.id, kind: 'npt' }])
+    for (const c of n.eht) claims.set(c, [...(claims.get(c) ?? []), { parent: n.id, kind: 'eht' }])
+  }
+
+  for (const n of nodes) {
+    // Depth is exactly 1: a derived TRDD ships its own changes or is accompanied
+    // by SIBLINGS under the same parent. Without this the flock is unbounded and
+    // the parent's completion gate recurses forever.
+    if (n.derived && (n.npt.length || n.eht.length)) {
+      v.push({ kind: 'depth1', id: n.id, detail: `derived, yet npt=[${n.npt}] eht=[${n.eht}]` })
+    }
+
+    if (n.parent) {
+      const p = byId.get(n.parent)
+      if (!p) v.push({ kind: 'childMissing', id: n.id, detail: `parent-trdd ${n.parent} not found` })
+      else if (p.derived) v.push({ kind: 'parentIsDerived', id: n.id, detail: `parent ${n.parent} is itself derived` })
+    }
+
+    // One parent. A child claimed by two or more is the shared-dependency-drawn-
+    // as-a-derivation mistake; a cycle is its degenerate two-node case.
+    const cs = claims.get(n.id) ?? []
+    if (cs.length > 1) {
+      v.push({ kind: 'twoParents', id: n.id, detail: `claimed by ${cs.map((c) => `${c.parent}:${c.kind}`).join(', ')}` })
+    }
+    for (const c of cs) {
+      if (n.npt.includes(c.parent) || n.eht.includes(c.parent)) {
+        v.push({ kind: 'cycle', id: n.id, detail: `${n.id} and ${c.parent} each claim the other as a child` })
+      }
+    }
+
+    if (n.derived) {
+      if (cs.length === 0) {
+        v.push({ kind: 'unclaimed', id: n.id, detail: 'declares derived, but no parent lists it' })
+      } else if (cs.length === 1) {
+        const [c] = cs
+        if (n.derivedKind && n.derivedKind !== c.kind) {
+          v.push({ kind: 'kindMismatch', id: n.id, detail: `says ${n.derivedKind}, ${c.parent} lists it under ${c.kind}` })
+        }
+        if (n.parent !== c.parent) {
+          v.push({ kind: 'parentMismatch', id: n.id, detail: `parent-trdd=${n.parent}, but claimed by ${c.parent}` })
+        }
+      }
+    }
+
+    for (const kind of ['npt', 'eht'] as const) {
+      for (const c of n[kind]) {
+        const child = byId.get(c)
+        if (!child) v.push({ kind: 'childMissing', id: n.id, detail: `${kind} names ${c}, which does not exist` })
+        else if (child.hasDerivedField && !child.derived) {
+          v.push({ kind: 'childDerivedFalse', id: n.id, detail: `${kind} names ${c}, which says derived: false` })
+        }
+      }
+    }
+
+    // The flock gate: a terminal parent whose child is still open has not finished
+    // — it shipped a change and left the hole it opened. Its honest column is
+    // `blocked`, on itself. A non-terminal parent claims nothing, so it is exempt.
+    if (TERMINAL_DONE.has(n.column)) {
+      const open = [...n.npt, ...n.eht].filter((c) => {
+        const k = byId.get(c)
+        return k && !TERMINAL_DONE.has(k.column)
+      })
+      if (open.length) v.push({ kind: 'falseComplete', id: n.id, detail: `column=${n.column} with open children: ${open}` })
+    }
+
+    if (n.blockedBy.length) {
+      if (!TERMINAL_DONE.has(n.column) && n.column !== 'blocked') {
+        v.push({ kind: 'blockedNotBlocked', id: n.id, detail: `column=${n.column} with blocked-by=[${n.blockedBy}]` })
+      }
+      for (const b of n.blockedBy) {
+        const bd = byId.get(b)
+        if (!bd) v.push({ kind: 'unknownBlocker', id: n.id, detail: `blocked-by ${b}, which does not exist` })
+        else if (TERMINAL_DONE.has(bd.column)) {
+          v.push({ kind: 'danglingBlocker', id: n.id, detail: `blocked-by ${b}, which is ${bd.column} — stale` })
+        }
+      }
+    }
+  }
+
+  return v
+}
+
+export interface BacklogEntry {
+  id: string
+  claimedBy: string
+}
+
+/**
+ * Claimed children that have not declared `derived:` yet. NOT a violation — the
+ * field postdates most of the corpus, and the policy is migrate-on-touch. Surfaced
+ * so the backlog is visible without failing anyone's build.
+ */
+export function migrationBacklog(nodes: TrddNode[]): BacklogEntry[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const seen = new Set<string>()
+  const out: BacklogEntry[] = []
+  for (const n of nodes) {
+    for (const kind of ['npt', 'eht'] as const) {
+      for (const c of n[kind]) {
+        const child = byId.get(c)
+        if (!child || child.hasDerivedField || seen.has(c)) continue
+        seen.add(c)
+        out.push({ id: c, claimedBy: `${n.id}.${kind}` })
+      }
+    }
+  }
+  return out
+}

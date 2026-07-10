@@ -3,7 +3,7 @@ trdd-id: 229CJGYH
 title: HTML side-panel subsystem for visualizer plugins with open close refresh and feedback callback
 column: complete
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-09T15:58:00+0200
+updated: 2026-07-10T04:20:51+0200
 implementation-commits: [230ea125]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -13,8 +13,10 @@ effort: L
 task-type: feature
 release-via: none
 parent-trdd: TRDD-SCLSRS6E
+derived: true
+derived-kind: npt
 npt: []
-eht: [TRDD-280DF70U]
+eht: []
 relevant-rules: []
 labels: [side-panel, html, visual-communicator, websocket, api, g4]
 test-requirements: [unit, integration, dev-browser-headless]
@@ -24,6 +26,16 @@ external-refs: ["campaign gate G4 in TRDD-903b7a20"]
 ---
 
 # TRDD-229CJGYH — HTML side-panel subsystem (campaign gate G4)
+
+> **Graph correction 2026-07-10 (corpus sweep).** This TRDD's `eht:` named
+> TRDD-280DF70U, the shared script-wrapper platelet. But an `npt:`/`eht:` edge
+> declares *parenthood*, and 280DF70U has exactly one parent — the epic
+> TRDD-SCLSRS6E, which still claims it. Five siblings named the same platelet, so
+> the one-parent law read it as five parents. What the edge really said is "the
+> panel needs a wrapper script" — a dependency on a sibling, which belongs in
+> `blocked-by:`. Moot now: 280DF70U is complete, and `blocked-by:` carries only
+> OPEN blockers. This TRDD is itself an NPT of the epic; a derived TRDD carries no
+> children of its own (depth is exactly 1).
 
 Build a new dashboard side panel that visualizer plugins (visual-communicator /
 webdesign) can push live HTML into, open/close/refresh remotely, and receive

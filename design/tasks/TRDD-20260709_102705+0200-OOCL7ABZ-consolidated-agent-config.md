@@ -3,7 +3,7 @@ trdd-id: OOCL7ABZ
 title: Consolidated agent-config endpoint with teams, normalized github repo, docker detection, tasks, AID
 column: complete
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-09T15:58:00+0200
+updated: 2026-07-10T04:20:51+0200
 implementation-commits: [04676a37]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -13,8 +13,10 @@ effort: M
 task-type: feature
 release-via: none
 parent-trdd: TRDD-SCLSRS6E
+derived: true
+derived-kind: npt
 npt: []
-eht: [TRDD-280DF70U]
+eht: []
 relevant-rules: []
 labels: [agent-config, teams, github, docker, tasks, api]
 test-requirements: [unit, integration]
@@ -24,6 +26,16 @@ external-refs: []
 ---
 
 # TRDD-OOCL7ABZ — Consolidated agent-config endpoint
+
+> **Graph correction 2026-07-10 (corpus sweep).** This TRDD's `eht:` named
+> TRDD-280DF70U, the shared script-wrapper platelet. But an `npt:`/`eht:` edge
+> declares *parenthood*, and 280DF70U has exactly one parent — the epic
+> TRDD-SCLSRS6E, which still claims it. Five siblings named the same platelet, so
+> the one-parent law read it as five parents. What the edge really said is "this
+> endpoint needs a wrapper" — a dependency on a sibling, which belongs in
+> `blocked-by:`. Moot now: 280DF70U is complete, and `blocked-by:` carries only
+> OPEN blockers. This TRDD is itself an NPT of the epic; a derived TRDD carries no
+> children of its own (depth is exactly 1).
 
 Give governance agents ONE endpoint that returns an agent's full operating context —
 base config, resolved team membership, a normalized GitHub repo identity, whether the

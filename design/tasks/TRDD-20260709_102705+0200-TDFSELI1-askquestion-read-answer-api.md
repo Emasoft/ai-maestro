@@ -3,7 +3,7 @@ trdd-id: TDFSELI1
 title: Read and answer AskQuestion and permission prompts via API
 column: complete
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-09T15:58:00+0200
+updated: 2026-07-10T04:20:51+0200
 implementation-commits: [f401728d]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -13,8 +13,10 @@ effort: M
 task-type: feature
 release-via: none
 parent-trdd: TRDD-SCLSRS6E
-npt: [TRDD-GT0TAJFL]
-eht: [TRDD-280DF70U]
+derived: true
+derived-kind: npt
+npt: []
+eht: []
 relevant-rules: []
 labels: [askquestion, permission, terminal-control, api, hook]
 test-requirements: [unit, integration]
@@ -24,6 +26,16 @@ external-refs: []
 ---
 
 # TRDD-TDFSELI1 — AskQuestion/permission read+answer API
+
+> **Graph correction 2026-07-10 (corpus sweep).** This TRDD claimed two children
+> it does not have: `eht: [TRDD-280DF70U]` and `npt: [TRDD-GT0TAJFL]`. Both are
+> siblings — the epic TRDD-SCLSRS6E is the sole parent of each, and still claims
+> them. An `npt:`/`eht:` edge declares parenthood; a *dependency* on a sibling
+> belongs in `blocked-by:`. Both edges expressed real ordering (this API needs the
+> script wrappers, and its capture half needs the hook change in GT0TAJFL) and both
+> are moot now that GT0TAJFL and 280DF70U are complete — `blocked-by:` carries only
+> OPEN blockers. This TRDD is itself an NPT of the epic; a derived TRDD carries no
+> children of its own (depth is exactly 1).
 
 Expose the hook's already-captured permission-prompt data (tool name, description,
 selectable options) through the API, and add a way to answer a pending prompt by

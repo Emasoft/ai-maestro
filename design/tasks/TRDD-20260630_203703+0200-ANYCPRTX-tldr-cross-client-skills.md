@@ -3,7 +3,7 @@ trdd-id: ANYCPRTX
 title: Author cross-client tldr-code+fastedit skill variants for all CLI ai-code clients
 column: complete
 created: 2026-06-30T20:37:03+0200
-updated: 2026-07-01T16:16:00+0200
+updated: 2026-07-10T04:20:51+0200
 implementation-commits: [a5909778]
 current-owner: main
 assignee: main
@@ -12,8 +12,10 @@ severity: LOW
 effort: L
 labels: [tooling, skills, cross-client, code-analysis]
 task-type: feature
-parent-trdd: null
-npt: [TRDD-ZFHY7UGU]
+parent-trdd: TRDD-ZFHY7UGU
+derived: true
+derived-kind: eht
+npt: []
 eht: []
 relevant-rules: []
 release-via: none
@@ -27,6 +29,16 @@ external-refs: ["github.com/parcadei/tldr-code", "github.com/parcadei/fastedit"]
 ---
 
 # TRDD-ANYCPRTX — Cross-client variants of the unified tldr-code+fastedit skill
+
+> **Graph correction 2026-07-10 (corpus sweep).** This TRDD declared
+> `npt: [TRDD-ZFHY7UGU]` while ZFHY7UGU declared `eht: [TRDD-ANYCPRTX]` — each
+> claiming the other as its child, which is a cycle. Both statements were true as
+> *ordering* ("this needs the four tools installed"; "shipping the tools obliges a
+> per-client skill"), and ordering is not derivation. ZFHY7UGU is the parent: its
+> own Open-questions section already calls this TRDD "EHT TRDD-ANYCPRTX", and this
+> work exists *because* the tools became official deps. So `parent-trdd` is now
+> ZFHY7UGU, this is its EHT, and the npt edge is gone. The prerequisite it stood
+> for needs no separate edge — an effect follows its cause.
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-06-30
 
@@ -42,8 +54,11 @@ external-refs: ["github.com/parcadei/tldr-code", "github.com/parcadei/fastedit"]
   Follow-ups (out of scope, documented): verify exact per-client skill frontmatter/
   load-path against each client's docs; optional converter-path DRY migration needs
   the skill added to ai-maestro-plugin (separate repo).
-- **Depends on (NPT):** TRDD-ZFHY7UGU (the 4 tools installed as deps on the client
-  machine: tldr-code, **fastedit**, lean-ctx, distill).
+- **Parent (this is an EHT of):** TRDD-ZFHY7UGU — which installed the 4 tools as
+  deps on the client machine (tldr-code, **fastedit**, lean-ctx, distill). Making
+  them official deps is what obliges a per-client skill; that is the effect this
+  TRDD handles. (Until 2026-07-10 this line read "Depends on (NPT)", and the
+  frontmatter matched — see the graph-correction note above.)
 - **Origin:** ai-maestro runs ANY CLI ai-code client. The 4 tools are
   client-agnostic CLIs; the SKILL that teaches INTENTIONAL use must exist in each
   client's skill/instruction format. The canonical skill is the UNIFIED

@@ -3,7 +3,7 @@ trdd-id: 41FJM8A8
 title: Server-side persistent command queue for fire-when-idle and fire-when-woken agent commands
 column: complete
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-09T15:58:00+0200
+updated: 2026-07-10T04:20:51+0200
 implementation-commits: [e292afbc]
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
@@ -13,8 +13,10 @@ effort: L
 task-type: feature
 release-via: none
 parent-trdd: TRDD-SCLSRS6E
+derived: true
+derived-kind: npt
 npt: []
-eht: [TRDD-280DF70U]
+eht: []
 relevant-rules: []
 labels: [command-queue, terminal-control, hibernation, api, script-layer]
 test-requirements: [unit, integration]
@@ -24,6 +26,16 @@ external-refs: []
 ---
 
 # TRDD-41FJM8A8 — Server-side persistent command queue
+
+> **Graph correction 2026-07-10 (corpus sweep).** This TRDD's `eht:` named
+> TRDD-280DF70U, the shared script-wrapper platelet. But an `npt:`/`eht:` edge
+> declares *parenthood*, and 280DF70U has exactly one parent — the epic
+> TRDD-SCLSRS6E, which still claims it. Five siblings named the same platelet, so
+> the one-parent law read it as five parents. What the edge really said is "this
+> subsystem's endpoints need wrappers" — a dependency on a sibling, which belongs
+> in `blocked-by:`. Moot now: 280DF70U is complete, and `blocked-by:` carries only
+> OPEN blockers. This TRDD is itself an NPT of the epic; a derived TRDD carries no
+> children of its own (depth is exactly 1).
 
 Build a server-side, persistent, generic command queue so any governance agent (the
 janitor, MANAGER, etc.) can enqueue a command for a target agent and have it fire

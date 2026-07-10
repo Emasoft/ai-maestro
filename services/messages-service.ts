@@ -34,6 +34,7 @@ import {
 } from '@/lib/messageQueue'
 import type { MessageSummary } from '@/lib/messageQueue'
 import { forwardFromUI } from '@/lib/message-send'
+import { MessageRouteDenied } from '@/lib/message-route-gate'
 import { searchAgents } from '@/lib/agent-registry'
 import { getSelfHostId, getSelfHost } from '@/lib/hosts-config'
 import {
@@ -445,6 +446,9 @@ export async function forwardMessage(params: ForwardMessageParams): Promise<Serv
       toAgent: toSession,
       forwardNote: forwardNote || undefined,
       providedOriginalMessage: originalMessage || undefined,
+      // Carries the caller's identity into the R6 gate. A system-owner keeps
+      // today's no-graph behaviour; an agent caller is now checked.
+      authContext,
     })
 
     return {
@@ -460,6 +464,11 @@ export async function forwardMessage(params: ForwardMessageParams): Promise<Serv
       status: 200,
     }
   } catch (error) {
+    // A governance refusal is a decision, not a crash — see the same mapping in
+    // agents-messaging-service. 500 would invite a retry that can never succeed.
+    if (error instanceof MessageRouteDenied) {
+      return { error: error.message, status: 403 }
+    }
     console.error('Error forwarding message:', error)
     return {
       error: error instanceof Error ? error.message : 'Failed to forward message',

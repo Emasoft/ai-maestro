@@ -31,9 +31,19 @@
  * (`send-message-service.ts:281`), so a rule keyed on "unresolved" would let a
  * typo'd local name through on the theory that some other host will catch it. No
  * host will: nothing is there. Remote is therefore keyed on an explicit
- * `name@hostId` whose host is not us — the same predicate `amp-service` uses
- * (`resolvedHostId && !isSelf(resolvedHostId)`). A local name that resolves to
- * nothing keeps its `'unknown'` title and the graph refuses it, as it does today.
+ * `name@hostId` whose host is not us — like `amp-service`'s
+ * `resolvedHostId && !isSelf(resolvedHostId)`.
+ *
+ * With one guard `amp-service` gets for free and we do not. It resolves the
+ * suffix through the AMP address parser before comparing hosts; the AIO's `to` is
+ * split naively on `@` (`send-message-service.ts:287`). So a suffix that is not a
+ * hostId at all — an AMP tenant address such as `alice@default.local`, or a typo —
+ * is not `isSelf`, and "not self" alone would call it remote and SKIP the graph.
+ * That would turn this gate into the bypass it exists to close. A remote recipient
+ * therefore also has to name a host we actually have in `hosts.json`
+ * (`findHostByAnyIdentifier`). An unknown suffix is not remote: it keeps its
+ * `'unknown'` title and the graph refuses it. Fail closed, as `amp-service` itself
+ * does when a resolved host is absent from config (`amp-service.ts:1132`).
  *
  * ── Why `'unknown'` is refused rather than fail-closed to `member` ────────────
  *
@@ -47,7 +57,7 @@
  */
 
 import { validateMessageRoute, getAllowedRecipients, isValidRole } from '@/lib/communication-graph'
-import { isSelf } from '@/lib/hosts-config'
+import { isSelf, findHostByAnyIdentifier } from '@/lib/hosts-config'
 import type { UserTitle } from '@/types/user'
 
 /** Reasons a route can be refused. Callers map these onto transport-specific errors. */
@@ -58,6 +68,23 @@ export type RouteGateCode =
   | 'title_communication_forbidden'
   /** The graph could not be consulted. Fail CLOSED — never pass through. */
   | 'graph_check_unavailable'
+  /** The caller supplied no auth context, so no sender identity could be trusted. */
+  | 'forbidden_no_auth_context'
+
+/**
+ * Thrown by callers that signal failure with exceptions rather than a result
+ * object (`forwardFromUI`). It exists so a service can answer **403** instead of
+ * the 500 a bare `Error` gets: a governance refusal is a decision, not a crash,
+ * and the two must not look alike to the caller or to the operator reading logs.
+ */
+export class MessageRouteDenied extends Error {
+  readonly code: RouteGateCode
+  constructor(code: RouteGateCode, message: string) {
+    super(message)
+    this.name = 'MessageRouteDenied'
+    this.code = code
+  }
+}
 
 export interface RouteGateRecipient {
   /**
@@ -93,9 +120,16 @@ export interface RouteGateResult {
   ops: string[]
 }
 
-/** A qualified name pointing at a host that is not this one. */
+/**
+ * A qualified name pointing at a CONFIGURED host that is not this one.
+ *
+ * The `findHostByAnyIdentifier` clause is load-bearing, not defensive: without it
+ * any unrecognised `@suffix` (an AMP tenant, a typo) is "not self" and would be
+ * waved through the graph on the false promise that some other host will check it.
+ */
 export function isRemoteRecipient(hostId: string | null | undefined): boolean {
-  return !!hostId && !isSelf(hostId)
+  if (!hostId || isSelf(hostId)) return false
+  return !!findHostByAnyIdentifier(hostId)
 }
 
 /**

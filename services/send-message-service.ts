@@ -280,6 +280,11 @@ export async function SendMessage(
     // ── G05: Resolve recipient agent ──────────────────────────
     let recipientTitle = 'unknown'
     let recipientAgentId: string | null = null
+    // The `@hostId` half of a qualified name. G06 needs it: without it, a recipient
+    // on another host is indistinguishable from a name that does not exist — both
+    // keep the 'unknown' title — and the graph refuses BOTH. The refusal is right
+    // for the typo and wrong for the peer, whose title only its own host can read.
+    const recipientHostId: string | null = to.includes('@') ? to.split('@')[1] || null : null
     {
       try {
         const { loadAgents: loadAll } = await import('@/lib/agent-registry')
@@ -361,40 +366,33 @@ export async function SendMessage(
     } else if (senderTitle === 'system') {
       ops.push(`G06: Graph check skipped (sender is system)`)
     } else {
-      // ── Agent sender — existing R6 graph check (unchanged) ────────────────
-      try {
-        const { validateMessageRoute } = await import('@/lib/communication-graph')
-        // recipientTitle is typed as AgentRole | null | undefined; AgentRole
-        // does not include 'human' or 'user', but legacy flows may pass either
-        // sentinel on the wire. Normalise by string-cast before comparison.
-        const recipientTitleStr = String(recipientTitle ?? '')
-        const recipientIsHuman = recipientTitleStr === 'human' || recipientTitleStr === 'user'
-        // R38.2 — when the model is on, tell the graph the recipient user's
-        // title so the inbound "normal users don't receive from agents" rule
-        // fires. Resolve only when the recipient is a user (cheap no-op otherwise).
-        let recipientUserTitle: import('@/types/user').UserTitle | undefined
-        if (userModelEnabled && recipientIsHuman) {
-          recipientUserTitle = await resolveRecipientUserTitle(to)
-        }
-        const graphResult = validateMessageRoute(senderTitle, recipientTitle, {
-          recipientIsHuman,
-          recipientUserTitle,
-          inReplyToMessageId: input.inReplyTo,
-        })
-        if (!graphResult.allowed) {
-          result.error = `Message blocked by communication graph (R6): ${graphResult.reason || `${senderTitle.toUpperCase()} cannot message ${(recipientTitle || 'unknown').toUpperCase()}`}. ` +
-            (graphResult.suggestion ? `Suggestion: ${graphResult.suggestion}` : '')
-          ops.push(`G06: DENIED — R6 graph: ${senderTitle} → ${recipientTitle ?? 'unknown'} forbidden${graphResult.edgeType ? ` (${graphResult.edgeType})` : ''}`)
-          return result
-        }
-        ops.push(`G06: R6 graph allows ${senderTitle} → ${recipientTitle ?? 'unknown'}${graphResult.edgeType === 'reply-only' ? ' (reply-only)' : ''}`)
-      } catch (graphErr) {
-        // FAIL-CLOSED: surface the failure rather than silently allowing.
-        // R6 is a documented governance gate; a missing/broken module must
-        // never pass-through as "allowed".
-        result.error = 'graph_check_unavailable'
-        ops.push(`G06: DENIED — graph module unavailable (${graphErr instanceof Error ? graphErr.message : 'unknown error'})`)
-        console.error('[SendMessage] G06 graph check failed (fail-closed):', graphErr)
+      // ── Agent sender — the R6 graph, via the ONE gate ─────────────────────
+      // The rule itself lives in `lib/message-route-gate.ts` because `forwardFromUI`
+      // must apply the identical rule. Two copies of a governance rule become two
+      // behaviours the moment either is touched — which is precisely how forward
+      // came to skip R6 while this branch enforced it (TRDD-YEE33F3A follow-up 1).
+      // The gate fails closed on any throw, so no try/catch is needed here.
+      const { assertAgentRouteAllowed } = await import('@/lib/message-route-gate')
+      // recipientTitle is typed as AgentRole | null | undefined; AgentRole does not
+      // include 'human' or 'user', but legacy flows may pass either sentinel on the
+      // wire. Normalise by string-cast before comparison.
+      const recipientTitleStr = String(recipientTitle ?? '')
+      const recipientIsHuman = recipientTitleStr === 'human' || recipientTitleStr === 'user'
+      // R38.2 — when the model is on, tell the graph the recipient user's title so
+      // the inbound "normal users don't receive from agents" rule fires. Resolve
+      // only when the recipient is a user (cheap no-op otherwise).
+      const recipientUserTitle = userModelEnabled && recipientIsHuman
+        ? await resolveRecipientUserTitle(to)
+        : undefined
+
+      const gate = assertAgentRouteAllowed({
+        senderTitle,
+        recipient: { title: recipientTitle, hostId: recipientHostId, isHuman: recipientIsHuman, userTitle: recipientUserTitle },
+        inReplyTo: input.inReplyTo,
+      })
+      ops.push(...gate.ops.map(o => o.replace(/^GATE:/, 'G06:')))
+      if (!gate.allowed) {
+        result.error = gate.error
         return result
       }
     }

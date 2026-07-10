@@ -37,6 +37,7 @@ import {
   deleteAgentMessage,
 } from '@/lib/agent-messaging'
 import { forwardFromUI } from '@/lib/message-send'
+import { MessageRouteDenied } from '@/lib/message-route-gate'
 import type { Message } from '@/lib/messageQueue'
 import {
   getAgent,
@@ -454,10 +455,17 @@ export async function forwardMessage(
       fromAgent: agentId,
       toAgent: to,
       forwardNote: note,
+      authContext,
     })
 
     return { data: { message: result.message }, status: 201 }
   } catch (error) {
+    // A governance refusal is a decision, not a crash. 500 would tell the caller
+    // to retry something that will never be allowed, and would bury a policy
+    // denial among genuine faults in the logs.
+    if (error instanceof MessageRouteDenied) {
+      return { error: error.message, status: 403 }
+    }
     const message = error instanceof Error ? error.message : 'Failed to forward message'
     console.error('Failed to forward message:', error)
     return { error: message, status: 500 }

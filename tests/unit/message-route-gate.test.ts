@@ -17,15 +17,24 @@
  *     of on an explicit foreign host would let a typo'd local name through on the
  *     theory that some other host will catch it. Nothing is there to catch it.
  *
- * `isSelf` is mocked so "which host am I" never depends on the developer's
- * ~/.aimaestro/hosts.json. The graph itself is REAL — mocking it would test the
- * mock, and the whole point is that the gate delegates rather than reimplements.
+ *  4. A suffix that is not a CONFIGURED host is not remote either. `to` is split
+ *     naively on `@`, so `alice@default.local` (an AMP tenant address) and a typo
+ *     both arrive as a "hostId" that is simply not us. "Not self" alone would make
+ *     them remote and skip the graph — the exact bypass this gate closes.
+ *
+ * `hosts-config` is mocked so "which host am I" and "which hosts exist" never
+ * depend on the developer's ~/.aimaestro/hosts.json. The graph itself is REAL —
+ * mocking it would test the mock, and the whole point is that the gate delegates
+ * rather than reimplements.
  */
 
 import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('@/lib/hosts-config', () => ({
   isSelf: (hostId: string) => hostId === 'this-host',
+  // Exactly one peer exists in this fixture's hosts.json.
+  findHostByAnyIdentifier: (id: string) =>
+    id === 'peer-host' || id === 'this-host' ? { id } : undefined,
 }))
 
 import { assertAgentRouteAllowed, isRemoteRecipient } from '@/lib/message-route-gate'
@@ -87,6 +96,28 @@ describe("a local name that resolves to nothing is refused — it is NOT 'remote
     // Same refusal as the bare unresolved name: self-host never takes the weak path.
     expect(r.allowed).toBe(false)
     expect(r.code).toBe('graph_denied')
+  })
+
+  it('an @suffix that names no configured host is NOT remote — it is refused', () => {
+    // `to` is split naively on '@', so an AMP tenant address and a typo both land
+    // here as a "hostId" that simply is not us. If "not self" were enough to mean
+    // remote, both would skip the graph on the promise that another host checks
+    // them. No such host exists. Fail closed.
+    expect(isRemoteRecipient('default.local')).toBe(false)
+    expect(isRemoteRecipient('peer-hsot')).toBe(false)
+
+    const amp = assertAgentRouteAllowed({ senderTitle: 'member', recipient: remote('unknown', 'default.local') })
+    expect(amp.allowed).toBe(false)
+    expect(amp.code).toBe('graph_denied')
+
+    const typo = assertAgentRouteAllowed({ senderTitle: 'member', recipient: remote('unknown', 'peer-hsot') })
+    expect(typo.allowed).toBe(false)
+    expect(typo.code).toBe('graph_denied')
+  })
+
+  it('a CONFIGURED foreign host is the only thing that is remote', () => {
+    expect(isRemoteRecipient('peer-host')).toBe(true)
+    expect(isRemoteRecipient('this-host')).toBe(false)
   })
 })
 

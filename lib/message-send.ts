@@ -25,6 +25,8 @@ import { getAgent } from '@/lib/agent-registry'
 import { verifySignature } from '@/lib/amp-keys'
 import { signHostAttestation } from '@/lib/host-keys'
 import { getHostById, getSelfHost, getSelfHostId, isSelf } from '@/lib/hosts-config-server.mjs'
+import { assertAgentRouteAllowed, MessageRouteDenied } from '@/lib/message-route-gate'
+import type { AuthContext } from '@/lib/agent-auth'
 import type { AMPEnvelope, AMPPayload } from '@/lib/types/amp'
 import type { Message, ResolvedAgent } from '@/lib/messageQueue'
 
@@ -387,6 +389,50 @@ export async function sendFromUI(options: SendFromUIOptions): Promise<{ message:
 // forwardFromUI
 // ============================================================================
 
+/**
+ * The R6 title graph for a forward, delegated to the ONE gate.
+ *
+ * Forward already ran `checkMessageAllowed` — the TEAM-GOVERNANCE filter. That is
+ * a different rule (which teams may talk), and having it sit where the reader
+ * expects a governance check is why the missing title check went unnoticed for so
+ * long. Both now run, next to each other, and are labelled for what they are.
+ *
+ * A system-owner caller keeps today's behaviour (no graph): a human forwarding
+ * from an agent's mailbox emits a message whose declared sender is that agent, and
+ * whether R6 should bind the human is a policy question for the MANAGER, not one
+ * to settle silently inside a bug fix.
+ */
+function assertForwardRouteAllowed(
+  authContext: AuthContext,
+  fromResolved: ResolvedAgent,
+  toResolved: ResolvedAgent,
+  isTargetLocal: boolean,
+): void {
+  if (authContext.isSystemOwner) return
+
+  const senderTitle = (getAgent(fromResolved.agentId)?.governanceTitle || 'autonomous').toLowerCase()
+  const recipientAlias = (toResolved.alias || '').toLowerCase()
+  const recipientTitle = isTargetLocal
+    ? (getAgent(toResolved.agentId)?.governanceTitle || 'autonomous').toLowerCase()
+    // Off-host: this host cannot read the recipient's title. The gate takes the
+    // sender-side weak path and the receiving host runs the real graph.
+    : 'unknown'
+
+  const gate = assertAgentRouteAllowed({
+    senderTitle,
+    recipient: {
+      title: recipientTitle,
+      hostId: isTargetLocal ? null : toResolved.hostId,
+      isHuman: recipientAlias === 'user' || recipientAlias === 'human',
+    },
+    // A forward is a new message, never a reply, so reply-only edges never open.
+  })
+
+  if (!gate.allowed) {
+    throw new MessageRouteDenied(gate.code || 'graph_denied', gate.error || 'Message blocked by communication graph (R6)')
+  }
+}
+
 export interface ForwardFromUIOptions {
   // CC-P1-411: Optional when providedOriginalMessage is supplied
   originalMessageId?: string
@@ -394,10 +440,22 @@ export interface ForwardFromUIOptions {
   toAgent: string
   forwardNote?: string
   providedOriginalMessage?: Message
+  /**
+   * Who is asking. REQUIRED — an absent context is refused, never treated as the
+   * owner (the G04.AUTH precedent). Both callers already carry one; they used it
+   * only for the mailbox-ownership guard and let the R6 title graph go unchecked.
+   */
+  authContext?: AuthContext
 }
 
 export async function forwardFromUI(options: ForwardFromUIOptions): Promise<{ message: Message; notified: boolean }> {
-  const { originalMessageId, fromAgent, toAgent, forwardNote, providedOriginalMessage } = options
+  const { originalMessageId, fromAgent, toAgent, forwardNote, providedOriginalMessage, authContext } = options
+
+  // A missing context cannot be read as "trusted caller" — that is how an
+  // unauthenticated request becomes an owner request (G04.AUTH precedent).
+  if (!authContext) {
+    throw new MessageRouteDenied('forbidden_no_auth_context', 'forbidden_no_auth_context')
+  }
 
   const { identifier: toIdentifier, hostId: targetHostId } = parseQualifiedName(toAgent)
   const isTargetLocal = !targetHostId || isSelf(targetHostId)
@@ -435,6 +493,10 @@ export async function forwardFromUI(options: ForwardFromUIOptions): Promise<{ me
   if (!fwdFilterResult.allowed) {
     throw new Error(fwdFilterResult.reason || 'Message blocked by team governance policy')
   }
+
+  // ── Governance: R6 title graph (TRDD-YEE33F3A follow-up 1) ──────────
+  // Distinct from the team filter above. Forward ran that one and not this one.
+  assertForwardRouteAllowed(authContext, fromResolved, toResolved, isTargetLocal)
 
   // Get original message
   let originalMessage: Message | null

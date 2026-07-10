@@ -10,6 +10,46 @@
 > same board multi-agent: shared per project, many assignees, edited
 > under title authority, mirrored to the dashboard and GitHub.
 
+## The TRDDs ARE the kanban; every board is a cache of them (USER, 2026-07-10)
+
+The board is not *stored* anywhere. A card **is** a TRDD, and a card's
+position and owner **are** two of that TRDD's frontmatter fields:
+
+| The statement | The fact on disk |
+|---|---|
+| "this task is in column *blocked*" | the TRDD's `column: blocked` |
+| "this task is assigned to agent X" | the TRDD's `assignee: X` |
+
+`column:` is the kanban column (17 ratified values); `assignee:` is the
+agent it is assigned to. Nothing else records either fact, so nothing
+else can disagree about it. To move a card you edit one line of one
+file; to render the board you `grep -H "^column:" design/**/*.md`.
+
+### The index document is a buffer, not a board
+
+Rescanning every agent's `design/` tree on every question is expensive,
+so a **kanban index document** is maintained as a cache: one row per
+TRDD carrying its id, title, `column:`, `assignee:`, and blockers,
+across every open project. A subconscious agent or a script refreshes
+it; the MANAGER and the ORCHESTRATOR read it to plan. The same is true
+of the GitHub Project board and the dashboard's kanban view.
+
+**All three are proxies, and a proxy is allowed to be stale.** The
+discipline that keeps a cache from quietly becoming a second source of
+truth:
+
+- **Regenerable.** Delete the index and nothing is lost — it is rebuilt
+  from the TRDDs. If rebuilding it would lose information, something was
+  written *only* to the index, which is the bug.
+- **Never authored.** No decision lands in the index. No agent edits it
+  to change a column; it edits the TRDD, and the refresher catches up.
+- **Never trusted when it matters.** Plan from the index; **act from the
+  TRDD**. Before a transition, an approval, or anything irreversible,
+  read the file. A stale row is expected, not a defect.
+- **Mirror writes flow backwards.** A drag on the GitHub board or in the
+  dashboard is applied by writing it into the TRDD (`column:` edit +
+  folder `git mv`); it is never left living in the mirror alone.
+
 ## What changes when the project is an ai-maestro agent workdir
 
 The board's substrate is unchanged — the cards are still the TRDDs and

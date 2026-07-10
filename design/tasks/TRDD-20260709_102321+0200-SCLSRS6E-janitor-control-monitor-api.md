@@ -1,9 +1,9 @@
 ---
 trdd-id: SCLSRS6E
 title: AI Maestro control/monitor API + permanent script layer for governance agents (janitor + fleet)
-column: complete
+column: blocked
 created: 2026-07-09T10:23:21+0200
-updated: 2026-07-09T16:45:00+0200
+updated: 2026-07-10T02:49:10+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -12,8 +12,14 @@ effort: XL
 task-type: feature
 release-via: none
 parent-trdd: null
+derived: false
+mandate: true
+mandated-by: self
+min-approval-requirement: none
 npt: [TRDD-41FJM8A8, TRDD-TDFSELI1, TRDD-OOCL7ABZ, TRDD-229CJGYH, TRDD-KJQZEYXW, TRDD-GT0TAJFL]
-eht: [TRDD-280DF70U]
+eht: [TRDD-280DF70U, TRDD-D3RP7KQZ, TRDD-4Q7WMPZK, TRDD-YEE33F3A, TRDD-K2WJH7RF, TRDD-WNZ72SFO, TRDD-QC8R79G5]
+blocked-by: [TRDD-D3RP7KQZ, TRDD-4Q7WMPZK, TRDD-YEE33F3A, TRDD-K2WJH7RF, TRDD-WNZ72SFO, TRDD-QC8R79G5]
+pre-block-column: complete
 relevant-rules: []
 labels: [api, janitor, terminal-control, side-panel, task-api, script-layer, dev-browser, fleet]
 test-requirements: [unit, integration, e2e, dev-browser-headless]
@@ -25,7 +31,32 @@ external-refs: []
 
 # TRDD-SCLSRS6E — AI Maestro control/monitor API + script layer for governance agents
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-09
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-10
+
+**▶ 2026-07-10T02:49 — `complete` → `blocked`, and the derivation chain flattened.**
+
+Two USER rules landed today and both hit this epic:
+
+1. **A parent is COMPLETE only when its whole flock is** — otherwise it is `blocked`.
+   This epic sat at `complete` while four of its effects were still open. Its own
+   seven design children (D1-D7) *are* all `complete`; the four open ones are the
+   effects that came after. `column: blocked`, `blocked-by:` names them,
+   `pre-block-column: complete` records where it was. The correction below already
+   said "do not read this epic as delivered" in prose — the column now says it too,
+   which is the point: prose does not gate anything.
+
+2. **A derived TRDD has no derived TRDDs — depth is exactly 1.** The chain
+   `SCLSRS6E → D3RP7KQZ → {4Q7WMPZK, K2WJH7RF} → {YEE33F3A, WNZ72SFO, QC8R79G5}`
+   was three levels deep, and two of its links (K2WJH7RF, YEE33F3A) named a parent
+   that never claimed them. All six are now **siblings in this epic's `eht:`**,
+   because an effect of a derived TRDD is a *sibling* of it, never a child. Their
+   lineage inside the flock is prose, not graph: D3RP7KQZ shipped the self-drive
+   split; K2WJH7RF is the ten routes it deferred; 4Q7WMPZK is the audit its "not
+   asked for" fix opened; YEE33F3A, WNZ72SFO and QC8R79G5 are what that audit
+   exposed. Flattening is what makes this epic's completion gate decidable — the
+   flock is a finite list on this file, not a tree of unknown depth.
+
+Also: `approval-tier:` → `min-approval-requirement:` on every TRDD touched today.
 
 **▶ CORRECTION 2026-07-09T16:45 — `complete` means "code landed", NOT "the janitor can
 use it". Do not read this epic as delivered.**

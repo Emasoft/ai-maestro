@@ -3,20 +3,20 @@ trdd-id: QC8R79G5
 title: The in-memory agent LRU cap of 10 evicts live agents during startup
 column: backburner
 created: 2026-07-10T02:11:00+0200
-updated: 2026-07-10T02:23:26+0200
+updated: 2026-07-10T02:49:10+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 2
 severity: MEDIUM
 effort: S
-approval-tier: 0
+min-approval-requirement: none
 mandate: true
 mandated-by: self
 derived: true
 derived-kind: eht
 task-type: bugfix
 release-via: none
-parent-trdd: TRDD-4Q7WMPZK
+parent-trdd: TRDD-SCLSRS6E
 npt: []
 eht: []
 blocked-by: []
@@ -64,11 +64,14 @@ capacity limit. The read path now uses `getExistingAgent()` and reports
 **NEXT ACTION:** decide what the cap means, then implement. It is a design call,
 which is why this is captured rather than fixed inline.
 
-**This TRDD BLOCKS `TRDD-WNZ72SFO`** (the EHT for the subconscious indicator, which
-now truthfully reads "Inactive" for the 8 evicted agents). There is no `blocks:`
-field in the v2 schema — the reverse edge is WNZ72SFO's `blocked-by:` and is found
-with `grep -l "^blocked-by:.*QC8R79G5" design/tasks/*.md`. What the badge should
-say is downstream of what the cap is *for*, so resolve this one first.
+**This TRDD BLOCKS its SIBLING `TRDD-WNZ72SFO`** (the EHT for the subconscious
+indicator, which now truthfully reads "Inactive" for the 8 evicted agents). Both are
+EHTs of the same parent, TRDD-4Q7WMPZK. There is no `blocks:` field in the v2 schema
+— the reverse edge is WNZ72SFO's `blocked-by:` and is found with
+`grep -l "^blocked-by:.*QC8R79G5" design/tasks/*.md`. It is emphatically NOT
+WNZ72SFO's `npt:`: a sibling ordering edge is `blocked-by:`, never a derivation
+edge (that would give this TRDD two parents; see the depth-1 rule). What the badge
+should say is downstream of what the cap is *for*, so resolve this one first.
 
 **Do NOT just raise `maxAgents`** without answering the question below — the cap
 exists to bound memory (each Agent holds a cerebellum + subsystems), and a fleet

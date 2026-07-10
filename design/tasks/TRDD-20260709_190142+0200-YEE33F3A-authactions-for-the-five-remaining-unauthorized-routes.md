@@ -2,7 +2,7 @@
 trdd-id: YEE33F3A
 title: Decide the AuthActions for the five remaining unauthorized agent-scoped routes
 column: planned
-approval-tier: 2
+min-approval-requirement: manager
 created: 2026-07-09T19:01:42+0200
 updated: 2026-07-10T02:23:26+0200
 current-owner: ai-maestro-session
@@ -12,7 +12,9 @@ severity: HIGH
 effort: M
 task-type: security
 release-via: none
-parent-trdd: TRDD-4Q7WMPZK
+parent-trdd: TRDD-SCLSRS6E
+derived: true
+derived-kind: eht
 npt: []
 eht: []
 blocked-by: []

@@ -1,10 +1,10 @@
 ---
 trdd-id: D3RP7KQZ
 title: An agent may drive its own surface, never reconfigure itself
-column: human_review
-approval-tier: 2
+column: blocked
+min-approval-requirement: manager
 created: 2026-07-09T16:42:56+0200
-updated: 2026-07-09T17:51:47+0200
+updated: 2026-07-10T02:49:10+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -13,9 +13,12 @@ effort: M
 task-type: security
 release-via: none
 parent-trdd: TRDD-SCLSRS6E
+derived: true
+derived-kind: eht
 npt: []
-eht: [TRDD-4Q7WMPZK]
-blocked-by: []
+eht: []
+blocked-by: [TRDD-4Q7WMPZK]
+pre-block-column: human_review
 relevant-rules: []
 labels: [authorization, sudo-guard, agent-path, janitor]
 test-requirements: [unit]
@@ -34,11 +37,17 @@ external-refs: ["https://github.com/Emasoft/ai-maestro-janitor/issues/76"]
 a compound question. The USER answered the central half; the rest was carved out
 into a successor proposal. Read the Approval log first — it is the decision.
 
-**Why `human_review` and not `complete`:** the code landed and the gates are
-green, but this TRDD has an open EHT (`TRDD-4Q7WMPZK`), and a parent may not
-reach `complete` while an EHT child is non-terminal. It also carries
-`review-requirements: [human-review]`. Both are satisfied by the same act: the
-USER reviewing the shipped invariant and the audit closing.
+**Why `blocked` and not `complete` (updated 2026-07-10T02:49):** the code landed
+and the gates are green, but 4Q7WMPZK is still open. Per the USER's completion
+rule, a TRDD whose flock is still under development is **not** complete and its
+column says `blocked` — prose saying "not really done" gates nothing. It also
+carries `review-requirements: [human-review]`, recorded in
+`pre-block-column: human_review`; both are satisfied by the same act (the USER
+reviewing the shipped invariant, and the audit closing).
+
+4Q7WMPZK is now a **sibling**, not a child: under the depth-1 rule a derived TRDD
+has no derived TRDDs, so this TRDD's `eht:` is `[]` and 4Q7WMPZK moved up into the
+epic's flock. The dependency survives where dependencies belong — `blocked-by:`.
 
 - **Decided + shipped:** the self-drive / self-configure split. `SELF_DRIVE_ACTIONS
   = {send-command, hibernate-agent}` in `lib/authorization.ts`; the panel / queue /

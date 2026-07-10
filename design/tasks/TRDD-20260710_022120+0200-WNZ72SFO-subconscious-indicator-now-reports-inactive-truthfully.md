@@ -3,21 +3,21 @@ trdd-id: WNZ72SFO
 title: The subconscious indicator now says Inactive for eight agents — decide what it should say
 column: backburner
 created: 2026-07-10T02:21:20+0200
-updated: 2026-07-10T02:21:20+0200
+updated: 2026-07-10T02:49:10+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 2
 severity: MEDIUM
 effort: S
-approval-tier: 0
+min-approval-requirement: none
 mandate: true
 mandated-by: self
 derived: true
 derived-kind: eht
 task-type: bugfix
 release-via: none
-parent-trdd: TRDD-4Q7WMPZK
-npt: [TRDD-QC8R79G5]
+parent-trdd: TRDD-SCLSRS6E
+npt: []
 eht: []
 blocked-by: [TRDD-QC8R79G5]
 pre-block-column: backburner
@@ -64,6 +64,24 @@ read "Running" because polling it had just started the subconscious it was
 reporting on. So this EHT is not a regression to undo — it is the bill for
 telling the truth, and it must be paid deliberately rather than by reverting to
 a comfortable lie.
+
+### Correction 2026-07-10T02:49 — the sibling edge was in the wrong field
+
+This TRDD carried `npt: [TRDD-QC8R79G5]`. That was wrong, and the depth-1 rule the
+USER stated today is what caught it. `npt:`/`eht:` are **derivation** edges — they
+declare parenthood — so listing QC8R79G5 there claimed this TRDD had spawned it,
+giving QC8R79G5 two parents and creating exactly the depth a derived TRDD may not
+have.
+
+QC8R79G5 is a **sibling**, not a child. The dependency is a runtime one and lives
+in `blocked-by:` alone, which is where it already was. `npt:` is now `[]`, as a
+derived TRDD's `npt:`/`eht:` always must be.
+
+The same rule re-parented both of us. `03159944` landed under TRDD-4Q7WMPZK, but
+4Q7WMPZK is itself derived, so it cannot be our parent. We are now siblings of it
+in the flock of the nearest non-derived ancestor, **TRDD-SCLSRS6E**. The causal
+lineage — this TRDD is an effect of 4Q7WMPZK's fix — is recorded here in prose,
+which is where a flat graph puts it.
 
 ### Why it is BLOCKED on TRDD-QC8R79G5
 

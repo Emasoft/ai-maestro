@@ -119,9 +119,11 @@ ADDS the multi-agent specifics:
 
 - The approver named in those protocols is the authority Part B
   requires — T1 COS · T2 MANAGER · T3 USER — and approval-log lines
-  record the tier: `- <ISO> — APPROVED by <approver> (tier <N>). …`.
-- Proposals carry **`approval-tier: N`** in frontmatter (Tier 1/2/3 by
-  definition — a Tier-0 task is authored directly in `design/tasks/`).
+  name it: `- <ISO> — APPROVED by <approver> (min-approval-requirement:
+  <title>). …`.
+- Proposals carry **`min-approval-requirement: <title>`** in frontmatter
+  (`orchestrator`/`chief-of-staff`/`manager`/`user` by definition — a
+  `none` task is authored directly in `design/tasks/`).
 - The **`amama-proposal-approvals`** skill (MANAGER plugin) is the
   batch listing/decision tool, and `amama_proposal_approvals.py
   archive --state <completed|cancelled|superseded>` operationalizes
@@ -218,12 +220,12 @@ MEMBER · ARCHITECT · INTEGRATOR   (no approval authority)
    <  USER              (not an agent; above the whole ladder)
 ```
 
-| Tier | Required approver | May issue it as a MANDATE |
+| Tier | `min-approval-requirement:` | May issue it as a MANDATE |
 |---|---|---|
-| **0** | none | **any agent** — a self-mandate: sender and receiver are the same |
-| **1** | CHIEF-OF-STAFF (or ORCHESTRATOR, within its dispatch scope) | ORCHESTRATOR\*, COS, MANAGER |
-| **2** | MANAGER | MANAGER |
-| **3** | USER | **USER only** |
+| **0** | `none` | **any agent** — a self-mandate: sender and receiver are the same |
+| **1** | `orchestrator` or `chief-of-staff` | ORCHESTRATOR\*, COS, MANAGER |
+| **2** | `manager` | MANAGER |
+| **3** | `user` | **USER only** |
 
 \* ORCHESTRATOR may mandate only the dispatch subset of Tier 1 (assignment,
 priority, sequencing inside its own team). Anything else Tier-1 is the COS's.
@@ -233,20 +235,64 @@ priority, sequencing inside its own team). Anything else Tier-1 is the COS's.
 `design/proposals/`. It carries:
 
 ```yaml
-approval-tier: 2          # the REQUIRED authority (the objective floor, §D3)
-mandate: true             # author authority >= required approver
-mandated-by: manager      # the TITLE whose authority pre-approves it ('self' for tier 0)
-derived: true             # this TRDD is an NPT or EHT of another
-derived-kind: eht         # npt | eht — which kind, without reading the parent
+min-approval-requirement: manager   # the TITLE that must approve (the objective floor, §D3)
+mandate: true                       # authority(mandated-by) >= authority(min-approval-requirement)
+mandated-by: manager                # the TITLE whose authority pre-approves it ('self' at `none`)
+derived: true                       # this TRDD is an NPT or EHT of another
+derived-kind: eht                   # npt | eht — which kind, without reading the parent
 ```
 
-**These are attributes, not machinery.** The whole model above is four frontmatter
+and an `## Approval log` line recording that no round-trip occurred:
+
+```
+- <ISO> — MANDATE issued by MANAGER <agent-name> (min-approval-requirement: manager).
+  Pre-approved: issuer authority >= required approver. No approval request was sent.
+```
+
+**These are attributes, not machinery.** The whole model above is five frontmatter
 fields. The TRDD *is* its frontmatter: the kanban reads `column:`, governance reads
-`approval-tier:` + `mandate:`, the dependency graph reads `npt:`/`eht:`/`blocked-by:`.
-One file, three pillars, no side tables, no registry to keep in sync. Every query
-in this rule is a `grep` — `grep -l "^mandate: true"`, `grep -l "^derived: true"`,
-`grep -lE "^approval-tier: [23]"` — which is what makes the §D4 watchdog cheap
-enough to run on an idle heartbeat instead of at every creation.
+`min-approval-requirement:` + `mandate:`, the dependency graph reads
+`npt:`/`eht:`/`blocked-by:`. One file, three pillars, no side tables, no registry to
+keep in sync. Every query in this rule is a `grep` — `grep -l "^mandate: true"`,
+`grep -l "^derived: true"`, `grep -lE "^min-approval-requirement: (manager|user)"` —
+which is what makes the §D4 watchdog cheap enough to run on an idle heartbeat instead
+of at every creation.
+
+**The invariant a watchdog can check:** `mandate: true` requires
+`authority(mandated-by) >= authority(min-approval-requirement)` — one comparison on
+the one authority ladder above. A mandate that fails it is void; see §D4.
+
+#### `min-approval-requirement:` supersedes `approval-tier: N` (USER, 2026-07-10)
+
+The tier NUMBER was an indirection: reading `approval-tier: 2` required this rule's
+D3 table to learn it meant "MANAGER". Naming the title directly removes the decode
+step and makes the mandate invariant a single comparison on a single ladder. It also
+says something the number could not: tier 1 admits **two** approvers, and
+`orchestrator` (dispatch scope) is a strictly weaker requirement than
+`chief-of-staff`. Values are lowercase-kebab governance titles, matching
+`agent.governanceTitle`: `none | orchestrator | chief-of-staff | manager | user`.
+
+`approval-tier:` is **deprecated**, decode-only, and never written on a new TRDD.
+Legacy files are migrated **on next touch** (the same incremental policy the IND base
+uses for v1 `status:` → v2 `column:`), never in a mass rewrite: `0 → none`,
+`1 → chief-of-staff` (or `orchestrator` where the TRDD is dispatch-scoped),
+`2 → manager`, `3 → user`. A file carries exactly one of the two fields.
+
+#### The field set — what is a field, and what is derived from one
+
+A frontmatter field earns its place by carrying information no other field carries.
+A field that restates another is a second source of truth waiting to disagree with
+the first, and the D4 watchdog then has to arbitrate between two things that were
+supposed to be one thing. So:
+
+| Attribute | How it is expressed |
+|---|---|
+| `mandate` / `mandated-by` | **fields** — nothing else records who pre-approved |
+| `derived` / `derived-kind` | **fields** — a denormalized back-pointer; see the invariant below |
+| `min-approval-requirement` | **field** — the objective floor; nothing else records it |
+| *proposal?* | **derived**: `column == proposal` (and the file sits in `design/proposals/`) |
+| *approved?* | **derived**: `column ∉ {proposal, refused}` — reaching `design/tasks/` **is** approval, whether by an approver or by mandate. The `## Approval log` line says which |
+| *the flock (list of D-TRDDs)* | **derived**: `npt: ∪ eht:` — already listed, and split by KIND, which the union would throw away. NPT gates the parent's `dev`; EHT gates its `complete`; a flat `derived-trdd:` list could not express that difference |
 
 **`derived:` is DENORMALIZED, and denormalized fields drift.** A TRDD is derived
 precisely when its id appears in some parent's `npt:` or `eht:`. The flag repeats
@@ -255,7 +301,7 @@ reason `parent-trdd:` exists. It buys a one-pass query and it owes an invariant:
 
 ```
 derived: true      ⟺  this trdd-id appears in exactly one parent's npt: or eht:
-derived-kind: npt  ⟺  it appears in that parent's npt:      (and blocked-by: while in-flight)
+derived-kind: npt  ⟺  it appears in that parent's npt:
 derived-kind: eht  ⟺  it appears in that parent's eht:
 parent-trdd:       ==  that parent
 ```
@@ -267,16 +313,60 @@ names a TRDD that does not declare `derived: true` is the same bug seen from the
 other end. Both are repaired by writing the missing half, never by deleting the
 half that is there.
 
-and an `## Approval log` line recording that no round-trip occurred:
+#### A derived TRDD has no derived TRDDs — the depth is exactly 1 (USER, 2026-07-10)
+
+**A D-TRDD may not spawn D-TRDDs of its own.** It either contains every change it
+needs, or it is *accompanied* by further D-TRDDs — **siblings under the same
+parent**, never children of itself.
 
 ```
-- <ISO> — MANDATE issued by MANAGER <agent-name> (tier 2). Pre-approved:
-  issuer authority >= required approver. No approval request was sent.
+derived: true   ⇒   npt: []   and   eht: []
+no TRDD may name a `derived: true` TRDD as its `parent-trdd:`
 ```
 
-**The invariant a watchdog can check:** `mandate: true` requires
-`authority(mandated-by) >= required-approver(approval-tier)`. A mandate that
-fails this is void — see §D4.
+Two greps, no LLM: a `derived: true` file with a non-empty `npt:`/`eht:`, or a
+`parent-trdd:` pointing at a derived file, is a violation.
+
+**This is what stops the platelet count from being unbounded.** Without it, each
+patch's own side effects spawn patches, those spawn patches, and the parent's
+`complete` gate — *all EHTs terminal* — recurses forever over a tree nobody can
+enumerate. At depth 1 the flock is a **finite, enumerated set** written on the
+parent, so "is the closure closed?" is a single read of one file.
+
+**Sibling ordering is `blocked-by:`, never `npt:`.** The two edges look alike and
+are not: `npt:`/`eht:` are **derivation** edges (this TRDD spawned that one) and
+they alone establish parenthood; `blocked-by:` is a **runtime** edge (this TRDD
+cannot proceed until that one resolves) and it establishes nothing. When D-TRDD *A*
+must wait on its sibling *B*, that goes in `A.blocked-by`, and `B` stays exactly
+where it already is — in the parent's `npt:`/`eht:`. Putting `B` in `A.npt:` would
+give `B` two parents, silently break the invariant above, and re-introduce the depth
+the rule exists to forbid. (This is not hypothetical: TRDD-WNZ72SFO carried
+`npt: [TRDD-QC8R79G5]` for its sibling until this rule caught it.)
+
+#### A parent is COMPLETE only when its whole flock is — else it is BLOCKED (USER, 2026-07-10)
+
+**A TRDD with any derived TRDD still under development is not complete. It is
+BLOCKED.** Not "complete with follow-ups", not "complete pending EHTs" — the kanban
+column says `blocked`, and `blocked-by:` names every open child.
+
+```
+column: complete   requires  every id in (npt: ∪ eht:) sits in a terminal column
+                             (complete | published | live | superseded)
+otherwise          column: blocked
+                   blocked-by: [the open children]
+                   pre-block-column: <where it was>
+```
+
+The parent's own tests going green is not completion. Completion is the parent's
+change **plus the holes it opened being closed** — that is what the platelets are
+for, and a parent that ships without them has done net damage. So the gate lives on
+the parent, and the only honest column for "my work is done, my flock is not" is
+`blocked`: it is blocked, on itself.
+
+Depth-1 (above) is what makes this gate **decidable**: the flock is the finite list
+written on the parent, so evaluating the gate is one file read plus one `column:`
+grep per child — never a tree walk of unbounded depth. The two rules are one design;
+neither works without the other.
 
 #### Consequences, stated because each one is a rule someone will otherwise get wrong
 
@@ -446,29 +536,31 @@ under-classification an efficiency-oriented agent is tempted to do.
 
 ### D2. Self-classify for speed — but it is AUDITED, not trusted
 
-The agent sets its own `approval-tier:` so it never waits on a human to
-*classify*. That speed is bought with an explicit anti-gaming contract:
+The agent sets its own `min-approval-requirement:` so it never waits on a
+human to *classify*. That speed is bought with an explicit anti-gaming
+contract:
 
-- An agent that **deliberately under-classifies** a TRDD (flags a
-  sensitive change Tier 0 to dodge the queue) commits a **governance
-  violation** — worse than the wait it avoided. The agent's local
+- An agent that **deliberately under-classifies** a TRDD (declares
+  `none` on a sensitive change, to dodge the queue) commits a
+  **governance violation** — worse than the wait it avoided. The agent's local
   judgment is NOT a substitute for the MANAGER's: only the MANAGER has
   the cross-project, user-priority, whole-picture view.
 - Because the high tiers are defined by **objective, greppable signals**
   (below), misclassification is **mechanically detectable** — so it is
   caught, just not instantly.
 
-### D3. The objective tier-floor (mechanical, not subjective)
+### D3. The objective floor (mechanical, not subjective)
 
-A TRDD's **minimum** tier is computed from what it actually touches —
-signals a script can check, so the watchdog needs no subjective call:
+A TRDD's **minimum** `min-approval-requirement:` is computed from what it
+actually touches — signals a script can check, so the watchdog needs no
+subjective call:
 
-| Objective signal in the TRDD's content / proposed diff | Tier floor |
+| Objective signal in the TRDD's content / proposed diff | Floor |
 |---|---|
-| GOLDEN PRRD rule edit · shared credentials / owner identity · irreversible destructive op · first production deploy of a new service · breaking public-API change | **3 (USER)** |
-| `.github/` workflows or rulesets · baseline-ruleset deviation · another project's source (cross-repo) · SILVER PRRD / persona / governance file · `release-via: publish\|deploy` to production | **2 (MANAGER)** |
-| affects other members of the same team / cross-member coordination | **1 (COS)** |
-| everything else (in-scope dev, NPT/EHT, docs, local refactor) | **0** |
+| GOLDEN PRRD rule edit · shared credentials / owner identity · irreversible destructive op · first production deploy of a new service · breaking public-API change | **`user`** |
+| `.github/` workflows or rulesets · baseline-ruleset deviation · another project's source (cross-repo) · SILVER PRRD / persona / governance file · `release-via: publish\|deploy` to production | **`manager`** |
+| affects other members of the same team / cross-member coordination | **`chief-of-staff`** (or `orchestrator` when purely dispatch-scoped) |
+| everything else (in-scope dev, NPT/EHT, docs, local refactor) | **`none`** |
 
 Keep the floors **narrow and objective** — approval is required *rarely*,
 only for truly sensitive, detectable categories. The narrower and more
@@ -482,26 +574,37 @@ heartbeat cadence / MANAGER idle sweep) — **never** on every creation:
 
 1. For each TRDD in `design/tasks/` + `design/proposals/`, compute the
    D3 objective floor from its content + proposed diff.
-2. Compare the **declared** `approval-tier:` to the floor:
+2. Compare the **declared** `min-approval-requirement:` to the floor:
    - **declared ≥ floor** → fine.
    - **declared < floor (UNDER-CLASSIFIED)** → for an *unambiguous*
-     objective signal, **auto-correct**: raise `approval-tier:` to the
-     floor, and if it was already in `design/tasks/` as `planned`, **move
-     it back to `design/proposals/`** (un-authorize it) and stop any
-     dependent execution; log it in the TRDD `## Approval log` and the
-     watchdog report. For an *ambiguous* case, **flag** it for the
-     MANAGER queue rather than auto-moving.
+     objective signal, **auto-correct**: raise
+     `min-approval-requirement:` to the floor, and if it was already in
+     `design/tasks/` as `planned`, **move it back to
+     `design/proposals/`** (un-authorize it) and stop any dependent
+     execution; log it in the TRDD `## Approval log` and the watchdog
+     report. For an *ambiguous* case, **flag** it for the MANAGER queue
+     rather than auto-moving.
 3. **For each `mandate: true`, verify the mandate was the issuer's to
-   issue:** `authority(mandated-by) >= required-approver(approval-tier)`,
-   using the corrected floor from step 2, not the declared tier. A mandate
+   issue:** `authority(mandated-by) >= authority(min-approval-requirement)`,
+   using the corrected floor from step 2, not the declared value. A mandate
    that fails this test was never an approval — it is a **forged** one.
    Revoke it (`mandate: false`), move the TRDD back to
    `design/proposals/`, halt dependent execution, and record the
    revocation in the `## Approval log` naming the issuer. This is the
    check that keeps the ladder from being decorative: without it,
-   `mandate: true` is self-certified, and an under-classified tier plus a
+   `mandate: true` is self-certified, and an under-classified floor plus a
    self-issued mandate is a complete bypass of the approval system by an
    agent that never sent a single request.
+4. **Check the two platelet invariants, both pure grep, no LLM:**
+   - `derived: true` ⇔ exactly one parent names it in `npt:`/`eht:`, with
+     the matching `derived-kind:` and `parent-trdd:` (repair the missing
+     half — never delete the half that is there);
+   - `derived: true` ⇒ `npt: []` and `eht: []`, and no `parent-trdd:`
+     points at a derived TRDD (depth is exactly 1).
+5. **Check the completion gate:** a TRDD in a terminal-DONE column whose
+   `npt:`/`eht:` names a non-terminal child is a **false completion** —
+   move it to `blocked` with `blocked-by:` naming the open children, and
+   flag it. See the completion rule below.
 4. The watchdog writes a report the MANAGER drains at leisure; it does
    not interrupt anyone.
 

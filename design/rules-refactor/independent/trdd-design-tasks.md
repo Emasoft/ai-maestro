@@ -303,8 +303,16 @@ A parent's transition to `complete` is gated on:
 
 ```
 (column == ai_review or human_review)  ─ tests + reviews passed
-  AND  all eht children are in terminal column (complete | published | live | superseded)
+  AND  every child in (npt: ∪ eht:) is in a terminal column
+       (complete | published | live | superseded)
 ```
+
+**A parent whose flock is still open is not complete — it is `blocked`.** Not
+"complete with follow-ups", not "complete pending EHTs": the kanban column reads
+`blocked`, `blocked-by:` names every open child, and `pre-block-column:` records
+where it was. The parent's own tests going green is not completion; completion is
+the change **plus the holes it opened being closed**. `blocked` is the only honest
+column for "my work is done, my flock is not" — the TRDD is blocked, on itself.
 
 ### Derived TRDDs are MANDATORY, not optional (the platelet rule)
 
@@ -330,6 +338,40 @@ misstates the blast radius. The test is mechanical — name the downstream surfa
 then go read it. If it has no consumers, there is no hole; record the verified
 non-effect inside a sibling EHT so nobody re-derives it. Platelets clot holes;
 they do not clot healthy vessels.
+
+### A derived TRDD has no derived TRDDs — the depth is exactly 1
+
+**A derived TRDD may not spawn derived TRDDs of its own.** It either contains
+every change it needs, or it is *accompanied* by further derived TRDDs —
+**siblings under the same parent**, never children of itself.
+
+```
+this TRDD is derived   ⇒   npt: []   and   eht: []
+no TRDD may name a derived TRDD as its `parent-trdd:`
+```
+
+Without this, the platelet count is unbounded: each patch's own side effects
+spawn patches, those spawn patches, and the parent's `complete` gate — *all
+children terminal* — recurses forever over a tree nobody can enumerate. At
+depth 1 the flock is a **finite, enumerated set written on the parent**, so the
+gate is decidable by one file read plus one `column:` check per child. The
+depth rule and the completion gate are one design; neither works alone.
+
+**Sibling ordering is `blocked-by:`, never `npt:`.** The two edges look alike
+and are not. `npt:`/`eht:` are **derivation** edges — this TRDD spawned that one
+— and they alone establish parenthood. `blocked-by:` is a **runtime** edge —
+this TRDD cannot proceed until that one resolves — and it establishes nothing.
+When derived TRDD *A* must wait on its sibling *B*, that goes in `A.blocked-by`;
+`B` stays exactly where it already is, in the parent's `npt:`/`eht:`. Putting
+`B` in `A.npt:` would give `B` two parents and re-introduce the depth this rule
+forbids.
+
+**Flattening loses one thing, and it is written down rather than modelled.** When
+an effect of a derived TRDD becomes its sibling, the graph no longer records
+*which* flock member caused it — only that both belong to the same parent. Say it
+in the new TRDD's STATE block ("this is an effect of *B*'s fix, commit `<sha>`").
+A finite, decidable flock plus one prose sentence beats an exact tree nobody can
+enumerate.
 
 ## The 8-char id reference syntax
 

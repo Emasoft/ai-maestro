@@ -2,7 +2,7 @@
 trdd-id: K2WJH7RF
 title: Decide the agent authorization policy for the ten remaining strict routes
 column: planned
-approval-tier: 2
+min-approval-requirement: manager
 created: 2026-07-09T18:03:01+0200
 updated: 2026-07-09T23:34:05+0200
 current-owner: ai-maestro-session
@@ -12,7 +12,9 @@ severity: MEDIUM
 effort: M
 task-type: security
 release-via: none
-parent-trdd: TRDD-D3RP7KQZ
+parent-trdd: TRDD-SCLSRS6E
+derived: true
+derived-kind: eht
 npt: []
 eht: []
 blocked-by: [TRDD-YEE33F3A]

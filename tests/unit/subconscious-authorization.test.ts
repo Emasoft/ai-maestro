@@ -2,23 +2,32 @@
  * SECURITY REGRESSION — GET /api/agents/[id]/subconscious made NO auth call, and
  * reading it EVICTS live agents.
  *
- * `getSubconsciousStatus` calls `agentRegistry.getAgent(agentId)`. That function
+ * `getSubconsciousStatus` called `agentRegistry.getAgent(agentId)`. That function
  * never returns null: it CONSTRUCTS an in-memory `Agent`, runs `initialize()`
  * (cerebellum + subconscious + voice subsystems, then `start()`), and calls
  * `evictIfNeeded()` BEFORE doing so. So a caller sweeping arbitrary UUIDs evicts
  * real agents from the registry, one per request. That — not the route's name —
- * is the primitive it reaches.
+ * is the primitive it reached.
  *
- * Two consequences worth stating, because both were previously believed:
+ * Three consequences, all previously believed otherwise:
  *
- *  1. The service's `if (!agent) return 404` is DEAD CODE. `getAgent` always
+ *  1. The service's `if (!agent) return 404` was DEAD CODE. `getAgent` always
  *     resolves an Agent, for any id, registered or not.
- *  2. `POST /api/agents/[id]/subconscious` is GONE. `triggerSubconsciousAction`
+ *  2. `exists: true` / `initialized: true` were hardcoded, and could not have been
+ *     anything else: the construct made them true on the way to reading them. The
+ *     endpoint that REPORTS whether a subconscious runs was what STARTED it, and
+ *     `AgentSubconsciousIndicator` polls it every 30s for the viewed agent.
+ *  3. `POST /api/agents/[id]/subconscious` is GONE. `triggerSubconsciousAction`
  *     returned `Unknown action` — 400 — for every possible input once
  *     TRDD-70a521d9 deleted the RAG subsystem, and had zero callers. It sat on
  *     the dangerous-primitive debt ledger described as "drives another agent's
  *     background process": a description read off its name. The right AuthAction
  *     for a dead endpoint is no endpoint.
+ *
+ * The service now asks the two questions separately: the FILE registry answers
+ * "does this agent exist" (source of truth, loaded or not), and `getExistingAgent`
+ * — Map.get + LRU touch — answers "is it loaded". Neither constructs. The 404 is
+ * live for the first time, and `initialized` reports a fact.
  *
  * An agent may read its own status; the system owner (the dashboard indicator,
  * the only caller) may read any. No new AuthAction — same ownership rule as the
@@ -33,13 +42,17 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockRouteAuth, mockRegistry } = vi.hoisted(() => ({
+const { mockRouteAuth, mockRegistry, mockAgentRegistry } = vi.hoisted(() => ({
   mockRouteAuth: { requireAuth: vi.fn(), enforceAuth: vi.fn() },
-  mockRegistry: { agentRegistry: { getAgent: vi.fn() } },
+  // Both accessors are mocked so a regression to the constructing one is VISIBLE
+  // as a call, rather than silently passing through an un-mocked import.
+  mockRegistry: { agentRegistry: { getAgent: vi.fn(), getExistingAgent: vi.fn() } },
+  mockAgentRegistry: { getAgent: vi.fn() },
 }))
 
 vi.mock('@/lib/route-auth', () => mockRouteAuth)
 vi.mock('@/lib/agent', () => mockRegistry)
+vi.mock('@/lib/agent-registry', () => mockAgentRegistry)
 vi.mock('@/lib/validation', () => ({ isValidUuid: () => true }))
 // The service is REAL — it carries the defence-in-depth half of the guard.
 
@@ -65,14 +78,25 @@ const get = (id: string) =>
     { params: { id } as never },
   )
 
-/** The eviction primitive. A denial that still constructed the Agent is not a denial. */
+/**
+ * A denial that still looked the agent up leaks existence; one that constructed it
+ * evicted a live agent. Neither registry may be touched on a refusal.
+ */
 function registryUntouched() {
+  expect(mockRegistry.agentRegistry.getExistingAgent).not.toHaveBeenCalled()
+  expect(mockAgentRegistry.getAgent).not.toHaveBeenCalled()
+  expect(mockRegistry.agentRegistry.getAgent).not.toHaveBeenCalled()
+}
+
+/** The construct-and-evict primitive must be unreachable from this service, always. */
+function neverConstructed() {
   expect(mockRegistry.agentRegistry.getAgent).not.toHaveBeenCalled()
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockRegistry.agentRegistry.getAgent.mockResolvedValue({
+  mockAgentRegistry.getAgent.mockReturnValue({ id: TARGET, name: 'target' })
+  mockRegistry.agentRegistry.getExistingAgent.mockReturnValue({
     getSubconscious: () => ({ getStatus: () => ({ isRunning: true }) }),
   })
 })
@@ -107,13 +131,15 @@ describe('an agent may read only its own subconscious status', () => {
   it('an agent reading its OWN status succeeds', async () => {
     asAgent(MEMBER)
     expect((await get(MEMBER)).status).toBe(200)
-    expect(mockRegistry.agentRegistry.getAgent).toHaveBeenCalledWith(MEMBER)
+    expect(mockRegistry.agentRegistry.getExistingAgent).toHaveBeenCalledWith(MEMBER)
+    neverConstructed()
   })
 
   it('the system owner (dashboard) may read any agent', async () => {
     asAgent(undefined)
     expect((await get(TARGET)).status).toBe(200)
-    expect(mockRegistry.agentRegistry.getAgent).toHaveBeenCalledWith(TARGET)
+    expect(mockRegistry.agentRegistry.getExistingAgent).toHaveBeenCalledWith(TARGET)
+    neverConstructed()
   })
 
   it('an unauthenticated request never reaches the registry', async () => {
@@ -162,6 +188,45 @@ describe('defence-in-depth: the SERVICE refuses even if a route forgets', () => 
   it('no authContext = internal caller; the route guard is authoritative', async () => {
     const result = await getSubconsciousStatus(TARGET)
     expect(result.status).toBe(200)
-    expect(mockRegistry.agentRegistry.getAgent).toHaveBeenCalledWith(TARGET)
+    expect(mockRegistry.agentRegistry.getExistingAgent).toHaveBeenCalledWith(TARGET)
+    neverConstructed()
+  })
+})
+
+describe('reading never loads: the construct-and-evict primitive is gone', () => {
+  it('an authorized read uses getExistingAgent, never getAgent', async () => {
+    const result = await getSubconsciousStatus(TARGET)
+    expect(result.status).toBe(200)
+    neverConstructed()
+  })
+
+  it('an agent absent from the FILE registry is a live 404, not a fabricated Agent', async () => {
+    // Before the fix this returned 200: `getAgent` resolved an Agent for any id,
+    // so the `if (!agent) return 404` branch could never be taken.
+    mockAgentRegistry.getAgent.mockReturnValue(null)
+    const result = await getSubconsciousStatus('no-such-agent')
+    expect(result.status).toBe(404)
+    expect(mockRegistry.agentRegistry.getExistingAgent).not.toHaveBeenCalled()
+    neverConstructed()
+  })
+
+  it('a registered agent that is NOT loaded reports initialized:false, not a lie', async () => {
+    mockRegistry.agentRegistry.getExistingAgent.mockReturnValue(undefined)
+    const result = await getSubconsciousStatus(TARGET)
+    expect(result.status).toBe(200)
+    expect(result.data).toMatchObject({ exists: true, initialized: false, isRunning: false, status: null })
+    neverConstructed()
+  })
+
+  it('a loaded agent reports initialized:true and its real isRunning', async () => {
+    const result = await getSubconsciousStatus(TARGET)
+    expect(result.data).toMatchObject({ exists: true, initialized: true, isRunning: true })
+  })
+
+  it('a loaded agent whose subconscious is absent still reports initialized:true', async () => {
+    // `initialized` is about the Agent being in memory, not about its subsystems.
+    mockRegistry.agentRegistry.getExistingAgent.mockReturnValue({ getSubconscious: () => null })
+    const result = await getSubconsciousStatus(TARGET)
+    expect(result.data).toMatchObject({ exists: true, initialized: true, isRunning: false, status: null })
   })
 })

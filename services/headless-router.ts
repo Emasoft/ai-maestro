@@ -1253,9 +1253,10 @@ const routes: Route[] = [
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/subconscious$/, paramNames: ['id'], handler: async (req, res, params) => {
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
-    // Own-id check + threaded context: `getSubconsciousStatus` reaches
-    // `agentRegistry.getAgent()`, which constructs an Agent for any id and
-    // evicts the least-recently-used one to make room.
+    // Own-id check + threaded context. `getSubconsciousStatus` used to reach
+    // `agentRegistry.getAgent()`, which constructs an Agent for any id and evicts
+    // the least-recently-used one to make room; it now reads with
+    // `getExistingAgent()`. The ownership guard is the durable half.
     if (auth.agentId && auth.agentId !== params.id) {
       sendJson(res, 403, { error: 'Forbidden — you may only read your own subconscious status' })
       return

@@ -15,7 +15,6 @@ import {
   getAgent,
 } from '@/lib/agent-registry'
 import { getSkillById } from '@/lib/marketplace-skills'
-import { agentRegistry } from '@/lib/agent'
 import { isManager, isChiefOfStaff, getClosedTeamsForAgent } from '@/lib/governance'
 import { isValidUuid } from '@/lib/validation'
 import type { ConfigOperationType, ConfigScope } from '@/types/governance-request'
@@ -261,8 +260,13 @@ export async function getSkillSettings(agentId: string): Promise<ServiceResult<R
     return { error: 'Invalid agent ID format', status: 400 }
   }
 
-  // NT-008: agentRegistry.getAgent (async, in-memory) used here for runtime operations (subconscious access)
-  const agent = await agentRegistry.getAgent(agentId)
+  // NT-008 claimed this needed the in-memory `agentRegistry.getAgent` "for runtime
+  // operations (subconscious access)". It does not: skill settings are a JSON file
+  // keyed by agentId, and the returned Agent was never read. The in-memory call
+  // constructs and starts an Agent for any id (evicting a live one at capacity) and
+  // never returns null, so the 404 below could not fire. The sync file registry is
+  // both the existence source of truth and what the sibling functions already use.
+  const agent = getAgent(agentId)
   if (!agent) {
     return { error: 'Agent not found', status: 404 }
   }
@@ -295,7 +299,8 @@ export async function saveSkillSettings(
     return { error: 'Invalid agent ID format', status: 400 }
   }
 
-  const agent = await agentRegistry.getAgent(agentId)
+  // Same as getSkillSettings: an existence check, not a runtime-object need.
+  const agent = getAgent(agentId)
   if (!agent) {
     return { error: 'Agent not found', status: 404 }
   }

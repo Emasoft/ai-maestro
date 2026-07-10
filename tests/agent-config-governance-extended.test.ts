@@ -56,18 +56,18 @@ vi.mock('@/lib/governance', () => ({
 }))
 
 // --- Agent registry mocks ---
-// SF-037: Two separate mock systems exist for agent-registry in this file:
-//   1. mockGetAgent (below) -- used by agents-skills-service.ts and agents-config-deploy-service.ts
-//      via `import { getAgent } from '@/lib/agent-registry'`. These are the registry-level lookups
-//      that return plain agent objects.
-//   2. mockAgentRegistryGetAgent (further below) -- used by agents-skills-service.ts for
-//      saveSkillSettings via `import { agentRegistry } from '@/lib/agent'`. This returns a runtime
-//      Agent class instance with getSubconscious().
-// When configuring test mocks, ensure you set the CORRECT mock for the code path under test:
-//   - Skills RBAC tests (updateSkills, addSkill, removeSkill) use mockGetAgent
-//   - saveSkillSettings uses BOTH mockGetAgent (for governance check) AND mockAgentRegistryGetAgent (for file write)
-//   - deployConfigToAgent uses mockGetAgent
-//   - cross-host governance tests override mockGetAgent in their own beforeEach
+// SF-037 once described TWO agent-lookup mocks here, and warned that configuring
+// only one caused "silent test failures". The second existed because
+// getSkillSettings/saveSkillSettings called the in-memory `agentRegistry.getAgent()`
+// "to get a runtime Agent instance (with getSubconscious())" — which they never
+// read. That call constructed and started an Agent (evicting a live one at
+// capacity) to satisfy a null-check that could not fail. TRDD-YEE33F3A replaced it
+// with the file-registry lookup every sibling already used, so one mock is enough.
+//
+// mockGetAgent -- `import { getAgent } from '@/lib/agent-registry'`, used by
+// agents-skills-service.ts and agents-config-deploy-service.ts. Registry-level
+// lookups returning plain agent objects. Cross-host governance tests override it
+// in their own beforeEach.
 const mockGetAgent = vi.fn()
 const mockGetAgentSkills = vi.fn()
 const mockAddMarketplaceSkills = vi.fn()
@@ -100,20 +100,6 @@ vi.mock('@/lib/agent-registry', () => ({
 const mockGetSkillById = vi.fn()
 vi.mock('@/lib/marketplace-skills', () => ({
   getSkillById: (...args: unknown[]) => mockGetSkillById(...args),
-}))
-
-// --- Agent class mock (agentRegistry.getAgent for saveSkillSettings) ---
-// SF-037: This is the SECOND agent lookup mock. It serves a different code path than
-// mockGetAgent above. saveSkillSettings calls `agentRegistry.getAgent()` from '@/lib/agent'
-// to get a runtime Agent instance (with getSubconscious()), whereas the RBAC governance check
-// calls `getAgent()` from '@/lib/agent-registry' to get a plain agent object.
-// If a test configures mockGetAgent but not mockAgentRegistryGetAgent (or vice versa),
-// the unconfigured path will return undefined, causing silent test failures.
-const mockAgentRegistryGetAgent = vi.fn()
-vi.mock('@/lib/agent', () => ({
-  agentRegistry: {
-    getAgent: (...args: unknown[]) => mockAgentRegistryGetAgent(...args),
-  },
 }))
 
 // --- fs/promises mock (for saveSkillSettings and deploy service) ---
@@ -326,17 +312,6 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
   } as Agent
 }
 
-// Returns Record<string, unknown> to match the mocked getAgent signature.
-// A more specific type would require importing Agent internals into the test.
-function makeAgentWithSubconscious(overrides: Partial<Agent> = {}): Record<string, unknown> {
-  return {
-    id: AGENT_UUID,
-    name: 'test-agent-runtime',
-    getSubconscious: () => null,
-    ...overrides,
-  }
-}
-
 function makeClosedTeam(overrides: Partial<Team> = {}): Team {
   return {
     id: TEAM_ID,
@@ -393,9 +368,6 @@ beforeEach(() => {
   // Default: agent exists
   mockGetAgent.mockReturnValue(makeAgent())
   mockGetAgentSkills.mockReturnValue({ marketplace: [], custom: [], aiMaestro: { enabled: true, skills: [] } })
-
-  // Default: Agent class registry mock
-  mockAgentRegistryGetAgent.mockResolvedValue(makeAgentWithSubconscious())
 
   // Default: skills operations succeed
   mockAddMarketplaceSkills.mockResolvedValue(makeAgent())
@@ -620,6 +592,40 @@ describe('skills service RBAC', () => {
 
     expect(result.status).toBe(403)
     expect(mockFsWriteFile).not.toHaveBeenCalled()
+  })
+
+  // ---- the skill-settings existence check (TRDD-YEE33F3A) ----
+  //
+  // Both functions used to resolve the agent through the in-memory
+  // `agentRegistry.getAgent()`, which never returns null — so `if (!agent) return
+  // 404` was unreachable, and an unknown id silently got a 200. They now use the
+  // file registry, the same source of truth the sibling RBAC checks use, so the
+  // 404 fires and no Agent is constructed to answer a question about a JSON file.
+
+  it('saveSkillSettings 404s on an unknown agent and writes nothing', async () => {
+    mockGetAgent.mockReturnValue(null)
+
+    const result = await saveSkillSettings(AGENT_UUID, { memory: { enabled: true } }, null)
+
+    expect(result.status).toBe(404)
+    expect(mockFsWriteFile).not.toHaveBeenCalled()
+    // The 404 precedes governance: there is no agent to check permissions against.
+    expect(mockIsManager).not.toHaveBeenCalled()
+  })
+
+  it('getSkillSettings 404s on an unknown agent instead of reporting empty settings', async () => {
+    mockGetAgent.mockReturnValue(null)
+
+    const result = await getSkillSettings(AGENT_UUID)
+
+    expect(result.status).toBe(404)
+  })
+
+  it('getSkillSettings succeeds for a known agent', async () => {
+    const result = await getSkillSettings(AGENT_UUID)
+
+    expect(result.status).toBe(200)
+    expect(mockGetAgent).toHaveBeenCalledWith(AGENT_UUID)
   })
 
   // ---- getSkillsConfig (no governance on reads) ----

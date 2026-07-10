@@ -24,16 +24,20 @@ const AGENTS_DIR = statePath('agents')
  * other identity-scoped state. The intersection of "dir exists on disk" AND
  * "agent id is in registry" is the AID integrity invariant — both must be
  * true for this agent to be considered real. Feeding registry-only IDs into
- * `initializeAllAgents()` would trigger `agentRegistry.getAgent()` which in
- * turn calls `getDatabase()` on a possibly-missing dir, creating a fresh
- * empty `agent.db` (and directory) that contains no keys — silently
- * fabricating a new identity for what was supposed to be an existing agent.
+ * `initializeAllAgents()` calls `agentRegistry.getAgent()`, which CONSTRUCTS
+ * and starts an Agent for whatever id it is handed — no id is ever rejected.
  *
- * TRDD-70a521d9 note: the RAG memory removal Phase 9 deletes only the
- * `agent.db` files inside these directories (`find -name 'agent.db' -delete`),
- * not the directories themselves. So this FS scan keeps working after memory
- * is gone; the coupling to fix is inside `agentRegistry.getAgent()` → make
- * sure subconscious startup stops calling `getDatabase()` (Phase 1 work).
+ * The `getDatabase()` call this comment used to warn about (it created a fresh
+ * empty `agent.db`, fabricating an identity with no keys) went away with the RAG
+ * subsystem in TRDD-70a521d9. The construct is still not free: subconscious
+ * `start()` writes `status.json` and mkdirs `~/.aimaestro/agents/<id>/`, so an
+ * unregistered id still leaves an identity-shaped directory behind. That litter
+ * is inert only because the registry intersection below filters it back out.
+ *
+ * This is the one caller that legitimately WANTS the construct — its ids come
+ * from `discoverAgentDatabases()` (disk ∩ registry), and starting the
+ * subconscious is the whole point. Callers that merely want to READ an agent
+ * must use `agentRegistry.getExistingAgent()` (TRDD-YEE33F3A).
  */
 export function discoverAgentDatabases(): string[] {
   if (!fs.existsSync(AGENTS_DIR)) {

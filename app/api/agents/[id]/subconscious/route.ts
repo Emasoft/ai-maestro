@@ -21,11 +21,12 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   // TRDD-YEE33F3A: this GET previously made NO auth call at all, and its
-  // `getSubconsciousStatus` reaches `agentRegistry.getAgent()`, which
-  // CONSTRUCTS an in-memory Agent for any id after evicting the least-recently
-  // used one. Sweeping arbitrary UUIDs therefore evicted live agents. An agent
-  // may read its own status; the system owner (the dashboard indicator, the
-  // only caller) may read any.
+  // `getSubconsciousStatus` reached `agentRegistry.getAgent()`, which CONSTRUCTS
+  // and starts an in-memory Agent for any id after evicting the least-recently
+  // used one. Sweeping arbitrary UUIDs therefore evicted live agents. The service
+  // now reads with `getExistingAgent()`, so the primitive is gone — but the guard
+  // stays: an agent may read only its own status; the system owner (the dashboard
+  // indicator, the only caller) may read any.
   const auth = requireAuth(request)
   if (!auth.ok) return auth.error
 

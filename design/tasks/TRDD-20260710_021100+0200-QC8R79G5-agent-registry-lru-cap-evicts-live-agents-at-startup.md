@@ -3,7 +3,7 @@ trdd-id: QC8R79G5
 title: The in-memory agent LRU cap of 10 evicts live agents during startup
 column: backburner
 created: 2026-07-10T02:11:00+0200
-updated: 2026-07-10T02:11:00+0200
+updated: 2026-07-10T02:23:26+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 2
@@ -59,6 +59,12 @@ capacity limit. The read path now uses `getExistingAgent()` and reports
 
 **NEXT ACTION:** decide what the cap means, then implement. It is a design call,
 which is why this is captured rather than fixed inline.
+
+**This TRDD BLOCKS `TRDD-WNZ72SFO`** (the EHT for the subconscious indicator, which
+now truthfully reads "Inactive" for the 8 evicted agents). There is no `blocks:`
+field in the v2 schema — the reverse edge is WNZ72SFO's `blocked-by:` and is found
+with `grep -l "^blocked-by:.*QC8R79G5" design/tasks/*.md`. What the badge should
+say is downstream of what the cap is *for*, so resolve this one first.
 
 **Do NOT just raise `maxAgents`** without answering the question below — the cap
 exists to bound memory (each Agent holds a cerebellum + subsystems), and a fleet

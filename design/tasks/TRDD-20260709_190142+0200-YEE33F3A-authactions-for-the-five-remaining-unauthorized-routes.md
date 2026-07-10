@@ -4,7 +4,7 @@ title: Decide the AuthActions for the five remaining unauthorized agent-scoped r
 column: planned
 approval-tier: 2
 created: 2026-07-09T19:01:42+0200
-updated: 2026-07-10T02:58:00+0200
+updated: 2026-07-10T02:23:26+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1

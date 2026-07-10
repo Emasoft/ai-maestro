@@ -209,6 +209,47 @@ MANAGER escalates to USER and relays the decision back down the chain.
 - MANAGER handles Tier 2; forwards Tier 3 to USER.
 - USER is the only approver for Tier 3.
 
+### The receiver's duty — a missing Derived TRDD must be reported (USER, 2026-07-10)
+
+The IND base makes derived TRDDs (NPT/EHT) **mandatory companions** of every
+TRDD: no change exists in isolation, and the D-TRDDs are the platelets that close
+the holes the change opens. In the multi-agent system that duty does not end with
+the author.
+
+**Any agent that receives an assigned TRDD and judges a Derived TRDD to be
+missing MUST report it to the sender immediately** — before, or at latest while,
+starting the work. This is not optional and it is not deferred to review. A
+receiver who executes a TRDD whose EHTs are absent lands the change and leaves
+the wound open.
+
+The receiver may go further and **author the missing D-TRDD itself, as a
+proposal** in `design/proposals/` (`column: proposal`, `parent-trdd:` the
+assigned TRDD, `labels: [derived, …]`). It is a NEW TRDD, not an edit of the
+assigned one, so it needs no owner-approval round-trip — only an approver:
+
+| Scope of the missing D-TRDD | Approver |
+|---|---|
+| Confined to the receiver's own slice; a derived NPT/EHT it will execute itself | none — Tier 0, author directly in `design/tasks/` as `planned` |
+| Affects other members of the same team | **CHIEF-OF-STAFF** (Tier 1) |
+| Within the ORCHESTRATOR's dispatch scope (re-prioritisation, re-assignment) | **ORCHESTRATOR** |
+| Crosses a team, a project, the release surface, or a baseline | **MANAGER** (Tier 2) |
+
+These are the tiers of Part B, not a new authority. The USER's phrasing —
+"approved by the MANAGER or the CHIEF-OF-STAFF or the ORCHESTRATOR" — names the
+three approvers the existing ladder already provides; which one applies is
+decided by the scope of the hole, exactly as for any other proposal.
+
+**Report the gap even when you also file the proposal.** The proposal closes the
+hole; the report tells the sender that their TRDD shipped incomplete, which is
+the only way the next one ships complete. Route the notification the same way any
+message routes — through the comm graph (a team-internal agent replies to its
+COS, never around it).
+
+**Do not manufacture platelets.** Before reporting a missing D-TRDD, name the
+downstream surface and read it. A derived TRDD invented to look thorough dilutes
+the real ones and misstates the blast radius; a verified non-effect is recorded,
+not filed.
+
 ---
 
 ## Part B2 — Column-transition authority (extends the IND transition table)

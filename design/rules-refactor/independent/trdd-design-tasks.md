@@ -306,6 +306,31 @@ A parent's transition to `complete` is gated on:
   AND  all eht children are in terminal column (complete | published | live | superseded)
 ```
 
+### Derived TRDDs are MANDATORY, not optional (the platelet rule)
+
+**A TRDD is authored together with its derived TRDDs — its NPTs and EHTs.** No
+change exists in isolation; everything affects what is around it. If TRDDs are
+the red blood cells of the system, the derived TRDDs are the **platelets**: they
+close the holes the change opens. A TRDD shipped without them does more damage
+than good, because the change lands and the holes stay open.
+
+So `eht: []` is not a default. **It is an assertion — "this change touches
+nothing around it" — and it is usually false.** Any TRDD that alters an
+observable behavior (an API response shape, a status field, a rendered state, a
+timing, an error code) owes one EHT per downstream surface that behavior reaches.
+Any TRDD that depends on work not yet done owes an NPT.
+
+The gate above is what gives the rule teeth: a parent cannot reach `complete`
+while an EHT is open. Prose in a STATE block is not a platelet — it cannot be
+assigned, it does not block `complete`, and nothing bleeds when it is ignored.
+
+**But verify each platelet before authoring it.** A derived TRDD invented to
+satisfy a quota is worse than none: it dilutes the ones that matter and it
+misstates the blast radius. The test is mechanical — name the downstream surface,
+then go read it. If it has no consumers, there is no hole; record the verified
+non-effect inside a sibling EHT so nobody re-derives it. Platelets clot holes;
+they do not clot healthy vessels.
+
 ## The 8-char id reference syntax
 
 Every TRDD's `trdd-id` IS its canonical short form — an 8-char UPPERCASE

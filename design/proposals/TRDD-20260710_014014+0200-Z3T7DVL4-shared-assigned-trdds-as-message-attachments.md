@@ -4,7 +4,7 @@ title: Assigned TRDDs are shared objects attached to the message, not copies
 column: proposal
 approval-tier: 2
 created: 2026-07-10T01:40:14+0200
-updated: 2026-07-10T01:48:00+0200
+updated: 2026-07-10T02:23:26+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -298,6 +298,64 @@ And the third pillar closes the loop: for an IDENTITY edit the **tier-floor eval
 receiver's edit inherits the approval-tier machinery it already lives under. Nothing
 new is invented — the TRDD carries its own antigens, and the PRRD is the immune
 system that reads them.
+
+## 8.5 The Derived TRDD is the platelet — USER, 2026-07-10
+
+The USER extended the metaphor, and the extension is a requirement, not a
+flourish:
+
+> the Derived-TRDD or D-TRDD, are crucial for the 3-pillars system to work.
+> Because no change can exist in isolation. Everything affects what is around it.
+> If the TRDD are the red blood cells of the ai-maestro circulatory system, the
+> Derived-TRDD are the platelets: they will cover the holes left by the changes
+> introduced by the TRDD. Without them, each TRDD will cause more damages than
+> good. The D-TRDD must be produced along with any TRDD, and if an agent, even
+> the receiver, think that a TRDD is missing a Derived-TRDD, it must notify this
+> immediately to the TRDD sender, even writing a D-TRDD proposal to get approved
+> by the MANAGER or the CHIEF-OF-STAFF or the ORCHESTRATOR.
+
+Read against the rest of this document, three things follow.
+
+**1. A TRDD without its D-TRDDs is a wound, not a delivery.** The NPT/EHT fields
+already exist in the v2 schema, and the IND base already gates a parent's
+`complete` on its EHTs reaching a terminal column. What was missing is the
+*obligation*: `eht: []` is an assertion that the change touches nothing around
+it, and that assertion is almost always false. A change that alters an observable
+behavior owes an EHT for each downstream surface that behavior reaches. Prose in
+a STATE block is not a platelet — it cannot be assigned, it does not block
+`complete`, and nothing bleeds when it is ignored.
+
+**2. The duty runs in BOTH directions along the vessel.** The sender authors the
+D-TRDDs; the **receiver** who spots a missing one must say so *immediately* — and
+may author the D-TRDD itself, as a **proposal** for MANAGER / CHIEF-OF-STAFF /
+ORCHESTRATOR approval. This is the first place in this design where the assignee
+originates a cell rather than circulating one, and it slots cleanly into §7: a
+receiver-authored D-TRDD is a NEW TRDD in `design/proposals/`, not an IDENTITY
+edit of the assigned one, so it needs no pending-edit machinery. It needs only
+the comm-graph edge back to the sender — which, per §8 Q7, it already has,
+because the notification *is* a message.
+
+Note the approver list the USER named — MANAGER **or** COS **or** ORCHESTRATOR —
+maps exactly onto the Tier 1/2 ladder: a D-TRDD confined to one team is the COS's
+(Tier 1); the ORCHESTRATOR may approve within its own dispatch scope; anything
+crossing a team, a project, or the release surface is the MANAGER's (Tier 2). No
+new authority is introduced.
+
+**3. Verify each platelet before authoring it.** A D-TRDD invented to satisfy a
+quota is worse than none: it dilutes the ones that matter and it lies about blast
+radius. The test is mechanical — name the downstream surface, then go read it. In
+`TRDD-WNZ72SFO` (the first EHT authored under this rule) two candidate effects
+were identified and only one survived: the subconscious indicator genuinely now
+renders "Inactive" for eight agents, while the skill-settings 404 turned out to
+have **zero consumers anywhere in the tree**. The non-effect was recorded inside
+the surviving EHT so nobody re-derives it. Platelets clot holes; they do not clot
+healthy vessels.
+
+**Consequence for the walking skeleton (§8 Q1).** The narrowest complete circuit
+must carry a D-TRDD, or it does not exercise the system: assign a TRDD, apply a
+CIRCULATION edit directly, queue an IDENTITY edit for the owner's approval, **and
+have the receiver notice a missing EHT and file it as a proposal.** That last leg
+is the one that proves the vessel runs both ways.
 
 ## 9. Why this is Tier 2
 

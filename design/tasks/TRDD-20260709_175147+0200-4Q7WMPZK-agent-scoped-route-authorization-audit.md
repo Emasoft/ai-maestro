@@ -3,7 +3,7 @@ trdd-id: 4Q7WMPZK
 title: Audit the ten agent-scoped mutation routes that authorize nothing
 column: dev
 created: 2026-07-09T17:51:47+0200
-updated: 2026-07-10T02:41:00+0200
+updated: 2026-07-10T02:23:26+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -14,7 +14,7 @@ task-type: security
 release-via: none
 parent-trdd: TRDD-D3RP7KQZ
 npt: []
-eht: []
+eht: [TRDD-WNZ72SFO, TRDD-QC8R79G5]
 blocked-by: []
 supersedes: []
 superseded-by: []

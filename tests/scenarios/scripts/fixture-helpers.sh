@@ -17,9 +17,19 @@
 
 set -eu
 
-# Resolve repo root from any caller
-PROJECT_ROOT="/Users/emanuelesabetta/ai-maestro"
-SCRIPTS_DIR="$PROJECT_ROOT/tests/scenarios/scripts"
+# Resolve repo root from any caller.
+#
+# `${BASH_SOURCE[0]}` is THIS file even when the file is sourced, so the answer
+# depends on where the harness lives, not on the caller's cwd or on $0. This is the
+# same idiom setup-overnight-batch.sh uses, deliberately: that script computes these
+# three values correctly and then sources us four lines later, so anything different
+# here would silently overwrite a correct answer with a wrong one.
+#
+# This line used to be an absolute path to one machine's home directory. Do not
+# reintroduce one: it made the harness unrunnable in any other clone, and it published
+# the author's home directory to a public repository.
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPTS_DIR/../../.." && pwd)"
 STATE_DIR="$PROJECT_ROOT/tests/scenarios/state"
 FIXTURES_TMP_ROOT="/tmp/aim-scen-fixtures-$$"
 

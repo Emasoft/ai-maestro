@@ -47,14 +47,47 @@ thing. That is the hole; this is the platelet. Until it closes, f181a4ae is `blo
 on this TRDD, not `published` — a parent that ships a change and leaves its hole open
 has not finished.
 
-**NEXT ACTION:** start with the de-path (independent of the plugin decision, and the
-only part with a security edge). Then decide consume-vs-keep before moving any file.
+**NEXT ACTION:** parts 2 and 3 below. Part 1 (de-path) is **DONE** — see the update.
+
+### ⏵ UPDATE 2026-07-10 — part 1 (de-path) done; it was five files, not four
+
+Fixed and verified. Three things the original scoping got wrong:
+
+- **A fifth file, outside `tests/scenarios/`.** `.claude/scripts/test-subagent-write-guard.sh`
+  had the same defect, and worse: its `ALLOW` case asserted a write to
+  `<absolute-root>/README.md`, a path that is *outside* any other clone — so the guard
+  would have correctly blocked it and the test would have failed for a reason unrelated
+  to the guard. Folded in rather than left behind a folder boundary. Suite: 24 pass, 0 fail.
+- **The correct answer was already in the repo, and was being destroyed.**
+  `setup-overnight-batch.sh` resolves `PROJECT_ROOT` from `${BASH_SOURCE[0]}` at line 35,
+  then sources `fixture-helpers.sh` four lines later, which reassigned it to the literal.
+  The helper now computes the identical value from its own location, so the reassignment
+  is idempotent instead of destructive.
+- **A second machine-specific assumption on the very line being de-pathed.** The overnight
+  batch's disk-space guard used `df -BG`, a GNU-coreutils flag. It works on the author's
+  machine only because homebrew's `df` shadows `/bin/df` on PATH. Stock BSD `df` exits 64;
+  `2>/dev/null` swallowed it, `FREE_GB` came back empty, and `[ -n "$FREE_GB" ]` skipped
+  the check in silence — so on any other Mac the unattended overnight run had no disk
+  guard at all. Now `df -P -k` (POSIX, verified to return the same number through both
+  `df` binaries), and an unreadable `df` is fatal rather than ignored.
+
+Verified: `bash -n` and `shellcheck -S warning` clean on all three scripts; a copy of
+`fixture-helpers.sh` placed under `/tmp/…/fakeclone` resolves `PROJECT_ROOT` to the copy,
+while the real repo still resolves to itself. That check was falsified first — given the
+old hardcoded line, it resolves to the author's machine and fails, so it can detect the
+bug it guards against.
+
+**Found while doing this, NOT fixed here:** the governance password is committed verbatim
+in **32 tracked files** on this public branch, and `SCENARIOS_TESTS_RULES.md` mandates it
+("the actual password value, in quotes"). That needs a rotation and a convention change,
+not a redaction — redacting 1 of 32 would be theatre and would break the suite. Filed
+separately; do not "fix" it piecemeal from here.
 
 ### The three pieces, in the order they should be done
 
-1. **De-path.** Four *git-tracked* files bake the author's absolute working directory
-   `/Users/emanuelesabetta/ai-maestro` into the repo, so the harness is unrunnable in
-   any other clone and the path is published to every reader:
+1. **De-path.** ✅ **DONE.** Five *git-tracked* files baked the author's absolute working
+   directory into the repo, so the harness was unrunnable in any other clone and the path
+   was published to every reader:
 
    | File | What it does with the path |
    |---|---|

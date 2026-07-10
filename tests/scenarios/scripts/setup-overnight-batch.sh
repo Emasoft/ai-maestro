@@ -177,9 +177,19 @@ for n in 001 002 003 004 005 006 007 008 009 010 011 012 013 014 015 016 017 018
 done
 
 # ─── 7. Disk space check ────────────────────────────────────
-FREE_GB=$(df -BG /Users/emanuelesabetta/ai-maestro 2>/dev/null | tail -1 | awk '{gsub(/G/,"",$4); print $4}')
+# `df -P -k` is POSIX: -P forces one line per filesystem (BSD df wraps a long device
+# name onto two lines without it) and -k fixes the block size at 1 KiB everywhere.
+#
+# This used to be `df -BG <absolute path>`. `-B` is a GNU-coreutils flag that stock
+# macOS /bin/df rejects with exit 64 — but the error went to /dev/null, FREE_GB came
+# back empty, and the `-n` guard below then skipped the check without a word. It only
+# ever ran on a machine with GNU coreutils ahead of /bin on PATH. An unattended
+# overnight batch must not silently skip its own disk check, so a df we cannot read is
+# now fatal rather than ignored.
+FREE_GB=$(df -P -k "$PROJECT_ROOT" 2>/dev/null | awk 'NR==2 { print int($4 / 1024 / 1024) }')
+[ -n "$FREE_GB" ] || die "cannot determine free disk space for $PROJECT_ROOT"
 log "disk free: ${FREE_GB}GB"
-if [ -n "$FREE_GB" ] && [ "$FREE_GB" -lt 5 ]; then
+if [ "$FREE_GB" -lt 5 ]; then
     die "less than 5GB free — aborting overnight run"
 fi
 

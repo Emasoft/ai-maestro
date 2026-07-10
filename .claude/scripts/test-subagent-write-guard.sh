@@ -4,8 +4,14 @@
 
 set -u
 
-GUARD="${CLAUDE_PROJECT_DIR:-/Users/emanuelesabetta/ai-maestro}/.claude/scripts/subagent-write-guard.sh"
-export CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-/Users/emanuelesabetta/ai-maestro}"
+# Honour CLAUDE_PROJECT_DIR when the harness sets it; otherwise derive the root from
+# THIS file's location (.claude/scripts/ → two levels up). The fallback used to be an
+# absolute path to one machine's home directory, which made every ALLOW case below
+# assert against a path that is OUTSIDE any other clone — so the guard would correctly
+# block it and the test would fail for a reason that had nothing to do with the guard.
+PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+GUARD="$PROJECT_ROOT/.claude/scripts/subagent-write-guard.sh"
+export CLAUDE_PROJECT_DIR="$PROJECT_ROOT"
 
 PASS=0
 FAIL=0
@@ -118,7 +124,7 @@ bash_case "echo > /tmp/x.txt" ALLOW "echo hi > /tmp/x.txt"
 
 echo
 echo "=== Write tool (path-based) ==="
-write_case "Write to project root file" ALLOW "/Users/emanuelesabetta/ai-maestro/README.md"
+write_case "Write to project root file" ALLOW "$PROJECT_ROOT/README.md"
 write_case "Write to /tmp" ALLOW "/tmp/foo.txt"
 write_case "Write to /etc" BLOCK "/etc/hosts"
 write_case "Write to ~/.aimaestro" BLOCK "$HOME/.aimaestro/x.json"

@@ -25,10 +25,10 @@ Both scripts source `fixture-helpers.sh` which provides reusable functions: `fix
 
 ## Pre-approval
 
-Every script is registered in `~/.claude/settings.json` `permissions.allow` with both absolute and relative path forms:
+Every script is registered in `~/.claude/settings.json` `permissions.allow` with both absolute and relative path forms. `<PROJECT_ROOT>` below is the absolute path of *your* clone — the allow-list is per-machine, so the absolute entry necessarily names a real local path. Never commit your own:
 
 ```
-"Bash(bash /Users/emanuelesabetta/ai-maestro/tests/scenarios/scripts/setup-SCEN-018.sh)"
+"Bash(bash <PROJECT_ROOT>/tests/scenarios/scripts/setup-SCEN-018.sh)"
 "Bash(./tests/scenarios/scripts/setup-SCEN-018.sh)"
 "Bash(tests/scenarios/scripts/setup-SCEN-018.sh)"
 ```
@@ -48,15 +48,21 @@ This is the pattern the user explicitly requested:
 
 ## Helper Python snippet for adding a new scenario to allow-list
 
+Run it from anywhere inside the clone — it asks git where the root is rather than
+assuming one machine's path, so it writes an allow-list entry that is correct for
+whoever runs it:
+
 ```python
-import json
+import json, subprocess
 from pathlib import Path
 SCEN = "023"  # change this
+root = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                      capture_output=True, text=True, check=True).stdout.strip()
 p = Path.home() / ".claude" / "settings.json"
 with p.open() as f: d = json.load(f)
 allow = set(d["permissions"]["allow"])
 for kind in ["setup", "cleanup"]:
-    for prefix in ["bash /Users/emanuelesabetta/ai-maestro/", "./", ""]:
+    for prefix in [f"bash {root}/", "./", ""]:
         allow.add(f"Bash({prefix}tests/scenarios/scripts/{kind}-SCEN-{SCEN}.sh)")
 d["permissions"]["allow"] = sorted(allow)
 with p.open("w") as f: json.dump(d, f, indent=2); f.write("\n")

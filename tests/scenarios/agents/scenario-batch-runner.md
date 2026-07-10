@@ -70,7 +70,7 @@ For each scenario number `N`:
 Compute the 3-digit form: `printf -v ID "%03d" $N`. Then:
 
 ```bash
-bash /Users/emanuelesabetta/ai-maestro/tests/scenarios/scripts/setup-SCEN-${ID}.sh
+bash "${CLAUDE_PROJECT_DIR}/tests/scenarios/scripts/setup-SCEN-${ID}.sh"
 ```
 
 This script provisions all fixtures the scenario expects: GitHub repos, fake source files, tmux placeholder sessions, agent registry snapshots for STATE-WIPE backup, etc. The script is **pre-approved in `~/.claude/settings.json`** — Claude Code will not prompt or inspect its contents. If the script does not exist, log a warning and rely on the scenario's own Phase 0 SAFE-SETUP to handle setup.
@@ -126,7 +126,7 @@ The proposals are the **most valuable output**. Categorize each as P0/P1/P2/P3 w
 ### 5. Cleanup (bash, pre-approved)
 
 ```bash
-bash /Users/emanuelesabetta/ai-maestro/tests/scenarios/scripts/cleanup-SCEN-${ID}.sh
+bash "${CLAUDE_PROJECT_DIR}/tests/scenarios/scripts/cleanup-SCEN-${ID}.sh"
 ```
 
 This is the SAFETY NET cleanup. The scenario itself runs its CLEANUP phase via the UI (Rule 1 CLEAN-AFTER-YOURSELF), but the bash script catches anything the UI cleanup missed (orphan tmux sessions, dangling agent folders, stale state files).
@@ -150,7 +150,7 @@ Append the result line to `tests/scenarios/state/batch-progress.log` and proceed
 
 | Setting | Value |
 |---------|-------|
-| Project root | `/Users/emanuelesabetta/ai-maestro` |
+| Project root | `${CLAUDE_PROJECT_DIR}` (the harness never hardcodes a path) |
 | Server | `http://localhost:23000` (pm2 process `ai-maestro`) |
 | Branch | `feature/team-governance` |
 | Governance password | `mYkri1-xoxrap-gogtan` |

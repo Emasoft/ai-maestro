@@ -278,6 +278,49 @@ uses for v1 `status:` → v2 `column:`), never in a mass rewrite: `0 → none`,
 `1 → chief-of-staff` (or `orchestrator` where the TRDD is dispatch-scoped),
 `2 → manager`, `3 → user`. A file carries exactly one of the two fields.
 
+#### The approval record — who judged it, and when (USER, 2026-07-10)
+
+A TRDD that has been **approved or refused** carries the judgment, not just its
+consequence:
+
+```yaml
+approved: true                      # true | false | rejected
+approval-judge: amama-manager       # WHO decided (an agent name, or the maestro)
+approval-datetime: 2026-07-10T03:19:24+0200
+min-approval-requirement: manager   # WHO WAS REQUIRED to decide (the D3 floor)
+```
+
+`approval-judge` and `approval-datetime` are new information: no other field records
+who signed off or when, and without them an `## Approval log` line is the only
+evidence — prose, not greppable. `min-approval-requirement` is the floor from §D3;
+its values are the authority ladder in lowercase kebab, with the human owner named
+as this project names them: `maestro | manager | chief-of-staff | orchestrator |
+none`. (The USER also wrote this field as `approval-requirement`; the `min-` prefix
+is kept because §D3 and §D4 compare against it as a *floor*, not as a fixed
+requirement.)
+
+`approved:` is DENORMALIZED, on the same terms as `derived:` — it buys a one-pass
+query (`grep -l "^approved: rejected"`) and it owes an invariant:
+
+```
+approved: true       ⟺  column ∉ {proposal, refused, superseded}   (it reached design/tasks/)
+approved: rejected   ⟺  column == refused                          (a judge declined it)
+approved: false      ⟺  column ∈ {proposal, superseded}            (pending, or overtaken)
+approval-judge / approval-datetime  present ⟺ approved ∈ {true, rejected}
+```
+
+A **mandate** is approved the moment it is written, so `approval-judge` is its
+issuer and `approval-datetime` its `created:`. A **superseded** proposal is archived
+with `approved: false` and **no judge**: nobody declined it, a newer TRDD overtook
+it. Recording it as `rejected` would attribute a decision to someone who never made
+one.
+
+**Declined, and why** — `status: superseded|valid` and `archived: yes|no` from the
+same directive are not fields. `status:` was the v1 field that `column:` replaced;
+reintroducing it with a new meaning would make every legacy file ambiguous. And
+both restate what `column:` and the file's folder already say. The rule below is
+the general form of that judgment.
+
 #### The field set — what is a field, and what is derived from one
 
 A frontmatter field earns its place by carrying information no other field carries.
@@ -290,8 +333,10 @@ supposed to be one thing. So:
 | `mandate` / `mandated-by` | **fields** — nothing else records who pre-approved |
 | `derived` / `derived-kind` | **fields** — a denormalized back-pointer; see the invariant below |
 | `min-approval-requirement` | **field** — the objective floor; nothing else records it |
+| `created-by` | **field** — authorship, set once. Not `current-owner` (write-lock) and not `assignee` (executor); those change hands, authorship does not |
+| `approved` / `approval-judge` / `approval-datetime` | **fields** — the judgment. `approved` is denormalized (see the invariant above); the judge and the datetime are recorded nowhere else |
 | *proposal?* | **derived**: `column == proposal` (and the file sits in `design/proposals/`) |
-| *approved?* | **derived**: `column ∉ {proposal, refused}` — reaching `design/tasks/` **is** approval, whether by an approver or by mandate. The `## Approval log` line says which |
+| *status? archived?* | **derived**: `column == superseded`, and the file's folder. `status:` is additionally the retired v1 field name — reusing it would make every legacy TRDD ambiguous |
 | *the flock (list of D-TRDDs)* | **derived**: `npt: ∪ eht:` — already listed, and split by KIND, which the union would throw away. NPT gates the parent's `dev`; EHT gates its `complete`; a flat `derived-trdd:` list could not express that difference |
 
 **`derived:` is DENORMALIZED, and denormalized fields drift.** A TRDD is derived
@@ -613,6 +658,13 @@ heartbeat cadence / MANAGER idle sweep) — **never** on every creation:
    `npt:`/`eht:` names a non-terminal child is a **false completion** —
    move it to `blocked` with `blocked-by:` naming the open children, and
    flag it. See the completion rule below.
+6. **Check the approval record:** `approved:` agrees with `column:` per the
+   invariant above; `approval-judge`/`approval-datetime` are present exactly
+   when `approved ∈ {true, rejected}`; and the judge's authority is at or
+   above `min-approval-requirement`. A `superseded` TRDD carries no judge.
+7. **Check supersede authority:** for every `T_old.superseded-by: [T_new]`,
+   the editor who set it must be `T_new.created-by`. Only the author of the
+   replacement may declare that it replaces something. Flag any other hand.
 4. The watchdog writes a report the MANAGER drains at leisure; it does
    not interrupt anyone.
 

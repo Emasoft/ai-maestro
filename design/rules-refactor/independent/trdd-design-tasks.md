@@ -117,6 +117,7 @@ created: 2026-06-02T11:53:00+0200        # ISO 8601 + local TZ
 updated: 2026-06-02T11:53:00+0200        # bump on EVERY edit
 
 # ─────────── 2. OWNERSHIP
+created-by: main-session                 # WHO AUTHORED IT — set once, never changes hands
 current-owner: main-session              # session name with write-lock on body
 assignee: main-session                   # who executes (standalone: always this project's Claude)
 priority: 3                              # 0 = highest, 9 = lowest
@@ -543,8 +544,8 @@ A TRDD lives in exactly one of four folders, by lifecycle state:
 |---|---|---|
 | `design/proposals/` | `proposal` | Authored, awaiting approval. **NOT** authorized to execute. |
 | `design/tasks/` | `planned` (then every downstream `column:` — `todo`, `dispatch`, `dev`, `testing`, …) | Approved/authorized. In the execution pipeline. |
-| `design/refused/` | `refused` | A **proposal that was NEVER approved** — declined at the proposal gate. Kept as an audit record; never deleted. |
-| `design/archived/` | `completed` · `cancelled` · `superseded` | **Once-approved** TRDDs that reached a terminal-DONE state — finished, withdrawn, or replaced. Kept; never deleted. **`failed` is NOT here** — it stays in `design/tasks/` (retryable). |
+| `design/refused/` | `refused` | A proposal a judge **DECLINED**. Kept as an audit record; never deleted. |
+| `design/archived/` | `completed` · `cancelled` · `superseded` | TRDDs that reached a terminal-DONE state — finished, withdrawn, or replaced. Kept; never deleted. **`failed` is NOT here** — it stays in `design/tasks/` (retryable). |
 
 `proposal`, `planned`, `refused`, `cancelled`, `completed`, and
 `superseded` are **overlay values of the v2 `column:` field**. `proposal`
@@ -552,11 +553,26 @@ precedes `planned`; `planned` is the approved-entry column from which the
 owner advances the TRDD through the normal v2 flow (`todo` → `dispatch`
 → `dev` → …).
 
-**Lineage rule (which terminal folder?):** the dividing line is *was it
-ever approved?* A proposal that is **declined** never entered the
-pipeline → `design/refused/`. A TRDD that **was approved** (reached
-`design/tasks/`) and later finishes, is cancelled, or is superseded →
-`design/archived/`.
+**Lineage rule (which terminal folder?):** the dividing line is *did a
+judge decline it?* — **not** *was it ever approved*. Only a DECLINED
+proposal goes to `design/refused/`. Everything else that ends —
+completed, cancelled, or superseded — goes to `design/archived/`,
+**whether or not it was ever approved**. A proposal made obsolete by a
+newer TRDD is superseded, never refused: nobody judged it, it was
+overtaken. It is archived with `approved: false` and
+`column: superseded`, which says exactly what happened. Refusing it
+would record a decision that no one made.
+
+**Only the author of the NEW TRDD may mark the old one superseded.**
+Superseding is a claim that *this* work replaces *that* work, and only
+the person making the replacement can honestly make it. So the writer of
+`T_new` sets `T_old.column: superseded` and `T_old.superseded-by:
+[T_new]`; nobody else may. `created-by:` is what makes the rule
+checkable: the editor's identity must equal `T_new.created-by`.
+
+`created-by:` is set once, at creation, and never changes. It is NOT
+`current-owner:` (who holds the write-lock right now) and NOT `assignee:`
+(who executes). Those two change hands; authorship does not.
 
 **`failed` is NOT terminal and is NOT archived.** A failed TRDD stays in
 `design/tasks/` with `column: failed`; failure is a *retryable* state —

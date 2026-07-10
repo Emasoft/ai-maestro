@@ -127,6 +127,11 @@ tests_dev/
 downloads_dev/
 libs_dev/
 builds_dev/
+# logs_dev/ was missing from this list, and one file slipped through it into a
+# PUBLIC repo: logs_dev/usage-export-2026-03-22.csv, 10k rows carrying the
+# owner's private email and the absolute path of every project on the machine.
+# A *_dev/ directory is local-only by definition — none of them may be tracked.
+logs_dev/
 
 # SERENA MCP state
 .serena/

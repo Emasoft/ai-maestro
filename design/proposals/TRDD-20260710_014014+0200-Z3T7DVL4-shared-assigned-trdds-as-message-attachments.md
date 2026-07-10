@@ -4,7 +4,7 @@ title: Assigned TRDDs are shared objects attached to the message, not copies
 column: proposal
 approval-tier: 2
 created: 2026-07-10T01:40:14+0200
-updated: 2026-07-10T02:23:26+0200
+updated: 2026-07-10T02:34:32+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -356,6 +356,105 @@ must carry a D-TRDD, or it does not exercise the system: assign a TRDD, apply a
 CIRCULATION edit directly, queue an IDENTITY edit for the owner's approval, **and
 have the receiver notice a missing EHT and file it as a proposal.** That last leg
 is the one that proves the vessel runs both ways.
+
+## 8.6 The mandate — why an assigned TRDD arrives already approved (USER, 2026-07-10)
+
+> mandate TRDD are just TRDD sent directly by the MANAGER, the CHIEF-OF-STAFF or
+> the ORCHESTRATOR. they are different from normal TRDD because they came
+> 'pre-approved', since they are essentially commands from above. […] the ones
+> that can create them are the same that the approval requirements and the PRRD
+> rules will require to approve them. […] a TRDD that require no approval, like a
+> local MEMBER TRDD, are automatically approved and considered mandate (even if
+> the mandate is from the agent itself, since he is both the sender and the
+> receiver).
+
+This closes a hole in §5 and §8 that I had not seen. The design so far described
+how a cell *circulates* and who may *edit* it, but left "approval" as an event
+that happens to a TRDD somewhere off-stage. It is not an event. It is a
+**property of the author's authority relative to the TRDD's tier**:
+
+```
+mandate  ⟺  authority(author) >= required-approver(tier)
+proposal ⟺  authority(author) <  required-approver(tier)
+```
+
+The proposal folder is not a stage every TRDD passes through. It is the holding
+pen for TRDDs whose author could not approve them. **A TRDD authored by someone
+who could have approved it is born approved**, because the approval round-trip
+would be that agent asking itself for permission.
+
+Three consequences for THIS design, each of which changes something above.
+
+**1. The assignment message and the approval are the same act.** §8 Q7 concluded
+that assignment must BE a message through `validateMessageRoute`, not a file write
+plus a notification. The mandate rule tells us what that message carries: a TRDD
+sent *down* the ladder — MANAGER→COS, COS→member, ORCH→member — is pre-approved
+**by the fact of who sent it**. The comm graph and the authority ladder are the
+same edge seen twice. This is why a MANAGER cannot reach an in-team MEMBER
+directly (R6 v3): a mandate that skipped the COS would also skip the COS's
+approval scope.
+
+**2. Tier 0 is not "approval-free", it is self-mandated.** Every derived NPT/EHT
+an agent creates for its own slice is a mandate where sender and receiver are the
+same agent. That is *why* §8.5's platelets never queue and never wait: not
+because they are unimportant, but because the author already holds the authority
+their tier requires. The walking skeleton's receiver-authored D-TRDD is a mandate
+when the hole is inside the receiver's slice, and a proposal only when it reaches
+past it.
+
+**3. Every MANAGER-created TRDD is a mandate — except at Tier 3.** No *agent*
+outranks the MANAGER, so at tiers 0-2 a MANAGER commands rather than proposes.
+But the USER is not an agent and sits above the ladder, and the USER-reserved set
+is real and already enforced in code: `prrd-edit.py` refuses a MANAGER golden-rule
+edit with `403 — golden rules are user-only` (`caller_is_manager()` in
+`prrd_lib.py`). So "the MANAGER has no one above him" is true of the fleet and
+false of the USER. A MANAGER-authored Tier-3 TRDD is a proposal, and the one
+kind of TRDD the MANAGER may never mandate.
+
+**The teeth.** `mandate: true` is written by the author, so on its own it is
+self-certified — and a self-certified mandate stacked on an under-classified tier
+(§D2) is a total bypass of the approval system by an agent that never sent a
+single request. The §D4 watchdog therefore gains a second check beside the
+tier-floor one: recompute the floor, then verify
+`authority(mandated-by) >= required-approver(floor)`. A mandate that fails is not
+a mis-filing, it is a **forged approval** — revoked, moved back to
+`design/proposals/`, dependent execution halted, issuer named in the
+`## Approval log`.
+
+**Frontmatter (open-schema expansion, DEP layer):**
+
+```yaml
+approval-tier: 2          # the REQUIRED authority — the objective floor (§D3)
+mandate: true             # author authority >= required approver
+mandated-by: manager      # the TITLE that pre-approves it; 'self' at tier 0
+```
+
+**4. A mandate travels as a flock, and the flock is judged per cell.** The USER:
+*"mandate-TRDD often comes with a flock of mandate-derived-TRDD. But even so, if a
+receiver agent think that is missing a derived-TRDD he can propose one for
+approval."* The issuing authority sends the parent together with its NPTs and
+EHTs, and those children are pre-approved by the same issuer — an authority that
+commands a change commands the platelets too. But authority does **not** flow down
+the `parent-trdd` link: each child is a mandate only if the issuer's rank clears
+**that child's own** floor. A MANAGER's flock mandates every child at tier ≤ 2 and
+ships any Tier-3 child as a proposal still awaiting the USER.
+
+And the flock never forecloses the receiver. However complete the mandate looks,
+the receiver may still propose a missing D-TRDD, and must still report the gap. A
+command from above carries authority, not omniscience — the issuer decided *what*
+must change; the receiver is standing where it will break. Note the routing: the
+receiver's D-TRDD goes to the approver **its own hole's tier** requires — a
+self-mandate inside its slice, upward only when the hole reaches past it. It does
+not route back to the issuer merely because the issuer outranks the receiver.
+This is the §8.5 leg of the walking skeleton, and it is the only leg that proves
+the vessel runs *up*.
+
+The pillars fold together here. The **PRRD** supplies the rule that sets the tier
+floor; the **TRDD** carries the tier and the mandate in its own frontmatter; the
+**kanban** shows it already in `planned`/`dispatch` rather than parked in
+proposals. A mandate is a cell that entered the bloodstream carrying its own
+clearance — the antigen and the passport on the same surface. A flock is what the
+marrow actually releases: never one cell, and never cells without platelets.
 
 ## 9. Why this is Tier 2
 

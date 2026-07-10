@@ -200,7 +200,111 @@ Required when the task:
 
 MANAGER escalates to USER and relays the decision back down the chain.
 
+### Mandate TRDDs — a command from above is already approved (USER, 2026-07-10)
+
+**The set of agents who may CREATE a TRDD as a mandate is exactly the set who
+would be required to APPROVE it.** Approval is therefore not an event that
+happens *to* a TRDD; it is a property of the author's authority relative to the
+TRDD's tier. A proposal exists **only** when the author's authority is BELOW the
+tier the TRDD requires.
+
+The agent authority ladder:
+
+```
+MEMBER · ARCHITECT · INTEGRATOR   (no approval authority)
+   <  ORCHESTRATOR      (its own team's dispatch scope)
+   <  CHIEF-OF-STAFF    (team-internal coordination — sole entry point, R6 v3)
+   <  MANAGER           (cross-team, governance, release, baseline deviation)
+   <  USER              (not an agent; above the whole ladder)
+```
+
+| Tier | Required approver | May issue it as a MANDATE |
+|---|---|---|
+| **0** | none | **any agent** — a self-mandate: sender and receiver are the same |
+| **1** | CHIEF-OF-STAFF (or ORCHESTRATOR, within its dispatch scope) | ORCHESTRATOR\*, COS, MANAGER |
+| **2** | MANAGER | MANAGER |
+| **3** | USER | **USER only** |
+
+\* ORCHESTRATOR may mandate only the dispatch subset of Tier 1 (assignment,
+priority, sequencing inside its own team). Anything else Tier-1 is the COS's.
+
+**A mandate is born approved.** It is authored directly in `design/tasks/` with
+`column: planned` (or straight to `dispatch`/`dev` when assigned) — never in
+`design/proposals/`. It carries:
+
+```yaml
+approval-tier: 2          # the REQUIRED authority (the objective floor, §D3)
+mandate: true             # author authority >= required approver
+mandated-by: manager      # the TITLE whose authority pre-approves it ('self' for tier 0)
+```
+
+and an `## Approval log` line recording that no round-trip occurred:
+
+```
+- <ISO> — MANDATE issued by MANAGER <agent-name> (tier 2). Pre-approved:
+  issuer authority >= required approver. No approval request was sent.
+```
+
+**The invariant a watchdog can check:** `mandate: true` requires
+`authority(mandated-by) >= required-approver(approval-tier)`. A mandate that
+fails this is void — see §D4.
+
+#### Consequences, stated because each one is a rule someone will otherwise get wrong
+
+- **Every TRDD created by a MANAGER is a mandate — with exactly one exception.**
+  No *agent* outranks the MANAGER, so at tiers 0-2 a MANAGER never proposes; it
+  commands. The exception is **Tier 3, the USER-reserved set**: golden PRRD rules,
+  promote/demote between golden and silver, and the irreversible / owner-facing
+  operations. There the MANAGER is a **proposer**, not an approver, and this is
+  not a convention — `prrd-edit.py` refuses a MANAGER golden edit with
+  `403 — golden rules are user-only`, enforced by `caller_is_manager()` in
+  `prrd_lib.py`. "The MANAGER has no one above him" is true of the agent fleet and
+  false of the USER, who is not an agent.
+- **Every Tier-0 TRDD is a self-mandate.** A task requiring no approval is
+  approved the moment it is written, because the author is both sender and
+  receiver. This is why derived NPT/EHT work never queues: it is mandated by the
+  agent that owns it.
+- **A COS-authored Tier-2 TRDD is a proposal, not a mandate.** Authority is per
+  tier, not per title. Being an approver *somewhere* does not make you an approver
+  *everywhere*.
+- **A mandate is still a TRDD.** It obeys the derived-TRDD rule (it ships its
+  NPTs/EHTs), the receiver may still report a missing D-TRDD, and its tier is
+  still subject to the objective floor. Pre-approved means "no approval request
+  was needed", not "unreviewable".
+- **No agent may mandate above its own rank.** An agent that sets `mandate: true`
+  on a TRDD whose floor exceeds its authority has not approved anything; it has
+  forged an approval. §D4 detects and reverses this.
+
+#### A mandate usually arrives with a flock (USER, 2026-07-10)
+
+A mandate rarely travels alone. The issuing authority sends it **together with its
+derived TRDDs** — the NPTs it depends on and the EHTs that close the holes it
+opens — and those children are themselves **mandate-derived-TRDDs**, pre-approved
+by the same issuer. This is the derived-TRDD rule and the mandate rule meeting: an
+authority that commands a change also commands the platelets that keep the change
+from bleeding.
+
+Each child's mandate is judged on **its own** tier floor, not the parent's. A
+MANAGER issuing a flock mandates every child whose floor is ≤ 2; a child whose
+content reaches the USER-reserved set (Tier 3) is a **proposal even from the
+MANAGER**, and the flock ships with one member still awaiting the USER. Authority
+does not flow down a parent link; it is re-evaluated per TRDD.
+
+**The flock does not foreclose the receiver.** However complete the mandate looks,
+a receiver that judges a derived TRDD to be missing **may still propose one** —
+and must still report the gap to the sender (see the receiver's duty below). A
+command from above carries authority, not omniscience: the issuer decided *what*
+must change, the receiver is the one standing where it will break. Approval of the
+receiver's D-TRDD follows the ordinary rule — a self-mandate when the hole lies
+inside the receiver's own slice, a proposal to the required approver when it
+reaches past it. It does **not** automatically route back to the mandate's issuer
+merely because the issuer outranks the receiver; the *hole's* tier decides, not the
+parent's.
+
 ### Routing summary
+- The routing below applies **only when the author's authority is below the
+  TRDD's tier**. An author at or above the tier issues a MANDATE and routes
+  nothing (see above).
 - Team-internal agents (ORCH/ARCH/INT/MEMBER) route **all** proposals
   through their **COS** (R6 v3). COS handles Tier 1; forwards Tier 2/3
   to MANAGER.
@@ -227,9 +331,9 @@ proposal** in `design/proposals/` (`column: proposal`, `parent-trdd:` the
 assigned TRDD, `labels: [derived, …]`). It is a NEW TRDD, not an edit of the
 assigned one, so it needs no owner-approval round-trip — only an approver:
 
-| Scope of the missing D-TRDD | Approver |
+| Scope of the missing D-TRDD | Required approver |
 |---|---|
-| Confined to the receiver's own slice; a derived NPT/EHT it will execute itself | none — Tier 0, author directly in `design/tasks/` as `planned` |
+| Confined to the receiver's own slice; a derived NPT/EHT it will execute itself | none — Tier 0, a **self-mandate**: author directly in `design/tasks/` as `planned` |
 | Affects other members of the same team | **CHIEF-OF-STAFF** (Tier 1) |
 | Within the ORCHESTRATOR's dispatch scope (re-prioritisation, re-assignment) | **ORCHESTRATOR** |
 | Crosses a team, a project, the release surface, or a baseline | **MANAGER** (Tier 2) |
@@ -238,6 +342,13 @@ These are the tiers of Part B, not a new authority. The USER's phrasing —
 "approved by the MANAGER or the CHIEF-OF-STAFF or the ORCHESTRATOR" — names the
 three approvers the existing ladder already provides; which one applies is
 decided by the scope of the hole, exactly as for any other proposal.
+
+**And the mandate rule applies to the D-TRDD too.** The receiver files a
+*proposal* only when the hole's tier exceeds its own authority. A MEMBER noticing
+a missing EHT inside its own slice issues it as a self-mandate and gets on with
+it. A COS noticing a missing team-wide EHT issues it as a mandate — it is the
+Tier-1 approver. Only when the hole reaches past the receiver's rank does the
+notification become a request rather than a command.
 
 **Report the gap even when you also file the proposal.** The proposal closes the
 hole; the report tells the sender that their TRDD shipped incomplete, which is
@@ -351,7 +462,18 @@ heartbeat cadence / MANAGER idle sweep) — **never** on every creation:
      dependent execution; log it in the TRDD `## Approval log` and the
      watchdog report. For an *ambiguous* case, **flag** it for the
      MANAGER queue rather than auto-moving.
-3. The watchdog writes a report the MANAGER drains at leisure; it does
+3. **For each `mandate: true`, verify the mandate was the issuer's to
+   issue:** `authority(mandated-by) >= required-approver(approval-tier)`,
+   using the corrected floor from step 2, not the declared tier. A mandate
+   that fails this test was never an approval — it is a **forged** one.
+   Revoke it (`mandate: false`), move the TRDD back to
+   `design/proposals/`, halt dependent execution, and record the
+   revocation in the `## Approval log` naming the issuer. This is the
+   check that keeps the ladder from being decorative: without it,
+   `mandate: true` is self-certified, and an under-classified tier plus a
+   self-issued mandate is a complete bypass of the approval system by an
+   agent that never sent a single request.
+4. The watchdog writes a report the MANAGER drains at leisure; it does
    not interrupt anyone.
 
 This is the safety net that makes D2 trustworthy: agents go fast by

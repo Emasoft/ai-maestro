@@ -1,9 +1,9 @@
 ---
 trdd-id: E9BZ5P7S
-title: The governance password is committed verbatim in 32 tracked files on a public branch
+title: The governance password is committed verbatim in 32 tracked files and one published plugin
 column: proposal
 created: 2026-07-10T06:05:03+0200
-updated: 2026-07-10T06:05:03+0200
+updated: 2026-07-10T06:23:25+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 assignee: null
@@ -34,6 +34,36 @@ external-refs: []
 be fixed by an edit.** Nothing here has been changed. Read the whole page before touching
 any of the 32 files — a partial redaction is worse than none.
 
+### ⏵ UPDATE 2026-07-10T06:23 — the exposure is bigger than this page said, and it escaped the repo
+
+When this TRDD was filed it recorded 32 tracked files in **one** repo. Diffing the
+published `web-scenario-tester` plugin against this repo's harness (while settling
+`TRDD-91LLU879` part 3) found a **33rd surface, in a second repo**:
+
+`Emasoft/ai-maestro-web-scenario-tester` is **public**. At tag **`v0.1.3`** the blob
+`references/SCENARIOS_TESTS_RULES.md` carries the literal **twice**. That plugin is
+registered in the `ai-maestro-plugins` marketplace and its install was smoke-tested, so
+the credential is not only committed to a public branch — it is **delivered into the
+plugin cache of anyone who installs it**, and it is frozen inside tagged releases
+v0.1.1–v0.1.3 that no rewrite of `master` would reach.
+
+(The sibling copy `skills/amwst-scenarios-rules/references/SCENARIOS_TESTS_RULES.md`
+does **not** carry it. The two shipped copies of the same doc have already diverged.)
+
+This **strengthens** the case for the sequence below rather than changing it:
+
+- Rotation was already step 1. It is now the *only* step that reaches every copy —
+  the 32 here, the 2 there, every git object in both histories, and every plugin cache
+  already on someone's disk. Nothing else can.
+- It makes "just redact the files" definitively wrong. There is no edit, in any repo,
+  that un-ships a tagged release.
+
+Scoped as its own platelet: **`TRDD-44RGLOO8`** (an EHT of `TRDD-f181a4ae`, the publish
+that carried it out), `blocked-by: [TRDD-E9BZ5P7S]` — the plugin cannot be scrubbed, and
+**no public issue may be opened about it**, until rotation lands. An issue naming the
+file and line would be a signpost to a live secret with a notification fan-out the file
+itself does not have.
+
 ## What is exposed
 
 The live AI Maestro **governance password** — the secret that gates sudo-mode, agent and
@@ -51,6 +81,12 @@ the **public** `Emasoft/ai-maestro`.
 
 Not on `fork/main` today. But `governance-rules` is the branch heading for a PR, so a
 merge publishes it there too.
+
+And, outside this repo entirely (see the 06:23 update above):
+
+| Where | Count | Shape |
+|---|---|---|
+| `Emasoft/ai-maestro-web-scenario-tester` @ `v0.1.3` — `references/SCENARIOS_TESTS_RULES.md` | 2 | public repo, tagged release, marketplace-installable |
 
 ## This is a convention, not an accident
 

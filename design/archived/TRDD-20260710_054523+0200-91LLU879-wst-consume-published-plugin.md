@@ -1,9 +1,9 @@
 ---
 trdd-id: 91LLU879
 title: Repoint the scenario harness onto the published web-scenario-tester plugin
-column: planned
+column: completed
 created: 2026-07-10T05:45:23+0200
-updated: 2026-07-10T05:45:23+0200
+updated: 2026-07-10T06:23:25+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 created-by: ai-maestro-session
@@ -32,6 +32,7 @@ audit-requirements: []
 review-requirements: []
 runtime-targets: [macos, linux]
 impacts: []
+implementation-commits: [f6fccd2a, bf93c71f]
 external-refs: []
 ---
 
@@ -47,7 +48,95 @@ thing. That is the hole; this is the platelet. Until it closes, f181a4ae is `blo
 on this TRDD, not `published` — a parent that ships a change and leaves its hole open
 has not finished.
 
-**NEXT ACTION:** part 3 — the consume-vs-keep decision. Parts 1 and 2 are **DONE**.
+**NEXT ACTION:** none. All three parts are **DONE**. Part 3 decided: **keep the copy.**
+This TRDD is terminal.
+
+### ⏵ UPDATE 2026-07-10 — part 3 decided: KEEP. Both reasons I gave for the tier were wrong.
+
+I wrote, in this very TRDD, that part 3 "may not be a Tier-0 call: making this repo's
+own test suite depend on a marketplace install is architectural and touches CI."
+That sentence contains two premises. **Both are false**, and checking them was the
+first thing I did:
+
+| My premise | Verdict | Evidence |
+|---|---|---|
+| "touches CI" | **FALSE** | `.github/workflows/` holds `ci.yml` + `test-installers.yml`. Neither mentions a scenario, the harness, or dev-browser. Nothing in CI runs this. |
+| "makes the repo's test suite depend on a marketplace install" | **FALSE** | `vitest.config.ts` is `include: ['tests/**/*.test.ts']`. The harness is `.scen.md` + `.sh`. `yarn test` has never touched it, and `package.json` has no scenario script. |
+
+So the tier had to be re-derived from the objective D3 floor rather than from my own
+hypothesis. Doing that turns up exactly **one** signal above `none`: the rules doc.
+`tests/scenarios/SCENARIOS_TESTS_RULES.md` is symlinked from `.claude/rules/`, so the
+harness auto-loads it into **every session in this repo**. Swapping it for a
+plugin-cached copy changes what every agent here is instructed to do — a governance
+file, floor `manager`, **Tier 2**.
+
+My conclusion (Tier 2) was right. My reasons were not. Recording that, because a
+right answer reached through two false premises is a coin flip, not an argument.
+
+### What is actually duplicated (measured, not assumed)
+
+| Surface | This repo | Plugin v0.1.3 | Overlap |
+|---|---|---|---|
+| scenario content (`.scen.md`) | 28 | 2 (`examples/scenarios/…example…`) | **0** |
+| scripts | 71 | 13 | **6** by basename |
+| agents | 5 project-scoped + 1 batch-runner | 6 (`amwst-*`) | 4 twins |
+| the rules doc | 1 (symlinked into `.claude/rules/`) | 2 copies | 1 |
+
+The 65 non-overlapping scripts are `setup-SCEN-NNN.sh` ×28, `cleanup-SCEN-NNN.sh` ×28,
+and 9 more (`aim-helpers.sh` — *this app's* UI helpers — `fixture-helpers.sh`,
+`batch-budget-guard.sh`, `kill-orphans.sh`, `setup/cleanup-overnight-batch.sh`, …).
+None of them can exist in a universal plugin. **The plugin is the harness; this repo
+is the content.** "Consume it or keep it" was a false binary from the start.
+
+### The decision, and its reasons (as this TRDD required)
+
+**KEEP the copy.** Not as a deferral — as the answer.
+
+1. **The plugin is not installed, and this repo may not install it.** Verified: absent
+   from user-scope `enabledPlugins`, absent from `.claude/settings.local.json`, and
+   **not present in the plugin cache at all**. The standing rule is that the
+   ai-maestro source repo must never enable an `ai-maestro-plugins` plugin at
+   project/local scope. Consuming would make `tests/scenarios/` dead in the one repo
+   it exists to describe, and would leave its liveness dependent on a USER-scope
+   install this repo cannot guarantee.
+2. **The prize is 6 files out of 106.** Everything else is content the plugin does not
+   and cannot ship.
+3. **The one coupling that matters — the rules doc — is Tier 2**, so it could not be
+   settled here regardless of the answer.
+
+### One hypothesis I nearly shipped as a finding, and had to kill
+
+I expected to argue that consuming the plugin's agents would silently drop the
+`PreToolUse` write-guard, since a plugin-shipped agent may not declare `hooks:` (a
+Claude Code restriction, and the reason `.claude/agents/scenario-improvement-implementer.md`
+exists as a project-scoped shadow at all). Confirmed layer 1: none of the six
+`amwst-*` agents declares `hooks:`.
+
+Then I checked layer 2 and it reversed the conclusion. The plugin wires the guard at
+**plugin scope**, in `hooks/hooks.json`, calling
+`${CLAUDE_PLUGIN_ROOT}/scripts/amwst_subagent-write-guard.sh` — and *sentinel-gates*
+it on `${CLAUDE_PROJECT_DIR}/.claude/scenario_is_running.json` so it is inert outside
+a run. Its own description names the exact defect: "closes the isolation:worktree
+process-escape gap". The plugin's authors read the same incident I did.
+
+I have **not** verified that a plugin-scoped PreToolUse hook actually fires inside a
+subagent's context, and I am not claiming it does. What is settled is that the
+guard's absence is *not* a reason to keep the copy. Falsify each layer separately;
+one layer's answer is not the stack's.
+
+### The residual problem is drift, and it is not mine to fix yet
+
+Six scripts and one rules doc now exist in two places. The rules doc has **already
+drifted**: the plugin's `references/` copy carries the governance credential twice
+while its `skills/amwst-scenarios-rules/references/` copy does not. Any de-duplication
+work would collide head-on with `TRDD-E9BZ5P7S`, which must rewrite that exact doc
+(rotate → env var → amend the lines that *mandate* the literal). So drift is
+**recorded, not acted on**.
+
+That same comparison is what surfaced the credential in the published artifact. It is
+filed as **`TRDD-44RGLOO8`** — an EHT of the parent `TRDD-f181a4ae`, not of this TRDD,
+because a derived TRDD may not spawn derived TRDDs (depth is exactly 1) and because
+the publish, not the repoint, is what opened it.
 
 ### ⏵ UPDATE 2026-07-10 — part 2 (`scenarios.config.json`) done
 
@@ -138,16 +227,13 @@ separately; do not "fix" it piecemeal from here.
 
 2. **`scenarios.config.json`.** ✅ **DONE** — see the update above.
 
-3. **Consume the plugin, or keep the copy — decide before moving anything.** ⚠ This may
-   not be a Tier-0 call: making this repo's own test suite depend on a marketplace
-   install is architectural and touches CI. If that reading holds, it is a MANAGER
-   (Tier-2) decision and belongs in `design/proposals/`, not here. Settle the tier
-   before settling the question. The
-   plugin ships 6 agents, 14 skills and 11 scripts at v0.1.3 (verified on the tag's
-   tree). `tests/scenarios/` still ships its own runner agents and scripts. Deleting
-   this repo's copy in favour of the installed plugin is the intent recorded in
-   f181a4ae, but it makes the repo's own test suite depend on a marketplace install,
-   which is a real cost. Whichever way it goes, write the reason down here.
+3. **Consume the plugin, or keep the copy — decide before moving anything.**
+   ✅ **DONE — decided: KEEP.** See the part-3 update in the STATE block above for the
+   measured overlap (6 of 106 tracked files), the corrected tier derivation (floor is
+   `manager`, but because of the session-loaded rules doc — *not* because of CI or the
+   test suite, both of which were verified to be untouched), and the three reasons.
+   Deciding to keep moves no files, deletes nothing and adds no dependency, so the
+   decision itself is Tier 0. The consume path would have been Tier 2 and is moot.
 
 **Verification.** `bash -n` on every touched script; `shellcheck` clean; a `grep -rl`
 for the absolute path over `git ls-files tests/scenarios/` returns nothing; and the
@@ -161,5 +247,10 @@ check that actually proves the de-path, since running it in place passes either 
 - 2026-07-10T05:45:23+0200 — MANDATE issued by ai-maestro-session (min-approval-requirement: none).
   Pre-approved: a Tier-0 derived EHT inside the author's own slice, so sender and receiver
   are the same. No approval request was sent.
+- 2026-07-10T06:23:25+0200 — COMPLETED by ai-maestro-session. All three parts settled:
+  de-path (`f6fccd2a`), `scenarios.config.json` (`bf93c71f`), and part 3 decided as
+  **keep the copy** with the reason recorded in the STATE block. Deciding to keep moves
+  no files and adds no dependency, so it stays inside the Tier-0 mandate this TRDD was
+  issued under. The consume path would have been Tier 2 and is now moot.
 
 ## Notes and lessons learned

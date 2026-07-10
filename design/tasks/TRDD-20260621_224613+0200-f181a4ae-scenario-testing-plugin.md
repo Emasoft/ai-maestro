@@ -4,7 +4,7 @@ title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-pl
 column: blocked
 pre-block-column: published
 created: 2026-06-21T22:46:13+0200
-updated: 2026-07-10T05:45:23+0200
+updated: 2026-07-10T06:23:25+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -17,8 +17,8 @@ published-version: 0.1.3
 published-at: 2026-07-08T18:48:08+0200
 relevant-rules: []
 parent-trdd: TRDD-903b7a20
-eht: [TRDD-91LLU879]
-blocked-by: [TRDD-91LLU879]
+eht: [TRDD-91LLU879, TRDD-44RGLOO8]
+blocked-by: [TRDD-44RGLOO8]
 labels: [scenario-testing, plugin, dev-browser, reusable-harness]
 impacts: [install-script]
 external-refs: []
@@ -27,6 +27,29 @@ external-refs: []
 # TRDD-f181a4ae — Standalone scenario-UI-testing plugin
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME — 2026-06-21
+
+### ⏵ UPDATE 2026-07-10T06:23 — the first hole closed; a second, worse one opened
+
+`TRDD-91LLU879` (the repoint EHT) is **done and archived**. Its part 3 settled as
+**keep the copy** — the plugin duplicates 6 of this repo's 106 tracked scenario
+files, is not installed here, and may never be enabled at project scope. The reason
+is written down in that TRDD; nothing was moved.
+
+Closing it did **not** unblock this TRDD, because settling part 3 required diffing
+the plugin's shipped rules doc against ours, and that diff found the publish had
+carried the **live governance credential** into a public, installable, tagged
+artifact — `references/SCENARIOS_TESTS_RULES.md` at `v0.1.3`, in the public repo
+`Emasoft/ai-maestro-web-scenario-tester`. The literal is deliberately not quoted
+anywhere in this corpus.
+
+That is a hole this TRDD's own change opened, so it is this TRDD's platelet:
+**`TRDD-44RGLOO8`** (`design/proposals/`, Tier 3, blocked on the USER's rotation via
+`TRDD-E9BZ5P7S`). `blocked-by:` moves from 91LLU879 to 44RGLOO8; `eht:` keeps both,
+because the derivation edge is history and is never erased.
+
+`pre-block-column: published` is unchanged. This TRDD does not reach `completed`
+while its publish is shipping a live credential — that is precisely the false
+completion the flock gate exists to catch.
 
 ### ⏵ UPDATE 2026-07-10T05:45 — PUBLISHED as v0.1.3, and therefore BLOCKED, not done
 

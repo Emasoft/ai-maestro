@@ -1,10 +1,11 @@
 ---
 trdd-id: K2WJH7RF
 title: Decide the agent authorization policy for the ten remaining strict routes
-column: planned
+column: blocked
+pre-block-column: planned
 min-approval-requirement: manager
 created: 2026-07-09T18:03:01+0200
-updated: 2026-07-09T23:34:05+0200
+updated: 2026-07-10T04:12:00+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 2

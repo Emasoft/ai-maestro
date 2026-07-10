@@ -99,13 +99,26 @@ function optionalRef(v: unknown): string | null {
  * day a v1 TRDD becomes someone's child, its parent would be reported as a false
  * completion for a child that finished years ago.
  */
-const V1_STATUS_TO_COLUMN: Readonly<Record<string, string>> = {
+export const V1_STATUS_TO_COLUMN: Readonly<Record<string, string>> = {
   'not-started': 'backburner',
   'in-progress': 'dev',
   completed: 'complete',
   failed: 'failed',
   blocked: 'blocked',
   superseded: 'superseded',
+  // Not one of the six documented v1 values — a hand-written v2 folder-lifecycle
+  // state in a v1 `status:` field. It is in the corpus (TRDD-1d4ea74e, the
+  // package-manager migration the USER declined), and an unmapped status reads as
+  // column '', which puts the card on no board at all. Map what exists, not what
+  // the enum says should exist.
+  cancelled: 'cancelled',
+}
+
+/** The TRDD's column, reading a v1 `status:` when `column:` is absent. */
+export function resolveTrddColumn(t: ParsedTrdd): string {
+  if (t.column) return t.column
+  const status = typeof t.frontmatter.status === 'string' ? t.frontmatter.status : ''
+  return V1_STATUS_TO_COLUMN[status] ?? ''
 }
 
 /**
@@ -117,12 +130,11 @@ const V1_STATUS_TO_COLUMN: Readonly<Record<string, string>> = {
 export function toGraphNode(t: ParsedTrdd): TrddNode | null {
   const fm = t.frontmatter
   if (!('trdd-id' in fm)) return null
-  const status = typeof fm.status === 'string' ? fm.status : ''
   return {
     id: t.id,
     zone: t.zone,
     filePath: t.filePath,
-    column: t.column || V1_STATUS_TO_COLUMN[status] || '',
+    column: resolveTrddColumn(t),
     derived: fm.derived === true,
     hasDerivedField: 'derived' in fm,
     derivedKind: typeof fm['derived-kind'] === 'string' ? fm['derived-kind'] : null,

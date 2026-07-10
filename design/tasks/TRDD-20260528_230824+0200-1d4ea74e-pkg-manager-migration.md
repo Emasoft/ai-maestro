@@ -1,7 +1,7 @@
 ---
 trdd-id: 1d4ea74e-8a9b-41a4-a5d6-3bd8ee99e195
 title: Migrate from Yarn Classic to pnpm or Yarn Berry for release-age cooldown
-status: cancelled
+column: cancelled
 created: 2026-05-28T23:08:24+0200
 updated: 2026-06-25T06:15:50+0200
 ---

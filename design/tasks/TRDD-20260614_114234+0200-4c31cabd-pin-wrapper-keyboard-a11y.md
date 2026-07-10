@@ -1,7 +1,7 @@
 ---
 trdd-id: 4c31cabd-2638-40be-aa44-b98f53dbc9f2
 title: Make the chat-bubble pin-on-click affordance keyboard accessible
-status: completed
+column: completed
 created: 2026-06-14T11:42:34+0200
 updated: 2026-06-25T06:29:00+0200
 ---

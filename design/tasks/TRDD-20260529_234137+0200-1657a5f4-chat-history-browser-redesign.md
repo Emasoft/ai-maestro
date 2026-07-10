@@ -1,7 +1,7 @@
 ---
 trdd-id: 1657a5f4-c54b-4e4b-95da-12f9aa149937
 title: Chat-history browser redesign — comic-bubble timeline, parallel lifelines, token economics, context-panel + PSS lifeline, Tailwind migration
-status: completed
+column: completed
 created: 2026-05-29T23:41:37+0200
 updated: 2026-06-14T11:29:35+0200
 ---

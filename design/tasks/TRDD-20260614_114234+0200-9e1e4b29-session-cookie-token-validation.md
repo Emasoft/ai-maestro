@@ -1,7 +1,7 @@
 ---
 trdd-id: 9e1e4b29-4fd5-44d1-b021-ceef38ddf557
 title: Validate the aim_session cookie token on sessions-browser routes — hasSessionCookie is presence-only
-status: completed
+column: completed
 created: 2026-06-14T11:42:34+0200
 updated: 2026-06-21T00:30:00+0200
 ---

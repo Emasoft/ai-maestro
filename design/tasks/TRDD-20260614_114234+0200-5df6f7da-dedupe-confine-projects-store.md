@@ -1,7 +1,7 @@
 ---
 trdd-id: 5df6f7da-138f-4486-b716-b33e4adf54ed
 title: Extract the triplicated confineToProjectsStore path-traversal guard into one shared helper
-status: completed
+column: completed
 created: 2026-06-14T11:42:34+0200
 updated: 2026-06-21T00:30:00+0200
 ---

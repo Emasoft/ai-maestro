@@ -10,6 +10,10 @@ priority: 2
 severity: MEDIUM
 effort: S
 approval-tier: 0
+mandate: true
+mandated-by: self
+derived: true
+derived-kind: eht
 task-type: bugfix
 release-via: none
 parent-trdd: TRDD-4Q7WMPZK

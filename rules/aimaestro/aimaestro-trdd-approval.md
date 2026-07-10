@@ -236,7 +236,36 @@ priority, sequencing inside its own team). Anything else Tier-1 is the COS's.
 approval-tier: 2          # the REQUIRED authority (the objective floor, §D3)
 mandate: true             # author authority >= required approver
 mandated-by: manager      # the TITLE whose authority pre-approves it ('self' for tier 0)
+derived: true             # this TRDD is an NPT or EHT of another
+derived-kind: eht         # npt | eht — which kind, without reading the parent
 ```
+
+**These are attributes, not machinery.** The whole model above is four frontmatter
+fields. The TRDD *is* its frontmatter: the kanban reads `column:`, governance reads
+`approval-tier:` + `mandate:`, the dependency graph reads `npt:`/`eht:`/`blocked-by:`.
+One file, three pillars, no side tables, no registry to keep in sync. Every query
+in this rule is a `grep` — `grep -l "^mandate: true"`, `grep -l "^derived: true"`,
+`grep -lE "^approval-tier: [23]"` — which is what makes the §D4 watchdog cheap
+enough to run on an idle heartbeat instead of at every creation.
+
+**`derived:` is DENORMALIZED, and denormalized fields drift.** A TRDD is derived
+precisely when its id appears in some parent's `npt:` or `eht:`. The flag repeats
+that fact so a child can be recognised without scanning every parent — the same
+reason `parent-trdd:` exists. It buys a one-pass query and it owes an invariant:
+
+```
+derived: true      ⟺  this trdd-id appears in exactly one parent's npt: or eht:
+derived-kind: npt  ⟺  it appears in that parent's npt:      (and blocked-by: while in-flight)
+derived-kind: eht  ⟺  it appears in that parent's eht:
+parent-trdd:       ==  that parent
+```
+
+The §D4 watchdog checks it with two greps and no LLM. A `derived: true` with no
+parent claiming it is an **orphan platelet** — it will never gate anyone's
+`complete`, which is the one thing a platelet exists to do. A parent whose `eht:`
+names a TRDD that does not declare `derived: true` is the same bug seen from the
+other end. Both are repaired by writing the missing half, never by deleting the
+half that is there.
 
 and an `## Approval log` line recording that no round-trip occurred:
 

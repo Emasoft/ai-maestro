@@ -4,7 +4,7 @@ title: Decide the AuthActions for the five remaining unauthorized agent-scoped r
 column: planned
 approval-tier: 2
 created: 2026-07-09T19:01:42+0200
-updated: 2026-07-10T01:35:00+0200
+updated: 2026-07-10T02:58:00+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -25,7 +25,7 @@ review-requirements: [human-review]
 runtime-targets: [macos, linux]
 impacts: [public-api]
 attempts: 5
-implementation-commits: [f56b79f2, 28593ed7, 505ae8c9, 1ad04ade, c8903197]
+implementation-commits: [f56b79f2, 28593ed7, 505ae8c9, 1ad04ade, c8903197, 2fd32899, 03159944]
 external-refs: []
 ---
 
@@ -320,10 +320,48 @@ Then the three follow-ups this TRDD surfaced but did not fix:
    leaves `recipientTitle = 'unknown'` for anyone absent from the LOCAL registry
    (`send-message-service.ts:294`, "may be remote"). `forwardFromUI` explicitly
    supports remote recipients — `toResolvedLocal || { agentId: '', alias, hostId }`
-   — so a remote forward has no title at all. Before enforcing, either resolve the
-   remote title (`lib/agent-directory.ts` holds peer agents, as `amp-service.ts`
-   does for its own graph check) or scope enforcement to local recipients and say
-   so. Do not discover this from a broken cross-host mesh.
+   — so a remote forward has no title at all. Do not discover this from a broken
+   cross-host mesh.
+
+   **CORRECTION (2026-07-10, verified by reading all three call sites).** The
+   remedy this section proposed — "resolve the remote title from
+   `lib/agent-directory.ts`, as `amp-service.ts` does" — is WRONG on both halves.
+   `amp-service` does not do that, and doing it would duplicate a check the
+   receiving host already owns.
+
+   The system's cross-host contract is stated at `amp-service.ts:1111-1124`:
+   *"We don't know the remote recipient's title, but we CAN check if the sender
+   has any allowed recipients at all… The full graph check happens on the
+   receiving host."* For a remote recipient it runs only the weak sender-side
+   check (`getAllowedRecipients(senderTitle).length > 0`), then POSTs to the
+   peer's `/api/v1/route`, which re-enters `routeMessage`, resolves the recipient
+   in ITS local registry, and runs the full `validateMessageRoute` at
+   `amp-service.ts:1286`. That line sits after the remote-delivery block returns,
+   so it is exactly the receiving-host enforcement the comment promises. A peer's
+   title lives on the peer's host and changes there; a sender-side copy read from
+   `agent-directory` is a stale mirror of an authoritative fact.
+
+   So the remote branch is: **weak sender-side check, deliver, let the receiving
+   host enforce.** That is this TRDD's own second option ("scope enforcement to
+   local recipients and say so") — now say so.
+
+   **Discovered while verifying it: the two send paths already disagree, and one
+   of them denies cross-host.** Only three call sites use `validateMessageRoute`
+   (the AIO's two branches and `amp-service:1286`).
+
+   | Path | `skipGraphCheck` for an AGENT sender | Remote recipient today |
+   |---|---|---|
+   | `POST /api/messages` → `messages-service.ts:289` | **true** (`isSystemOwner \|\| from !== 'user'`) | delivered; R6 never runs — "agents continue to route through AMP for R6-governed messaging" |
+   | `POST /api/agents/[id]/messages` → `agents-messaging-service.ts:333` | **false** | **DENIED** — `recipientTitle` is the truthy string `'unknown'`, so the `!recipientRole` fail-closed-to-`member` branch at `:501` never fires and `:526` returns `Unknown recipient role` |
+   | AMP `/api/v1/route` → `amp-service.ts` | n/a | delivered after the weak check; receiving host enforces |
+
+   `sendFromUI` DOES deliver cross-host (`lib/message-send.ts:289`), so the
+   agent-scoped route's denial is not theoretical — G06 refuses before delivery is
+   attempted. Verified by reading; **not yet reproduced by a test**, which the
+   suite below must do before the branch is touched. The M2 comment at
+   `messages-service.ts:271` fixed this asymmetry in the other direction (a
+   production path skipped R38.2 while AMP enforced it); the shared gate is what
+   stops it recurring in a third place.
 
    **BLOCKED ON A POLICY DECISION (escalated, not self-approved).** Forward rewrites
    the new message's `from` to the mailbox owner — an AGENT. So a HUMAN clicking
@@ -337,13 +375,48 @@ Then the three follow-ups this TRDD surfaced but did not fix:
    behavior (no graph) for a system-owner caller until the USER or MANAGER decides.
    That closes the security hole while inventing no policy.
 
+   **Gate contract (write this, then wire it).** `lib/message-route-gate.ts`
+
+   ```
+   assertRouteAllowed({ senderTitle, senderAgentId, to, recipient, authContext,
+                        inReplyTo, skip }) -> { allowed, error?, ops[] }
+   ```
+
+   | Case | Behavior | Why |
+   |---|---|---|
+   | `authContext` absent | **DENY** `forbidden_no_auth_context` | G04.AUTH sets the precedent; skipping is the bypass |
+   | sender is an agent, recipient resolved LOCALLY | full `validateMessageRoute` | today's G06 agent branch, unchanged |
+   | sender is an agent, recipient remote/unresolved | weak `getAllowedRecipients(senderTitle).length > 0` | the AMP contract; receiving host enforces |
+   | sender is `user`/`system` (system-owner caller) | preserve today's behavior | the Tier-2 question below — invent no policy |
+   | graph module throws | **DENY** `graph_check_unavailable` | SVC2-MAJ-19 fail-closed, preserved |
+
+   Call it from the AIO (replacing G06's body) and from `forwardFromUI`. Two
+   callers, one rule — which is the entire point, since a second copy of a
+   governance rule diverges. Note `ForwardFromUIOptions` still has no
+   `authContext` field; both `forwardMessage` services already carry one
+   (`28593ed7`) and use it for the ownership guard, so the plumbing is a parameter,
+   not a lookup.
+
    Regression risk is on the core send path AND the cross-host mesh; it needs its
-   own suite. MEDIUM.
+   own suite. MEDIUM. **Falsify in this order, before touching the branch:** (1) a
+   test that reproduces the agent-scoped route's cross-host denial, so the fix has
+   something to turn green; (2) a test that a forward from an agent to a recipient
+   its title cannot reach is refused, and that the message was never written to any
+   `sent/` folder — a denial asserted as a 403 alone would pass on a bypass that
+   delivers first.
 2. **`agentRegistry.getAgent()` constructs and evicts on read** (`lib/agent.ts:905`)
-   — audit every caller; switch READ paths to `getExistingAgent()`.
-3. **`element-inventory` POST validation gauntlet** — cognitive 34. Pure refactor.
-   (The `metrics` fix avoided repeating this: its gauntlet lives in a pure
-   `parseMetricsUpdate`, after the code-health hook caught `updateMetrics` at 38.)
+   — **DONE `03159944`.** Four callers; one legitimately wanted the construct
+   (`agent-startup`), one wanted a runtime read (`getSubconsciousStatus`), and two
+   (`getSkillSettings`, `saveSkillSettings`) never used the returned Agent at all —
+   they wanted an existence check, and because `getAgent` never returns null their
+   `404` was dead, so an unknown or soft-deleted agent got a 200. The read accessor
+   `getExistingAgent()` already existed. Surfaced a live capacity bug now tracked as
+   **TRDD-QC8R79G5**: the LRU cap is 10, there are 18 agents, and startup evicts 8 —
+   invisible until the read stopped reloading them.
+3. **`element-inventory` POST validation gauntlet** — **DONE `2fd32899`** (cognitive
+   34 → 12). Pure refactor. (The `metrics` fix avoided repeating this: its gauntlet
+   lives in a pure `parseMetricsUpdate`, after the code-health hook caught
+   `updateMetrics` at 38.)
 
 Deciding `amp-init` is what empties `UNREVIEWED_INVENTORY` and closes the parent
 **TRDD-4Q7WMPZK**.

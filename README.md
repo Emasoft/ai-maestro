@@ -102,6 +102,87 @@ PERSONA is the only layer with cardinality 1:1 to a tmux session. TITLE and ROLE
 
 ---
 
+## How Work Is Governed — The Three Pillars
+
+A fleet of agents needs to agree on what the rules are, what the work is, and
+where each piece of work stands. AI Maestro answers all three with **git-tracked
+markdown files**. There is no database, no service, no side table — every
+question is a `grep`, and every answer is in the repo you already cloned.
+
+### 1. The PRRD — the constitution
+
+`design/requirements/PRRD.md`, one per project. Rules are **golden** (only you
+may change them) or **silver** (the MANAGER may). A rule is cited by its number,
+which never changes even when the rule is revised or its authority flips.
+
+### 2. The TRDDs — the red blood cells
+
+`design/tasks/TRDD-<id>-<slug>.md`. Every non-trivial task is one file. They are
+what actually carries work around the system: a TRDD holds the problem, the
+plan, the constraints, and — once it lands — the commits that implemented it, so
+a bug found a year later traces back to the task that introduced it.
+
+### 3. The kanban — which does not exist as a file
+
+**The TRDDs *are* the kanban.** A card is a TRDD; the card's column and owner
+are two of its frontmatter fields:
+
+| The statement | The fact on disk |
+|---|---|
+| "this task is blocked" | the TRDD's `column: blocked` |
+| "this task is assigned to Peter" | the TRDD's `assignee: peter-bot` |
+
+Nothing else records either fact, so nothing else can disagree about it. Moving
+a card edits one line of one file. The board you see in the dashboard, the
+mirrored GitHub Project, and the index the MANAGER reads to plan are all
+**caches** — regenerable, allowed to be stale, and never authoritative. *Plan
+from the index; act from the TRDD.*
+
+### Derived TRDDs — the platelets
+
+No change exists in isolation; everything affects what is around it. So a TRDD
+ships together with the **derived TRDDs** that close the holes it opens: its
+prerequisites (`npt:`) and the tasks that handle its consequences (`eht:`).
+
+> If the TRDDs are the red blood cells, the derived TRDDs are the platelets.
+
+Without them a change lands and the wounds stay open — the task does more damage
+than good. Four rules keep the metaphor honest:
+
+- **`eht: []` is a claim, not a default.** It asserts "this touches nothing
+  around it", and that is usually false. Verify each platelet against the code
+  before writing it: name the downstream surface, then go read it. A platelet
+  invented to look thorough misstates the blast radius.
+- **A derived TRDD may not spawn derived TRDDs.** Depth is exactly one, or the
+  platelets breed platelets forever. Further effects become *siblings* under the
+  same parent.
+- **A parent is complete only when its whole flock is complete.** Otherwise its
+  column reads `blocked` — blocked on itself. Its own tests going green is not
+  completion; completion is the change *plus* the closed holes.
+- **Any agent that receives a task missing a platelet must say so** — and may
+  write the missing one itself.
+
+### Approval — a command from above is already approved
+
+Each TRDD names the authority that must sign it, by title:
+`min-approval-requirement: none | orchestrator | chief-of-staff | manager | maestro`.
+
+Most work needs `none` and proceeds immediately. When an agent's own authority
+already meets the requirement, the TRDD is a **mandate**: born approved, because
+the set of agents who may *issue* it is exactly the set who would be required to
+*approve* it. Approval is not an event that happens to a task; it is a property
+of who wrote it. A proposal exists only when the author ranks below what the task
+demands — it waits in `design/proposals/` and blocks nobody.
+
+A lazy watchdog audits the rest: it recomputes each task's required authority
+from what the task actually touches, and a self-issued mandate that outranks its
+author is revoked as a forged approval.
+
+Full rules: [`docs/GOVERNANCE-RULES.md`](./docs/GOVERNANCE-RULES.md) and
+`rules/aimaestro/`.
+
+---
+
 ## Quick Start
 
 ```bash

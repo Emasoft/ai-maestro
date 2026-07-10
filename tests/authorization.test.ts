@@ -287,7 +287,6 @@ describe('TRDD-D3RP7KQZ — an agent may never reconfigure itself', () => {
     'create-session',
     'link-session',
     'wake-agent',
-    'manage-amp-address',
   ] as const
 
   it.each(SELF_FORBIDDEN)('MEMBER attempting "%s" on ITSELF is DENIED', (action) => {

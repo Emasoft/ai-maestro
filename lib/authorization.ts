@@ -50,7 +50,10 @@ export type AuthAction =
   | 'manage-team'       // Create/modify/delete teams
   | 'manage-skills'     // Install/remove skills on an agent
   | 'manage-group'      // SVC2-MAJ-07/08: create/update/delete groups + subscribe/notify
-  | 'manage-amp-address' // SVC2-MAJ-18: claim or remove an AMP address on an agent record
+  // 'manage-amp-address' (SVC2-MAJ-18) was DELETED by TRDD-YEE33F3A Part 3: it was
+  // wired to zero routes while all four address routes authorize with 'modify-agent'.
+  // An action that exists only in a test reads as coverage. Re-adding it means
+  // migrating all four address routes at once — never wiring it into just one.
   | 'export-agent'      // TRDD-YEE33F3A: download an agent's full archive — INCLUDING keys/private.pem
   | 'view-agent'        // Read agent data (currently open, for future lockdown)
 

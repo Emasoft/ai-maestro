@@ -47,11 +47,17 @@ function findRouteFiles(dir: string): string[] {
 const MUTATING = /^export async function (POST|PUT|PATCH|DELETE)/m
 
 /**
- * The four shapes an authorization step takes in this codebase:
+ * The five shapes an authorization step takes in this codebase:
  *   authorize(...)        — the route decides directly
  *   requireSudoToken(...) — strict route; the guard decides (R32 dual-path)
  *   auth.context / authContext — forwarded into a Change* pipeline whose Gate 0
  *                                (`assertAuthorized`) calls authorize() for it
+ *   buildAuthContext(...) — the other spelling of the same forward: the helper's
+ *                           only purpose is to hand the verified caller into a
+ *                           Change* pipeline's Gate 0 (metadata/route.ts is the
+ *                           route that surfaced the gap — it authorized at
+ *                           ChangeMetadata G00 all along but sat in the ledger
+ *                           because this regex could not see the spelling)
  *   canIssue(...)         — the R28 portfolio route's own mint-authority check
  *                           (title + standing authority). It is deliberately
  *                           NOT sudo-gated and does not call authorize(); it is
@@ -61,7 +67,7 @@ const MUTATING = /^export async function (POST|PUT|PATCH|DELETE)/m
  * these (portfolio/route.ts explains at length why it does not call
  * requireSudoToken) does not read as a call.
  */
-const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bauth\.context\b|\bauthContext\b/
+const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bbuildAuthContext\(|\bauth\.context\b|\bauthContext\b/
 
 /**
  * Agent-scoped mutating routes with NO authorization step, as of 2026-07-09.
@@ -110,20 +116,23 @@ const AUTHORIZES = /\bauthorize\(|\brequireSudoToken\(|\bcanIssue\(|\bauth\.cont
  *     `amount` was stored into estimatedCost, which the profile UI renders with
  *     .toFixed(2). Pinned by tests/unit/metrics-authorization.test.ts.
  *
- * TWO KNOWN DETECTOR ARTIFACTS in the list below — do NOT "fix" them blindly:
- *   - `metadata/route.ts` DOES authorize, at `ChangeMetadata` gate G00. It only
- *     appears here because it forwards `buildAuthContext(auth)` into the pipeline
- *     rather than calling `authorize()` itself, which the regex cannot see.
- *   - `amp-init/route.ts` has a hand-rolled `isManager(auth.agentId)` check.
- *     Correct today, but it bypasses the matrix — including the self-target rule,
- *     so an agent may re-mint its OWN AMP identity keys. Worth a decision.
+ * THE LEDGER IS EMPTY (TRDD-YEE33F3A Part 2, 2026-07-10) and the two final
+ * entries resolved in opposite directions — do not re-add either:
+ *   - `metadata/route.ts` was a DETECTOR artifact: it authorized at
+ *     `ChangeMetadata` gate G00 all along, via a `buildAuthContext(auth)`
+ *     forward the AUTHORIZES regex could not see. The regex learned that
+ *     spelling; the route was never touched.
+ *   - `amp-init/route.ts` was a REAL hole wearing a correct-looking guard: its
+ *     hand-rolled `isManager` check only fired for cross-agent callers, so an
+ *     agent could re-mint its OWN Ed25519 identity keys — inverting the
+ *     route's own doc comment — and a model-ON non-maestro user principal
+ *     (userId, no agentId) skipped the guard entirely. Now
+ *     `authorize('modify-agent')` plus a tighten-only MANAGER narrowing.
+ *     Pinned by tests/unit/amp-init-authorization.test.ts.
  *
- * The audit is TRDD-4Q7WMPZK, which records what each remaining route does.
+ * The audit was TRDD-4Q7WMPZK, which records what each route did.
  */
-const UNREVIEWED_INVENTORY = [
-  'amp-init/route.ts',
-  'metadata/route.ts',
-]
+const UNREVIEWED_INVENTORY: string[] = []
 
 function unauthorizedRoutes(): string[] {
   return findRouteFiles(agentScopedRoot)

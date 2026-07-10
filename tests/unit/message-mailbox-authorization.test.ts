@@ -25,7 +25,8 @@
  * agent's mail. That is what `listMessages` and `messages-service` already do
  * (`denyForeignMailbox`), so no new AuthAction is introduced. Inventing
  * `manage-messages` would have created two mechanisms for one capability — the
- * same split-brain the parent audit rejected for `manage-amp-address`.
+ * same split-brain the parent audit rejected for `manage-amp-address` (an
+ * action since deleted from the union for exactly that reason).
  *
  * THE ASSERTION THAT MATTERS: the store is never touched. Routes and services
  * here are REAL; only the storage libs are mocked. So a denial is proved by

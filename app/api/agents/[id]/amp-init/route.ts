@@ -6,9 +6,13 @@
  * the recovery path when CreateAgent G12 failed (ampIdentityMissing flag set)
  * or when the user manually rotates the agent's identity.
  *
- * Identity auth only — the caller must be the system owner or the MANAGER.
- * Per-agent self-init is rejected to prevent agents from re-minting their own
- * identity and impersonating siblings.
+ * The caller must be the system owner, or the MANAGER acting on ANOTHER
+ * agent. Self-init is rejected for every title, MANAGER included: an agent's
+ * Ed25519 keypair is the sharpest piece of configuration it has (re-minting
+ * silently invalidates every signature its peers trust), and under
+ * TRDD-D3RP7KQZ an agent may drive its own surface but never reconfigure
+ * itself. This comment used to CLAIM self-init was rejected while the guard
+ * below only fired for cross-agent callers — TRDD-YEE33F3A closed that gap.
  *
  * On success: clears ampIdentityMissing flag in the registry and returns
  * 200 with the new fingerprint. On failure: returns 500 with the amp-init
@@ -22,6 +26,7 @@ import { promisify } from 'util'
 import { existsSync } from 'fs'
 import { isValidUuid } from '@/lib/validation'
 import { authenticateFromRequest } from '@/lib/agent-auth'
+import { authorize } from '@/lib/authorization'
 import { getAgent, updateAgent } from '@/lib/agent-registry'
 import { isManager } from '@/lib/governance'
 import type { UpdateAgentRequest } from '@/types/agent'
@@ -43,16 +48,34 @@ export async function POST(
       return NextResponse.json({ error: auth.error }, { status: auth.status || 401 })
     }
 
-    // Authorization: only user (no agentId) or MANAGER can re-init another
-    // agent's AMP identity. Regular agents cannot re-mint keys for anyone.
-    if (auth.agentId && auth.agentId !== id) {
-      const callerIsManager = isManager(auth.agentId)
-      if (!callerIsManager) {
-        return NextResponse.json(
-          { error: 'Only the system owner or MANAGER can re-initialize an agent\'s AMP identity' },
-          { status: 403 },
-        )
-      }
+    // Authorization in two tighten-only steps (TRDD-YEE33F3A Part 2).
+    //
+    // Step 1 — the matrix. `authorize('modify-agent')` supplies three denials
+    // the previous hand-rolled `isManager` check silently lacked:
+    //   - SELF: `modify-agent` is not self-drive, so an agent re-minting its
+    //     OWN keys is refused — the old guard only fired when
+    //     `auth.agentId !== id`, inverting this route's documented contract.
+    //   - a model-ON non-maestro USER principal ({ userId, no agentId }) is
+    //     denied by the M1/U1 branch — the old guard skipped it entirely,
+    //     letting an ordinary user re-mint any agent's keys.
+    //   - fail-closed on an errored auth result.
+    const decision = authorize(auth, 'modify-agent', id)
+    if (!decision.allowed) {
+      return NextResponse.json(
+        { error: decision.reason || 'Not authorized to re-initialize this agent\'s AMP identity' },
+        { status: 403 },
+      )
+    }
+    // Step 2 — narrow the matrix. `modify-agent` would also grant the
+    // target's own COS; this route stays system-owner-or-MANAGER because key
+    // rotation invalidates every signature the fleet trusts from this agent —
+    // an identity operation, not team coordination (same reasoning that made
+    // `export-agent` owner-only). This branch can only DENY, never widen.
+    if (auth.agentId && !isManager(auth.agentId)) {
+      return NextResponse.json(
+        { error: 'Only the system owner or MANAGER can re-initialize an agent\'s AMP identity' },
+        { status: 403 },
+      )
     }
 
     const agent = getAgent(id)

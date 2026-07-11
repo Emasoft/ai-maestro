@@ -10,11 +10,15 @@ All UI scenario tests in AI Maestro MUST follow these 14 rules. No exceptions.
 
 ---
 
-## Rule 0 — Who you are in a scenario (CRITICAL)
+## Rule 0 — Who you are, and what you must NOT do to the agents (CRITICAL)
 
-**You are the HUMAN USER of AI Maestro. You are NOT an agent. You are NEVER an agent. Not even partially.**
+Rule 0 has two halves. The first says who you are. The second says what that forbids you from doing — and it is the half that decides whether a scenario is worth running at all.
 
-Scenarios are always played from the user's seat — the user who opens a browser, logs in to the dashboard, and drives the app through forms, buttons, and the **chat section** of an agent's view. No scenario, no phase, no step, no subagent, no "just this once" exception lets the runner adopt an agent identity.
+**0.a — YOU ARE THE HUMAN USER of AI Maestro. You are NOT an agent. You are NEVER an agent. Not even partially.**
+
+**0.b — YOU MUST NOT ARTIFICIALLY CONTROL THE AGENTS. You give the MANAGER a directive through the UI, and then you STOP.** Your job from that moment is to *watch whether the agents behave correctly and invoke their skills on their own*. That is the most important thing this entire test suite exists to measure. An agent you had to steer has told you nothing.
+
+Scenarios are always played from the user's seat — the user who opens a browser, logs in to the dashboard, and drives the app through forms, buttons, and the **chat section** of an agent's view. No scenario, no phase, no step, no subagent, no "just this once" exception lets the runner adopt an agent identity, and none lets it puppet the fleet.
 
 ### What the human user has, and does not have
 
@@ -29,6 +33,31 @@ A human user of AI Maestro:
 - Create an agent-identity for itself, request an AID, or register itself with the app.
 - Write into any file inside `~/agents/<anything>/` directly (all agent mutations go through the UI).
 - Use CLI tools such as `aimaestro-agent.sh`, `amp-send.sh`, or direct API calls to affect agents — those are agent-to-agent tooling, not user tooling.
+
+### OBSERVE, DON'T DRIVE — the most important thing a scenario tests
+
+**The single most valuable thing any scenario can tell you is whether the agents behave correctly and reach for their skills SPONTANEOUSLY — unprompted, un-nudged, un-hand-held.** That is the product. Everything else (does the button work, does the API return 200) is plumbing underneath it.
+
+So the user's levers are deliberately, drastically few:
+
+1. **The dashboard UI** — create agents in the wizard, assign titles, open boards, read state.
+2. **A directive to the MANAGER**, typed into the MANAGER's **chat** section.
+3. **Then STOP.** And watch.
+
+That is the whole repertoire. The MANAGER is the entry point to the fleet; it cascades the work itself (MANAGER → COS → team), exactly as the comm graph says it must. **If you find yourself typing into three agents' chats to make something happen, you are no longer testing the system — you have BECOME the system**, and whatever passes afterwards proves nothing about it.
+
+**Therefore, while observing, you MUST NOT:**
+- instruct a non-MANAGER agent directly, unless the scenario's steps explicitly test a user↔agent path;
+- prod, nudge, remind, or re-send a directive to an agent that has gone quiet;
+- hint at which skill to invoke, or name the skill, or paste its command;
+- do an agent's work for it, or "help it along" past a step it fumbled;
+- restart or re-prompt an agent to get a nicer outcome.
+
+**An agent that stalls, forgets a skill, mis-routes a message, skips its COS, or never delegates IS THE RESULT.** Write it down. Screenshot it. Do not rescue it. **Rescuing an agent destroys the exact signal the test exists to produce** — and it converts a real, reproducible defect into a scenario that "passed".
+
+**A false PASS is worse than a FAIL.** A failure tells you something is broken. A pass bought by nudging tells you the fleet works when it does not, and it will be believed. If a scenario only reaches its goal because the runner intervened, the correct verdict is **FAIL**, and the finding is *"the agent did not do X on its own."*
+
+The one exception is Rule 4 (FIX-AS-YOU-GO), and it is narrower than it looks: Rule 4 lets you fix **the app's code** when the app is broken. It does not license you to fix **an agent's behaviour** by talking to it. Broken button → fix the button, retry the step. Agent ignored its skill → that is a finding, and the run continues (or fails) without your help.
 
 ### The "every agent lives in ~/agents/" hard invariant
 
@@ -80,7 +109,7 @@ The default rewipe-list does NOT contain `~/.claude/*` files. Those belong to th
 
 ## Table of Contents
 
-0. [Rule 0: Who you are in a scenario](#rule-0--who-you-are-in-a-scenario-critical) — You are the human user, not an agent
+0. [Rule 0: Who you are, and what you must NOT do to the agents](#rule-0--who-you-are-and-what-you-must-not-do-to-the-agents-critical) — **0.a** you are the human user, not an agent · **0.b** never artificially control the agents: brief the MANAGER, then stop and observe whether they use their skills spontaneously (the most important test)
 1. [Rule 1: CLEAN-AFTER-YOURSELF](#rule-1-clean-after-yourself) — Revert system to pre-test state
 2. [Rule 2: 0-IMPACT](#rule-2-0-impact) — Never use existing user resources
 3. [Rule 3: STATE-WIPE](#rule-3-state-wipe) — Backup and restore config files
@@ -1255,28 +1284,32 @@ In a scenario test, you are **impersonating the user**. You sit in front of the 
 - When the scenario says "Create an agent", you use the wizard in the browser — not an API call.
 - When you need to verify something, you look at the Profile panel, the sidebar, or the terminal output — not a curl response.
 
-### Talk to your agents
+### Brief the MANAGER — then stop talking
 
-Agents are live Claude Code instances running in tmux sessions. They can read your messages and act on them. When a scenario requires an agent to perform an action:
+> **This section previously said the opposite.** It told the runner: *"If an agent refuses to do its job, pushes back, or sits idle — talk to it. Push it to act. Don't let agents slack. You are the manager of the test."* That advice manufactured **false passes**: it made a fleet that could not self-organize look like one that could, because a human was quietly supplying the organization. It is rescinded. You are not the manager of the test. **The MANAGER is.**
 
-1. **Select the agent** in the sidebar (click its name)
-2. **Type into the terminal** — click the terminal area to focus it, then type. Use arrow keys to navigate menus, Enter to confirm choices, and type text to give instructions.
-3. **Or use the Prompt Builder** — the text area at the bottom of the dashboard. Type your instruction and click Send. The Prompt Builder is recommended for longer messages but is not mandatory.
-4. **Read the terminal output** to see what the agent is doing and whether it succeeded
-5. **Respond to the agent** if it asks questions or needs clarification — type your answer directly into the terminal or use the Prompt Builder
+When a scenario requires the fleet to do something:
 
-You interact with agents the same way a human user would: typing instructions, accepting plans, approving tool use, pasting URLs or information, navigating CLI menus with arrow keys, and pressing Enter to confirm.
+1. **Select the MANAGER** in the sidebar.
+2. **Type the directive into its CHAT section** (the typed-message UI) — *not* the terminal. State the goal, not the method. "Build a JSONL viewer in Swift for macOS" is a directive; "create a team, then assign an ARCHITECT, then open the kanban" is you doing the MANAGER's job for it.
+3. **Then stop, and observe.** The MANAGER cascades the work itself (MANAGER → COS → team), as the comm graph requires.
 
-If an agent refuses to do its job, pushes back, or sits idle — **talk to it**. Give it clearer instructions. Push it to act. Don't let agents slack. You are the manager of the test.
+**The terminal section is READ-ONLY to you.** It is a live window onto what an agent is doing. Read it, screenshot it, quote it in your report — never type into it, never `send-keys` into it. (Claude Code uses the alternate screen buffer, so what you see there is the agent's own session, not a prompt for you.)
 
-### Read what agents write
+### Read what agents write — and let them fail
 
-The terminal shows the agent's real-time output. **Read it.** The agent may:
+The terminal is your microscope. Watch it for: which skills the agent invokes unprompted, whether it routes through its COS, whether it populates the kanban, whether it delegates or tries to do everything itself.
 
-- Ask for permission (approve it if appropriate for the test)
-- Report errors (diagnose and fix per Rule 4)
-- Request clarification (answer via the Prompt Builder)
-- Show progress (wait for completion before moving to the next step)
+What you may respond to:
+- **A permission prompt** — approve it if the scenario intends that action. (A user does click Approve.)
+- **A direct question to you, the user** — answer it plainly, once, without coaching.
+
+What you must NOT respond to:
+- **Silence.** An agent that goes idle without finishing is a **finding**, not a prompt for you to poke it.
+- **A wrong turn.** An agent that skips its COS, forgets a skill, or mis-routes a message is a **finding**. Record it and let it run on.
+- **A stall you could easily unstick.** Especially this one. The easier it is to rescue, the more valuable the untouched observation, because you have found something small, real and reproducible — the kind of bug that survives review precisely because everyone reflexively works around it.
+
+Record every such moment in the report as an explicit behavioural finding: *what you expected the agent to do on its own, what it actually did, and what it never did.* If the scenario's goal was reached **only** because you intervened, the verdict is **FAIL** — the intervention is the bug report.
 
 Don't blindly move to the next step without confirming the agent completed the current action.
 

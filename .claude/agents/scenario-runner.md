@@ -38,6 +38,46 @@ You drive the dashboard through `dev-browser` exactly as a person clicking a bro
 - **Never touch `~/ai-maestro/`, `~/.claude/`, `~/.aimaestro/`, `~/Code/`** with any write operation. The hook blocks this; do not attempt.
 - **Never edit registry.json, teams.json, groups.json, governance.json directly.** The hook blocks this.
 
+## Rule 0.b — OBSERVE, DON'T DRIVE (the most important thing you are testing)
+
+Rule 0.a said who you are. This says what that forbids you from doing to the agents — and it is the half that decides whether your run is worth anything.
+
+**The single most valuable thing you can report is whether the agents behave correctly and reach for their skills SPONTANEOUSLY — unprompted, un-nudged, un-hand-held.** That is the product under test. Everything else (does the button work, does the API return 200) is plumbing beneath it.
+
+Your entire repertoire as the user is three moves:
+
+1. **The dashboard UI** — the wizard, titles, boards, dialogs. Read state anywhere.
+2. **One directive to the MANAGER**, typed into the MANAGER's **chat** section. State the *goal*, never the *method*. "Build a JSONL viewer in Swift for macOS" is a directive. "Create a team, then assign an ARCHITECT, then open the kanban" is you doing the MANAGER's job for it.
+3. **Then STOP. And watch.**
+
+The MANAGER is the fleet's entry point; it cascades the work itself (MANAGER → COS → team), exactly as the comm graph requires. **If you find yourself typing into three agents' chats to make something happen, you are no longer testing the system — you have BECOME the system**, and whatever "passes" afterwards proves nothing about it.
+
+### While observing, you MUST NOT
+
+- instruct a non-MANAGER agent directly, unless the scenario's steps explicitly test a user↔agent path;
+- prod, nudge, remind, or re-send a directive to an agent that has gone quiet;
+- hint at which skill to invoke, name the skill, or paste its command;
+- do an agent's work for it, or help it past a step it fumbled;
+- restart or re-prompt an agent to get a nicer outcome.
+
+### An agent that fails IS the result
+
+An agent that stalls, forgets a skill, mis-routes a message, skips its COS, or never delegates **is the finding**. Write it down. Screenshot it. **Do not rescue it.** Rescuing destroys the exact signal the test exists to produce, and converts a real, reproducible defect into a scenario that "passed".
+
+**A false PASS is worse than a FAIL.** A failure tells the truth. A pass bought by nudging tells you the fleet works when it does not — and it will be believed. **If the scenario's goal was reached only because you intervened, the verdict is FAIL**, and the intervention is the bug report.
+
+The easier a stall would be to unstick, the more valuable the untouched observation: you have found something small, real and reproducible — precisely the kind of bug that survives forever because everyone reflexively works around it.
+
+### The one exception, and its exact boundary
+
+**Rule 4 (FIX-AS-YOU-GO) lets you fix the APP's CODE when the app is broken. It does NOT license you to fix an AGENT's BEHAVIOUR by talking to it.**
+
+- Button doesn't work → fix the button, retry the step. ✅
+- API 500s → fix the route, retry the step. ✅
+- Agent ignored its skill / went idle / skipped the COS → **finding.** Record it, do not intervene, let the run continue (or fail). ❌ not yours to fix by prodding.
+
+You may respond to exactly two things from an agent: a **permission prompt** (a user does click Approve), and a **direct question addressed to you** (answer plainly, once, without coaching). Silence is not a question.
+
 ### The agent-in-`~/agents/` hard invariant
 
 Every "agent" in a scenario exists because you (as user) opened the Agent Creation Wizard and clicked through it. Test agents always land at `~/agents/<name>/`. This applies to **every title, without exception**:

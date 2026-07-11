@@ -157,11 +157,35 @@ author: AI Maestro Team
 
 ## Phase 3: Send Project Task to MANAGER
 
-#### S011: Type task instruction in terminal
-- **Action:** In Prompt Builder, type and send: `Create a team called "jsonl-viewer-swift" to build a JSONL viewer desktop app for macOS in Swift/SwiftUI. The app needs to: (1) open .jsonl files and display each JSON line in a table, (2) filter/search across all lines, (3) pretty-print individual JSON objects when clicked, (4) handle large files 100MB+ with lazy loading. Create the team using the /team-governance skill, then create a full 5-agent team with ALL required titles: one ARCHITECT for Swift/SwiftUI design, one ORCHESTRATOR to coordinate the build pipeline, one INTEGRATOR for CI/CD and packaging, and two MEMBERs for implementation (one for the UI layer, one for the data/parsing layer). The team must have a minimum of 5 agents (COS is auto-created, plus the 4 you create plus a second MEMBER). MANDATORY AGENT NAMING AND LOCATION: every agent you create MUST have a name prefixed 'scen9-' (e.g. scen9-jsonl-architect, scen9-jsonl-orchestrator, scen9-jsonl-integrator, scen9-jsonl-member-ui, scen9-jsonl-member-data; the auto-created COS will be cos-scen9-jsonl-viewer-swift). Every agent's working directory MUST be under ~/agents/<name>/ — never inside ~/ai-maestro, never inside ~/.claude, never in an existing project folder the user owns. The Agent Creation Wizard enforces this by default; do NOT override the default folder, do NOT browse for an existing folder, do NOT supply allowExternalFolder=true. If any step would create an agent outside ~/agents/, stop and report it as a bug. If any operation requires the governance password, ask the user to enter it in the AI Maestro UI popup -- do NOT use the password directly.`
-- **Goal:** MANAGER receives task
+#### S011: Give the MANAGER the directive — then STOP (Rule 0.b)
+
+> **This step was rewritten.** It used to hand the MANAGER an answer key: it named the skill to
+> invoke (`/team-governance`), designed the org chart for it (one ARCHITECT for X, one
+> ORCHESTRATOR for Y, two MEMBERs for Z…), and listed every agent to create. A MANAGER given
+> that cannot demonstrate judgement — it can only transcribe, and the scenario could never fail
+> for the one reason worth failing for. **State the GOAL. Never the METHOD.** (Rule 0.b)
+
+- **Action:** In the MANAGER's **chat** section (NOT the terminal — it is read-only), type and send:
+
+  `Build a JSONL viewer desktop app for macOS in Swift/SwiftUI. It must: (1) open .jsonl files and display each JSON line in a table, (2) filter/search across all lines, (3) pretty-print an individual JSON object when clicked, (4) stay responsive on 100MB+ files. Organise whatever team you need and get it moving.`
+
+  `Two house rules: name every agent you create with the prefix 'scen9-', and leave every agent's working directory at the wizard default under ~/agents/<name>/ (never inside ~/ai-maestro, ~/.claude, or a project folder I own). If something needs the governance password, ask me and I will type it into the UI popup — I will not give it to you.`
+
+  Then **STOP**. Send nothing further. Do not name skills, titles, agents, or a team structure — those are the MANAGER's decisions and whether it makes them well is the entire point of this scenario.
+
+  *(The two house rules are permitted: they are sandbox policy — a real user setting naming and
+  safety boundaries — not instructions about how to do the work. The line is: constraints on the
+  BLAST RADIUS are yours; decisions about the WORK are the MANAGER's.)*
+
+- **Goal:** MANAGER receives a goal-level directive with no method prescribed
 - **Creates:** nothing yet
 - **Modifies:** nothing yet
+- **Verify:** the message appears in the MANAGER's chat. Screenshot. From here on you are an
+  OBSERVER: record what the MANAGER does **on its own** — which skills it invokes unprompted,
+  whether it creates a team, which titles it chooses and why, whether it routes through its COS,
+  whether it populates the kanban. **If it stalls, does nothing, or picks a nonsensical team,
+  that is the RESULT — record it and do NOT prod it.** A goal reached only because you
+  intervened is a FAIL, and the intervention is the bug report.
 - **Verify:** Terminal shows MANAGER processing. Screenshot: SCEN-009/S011-task-sent.png
 
 #### S012: Wait for MANAGER to acknowledge and start planning

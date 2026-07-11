@@ -1811,12 +1811,83 @@ async function startServer(handleRequest) {
       console.warn('[Startup] Auto-update scheduler init failed (non-fatal):', err?.message || err)
     }
 
-    // R17 compliance is enforced exclusively by the AIO Change* pipelines:
+    // ── Agent-workdir invariants: boot sweep + the ONE watchdog (TRDD-VYQ8N4KR) ──
+    // Everything ai-maestro guarantees about an agent workdir is declared in ONE
+    // list (lib/agent-invariants.ts). The per-agent triggers (CreateAgent,
+    // importAgent, the wake gate) only fire when an agent is TOUCHED, which
+    // leaves two holes:
+    //   COVERAGE  — an agent that is never woken never receives a guarantee the
+    //               app shipped after it was created.
+    //   TAMPERING — a file an agent deleted or rewrote stays broken until that
+    //               same agent is next woken; the agent that broke it would be
+    //               choosing when the fix lands.
+    // The boot sweep closes the first (every registered agent, hibernated ones
+    // included). The watchdog closes the second, bounding a tamper's lifetime to
+    // one interval rather than to the goodwill of the process that caused it.
+    //
+    // Only the invariants declaring `periodic` run here — which is why the R17
+    // core-plugin install does NOT (it shells out to a package manager; see the
+    // note on its row and the R17 stance below). The periodic set writes FILES,
+    // never registry state, spawns nothing, and cannot change an agent's
+    // installed elements.
+    try {
+      const { loadAgents } = await import('./lib/agent-registry.ts')
+      const { checkAuthorizedAgentWorkdir } = await import('./lib/agent-workdir-policy.ts')
+      const { enforceAgentInvariants, formatEnforceResult, startAgentInvariantsWatchdog } =
+        await import('./lib/agent-invariants.ts')
+
+      // Gate on the ONE workdir authority rather than re-deriving a path check
+      // here. It admits an adopted external project (a MAINTAINER on ~/Code/<x>)
+      // because the registry records it for that agent, and rejects a bogus entry.
+      // This is not cosmetic: a legacy `default` agent carries workingDirectory
+      // "/", and without the gate every boot and every watchdog tick would attempt
+      // `mkdir /.claude` — harmless as this uid, a real mess if run as root.
+      //
+      // `warn` only on the boot pass: the watchdog re-runs this every few minutes
+      // and a permanently-bogus registry entry would otherwise log forever.
+      const invariantAgents = (warn = false) => loadAgents()
+        .filter(a => !a.deletedAt && a.workingDirectory)
+        .filter(a => {
+          const verdict = checkAuthorizedAgentWorkdir(a.workingDirectory, a.name)
+          if (!verdict.ok && warn) {
+            console.warn(`[Startup] Invariants: skipping ${a.name || a.id} — ${verdict.reason}`)
+          }
+          return verdict.ok
+        })
+        .map(a => ({
+          agentId: a.id,
+          agentName: a.name,
+          workdir: a.workingDirectory,
+          clientType: (a.program || '').includes('claude') ? 'claude' : 'unknown',
+        }))
+
+      const fleet = invariantAgents(true)
+      let repaired = 0
+      for (const a of fleet) {
+        const r = await enforceAgentInvariants({ ...a, trigger: 'periodic' })
+        const line = formatEnforceResult(a.agentName || a.agentId, r)
+        if (line) { repaired++; console.log(`[Startup] Invariants ${line}`) }
+      }
+      console.log(`[Startup] Agent invariants: ${fleet.length} workdir(s) checked, ${repaired} repaired`)
+
+      // Re-reads the registry on every tick, so agents created later are covered
+      // without restarting the watchdog. Unref'd — never blocks shutdown.
+      if (startAgentInvariantsWatchdog(invariantAgents)) {
+        console.log('[Startup] Agent-invariants watchdog started (the single enforcement loop)')
+      }
+    } catch (err) {
+      console.warn('[Startup] Agent-invariant sweep failed (non-fatal):', err?.message || err)
+    }
+
+    // R17 core-plugin compliance is enforced exclusively by the AIO Change*
+    // pipelines and the wake gate:
     //   - InstallElement() PG01/PG02/PG05 post-gates
-    //   - wakeAgent() R17 gate (services/agents-core-service.ts:1530)
-    //   - createSession() R17 defense-in-depth (services/sessions-service.ts:631)
-    // No startup audit, no periodic loop. Stale registry entries are never
-    // mutated outside of an explicit user-initiated Change* operation.
+    //   - wakeAgent() R17 gate (services/agents-core-service.ts)
+    //   - createSession() R17 defense-in-depth (services/sessions-service.ts)
+    // No startup audit, no periodic loop — which is exactly why the `core-plugin`
+    // invariant declares `triggers: ['wake']` and is skipped by the sweep above.
+    // Stale registry entries are never mutated outside an explicit user-initiated
+    // Change* operation.
 
     // Kill any orphaned creation-helper sessions on startup.
     // These zombie sessions can consume tokens indefinitely if not cleaned up.

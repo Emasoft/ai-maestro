@@ -225,7 +225,10 @@ describe('CreateAgent G05c gitignore seeding + allowExternalFolder (TRDD-57EBNB7
 
     const g05cLine = result.operations.find(o => o.startsWith('G05c:'))
     expect(g05cLine).toBeDefined()
-    expect(g05cLine).toMatch(/managed git-exclude created/)
+    // TRDD-VYQ8N4KR: G05c is now the `git-exclude` row of the invariant list
+    // rather than a hand-rolled gate. The G05c op LABEL is deliberately
+    // preserved (it is the AIO's per-gate contract); only the prose moved.
+    expect(g05cLine).toMatch(/git-exclude=repaired \(created\)/)
     expect(mockEnsureWorkdirGitignore).toHaveBeenCalledWith(join(HOME, 'agents', 'gi-default'))
   })
 

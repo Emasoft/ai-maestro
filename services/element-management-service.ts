@@ -7183,43 +7183,40 @@ export async function CreateAgent(
     result.agentId = agent.id
     ops.push(`G04: Agent created: id=${agent.id}, name=${agent.name}`)
 
-    // ── G05: Create .claude directory for Claude agents ──────
-    if (program.includes('claude')) {
-      const claudeDir = join(workDir, '.claude')
-      await mkdir(claudeDir, { recursive: true })
-      ops.push(`G05: .claude/ directory ensured in working dir`)
-
-      // ── G05b: Seed the DEP governance-rule overlay (TRDD-DE9757LJ) ──
-      // The aimaestro-* rules load only inside registered agent workdirs;
-      // the wake path (ensureCorePluginInstalled) re-seeds on drift, so a
-      // failure here is best-effort — it must never abort agent creation.
-      try {
-        const { ensureAgentRules } = await import('@/lib/agent-rules-seed')
-        const rulesResult = await ensureAgentRules(workDir)
-        ops.push(`G05b: DEP rules seeded=[${rulesResult.seeded.join(',')}] updated=[${rulesResult.updated.join(',')}] preserved=[${rulesResult.preserved.join(',')}]`)
-      } catch (rulesErr) {
-        ops.push(`G05b: WARN — DEP rules seeding failed (non-fatal): ${rulesErr instanceof Error ? rulesErr.message : rulesErr}`)
-      }
-    } else {
-      ops.push(`G05: Non-Claude agent — skip .claude/ creation`)
+    // ── G05: Establish the workdir invariants (TRDD-VYQ8N4KR) ──────
+    // Was three hand-rolled gates — mkdir .claude/ (G05), seed the DEP rules
+    // (G05b), restore the managed git-exclude (G05c) — each with its own
+    // try/catch, and each duplicated in ensureCorePluginInstalled. They are now
+    // ONE list (lib/agent-invariants.ts) run by ONE runner, so adding a
+    // guarantee is a row rather than a fourth copy of this block.
+    //
+    // Best-effort, exactly as before: a failed invariant is a WARN op and never
+    // aborts agent creation. (The one invariant whose failure IS fatal — the R17
+    // core plugin — is deliberately not on the 'create' trigger: it is installed
+    // on first wake, and this consolidation does not change that.)
+    //
+    // The G05/G05b/G05c op labels are kept: they are the AIO's public
+    // per-gate contract, read by callers and pinned by tests.
+    const INVARIANT_OPS: Record<string, string> = {
+      'claude-dir': 'G05',
+      'dep-rules': 'G05b',
+      'git-exclude': 'G05c',
     }
-
-    // ── G05c: Managed .gitignore block for git-repo workdirs (TRDD-57EBNB72) ──
-    // An adopted plugin repo must never end up committing the server's writes
-    // (DEP rules, settings.local.json) or the runtime tool artifacts. Runs for
-    // ALL clients (the artifacts appear regardless of program) and only when
-    // <workDir>/.git exists. Best-effort like G05b — the wake path
-    // (ensureCorePluginInstalled) self-heals drift.
-    try {
-      const { ensureWorkdirGitignore } = await import('@/lib/workdir-gitignore-seed')
-      const giResult = await ensureWorkdirGitignore(workDir)
-      if (giResult.skipped) {
-        ops.push('G05c: workdir is not a git repo — gitignore seeding skipped')
-      } else {
-        ops.push(`G05c: managed git-exclude ${giResult.created ? 'created' : giResult.updated ? 'updated' : 'unchanged'}`)
-      }
-    } catch (giErr) {
-      ops.push(`G05c: WARN — gitignore seeding failed (non-fatal): ${giErr instanceof Error ? giErr.message : giErr}`)
+    const { enforceAgentInvariants } = await import('@/lib/agent-invariants')
+    const invariants = await enforceAgentInvariants({
+      agentId: agent.id,
+      agentName: agent.name,
+      workdir: workDir,
+      clientType: (program.includes('claude') ? 'claude' : 'unknown'),
+      trigger: 'create',
+    })
+    for (const o of invariants.outcomes) {
+      const label = INVARIANT_OPS[o.id] || 'G05x'
+      ops.push(
+        o.status === 'failed'
+          ? `${label}: WARN — invariant ${o.id} failed (non-fatal): ${o.detail}`
+          : `${label}: invariant ${o.id}=${o.status}${o.detail ? ` (${o.detail})` : ''}`
+      )
     }
 
     // ── G06: Set governance title if requested ───────────────

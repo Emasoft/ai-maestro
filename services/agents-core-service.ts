@@ -1933,66 +1933,43 @@ export async function ensureCorePluginInstalled(
   clientType: 'claude' | 'codex' | 'gemini' | 'opencode' | 'kiro' | 'unknown',
   authContext?: AuthContext
 ): Promise<{ success: boolean; installed: boolean; error?: string; operations?: string[] }> {
-  const { InstallElement } = await import('@/services/element-management-service')
+  // InstallElement is deliberately NOT imported here any more — the `core-plugin`
+  // invariant owns that call. Two functions racing to install the same plugin is
+  // exactly the duplicated-enforcement shape this consolidation removes.
   const { getAgent, updateAgent } = await import('@/lib/agent-registry')
 
-  // Ensure .claude/ exists so the (legacy) Claude install path can write
-  // settings.local.json without falling over. Harmless for Codex since its
-  // install path uses .codex/.
-  fs.mkdirSync(path.join(workingDirectory, '.claude'), { recursive: true })
+  // TRDD-VYQ8N4KR: every workdir guarantee now lives in ONE list
+  // (lib/agent-invariants.ts) and is enforced by ONE runner. This function used
+  // to hand-roll them — mkdir .claude/, seed the DEP rules, restore the managed
+  // git-exclude, then the R17 plugin check — each in its own copy-pasted
+  // try/catch. Adding a guarantee meant remembering every call site; the list
+  // means adding a row.
+  //
+  // This is the WAKE trigger (wakeAgent, createSession, the ensure-core POST),
+  // so it runs the wake-safe invariants. Everything except the core plugin also
+  // runs on the periodic watchdog, so it no longer takes a wake to repair them.
+  const { enforceAgentInvariants, formatEnforceResult } = await import('@/lib/agent-invariants')
+  const enforcement = await enforceAgentInvariants({
+    agentId,
+    workdir: workingDirectory,
+    clientType,
+    trigger: 'wake',
+    authContext,
+  })
 
-  // TRDD-DE9757LJ: seed/refresh the DEP governance-rule overlay at the same
-  // choke point as the R17 plugin self-heal — this function runs on wake
-  // (wakeAgent), on New Session (sessions-service createSession), and on the
-  // ensure-core POST, so it doubles as the "missing rules" monitor: a rule
-  // deleted from the workdir (or gone stale after an app update) is restored
-  // on the next wake. Best-effort by design — rules I/O must never block a wake.
-  try {
-    const { ensureAgentRules } = await import('@/lib/agent-rules-seed')
-    const rulesResult = await ensureAgentRules(workingDirectory)
-    if (rulesResult.seeded.length || rulesResult.updated.length) {
-      console.log(`[ensureCorePluginInstalled] DEP rules for agent ${agentId}: seeded=[${rulesResult.seeded.join(',')}] updated=[${rulesResult.updated.join(',')}]`)
-    }
-  } catch (rulesErr) {
-    console.warn(`[ensureCorePluginInstalled] DEP rules seeding failed for agent ${agentId} (non-fatal):`, rulesErr)
+  const line = formatEnforceResult(agentId, enforcement)
+  if (line) console.log(`[ensureCorePluginInstalled] invariants ${line}`)
+
+  // The core plugin is the one invariant whose failure is the CALLER's problem:
+  // a wake must not proceed without it (R17). Every other invariant is
+  // best-effort — a failed rule seed must never block a wake.
+  const core = enforcement.outcomes.find(o => o.id === 'core-plugin')
+  if (core?.status === 'failed') {
+    return { success: false, installed: false, error: core.detail || 'core plugin install failed' }
   }
 
-  // TRDD-57EBNB72: same self-heal for the managed .gitignore block. The rule
-  // seeding above re-ADDS files into the workdir on every wake, so a git-repo
-  // workdir needs its gitignore protection restored at the same cadence —
-  // otherwise a hand-trimmed or drifted .gitignore lets server writes and
-  // runtime artifacts show up as committable changes in an adopted plugin repo.
-  try {
-    const { ensureWorkdirGitignore } = await import('@/lib/workdir-gitignore-seed')
-    const giResult = await ensureWorkdirGitignore(workingDirectory)
-    if (giResult.created || giResult.updated) {
-      console.log(`[ensureCorePluginInstalled] managed git-exclude ${giResult.created ? 'created' : 'updated'} for agent ${agentId}`)
-    }
-  } catch (giErr) {
-    console.warn(`[ensureCorePluginInstalled] gitignore seeding failed for agent ${agentId} (non-fatal):`, giErr)
-  }
-
-  const hasPlugin = await isCorePluginPresent(agentId)
-
-  if (!hasPlugin) {
-    console.log(`[ensureCorePluginInstalled] R17: ai-maestro-plugin missing or disabled for agent ${agentId} (client=${clientType}) — installing...`)
-    const { buildSystemAuthContext } = await import('@/lib/agent-auth')
-    const installAuth = authContext || buildSystemAuthContext('ensure-core-plugin-r17-reinstall')
-    const installResult = await InstallElement({
-      name: 'ai-maestro-plugin',
-      marketplace: 'ai-maestro-plugins',
-      action: 'install',
-      scope: 'local',
-      agentDir: workingDirectory,
-      agentId,
-      clientType,
-    }, installAuth)
-
-    if (!installResult.success) {
-      return { success: false, installed: false, error: installResult.error, operations: installResult.operations }
-    }
-    console.log(`[ensureCorePluginInstalled] R17: ai-maestro-plugin installed for agent ${agentId} (${installResult.operations.length} gates)`)
-    return { success: true, installed: true, operations: installResult.operations }
+  if (core?.status === 'repaired') {
+    return { success: true, installed: true }
   }
 
   // Plugin already present — clear a stale corePluginMissing flag if set.

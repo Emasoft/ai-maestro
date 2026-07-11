@@ -121,16 +121,91 @@ layers:
 - **DEP (ai-maestro overlay)** — `rules/aimaestro/aimaestro-*.md` in THIS repo
   (git-tracked, bundled with the app). `lib/agent-rules-seed.ts`
   (`ensureAgentRules`) copies them into each registered agent workdir's
-  `.claude/rules/` — wired at CreateAgent G05b, at `ensureCorePluginInstalled`
-  (the wake-path monitor: re-seeds missing/stale rules on every wake), and at
-  `importAgent`. Every DEP file carries the `ai-maestro:installed-dep-rule`
-  provenance marker; the seeder only ever overwrites marker-stamped files —
-  a user's same-named file is never touched. DEP files EXPAND the IND base
-  and must never restate it.
+  `.claude/rules/`. It is NOT called directly by the lifecycle any more — it is
+  the `dep-rules` row of the **agent-invariant registry** (see below), which is
+  what actually schedules it. DEP files EXPAND the IND base and must never
+  restate it.
+
+**ai-maestro OWNS the `aimaestro-*.md` name** inside an agent workdir
+(TRDD-JGCEA6CQ). A shipped rule is written **read-only (0444)**, restored when its
+bytes differ, re-created when deleted, and re-protected when its mode drifts —
+whether or not it still carries the `ai-maestro:installed-dep-rule` marker. The
+marker is provenance, **not a permission gate**: the earlier "preserve a same-named
+file lacking the marker" contract was a bypass (strip the marker, rewrite the rule,
+keep the edit forever — the governed party editing its own governance). A user who
+wants their own rule uses any other filename.
+
+*Honest limit:* agents share the server's UID, so this is **tamper-evident and
+self-healing, not tamper-proof** — a determined agent can chmod and rewrite, and the
+watchdog puts it back within one interval. Real prevention needs per-agent UID
+isolation (TRDD-a1019073). Do not describe it as a sandbox.
+
+Two kinds of DEP rule live in `rules/aimaestro/`:
+
+| File | Layer |
+|---|---|
+| `aimaestro-trdd-approval.md`, `aimaestro-manager-approval-defaults.md`, `aimaestro-prrd-governance.md`, `aimaestro-kanban-multiagent.md` | **governance** — approval tiers, transition authority, PRRD, multi-agent kanban |
+| `aimaestro-agent-rules.md` | **operating** — how an agent (and its subagents) must BEHAVE inside the harness: boundaries, failure handling, truth, work discipline |
+
+**The operating file is under a hard size budget** (2,200 bytes, enforced by
+`tests/unit/agent-operating-rules.test.ts`). Everything in `.claude/rules/` is
+injected into an agent's context on EVERY turn, so its cost is
+size × turns × agents. Each rule is ONE line stating WHAT, never HOW — the
+implementation is the agent's to choose. Growing it is a deliberate decision
+that must pay for itself on every turn of every agent, forever.
+
+**Naming is load-bearing.** A DEP rule MUST be named `aimaestro-*.md`: that is
+exactly the glob in `MANAGED_GITIGNORE_ENTRIES` (`lib/workdir-gitignore-seed.ts`)
+that keeps a seeded rule out of `git status` in an adopted project repo. A file
+named `ai-maestro-rules.md` would not match and would surface as untracked in
+every agent's repository.
 
 This repo self-governs via symlinks `.claude/rules/aimaestro-*.md →
-rules/aimaestro/`. To change a DEP rule, edit `rules/aimaestro/` (agents pick
-the update up on next wake); never hand-edit a seeded copy in a workdir.
+rules/aimaestro/` — for the **governance** rules only. The operating rules bind
+agents running INSIDE the harness (use the CLI, never the API; obey the comm
+graph), which is the opposite of what a developer OF the server does, so it is
+deliberately not symlinked here. To change a DEP rule, edit `rules/aimaestro/`
+(agents pick the update up on next wake, or within one watchdog interval); never
+hand-edit a seeded copy in a workdir — it will be restored.
+
+## Agent-workdir invariants — ONE list, ONE runner, ONE watchdog (TRDD-VYQ8N4KR)
+
+**Everything ai-maestro guarantees about an agent's working directory is declared in
+`lib/agent-invariants.ts`. To add a guarantee, add a row — never a call site.**
+
+| id | guarantee | triggers |
+|---|---|---|
+| `claude-dir` | `.claude/` exists | create · wake · periodic |
+| `dep-rules` | the shipped `aimaestro-*.md` rules: present, unmodified, read-only | create · wake · periodic |
+| `git-exclude` | a git-repo workdir carries the managed git-exclude block | create · wake · periodic |
+| `core-plugin` | `ai-maestro-plugin` (R17) installed + enabled at local scope | **wake only** |
+
+- `enforceAgentInvariants(ctx)` runs the rows matching `ctx.trigger`. A throwing
+  invariant becomes a `failed` outcome and the rest still run.
+- `startAgentInvariantsWatchdog()` — the **single** periodic loop (5 min;
+  `AIM_INVARIANTS_WATCHDOG_INTERVAL_MS`, 0 disables), started from `server.mjs`
+  after a boot sweep over the whole fleet.
+- Callers: CreateAgent (`trigger: 'create'`, emitting the stable `G05`/`G05b`/`G05c`
+  op labels), `ensureCorePluginInstalled` (`'wake'`), server boot + watchdog
+  (`'periodic'`).
+
+**Why `triggers` exists, and why `core-plugin` is wake-only.** Its repair is
+`claude plugin install` — network I/O, a package manager, a registry write. A
+background loop that silently reinstalls plugins fleet-wide is a categorically bigger
+promise than "rewrite a file", and R17 deliberately has no periodic loop. A test pins
+`core-plugin.triggers === ['wake']` so a future edit can't quietly turn the watchdog
+into a background plugin installer.
+
+**Two holes this closes.** *Coverage:* a per-agent hook only fires when that agent is
+TOUCHED, so an agent that is never woken never receives a guarantee shipped after it
+was created. *Tampering:* a guarantee enforced only on wake is enforced by the very
+agent that may have broken it — the suspect choosing when the repair lands. The boot
+sweep closes the first; the watchdog closes the second.
+
+The sweep gates each workdir on `checkAuthorizedAgentWorkdir` (`lib/agent-workdir-policy.ts`
+— the ONE workdir authority, TRDD-WLWHVMKT), which admits an adopted `~/Code/<project>`
+and rejects a bogus entry. This is not cosmetic: a legacy `default` agent in the registry
+carries `workingDirectory: "/"`.
 
 ## Version Management
 

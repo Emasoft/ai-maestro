@@ -10,8 +10,8 @@
 
 import { execFile, execFileSync as nodeExecFileSync } from 'child_process'
 import { promisify } from 'util'
-import path from 'path'
-import os from 'os'
+
+import { assertAuthorizedAgentWorkdir } from '@/lib/agent-workdir-policy'
 
 // Shell-free command execution — prevents shell injection by passing args as array
 const execFileAsync = promisify(execFile)
@@ -39,32 +39,32 @@ function validateSessionName(name: string, label: string = 'session name'): void
   }
 }
 
-const HOME_DIR = os.homedir()
-const AGENTS_ROOT = path.join(HOME_DIR, 'agents')
-
 // ── TRDD-a1019073 coupling (interim posture — do NOT mistake for permanent) ──
-// The ~/agents-only rule below is the current cwd policy for the SHARED-UID era.
-// It is NOT the controlled-execution-environment boundary: on a shared UID no
-// cwd policy is a security boundary (a same-UID process can chdir anywhere the
-// kernel allows). When the dedicated `aimaestro` UID + host sandbox land, this
-// check must be tightened IN LOCKSTEP with the OS-level enforcement (private
-// /tmp, TMPDIR redirect, dedicated non-human-writable toolchain, cross-UID
-// perms) — never relaxed to re-admit external workdirs without that enforcement.
+// The cwd policy below is for the SHARED-UID era. It is NOT the
+// controlled-execution-environment boundary: on a shared UID no cwd policy is a
+// security boundary (a same-UID process can chdir anywhere the kernel allows).
+// When the dedicated `aimaestro` UID + host sandbox land, this must be tightened
+// IN LOCKSTEP with the OS-level enforcement (private /tmp, TMPDIR redirect,
+// dedicated non-human-writable toolchain, cross-UID perms).
 // See design/tasks/TRDD-…-a1019073-controlled-execution-environment.md §11.1
 // (interim bridge) and §4.1 (UID separation, the load-bearing foundation).
+//
+// TRDD-WLWHVMKT: this used to be a hardcoded "must resolve under ~/agents/" check.
+// It was one of FIVE places that each re-derived that invariant independently, and
+// when TRDD-57EBNB72 widened only ONE of them (CreateAgent's G03 gates) to support
+// adopting an existing project folder, this check kept throwing — so an adopted
+// agent's registry entry was written and its session could then never start. The
+// rule is NOT relaxed here; it is delegated to the one authority that now answers
+// the question for every enforcement point (lib/agent-workdir-policy.ts), which
+// authorizes an external cwd only when the REGISTRY records it as an agent's own
+// working directory — i.e. a directory that already passed the creation gates.
+//
+// No agent name is passed: CreateAgent's G03-OVERLAP already refuses to register a
+// workdir owned by another live agent, so "is a registered workdir" is equivalent to
+// "is THIS agent's workdir" — and not depending on session-name parsing here avoids
+// false denials on multi-session names (`<name>-1`, `<id>@<host>`).
 function validateCwd(cwd: string): void {
-  if (typeof cwd !== 'string') {
-    throw new Error('[agent-runtime] Invalid cwd: must be a string')
-  }
-  // Empty cwd is OK — tmux will use the current working directory
-  if (cwd.length === 0) return
-  // The cwd must resolve under ~/agents/. We don't allow resolution outside
-  // that root because every legitimate AI Maestro agent has its workdir
-  // inside ~/agents/<name>/ (R0 / Rule 0 invariant).
-  const resolved = path.resolve(cwd)
-  if (!resolved.startsWith(AGENTS_ROOT + path.sep) && resolved !== AGENTS_ROOT) {
-    throw new Error(`[agent-runtime] Invalid cwd: ${JSON.stringify(cwd)} — must resolve under ${AGENTS_ROOT}`)
-  }
+  assertAuthorizedAgentWorkdir(cwd)
 }
 
 // ---------------------------------------------------------------------------

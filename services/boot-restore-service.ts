@@ -1,11 +1,12 @@
 import { existsSync } from 'fs'
-import { homedir } from 'os'
-import { join, resolve, sep } from 'path'
 import { loadAgents } from '@/lib/agent-registry'
+import { checkAuthorizedAgentWorkdir } from '@/lib/agent-workdir-policy'
 import { wakeAgent } from '@/services/agents-core-service'
 
-/** ~/agents — the only root an agent workdir may live under (mirrors validateCwd in lib/agent-runtime.ts). */
-const AGENTS_ROOT = join(homedir(), 'agents')
+// TRDD-WLWHVMKT: the local AGENTS_ROOT const that used to live here was a COPY of the
+// same invariant enforced in lib/agent-runtime.ts — and the two drifted, which is the
+// whole bug. Workdir authorization now has exactly one home:
+// lib/agent-workdir-policy.ts. Do not re-derive it here.
 
 /**
  * Boot restore — relaunch the agents that were active when the host went down.
@@ -99,16 +100,21 @@ export async function restoreActiveAgentsOnBoot(): Promise<BootRestoreResult> {
       continue
     }
 
-    // ~/agents/ invariant — wakeAgent's validateCwd (agent-runtime.ts) REFUSES any
-    // workdir outside ~/agents/ (the R0 "every agent lives in ~/agents/" rule). An
-    // active agent here whose workdir is elsewhere (e.g. ~/Code/<proj>) was a
-    // MANUALLY-started tmux session AI Maestro discovered+linked, NOT an API-created
-    // agent — the API cannot recreate it. Skip with a clear reason rather than letting
-    // wakeAgent fail with the opaque "Failed to create tmux session".
-    const resolvedWd = resolve(agent.workingDirectory)
-    if (resolvedWd !== AGENTS_ROOT && !resolvedWd.startsWith(AGENTS_ROOT + sep)) {
-      result.skipped.push({ name, reason: `workdir outside ~/agents/ (manually-managed; migrate to ~/agents/ to enable auto-restore): ${agent.workingDirectory}` })
-      console.log(`[BootRestore] Skipped ${name}: workdir outside ~/agents/ (${agent.workingDirectory})`)
+    // Workdir authorization — must agree with what wakeAgent's runtime check will do,
+    // or we either skip an agent that would have started fine, or try to restore one
+    // that will then throw.
+    //
+    // TRDD-WLWHVMKT: this used to hard-skip anything outside ~/agents/, on the premise
+    // that such an agent could only be a manually-started session the API cannot
+    // recreate. That premise stopped being true when external folder adoption shipped
+    // (TRDD-57EBNB72): an ADOPTED agent (e.g. a MAINTAINER whose workdir is its real
+    // project under ~/Code) is API-created and perfectly restorable — but this gate
+    // silently dropped it on every server restart. Both this and the runtime check now
+    // ask the single authority, so they cannot disagree again.
+    const verdict = checkAuthorizedAgentWorkdir(agent.workingDirectory, name)
+    if (!verdict.ok) {
+      result.skipped.push({ name, reason: `workdir not authorized: ${verdict.reason}` })
+      console.log(`[BootRestore] Skipped ${name}: workdir not authorized — ${verdict.reason}`)
       continue
     }
 

@@ -19,6 +19,7 @@ import { join, resolve, normalize, extname, relative, isAbsolute } from 'path'
 import { homedir } from 'os'
 import { requireAuth } from '@/lib/route-auth'
 import { getAgent } from '@/lib/agent-registry'
+import { checkAuthorizedAgentWorkdir } from '@/lib/agent-workdir-policy'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,6 +82,14 @@ function isAllowedPath(normalizedPath: string): boolean {
   // when the path is within the user's home directory to prevent traversal via
   // arbitrary paths like /tmp/evil/.claude/ or /tmp/evil/.claude
   if (normalizedPath.startsWith(HOME + '/') && (normalizedPath.includes('/.claude/') || normalizedPath.endsWith('/.claude'))) return true
+  // An agent's ADOPTED working directory (TRDD-WLWHVMKT). The static prefix list
+  // above predates external folder adoption, so it 403'd the tree of a MAINTAINER
+  // agent whose workdir is its real project (e.g. ~/Code/<proj>) — the agent could
+  // not browse its own repo. This is NOT a blanket $HOME opening: the policy admits
+  // a path only when the REGISTRY records it as a live agent's working directory
+  // (and it still refuses $HOME itself, the user-data roots, anything outside $HOME,
+  // and the ai-maestro install tree).
+  if (normalizedPath.length > 0 && checkAuthorizedAgentWorkdir(normalizedPath).ok) return true
   return false
 }
 

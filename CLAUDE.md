@@ -240,7 +240,7 @@ Every AI Maestro agent has exactly **three orthogonal layers**. Do NOT collapse 
 
 **ROLE** is the role-plugin *main-agent* the PERSONA currently runs. Fully qualified as `<plugin>:<main-agent>@<marketplace>` — the `@marketplace` mirrors Claude Code's plugin syntax and the `:main-agent` segment selects which main-agent `.md` file inside the plugin is loaded via `claude --agent <name>`. Installed exactly like any normal plugin (`claude plugin install <name> <marketplace> --scope local` after `claude plugin marketplace add <path-or-owner/repo>`). A role-plugin is any plugin that additionally contains (a) a `<name>.agent.toml` with the two extra fields `compatible-titles` and `compatible-clients`, and (b) a main-agent `.md` whose persona carries the governance rules (inline, via `skills:` references, or via rule-file links). The two AI Maestro default role-plugin marketplaces are the remote `Emasoft/ai-maestro-plugins` and the local `ai-maestro-local-roles-marketplace`.
 
-**PERSONA** is the concrete running instance — four attributes (name, AID key pair, avatar, workdir) that together identify a specific Claude Code tmux session. Only PERSONA has 1:1 cardinality with a session; TITLE and ROLE are swappable on a live PERSONA without losing identity. The workdir is at `~/agents/<name>/` and is the only place outside `/tmp` where the PERSONA may write.
+**PERSONA** is the concrete running instance — four attributes (name, AID key pair, avatar, workdir) that together identify a specific Claude Code tmux session. Only PERSONA has 1:1 cardinality with a session; TITLE and ROLE are swappable on a live PERSONA without losing identity. The workdir defaults to `~/agents/<name>/`, but a MANAGER / MAINTAINER / AUTONOMOUS persona may instead **adopt an existing project folder in place** (e.g. `~/Code/<plugin>`) via `allowExternalFolder` — see "Agent workdir policy" below for the one authority that decides which directories are permitted, and for why this is authorization rather than containment. The workdir (wherever it resolves) plus `/tmp` is where the PERSONA is expected to write.
 
 **Key relationships and rules**
 - TITLE and ROLE are **orthogonal but constrained** by `compatible-titles`. ChangeTitle rejects assigning a ROLE whose `.agent.toml` does not include the new TITLE.
@@ -1761,9 +1761,38 @@ All plugin/element/agent-property mutations go through `services/element-managem
 
 The PATCH `/api/agents/{id}` route is a router that dispatches to the appropriate Change* function based on which fields are in the body.
 
-### Folder adoption — `allowExternalFolder` (TRDD-57EBNB72)
+### Agent workdir policy — ONE authority (TRDD-WLWHVMKT)
 
-`POST /api/agents` accepts `allowExternalFolder: true` (zod schema in `lib/create-agent-schema.ts`) to ADOPT an existing folder in place instead of creating `~/agents/<name>/`. Pipeline semantics:
+**`lib/agent-workdir-policy.ts` is the single authority** for "may an agent use this
+directory?". Every enforcement point consults it. Do NOT re-derive the rule anywhere
+else — that is exactly what broke before: the `~/agents/`-only invariant was copied
+into five places, TRDD-57EBNB72 widened only one of them (`CreateAgent`'s G03 gates),
+and the result was an adopted agent whose registry entry was written and whose session
+could then **never start** (`validateCwd` threw, boot-restore skipped it, `browse-dir`
+403'd it). The registry write succeeding made it *look* like the feature worked.
+
+Two distinct questions, two functions:
+
+| Function | When | Rule |
+|---|---|---|
+| `checkAdoptableWorkdir(dir, allowExternal)` | **creation** (agent doesn't exist yet) | path policy only + the `allowExternalFolder` flag |
+| `checkAuthorizedAgentWorkdir(cwd, agentName?)` | **runtime** (start session, boot-restore, browse) | under `~/agents/` **or** a workdir the **registry** records for that agent |
+
+Always denied, no flag overrides them: outside `$HOME`; `$HOME` itself and the
+user-data roots (Desktop/Documents/Downloads/Library); and **the ai-maestro install
+tree** — an agent whose workdir is the server's own source would rebuild and restart
+the very server managing it. Developing ai-maestro from an agent needs an isolated
+container, never an in-place workdir.
+
+**This is authorization, not containment.** On a shared UID no cwd policy is a
+security boundary (a same-UID process can chdir/write anywhere; `agent-shell-guard.sh`
+only overrides `cd`/`pushd`, so it never stopped an absolute-path write). Real
+containment is TRDD-a1019073 / container agents. Do not read this as "external
+workdirs are now sandboxed".
+
+### Folder adoption — `allowExternalFolder` (TRDD-57EBNB72, fixed by TRDD-WLWHVMKT)
+
+`POST /api/agents` accepts `allowExternalFolder: true` (zod schema in `lib/create-agent-schema.ts`) to ADOPT an existing folder in place instead of creating `~/agents/<name>/`. This is how a MAINTAINER agent takes over an existing project (e.g. `~/Code/<plugin>`) without it being moved or copied. Pipeline semantics:
 
 - **G03-CLAMP**: the flag is honored only for folders under `$HOME`; anything outside (e.g. `/Volumes/...`) has the flag ignored (ops line `G03-CLAMP`) and the workdir is forced back to `~/agents/<name>/`. G03-ENFORCE/G03-SAFETY are unchanged; team titles remain force-pathed.
 - **G05c**: for git-repo workdirs, a managed ignore block (marker `ai-maestro:managed-gitignore`) is seeded into `.git/info/exclude` — never `.gitignore`, which repos track — via `lib/workdir-gitignore-seed.ts`; the wake path (`ensureCorePluginInstalled`) self-heals it. Resolver covers `.git` dir, submodule gitdir-file, and linked-worktree `commondir` shapes.

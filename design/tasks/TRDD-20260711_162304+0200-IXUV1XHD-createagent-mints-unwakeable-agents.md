@@ -94,34 +94,39 @@ test asserting the exact broken call passed for as long as it existed. Its `fs/p
 mock also lacked `rename`, so the atomic settings write silently degraded to a WARN —
 a second mock gap hiding a second install failure.
 
-## The environment problem (NOT a code bug — the USER decides)
+## The environment problem — SOLVED: a stale pm2 daemon (and my first two theories were WRONG)
 
-The install fails because **the pm2-managed server process cannot resolve DNS**:
+The install failed with `Could not resolve host: github.com`. Two theories, both
+FALSIFIED by experiment, and recorded because each looked convincing:
 
-```
-fatal: unable to access 'https://github.com/Emasoft/ai-maestro-autonomous-agent.git/':
-       Could not resolve host: github.com
-```
+1. *"The server inherited a network-sandboxed env from a Claude Code session"* — killed
+   by a pm2-spawned `dns.lookup` probe that resolved github.com fine, and by running
+   `git ls-remote` under the server's **full 179-var env**, which also worked.
+2. *"It's a transient blip; just retry"* (the USER's hypothesis, and the right instinct)
+   — killed by measurement: with the new backoff the server made **8 spaced attempts
+   over 57 s** and every one failed identically. Not transient.
 
-`git`/`gh` work fine from a normal shell — only children of the **pm2 daemon** are
-affected. The daemon carries `CLAUDE_CODE_CHILD_SESSION=1`: it was started from inside a
-network-sandboxed Claude Code session and every process it forks inherits that
-environment. `pm2 restart --update-env` does **not** fix it (the env is re-read from the
-*current* shell, which is itself a Claude session).
-
-**Consequence for the migration: while this holds, no agent can be created at all** (the
-new gate correctly refuses rather than minting broken agents), and nothing else needing
-the network — plugin install/update, marketplace refresh — works either.
-
-**The repair** (recycles the daemon; `ai-maestro` is the only pm2 app, so nothing else is
-affected) must be run from a **normal terminal**, not from an agent session:
+**Actual cause: the long-lived pm2 God daemon** (pid 11195, ppid 1, restart_time
+1,857,042). Every process it forked failed DNS *in git/curl* while node's own resolver
+worked — and `pm2 restart` cannot fix it, because the app is re-forked from that same
+daemon. Recycling the daemon does:
 
 ```bash
 pm2 kill && cd ~/ai-maestro && pm2 start ecosystem.config.js && pm2 save
 ```
 
-Left to the USER deliberately: killing the daemon stops the running fleet, and doing it
-from inside a sandboxed session would just re-poison the environment.
+After that, `POST /api/agents` → **201** with the role-plugin present in
+`.claude/settings.local.json`. The lesson is in the footnote.
+
+## The retry that should have been there all along
+
+A marketplace install CLONES from GitHub — a network call — and it was attempted
+**exactly once**. Combined with the new hard reject, a single blip would have DESTROYED
+the agent rather than costing it seconds. `installPluginLocally` now retries with
+exponential backoff + jitter (4 attempts, ~2s/6s/18s, `AIM_PLUGIN_INSTALL_ATTEMPTS` /
+`AIM_PLUGIN_INSTALL_BASE_DELAY_MS` to tune or disable), and only on *transient-looking*
+errors: a wrong plugin name or an auth failure fails fast rather than burning the full
+backoff to be told the same thing. 6 new tests.
 
 ## Verification
 
@@ -140,3 +145,20 @@ from inside a sandboxed session would just re-poison the environment.
   the *appearance* of it. Fix the observability first and the bug hunt collapses from
   hours of deduction to one log line. Corollary: a WARN that does not change the
   operation's outcome is not a warning, it is a silent failure with extra steps.
+
+[^2]: [ocd:2026-07-11 lmd:2026-07-11] I asserted "environmental, not transient" from a
+  plausible env var (CLAUDE_CODE_CHILD_SESSION) without ever testing whether the failure
+  repeated — and I shipped a hard reject with NO retry, which makes a genuine blip
+  *destroy* the agent. The USER's "why didn't you retry?" was the correct challenge to
+  both. The retry is right regardless of cause (a one-shot network call is a bug), and
+  the measurement it enabled — 8 attempts, 57 s, identical failure — is what finally
+  ruled transience OUT and pointed at the daemon. Lesson: when you catch yourself
+  explaining a failure instead of reproducing it, you are guessing. Retry first, measure,
+  then theorize.
+
+[^3]: [ocd:2026-07-11 lmd:2026-07-11] `pm2 restart` re-forks the app from the SAME God
+  daemon, so it inherits whatever is wrong with that daemon — a daemon that had been
+  alive for 1.8M restarts. If a long-lived pm2 app misbehaves in a way that its code
+  cannot explain, recycle the DAEMON (`pm2 kill`), not the app. `--update-env` does not
+  help either: it re-reads the env from the *current* shell, which for an agent IS a
+  Claude session.

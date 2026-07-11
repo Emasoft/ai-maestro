@@ -290,6 +290,41 @@ const TITLE_PLUGIN_MAP: Record<string, string> = Object.fromEntries(
   Object.entries(ECOSYSTEM_TITLE_PLUGIN_MAP).map(([k, v]) => [k.toLowerCase(), v])
 )
 
+// ── Network-install retry policy ──────────────────────────────
+//
+// `claude plugin install <name> <marketplace>` clones the plugin's repo from GitHub.
+// It is a network call, and it was being made exactly once. Configurable so an
+// offline/air-gapped host can turn the waiting off (AIM_PLUGIN_INSTALL_ATTEMPTS=1).
+
+const INSTALL_MAX_ATTEMPTS = Math.max(1, Number(process.env.AIM_PLUGIN_INSTALL_ATTEMPTS) || 4)
+const INSTALL_BASE_DELAY_MS = Math.max(100, Number(process.env.AIM_PLUGIN_INSTALL_BASE_DELAY_MS) || 2000)
+
+const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
+
+/** Exponential backoff with jitter: ~2s, ~6s, ~18s (base 2000, factor 3). */
+function installBackoffMs(attempt: number): number {
+  const backoff = INSTALL_BASE_DELAY_MS * Math.pow(3, attempt - 1)
+  // Jitter ±25% so N agents created at once don't retry in lockstep and hammer
+  // whatever is already struggling.
+  const jitter = backoff * 0.25 * (Math.random() * 2 - 1)
+  return Math.round(backoff + jitter)
+}
+
+/**
+ * Is this install failure worth retrying?
+ *
+ * Retry the failures that go away on their own — DNS, connectivity, timeouts, GitHub
+ * throttling, a half-finished clone. Do NOT retry a wrong plugin name or an
+ * unregistered marketplace: those are deterministic, and retrying them just burns the
+ * full backoff before failing with the identical message.
+ */
+function isTransientInstallError(msg: string): boolean {
+  const m = msg.toLowerCase()
+  const permanent = /not found in|unknown plugin|does not exist|no such plugin|invalid plugin|marketplace .* not found|repository not found|authentication failed|permission denied/
+  if (permanent.test(m)) return false
+  return /could not resolve|resolve host|temporary failure|timed out|timeout|etimedout|econnreset|econnrefused|enotfound|eai_again|network|connection|failed to clone|rate limit|429|50[023]|tls|ssl|early eof|remote end hung up|unable to access/.test(m)
+}
+
 // ── Degraded-outcome logging ──────────────────────────────────
 
 /**
@@ -1480,16 +1515,38 @@ export async function installPluginLocally(
     marketplaceName === CUSTOM_MARKETPLACE_NAME
   )
   if (!isLocalOnlyMarketplace) {
-    try {
-      await execFileAsync('claude', [
-        'plugin', 'install', pluginName, marketplaceName, '--scope', 'local',
-      ], { timeout: 120000, cwd: resolvedDir })
-      console.log(`[element-mgmt] Installed ${pluginName} from ${marketplaceName} via Claude CLI (scope: local, cwd: ${resolvedDir})`)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      throw new Error(`Failed to install plugin "${pluginName}" from ${marketplaceName}: ${msg}`)
+    // A marketplace install CLONES the plugin's repo from GitHub, so it is a NETWORK
+    // operation and it fails the way network operations fail: DNS blips, a flaky
+    // resolver, GitHub rate-limiting, a laptop that just woke up. It was attempted
+    // exactly once, and one failure marked the agent permanently role-less
+    // (TRDD-IXUV1XHD made that a hard reject, which without a retry means a single
+    // transient blip DESTROYS the agent instead of costing it a few seconds).
+    //
+    // Retry with exponential backoff on transient-looking failures only. A wrong
+    // plugin name or an unregistered marketplace is NOT transient — retrying those
+    // just burns two minutes before failing with the same message, so they fail fast.
+    let lastErr = ''
+    for (let attempt = 1; attempt <= INSTALL_MAX_ATTEMPTS; attempt++) {
+      try {
+        await execFileAsync('claude', [
+          'plugin', 'install', pluginName, marketplaceName, '--scope', 'local',
+        ], { timeout: 120000, cwd: resolvedDir })
+        if (attempt > 1) {
+          console.log(`[element-mgmt] Installed ${pluginName} from ${marketplaceName} on attempt ${attempt}/${INSTALL_MAX_ATTEMPTS} (earlier attempts failed transiently)`)
+        } else {
+          console.log(`[element-mgmt] Installed ${pluginName} from ${marketplaceName} via Claude CLI (scope: local, cwd: ${resolvedDir})`)
+        }
+        return
+      } catch (err) {
+        lastErr = err instanceof Error ? err.message : String(err)
+        const transient = isTransientInstallError(lastErr)
+        if (!transient || attempt === INSTALL_MAX_ATTEMPTS) break
+        const delay = installBackoffMs(attempt)
+        console.warn(`[element-mgmt] Install of ${pluginName} failed transiently (attempt ${attempt}/${INSTALL_MAX_ATTEMPTS}), retrying in ${delay}ms: ${lastErr.split('\n')[0]}`)
+        await sleep(delay)
+      }
     }
-    return
+    throw new Error(`Failed to install plugin "${pluginName}" from ${marketplaceName} after ${INSTALL_MAX_ATTEMPTS} attempt(s): ${lastErr}`)
   }
 
   // For Haephestos-authored local/custom plugins, write settings.local.json directly.

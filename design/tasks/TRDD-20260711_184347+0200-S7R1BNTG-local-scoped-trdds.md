@@ -32,8 +32,8 @@ attempts: 1
 test-failures: 0
 last-test-result: not-run
 last-test-at: null
-implementation-commits: []
-external-refs: ["https://github.com/Emasoft/ai-maestro-janitor/issues/73"]
+implementation-commits: [00c9c25a]
+external-refs: ["https://github.com/Emasoft/ai-maestro-janitor/issues/84", "https://github.com/Emasoft/ai-maestro-janitor/issues/73"]
 ---
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-11

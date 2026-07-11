@@ -198,11 +198,6 @@ public/avatars/*_enhanced.png
 .claude/worktrees/
 .claude/agent-memory/
 .claude/rules/use-safe-delete.md
-# LOCAL-scoped TRDDs (TRDD-S7R1BNTG). Machine-private task corpus: chores about THIS
-# instance (its paths, its caches, its credentials-adjacent state). Same lifecycle
-# folders as design/, different root — and never pushed, because a local TRDD is the
-# task equivalent of a LOCAL memory note and carries the same private data.
-.claude/local-tasks/
 CLAUDE.local.md
 
 # External backup files

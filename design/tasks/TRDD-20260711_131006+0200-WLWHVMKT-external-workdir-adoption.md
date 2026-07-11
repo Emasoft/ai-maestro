@@ -46,9 +46,61 @@ external-refs: ["https://github.com/Emasoft/ai-maestro-maintainer-agent/issues/2
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-11
 
-**Current state.** Diagnosed in full (evidence:
-`reports/workdir-adoption/20260711_124924+0200-agents-dir-constraints.md`).
-Design agreed. Implementation NOT started.
+**CORE FIX LANDED (`f8a1fac7`) AND PROVEN END-TO-END ON A LIVE SERVER.**
+
+E2E proof (real server, real tmux, fixture `~/Code/aim-e2e-adopt-*` genuinely OUTSIDE
+`~/agents/`):
+
+| Check | Result |
+|---|---|
+| MAINTAINER agent adopts an external repo in place | `201`, workdir stored verbatim |
+| **tmux session actually starts**, pane cwd = adopted folder | **PASS** (was impossible: `validateCwd` threw) |
+| `browse-dir` on the adopted tree | `200` (was `403`) |
+| Adopting the ai-maestro install tree | **`400` REFUSED** — recursion guard holds |
+| `R19.3` one-MAINTAINER-per-repo | correctly refused a duplicate repo |
+
+**THREE NEW BLOCKERS FOUND DURING THE E2E — these are the next work, and they are
+NOT caused by this TRDD's change (they are pre-existing, and adoption merely made
+them reachable).**
+
+1. **`409 role_plugin_required` on wake — CreateAgent leaves an agent with ZERO
+   role-plugins.** Creating a MAINTAINER via `POST /api/agents` *without*
+   `pluginName` succeeds (201) but installs no role-plugin, so the agent can never
+   be woken. **R9.13 says the CreateAgent pipeline must HARD REJECT a desired-state
+   with zero role-plugins** — it does neither that nor an auto-install (which is
+   what `ChangeTitle` Gates 15-16 do). Either CreateAgent must auto-assign the
+   title's default role-plugin, or it must 400. Today it silently produces a
+   permanently un-wakeable agent.
+2. **Registry `status`/`sessions` never update for a created agent — and it is a
+   GENERAL bug, not an adoption one.** With the tmux session demonstrably ALIVE for
+   30 s+, `registry.json` still reports `status: offline, sessions: []`, while
+   `~/.aimaestro/sessions.json` DOES record the session — the two stores disagree.
+   **CONTROL EXPERIMENT (decisive):** an agent created the ordinary way, workdir
+   under `~/agents/`, AUTONOMOUS, `createSession: true` → tmux **ALIVE**, registry
+   **`status=offline, sessions=0`**. Identical. So this afflicts *every* agent
+   created through `POST /api/agents`, not just adopted ones.
+   **Consequence: boot-restore only restores agents it sees as ACTIVE, so today it
+   can restore NOTHING — a server restart resurrects no agent at all.** For a fleet
+   that is about to become the primary development surface, that is the single most
+   dangerous defect found so far: one restart and the whole fleet is down with no
+   automatic recovery.
+   This needs its own TRDD (it is out of scope for the workdir policy, and fixing it
+   here would conflate two unrelated defects).
+3. Boot-restore across a real restart is therefore **NOT YET PROVEN** for adopted
+   agents — blocked on (2), which must be fixed first. The boot-restore *gate* is
+   fixed and unit-covered; what is unproven is the end-to-end path, because no agent
+   currently reaches the `active` state that boot-restore keys on.
+
+**NEXT ACTION.** Open a TRDD for (2) — registry status/session tracking on
+CreateAgent — and fix it, then re-run the boot-restore E2E. (1) and (2) are both
+pre-existing and both block the migration.
+
+**Test agents/fixtures still on disk (clean up or reuse):**
+`e2e-adopt-1783769238` (no role-plugin), `e2e-adopt2-1783769489`; fixtures
+`~/Code/aim-e2e-adopt-1783769238`, `~/Code/aim-e2e-adopt2-1783769489`.
+
+**Historical (the diagnosis that produced the fix):** evidence in
+`reports/workdir-adoption/20260711_124924+0200-agents-dir-constraints.md`.
 
 **The finding.** Adopting an existing repo under `~/Code/<project>` as an agent's
 working directory — which the owner requires in order to migrate all plugin

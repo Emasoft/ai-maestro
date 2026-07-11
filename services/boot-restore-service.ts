@@ -17,14 +17,19 @@ import { wakeAgent } from '@/services/agents-core-service'
  * inside their named sessions). This module closes that gap: on startup it
  * re-wakes the set of agents that were running at crash time.
  *
- * Source of truth — the registry's frozen `status: 'active'` set.
- * `GET /api/agents` reconciles live tmux against the registry, but that
- * reconciliation is RESPONSE-ONLY (services/agents-core-service.ts builds a
- * result array and returns it; it never calls saveAgents). So after a reboot
- * `registry.json` still records exactly which agents were `active` when the
- * host died — discovery cannot have overwritten it. We deliberately do NOT
- * keep a parallel snapshot file: that would duplicate the registry status
+ * Source of truth — the registry's `status: 'active'` set. We deliberately do
+ * NOT keep a parallel snapshot file: that would duplicate the registry status
  * field and violate single-source-of-truth.
+ *
+ * TRDD-YOS36TZI: that field is only trustworthy because every session-state
+ * transition now writes it AT THE MOMENT IT HAPPENS — createSession, wakeAgent
+ * and hibernateAgent all go through linkSession/unlinkSession. Until then the
+ * ONLY writer was a READ path (`GET /api/sessions` → reconcileRegistrySessions),
+ * so an agent created on a server nobody was polling — headless mode has no UI at
+ * all — stayed `offline` in the registry while its tmux pane ran, and this
+ * function restored NOTHING after a restart. If a future change moves a lifecycle
+ * transition off those primitives, it silently re-breaks boot-restore: the bug is
+ * invisible in the running server and only surfaces on the next restart.
  *
  * `wakeAgent` is invoked server-internally with `authContext: { isSystemOwner:
  * true }`, which skips Gate 0 (RBAC — there is no human caller at boot) but

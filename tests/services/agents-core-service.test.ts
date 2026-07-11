@@ -638,6 +638,41 @@ describe('wakeAgent', () => {
     )
   })
 
+  // TRDD-YOS36TZI: wake/hibernate used to write the registry through a PRIVATE,
+  // UNLOCKED copy of linkSession/unlinkSession (updateAgentSessionInRegistry:
+  // loadAgents -> mutate -> saveAgents, no withLock). Two writers for one fact,
+  // and the unlocked one raced the /api/sessions poll's locked one. There is now
+  // exactly one writer, and it is the registry's own locked primitive.
+  it('links the session through the registry primitive, counting the launch', async () => {
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/home' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(false)
+    mockAgentRegistry.loadAgents.mockReturnValue([agent])
+
+    await wakeAgent('agent-1', { startProgram: false })
+
+    expect(mockAgentRegistry.linkSession).toHaveBeenCalledWith(
+      'agent-1', 'my-agent', '/home', { incrementLaunch: true }
+    )
+    // The unlocked duplicate is gone — nothing writes the registry file directly.
+    expect(mockAgentRegistry.saveAgents).not.toHaveBeenCalled()
+  })
+
+  it('re-links an already-running session WITHOUT counting a second launch', async () => {
+    // Waking an agent whose tmux session survived a server bounce must repair the
+    // registry (that is how a restart-surviving session is re-adopted) but must not
+    // inflate launchCount — no client was actually launched.
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent', workingDirectory: '/home' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockAgentRegistry.loadAgents.mockReturnValue([agent])
+
+    const result = await wakeAgent('agent-1', {})
+
+    expect(result.data?.alreadyRunning).toBe(true)
+    expect(mockAgentRegistry.linkSession).toHaveBeenCalledWith('agent-1', 'my-agent', '/home')
+  })
+
   it('sets up AMP for the session', async () => {
     const agent = makeAgent({ id: 'agent-1', name: 'my-agent' })
     mockAgentRegistry.getAgent.mockReturnValue(agent)
@@ -846,6 +881,32 @@ describe('hibernateAgent', () => {
     await hibernateAgent('agent-1', {})
 
     expect(mockSessionPersistence.unpersistSession).toHaveBeenCalledWith('my-agent')
+  })
+
+  // TRDD-YOS36TZI: the mirror of the wake case. A hibernate that fails to mark the
+  // agent offline leaves boot-restore convinced it was running, so the next restart
+  // WAKES an agent the user deliberately put to sleep. Same single locked writer.
+  it('unlinks the session through the registry primitive', async () => {
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(true)
+    mockAgentRegistry.loadAgents.mockReturnValue([agent])
+
+    await hibernateAgent('agent-1', {})
+
+    expect(mockAgentRegistry.unlinkSession).toHaveBeenCalledWith('agent-1', 0)
+    expect(mockAgentRegistry.saveAgents).not.toHaveBeenCalled()
+  })
+
+  it('unlinks even when the tmux session was already gone', async () => {
+    const agent = makeAgent({ id: 'agent-1', name: 'my-agent' })
+    mockAgentRegistry.getAgent.mockReturnValue(agent)
+    mockRuntime.sessionExists.mockResolvedValue(false)
+    mockAgentRegistry.loadAgents.mockReturnValue([agent])
+
+    await hibernateAgent('agent-1', {})
+
+    expect(mockAgentRegistry.unlinkSession).toHaveBeenCalledWith('agent-1', 0)
   })
 
   it('attempts graceful shutdown before kill', async () => {

@@ -985,11 +985,25 @@ export async function updateAgentStatus(id: string, status: Agent['status']): Pr
 }
 
 /**
- * Link a session to an agent
- * Uses parseSessionName to determine session index from tmux session name
- * MF-003: Wrapped with file lock to prevent read-modify-write races
+ * Link a session to an agent — the ONE writer that marks an agent ACTIVE.
+ *
+ * Uses parseSessionName to determine session index from tmux session name.
+ * MF-003: Wrapped with file lock to prevent read-modify-write races.
+ *
+ * TRDD-YOS36TZI: `incrementLaunch` exists so wakeAgent can retire its private,
+ * UNLOCKED copy of this function (updateAgentSessionInRegistry) — launchCount was
+ * the only thing that copy did which this one could not, and keeping two writers
+ * for one fact is what let the copy race the /api/sessions poll's locked write.
+ * Count a launch ONLY when a client was actually started: re-linking a tmux session
+ * that survived a server bounce must repair the registry without inflating the
+ * counter (the R17-TRUST first-launch branch keys on launchCount === 0).
  */
-export async function linkSession(agentId: string, sessionName: string, workingDirectory: string): Promise<boolean> {
+export async function linkSession(
+  agentId: string,
+  sessionName: string,
+  workingDirectory: string,
+  opts?: { incrementLaunch?: boolean },
+): Promise<boolean> {
   return withLock('agents', () => {
   const agents = loadAgents()
   const index = agents.findIndex(a => a.id === agentId)
@@ -1029,6 +1043,10 @@ export async function linkSession(agentId: string, sessionName: string, workingD
 
   agents[index].status = 'active'
   agents[index].lastActive = new Date().toISOString()
+
+  if (opts?.incrementLaunch) {
+    agents[index].launchCount = (agents[index].launchCount || 0) + 1
+  }
 
   const saved = saveAgents(agents)
   if (saved) invalidateAgentCache()

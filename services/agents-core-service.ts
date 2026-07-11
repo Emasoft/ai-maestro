@@ -41,8 +41,10 @@ import {
   computeSessionName,
 } from '@/types/agent'
 import {
+  // TRDD-YOS36TZI: saveAgents is deliberately NOT imported here any more. This
+  // service must not write the registry file directly — every session-state
+  // transition goes through linkSession/unlinkSession, which take the lock.
   loadAgents,
-  saveAgents,
   createAgent,
   getAgent,
   getAgentBySession,
@@ -367,57 +369,14 @@ async function setupAMPForSession(
   return ampDir
 }
 
-/**
- * Update agent session status in the registry after wake/hibernate.
- */
-function updateAgentSessionInRegistry(
-  agentId: string,
-  sessionIndex: number,
-  status: 'online' | 'offline',
-  workingDirectory?: string,
-  incrementLaunch: boolean = false
-): void {
-  const agents = loadAgents()
-  const index = agents.findIndex(a => a.id === agentId)
-  if (index === -1) return
-
-  if (!agents[index].sessions) {
-    agents[index].sessions = []
-  }
-
-  const sessionIdx = agents[index].sessions.findIndex(s => s.index === sessionIndex)
-
-  if (status === 'online') {
-    const sessionData: AgentSession = {
-      index: sessionIndex,
-      status: 'online',
-      workingDirectory: workingDirectory || agents[index].workingDirectory,
-      createdAt: new Date().toISOString(),
-      lastActive: new Date().toISOString(),
-    }
-    if (sessionIdx >= 0) {
-      agents[index].sessions[sessionIdx] = sessionData
-    } else {
-      agents[index].sessions.push(sessionData)
-    }
-    agents[index].status = 'active'
-  } else {
-    if (sessionIdx >= 0) {
-      agents[index].sessions[sessionIdx].status = 'offline'
-      agents[index].sessions[sessionIdx].lastActive = new Date().toISOString()
-    }
-    const hasOnlineSession = agents[index].sessions?.some(s => s.status === 'online') ?? false
-    agents[index].status = hasOnlineSession ? 'active' : 'offline'
-  }
-
-  agents[index].lastActive = new Date().toISOString()
-
-  if (incrementLaunch) {
-    agents[index].launchCount = (agents[index].launchCount || 0) + 1
-  }
-
-  saveAgents(agents)
-}
+// TRDD-YOS36TZI: `updateAgentSessionInRegistry` lived here — a private,
+// UNLOCKED re-implementation of exactly what lib/agent-registry.ts's
+// linkSession/unlinkSession already do (loadAgents -> mutate -> saveAgents, with
+// no withLock and no cache invalidation). Two writers for one fact: its
+// read-modify-write raced the /api/sessions poll's LOCKED linkSession, so either
+// write could be lost. Wake/hibernate now call the registry's own primitives —
+// one writer, under the lock. Do not reintroduce a local copy; if a transition
+// needs something the primitives lack, add it THERE (as `incrementLaunch` was).
 
 // ===========================================================================
 // PUBLIC API -- called by API routes
@@ -2110,7 +2069,9 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
     // Check if session already exists
     const exists = await runtime.sessionExists(sessionName)
     if (exists) {
-      updateAgentSessionInRegistry(agentId, sessionIndex, 'online', workingDirectory)
+      // Re-adopt a session that outlived the server (pm2 bounce): repair the
+      // registry, but do NOT count a launch — no client was started here.
+      await linkSession(agentId, sessionName, workingDirectory)
       return {
         data: {
           success: true,
@@ -2320,8 +2281,10 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
       handleTrustAutoAccept(sessionName, agentName).catch(() => {})
     }
 
-    // Update agent status in registry
-    updateAgentSessionInRegistry(agentId, sessionIndex, 'online', workingDirectory, true)
+    // Mark the agent ACTIVE in the registry. This is what boot-restore selects on,
+    // so it has to happen HERE — at the moment the session starts — and not be left
+    // to whoever next calls GET /api/sessions (TRDD-YOS36TZI).
+    await linkSession(agentId, sessionName, workingDirectory, { incrementLaunch: true })
 
     console.log(`[Wake] Agent ${agentName} (${agentId}) session ${sessionIndex} woken up successfully`)
 
@@ -2425,7 +2388,7 @@ export async function hibernateAgent(agentId: string, params: HibernateAgentPara
     const exists = await runtime.sessionExists(sessionName)
     if (!exists) {
       // Session doesn't exist, just update the status and clean up any stale activity entry
-      updateAgentSessionInRegistry(agentId, sessionIndex, 'offline')
+      await unlinkSession(agentId, sessionIndex)
       // Clear stale activity so that if this session name is reused, idle-checks start fresh
       sessionActivity.delete(sessionName)
 
@@ -2477,8 +2440,11 @@ export async function hibernateAgent(agentId: string, params: HibernateAgentPara
       await updAgent(agentId, { metadata: { sessionSecretHash: null } } as any)
     } catch { /* non-fatal — secret will be overwritten on next wake */ }
 
-    // Update agent status in registry
-    updateAgentSessionInRegistry(agentId, sessionIndex, 'offline')
+    // Mark the agent OFFLINE in the registry. The mirror of the wake case: a
+    // hibernate whose registry write never lands leaves boot-restore convinced the
+    // agent was running, and the next restart wakes an agent the user deliberately
+    // put to sleep (TRDD-YOS36TZI).
+    await unlinkSession(agentId, sessionIndex)
 
     console.log(`[Hibernate] Agent ${agentName} (${agentId}) session ${sessionIndex} hibernated successfully`)
 

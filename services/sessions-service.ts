@@ -1081,6 +1081,21 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
     ...(registeredAgent && { agentId: registeredAgent.id })
   })
 
+  // TRDD-YOS36TZI: mark the agent ACTIVE in the registry. This write did not exist:
+  // createSession spawned the tmux session and told sessions.json about it, but the
+  // registry — the store boot-restore selects on (`status === 'active'`) — was only
+  // ever repaired as a side effect of a client calling GET /api/sessions. With no UI
+  // polling (headless mode, or simply no browser tab open) an agent created here was
+  // invisible to boot-restore forever, so a restart restored nothing at all.
+  //
+  // launchCount is deliberately NOT incremented: the R17-TRUST first-launch branch
+  // below keys on `registeredAgent.launchCount === 0`, and the registry's mtime cache
+  // hands linkSession the same object this function is holding — bumping it here
+  // would silently suppress the trust auto-accept for every wizard-created agent.
+  if (registeredAgent) {
+    await linkSession(registeredAgent.id, actualSessionName, cwd)
+  }
+
   // Belt-and-braces: refresh session-level env for any future pane opened in
   // this session. These duplicate the `-e` values above and are best-effort.
   try {

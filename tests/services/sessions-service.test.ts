@@ -42,6 +42,8 @@ const {
       deleteAgentBySession: vi.fn(),
       renameAgentSession: vi.fn(),
       loadAgents: vi.fn().mockReturnValue([]),
+      linkSession: vi.fn(),
+      unlinkSession: vi.fn(),
     },
     mockHostsConfig: {
       getHosts: vi.fn().mockReturnValue([{ id: 'test-host', name: 'Test Host', url: 'http://localhost:23000' }]),
@@ -256,6 +258,32 @@ describe('createSession', () => {
     expect(result.data?.success).toBe(true)
     expect(result.data?.name).toBe('my-agent')
     expect(mockRuntime.createSession).toHaveBeenCalled()
+  })
+
+  // TRDD-YOS36TZI: createSession spawns the tmux session but used to leave the
+  // registry saying `status: offline, sessions: []`. The ONLY thing that ever
+  // repaired that was a client calling GET /api/sessions — a READ path. Since
+  // boot-restore selects on `status === 'active'`, a headless server (no UI, so
+  // nobody polls) restored NOTHING after a restart. The session write must happen
+  // where the session is created.
+  it('links the new session into the registry so the agent reads back ACTIVE', async () => {
+    mockRuntime.sessionExists.mockResolvedValue(false)
+    mockAgentRegistry.getAgentByName.mockReturnValue({ id: 'agent-1', name: 'my-agent', launchCount: 0 })
+
+    await createSession({ name: 'my-agent', workingDirectory: '/work/dir', agentId: 'agent-1' })
+
+    expect(mockAgentRegistry.linkSession).toHaveBeenCalledWith('agent-1', 'my-agent', '/work/dir')
+  })
+
+  it('does not touch the registry when the agent could not be registered', async () => {
+    mockRuntime.sessionExists.mockResolvedValue(false)
+    mockAgentRegistry.getAgentByName.mockReturnValue(null)
+    mockAgentRegistry.createAgent.mockImplementation(() => { throw new Error('registry down') })
+
+    await createSession({ name: 'orphan' })
+
+    // No agent id to link to — a session with no owner must not invent one.
+    expect(mockAgentRegistry.linkSession).not.toHaveBeenCalled()
   })
 
   it('returns 400 when name is missing', async () => {

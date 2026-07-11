@@ -290,6 +290,29 @@ const TITLE_PLUGIN_MAP: Record<string, string> = Object.fromEntries(
   Object.entries(ECOSYSTEM_TITLE_PLUGIN_MAP).map(([k, v]) => [k.toLowerCase(), v])
 )
 
+// ── Degraded-outcome logging ──────────────────────────────────
+
+/**
+ * Print the gates that DEGRADED but did not abort.
+ *
+ * Every AIO pipeline records its per-gate outcome in an `ops` array and returns it
+ * to the caller. The route handlers do not print it. So a gate that WARNs — a
+ * role-plugin that failed to install, a conversion that fell through — produced a
+ * 201 and total server-side silence, and the operator's only clue was an agent that
+ * mysteriously refused to wake days later (TRDD-YOS36TZI follow-up: a CreateAgent
+ * that leaves an agent with zero role-plugins is an R9.13 violation, and it was
+ * being reported as success).
+ *
+ * A degraded outcome is not a success. Fail loudly: an aborting gate already throws
+ * or returns an error, and this makes the non-aborting ones visible too.
+ */
+function logDegradedOps(pipeline: string, subject: string, ops: string[]): void {
+  const degraded = ops.filter(o => /\b(WARN|FAIL|DENIED|VIOLATION|MISMATCH)\b/.test(o))
+  if (degraded.length === 0) return
+  console.warn(`[${pipeline}] ${subject}: ${degraded.length} gate(s) DEGRADED:`)
+  for (const op of degraded) console.warn(`[${pipeline}]   ${op}`)
+}
+
 // ── JSON helpers ──────────────────────────────────────────────
 
 async function loadJsonSafe(path: string): Promise<Record<string, unknown>> {
@@ -3135,6 +3158,12 @@ export async function ChangeTitle(
 
     result.success = true
     console.log(`[ChangeTitle] Agent ${agentId} "${agent.name}": ${oldTitle || 'none'} → ${effectiveTitle || 'none'} (${ops.length} gates, restart=${result.restartNeeded})`)
+    // A gate that fails but does not abort records a WARN in `ops` — and `ops` is
+    // returned to the caller, which in the CreateAgent path is a route that prints
+    // NONE of it. So an R9.13 violation (titled agent, zero role-plugins, hibernated
+    // and permanently un-wakeable) was produced with a 201 and complete server-side
+    // silence. A degraded outcome must be loud (TRDD-YOS36TZI follow-up).
+    logDegradedOps('ChangeTitle', `${agent.name} → ${effectiveTitle || 'none'}`, ops)
 
     // ISSUE-001: Broadcast governance update so UI refreshes instantly.
     // Broadcasts effectiveTitle (post-Gate-1 normalization). Previously
@@ -7153,6 +7182,10 @@ export async function CreateAgent(
       desired.teamId &&
       TEAM_REQUIRED_TITLES_G06.has(desired.governanceTitle)
 
+    // ChangeTitle's own gate log — kept so G07c can name the REAL reason a role-plugin
+    // failed to install, instead of the useless summary this pipeline records.
+    let titleOps: string[] = []
+
     // R9.13: AUTONOMOUS is now a real title that resolves to
     // ai-maestro-autonomous-agent. It MUST flow through ChangeTitle like any
     // other title so Gates 15/16 install its mandatory role-plugin. The
@@ -7176,6 +7209,7 @@ export async function CreateAgent(
         result.agentId = null
         return result
       }
+      titleOps = titleResult.operations
       ops.push(`G06: Title set to ${desired.governanceTitle.toUpperCase()} (${titleResult.operations.length} sub-gates)`)
       result.restartNeeded = result.restartNeeded || titleResult.restartNeeded
     } else if (titleNeedsTeamFirst) {
@@ -7201,6 +7235,7 @@ export async function CreateAgent(
         result.agentId = null
         return result
       }
+      titleOps = titleResult.operations
       result.restartNeeded = result.restartNeeded || titleResult.restartNeeded
     }
 
@@ -7242,11 +7277,48 @@ export async function CreateAgent(
           result.agentId = null
           return result
         }
+        titleOps = retitleResult.operations
         ops.push(`G07b: Title confirmed as ${desired.governanceTitle.toUpperCase()} after team join`)
         result.restartNeeded = result.restartNeeded || retitleResult.restartNeeded
       }
     } else {
       ops.push(`G07: No team requested`)
+    }
+
+    // ── G07c: R9.13 HARD REJECT — no agent may exist with zero role-plugins ──
+    //
+    // ChangeTitle's G17 already DETECTS this (it sets roleMissing=true and hibernates
+    // the agent), but ChangeTitle still returns success — so CreateAgent went on to
+    // return 201 for an agent that can never be woken (the wake route answers 409
+    // role_plugin_required forever). R9.13 says the pipeline must HARD REJECT a
+    // desired-state with zero role-plugins; it was doing neither that nor an
+    // auto-install. Any failure of the role-plugin install therefore produced a
+    // silently, permanently broken agent — and a real one: the install fails whenever
+    // the server cannot reach GitHub (`Could not resolve host: github.com` when the
+    // process inherits a network-restricted environment), which is exactly the kind of
+    // transient condition this gate exists to refuse rather than paper over.
+    //
+    // Roll the agent back and surface the real reason (now that degraded gates are
+    // logged, the cause is in the ops we return).
+    const { getAgent: getAgentG07c } = await import('@/lib/agent-registry')
+    const postTitleAgent = getAgentG07c(agent.id)
+    if (postTitleAgent?.roleMissing) {
+      // The cause lives in ChangeTitle's OWN ops (G16's install error), which this
+      // pipeline only ever summarised as "(N sub-gates)". Carry it through verbatim —
+      // an error that says "install failed" and nothing else sends the operator
+      // hunting, when the actual message ("Could not resolve host: github.com") names
+      // the problem outright.
+      const why = titleOps.filter(o => /G1[67]:.*(WARN|VIOLATION)/.test(o)).join(' | ') || 'role-plugin install failed'
+      try {
+        const { deleteAgent } = await import('@/lib/agent-registry')
+        await deleteAgent(agent.id)
+        ops.push(`G07c: DENIED — R9.13: agent has 0 role-plugins after title assignment. Rolled back.`)
+      } catch (rollbackErr) {
+        ops.push(`G07c: DENIED — R9.13: agent has 0 role-plugins. ROLLBACK FAILED: ${rollbackErr instanceof Error ? rollbackErr.message : rollbackErr}`)
+      }
+      result.error = `role-plugin is mandatory (R9.13) — the agent's role-plugin could not be installed, so no agent was created. Cause: ${why}`
+      result.agentId = null
+      return result
     }
 
     // ── G08: Install role-plugin if specified ─────────────────
@@ -7269,14 +7341,26 @@ export async function CreateAgent(
         const clientType = detectClientType(program)
 
         if (clientType === 'claude') {
-          // Direct install for Claude clients — createPersona is idempotent
-          // and wraps the Claude CLI install.
-          const { createPersona } = await import('@/services/role-plugin-service')
-          await createPersona({
-            personaName: desired.label || name,
-            pluginName: desired.pluginName,
-          })
-          ops.push(`G08: Role-plugin "${desired.pluginName}" installed (Claude)`)
+          // Install into the agent's OWN working directory.
+          //
+          // This used to call createPersona({ personaName: desired.label || name }),
+          // which was wrong twice over (TRDD-YOS36TZI follow-up):
+          //   1. `label` is a DISPLAY name and is auto-assigned CAPITALIZED ("Nadia",
+          //      "Aurelia"). createPersona validates personaName against
+          //      /^[a-z0-9-]+$/ and THROWS on anything else — so for the default
+          //      label this branch could only ever throw, and the throw was swallowed
+          //      into a WARN op nobody printed.
+          //   2. createPersona installs into ~/agents/<personaName>/ — a directory
+          //      derived from the label, NOT the agent's working directory. For an
+          //      adopted external workdir (a MAINTAINER on ~/Code/<project>) that
+          //      would have created a bogus ~/agents/<label>/ and installed the
+          //      role-plugin into it, leaving the real workdir empty.
+          // installPluginLocally is the same primitive ChangeTitle G16 uses, and it
+          // takes the agent directory explicitly.
+          if (!workDir) throw new Error('no working directory — cannot install role-plugin')
+          const mkt = PREDEFINED_ROLE_PLUGINS[desired.pluginName]?.marketplace || LOCAL_MARKETPLACE_NAME
+          await installPluginLocally(desired.pluginName, workDir, mkt)
+          ops.push(`G08: Role-plugin "${desired.pluginName}" installed (Claude, ${mkt}) into ${workDir}`)
         } else if (clientType === 'codex' || clientType === 'gemini' || clientType === 'opencode' || clientType === 'kiro') {
           // R18 cross-client conversion + adapter install.
           try {
@@ -7554,6 +7638,7 @@ export async function CreateAgent(
 
     result.success = true
     console.log(`[CreateAgent] "${name}" created (id=${agent.id}, program=${program}, ${ops.length} gates)`)
+    logDegradedOps('CreateAgent', name, ops)
     return result
   } catch (err) {
     result.error = err instanceof Error ? err.message : String(err)

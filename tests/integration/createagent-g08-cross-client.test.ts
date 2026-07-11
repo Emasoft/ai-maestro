@@ -174,6 +174,11 @@ vi.mock('fs/promises', () => ({
   }),
   readFile: vi.fn(async () => ''),
   writeFile: vi.fn(async () => undefined),
+  // saveJsonSafe writes to a temp file then renames — the real settings write is
+  // atomic. Without `rename` the mock throws and every settings-writing gate (G08's
+  // local-marketplace install, G11) degrades to a WARN, which is exactly the kind of
+  // mock gap that lets a broken install path look healthy.
+  rename: vi.fn(async () => undefined),
 }))
 
 vi.mock('fs', () => ({
@@ -354,10 +359,24 @@ describe('CreateAgent G08 — R18.3d priority chain', () => {
   })
 
   /**
-   * Claude client path: createPersona wraps the install directly; the
-   * R18 conversion chain must not be consulted.
+   * Claude client path: the plugin is installed into the agent's OWN working
+   * directory; the R18 conversion chain must not be consulted.
+   *
+   * This test used to assert `createPersona({ personaName: label })` — and in doing
+   * so it pinned a bug rather than a behaviour. Two things were wrong, and the mock
+   * hid both:
+   *   - `createPersona` validates personaName against /^[a-z0-9-]+$/ and THROWS on
+   *     anything else. The label here is "Claude Persona" — capitals AND a space —
+   *     so in production this branch could only ever throw. Labels are auto-assigned
+   *     capitalized ("Nadia", "Aurelia"), so it threw for essentially every agent.
+   *     The mock accepted the value the real function rejects, which is how a test
+   *     asserting the exact broken call kept passing.
+   *   - `createPersona` installs into ~/agents/<personaName>/ — a directory derived
+   *     from the LABEL, not the agent's working directory. For an adopted external
+   *     workdir that installs the role-plugin into the wrong place entirely.
+   * The fix installs into `workDir` via the same primitive ChangeTitle G16 uses.
    */
-  it('Claude client: createPersona runs, R18 helpers bypassed', async () => {
+  it('Claude client: installs the plugin into the agent working directory, R18 helpers bypassed', async () => {
     mockDetectClientType.mockReturnValue('claude')
 
     const { CreateAgent } = await import('@/services/element-management-service')
@@ -370,10 +389,8 @@ describe('CreateAgent G08 — R18.3d priority chain', () => {
       authContext: { isSystemOwner: true as const },
     })
 
-    expect(mockCreatePersona).toHaveBeenCalledWith({
-      personaName: 'Claude Persona',
-      pluginName: 'my-plugin',
-    })
+    // The label must NOT be used as a directory or a persona slug.
+    expect(mockCreatePersona).not.toHaveBeenCalled()
     expect(mockFindNative).not.toHaveBeenCalled()
     expect(mockEmitForClient).not.toHaveBeenCalled()
     expect(mockConvertAndStore).not.toHaveBeenCalled()
@@ -381,5 +398,8 @@ describe('CreateAgent G08 — R18.3d priority chain', () => {
     const g08Lines = result.operations.filter(o => o.startsWith('G08:'))
     const claudeLine = g08Lines.find(l => /my-plugin/.test(l) && /Claude/.test(l))
     expect(claudeLine).toBeDefined()
+    // The op records the destination, and it is the agent's workdir — never ~/agents/<label>/.
+    expect(claudeLine).toMatch(/claude-native/)
+    expect(claudeLine).not.toMatch(/Claude Persona/)
   })
 })

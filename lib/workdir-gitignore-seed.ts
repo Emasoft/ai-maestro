@@ -52,6 +52,12 @@ export const MANAGED_GITIGNORE_ENTRIES: readonly string[] = [
   '.claude/settings.local.json',
   '.claude/rules/aimaestro-*.md',
   '.mcp.json',
+  // LOCAL-scoped TRDDs (TRDD-S7R1BNTG) — the machine-private half of the task corpus.
+  // A local TRDD is about THIS instance (its paths, caches, credentials-adjacent
+  // state), so it is the task equivalent of a LOCAL memory note and must never be
+  // pushed. PROJECT-scoped TRDDs stay in design/ and ARE tracked — that asymmetry is
+  // the whole point of the scope field.
+  '.claude/local-tasks/',
   // janitor / memory runtime state
   '.janitor/',
   '.claude/janitor/',

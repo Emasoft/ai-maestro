@@ -32,7 +32,7 @@ attempts: 1
 test-failures: 0
 last-test-result: pass
 last-test-at: 2026-07-11T17:20:00+0200
-implementation-commits: []
+implementation-commits: [8e61eedf, 95451222]
 external-refs: ["design/tasks/TRDD-20260707_232304+0200-DE9757LJ-split-governance-rules-ind-dep.md", "design/tasks/TRDD-20260711_162304+0200-IXUV1XHD-createagent-mints-unwakeable-agents.md"]
 ---
 

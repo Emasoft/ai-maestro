@@ -33,7 +33,7 @@ attempts: 1
 test-failures: 0
 last-test-result: pass
 last-test-at: 2026-07-11T17:35:00+0200
-implementation-commits: []
+implementation-commits: [95451222]
 external-refs: ["design/tasks/TRDD-20260711_170855+0200-JGCEA6CQ-agent-operating-rules.md", "design/tasks/TRDD-20260707_232304+0200-DE9757LJ-split-governance-rules-ind-dep.md", "design/tasks/TRDD-20260703_000000+0200-a1019073-controlled-execution-environment.md"]
 ---
 

@@ -66,16 +66,42 @@ Rule 4 (FIX-AS-YOU-GO) is **not an exception** to Rule 0.b. It is the engine of 
 | **Rule 0.b FORBIDS** | fixing an agent's behaviour **at runtime, by talking to it** — nudging, hinting, naming the skill, re-prompting, doing its job. This masks the defect and buys a false pass. |
 | **Rule 4 REQUIRES** | fixing the **CAUSE** of that behaviour — in the code, the role-plugin, the skill, the rules, the API — and then retrying the same act. |
 
-**THE SCENARIO LOOP — this is the core of scenario testing:**
+## THE SCENARIO LOOP — the core of the entire method
 
-1. **ACT** as the user (UI only; brief the MANAGER; then stop).
-2. **OBSERVE** — did the expected result the scenario specifies actually happen?
-3. **YES** → next step.
-4. **NO** → **you have discovered a bug.** Do not prod the agent. Do not work around it. **Diagnose the root cause and FIX IT in the code/config/prompt that produced the behaviour.**
-5. **RETRY the same act**, from the same state.
-6. Expected result now correct? → next step. Still wrong? → keep fixing. **There is no attempt limit.**
+**FIX-AS-YOU-GO is not an exception to anything. It is what you do the moment a problem or a shortcoming BLOCKS the next step of the scenario.** And that is the only time you do it: **ONLY IF YOU CANNOT GO ON — if you cannot execute the next step — you fix the problem, so that you can go on.**
 
-**You fix ONLY when you cannot go on.** If the expected result did not happen, you *are* blocked — the next step depends on it. That is the trigger, and the only one. Do not gold-plate, do not fix things that are not blocking you.
+**For each step of the scenario:**
+
+### 1. IMPERSONATE THE USER — with MAESTRO privileges
+
+You are the human owner of this AI Maestro instance, logged into the dashboard. You hold the MAESTRO title: you can do anything a human owner can do through the UI (create agents, assign titles, enter the governance password when the UI asks for it, approve sudo prompts). You hold **no agent identity** — no AID, no governance title as an *agent*, no `~/agents/<you>/` folder.
+
+### 2. ACT — using the means of the USER, never a shortcut around the UI
+
+Perform the step exactly as the scenario specifies, **always through the browser UI**. Never reach for a tool, script, or API call that bypasses it.
+
+**This is not pedantry — it is the point.** You are testing **the UI, and the harness's reaction to UI interactions.** A step performed by any other means has tested nothing: the very code path the user will exercise is the one you skipped.
+
+### 3. VERIFY — by ANY means, provided it is READ-ONLY
+
+Did the expected result specified in the step actually happen? Check it however you like — **visually in the UI, by inspecting the filesystem, by reading logs, with a console debugger, with a read-only API call, with `tmux capture-pane`** — anything, **as long as it does not mutate state.**
+
+Read-only verification is unrestricted and it is *encouraged*: the UI is often the last place a result becomes visible, and the truth usually lands on disk first.
+
+> **Worked example.** The user tells the MANAGER to create a MAINTAINER agent called `ApolloBot` to supervise GitHub repo X. You then go and LOOK: is `~/agents/ApolloBot/` being created? Is repo X being cloned into a subfolder of it, or into `/tmp/repositories/<X>`, or into a docker container? If, after a reasonable wait, **none** of those appear anywhere on the filesystem — you have found an issue. If one of them does, the result came true: go on.
+
+### 4. STOP and FIX — immediately, not later
+
+If the expected result did **not** come true, **you have discovered a bug. Stop. Fix it now — do not procrastinate, do not note-and-continue, do not work around it.**
+
+- **Hot-swap the fixed part** wherever that is possible (edit the file the agent reads, the skill, the rule, the prompt — things that are re-read on next use).
+- **If a hot swap is not possible**, rebuild and restart the ai-maestro server, then **resume or restart the scenario** as appropriate.
+- **Then RETRY the same act** (step 2), and **VERIFY again** (step 3).
+- **Did the expected result come out correctly this time?** If **no** → **try a DIFFERENT fix and iterate.** There is no attempt limit. If **yes** → go on.
+
+Remember where the bug lives when it is an *agent* misbehaving: in its role-plugin prompt, its skill's description, the rules it loads, or the server's enforcement — **never in your chat window.** Fixing it by talking to the agent is forbidden (Rule 0.b) and it is not a fix; it is a disguise.
+
+### 5. GO TO THE NEXT STEP — and repeat from 1.
 
 ### What "fix the cause" means when the failure is an AGENT's behaviour
 

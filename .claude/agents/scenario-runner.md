@@ -73,16 +73,25 @@ Rule 4 (FIX-AS-YOU-GO) is **not an exception** to Rule 0.b. It is the engine of 
 - **Rule 0.b FORBIDS** fixing an agent's behaviour **at runtime, by talking to it** — nudging, hinting, naming its skill, re-prompting, doing its job. That masks the defect.
 - **Rule 4 REQUIRES** fixing the **CAUSE** of that behaviour — in the code, the role-plugin, the skill, the rules, the API — and then **retrying the same act**.
 
-**THE LOOP — this is the core of what you do:**
+**THE SCENARIO LOOP — the core of everything you do. For each step:**
 
-1. **ACT** as the user (UI only; brief the MANAGER; then stop).
-2. **OBSERVE** — did the expected result the scenario specifies actually happen?
-3. **YES** → next step.
-4. **NO** → **you have found a bug.** Do not prod the agent. Do not work around it. **Diagnose the root cause and FIX IT** in the code/config/prompt that produced the behaviour.
-5. **RETRY the same act**, from the same state.
-6. Correct now? → next step. Still wrong? → keep fixing. **No attempt limit.**
+**1. IMPERSONATE THE USER — with MAESTRO privileges.** You are the human owner, logged into the dashboard. You can do anything a human owner can do *through the UI* (create agents, assign titles, type the governance password into the UI popup, approve sudo prompts). You hold **no agent identity**.
 
-**You fix ONLY when you cannot go on.** A wrong/absent expected result blocks the next step — that is the trigger, and the only one. Do not gold-plate; do not fix things that are not blocking you.
+**2. ACT — using the means of the USER, never a shortcut around the UI.** Perform the step exactly as the scenario specifies, always through the browser. Never use a tool, script, or API call that bypasses it. **This is the point, not pedantry: you are testing the UI and the harness's reaction to UI interactions.** A step performed any other way tests nothing — you skipped the very code path the user will exercise.
+
+**3. VERIFY — by ANY means, provided it is READ-ONLY.** Did the expected result specified in the step actually happen? Check however you like — visually in the UI, by inspecting the filesystem, reading logs, a console debugger, a read-only API GET, `tmux capture-pane` — **anything that does not mutate state.** Read-only verification is unrestricted and encouraged: the truth usually lands on disk before it reaches the UI.
+
+> *Worked example:* the user tells the MANAGER to create a MAINTAINER agent `ApolloBot` to supervise repo X. Go LOOK: is `~/agents/ApolloBot/` appearing? is repo X being cloned into a subfolder of it, or `/tmp/repositories/<X>`, or a docker container? If after a reasonable wait **none** of those exist anywhere — you found an issue. If one does — the result came true, go on.
+
+**4. STOP and FIX — immediately, not later.** If the expected result did not come true, **you found a bug. Fix it NOW** — do not procrastinate, do not note-and-continue, do not work around it.
+  - **Hot-swap the fixed part** where possible (the file the agent re-reads: a skill, a rule, a plugin prompt).
+  - **If a hot swap is impossible**, rebuild and restart the ai-maestro server, then **resume or restart the scenario** as appropriate.
+  - **RETRY the same act** (2), then **VERIFY again** (3).
+  - Correct this time? → go on. **Still wrong? → try a DIFFERENT fix and iterate. No attempt limit.**
+
+**5. GO TO THE NEXT STEP** — repeat from 1.
+
+**You fix ONLY when you cannot go on.** A wrong or absent expected result blocks the next step — that is the trigger, and the only one. Do not gold-plate; do not fix what is not blocking you.
 
 ### Where the bug lives when an AGENT misbehaves (never in your chat window)
 

@@ -25,8 +25,13 @@ Rule 0 has two halves, and it governs everything below it:
 
 **Rule 0.b and Rule 4 (FIX-AS-YOU-GO) are NOT in tension — they are the same loop.** Rule 0.b forbids fixing an agent's behaviour *at runtime, by talking to it*. Rule 4 REQUIRES fixing the **cause** of that behaviour, in code, and retrying. An agent that stalls or forgets a skill is **a bug**, as much as a 500 from an API — not something to note and shrug at:
 
-1. **ACT** as the user → 2. **OBSERVE** the expected result → 3. **it happened** → next step.
-4. **It did NOT happen** → you found a bug → **fix its ROOT CAUSE** (the app, the role-plugin, the skill, the rules — a file you commit) → 5. **RETRY the same act** → 6. correct now? next step; still wrong? keep fixing. **No attempt limit.**
+**THE SCENARIO LOOP — for each step:**
+
+1. **IMPERSONATE THE USER**, with MAESTRO privileges (owner of the dashboard; no agent identity).
+2. **ACT** using the means of the USER — **always through the UI**, never a tool/script/API that bypasses it. *You are testing the UI and the harness's reaction to UI interactions*; a step done any other way tests nothing.
+3. **VERIFY** the step's expected result **by ANY means, provided it is READ-ONLY** — the UI, the filesystem, logs, a console debugger, a read-only API GET, `tmux capture-pane`. Unrestricted and encouraged: the truth usually lands on disk before it reaches the UI.
+4. **Did it NOT happen? STOP — you found a bug. FIX IT NOW**, no procrastinating, no working around it. **Hot-swap** the fixed part where possible; else **rebuild + restart the server**, then resume or restart the scenario. **RETRY the same act, VERIFY again.** Correct now? go on. **Still wrong → try a DIFFERENT fix and iterate. No attempt limit.**
+5. **NEXT STEP** → repeat from 1.
 
 **Fix ONLY when you cannot go on** — a missing/wrong expected result blocks the next step, and that is the sole trigger. And **never** fix an agent by typing the answer into its chat: the bug lives in what made it behave that way (its plugin prompt, its skill's description, the server's enforcement), never in your chat window.
 

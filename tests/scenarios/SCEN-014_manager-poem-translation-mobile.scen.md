@@ -1,17 +1,23 @@
 ---
 number: 14
 name: Manager-Orchestrated Poem Translation (Mobile)
-version: "1.0"
+version: "2.0"
 description: >
-  The user logs in on a smartphone-sized viewport, creates a MANAGER agent and
-  two AUTONOMOUS agents (a poet and a translator). They instruct the MANAGER
-  to ask the poet to write a poem about the sea and return it as a .md file
-  via AMP attachment. Then the MANAGER forwards the poem to the translator,
-  who translates it into Italian and sends back the .md via AMP attachment.
-  The MANAGER receives both files, combines them into a PDF, and presents
-  the final result to the user. The entire flow is verified through the
-  mobile dashboard — touch-friendly components, MobileMessageCenter, and
-  the AMP inbox.
+  On a smartphone-sized viewport the user creates a MANAGER and two AUTONOMOUS
+  agents (a poet, a translator), then gives the MANAGER a plain-language GOAL —
+  "get a poem written and translated, combine them into a PDF" — and STOPS. The
+  measurement is whether the MANAGER decomposes that itself: delegates to the
+  poet, waits, collects, delegates to the translator, collects, produces the PDF,
+  and reports back — reaching for AMP (send / inbox / attachment) on its own
+  initiative, and whether the poet and translator each notice their own inbox and
+  act unprompted. The whole flow is observed READ-ONLY through the mobile
+  dashboard; the human never types into a MEMBER and never nudges a stalled agent.
+  Up to v1.x the directive pasted the literal `amp-send … --attach` command, named
+  the /amp-send and /amp-inbox skills, wrote the MANAGER's 4-step plan for it, and
+  said "if idle, type /amp-inbox to check" — so a fleet that could not orchestrate
+  at all still passed. The methods now live in the Verify assertions as findings
+  (AMP = expected PASS; a different working mechanism = a finding; nothing = FAIL;
+  a stalled agent = a finding diagnosed read-only, never nudged).
 client: claude
 interhosts: false
 device: smartphone
@@ -200,111 +206,130 @@ author: AI Maestro Team
 
 ## Phase 4: Instruct MANAGER to Orchestrate the Poem Workflow
 
-#### S017: Send task instruction to MANAGER
-- **Action:** Tap `scen14-manager` in mobile list to switch to its terminal. Type and send:
+#### S017: Give the MANAGER the goal — then STOP (Rule 0.b)
+- **Action:** Tap `scen14-manager` in the mobile list and open its **Chat** section (NOT
+  its terminal — the terminal is a read-only observation stream, Rule 0.a). Send the
+  OUTCOME, in the words an owner would actually use:
   ```
-  I need you to orchestrate a creative task using the other agents on this host.
-  
-  Step 1: Send an AMP message to agent "scen14-poet" asking it to write a short
-  poem (8-12 lines) about the sea at dawn. Tell it to save the poem as a .md file
-  and send it back to you as an AMP attachment using: amp-send scen14-manager "Poem: Sea at Dawn" "Here is the poem you requested" --attach <path-to-poem.md>
-  
-  Step 2: Once you receive the poem .md file from the poet (check your inbox with
-  amp-inbox, then download the attachment with amp-download), forward it to agent
-  "scen14-translator" asking it to translate the poem into Italian, save the
-  translation as a new .md file, and send it back to you via AMP attachment.
-  
-  Step 3: Once you receive the Italian translation, combine both poems (original
-  English + Italian translation) into a single PDF file. You can use any method
-  available (pandoc, python, etc.) to generate the PDF.
-  
-  Step 4: Tell me when the PDF is ready and where it is saved.
-  
-  Use the /amp-send and /amp-inbox skills. Do NOT use the governance password.
+  I'd like a poem and a translation of it. Please have scen14-poet write a short
+  poem (8-12 lines) about the sea at dawn, then have scen14-translator put it into
+  Italian. When you have both, combine them into a single PDF and tell me where
+  you saved it.
   ```
-- **Goal:** MANAGER receives the orchestration task
+  Then **STOP and observe.** Do not name AMP, a script, a skill, a flag, or an
+  attachment mechanism. Do not lay out the steps for it. Do not re-send if it goes
+  quiet. (Naming the agents is fine — the user created them in S012-S013 and knows
+  they exist. What the user does *not* know is how agents talk to each other.)
+- **Goal:** The MANAGER **decomposes the task itself** — delegates to the poet, waits,
+  collects the result, delegates to the translator, collects again, produces the PDF,
+  and reports back — reaching for AMP (send / inbox / attachment download) **on its own
+  initiative**. That whole chain, unprompted, IS the scenario.
+
+  Up to v1.x this step pasted the literal `amp-send … --attach <path>` line, named the
+  `/amp-send` and `/amp-inbox` skills, and wrote the MANAGER's plan for it as Steps 1-4.
+  A MANAGER that could not orchestrate at all still passed, because the human had
+  already done the orchestrating.
 - **Creates:** nothing yet
 - **Modifies:** nothing yet
-- **Verify:** MANAGER starts processing. Screenshot: SCEN-014/S017-task-sent.png
+- **Verify:** MANAGER starts processing **without further input**. Record (read-only,
+  from its terminal) *which* mechanism it chose to reach the poet — AMP is the expected
+  self-organized answer; a different-but-working mechanism is a finding, not an
+  automatic fail; **doing nothing is a FAIL.** Screenshot: SCEN-014/S017-task-sent.png
 
-#### S018: Wait for MANAGER to send message to poet
-- **Action:** Watch MANAGER terminal for `amp-send scen14-poet` output. Allow up to 2 minutes.
-- **Goal:** MANAGER sends AMP message to poet
-- **Creates:** AMP message in poet's inbox
+#### S018: Wait for MANAGER to contact the poet
+- **Action:** Watch the MANAGER's terminal (read-only). Allow up to 2 minutes for it to reach out to `scen14-poet` with the task.
+- **Goal:** The MANAGER contacts the poet with the poem task, by whatever mechanism it chooses.
+- **Creates:** A message/task delivered to the poet (inbox entry, AMP message, or equivalent)
 - **Modifies:** nothing
-- **Verify:** Terminal shows successful send. Screenshot: SCEN-014/S018-manager-sends-to-poet.png
+- **Verify:** AMP (send) is the expected spontaneous choice and is a PASS; a different mechanism that still delivers the task to the poet is a FINDING, not an automatic fail; the poet never receiving the task is a FAIL. Screenshot: SCEN-014/S018-manager-sends-to-poet.png
 
 ---
 
 ## Phase 5: Verify Poet Receives Task and Responds
 
-#### S019: Switch to poet agent and check inbox
-- **Action:** Tap `scen14-poet` in mobile list. Check terminal — the poet should have received a notification and started working. If idle, type `/amp-inbox` to check.
-- **Goal:** Poet has the message from MANAGER
+#### S019: OBSERVE the poet — do not touch it (Rule 0.b)
+- **Action:** Tap `scen14-poet` in the mobile list and **watch its terminal (read-only).**
+  Type NOTHING into this agent — not a command, not a nudge, not a reminder. The user has
+  no business instructing a MEMBER directly; only the MANAGER was briefed, and whether the
+  poet notices its own inbox and acts is precisely what is being measured.
+- **Goal:** The poet notices the MANAGER's message **unprompted** and starts work.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Inbox shows message from scen14-manager. Screenshot: SCEN-014/S019-poet-inbox.png
+- **Verify:** Within a reasonable window (~60s) the poet's inbox shows the message from
+  scen14-manager and it begins acting on it **on its own**. If it is still idle and
+  unaware after that window, **that is the finding** — a missed notification or a skill
+  the agent never invoked. Diagnose it read-only (its conversation log, the inbox API,
+  the hook state) and fix the CAUSE per Rule 4; **never type `/amp-inbox` into the agent
+  to unstick it.** A prior version of this step said *"If idle, type `/amp-inbox` to
+  check"* — which converted the single highest-signal failure this scenario can produce
+  into a silent pass. Screenshot: SCEN-014/S019-poet-inbox.png
 
-#### S020: Wait for poet to write poem and send back
-- **Action:** Watch poet terminal. It should write a .md file and send it via `amp-send scen14-manager ... --attach`. Allow up to 3 minutes.
-- **Goal:** Poet writes poem.md and sends via AMP attachment
-- **Creates:** poem .md file, AMP message with attachment
+#### S020: Wait for the poet to write the poem and send it back
+- **Action:** Watch the poet's terminal (read-only). Allow up to 3 minutes for it to write the poem and deliver it back to the MANAGER.
+- **Goal:** The poet produces a poem .md file and returns it to the MANAGER, by whatever mechanism it chooses.
+- **Creates:** poem .md file; a message/attachment delivered to the MANAGER
 - **Modifies:** nothing
-- **Verify:** Terminal shows successful amp-send with attachment. Screenshot: SCEN-014/S020-poet-sends-poem.png
+- **Verify:** AMP (send with `--attach`) is the expected spontaneous choice and is a PASS; a different mechanism that still delivers the poem file to the MANAGER is a FINDING, not an automatic fail; the poem never reaching the MANAGER is a FAIL. Screenshot: SCEN-014/S020-poet-sends-poem.png
 
 ---
 
 ## Phase 6: Verify MANAGER Receives Poem and Forwards to Translator
 
-#### S021: Switch to MANAGER and verify poem received
-- **Action:** Tap `scen14-manager`. Watch terminal for inbox check / download activity. If idle, the MANAGER should be polling inbox.
-- **Goal:** MANAGER downloads the poem attachment
-- **Creates:** Downloaded .md file in MANAGER's workspace
+#### S021: Switch to MANAGER and observe it receive the poem
+- **Action:** Tap `scen14-manager` and watch its terminal (read-only). Allow it time to notice and retrieve the poet's response.
+- **Goal:** The MANAGER obtains the poem content, by whatever mechanism it chooses.
+- **Creates:** The poem content available in the MANAGER's workspace or context (e.g. a downloaded .md file)
 - **Modifies:** nothing
-- **Verify:** Terminal shows amp-download or poem content. Screenshot: SCEN-014/S021-manager-receives-poem.png
+- **Verify:** AMP (inbox check + attachment download) is the expected spontaneous choice and is a PASS; a different mechanism that still gets the poem content to the MANAGER is a FINDING, not an automatic fail; the MANAGER never obtaining the poem is a FAIL. Screenshot: SCEN-014/S021-manager-receives-poem.png
 
-#### S022: Wait for MANAGER to forward poem to translator
-- **Action:** Watch MANAGER terminal for `amp-send scen14-translator` with the poem attached.
-- **Goal:** MANAGER forwards poem to translator with translation instructions
-- **Creates:** AMP message with .md attachment in translator's inbox
+#### S022: Wait for the MANAGER to forward the poem to the translator
+- **Action:** Watch the MANAGER's terminal (read-only). Allow it time to pass the poem, with translation instructions, to `scen14-translator`.
+- **Goal:** The MANAGER delivers the poem and the translation request to the translator, by whatever mechanism it chooses.
+- **Creates:** A message/attachment delivered to the translator's inbox
 - **Modifies:** nothing
-- **Verify:** Terminal shows successful send to translator. Screenshot: SCEN-014/S022-manager-forwards-to-translator.png
+- **Verify:** AMP (send with the poem attached) is the expected spontaneous choice and is a PASS; a different mechanism that still delivers the poem and instructions to the translator is a FINDING, not an automatic fail; the translator never receiving the poem is a FAIL. Screenshot: SCEN-014/S022-manager-forwards-to-translator.png
 
 ---
 
 ## Phase 7: Verify Translator Receives and Translates
 
-#### S023: Switch to translator and verify task received
-- **Action:** Tap `scen14-translator`. Check terminal for notification or type `/amp-inbox`.
-- **Goal:** Translator has the poem and translation instructions
+#### S023: OBSERVE the translator — do not touch it (Rule 0.b)
+- **Action:** Tap `scen14-translator` and **watch its terminal (read-only).** Type NOTHING
+  into this agent. Same reasoning as S019: the user briefed only the MANAGER, and whether
+  the translator picks up its own work is the measurement.
+- **Goal:** The translator notices the MANAGER's message — **with the poem attached** —
+  and starts translating, unprompted.
 - **Creates:** nothing
 - **Modifies:** nothing
-- **Verify:** Inbox shows message from scen14-manager with attachment. Screenshot: SCEN-014/S023-translator-inbox.png
+- **Verify:** Its inbox shows the message from scen14-manager **carrying the poem as an
+  attachment**, and it begins work on its own. A stall, a missed attachment, or an agent
+  that never checks its inbox is a **finding** — diagnose read-only, fix the cause, never
+  nudge. Screenshot: SCEN-014/S023-translator-inbox.png
 
-#### S024: Wait for translator to send Italian version back
-- **Action:** Watch translator terminal. It should translate, save as .md, and `amp-send scen14-manager ... --attach`. Allow up to 3 minutes.
-- **Goal:** Translator sends Italian poem .md via AMP attachment
-- **Creates:** Italian poem .md file, AMP message with attachment
+#### S024: Wait for the translator to send the Italian version back
+- **Action:** Watch the translator's terminal (read-only). Allow up to 3 minutes for it to translate, save the result, and deliver it back to the MANAGER.
+- **Goal:** The translator produces the Italian poem as a .md file and returns it to the MANAGER, by whatever mechanism it chooses.
+- **Creates:** Italian poem .md file; a message/attachment delivered to the MANAGER
 - **Modifies:** nothing
-- **Verify:** Terminal shows successful amp-send. Screenshot: SCEN-014/S024-translator-sends-translation.png
+- **Verify:** AMP (send with `--attach`) is the expected spontaneous choice and is a PASS; a different mechanism that still delivers the translated file to the MANAGER is a FINDING, not an automatic fail; the translation never reaching the MANAGER is a FAIL. Screenshot: SCEN-014/S024-translator-sends-translation.png
 
 ---
 
 ## Phase 8: Verify MANAGER Generates PDF
 
-#### S025: Switch to MANAGER and verify translation received
-- **Action:** Tap `scen14-manager`. Watch terminal for inbox check / download.
-- **Goal:** MANAGER downloads the Italian poem attachment
-- **Creates:** Downloaded Italian .md in MANAGER's workspace
+#### S025: Switch to MANAGER and observe it receive the translation
+- **Action:** Tap `scen14-manager` and watch its terminal (read-only). Allow it time to notice and retrieve the translator's response.
+- **Goal:** The MANAGER obtains the Italian poem content, by whatever mechanism it chooses.
+- **Creates:** The Italian poem content available in the MANAGER's workspace or context (e.g. a downloaded .md file)
 - **Modifies:** nothing
-- **Verify:** Terminal shows download or translation content. Screenshot: SCEN-014/S025-manager-receives-translation.png
+- **Verify:** AMP (inbox check + attachment download) is the expected spontaneous choice and is a PASS; a different mechanism that still gets the translation to the MANAGER is a FINDING, not an automatic fail; the MANAGER never obtaining the translation is a FAIL. Screenshot: SCEN-014/S025-manager-receives-translation.png
 
-#### S026: Wait for MANAGER to generate PDF
-- **Action:** Watch MANAGER terminal for PDF generation (pandoc, python, or other tool). Allow up to 2 minutes.
-- **Goal:** PDF file created combining both poems
+#### S026: Wait for the MANAGER to generate the PDF
+- **Action:** Watch the MANAGER's terminal (read-only). Allow up to 2 minutes for it to combine both poems into a PDF, by whatever tool it chooses (pandoc, a script, or otherwise).
+- **Goal:** A PDF file is created combining both poems.
 - **Creates:** PDF file in MANAGER's workspace
 - **Modifies:** nothing
-- **Verify:** Terminal shows PDF path. Screenshot: SCEN-014/S026-pdf-generated.png
+- **Verify:** Any working mechanism that produces the PDF is a PASS; the terminal shows the PDF path or generation activity; no PDF ever appearing is a FAIL. Screenshot: SCEN-014/S026-pdf-generated.png
 
 #### S027: Verify PDF exists and has content
 - **Action:** Check the PDF path reported by MANAGER. Verify via `GET /api/agents/<managerId>` workspace or read the conversation log to find the file path. Verify the file exists and is non-empty.

@@ -32,7 +32,7 @@ import { loadAgents, linkSession, unlinkSession } from '@/lib/agent-registry'
 import { getHosts, getSelfHost, isSelf, getHostById } from '@/lib/hosts-config'
 import { persistSession, loadPersistedSessions, unpersistSession } from '@/lib/session-persistence'
 import { parseNameForDisplay } from '@/types/agent'
-import { initAgentAMPHome, getAgentAMPDir } from '@/lib/amp-inbox-writer'
+import { buildAgentSessionEnv } from '@/lib/session-env'
 import { sessionActivity, broadcastStatusUpdate } from '@/services/shared-state'
 import { getRuntime } from '@/lib/agent-runtime'
 import crypto from 'crypto'
@@ -973,64 +973,16 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
 
   const registeredAgentId = registeredAgent?.id
 
-  // Build the initial env bag for `tmux new-session -e`. Keys without a
-  // resolvable value (e.g. AIM_AGENT_ID when agent registration failed) are
-  // simply omitted — the caller proceeds with a best-effort session rather
-  // than failing. AGENT_WORK_DIR is ALWAYS set because cwd is known by now.
-  const initialEnv: Record<string, string> = {
-    AGENT_WORK_DIR: cwd,
-    AIM_AGENT_NAME: agentName,
-  }
-
-  // AMP init is fast (just mkdir -p) and needs to run before we can compute
-  // AMP_DIR. If it fails, we log and fall back to a session with no AMP_DIR
-  // — AMP is not strictly required for a session to function.
-  let ampDir: string | undefined
-  try {
-    await initAgentAMPHome(agentName, registeredAgentId)
-    ampDir = getAgentAMPDir(agentName, registeredAgentId)
-    initialEnv.AMP_DIR = ampDir
-  } catch (ampErr) {
-    console.warn(`[Sessions] Could not init AMP home for ${agentName}:`, ampErr)
-  }
-
-  if (registeredAgentId) {
-    initialEnv.AIM_AGENT_ID = registeredAgentId
-  }
-
-  // AID_AUTH: server-issued AID session secret for agent API authentication.
-  // The server spawns the agent, so it IS the identity authority for local
-  // agents. The secret must be present before `claude` starts (WT-022#1);
-  // the hash is stored in the registry for validation on incoming requests.
-  // If secret generation or persistence fails, the session proceeds without
-  // AID_AUTH (logged) — this matches the previous fail-open behavior.
-  let aidAuthSet = false
-  if (registeredAgentId) {
-    try {
-      const { generateSessionSecret } = await import('@/lib/session-secret')
-      const { secret, secretHash } = generateSessionSecret()
-      // R21.4: route metadata mutation through ChangeMetadata AIO (auth +
-      // validation + ledger op). Session bootstrap is a privileged internal
-      // operation, so we build a system-owner auth context with a reason
-      // string for audit logging.
-      const { ChangeMetadata } = await import('@/services/element-management-service')
-      const { buildSystemAuthContext } = await import('@/lib/agent-auth')
-      const r = await ChangeMetadata(
-        registeredAgentId,
-        { sessionSecretHash: secretHash },
-        buildSystemAuthContext('session-bootstrap'),
-        { mode: 'merge' },
-      )
-      if (!r.success) {
-        throw new Error(r.error || 'ChangeMetadata failed during session bootstrap')
-      }
-      initialEnv.AID_AUTH = secret
-      aidAuthSet = true
-      console.log(`[Sessions] Set AID_AUTH for agent ${agentName} (AID session secret)`)
-    } catch (secretErr) {
-      console.warn(`[Sessions] Could not set session secret for ${agentName}:`, secretErr)
-    }
-  }
+  // Build the initial env bag for `tmux new-session -e` via the SINGLE builder
+  // shared with the wake path (TRDD-L1OYEVSN). This used to be a hand-rolled
+  // literal here, and a second, DIFFERENT hand-rolled literal in wakeAgent —
+  // which is how AID_AUTH came to be injected on create and lost on every wake
+  // (and therefore on every boot-restore, i.e. every server restart).
+  const { env: initialEnv, aidAuthSet, ampDir } = await buildAgentSessionEnv({
+    agentName,
+    agentId: registeredAgentId,
+    workingDirectory: cwd,
+  })
 
   // Atomic session creation: env vars are visible to the first pane's
   // process tree (and therefore to `claude` when it launches below).

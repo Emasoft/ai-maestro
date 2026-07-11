@@ -58,6 +58,7 @@ import { resolveAgentIdentifier } from '@/lib/messageQueue'
 import { getHosts, getSelfHost, getSelfHostId, isSelf } from '@/lib/hosts-config'
 import { persistSession, unpersistSession } from '@/lib/session-persistence'
 import { initAgentAMPHome, getAgentAMPDir } from '@/lib/amp-inbox-writer'
+import { buildAgentSessionEnv } from '@/lib/session-env'
 import { initializeAllAgents, getStartupStatus } from '@/lib/agent-startup'
 import { sessionActivity } from '@/services/shared-state'
 import { getRuntime } from '@/lib/agent-runtime'
@@ -2152,26 +2153,18 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
     // The ONLY atomic path is `tmux new-session -e KEY=VAL`, which requires
     // computing the env BEFORE createSession.
     //
-    // AGENT_WORK_DIR    — used by the directory-guard hook (sandbox boundary)
-    // AIM_AGENT_NAME/ID — used by AMP messaging + state-tracking hooks
-    // AMP_DIR           — set if initAgentAMPHome succeeds (non-fatal otherwise)
-    const initialEnv: Record<string, string> = {
-      AGENT_WORK_DIR: workingDirectory,
-      AIM_AGENT_NAME: agentName,
-      AIM_AGENT_ID: agentId,
-    }
-
-    // AMP init runs pre-create so AMP_DIR lands in the initial pane's env.
-    // If it fails we log and continue with no AMP_DIR — AMP isn't strictly
-    // required for session creation.
-    let ampDir = ''
-    try {
-      await initAgentAMPHome(agentName, agentId)
-      ampDir = getAgentAMPDir(agentName, agentId) || ''
-      if (ampDir) initialEnv.AMP_DIR = ampDir
-    } catch (ampErr) {
-      console.warn(`[Wake] Could not init AMP home for ${agentName}:`, ampErr)
-    }
+    // The bag is built by the SINGLE builder shared with the create path
+    // (TRDD-L1OYEVSN). It previously listed AGENT_WORK_DIR / AIM_AGENT_NAME /
+    // AIM_AGENT_ID / AMP_DIR here — a complete-looking enumeration that was
+    // missing AID_AUTH, the agent's API credential. Because boot-restore wakes
+    // every agent, that omission silently un-authenticated the entire fleet on
+    // every server restart. Do not re-inline this: add new vars to
+    // lib/session-env.ts so BOTH paths get them.
+    const { env: initialEnv } = await buildAgentSessionEnv({
+      agentName,
+      agentId,
+      workingDirectory,
+    })
 
     // Create new tmux session with atomic env injection
     try {

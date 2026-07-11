@@ -32,7 +32,7 @@ attempts: 1
 test-failures: 0
 last-test-result: pass
 last-test-at: 2026-07-11T18:10:00+0200
-implementation-commits: []
+implementation-commits: [ce0a69ff]
 external-refs: ["design/tasks/TRDD-20260711_131006+0200-WLWHVMKT-external-workdir-adoption.md", "design/tasks/TRDD-20260703_000000+0200-a1019073-controlled-execution-environment.md"]
 ---
 

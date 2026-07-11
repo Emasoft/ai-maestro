@@ -183,9 +183,15 @@ author: AI Maestro Team
 - **Verify:** the message appears in the MANAGER's chat. Screenshot. From here on you are an
   OBSERVER: record what the MANAGER does **on its own** — which skills it invokes unprompted,
   whether it creates a team, which titles it chooses and why, whether it routes through its COS,
-  whether it populates the kanban. **If it stalls, does nothing, or picks a nonsensical team,
-  that is the RESULT — record it and do NOT prod it.** A goal reached only because you
-  intervened is a FAIL, and the intervention is the bug report.
+  whether it populates the kanban.
+
+  **If it stalls, does nothing, or picks a nonsensical team — that is a BUG, and Rule 4 applies:
+  fix its CAUSE, then retry this step.** The cause is in the MANAGER's role-plugin, its skills,
+  or the app — never in your chat window. So: do NOT prod it, do NOT re-send the directive, do
+  NOT name the skill it should have used. Diagnose why it didn't act, fix that file, re-create
+  the agent so it loads the fix, and send the directive again. Repeat until the expected result
+  happens on its own. **A goal reached only because you coached it is a FAIL, and the coaching is
+  the bug report.**
 - **Verify:** Terminal shows MANAGER processing. Screenshot: SCEN-009/S011-task-sent.png
 
 #### S012: Wait for MANAGER to acknowledge and start planning

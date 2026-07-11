@@ -53,11 +53,42 @@ That is the whole repertoire. The MANAGER is the entry point to the fleet; it ca
 - do an agent's work for it, or "help it along" past a step it fumbled;
 - restart or re-prompt an agent to get a nicer outcome.
 
-**An agent that stalls, forgets a skill, mis-routes a message, skips its COS, or never delegates IS THE RESULT.** Write it down. Screenshot it. Do not rescue it. **Rescuing an agent destroys the exact signal the test exists to produce** — and it converts a real, reproducible defect into a scenario that "passed".
+**An agent that stalls, forgets a skill, mis-routes a message, skips its COS, or never delegates IS A BUG.** Not a nuisance to route around — a bug, exactly as much as a 500 from an API. Write it down, screenshot it, and then **go fix its CAUSE** (next section). What you must never do is fix it by *talking to the agent*.
 
-**A false PASS is worse than a FAIL.** A failure tells you something is broken. A pass bought by nudging tells you the fleet works when it does not, and it will be believed. If a scenario only reaches its goal because the runner intervened, the correct verdict is **FAIL**, and the finding is *"the agent did not do X on its own."*
+**A false PASS is worse than a FAIL.** A failure tells you something is broken. A pass bought by nudging tells you the fleet works when it does not — and it will be believed. If a scenario only reaches its goal because the runner coached an agent through it, the correct verdict is **FAIL**, and the finding is *"the agent did not do X on its own."*
 
-The one exception is Rule 4 (FIX-AS-YOU-GO), and it is narrower than it looks: Rule 4 lets you fix **the app's code** when the app is broken. It does not license you to fix **an agent's behaviour** by talking to it. Broken button → fix the button, retry the step. Agent ignored its skill → that is a finding, and the run continues (or fails) without your help.
+### Rule 0.b and Rule 4 are not in tension — they are the same loop
+
+Rule 4 (FIX-AS-YOU-GO) is **not an exception** to Rule 0.b. It is the engine of the whole method. The two rules govern different things and never collide:
+
+| | |
+|---|---|
+| **Rule 0.b FORBIDS** | fixing an agent's behaviour **at runtime, by talking to it** — nudging, hinting, naming the skill, re-prompting, doing its job. This masks the defect and buys a false pass. |
+| **Rule 4 REQUIRES** | fixing the **CAUSE** of that behaviour — in the code, the role-plugin, the skill, the rules, the API — and then retrying the same act. |
+
+**THE SCENARIO LOOP — this is the core of scenario testing:**
+
+1. **ACT** as the user (UI only; brief the MANAGER; then stop).
+2. **OBSERVE** — did the expected result the scenario specifies actually happen?
+3. **YES** → next step.
+4. **NO** → **you have discovered a bug.** Do not prod the agent. Do not work around it. **Diagnose the root cause and FIX IT in the code/config/prompt that produced the behaviour.**
+5. **RETRY the same act**, from the same state.
+6. Expected result now correct? → next step. Still wrong? → keep fixing. **There is no attempt limit.**
+
+**You fix ONLY when you cannot go on.** If the expected result did not happen, you *are* blocked — the next step depends on it. That is the trigger, and the only one. Do not gold-plate, do not fix things that are not blocking you.
+
+### What "fix the cause" means when the failure is an AGENT's behaviour
+
+This is the part people get wrong. The agent misbehaved, so the bug is in **whatever makes it behave that way** — never in your chat window:
+
+| Symptom | Where the bug actually is | The fix |
+|---|---|---|
+| Agent never invoked a skill it should have | the skill's `description` doesn't trigger, or the role-plugin's main-agent `.md` never tells it the skill exists | fix the skill/plugin, re-create the agent so it loads the fix, retry the step |
+| Agent messaged a MEMBER directly instead of its COS | the comm graph isn't in its prompt, and/or the server didn't 403 it | fix the plugin prompt and/or the server's enforcement, retry |
+| Agent went idle mid-task and never resumed | a hook, notification, or wake defect in the app | fix the app, retry |
+| Agent invented a team structure that makes no sense | the MANAGER's persona gives it no guidance on team composition | fix the role-plugin, retry |
+
+In every row the fix lands in a **file you commit**, and the retry proves it. **In no row do you type the answer into the agent's chat.** That is the whole distinction, and it is the difference between shipping a fixed fleet and shipping a fleet that only works when a human is standing over it.
 
 ### The "every agent lives in ~/agents/" hard invariant
 

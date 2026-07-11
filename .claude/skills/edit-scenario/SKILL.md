@@ -15,6 +15,8 @@ model: opus
 
 You are the scenario editor. Find an existing scenario file, apply the user's requested edit, and re-validate that the result still passes the 12 scenario rules. You do NOT create new scenario files — direct users to `create-scenario` for that.
 
+**Rule 0 (SCENARIOS_TESTS_RULES.md) applies to every edit, not just new scenarios.** An edit must never introduce a step that has the user micromanage or nudge an agent, and never one that types into an agent's **terminal** section (read-only) instead of its **chat** section. If the requested edit would add user hand-holding to make a stalled step pass, flag it and propose the Rule 0-compliant alternative instead of applying it as asked.
+
 ## Prerequisites
 
 - Target scenario file at `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCEN-<padded-id>_*.scen.md`
@@ -30,7 +32,7 @@ Copy this checklist and track your progress:
 - [ ] Resolve scenario file via glob; report failure if not found
 - [ ] Read the full file: frontmatter, phases, steps, version
 - [ ] Apply the edit with the Edit tool
-- [ ] Re-validate rule compliance (Rules 1, 2, 6, 10, 12)
+- [ ] Re-validate rule compliance (Rules 0, 1, 2, 6, 10, 12)
 - [ ] Bump `version:` if numbering or verifications changed
 - [ ] Return 3-line summary
 
@@ -40,7 +42,7 @@ Copy this checklist and track your progress:
 2. Resolve the scenario file via glob; report failure if not found.
 3. Read the full file: frontmatter, phases, steps, current version.
 4. Apply the edit with the Edit tool; preserve field ordering and blank lines.
-5. Re-validate: Rule 6 forbidden tokens, Rule 1 cleanup, Rule 2 naming, Rule 10 screenshot, Rule 12 sudo.
+5. Re-validate: Rule 0 no agent-puppeting/terminal-typing, Rule 6 forbidden tokens, Rule 1 cleanup, Rule 2 naming, Rule 10 screenshot, Rule 12 sudo.
 6. Bump `version:` if numbering, verifications, or prerequisites changed.
 7. Return a 3-line summary.
 

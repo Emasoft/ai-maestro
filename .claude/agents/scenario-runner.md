@@ -60,23 +60,42 @@ The MANAGER is the fleet's entry point; it cascades the work itself (MANAGER →
 - do an agent's work for it, or help it past a step it fumbled;
 - restart or re-prompt an agent to get a nicer outcome.
 
-### An agent that fails IS the result
+### An agent that misbehaves IS A BUG — so fix it, in the code
 
-An agent that stalls, forgets a skill, mis-routes a message, skips its COS, or never delegates **is the finding**. Write it down. Screenshot it. **Do not rescue it.** Rescuing destroys the exact signal the test exists to produce, and converts a real, reproducible defect into a scenario that "passed".
+An agent that stalls, forgets a skill, mis-routes a message, skips its COS, or never delegates is **a bug**, exactly as much as a 500 from an API. It is not a nuisance to route around, and it is not something to note and shrug at.
 
-**A false PASS is worse than a FAIL.** A failure tells the truth. A pass bought by nudging tells you the fleet works when it does not — and it will be believed. **If the scenario's goal was reached only because you intervened, the verdict is FAIL**, and the intervention is the bug report.
+**A false PASS is worse than a FAIL.** A failure tells the truth. A pass bought by nudging tells you the fleet works when it does not — and it will be believed. **If the scenario's goal was reached only because you coached an agent through it, the verdict is FAIL**, and your intervention is the bug report.
 
-The easier a stall would be to unstick, the more valuable the untouched observation: you have found something small, real and reproducible — precisely the kind of bug that survives forever because everyone reflexively works around it.
+### Rule 0.b and Rule 4 are the SAME LOOP — not an exception to each other
 
-### The one exception, and its exact boundary
+Rule 4 (FIX-AS-YOU-GO) is **not an exception** to Rule 0.b. It is the engine of the entire method. They govern different things and never collide:
 
-**Rule 4 (FIX-AS-YOU-GO) lets you fix the APP's CODE when the app is broken. It does NOT license you to fix an AGENT's BEHAVIOUR by talking to it.**
+- **Rule 0.b FORBIDS** fixing an agent's behaviour **at runtime, by talking to it** — nudging, hinting, naming its skill, re-prompting, doing its job. That masks the defect.
+- **Rule 4 REQUIRES** fixing the **CAUSE** of that behaviour — in the code, the role-plugin, the skill, the rules, the API — and then **retrying the same act**.
 
-- Button doesn't work → fix the button, retry the step. ✅
-- API 500s → fix the route, retry the step. ✅
-- Agent ignored its skill / went idle / skipped the COS → **finding.** Record it, do not intervene, let the run continue (or fail). ❌ not yours to fix by prodding.
+**THE LOOP — this is the core of what you do:**
 
-You may respond to exactly two things from an agent: a **permission prompt** (a user does click Approve), and a **direct question addressed to you** (answer plainly, once, without coaching). Silence is not a question.
+1. **ACT** as the user (UI only; brief the MANAGER; then stop).
+2. **OBSERVE** — did the expected result the scenario specifies actually happen?
+3. **YES** → next step.
+4. **NO** → **you have found a bug.** Do not prod the agent. Do not work around it. **Diagnose the root cause and FIX IT** in the code/config/prompt that produced the behaviour.
+5. **RETRY the same act**, from the same state.
+6. Correct now? → next step. Still wrong? → keep fixing. **No attempt limit.**
+
+**You fix ONLY when you cannot go on.** A wrong/absent expected result blocks the next step — that is the trigger, and the only one. Do not gold-plate; do not fix things that are not blocking you.
+
+### Where the bug lives when an AGENT misbehaves (never in your chat window)
+
+| Symptom | The bug is actually in | The fix |
+|---|---|---|
+| Never invoked a skill it should have | the skill's `description` doesn't trigger, or the role-plugin's main-agent `.md` never mentions it | fix the skill/plugin, re-create the agent so it loads the fix, retry |
+| Messaged a MEMBER directly instead of its COS | the comm graph isn't in its prompt, and/or the server failed to 403 it | fix the plugin prompt and/or server enforcement, retry |
+| Went idle mid-task, never resumed | a hook / notification / wake defect in the app | fix the app, retry |
+| Invented a nonsensical team structure | the MANAGER persona gives no guidance on team composition | fix the role-plugin, retry |
+
+Every fix lands in **a file you commit**, and the retry proves it. **In no case do you type the answer into the agent's chat.** That is the whole distinction — and the difference between shipping a fleet that works and shipping one that only works while a human stands over it.
+
+You may respond to exactly two things from an agent: a **permission prompt** (a user does click Approve), and a **direct question addressed to you** (answer plainly, once, without coaching). **Silence is not a question** — it is a bug, and it has a cause you must go and fix.
 
 ### The agent-in-`~/agents/` hard invariant
 

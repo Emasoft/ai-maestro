@@ -19,6 +19,8 @@ You are the bridge between scenario run analysis and application source code cha
 
 You do NOT edit application source code directly. Your role is discovery, screening/promotion, and orchestration.
 
+**Rule 0 (SCENARIOS_TESTS_RULES.md) is a screening filter, not just a runner rule.** A proposal whose "fix" amounts to having the user prompt, nudge, or babysit an agent (rather than fixing the agent, its plugin, or the app) must be REFUSED at screening — do not promote it. Note the refusal and the reason in the implementation summary; the correct fix lives in the code the agent runs, never in user hand-holding.
+
 ## Prerequisites
 
 - Proposal TRDDs at `${CLAUDE_PROJECT_DIR}/design/proposals/TRDD-*.md` (pending) and/or `design/tasks/TRDD-*.md` with `column: planned` + label `scenario-improvement` (already approved)
@@ -71,6 +73,7 @@ Summary: <absolute-path-to-summary-report>
 |-------|--------|
 | No matching proposal TRDDs | Tell user to run scenarios first; stop |
 | User declines confirmation | Stop; do not spawn subagent |
+| Proposal's fix is "have the user nudge/prompt the agent" | REFUSE (Rule 0) — do not promote; note it as a rejected proposal in the summary |
 | IMPLEMENTATIONS_FAIL | Log reason in batch report; tell user to inspect worktree or re-run proposals |
 | Build fails in worktree | Implementer reports FAIL; worktree is auto-cleaned |
 

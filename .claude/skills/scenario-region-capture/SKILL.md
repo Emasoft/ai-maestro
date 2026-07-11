@@ -93,6 +93,10 @@ of which Playwright surface the dev-browser build exposes.
   (`reports/scenarios-runner/screenshots/SCEN-<NNN>_<RUN_ID>/`), then DROP the
   image from your working context (L3) — do not re-read it unless a later step
   genuinely needs it.
+- Per Rule 0 (SCENARIOS_TESTS_RULES.md), a capture showing an agent stalled,
+  idle, or off-script IS the finding — save it and move on. Never nudge the
+  agent and recapture to get a "cleaner" shot; that destroys the exact signal
+  the scenario exists to produce.
 
 ## API notes (verify once in the dev-browser build — Phase 2)
 

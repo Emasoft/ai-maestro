@@ -217,10 +217,15 @@ author: AI Maestro Team
 - **Modifies:** nothing
 - **Verify:** the message appears in the MANAGER's chat. Screenshot. From here you are an
   OBSERVER. Record what it does unprompted: does it reach for the governance skill on its own?
-  does it go through the COS, or does it try to message a MEMBER directly (a comm-graph violation
-  — and a genuine finding)? does it write orders, or improvise inline? **If it does the wrong
-  thing, that is the RESULT. Do not correct it, do not re-send, do not hint.** A pass bought by
-  coaching is a FAIL.
+  does it go through the COS, or does it try to message a MEMBER directly (a comm-graph
+  violation)? does it write orders, or improvise inline?
+
+  **If it does the wrong thing, that is a BUG, and Rule 4 applies: fix its CAUSE, then retry this
+  step.** Do not correct it in chat, do not re-send, do not hint. Ask instead *why* it did the
+  wrong thing — is the comm graph absent from its role-plugin prompt? did the server fail to 403
+  a MEMBER-directed message? does R15 never appear in its persona? — fix **that**, re-create the
+  agent so it loads the fix, and send the directive again. Repeat until it routes correctly
+  unprompted. **A pass bought by coaching is a FAIL, and the coaching is the bug report.**
 
 #### S016: Wait for MANAGER to delegate
 - **Action:** Wait for MANAGER to send AMP message to the COS (the sole team gateway -- R6 v3 blocks a direct MANAGER->member edge)

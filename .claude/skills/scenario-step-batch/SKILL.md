@@ -33,6 +33,11 @@ which step broke and why, and diagnose from there (FIX-AS-YOU-GO).
   one logical group (e.g. one wizard page), not the whole scenario — over-batching
   hides where time/failures go.
 
+Batched steps are USER-side UI actions only (Rule 0, SCENARIOS_TESTS_RULES.md) —
+form fills, clicks, navigation. Never include a step that nudges, re-sends, or
+prods an agent to get it moving; a stalled or unresponsive agent is a failed
+assertion to report, not something to retry past.
+
 ## The helper — `references/step-driver.js`
 Read [`references/step-driver.js`](references/step-driver.js) once at your first
 batch, paste `runSteps` into your dev-browser script, call against `page`:

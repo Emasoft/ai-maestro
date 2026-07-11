@@ -15,6 +15,8 @@ model: opus
 
 You are the scenario author. Interview the user, draft a complete scenario file that passes all 12 scenario rules, and save it into the project's `<project>/tests/scenarios/` folder.
 
+**Rule 0 (SCENARIOS_TESTS_RULES.md) constrains every step you draft.** The user briefs the MANAGER once, through its **chat** section, then stops to observe — never script the user micromanaging the fleet (typing instructions into several agents in turn), and never write a step that has the user type into an agent's **terminal** section (that stream is read-only observation; instructions go through an agent's **chat** section only). A scenario that has the user hand-hold agents to a result is a Rule 0 violation, not a valid test.
+
 ## Prerequisites
 
 - `${CLAUDE_PROJECT_DIR}/tests/scenarios/` folder (created on first use via `init-scenarios-folder.sh`)
@@ -33,7 +35,7 @@ Copy this checklist and track your progress:
 - [ ] Interview user for 12 required fields (see below)
 - [ ] Draft frontmatter with all required fields
 - [ ] Draft phases and steps using the exact step format
-- [ ] Enforce rules 1, 2, 6, 10, 12 on every Action field
+- [ ] Enforce rules 0, 1, 2, 6, 10, 12 on every Action field
 - [ ] Write file to `SCEN-<padded-id>_<slug>.scen.md`
 - [ ] Bump `NEXT_SCEN_NUMBER` to `NEXT_N + 1`
 
@@ -44,7 +46,7 @@ Copy this checklist and track your progress:
 3. Interview the user for the 12 required frontmatter fields.
 4. Draft the frontmatter with exact field ordering and quoting.
 5. Draft phases and steps using the exact step format.
-6. Enforce rules 1, 2, 6, 10, 12 on every Action field.
+6. Enforce rules 0, 1, 2, 6, 10, 12 on every Action field.
 7. Write the file to `tests/scenarios/SCEN-NNN_<slug>.scen.md`.
 8. Bump `NEXT_SCEN_NUMBER` to `NEXT_N + 1`.
 

@@ -19,6 +19,8 @@ You are the scenario improver. Look at a scenario's **run history** — its repo
 - **`improve-scenario`** (this skill) — proposes edits to the `.scen.md` file itself.
 - **`implement-scenarios-proposals`** — applies the P0 items from `scenario_proposed-improvements_*.md` to the application source code.
 
+**Rule 0 (SCENARIOS_TESTS_RULES.md) is a hard filter on what counts as an improvement.** A stalled or un-nudged agent is the correct, valuable signal a scenario exists to produce. Any proposed edit that adds user hand-holding, prompting, or terminal-typing to get a flaky step to pass is a **regression**, not an improvement — reject it and instead propose the app/agent-side fix (or a new scenario) that lets the agent behave correctly on its own.
+
 ## Prerequisites
 
 - At least one report file at `${CLAUDE_PROJECT_DIR}/reports/scenarios-runner/SCEN-<padded-id>_*.report.md` (canonical since 2026-04-19; older runs may sit in the deprecated `tests/scenarios/reports/`)
@@ -46,7 +48,7 @@ Copy this checklist and track your progress:
 2. Resolve the scenario file via glob; stop if not found.
 3. Glob all report and improvement files for this scenario.
 4. Read reports in chronological order (oldest first).
-5. Identify patterns: flaky steps, repeated bugs, missing coverage, Rule 6 violations, cleanup drift.
+5. Identify patterns: flaky steps, repeated bugs, missing coverage, Rule 0 hand-holding, Rule 6 violations, cleanup drift.
 6. Draft proposed changes with pattern, evidence, proposed edit, and priority.
 7. Write the analysis report to `reports/scenarios-runner/`.
 8. Return a 3-line summary.

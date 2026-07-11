@@ -16,6 +16,22 @@ Project-scoped scenario rules for ai-maestro. Every scenario runner and improvem
 
 Single source of truth: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_RULES.md` (git-tracked canonical 806-line text). The skill's [references/rules.md](references/rules.md) is a **symlink** to that file so the two can NEVER drift. Update only the canonical path.
 
+## Rule 0 — read this before any other rule (CRITICAL)
+
+Rule 0 has two halves, and it governs everything below it:
+
+- **0.a** — YOU ARE THE HUMAN USER of AI Maestro, never an agent. You click, fill forms, and type only into an agent's **chat** section — its **terminal** section is a read-only observation stream, never an input surface.
+- **0.b** — YOU MUST NOT ARTIFICIALLY CONTROL THE AGENTS. Brief the MANAGER through the UI, then STOP and observe whether the agents invoke their skills spontaneously — that is the single most important thing the suite measures. Never nudge, prod, hint at a skill, or do an agent's work for it. A PASS bought by intervening is worse than a FAIL; the correct verdict is FAIL.
+
+**Rule 0.b and Rule 4 (FIX-AS-YOU-GO) are NOT in tension — they are the same loop.** Rule 0.b forbids fixing an agent's behaviour *at runtime, by talking to it*. Rule 4 REQUIRES fixing the **cause** of that behaviour, in code, and retrying. An agent that stalls or forgets a skill is **a bug**, as much as a 500 from an API — not something to note and shrug at:
+
+1. **ACT** as the user → 2. **OBSERVE** the expected result → 3. **it happened** → next step.
+4. **It did NOT happen** → you found a bug → **fix its ROOT CAUSE** (the app, the role-plugin, the skill, the rules — a file you commit) → 5. **RETRY the same act** → 6. correct now? next step; still wrong? keep fixing. **No attempt limit.**
+
+**Fix ONLY when you cannot go on** — a missing/wrong expected result blocks the next step, and that is the sole trigger. And **never** fix an agent by typing the answer into its chat: the bug lives in what made it behave that way (its plugin prompt, its skill's description, the server's enforcement), never in your chat window.
+
+Every rule and checklist item after this one operates under Rule 0 — a step, edit, or "improvement" that has the user hand-hold an agent is a violation, not a shortcut.
+
 ## Prerequisites
 
 - Project with `tests/scenarios/SCEN-NNN_*.scen.md` files
@@ -28,6 +44,7 @@ Single source of truth: `${CLAUDE_PROJECT_DIR}/tests/scenarios/SCENARIOS_TESTS_R
 Copy this checklist and track your progress:
 
 - [ ] Read the full rules at startup
+- [ ] Brief the MANAGER once, then STOP and observe — never puppet or nudge agents (Rule 0)
 - [ ] CLEAN-AFTER-YOURSELF at end of scenario
 - [ ] Never mutate existing user resources (0-IMPACT)
 - [ ] Backup configs at start (STATE-WIPE CHECKPOINT-SAVE)

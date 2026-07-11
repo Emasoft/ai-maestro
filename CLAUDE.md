@@ -14,6 +14,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
+### Node version — read this before running ANY yarn command (TRDD-Y85MSD5U)
+
+This repo requires **Node 22** (`engines: >=22 <26`, `.nvmrc: 22`). The cap is a
+hard ABI constraint, not a preference: **node-pty**'s compiled binary is
+NODE_MODULE_VERSION 127 (Node 22) while Node 26 needs 147, and
+**better-sqlite3** hard-caps at Node 25. PTY/terminal streaming is the
+dashboard's core feature, so an unsupported Node doesn't degrade the app — it
+kills it (pm2 crash-loops on `ERR_DLOPEN_FAILED`).
+
+Yarn enforces `engines` **before any script runs**, so on a machine whose default
+`node` is 26, `yarn build` and `yarn test` abort outright. If your shell doesn't
+already select Node 22 (via nvm/mise reading `.nvmrc`), prefix commands with the
+wrapper — it works from any shell, which is what an ai-maestro agent needs since
+its tmux shell has no nvm/mise hook:
+
+```bash
+bash scripts/with-node.sh yarn build
+bash scripts/with-node.sh yarn test
+```
+
+`scripts/pin-node.sh` is the single source of truth for the selection (it parses
+`engines` from package.json and version-CHECKS each candidate binary — the brew
+`node@23/24/25` kegs on some machines are mislabeled and actually report v26).
+It **fails fast** rather than falling back to an unsupported Node. Never add
+`ignore-engines` to `.yarnrc` and never widen `engines` — that trades one clear
+error for a crash-loop.
+
 ```bash
 # Development
 yarn install             # Install all dependencies

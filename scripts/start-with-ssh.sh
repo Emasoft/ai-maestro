@@ -114,18 +114,17 @@ fi
 # (PTY/terminal streaming — the dashboard's core feature — is dead). See
 # .nvmrc (22) + package.json engines (>=22 <26) + TRDD-62e24f29.
 #
-# We prefer a real <=25 homebrew keg if present. CRITICAL: we version-CHECK the
-# keg's actual `node -v` rather than trust its name — on this machine the
-# node@23/24/25/26 kegs are all mislabeled to v26.3.0, so a name-only pin would
-# silently re-introduce Node 26. If no real <26 keg is found we fall back to the
-# default PATH node (correct on any machine whose default is already <26).
-for NODE_BIN in /opt/homebrew/opt/node@22/bin /opt/homebrew/opt/node@24/bin /opt/homebrew/opt/node@25/bin; do
-    if [ -x "$NODE_BIN/node" ] && "$NODE_BIN/node" -v 2>/dev/null | grep -qE '^v(2[2-5])\.'; then
-        export PATH="$NODE_BIN:$PATH"
-        echo "[AI Maestro] Pinned Node $("$NODE_BIN/node" -v) from $NODE_BIN (native deps require <26)"
-        break
-    fi
-done
+# The selection logic itself lives in scripts/pin-node.sh — the single source of
+# truth shared with scripts/with-node.sh (which is how build/test get a correct
+# Node too). It used to be inlined HERE and nowhere else, which is precisely why
+# `yarn build` / `yarn test` stayed broken on Node 26 while the server ran fine
+# (TRDD-Y85MSD5U). Keep exactly one implementation.
+#
+# It FAILS FAST rather than falling back to an unsupported Node: a loud error is
+# strictly better than a pm2 crash-loop on ERR_DLOPEN_FAILED.
+# shellcheck source=scripts/pin-node.sh
+source "$PROJECT_ROOT/scripts/pin-node.sh" || exit 1
+echo "[AI Maestro] Pinned Node ${AIM_NODE} (native deps require <26)"
 
 # Start the actual server via the LOCAL tsx (node_modules/.bin/tsx) so it runs
 # under the pinned node above — NOT a global tsx that may carry its own node.

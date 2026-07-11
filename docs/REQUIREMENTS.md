@@ -52,11 +52,19 @@ If you prefer manual installation, follow the steps below.
 
 ### 3.1 Node.js and Yarn
 
-The dashboard requires Node.js v18.17+ or v20.x and Yarn package manager.
+The dashboard requires **Node.js 22** (`engines: >=22.0.0 <26.0.0`, pinned in
+`.nvmrc`) and the Yarn package manager.
+
+The upper bound is a hard native-ABI constraint, not a preference: **node-pty**'s
+compiled binary is NODE_MODULE_VERSION 127 (Node 22) while Node 26 expects 147,
+and **better-sqlite3** hard-caps at Node 25. Since node-pty *is* the terminal
+streaming layer, running on Node 26+ does not degrade the dashboard — it makes it
+fail to boot (`ERR_DLOPEN_FAILED`). Yarn checks `engines` before running any
+script, so on an unsupported Node even `yarn build` and `yarn test` refuse to run.
 
 **Check if already installed:**
 ```bash
-node --version
+node --version   # must be v22.x  (v26+ will NOT work)
 yarn --version
 ```
 
@@ -65,8 +73,8 @@ yarn --version
 # Install Homebrew if not already installed
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# Install Node.js
-brew install node@20
+# Install Node.js 22 (NOT the `node` formula — that tracks the latest major)
+brew install node@22
 
 # Install Yarn globally
 npm install -g yarn
@@ -74,7 +82,7 @@ npm install -g yarn
 brew install yarn
 
 # Verify installation
-node --version  # Should show v20.x.x
+node --version  # Should show v22.x.x
 yarn --version  # Should show v1.22.x or v3.x.x
 ```
 

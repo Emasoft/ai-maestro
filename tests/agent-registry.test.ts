@@ -115,12 +115,23 @@ import {
   incrementAgentMetric,
 } from '@/lib/agent-registry'
 import path from 'path'
+import os from 'os'
 import { statePath } from '@/lib/ecosystem-constants'
 import type { Agent, CreateAgentRequest } from '@/types/agent'
 
 // ============================================================================
 // Test Helpers
 // ============================================================================
+
+/**
+ * A working directory the policy actually permits (TRDD-QMD7X3FB).
+ *
+ * These fixtures used to be `/tmp/work`, `/original`, etc. — paths OUTSIDE $HOME,
+ * which the workdir policy has always forbidden. They only passed because
+ * `createAgent` validated the working directory not at all; it is now the choke
+ * point that enforces it, so the fixtures have to be legal like a real agent's.
+ */
+const VALID_WD = (name: string) => path.join(os.homedir(), 'agents', name)
 
 function makeCreateRequest(overrides: Partial<CreateAgentRequest> = {}): CreateAgentRequest {
   return {
@@ -293,13 +304,13 @@ describe('createAgent', () => {
   it('creates an agent with all required fields', async () => {
     const agent = await createAgent(makeCreateRequest({
       name: 'new-agent',
-      workingDirectory: '/tmp/work',
+      workingDirectory: VALID_WD('new-agent'),
       tags: ['backend', 'api'],
     }))
 
     expect(agent.id).toBeDefined()
     expect(agent.name).toBe('new-agent')
-    expect(agent.workingDirectory).toBe('/tmp/work')
+    expect(agent.workingDirectory).toBe(VALID_WD('new-agent'))
     expect(agent.hostId).toBe('test-host')
     expect(agent.hostUrl).toBe('http://test-host:23000')
     expect(agent.status).toBe('offline')
@@ -311,6 +322,50 @@ describe('createAgent', () => {
   it('normalizes agent name to lowercase', async () => {
     const agent = await createAgent(makeCreateRequest({ name: 'UpperCase-Agent' }))
     expect(agent.name).toBe('uppercase-agent')
+  })
+
+  // ── Forbidden working directories (TRDD-QMD7X3FB) ────────────────────────
+  // createAgent is the ONE writer every service funnels through (the AIO
+  // CreateAgent, sessions-service, amp-service, teams-service, the creation
+  // helper, the docker service). It used to validate the working directory not at
+  // all, so the AIO's gates guarded one path and the rest wrote what they were
+  // handed. THIS is where the policy has to bite.
+  it('REFUSES the filesystem root as a working directory', async () => {
+    await expect(
+      createAgent(makeCreateRequest({ name: 'root-agent', workingDirectory: '/' }))
+    ).rejects.toThrow(/forbidden.*filesystem root/i)
+  })
+
+  it('REFUSES $HOME as a working directory', async () => {
+    await expect(
+      createAgent(makeCreateRequest({ name: 'home-agent', workingDirectory: os.homedir() }))
+    ).rejects.toThrow(/forbidden/i)
+  })
+
+  it('REFUSES a directory outside $HOME', async () => {
+    await expect(
+      createAgent(makeCreateRequest({ name: 'tmp-agent', workingDirectory: '/tmp/anywhere' }))
+    ).rejects.toThrow(/forbidden.*outside \$HOME/i)
+  })
+
+  it('defaults an ABSENT workdir to ~/agents/<name>, never to the server\'s cwd', async () => {
+    // The old default was `request.workingDirectory || process.cwd()`. process.cwd()
+    // is the ai-maestro install tree — and on this host the pm2 daemon ran with cwd
+    // "/", which is exactly how the legacy `default` agent came to own the whole
+    // filesystem. A fallback that hands an agent whatever directory the server
+    // happens to be standing in is a defect generator, not a convenience.
+    const agent = await createAgent(makeCreateRequest({ name: 'no-wd-agent' }))
+    expect(agent.workingDirectory).toBe(VALID_WD('no-wd-agent'))
+    expect(agent.workingDirectory).not.toBe(process.cwd())
+  })
+
+  it('REFUSES relocating an existing agent to a forbidden directory', async () => {
+    // Otherwise "create clean, then relocate to /" is a two-call bypass of the policy.
+    const agent = await createAgent(makeCreateRequest({ name: 'relocate-me' }))
+    await expect(updateAgent(agent.id, { workingDirectory: '/' })).rejects.toThrow(/forbidden/i)
+    await expect(
+      updateAgent(agent.id, { workingDirectory: os.homedir() })
+    ).rejects.toThrow(/forbidden/i)
   })
 
   it('throws when name is missing', async () => {
@@ -354,12 +409,12 @@ describe('createAgent', () => {
     const agent = await createAgent(makeCreateRequest({
       name: 'with-session',
       createSession: true,
-      workingDirectory: '/tmp/session',
+      workingDirectory: VALID_WD('with-session'),
     }))
     expect(agent.sessions).toHaveLength(1)
     expect(agent.sessions[0].index).toBe(0)
     expect(agent.sessions[0].status).toBe('offline')
-    expect(agent.sessions[0].workingDirectory).toBe('/tmp/session')
+    expect(agent.sessions[0].workingDirectory).toBe(VALID_WD('with-session'))
   })
 
   it('creates empty sessions array when createSession is false', async () => {
@@ -390,14 +445,14 @@ describe('updateAgent', () => {
   it('updates specified fields while preserving others', async () => {
     const agent = await createAgent(makeCreateRequest({
       name: 'update-me',
-      workingDirectory: '/original',
+      workingDirectory: VALID_WD('update-me'),
     }))
 
     const updated = await updateAgent(agent.id, { taskDescription: 'New task' })
     expect(updated).not.toBeNull()
     expect(updated!.taskDescription).toBe('New task')
     expect(updated!.name).toBe('update-me')
-    expect(updated!.workingDirectory).toBe('/original')
+    expect(updated!.workingDirectory).toBe(VALID_WD('update-me'))
   })
 
   it('returns null for non-existent agent', async () => {

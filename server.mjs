@@ -1850,7 +1850,19 @@ async function startServer(handleRequest) {
         .filter(a => {
           const verdict = checkAuthorizedAgentWorkdir(a.workingDirectory, a.name)
           if (!verdict.ok && warn) {
-            console.warn(`[Startup] Invariants: skipping ${a.name || a.id} — ${verdict.reason}`)
+            // A LEGACY violator, not a new one: createAgent/updateAgent now refuse a
+            // forbidden workdir outright (TRDD-QMD7X3FB), so nothing can enter the
+            // registry in this state any more. What remains is what the old
+            // `|| process.cwd()` default already wrote — e.g. the `default` agent whose
+            // workdir is "/" because this host's pm2 daemon ran with cwd "/". The entry
+            // is left ALONE (it is the user's data, and silently rewriting an agent's
+            // workdir is not ours to do); it is simply never acted on: no rules seeded,
+            // no session started, no boot-restore. Loud, named, and inert.
+            console.warn(
+              `[Startup] FORBIDDEN WORKDIR — agent "${a.name || a.id}" has workingDirectory ` +
+              `"${a.workingDirectory}" (${verdict.reason}). It is skipped by every enforcement ` +
+              `path and can never start a session. Fix or delete it in the dashboard.`
+            )
           }
           return verdict.ok
         })

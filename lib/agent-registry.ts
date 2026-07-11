@@ -6,6 +6,10 @@ import { compare as jsonPatchCompare } from 'fast-json-patch'
 import type { Agent, AgentSummary, AgentSession, CreateAgentRequest, UpdateAgentRequest, UpdateAgentMetricsRequest, DeploymentType } from '@/types/agent'
 import { parseSessionName, computeSessionName } from '@/types/agent'
 import { getSelfHost, getSelfHostId } from '@/lib/hosts-config'
+// The PURE path policy — no registry import, so no cycle. This is the one copy of
+// the forbidden-directory rules (TRDD-QMD7X3FB); lib/agent-workdir-policy.ts (the
+// authorization authority) uses the same module.
+import { checkWorkdirPathPolicy } from '@/lib/workdir-path-policy'
 import { renameInIndex, removeFromIndex } from '@/lib/amp-inbox-writer'
 import { invalidateAgentCache } from '@/lib/messageQueue'
 import { sessionExistsSync, killSessionSync, renameSessionSync } from '@/lib/agent-runtime'
@@ -492,6 +496,36 @@ export async function createAgent(request: CreateAgentRequest): Promise<Agent> {
     throw new Error(`Agent "${agentName}" already exists on host "${hostId}"`)
   }
 
+  // ── Working-directory policy (TRDD-QMD7X3FB) ──────────────────────────────
+  // THIS is the choke point. Every service that mints an agent — the AIO
+  // CreateAgent, sessions-service, amp-service, teams-service, the creation
+  // helper, the docker service — funnels through here, and this function used to
+  // validate the working directory not at all. The AIO's G03 gates guarded ONE of
+  // those paths; the rest wrote whatever they were handed.
+  //
+  // And the default was the worst one available: `request.workingDirectory ||
+  // process.cwd()`. process.cwd() is the ai-maestro INSTALL TREE — the single
+  // directory an agent must never own (it would rebuild and restart the server
+  // managing it). Worse, it is whatever directory the server process happens to be
+  // standing in: this host's pm2 daemon ran with cwd `/`, which is exactly how the
+  // legacy `default` agent ended up owning the entire filesystem.
+  //
+  // A fallback that silently hands an agent an arbitrary directory is not a
+  // convenience, it is a defect generator. So:
+  //   - an EXPLICIT workdir that violates the policy → THROW (fail fast, no
+  //     silent correction: the caller asked for something forbidden and must know);
+  //   - an ABSENT workdir → the canonical safe home ~/agents/<name>, never cwd.
+  const workingDirectory = request.workingDirectory
+    ? request.workingDirectory
+    : path.join(os.homedir(), 'agents', agentName)
+
+  const wdVerdict = checkWorkdirPathPolicy(workingDirectory)
+  if (!wdVerdict.ok) {
+    throw new Error(
+      `Refusing to register agent "${agentName}": working directory is forbidden — ${wdVerdict.reason}`
+    )
+  }
+
   // Create initial sessions array
   const sessions: AgentSession[] = []
   if (request.createSession) {
@@ -499,7 +533,7 @@ export async function createAgent(request: CreateAgentRequest): Promise<Agent> {
     sessions.push({
       index: sessionIndex,
       status: 'offline',
-      workingDirectory: request.workingDirectory,
+      workingDirectory,
       createdAt: new Date().toISOString(),
     })
   }
@@ -528,7 +562,7 @@ export async function createAgent(request: CreateAgentRequest): Promise<Agent> {
     name: agentName,
     label,
     avatar,
-    workingDirectory: request.workingDirectory || process.cwd(),
+    workingDirectory,
     sessions,
     hostId,
     hostName,
@@ -596,6 +630,20 @@ export async function updateAgent(id: string, updates: UpdateAgentRequest): Prom
 
   if (index === -1) {
     return null
+  }
+
+  // A workdir forbidden at CREATE is equally forbidden one step later — otherwise
+  // "create clean, then relocate to /" is a two-call bypass of the whole policy
+  // (TRDD-QMD7X3FB). Only validated when the field is actually being changed, so a
+  // pre-existing violator (the legacy `default` agent, workdir "/") can still have
+  // its OTHER fields updated rather than becoming permanently unwritable.
+  if (updates.workingDirectory !== undefined) {
+    const verdict = checkWorkdirPathPolicy(updates.workingDirectory)
+    if (!verdict.ok) {
+      throw new Error(
+        `Refusing to set working directory for agent ${id}: forbidden — ${verdict.reason}`
+      )
+    }
   }
 
   // Support both new 'name' and deprecated 'alias'
@@ -1071,6 +1119,16 @@ export async function updateAgentWorkingDirectory(agentId: string, workingDirect
   const oldWd = agents[index].workingDirectory
   if (oldWd === workingDirectory) {
     return true // No change needed
+  }
+
+  // Same gate as createAgent/updateAgent — this is a THIRD way to set the field
+  // (called from the session layer), and a policy enforced on two of three writers
+  // is not enforced (TRDD-QMD7X3FB).
+  const wdVerdict = checkWorkdirPathPolicy(workingDirectory)
+  if (!wdVerdict.ok) {
+    throw new Error(
+      `Refusing to set working directory for agent ${agentId}: forbidden — ${wdVerdict.reason}`
+    )
   }
 
   console.log(`[Agent Registry] Updating workingDirectory for ${agentId.substring(0, 8)}:`)

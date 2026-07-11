@@ -40,75 +40,23 @@
  */
 
 import { homedir } from 'os'
-import { join, resolve, sep } from 'path'
+import { resolve } from 'path'
 
 import { loadAgents, getAgentByNameAnyHost } from '@/lib/agent-registry'
+// The PURE path half lives in its own module so lib/agent-registry.ts — which this
+// file imports — can enforce it at the single writer without an import cycle
+// (TRDD-QMD7X3FB). There is exactly one copy of the forbidden-directory rules.
+import {
+  AGENTS_ROOT,
+  checkWorkdirPathPolicy,
+  isUnder,
+  type WorkdirVerdict,
+} from '@/lib/workdir-path-policy'
 
 const HOME = homedir()
 
-/** The canonical home for agent-owned working directories. */
-export const AGENTS_ROOT = join(HOME, 'agents')
-
-/**
- * The ai-maestro installation itself. Captured once at module load.
- *
- * An agent must never adopt this tree: it is the source of the server that manages
- * the agent, and its `~/.aimaestro` state, port 23000 and tmux namespace are shared
- * with every other agent. An agent editing/rebuilding it would destabilize the system
- * it is running inside. Developing ai-maestro from an agent requires an isolated
- * environment (a container), not an in-place workdir.
- */
-const INSTALL_ROOT = resolve(process.cwd())
-
-/**
- * Directories that are never a valid agent workdir even though they sit under $HOME.
- * These are user-data roots — adopting one would hand an agent the user's whole
- * Desktop/Documents/etc. rather than a single project.
- */
-const BLOCKED_EXACT: ReadonlySet<string> = new Set([
-  resolve('/'),
-  resolve(HOME),
-  resolve(join(HOME, 'Desktop')),
-  resolve(join(HOME, 'Documents')),
-  resolve(join(HOME, 'Downloads')),
-  resolve(join(HOME, 'Library')),
-])
-
-export interface WorkdirVerdict {
-  ok: boolean
-  /** Human-readable reason when `ok` is false. Surfaced to callers — never opaque. */
-  reason?: string
-}
-
-function isUnder(child: string, parent: string): boolean {
-  return child === parent || child.startsWith(parent + sep)
-}
-
-/**
- * Path policy shared by BOTH questions. Answers: "could any agent legitimately own
- * this directory?" — independent of which agent, and of whether it is registered.
- */
-function checkPathPolicy(resolved: string): WorkdirVerdict {
-  if (isUnder(resolved, AGENTS_ROOT)) {
-    return { ok: true }
-  }
-  if (!isUnder(resolved, HOME)) {
-    return { ok: false, reason: `outside $HOME (${resolved})` }
-  }
-  if (BLOCKED_EXACT.has(resolved)) {
-    return { ok: false, reason: `a protected user-data root, not a project (${resolved})` }
-  }
-  if (isUnder(resolved, INSTALL_ROOT)) {
-    return {
-      ok: false,
-      reason:
-        `inside the ai-maestro installation (${INSTALL_ROOT}). An agent cannot adopt the ` +
-        `source tree of the server that manages it — that is a recursion, not a project. ` +
-        `Use an isolated container to develop ai-maestro itself.`,
-    }
-  }
-  return { ok: true }
-}
+export { AGENTS_ROOT }
+export type { WorkdirVerdict }
 
 /**
  * CREATION-time gate. Use when the agent does not exist yet (CreateAgent G03,
@@ -120,13 +68,10 @@ function checkPathPolicy(resolved: string): WorkdirVerdict {
  * deliberately pointed at an existing project).
  */
 export function checkAdoptableWorkdir(dir: string, allowExternal: boolean): WorkdirVerdict {
-  if (typeof dir !== 'string' || dir.length === 0) {
-    return { ok: false, reason: 'workdir must be a non-empty string' }
-  }
-  const resolved = resolve(dir)
-
-  const policy = checkPathPolicy(resolved)
+  const policy = checkWorkdirPathPolicy(dir)
   if (!policy.ok) return policy
+
+  const resolved = resolve((dir as string).startsWith('~') ? (dir as string).replace(/^~/, HOME) : dir)
 
   if (!isUnder(resolved, AGENTS_ROOT) && !allowExternal) {
     return {
@@ -153,19 +98,19 @@ export function checkAdoptableWorkdir(dir: string, allowExternal: boolean): Work
  *   adopted project. When omitted, any live agent's registered workdir is accepted.
  */
 export function checkAuthorizedAgentWorkdir(cwd: string, agentName?: string): WorkdirVerdict {
-  if (typeof cwd !== 'string') {
-    return { ok: false, reason: 'cwd must be a string' }
-  }
-  // Empty cwd is legal — tmux inherits the server's cwd. Preserved from validateCwd.
-  if (cwd.length === 0) return { ok: true }
+  // An empty cwd used to be treated as legal here ("tmux inherits the server's
+  // cwd"). That was a hole, and the worst-shaped one available: the server's cwd IS
+  // the ai-maestro install tree — the single directory this policy most needs to keep
+  // an agent out of (an agent there rebuilds and restarts the server managing it). So
+  // `/` was refused while "" quietly granted something worse. checkWorkdirPathPolicy
+  // now refuses an empty workdir outright (TRDD-QMD7X3FB).
+  const policy = checkWorkdirPathPolicy(cwd)
+  if (!policy.ok) return policy
 
-  const resolved = resolve(cwd)
+  const resolved = resolve(cwd.startsWith('~') ? cwd.replace(/^~/, HOME) : cwd)
 
   // The ordinary case: an agent living under ~/agents/. No registry read needed.
   if (isUnder(resolved, AGENTS_ROOT)) return { ok: true }
-
-  const policy = checkPathPolicy(resolved)
-  if (!policy.ok) return policy
 
   // External workdir — it must be one this system actually handed to an agent.
   let registered: string[] = []

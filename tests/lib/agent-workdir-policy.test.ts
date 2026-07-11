@@ -62,8 +62,15 @@ describe('checkAuthorizedAgentWorkdir — the ordinary ~/agents/ case', () => {
     expect(loadAgents).not.toHaveBeenCalled()
   })
 
-  it('allows an empty cwd (tmux inherits the server cwd — preserved behaviour)', () => {
-    expect(checkAuthorizedAgentWorkdir('').ok).toBe(true)
+  it('REFUSES an empty cwd — it would inherit the server\'s own directory', () => {
+    // This test used to assert the opposite ("allows an empty cwd — tmux inherits the
+    // server cwd — preserved behaviour"), and in doing so it pinned the bypass:
+    // the server's cwd IS the ai-maestro install tree, the one directory an agent must
+    // never own. So `/` was refused while "" quietly granted something strictly worse.
+    // Inverted deliberately (TRDD-QMD7X3FB) — absence is a refusal, never a fallback.
+    const v = checkAuthorizedAgentWorkdir('')
+    expect(v.ok).toBe(false)
+    expect(v.reason).toMatch(/required/)
   })
 })
 

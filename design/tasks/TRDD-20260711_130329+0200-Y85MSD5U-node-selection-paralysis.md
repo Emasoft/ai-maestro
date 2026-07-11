@@ -1,9 +1,9 @@
 ---
 trdd-id: Y85MSD5U
 title: Node selection paralyzes build and test — pin the supported Node in one place
-column: dev
+column: complete
 created: 2026-07-11T13:03:29+0200
-updated: 2026-07-11T13:03:29+0200
+updated: 2026-07-11T13:24:00+0200
 current-owner: ai-maestro-dev
 assignee: ai-maestro-dev
 priority: 0
@@ -38,7 +38,7 @@ attempts: 0
 test-failures: 0
 last-test-result: pass
 last-test-at: 2026-07-11T13:03:29+0200
-implementation-commits: []
+implementation-commits: [3f240263]
 external-refs: ["https://github.com/Emasoft/ai-maestro-maintainer-agent/issues/27"]
 ---
 
@@ -46,7 +46,22 @@ external-refs: ["https://github.com/Emasoft/ai-maestro-maintainer-agent/issues/2
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-11
 
-**Current state.** Diagnosed, fix not yet applied.
+**Current state: DONE and verified — landed in `3f240263`.**
+
+- `scripts/pin-node.sh` (SSOT) + `scripts/with-node.sh` (wrapper) added;
+  `start-with-ssh.sh` now sources the shared logic instead of its private copy;
+  `CLAUDE.md` + `docs/REQUIREMENTS.md` document the constraint.
+- Verified: wrapper picks **v22.23.1** from an ambient **v26.5.0** shell; yarn's
+  engine check passes; shellcheck clean; a REAL negative test (engines
+  `>=99 <100`) exits 1 with an actionable message rather than falling back;
+  `pm2 restart` → server **online**, `/api/sessions` answers (401 = auth gate).
+- Derived check done: `.github/workflows/ci.yml` already pins `node-version: 22`,
+  so CI needed no change (verified, not assumed).
+- `docs/REQUIREMENTS.md` was found actively WRONG ("Node v18.17+ or v20.x",
+  `brew install node@20`) — a value that doesn't even satisfy `engines >=22`.
+  Corrected in the same commit.
+
+**Historical (the diagnosis that produced the fix):**
 
 - The machine's default `node` is **v26.5.0**. `package.json` declares
   `engines.node: ">=22.0.0 <26.0.0"`, and `.nvmrc` pins **22**.

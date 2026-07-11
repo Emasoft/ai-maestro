@@ -61,7 +61,7 @@ import { initAgentAMPHome, getAgentAMPDir } from '@/lib/amp-inbox-writer'
 import { buildAgentSessionEnv } from '@/lib/session-env'
 import { initializeAllAgents, getStartupStatus } from '@/lib/agent-startup'
 import { sessionActivity } from '@/services/shared-state'
-import { getRuntime } from '@/lib/agent-runtime'
+import { getRuntime, prepareShellForLaunch, SHELL_READY_TIMEOUT_MS } from '@/lib/agent-runtime'
 import { isManager, isChiefOfStaffAnywhere } from '@/lib/governance'
 import { isValidUuid } from '@/lib/validation'
 import { loadTeams } from '@/lib/team-registry'
@@ -2213,8 +2213,24 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
           }
         }
 
-        // Small delay to let the session initialize
-        await new Promise(resolve => setTimeout(resolve, 300))
+        // Wait for the login shell to actually reach an idle prompt before we
+        // type anything into it. A blind 300ms sleep used to stand here, and
+        // every keystroke below (the guard `source`, then the client itself)
+        // was silently eaten whenever the shell's startup files were still
+        // running — see waitForShellReady in lib/agent-runtime.ts.
+        const shell = await prepareShellForLaunch(runtime, sessionName)
+        if (shell.interrupted) {
+          console.warn(
+            `[Wake] ${sessionName}: login shell was still busy after ${SHELL_READY_TIMEOUT_MS}ms ` +
+              `(a startup file is holding the TTY) — sent Ctrl-C; shell ${shell.ready ? 'recovered' : 'did NOT recover'}.`,
+          )
+        }
+        if (!shell.ready) {
+          console.warn(
+            `[Wake] ${sessionName}: no shell prompt detected — sending startup keys blind; ` +
+              `the agent may land on a bare prompt with no client running.`,
+          )
+        }
 
         // Install the shell guard into the pane shell BEFORE launching
         // the AI program. The guard sources from

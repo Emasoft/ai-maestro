@@ -34,7 +34,7 @@ import { persistSession, loadPersistedSessions, unpersistSession } from '@/lib/s
 import { parseNameForDisplay } from '@/types/agent'
 import { buildAgentSessionEnv } from '@/lib/session-env'
 import { sessionActivity, broadcastStatusUpdate } from '@/services/shared-state'
-import { getRuntime } from '@/lib/agent-runtime'
+import { getRuntime, prepareShellForLaunch, SHELL_READY_TIMEOUT_MS } from '@/lib/agent-runtime'
 import crypto from 'crypto'
 import { statePath } from '@/lib/ecosystem-constants'
 // TRDD-I75EMTK0: shared R17 presence-check + reinstall helper (see
@@ -1096,7 +1096,19 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
       if (sanitized) startCommand = `${startCommand} ${sanitized}`
     }
 
-    await new Promise(resolve => setTimeout(resolve, 300))
+    const shell = await prepareShellForLaunch(runtime, actualSessionName)
+    if (shell.interrupted) {
+      console.warn(
+        `[Sessions] ${actualSessionName}: login shell was still busy after ${SHELL_READY_TIMEOUT_MS}ms ` +
+          `(a startup file is holding the TTY) — sent Ctrl-C; shell ${shell.ready ? 'recovered' : 'did NOT recover'}.`,
+      )
+    }
+    if (!shell.ready) {
+      console.warn(
+        `[Sessions] ${actualSessionName}: no shell prompt detected — launching "${startCommand}" ` +
+          `blind; the agent may land on a bare prompt with no client running.`,
+      )
+    }
 
     try {
       // Send command without wrapping double quotes -- tmux send-keys does not

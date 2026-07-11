@@ -32,7 +32,7 @@ attempts: 1
 test-failures: 0
 last-test-result: pass
 last-test-at: 2026-07-11T16:20:00+0200
-implementation-commits: []
+implementation-commits: [ce635c14]
 external-refs: ["design/tasks/TRDD-20260711_154259+0200-YOS36TZI-session-state-has-no-writer.md"]
 ---
 

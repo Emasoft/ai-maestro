@@ -3,13 +3,17 @@ number: 9
 name: Manager-Driven Team Creation (JSONL Viewer)
 version: "2.0"
 description: >
-  The user logs in, creates a MANAGER agent, and launches its Claude session.
-  They type a project task into the terminal ("build a JSONL viewer in Swift for
-  macOS") and watch the MANAGER work autonomously: it creates a team, a COS is
-  auto-assigned, team members are recruited with appropriate titles, and kanban
-  tasks are populated. The user verifies each step through the sidebar and team
-  dashboard, confirms the resulting 5-agent team, and checks that the MANAGER
-  itself stays outside the team. Finally, they delete everything and clean up.
+  The user logs in, creates a MANAGER agent, launches its Claude session, and
+  gives it a plain-language project GOAL ("build a JSONL viewer in Swift for
+  macOS") via its CHAT section — then STOPS. The measurement is what the MANAGER
+  does on its own: whether it creates a team, whether a COS gets auto-assigned,
+  whether it recruits members with sensible titles, whether it routes through the
+  COS, and whether it populates the kanban — none of it prescribed, all of it
+  OBSERVED read-only through the sidebar and team dashboard. The user never names
+  a skill, a title, or a team shape, and never nudges the MANAGER if it stalls (a
+  stall is a finding, fixed at its cause per Rule 4, not coached). Finally they
+  delete everything and clean up. A prior version typed the task into the terminal
+  (a read-only stream) and asserted the team outcome as certain — both corrected.
 client: claude
 interhosts: false
 device: desktop
@@ -191,8 +195,7 @@ author: AI Maestro Team
   NOT name the skill it should have used. Diagnose why it didn't act, fix that file, re-create
   the agent so it loads the fix, and send the directive again. Repeat until the expected result
   happens on its own. **A goal reached only because you coached it is a FAIL, and the coaching is
-  the bug report.**
-- **Verify:** Terminal shows MANAGER processing. Screenshot: SCEN-009/S011-task-sent.png
+  the bug report.** Screenshot: SCEN-009/S011-task-sent.png
 
 #### S012: Wait for MANAGER to acknowledge and start planning
 - **Action:** Watch terminal for planning output or skill invocation

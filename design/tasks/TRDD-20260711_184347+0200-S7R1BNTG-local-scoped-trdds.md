@@ -42,11 +42,16 @@ The SPEC below is the deliverable. The **IND rule it amends is owned by the
 ai-maestro-janitor repo**, not this one, so per the cross-project rule ai-maestro does NOT
 edit it — the spec is filed as janitor issue #84.
 
-**REVISED after the janitor's counter-proposal, which was RIGHT.** The first version of this
-spec put the local root IN the repo (`.claude/local-tasks/`, gitignored). The janitor's Claude
-proposed `~/.claude/projects/<slug>/` — outside the repo, beside LOCAL memory — and that is
-what shipped. See "The root: outside the repo" below for why my original reasoning was wrong;
-the short version is that I matched the wrong precedent.
+**REVISED TWICE, and the janitor's Claude was right BOTH times.**
+
+1. The first version put the local root IN the repo (`.claude/local-tasks/`, gitignored). The
+   janitor proposed `~/.claude/projects/<slug>/` — outside the repo, beside LOCAL memory —
+   and that is what shipped. See "The root: outside the repo" below.[^2]
+2. The second version kept a `scope:` FRONTMATTER FIELD. The janitor pointed out (#58) that
+   **scope IS the path**, so the field is a second source of truth with nothing to buy. Also
+   correct; §1 is rewritten and the field is gone.[^3]
+
+§8 now carries the rulings on the five questions their implementation surfaced.
 
 ai-maestro's in-repo half (a `.gitignore` entry + a `MANAGED_GITIGNORE_ENTRIES` entry) was
 therefore REVERTED — there is nothing in-repo left to ignore.
@@ -65,11 +70,20 @@ missing piece was a non-git-tracked root to put them in.
 
 ## THE SPEC
 
-### 1. New frontmatter field
+### 1. Scope IS the path — there is NO `scope:` frontmatter field
 
-```yaml
-scope: project | local     # default: project (an absent field means project — back-compat)
+A TRDD's scope is determined **solely by which root it lives under**, exactly as a memory
+note's scope is. There is no `scope:` field to set, to read, or to get wrong.[^3]
+
 ```
+<repo>/design/…                       ⇒ PROJECT
+~/.claude/projects/<slug>/design/…    ⇒ LOCAL
+```
+
+A field that merely restates the path would be a second source of truth, free to disagree
+with the filesystem — and the two would eventually disagree, because a promotion (§5) moves
+the file and nothing forces the field to follow. It would also buy nothing: a query already
+knows which root it searched.
 
 ### 2. Root by scope — same lifecycle, different root
 
@@ -145,6 +159,54 @@ scan; default = both.
 Nothing is written inside the repo, so there is no ignore entry to maintain, in this repo or
 in any other. A repo the janitor merely visits is **not mutated at all**.
 
+### 8. Rulings on the five questions the janitor's implementation surfaced (#58)
+
+**Q1 — `TRDD_PATH` override.** PROJECT honors it (existing behaviour; the design root is the
+parent of the configured tasks dir, and the other three lifecycle folders travel with it).
+**LOCAL never honors it.** The janitor's instinct is right and the reason is stronger than
+"a typo could take the board down": LOCAL is the scope that must still resolve when the
+project's own configuration is absent, broken, or untrusted. A root derived from the project
+slug is computable from the path alone; a root read from project config inherits every way
+that config can be wrong. Derivation, not configuration.
+
+**Q2 — Containment.** Confirmed: the escape check (reject absolute / `../`) exists to stop a
+**user-supplied string** from escaping the repo. It is not a general law that TRDDs live
+inside the repo, so it does not apply to LOCAL — being outside the repo IS the scope.
+LOCAL's containment is a different and stricter one: the root must be **exactly**
+`~/.claude/projects/<slug>/design/` with `<slug>` from `project_slug()` — no env var, no
+config, no override. Nothing to escape from, because nothing is supplied.
+
+**Q3 — Promotion LOCAL → PROJECT.** Plain `mv` (LOCAL is not in git, so `git mv` has nothing
+to remove), and the id is **kept** — ids are globally unique, so nothing collides and every
+existing citation keeps resolving. One thing the mechanical move misses, and it is the whole
+non-trivial part: **check the citations before promoting.** A PROJECT TRDD must never cite a
+LOCAL one (§5), so any `parent-trdd` / `blocked-by` / `npt` / `eht` on the promoted file that
+still points into LOCAL becomes a dangling reference for every other contributor the instant
+it lands in the repo. Promotion is therefore `mv` **plus** resolving those edges — promote
+them too, or drop them. Demotion (PROJECT → LOCAL) is legal but only when nothing in PROJECT
+cites the file, for the same reason in reverse.
+
+**Q4 — Approval tiers in LOCAL.** Neither of the two offered answers — it is a third.
+A LOCAL TRDD is `min-approval-requirement: none` **by default** (a chore on the user's own
+machine; there is no MANAGER for that, and a self-mandate is the honest description). The
+exception is real and is why the folder exists: a task that is **destructive or irreversible
+on the user's machine** — rotate a credential, purge a store, rewrite history — is
+`min-approval-requirement: user` and waits in the LOCAL `proposals/` until the USER approves,
+landing in `refused/` if they decline. So LOCAL *does* use `proposals/`; it just uses it
+rarely, and the approver is always the human.
+
+**Q5 — Detector visibility.** Surface them, as first-class work items — that is what "local
+tasks are essential" means, and drift lines never leave the local session so there is nothing
+to leak. Two conditions: (a) **label the scope in the output**, because a LOCAL and a PROJECT
+card are otherwise indistinguishable while their remediation differs (one is committed, one
+cannot be); (b) the session-start / pre-compact handoffs that enumerate in-progress TRDDs
+should enumerate **both** roots, or a compaction will quietly drop half the board.
+
+**Q6 (not asked, but load-bearing) — the collision check must scan BOTH roots.** The id is
+what makes a citation unambiguous, and it is unique per PROJECT, not per root. A create-time
+check that scans only one root can mint a duplicate. The janitor's `trdd_files()` already
+returns files across both scopes, which is the primitive this needs.
+
 ## The root: outside the repo (and why my first answer was wrong)
 
 I first specified `<project>/.claude/local-tasks/` — in the repo, gitignored. The janitor's
@@ -170,6 +232,20 @@ survive contact with the three above.[^2]
   fine; one missing directory was doing all the damage. When a system "cannot represent X",
   check whether the model actually forbids X or whether a single unstated default is
   masquerading as the model.
+
+[^3]: [ocd:2026-07-11 lmd:2026-07-11] This spec originally defined a `scope: project | local`
+  FRONTMATTER FIELD. That was wrong, and the janitor's Claude caught it (ai-maestro#58):
+  **scope IS the path**, so a field restating it is a second source of truth that the
+  filesystem is free to contradict — and would, at the first promotion, since `mv` moves the
+  file and nothing makes the field follow. What stings is that I had *written the rule that
+  forbids this* days earlier, in the DEP overlay: *"A field that restates another is a second
+  source of truth waiting to disagree with the first."* I applied it correctly to `status:`
+  and `archived:` (declining both), then added `scope:` without running the same test. The
+  test that decides it is one question — **does this field enable a query the derived value
+  cannot?** `approved:` and `derived:` earn their denormalization (a one-pass grep across a
+  corpus). `scope:` earns nothing: a query always knows which root it searched. Lesson: a rule
+  you authored is not a rule you have internalized. Run your own checklist against your own
+  new work, especially when the new work feels obvious.
 
 [^2]: [ocd:2026-07-11 lmd:2026-07-11] I picked the WRONG PRECEDENT and the whole design
   followed it off a cliff. I reasoned "the janitor's per-project state lives in-repo and

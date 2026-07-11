@@ -32,7 +32,7 @@ attempts: 1
 test-failures: 0
 last-test-result: pass
 last-test-at: 2026-07-11T19:45:00+0200
-implementation-commits: []
+implementation-commits: [439984f9]
 external-refs: ["https://github.com/Emasoft/ai-maestro/issues/57", "https://github.com/Emasoft/ai-maestro/issues/46", "https://github.com/Emasoft/ai-maestro/issues/55", "design/tasks/TRDD-20260711_181251+0200-QMD7X3FB-forbid-root-and-home-workdirs.md"]
 ---
 

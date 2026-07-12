@@ -83,6 +83,19 @@ export async function PATCH(
       }
       command = allowed.command
       requireIdle = allowed.requiresIdle
+    } else {
+      // #54 (TRDD-ED9A4VVY): the arbitrary-`command` path types unconstrained
+      // text straight into a live agent's pane — strictly more dangerous than
+      // the deferred, cancellable `queue` route (which IS strict). Gate it the
+      // same way: a USER (system-owner) must present a fresh X-Sudo-Token, and
+      // an AGENT is held to the send-command matrix (self-drive OK, another
+      // agent needs MANAGER / own-team COS). The curated `commandKey` branch
+      // above is deliberately exempt — its allowlist is the security boundary —
+      // so chat keystrokes and curated controls are unaffected. requireSudoToken
+      // no-ops unless the route is registry-strict, so this enforces only now
+      // that PATCH_/api/agents/[id]/session is classified strict.
+      const guard = requireSudoToken(request, 'PATCH', '/api/agents/[id]/session')
+      if (guard) return guard
     }
 
     const result = await sendAgentSessionCommand(id, {

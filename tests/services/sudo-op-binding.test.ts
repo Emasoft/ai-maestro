@@ -81,6 +81,9 @@ const STRICT_ROUTE_PAIRS: { method: string; guardTemplate: string; literalPath: 
   { method: 'DELETE', guardTemplate: '/api/agents/[id]', literalPath: '/api/agents/abc12345' },
   { method: 'POST', guardTemplate: '/api/agents/[id]/ensure-core', literalPath: '/api/agents/abc12345/ensure-core' },
   { method: 'DELETE', guardTemplate: '/api/agents/[id]/session', literalPath: '/api/agents/abc12345/session' },
+  // #54 (TRDD-ED9A4VVY): the arbitrary-command branch of PATCH …/session is now
+  // sudo-gated exactly like the deferred queue route.
+  { method: 'PATCH', guardTemplate: '/api/agents/[id]/session', literalPath: '/api/agents/abc12345/session' },
   { method: 'POST', guardTemplate: '/api/agents/import', literalPath: '/api/agents/import' },
   { method: 'POST', guardTemplate: '/api/agents/foreign-approvals/[id]/reject', literalPath: '/api/agents/foreign-approvals/abc12345/reject' },
   { method: 'POST', guardTemplate: '/api/agents/foreign-approvals/[id]/approve', literalPath: '/api/agents/foreign-approvals/abc12345/approve' },

@@ -39,6 +39,7 @@
   "entries": {
     "DELETE_/api/agents/[id]": "strict",
     "DELETE_/api/agents/[id]/session": "strict",
+    "PATCH_/api/agents/[id]/session": "strict",
     "POST_/api/teams": "strict",
     "POST_/api/teams/create-with-project": "strict",
     "DELETE_/api/teams/[id]": "strict",

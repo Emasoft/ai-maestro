@@ -329,6 +329,14 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   'POST /api/agents/[id]/panel': { action: 'send-command', targetFromPathId: true },
   'POST /api/agents/[id]/queue': { action: 'send-command', targetFromPathId: true },
   'POST /api/agents/[id]/prompt/answer': { action: 'send-command', targetFromPathId: true },
+  // #54 (TRDD-ED9A4VVY): the IMMEDIATE twin of `queue` — PATCH …/session types
+  // arbitrary text straight into a live pane. Only its arbitrary-`command` branch
+  // calls the guard (the curated `commandKey` allowlist branch stays open), so a
+  // USER needs a fresh sudo token and an AGENT the same send-command matrix as
+  // queue (self-drive OK, another agent needs MANAGER / own-team COS). Without
+  // this entry the route would be strict-in-registry yet undeclared → the
+  // coverage guardrail fails closed.
+  'PATCH /api/agents/[id]/session': { action: 'send-command', targetFromPathId: true },
   // Configuration, not surface. PATCH is a router: it dispatches ChangeTitle /
   // ChangePlugin / ChangeClient / ChangeTeam / ChangeName / …. No agent may
   // reconfigure ITSELF; MANAGER (any) and COS (own team) may reconfigure others.

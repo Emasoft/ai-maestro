@@ -1,9 +1,9 @@
 ---
 trdd-id: ED9A4VVY
 title: security — sudo-gate the arbitrary-command path of PATCH /api/agents/[id]/session (#54)
-column: dev
+column: complete
 created: 2026-07-12T09:02:01+0200
-updated: 2026-07-12T09:02:01+0200
+updated: 2026-07-12T09:07:30+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 1
@@ -23,9 +23,10 @@ test-requirements: [unit, typecheck]
 audit-requirements: [adversarial-scan]
 review-requirements: []
 impacts: [config-schema]
-attempts: 0
-last-test-result: not-run
-implementation-commits: []
+attempts: 1
+last-test-result: pass
+last-test-at: 2026-07-12T09:06:00+0200
+implementation-commits: [8a198248]
 external-refs: ["github.com/Emasoft/ai-maestro/issues/54"]
 ---
 

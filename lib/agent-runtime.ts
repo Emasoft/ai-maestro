@@ -16,6 +16,15 @@ import { assertAuthorizedAgentWorkdir } from '@/lib/agent-workdir-policy'
 // Shell-free command execution — prevents shell injection by passing args as array
 const execFileAsync = promisify(execFile)
 
+// Keychain-preflight sentinels + default install path (TRDD-CNF1X3J7). The
+// probe script and its sentinels live in agent-keychain-probe.ts so the command
+// typed into the pane is only ever `sh "<path>"` — no nested quoting.
+import {
+  KEYCHAIN_PROBE_READY,
+  KEYCHAIN_PROBE_BLIND,
+  KEYCHAIN_PROBE_INSTALL_PATH,
+} from './agent-keychain-probe'
+
 // LIB2-MAJ-14: Defence-in-depth validation for tmux session names. Even though
 // `execFileAsync` prevents shell injection, tmux's target syntax `[session]:[window].[pane]`
 // makes session names containing `:`, `.`, or `@` semantically dangerous —
@@ -537,6 +546,67 @@ export async function waitForShellReady(
   }
 
   return false
+}
+
+// Generous ceiling: the probe itself is ~1s. The whole point is to REFUSE if we
+// can't get a verdict, so this bounds how long we wait before doing so.
+export const KEYCHAIN_PREFLIGHT_TIMEOUT_MS = 8000
+const KEYCHAIN_PREFLIGHT_POLL_MS = 300
+
+export type KeychainPreflight = { status: 'ok' | 'refuse' | 'skip'; reason?: string }
+
+/**
+ * Gate 1 (TRDD-CNF1X3J7): prove THIS pane can read the login keychain BEFORE we
+ * launch a client in it. waitForShellReady proves the shell will accept input;
+ * it does not prove the pane can authenticate. A pane forked by a keychain-blind
+ * tmux server sits at a clean prompt yet `claude` there prints "Not logged in"
+ * and the agent looks alive while doing nothing.
+ *
+ * The probe runs IN THE PANE (running it from node would test node's keychain
+ * access, not the pane's) via `sh "<probePath>"` — the caller installs the probe
+ * script first (ensureKeychainProbeInstalled), exactly as the shell guard is
+ * installed. We read the READY/BLIND sentinel back off the pane.
+ *
+ * FAIL-FAST: anything short of a proven READY is a REFUSE — a BLIND verdict, a
+ * timeout, or an un-typable probe. "Cannot prove it works" must never resolve to
+ * "allow"; a refused launch is strictly better than a zombie agent that looks
+ * alive. macOS-only: off darwin the failure mode does not exist, so we skip
+ * (never refuse) to avoid a false block.
+ */
+export async function preflightPaneKeychain(
+  runtime: AgentRuntime,
+  sessionName: string,
+  opts: {
+    probePath?: string
+    timeoutMs?: number
+    pollMs?: number
+    platform?: NodeJS.Platform
+  } = {},
+): Promise<KeychainPreflight> {
+  const platform = opts.platform ?? process.platform
+  if (platform !== 'darwin') return { status: 'skip' }
+
+  const probePath = opts.probePath ?? KEYCHAIN_PROBE_INSTALL_PATH
+  const timeoutMs = opts.timeoutMs ?? KEYCHAIN_PREFLIGHT_TIMEOUT_MS
+  const pollMs = opts.pollMs ?? KEYCHAIN_PREFLIGHT_POLL_MS
+
+  try {
+    // JSON.stringify double-quotes the path — a single, un-nested level the
+    // pane's own shell parses once. Nothing to mangle.
+    await runtime.sendKeys(sessionName, `sh ${JSON.stringify(probePath)}`, { enter: true })
+  } catch {
+    return { status: 'refuse', reason: 'keychain_probe_send_failed' }
+  }
+
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, pollMs))
+    const pane = await runtime.capturePane(sessionName, 8).catch(() => '')
+    // BLIND first: if both ever appear (they cannot in one run), fail safe.
+    if (pane.includes(KEYCHAIN_PROBE_BLIND)) return { status: 'refuse', reason: 'keychain_unreadable' }
+    if (pane.includes(KEYCHAIN_PROBE_READY)) return { status: 'ok' }
+  }
+  return { status: 'refuse', reason: 'keychain_probe_timeout' }
 }
 
 export function setRuntime(r: AgentRuntime): void {

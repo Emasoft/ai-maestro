@@ -1,9 +1,9 @@
 ---
 trdd-id: CNF1X3J7
 title: reliability — refuse to launch an agent client that cannot authenticate or whose role-plugin is not installed
-column: planned
+column: dev
 created: 2026-07-12T12:27:10+0200
-updated: 2026-07-12T12:27:10+0200
+updated: 2026-07-13T00:00:00+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -41,9 +41,28 @@ external-refs: ["memory:running-claude-code-clients", "memory:tmux-pane-cannot-r
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-12
 
-- **State:** PLANNED. No code written yet.
-- **NEXT ACTION:** TDD. Write `tests/unit/agent-launch-preflight.test.ts` FIRST (it must
-  fail), then implement Gate 1 in `lib/agent-runtime.ts`.
+- **State:** IN PROGRESS. Gate-1 DECISION is done, TDD, all 4 tests green:
+  - `lib/agent-keychain-probe.ts` — the probe script installer (mirrors
+    agent-shell-guard-install.ts; sentinels `AIM_KC_READY`/`AIM_KC_BLIND`; the
+    `-s` arg + sentinels live IN the file so the pane only types `sh "<path>"`).
+  - `lib/agent-runtime.ts` — `preflightPaneKeychain(runtime, sessionName, opts)`
+    → `{status:'ok'|'refuse'|'skip', reason?}`. macOS-only (skip off-darwin);
+    fail-fast (BLIND / timeout / un-typable-probe all REFUSE).
+  - `tests/unit/agent-launch-preflight.test.ts` — 4 cases (ok / refuse-blind /
+    refuse-timeout / skip-non-mac), green.
+  NOT yet wired into the launch path — the function is currently dead code.
+- **NEXT ACTION (wiring — the risky part, two big files):** at BOTH launch sites,
+  right after `prepareShellForLaunch` and BEFORE the client `sendKeys`, insert:
+  `await ensureKeychainProbeInstalled(); const kc = await preflightPaneKeychain(runtime, sessionName, {probePath: KEYCHAIN_PROBE_INSTALL_PATH});`
+  and on `kc.status === 'refuse'`: log loudly (name the remedy), kill the tmux
+  session (no zombie pane), mark the agent failed (NOT green/online), and SKIP the
+  client injection AND the trust-auto-accept. Sites:
+  - `services/agents-core-service.ts` ~line 2216 (inside the `else` real-program
+    branch; skip guard-source + `unset CLAUDECODE; ${fullCommand}` + the
+    `handleTrustAutoAccept` at ~2263).
+  - `services/sessions-service.ts` ~line 1099.
+  Then the `role-plugin` invariant row (Gate 2) + its test, then run
+  `bash scripts/with-node.sh yarn test && yarn build`, then EHT TRDD-78J4I4QS.
 - **Load-bearing facts (do not re-derive — they cost a day):**
   - Keychain access is **inherited from the spawner**. Every agent pane is forked by
     ONE long-lived tmux server, so a blind server ⇒ the WHOLE fleet is blind at once,

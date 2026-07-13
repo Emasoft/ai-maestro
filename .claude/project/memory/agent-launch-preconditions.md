@@ -2,7 +2,7 @@
 name: agent-launch-preconditions
 description: "an ai-maestro agent starts, shows up healthy in the dashboard, but says 'Not logged in' / 'API Usage Billing' and can do nothing — or its pane falls back to a shell prompt because --agent did not resolve"
 ocd: 2026-07-12
-lmd: 2026-07-12
+lmd: 2026-07-13
 metadata:
   node_type: memory
   type: project
@@ -88,3 +88,20 @@ not as a `[[wikilink]]`, per the link-hygiene rule).
   LOOKED fine and the failure was scoped to a process context rather than to any
   piece of configuration. The preflight exists to make that class of failure loud and
   immediate instead of silent and fleet-wide.
+
+[^2]: [ocd:2026-07-13 lmd:2026-07-13] Both gates + the fleet watchdog are now LIVE
+  (TRDD-CNF1X3J7 commits fb8c03ea, TRDD-78J4I4QS commits 6eef63fe+fcd0fa5b). Lesson
+  from the watchdog's FIRST production sweep: a fail-safe detector that uses a
+  fixed-name throwaway resource MUST pre-clean its own leftover, or its own debris
+  becomes a false fleet-wide alarm — a stale `aim-kc-watchdog` session made
+  `createSession` fail "duplicate session", and fail-safe ("cannot prove ⇒ blind")
+  faithfully reported a healthy server as blind. Corollary: when a comment promises
+  cleanup-by-name ("the fixed name exists so leftovers can be killed by name"),
+  verify the CODE implements it — the promise had been written, the pre-kill hadn't.
+
+[^3]: [ocd:2026-07-13 lmd:2026-07-13] Resolving WHICH plugin is an agent's role in
+  the enabled-but-not-installed state cannot use the scanner: the quad-match only
+  sees plugins whose files exist on disk, so it returns null in exactly the broken
+  state. The truthful fallback is the agent's own launch args — `--agent
+  <plugin>-main-agent` names precisely what the client will try (and fail) to load.
+  Implemented in the `role-plugin` invariant row (lib/agent-invariants.ts).

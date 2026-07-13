@@ -1,9 +1,9 @@
 ---
 trdd-id: 78J4I4QS
 title: reliability — detect a keychain-blind tmux server before it silently takes the whole fleet down
-column: dev
+column: ai_review
 created: 2026-07-12T12:27:10+0200
-updated: 2026-07-13T05:35:00+0200
+updated: 2026-07-13T05:47:00+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 1
@@ -42,7 +42,22 @@ external-refs: ["memory:tmux-pane-cannot-read-login-keychain", "memory:fleet-aut
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-12
 
-**▶ UPDATE 2026-07-13 (IMPLEMENTED — awaiting deploy):**
+**▶ UPDATE 2026-07-13 05:47 (DEPLOYED + LIVE-VERIFIED):**
+
+- Live on the production server (pm2 restart after `fcd0fa5b`). The pm2 env runs the
+  watchdog at `AIM_INVARIANTS_WATCHDOG_INTERVAL_MS=15000` (15s — a leftover dev
+  setting worth revisiting; code default is 5 min). Observed 3+ sweeps: SILENT (no
+  alarm), zero leftover `aim-kc-watchdog` sessions.
+- **Live incident caught + fixed on first deploy:** the very first sweep raised a
+  FALSE fleet-blind alarm — a leftover fixed-name session (debris from a
+  non-hermetic test run) made `createSession` fail "duplicate session" and the
+  fail-safe reported `blind`. Fix `fcd0fa5b`: pre-kill our OWN fixed name before
+  creating (the module comment promised this; the code hadn't implemented it),
+  pinned by test. Lesson recorded in the project memory page
+  `agent-launch-preconditions`.
+- implementation-commits: 6eef63fe (module+wiring+tests), fcd0fa5b (pre-kill fix).
+
+**▶ UPDATE 2026-07-13 (IMPLEMENTED — superseded by the deploy update above):**
 
 - **Built + tested.** `lib/tmux-server-keychain-watchdog.ts`:
   `checkTmuxServerKeychainOnce` (throwaway session `aim-kc-watchdog`, REUSES

@@ -1,9 +1,9 @@
 ---
 trdd-id: CNF1X3J7
 title: reliability — refuse to launch an agent client that cannot authenticate or whose role-plugin is not installed
-column: dev
+column: ai_review
 created: 2026-07-12T12:27:10+0200
-updated: 2026-07-13T05:30:00+0200
+updated: 2026-07-13T05:47:00+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -40,6 +40,14 @@ external-refs: ["memory:running-claude-code-clients", "memory:tmux-pane-cannot-r
 # TRDD-CNF1X3J7 — Agent-launch preflight: never start a client that cannot function
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-12
+
+**▶ UPDATE 2026-07-13 05:47 (DEPLOYED):** full suite 168 files green, built, pm2
+restarted. The fleet watchdog (EHT 78J4I4QS, also live) runs the SAME
+`preflightPaneKeychain` through the real runtime every sweep and returns `ok` —
+live evidence the probe does not false-refuse on a healthy server. Residual manual
+item (deliberately blind server ⇒ REFUSE end-to-end) deferred: fabricating
+blindness on the live fleet server would disrupt real agents; the unit tests pin
+the refuse path. Columns → ai_review; USER is the reviewer.
 
 **▶ UPDATE 2026-07-13 (Gate-1 WIRED + Gate-2 LANDED — full suite/build pending):**
 

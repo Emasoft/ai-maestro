@@ -78,6 +78,35 @@ external-refs: ["cc-version:2.1.207", "docs:https://code.claude.com/docs/en/plug
   - ✗ "`v`-prefixed vs bare tags" and "`url` vs `github` source type" — both were dead
     ends; neither is the variable that matters. The variable is the tag NAME PREFIX.
 
+## ⏵ CI STATE of PR ai-maestro-plugin#25 (branch `fix/dependency-resolution-tag`) — 2026-07-13 07:20
+
+- **Green:** Test, Test matrix (ubuntu + macos), Commitlint, Socket. The code change and
+  its 5 regression tests pass.
+- **Red: Lint (MegaLinter) — legacy debt, not this PR's code.** The repo runs
+  `VALIDATE_ALL_CODEBASE: false`, so a file's accumulated lint debt only surfaces when
+  someone EDITS it — and then their PR fails for code they never wrote. `main` is green
+  because nobody had touched `publish.py`.
+  - Round 1 (commit `2aeeb0f`): bandit 57 (**49 pre-existing in `publish.py`** —
+    B404/B603/B607 = "imports subprocess", "no shell=True", "partial path" — i.e. exactly
+    what release tooling IS; the 8 others are B101 asserts in the new test) + cspell 31
+    (**every word a pre-existing `publish.py` identifier**: cprint, ppid, precheck,
+    spoofable, …).
+  - Fix pushed (`9885bad`): `.mega-linter.yml` → `PYTHON_BANDIT_ARGUMENTS: "--skip
+    B101,B404,B603,B607"`; new `.cspell.json` project dictionary. Both verified locally
+    (bandit exit 0, cspell 0 issues on the changed .py files).
+  - Round 2 still red — **the same trap one layer out**: editing `.mega-linter.yml` pulled
+    THAT file into the changed-set, so cspell now flags ITS pre-existing words
+    (`testdata`, `externalizer`, `MYPY` at lines 30/31/35). yamllint may also fire on its
+    pre-existing 232-char regex line 31 — NOT yet confirmed.
+- **NEXT ACTION:** the run (29225035767) is wedged on a `Validate` job that has been
+  `in_progress` since 04:54Z, and MegaLinter's log only publishes when the whole run
+  completes — so read the failing-linter summary from a FRESH run
+  (`gh run view <run> --job <Lint job> --log-failed | grep "❌"`), then fix **precisely**:
+  add the 3 collateral words to `.cspell.json`, and only touch yamllint if it is actually
+  failing. Do NOT speculatively churn config in someone else's repo.
+- **Judgement call left for the maintainer** (stated in the PR): repo-wide bandit skips
+  vs ~49 per-line `# nosec` annotations. I chose the skips + an inline WHY.
+
 ## Problem
 
 `claude plugin install <role-plugin>@ai-maestro-plugins` fails for **every** role-plugin:

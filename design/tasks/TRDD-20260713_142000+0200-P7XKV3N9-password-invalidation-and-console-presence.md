@@ -146,6 +146,29 @@ Then the gate is only as strong as the weakest caller, and the whole feature is
 theater. One enforcement point, N dumb callers: a new surface can only ever be as
 safe as the endpoint, and it cannot lower the bar by existing.
 
+**The deeper reason, and the one that settles it: EVERY route is curl-able.** The
+API is plain HTTP — 49 of the `~/.local/bin/aimaestro-*.sh` / `amp-*.sh` scripts
+are curl wrappers (they pass `X-Sudo-Token` through `AIMAESTRO_SUDO_TOKEN`). So a
+"surface" is never a chokepoint: whatever the button and the script do, anyone can
+skip both and curl the endpoint directly. A gate placed in a client is therefore
+not a weak gate — it is *no gate*.
+
+Two consequences that decide the design rather than merely decorating it:
+
+- **The presence check cannot be "which client are you".** curl sets any
+  User-Agent, so UA-sniffing is defeated by a command-line flag. The **connection**
+  (loopback vs Tailscale CGNAT) is the one property a phone cannot forge, which is
+  precisely why the check lives there and nowhere else.
+- **"The script layer is the only code allowed to call the API" is a DECOUPLING
+  rule, not a security boundary.** It keeps plugins from hardcoding endpoints that
+  churn. It has never prevented a direct curl and was never meant to. Do not read
+  it as a defence, or you will "harden" the wrapper and leave the endpoint open.
+
+This also names the real gap on the human side: a token-less curl to a strict route
+is already rejected (401). What is missing is any way for a **human** to *obtain* a
+sudo token outside the web UI's modal — which is exactly what TRDD-9MZQ4T7E adds: a
+TTY password prompt that performs the exchange.
+
 Corollary: a surface must NOT pre-validate the password to give a "nicer" error. It
 would need to hold the secret to do so, and any code that holds the secret is code
 that can leak it.

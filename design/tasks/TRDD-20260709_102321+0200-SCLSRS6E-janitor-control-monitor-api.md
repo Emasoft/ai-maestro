@@ -18,7 +18,7 @@ mandated-by: self
 min-approval-requirement: none
 npt: [TRDD-41FJM8A8, TRDD-TDFSELI1, TRDD-OOCL7ABZ, TRDD-229CJGYH, TRDD-KJQZEYXW, TRDD-GT0TAJFL]
 eht: [TRDD-280DF70U, TRDD-D3RP7KQZ, TRDD-4Q7WMPZK, TRDD-YEE33F3A, TRDD-K2WJH7RF, TRDD-WNZ72SFO, TRDD-QC8R79G5, TRDD-XV4ANN4P]
-blocked-by: [TRDD-D3RP7KQZ, TRDD-YEE33F3A, TRDD-K2WJH7RF]
+blocked-by: [TRDD-K2WJH7RF]
 pre-block-column: complete
 relevant-rules: []
 labels: [api, janitor, terminal-control, side-panel, task-api, script-layer, dev-browser, fleet]

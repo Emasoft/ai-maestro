@@ -22,7 +22,6 @@ eht: []
 blocked-by: []
 min-approval-requirement: user
 mandate: false
-approved: false
 relevant-rules: []
 release-via: none
 delivery: direct-push

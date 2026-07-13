@@ -17,7 +17,6 @@ severity: HIGH
 effort: M
 task-type: security
 release-via: none
-parent-trdd: TRDD-D3RP7KQZ
 derived: false
 npt: []
 eht: []

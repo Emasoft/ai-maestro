@@ -1,8 +1,8 @@
 ---
 trdd-id: K2WJH7RF
 title: Decide the agent authorization policy for the ten remaining strict routes
-column: blocked
-pre-block-column: planned
+column: planned
+pre-block-column: null
 min-approval-requirement: manager
 created: 2026-07-09T18:03:01+0200
 updated: 2026-07-10T04:12:00+0200
@@ -18,7 +18,7 @@ derived: true
 derived-kind: eht
 npt: []
 eht: []
-blocked-by: [TRDD-YEE33F3A]
+blocked-by: []
 supersedes: []
 superseded-by: []
 relevant-rules: []

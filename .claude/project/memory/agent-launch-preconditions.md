@@ -1,5 +1,5 @@
 ---
-name: agent-launch-must-preflight-keychain-and-plugin
+name: agent-launch-preconditions
 description: "an ai-maestro agent starts, shows up healthy in the dashboard, but says 'Not logged in' / 'API Usage Billing' and can do nothing — or its pane falls back to a shell prompt because --agent did not resolve"
 ocd: 2026-07-12
 lmd: 2026-07-12
@@ -71,7 +71,13 @@ point of failure** that nothing currently monitors. A pane-level preflight (abov
 turns it from a silent fleet outage into an explicit, diagnosable refusal.
 
 Related: the general platform knowledge lives in the user-scope notes
-`running-claude-code-clients` and `tmux-pane-cannot-read-login-keychain`.
+`claude-code-client-authentication` and `macos-keychain-access-inheritance`.
+
+## Governed by
+
+General debugging discipline this page's own `[^1]` lesson applies now lives on the
+USER-scope aspect page `debugging-methodology` (cross-scope; referenced in prose,
+not as a `[[wikilink]]`, per the link-hygiene rule).
 
 ## Notes and lessons learned
 

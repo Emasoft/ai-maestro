@@ -29,7 +29,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { verifyPassword, invalidatePassword, loadGovernance } from '@/lib/governance'
-import { isConsolePeer, peerAddress } from '@/lib/peer-address'
+import { isConsolePeer, peerAddress } from '@/lib/peer-address.mjs'
 import { startSetupFlow, verifySetupCode } from '@/lib/setup-bootstrap'
 import { checkAndRecordAttempt, resetRateLimit } from '@/lib/rate-limit'
 

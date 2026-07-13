@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
-import { isConsolePeer, peerAddress, PEER_ADDR_HEADER } from '@/lib/peer-address'
+import { isConsolePeer, peerAddress, PEER_ADDR_HEADER } from '@/lib/peer-address.mjs'
 
 const req = (headers: Record<string, string>) => ({
   headers: { get: (n: string) => headers[n.toLowerCase()] ?? null },

@@ -3,7 +3,7 @@ trdd-id: JT3U4ZVM
 title: fleet blocker — role-plugin installs fail because releases lack the {name}--v{version} tags the dependency resolver requires
 column: dev
 created: 2026-07-13T06:15:10+0200
-updated: 2026-07-13T07:05:00+0200
+updated: 2026-07-13T07:45:00+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -64,10 +64,17 @@ external-refs: ["cc-version:2.1.207", "docs:https://code.claude.com/docs/en/plug
   takes the highest satisfying tag) + add `claude plugin tag --push` to its `publish.py`.
   The 8 role-plugin issues were **corrected and retitled**: their pins STAY; their only
   (optional) ask is the same tag step in their own publish pipelines.
-- **NEXT ACTION:** once the tag lands →
-  `claude plugin marketplace update ai-maestro-plugins` then
+- **✅ RESOLVED 2026-07-13 07:45 — the fleet is UNBLOCKED.** The USER authorized the direct
+  tag push; `ai-maestro-plugin--v2.8.0` -> c0cf169 (the v2.8.0 release commit; its
+  plugin.json reads 2.8.0, which the spec requires) is live on the remote. Verified
+  immediately: `claude plugin marketplace update ai-maestro-plugins`, then
   `claude plugin install ai-maestro-maintainer-agent@ai-maestro-plugins --scope local`
-  in a scratch dir must succeed. Then stand up MANAGER + one MAINTAINER.
+  → **✔ installed (+ 1 dependency: ai-maestro-plugin)** — the exact call that had been
+  failing for every agent. assistant-manager installs too. Scratch installs cleaned up.
+- **NEXT ACTION:** stand up MANAGER + one MAINTAINER through the dashboard and watch
+  ChangeTitle G15/G16 reach `installed` instead of `WARN — Failed to install`. Residual:
+  merge PR #25 so the NEXT release carries the tag automatically — without it, 2.8.1 ships
+  untagged for the resolver and the fleet breaks again at the next version bump.
 - **SUPERSEDED — do NOT carry forward:**
   - ✗ "Claude Code 2.1.207 cannot resolve ANY versioned plugin dependency / it is an
     upstream bug." **False.** The resolver works; it was looking for a tag name we never

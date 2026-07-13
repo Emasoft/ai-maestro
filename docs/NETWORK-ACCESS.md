@@ -19,10 +19,16 @@ Complete guide for accessing AI Maestro from different locations and networks.
 
 **Server Details:**
 - **Port:** 23000
-- **Binding:** All interfaces (`0.0.0.0:23000`)
+- **Binding:** `::` (dual-stack) when Tailscale is detected, else `127.0.0.1` only. A TCP-level filter (`server.mjs::isAllowedSource()`) drops every connection except loopback and Tailscale before any HTTP is processed — so despite the `::` bind, **LAN and public IPs cannot connect**. See [Security Considerations](#security-considerations).
 - **Local IP:** 10.0.0.18
 - **Tailscale IP:** 100.80.12.6
 - **Hostname:** mac-mini
+
+> **Note:** several "Local Network Access" methods below (Bonjour/`.local`, direct
+> LAN IP, custom LAN domains) describe *DNS convenience* only. They resolve a name
+> to the Mac's LAN IP, but the server **drops the connection at the TCP level** for
+> any non-Tailscale, non-loopback source. LAN access does not work by design;
+> remote access is Tailscale-only. This is the security model, not a misconfiguration.
 
 ---
 
@@ -281,49 +287,67 @@ tailscale funnel --disable 23000
 
 ### Current Security Model
 
-AI Maestro Phase 1 has **no authentication** - it's designed for localhost-only use.
+AI Maestro is **security-first** and enforces two independent layers.
 
-**Security assumptions:**
-- Application runs on localhost (127.0.0.1)
-- OS-level user security protects access
-- All sessions accessible to local user
+**1. Network perimeter — Tailscale only.** The server binds `::` when Tailscale is
+present, but `server.mjs::isAllowedSource()` is a TCP-level filter that drops every
+connection except:
+
+| Source | Reaches the server? |
+|--------|--------------------|
+| `127.0.0.1`, `::1` (the host itself) | ✅ yes |
+| `100.64.0.0/10` (Tailscale CGNAT) | ✅ yes |
+| `fd7a:115c:a1e0::/48` (Tailscale ULA) | ✅ yes |
+| `192.168.*` / `10.*` (LAN / WiFi) | ❌ **dropped at TCP level** |
+| Any public IP | ❌ **dropped at TCP level** |
+
+Without Tailscale the server falls back to `127.0.0.1`-only. **A device on your
+WiFi cannot reach the app** — that "connection refused" is the design working.
+
+**2. Authorization — identity, not network position.** Passing the perimeter grants
+*nothing*. Inside the Tailscale VPN every device (phone, iPad, remote machine, a
+script) is a first-class caller, and every route still demands its own proof:
+
+- a **session cookie** for a logged-in human (governance password login; first-run
+  setup dispatches a confirmation code to the host's desktop);
+- an **AID proof-of-possession** (Ed25519) for a registered agent;
+- a fresh **sudo token** for destructive/"strict" routes (re-enter the password).
+
+Two operations additionally require the caller to be **physically at the console**
+(loopback): MAESTRO login and MAESTRO password change. The server determines "at
+the console" from the real TCP peer, never from a client header — so a remote
+device on the VPN cannot spoof it.
+
+**Rotating / revoking the governance password.** Settings → **Revoke** (or
+`aimaestro-governance.sh invalidate-password`) revokes the password using the
+password plus a one-shot code delivered to *this machine's desktop*. The old
+credential is destroyed and the next login asks for a new one. Because it needs the
+desktop code, it can only be completed from the machine itself — a remote holder of
+the password cannot do it.
 
 ### Risks When Exposing to Network
 
-When you expose AI Maestro to your network or the internet:
+**Local Network (WiFi):** not exposed — LAN connections are dropped at TCP level.
 
-**Local Network Exposure:**
-- ⚠️ Anyone on your WiFi can access it
-- ⚠️ All tmux sessions visible
-- ⚠️ Full terminal access to your Mac
-
-**Tailscale Exposure:**
-- ✅ Encrypted VPN connection
-- ✅ Only your Tailscale devices can access
-- ⚠️ Still no authentication within the app
+**Tailscale:**
+- ✅ Encrypted VPN; only your Tailnet devices pass the perimeter
+- ✅ Every app action still requires cookie / AID / sudo authentication
+- ⚠️ No CORS/CSRF middleware yet — same-origin by design; a reverse-proxy or
+  cross-origin deployment needs to add it
+- ⚠️ No TLS on the direct bind — traffic is encrypted by Tailscale's WireGuard, not
+  by the app
 
 **Public Exposure (Tailscale Funnel):**
-- ❌ **NOT RECOMMENDED** without authentication
-- ❌ Public internet can access your terminals
-- ❌ Major security risk
+- ❌ **NOT RECOMMENDED** — Funnel bypasses the Tailscale-only perimeter and puts the
+  app on the public internet. The identity layer still applies, but you lose the
+  network layer entirely. Avoid unless you fully understand the trade-off.
 
 ### Recommendations
 
-**For local network access:**
-1. Use WPA3 encryption on your WiFi
-2. Trust all devices on your network
-3. Consider MAC address filtering on your router
-
 **For Tailscale access:**
-1. Use Tailscale's built-in ACLs (Access Control Lists)
-2. Limit which Tailscale devices can access your Mac
-3. Enable key expiry for added security
-
-**Future improvements (Phase 2+):**
-- User authentication
-- Session-level permissions
-- HTTPS/TLS support
-- OAuth integration
+1. Use Tailscale's built-in ACLs (Access Control Lists) to limit which devices reach the Mac
+2. Enable key expiry
+3. Keep the governance password strong, and revoke it (above) if it may have leaked
 
 ---
 
@@ -509,5 +533,5 @@ ping mac-mini.local
 
 ---
 
-**Last Updated:** 2025-11-05
-**AI Maestro Version:** 0.8.0
+**Last Updated:** 2026-07-13
+**AI Maestro Version:** 0.28.0+

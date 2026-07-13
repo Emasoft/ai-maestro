@@ -15,7 +15,7 @@
 import path from 'path'
 import process from 'process'
 
-const { lintCorpus, fixCorpus } = await import('../lib/trdd-doctor.ts')
+const { lintCorpus, fixCorpus, readyQueue } = await import('../lib/trdd-doctor.ts')
 const { TRDD_ZONES, listTrddFiles, parseTrddFile } = await import('../lib/trdd-store.ts')
 
 const args = process.argv.slice(2)
@@ -54,6 +54,27 @@ if (has('--board')) {
     }
     console.log()
   }
+  process.exit(0)
+}
+
+if (has('--next') || has('--ready')) {
+  // What can ACTUALLY be worked on right now — every prerequisite satisfied — ordered by
+  // how much work finishing it would unblock. Derived from the dependency graph, never
+  // from age: a card that has waited a month may still be blocked, and one created this
+  // morning may be the single thing freeing six others.
+  const ready = readyQueue(designDir)
+  if (ready.length === 0) {
+    console.log(C.yellow('\nNOTHING IS READY — every open card is waiting on another.'))
+    console.log(C.dim('If that is not what you expect, run the linter: a dependency CYCLE looks exactly like this.\n'))
+    process.exit(0)
+  }
+  console.log(C.bold(`\nREADY — ${ready.length} card(s) whose prerequisites are ALL satisfied\n`))
+  console.log(C.dim('  unblocks = how many open cards this one is holding up\n'))
+  for (const r of ready) {
+    const lever = r.unblocks > 0 ? C.green(`unblocks ${r.unblocks}`) : C.dim('unblocks 0')
+    console.log(`  ${C.bold(r.id.padEnd(9))} ${C.dim(`P${r.priority ?? '?'}`)} ${String(r.column).padEnd(12)} ${lever.padEnd(22)} ${String(r.title).slice(0, 58)}`)
+  }
+  console.log()
   process.exit(0)
 }
 

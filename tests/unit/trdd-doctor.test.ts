@@ -17,7 +17,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
-import { lintCorpus, fixCorpus, expectedZone, VALID_COLUMNS, AUTHORITY_RANK } from '@/lib/trdd-doctor'
+import { lintCorpus, fixCorpus, readyQueue, expectedZone, VALID_COLUMNS, AUTHORITY_RANK } from '@/lib/trdd-doctor'
 import { DEFAULT_STATUSES } from '@/types/task'
 
 let tmp: string
@@ -128,6 +128,73 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
       good('MMMMMMMM', { derived: 'true', 'derived-kind': 'eht', eht: '[NNNNNNNN]' }))
     write('tasks', 'TRDD-20260101_000000+0100-NNNNNNNN-g.md', good('NNNNNNNN', { derived: 'true' }))
     expect(idsOf(lintCorpus(tmp), 'DERIVED-DEPTH')).toContain('MMMMMMMM')
+  })
+
+  // ================== ORDER — the invariant that actually matters ==================
+  // Timing is noise: a card may wait a month and nothing is wrong. Work proceeding OUT
+  // OF ORDER is always wrong. These are the errors; STALE-COLUMN is only a warn.
+
+  it('ORDER-BLOCKER-IGNORED — a live blocker MUST show as blocked, or someone starts it out of order', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-A1A1A1A1-b.md', good('A1A1A1A1', { column: 'dev' }))
+    write('tasks', 'TRDD-20260101_000000+0100-A2A2A2A2-x.md',
+      good('A2A2A2A2', { column: 'dev', 'blocked-by': '[TRDD-A1A1A1A1]' }))
+    expect(idsOf(lintCorpus(tmp), 'ORDER-BLOCKER-IGNORED')).toContain('A2A2A2A2')
+  })
+
+  it('ORDER-STALE-BLOCK — blocked, but every blocker cleared: READY work idling unnoticed', () => {
+    write('archived', 'TRDD-20260101_000000+0100-B1B1B1B1-b.md', good('B1B1B1B1', { column: 'completed' }))
+    write('tasks', 'TRDD-20260101_000000+0100-B2B2B2B2-x.md', good('B2B2B2B2', {
+      column: 'blocked',
+      'blocked-by': '[TRDD-B1B1B1B1]',
+      'pre-block-column': 'dev',
+    }))
+    expect(idsOf(lintCorpus(tmp), 'ORDER-STALE-BLOCK')).toContain('B2B2B2B2')
+  })
+
+  it('ORDER-NPT-VIOLATED — a card past `dev` while its prerequisite is unfinished', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-C1C1C1C1-n.md', good('C1C1C1C1', { column: 'dev' }))
+    write('tasks', 'TRDD-20260101_000000+0100-C2C2C2C2-p.md',
+      good('C2C2C2C2', { column: 'testing', npt: '[TRDD-C1C1C1C1]' }))
+    // Being TESTED against a prerequisite that does not exist yet.
+    expect(idsOf(lintCorpus(tmp), 'ORDER-NPT-VIOLATED')).toContain('C2C2C2C2')
+  })
+
+  it('ORDER-NPT-VIOLATED does NOT fire while the parent is still in `dev` — NPT gates PAST dev, not dev itself', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-D1D1D1D1-n.md', good('D1D1D1D1', { column: 'dev' }))
+    write('tasks', 'TRDD-20260101_000000+0100-D2D2D2D2-p.md',
+      good('D2D2D2D2', { column: 'dev', npt: '[TRDD-D1D1D1D1]' }))
+    expect(idsOf(lintCorpus(tmp), 'ORDER-NPT-VIOLATED')).toEqual([])
+  })
+
+  it('ORDER-CYCLE — a ring in which nothing can EVER start, and each card looks individually valid', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-E1E1E1E1-a.md',
+      good('E1E1E1E1', { column: 'blocked', 'blocked-by': '[TRDD-E2E2E2E2]' }))
+    write('tasks', 'TRDD-20260101_000000+0100-E2E2E2E2-b.md',
+      good('E2E2E2E2', { column: 'blocked', 'blocked-by': '[TRDD-E3E3E3E3]' }))
+    write('tasks', 'TRDD-20260101_000000+0100-E3E3E3E3-c.md',
+      good('E3E3E3E3', { column: 'blocked', 'blocked-by': '[TRDD-E1E1E1E1]' }))
+    const cyc = lintCorpus(tmp).findings.filter((f) => f.rule === 'ORDER-CYCLE')
+    expect(cyc).toHaveLength(1) // reported ONCE, not once per member
+    expect(cyc[0].message).toMatch(/E1E1E1E1/)
+  })
+
+  it('readyQueue — returns only cards whose prerequisites are ALL satisfied, ranked by what they unblock', () => {
+    // BLK is open, so DOWN1/DOWN2 wait on it. FREE waits on nobody.
+    write('tasks', 'TRDD-20260101_000000+0100-F0F0F0F0-blk.md', good('F0F0F0F0', { column: 'dev' }))
+    write('tasks', 'TRDD-20260101_000000+0100-F1F1F1F1-d1.md',
+      good('F1F1F1F1', { column: 'blocked', 'blocked-by': '[TRDD-F0F0F0F0]' }))
+    write('tasks', 'TRDD-20260101_000000+0100-F2F2F2F2-d2.md',
+      good('F2F2F2F2', { column: 'blocked', 'blocked-by': '[TRDD-F0F0F0F0]' }))
+    write('tasks', 'TRDD-20260101_000000+0100-F3F3F3F3-free.md', good('F3F3F3F3', { column: 'todo' }))
+
+    const q = readyQueue(tmp)
+    const ids = q.map((r) => r.id)
+    expect(ids).toContain('F0F0F0F0')
+    expect(ids).toContain('F3F3F3F3')
+    expect(ids).not.toContain('F1F1F1F1') // blocked — not workable
+    // F0 unblocks two cards, so it OUTRANKS the free-floating card. Age never enters it.
+    expect(ids[0]).toBe('F0F0F0F0')
+    expect(q[0].unblocks).toBe(2)
   })
 
   it('DANGLING-REF — an edge pointing at nothing silently never resolves', () => {

@@ -91,7 +91,7 @@ export interface DoctorReport {
   warnings: number
 }
 
-interface Card {
+export interface Card {
   id: string
   zone: TrddZone
   filePath: string
@@ -293,17 +293,91 @@ export function lintCorpus(designDir: string): DoctorReport {
       })
     }
 
-    // ---- blocked ⇄ blocked-by ----
-    const blockedBy = asList(c.fm['blocked-by'])
+    // ================= ORDER — the invariant that actually matters =================
+    //
+    // Timing is noise: a TRDD may wait a day or a month and nothing is wrong. What is
+    // NEVER acceptable is work proceeding OUT OF ORDER — a task running while its
+    // prerequisite is unfinished, or a task idling while its blocker has long cleared.
+    // The dependency chain is the load-bearing structure; respect it and scheduling
+    // solves itself. These four rules are that structure, enforced.
+
+    const blockedBy = asList(c.fm['blocked-by']).map((x) => norm(x.replace(/^TRDD-/i, '')))
+    const openBlockers = blockedBy.filter((k) => {
+      const b = byId.get(k)?.[0]
+      return b && !TERMINAL_DONE.includes(b.column)
+    })
+
+    // (1) A live blocker MUST show as blocked. Otherwise the card sits in `dev` looking
+    //     workable, an agent picks it up, and the ordering is violated with no warning.
+    if (openBlockers.length > 0 && c.column !== 'blocked') {
+      add({
+        rule: 'ORDER-BLOCKER-IGNORED',
+        severity: 'error',
+        id: c.id,
+        filePath: c.filePath,
+        message: `is '${c.column}' while blocked-by ${openBlockers.join(', ')} are still open — a non-empty blocked-by MEANS the column is \`blocked\`. Left in a working column the card looks available, so someone starts it out of order`,
+        autofixable: false,
+      })
+    }
+
+    // (2) The mirror: blocked, but every blocker has cleared. This is the expensive one —
+    //     real, ready work sitting idle because nobody noticed it was freed. Restore it to
+    //     `pre-block-column:`.
+    if (c.column === 'blocked' && blockedBy.length > 0 && openBlockers.length === 0) {
+      const back = String(c.fm['pre-block-column'] ?? '').trim()
+      add({
+        rule: 'ORDER-STALE-BLOCK',
+        severity: 'error',
+        id: c.id,
+        filePath: c.filePath,
+        message: `is \`blocked\` but every blocker (${blockedBy.join(', ')}) is terminal — it is READY and nobody noticed. Restore to ${back ? `\`${back}\` (its pre-block-column)` : '`todo` (no pre-block-column was recorded)'}`,
+        autofixable: false,
+      })
+    }
+
     if (c.column === 'blocked' && blockedBy.length === 0) {
       add({
         rule: 'BLOCKED-WITHOUT-BLOCKER',
+        severity: 'error',
+        id: c.id,
+        filePath: c.filePath,
+        message: 'column is `blocked` but `blocked-by:` is empty — nothing records what would unblock it, so it can NEVER be noticed as unblocked. A card that cannot be unblocked is a card that is silently abandoned',
+        autofixable: false,
+      })
+    }
+
+    if (c.column === 'blocked' && !fmHas('pre-block-column')) {
+      add({
+        rule: 'BLOCKED-NO-RESTORE-POINT',
         severity: 'warn',
         id: c.id,
         filePath: c.filePath,
-        message: 'column is `blocked` but `blocked-by:` is empty — nothing records what would unblock it, so it can never be noticed as unblocked',
+        message: 'blocked without `pre-block-column:` — when the blocker clears there is no record of where to put it back, so it will land in the wrong column or be forgotten',
         autofixable: false,
       })
+    }
+
+    // (3) NPT ordering: a Necessary Prerequisite Task must be finished BEFORE the parent
+    //     proceeds past `dev`. A parent in testing/review/complete with an open NPT has
+    //     built on a foundation that does not exist yet.
+    const PAST_DEV = ['testing', 'ai_review', 'human_review', 'complete', 'publish', 'published', 'deploy', 'live', 'live_auditing']
+    if (PAST_DEV.includes(c.column)) {
+      const openNpt = asList(c.fm['npt'])
+        .map((x) => norm(x.replace(/^TRDD-/i, '')))
+        .filter((k) => {
+          const n = byId.get(k)?.[0]
+          return n && !TERMINAL_DONE.includes(n.column)
+        })
+      if (openNpt.length > 0) {
+        add({
+          rule: 'ORDER-NPT-VIOLATED',
+          severity: 'error',
+          id: c.id,
+          filePath: c.filePath,
+          message: `is '${c.column}' (past dev) while its NPT(s) ${openNpt.join(', ')} are unfinished — an NPT must complete BEFORE the parent proceeds past \`dev\`. This card is being tested/reviewed against a prerequisite that does not exist yet`,
+          autofixable: false,
+        })
+      }
     }
 
     // ---- derived-TRDD invariants (depth is exactly 1) ----
@@ -446,7 +520,15 @@ export function lintCorpus(designDir: string): DoctorReport {
       })
     }
 
-    // ---- staleness: the STATE block says done, the column says otherwise ----
+    // ---- drift: the STATE block says done, the column says otherwise ----
+    //
+    // Deliberately a WARN, not an error. This is a *timing* signal, and timing is the
+    // least important thing on this board: how long a card has waited says nothing about
+    // whether anything is wrong. The ERRORs above are all about ORDER — a prerequisite
+    // skipped, a blocker ignored, a ring that can never start — because a violated order
+    // means work is proceeding on a foundation that does not exist, which is a real
+    // defect at any age. A stale column is only a bookkeeping lag, and it costs a
+    // reviewer a minute; a violated order costs the work itself.
     if (WORKING_COLUMNS.includes(c.column)) {
       const state = c.body.match(/##\s*⏵?\s*STATE[\s\S]{0,1200}/i)?.[0] ?? ''
       if (/\b(RESOLVED|EXECUTION COMPLETE|✅\s*(DONE|COMPLETE|SHIPPED)|DEPLOYED \+ LIVE-VERIFIED)\b/i.test(state)) {
@@ -455,15 +537,129 @@ export function lintCorpus(designDir: string): DoctorReport {
           severity: 'warn',
           id: c.id,
           filePath: c.filePath,
-          message: `STATE block reads as finished but column is '${c.column}' — either the card never got moved (the board is lying about open work) or the STATE is optimistic. Verify against git before moving it: a STATE block's word is not evidence`,
+          message: `STATE block reads as finished but column is '${c.column}' — either the card never got moved or the STATE is optimistic. Verify against git before moving it: a STATE block's word is not evidence. (WARN by design: this is bookkeeping lag, not an ordering violation)`,
           autofixable: false,
         })
       }
     }
   }
 
+  // ---- (4) CYCLES — the failure that freezes the board forever ----
+  //
+  // A → blocked-by → B → blocked-by → A. Every card in the ring is waiting for another
+  // card in the ring, so NOTHING in it can ever start. No timeout fires, no alarm rings:
+  // each card individually looks perfectly legitimate ("I am blocked, that is a valid
+  // state"). It is only visible from the SHAPE of the graph. This is why order, not age,
+  // is the thing worth checking — a cycle is un-agable, and it is fatal.
+  for (const cyc of findCycles(cards)) {
+    add({
+      rule: 'ORDER-CYCLE',
+      severity: 'error',
+      id: cyc[0],
+      filePath: byId.get(cyc[0])?.[0]?.filePath ?? '?',
+      message: `dependency CYCLE: ${cyc.join(' → ')} → ${cyc[0]}. Every card in this ring waits on another card in the ring, so none of them can EVER start — and each one looks individually valid, which is why nothing catches it. Break the ring: one of these edges is wrong (a sibling ordering belongs in \`blocked-by:\`, a derivation in \`npt:\`/\`eht:\` — confusing the two is the usual cause)`,
+      autofixable: false,
+    })
+  }
+
   const errors = findings.filter((f) => f.severity === 'error').length
   return { findings, scanned: cards.length, errors, warnings: findings.length - errors }
+}
+
+/** Edges that impose ORDER: this card cannot proceed until those cards do. */
+function orderEdges(c: Card): string[] {
+  return [...asList(c.fm['blocked-by']), ...asList(c.fm['npt'])].map((x) =>
+    norm(x.replace(/^TRDD-/i, '')),
+  )
+}
+
+/** Every dependency cycle, each reported once (canonicalised by its smallest member). */
+export function findCycles(cards: Card[]): string[][] {
+  const adj = new Map<string, string[]>()
+  for (const c of cards) adj.set(c.id, orderEdges(c))
+
+  const WHITE = 0, GREY = 1, BLACK = 2
+  const colour = new Map<string, number>()
+  const stack: string[] = []
+  const seen = new Set<string>()
+  const cycles: string[][] = []
+
+  const walk = (id: string) => {
+    colour.set(id, GREY)
+    stack.push(id)
+    for (const next of adj.get(id) ?? []) {
+      if (!adj.has(next)) continue // dangling — DANGLING-REF already reports it
+      const col = colour.get(next) ?? WHITE
+      if (col === GREY) {
+        const ring = stack.slice(stack.indexOf(next))
+        // canonical rotation so the same ring is never reported twice
+        const min = ring.indexOf([...ring].sort()[0])
+        const canon = [...ring.slice(min), ...ring.slice(0, min)]
+        const key = canon.join('>')
+        if (!seen.has(key)) {
+          seen.add(key)
+          cycles.push(canon)
+        }
+      } else if (col === WHITE) {
+        walk(next)
+      }
+    }
+    stack.pop()
+    colour.set(id, BLACK)
+  }
+
+  for (const c of cards) if ((colour.get(c.id) ?? WHITE) === WHITE) walk(c.id)
+  return cycles
+}
+
+export interface ReadyCard {
+  id: string
+  column: string
+  title: string
+  priority: unknown
+  /** Cards this one unblocks. A high count means finishing it frees the most work. */
+  unblocks: number
+}
+
+/**
+ * The READY QUEUE — every card whose prerequisites are ALL satisfied, so it can be
+ * worked on right now, ordered by how much work finishing it would unblock.
+ *
+ * This is the answer to "what should I do next?", and it is derived purely from the
+ * dependency graph — never from how long something has been waiting. Age tells you
+ * nothing: a card that has waited a month may still be blocked, and a card created
+ * this morning may be the one thing unblocking six others.
+ */
+export function readyQueue(designDir: string): ReadyCard[] {
+  const { cards } = loadCorpus(designDir)
+  const byId = new Map(cards.map((c) => [c.id, c]))
+  const isDone = (id: string) => {
+    const c = byId.get(id)
+    return !c || TERMINAL_DONE.includes(c.column)
+  }
+
+  // How many OPEN cards each card would unblock if it were finished.
+  const unblocks = new Map<string, number>()
+  for (const c of cards) {
+    if (TERMINAL_DONE.includes(c.column)) continue
+    for (const dep of orderEdges(c)) unblocks.set(dep, (unblocks.get(dep) ?? 0) + 1)
+  }
+
+  return cards
+    .filter((c) => WORKING_COLUMNS.includes(c.column) && c.column !== 'blocked')
+    .filter((c) => orderEdges(c).every(isDone))
+    .map((c) => ({
+      id: c.id,
+      column: c.column,
+      title: c.title,
+      priority: c.fm['priority'],
+      unblocks: unblocks.get(c.id) ?? 0,
+    }))
+    .sort(
+      (a, b) =>
+        b.unblocks - a.unblocks ||
+        String(a.priority ?? 9).localeCompare(String(b.priority ?? 9)),
+    )
 }
 
 /* ------------------------------------------------------------------ *

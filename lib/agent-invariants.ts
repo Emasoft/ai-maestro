@@ -321,6 +321,20 @@ export function startAgentInvariantsWatchdog(
 
   watchdogTimer = setInterval(() => {
     void (async () => {
+      // Fleet-level check, ONCE per sweep, BEFORE the per-agent loop — never
+      // per-agent. The keychain-blindness this detects is a property of the
+      // tmux SERVER every pane is forked from, not of any one agent's workdir,
+      // so running it per-agent would both waste the sweep and turn one root
+      // cause into N alarm lines (TRDD-78J4I4QS). A sweep failure here must not
+      // cancel the per-agent invariants below — same isolation contract as the
+      // outer catch two lines down.
+      try {
+        const { sweepTmuxServerKeychain } = await import('@/lib/tmux-server-keychain-watchdog')
+        await sweepTmuxServerKeychain()
+      } catch (err) {
+        console.warn('[InvariantsWatchdog] tmux-server-keychain sweep failed:', err instanceof Error ? err.message : err)
+      }
+
       try {
         for (const a of listAgents()) {
           const r = await enforceAgentInvariants({ ...a, trigger: 'periodic' })

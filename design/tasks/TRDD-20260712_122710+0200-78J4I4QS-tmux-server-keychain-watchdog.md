@@ -1,9 +1,9 @@
 ---
 trdd-id: 78J4I4QS
 title: reliability — detect a keychain-blind tmux server before it silently takes the whole fleet down
-column: planned
+column: dev
 created: 2026-07-12T12:27:10+0200
-updated: 2026-07-12T12:27:10+0200
+updated: 2026-07-13T05:35:00+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 1
@@ -42,9 +42,27 @@ external-refs: ["memory:tmux-pane-cannot-read-login-keychain", "memory:fleet-aut
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-12
 
-- **State:** PLANNED. Depends on nothing; can be built before or after its parent, but it
+**▶ UPDATE 2026-07-13 (IMPLEMENTED — awaiting deploy):**
+
+- **Built + tested.** `lib/tmux-server-keychain-watchdog.ts`:
+  `checkTmuxServerKeychainOnce` (throwaway session `aim-kc-watchdog`, REUSES
+  `preflightPaneKeychain`, fail-safe: pane-standup errors report `blind`, `finally`
+  always kills the throwaway) + `sweepTmuxServerKeychain` (darwin-gated, re-entrancy
+  guard — overlapping sweeps on the FIXED session name would false-alarm `blind` —
+  alarm state with preserved `since`, ONE `console.error` with the remediation text,
+  silence on ok) + the `dotenclave` secrets-CLI canary via `tmux list-panes -a`.
+  Wired into `startAgentInvariantsWatchdog`'s interval (once per sweep, before the
+  per-agent loop, own try/catch). `getTmuxServerKeychainAlarm()` exported for a
+  future dashboard banner (banner UI NOT yet wired — detector + log + queryable
+  state only). Tests: 13 (incl. the 3 pinned) + hermetic mock added to
+  `agent-invariants.test.ts` so unit runs never touch the real host tmux server.
+- **NEXT:** deploy (build + pm2 restart) and observe one 5-min sweep on the live
+  server; then wire the dashboard banner off `getTmuxServerKeychainAlarm()` (small
+  follow-up, not gating).
+
+- **State (2026-07-12, superseded above):** PLANNED. Depends on nothing; can be built before or after its parent, but it
   only becomes *useful* once the parent refuses launches.
-- **NEXT ACTION:** add a `tmux-server-keychain` check to the periodic invariants
+- **NEXT ACTION (done):** add a `tmux-server-keychain` check to the periodic invariants
   watchdog started by `server.mjs` (`startAgentInvariantsWatchdog`, 5 min default).
 - **Why this is an EHT, not a nice-to-have:** the parent (TRDD-CNF1X3J7) makes the launch
   path REFUSE when a pane cannot read the keychain. That is correct — but on its own it

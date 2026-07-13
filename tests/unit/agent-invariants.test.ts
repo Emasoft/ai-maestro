@@ -48,6 +48,14 @@ vi.mock('@/services/element-management-service', () => ({
 vi.mock('@/lib/agent-auth', () => ({
   buildSystemAuthContext: vi.fn(() => ({ kind: 'system' })),
 }))
+// The watchdog interval dynamically imports the fleet-level keychain sweep
+// (TRDD-78J4I4QS). Unmocked, the watchdog tests below would run the REAL
+// TmuxRuntime against this machine's live tmux server (creating/killing a
+// real `aim-kc-watchdog` session and probing the real macOS keychain) — a
+// unit test must stay hermetic. The sweep has its own dedicated test file.
+vi.mock('@/lib/tmux-server-keychain-watchdog', () => ({
+  sweepTmuxServerKeychain: vi.fn(async () => {}),
+}))
 
 const AGENT_RULES_FILE = 'aimaestro-agent-rules.md'
 

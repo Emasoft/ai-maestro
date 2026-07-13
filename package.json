@@ -39,6 +39,7 @@
     "trdd:doctor": "node --import tsx scripts/trdd-doctor.mjs",
     "trdd:fix": "node --import tsx scripts/trdd-doctor.mjs --fix",
     "trdd:board": "node --import tsx scripts/trdd-doctor.mjs --board",
+    "greptrdd": "node --import tsx scripts/greptrdd.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:services": "vitest run tests/services/",

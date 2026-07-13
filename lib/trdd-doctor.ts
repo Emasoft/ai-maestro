@@ -34,14 +34,30 @@ import fs from 'fs'
 import path from 'path'
 import { execFileSync } from 'child_process'
 import { TRDD_ZONES, type TrddZone, listTrddFiles, parseTrddFile } from './trdd-store'
+import {
+  loadTrddGraph,
+  checkTrddInvariants,
+  normalizeTrddRef,
+  V1_STATUS_TO_COLUMN,
+  TERMINAL_DONE as GRAPH_TERMINAL_DONE,
+} from './trdd-graph'
 import { DEFAULT_STATUSES } from '@/types/task'
 
 /** The 17 ratified kanban columns, plus the lifecycle values that bracket them. */
 export const BRACKET_COLUMNS = ['proposal', 'planned', 'refused', 'completed', 'cancelled'] as const
 export const VALID_COLUMNS: readonly string[] = [...DEFAULT_STATUSES, ...BRACKET_COLUMNS]
 
-/** Columns that mean "this work is finished and leaves the board". */
-export const TERMINAL_DONE = ['complete', 'completed', 'published', 'live', 'cancelled', 'superseded']
+/**
+ * Columns that mean "this work is finished and leaves the board".
+ *
+ * RE-EXPORTED from lib/trdd-graph.ts — NOT redefined. It is the one owner of the graph
+ * semantics, and a second definition of "what counts as done" is a second truth that
+ * will eventually disagree with the first. (I originally wrote my own copy of this list,
+ * plus my own cycle detector and completion gate, because I never checked whether they
+ * existed. They did. That is the bug this whole file exists to catch, committed by the
+ * file itself.)
+ */
+export const TERMINAL_DONE: readonly string[] = [...GRAPH_TERMINAL_DONE]
 /** Working columns — a card here is OPEN. `failed` is OPEN too: it is retryable. */
 export const WORKING_COLUMNS = DEFAULT_STATUSES.filter(
   (c) => !['complete', 'published', 'live', 'superseded'].includes(c),
@@ -55,21 +71,6 @@ export const AUTHORITY_RANK: Record<string, number> = {
   manager: 3,
   user: 4,
   maestro: 4, // the human owner, as this project names them
-}
-
-/** v1 `status:` → v2 `column:`. Only unambiguous mappings; anything else falls to `todo`. */
-const STATUS_TO_COLUMN: Record<string, string> = {
-  'not-started': 'todo',
-  notstarted: 'todo',
-  todo: 'todo',
-  planned: 'planned',
-  'in-progress': 'dev',
-  inprogress: 'dev',
-  doing: 'dev',
-  blocked: 'blocked',
-  done: 'complete',
-  complete: 'complete',
-  completed: 'complete',
 }
 
 export type Severity = 'error' | 'warn'
@@ -105,7 +106,6 @@ export interface Card {
 const asList = (v: unknown): string[] =>
   Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : []
 
-const norm = (id: string) => id.trim().toUpperCase()
 
 /**
  * Read every TRDD in every zone, through the store. A file the store cannot parse is
@@ -123,7 +123,7 @@ function loadCorpus(designDir: string): { cards: Card[]; unparsed: string[] } {
         continue
       }
       cards.push({
-        id: norm(parsed.id),
+        id: normalizeTrddRef(parsed.id),
         zone,
         filePath: file,
         column: String(parsed.column ?? '').trim(),
@@ -181,7 +181,7 @@ export function lintCorpus(designDir: string): DoctorReport {
   for (const c of cards) {
     for (const kind of ['npt', 'eht'] as const) {
       for (const child of asList(c.fm[kind])) {
-        const k = norm(child.replace(/^TRDD-/i, ''))
+        const k = normalizeTrddRef(child.replace(/^TRDD-/i, ''))
         if (!claimedBy.has(k)) claimedBy.set(k, [])
         claimedBy.get(k)!.push({ parent: c.id, kind })
       }
@@ -301,39 +301,12 @@ export function lintCorpus(designDir: string): DoctorReport {
     // The dependency chain is the load-bearing structure; respect it and scheduling
     // solves itself. These four rules are that structure, enforced.
 
-    const blockedBy = asList(c.fm['blocked-by']).map((x) => norm(x.replace(/^TRDD-/i, '')))
-    const openBlockers = blockedBy.filter((k) => {
-      const b = byId.get(k)?.[0]
-      return b && !TERMINAL_DONE.includes(b.column)
-    })
-
-    // (1) A live blocker MUST show as blocked. Otherwise the card sits in `dev` looking
-    //     workable, an agent picks it up, and the ordering is violated with no warning.
-    if (openBlockers.length > 0 && c.column !== 'blocked') {
-      add({
-        rule: 'ORDER-BLOCKER-IGNORED',
-        severity: 'error',
-        id: c.id,
-        filePath: c.filePath,
-        message: `is '${c.column}' while blocked-by ${openBlockers.join(', ')} are still open — a non-empty blocked-by MEANS the column is \`blocked\`. Left in a working column the card looks available, so someone starts it out of order`,
-        autofixable: false,
-      })
-    }
-
-    // (2) The mirror: blocked, but every blocker has cleared. This is the expensive one —
-    //     real, ready work sitting idle because nobody noticed it was freed. Restore it to
-    //     `pre-block-column:`.
-    if (c.column === 'blocked' && blockedBy.length > 0 && openBlockers.length === 0) {
-      const back = String(c.fm['pre-block-column'] ?? '').trim()
-      add({
-        rule: 'ORDER-STALE-BLOCK',
-        severity: 'error',
-        id: c.id,
-        filePath: c.filePath,
-        message: `is \`blocked\` but every blocker (${blockedBy.join(', ')}) is terminal — it is READY and nobody noticed. Restore to ${back ? `\`${back}\` (its pre-block-column)` : '`todo` (no pre-block-column was recorded)'}`,
-        autofixable: false,
-      })
-    }
+    // NOTE: "a live blocker means column: blocked" and "blocked-by lists only OPEN
+    // blockers" are NOT checked here. lib/trdd-graph.ts already owns them
+    // (`blockedNotBlocked`, `danglingBlocker`) and the delegation block at the end of
+    // this function surfaces them. I originally re-implemented both, which is how this
+    // file briefly became the second truth it exists to prevent.
+    const blockedBy = asList(c.fm['blocked-by']).map((x) => normalizeTrddRef(x))
 
     if (c.column === 'blocked' && blockedBy.length === 0) {
       add({
@@ -363,7 +336,7 @@ export function lintCorpus(designDir: string): DoctorReport {
     const PAST_DEV = ['testing', 'ai_review', 'human_review', 'complete', 'publish', 'published', 'deploy', 'live', 'live_auditing']
     if (PAST_DEV.includes(c.column)) {
       const openNpt = asList(c.fm['npt'])
-        .map((x) => norm(x.replace(/^TRDD-/i, '')))
+        .map((x) => normalizeTrddRef(x.replace(/^TRDD-/i, '')))
         .filter((k) => {
           const n = byId.get(k)?.[0]
           return n && !TERMINAL_DONE.includes(n.column)
@@ -380,66 +353,33 @@ export function lintCorpus(designDir: string): DoctorReport {
       }
     }
 
-    // ---- derived-TRDD invariants (depth is exactly 1) ----
-    const derived = c.fm['derived'] === true
+    // The derivation invariants (depth1 / unclaimed / childDerivedFalse / twoParents /
+    // kindMismatch / parentMismatch) and the completion gate (falseComplete) are NOT
+    // checked here — lib/trdd-graph.ts owns all of them, and the delegation block below
+    // surfaces them. What the graph does NOT do is decide whether a violation is
+    // MECHANICALLY REPAIRABLE, so that judgement stays here:
+    //
+    // A missing `derived: true` back-link is autofixable ONLY when the lineage is
+    // unambiguous — exactly ONE parent claims the child AND the child already names that
+    // same parent. Then the flag is DERIVED from the parent's own npt:/eht:, not guessed.
+    // Two claimants means the child has two parents, which is a real lineage bug; writing
+    // the flag would paper over it. `fixCorpus` applies exactly this rule.
     const claims = claimedBy.get(c.id) ?? []
-    if (derived && claims.length === 0) {
-      add({
-        rule: 'DERIVED-ORPHAN',
-        severity: 'error',
-        id: c.id,
-        filePath: c.filePath,
-        message: 'declares `derived: true` but NO parent lists it in `npt:`/`eht:` — an orphan platelet never gates anyone\'s `complete`, which is the one thing it exists to do',
-        autofixable: false,
-      })
-    }
-    if (!derived && claims.length > 0) {
-      // Autofixable ONLY when the lineage is unambiguous: exactly ONE parent claims it,
-      // and the child already points back at that same parent. Then `derived: true` and
-      // `derived-kind:` are DERIVED facts (from the parent's own npt:/eht:), not a
-      // judgement. If two parents claim the same child, the child has two parents —
-      // that is a real lineage bug, and writing a flag would paper over it.
-      const parentField = norm(String(c.fm['parent-trdd'] ?? '').replace(/^TRDD-/i, ''))
+    if (c.fm['derived'] !== true && claims.length > 0) {
+      const parentField = normalizeTrddRef(String(c.fm['parent-trdd'] ?? ''))
       const unambiguous = claims.length === 1 && parentField === claims[0].parent
-      add({
-        rule: 'DERIVED-FLAG-MISSING',
-        severity: 'error',
-        id: c.id,
-        filePath: c.filePath,
-        message: `is claimed as an ${claims[0].kind.toUpperCase()} by TRDD-${claims[0].parent} but does not declare \`derived: true\` — the same bug seen from the other end; repair the missing half, never delete the half that is there${unambiguous ? '' : ' (NOT autofixable: the lineage is ambiguous — more than one parent claims it, or parent-trdd disagrees)'}`,
-        autofixable: unambiguous,
-      })
-    }
-    if (derived && (asList(c.fm['npt']).length > 0 || asList(c.fm['eht']).length > 0)) {
-      add({
-        rule: 'DERIVED-DEPTH',
-        severity: 'error',
-        id: c.id,
-        filePath: c.filePath,
-        message: 'a derived TRDD may not have its own npt/eht (depth is exactly 1) — otherwise the parent\'s `complete` gate recurses over a tree nobody can enumerate. A sibling ordering belongs in `blocked-by:`, not `npt:`',
-        autofixable: false,
-      })
-    }
-
-    // ---- the completion gate: a parent is not complete while its flock is open ----
-    if (TERMINAL_DONE.includes(c.column)) {
-      const children = [...asList(c.fm['npt']), ...asList(c.fm['eht'])].map((x) =>
-        norm(x.replace(/^TRDD-/i, '')),
-      )
-      const open = children.filter((k) => {
-        const child = byId.get(k)?.[0]
-        return child && !TERMINAL_DONE.includes(child.column)
-      })
-      if (open.length > 0) {
+      if (unambiguous) {
         add({
-          rule: 'FALSE-COMPLETION',
+          rule: 'DERIVED-FLAG-MISSING',
           severity: 'error',
           id: c.id,
           filePath: c.filePath,
-          message: `is '${c.column}' while its derived TRDD(s) ${open.join(', ')} are still open — the honest column is \`blocked\` (it is blocked on itself). Shipping the parent without its platelets does net damage: the change landed and the holes it opened stayed open`,
-          autofixable: false,
+          message: `is claimed as an ${claims[0].kind.toUpperCase()} by TRDD-${claims[0].parent} but does not declare \`derived: true\` — repair the missing half, never delete the half that is there`,
+          autofixable: true,
         })
       }
+      // The ambiguous case is left to trdd-graph (it reports `twoParents`/`childDerivedFalse`),
+      // because it is NOT repairable and duplicating the report would double-count it.
     }
 
     // ---- mandate authority: a self-issued mandate above your rank is a forged approval ----
@@ -492,32 +432,21 @@ export function lintCorpus(designDir: string): DoctorReport {
       })
     }
 
-    // ---- dangling references ----
-    for (const field of ['npt', 'eht', 'blocked-by', 'superseded-by'] as const) {
-      for (const ref of asList(c.fm[field])) {
-        const k = norm(ref.replace(/^TRDD-/i, ''))
-        if (!known.has(k)) {
-          add({
-            rule: 'DANGLING-REF',
-            severity: 'error',
-            id: c.id,
-            filePath: c.filePath,
-            message: `\`${field}:\` cites TRDD-${k}, which does not exist in either root — a dependency edge that points at nothing silently never resolves`,
-            autofixable: false,
-          })
-        }
+    // `superseded-by:` is the one reference field trdd-graph does NOT walk (it checks
+    // npt/eht/blocked-by/parent-trdd). Kept here for that field alone — everything else
+    // comes from the delegation below.
+    for (const ref of asList(c.fm['superseded-by'])) {
+      const k = normalizeTrddRef(ref)
+      if (!known.has(k)) {
+        add({
+          rule: 'DANGLING-REF',
+          severity: 'error',
+          id: c.id,
+          filePath: c.filePath,
+          message: `\`superseded-by:\` cites TRDD-${k}, which does not exist in either root — a card superseded by nothing is a card silently removed from the board`,
+          autofixable: false,
+        })
       }
-    }
-    const parent = String(c.fm['parent-trdd'] ?? '').trim()
-    if (parent && parent !== 'null' && !known.has(norm(parent.replace(/^TRDD-/i, '')))) {
-      add({
-        rule: 'DANGLING-REF',
-        severity: 'error',
-        id: c.id,
-        filePath: c.filePath,
-        message: `\`parent-trdd:\` cites TRDD-${parent}, which does not exist`,
-        autofixable: false,
-      })
     }
 
     // ---- drift: the STATE block says done, the column says otherwise ----
@@ -544,20 +473,29 @@ export function lintCorpus(designDir: string): DoctorReport {
     }
   }
 
-  // ---- (4) CYCLES — the failure that freezes the board forever ----
+  // ================== THE GRAPH INVARIANTS — DELEGATED, NOT RE-DERIVED ==================
   //
-  // A → blocked-by → B → blocked-by → A. Every card in the ring is waiting for another
-  // card in the ring, so NOTHING in it can ever start. No timeout fires, no alarm rings:
-  // each card individually looks perfectly legitimate ("I am blocked, that is a valid
-  // state"). It is only visible from the SHAPE of the graph. This is why order, not age,
-  // is the thing worth checking — a cycle is un-agable, and it is fatal.
-  for (const cyc of findCycles(cards)) {
+  // cycle · falseComplete · blockedNotBlocked · danglingBlocker · depth1 · unclaimed ·
+  // twoParents · kindMismatch · parentMismatch · childMissing · childDerivedFalse ·
+  // unknownBlocker · parentIsDerived — every one of these lives in lib/trdd-graph.ts,
+  // which is ALREADY the owner (wired into lib/kanban-index.ts, falsified by
+  // tests/unit/trdd-corpus-invariants.test.ts). This doctor calls it. It does not
+  // reimplement it.
+  //
+  // The first version of THIS FILE re-derived eight of those rules — a private cycle
+  // detector, a private completion gate, a private TERMINAL_DONE — because I never
+  // enumerated what existed before building. Two implementations of "is this card done?"
+  // agree on the day they are written and disagree silently the day one is edited. That
+  // is the exact class of defect this doctor exists to catch, and the doctor committed it.
+  // Deleting my copies is the fix; this comment is the guardrail against a third.
+  for (const v of checkTrddInvariants(loadTrddGraph(designDir))) {
+    const id = normalizeTrddRef(v.id)
     add({
-      rule: 'ORDER-CYCLE',
+      rule: `GRAPH-${v.kind.replace(/([A-Z])/g, '-$1').toUpperCase()}`,
       severity: 'error',
-      id: cyc[0],
-      filePath: byId.get(cyc[0])?.[0]?.filePath ?? '?',
-      message: `dependency CYCLE: ${cyc.join(' → ')} → ${cyc[0]}. Every card in this ring waits on another card in the ring, so none of them can EVER start — and each one looks individually valid, which is why nothing catches it. Break the ring: one of these edges is wrong (a sibling ordering belongs in \`blocked-by:\`, a derivation in \`npt:\`/\`eht:\` — confusing the two is the usual cause)`,
+      id,
+      filePath: byId.get(id)?.[0]?.filePath ?? '?',
+      message: v.detail,
       autofixable: false,
     })
   }
@@ -569,47 +507,8 @@ export function lintCorpus(designDir: string): DoctorReport {
 /** Edges that impose ORDER: this card cannot proceed until those cards do. */
 function orderEdges(c: Card): string[] {
   return [...asList(c.fm['blocked-by']), ...asList(c.fm['npt'])].map((x) =>
-    norm(x.replace(/^TRDD-/i, '')),
+    normalizeTrddRef(x),
   )
-}
-
-/** Every dependency cycle, each reported once (canonicalised by its smallest member). */
-export function findCycles(cards: Card[]): string[][] {
-  const adj = new Map<string, string[]>()
-  for (const c of cards) adj.set(c.id, orderEdges(c))
-
-  const WHITE = 0, GREY = 1, BLACK = 2
-  const colour = new Map<string, number>()
-  const stack: string[] = []
-  const seen = new Set<string>()
-  const cycles: string[][] = []
-
-  const walk = (id: string) => {
-    colour.set(id, GREY)
-    stack.push(id)
-    for (const next of adj.get(id) ?? []) {
-      if (!adj.has(next)) continue // dangling — DANGLING-REF already reports it
-      const col = colour.get(next) ?? WHITE
-      if (col === GREY) {
-        const ring = stack.slice(stack.indexOf(next))
-        // canonical rotation so the same ring is never reported twice
-        const min = ring.indexOf([...ring].sort()[0])
-        const canon = [...ring.slice(min), ...ring.slice(0, min)]
-        const key = canon.join('>')
-        if (!seen.has(key)) {
-          seen.add(key)
-          cycles.push(canon)
-        }
-      } else if (col === WHITE) {
-        walk(next)
-      }
-    }
-    stack.pop()
-    colour.set(id, BLACK)
-  }
-
-  for (const c of cards) if ((colour.get(c.id) ?? WHITE) === WHITE) walk(c.id)
-  return cycles
 }
 
 export interface ReadyCard {
@@ -703,7 +602,7 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
   for (const c of cards) {
     for (const kind of ['npt', 'eht'] as const) {
       for (const child of asList(c.fm[kind])) {
-        const k = norm(child.replace(/^TRDD-/i, ''))
+        const k = normalizeTrddRef(child.replace(/^TRDD-/i, ''))
         if (!claimedBy.has(k)) claimedBy.set(k, [])
         claimedBy.get(k)!.push({ parent: c.id, kind })
       }
@@ -720,7 +619,7 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
       const h1 = text.match(/^#\s+(.+)$/m)?.[1] ?? ''
       const title = h1.replace(/^TRDD-[0-9a-fA-F-]+\s+—\s+/, '').trim()
       const created = gitFirstCommitDate(c.filePath) ?? stamp
-      const id = norm(path.basename(c.filePath).replace(/^TRDD-(?:\d{8}_\d{6}[+-]\d{4}-)?/, '').slice(0, 8))
+      const id = normalizeTrddRef(path.basename(c.filePath).replace(/^TRDD-(?:\d{8}_\d{6}[+-]\d{4}-)?/, '').slice(0, 8))
       const fm = [
         '---',
         `trdd-id: ${id}`,
@@ -755,7 +654,7 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
       //       only unambiguous values; anything else falls to `todo`.
       const status = c.fm['status']
       if (status !== undefined && c.column) {
-        const agrees = STATUS_TO_COLUMN[String(status).trim().toLowerCase()] === c.column
+        const agrees = V1_STATUS_TO_COLUMN[String(status).trim().toLowerCase()] === c.column
         text = text.replace(/^status:.*\n/m, '')
         changes.push(
           agrees || String(status).trim().toLowerCase() === c.column
@@ -763,7 +662,7 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
             : `dropped the retired \`status: ${status}\`; KEPT \`column: ${c.column}\` (the v2 state machine wins — the dead field must never overwrite the live one)`,
         )
       } else if (status !== undefined) {
-        const mapped = STATUS_TO_COLUMN[String(status).trim().toLowerCase()] ?? 'todo'
+        const mapped = V1_STATUS_TO_COLUMN[String(status).trim().toLowerCase()] ?? 'todo'
         text = text.replace(/^status:.*$/m, `column: ${mapped}`)
         changes.push(`status: ${status} → column: ${mapped}`)
       }
@@ -774,7 +673,7 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
       }
       // uppercase the id
       if (c.fm['trdd-id'] && !/^[A-Z0-9]{8}$/.test(String(c.fm['trdd-id']))) {
-        const short = norm(String(c.fm['trdd-id']).slice(0, 8))
+        const short = normalizeTrddRef(String(c.fm['trdd-id']).slice(0, 8))
         text = text.replace(/^trdd-id:.*$/m, `trdd-id: ${short}`)
         changes.push(`trdd-id → ${short} (8-char UPPERCASE base36)`)
       }
@@ -793,7 +692,7 @@ export function fixCorpus(designDir: string, opts: { dryRun?: boolean; now?: str
       // and `derived-kind:` follow mechanically from the parent's own npt:/eht:. Two
       // claimants means a genuine lineage bug; writing the flag would hide it.
       const claims = claimedBy.get(c.id) ?? []
-      const parentField = norm(String(c.fm['parent-trdd'] ?? '').replace(/^TRDD-/i, ''))
+      const parentField = normalizeTrddRef(String(c.fm['parent-trdd'] ?? '').replace(/^TRDD-/i, ''))
       if (c.fm['derived'] !== true && claims.length === 1 && parentField === claims[0].parent) {
         const kind = claims[0].kind
         text = /^derived:/m.test(text)

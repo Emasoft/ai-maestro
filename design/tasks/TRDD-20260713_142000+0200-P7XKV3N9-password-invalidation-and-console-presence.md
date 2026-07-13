@@ -1,7 +1,7 @@
 ---
 trdd-id: P7XKV3N9
 title: Invalidate a password with the password, and gate MAESTRO rotation on console presence
-column: todo
+column: testing
 min-approval-requirement: user
 mandate: true
 mandated-by: user
@@ -9,7 +9,7 @@ approved: true
 approval-judge: maestro
 approval-datetime: 2026-07-13T14:20:00+0200
 created: 2026-07-13T14:20:00+0200
-updated: 2026-07-13T14:20:00+0200
+updated: 2026-07-13T15:10:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0
@@ -21,6 +21,7 @@ derived: false
 npt: []
 eht: []
 blocked-by: []
+implementation-commits: [13dfbb92, 0d2d421f, 76e738f9, fdeee818]
 relevant-rules: []
 ---
 
@@ -49,10 +50,37 @@ exactly the kind of chore that does not get performed. **This TRDD is what
 unblocks 44RGLOO8 for good, and what makes every future rotation cheap enough to
 actually happen.**
 
-**NEXT ACTION:** implement `POST /api/governance/password/invalidate` (below),
-then wire the forced-reset branch into the existing login/setup flow
-(`/api/auth/setup-init` + `/setup-verify` already know how to accept a *new*
-password — the invalidated state simply routes login back into them).
+**▶ 2026-07-13 — SHIPPED AND VERIFIED LIVE.** `column: testing`.
+
+Commits: `0d2d421f` (endpoint + peer-address + state), `76e738f9` (CLI + UI),
+`fdeee818` (the .mjs fix), `13dfbb92` (dedupe onto setup-bootstrap/rate-limit).
+
+- `POST /api/governance/password/invalidate` — password ⇒ code on the desktop ⇒
+  revoked. Console-gated, throttled 5/15min per peer, fail-closed.
+- `lib/peer-address.mjs` — the trusted peer. **`server.mjs` deletes any inbound
+  `x-aim-peer` and stamps it from `req.socket.remoteAddress`.**
+- `invalidatePassword()` DESTROYS the hash; `setPassword()` clears the flag.
+- `aimaestro-governance.sh invalidate-password` — TTY prompt, never argv.
+- Settings → **Revoke** button + `RevokePasswordDialog`.
+- 9 new unit tests; 172 test files green; build green.
+
+**The proof that counts** (from this host's own Tailscale IP, a genuinely remote
+peer): an honest remote call gets `403 console_required`, and a call **forging**
+`X-Forwarded-For: 127.0.0.1` + `X-Real-IP: ::1` + `X-Aim-Peer: 127.0.0.1` *also*
+gets `403`. Curling from loopback proves nothing (the peer really is 127.0.0.1) —
+the spoof only becomes a test when the source is actually remote.
+
+**NEXT ACTION:** the owner rotates the leaked credential using this feature —
+Settings → Revoke, or `aimaestro-governance.sh invalidate-password` — which is
+what unblocks **TRDD-44RGLOO8**. An agent must never rotate a credential.
+
+**Two things this TRDD did NOT do** (both deliberate, both still open):
+- **MAESTRO *login* is not yet console-gated.** §2b binds the console rule to two
+  operations; only the password-change half is built. Login still accepts a
+  session from any VPN device.
+- **The general TTY→sudo-token path for other strict routes is TRDD-9MZQ4T7E.**
+  This endpoint sidesteps it by self-authenticating (its input IS the password),
+  so it needed no sudo token — which is why it could ship first.
 
 ## The two mechanisms
 

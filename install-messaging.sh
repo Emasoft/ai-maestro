@@ -807,10 +807,8 @@ fi
 # OPTIONAL: code-analysis tooling (TRDD-ZFHY7UGU)
 #
 # tldr (deliberate READ CLI) + fastedit (deliberate AST WRITE CLI) +
-# distill (generic output-compression pipe) + lean-ctx (generic shell/read
-# interceptor). The dedicated installer is FAIL-SOFT (a failure here never
-# aborts the ai-maestro install) and seeds the lean-ctx allowlist with every
-# ai-maestro CLI so agent shells don't break.
+# distill (generic output-compression pipe). The dedicated installer is
+# FAIL-SOFT (a failure here never aborts the ai-maestro install).
 # ═══════════════════════════════════════════════════════════════
 TOOLING_INSTALLER="$SCRIPT_DIR/scripts/install-code-analysis-tooling.sh"
 if [ -f "$TOOLING_INSTALLER" ]; then
@@ -822,7 +820,7 @@ if [ -f "$TOOLING_INSTALLER" ]; then
         INSTALL_TOOLING=true
         print_info "Non-interactive mode: installing code-analysis tooling (no model, no source build)..."
     else
-        echo "🔎 Code-analysis tooling: tldr, fastedit, distill, lean-ctx"
+        echo "🔎 Code-analysis tooling: tldr, fastedit, distill"
         read -r -p "   Install now? (y/N): " TOOLING_CHOICE
         case "$TOOLING_CHOICE" in
             [Yy]*)

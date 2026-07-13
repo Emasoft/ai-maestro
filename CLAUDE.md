@@ -67,7 +67,7 @@ tmux kill-session -t test-session    # Clean up test session
 
 ## Code-analysis tooling (official deps — TRDD-ZFHY7UGU)
 
-Four CLIs are official ai-maestro dependencies, installed by
+Three CLIs are official ai-maestro dependencies, installed by
 `scripts/install-code-analysis-tooling.sh` (called from `install-messaging.sh`)
 alongside the rest of the install:
 
@@ -78,23 +78,12 @@ alongside the rest of the install:
   invoked explicitly for symbol-level edits; requires tldr on PATH first.
 - **distill** — output-compression pipe. A **generic, non-discriminating**
   interceptor: wraps command output regardless of which tool produced it.
-- **lean-ctx** — shell command allowlist + output-compression interceptor +
-  `ctx_*` MCP tools. Also **generic, non-discriminating** — wraps every shell
-  call by default.
 
-**Coexistence model:** lean-ctx + distill wrap every tool call; tldr and
-fastedit are invoked on purpose when an agent wants deliberate, scoped code
-analysis or edits. **The tldr hooks stay UNWIRED** — never wire
-`tldr-read-enforcer` alongside lean-ctx (the two are mutually exclusive
-interception layers; wiring both double-intercepts every read).
-
-**lean-ctx allowlist gotcha:** lean-ctx enforces a command **allowlist**, so
-the installer MUST seed it with every ai-maestro CLI the agent shells rely on
-(`aimaestro-*.sh`, `amp-*.sh`, `aid-*.sh`, `tldr*`, `fastedit*`, `node`, `uv`,
-`git`, `[`, …) or those shells break. `$(...)` command-substitution is
-**warn-only** (not blocked), and is **not intercepted inside a script an agent
-invokes** — only the agent's top-level Bash-tool calls pass through the
-allowlist check.
+**Coexistence model:** distill wraps command output; tldr and fastedit are
+invoked on purpose when an agent wants deliberate, scoped code analysis or
+edits. **The tldr hooks stay UNWIRED** — a per-tool-call hook that injects into
+the transcript retroactively mutates the cached prefix and re-bills the whole
+prompt, so ai-maestro ships no read-interception hook at all.
 
 See `~/.claude/rules/tldr-cli.md` and the `tldr-code` skill for the full
 command reference.
@@ -107,7 +96,7 @@ coding-agent client, so the unified skill ships per-client source under
 `scripts/distribute-code-analysis-skill.sh` (run by the installer, fail-soft)
 copies each variant into a detected client's global config dir; github-copilot +
 kilocode are per-workspace, so their placement is printed rather than
-auto-applied. Non-Claude variants drop the Claude-only lean-ctx allowlist note.
+auto-applied.
 
 ## Governance rules — IND base + DEP overlay (TRDD-DE9757LJ)
 

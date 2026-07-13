@@ -3,7 +3,7 @@ trdd-id: ZFHY7UGU
 title: Make tldr-code + fastedit + lean-ctx + distill official ai-maestro dependencies
 column: completed
 created: 2026-06-30T20:37:03+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T11:20:00+0200
 implementation-commits: [7d018813]
 current-owner: main
 assignee: main
@@ -28,6 +28,20 @@ external-refs: ["github.com/parcadei/tldr-code"]
 ---
 
 # TRDD-ZFHY7UGU — Make tldr-code + fastedit + lean-ctx + distill official ai-maestro dependencies
+
+> ## ⛔ PARTLY SUPERSEDED 2026-07-13 — **lean-ctx is UNINSTALLED. Do NOT reinstall it.**
+> This TRDD ratified **four** tools. **lean-ctx has since been removed from this ecosystem** on the
+> USER's explicit order, and every trace of it was purged from the installer, the docs, and the
+> cross-client skill variants. The other three (**tldr**, **fastedit**, **distill**) remain official
+> dependencies and everything this TRDD says about them still holds.
+>
+> The body below is preserved **as a historical record of what was true on 2026-06-30** — it is not
+> a current instruction. Read *nothing* here as authority to install lean-ctx. The reasons it was
+> removed (a per-tool-call hook that retroactively rewrites the cached prompt prefix and re-bills the
+> conversation; a launchd auto-updater + KeepAlive proxy that resurrected it after two "full
+> disables"; an MCP exposing ~81 tool schemas in every turn) are recorded in the USER memory note
+> `lean-ctx-observe-hooks-removed-do-not-reonboard`. **Do not re-litigate without new evidence AND
+> user approval.**
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-06-30
 

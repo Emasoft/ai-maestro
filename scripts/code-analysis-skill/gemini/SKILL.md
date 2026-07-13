@@ -30,12 +30,10 @@ lines: the symbol's definition, the lines it depends on, the lines that depend o
 it, the callers, the slice. You decide the query; `tldr` returns the signal.
 
 > `tldr` is invoked **deliberately by you**. It is NOT a passive interceptor.
-> The generic output-compression / read-interception layer is **lean-ctx** and
-> **distill** (they wrap every tool call indiscriminately). `tldr` is the
-> opposite: a precise instrument you reach for on purpose. The three coexist —
-> lean-ctx/distill make every call cheaper; `tldr` makes you ask better
-> questions. (If a shell call to `tldr` is ever blocked by lean-ctx's allowlist,
-> run `lean-ctx allow tldr` once.)
+> The generic output-compression layer is **distill** (`cmd | distill "<prompt>"`),
+> which wraps command OUTPUT indiscriminately. `tldr` is the opposite: a precise
+> instrument you reach for on purpose. The two coexist — `distill` makes a call's
+> output cheaper; `tldr` makes you ask a better question in the first place.
 
 ## When to reach for tldr (instead of Read/Grep)
 
@@ -257,17 +255,15 @@ strings/comments). 13 languages (Python, JS, TS, Rust, Go, Java, C, C++, Ruby,
 Swift, Kotlin, C#, PHP). Backend: local MLX (Apple Silicon) / vLLM (GPU), or any
 OpenAI-compatible server via `FASTEDIT_BACKEND=llm` + `FASTEDIT_LLM_API_BASE=<url>`.
 An optional MCP server (`fastedit-mcp`, 12 tools) + an Edit→fast_edit hook
-(`fastedit-hook`) exist but are NOT enabled here — intentional-CLI use keeps
-per-turn token cost at zero, and the Edit-redirect hook must not run alongside
-lean-ctx.
+(`fastedit-hook`) exist but are NOT enabled here: intentional-CLI use keeps the
+per-turn token cost at zero, whereas a hook that fires on every tool call injects
+text into the transcript and re-bills the cached prefix.
 
-## Coexistence with lean-ctx & distill
+## Coexistence with distill
 
-- **lean-ctx** and **distill** are generic, non-discriminating interceptors
-  (they wrap/compress every tool call). `tldr` is a deliberate instrument — it
-  does not duplicate or replace them, and it is not a Read-interceptor.
-- `tldr` binaries (`tldr`, `tldr-daemon`, `tldr-mcp`, `fastedit`) are in
-  lean-ctx's shell allowlist. If a future binary/alias is blocked: `lean-ctx allow <name>`.
+- **distill** is a generic, non-discriminating output-compression pipe. `tldr` is
+  a deliberate instrument — it does not duplicate or replace distill, and it is
+  not a Read-interceptor.
 - An MCP server (`tldr-mcp`) is available for tool-style access — see
   `references/mcp-integration.md`.
 

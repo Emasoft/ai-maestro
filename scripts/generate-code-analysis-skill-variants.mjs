@@ -6,7 +6,7 @@
  * machine-generated, never hand-maintained.
  *
  * Node-26 note (fork-verified): a static `import { convert }` fails under Node
- * 26; a dynamic `import()` works. tsx is lean-ctx-blocked, so run via:
+ * 26; a dynamic `import()` works. Run via:
  *
  *   TSX_TSCONFIG_PATH="$PWD/tsconfig.json" node --import tsx \
  *     scripts/generate-code-analysis-skill-variants.mjs [--check]

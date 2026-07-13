@@ -2,16 +2,13 @@
 #
 # install-code-analysis-tooling.sh
 #
-# WHY (TRDD-ZFHY7UGU): make the four code-analysis tools official ai-maestro
+# WHY (TRDD-ZFHY7UGU): make the code-analysis tools official ai-maestro
 # dependencies — installed alongside the rest of the stack and available on
 # PATH to every agent regardless of client.
 #
-# THE FOUR TOOLS + COEXISTENCE MODEL (ratified in TRDD-ZFHY7UGU):
-#   * lean-ctx  — a GENERIC, non-discriminating INTERCEPTOR. It wraps every
-#                 tool call (Read/Grep/Shell/Glob) and enforces a shell
-#                 ALLOWLIST. Coexists with the deliberate tools below.
+# THE THREE TOOLS + COEXISTENCE MODEL (ratified in TRDD-ZFHY7UGU):
 #   * distill   — a GENERIC output-compression pipe (`cmd | distill "<prompt>"`).
-#                 Also non-discriminating; wraps command OUTPUT. Low conflict.
+#                 Non-discriminating; wraps command OUTPUT. Low conflict.
 #   * tldr      — the DELIBERATE, intentionally-invoked READ instrument
 #                 (tldr-code, Rust). You call it on purpose to extract only the
 #                 lines that matter instead of reading whole files.
@@ -19,16 +16,11 @@
 #                 (Python; uses tldr-code internally, so tldr MUST be on PATH
 #                 FIRST). 74% of edits are deterministic (0 tokens).
 #
-#   The three interception/tool layers coexist by design. tldr's OWN hooks stay
-#   UNWIRED: NEVER wire the `tldr-read-enforcer` hook alongside lean-ctx. lean-ctx
-#   is already THE single generic read/exec interception layer; a second enforcer
-#   would double-gate every read. tldr is a deliberate CLI, not an interceptor.
-#
-# THE KEY CONFLICT this installer fixes: lean-ctx's allowlist blocks `tldr`,
-# `claude`, `node`, `python3 -c`, `[`, heredoc-piped interpreters, etc. out of
-# the box. If those are not allowlisted, ai-maestro's own CLI scripts and agent
-# tmux shells BREAK. This installer seeds the allowlist with every tool + every
-# ai-maestro CLI agents rely on.
+#   tldr's OWN hooks stay UNWIRED, and ai-maestro installs NO per-tool-call
+#   interception hook of any kind. A hook that injects text on every tool call
+#   rewrites the transcript prefix retroactively, which invalidates the prompt
+#   cache and re-bills the entire conversation — the cost dwarfs anything the
+#   interception saves. tldr is a deliberate CLI, not an interceptor.
 #
 # FAIL-SOFT: every tool installs independently; a failure warns and CONTINUES.
 # This script NEVER aborts and always exits 0. Idempotent: a tool already on
@@ -49,9 +41,6 @@
 # NOTE: intentionally NO `set -e` — fail-soft requires that a single failing
 # tool install not abort the whole run. Each step handles its own errors.
 
-# ── Homebrew tap that ships lean-ctx (from this machine's INSTALL_RECEIPT.json)
-LEANCTX_TAP="yvgude/lean-ctx"
-
 # ── Config / flags (env defaults first, then flags override) ──────────────
 NON_INTERACTIVE=false
 WITH_MODEL=false
@@ -64,7 +53,7 @@ case "${NONINTERACTIVE:-}" in 1|true|TRUE|yes) NON_INTERACTIVE=true ;; esac
 
 usage() {
     cat <<'EOF'
-AI Maestro — code-analysis tooling installer (tldr, fastedit, distill, lean-ctx)
+AI Maestro — code-analysis tooling installer (tldr, fastedit, distill)
 
 Usage: install-code-analysis-tooling.sh [OPTIONS]
 
@@ -153,7 +142,6 @@ export PATH
 STATUS_TLDR=""
 STATUS_FASTEDIT=""
 STATUS_DISTILL=""
-STATUS_LEANCTX=""
 
 # ── tldr-code (Rust READ instrument) ──────────────────────────────────────
 install_tldr_prebuilt() {
@@ -323,64 +311,6 @@ install_distill() {
     fi
 }
 
-# ── lean-ctx (Homebrew interceptor) — best-effort ─────────────────────────
-install_leanctx() {
-    if command -v lean-ctx >/dev/null 2>&1; then
-        STATUS_LEANCTX="present"
-        print_success "lean-ctx already on PATH — skipping"
-        return 0
-    fi
-    if ! command -v brew >/dev/null 2>&1; then
-        STATUS_LEANCTX="skipped"
-        print_warning "Homebrew not found — lean-ctx is distributed via a Homebrew tap."
-        print_warning "  Install Homebrew (https://brew.sh), then: brew install ${LEANCTX_TAP}/lean-ctx"
-        return 0
-    fi
-    print_info "Installing lean-ctx via Homebrew tap ${LEANCTX_TAP} (best-effort)..."
-    if brew install "${LEANCTX_TAP}/lean-ctx"; then
-        STATUS_LEANCTX="installed"; print_success "lean-ctx installed"
-    else
-        STATUS_LEANCTX="failed"
-        print_warning "lean-ctx install failed. If the tap is unavailable in your environment, install manually:"
-        print_warning "  brew tap ${LEANCTX_TAP} && brew install lean-ctx"
-    fi
-}
-
-# ── Seed the lean-ctx allowlist (THE KEY CONFLICT FIX) ────────────────────
-# Runs only if lean-ctx is present (freshly installed OR pre-existing). Without
-# this, lean-ctx's shell gate blocks the tools + ai-maestro CLIs and agent
-# shells break. `lean-ctx allow` is additive + idempotent.
-seed_leanctx_allowlist() {
-    if ! command -v lean-ctx >/dev/null 2>&1; then
-        print_info "lean-ctx not present — skipping allowlist seed"
-        return 0
-    fi
-    print_info "Seeding lean-ctx allowlist (tools + ai-maestro CLIs) so agent shells don't break..."
-
-    local base=(
-        tldr tldr-daemon tldr-mcp
-        fastedit fastedit-mcp fastedit-hook
-        distill lean-ctx
-        claude node uv npm cargo git gh jq curl openssl tmux pm2 yarn
-        which command test "[" python3
-    )
-    local cmd n=0 f bn
-    for cmd in "${base[@]}"; do
-        if lean-ctx allow "$cmd" >/dev/null 2>&1; then n=$((n + 1)); fi
-    done
-
-    # Every ai-maestro CLI installed to ~/.local/bin. Unmatched globs are skipped
-    # by the `-e` existence test (default bash globbing leaves the literal).
-    for f in "$LOCAL_BIN"/aimaestro-*.sh "$LOCAL_BIN"/amp-*.sh "$LOCAL_BIN"/aid-*.sh \
-             "$LOCAL_BIN"/docs-*.sh "$LOCAL_BIN"/graph-*.sh "$LOCAL_BIN"/memory-*.sh; do
-        [ -e "$f" ] || continue
-        bn="$(basename "$f")"
-        if lean-ctx allow "$bn" >/dev/null 2>&1; then n=$((n + 1)); fi
-    done
-
-    print_success "lean-ctx allowlist seeded ($n entries ensured; additive + idempotent)"
-}
-
 # ── Summary table (tool | version | status) ───────────────────────────────
 status_label() {
     case "$1" in
@@ -410,13 +340,12 @@ print_summary() {
     summary_row "tldr"     "$STATUS_TLDR"     "tldr --version"
     summary_row "fastedit" "$STATUS_FASTEDIT" "fastedit --version"
     summary_row "distill"  "$STATUS_DISTILL"  "distill --version"
-    summary_row "lean-ctx" "$STATUS_LEANCTX"  "lean-ctx --version"
     echo ""
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────
 echo ""
-print_info "Code-analysis tooling: tldr (read), fastedit (write), distill (compress), lean-ctx (intercept)"
+print_info "Code-analysis tooling: tldr (read), fastedit (write), distill (compress)"
 
 if [ "$NON_INTERACTIVE" != true ]; then
     printf "Install code-analysis tooling now? [Y/n]: "
@@ -433,13 +362,10 @@ if [ "$NON_INTERACTIVE" != true ]; then
     fi
 fi
 
-# Order matters: tldr BEFORE fastedit (fastedit uses tldr); lean-ctx BEFORE the
-# allowlist seed (which also covers a pre-existing lean-ctx).
+# Order matters: tldr BEFORE fastedit (fastedit uses tldr).
 install_tldr
 install_fastedit
 install_distill
-install_leanctx
-seed_leanctx_allowlist
 
 # Distribute the cross-client skill variants (TRDD-ANYCPRTX) — fail-soft; never aborts.
 DISTRIBUTE="$(dirname "${BASH_SOURCE[0]}")/distribute-code-analysis-skill.sh"

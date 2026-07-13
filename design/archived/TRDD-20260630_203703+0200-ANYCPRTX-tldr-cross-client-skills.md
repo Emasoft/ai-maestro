@@ -30,6 +30,14 @@ external-refs: ["github.com/parcadei/tldr-code", "github.com/parcadei/fastedit"]
 
 # TRDD-ANYCPRTX — Cross-client variants of the unified tldr-code+fastedit skill
 
+> ## ⛔ PARTLY SUPERSEDED 2026-07-13 — **lean-ctx is UNINSTALLED. Do NOT reinstall it.**
+> The skill variants this TRDD produced originally described a "coexistence model" with **lean-ctx**.
+> That tool has been removed from the ecosystem on the USER's explicit order, and every variant
+> (claude, codex, gemini, opencode, kiro, copilot, kilocode) has been purged of it — they now
+> describe coexistence with **distill** alone. Everything else in this TRDD still stands. The body
+> below is a historical record, not a current instruction. See the USER memory note
+> `lean-ctx-observe-hooks-removed-do-not-reonboard` for why it was removed.
+
 > **Graph correction 2026-07-10 (corpus sweep).** This TRDD declared
 > `npt: [TRDD-ZFHY7UGU]` while ZFHY7UGU declared `eht: [TRDD-ANYCPRTX]` — each
 > claiming the other as its child, which is a cycle. Both statements were true as

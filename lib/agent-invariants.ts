@@ -25,7 +25,7 @@
  * reviewable field beats leaving it implicit in which function someone remembered to
  * call.
  */
-import { mkdir } from 'fs/promises'
+import { mkdir, readFile } from 'fs/promises'
 import { join } from 'path'
 
 export type InvariantTrigger = 'create' | 'wake' | 'periodic'
@@ -143,6 +143,96 @@ export const AGENT_INVARIANTS: readonly AgentInvariant[] = [
       return result.success
         ? { id: 'core-plugin', status: 'repaired', detail: `installed (${result.operations.length} gates)` }
         : { id: 'core-plugin', status: 'failed', detail: result.error || 'install failed' }
+    },
+  },
+
+  {
+    id: 'role-plugin',
+    // WAKE ONLY — the same contract as core-plugin, for the same reason: the
+    // repair shells out to `claude plugin install` (network I/O, a package
+    // manager), which must never run unattended on the periodic loop. A test
+    // pins triggers === ['wake'] so a future edit cannot quietly turn the
+    // watchdog into a background plugin installer (TRDD-CNF1X3J7 Gate 2).
+    description: "the agent's role-plugin is INSTALLED, not merely enabled — `claude --agent` exits when it is missing",
+    triggers: ['wake'],
+    async enforce(ctx: AgentInvariantContext) {
+      // The verifiable failure mode is Claude-specific today (`claude plugin
+      // list` is the ground truth). Other clients: skip, never falsely refuse.
+      if (ctx.clientType !== 'claude') {
+        return { id: 'role-plugin', status: 'skipped', detail: `no CLI check for client "${ctx.clientType}"` }
+      }
+
+      // Resolve WHICH plugin is this agent's ROLE. The scanner's quad-match
+      // only sees plugins whose files exist on disk, so in the exact state
+      // this gate exists for — enabled in settings.local.json but absent from
+      // the install cache (the 2026-07-12 outage) — it returns null. The
+      // launch args are the truthful fallback: `--agent <plugin>-main-agent`
+      // names precisely what the client will try (and fail) to load.
+      const { scanAgentLocalConfig } = await import('@/services/agent-local-config-service')
+      const scanned = scanAgentLocalConfig(ctx.agentId).data?.rolePlugin ?? null
+      let name = scanned?.name ?? null
+      if (!name) {
+        const { getAgent } = await import('@/lib/agent-registry')
+        const m = getAgent(ctx.agentId)?.programArgs?.match(/--agent[= ]+["']?([A-Za-z0-9_-]+)-main-agent/)
+        name = m ? m[1] : null
+      }
+      if (!name) {
+        // No role resolvable anywhere. Policing R9.13 (every agent carries
+        // exactly one ROLE) belongs to CreateAgent/ChangeTitle; with no
+        // `--agent` flag there is nothing for the client to fail on, so
+        // skipping here cannot mask the outage this gate guards against.
+        return { id: 'role-plugin', status: 'skipped', detail: 'no role-plugin resolvable' }
+      }
+
+      // Marketplace: the scan knows it when the files exist; otherwise the
+      // settings key suffix IS the marketplace; otherwise predefined names
+      // ship from the GitHub marketplace and customs from the local one.
+      const { MARKETPLACE_NAME, LOCAL_MARKETPLACE_NAME, PREDEFINED_ROLE_PLUGIN_NAMES } = await import('@/lib/ecosystem-constants')
+      let marketplace = scanned?.marketplace ?? null
+      if (!marketplace) {
+        try {
+          const raw = await readFile(join(ctx.workdir, '.claude', 'settings.local.json'), 'utf8')
+          const settings = JSON.parse(raw) as { enabledPlugins?: Record<string, boolean> }
+          const key = Object.keys(settings.enabledPlugins ?? {}).find((k) => k.startsWith(`${name}@`))
+          if (key) marketplace = key.slice(name.length + 1)
+        } catch {
+          // no settings file / unparsable — fall through to the defaults
+        }
+      }
+      if (!marketplace) {
+        marketplace = (PREDEFINED_ROLE_PLUGIN_NAMES as readonly string[]).includes(name)
+          ? MARKETPLACE_NAME
+          : LOCAL_MARKETPLACE_NAME
+      }
+      const pluginKey = `${name}@${marketplace}`
+
+      // Ground truth is `claude plugin list` — NEVER settings.local.json,
+      // which is exactly the file that lies in the enabled-but-not-installed
+      // state (see lib/claude-plugin-list.ts). Any enabled scope counts as
+      // installed: a user-scope install also makes `claude --agent` resolve.
+      const { listInstalledClaudePlugins } = await import('@/lib/claude-plugin-list')
+      const installed = await listInstalledClaudePlugins(ctx.workdir)
+      const hit = installed.find((p) => p.id === pluginKey && p.enabled)
+      if (hit) return { id: 'role-plugin', status: 'ok', detail: `${pluginKey} (${hit.scope})` }
+
+      const { InstallElement } = await import('@/services/element-management-service')
+      const { buildSystemAuthContext } = await import('@/lib/agent-auth')
+      const auth = (ctx.authContext as Parameters<typeof InstallElement>[1] | undefined)
+        || buildSystemAuthContext('agent-invariant-role-plugin')
+
+      const result = await InstallElement({
+        name,
+        marketplace,
+        action: 'install',
+        scope: 'local',
+        agentDir: ctx.workdir,
+        agentId: ctx.agentId,
+        clientType: ctx.clientType,
+      }, auth)
+
+      return result.success
+        ? { id: 'role-plugin', status: 'repaired', detail: `installed ${pluginKey}` }
+        : { id: 'role-plugin', status: 'failed', detail: result.error || `install of ${pluginKey} failed` }
     },
   },
 ]

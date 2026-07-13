@@ -34,7 +34,7 @@ import { persistSession, loadPersistedSessions, unpersistSession } from '@/lib/s
 import { parseNameForDisplay } from '@/types/agent'
 import { buildAgentSessionEnv } from '@/lib/session-env'
 import { sessionActivity, broadcastStatusUpdate } from '@/services/shared-state'
-import { getRuntime, prepareShellForLaunch, SHELL_READY_TIMEOUT_MS } from '@/lib/agent-runtime'
+import { getRuntime, prepareShellForLaunch, preflightPaneKeychain, SHELL_READY_TIMEOUT_MS } from '@/lib/agent-runtime'
 import crypto from 'crypto'
 import { statePath } from '@/lib/ecosystem-constants'
 // TRDD-I75EMTK0: shared R17 presence-check + reinstall helper (see
@@ -1108,6 +1108,42 @@ export async function createSession(params: CreateSessionParams): Promise<Servic
         `[Sessions] ${actualSessionName}: no shell prompt detected — launching "${startCommand}" ` +
           `blind; the agent may land on a bare prompt with no client running.`,
       )
+    }
+
+    // Gate 1 (TRDD-CNF1X3J7): prove the pane can read the login keychain BEFORE
+    // typing the client command. A pane forked by a keychain-blind tmux server
+    // passes the shell-ready check yet `claude` there prints "Not logged in" —
+    // the agent looks alive and can do nothing (the 2026-07-12 fleet outage).
+    // Refuse: kill the pane, undo the link/persist done above, surface the remedy.
+    try {
+      const { ensureKeychainProbeInstalled } = await import('@/lib/agent-keychain-probe')
+      await ensureKeychainProbeInstalled()
+    } catch (probeErr) {
+      // The preflight below will time out and REFUSE — fail-fast is preserved.
+      console.warn(`[Sessions] ${actualSessionName}: keychain probe install failed:`, probeErr)
+    }
+    const kc = await preflightPaneKeychain(runtime, actualSessionName)
+    if (kc.status === 'refuse') {
+      console.error(
+        `[Sessions] ${actualSessionName}: REFUSING launch — the pane cannot read the login keychain (${kc.reason}). ` +
+          `The fleet's tmux server is likely keychain-blind: every pane it forks inherits the blindness, so ` +
+          `restarting agents will NOT help. Remedy: recreate the tmux server from a shell that passes ` +
+          `\`security find-generic-password -s "Claude Code-credentials" -w\`.`,
+      )
+      await runtime.killSession(actualSessionName).catch(() => {})
+      await unpersistSession(actualSessionName)
+      // linkSession already ran above — undo it, or the dashboard shows a
+      // green agent whose pane we just killed.
+      if (registeredAgent) {
+        await unlinkSession(registeredAgent.id)
+      }
+      return {
+        error:
+          `Refused to launch "${agentName}": the tmux pane cannot read the login keychain (${kc.reason}). ` +
+          `Recreate the tmux server from a keychain-unlocked shell — restarting the agent will not help.`,
+        status: 503,
+        data: undefined,
+      }
     }
 
     try {

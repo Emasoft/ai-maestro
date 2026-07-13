@@ -61,7 +61,7 @@ import { initAgentAMPHome, getAgentAMPDir } from '@/lib/amp-inbox-writer'
 import { buildAgentSessionEnv } from '@/lib/session-env'
 import { initializeAllAgents, getStartupStatus } from '@/lib/agent-startup'
 import { sessionActivity } from '@/services/shared-state'
-import { getRuntime, prepareShellForLaunch, SHELL_READY_TIMEOUT_MS } from '@/lib/agent-runtime'
+import { getRuntime, prepareShellForLaunch, preflightPaneKeychain, SHELL_READY_TIMEOUT_MS } from '@/lib/agent-runtime'
 import { isManager, isChiefOfStaffAnywhere } from '@/lib/governance'
 import { isValidUuid } from '@/lib/validation'
 import { loadTeams } from '@/lib/team-registry'
@@ -2230,6 +2230,43 @@ export async function wakeAgent(agentId: string, params: WakeAgentParams): Promi
             `[Wake] ${sessionName}: no shell prompt detected — sending startup keys blind; ` +
               `the agent may land on a bare prompt with no client running.`,
           )
+        }
+
+        // Gate 1 (TRDD-CNF1X3J7): prove the pane can read the login keychain
+        // BEFORE typing the client command. waitForShellReady only proves the
+        // shell accepts input; a pane forked by a keychain-blind tmux server
+        // still passes it, and `claude` there prints "Not logged in" while the
+        // dashboard shows the agent green. Refusing (kill the pane, keep the
+        // agent NOT-online, surface the remedy) is strictly better than
+        // launching a zombie — that exact failure took the whole fleet down
+        // for hours on 2026-07-12.
+        try {
+          const { ensureKeychainProbeInstalled } = await import('@/lib/agent-keychain-probe')
+          await ensureKeychainProbeInstalled()
+        } catch (probeErr) {
+          // The preflight below will time out and REFUSE — fail-fast is
+          // preserved; this warn only names the earlier cause.
+          console.warn(`[Wake] ${sessionName}: keychain probe install failed:`, probeErr)
+        }
+        const kc = await preflightPaneKeychain(runtime, sessionName)
+        if (kc.status === 'refuse') {
+          console.error(
+            `[Wake] ${sessionName}: REFUSING launch — the pane cannot read the login keychain (${kc.reason}). ` +
+              `The fleet's tmux server is likely keychain-blind: every pane it forks inherits the blindness, so ` +
+              `restarting agents will NOT help. Remedy: recreate the tmux server from a shell that passes ` +
+              `\`security find-generic-password -s "Claude Code-credentials" -w\`.`,
+          )
+          // No zombie pane: kill the session and drop its persisted entry so
+          // boot-restore does not resurrect the same doomed launch. linkSession
+          // below is skipped, so the agent stays NOT-online in the registry.
+          await runtime.killSession(sessionName).catch(() => {})
+          await unpersistSession(sessionName)
+          return {
+            error:
+              `Refused to launch "${agentName}": the tmux pane cannot read the login keychain (${kc.reason}). ` +
+              `Recreate the tmux server from a keychain-unlocked shell — restarting the agent will not help.`,
+            status: 503,
+          }
         }
 
         // Install the shell guard into the pane shell BEFORE launching

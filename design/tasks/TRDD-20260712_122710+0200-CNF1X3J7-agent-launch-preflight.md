@@ -3,7 +3,7 @@ trdd-id: CNF1X3J7
 title: reliability — refuse to launch an agent client that cannot authenticate or whose role-plugin is not installed
 column: dev
 created: 2026-07-12T12:27:10+0200
-updated: 2026-07-13T00:00:00+0200
+updated: 2026-07-13T05:30:00+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -41,7 +41,31 @@ external-refs: ["memory:running-claude-code-clients", "memory:tmux-pane-cannot-r
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-12
 
-- **State:** IN PROGRESS. Gate-1 DECISION is done, TDD, all 4 tests green:
+**▶ UPDATE 2026-07-13 (Gate-1 WIRED + Gate-2 LANDED — full suite/build pending):**
+
+- **Gate-1 wiring DONE at both launch sites.** `ensureKeychainProbeInstalled()` +
+  `preflightPaneKeychain(runtime, session)` inserted after the shell-ready check and
+  before ANY key injection at `services/agents-core-service.ts` (wake, real-program
+  branch) and `services/sessions-service.ts` (createSession). On `refuse`: loud
+  console.error naming the remedy, `killSession` (no zombie pane),
+  `unpersistSession` (boot-restore must not resurrect the doomed launch),
+  `unlinkSession` where the link already happened (sessions-service), return 503 —
+  the client command, guard-source, and trust-auto-accept are all skipped and the
+  agent stays NOT-online.
+- **Gate-2 LANDED.** `role-plugin` row in `lib/agent-invariants.ts`, `triggers:
+  ['wake']` pinned by test. Ground truth = NEW `lib/claude-plugin-list.ts`
+  (`claude plugin list --json`, cwd = workdir) — NEVER settings.local.json. Expected
+  role resolution: scan quad-match → fallback `programArgs` `--agent
+  <plugin>-main-agent` (the quad-match returns null in the very outage state, files
+  absent) → marketplace from settings key suffix / predefined-vs-local default.
+  Repair = `InstallElement` scope local. 4 new tests; invariants+preflight suites
+  18/18 green; `tsc --noEmit` clean.
+- **Residual (accepted):** the RESTART route relaunches into an EXISTING pane with
+  no keychain gate — a server that turns blind AFTER first launch is caught
+  fleet-level by EHT TRDD-78J4I4QS (the watchdog), not per-restart.
+- **NEXT:** full `yarn test` + `yarn build`, commit, then EHT TRDD-78J4I4QS.
+
+- **State (2026-07-12, superseded above):** Gate-1 DECISION done, TDD, all 4 tests green:
   - `lib/agent-keychain-probe.ts` — the probe script installer (mirrors
     agent-shell-guard-install.ts; sentinels `AIM_KC_READY`/`AIM_KC_BLIND`; the
     `-s` arg + sentinels live IN the file so the pane only types `sh "<path>"`).

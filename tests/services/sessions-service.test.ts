@@ -83,6 +83,19 @@ const {
 
 vi.mock('@/lib/agent-runtime', () => ({
   getRuntime: vi.fn().mockReturnValue(mockRuntime),
+  // The launch path awaits these before typing anything (SCEN-015 +
+  // TRDD-CNF1X3J7). Happy-path defaults so the pre-existing createSession
+  // tests exercise the launch path unchanged. The mock previously lacked
+  // prepareShellForLaunch entirely, which failed every createSession test
+  // the moment the service started calling it.
+  prepareShellForLaunch: vi.fn(async () => ({ ready: true, interrupted: false })),
+  preflightPaneKeychain: vi.fn(async () => ({ status: 'ok' as const })),
+  SHELL_READY_TIMEOUT_MS: 15000,
+}))
+// TRDD-CNF1X3J7: keep the probe-script installer off the real filesystem.
+vi.mock('@/lib/agent-keychain-probe', () => ({
+  ensureKeychainProbeInstalled: vi.fn(async () => {}),
+  KEYCHAIN_PROBE_INSTALL_PATH: '/tmp/keychain-probe-test.sh',
 }))
 vi.mock('@/lib/agent-registry', () => mockAgentRegistry)
 vi.mock('@/lib/hosts-config', () => mockHostsConfig)
@@ -258,6 +271,28 @@ describe('createSession', () => {
     expect(result.data?.success).toBe(true)
     expect(result.data?.name).toBe('my-agent')
     expect(mockRuntime.createSession).toHaveBeenCalled()
+  })
+
+  // TRDD-CNF1X3J7 Gate 1 wiring: a pane that cannot read the login keychain
+  // must never receive the client command — kill the pane, undo link+persist,
+  // return 503 naming the remedy. A refused launch is strictly better than a
+  // zombie agent that shows green while `claude` prints "Not logged in".
+  it('refuses the launch when the keychain preflight refuses — no client injection, pane killed, link undone', async () => {
+    const { preflightPaneKeychain } = await import('@/lib/agent-runtime')
+    mockRuntime.sessionExists.mockResolvedValue(false)
+    mockAgentRegistry.getAgentByName.mockReturnValue({ id: 'agent-1', name: 'my-agent', launchCount: 1 })
+    vi.mocked(preflightPaneKeychain).mockResolvedValueOnce({ status: 'refuse', reason: 'keychain_unreadable' } as never)
+
+    const result = await createSession({ name: 'my-agent', agentId: 'agent-1' })
+
+    expect(result.status).toBe(503)
+    expect(result.error).toContain('keychain')
+    // The client command was never typed into the pane...
+    expect(mockRuntime.sendKeys).not.toHaveBeenCalledWith('my-agent', expect.stringContaining('claude'), expect.anything())
+    // ...the doomed pane is gone, and the agent is not left green-but-dead.
+    expect(mockRuntime.killSession).toHaveBeenCalledWith('my-agent')
+    expect(mockSessionPersistence.unpersistSession).toHaveBeenCalledWith('my-agent')
+    expect(mockAgentRegistry.unlinkSession).toHaveBeenCalledWith('agent-1')
   })
 
   // TRDD-YOS36TZI: createSession spawns the tmux session but used to leave the

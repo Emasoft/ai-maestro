@@ -28,6 +28,27 @@ import {
 } from '@/lib/agent-invariants'
 import { RULE_FILE_MODE } from '@/lib/agent-rules-seed'
 
+// ── Mocks for the role-plugin row (TRDD-CNF1X3J7 Gate 2) ────────────────────
+// The row resolves its dependencies via dynamic import, so these file-level
+// mocks intercept them. No other test in this file touches these modules.
+vi.mock('@/services/agent-local-config-service', () => ({
+  // The quad-match only sees plugins whose files exist on disk, so in the
+  // enabled-but-not-installed state it returns null — the default here.
+  scanAgentLocalConfig: vi.fn(() => ({ data: { rolePlugin: null } })),
+}))
+vi.mock('@/lib/agent-registry', () => ({
+  getAgent: vi.fn(() => ({ programArgs: '--agent ai-maestro-programmer-agent-main-agent' })),
+}))
+vi.mock('@/lib/claude-plugin-list', () => ({
+  listInstalledClaudePlugins: vi.fn(async () => []),
+}))
+vi.mock('@/services/element-management-service', () => ({
+  InstallElement: vi.fn(async () => ({ success: true, operations: [] })),
+}))
+vi.mock('@/lib/agent-auth', () => ({
+  buildSystemAuthContext: vi.fn(() => ({ kind: 'system' })),
+}))
+
 const AGENT_RULES_FILE = 'aimaestro-agent-rules.md'
 
 let workdir: string
@@ -125,6 +146,59 @@ describe('enforceAgentInvariants', () => {
     expect(r.failed.map((o) => o.id)).toContain('claude-dir')
     expect(r.outcomes.map((o) => o.id)).toContain('git-exclude')
     expect(r.outcomes).toHaveLength(3)
+  })
+})
+
+describe('the role-plugin invariant (TRDD-CNF1X3J7 Gate 2)', () => {
+  const row = () => AGENT_INVARIANTS.find((i) => i.id === 'role-plugin')!
+
+  it('exists and is pinned to wake-only — its repair is a package manager, never a background loop', () => {
+    expect(row()).toBeDefined()
+    // Deep-equal, not "contains": a future edit adding 'periodic' would turn
+    // the watchdog into a background plugin installer; adding 'create' would
+    // smuggle in a behavior change. Same wall as core-plugin's.
+    expect(row().triggers).toEqual(['wake'])
+  })
+
+  it('detects enabled-but-not-installed (the settings file lies; `claude plugin list` is truth) and repairs via a local-scope install', async () => {
+    const { listInstalledClaudePlugins } = await import('@/lib/claude-plugin-list')
+    const { InstallElement } = await import('@/services/element-management-service')
+    vi.mocked(InstallElement).mockClear()
+    // The outage state: scan.rolePlugin is null (files absent), the launch
+    // args still name the role, and `claude plugin list` does NOT show it.
+    vi.mocked(listInstalledClaudePlugins).mockResolvedValueOnce([])
+
+    const r = await row().enforce(ctx('wake'))
+
+    expect(r.status).toBe('repaired')
+    expect(vi.mocked(InstallElement)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'ai-maestro-programmer-agent',
+        marketplace: 'ai-maestro-plugins',
+        action: 'install',
+        scope: 'local',
+      }),
+      expect.anything(),
+    )
+  })
+
+  it('reports ok WITHOUT reinstalling when `claude plugin list` shows the plugin installed and enabled', async () => {
+    const { listInstalledClaudePlugins } = await import('@/lib/claude-plugin-list')
+    const { InstallElement } = await import('@/services/element-management-service')
+    vi.mocked(InstallElement).mockClear()
+    vi.mocked(listInstalledClaudePlugins).mockResolvedValueOnce([
+      { id: 'ai-maestro-programmer-agent@ai-maestro-plugins', scope: 'local', enabled: true },
+    ])
+
+    const r = await row().enforce(ctx('wake'))
+
+    expect(r.status).toBe('ok')
+    expect(vi.mocked(InstallElement)).not.toHaveBeenCalled()
+  })
+
+  it('skips on non-claude clients — no CLI check exists there, and a skip can never falsely refuse', async () => {
+    const r = await row().enforce({ ...ctx('wake'), clientType: 'codex' as never })
+    expect(r.status).toBe('skipped')
   })
 })
 

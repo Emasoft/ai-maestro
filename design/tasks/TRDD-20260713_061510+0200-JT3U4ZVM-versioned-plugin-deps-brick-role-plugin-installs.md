@@ -1,9 +1,9 @@
 ---
 trdd-id: JT3U4ZVM
-title: fleet blocker — every role-plugin install fails because Claude Code cannot resolve a VERSIONED plugin dependency
+title: fleet blocker — role-plugin installs fail because releases lack the {name}--v{version} tags the dependency resolver requires
 column: dev
 created: 2026-07-13T06:15:10+0200
-updated: 2026-07-13T06:15:10+0200
+updated: 2026-07-13T06:45:00+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -34,31 +34,49 @@ review-requirements: []
 impacts: [agent-lifecycle, role-plugins, fleet]
 attempts: 0
 implementation-commits: []
-external-refs: ["cc-version:2.1.207", "gh:Emasoft/ai-maestro-architect-agent#25", "gh:Emasoft/ai-maestro-assistant-manager-agent#25", "gh:Emasoft/ai-maestro-chief-of-staff#25", "gh:Emasoft/ai-maestro-orchestrator-agent#28", "gh:Emasoft/ai-maestro-integrator-agent#22", "gh:Emasoft/ai-maestro-programmer-agent#26", "gh:Emasoft/ai-maestro-maintainer-agent#28", "gh:Emasoft/ai-maestro-autonomous-agent#13"]
+external-refs: ["cc-version:2.1.207", "docs:https://code.claude.com/docs/en/plugin-dependencies.md", "gh:Emasoft/ai-maestro-plugin#24", "gh:Emasoft/ai-maestro-architect-agent#25", "gh:Emasoft/ai-maestro-assistant-manager-agent#25", "gh:Emasoft/ai-maestro-chief-of-staff#25", "gh:Emasoft/ai-maestro-orchestrator-agent#28", "gh:Emasoft/ai-maestro-integrator-agent#22", "gh:Emasoft/ai-maestro-programmer-agent#26", "gh:Emasoft/ai-maestro-maintainer-agent#28", "gh:Emasoft/ai-maestro-autonomous-agent#13"]
 ---
 
-# TRDD-JT3U4ZVM — Versioned plugin dependencies are unresolvable, and they brick the whole fleet
+# TRDD-JT3U4ZVM — The dependency resolver wants `{name}--v{version}` tags; we never published them
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-13
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative) — 2026-07-13 (CORRECTED 06:40)
 
-- **State:** ROOT CAUSE PROVEN (empirically, 2026-07-13). The fix lands in OTHER repos
-  (the 8 role-plugin repos) → delivered as cross-repo ISSUES, not commits here.
-- **The one-liner:** Claude Code **2.1.207 cannot resolve ANY versioned plugin
-  dependency** — it reports `has no git tag satisfying <range>` no matter what tags
-  exist. All 8 role-plugins declare `dependencies: [{name: ai-maestro-plugin, version:
-  ^2.x}]`, so **every role-plugin install fails**, and with it CreateAgent / ChangeTitle
-  (R9.13 requires exactly one ROLE per agent). This — not the harness — is what stops
-  the fleet from standing up.
-- **DONE:** the fix issue is filed on all 8 role-plugin repos (see `external-refs`) —
-  drop the `version` field from the dependency entry, keep `{"name":
-  "ai-maestro-plugin"}`, publish.
-- **NEXT ACTION:** wait for the 8 repos to publish, then
-  `claude plugin marketplace update ai-maestro-plugins` and verify a real install
-  (`claude plugin install ai-maestro-maintainer-agent@ai-maestro-plugins --scope local`
-  in a scratch dir). Stale installed copies still contribute their old pins, so
-  re-install/upgrade the role-plugins on this host afterwards. Remaining optional item:
-  report the CLI bug upstream (needs USER approval — a public post to a third-party
-  tracker under the owner's identity).
+- **State:** ROOT CAUSE PROVEN AND CORRECTED. It is **NOT** a Claude Code bug — it is a
+  **spec requirement we never met**. The fix is one git tag in `ai-maestro-plugin`.
+- **The one-liner:** dependency version constraints resolve against tags named
+  **`{plugin-name}--v{version}`** (`claude plugin tag --push`; feature landed CC 2.1.110,
+  documented at <https://code.claude.com/docs/en/plugin-dependencies.md>). Our releases
+  are tagged **`v2.8.0`**, not **`ai-maestro-plugin--v2.8.0`**, so the resolver's
+  prefix filter matches nothing and every constrained dependency reports
+  `no matching tag` (surfaced as `has no git tag satisfying …`). The tags exist; they
+  are named wrong for this lookup.
+- **Consequence:** all 8 role-plugins pin `^2.x` on `ai-maestro-plugin` ⇒ every
+  role-plugin install fails ⇒ ChangeTitle G15/G16 + CreateAgent fail ⇒ R9.13 rejects an
+  agent with zero role-plugins ⇒ **no agent can be given a ROLE**. This — not the
+  harness — is what stops the fleet from standing up.
+- **Verified for OUR layout** (hub-and-spoke: plugins in their own repos, `url` source):
+  the `{name}--v{version}` tag must live on the **plugin's OWN repo**. It does *not*
+  need to be on the marketplace repo. Proven on a synthetic marketplace: same
+  constrained install fails with `v1.0.0`-style tags and succeeds (auto-installing the
+  dependency) once a `prov--v1.0.0` tag exists.
+- **DONE:** filed **Emasoft/ai-maestro-plugin#24** — backfill `ai-maestro-plugin--v2.8.0`
+  (2.8.0 satisfies every declared range: `^2.6.0`, `^2.7.0`, `^2.7.9`, and the resolver
+  takes the highest satisfying tag) + add `claude plugin tag --push` to its `publish.py`.
+  The 8 role-plugin issues were **corrected and retitled**: their pins STAY; their only
+  (optional) ask is the same tag step in their own publish pipelines.
+- **NEXT ACTION:** once the tag lands →
+  `claude plugin marketplace update ai-maestro-plugins` then
+  `claude plugin install ai-maestro-maintainer-agent@ai-maestro-plugins --scope local`
+  in a scratch dir must succeed. Then stand up MANAGER + one MAINTAINER.
+- **SUPERSEDED — do NOT carry forward:**
+  - ✗ "Claude Code 2.1.207 cannot resolve ANY versioned plugin dependency / it is an
+    upstream bug." **False.** The resolver works; it was looking for a tag name we never
+    published. **No upstream issue was filed** (the USER stopped it — correctly).
+  - ✗ "The fix is to drop the `version` field from the role-plugins' dependency entry."
+    **Retracted.** It *works* (an unversioned dep needs no tag) but it is the wrong fix:
+    it throws away the breaking-change protection the pin exists for.
+  - ✗ "`v`-prefixed vs bare tags" and "`url` vs `github` source type" — both were dead
+    ends; neither is the variable that matters. The variable is the tag NAME PREFIX.
 
 ## Problem
 
@@ -72,39 +90,48 @@ external-refs: ["cc-version:2.1.207", "gh:Emasoft/ai-maestro-architect-agent#25"
 `ai-maestro-plugin` has annotated tags `v2.7.0 … v2.8.0` AND matching GitHub releases.
 `git ls-remote --tags` lists them. The resolver sees none of them.
 
-## Root cause (proven, not inferred)
+## Root cause (the spec, then the proof)
 
-A synthetic two-plugin marketplace (local git repos, `/tmp`) isolates it. Consumer
-declares a dependency on a provider whose repo carries the satisfying tag:
+**The spec** — [Constrain plugin dependency versions](https://code.claude.com/docs/en/plugin-dependencies.md)
+(feature since CC 2.1.110):
 
-| dependency spec in the consumer's `plugin.json` | result |
+> Version constraints resolve against git tags. **Tag each release as
+> `{plugin-name}--v{version}`**, where `{version}` matches the `version` field in that
+> commit's `plugin.json`. […] Claude Code lists the tags, **filters to those starting
+> with `secrets-vault--v`**, and fetches the highest version satisfying the range.
+
+We tag releases `v2.8.0`. The resolver looks for `ai-maestro-plugin--v*`. The filter
+matches nothing ⇒ `no-matching-tag`, surfaced as `has no git tag satisfying <range>`.
+`claude plugin tag --push` is the command that creates the correctly-named tag (it
+exists on 2.1.207 and validates that `plugin.json` and the marketplace entry agree).
+
+**The proof, on a synthetic marketplace that mirrors our hub-and-spoke layout**
+(plugins in their own git repos, referenced by a `url` source):
+
+| tags on the dependency's own repo | constrained install (`^1.0.0`) |
 |---|---|
-| `{"name":"tagdep"}` — **no version** | ✅ installs, **and auto-installs the dependency** |
-| `{"name":"tagdep","version":"1.0.0"}` (exact) | ✘ `no git tag satisfying 1.0.0` |
-| `{"name":"tagdep","version":">=1.0.0"}` | ✘ `no git tag satisfying >=1.0.0` |
-| `{"name":"tagdep","version":"^1.0.0"}` | ✘ `no git tag satisfying >=1.0.0 <2.0.0-0` |
-| `{"name":"tagdep","version":"~1.0.0"}` | ✘ `no git tag satisfying >=1.0.0 <2.0.0-0` |
+| `v1.0.0` (v-prefixed) | ✘ `no git tag satisfying >=1.0.0 <2.0.0-0` |
+| `1.0.0` (bare semver) | ✘ same |
+| **`prov--v1.0.0`** (the spec name) | ✅ **installs, and auto-installs the dependency** |
 
-Every other variable was eliminated — each of these fails identically:
+Two further facts established there:
+- the spec-named tag must live on the **plugin's OWN repo** — putting it on the
+  *marketplace* repo is unnecessary (both were tested);
+- an **unversioned** dependency (`{"name":"dep"}`) always installs, because no tag
+  lookup happens — which is why `ai-maestro-autonomous-agent` looked different, and why
+  "drop the pin" *appeared* to be a fix.
 
-- tag naming: **`v1.0.0` and bare `1.0.0`** (both present on the same commit),
-- tag kind: **lightweight** (synthetic) and **annotated + GitHub-released** (real repo),
-- marketplace source type: **`{"source":"url","url":"…​.git"}`** (what we ship) and
-  **`{"source":"github","repo":"owner/name"}`**; `{"source":"git",…}` is rejected
-  outright as an unsupported source type on 2.1.207,
-- transport: `https://github.com/…` and local `file://`.
+Dead ends, recorded so nobody re-walks them: `v`-prefixed vs bare tags; `url` vs
+`github` marketplace source type; lightweight vs annotated+GitHub-released tags;
+`https://` vs `file://` transport. None of them is the variable that matters. **The
+variable is the tag-name prefix.**
 
-Unconstrained installs work; the moment a *version* is attached to a dependency the
-resolver enumerates git tags and finds **zero**. It is a Claude Code bug, not a
-packaging error on our side.
-
-**Why it poisons even a plugin that is innocent.** The constraint set is the UNION over
-every *installed* dependent, so:
-- `ai-maestro-autonomous-agent` declares its dependency with **no version** — yet it
-  still fails, inheriting `>=2.7.0` from the other role-plugins already installed;
-- installing the core plugin *by itself* fails for the same reason.
-
-So the repair must be applied to **all 8 at once**; one straggler keeps the fleet down.
+**Why even the innocent plugin fails.** The constraint set is the UNION over every
+*installed* dependent, so `ai-maestro-autonomous-agent` (dependency declared with no
+version) still fails, inheriting `>=2.7.0` from the other role-plugins already
+installed — and installing the core plugin *by itself* fails for the same reason. This
+is documented behaviour ("Claude Code intersects their ranges"), not a defect. **One
+correctly-named tag on the core plugin satisfies the whole union at once.**
 
 ## Blast radius
 
@@ -124,25 +151,29 @@ Downstream: `ChangeTitle` Gates 15-16 and `CreateAgent` install the role-plugin;
 hard-rejects an agent with zero role-plugins. The server logs have been carrying
 `G16: WARN — Failed to install "ai-maestro-architect-agent"` since at least 2026-07-11.
 
-## Proposed fix
+## Fix
 
-1. **In each of the 8 role-plugin repos** — drop the `version` field from the dependency
-   entry, keeping the relationship:
-   ```json
-   "dependencies": [{ "name": "ai-maestro-plugin" }]
+1. **In `Emasoft/ai-maestro-plugin` (the dependency) — this alone unblocks the fleet.**
+   Backfill the correctly-named tag on the 2.8.0 release commit:
+   ```bash
+   git tag -a 'ai-maestro-plugin--v2.8.0' 'v2.8.0^{}' -m 'ai-maestro-plugin v2.8.0'
+   git push origin 'ai-maestro-plugin--v2.8.0'
    ```
-   Proven to install AND to auto-install the dependency. Publish via each repo's own
-   `publish.py`.
-2. **After all 8 publish:** `claude plugin marketplace update ai-maestro-plugins`, then
-   verify with a real install. Stale installed copies still contribute their old pinned
-   constraints, so re-install/upgrade the role-plugins on the host.
-3. **Not a regression risk for the version floor:** the floor was never enforced anyway
-   (the constraint has been *failing closed* since the feature shipped), and ai-maestro
-   independently guarantees the core plugin via the R17 `core-plugin` invariant
-   (`lib/agent-invariants.ts`), which installs it on every wake.
-4. **Upstream (needs USER approval — public, third-party, owner identity):** report to
-   the Claude Code tracker that versioned `dependencies` resolution finds no tags on
-   2.1.207 for `url`/`github` sources, with the reproduction table above.
+   `2.8.0` satisfies **every** declared range (`^2.6.0`, `^2.7.0`, `^2.7.9`) and the
+   resolver takes the highest satisfying tag, so ONE tag fixes all 8 role-plugins.
+   Filed as **Emasoft/ai-maestro-plugin#24**.
+2. **Make it permanent:** add `claude plugin tag --push` to each plugin's `publish.py`,
+   after the version bump + release commit. Keep the existing `v{version}` tag — that is
+   what GitHub Releases and the marketplace notify chain use; the two coexist, and only
+   `{name}--v{version}` is read by the dependency resolver. (This is the one remaining
+   ask on the 8 role-plugin issues, now retitled.)
+3. **KEEP the version pins.** They are correct and they are what protects each
+   role-plugin from a breaking core release. (Dropping them also works — an unversioned
+   dep needs no tag — but it trades away the protection for nothing.)
+4. **Verify:** `claude plugin marketplace update ai-maestro-plugins` then
+   `claude plugin install ai-maestro-maintainer-agent@ai-maestro-plugins --scope local`
+   in a scratch dir must succeed.
+5. **No upstream bug report.** The resolver behaves as documented.
 
 ## Verification
 
@@ -157,8 +188,19 @@ hard-rejects an agent with zero role-plugins. The server logs have been carrying
   repo's own design corpus; the code fix is delivered as issues on the plugin repos, per
   the cross-project rule). Root cause established empirically before authoring.
 
-## Notes
+## Notes — the investigation's own post-mortem
 
-The investigation is reproducible: `/tmp/aim-tagtest2` holds the two-plugin synthetic
-marketplace used above (a dependency-free provider + a consumer whose `dependencies`
-spec is the only variable).
+The synthetic marketplaces were deleted after use (and the temporary marketplace entries
+they added to the user's Claude config were removed). Rebuilding one takes minutes: two
+git repos (a provider and a consumer whose `dependencies` entry is the only variable) +
+a `marketplace.json` with `url` sources, then flip ONE thing at a time.
+
+**The mistake worth remembering.** I concluded "upstream Claude Code bug" from a
+thorough-looking elimination — I varied the tag *prefix* (`v` vs bare), the *source
+type*, the *tag kind*, the *transport*, and the *range operator*, and every one failed.
+What I never varied was the thing the docs actually specify: the tag's **name prefix**
+(`{plugin-name}--v`). A complete-looking matrix over the wrong axes reads exactly like
+proof. The USER stopped the bogus upstream report and said "read the spec" — the spec
+answered it in one paragraph. **Read the vendor's spec BEFORE concluding the vendor is
+broken**, especially when the failing feature is recent (this one landed in CC 2.1.110)
+and our packaging predates it.

@@ -9,54 +9,61 @@ metadata:
   tier: component
 ---
 
-^plugin-dep-versioned-deps-are-unresolvable [desc: claude_code_cannot_resolve_any_versioned_plugin_dependency_and_reports_no_git_tag_satisfying, keywords: has no git tag satisfying, plugin install fails dependency, role plugin will not install, ChangeTitle G16 failed to install, agent has no role plugin, ocd: 2026-07-13, lmd: 2026-07-13]
-**Claude Code (verified on 2.1.207) cannot resolve ANY *versioned* plugin dependency.**
-It reports `Dependency "<dep>" has no git tag satisfying <range>` while the tags exist
-and `git ls-remote --tags` lists them. Proven by isolating the dependency's version spec
-as the only variable:
+^plugin-dep-tags-need-the-name-prefix [desc: version_constrained_plugin_dependencies_resolve_only_against_tags_named_pluginname__vversion, keywords: has no git tag satisfying, no-matching-tag, plugin dependency version constraint, claude plugin tag --push, role plugin will not install, ocd: 2026-07-13, lmd: 2026-07-13]
+**A version-constrained plugin dependency resolves ONLY against git tags named
+`{plugin-name}--v{version}`** — not `v{version}`, not bare `{version}`. Claude Code lists
+the dependency's tags, **filters by the `{plugin-name}--v` prefix**, and takes the
+highest one satisfying the range; if the filter matches nothing it reports
+`no-matching-tag`, surfaced to the user as **`has no git tag satisfying <range>`** even
+though the repo is full of tags. Spec:
+<https://code.claude.com/docs/en/plugin-dependencies.md> (feature since CC 2.1.110).
 
-| `dependencies` entry | result |
-|---|---|
-| `{"name":"dep"}` — **no version** | ✅ installs, and still **auto-installs** the dependency |
-| `"version"` = exact · `>=` · `^` · `~` | ✘ `no git tag satisfying …` — every time |
+- The correctly-named tag is created by **`claude plugin tag --push`** (validates that
+  `plugin.json` and the marketplace entry agree on the version; refuses on a dirty tree).
+- In a **hub-and-spoke** marketplace (plugins in their own repos, `url` source — our
+  layout) the tag must live on the **plugin's OWN repo**. It does NOT need to be on the
+  marketplace repo. *(Both were tested.)*
+- Keep the ordinary `v{version}` tag too — GitHub Releases and the marketplace notify
+  chain use it. The two coexist; only `{name}--v{version}` is read by the resolver.
+- An **unversioned** dependency (`{"name":"dep"}`) needs no tag at all and always
+  installs — which is why dropping a version pin *looks* like a fix. It is not one: it
+  throws away the breaking-change protection the pin exists for.
+- Constraints from **all installed dependents are intersected**, so a plugin that pins
+  nothing still fails while any other installed plugin pins the same dependency — and
+  one correctly-named tag on the dependency satisfies the whole union at once.
 
-Ruled out (each fails identically): `v`-prefixed **and** bare tags; lightweight **and**
-annotated+GitHub-released tags; marketplace source `{"source":"url"}` **and**
-`{"source":"github"}` (`{"source":"git"}` is rejected as an unsupported source type);
-`https://` **and** `file://` transports.
+^plugin-dep-fleet-impact-role-plugins [desc: why_a_missing_tag_name_stopped_every_agent_from_getting_a_role, keywords: no agent can get a role, CreateAgent fails role plugin, ChangeTitle G16 failed to install, R9.13 rejects agent with zero role plugins, fleet cannot stand up, ocd: 2026-07-13, lmd: 2026-07-13]
+All 8 ai-maestro role-plugins pin `^2.x` on `ai-maestro-plugin`, whose releases were
+tagged `v2.8.0` rather than `ai-maestro-plugin--v2.8.0` — so **every role-plugin install
+failed**. `ChangeTitle` (Gates 15-16) and `CreateAgent` install the role-plugin, and R9.13
+hard-rejects an agent with zero role-plugins, so this one missing tag name is what stopped
+the MANAGER/MAINTAINER fleet from standing up. The server had been logging
+`G16: WARN — Failed to install …` since at least 2026-07-11.
 
-**The constraint set is the UNION over every INSTALLED dependent.** So a plugin that
-declares no version pin *still* fails, inheriting the range from other installed
-plugins — and installing the dependency by itself fails too. One straggler with a pin
-keeps everything down; the repair must land on all dependents at once.
-
-**Workaround (the only one that works):** declare the dependency WITHOUT a version —
-`"dependencies": [{"name": "ai-maestro-plugin"}]`. Restore the pin only after the
-upstream resolver is fixed.
-
-^plugin-dep-fleet-impact-role-plugins [desc: why_this_one_cli_bug_stops_every_agent_from_getting_a_role, keywords: no agent can get a role, CreateAgent fails role plugin, R9.13 rejects agent with zero role plugins, fleet cannot stand up, ocd: 2026-07-13, lmd: 2026-07-13]
-All 8 ai-maestro role-plugins pinned `^2.x` on `ai-maestro-plugin`, so **every
-role-plugin install failed**. `ChangeTitle` (Gates 15-16) and `CreateAgent` install the
-role-plugin, and R9.13 hard-rejects an agent with zero role-plugins — so this single
-upstream bug is what stopped the MANAGER/MAINTAINER fleet from standing up. The
-server had been logging `G16: WARN — Failed to install …` since at least 2026-07-11.
-
-Tracked as TRDD-JT3U4ZVM; the fix was filed as an issue on each of the 8 plugin repos
-(cross-project rule: never edit another project's tree — file an issue or a PR).
-
-Dropping the pin is safe: it never held anything (the constraint has been *failing
-closed* since the feature shipped, so no install ever succeeded with it), and ai-maestro
-independently guarantees the core plugin at runtime via the R17 `core-plugin` invariant
-in `lib/agent-invariants.ts`, which installs it on every wake.
+Fix: backfill `ai-maestro-plugin--v2.8.0` on the core repo (2.8.0 satisfies every declared
+range, and the resolver takes the highest satisfying tag, so ONE tag unblocks all 8), then
+add `claude plugin tag --push` to each plugin's `publish.py`. Tracked as TRDD-JT3U4ZVM;
+filed as Emasoft/ai-maestro-plugin#24 (cross-project rule: never edit another project's
+tree — file an issue or a PR).
 
 ## Notes and lessons learned
 
-[^1]: [ocd:2026-07-13 lmd:2026-07-13] The first two hypotheses were both wrong and both
-  *plausible*: (a) "the tags are `v`-prefixed and the resolver wants bare semver" — a
-  bare tag on the same commit failed identically; (b) "the marketplace declares
-  `source: url`, and tag lookup only works for a `github` source" — the `github` source
-  failed identically against the real repo with a satisfiable range. What actually found
-  it was reducing to a synthetic two-plugin marketplace in `/tmp` where the dependency's
-  version spec was the ONLY variable. Lesson: when a resolver claims a resource does not
-  exist and you can see it exists, do not keep guessing which attribute of the resource
-  it dislikes — build the smallest case where you can flip one attribute at a time.
+[^1]: [ocd:2026-07-13 lmd:2026-07-13] This page first said **"Claude Code 2.1.207 cannot
+  resolve ANY versioned plugin dependency — it is an upstream bug"**, and I filed 8 issues
+  prescribing "drop the version pin". Both were WRONG, and I retracted them. The WHY is
+  worth more than the fact: I ran what *looked* like an exhaustive elimination — varying
+  the tag prefix (`v` vs bare), the marketplace source type (`url` vs `github`), the tag
+  kind (lightweight vs annotated+released), the transport (`https` vs `file://`) and the
+  range operator (exact/`>=`/`^`/`~`) — and since every cell failed, I concluded the
+  feature was broken. **A complete-looking matrix over the wrong axes reads exactly like
+  proof.** The one axis I never varied was the one the docs specify: the tag's NAME PREFIX
+  (`{plugin-name}--v`). Lesson: when a vendor tool says a resource does not exist and you
+  can see it does, **read the vendor's spec for that feature BEFORE concluding the vendor
+  is broken** — especially when the feature is recent (this one landed in CC 2.1.110) and
+  our packaging predates it. The USER caught it with one instruction: "read the specs".
+
+[^2]: [ocd:2026-07-13 lmd:2026-07-13] Second-order lesson, from the same episode: I filed
+  8 public issues on other repos *before* checking the spec, and their Claudes could have
+  acted on a wrong prescription. Cross-repo issues are an outward-facing, hard-to-recall
+  action — the bar for "am I sure?" is higher than for a local commit. Verify against the
+  authoritative source first; a retraction costs more than the delay would have.

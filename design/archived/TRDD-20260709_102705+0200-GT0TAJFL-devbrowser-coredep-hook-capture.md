@@ -3,7 +3,7 @@ trdd-id: GT0TAJFL
 title: dev-browser as core-plugin dependency and hook AskUserQuestion capture in ai-maestro-plugin repo
 column: completed
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:41:29+0000
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2
@@ -12,6 +12,8 @@ effort: S
 task-type: feature
 release-via: none
 parent-trdd: TRDD-SCLSRS6E
+derived: true
+derived-kind: npt
 npt: []
 eht: []
 relevant-rules: []

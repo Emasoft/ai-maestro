@@ -1,9 +1,9 @@
 ---
-trdd-id: 3339cc45-c6ed-4704-9ccf-e8a473b5e471
+trdd-id: 3339CC45
 title: De-fragilize the /context snapshot parser against future Claude Code line removals
 column: completed
 created: 2026-06-14T11:42:34+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:40:07+0000
 ---
 
 # TRDD-3339cc45 — Make the /context snapshot parser resilient to dropped lines

@@ -1,9 +1,9 @@
 ---
-trdd-id: 5e0638ed-511b-4234-8f1c-7c95c9ddbc14
+trdd-id: 5E0638ED
 title: Harden the ai-maestro installer + CLI scripts — shellcheck-found real bugs + fail-fast cleanup
 column: completed
 created: 2026-06-23T11:06:54+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 3

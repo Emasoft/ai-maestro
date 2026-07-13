@@ -1,9 +1,9 @@
 ---
-trdd-id: 95d23f3b-54df-4890-b452-e16eeb16d070
+trdd-id: 95D23F3B
 title: Complete the Extended Task Model — carry evidence fields + attachments/dueDate/first-class-epic end-to-end
 column: completed
 created: 2026-06-21T18:57:35+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1

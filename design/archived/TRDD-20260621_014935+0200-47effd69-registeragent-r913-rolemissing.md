@@ -1,9 +1,9 @@
 ---
-trdd-id: 47effd69-6ca1-462c-931b-f593866265cd
+trdd-id: 47EFFD69
 title: registerAgent must flag roleMissing on the role-less agent it creates from a session (R9.13)
 column: completed
 created: 2026-06-21T01:49:35+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: bugfix

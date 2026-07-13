@@ -1,9 +1,9 @@
 ---
-trdd-id: d77a7d6e-4888-443e-81a1-bee94e67e3af
+trdd-id: D77A7D6E
 title: Secure auto-restore of active AI Maestro agents after unclean shutdown
 column: superseded
 created: 2026-05-21T17:08:44+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:40:07+0000
 superseded-by: [TRDD-a1019073]
 ---
 

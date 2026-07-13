@@ -1,9 +1,9 @@
 ---
-trdd-id: 2ed177f4-3def-48e3-8ba8-857026078d0b
+trdd-id: 2ED177F4
 title: yarn build broken by stale eslint-disable for an unloaded typescript-eslint rule
 column: completed
 created: 2026-06-21T02:04:12+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: bugfix

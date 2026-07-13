@@ -1,11 +1,10 @@
 ---
-trdd-id: 593e0d15-94d2-416a-a0c6-5963609f436e
+trdd-id: 593E0D15
 title: Wire MANAGER-only RBAC into POST /api/teams/create-with-project
-status: completed
 column: completed
 approval-tier: 2
 created: 2026-06-16T23:38:54+0200
-updated: 2026-06-19T04:34:45+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: null
 task-type: security
 priority: 1

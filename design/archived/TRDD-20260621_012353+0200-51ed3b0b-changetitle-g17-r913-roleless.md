@@ -1,9 +1,9 @@
 ---
-trdd-id: 51ed3b0b-99ad-410e-a68c-1d52ee15a5e7
+trdd-id: 51ED3B0B
 title: ChangeTitle Gate 17 must enforce R9.13 when a role-plugin install leaves an agent role-less
 column: completed
 created: 2026-06-21T01:23:53+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: bugfix

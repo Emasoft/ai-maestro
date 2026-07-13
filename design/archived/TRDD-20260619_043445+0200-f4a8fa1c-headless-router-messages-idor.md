@@ -1,9 +1,9 @@
 ---
-trdd-id: f4a8fa1c-71ae-4651-9f78-76f051e1afc7
+trdd-id: F4A8FA1C
 title: Headless-router /api/messages GET+PATCH+DELETE lack auth — same IDOR fixed in the Next.js routes
 column: completed
 created: 2026-06-19T04:34:45+0200
-updated: 2026-06-20T03:46:07+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: amama
 assignee: amama
 last-test-result: pass

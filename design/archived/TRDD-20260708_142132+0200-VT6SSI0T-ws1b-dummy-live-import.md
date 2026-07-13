@@ -3,7 +3,7 @@ trdd-id: VT6SSI0T
 title: WS1b — dummy live-import verification protocol (adopt a cloned repo end-to-end)
 column: completed
 created: 2026-07-08T14:21:32+0200
-updated: 2026-07-08T17:28:00+0200
+updated: 2026-07-13T10:41:29+0000
 current-owner: main-session
 assignee: main-session
 priority: 0
@@ -12,6 +12,8 @@ effort: S
 labels: [fleet-readiness, import-system, derived-eht]
 task-type: audit
 parent-trdd: TRDD-57EBNB72
+derived: true
+derived-kind: eht
 approval-tier: 0
 release-via: none
 test-requirements: []

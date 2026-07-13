@@ -1,10 +1,10 @@
 ---
-trdd-id: f181a4ae-36a2-4524-abb1-3eab554999d9
+trdd-id: F181A4AE
 title: Package scenario-UI-testing as the ai-maestro-web-scenario-tester role-plugin (dev-browser integrated)
 column: blocked
 pre-block-column: published
 created: 2026-06-21T22:46:13+0200
-updated: 2026-07-10T06:23:25+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 2

@@ -1,11 +1,10 @@
 ---
-trdd-id: 2ee0c2d8-fba0-4da0-8a47-ee849b1f0fd1
+trdd-id: 2EE0C2D8
 title: Enforce per-mailbox object-level authz on every message route
-status: completed
 column: completed
 approval-tier: 2
 created: 2026-06-16T23:38:54+0200
-updated: 2026-06-19T04:34:45+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: null
 task-type: security
 priority: 0

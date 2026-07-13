@@ -1,9 +1,9 @@
 ---
-trdd-id: fb75c4d1-df8b-4f58-993c-cf20e1d71b59
+trdd-id: FB75C4D1
 title: Add frozen CLI verbs — teams tasks/reassign-cos + agent presence (decoupling, #45)
 column: completed
 created: 2026-06-21T00:48:05+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: feature

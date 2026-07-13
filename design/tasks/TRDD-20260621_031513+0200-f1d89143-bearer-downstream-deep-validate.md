@@ -1,9 +1,9 @@
 ---
-trdd-id: f1d89143-8b8e-470d-90f8-009a9070e43a
+trdd-id: F1D89143
 title: Deep-validate Bearer credentials at the downstream WS and pty handler — not the pre-handshake gate
 column: backburner
 created: 2026-06-21T03:15:13+0200
-updated: 2026-06-21T03:15:13+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: ai-maestro-session
 assignee: null
 priority: 3

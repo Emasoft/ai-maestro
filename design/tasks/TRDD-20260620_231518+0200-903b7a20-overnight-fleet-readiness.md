@@ -1,9 +1,9 @@
 ---
-trdd-id: 903b7a20-bddf-4368-9295-4a9a984270e9
+trdd-id: 903B7A20
 title: Overnight fleet-readiness campaign — govern-compliance + script-skill align + install-security + scenarios before the governance PR
 column: dev
 created: 2026-06-20T23:15:18+0200
-updated: 2026-07-09T02:47:00+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 0

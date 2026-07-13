@@ -1,9 +1,9 @@
 ---
-trdd-id: 67f8b9bd-0484-4a03-adde-2d5c52da67c2
+trdd-id: 67F8B9BD
 title: Next.js POST tasks route drops TRDD-v2 kanban fields it validates (dual-mode drift)
 column: completed
 created: 2026-06-21T00:33:52+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: bugfix

@@ -1,9 +1,9 @@
 ---
-trdd-id: ba9d6df2-781c-43a3-b931-b67144a642f5
+trdd-id: BA9D6DF2
 title: server.mjs full-mode auth gate must deep-validate the session cookie (not presence-only)
 column: completed
 created: 2026-06-21T01:39:45+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: security

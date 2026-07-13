@@ -3,7 +3,7 @@ trdd-id: E6MD2FNX
 title: New UI scenario — wizard folder-adoption of a git plugin repo (maintainer path)
 column: completed
 created: 2026-07-08T14:21:32+0200
-updated: 2026-07-08T18:20:00+0200
+updated: 2026-07-13T10:41:29+0000
 current-owner: main-session
 assignee: main-session
 priority: 2
@@ -12,6 +12,8 @@ effort: M
 labels: [fleet-readiness, import-system, scenario, derived-eht]
 task-type: feature
 parent-trdd: TRDD-57EBNB72
+derived: true
+derived-kind: eht
 approval-tier: 0
 release-via: none
 test-requirements: [dev-browser-headless]

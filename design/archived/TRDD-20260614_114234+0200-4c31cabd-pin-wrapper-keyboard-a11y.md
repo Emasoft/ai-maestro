@@ -1,9 +1,9 @@
 ---
-trdd-id: 4c31cabd-2638-40be-aa44-b98f53dbc9f2
+trdd-id: 4C31CABD
 title: Make the chat-bubble pin-on-click affordance keyboard accessible
 column: completed
 created: 2026-06-14T11:42:34+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:40:07+0000
 ---
 
 > ✅ **DONE 2026-06-25 (commit `cfc39169`).** Added `role="button"` + `tabIndex={0}`

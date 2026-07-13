@@ -1,11 +1,10 @@
 ---
-trdd-id: f9f71e4a-1f4d-4f41-a97d-c79215dbac8e
+trdd-id: F9F71E4A
 title: Gate the team orchestratorId slot — sudo plus eligibility plus titling on PUT
-status: completed
 column: completed
 approval-tier: 2
 created: 2026-06-16T23:38:54+0200
-updated: 2026-06-19T04:34:45+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: null
 task-type: security
 priority: 0

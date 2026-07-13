@@ -1,9 +1,9 @@
 ---
-trdd-id: 35af6b13-1d0e-489e-97a1-ecfc06a33b60
+trdd-id: 35AF6B13
 title: ChangeFolder must confine an agent's workingDirectory to ~/agents/ — workdir-write escape
 column: completed
 created: 2026-06-21T00:20:26+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:40:07+0000
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 task-type: security

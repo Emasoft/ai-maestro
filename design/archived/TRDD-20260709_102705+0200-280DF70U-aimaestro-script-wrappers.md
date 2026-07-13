@@ -3,7 +3,7 @@ trdd-id: 280DF70U
 title: Permanent aimaestro and amp script wrappers for every new control monitor and task endpoint
 column: completed
 created: 2026-07-09T10:27:08+0200
-updated: 2026-07-10T05:26:00+0200
+updated: 2026-07-13T10:41:29+0000
 implementation-commits: [c2c5ce5a]
 last-test-result: pass
 last-test-at: 2026-07-09T15:45:00+0200
@@ -15,6 +15,8 @@ effort: M
 task-type: infra
 release-via: none
 parent-trdd: TRDD-SCLSRS6E
+derived: true
+derived-kind: eht
 npt: []
 eht: []
 relevant-rules: []

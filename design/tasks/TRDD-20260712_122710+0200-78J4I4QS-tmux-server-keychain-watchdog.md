@@ -34,7 +34,7 @@ audit-requirements: []
 review-requirements: []
 impacts: [agent-lifecycle]
 attempts: 0
-implementation-commits: []
+implementation-commits: [6eef63fe]
 external-refs: ["memory:tmux-pane-cannot-read-login-keychain", "memory:fleet-auth-outage-2026-07-12-tmux-server-keychain-blind"]
 ---
 

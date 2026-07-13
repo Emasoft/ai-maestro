@@ -74,6 +74,13 @@ export async function checkTmuxServerKeychainOnce(
   if (process.platform !== 'darwin') return { status: 'skip' }
 
   try {
+    // A crashed prior sweep can leave the fixed-name session behind (that is
+    // exactly why the name is fixed — see TMUX_KEYCHAIN_WATCHDOG_SESSION).
+    // Without this pre-kill, createSession fails "duplicate session" and the
+    // fail-safe below reports the whole fleet 'blind' — a FALSE alarm caused
+    // by our own leftover, observed live on the first production sweep
+    // (2026-07-13). Only ever our own name; never any other session.
+    await runtime.killSession(TMUX_KEYCHAIN_WATCHDOG_SESSION).catch(() => {})
     await runtime.createSession(TMUX_KEYCHAIN_WATCHDOG_SESSION, AGENTS_ROOT)
     await ensureKeychainProbeInstalled()
     const result = await preflightPaneKeychain(runtime, TMUX_KEYCHAIN_WATCHDOG_SESSION)

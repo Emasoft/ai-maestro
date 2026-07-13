@@ -119,7 +119,21 @@ describe('checkTmuxServerKeychainOnce', () => {
     // "cannot prove it works" must resolve to blind, never ok — the same
     // fail-fast contract preflightPaneKeychain enforces per-launch.
     expect(r.status).toBe('blind')
-    expect(runtime.killed).toEqual([TMUX_KEYCHAIN_WATCHDOG_SESSION])
+    // Two kills of the SAME fixed name: the leftover pre-kill, then the finally.
+    expect(runtime.killed).toEqual([TMUX_KEYCHAIN_WATCHDOG_SESSION, TMUX_KEYCHAIN_WATCHDOG_SESSION])
+  })
+
+  it('pre-kills its own leftover fixed-name session before creating — a crashed prior sweep must not cause a false blind', async () => {
+    // Live incident 2026-07-13 (first production sweep): a leftover
+    // aim-kc-watchdog session made createSession fail "duplicate session" and
+    // the fail-safe reported the WHOLE FLEET blind — a false alarm caused by
+    // our own debris. The pre-kill targets our own fixed name ONLY.
+    const runtime = fakeRuntime(['', 'AIM_KC_READY'])
+    const r = await checkTmuxServerKeychainOnce(runtime)
+    expect(r.status).toBe('ok')
+    // pre-kill + the finally kill — and nothing but our own session name.
+    expect(runtime.killed).toEqual([TMUX_KEYCHAIN_WATCHDOG_SESSION, TMUX_KEYCHAIN_WATCHDOG_SESSION])
+    expect(runtime.created).toEqual([{ name: TMUX_KEYCHAIN_WATCHDOG_SESSION, cwd: expect.any(String) }])
   })
 })
 

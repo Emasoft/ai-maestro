@@ -141,7 +141,7 @@ Sonnet[1m] runner (commit `c4d65da6`).
   scenario-tester plugin live in their own repos → PR or issue).
 - Keep security STRICT — never relax a gate. Integrate, don't delete. TRDD per
   change. Commit often with WHY.
-- governance_password: mYkri1-xoxrap-gogtan (only if a UI flow needs it).
+- governance_password: $AIM_GOVERNANCE_PASSWORD (only if a UI flow needs it).
 
 **Current state of each component:**
 - Token levers L1–L9: ✅ built + committed (`c4d65da6`, `70266bde`, `ea32110a`).

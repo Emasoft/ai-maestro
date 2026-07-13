@@ -47,7 +47,7 @@ prerequisites:
   - "ai-maestro-plugin installed at local scope in each agent's workdir (core, per R17.17 — never user scope)"
   - "ai-maestro-autonomous-agent role-plugin available in local marketplace"
   - "MAINTAINER role-plugin available as an optional title for step S012 (per R19, MAINTAINER must be picker-visible)"
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -72,7 +72,7 @@ commit: TBD
 - **Verify:** Health OK, backups exist.
 
 ### S002: Login
-- **Action:** Navigate to `/`, enter password `mYkri1-xoxrap-gogtan`,
+- **Action:** Navigate to `/`, enter password `$AIM_GOVERNANCE_PASSWORD`,
   click Login.
 - **Goal:** Session established.
 - **Creates:** session cookie
@@ -199,7 +199,7 @@ commit: TBD
   disabled until it is filled. Fill `Emasoft/scen020-test-repo`. Confirm
   becomes enabled. Click Confirm. When the sudo password modal appears
   (Rule 12 — PATCH /api/agents/[id]/title is classified strict), enter
-  governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+  governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** ChangeTitle Gate 15 uninstalls the AUTONOMOUS role-plugin
   and installs the MAINTAINER role-plugin (title swap pipeline), binding
   the agent's githubRepo to `Emasoft/scen020-test-repo`.
@@ -214,7 +214,7 @@ commit: TBD
 
 ### S013: Revert title back to AUTONOMOUS (for cleanup symmetry)
 - **Action:** Click the MAINTAINER badge → pick AUTONOMOUS → enter sudo
-  password `mYkri1-xoxrap-gogtan` → Confirm.
+  password `$AIM_GOVERNANCE_PASSWORD` → Confirm.
 - **Goal:** Gate 15 re-installs the autonomous role-plugin.
 - **Creates:** nothing
 - **Modifies:** registry (governanceTitle=autonomous),
@@ -233,7 +233,7 @@ commit: TBD
   "Also delete agent folder". Type agent name `scen020-autonomous-test`.
   Click Delete Forever. When the sudo password modal appears (DELETE
   /api/agents/[id] is strict), enter governance password
-  `mYkri1-xoxrap-gogtan` and click Confirm.
+  `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Agent removed.
 - **Removes:** Registry entry,
   `~/agents/scen020-autonomous-test/`, tmux session
@@ -243,7 +243,7 @@ commit: TBD
 ### S015: Purge cemetery entry
 - **Action:** Settings → Cemetery tab → find the
   `scen020-autonomous-test` row → click Purge → enter sudo password
-  `mYkri1-xoxrap-gogtan` when prompted.
+  `$AIM_GOVERNANCE_PASSWORD` when prompted.
 - **Removes:** Cemetery record
 - **Verify:** Cemetery list no longer shows the entry.
 

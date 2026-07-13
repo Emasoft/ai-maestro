@@ -52,7 +52,7 @@ prerequisites:
   - No pre-existing agent named "scen016-r18-test"
   - Codex CLI installed (`which codex` succeeds)
   - Claude CLI installed (`which claude` succeeds)
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/teams/groups.json
@@ -112,7 +112,7 @@ author: AI Maestro Team
 ## Phase 1: Create a Claude Agent with Role Plugin
 
 #### S006: Login with governance password
-- **Action:** Navigate to http://localhost:23000, fill governance password `mYkri1-xoxrap-gogtan`, click Sign In
+- **Action:** Navigate to http://localhost:23000, fill governance password `$AIM_GOVERNANCE_PASSWORD`, click Sign In
 - **Goal:** Authenticated MAESTRO session
 - **Creates:** Session cookie
 - **Modifies:** browser cookies

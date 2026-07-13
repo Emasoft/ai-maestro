@@ -48,7 +48,7 @@ prerequisites:
   - Internet access for cloning marketplace from GitHub
   - "'which gh && gh auth status' succeeds"
   - Marketplace used for testing must NOT be already registered. Default choice is https://github.com/petems/petems-claude-marketplace (small, 2 plugins, no runtime deps). NOTE 2026-04-30 — this scenario originally used cblecker/claude-plugins, but that marketplace is now pre-registered in the dev user's `~/.claude/settings.json`, so a Rule 4 authoring fix swapped to petems' marketplace which is unregistered.
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -81,7 +81,7 @@ commit: TBD
 
 ### S003: Navigate to login + authenticate
 - **Action:** `navigate_page` to `http://localhost:23000/`, enter governance
-  password `mYkri1-xoxrap-gogtan`, click Login.
+  password `$AIM_GOVERNANCE_PASSWORD`, click Login.
 - **Goal:** Dashboard loads with the logged-in user.
 - **Creates:** `aim_session` cookie
 - **Modifies:** in-memory session map
@@ -227,7 +227,7 @@ commit: TBD
 ### S017: Uninstall the test plugin (Rule 12 sudo password)
 - **Action:** Click Uninstall on the test plugin. When the sudo password
   modal appears (Rule 12 — DELETE /api/agents/role-plugins/install is
-  classified strict), enter governance password `mYkri1-xoxrap-gogtan`
+  classified strict), enter governance password `$AIM_GOVERNANCE_PASSWORD`
   and click Confirm. Then confirm the uninstall dialog.
 - **Goal:** Plugin removed from user settings + cache cleaned.
 - **Removes:** The installed plugin
@@ -238,7 +238,7 @@ commit: TBD
 - **Action:** Switch to Marketplaces subtab. Click Remove on the
   `petems` marketplace card. When the sudo password modal
   appears (Rule 12 — DELETE /api/settings/marketplaces is classified
-  strict), enter governance password `mYkri1-xoxrap-gogtan` and click
+  strict), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click
   Confirm. Then confirm the removal dialog.
 - **Goal:** Marketplace unregistered from Claude CLI + cache removed.
   Per commit a2f90e0e, `DELETE /api/settings/marketplaces` now routes

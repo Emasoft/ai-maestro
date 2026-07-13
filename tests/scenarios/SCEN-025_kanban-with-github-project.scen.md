@@ -62,7 +62,7 @@ prerequisites:
   - 'Fixture GitHub Project "SCEN-025 Fixture Board" exists and has columns: Backlog, Pending, In Progress, Review, Completed'
   - No pre-existing agents matching "scen025-*"
   - No pre-existing team named "scen025-team"
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -129,7 +129,7 @@ fixture_github_project_v2 Emasoft "SCEN-025 Fixture Board"
 ## Phase 1: Create MANAGER + Team Staff
 
 #### S003: Create scen025-mgr-01 via Wizard -> MANAGER
-- **Action:** Sidebar → Agents → + (Create new agent). Fill Wizard steps 1-7: name `scen025-mgr-01`, persona `Mgr-25`, title MANAGER, Claude client, no team, programmer role-plugin, then "Let's Go!". When sudo modal appears for title assignment, enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Sidebar → Agents → + (Create new agent). Fill Wizard steps 1-7: name `scen025-mgr-01`, persona `Mgr-25`, title MANAGER, Claude client, no team, programmer role-plugin, then "Let's Go!". When sudo modal appears for title assignment, enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** MANAGER agent scen025-mgr-01 exists in the registry with governanceTitle=manager.
 - **Creates:** 1 agent (scen025-mgr-01), 1 ~/agents/scen025-mgr-01/ workdir.
 - **Modifies:** governance.json (managerId).

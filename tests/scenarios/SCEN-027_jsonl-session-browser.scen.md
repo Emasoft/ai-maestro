@@ -64,7 +64,7 @@ prerequisites:
   - "`scripts/aim-jsonl-reader` binary built (run `yarn build` if missing — build:jsonl-reader triggers cargo build --release)"
   - ai-maestro-plugins marketplace registered (`claude plugin marketplace list` shows it)
   - No pre-existing agent named "scen027-jsonl-session-browser"
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 commit: TBD
 author: AI Maestro Team
 ---
@@ -88,7 +88,7 @@ author: AI Maestro Team
 - **Verify:** `test -x scripts/aim-jsonl-reader` exits 0. Screenshot: S002_<RUN_ID>_server-healthy.jpg
 
 #### S003: Navigate to dashboard and log in
-- **Action:** Via dev-browser, `page.goto('http://localhost:23000')`. Use the `aim_login` helper to type governance password `mYkri1-xoxrap-gogtan` and submit.
+- **Action:** Via dev-browser, `page.goto('http://localhost:23000')`. Use the `aim_login` helper to type governance password `$AIM_GOVERNANCE_PASSWORD` and submit.
 - **Goal:** Dashboard loads; sidebar is visible
 - **Creates:** `aim_session` cookie in the `ai-maestro-scenarios` named browser instance
 - **Modifies:** nothing server-side
@@ -106,7 +106,7 @@ author: AI Maestro Team
 - **Verify:** Snapshot shows "Agent Creation Wizard" heading and "Step 1 / 7". Screenshot: S004_<RUN_ID>_wizard-open.jpg
 
 #### S005: Fill the wizard and create the agent
-- **Action:** Step 1 — Persona Name `scen027-jsonl-session-browser`, client `claude`. Step 2 — accept default avatar. Step 3 — default title (MEMBER). Step 4 — default role-plugin (the wizard picks the first compatible). Step 5 — skip subagents. Step 6 — review. Step 7 — click "Create Agent". When the sudo modal appears, enter `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Step 1 — Persona Name `scen027-jsonl-session-browser`, client `claude`. Step 2 — accept default avatar. Step 3 — default title (MEMBER). Step 4 — default role-plugin (the wizard picks the first compatible). Step 5 — skip subagents. Step 6 — review. Step 7 — click "Create Agent". When the sudo modal appears, enter `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Agent appears in the sidebar; its `workingDirectory` is `~/agents/scen027-jsonl-session-browser/`
 - **Creates:** 1 registry entry + 1 workdir `~/agents/scen027-jsonl-session-browser/` + 1 tmux session
 - **Modifies:** `~/.aimaestro/agents/registry.json`
@@ -226,7 +226,7 @@ project dir, not just ~/agents/<name>/. Confirmed fixed at SCEN-027
 run 2026-05-23 (94f00b5b); the third Verify check below is the
 regression guard.
 -->
-- **Action:** Click the agent in the sidebar → Profile → Advanced tab → Danger Zone → "Delete Agent". In the confirmation dialog, check "Also delete agent folder", type `scen027-jsonl-session-browser` in the confirmation field, click "Delete Forever". When the sudo modal appears, enter `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Click the agent in the sidebar → Profile → Advanced tab → Danger Zone → "Delete Agent". In the confirmation dialog, check "Also delete agent folder", type `scen027-jsonl-session-browser` in the confirmation field, click "Delete Forever". When the sudo modal appears, enter `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Agent is removed from the registry, its workdir is deleted, its tmux session is killed, all `.jsonl` files under `~/.claude/projects/-Users-*-agents-scen027-jsonl-session-browser/` are gone (along with any `.aimidx` sidecars)
 - **Removes:** 1 registry entry + 1 workdir + 1 tmux session + 0-N JSONL files + 0-N .aimidx sidecars
 - **Verify:** `GET /api/agents?includeDeleted=false` no longer lists the test agent; `ls ~/agents/scen027-jsonl-session-browser/ 2>&1` returns "No such file or directory"; `ls ~/.claude/projects/-Users-*-agents-scen027-jsonl-session-browser/ 2>&1` returns "No such file or directory" (glob matches zero directories) — this third check is the regression guard for the Claude-projects cascade. Screenshot: S018_<RUN_ID>_agent-deleted.jpg

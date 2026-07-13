@@ -49,7 +49,7 @@ forces a restart from S001. No partial credit, no "just this once".
 
 Scenario file: `<SCENFILE>`
 Rules (all 15, mandatory): `tests/scenarios/SCENARIOS_TESTS_RULES.md`
-Governance password: `mYkri1-xoxrap-gogtan`
+Governance password: `$AIM_GOVERNANCE_PASSWORD`
 The ai-maestro server is running (pm2 `ai-maestro`, port 23000).
 
 - Follow the 15 rules exactly.

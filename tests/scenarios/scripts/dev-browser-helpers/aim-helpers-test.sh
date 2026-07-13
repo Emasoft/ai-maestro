@@ -24,7 +24,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/aim-helpers.sh"
 
-PASSWORD="${1:?Usage: $0 <governance_password>}"
+# No password argument: aim_login resolves it from AIM_GOVERNANCE_PASSWORD itself.
+# The secret never appears on a command line — see SCENARIOS_TESTS_RULES.md Rule 12.
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 PASS=0
 FAIL=0
@@ -78,7 +79,7 @@ echo "dev-browser found."
 # --------------------------------------------------------------------------
 # Test 1: aim_login
 # --------------------------------------------------------------------------
-run_test "aim_login" aim_login "${PASSWORD}"
+run_test "aim_login" aim_login
 
 # --------------------------------------------------------------------------
 # Test 2: aim_dashboard_snapshot

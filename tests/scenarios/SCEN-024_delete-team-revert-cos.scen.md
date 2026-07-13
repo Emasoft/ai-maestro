@@ -50,7 +50,7 @@ prerequisites:
   - 'No pre-existing agents matching "scen024-*"'
   - 'No pre-existing team named "scen024-team"'
   - "MAINTAINER role-plugin available as a picker option (per R19 — not exercised in this scenario but required for the Title Assignment Dialog to pass invariant checks)"
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -105,7 +105,7 @@ author: AI Maestro Team
 - **Verify:** 200 response. Screenshot: SCEN-024/S003-server.jpg
 
 #### S004: Login
-- **Action:** Navigate to `http://localhost:23000/`, enter `mYkri1-xoxrap-gogtan`, click Sign In
+- **Action:** Navigate to `http://localhost:23000/`, enter `$AIM_GOVERNANCE_PASSWORD`, click Sign In
 - **Goal:** Authenticated session
 - **Creates:** Session cookie
 - **Modifies:** nothing
@@ -130,7 +130,7 @@ author: AI Maestro Team
 - **Verify:** Agent in sidebar. Screenshot: SCEN-024/S006-mgr-created.jpg
 
 #### S007: Assign MANAGER title to `scen024-mgr-01`
-- **Action:** Open scen024-mgr-01 profile → click title badge → select MANAGER → enter sudo password `mYkri1-xoxrap-gogtan` in the sudo modal (Rule 12 — PATCH /api/agents/[id]/title is strict) → Confirm
+- **Action:** Open scen024-mgr-01 profile → click title badge → select MANAGER → enter sudo password `$AIM_GOVERNANCE_PASSWORD` in the sudo modal (Rule 12 — PATCH /api/agents/[id]/title is strict) → Confirm
 - **Goal:** Agent becomes MANAGER
 - **Creates:** nothing
 - **Modifies:** Registry (governanceTitle=manager), settings.local.json (MANAGER role-plugin installed)
@@ -151,7 +151,7 @@ author: AI Maestro Team
 - **Verify:** Agent in sidebar. Screenshot: SCEN-024/S009-mbr-created.jpg
 
 #### S010: Create team `scen024-team` with both agents
-- **Action:** Sidebar → Teams tab → + Create Team → name `scen024-team`, add scen024-cos-01 and scen024-mbr-01 as members, Create. Team creation may prompt for inline governance password; enter `mYkri1-xoxrap-gogtan` if so.
+- **Action:** Sidebar → Teams tab → + Create Team → name `scen024-team`, add scen024-cos-01 and scen024-mbr-01 as members, Create. Team creation may prompt for inline governance password; enter `$AIM_GOVERNANCE_PASSWORD` if so.
 - **Goal:** Team exists with both agents
 - **Creates:** Team `scen024-team`, teams.json entry, both agents auto-titled MEMBER
 - **Modifies:** Registry (both agents → member)
@@ -192,7 +192,7 @@ author: AI Maestro Team
 - **Verify:** Dialog visible with inline governance password field (per Rule 12 Team Delete exception — no separate sudo modal). Screenshot: SCEN-024/S013-delete-dialog.jpg
 
 #### S014: Submit team deletion (inline password — Rule 12 Team Delete exception)
-- **Action:** Enter governance password `mYkri1-xoxrap-gogtan` in the dialog's inline password field. Leave "Delete Agents Too" UNCHECKED (we want the agents to revert to AUTONOMOUS, not be deleted). Click "Delete Team". Wait for the success response.
+- **Action:** Enter governance password `$AIM_GOVERNANCE_PASSWORD` in the dialog's inline password field. Leave "Delete Agents Too" UNCHECKED (we want the agents to revert to AUTONOMOUS, not be deleted). Click "Delete Team". Wait for the success response.
 - **Goal:** Team deleted, DeleteTeam pipeline runs G03 revert on all former members. Per Rule 12 Team Delete exception, the inline password is exchanged for a sudo token before the DELETE call, so no separate sudo modal pops up.
 - **Creates:** nothing
 - **Modifies:** teams.json (team removed), registry (cos+mbr titles reverted to autonomous), settings.local.json on former COS (COS role-plugin uninstalled)
@@ -242,31 +242,31 @@ author: AI Maestro Team
 ## Phase CLEANUP: Restore Original State
 
 #### S020: Delete scen024-cos-01 via UI (Rule 12 sudo)
-- **Action:** Profile → Advanced → Danger Zone → Delete Agent. Check "Also delete agent folder". Type `scen024-cos-01`. Click Delete Forever. When the sudo password modal appears (Rule 12 — DELETE /api/agents/[id] strict), enter sudo password `mYkri1-xoxrap-gogtan` and Confirm.
+- **Action:** Profile → Advanced → Danger Zone → Delete Agent. Check "Also delete agent folder". Type `scen024-cos-01`. Click Delete Forever. When the sudo password modal appears (Rule 12 — DELETE /api/agents/[id] strict), enter sudo password `$AIM_GOVERNANCE_PASSWORD` and Confirm.
 - **Goal:** Agent removed
 - **Removes:** Registry entry, ~/agents/scen024-cos-01/, tmux session
 - **Verify:** Agent not in sidebar. Sudo modal appeared once. Screenshot: SCEN-024/S020-cos-deleted.jpg
 
 #### S021: Delete scen024-mbr-01 via UI (Rule 12 sudo)
-- **Action:** Same as S020 but for scen024-mbr-01. Enter sudo password `mYkri1-xoxrap-gogtan` when prompted.
+- **Action:** Same as S020 but for scen024-mbr-01. Enter sudo password `$AIM_GOVERNANCE_PASSWORD` when prompted.
 - **Goal:** Agent removed
 - **Removes:** Registry, folder, tmux session
 - **Verify:** Not in sidebar. Sudo modal appeared once. Screenshot: SCEN-024/S021-mbr-deleted.jpg
 
 #### S021b: Delete cos-scen024-team (Tatiana, the auto-COS) via UI (Rule 12 sudo)
-- **Action:** Profile → Advanced → Danger Zone → Delete Agent. Check "Also delete agent folder". Type `cos-scen024-team`. Click Delete Forever. Sudo password modal appears — enter `mYkri1-xoxrap-gogtan`.
+- **Action:** Profile → Advanced → Danger Zone → Delete Agent. Check "Also delete agent folder". Type `cos-scen024-team`. Click Delete Forever. Sudo password modal appears — enter `$AIM_GOVERNANCE_PASSWORD`.
 - **Goal:** Auto-COS removed
 - **Removes:** Registry entry, ~/agents/cos-scen024-team/, tmux session (if any)
 - **Verify:** Agent not in sidebar. Sudo modal appeared once. Screenshot: SCEN-024/S021b-auto-cos-deleted.jpg
 
 #### S022: Demote + delete scen024-mgr-01 (Rule 12 sudo x 2)
-- **Action:** Open profile → title badge → AUTONOMOUS → enter sudo password `mYkri1-xoxrap-gogtan` in the first sudo modal (title change strict). Then Advanced → Danger Zone → Delete Agent, enter sudo password `mYkri1-xoxrap-gogtan` in the second sudo modal (delete strict), "Also delete folder", type `scen024-mgr-01`, Delete Forever.
+- **Action:** Open profile → title badge → AUTONOMOUS → enter sudo password `$AIM_GOVERNANCE_PASSWORD` in the first sudo modal (title change strict). Then Advanced → Danger Zone → Delete Agent, enter sudo password `$AIM_GOVERNANCE_PASSWORD` in the second sudo modal (delete strict), "Also delete folder", type `scen024-mgr-01`, Delete Forever.
 - **Goal:** MANAGER removed (two-step because MANAGER is a standalone title, and each strict op needs a fresh sudo token per Rule 12 single-shot)
 - **Removes:** Registry, folder, tmux session
 - **Verify:** Not in sidebar. Two sudo modals appeared (one per strict op). Screenshot: SCEN-024/S022-mgr-deleted.jpg
 
 #### S023: Purge cemetery entries (Rule 12 sudo x 4)
-- **Action:** Settings → Cemetery → Purge each of scen024-mgr-01, scen024-cos-01, scen024-mbr-01, cos-scen024-team — enter sudo password `mYkri1-xoxrap-gogtan` in each sudo modal (cemetery purge is strict, single-shot token per op). (Note: if hard-delete with folder skipped cemetery per R20.x, no entries will be listed — the step becomes N/A.)
+- **Action:** Settings → Cemetery → Purge each of scen024-mgr-01, scen024-cos-01, scen024-mbr-01, cos-scen024-team — enter sudo password `$AIM_GOVERNANCE_PASSWORD` in each sudo modal (cemetery purge is strict, single-shot token per op). (Note: if hard-delete with folder skipped cemetery per R20.x, no entries will be listed — the step becomes N/A.)
 - **Goal:** Cemetery clean
 - **Removes:** Cemetery entries
 - **Verify:** None listed. Up to four sudo modals appeared (one per entry, or 0 if hard-delete skipped cemetery). Screenshot: SCEN-024/S023-cemetery-purged.jpg

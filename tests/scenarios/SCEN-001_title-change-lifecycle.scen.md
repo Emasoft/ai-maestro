@@ -44,7 +44,7 @@ prerequisites:
   - Chrome browser open with DevTools accessible via CDP
   - ai-maestro-plugins marketplace registered
   - At least 1 existing team with available slots
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -100,7 +100,7 @@ author: AI Maestro Team
 - **Verify:** Session API confirms not authenticated. Screenshot: SCEN-001/S005-no-session.png
 
 #### S006: Enter governance password and log in
-- **Action:** Fill password field with `mYkri1-xoxrap-gogtan`, click "Login" button
+- **Action:** Fill password field with `$AIM_GOVERNANCE_PASSWORD`, click "Login" button
 - **Goal:** Login succeeds, dashboard loads with sidebar and agent list
 - **Creates:** Session cookie set in browser
 - **Modifies:** nothing
@@ -193,7 +193,7 @@ author: AI Maestro Team
 - **Verify:** ORCHESTRATOR/ARCHITECT/INTEGRATOR/MEMBER/CHIEF-OF-STAFF options ARE shown (disabled, with the team-membership reason text) — not absent from the dialog. MANAGER disabled if already taken (names the holder), or selectable otherwise. MAINTAINER present and selectable. Screenshot: SCEN-001/S016-singleton-enforced.png
 
 #### S017: Create a dedicated test team for the test agent
-- **Action:** Click Teams tab in sidebar. Click "+" or "Create Team" button. Enter team name EXACTLY `scen001-title-team`. Description: `Isolated test team for SCEN-001 — delete in cleanup`. Click Next. When prompted for initial agents, do NOT select any existing agents. Click "Create Team". A sudo password modal MUST appear (TRDD-1LX5LMBD: `POST /api/teams` is a strict sudo route) — enter governance password `mYkri1-xoxrap-gogtan` in the modal and click Confirm. Wait for team creation to complete and its auto-COS (named `cos-scen001-title-team` per the scen-prefixed convention) to appear.
+- **Action:** Click Teams tab in sidebar. Click "+" or "Create Team" button. Enter team name EXACTLY `scen001-title-team`. Description: `Isolated test team for SCEN-001 — delete in cleanup`. Click Next. When prompted for initial agents, do NOT select any existing agents. Click "Create Team". A sudo password modal MUST appear (TRDD-1LX5LMBD: `POST /api/teams` is a strict sudo route) — enter governance password `$AIM_GOVERNANCE_PASSWORD` in the modal and click Confirm. Wait for team creation to complete and its auto-COS (named `cos-scen001-title-team` per the scen-prefixed convention) to appear.
 - **Goal:** New isolated test team exists, created only after a fresh sudo token was minted via the modal. An auto-COS with scen001- prefix was created by the system.
 - **Creates:** 1 test team (`scen001-title-team`), 1 auto-COS agent (`cos-scen001-title-team`)
 - **Modifies:** teams.json, agent registry (auto-COS)
@@ -228,7 +228,7 @@ author: AI Maestro Team
 - **Verify:** "Enter Governance Password" dialog with input field. Screenshot: SCEN-001/S020-password-dialog.png
 
 #### S021: Enter governance password and submit
-- **Action:** Type governance password `mYkri1-xoxrap-gogtan`, click Confirm. When the sudo password modal appears (`PATCH /api/agents/[id]/title` is a strict route per Rule 12), enter the governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
+- **Action:** Type governance password `$AIM_GOVERNANCE_PASSWORD`, click Confirm. When the sudo password modal appears (`PATCH /api/agents/[id]/title` is a strict route per Rule 12), enter the governance password `$AIM_GOVERNANCE_PASSWORD` again and click Confirm.
 - **Goal:** Title changes to ORCHESTRATOR, role-plugin installed
 - **Creates:** Plugin entry in agent's settings.local.json
 - **Modifies:** Agent governanceTitle in registry, plugin state
@@ -246,7 +246,7 @@ author: AI Maestro Team
 - **Verify:** Dialog shows with ORCHESTRATOR pre-selected. Screenshot: SCEN-001/S022-title-dialog-orchestrator.png
 
 #### S023: Select ARCHITECT and confirm with password
-- **Action:** Select ARCHITECT, click Confirm, enter password `mYkri1-xoxrap-gogtan`, submit. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title`), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
+- **Action:** Select ARCHITECT, click Confirm, enter password `$AIM_GOVERNANCE_PASSWORD`, submit. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title`), enter governance password `$AIM_GOVERNANCE_PASSWORD` again and click Confirm.
 - **Goal:** Title swaps to ARCHITECT, plugin swaps to architect
 - **Creates:** nothing (plugin swap)
 - **Modifies:** Agent title (-> ARCHITECT), plugin (orchestrator -> architect)
@@ -264,7 +264,7 @@ author: AI Maestro Team
 ## Phase 6: Revert to MEMBER
 
 #### S025: Click ARCHITECT title badge -> select MEMBER -> password
-- **Action:** Open title dialog, select MEMBER, confirm with password `mYkri1-xoxrap-gogtan`. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title`), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
+- **Action:** Open title dialog, select MEMBER, confirm with password `$AIM_GOVERNANCE_PASSWORD`. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title`), enter governance password `$AIM_GOVERNANCE_PASSWORD` again and click Confirm.
 - **Goal:** Title reverts to MEMBER, programmer plugin auto-installed
 - **Creates:** nothing
 - **Modifies:** Agent title (-> MEMBER), plugin (-> ai-maestro-programmer-agent)
@@ -282,7 +282,7 @@ author: AI Maestro Team
 ## Phase 7: Singleton Constraint Check
 
 #### S027: Assign ORCHESTRATOR to test agent again
-- **Action:** Open title dialog, select ORCHESTRATOR, enter governance password `mYkri1-xoxrap-gogtan`, click Confirm. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title`), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
+- **Action:** Open title dialog, select ORCHESTRATOR, enter governance password `$AIM_GOVERNANCE_PASSWORD`, click Confirm. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title`), enter governance password `$AIM_GOVERNANCE_PASSWORD` again and click Confirm.
 - **Goal:** Test agent is now ORCHESTRATOR
 - **Creates:** Plugin entry
 - **Modifies:** Agent title, plugin
@@ -366,19 +366,19 @@ author: AI Maestro Team
 - **Verify:** Title shows AUTONOMOUS, no team, Config tab shows exactly one role-plugin: ai-maestro-autonomous-agent (NOT empty — R9.13 forbids a persisted role-less agent). Agent remains online. Screenshot: SCEN-001/S034-reverted-autonomous.png
 
 #### S034a: Delete the second scen-prefixed test agent (scen001-title-agent-2)
-- **Action:** Click `scen001-title-agent-2` in sidebar. Profile → Danger Zone → "Delete Agent" → check "Also delete agent folder" → type `scen001-title-agent-2` → click "Delete Forever". When the sudo password modal appears, enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Click `scen001-title-agent-2` in sidebar. Profile → Danger Zone → "Delete Agent" → check "Also delete agent folder" → type `scen001-title-agent-2` → click "Delete Forever". When the sudo password modal appears, enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Second scen-prefixed test agent removed from registry, folder `~/agents/scen001-title-agent-2/` deleted.
 - **Removes:** Agent `scen001-title-agent-2`, its folder, and its tmux session if any.
 - **Verify:** Agent no longer in sidebar. `GET /api/agents` returns 404 for its ID. `ls ~/agents/scen001-title-agent-2` fails. Screenshot: SCEN-001/S034a-agent-2-deleted.png
 
 #### S034b: Delete the test team (scen001-title-team)
-- **Action:** Click Teams tab in sidebar. Click `scen001-title-team` → Delete team. Enter governance password `mYkri1-xoxrap-gogtan`. Check "Delete agents in this team too" (to catch the auto-COS). Click Delete Team.
+- **Action:** Click Teams tab in sidebar. Click `scen001-title-team` → Delete team. Enter governance password `$AIM_GOVERNANCE_PASSWORD`. Check "Delete agents in this team too" (to catch the auto-COS). Click Delete Team.
 - **Goal:** Test team removed. Auto-COS `cos-scen001-title-team` removed via cascade.
 - **Removes:** Team `scen001-title-team`, auto-COS agent `cos-scen001-title-team` (and its folder).
 - **Verify:** Teams tab no longer shows `scen001-title-team`. `cos-scen001-title-team` no longer in sidebar. Screenshot: SCEN-001/S034b-team-deleted.png
 
 #### S035: Soft-delete primary test agent via UI (cemetery path)
-- **Action:** Click delete button in profile panel -> Danger Zone -> "Delete Agent". Type `scen-test-title-agent` -> click **"Move to Cemetery"** (TRDD-0301PUYW: the soft-delete button — `hard=false` — which archives to the cemetery AND preserves the workdir; the checkbox is irrelevant on this path because a cemetery move always keeps the folder). When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Click delete button in profile panel -> Danger Zone -> "Delete Agent". Type `scen-test-title-agent` -> click **"Move to Cemetery"** (TRDD-0301PUYW: the soft-delete button — `hard=false` — which archives to the cemetery AND preserves the workdir; the checkbox is irrelevant on this path because a cemetery move always keeps the folder). When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Test agent removed from registry, archived to cemetery, workdir on disk preserved for revive.
 - **Creates:** Cemetery archive entry (zip file with manifest + registry snapshot + agent.db). Workdir at `~/agents/scen-test-title-agent/` remains.
 - **Modifies:** Agent registry (entry removed)
@@ -399,7 +399,7 @@ author: AI Maestro Team
 - **Verify:** Cemetery list shows `scen-test-title-agent` with archive date and download/revive/purge options. Screenshot: SCEN-001/S036-cemetery-entry.png
 
 #### S037: Purge all scen001-* entries from Cemetery
-- **Action:** For each cemetery entry with name in the explicit list `["scen-test-title-agent", "scen001-title-agent-2", "cos-scen001-title-team"]` (derived from the agents this scenario created), click its "Purge" button, confirm via the sudo password modal with `mYkri1-xoxrap-gogtan`. Do NOT purge any other cemetery entries — only the ones whose names match the explicit list.
+- **Action:** For each cemetery entry with name in the explicit list `["scen-test-title-agent", "scen001-title-agent-2", "cos-scen001-title-team"]` (derived from the agents this scenario created), click its "Purge" button, confirm via the sudo password modal with `$AIM_GOVERNANCE_PASSWORD`. Do NOT purge any other cemetery entries — only the ones whose names match the explicit list.
 - **Goal:** All cemetery entries created by this scenario are removed. Pre-existing entries from other scenarios or prior runs are untouched.
 - **Removes:** Cemetery zip archives for each entry in the explicit list (if present).
 - **Verify:** For each name in the list, cemetery no longer shows that entry. Other cemetery entries (if any) are still present. Screenshot: SCEN-001/S037-cemetery-purged.png

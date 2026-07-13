@@ -627,9 +627,9 @@ prerequisites:                      # Conditions that must be true BEFORE Phase 
   - Governance password set
   - ai-maestro-plugins marketplace registered
   - <any scenario-specific requirements, e.g. "Codex CLI installed">
-governance_password: "<password>"   # The actual password value, in quotes.
-                                    # Every step that needs it must reference it
-                                    # verbatim — never write just "password".
+governance_password: "$AIM_GOVERNANCE_PASSWORD"   # The env var NAME. NEVER the value.
+                                    # The literal is a secret; a scenario file is
+                                    # committed and published. See Rule 12.
 commit: <git-hash or TBD>          # Hash at time of writing. Updated after first run.
 author: <who wrote the scenario>    # (optional) Person or team name.
 # NOTE: `client` goes between `description` and `subsystems` (see above).
@@ -657,7 +657,7 @@ author: <who wrote the scenario>    # (optional) Person or team name.
 | `browser_stack` | string | yes | `dev-browser` per Rule 8. New scenarios MUST set this field. |
 | `required_tools` | list | no | Legacy chrome-devtools-mcp list from pre-2026-04-15 scenarios. Deprecated; do NOT add to new scenarios. |
 | `prerequisites` | list | yes | Testable conditions. Include CLI checks (e.g., `which codex`). |
-| `governance_password` | string | yes | Actual password in quotes. Referenced verbatim in steps. |
+| `governance_password` | string | yes | The env var NAME (`"$AIM_GOVERNANCE_PASSWORD"`), never the value. Rule 12. |
 | `commit` | string | yes | Git hash or `TBD`. Updated after first successful run. |
 | `author` | string | no | Person or team. |
 
@@ -696,7 +696,7 @@ Steps are numbered sequentially across all phases: S001, S002, ... S028. Never r
 
 | Field | Required | Content |
 |-------|----------|---------|
-| `Action` | yes | Exact UI sequence. Spell out button labels, input values, passwords. Never write "enter password" — write `enter password \`mYkri1-xoxrap-gogtan\``. |
+| `Action` | yes | Exact UI sequence. Spell out button labels, input values, passwords. Never write "enter password" — write `enter password \`$AIM_GOVERNANCE_PASSWORD\``. |
 | `Goal` | yes | Single verifiable assertion. Not a wish — a testable fact. |
 | `Creates` | yes | List of artifacts created, or `nothing`. Include where (registry, filesystem, tmux). |
 | `Modifies` | yes | List of state changes, or `nothing`. Be specific (field names, file paths). |
@@ -915,7 +915,7 @@ Any step that hits a strict operation MUST also include a
 
 > **Action:** Click "Delete Agent" in the Danger Zone. When the sudo
 > password modal appears, enter the governance password
-> `mYkri1-xoxrap-gogtan` and click Confirm. Then type the agent name
+> `$AIM_GOVERNANCE_PASSWORD` and click Confirm. Then type the agent name
 > in the confirmation field and click Delete Forever.
 
 If the scenario does NOT show the sudo modal appearing, that is a BUG
@@ -944,6 +944,41 @@ v3.6.0 the strict routes are:
 
 When a NEW strict route is added to `security-registry.json`, update
 this table AND every scenario that touches that route.
+
+### THE PASSWORD NEVER PASSES THROUGH A MODEL (hard invariant)
+
+**The governance password is a secret. No scenario file, no report, no shell
+command, no agent prompt may ever contain its value.** It lives in exactly one
+place — the `AIM_GOVERNANCE_PASSWORD` env var, sourced from the gitignored
+`.env.local` — and it travels **env → bash → the dev-browser script's stdin**.
+The runner *names a helper*; it never sees, types, or handles the value.
+
+Concretely:
+
+- **The helpers take NO password argument.** `aim_login`, `aim_sudo_modal`, and
+  `aim_delete_agent <name>` resolve it themselves via `aim__password_json`. A
+  parameter is a value the caller must first possess — which is precisely what
+  the runner must not.
+- **A scenario writes the env var NAME, never the literal.** In frontmatter:
+  `governance_password: "$AIM_GOVERNANCE_PASSWORD"`. In a step's Action line:
+  "when the sudo modal appears, call `aim_sudo_modal`" — *not* "enter the
+  password `<literal>`".
+- **A step never instructs the runner to type the password.** If a step's Action
+  says to type it, that step is a bug: rewrite it to call the helper.
+- **If `AIM_GOVERNANCE_PASSWORD` is unset, the run FAILS FAST.** No default, no
+  placeholder. A default would be a secret in a committed file — which is the
+  exact bug this rule exists to prevent.
+
+**Why this is a hard invariant and not a preference.** The old contract passed
+the password as `$1`. That made every scenario spell it out in clear text and
+every runner type it into a shell command — so **197 copies accumulated across
+34 committed files**, and then left the repo entirely: a `publish` carried the
+live credential into a **PUBLIC** plugin repo (`TRDD-44RGLOO8`,
+`TRDD-E9BZ5P7S`). Nobody decided to leak it; the format required them to.
+
+A secret that any file is *permitted* to name will eventually appear in every
+file that *can* name it. The only durable fix is to make naming it impossible,
+which is what "the helpers take no password argument" buys.
 
 ### Sudo modal recognition pattern (dev-browser + legacy chrome-devtools-mcp)
 

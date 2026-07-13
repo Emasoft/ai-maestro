@@ -49,7 +49,7 @@ prerequisites:
   - ai-maestro-plugins marketplace registered
   - At least one role-plugin available (e.g. ai-maestro-autonomous-agent)
   - A small non-destructive test plugin available in some marketplace (suggested rechecker-plugin or any minor utility plugin; exact plugin name is recorded in the scenario report)
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -73,7 +73,7 @@ commit: TBD
 - **Verify:** Health OK; backups exist.
 
 ### S002: Login
-- **Action:** Navigate to `/`; enter password `mYkri1-xoxrap-gogtan`; click
+- **Action:** Navigate to `/`; enter password `$AIM_GOVERNANCE_PASSWORD`; click
   Login.
 - **Goal:** Session established.
 - **Creates:** session cookie
@@ -218,28 +218,28 @@ commit: TBD
 - **Action:** Alpha → Config → Plugins → click X on the local plugin.
   Confirm dialog. When the sudo password modal appears (DELETE
   /api/agents/role-plugins/install is strict), enter governance
-  password `mYkri1-xoxrap-gogtan` and click Confirm.
+  password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Removes:** local-scope install from scen021-alpha
 - **Verify:** Plugin no longer listed; sudo modal appeared once.
 
 ### S018: Uninstall user-scope plugin from Settings (Rule 12 sudo)
 - **Action:** Settings → Plugins → Uninstall the user-scope plugin.
   When the sudo password modal appears, enter governance password
-  `mYkri1-xoxrap-gogtan` and Confirm.
+  `$AIM_GOVERNANCE_PASSWORD` and Confirm.
 - **Removes:** user-scope install
 - **Verify:** Plugin no longer in the user list; sudo modal appeared.
 
 ### S019: Delete scen021-alpha (Rule 12 sudo)
 - **Action:** Profile → Advanced → Delete Agent (check "Also delete agent
   folder" checkbox, type `scen021-alpha`). When the sudo password
-  modal appears, enter governance password `mYkri1-xoxrap-gogtan` and
+  modal appears, enter governance password `$AIM_GOVERNANCE_PASSWORD` and
   Confirm.
 - **Removes:** Agent alpha + folder + tmux session
 - **Verify:** Not in sidebar; sudo modal appeared.
 
 ### S020: Delete scen021-beta (Rule 12 sudo)
 - **Action:** Same flow as S019 (type `scen021-beta`, enter sudo
-  password `mYkri1-xoxrap-gogtan` when prompted).
+  password `$AIM_GOVERNANCE_PASSWORD` when prompted).
 - **Removes:** Agent beta + folder + tmux session
 - **Verify:** Not in sidebar; sudo modal appeared.
 

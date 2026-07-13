@@ -39,7 +39,7 @@ prerequisites:
   - ai-maestro-plugins marketplace registered
   - No pre-existing agent named "scen013-codex-r17-test"
   - Codex CLI installed (`which codex` succeeds)
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   # Rule 3: STATE-WIPE only restores config files modified by side effects.
   # Do NOT include registry.json or teams.json — UI delete + cleanup already handles those,
@@ -85,7 +85,7 @@ author: AI Maestro Team
 - **Verify:** `tmux list-sessions | grep scen012` returns nothing
 
 #### S005: Login to dashboard
-- **Action:** Navigate to `http://localhost:23000/`, enter governance password `mYkri1-xoxrap-gogtan`, click Sign In
+- **Action:** Navigate to `http://localhost:23000/`, enter governance password `$AIM_GOVERNANCE_PASSWORD`, click Sign In
 - **Goal:** Authenticated session established
 - **Creates:** Session cookie
 - **Modifies:** nothing
@@ -322,20 +322,20 @@ author: AI Maestro Team
 ## Phase CLEANUP: Restore Original State
 
 #### S030: Stop the test agent
-- **Action:** In the dashboard, select scen013-codex-r17-test, click Stop button. SUDO-MODE: when the sudo password modal appears (POST `/api/sessions/{id}/stop` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. (Alternative: send `/exit` via terminal; this path does not prompt but requires manual confirmation inside the Codex CLI.)
+- **Action:** In the dashboard, select scen013-codex-r17-test, click Stop button. SUDO-MODE: when the sudo password modal appears (POST `/api/sessions/{id}/stop` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm. (Alternative: send `/exit` via terminal; this path does not prompt but requires manual confirmation inside the Codex CLI.)
 - **Goal:** Agent's Codex session exits gracefully
 - **Creates:** nothing
 - **Modifies:** Agent session status → offline
 - **Verify:** Agent shows as offline/hibernated in sidebar. Screenshot: SCEN-013/S030-agent-stopped.png
 
 #### S031: Delete the test agent via UI
-- **Action:** Agent Profile → Advanced tab → Danger Zone → Delete Agent → check "Also delete agent folder" → type `scen013-codex-r17-test` → click "Delete Forever". SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Agent Profile → Advanced tab → Danger Zone → Delete Agent → check "Also delete agent folder" → type `scen013-codex-r17-test` → click "Delete Forever". SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Agent removed from registry, folder deleted, tmux session killed
 - **Removes:** Agent from registry, ~/agents/scen013-codex-r17-test/ directory, tmux session
 - **Verify:** Agent no longer in sidebar. Run `ls ~/agents/scen013-codex-r17-test` and confirm "No such file or directory" — this verifies the "Also delete agent folder" checkbox actually removed the folder. Screenshot: SCEN-013/S031-agent-deleted.png
 
 #### S032: Purge cemetery entry
-- **Action:** Navigate to Settings → Cemetery tab → find scen013-codex-r17-test → click Purge. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/cemetery` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Navigate to Settings → Cemetery tab → find scen013-codex-r17-test → click Purge. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/cemetery` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Cemetery entry removed
 - **Removes:** Cemetery archive entry for scen013-codex-r17-test
 - **Verify:** scen013-codex-r17-test not listed in cemetery. Screenshot: SCEN-013/S032-cemetery-purged.png

@@ -87,7 +87,7 @@ prerequisites:
   - ai-maestro-plugins marketplace registered (`claude plugin marketplace list` shows it)
   - 4 git-fixtures cloned under `tests/scenarios/fixtures/git/<repo-name>/` with a `scenario-start` tag (scenario author responsibility — scenario-setup.sh resets them but never clones)
   - No pre-existing agent named "scen026-codex-plugin-test"
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 commit: TBD
 author: AI Maestro Team
 ---
@@ -205,7 +205,7 @@ author: AI Maestro Team
 - **Verify:** `tmux list-sessions` returns zero matches; both `which` calls exit 0; API returns `available=true`.
 
 #### S005: Open dashboard + login + baseline screenshot
-- **Action:** Via `dev-browser`, open the persistent `dashboard` page on the `ai-maestro-scenarios` instance. If not logged in, log in with the governance password `mYkri1-xoxrap-gogtan`.
+- **Action:** Via `dev-browser`, open the persistent `dashboard` page on the `ai-maestro-scenarios` instance. If not logged in, log in with the governance password `$AIM_GOVERNANCE_PASSWORD`.
 - **Goal:** Logged-in dashboard at the Agents view
 - **Creates:** nothing
 - **Modifies:** browser session cookie
@@ -275,7 +275,7 @@ author: AI Maestro Team
 - **Verify:** Dialog visible with 8 title cards. Screenshot of the open dialog.
 
 #### S011: Assign ARCHITECT + enter governance password
-- **Action:** Click the ARCHITECT radio card, enter governance password `mYkri1-xoxrap-gogtan` in the modal, click "Assign". If the sudo modal also appears, enter the same password there.
+- **Action:** Click the ARCHITECT radio card, enter governance password `$AIM_GOVERNANCE_PASSWORD` in the modal, click "Assign". If the sudo modal also appears, enter the same password there.
 - **Goal:** ChangeTitle pipeline runs TWO symmetric source→target ops: (a) G14c TARGET UNINSTALL of the programmer role-plugin from Codex — flip its `enabled` flag to false (or remove its key) in `~/.codex/config.toml`. The SOURCE at `~/agents/role-plugins/codex-roles-marketplace/ai-maestro-programmer-agent-codex/` stays in place for future reuse. (b) G16 checks for a native/emitted Codex source of `ai-maestro-architect-agent`; if missing, emits one into the local marketplace; then TARGET INSTALL via Codex's protocol — flip enabled=true for `ai-maestro-architect-agent-codex@ai-maestro-local-roles-marketplace` in config.toml.
 - **Creates:** Possibly 1 new role-plugin SOURCE under `~/agents/role-plugins/codex-roles-marketplace/ai-maestro-architect-agent-codex/` (only if not already emitted); 1 new enabled entry in `~/.codex/config.toml`; 3-4 ledger entries (`change_title`, `change_plugin(uninstall)`, `change_plugin(install)`)
 - **Modifies:** `agents/registry.json` (governanceTitle + rolePlugin); `~/.codex/config.toml` (two toggles — one disabled, one enabled); possibly `~/.agents/plugins/marketplace.json` if the local marketplace needed registration
@@ -303,7 +303,7 @@ author: AI Maestro Team
 ## Phase 3: R9.13 role-plugin-or-hibernate invariant
 
 #### S014: Uninstall the active role-plugin from the Config tab
-- **Action:** In Profile → Config tab → Role-Plugin card, click the "Uninstall" (or trash) button. When the sudo modal appears, enter `mYkri1-xoxrap-gogtan` and confirm.
+- **Action:** In Profile → Config tab → Role-Plugin card, click the "Uninstall" (or trash) button. When the sudo modal appears, enter `$AIM_GOVERNANCE_PASSWORD` and confirm.
 - **Goal:** ChangePlugin PG04 runs. Since no compatible fallback role-plugin exists for ARCHITECT on Codex beyond `ai-maestro-architect-agent-codex` (the one we just removed), PG04 sets `roleMissing=true` and auto-hibernates the agent.
 - **Creates:** Ledger entries `change_plugin(uninstall)` + `hibernate_role_missing`
 - **Modifies:** agent registry (rolePlugin=null, roleMissing=true); tmux session killed

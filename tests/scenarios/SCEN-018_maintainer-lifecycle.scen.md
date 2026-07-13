@@ -65,7 +65,7 @@ prerequisites:
   - Emasoft/scen018-test-repo-alpha exists with src/buggy.py (known divide bug), tests/test_buggy.py (failing test), scripts/publish.py, pyproject.toml with bumpable version, v0.1.0 git tag, branch ruleset (require PR, no force-push, no branch delete)
   - Emasoft/scen018-test-repo-beta exists with src/other.py (known multiply bug), tests/test_other.py (failing test), scripts/publish.py, pyproject.toml with bumpable version, v0.1.0 git tag, branch ruleset (require PR, no force-push, no branch delete)
   - Codex CLI NOT required (claude-only scenario)
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -124,7 +124,7 @@ commit: TBD
 - **Verify:** `tmux list-sessions` shows no scen018-* sessions.
 
 #### S006: Login to dashboard and take baseline screenshot
-- **Action:** Navigate to `http://localhost:23000`. Enter governance password `mYkri1-xoxrap-gogtan` if login required. Take a full-page screenshot as baseline.
+- **Action:** Navigate to `http://localhost:23000`. Enter governance password `$AIM_GOVERNANCE_PASSWORD` if login required. Take a full-page screenshot as baseline.
 - **Goal:** Dashboard loaded, baseline captured for post-test comparison.
 - **Creates:** nothing
 - **Modifies:** nothing
@@ -455,25 +455,25 @@ commit: TBD
 - **Verify:** `gh release list --repo Emasoft/scen018-test-repo-beta` no longer shows the test release.
 
 #### S041: Delete scen018-maint-alpha (Rule 12 sudo)
-- **Action:** Click scen018-maint-alpha in sidebar. Navigate to Profile -> Advanced -> Danger Zone. Click "Delete Agent". When the sudo password modal appears, enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. Check "Also delete agent folder". Type agent name `scen018-maint-alpha` in the confirmation field. Click Delete Forever.
+- **Action:** Click scen018-maint-alpha in sidebar. Navigate to Profile -> Advanced -> Danger Zone. Click "Delete Agent". When the sudo password modal appears, enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm. Check "Also delete agent folder". Type agent name `scen018-maint-alpha` in the confirmation field. Click Delete Forever.
 - **Goal:** Agent deleted with all associated resources.
 - **Removes:** Agent registry entry, tmux session, agent folder, maintainer ledger
 - **Verify:** scen018-maint-alpha not in sidebar. Sudo modal appeared and was handled.
 
 #### S042: Delete scen018-contrib-alpha (Rule 12 sudo)
-- **Action:** Same flow as S041 for scen018-contrib-alpha. Enter sudo password `mYkri1-xoxrap-gogtan` when prompted. Check "Also delete agent folder". Type name, click Delete Forever.
+- **Action:** Same flow as S041 for scen018-contrib-alpha. Enter sudo password `$AIM_GOVERNANCE_PASSWORD` when prompted. Check "Also delete agent folder". Type name, click Delete Forever.
 - **Goal:** Contributor agent deleted.
 - **Removes:** Agent registry entry, tmux session, agent folder
 - **Verify:** scen018-contrib-alpha not in sidebar.
 
 #### S043: Delete scen018-manager (Rule 12 sudo)
-- **Action:** Same flow as S041 for scen018-manager. Enter sudo password `mYkri1-xoxrap-gogtan` when prompted. Check "Also delete agent folder". Type name, click Delete Forever.
+- **Action:** Same flow as S041 for scen018-manager. Enter sudo password `$AIM_GOVERNANCE_PASSWORD` when prompted. Check "Also delete agent folder". Type name, click Delete Forever.
 - **Goal:** MANAGER agent deleted.
 - **Removes:** Agent registry entry, tmux session, agent folder
 - **Verify:** scen018-manager not in sidebar.
 
 #### S044: Purge cemetery entries
-- **Action:** Navigate to Settings -> Cemetery tab. Purge entries for scen018-maint-alpha, scen018-contrib-alpha, and scen018-manager. Enter sudo password `mYkri1-xoxrap-gogtan` when prompted for each purge operation.
+- **Action:** Navigate to Settings -> Cemetery tab. Purge entries for scen018-maint-alpha, scen018-contrib-alpha, and scen018-manager. Enter sudo password `$AIM_GOVERNANCE_PASSWORD` when prompted for each purge operation.
 - **Goal:** Cemetery is clean of test agents.
 - **Removes:** Cemetery records for all 3 test agents
 - **Verify:** Cemetery shows no scen018-* entries.

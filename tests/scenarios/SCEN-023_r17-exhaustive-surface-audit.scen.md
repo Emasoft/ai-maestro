@@ -49,7 +49,7 @@ prerequisites:
     hosts the core `ai-maestro-plugin`; per R20, Claude core is
     remote-only and has no local core marketplace)
   - No pre-existing agent named "scen023-r17-audit-01"
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -106,7 +106,7 @@ author: AI Maestro Team
 - **Verify:** `/api/sessions` returns 200. Screenshot: SCEN-023/S003-server.jpg
 
 #### S004: Login to dashboard
-- **Action:** Navigate to `http://localhost:23000/`, enter `mYkri1-xoxrap-gogtan`, click Sign In
+- **Action:** Navigate to `http://localhost:23000/`, enter `$AIM_GOVERNANCE_PASSWORD`, click Sign In
 - **Goal:** Authenticated session
 - **Creates:** Session cookie
 - **Modifies:** nothing
@@ -206,7 +206,7 @@ author: AI Maestro Team
 > icon is hidden/disabled on that card, OR clicking it produces an R17 rejection.
 
 #### S015: Attempt marketplace removal via UI
-- **Action:** Navigate to Settings → Plugins Explorer → Marketplaces tab. Locate the `ai-maestro-plugins` marketplace card. If a trash icon / remove button is rendered, click it. If a sudo password modal appears, enter `mYkri1-xoxrap-gogtan` and Confirm. Then click the final "Remove marketplace" confirm button.
+- **Action:** Navigate to Settings → Plugins Explorer → Marketplaces tab. Locate the `ai-maestro-plugins` marketplace card. If a trash icon / remove button is rendered, click it. If a sudo password modal appears, enter `$AIM_GOVERNANCE_PASSWORD` and Confirm. Then click the final "Remove marketplace" confirm button.
 - **Goal:** The UI either hides/disables the remove-marketplace control for `ai-maestro-plugins`, OR the attempt produces an R17 rejection toast (DeleteMarketplace pipeline refuses because it hosts a core plugin).
 - **Creates:** nothing
 - **Modifies:** nothing
@@ -231,7 +231,7 @@ author: AI Maestro Team
 - **Verify:** File content shows `false`. Screenshot: SCEN-023/S017-manually-disabled.jpg
 
 #### S018: Hibernate the agent via UI
-- **Action:** Select scen023-r17-audit-01 in the sidebar, click Hibernate (enter sudo password `mYkri1-xoxrap-gogtan` in the modal when prompted — Rule 12 hibernate is strict for team agents; AUTONOMOUS agents may or may not prompt depending on registry state)
+- **Action:** Select scen023-r17-audit-01 in the sidebar, click Hibernate (enter sudo password `$AIM_GOVERNANCE_PASSWORD` in the modal when prompted — Rule 12 hibernate is strict for team agents; AUTONOMOUS agents may or may not prompt depending on registry state)
 - **Goal:** Agent hibernated
 - **Creates:** nothing
 - **Modifies:** Agent session status → offline, tmux session killed
@@ -256,7 +256,7 @@ author: AI Maestro Team
 - **Verify:** File content has no ai-maestro-plugin key. Screenshot: SCEN-023/S020-entry-removed.jpg
 
 #### S021: Hibernate + wake to trigger repair
-- **Action:** Hibernate then Wake the agent via UI (sudo password `mYkri1-xoxrap-gogtan` when prompted)
+- **Action:** Hibernate then Wake the agent via UI (sudo password `$AIM_GOVERNANCE_PASSWORD` when prompted)
 - **Goal:** Wake-gate R17 detects missing plugin and reinstalls
 - **Creates:** settings.local.json plugin entry (reinstalled)
 - **Modifies:** Agent session status, settings.local.json (plugin reinstalled)
@@ -267,7 +267,7 @@ author: AI Maestro Team
 ## Phase CLEANUP: Restore Original State
 
 #### S022: Delete the test agent via UI
-- **Action:** Profile → Advanced → Danger Zone → Delete Agent. Check "Also delete agent folder". Type `scen023-r17-audit-01`. Click "Delete Forever". When the sudo password modal appears (DELETE /api/agents/[id] is strict), enter sudo password `mYkri1-xoxrap-gogtan` and Confirm.
+- **Action:** Profile → Advanced → Danger Zone → Delete Agent. Check "Also delete agent folder". Type `scen023-r17-audit-01`. Click "Delete Forever". When the sudo password modal appears (DELETE /api/agents/[id] is strict), enter sudo password `$AIM_GOVERNANCE_PASSWORD` and Confirm.
 - **Goal:** Agent removed from registry, folder deleted, tmux session killed
 - **Removes:** Agent from registry, `~/agents/scen023-r17-audit-01/`, tmux session
 - **Verify:** Agent no longer in sidebar. Folder does not exist. Screenshot: SCEN-023/S022-deleted.jpg

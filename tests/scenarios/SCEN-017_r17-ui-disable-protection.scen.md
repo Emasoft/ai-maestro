@@ -51,7 +51,7 @@ prerequisites:
   - "ai-maestro-plugin installed at LOCAL scope inside every agent's workdir (per R17.17 IRON rule — AI Maestro NEVER installs at user scope; only the human user may via Settings → Plugins Explorer). SCEN-017 Phase 2 exercises this local-scope invariant."
   - "Phase 3/4 assert R17 protection on ANY user-scope install that happens to exist. Since AI Maestro never creates one by default, Phase 3/4 are SKIP/N/A unless the human user has previously installed ai-maestro-plugin at user scope via the Settings UI. S017 branches on this at runtime."
   - No pre-existing agent named "scen017-ui-test"
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -103,7 +103,7 @@ author: AI Maestro Team
 - **Verify:** `plugin.json` exists in the cache directory. If missing, the ai-maestro-plugins marketplace was never updated — run `claude plugin marketplace update ai-maestro-plugins` and retry. Screenshot: SCEN-017/S005-plugin-cached.png
 
 #### S006: Login to dashboard
-- **Action:** Navigate to `http://localhost:23000/`, fill governance password `mYkri1-xoxrap-gogtan`, click Sign In
+- **Action:** Navigate to `http://localhost:23000/`, fill governance password `$AIM_GOVERNANCE_PASSWORD`, click Sign In
 - **Goal:** Authenticated maestro session established
 - **Creates:** Session cookie
 - **Modifies:** browser cookies
@@ -221,7 +221,7 @@ author: AI Maestro Team
 - **Verify:** Snapshot records one of two outcomes: (A) toggle is absent (protection working correctly) — in which case steps S018-S020 are skipped and marked N/A; (B) toggle is present and shows "enabled" state — in which case the test continues to S018 to exercise the click path. Screenshot: SCEN-017/S017-toggle-state.png
 
 #### S018: Click the disable toggle on the core plugin row
-- **Action:** Click the toggle control on the ai-maestro-plugin row. If a sudo password modal appears, enter `mYkri1-xoxrap-gogtan` and click Confirm (note: at v3.6.0 `POST /api/settings/global-plugins` is NOT classified strict in security-registry.json, so no modal is expected — if one appears, that is an INFO observation, not a failure).
+- **Action:** Click the toggle control on the ai-maestro-plugin row. If a sudo password modal appears, enter `$AIM_GOVERNANCE_PASSWORD` and click Confirm (note: at v3.6.0 `POST /api/settings/global-plugins` is NOT classified strict in security-registry.json, so no modal is expected — if one appears, that is an INFO observation, not a failure).
 - **Goal:** The UI sends a disable request to the backend
 - **Creates:** nothing (the backend is expected to reject)
 - **Modifies:** nothing successful — the server-side ChangePlugin Gate 7 must reject with an R17 error
@@ -269,7 +269,7 @@ author: AI Maestro Team
 - **Verify:** Snapshot lists rendered buttons. If Trash2 (Uninstall) and delete-marketplace are visible for the core plugin, that is ISSUE-SURFACE-3 (UX: destructive controls visible for protected plugin). Screenshot: SCEN-017/S023-mkt-buttons.png
 
 #### S024: Click the per-plugin Uninstall (Trash2) on ai-maestro-plugin
-- **Action:** Click the Trash2 button on the ai-maestro-plugin row. A confirmation modal appears with label `Uninstall "ai-maestro-plugin"?`. Click the red "Uninstall" button in that modal. When the sudo password modal appears (DELETE /api/agents/role-plugins/install is strict), enter `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Click the Trash2 button on the ai-maestro-plugin row. A confirmation modal appears with label `Uninstall "ai-maestro-plugin"?`. Click the red "Uninstall" button in that modal. When the sudo password modal appears (DELETE /api/agents/role-plugins/install is strict), enter `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** The backend receives the DELETE request, ChangePlugin Gate 7 rejects it (R17 + user-scope check), the UI shows a visible error
 - **Creates:** nothing
 - **Modifies:** nothing successful — the plugin must remain installed
@@ -290,7 +290,7 @@ author: AI Maestro Team
 - **Verify:** File content shows `"ai-maestro-plugin@ai-maestro-plugins": true`. Screenshot: SCEN-017/S026-settings-verify.png
 
 #### S027: Attempt to delete the ai-maestro-plugins marketplace
-- **Action:** Click the delete-marketplace (Trash) button on the ai-maestro-plugins marketplace card header. A confirmation modal appears with label `Delete marketplace "ai-maestro-plugins"? This will uninstall all its plugins and remove the marketplace.` Click the red "Delete" button. When the sudo password modal appears (DELETE /api/settings/marketplaces is strict), enter `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Click the delete-marketplace (Trash) button on the ai-maestro-plugins marketplace card header. A confirmation modal appears with label `Delete marketplace "ai-maestro-plugins"? This will uninstall all its plugins and remove the marketplace.` Click the red "Delete" button. When the sudo password modal appears (DELETE /api/settings/marketplaces is strict), enter `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** The backend rejects the cascade delete because it would remove the core plugin. The UI shows a visible error.
 - **Creates:** nothing
 - **Modifies:** nothing successful — the marketplace and plugin must both remain
@@ -317,13 +317,13 @@ author: AI Maestro Team
 > Cleanup MUST follow the MANDATORY UI-first order (see SCENARIOS_TESTS_RULES.md "Cleanup Order Is Non-Negotiable"): delete agent via UI → purge cemetery → STATE-WIPE restore of settings files.
 
 #### S030: Delete the test agent via UI
-- **Action:** With scen017-ui-test selected, open the profile panel → Advanced tab → Danger Zone → click "Delete Agent". In the dialog, check the "Also delete agent folder" checkbox, type `scen017-ui-test` into the confirmation field, click "Delete Forever". When the sudo password modal appears (DELETE /api/agents/[id] is strict), enter `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** With scen017-ui-test selected, open the profile panel → Advanced tab → Danger Zone → click "Delete Agent". In the dialog, check the "Also delete agent folder" checkbox, type `scen017-ui-test` into the confirmation field, click "Delete Forever". When the sudo password modal appears (DELETE /api/agents/[id] is strict), enter `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Agent removed from registry, tmux session killed, `~/agents/scen017-ui-test/` folder deleted
 - **Removes:** Agent registry entry, ~/agents/scen017-ui-test/ directory, tmux session
 - **Verify:** Agent no longer in sidebar; API `GET /api/agents` does not list scen017-ui-test; folder `~/agents/scen017-ui-test/` does not exist. Screenshot: SCEN-017/S030-agent-deleted.png
 
 #### S031: Purge cemetery entry
-- **Action:** Navigate to Settings → Cemetery tab, find the `scen017-ui-test` row, click Purge. When the sudo password modal appears (DELETE /api/agents/cemetery/[id] is strict), enter `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Navigate to Settings → Cemetery tab, find the `scen017-ui-test` row, click Purge. When the sudo password modal appears (DELETE /api/agents/cemetery/[id] is strict), enter `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Cemetery archive entry removed
 - **Removes:** Cemetery entry for scen017-ui-test
 - **Verify:** scen017-ui-test no longer listed in Cemetery tab. Screenshot: SCEN-017/S031-cemetery-purged.png

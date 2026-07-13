@@ -40,7 +40,7 @@ prerequisites:
   - Governance password set
   - "dir fixture ~/agents/scen028-import-fixture exists: a git repo with a scenario-start tag, at least one tracked file, and origin set to https://github.com/Emasoft/scen028-import-fixture.git (the URL is never fetched — the github-repo prefill is a pure filesystem read of .git/config)"
   - 'No pre-existing agents matching "scen028-*"'
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -84,7 +84,7 @@ commit: TBD
 - **Verify:** `tmux list-sessions` shows no `scen028-*`
 
 #### S004: Login + baseline screenshot
-- **Action:** Via dev-browser (`--browser ai-maestro-scenarios --headless --timeout 60`): navigate to `http://localhost:23000`, log in with governance password `mYkri1-xoxrap-gogtan` if prompted, wait for the sidebar to render.
+- **Action:** Via dev-browser (`--browser ai-maestro-scenarios --headless --timeout 60`): navigate to `http://localhost:23000`, log in with governance password `$AIM_GOVERNANCE_PASSWORD` if prompted, wait for the sidebar to render.
 - **Goal:** Authenticated dashboard visible
 - **Creates:** baseline screenshot
 - **Modifies:** nothing
@@ -130,7 +130,7 @@ commit: TBD
 - **Verify:** Snapshot text match on the prefilled URL; screenshot `S009_<RUN_ID>_github-prefill.jpg`. An empty field is a BUG (Rule 4).
 
 #### S010: Create the agent
-- **Action:** Proceed to summary; confirm the summary shows workdir = `FOLDFIX[0]`; click Create. Handle the sudo password modal if it appears (enter `mYkri1-xoxrap-gogtan`, Confirm).
+- **Action:** Proceed to summary; confirm the summary shows workdir = `FOLDFIX[0]`; click Create. Handle the sudo password modal if it appears (enter `$AIM_GOVERNANCE_PASSWORD`, Confirm).
 - **Goal:** Agent created — adoption IN PLACE (no `~/agents/scen028-maintainer-01/` folder is created)
 - **Creates:** registry entry `scen028-maintainer-01`; seeded artifacts inside the fixture
 - **Modifies:** fixture's `.claude/` + `.git/info/exclude`
@@ -148,7 +148,7 @@ commit: TBD
 ## Phase 2: Tombstone regression — soft delete, then re-adopt the SAME folder
 
 #### S012: Soft-delete the maintainer agent (folder MUST survive)
-- **Action:** Select `scen028-maintainer-01` → Profile → Advanced → Danger Zone → Delete Agent. When the sudo modal appears enter `mYkri1-xoxrap-gogtan` and Confirm. In the delete dialog do **NOT** check "Also delete agent folder" (the folder is a permanent fixture). Type the agent name, click Delete Forever.
+- **Action:** Select `scen028-maintainer-01` → Profile → Advanced → Danger Zone → Delete Agent. When the sudo modal appears enter `$AIM_GOVERNANCE_PASSWORD` and Confirm. In the delete dialog do **NOT** check "Also delete agent folder" (the folder is a permanent fixture). Type the agent name, click Delete Forever.
 - **Goal:** Agent removed from the sidebar; fixture folder intact
 - **Creates:** cemetery archive entry
 - **Modifies:** registry (tombstone)
@@ -173,7 +173,7 @@ commit: TBD
 ## Phase CLEANUP: Restore Original State
 
 #### S015: Delete the autonomous agent (folder preserved)
-- **Action:** Same UI delete flow as S012 for `scen028-auto-01` — sudo modal with `mYkri1-xoxrap-gogtan`, do **NOT** check "Also delete agent folder", type name, Delete Forever.
+- **Action:** Same UI delete flow as S012 for `scen028-auto-01` — sudo modal with `$AIM_GOVERNANCE_PASSWORD`, do **NOT** check "Also delete agent folder", type name, Delete Forever.
 - **Goal:** Agent removed; fixture intact
 - **Removes:** `scen028-auto-01` from sidebar/registry (tombstone)
 - **Verify:** Sidebar clean of `scen028-*`; fixture folder exists

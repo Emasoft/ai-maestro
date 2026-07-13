@@ -53,7 +53,7 @@ prerequisites:
   - Governance password set
   - Chrome browser open with DevTools accessible via CDP
   - ai-maestro-plugins marketplace registered (Emasoft/ai-maestro-plugins)
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -102,7 +102,7 @@ author: AI Maestro Team
 ## Phase 1: LoginGate Authentication
 
 #### S005: Log in with governance password
-- **Action:** Fill password field with `mYkri1-xoxrap-gogtan`, click "Login" button
+- **Action:** Fill password field with `$AIM_GOVERNANCE_PASSWORD`, click "Login" button
 - **Goal:** Login succeeds, dashboard loads with sidebar and agent list
 - **Creates:** Session cookie
 - **Modifies:** nothing
@@ -348,7 +348,7 @@ author: AI Maestro Team
 - **Verify:** ORCHESTRATOR card is not grayed out, is clickable. Screenshot: SCEN-002/S034-orchestrator-available.png
 
 #### S035: Select ORCHESTRATOR and confirm with password
-- **Action:** Click ORCHESTRATOR, click Confirm. Enter `mYkri1-xoxrap-gogtan` in password dialog, submit. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
+- **Action:** Click ORCHESTRATOR, click Confirm. Enter `$AIM_GOVERNANCE_PASSWORD` in password dialog, submit. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` again and click Confirm.
 - **Goal:** Title changes to ORCHESTRATOR, orchestrator role-plugin auto-installed
 - **Creates:** Plugin entry in agent's settings.local.json
 - **Modifies:** Agent governanceTitle (MEMBER -> ORCHESTRATOR), plugin state
@@ -480,7 +480,7 @@ author: AI Maestro Team
 - **Verify:** Title badge shows "MEMBER". Screenshot: SCEN-002/S047-alpha-member-again.png
 
 #### S048: Re-assign ORCHESTRATOR title
-- **Action:** Click title badge, select ORCHESTRATOR, confirm with `mYkri1-xoxrap-gogtan`. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
+- **Action:** Click title badge, select ORCHESTRATOR, confirm with `$AIM_GOVERNANCE_PASSWORD`. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` again and click Confirm.
 - **Goal:** Title changes back to ORCHESTRATOR, plugin re-installed
 - **Creates:** Plugin entry in settings.local.json
 - **Modifies:** Agent governanceTitle (MEMBER -> ORCHESTRATOR), plugin state
@@ -567,28 +567,28 @@ author: AI Maestro Team
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
 #### S055: Delete scen-test-agent-alpha
-- **Action:** Click on `scen-test-agent-alpha` in sidebar, click delete button in profile panel -> Danger Zone -> "Delete Agent" -> confirm. When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Click on `scen-test-agent-alpha` in sidebar, click delete button in profile panel -> Danger Zone -> "Delete Agent" -> confirm. When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Test agent fully removed from registry and team
 - **Creates:** Cemetery archive entry
 - **Modifies:** Agent registry (entry removed), team agentIds (alpha removed)
 - **Verify:** Agent no longer appears in sidebar. Screenshot: SCEN-002/S055-alpha-deleted.png
 
 #### S056: Delete scen-test-agent-beta
-- **Action:** Click on `scen-test-agent-beta` in sidebar, click delete button in profile panel, confirm deletion. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Click on `scen-test-agent-beta` in sidebar, click delete button in profile panel, confirm deletion. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Test agent fully removed from registry and team
 - **Creates:** Cemetery archive entry
 - **Modifies:** Agent registry (entry removed), team agentIds (beta removed), team chiefOfStaffId (cleared)
 - **Verify:** Agent no longer appears in sidebar. Screenshot: SCEN-002/S056-beta-deleted.png
 
 #### S057: Delete scen-test-team-alpha via DeleteTeam pipeline
-- **Action:** Switch to "Teams" tab, find `scen-test-team-alpha` team card, click delete icon. First dialog: click Delete. Second dialog: enter governance password `mYkri1-xoxrap-gogtan`, click "Delete Agents Too".
+- **Action:** Switch to "Teams" tab, find `scen-test-team-alpha` team card, click delete icon. First dialog: click Delete. Second dialog: enter governance password `$AIM_GOVERNANCE_PASSWORD`, click "Delete Agents Too".
 - **Goal:** Test team fully removed via DeleteTeam 8-gate pipeline. All agents (including auto-COS) reverted to AUTONOMOUS with no role-plugin, then deleted. Pending transfers cancelled. Team task files deleted.
 - **Creates:** nothing
 - **Modifies:** Teams registry (entry removed), all team agents deleted
 - **Verify:** Team card no longer appears in sidebar. Screenshot: SCEN-002/S057-team-deleted.png
 
 #### S058: Delete auto-COS agent (cos-scen-test-team-alpha)
-- **Action:** Find `cos-scen-test-team-alpha` in agent list (ALL tab). If still present (not deleted by "Delete Agents Too"), click delete button, confirm. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Find `cos-scen-test-team-alpha` in agent list (ALL tab). If still present (not deleted by "Delete Agents Too"), click delete button, confirm. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Auto-created COS agent removed from registry
 - **Creates:** nothing
 - **Modifies:** Agent registry (entry removed)
@@ -602,7 +602,7 @@ author: AI Maestro Team
 - **Verify:** Cemetery list shows entries for the deleted test agents. Screenshot: SCEN-002/S059-cemetery-entries.png
 
 #### S060: Purge all test cemetery entries
-- **Action:** For each test agent in cemetery (scen-test-agent-alpha, scen-test-agent-beta, cos-scen-test-team-alpha), click "Purge" and confirm. When the sudo password modal appears each time (`DELETE /api/agents/cemetery` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** For each test agent in cemetery (scen-test-agent-alpha, scen-test-agent-beta, cos-scen-test-team-alpha), click "Purge" and confirm. When the sudo password modal appears each time (`DELETE /api/agents/cemetery` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** All test cemetery entries removed
 - **Removes:** Cemetery zip archives for test agents
 - **Verify:** No test agent entries remain in cemetery. Screenshot: SCEN-002/S060-cemetery-purged.png

@@ -27,7 +27,46 @@ AIM_DASHBOARD_URL="${AIM_DASHBOARD_URL:-http://localhost:23000/}"
 AIM_SCREENSHOTS_ROOT="${AIM_SCREENSHOTS_ROOT:-${CLAUDE_PROJECT_DIR:-$(pwd)}/reports/scenarios-runner/screenshots}"
 
 # ----------------------------------------------------------------------------
-# aim_login <governance_password>
+# aim__password_json  (internal)
+#
+# The governance password is a SECRET and MUST NOT pass through a model.
+#
+# It is never an argument, never on a command line, never written in a scenario
+# file. It lives in exactly ONE place — the AIM_GOVERNANCE_PASSWORD env var,
+# sourced from the gitignored .env.local — and it travels env → bash → the
+# dev-browser script's stdin. The caller (a model) names the helper; it never
+# sees, types, or handles the value. This is why no helper below takes a
+# password parameter: a parameter is a value the caller must first possess.
+#
+# The old contract took it as $1, so every scenario spelled it out in clear and
+# every runner typed it into a shell command. 191 copies accumulated across 33
+# committed files and then left the repo entirely — into a PUBLIC plugin
+# (TRDD-44RGLOO8, TRDD-E9BZ5P7S). A secret that any file may name will end up in
+# every file that can name it.
+#
+# JSON-encoded, because the value is interpolated into a JS string literal: a
+# quote or backslash in the password would otherwise break — or escape — it.
+# ----------------------------------------------------------------------------
+aim__password_json() {
+  if [ -z "${AIM_GOVERNANCE_PASSWORD:-}" ]; then
+    local env_file="${CLAUDE_PROJECT_DIR:-$(pwd)}/.env.local"
+    if [ -f "$env_file" ]; then
+      set -a
+      # shellcheck disable=SC1090
+      . "$env_file"
+      set +a
+    fi
+  fi
+  if [ -z "${AIM_GOVERNANCE_PASSWORD:-}" ]; then
+    echo "aim: AIM_GOVERNANCE_PASSWORD is not set — put it in .env.local (gitignored) or export it." >&2
+    echo "aim: it is NEVER passed as an argument and NEVER written in a scenario file." >&2
+    return 1
+  fi
+  node -e 'process.stdout.write(JSON.stringify(process.env.AIM_GOVERNANCE_PASSWORD))'
+}
+
+# ----------------------------------------------------------------------------
+# aim_login          (takes NO password — see aim__password_json)
 #
 # Opens (or re-attaches to) the persistent `dashboard` named page, navigates
 # to the dashboard, and if a password input is visible, fills it and clicks
@@ -39,7 +78,8 @@ AIM_SCREENSHOTS_ROOT="${AIM_SCREENSHOTS_ROOT:-${CLAUDE_PROJECT_DIR:-$(pwd)}/repo
 # Exits non-zero on timeout / navigation error.
 # ----------------------------------------------------------------------------
 aim_login() {
-  local password="${1:?aim_login: missing governance_password argument}"
+  local pw_json
+  pw_json="$(aim__password_json)" || return 1
   dev-browser --browser "${AIM_BROWSER}" --headless --timeout 60 <<EOF
 const page = await browser.getPage("dashboard");
 try {
@@ -58,7 +98,7 @@ let already = false;
 if (pre.hasSidebar && !pre.hasLoginForm) {
   already = true;
 } else {
-  await page.fill('input[type="password"]', '${password}');
+  await page.fill('input[type="password"]', ${pw_json});
   await page.click('button:has-text("Sign In")');
   await new Promise(r => setTimeout(r, 5000));
   const post = await page.evaluate(() => ({
@@ -112,7 +152,7 @@ EOF
 }
 
 # ----------------------------------------------------------------------------
-# aim_sudo_modal <governance_password>
+# aim_sudo_modal     (takes NO password — see aim__password_json)
 #
 # Detects the sudo-mode password modal, fills it, and clicks Confirm.
 #
@@ -129,7 +169,8 @@ EOF
 # expected. If no modal appears within 3 seconds, returns `ok: false`.
 # ----------------------------------------------------------------------------
 aim_sudo_modal() {
-  local password="${1:?aim_sudo_modal: missing governance_password argument}"
+  local pw_json
+  pw_json="$(aim__password_json)" || return 1
   dev-browser --browser "${AIM_BROWSER}" --headless --timeout 30 <<EOF
 const page = await browser.getPage("dashboard");
 
@@ -192,7 +233,7 @@ if (!appeared) {
         clientX: cx, clientY: cy, button: 0
       }));
     });
-  }, '${password}');
+  }, ${pw_json});
 
   // Wait for the modal to dismiss
   await new Promise(r => setTimeout(r, 1500));
@@ -498,7 +539,7 @@ EOF
 }
 
 # ----------------------------------------------------------------------------
-# aim_delete_agent <agent_name> <governance_password>
+# aim_delete_agent <agent_name>     (takes NO password — see aim__password_json)
 #
 # Deletes an agent through the UI:
 #   1. Navigates to the agent in the sidebar
@@ -513,7 +554,7 @@ EOF
 # ----------------------------------------------------------------------------
 aim_delete_agent() {
   local name="${1:?aim_delete_agent: missing agent_name}"
-  local password="${2:?aim_delete_agent: missing governance_password}"
+  # No password param: aim_sudo_modal resolves it from the environment itself.
 
   # First navigate to the agent
   aim_navigate_agent "${name}" >/dev/null 2>&1 || true
@@ -615,7 +656,7 @@ EOF
   # going and echoed {"ok":true} anyway — a silent false-positive that left
   # the agent, its folder, and its tmux session all still present.
   local sudo_result
-  sudo_result="$(aim_sudo_modal "${password}")"
+  sudo_result="$(aim_sudo_modal)"
   if ! printf '%s' "${sudo_result}" | grep -q '"ok":true'; then
     # Diagnostic detail goes to stderr, not into the JSON payload — sudo_result
     # is itself a JSON string, and interpolating it verbatim into another

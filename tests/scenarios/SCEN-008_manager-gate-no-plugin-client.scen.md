@@ -48,7 +48,7 @@ prerequisites:
   - Chrome browser open with DevTools accessible via CDP
   - ai-maestro-plugins marketplace registered
   - No MANAGER currently assigned (or willingness to temporarily reassign)
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -97,7 +97,7 @@ author: AI Maestro Team
 ## Phase 1: LoginGate and Preconditions
 
 #### S005: Log in with governance password
-- **Action:** Fill password `mYkri1-xoxrap-gogtan`, click Login
+- **Action:** Fill password `$AIM_GOVERNANCE_PASSWORD`, click Login
 - **Goal:** Dashboard loads
 - **Creates:** Session cookie
 - **Modifies:** nothing
@@ -122,7 +122,7 @@ author: AI Maestro Team
 ## Phase 2: Assign MANAGER (Claude Code)
 
 #### S008: Create and assign MANAGER `scen8-manager`
-- **Action:** Wizard: Claude Code, `scen8-manager`, AUTONOMOUS, finish. Click AUTONOMOUS badge -> MANAGER. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Wizard: Claude Code, `scen8-manager`, AUTONOMOUS, finish. Click AUTONOMOUS badge -> MANAGER. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** MANAGER active
 - **Creates:** Agent, plugin
 - **Modifies:** Governance, registry
@@ -191,7 +191,7 @@ author: AI Maestro Team
 ## Phase 7: Change Gemini Title to ORCHESTRATOR -- NO Plugin
 
 #### S015: Open Title Dialog and assign ORCHESTRATOR
-- **Action:** Click MEMBER badge -> ORCHESTRATOR. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Click MEMBER badge -> ORCHESTRATOR. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Title changes, plugin skipped (Gemini no-plugin)
 - **Creates:** nothing
 - **Modifies:** Agent title
@@ -231,7 +231,7 @@ author: AI Maestro Team
 ## Phase 10: Delete Team via DeleteTeam Pipeline
 
 #### S019: Delete team with "Delete Agents Too"
-- **Action:** Teams -> delete `scen8-noplugin-team` -> Delete -> password `mYkri1-xoxrap-gogtan` -> Delete Agents Too
+- **Action:** Teams -> delete `scen8-noplugin-team` -> Delete -> password `$AIM_GOVERNANCE_PASSWORD` -> Delete Agents Too
 - **Goal:** Team and COS deleted. Gemini agent survives (already left).
 - **Creates:** nothing
 - **Modifies:** Team removed, COS deleted
@@ -259,27 +259,27 @@ author: AI Maestro Team
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
 #### S021: Remove MANAGER title
-- **Action:** Title badge -> AUTONOMOUS. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Title badge -> AUTONOMOUS. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Removes:** MANAGER title
 - **Verify:** `hasManager: false`. Screenshot: SCEN-008/S021-no-manager.png
 
 #### S022: Delete `scen8-manager`
-- **Action:** Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type `scen8-manager` -> Delete Forever. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type `scen8-manager` -> Delete Forever. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Removes:** Agent + folder
 - **Verify:** Gone. Run `ls ~/agents/scen8-manager` returns "No such file or directory". Screenshot: SCEN-008/S022-mgr-deleted.png
 
 #### S023: Delete `scen8-gemini-member`
-- **Action:** Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type `scen8-gemini-member` -> Delete Forever. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type `scen8-gemini-member` -> Delete Forever. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Removes:** Agent + folder
 - **Verify:** Gone. Run `ls ~/agents/scen8-gemini-member` returns "No such file or directory". Screenshot: SCEN-008/S023-gemini-deleted.png
 
 #### S024: Delete scen8 auto-COS agent (explicit name only)
-- **Action:** EXPLICIT LIST: `["cos-scen8-noplugin-team"]`. Click that exact agent in the sidebar, open Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type the exact name -> Delete Forever. Enter governance password `mYkri1-xoxrap-gogtan` when the sudo modal appears. Do NOT use `cos-*` prefix or substring matching — that could accidentally hit `ecos-chief-of-staff-one` or other real agents.
+- **Action:** EXPLICIT LIST: `["cos-scen8-noplugin-team"]`. Click that exact agent in the sidebar, open Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type the exact name -> Delete Forever. Enter governance password `$AIM_GOVERNANCE_PASSWORD` when the sudo modal appears. Do NOT use `cos-*` prefix or substring matching — that could accidentally hit `ecos-chief-of-staff-one` or other real agents.
 - **Removes:** `cos-scen8-noplugin-team` (and folder) if present.
 - **Verify:** That specific agent gone. `ecos-chief-of-staff-one` and all user's real agents unchanged. Screenshot: SCEN-008/S024-cos-deleted.png
 
 #### S025: Verify cemetery entries and purge
-- **Action:** Settings -> Cemetery. Verify test entries appear. For each test entry, click Purge. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/cemetery` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. Each purge requires a fresh sudo token (tokens are one-shot, ~60s window).
+- **Action:** Settings -> Cemetery. Verify test entries appear. For each test entry, click Purge. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/cemetery` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm. Each purge requires a fresh sudo token (tokens are one-shot, ~60s window).
 - **Removes:** Cemetery archives
 - **Verify:** No test entries. Screenshot: SCEN-008/S025-cemetery-purged.png
 

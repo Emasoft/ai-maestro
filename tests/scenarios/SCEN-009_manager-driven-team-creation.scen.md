@@ -63,7 +63,7 @@ prerequisites:
   - No MANAGER currently assigned
   - Claude Code CLI available
   - Sufficient API credits for MANAGER agent to run autonomously (~15 min)
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -112,7 +112,7 @@ author: AI Maestro Team
 ## Phase 1: LoginGate Authentication
 
 #### S005: Log in with governance password
-- **Action:** Fill password `mYkri1-xoxrap-gogtan`, click Login
+- **Action:** Fill password `$AIM_GOVERNANCE_PASSWORD`, click Login
 - **Goal:** Dashboard loads
 - **Creates:** Session cookie
 - **Modifies:** nothing
@@ -137,7 +137,7 @@ author: AI Maestro Team
 - **Verify:** Agent in sidebar. Screenshot: SCEN-009/S007-agent-created.png
 
 #### S008: Assign MANAGER title
-- **Action:** AUTONOMOUS badge -> MANAGER. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** AUTONOMOUS badge -> MANAGER. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** MANAGER active with plugin
 - **Creates:** Plugin entry
 - **Modifies:** Governance, title
@@ -299,14 +299,14 @@ author: AI Maestro Team
 ## Phase 9: Stress Test -- MANAGER Removal/Re-assignment
 
 #### S023: Remove MANAGER title
-- **Action:** Click MANAGER badge -> AUTONOMOUS. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Click MANAGER badge -> AUTONOMOUS. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** MANAGER removed, team blocked (R9.5)
 - **Creates:** nothing
 - **Modifies:** Governance, team blocked
 - **Verify:** AUTONOMOUS. `hasManager: false`. Team `blocked: true`. Screenshot: SCEN-009/S023-mgr-removed.png
 
 #### S024: Re-assign MANAGER title
-- **Action:** AUTONOMOUS badge -> MANAGER. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. Sudo tokens are one-shot; each strict operation needs a fresh token.
+- **Action:** AUTONOMOUS badge -> MANAGER. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm. Sudo tokens are one-shot; each strict operation needs a fresh token.
 - **Goal:** MANAGER restored, team unblocked (R9.6)
 - **Creates:** nothing
 - **Modifies:** Governance, team unblocked
@@ -327,23 +327,23 @@ author: AI Maestro Team
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
 #### S025: Delete team with all agents
-- **Action:** Teams -> Delete team -> password `mYkri1-xoxrap-gogtan` -> Delete Agents Too
+- **Action:** Teams -> Delete team -> password `$AIM_GOVERNANCE_PASSWORD` -> Delete Agents Too
 - **Goal:** Team and all team agents deleted via DeleteTeam 8-gate pipeline
 - **Removes:** Team, COS, all team members and folders
 - **Verify:** Team gone. No team agent IDs in agents list. Screenshot: SCEN-009/S025-team-deleted.png
 
 #### S026: Remove MANAGER title
-- **Action:** MANAGER badge -> AUTONOMOUS. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** MANAGER badge -> AUTONOMOUS. SUDO-MODE: when the sudo password modal appears (PATCH `/api/agents/{id}/title` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Removes:** MANAGER title
 - **Verify:** `hasManager: false`. Screenshot: SCEN-009/S026-no-manager.png
 
 #### S027: Delete scen-mgr-jsonl with folder
-- **Action:** Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type `scen-mgr-jsonl` -> Delete Forever. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type `scen-mgr-jsonl` -> Delete Forever. SUDO-MODE: when the sudo password modal appears (DELETE `/api/agents/{id}` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Removes:** Agent, tmux, folder
 - **Verify:** Agent gone. Run `ls ~/agents/scen-mgr-jsonl` returns "No such file or directory". Screenshot: SCEN-009/S027-mgr-deleted.png
 
 #### S028: Delete remaining scen9-prefixed agents (strict ^scen9-/^cos-scen9- prefix only)
-- **Action:** Fetch `GET /api/agents | jq '.agents[] | select(.name | test("^scen9-|^cos-scen9-")) | .name'`. For EACH name returned, open Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type exact name -> Delete Forever. Enter governance password `mYkri1-xoxrap-gogtan` when the sudo modal appears. Do NOT use substring matches like "jsonl" or "swift" — a user might have real agents with those words in their names (e.g. a swift project agent in ~/Code/).
+- **Action:** Fetch `GET /api/agents | jq '.agents[] | select(.name | test("^scen9-|^cos-scen9-")) | .name'`. For EACH name returned, open Profile -> Advanced -> Danger Zone -> Delete Agent -> check "Also delete agent folder" -> type exact name -> Delete Forever. Enter governance password `$AIM_GOVERNANCE_PASSWORD` when the sudo modal appears. Do NOT use substring matches like "jsonl" or "swift" — a user might have real agents with those words in their names (e.g. a swift project agent in ~/Code/).
 - **Removes:** Only agents whose name starts exactly with `scen9-` or `cos-scen9-`.
 - **Verify:** After the deletion, `GET /api/agents | jq '.agents[] | select(.name | test("^scen9-|^cos-scen9-"))'` returns empty. Pre-existing user agents are untouched. Screenshot: SCEN-009/S028-cleanup-agents.png
 
@@ -355,7 +355,7 @@ author: AI Maestro Team
 - **Verify:** Report prints "Cleanup verified: 0 scen-prefixed agents remain."
 
 #### S029: Verify cemetery entries and purge
-- **Action:** Settings -> Cemetery. Verify test agents. For each test entry, click Purge. SUDO-MODE: when the sudo password modal appears for each purge (DELETE `/api/agents/cemetery` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Settings -> Cemetery. Verify test agents. For each test entry, click Purge. SUDO-MODE: when the sudo password modal appears for each purge (DELETE `/api/agents/cemetery` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Removes:** Cemetery archives
 - **Verify:** No test entries. Screenshot: SCEN-009/S029-cemetery-purged.png
 

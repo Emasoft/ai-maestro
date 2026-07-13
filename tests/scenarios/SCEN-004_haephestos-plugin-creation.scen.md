@@ -50,7 +50,7 @@ required_tools:
   - mcp__chrome-devtools__type_text
   - mcp__chrome-devtools__upload_file
   - mcp__chrome-devtools__press_key
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -106,7 +106,7 @@ author: AI Maestro Team
 ## Phase 1: LoginGate Authentication
 
 #### S006: Log in with governance password
-- **Action:** Fill password field with `mYkri1-xoxrap-gogtan`, click "Login" button
+- **Action:** Fill password field with `$AIM_GOVERNANCE_PASSWORD`, click "Login" button
 - **Goal:** Dashboard loads with sidebar and agent list
 - **Creates:** Session cookie
 - **Modifies:** nothing
@@ -321,21 +321,21 @@ author: AI Maestro Team
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
 #### S030: Delete the test plugin via UI (Settings → Plugins Explorer)
-- **Action:** Navigate to Settings → Plugins Explorer → Marketplaces tab. Locate the `ai-maestro-local-roles-marketplace` card and expand it. Click the uninstall button next to the test plugin entry. When the sudo password modal appears (`DELETE /api/agents/role-plugins/install` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Navigate to Settings → Plugins Explorer → Marketplaces tab. Locate the `ai-maestro-local-roles-marketplace` card and expand it. Click the uninstall button next to the test plugin entry. When the sudo password modal appears (`DELETE /api/agents/role-plugins/install` is a strict route per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Test plugin fully removed via the plugin lifecycle API (pipeline handles directory removal + marketplace manifest update).
 - **Creates:** nothing
 - **Modifies:** Marketplace manifest, plugins directory (via API)
 - **Verify:** Plugin no longer appears in `GET /api/agents/role-plugins`. Screenshot: SCEN-004/S030-plugin-removed.png
 
 #### S031: Delete Haephestos agent via UI (if still present)
-- **Action:** In the sidebar HELPERS section, if `_aim-creation-helper` still shows as a registered agent, click it. In the Profile panel, open Advanced tab → Danger Zone → Delete Agent. Check "Also delete agent folder". Type `_aim-creation-helper` to confirm and click "Delete Forever". When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. The Delete Agent pipeline handles tmux session kill + registry removal + folder deletion + cemetery archive atomically.
+- **Action:** In the sidebar HELPERS section, if `_aim-creation-helper` still shows as a registered agent, click it. In the Profile panel, open Advanced tab → Danger Zone → Delete Agent. Check "Also delete agent folder". Type `_aim-creation-helper` to confirm and click "Delete Forever". When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm. The Delete Agent pipeline handles tmux session kill + registry removal + folder deletion + cemetery archive atomically.
 - **Goal:** No stale Haephestos agent entry, no stale tmux session, no stale workspace
 - **Creates:** Cemetery archive entry (optional — ephemeral helper may skip cemetery per implementation)
 - **Modifies:** Agent registry, tmux sessions, filesystem
 - **Verify:** `_aim-creation-helper` not in registry, not in `tmux list-sessions`, `~/agents/haephestos/` does not exist. Screenshot: SCEN-004/S031-haephestos-removed.png
 
 #### S032: Purge Haephestos cemetery entry (if one was created)
-- **Action:** Navigate to Settings → Cemetery tab. If `_aim-creation-helper` appears in the cemetery list, click Purge and confirm. When the sudo password modal appears (`DELETE /api/agents/cemetery` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Navigate to Settings → Cemetery tab. If `_aim-creation-helper` appears in the cemetery list, click Purge and confirm. When the sudo password modal appears (`DELETE /api/agents/cemetery` is a strict route per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** No cemetery artifact from the test
 - **Removes:** Cemetery zip archive for `_aim-creation-helper` (if present)
 - **Verify:** Cemetery list has no `_aim-creation-helper` entry. Screenshot: SCEN-004/S032-cemetery-purged.png

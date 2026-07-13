@@ -153,7 +153,7 @@ Append the result line to `tests/scenarios/state/batch-progress.log` and proceed
 | Project root | `${CLAUDE_PROJECT_DIR}` (the harness never hardcodes a path) |
 | Server | `http://localhost:23000` (pm2 process `ai-maestro`) |
 | Branch | `feature/team-governance` |
-| Governance password | `mYkri1-xoxrap-gogtan` |
+| Governance password | `$AIM_GOVERNANCE_PASSWORD` |
 | Chrome | already running with CDP enabled — load tools via `ToolSearch select:mcp__chrome-devtools__take_snapshot,mcp__chrome-devtools__click,mcp__chrome-devtools__fill,mcp__chrome-devtools__take_screenshot,mcp__chrome-devtools__wait_for,mcp__chrome-devtools__navigate_page,mcp__chrome-devtools__evaluate_script,mcp__chrome-devtools__list_pages,mcp__chrome-devtools__select_page,mcp__chrome-devtools__press_key` at the very start |
 
 ## Resume protocol

@@ -57,7 +57,7 @@ prerequisites:
   - Chrome browser open with DevTools accessible via CDP
   - ai-maestro-plugins marketplace registered
   - No MANAGER currently assigned (or willingness to temporarily reassign)
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -120,7 +120,7 @@ author: AI Maestro Team
 - **Verify:** Not authenticated. Screenshot: SCEN-005/S005-no-session.png
 
 #### S006: Log in with governance password
-- **Action:** Fill password field with `mYkri1-xoxrap-gogtan`, click "Login" button
+- **Action:** Fill password field with `$AIM_GOVERNANCE_PASSWORD`, click "Login" button
 - **Goal:** Login succeeds, dashboard loads with sidebar and agent list
 - **Creates:** Session cookie set in browser
 - **Modifies:** nothing
@@ -233,7 +233,7 @@ author: AI Maestro Team
 - **Verify:** Blue border on MANAGER card, Confirm not disabled. Screenshot: SCEN-005/S020-select-manager-title.png
 
 #### S021: Confirm and enter governance password
-- **Action:** Click Confirm, enter governance password `mYkri1-xoxrap-gogtan`, submit. When the sudo password modal appears (`PATCH /api/agents/[id]/title` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
+- **Action:** Click Confirm, enter governance password `$AIM_GOVERNANCE_PASSWORD`, submit. When the sudo password modal appears (`PATCH /api/agents/[id]/title` is a strict route per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` again and click Confirm.
 - **Goal:** Title changes to MANAGER, role-plugin installed
 - **Creates:** Plugin entry in agent's settings
 - **Modifies:** Agent governanceTitle in registry, governance state (hasManager: true), plugin state
@@ -520,7 +520,7 @@ author: AI Maestro Team
 - **Verify:** Second dialog with the "Delete Team" primary button and the governance password field. (Proposal 36 fix 2026-04-20 — the old "Keep Agents vs Delete Agents Too" split does not exist in current UI; single "Delete Team" button runs the Keep-Agents semantics by default. Proposal 7 will add the optional "Delete Agents Too" checkbox in a separate commit.) Screenshot: SCEN-005/S056-delete-dialog-2.png
 
 #### S057: Enter governance password and confirm team delete
-- **Action:** Enter governance password `mYkri1-xoxrap-gogtan`, click "Delete Team". (Proposal 36 fix 2026-04-20 — removed stale "Keep Agents" button reference.)
+- **Action:** Enter governance password `$AIM_GOVERNANCE_PASSWORD`, click "Delete Team". (Proposal 36 fix 2026-04-20 — removed stale "Keep Agents" button reference.)
 - **Goal:** Team deleted via DeleteTeam 8-gate pipeline. Agents revert to AUTONOMOUS (Keep-Agents semantics — the current default when Proposal 7's checkbox is not added or not ticked). Transfers cancelled. Team data files deleted.
 - **Creates:** nothing
 - **Modifies:** Teams registry (team removed), agent titles (all -> AUTONOMOUS), plugins stripped.
@@ -580,7 +580,7 @@ author: AI Maestro Team
 - **Verify:** Dialog visible. Screenshot: SCEN-005/S064-title-dialog.png
 
 #### S065: Change title to AUTONOMOUS (remove MANAGER)
-- **Action:** Select AUTONOMOUS, click Confirm, enter governance password `mYkri1-xoxrap-gogtan`, submit. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
+- **Action:** Select AUTONOMOUS, click Confirm, enter governance password `$AIM_GOVERNANCE_PASSWORD`, submit. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` again and click Confirm.
 - **Goal:** MANAGER title removed, agent becomes AUTONOMOUS. Blocking cascade triggers (R9.8).
 - **Creates:** nothing
 - **Modifies:** Agent title (-> AUTONOMOUS), governance state (hasManager: false), all teams blocked, team agents hibernated
@@ -629,43 +629,43 @@ author: AI Maestro Team
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
 #### S070: Re-assign MANAGER to unblock teams for cleanup
-- **Action:** Open title dialog for `scen-test-manager`, select MANAGER, enter governance password `mYkri1-xoxrap-gogtan`, confirm. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
+- **Action:** Open title dialog for `scen-test-manager`, select MANAGER, enter governance password `$AIM_GOVERNANCE_PASSWORD`, confirm. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` again and click Confirm.
 - **Goal:** MANAGER restored so teams can be deleted
 - **Removes:** nothing
 - **Verify:** `GET /api/governance` shows `hasManager: true`. Screenshot: SCEN-005/S070-manager-restored.png
 
 #### S071: Delete team `scen-test-blocking-team` with "Delete Agents Too"
-- **Action:** Navigate to Teams tab, click delete on `scen-test-blocking-team`. Delete -> password `mYkri1-xoxrap-gogtan` -> "Delete Agents Too".
+- **Action:** Navigate to Teams tab, click delete on `scen-test-blocking-team`. Delete -> password `$AIM_GOVERNANCE_PASSWORD` -> "Delete Agents Too".
 - **Goal:** Team AND all its agents deleted
 - **Removes:** Team, auto-COS, any members
 - **Verify:** Team gone from `GET /api/teams`. Screenshot: SCEN-005/S071-blocking-team-deleted.png
 
 #### S072: Remove MANAGER title from `scen-test-manager`
-- **Action:** Open title dialog, select AUTONOMOUS, enter governance password `mYkri1-xoxrap-gogtan`, confirm. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` again and click Confirm.
+- **Action:** Open title dialog, select AUTONOMOUS, enter governance password `$AIM_GOVERNANCE_PASSWORD`, confirm. When the sudo password modal appears (strict route `PATCH /api/agents/[id]/title` per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` again and click Confirm.
 - **Goal:** No MANAGER on host
 - **Removes:** MANAGER title
 - **Verify:** `GET /api/governance` shows `hasManager: false`. Screenshot: SCEN-005/S072-no-manager.png
 
 #### S073: Delete test agent `scen-test-manager` via Danger Zone
-- **Action:** Profile -> Advanced -> Danger Zone -> "Delete Agent" -> check "Also delete agent folder" -> type `scen-test-manager` -> Delete Forever. When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Profile -> Advanced -> Danger Zone -> "Delete Agent" -> check "Also delete agent folder" -> type `scen-test-manager` -> Delete Forever. When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Test agent fully removed
 - **Removes:** Agent, folder, tmux session
 - **Verify:** Agent no longer in sidebar. Screenshot: SCEN-005/S073-manager-deleted.png
 
 #### S074: Delete test agent `scen-test-team-member`
-- **Action:** Click on `scen-test-team-member` in sidebar, open Profile → Advanced → Danger Zone, click Delete Agent, check "Also delete agent folder", type the agent name and click Delete Forever. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Click on `scen-test-team-member` in sidebar, open Profile → Advanced → Danger Zone, click Delete Agent, check "Also delete agent folder", type the agent name and click Delete Forever. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Test agent fully removed
 - **Removes:** Agent
 - **Verify:** Agent gone. Screenshot: SCEN-005/S074-member-deleted.png
 
 #### S075: Delete auto-COS agents created by this scenario (explicit names only)
-- **Action:** Build an EXPLICIT LIST of auto-COS names to delete, derived ONLY from the team names this scenario created. In this scenario: auto-COS for `scen-test-governance-team` is `cos-scen-test-governance-team`, and for `scen-test-blocking-team` is `cos-scen-test-blocking-team`. DO NOT use prefix-match like "cos-*" — that could accidentally match real user agents. For each name in the explicit list `["cos-scen-test-governance-team", "cos-scen-test-blocking-team"]`, click that exact agent in the sidebar, open Profile → Advanced → Danger Zone, click Delete Agent, check "Also delete agent folder", type the exact name and click Delete Forever. When the sudo password modal appears each time (strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. If any of these names no longer exist (already cleaned up), skip that one and continue.
+- **Action:** Build an EXPLICIT LIST of auto-COS names to delete, derived ONLY from the team names this scenario created. In this scenario: auto-COS for `scen-test-governance-team` is `cos-scen-test-governance-team`, and for `scen-test-blocking-team` is `cos-scen-test-blocking-team`. DO NOT use prefix-match like "cos-*" — that could accidentally match real user agents. For each name in the explicit list `["cos-scen-test-governance-team", "cos-scen-test-blocking-team"]`, click that exact agent in the sidebar, open Profile → Advanced → Danger Zone, click Delete Agent, check "Also delete agent folder", type the exact name and click Delete Forever. When the sudo password modal appears each time (strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm. If any of these names no longer exist (already cleaned up), skip that one and continue.
 - **Goal:** The two scen-prefixed auto-COS agents are removed. No other agent is touched.
 - **Removes:** `cos-scen-test-governance-team`, `cos-scen-test-blocking-team` (and their folders) — if present.
 - **Verify:** Neither of the two named agents appears in the sidebar. Pre-existing user agents like `ecos-chief-of-staff-one` are still present. Screenshot: SCEN-005/S075-cos-deleted.png
 
 #### S076: Verify cemetery entries and purge (explicit names only)
-- **Action:** Navigate to Settings -> Cemetery tab. Build the explicit list of cemetery entries this scenario is responsible for: `["scen-test-manager", "scen-test-team-member", "cos-scen-test-governance-team", "cos-scen-test-blocking-team"]`. For each name in that list, click "Purge" on its entry, confirm, and enter governance password `mYkri1-xoxrap-gogtan` when the sudo modal appears. Do NOT purge any other entry — only the ones whose names match the explicit list.
+- **Action:** Navigate to Settings -> Cemetery tab. Build the explicit list of cemetery entries this scenario is responsible for: `["scen-test-manager", "scen-test-team-member", "cos-scen-test-governance-team", "cos-scen-test-blocking-team"]`. For each name in that list, click "Purge" on its entry, confirm, and enter governance password `$AIM_GOVERNANCE_PASSWORD` when the sudo modal appears. Do NOT purge any other entry — only the ones whose names match the explicit list.
 - **Goal:** Scenario-created cemetery entries are gone. Pre-existing cemetery entries (from other scenarios or prior runs) are untouched.
 - **Removes:** Cemetery zip archives for entries in the explicit list (if present).
 - **Verify:** None of the four named cemetery entries is present after the purge. Other entries remain. Screenshot: SCEN-005/S076-cemetery-purged.png

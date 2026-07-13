@@ -53,7 +53,7 @@ prerequisites:
   - Claude CLI installed (`which claude` succeeds)
   - No pre-existing agents named "scen015-alice" or "scen015-bob"
   - P002 (CreateAgent G12 AMP identity auto-init) is deployed on the running server
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/teams/groups.json
@@ -119,7 +119,7 @@ author: AI Maestro Team
 ## Phase 1: Create Two AUTONOMOUS Agents via Wizard
 
 #### S007: Login with governance password
-- **Action:** Navigate to http://localhost:23000, fill governance password `mYkri1-xoxrap-gogtan`, click Sign In
+- **Action:** Navigate to http://localhost:23000, fill governance password `$AIM_GOVERNANCE_PASSWORD`, click Sign In
 - **Goal:** Authenticated MAESTRO session
 - **Creates:** Session cookie
 - **Modifies:** browser cookies
@@ -236,13 +236,13 @@ author: AI Maestro Team
 ## Phase CLEANUP: Restore Original State
 
 #### S022: Delete both test agents via UI
-- **Action:** For each of `scen015-alice` and `scen015-bob`: open profile panel → Advanced tab → Danger Zone → Delete Agent → check "Also delete agent folder" → type the agent name → Delete Forever. SUDO-MODE: when the sudo password modal appears for each deletion (DELETE `/api/agents/{id}` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm. Each delete requires a fresh sudo token.
+- **Action:** For each of `scen015-alice` and `scen015-bob`: open profile panel → Advanced tab → Danger Zone → Delete Agent → check "Also delete agent folder" → type the agent name → Delete Forever. SUDO-MODE: when the sudo password modal appears for each deletion (DELETE `/api/agents/{id}` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm. Each delete requires a fresh sudo token.
 - **Goal:** Both agents fully removed from registry and filesystem
 - **Removes:** 2 agent registry entries, `~/agents/scen015-alice/` and `~/agents/scen015-bob/` directories, tmux sessions (if any)
 - **Verify:** Neither agent in sidebar, `GET /api/agents` does not list them. Run `ls ~/agents/scen015-alice ~/agents/scen015-bob` and confirm both return "No such file or directory". Screenshot: SCEN-015/S022-agents-deleted.png
 
 #### S023: Purge cemetery entries
-- **Action:** Navigate to Settings → Cemetery tab. For each entry matching `scen015-alice` or `scen015-bob`, click Purge. SUDO-MODE: when the sudo password modal appears for each purge (DELETE `/api/agents/cemetery` is a strict route), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Navigate to Settings → Cemetery tab. For each entry matching `scen015-alice` or `scen015-bob`, click Purge. SUDO-MODE: when the sudo password modal appears for each purge (DELETE `/api/agents/cemetery` is a strict route), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Cemetery archive cleared
 - **Removes:** cemetery entries for the two test agents
 - **Verify:** Neither entry is in Cemetery tab. Screenshot: SCEN-015/S023-cemetery-purged.png

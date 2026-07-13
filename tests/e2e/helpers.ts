@@ -8,7 +8,27 @@
 import { type Page, expect } from '@playwright/test'
 
 export const BASE_URL = 'http://localhost:23000'
-export const GOVERNANCE_PASSWORD = 'mYkri1-xoxrap-gogtan'
+
+/**
+ * The governance password. Read from the environment, NEVER written in source.
+ *
+ * Fail-fast on purpose: a default here would be a secret in a committed file,
+ * which is exactly how the previous literal escaped the repo into a PUBLIC
+ * plugin (TRDD-44RGLOO8). A missing env var must stop the run, not be papered
+ * over with a placeholder that silently authenticates as nobody.
+ *
+ * Put it in .env.local (gitignored) or export it before running the suite.
+ */
+export const GOVERNANCE_PASSWORD: string = (() => {
+  const pw = process.env.AIM_GOVERNANCE_PASSWORD
+  if (!pw) {
+    throw new Error(
+      'AIM_GOVERNANCE_PASSWORD is not set. Put it in .env.local (gitignored) or export it. ' +
+        'It is never hardcoded — see tests/scenarios/SCENARIOS_TESTS_RULES.md Rule 12.',
+    )
+  }
+  return pw
+})()
 
 // Known test agents — must exist in the running instance
 export const AGENT_ALEXANDRE = 'alexandre'

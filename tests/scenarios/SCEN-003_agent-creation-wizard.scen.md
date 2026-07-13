@@ -49,7 +49,7 @@ prerequisites:
   - Chrome browser open with DevTools accessible via CDP
   - ai-maestro-plugins marketplace registered (Emasoft/ai-maestro-plugins)
   - Role-plugin defaults synced (ai-maestro-integrator-agent, ai-maestro-programmer-agent available)
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -98,7 +98,7 @@ author: AI Maestro Team
 ## Phase 1: LoginGate Authentication
 
 #### S005: Log in with governance password
-- **Action:** Fill password field with `mYkri1-xoxrap-gogtan`, click "Login" button
+- **Action:** Fill password field with `$AIM_GOVERNANCE_PASSWORD`, click "Login" button
 - **Goal:** Dashboard loads with sidebar and agent list
 - **Creates:** Session cookie
 - **Modifies:** nothing
@@ -123,7 +123,7 @@ author: AI Maestro Team
 - **Verify:** Browser URL ends in `/teams`. Snapshot shows Create Team button. Screenshot: SCEN-003/S007-teams-page.png
 
 #### S008: Create test team via full wizard (with auto-COS)
-- **Action:** Click "Create Team". Fill Team Info step (name `scen-test-wizard-team`, description `Scenario 003 wizard test team`, governance password `mYkri1-xoxrap-gogtan`). Skip GitHub Repos + GitHub Project steps (Next → Next). On Team Roles step leave COS as "Auto-create" and Orchestrator as "None". Click Next → Create Team on the Confirm step. (Proposal 16 fix 2026-04-20 — replaced contradictory "Do NOT select any agents" wording with the actual /teams wizard flow.)
+- **Action:** Click "Create Team". Fill Team Info step (name `scen-test-wizard-team`, description `Scenario 003 wizard test team`, governance password `$AIM_GOVERNANCE_PASSWORD`). Skip GitHub Repos + GitHub Project steps (Next → Next). On Team Roles step leave COS as "Auto-create" and Orchestrator as "None". Click Next → Create Team on the Confirm step. (Proposal 16 fix 2026-04-20 — replaced contradictory "Do NOT select any agents" wording with the actual /teams wizard flow.)
 - **Goal:** Team created with auto-generated COS agent. No contradiction with the UI reality.
 - **Creates:** Team `scen-test-wizard-team` + auto-COS agent (typically `cos-scen-test-wizard-team`).
 - **Modifies:** Teams registry, agents registry (auto-COS entry).
@@ -363,28 +363,28 @@ author: AI Maestro Team
 > **NEVER use bash to delete agent folders or kill tmux sessions. That is a Rule 6 violation.**
 
 #### S038: Delete scen-test-integrator-rex
-- **Action:** Click on `scen-test-integrator-rex` in sidebar, click delete button in profile panel -> Danger Zone -> Delete Agent -> confirm. When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Click on `scen-test-integrator-rex` in sidebar, click delete button in profile panel -> Danger Zone -> Delete Agent -> confirm. When the sudo password modal appears (`DELETE /api/agents/[id]` is a strict route per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Agent fully removed from registry and team
 - **Creates:** Cemetery archive entry
 - **Modifies:** Agent registry (entry removed), team agentIds (agent removed)
 - **Verify:** Agent no longer appears in sidebar. Screenshot: SCEN-003/S038-integrator-deleted.png
 
 #### S039: Delete scen-test-member-zeta
-- **Action:** Click on `scen-test-member-zeta` in sidebar, click delete button in profile panel, confirm deletion. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Click on `scen-test-member-zeta` in sidebar, click delete button in profile panel, confirm deletion. When the sudo password modal appears (strict route `DELETE /api/agents/[id]` per Rule 12), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Agent fully removed from registry and team
 - **Creates:** Cemetery archive entry
 - **Modifies:** Agent registry (entry removed), team agentIds (agent removed)
 - **Verify:** Agent no longer appears in sidebar. Screenshot: SCEN-003/S039-member-deleted.png
 
 #### S040: Delete scen-test-wizard-team via DeleteTeam pipeline (cascade)
-- **Action:** Switch to "Teams" tab, find `scen-test-wizard-team` team card, click delete icon. In the DeleteTeam dialog, CHECK the "Delete member agents too" checkbox, enter governance password `mYkri1-xoxrap-gogtan`, then click the button — labeled "Delete Team + Agents" once the checkbox is checked (or plain "Delete Team" if left unchecked; this step requires it checked).
+- **Action:** Switch to "Teams" tab, find `scen-test-wizard-team` team card, click delete icon. In the DeleteTeam dialog, CHECK the "Delete member agents too" checkbox, enter governance password `$AIM_GOVERNANCE_PASSWORD`, then click the button — labeled "Delete Team + Agents" once the checkbox is checked (or plain "Delete Team" if left unchecked; this step requires it checked).
 - **Goal:** Test team fully removed via DeleteTeam 8-gate pipeline in a single action. Auto-COS agent deleted by the cascade (no separate manual step needed). Pending transfers cancelled. Team task files deleted.
 - **Creates:** nothing
 - **Modifies:** Teams registry (entry removed), auto-COS agent deleted
 - **Verify:** Team card no longer appears in sidebar. The auto-COS agent no longer appears in the agent list either (the cascade removed it in this one action — no separate "delete the orphaned auto-COS manually" step is needed). Screenshot: SCEN-003/S040-team-deleted.png
 
 #### S041: Verify cemetery entries and purge
-- **Action:** Navigate to Settings -> Cemetery tab. Verify deleted test agents appear. Click "Purge" for each test entry. When the sudo password modal appears each time (`DELETE /api/agents/cemetery` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+- **Action:** Navigate to Settings -> Cemetery tab. Verify deleted test agents appear. Click "Purge" for each test entry. When the sudo password modal appears each time (`DELETE /api/agents/cemetery` is a strict route per Rule 12, and sudo tokens are one-shot), enter governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Cemetery entries verified then purged (no test artifacts remain)
 - **Removes:** Cemetery archives for test agents
 - **Verify:** No scen-test entries remain in cemetery. Screenshot: SCEN-003/S041-cemetery-purged.png

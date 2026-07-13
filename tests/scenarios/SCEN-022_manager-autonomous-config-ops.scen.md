@@ -69,7 +69,7 @@ prerequisites:
   - MAINTAINER role-plugin available as a title option per R19
     (not exercised in this scenario but must be picker-visible for the
     scen022-manager's agent-management skill to report it accurately)
-governance_password: "mYkri1-xoxrap-gogtan"
+governance_password: "$AIM_GOVERNANCE_PASSWORD"
 rewipe-list:
   - ~/.aimaestro/governance.json
   - ~/.aimaestro/agents/registry.json
@@ -92,21 +92,21 @@ commit: TBD
 - **Verify:** Health OK; backups exist.
 
 ### S002: Login + precondition check — NO real MANAGER may exist
-- **Action:** Navigate to `/`, enter password `mYkri1-xoxrap-gogtan`, click Login. Then READ-ONLY check `GET /api/governance`. If `hasManager: true`, the host has a real user MANAGER (likely one of `alexandre`, `luckas-bot`, etc.). The scenario MUST HALT — this scenario creates its own test MANAGER and cannot safely co-exist with an existing real MANAGER.
+- **Action:** Navigate to `/`, enter password `$AIM_GOVERNANCE_PASSWORD`, click Login. Then READ-ONLY check `GET /api/governance`. If `hasManager: true`, the host has a real user MANAGER (likely one of `alexandre`, `luckas-bot`, etc.). The scenario MUST HALT — this scenario creates its own test MANAGER and cannot safely co-exist with an existing real MANAGER.
 - **Goal:** Confirm `hasManager: false`. If true, HALT with `SCENARIO_ABORTED SCEN-022 — real MANAGER exists on host.`
 - **Creates:** session cookie
 - **Modifies:** nothing — do NOT demote any existing MANAGER.
 - **Verify:** `hasManager: false`.
 
 ### S002a: Create a scen-prefixed test MANAGER agent via the Wizard
-- **Action:** Click the "+" button in the Agents sidebar to open the Agent Creation Wizard. Enter name EXACTLY `scen022-manager`. Select client Claude. Title: MANAGER (the scenario creates its own MANAGER rather than relying on ambient state). Let the wizard auto-assign the MANAGER role-plugin (`ai-maestro-assistant-manager-agent`) and the default workdir `~/agents/scen022-manager/`. DO NOT override the folder. DO NOT click "Import from existing folder". Enter governance password `mYkri1-xoxrap-gogtan` when prompted (assigning MANAGER title requires it per Rule 12).
+- **Action:** Click the "+" button in the Agents sidebar to open the Agent Creation Wizard. Enter name EXACTLY `scen022-manager`. Select client Claude. Title: MANAGER (the scenario creates its own MANAGER rather than relying on ambient state). Let the wizard auto-assign the MANAGER role-plugin (`ai-maestro-assistant-manager-agent`) and the default workdir `~/agents/scen022-manager/`. DO NOT override the folder. DO NOT click "Import from existing folder". Enter governance password `$AIM_GOVERNANCE_PASSWORD` when prompted (assigning MANAGER title requires it per Rule 12).
 - **Goal:** The scenario's OWN test MANAGER agent exists at `~/agents/scen022-manager/`. No real user agent is promoted.
 - **Creates:** 1 test agent `scen022-manager` with MANAGER title and role-plugin, workdir `~/agents/scen022-manager/`.
 - **Modifies:** Agent registry, governance.json (hasManager becomes true, managerId points at the test agent).
 - **Verify:** `GET /api/agents | jq '.agents[] | select(.name=="scen022-manager") | .workingDirectory'` returns `/Users/<user>/agents/scen022-manager` exactly. If any other path, HALT as P0 bug.
 
 ### S003: Wake the test MANAGER if hibernated
-- **Action:** Click `scen022-manager` card in sidebar (the scenario's own test MANAGER — never any other MANAGER-titled agent); if hibernated, click Wake. If the sudo password modal appears, enter governance password `mYkri1-xoxrap-gogtan` and Confirm. Do NOT click any other agent.
+- **Action:** Click `scen022-manager` card in sidebar (the scenario's own test MANAGER — never any other MANAGER-titled agent); if hibernated, click Wake. If the sudo password modal appears, enter governance password `$AIM_GOVERNANCE_PASSWORD` and Confirm. Do NOT click any other agent.
 - **Goal:** The scenario-owned test MANAGER is online with a terminal session.
 - **Creates:** tmux session (if was hibernated)
 - **Modifies:** session status of `scen022-manager` only
@@ -290,7 +290,7 @@ commit: TBD
   Danger Zone → Delete Agent. Check "Also delete agent folder". Type
   `scen022-autobot`. Click Delete Forever. When the sudo password
   modal appears (Rule 12 — DELETE /api/agents/[id] strict), enter
-  governance password `mYkri1-xoxrap-gogtan` and click Confirm.
+  governance password `$AIM_GOVERNANCE_PASSWORD` and click Confirm.
 - **Goal:** Cleanup succeeds via user-driven UI (the sudo-mode gate
   allows the user because the user can supply a fresh password; it
   does not allow the MANAGER agent).
@@ -302,7 +302,7 @@ commit: TBD
 ### S014: Purge scen022-autobot cemetery entry
 - **Action:** Settings → Cemetery → find the `scen022-autobot` row
   (match the name exactly; do NOT purge any other row) → click
-  Purge → enter sudo password `mYkri1-xoxrap-gogtan` when prompted.
+  Purge → enter sudo password `$AIM_GOVERNANCE_PASSWORD` when prompted.
 - **Removes:** scen022-autobot cemetery record ONLY
 - **Verify:** Cemetery list no longer shows `scen022-autobot`. All
   other cemetery entries unchanged (count drops by exactly 1).
@@ -310,7 +310,7 @@ commit: TBD
 ### S014a: Demote scen022-manager before deletion
 - **Action:** Click `scen022-manager` card → Profile → title badge
   → select AUTONOMOUS (no team, no governance responsibilities) →
-  enter governance password `mYkri1-xoxrap-gogtan` when prompted by
+  enter governance password `$AIM_GOVERNANCE_PASSWORD` when prompted by
   the Title Assignment Dialog. This frees the MANAGER slot so the
   blocking cascade does NOT fire during deletion.
 - **Goal:** `scen022-manager` title is AUTONOMOUS (no longer MANAGER).
@@ -324,7 +324,7 @@ commit: TBD
   (safe — workdir is `~/agents/scen022-manager/`, enforced by G03
   guard). Type `scen022-manager` in the confirmation field. Click
   Delete Forever. Enter governance password
-  `mYkri1-xoxrap-gogtan` in the sudo modal and Confirm.
+  `$AIM_GOVERNANCE_PASSWORD` in the sudo modal and Confirm.
 - **Removes:** scen022-manager from registry,
   `~/agents/scen022-manager/`, tmux session.
 - **Verify:** `GET /api/agents | jq '.agents[] | select(.name=="scen022-manager")'`
@@ -333,7 +333,7 @@ commit: TBD
 ### S014c: Purge scen022-manager cemetery entry
 - **Action:** Settings → Cemetery → find the `scen022-manager` row
   (match the name exactly) → click Purge → enter sudo password
-  `mYkri1-xoxrap-gogtan`.
+  `$AIM_GOVERNANCE_PASSWORD`.
 - **Removes:** scen022-manager cemetery record ONLY.
 - **Verify:** Cemetery list no longer shows `scen022-manager`. No
   other cemetery entries touched.

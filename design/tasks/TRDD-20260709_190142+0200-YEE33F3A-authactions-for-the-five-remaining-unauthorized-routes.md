@@ -1,10 +1,13 @@
 ---
 trdd-id: YEE33F3A
 title: Decide the AuthActions for the five remaining unauthorized agent-scoped routes
-column: human_review
+column: complete
 min-approval-requirement: manager
+approved: true
+approval-judge: maestro
+approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-09T19:01:42+0200
-updated: 2026-07-10T09:12:23+0200
+updated: 2026-07-13T14:05:00+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 1
@@ -635,6 +638,19 @@ The risk of NOT deciding is concrete and current: **`export` and
 other agent's transcripts, and delete the messages its COS sent it.
 
 ## Approval log
+
+- 2026-07-13T14:05:00+0200 — **HUMAN REVIEW PASSED. USER: "yes to all decisions.
+  in case of problems we will revise them later."** `review-requirements:
+  [human-review]` is satisfied; `column: complete`.
+  - The six AuthAction decisions made under the mandate stand as shipped.
+  - **The escalated Tier-2 question is answered: NO.** R6 does not bind a
+    system-owner FORWARD whose declared sender is an agent. The USER: *"ok for the
+    no, this will be correct later too if problem arise."* This ratifies today's
+    behaviour rather than changing it, so `tests/unit/message-forward-r6-gate.test.ts`
+    stays as it is — the test was already pinning the right answer.
+  - The USER attached an explicit revision licence: these are reversible calls,
+    approved to unblock the harness, and may be revisited if they bite. Recorded
+    so a future session reads them as *decided-for-now*, not as settled law.
 
 - 2026-07-09T23:34:05+0200 — APPROVED by USER (tier 2), via the batch approval of
   four Tier-2 proposals. Rationale: `export` and `messages/[messageId]` are open

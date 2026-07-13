@@ -1,10 +1,13 @@
 ---
 trdd-id: D3RP7KQZ
 title: An agent may drive its own surface, never reconfigure itself
-column: human_review
+column: complete
 min-approval-requirement: manager
+approved: true
+approval-judge: maestro
+approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-09T16:42:56+0200
-updated: 2026-07-10T09:12:23+0200
+updated: 2026-07-13T14:05:00+0200
 current-owner: ai-maestro-session
 assignee: ai-maestro-session
 priority: 1
@@ -185,6 +188,34 @@ already the single source of truth and is well covered. The risk of NOT deciding
 is that the epic stays inert and the janitor's command reference stays wrong.
 
 ## Approval log
+
+- 2026-07-13T14:05:00+0200 — **HUMAN REVIEW PASSED, and the carried-forward half
+  is now DECIDED.** USER, verbatim:
+
+  > yes, ok for the 10 routes (actually more routes are coming, but now we need to
+  > focus on making ai-maestro harness working). the scripts if executed via cli by
+  > the user manually MUST require to enter the password of the MAESTRO USER, of
+  > course. other non MAESTRO users are not contemplated.
+
+  Three things, and the third is new work:
+
+  1. **The ten `AGENT_POLICY_PENDING` routes are approved** as proposed — the five
+     `/api/trdd/*` verbs, maestro-delegate ×2, foreign-approvals ×2, aid-recover.
+  2. **More routes are coming, and that is expected.** The policy is the durable
+     artifact; the route list is not. A new route inherits the self-drive /
+     self-configure split rather than re-opening it.
+  3. **The script layer gets a USER auth path, and it is a PASSWORD prompt.** A
+     script run manually from the CLI MUST require the MAESTRO USER's password.
+     **There is exactly one human principal — MAESTRO. Non-MAESTRO users are not
+     contemplated**, so the script layer needs no user model, no roles, no
+     multi-tenant story: one principal, one password prompt. That closes the
+     "script layer has no USER auth path" gap this TRDD carried forward, and it
+     closes it *narrowly* — which is why it is cheap. Successor: **TRDD-9MZQ4T7E**.
+
+  `review-requirements: [human-review]` is satisfied, and the flock gate is too:
+  the sibling audit **4Q7WMPZK** reached `completed` and is archived. The body's
+  STATE block still says it is open — that is STALE, and this line supersedes it.
+  Both gates clear ⇒ `column: complete`.
 
 - 2026-07-09T17:45:00+0200 — **APPROVED by the USER (tier 2; USER is the tier-3
   authority and may decide a tier-2 proposal directly).** The decision, verbatim:

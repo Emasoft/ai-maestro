@@ -1,9 +1,12 @@
 ---
 trdd-id: 44RGLOO8
 title: The published web-scenario-tester ships the live governance credential in its rules doc
-column: proposal
+column: dev
+approved: true
+approval-judge: maestro
+approval-datetime: 2026-07-13T14:05:00+0200
 created: 2026-07-10T06:23:25+0200
-updated: 2026-07-10T06:47:10+0200
+updated: 2026-07-13T14:05:00+0200
 current-owner: ai-maestro-session
 created-by: ai-maestro-session
 priority: 0
@@ -147,6 +150,36 @@ credential is live would be exactly the false completion the flock gate exists t
 prevent.
 
 ## Approval log
+
+- 2026-07-13T14:05:00+0200 — **APPROVED by the USER (tier 3).** Directed the fix
+  and it is half done. USER, verbatim:
+
+  > improve the skill making the governance password read from an env var like the
+  > other secrets api keys. then replace the password mentions in clear with the
+  > name of the env var, and instructing the web scenarios tester to read it from
+  > the env var (or even better: use a script to paste it into the dialog input
+  > field automatically, without the model ever read it).
+
+  **DONE (commit `1e6246ff`, this repo — the "even better" option was taken):** the
+  helpers take **no password argument** at all; they resolve it themselves from
+  `AIM_GOVERNANCE_PASSWORD` and pipe it env → bash → the dev-browser script's
+  stdin, so the model never sees, types, or handles the value. 197 literals across
+  34 files became the env var NAME; `tests/e2e/helpers.ts` fails fast if it is
+  unset; Rule 12 states the invariant; a guard test enforces the SHAPE (not the
+  value — pinning today's literal would be worthless after rotation and would
+  itself be a committed copy of the secret). Tracked as TRDD-E9BZ5P7S.
+
+  **NOT DONE, and not mine to do — two acts, in this order:**
+  1. **The USER rotates the governance password.** It is public at
+     `ai-maestro-web-scenario-tester` **v0.1.3** and in that repo's history; no
+     amount of redaction here un-publishes it. **An agent must never rotate a
+     credential.** Everything above is what makes the *rotated* password safe to
+     hold — it is not a substitute for rotating it.
+  2. **Only then**, the public repo is cleaned (purge the literal from history,
+     republish). Per the cross-project rule this session may not edit that tree —
+     it is an issue or a fork+PR — and per this TRDD's own standing warning **no
+     public issue may be filed until after the rotation**, because the issue would
+     itself advertise the live credential to anyone reading the tracker.
 
 - 2026-07-10T06:23:25+0200 — AUTHORED as a proposal by ai-maestro-session
   (min-approval-requirement: user). Not a mandate: the author's authority is below the

@@ -5,6 +5,7 @@ import { Server, Plus, Trash2, Edit2, CheckCircle, X, AlertCircle, Loader2, Arro
 import type { Host } from '@/types/host'
 import localVersion from '@/version.json'
 import GovernancePasswordDialog from '@/components/governance/GovernancePasswordDialog'
+import RevokePasswordDialog from '@/components/governance/RevokePasswordDialog'
 import HostToolsSection from './HostToolsSection'
 import AvatarPicker from '@/components/AvatarPicker'
 
@@ -59,6 +60,7 @@ export default function HostsSection() {
   const [governanceUserAvatar, setGovernanceUserAvatar] = useState<string | null>(null)
   const [governanceHasPassword, setGovernanceHasPassword] = useState(false)
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
+  const [showRevokeDialog, setShowRevokeDialog] = useState(false)
   const [passwordDialogMode, setPasswordDialogMode] = useState<'setup' | 'confirm'>('setup')
   const [editingUserName, setEditingUserName] = useState(false)
   const [userNameDraft, setUserNameDraft] = useState('')
@@ -870,6 +872,21 @@ export default function HostsSection() {
                                 >
                                   Change
                                 </button>
+                                {/*
+                                  Revoke — TRDD-P7XKV3N9. This button carries NO policy: it
+                                  opens a dialog that POSTs the password and renders whatever
+                                  the server replies. Every gate (possession, the console
+                                  check, the desktop code, the rate limit) lives in the
+                                  endpoint, because every route is curl-able and a check
+                                  placed in a client is not a weak check — it is no check.
+                                */}
+                                <button
+                                  onClick={() => setShowRevokeDialog(true)}
+                                  title="Revoke this password. The next login will ask for a new one."
+                                  className="px-2 py-0.5 text-xs bg-red-900/60 hover:bg-red-800 text-red-200 rounded transition-colors"
+                                >
+                                  Revoke
+                                </button>
                               </>
                             ) : (
                               <>
@@ -1010,6 +1027,19 @@ export default function HostsSection() {
           await fetchGovernance()
         }}
       />
+
+      {/* Revoke the password (TRDD-P7XKV3N9) — the dialog decides nothing; the endpoint does. */}
+      {showRevokeDialog && (
+        <RevokePasswordDialog
+          onClose={() => setShowRevokeDialog(false)}
+          onRevoked={async () => {
+            setShowRevokeDialog(false)
+            // The credential is gone. Re-read governance so the section flips to
+            // "Password: Not set" immediately rather than showing a stale ●●●●●●.
+            await fetchGovernance()
+          }}
+        />
+      )}
 
       {/* Avatar picker for the local user */}
       <AvatarPicker

@@ -96,6 +96,12 @@ show_help() {
 aimaestro-governance.sh — AI Maestro governance CLI
 
 Commands:
+  invalidate-password          Revoke the governance password (you must know it).
+                               Prompts on the TTY — never takes it as an argument.
+                               Must be run ON the machine hosting AI Maestro: the
+                               server confirms with a code delivered to that
+                               machine's desktop. The next login asks for a new
+                               password. (TRDD-P7XKV3N9)
   whoami                       Show governance config (manager, owner title, hasManager)
   status                       Alias for whoami — flat governance probe (hasManager, …)
   requests [filters]           List governance requests
@@ -288,7 +294,61 @@ cmd_transfer() {
     esac
 }
 
+# ---------------------------------------------------------------------------
+# invalidate-password — revoke the governance password using the password.
+#
+# TRDD-P7XKV3N9. This wrapper carries NO POLICY. Every gate (possession, the
+# console check, the OS-delivered code, the rate limit) lives in the endpoint and
+# nowhere else — because every route is curl-able, so a check placed in a client
+# is not a weak check, it is NO check. This script's only jobs are: read the
+# secrets from a TTY, and POST them.
+#
+# The password is read with `read -s` from the terminal. NEVER an argument, never
+# an env var on the command line: argv is visible in `ps` to every process on the
+# box and lands in shell history (TRDD-E9BZ5P7S — 197 clear-text copies of this
+# very password leaked into a public repo exactly because it was passed around as
+# a value).
+# ---------------------------------------------------------------------------
+cmd_invalidate_password() {
+    local password code resp
+
+    if [ ! -t 0 ]; then
+        echo "Error: invalidate-password needs a terminal — it prompts for the password." >&2
+        echo "       It is never accepted as an argument or an env var (it would leak via ps/history)." >&2
+        exit 1
+    fi
+
+    printf 'Governance password: ' >&2
+    read -rs password
+    printf '\n' >&2
+    [ -n "$password" ] || { echo "Error: empty password" >&2; exit 1; }
+
+    # Step 1 — prove possession; the server puts a code on this machine's desktop.
+    # jq --arg does the escaping: a password with a quote or backslash must not be
+    # able to break out of the JSON string (or forge extra fields).
+    resp="$(_api POST /api/governance/password/invalidate \
+        "$(jq -nc --arg p "$password" '{password:$p}')")" || exit 1
+
+    if echo "$resp" | grep -q '"codeRequired"'; then
+        echo "A confirmation code was sent to this machine's desktop." >&2
+        echo "(If you are not sitting at that machine, you will not see it — that is the point.)" >&2
+        printf 'Code: ' >&2
+        read -r code
+        printf '\n' >&2
+    else
+        # No code demanded means the server did not reach step 3 — surface whatever
+        # it said rather than pretending we succeeded.
+        echo "$resp"
+        exit 1
+    fi
+
+    # Step 2 — prove presence.
+    _api POST /api/governance/password/invalidate \
+        "$(jq -nc --arg p "$password" --arg c "$code" '{password:$p, code:$c}')"
+}
+
 case "${1:-help}" in
+    invalidate-password) shift; cmd_invalidate_password "$@" ;;
     whoami|config|status) shift; cmd_whoami "$@" ;;
     requests)      shift; cmd_requests "$@" ;;
     request)       shift; cmd_request "$@" ;;

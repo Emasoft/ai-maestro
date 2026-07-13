@@ -120,6 +120,36 @@ unaffected — only MAESTRO is console-bound.
 - **The invalidated state is durable.** A restart must not resurrect the old
   credential; that would turn rotation into a suggestion.
 
+## The API is the authority; every surface is a thin caller
+
+USER, 2026-07-13:
+
+> once the api call for invalidating the password of an USER is done, you can make
+> many ways to call it: via a button in the settings page, or via a script of
+> ai-maestro, etc.
+
+**Build the endpoint FIRST, then the surfaces — and the surfaces carry no policy.**
+Every gate above (possession, the loopback check, the PIN, fail-closed, durability)
+lives in `POST /api/governance/password/invalidate` and **nowhere else**. A surface
+supplies input and renders the outcome; it never decides anything.
+
+| surface | what it is |
+|---|---|
+| **Settings page button** ("Invalidate password → forces a new one on next login") | a form that POSTs. The loopback denial and the PIN prompt arrive as API responses; the UI just renders them. |
+| **`aimaestro-*.sh` CLI verb** | a wrapper that prompts for the password on a **TTY** (never `$1`, never an env var on the command line — TRDD-E9BZ5P7S) and POSTs it. Per the decoupling invariant, the script layer is the ONLY code allowed to call the API; a plugin/hook that wants this calls the script, never `fetch()`. |
+| future (passkey, panel, whatever) | same: a caller. |
+
+**Why this is stated and not left implicit.** The obvious failure is each surface
+re-implementing the presence check — the UI checks the connection, the script
+checks something else, and the third surface, added in a hurry, checks nothing.
+Then the gate is only as strong as the weakest caller, and the whole feature is
+theater. One enforcement point, N dumb callers: a new surface can only ever be as
+safe as the endpoint, and it cannot lower the bar by existing.
+
+Corollary: a surface must NOT pre-validate the password to give a "nicer" error. It
+would need to hold the secret to do so, and any code that holds the secret is code
+that can leak it.
+
 ## Deliberately deferred (the USER said so)
 
 **Passkeys / WebAuthn for both principals.** The USER named it twice as the future

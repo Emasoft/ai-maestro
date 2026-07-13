@@ -85,7 +85,44 @@ the second factor is **being physically at the machine**:
   desktop, not to the HTTP response. That is the entire point, and it is why the
   PIN must never be returned in any API body, log line, or error message.
 
-### 3. Remote MAESTRO is denied outright
+### 2b. SCOPE — the console rule binds TWO operations, and NOTHING else
+
+**Read this before generalizing anything below.** USER, 2026-07-13:
+
+> of course we are only talking about tailscale vpn. anything outside the tailscale
+> vpn is not allowed to see the server at all. but anything inside the vpn, either a
+> mobile phone, a remote computer, a script on a server, anything.. can call the api
+> of the server. after all, every function must be available from the browser when
+> connecting from other devices and working remotely. this does not mean that any
+> api command automatically allows any action. the command can still require more,
+> for example a cookie to prove the user is logged in, or the AID to prove the agent
+> is the one registered with the server, and so on.
+
+So the model is:
+
+| layer | rule |
+|---|---|
+| **network** | Tailscale VPN is the perimeter. Outside it, the server is invisible — `isAllowedSource()` in `server.mjs` stays exactly as it is. **This TRDD does not widen the bind.** |
+| **inside the VPN** | **every device is a first-class caller** — phone, iPad, remote machine, a script on a server. Every function must be reachable from a browser on another device, because remote work is the point. |
+| **authorization** | per-command, and it is about **who you are**, never **where you are**: a session cookie (a logged-in human), an AID proof (a registered agent), a sudo token (a strict route). Reachable ≠ permitted. |
+
+**The loopback check is therefore NOT a general authorization signal, and must never
+be used as one.** It is a *presence* factor, and it binds exactly two operations:
+
+- MAESTRO **login**, and
+- MAESTRO **password change / invalidate**.
+
+Everything else — every other route, for MAESTRO and for agents alike — is fully
+usable from any device on the VPN and is gated by cookie / AID / sudo token only.
+Applying a loopback check anywhere else would break remote administration from the
+phone, which is a feature, not a leak.
+
+**And note what actually does the work here: the PIN, not the IP.** A remote
+attacker holding the password still cannot read a notification rendered on your
+desktop. The loopback denial is the USER's explicit policy for MAESTRO sessions
+("deny the login from the iPhone"); the PIN is the security property.
+
+### 3. Remote MAESTRO is denied outright (login + password change ONLY — see 2b)
 
 > "If the MAESTRO USER is logged from its iphone or mobile or some other device
 > with a browser, it will deny the login and any password change."
@@ -119,6 +156,17 @@ unaffected — only MAESTRO is console-bound.
   eventually is.
 - **The invalidated state is durable.** A restart must not resurrect the old
   credential; that would turn rotation into a suggestion.
+
+- **Throttle it. The password is this endpoint's INPUT.** Every other route takes a
+  *token*; this one takes the secret itself, which makes it the single most
+  attractive target on the whole surface — and it is reachable from every device on
+  the VPN (that is deliberate, see 2b). "Without the password they can't do
+  anything" is only true if they cannot **guess** it at line rate: with no backoff,
+  an unauthenticated attacker on the VPN gets unlimited free attempts against the
+  master credential. So: exponential backoff + lockout on repeated failures, keyed
+  per-source, and the same for the PIN (short-lived, single-use, wrong PIN consumes
+  the attempt). A rate limit is not a nicety here; without it the endpoint *weakens*
+  the system it exists to protect.
 
 ## The API is the authority; every surface is a thin caller
 

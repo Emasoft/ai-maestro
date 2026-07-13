@@ -19,7 +19,16 @@ export async function GET(request: Request) {
     const { loadGovernance } = await import('@/lib/governance')
     const config = loadGovernance()
     if (!config.passwordHash) {
-      const res = NextResponse.json({ authenticated: true, passwordNotSet: true })
+      // `passwordInvalidatedAt` distinguishes a FORCED ROTATION from a fresh
+      // install (TRDD-P7XKV3N9). Both land here with no hash, but they mean
+      // opposite things to the person reading the screen: "welcome, pick a
+      // password" is reassuring, and it is the WRONG thing to say when someone
+      // just revoked the credential — if that was not you, you need to know now.
+      const res = NextResponse.json({
+        authenticated: true,
+        passwordNotSet: true,
+        passwordInvalidatedAt: config.passwordInvalidatedAt ?? null,
+      })
       res.headers.set('Cache-Control', 'no-store')
       return res
     }

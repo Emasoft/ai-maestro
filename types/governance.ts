@@ -27,6 +27,18 @@ export interface GovernanceConfig {
   version: 1
   passwordHash: string | null   // bcrypt hash of governance password, null = not set
   passwordSetAt: string | null  // ISO timestamp when password was last set
+  /**
+   * ISO timestamp of a deliberate invalidation (TRDD-P7XKV3N9), else null.
+   *
+   * Set together with `passwordHash: null` — the hash is DESTROYED, not flagged,
+   * so no code path that checks only `passwordHash` can accidentally keep
+   * honouring a credential the owner revoked. This field is what distinguishes
+   * "never had a password" from "had one, and it was revoked", which is the
+   * difference between first-run setup and a forced rotation.
+   *
+   * Cleared by setPassword().
+   */
+  passwordInvalidatedAt?: string | null
   managerId: string | null      // Agent UUID of the singleton MANAGER role
   userName?: string             // Display name for the local user (auto-generated on first load if absent)
   /** Avatar identifier for the local user (AvatarPicker value, /public path, or URL) */

@@ -201,11 +201,43 @@ export async function setPassword(plaintext: string): Promise<void> {
     const config = loadGovernance()
     config.passwordHash = await hashPassword(plaintext)
     config.passwordSetAt = new Date().toISOString()
+    // Setting a password is what CLEARS an invalidation (TRDD-P7XKV3N9). Without
+    // this the host would stay stuck in forced-reset forever: the user creates a
+    // new password, logs in, and is told to create a new password.
+    config.passwordInvalidatedAt = null
     saveGovernance(config)
     if (isUnlocked()) {
       reEncryptWithNewPassword(plaintext)
     }
   })
+}
+
+/**
+ * Invalidate the current password (TRDD-P7XKV3N9).
+ *
+ * The hash is DESTROYED, not merely flagged. A flag would leave a still-valid
+ * credential on disk for anything that reads `passwordHash` without also
+ * checking the flag — and every existing caller does exactly that. Destroying it
+ * means "invalidated" cannot be bypassed by a code path that has not been taught
+ * about it yet: there is nothing left to match against.
+ *
+ * The timestamp is what turns "no password" into "no password BECAUSE it was
+ * invalidated", which is what the login flow shows the user.
+ */
+export async function invalidatePassword(): Promise<void> {
+  return withLock('governance', async () => {
+    const config = loadGovernance()
+    config.passwordHash = null
+    config.passwordSetAt = null
+    config.passwordInvalidatedAt = new Date().toISOString()
+    saveGovernance(config)
+  })
+}
+
+/** Was the password invalidated and not yet replaced? */
+export function isPasswordInvalidated(): boolean {
+  const config = loadGovernance()
+  return config.passwordHash === null && !!config.passwordInvalidatedAt
 }
 
 // Phase 1: No lock on read. Minor TOCTOU with setPassword(). Acceptable for single-user localhost.

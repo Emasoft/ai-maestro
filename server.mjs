@@ -10,6 +10,7 @@ import pty from 'node-pty'
 import os from 'os'
 import fs from 'fs'
 import path from 'path'
+import { PEER_ADDR_HEADER } from './lib/peer-address'
 import { getHostById, isSelf } from './lib/hosts-config-server.mjs'
 import { statePath } from './lib/ecosystem-state-paths.mjs'
 import { hostHints } from './lib/host-hints-server.mjs'
@@ -586,6 +587,23 @@ setOnStatusUpdateCallback((sessionName, status, hookStatus, notificationType) =>
 async function startServer(handleRequest) {
   const server = createServer(async (req, res) => {
     try {
+      // ── TRUSTED PEER ADDRESS (TRDD-P7XKV3N9) ──────────────────────────────
+      // The ONLY place in the process that can see the real TCP peer. Route
+      // handlers get a `Request`, not a socket, so anything downstream that
+      // needs the caller's address has to read a header — and every header a
+      // client can set, a client can FORGE. `x-forwarded-for` / `x-real-ip` are
+      // attacker-controlled: a phone on the VPN can send
+      // `X-Forwarded-For: 127.0.0.1` and defeat any naive loopback check.
+      //
+      // So: DELETE any inbound copy of our header (a client must never be able
+      // to supply it), then stamp it from the socket. Downstream code reads
+      // ONLY this header and never x-forwarded-for for a security decision.
+      //
+      // We are not behind a proxy — the bind is localhost + Tailscale direct
+      // (see isAllowedSource) — so the socket address IS the client address.
+      delete req.headers[PEER_ADDR_HEADER]
+      req.headers[PEER_ADDR_HEADER] = req.socket?.remoteAddress ?? ''
+
       // Use the WHATWG URL API instead of the deprecated url.parse().
       // Construct a Next.js-compatible { pathname, query } object so that both
       // the internal endpoint check and app.getRequestHandler() work correctly.

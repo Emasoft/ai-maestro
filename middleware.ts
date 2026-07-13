@@ -38,6 +38,14 @@ const WHITELIST: ReadonlyArray<RegExp> = [
   /^\/api\/auth\/session(\/|$)/,  // GET returns current session state (may be unauthenticated)
   /^\/api\/auth\/setup-init(\/|$)/,    // first-run bootstrap step 1 — dispatch OS notification (SEC-PHASE-6)
   /^\/api\/auth\/setup-verify(\/|$)/,  // first-run bootstrap step 2 — verify code + persist password (SEC-PHASE-6)
+  // Password invalidation (TRDD-P7XKV3N9) — SELF-AUTHENTICATING, like the two
+  // lines above. Its input IS the credential (plus a code delivered to the
+  // physical desktop), so requiring a session first would be circular: the whole
+  // point is to revoke a password you can still use, including from a CLI with no
+  // cookie jar. It is NOT an open door — the handler demands the correct password,
+  // a console-local connection, an OS-delivered one-shot code, and it rate-limits
+  // per peer.
+  /^\/api\/governance\/password\/invalidate(\/|$)/,
   // Public health + capability reporting (no secrets leaked, safe to probe)
   /^\/api\/v1\/health(\/|$)/,
   /^\/api\/v1\/info(\/|$)/,

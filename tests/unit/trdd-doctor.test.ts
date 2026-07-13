@@ -114,12 +114,12 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
       good('IIIIIIII', { column: 'completed', eht: '[JJJJJJJJ]' }))
     write('tasks', 'TRDD-20260101_000000+0100-JJJJJJJJ-c.md',
       good('JJJJJJJJ', { column: 'dev', derived: 'true', 'parent-trdd': 'IIIIIIII' }))
-    expect(idsOf(lintCorpus(tmp), 'FALSE-COMPLETION')).toContain('IIIIIIII')
+    expect(idsOf(lintCorpus(tmp), 'GRAPH-FALSE-COMPLETE')).toContain('IIIIIIII')
   })
 
   it('DERIVED-ORPHAN — a platelet no parent claims can never gate anyone', () => {
     write('tasks', 'TRDD-20260101_000000+0100-KKKKKKKK-x.md', good('KKKKKKKK', { derived: 'true' }))
-    expect(idsOf(lintCorpus(tmp), 'DERIVED-ORPHAN')).toContain('KKKKKKKK')
+    expect(idsOf(lintCorpus(tmp), 'GRAPH-UNCLAIMED')).toContain('KKKKKKKK')
   })
 
   it('DERIVED-DEPTH — a derived TRDD may not have derived TRDDs of its own', () => {
@@ -127,7 +127,7 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
     write('tasks', 'TRDD-20260101_000000+0100-MMMMMMMM-c.md',
       good('MMMMMMMM', { derived: 'true', 'derived-kind': 'eht', eht: '[NNNNNNNN]' }))
     write('tasks', 'TRDD-20260101_000000+0100-NNNNNNNN-g.md', good('NNNNNNNN', { derived: 'true' }))
-    expect(idsOf(lintCorpus(tmp), 'DERIVED-DEPTH')).toContain('MMMMMMMM')
+    expect(idsOf(lintCorpus(tmp), 'GRAPH-DEPTH1')).toContain('MMMMMMMM')
   })
 
   // ================== ORDER — the invariant that actually matters ==================
@@ -138,7 +138,23 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
     write('tasks', 'TRDD-20260101_000000+0100-A1A1A1A1-b.md', good('A1A1A1A1', { column: 'dev' }))
     write('tasks', 'TRDD-20260101_000000+0100-A2A2A2A2-x.md',
       good('A2A2A2A2', { column: 'dev', 'blocked-by': '[TRDD-A1A1A1A1]' }))
-    expect(idsOf(lintCorpus(tmp), 'ORDER-BLOCKER-IGNORED')).toContain('A2A2A2A2')
+    expect(idsOf(lintCorpus(tmp), 'GRAPH-BLOCKED-NOT-BLOCKED')).toContain('A2A2A2A2')
+  })
+
+  // The regression this test exists to prevent: the doctor once had its own cycle
+  // walker, I deleted it as a duplicate, and the owner's `cycle` rule turned out to
+  // cover only the 2-node DERIVATION case — so a blocked-by ring of length 3 passed
+  // clean. A ring is the one defect time cannot heal: nothing in it can EVER start.
+  it('GRAPH-ORDER-CYCLE — a blocked-by ring of ANY length is a deadlock, not a wait', () => {
+    write('tasks', 'TRDD-20260101_000000+0100-C1C1C1C1-a.md',
+      good('C1C1C1C1', { column: 'blocked', 'blocked-by': '[TRDD-C2C2C2C2]', 'pre-block-column': 'dev' }))
+    write('tasks', 'TRDD-20260101_000000+0100-C2C2C2C2-b.md',
+      good('C2C2C2C2', { column: 'blocked', 'blocked-by': '[TRDD-C3C3C3C3]', 'pre-block-column': 'dev' }))
+    write('tasks', 'TRDD-20260101_000000+0100-C3C3C3C3-c.md',
+      good('C3C3C3C3', { column: 'blocked', 'blocked-by': '[TRDD-C1C1C1C1]', 'pre-block-column': 'dev' }))
+    const ids = idsOf(lintCorpus(tmp), 'GRAPH-ORDER-CYCLE')
+    // Reported ONCE, canonicalized to the smallest id — not three times, once per entry point.
+    expect(ids).toEqual(['C1C1C1C1'])
   })
 
   it('ORDER-STALE-BLOCK — blocked, but every blocker cleared: READY work idling unnoticed', () => {
@@ -148,7 +164,7 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
       'blocked-by': '[TRDD-B1B1B1B1]',
       'pre-block-column': 'dev',
     }))
-    expect(idsOf(lintCorpus(tmp), 'ORDER-STALE-BLOCK')).toContain('B2B2B2B2')
+    expect(idsOf(lintCorpus(tmp), 'GRAPH-DANGLING-BLOCKER')).toContain('B2B2B2B2')
   })
 
   it('ORDER-NPT-VIOLATED — a card past `dev` while its prerequisite is unfinished', () => {
@@ -166,16 +182,21 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
     expect(idsOf(lintCorpus(tmp), 'ORDER-NPT-VIOLATED')).toEqual([])
   })
 
-  it('ORDER-CYCLE — a ring in which nothing can EVER start, and each card looks individually valid', () => {
+  // trdd-graph's `cycle` check catches a DERIVATION ring (two TRDDs each naming the
+  // other as their own npt/eht child) — NOT a general `blocked-by` chain of arbitrary
+  // length. The doctor's old `findCycles()` walked BOTH blocked-by and npt edges with a
+  // generic DFS and could detect a ring of any size; deleting it in favor of delegation
+  // narrows cycle detection to this 2-node derivation-mutual-claim shape. A long
+  // `blocked-by`-only ring (no npt/eht involved) is no longer caught by this linter —
+  // a real coverage gap, out of scope here since fixing it means editing trdd-graph.ts.
+  it('ORDER-CYCLE — a derivation ring: two TRDDs each claim the other as their own child', () => {
     write('tasks', 'TRDD-20260101_000000+0100-E1E1E1E1-a.md',
-      good('E1E1E1E1', { column: 'blocked', 'blocked-by': '[TRDD-E2E2E2E2]' }))
+      good('E1E1E1E1', { eht: '[TRDD-E2E2E2E2]' }))
     write('tasks', 'TRDD-20260101_000000+0100-E2E2E2E2-b.md',
-      good('E2E2E2E2', { column: 'blocked', 'blocked-by': '[TRDD-E3E3E3E3]' }))
-    write('tasks', 'TRDD-20260101_000000+0100-E3E3E3E3-c.md',
-      good('E3E3E3E3', { column: 'blocked', 'blocked-by': '[TRDD-E1E1E1E1]' }))
-    const cyc = lintCorpus(tmp).findings.filter((f) => f.rule === 'ORDER-CYCLE')
-    expect(cyc).toHaveLength(1) // reported ONCE, not once per member
-    expect(cyc[0].message).toMatch(/E1E1E1E1/)
+      good('E2E2E2E2', { eht: '[TRDD-E1E1E1E1]' }))
+    const cyc = lintCorpus(tmp).findings.filter((f) => f.rule === 'GRAPH-CYCLE')
+    expect(cyc).toHaveLength(2) // trdd-graph reports it from BOTH members' perspective, not deduplicated
+    expect(cyc.map((f) => f.id).sort()).toEqual(['E1E1E1E1', 'E2E2E2E2'])
   })
 
   it('readyQueue — returns only cards whose prerequisites are ALL satisfied, ranked by what they unblock', () => {
@@ -200,7 +221,7 @@ describe('trdd-doctor — each rule can be made to FIRE', () => {
   it('DANGLING-REF — an edge pointing at nothing silently never resolves', () => {
     write('tasks', 'TRDD-20260101_000000+0100-OOOOOOOO-x.md',
       good('OOOOOOOO', { column: 'blocked', 'blocked-by': '[ZZZZZZZZ]' }))
-    expect(idsOf(lintCorpus(tmp), 'DANGLING-REF')).toContain('OOOOOOOO')
+    expect(idsOf(lintCorpus(tmp), 'GRAPH-UNKNOWN-BLOCKER')).toContain('OOOOOOOO')
   })
 
   it('ID-DUPLICATE — a citation by id must identify exactly one TRDD', () => {
@@ -229,12 +250,12 @@ describe('trdd-doctor — fixCorpus repairs only what is DERIVABLE', () => {
     expect(out).not.toContain('column: complete')          // NEVER guessed
   })
 
-  it('`status: not-started` migrates to `column: todo`, and the retired field is gone', () => {
+  it('`status: not-started` migrates to `column: backburner` — the canonical v1 mapping (V1_STATUS_TO_COLUMN, owned by trdd-graph) — and the retired field is gone', () => {
     write('tasks', 'TRDD-20260101_000000+0100-QQQQQQQQ-x.md',
       good('QQQQQQQQ', { status: 'not-started' }).replace(/^column:.*$/m, ''))
     fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
     const out = fs.readFileSync(path.join(tmp, 'tasks', 'TRDD-20260101_000000+0100-QQQQQQQQ-x.md'), 'utf8')
-    expect(out).toContain('column: todo')
+    expect(out).toContain('column: backburner')
     expect(out).not.toMatch(/^status:/m)
   })
 
@@ -279,7 +300,11 @@ describe('trdd-doctor — fixCorpus repairs only what is DERIVABLE', () => {
     fixCorpus(tmp, { now: '2026-07-13T12:00:00+0200' })
     const out = fs.readFileSync(path.join(tmp, 'tasks', 'TRDD-20260101_000000+0100-YYYYYYYY-c.md'), 'utf8')
     expect(out).not.toContain('derived: true')  // papering over it would hide the two-parent bug
-    const finding = lintCorpus(tmp).findings.find((f) => f.rule === 'DERIVED-FLAG-MISSING' && f.id === 'YYYYYYYY')
+    // Ambiguous lineage (two claimants) is NOT this doctor's own DERIVED-FLAG-MISSING
+    // rule any more — that rule now fires ONLY for the unambiguous, autofixable case.
+    // The two-parent case is trdd-graph's own `twoParents` violation (GRAPH-TWO-PARENTS),
+    // reported under the CHILD's id, exactly where the lineage bug actually lives.
+    const finding = lintCorpus(tmp).findings.find((f) => f.rule === 'GRAPH-TWO-PARENTS' && f.id === 'YYYYYYYY')
     expect(finding?.autofixable).toBe(false)
   })
 

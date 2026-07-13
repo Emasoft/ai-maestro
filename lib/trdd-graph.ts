@@ -58,6 +58,7 @@ export type ViolationKind =
   | 'childMissing'
   | 'childDerivedFalse'
   | 'falseComplete'
+  | 'orderCycle'
   | 'blockedNotBlocked'
   | 'danglingBlocker'
   | 'unknownBlocker'
@@ -250,7 +251,80 @@ export function checkTrddInvariants(nodes: TrddNode[]): TrddViolation[] {
     }
   }
 
+  v.push(...findOrderCycles(nodes))
   return v
+}
+
+/**
+ * Rings in the WAIT-FOR graph, of any length.
+ *
+ * The edges are the two that impose ORDER: `blocked-by` (A cannot proceed until B
+ * resolves) and `npt` (a parent cannot pass `dev` until its prerequisite does). A
+ * ring in that graph is a deadlock — no member can EVER start, because each is
+ * waiting on the next, forever. It is the one corpus defect that cannot resolve
+ * itself with time, so it must be an error, not a warning.
+ *
+ * This is DISTINCT from `cycle`, which is the degenerate two-node case in the
+ * DERIVATION graph (each claims the other as a child). A three-card blocked-by
+ * ring trips nothing there, which is exactly how it went undetected.
+ */
+function findOrderCycles(nodes: TrddNode[]): TrddViolation[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const waitsOn = (id: string): string[] => {
+    const n = byId.get(id)
+    if (!n) return []
+    // Dedupe: a card may name the same id in both blocked-by and npt.
+    return [...new Set([...n.blockedBy, ...n.npt])].filter((x) => byId.has(x))
+  }
+
+  const state = new Map<string, 'open' | 'done'>()
+  const reported = new Set<string>()
+  const out: TrddViolation[] = []
+
+  // Iterative DFS — the corpus is small, but a recursive walk over a cyclic graph
+  // is the classic way to turn a data bug into a stack overflow.
+  for (const start of nodes) {
+    if (state.get(start.id)) continue
+    const path: string[] = []
+    const stack: Array<{ id: string; next: number }> = [{ id: start.id, next: 0 }]
+    state.set(start.id, 'open')
+    path.push(start.id)
+
+    while (stack.length) {
+      const top = stack[stack.length - 1]
+      const edges = waitsOn(top.id)
+      if (top.next >= edges.length) {
+        state.set(top.id, 'done')
+        stack.pop()
+        path.pop()
+        continue
+      }
+      const nxt = edges[top.next++]
+      const s = state.get(nxt)
+      if (s === 'done') continue
+      if (s === 'open') {
+        // Found a ring. Canonicalize by rotating to the smallest id so the same
+        // ring is reported once, whichever node we happened to enter it from.
+        const ring = path.slice(path.indexOf(nxt))
+        const min = ring.indexOf([...ring].sort()[0])
+        const rot = [...ring.slice(min), ...ring.slice(0, min)]
+        const key = rot.join('>')
+        if (!reported.has(key)) {
+          reported.add(key)
+          out.push({
+            kind: 'orderCycle',
+            id: rot[0],
+            detail: `wait-for ring (nothing in it can ever start): ${[...rot, rot[0]].join(' → ')}`,
+          })
+        }
+        continue
+      }
+      state.set(nxt, 'open')
+      path.push(nxt)
+      stack.push({ id: nxt, next: 0 })
+    }
+  }
+  return out
 }
 
 export interface BacklogEntry {

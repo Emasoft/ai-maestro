@@ -3,6 +3,7 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { advanceColumn } from '@/lib/trdd-store'
+import { authorizeTrddVerb } from '@/lib/trdd-authz'
 
 /**
  * POST /api/trdd/[id]/promote — advance an OPEN (design/tasks/) TRDD's `column`
@@ -42,6 +43,13 @@ export async function POST(
   }
 
   const designDir = resolveDesignDir(typeof body.agentId === 'string' ? body.agentId : null)
+
+  // TRDD-K2WJH7RF: promotion IS the approval act, so it shares approve's rule —
+  // same tier, same self-approval ban. Letting them diverge would make `promote`
+  // a way to launder an approval the caller could not grant.
+  const authzErr = authorizeTrddVerb(auth, designDir, id, 'promote')
+  if (authzErr) return authzErr
+
   const result = advanceColumn(designDir, id, column, {
     iso: new Date().toISOString(),
     note: typeof body.note === 'string' ? body.note : undefined,

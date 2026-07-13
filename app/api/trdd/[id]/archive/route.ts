@@ -3,6 +3,7 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { archiveTrdd } from '@/lib/trdd-store'
+import { authorizeTrddVerb, rejectUnarchivableState } from '@/lib/trdd-authz'
 
 const ARCHIVE_STATES = ['completed', 'cancelled', 'superseded'] as const
 
@@ -46,6 +47,20 @@ export async function POST(
   }
 
   const designDir = resolveDesignDir(typeof body.agentId === 'string' ? body.agentId : null)
+
+  // TRDD-K2WJH7RF. Two gates, and they are deliberately different in KIND:
+  //
+  //  1. DATA invariant — `archive failed` is refused for EVERYONE, the human
+  //     owner included. A failed TRDD is retryable and stays on the board;
+  //     giving up on it is an explicit `cancelled`. This cannot live in
+  //     authorize(), which grants the system-owner unconditionally.
+  const stateErr = rejectUnarchivableState((body as Record<string, unknown>).state)
+  if (stateErr) return stateErr
+
+  //  2. AUTHORIZATION — the owner or MANAGER. The sudo-guard deferred this route.
+  const authzErr = authorizeTrddVerb(auth, designDir, id, 'archive')
+  if (authzErr) return authzErr
+
   const result = archiveTrdd(designDir, id, {
     approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
     state: state as (typeof ARCHIVE_STATES)[number],

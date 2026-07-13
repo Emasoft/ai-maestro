@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/route-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { readTrdd, editTrdd } from '@/lib/trdd-store'
+import { authorizeTrddVerb } from '@/lib/trdd-authz'
 
 /**
  * GET /api/trdd/[id] — read one TRDD (full frontmatter + body) by its 8-char id.
@@ -76,6 +77,13 @@ export async function PATCH(
   }
 
   const designDir = resolveDesignDir(typeof body.agentId === 'string' ? body.agentId : null)
+
+  // TRDD-K2WJH7RF: `edit` is the mechanical column transition, EXEMPT from
+  // approval — so the gate is OWNERSHIP, not tier: the card's assignee, its
+  // team's ORCHESTRATOR, or MANAGER. The sudo-guard deferred this route.
+  const authzErr = authorizeTrddVerb(auth, designDir, id, 'edit')
+  if (authzErr) return authzErr
+
   const result = editTrdd(designDir, id, edits, new Date().toISOString())
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status })

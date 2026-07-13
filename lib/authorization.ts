@@ -50,6 +50,13 @@ export type AuthAction =
   | 'manage-team'       // Create/modify/delete teams
   | 'manage-skills'     // Install/remove skills on an agent
   | 'manage-group'      // SVC2-MAJ-07/08: create/update/delete groups + subscribe/notify
+  // TRDD-K2WJH7RF: the 3-pillars TRDD lifecycle write verbs. This is the FIRST
+  // action that is NOT agent-targeted: a TRDD has no target agent — it has an
+  // approval TIER, and the tier names who may act. Its matrix therefore mirrors
+  // aimaestro-trdd-approval.md, not the "may caller X act on agent Y" model every
+  // other action uses. The ROUTE resolves the TRDD's facts from disk and passes
+  // them in as TrddAuthContext, so authorize() stays synchronous and does no I/O.
+  | 'manage-trdd'       // PATCH /api/trdd/[id] + approve|refuse|promote|archive
   // 'manage-amp-address' (SVC2-MAJ-18) was DELETED by TRDD-YEE33F3A Part 3: it was
   // wired to zero routes while all four address routes authorize with 'modify-agent'.
   // An action that exists only in a test reads as coverage. Re-adding it means
@@ -60,6 +67,59 @@ export type AuthAction =
 export interface AuthorizationResult {
   allowed: boolean
   reason?: string
+}
+
+/** The TRDD lifecycle write verbs (TRDD-K2WJH7RF Part 1). */
+export type TrddVerb = 'edit' | 'approve' | 'refuse' | 'promote' | 'archive'
+
+/**
+ * The TITLE that must approve a TRDD — its `min-approval-requirement:` field.
+ * This is the authority ladder of aimaestro-trdd-approval.md, verbatim.
+ */
+export type TrddApprovalTitle = 'none' | 'orchestrator' | 'chief-of-staff' | 'manager' | 'user'
+
+/**
+ * The TRDD facts a `manage-trdd` decision needs.
+ *
+ * The ROUTE reads these off disk and passes them in. authorize() deliberately
+ * does NOT grow a filesystem read: it is synchronous and today touches only the
+ * registry and the team file. Keeping it honest about what it knows is why the
+ * tier arrives as an argument rather than being resolved here (TRDD-K2WJH7RF).
+ */
+export interface TrddAuthContext {
+  /** Which write verb is being attempted. */
+  verb: TrddVerb
+  /** The target TRDD's `min-approval-requirement:` — the title that must approve. */
+  minApproval: TrddApprovalTitle
+  /** The TRDD's `assignee:` (agent id), if any — it may `edit` its own card. */
+  assigneeAgentId?: string | null
+  /** The TRDD's author (`created-by:`). Self-approval is refused — see below. */
+  createdByAgentId?: string | null
+}
+
+/**
+ * The one authority ladder. `user` is NOT an agent: no agent ever satisfies it,
+ * which is exactly what makes a Tier-3 (USER-reserved) TRDD unapprovable by the
+ * whole fleet, MANAGER included.
+ *
+ * Titles absent from this map (member, architect, integrator, maintainer,
+ * autonomous) have NO approval authority — they score 0 and may approve only a
+ * `none`-tier TRDD, which by definition needs no approval at all.
+ */
+const TRDD_AUTHORITY: Record<string, number> = {
+  none: 0,
+  orchestrator: 1,
+  'chief-of-staff': 2,
+  manager: 3,
+  user: 4,
+}
+
+/** Authority of an AGENT caller. Never returns the USER rung — agents cannot hold it. */
+function agentAuthority(title: string | undefined | null): number {
+  if (!title) return 0
+  const rung = TRDD_AUTHORITY[title]
+  // `user` is unreachable for an agent even if a registry record somehow said so.
+  return rung === undefined || rung >= TRDD_AUTHORITY.user ? 0 : rung
 }
 
 /**
@@ -112,7 +172,8 @@ const SELF_DRIVE_ACTIONS: ReadonlySet<AuthAction> = new Set<AuthAction>([
 export function authorize(
   auth: AgentAuthResult,
   action: AuthAction,
-  targetAgentId?: string
+  targetAgentId?: string,
+  trdd?: TrddAuthContext
 ): AuthorizationResult {
   // ── AUTH-CRIT-01 fix (2026-05-04) — fail-closed on errored auth result ──
   // BUG: previous version returned { allowed: true } for any auth result with
@@ -251,6 +312,121 @@ export function authorize(
     return {
       allowed: false,
       reason: 'Only the system owner can export an agent — the archive contains keys/private.pem',
+    }
+  }
+
+  // ── Special rule: manage-trdd (TRDD-K2WJH7RF) ──────────────
+  // The first NON-agent-targeted action, and it MUST return early. Every rule
+  // below keys on a target agent, and in particular the general
+  // "MANAGER → always allowed" would otherwise let a MANAGER approve a Tier-3
+  // (USER-reserved) TRDD and approve its OWN proposal — the two things this
+  // matrix exists to forbid.
+  //
+  // The human/system-owner never reaches this line (granted at `!auth.agentId`
+  // above), so the caller here is provably an AGENT.
+  if (action === 'manage-trdd') {
+    if (!trdd) {
+      // Fail closed. A manage-trdd check with no TRDD context cannot be decided,
+      // and guessing would mean guessing an approval tier.
+      return {
+        allowed: false,
+        reason: 'manage-trdd requires the TRDD context (verb + min-approval-requirement)',
+      }
+    }
+
+    const callerRung = agentAuthority(title)
+    // An unrecognized tier is treated as MANAGER-level, never as `none`: an
+    // unparseable frontmatter field must not silently open a card to everyone.
+    const requiredRung = TRDD_AUTHORITY[trdd.minApproval] ?? TRDD_AUTHORITY.manager
+
+    switch (trdd.verb) {
+      // `edit` = the mechanical column transitions, which are EXEMPT from
+      // approval (aimaestro-manager-approval-defaults.md §A). So the gate is
+      // OWNERSHIP, not tier: the card's assignee drives its own card, its team's
+      // ORCHESTRATOR dispatches it, MANAGER may always act.
+      case 'edit': {
+        if (title === 'manager') return { allowed: true }
+        if (trdd.assigneeAgentId && trdd.assigneeAgentId === auth.agentId) {
+          return { allowed: true }
+        }
+        if (title === 'orchestrator' && trdd.assigneeAgentId) {
+          const orchTeamId = auth.teamId ?? lookupTeamIdForAgent(auth.agentId)
+          const assigneeTeamId = lookupTeamIdForAgent(trdd.assigneeAgentId)
+          if (orchTeamId && orchTeamId === assigneeTeamId) return { allowed: true }
+          return {
+            allowed: false,
+            reason: 'ORCHESTRATOR can only edit TRDDs assigned within its own team',
+          }
+        }
+        return {
+          allowed: false,
+          reason: 'Only the TRDD assignee, its team ORCHESTRATOR, or MANAGER can edit a TRDD',
+        }
+      }
+
+      // approve / promote share one rule because promotion IS the approval act.
+      // Letting them diverge would make `promote` a way to launder an approval
+      // the caller could not grant.
+      case 'approve':
+      case 'promote': {
+        // Self-approval defeats the approval system entirely. Mirrors the way
+        // change-title already refuses self even for a MANAGER.
+        if (trdd.createdByAgentId && trdd.createdByAgentId === auth.agentId) {
+          return { allowed: false, reason: `An agent cannot ${trdd.verb} a TRDD it authored` }
+        }
+        if (trdd.minApproval === 'user') {
+          return {
+            allowed: false,
+            reason: `This TRDD requires USER approval — no agent can ${trdd.verb} it`,
+          }
+        }
+        if (callerRung < requiredRung) {
+          return {
+            allowed: false,
+            reason: `${title || 'agent'} cannot ${trdd.verb} a TRDD requiring ${trdd.minApproval} approval`,
+          }
+        }
+        return { allowed: true }
+      }
+
+      // `refuse` carries the same authority as approve — deciding a proposal is
+      // ONE gate, whichever way it goes. Self is deliberately NOT banned here:
+      // refusing your own proposal is a withdrawal, and withdrawing costs the
+      // system nothing.
+      case 'refuse': {
+        if (trdd.minApproval === 'user') {
+          return {
+            allowed: false,
+            reason: 'This TRDD requires USER approval — no agent can refuse it',
+          }
+        }
+        if (callerRung < requiredRung) {
+          return {
+            allowed: false,
+            reason: `${title || 'agent'} cannot refuse a TRDD requiring ${trdd.minApproval} approval`,
+          }
+        }
+        return { allowed: true }
+      }
+
+      // `archive` retires a terminal-DONE card. The owner or MANAGER may.
+      // WHICH states are archivable — never `failed` — is a DATA invariant and
+      // lives in the route, because it must bind the human owner too (who is
+      // granted unconditionally above and never reaches this matrix).
+      case 'archive': {
+        if (title === 'manager') return { allowed: true }
+        const isOwner =
+          (trdd.assigneeAgentId && trdd.assigneeAgentId === auth.agentId) ||
+          (trdd.createdByAgentId && trdd.createdByAgentId === auth.agentId)
+        if (isOwner) return { allowed: true }
+        return { allowed: false, reason: 'Only the TRDD owner or MANAGER can archive a TRDD' }
+      }
+
+      default: {
+        // Exhaustiveness: a new verb must STATE its policy here, never inherit one.
+        const unknown: never = trdd.verb
+        return { allowed: false, reason: `Unknown TRDD verb: ${String(unknown)}` }
+      }
     }
   }
 

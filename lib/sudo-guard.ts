@@ -220,6 +220,27 @@ export const SYSTEM_OWNER_ONLY_STRICT = new Set<string>([
   'PATCH /api/settings/auto-update',
   'POST /api/settings/auto-update/run',
   'POST /api/agents/import',
+
+  // ── TRDD-K2WJH7RF Part 2 (USER-approved 2026-07-09) ──────────────────────
+  // These five moved here from AGENT_POLICY_PENDING. NO BEHAVIOUR CHANGES: they
+  // refused every agent before and refuse every agent now. What changes is that
+  // the refusal is a STATED decision instead of a shrug.
+  //
+  // Each is a root-of-trust operation, and each fails in the same direction:
+  //   • maestro-delegate — delegates the HUMAN OWNER's authority. An agent that
+  //     could delegate the maestro could mint its own owner.
+  //   • foreign-approvals — admits an agent from ANOTHER HOST. A MANAGER here is
+  //     "plausible and useful"; it is also exactly how a compromised MANAGER on
+  //     one host would admit itself to another. Cross-host trust is the sharpest
+  //     edge in the system, so it stays owner-only until someone argues the
+  //     MANAGER case properly — the burden belongs on widening, not on closing.
+  //   • aid-recover — recovers an agent IDENTITY, the root of the whole trust
+  //     chain. Whoever can recover an AID can become any agent.
+  'POST /api/governance/maestro-delegate',
+  'DELETE /api/governance/maestro-delegate',
+  'POST /api/agents/foreign-approvals/[id]/approve',
+  'POST /api/agents/foreign-approvals/[id]/reject',
+  'POST /api/system/aid-recover',
 ])
 
 /**
@@ -246,24 +267,22 @@ export const SYSTEM_OWNER_ONLY_STRICT = new Set<string>([
  * so it can shrink as policies are decided but cannot silently grow.
  */
 export const AGENT_POLICY_PENDING = new Set<string>([
-  // Governance-layer routes that predate epic TRDD-SCLSRS6E. Each is a distinct
-  // policy question nobody has answered: who delegates the maestro authority,
-  // who approves a foreign agent, who may recover an AID.
-  'POST /api/governance/maestro-delegate',
-  'DELETE /api/governance/maestro-delegate',
-  'POST /api/agents/foreign-approvals/[id]/approve',
-  'POST /api/agents/foreign-approvals/[id]/reject',
-  'POST /api/system/aid-recover',
-  // The 3-pillars TRDD lifecycle. These need a `manage-trdd` AuthAction whose
-  // matrix mirrors the approval tiers (aimaestro-trdd-approval.md): approve and
-  // refuse belong to COS / MANAGER / USER by tier, promote belongs to the
-  // proposal's approver, and a `failed` TRDD is never archived. That is a new
-  // action with a new matrix, not a mapping to an existing one.
-  'PATCH /api/trdd/[id]',
-  'POST /api/trdd/[id]/approve',
-  'POST /api/trdd/[id]/refuse',
-  'POST /api/trdd/[id]/promote',
-  'POST /api/trdd/[id]/archive',
+  // EMPTY — the ledger is discharged (TRDD-K2WJH7RF, USER-approved 2026-07-09).
+  //
+  // The ten routes that sat here are now DECIDED, not merely refused:
+  //   • the five governance routes  → SYSTEM_OWNER_ONLY_STRICT (owner-only)
+  //   • the five /api/trdd/* verbs  → STRICT_AGENT_RULES, action 'manage-trdd'
+  //
+  // Emptying this set is the whole point of the epic. It was a DEBT LEDGER, and
+  // the debt it tracked was real: `aimaestro-trdd.sh` was half a tool — the
+  // janitor could read the board and could not touch it, and every agent that
+  // tried got a 403 that correctly said nobody had decided
+  // (ai-maestro-janitor#76, which told the janitor to SKIP the TRDD write verbs).
+  //
+  // Keep the set. It is not dead code: the coverage guardrail requires every NEW
+  // strict route to be declared in exactly one of the three sets, so a route
+  // added tomorrow without a decided agent policy lands HERE and fails a test,
+  // instead of shipping as a dead endpoint.
 ])
 
 /**
@@ -284,9 +303,43 @@ interface StrictAgentRule {
   targetFromPathId?: boolean
   /** The path `[id]` is a tmux session name → resolve to agentId (D1). */
   session?: boolean
+  /**
+   * TRDD-K2WJH7RF. The guard CANNOT decide this route, and must not pretend to.
+   *
+   * `manage-trdd` is keyed on the target TRDD's approval TIER — a fact that
+   * lives on disk, in that TRDD's frontmatter. The guard is deliberately coarse:
+   * it never consumes the body and never reads the task corpus. So for these
+   * routes it admits any AUTHENTICATED AGENT past the title gate and the ROUTE
+   * performs the real `authorize(auth, 'manage-trdd', undefined, trddContext)`
+   * with the tier, assignee and author resolved. That is exactly the split
+   * K2WJH7RF chose: the route resolves the tier and passes it in, so authorize()
+   * stays synchronous and honest about what it knows.
+   *
+   * This is NOT a hole. `authorize()` FAILS CLOSED on a `manage-trdd` call with
+   * no TrddAuthContext, and `tests/unit/manage-trdd-authorization.test.ts` pins
+   * that every deferring route actually calls it. A route that forgot would deny
+   * everything, loudly — never allow everything, silently. The coarse gate here
+   * cannot be tighter than "is an agent", because a MEMBER may legitimately
+   * `edit` a TRDD it is assigned: no TITLE can be excluded up front.
+   */
+  deferToRoute?: boolean
 }
 
 const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
+  // ── TRDD-K2WJH7RF Part 1: the 3-pillars TRDD lifecycle write verbs ────────
+  // `[id]` here is a TRDD id, NOT an agent id — so `targetFromPathId` must stay
+  // OFF. Resolving it as an agent UUID would silently look up a nonexistent
+  // agent and hand authorize() a garbage target.
+  //
+  // These are what ai-maestro-janitor#76 told the janitor to SKIP, because they
+  // 403'd every agent. They are the reason `aimaestro-trdd.sh` was half a tool:
+  // read the board, never touch it.
+  'PATCH /api/trdd/[id]': { action: 'manage-trdd', deferToRoute: true },
+  'POST /api/trdd/[id]/approve': { action: 'manage-trdd', deferToRoute: true },
+  'POST /api/trdd/[id]/refuse': { action: 'manage-trdd', deferToRoute: true },
+  'POST /api/trdd/[id]/promote': { action: 'manage-trdd', deferToRoute: true },
+  'POST /api/trdd/[id]/archive': { action: 'manage-trdd', deferToRoute: true },
+
   'DELETE /api/agents/[id]': { action: 'delete-agent', targetFromPathId: true },
   'POST /api/agents/[id]/transfer': { action: 'change-title', targetFromPathId: true },
   // TRDD-I75EMTK0: the "New Session" R17 self-heal route. Same shape as the
@@ -543,6 +596,21 @@ export function requireAidTitle(
       },
       { status: 403 }
     )
+  }
+
+  // (b2) TRDD-K2WJH7RF — routes the guard REFUSES to decide.
+  //
+  // `manage-trdd` turns on the target TRDD's approval tier, which lives on disk.
+  // The guard does not read the task corpus (or the body), so deciding here would
+  // mean guessing a tier — and a guessed tier is a guessed approval. Admit the
+  // authenticated agent past the TITLE gate and let the route run the real
+  // authorize() with the tier, assignee and author it resolved.
+  //
+  // Safe because authorize() FAILS CLOSED without a TrddAuthContext: a route that
+  // forgets the check denies everything loudly, rather than allowing everything
+  // silently. A test pins that each of these routes really does call it.
+  if (rule.deferToRoute) {
+    return null
   }
 
   // Resolve targetAgentId for the (still coarse) authorize() decision.

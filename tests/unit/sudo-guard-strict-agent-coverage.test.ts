@@ -54,6 +54,7 @@ function strictRouteKeys(): string[] {
  */
 const UNDECLARED_MESSAGE = 'This operation is not available to agents.'
 const PENDING_MESSAGE = 'Agent access to this operation has not been defined yet.'
+const OWNER_ONLY_MESSAGE = 'This operation is restricted to the system owner.'
 
 const MANAGER: AgentAuthResult = {
   agentId: '11111111-1111-4111-8111-111111111111',
@@ -75,18 +76,54 @@ async function messageFor(method: string, template: string): Promise<string | nu
  * TRDD-D3RP7KQZ removed four: the panel/queue/prompt-answer trio and
  * `PATCH /api/agents/[id]`, now mapped in STRICT_AGENT_RULES.
  */
-const PENDING_INVENTORY = [
+const PENDING_INVENTORY: string[] = [
+  // EMPTY — TRDD-K2WJH7RF discharged the ledger (USER-approved 2026-07-09).
+  // The ten that were here are now DECIDED, and are pinned below instead.
+]
+
+/**
+ * TRDD-K2WJH7RF Part 2 — the five governance routes, now a STATED owner-only
+ * decision rather than a shrug. 403 before, 403 after: the behaviour is
+ * deliberately unchanged, which is exactly why this must be asserted. A silent
+ * delisting would look identical from the outside while opening the route.
+ */
+const K2WJH7RF_OWNER_ONLY = [
   'POST /api/governance/maestro-delegate',
   'DELETE /api/governance/maestro-delegate',
   'POST /api/agents/foreign-approvals/[id]/approve',
   'POST /api/agents/foreign-approvals/[id]/reject',
   'POST /api/system/aid-recover',
+]
+
+/**
+ * TRDD-K2WJH7RF Part 1 — the five TRDD write verbs. The guard now ADMITS an
+ * authenticated agent (`deferToRoute`) because the decision needs the target
+ * TRDD's approval tier, which lives on disk and which the guard refuses to read.
+ * The real check is `authorizeTrddVerb()` inside each route.
+ *
+ * These are what ai-maestro-janitor#76 told the janitor to SKIP.
+ */
+const K2WJH7RF_TRDD_VERBS = [
   'PATCH /api/trdd/[id]',
   'POST /api/trdd/[id]/approve',
   'POST /api/trdd/[id]/refuse',
   'POST /api/trdd/[id]/promote',
   'POST /api/trdd/[id]/archive',
 ]
+
+/**
+ * The route FILE behind each deferred verb. Deferral means the guard performs no
+ * check, so if one of these files stopped calling `authorizeTrddVerb()` the route
+ * would authorize NOBODY — it would authorize EVERYONE. Nothing else in the
+ * system would notice. This mapping is what makes that regression impossible.
+ */
+const DEFERRED_ROUTE_FILES: Record<string, string> = {
+  'PATCH /api/trdd/[id]': 'app/api/trdd/[id]/route.ts',
+  'POST /api/trdd/[id]/approve': 'app/api/trdd/[id]/approve/route.ts',
+  'POST /api/trdd/[id]/refuse': 'app/api/trdd/[id]/refuse/route.ts',
+  'POST /api/trdd/[id]/promote': 'app/api/trdd/[id]/promote/route.ts',
+  'POST /api/trdd/[id]/archive': 'app/api/trdd/[id]/archive/route.ts',
+}
 
 /**
  * The routes TRDD-D3RP7KQZ decided. Leaving the pending list is necessary but
@@ -139,10 +176,70 @@ describe('strict-route agent-path coverage (TRDD-6A2I6ZO0)', () => {
   })
 
   it('a pending route refuses agents with a stated reason, not the fall-through default', async () => {
-    for (const routeKey of PENDING_INVENTORY) {
-      const [method, ...rest] = routeKey.split(' ')
-      expect(await messageFor(method, rest.join(' ')), routeKey).toBe(PENDING_MESSAGE)
+    // The ledger is EMPTY since TRDD-K2WJH7RF, so looping it would assert
+    // nothing — a check that cannot fire is not a check. Exercise the MECHANISM
+    // directly instead, so it still works for the next undecided route that
+    // lands here (which is the only reason the empty set is kept at all).
+    const probe = 'POST /api/trdd/[id]/approve' // a real strict route
+    AGENT_POLICY_PENDING.add(probe)
+    try {
+      const [method, ...rest] = probe.split(' ')
+      expect(await messageFor(method, rest.join(' '))).toBe(PENDING_MESSAGE)
+    } finally {
+      AGENT_POLICY_PENDING.delete(probe)
     }
+
+    // …and the ledger really is empty again afterwards.
+    expect([...AGENT_POLICY_PENDING]).toEqual([])
+  })
+
+  // ── TRDD-K2WJH7RF ─────────────────────────────────────────────────────────
+
+  it('K2WJH7RF Part 2: the five governance routes are owner-only, not merely delisted', async () => {
+    for (const routeKey of K2WJH7RF_OWNER_ONLY) {
+      expect(SYSTEM_OWNER_ONLY_STRICT.has(routeKey), `${routeKey} not owner-only`).toBe(true)
+      expect(AGENT_POLICY_PENDING.has(routeKey), `${routeKey} still pending`).toBe(false)
+
+      const [method, ...rest] = routeKey.split(' ')
+      // A MANAGER — the most privileged AGENT there is — must still be refused,
+      // and refused for the STATED reason (not the silent fall-through 403).
+      expect(await messageFor(method, rest.join(' ')), routeKey).toBe(OWNER_ONLY_MESSAGE)
+    }
+  })
+
+  it('K2WJH7RF Part 1: the five TRDD verbs are admitted by the guard and deferred to the route', async () => {
+    for (const routeKey of K2WJH7RF_TRDD_VERBS) {
+      expect(AGENT_POLICY_PENDING.has(routeKey), `${routeKey} still pending`).toBe(false)
+      expect(SYSTEM_OWNER_ONLY_STRICT.has(routeKey), `${routeKey} wrongly owner-only`).toBe(false)
+
+      const [method, ...rest] = routeKey.split(' ')
+      // null ⇒ the guard admitted the agent. That is CORRECT here and it is not
+      // a hole: the route runs the real authorize('manage-trdd', …) with the
+      // tier it read off disk. The next test is what makes that guarantee hold.
+      expect(await messageFor(method, rest.join(' ')), routeKey).toBeNull()
+    }
+  })
+
+  it('K2WJH7RF: every DEFERRED route actually calls authorizeTrddVerb (else it authorizes EVERYONE)', () => {
+    // This is the load-bearing test of the whole deferral design. The guard waves
+    // these routes through, so the route's own call is the ONLY check. A route
+    // that lost it would not fail closed — it would fail OPEN, silently, and let
+    // any agent approve any TRDD (its own proposals included).
+    const holes: string[] = []
+
+    for (const [routeKey, relPath] of Object.entries(DEFERRED_ROUTE_FILES)) {
+      const src = readFileSync(path.join(repoRoot, relPath), 'utf8')
+      const imports = /import\s+\{[^}]*\bauthorizeTrddVerb\b[^}]*\}\s+from\s+'@\/lib\/trdd-authz'/.test(src)
+      const calls = /\bauthorizeTrddVerb\s*\(\s*auth\b/.test(src)
+      if (!imports || !calls) holes.push(`${routeKey}  (${relPath})`)
+    }
+
+    expect(
+      holes,
+      'These routes are DEFERRED by the sudo-guard but do not call authorizeTrddVerb(auth, …).\n' +
+        'The guard performs no check on them, so they are wide open to every agent:\n  ' +
+        holes.join('\n  '),
+    ).toEqual([])
   })
 
   it('the routes decided by TRDD-D3RP7KQZ are mapped, not merely delisted', async () => {

@@ -3,6 +3,7 @@ import { authenticateFromRequest } from '@/lib/agent-auth'
 import { requireSudoToken } from '@/lib/sudo-guard'
 import { resolveDesignDir, isValidTrddId } from '@/lib/trdd-design-dir'
 import { refuseTrdd } from '@/lib/trdd-store'
+import { authorizeTrddVerb } from '@/lib/trdd-authz'
 
 /**
  * POST /api/trdd/[id]/refuse — refuse a PROPOSAL at the gate: sets column=refused,
@@ -36,6 +37,12 @@ export async function POST(
   }
 
   const designDir = resolveDesignDir(typeof body.agentId === 'string' ? body.agentId : null)
+
+  // TRDD-K2WJH7RF: refusing a proposal carries the SAME authority as approving
+  // it — deciding is one gate, whichever way it goes. The sudo-guard deferred.
+  const authzErr = authorizeTrddVerb(auth, designDir, id, 'refuse')
+  if (authzErr) return authzErr
+
   const result = refuseTrdd(designDir, id, {
     approver: typeof body.approver === 'string' ? body.approver : auth.agentId || 'user',
     tier: typeof body.tier === 'number' ? body.tier : undefined,

@@ -1,11 +1,11 @@
 ---
 trdd-id: K2WJH7RF
 title: Decide the agent authorization policy for the ten remaining strict routes
-column: planned
+column: human_review
 pre-block-column: null
 min-approval-requirement: manager
 created: 2026-07-09T18:03:01+0200
-updated: 2026-07-10T04:12:00+0200
+updated: 2026-07-13T21:40:00+0200
 current-owner: ai-maestro-session
 assignee: null
 priority: 2
@@ -27,8 +27,8 @@ test-requirements: [unit]
 review-requirements: [human-review]
 runtime-targets: [macos, linux]
 impacts: [public-api]
-attempts: 0
-implementation-commits: []
+attempts: 1
+implementation-commits: [d7531e53]
 external-refs: ["https://github.com/Emasoft/ai-maestro-janitor/issues/76"]
 ---
 

@@ -1,3 +1,25 @@
+---
+trdd-id: E5AAE555
+title: Haephestos ephemeral-session hardening
+column: todo
+created: 2026-04-20T07:00:21+0200
+updated: 2026-07-13T12:40:00+0200
+current-owner: main
+assignee: main
+priority: 3
+severity: MEDIUM
+effort: M
+labels: [haephestos, role-plugins, hardening, v1-migrated]
+task-type: security
+scope: project
+min-approval-requirement: none
+parent-trdd: null
+npt: []
+eht: []
+blocked-by: []
+implementation-commits: []
+---
+
 # TRDD-e5aae555-1090-4fbf-ab4b-1ac99f82486c — Haephestos ephemeral-session hardening
 
 **TRDD ID:** `e5aae555-1090-4fbf-ab4b-1ac99f82486c`

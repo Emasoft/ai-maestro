@@ -1,9 +1,9 @@
 ---
 trdd-id: JT3U4ZVM
 title: fleet blocker — role-plugin installs fail because releases lack the {name}--v{version} tags the dependency resolver requires
-column: dev
+column: ai_review
 created: 2026-07-13T06:15:10+0200
-updated: 2026-07-13T07:45:00+0200
+updated: 2026-07-13T12:05:00+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -75,6 +75,29 @@ external-refs: ["cc-version:2.1.207", "docs:https://code.claude.com/docs/en/plug
   ChangeTitle G15/G16 reach `installed` instead of `WARN — Failed to install`. Residual:
   merge PR #25 so the NEXT release carries the tag automatically — without it, 2.8.1 ships
   untagged for the resolver and the fleet breaks again at the next version bump.
+
+**▶ UPDATE 2026-07-13 12:05 — column `dev` → `ai_review`. The rescue half is DONE and
+independently confirmed in a real agent workdir**, not just by my own scratch install:
+`~/agents/jack-bot` (the live MANAGER) now shows, via `claude plugin list --json` (the ground
+truth — never `settings.local.json`), `ai-maestro-assistant-manager-agent@ai-maestro-plugins
+v2.12.12` **installed** at local scope with its dependency resolved as
+`ai-maestro-plugin@ai-maestro-plugins v2.8.0-c0cf169e83b6` — the version string carries the
+commit our new `ai-maestro-plugin--v2.8.0` tag points at, which is the resolver quoting the fix
+back at us. Its pane runs Claude 2.1.207, not a fallen-back `zsh`.
+
+**The DURABILITY half is NOT done and is NOT mine to finish.** `Emasoft/ai-maestro-plugin`
+PR #25 (adds the tag step to that repo's `publish.py`) is `MERGEABLE`, all checks green, and
+sits at **`REVIEW_REQUIRED`**. I will not approve/merge my own cross-repo PR under the shared
+owner identity — that is the impersonation the governance rule exists to prevent, and the
+cross-project rule says the fix lands as a PR in *their* queue. **If it is never merged, v2.8.1
+ships without the resolver tag and the entire fleet breaks again at the next version bump** —
+the backfilled tag is a one-time rescue, not a fix. This is the single highest-value open item
+in the whole ecosystem right now, and it is one click. Filed as the lead ask on
+ai-maestro-plugin#26 (fleet-status issue).
+
+Fleet exposure swept: `claude-plugins-validation` pins `claude-menu-system >=0.1.5`, and that
+repo has **zero** `claude-menu-system--v*` tags → CPV is uninstallable-from-clean today, unnoticed
+because an already-installed copy keeps working. Filed as claude-menu-system#2 / CPV#163.
 - **SUPERSEDED — do NOT carry forward:**
   - ✗ "Claude Code 2.1.207 cannot resolve ANY versioned plugin dependency / it is an
     upstream bug." **False.** The resolver works; it was looking for a tag name we never

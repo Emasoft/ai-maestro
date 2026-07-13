@@ -1,3 +1,25 @@
+---
+trdd-id: EAC02238
+title: Per-operation ledger audit entries
+column: complete
+created: 2026-04-20T07:00:21+0200
+updated: 2026-07-13T12:40:00+0200
+current-owner: main
+assignee: main
+priority: 2
+severity: MEDIUM
+effort: M
+labels: [ledger, audit, security, v1-migrated]
+task-type: security
+scope: project
+min-approval-requirement: none
+parent-trdd: null
+npt: []
+eht: []
+blocked-by: []
+implementation-commits: []
+---
+
 # TRDD-eac02238-7f2a-498f-92d4-e30d4688607b — Per-operation ledger audit entries
 
 **TRDD ID:** `eac02238-7f2a-498f-92d4-e30d4688607b`

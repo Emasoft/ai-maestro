@@ -1,3 +1,25 @@
+---
+trdd-id: 8E8BE91A
+title: Upstream AMP Sync Before PR Submission
+column: todo
+created: 2026-04-24T15:45:16+0200
+updated: 2026-07-13T12:40:00+0200
+current-owner: main
+assignee: main
+priority: 3
+severity: LOW
+effort: M
+labels: [amp, upstream, fork, v1-migrated]
+task-type: infra
+scope: project
+min-approval-requirement: manager
+parent-trdd: null
+npt: []
+eht: []
+blocked-by: []
+implementation-commits: []
+---
+
 # TRDD-8e8be91a — Upstream AMP Sync Before PR Submission
 
 **TRDD ID:** `8e8be91a-cf88-426c-ac12-dcffba7dbdd6`

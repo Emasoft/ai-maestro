@@ -1,3 +1,25 @@
+---
+trdd-id: D46B42E9
+title: JSONL Session Browser (Rust streaming reader + chat transcript UI)
+column: todo
+created: 2026-04-20T22:31:54+0200
+updated: 2026-07-13T12:40:00+0200
+current-owner: main
+assignee: main
+priority: 3
+severity: LOW
+effort: L
+labels: [jsonl, session-browser, ui, v1-migrated]
+task-type: feature
+scope: project
+min-approval-requirement: none
+parent-trdd: null
+npt: []
+eht: []
+blocked-by: []
+implementation-commits: []
+---
+
 # TRDD-d46b42e9 — JSONL Session Browser (Rust streaming reader + chat transcript UI)
 
 **TRDD ID:** `d46b42e9-52fa-4f04-9be5-2fb4131fcdd1`

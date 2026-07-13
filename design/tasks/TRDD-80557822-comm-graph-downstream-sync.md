@@ -1,3 +1,25 @@
+---
+trdd-id: 80557822
+title: R6 Communication Graph Downstream Sync
+column: todo
+created: 2026-04-24T04:08:31+0200
+updated: 2026-07-13T12:40:00+0200
+current-owner: main
+assignee: main
+priority: 1
+severity: MEDIUM
+effort: M
+labels: [comm-graph, r6, role-plugins, downstream, v1-migrated]
+task-type: docs
+scope: project
+min-approval-requirement: none
+parent-trdd: null
+npt: []
+eht: []
+blocked-by: []
+implementation-commits: []
+---
+
 # TRDD-80557822 — R6 Communication Graph Downstream Sync
 
 **TRDD ID:** `80557822-b6f1-4b47-8770-7505947d8378`

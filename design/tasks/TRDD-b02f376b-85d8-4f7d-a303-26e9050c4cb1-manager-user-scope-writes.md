@@ -1,3 +1,25 @@
+---
+trdd-id: B02F376B
+title: Tamper-proof title verification for the directory guard hook (MANAGER user-scope writes)
+column: todo
+created: 2026-04-30T08:18:15+0200
+updated: 2026-07-13T12:40:00+0200
+current-owner: main
+assignee: main
+priority: 2
+severity: HIGH
+effort: L
+labels: [security, governance, guard-hook, v1-migrated]
+task-type: security
+scope: project
+min-approval-requirement: manager
+parent-trdd: null
+npt: []
+eht: []
+blocked-by: []
+implementation-commits: []
+---
+
 # TRDD-b02f376b — Tamper-proof title verification for the directory guard hook (MANAGER user-scope writes)
 
 **TRDD ID:** `b02f376b-85d8-4f7d-a303-26e9050c4cb1`

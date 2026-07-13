@@ -1,9 +1,23 @@
 ---
-trdd-id: a1019073-a2b8-4dda-9ba0-e668a77b9ccc
+trdd-id: A1019073
 title: Controlled execution environment for AI Maestro agents — UID separation, host sandboxing, supply-chain controls
-status: not-started
+column: todo
 created: 2026-05-22T11:15:03+0200
-updated: 2026-07-02T13:58:14+0200
+updated: 2026-07-13T12:40:00+0200
+current-owner: main
+assignee: main
+priority: 1
+severity: HIGH
+effort: XL
+labels: [security, sandbox, uid-separation, containers, v1-migrated]
+task-type: security
+scope: project
+min-approval-requirement: manager
+parent-trdd: null
+npt: []
+eht: []
+blocked-by: []
+implementation-commits: []
 ---
 
 # TRDD-a1019073 — Controlled execution environment for AI Maestro agents

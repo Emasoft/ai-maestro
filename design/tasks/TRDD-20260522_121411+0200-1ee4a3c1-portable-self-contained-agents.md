@@ -1,9 +1,23 @@
 ---
-trdd-id: 1ee4a3c1-c6c3-47f5-a8df-30b06a42c483
+trdd-id: 1EE4A3C1
 title: Self-contained portable agents — workdir .aimaestro mirror, sessions.json reconcile, orphan revival
-status: not-started
+column: todo
 created: 2026-05-22T12:14:11+0200
-updated: 2026-05-22T12:28:41+0200
+updated: 2026-07-13T12:40:00+0200
+current-owner: main
+assignee: main
+priority: 2
+severity: MEDIUM
+effort: XL
+labels: [portable-agents, workdir, sessions, v1-migrated]
+task-type: feature
+scope: project
+min-approval-requirement: none
+parent-trdd: null
+npt: []
+eht: []
+blocked-by: []
+implementation-commits: []
 ---
 
 # TRDD-1ee4a3c1 — Self-contained portable agents

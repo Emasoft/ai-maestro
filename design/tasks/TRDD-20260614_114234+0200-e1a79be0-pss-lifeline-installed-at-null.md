@@ -1,9 +1,23 @@
 ---
-trdd-id: e1a79be0-01d4-4ad1-99ff-b8310bb7cc16
+trdd-id: E1A79BE0
 title: PSS lifeline installedAtIso is always null — asOfComponents reads fields the PSS schema does not emit
-status: not-started
+column: complete
 created: 2026-06-14T11:42:34+0200
-updated: 2026-06-14T11:42:34+0200
+updated: 2026-07-13T12:40:00+0200
+current-owner: main
+assignee: main
+priority: 2
+severity: MEDIUM
+effort: S
+labels: [pss, lifeline, tautology, v1-migrated]
+task-type: bugfix
+scope: project
+min-approval-requirement: none
+parent-trdd: null
+npt: []
+eht: []
+blocked-by: []
+implementation-commits: []
 ---
 
 # TRDD-e1a79be0 — Fix the always-null PSS lifeline install timestamp

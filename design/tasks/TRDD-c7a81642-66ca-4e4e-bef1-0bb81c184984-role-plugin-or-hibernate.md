@@ -1,3 +1,25 @@
+---
+trdd-id: C7A81642
+title: Universal role-plugin-or-hibernate invariant (R9.13 extension)
+column: complete
+created: 2026-04-20T07:00:21+0200
+updated: 2026-07-13T12:40:00+0200
+current-owner: main
+assignee: main
+priority: 2
+severity: MEDIUM
+effort: M
+labels: [role-plugins, governance, r9, v1-migrated]
+task-type: feature
+scope: project
+min-approval-requirement: none
+parent-trdd: null
+npt: []
+eht: []
+blocked-by: []
+implementation-commits: []
+---
+
 # TRDD-c7a81642-66ca-4e4e-bef1-0bb81c184984 — Universal role-plugin-or-hibernate invariant (R9.13 extension)
 
 **TRDD ID:** `c7a81642-66ca-4e4e-bef1-0bb81c184984`

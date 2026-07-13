@@ -3,7 +3,7 @@ trdd-id: JT3U4ZVM
 title: fleet blocker — role-plugin installs fail because releases lack the {name}--v{version} tags the dependency resolver requires
 column: dev
 created: 2026-07-13T06:15:10+0200
-updated: 2026-07-13T06:45:00+0200
+updated: 2026-07-13T07:05:00+0200
 current-owner: ai-maestro-dev-session
 assignee: ai-maestro-dev-session
 priority: 0
@@ -34,7 +34,7 @@ review-requirements: []
 impacts: [agent-lifecycle, role-plugins, fleet]
 attempts: 0
 implementation-commits: []
-external-refs: ["cc-version:2.1.207", "docs:https://code.claude.com/docs/en/plugin-dependencies.md", "gh:Emasoft/ai-maestro-plugin#24", "gh:Emasoft/ai-maestro-architect-agent#25", "gh:Emasoft/ai-maestro-assistant-manager-agent#25", "gh:Emasoft/ai-maestro-chief-of-staff#25", "gh:Emasoft/ai-maestro-orchestrator-agent#28", "gh:Emasoft/ai-maestro-integrator-agent#22", "gh:Emasoft/ai-maestro-programmer-agent#26", "gh:Emasoft/ai-maestro-maintainer-agent#28", "gh:Emasoft/ai-maestro-autonomous-agent#13"]
+external-refs: ["cc-version:2.1.207", "docs:https://code.claude.com/docs/en/plugin-dependencies.md", "gh:Emasoft/ai-maestro-plugin#24", "gh:Emasoft/ai-maestro-plugin#25(PR)", "gh:Emasoft/ai-maestro-architect-agent#25", "gh:Emasoft/ai-maestro-assistant-manager-agent#25", "gh:Emasoft/ai-maestro-chief-of-staff#25", "gh:Emasoft/ai-maestro-orchestrator-agent#28", "gh:Emasoft/ai-maestro-integrator-agent#22", "gh:Emasoft/ai-maestro-programmer-agent#26", "gh:Emasoft/ai-maestro-maintainer-agent#28", "gh:Emasoft/ai-maestro-autonomous-agent#13"]
 ---
 
 # TRDD-JT3U4ZVM — The dependency resolver wants `{name}--v{version}` tags; we never published them
@@ -162,7 +162,14 @@ hard-rejects an agent with zero role-plugins. The server logs have been carrying
    `2.8.0` satisfies **every** declared range (`^2.6.0`, `^2.7.0`, `^2.7.9`) and the
    resolver takes the highest satisfying tag, so ONE tag fixes all 8 role-plugins.
    Filed as **Emasoft/ai-maestro-plugin#24**.
-2. **Make it permanent:** add `claude plugin tag --push` to each plugin's `publish.py`,
+2. **Make it permanent:** **PR Emasoft/ai-maestro-plugin#25** (open) — `publish.py` now
+   derives `{name}--v{version}` from the manifest, creates it with git directly, and
+   pushes it in the SAME `--atomic` transaction as the release; 5 regression tests. It
+   also deletes the call that *looked* like it did this already: `claude plugin tag
+   <tag>` passed the tag where the CLI wants a PATH and swallowed the result with
+   `check=False`, so it silently created nothing on every release. Merging it does NOT
+   unblock today — it takes effect on the next release; the backfill in (1) is what
+   clears the fleet now. The same step belongs in each role-plugin's `publish.py`,
    after the version bump + release commit. Keep the existing `v{version}` tag — that is
    what GitHub Releases and the marketplace notify chain use; the two coexist, and only
    `{name}--v{version}` is read by the dependency resolver. (This is the one remaining

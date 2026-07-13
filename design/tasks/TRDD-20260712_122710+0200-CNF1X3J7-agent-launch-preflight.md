@@ -33,7 +33,7 @@ audit-requirements: []
 review-requirements: []
 impacts: [agent-lifecycle]
 attempts: 0
-implementation-commits: []
+implementation-commits: [e8593bf4, fb8c03ea]
 external-refs: ["memory:running-claude-code-clients", "memory:tmux-pane-cannot-read-login-keychain", "memory:agent-launch-must-preflight-keychain-and-plugin", "memory:fleet-auth-outage-2026-07-12-tmux-server-keychain-blind"]
 ---
 

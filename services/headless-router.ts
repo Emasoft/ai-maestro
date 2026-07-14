@@ -214,7 +214,7 @@ import {
 
 import { handleGovernanceSyncMessage, buildLocalGovernanceSnapshot } from '@/lib/governance-sync'
 import { getHosts } from '@/lib/hosts-config'
-import { statePath } from '@/lib/ecosystem-constants'
+import { statePath, isCorePlugin } from '@/lib/ecosystem-constants'
 import { verifyHostAttestation } from '@/lib/host-keys'
 // Imports for chief-of-staff endpoint (mirrors app/api/teams/[id]/chief-of-staff/route.ts)
 import { verifyPassword, loadGovernance, getManagerId, isChiefOfStaffAnywhere, isManager, isChiefOfStaff } from '@/lib/governance'
@@ -3261,6 +3261,21 @@ const routes: Route[] = [
     }
     const body = await readJsonBody(req)
     if (!body.pluginName || !body.agentDir) return sendJson(res, 400, { error: 'pluginName and agentDir are required' })
+    // R17.14 (governance audit, 2026-07-14): the core ai-maestro-plugin can NEVER be
+    // uninstalled via the API, in EITHER serving mode. Full mode enforces this in
+    // ChangePlugin G01b (element-management-service.ts). This handler deliberately
+    // bypasses ChangePlugin and calls uninstallPluginLocally directly (the low-level
+    // role-plugin surface), so G01b never ran here — an authorized MANAGER in headless
+    // could uninstall the core plugin and strip its key, defeating R17. Mirror G01b's
+    // specific check at THIS surface, not in uninstallPluginLocally: that helper is also
+    // called by ChangeClient (R18), which legitimately uninstalls the old-client core
+    // plugin while re-emitting it for the new client. An unconditional block in the helper
+    // would break client conversion. The invariant belongs to the "uninstall this plugin"
+    // INTENT, which is this route — exactly where full mode places it.
+    if (isCorePlugin(body.pluginName, body.marketplaceName)) {
+      sendJson(res, 400, { error: 'The ai-maestro-plugin is a core system plugin and cannot be uninstalled (R17.14)' })
+      return
+    }
     try {
       // marketplaceName is optional — defaults to the local role-plugins marketplace
       await uninstallPluginLocally(body.pluginName, body.agentDir, body.marketplaceName)

@@ -47,6 +47,30 @@ A contributing cause, now fixed (`d6b802fd`): `check_api_running()` reported **e
 non-200 as *"AI Maestro is not running — start the server"*. On a 401 that is a false
 diagnosis that makes a present-but-unauthorized verb look absent.
 
+## The consumer's half — a STALE BLOCKER is worse than an open bug
+
+The producer's duty is R23.8 (*announcing a verb is part of shipping it*). The **consumer's**
+duty is the mirror of it, and the MANAGER stated it better than I did:
+
+> *"I sat on a `DECOUPLE-BLOCKED` marker for weeks and never re-checked it. The marker was
+> true when written and became false without anyone noticing. **A stale blocker is worse
+> than an open bug — a bug gets triaged, a blocker gets respected.**"*
+
+**Re-verify a blocker before you cite it.** A blocker is a claim with a timestamp, and the
+world moves under it. It decays silently, because nobody re-runs a test they already
+"know" the answer to.
+
+**And do not conflate two senses in one marker.** `DECOUPLE-BLOCKED` was used for both:
+
+| Sense | Example | Decays? |
+|---|---|---|
+| *waiting on the other side to ship something* | "no `presence` verb yet" | **yes** — and it did |
+| *deliberately impossible, by design* | "no `set-governance-password` agent verb (R32: it is a USER/UI action)" | **never** |
+
+The first must be re-checked; the second must never be "unblocked" by a future session
+trying to be helpful. Same marker, opposite meanings — so state the design intent in prose
+rather than tagging it with a marker that invites removal.
+
 ## Notes and lessons learned
 
 [^1]: [ocd:2026-07-14 lmd:2026-07-14] The first instinct on both incidents was to go build
@@ -55,3 +79,13 @@ diagnosis that makes a present-but-unauthorized verb look absent.
   exist? does the verb already exist?) costs one grep and would have short-circuited both.
   Lesson: when a downstream consumer reports an absence, the first move is to look, not to
   build.
+
+[^2]: [ocd:2026-07-14 lmd:2026-07-14] A **third** trap, distinct from both halves above:
+  *asserted* identity is not *proven* identity. `#46` resolves "which agent am I?" from the
+  session's own environment — sufficient for self-identification, and NOT sufficient for
+  "grant this capability to the janitor and to nobody else", which needs an identity a
+  SERVER can verify. The two bars are different and the fleet will conflate them the moment
+  one of them turns green. Same shape as the `R41` split: **authorization** is enforced
+  (the server refuses an under-authorized approval) while **authentication** is still
+  convention (the Approval-log line is forgeable). Never let "X is unblocked" be read as
+  "X is trustworthy".

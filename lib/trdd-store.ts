@@ -348,7 +348,7 @@ function editAt(filePath: string, edits: Array<[string, string]>, logLine: strin
 export function promoteTrdd(
   designDir: string,
   id: string,
-  opts: { approver: string; tier?: number; rationale?: string; iso: string },
+  opts: { approver: string; tier?: number; rationale?: string; iso: string; approvalToken?: string | null },
 ): TrddResult {
   const trdd = findTrdd(designDir, id)
   if (!trdd) return { ok: false, error: 'TRDD not found', status: 404 }
@@ -357,10 +357,29 @@ export function promoteTrdd(
   }
   const { toPath: newPath, tracked } = moveZone(designDir, trdd, 'tasks')
   const tierStr = opts.tier != null ? ` (tier ${opts.tier})` : ''
+
+  // The APPROVAL RECORD the governance rules define (`approved:` / `approval-judge:`
+  // / `approval-datetime:`), plus `approval-token:` — the id of the host-signed,
+  // ledger-anchored token that makes the decision VERIFIABLE rather than merely
+  // written down (ai-maestro#47). Every one of these fields is forgeable prose on
+  // its own; the token is the one thing that is not, and it is what a reader should
+  // check. The prose stays because humans read it.
+  const fields: Array<[string, string]> = [
+    ['column', 'planned'],
+    ['updated', opts.iso],
+    ['approved', 'true'],
+    ['approval-judge', opts.approver],
+    ['approval-datetime', opts.iso],
+  ]
+  if (opts.approvalToken) fields.push(['approval-token', opts.approvalToken])
+
   editAt(
     newPath,
-    [['column', 'planned'], ['updated', opts.iso]],
-    `- ${opts.iso} — APPROVED by ${opts.approver}${tierStr}. ${opts.rationale ?? 'promoted proposal → planned'}.`,
+    fields,
+    `- ${opts.iso} — APPROVED by ${opts.approver}${tierStr}. ${opts.rationale ?? 'promoted proposal → planned'}.` +
+      (opts.approvalToken
+        ? ` Verifiable: approval-token ${opts.approvalToken} (aimaestro-trdd.sh verify ${trdd.id}).`
+        : ''),
   )
   if (tracked) stageMovedFile(designDir, newPath)
   return { ok: true, id: trdd.id, from: 'proposals', to: 'tasks', column: 'planned', filePath: newPath }

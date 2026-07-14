@@ -26,8 +26,31 @@
 /** A portfolio token is either a one-shot approval or a standing mandate. */
 export type PortfolioTokenKind = 'approval' | 'mandate'
 
-/** The issuer of a portfolio token is always a governance authority. */
-export type PortfolioIssuerTitle = 'manager' | 'chief-of-staff'
+/**
+ * The issuer of a portfolio token is always a governance authority.
+ *
+ * `user` is the HUMAN OWNER (the dashboard / system-owner path). It is on the
+ * ladder above `manager` and no agent can ever hold it — which is what makes a
+ * USER-reserved decision unforgeable by the whole fleet, MANAGER included. It has
+ * to be here: without it, a token minted by the human owner would record
+ * `manager`, and a `user`-tier card approved by the owner would then verify as
+ * "issuer authority below what this card requires" — the one approval that must
+ * always hold, failing.
+ */
+export type PortfolioIssuerTitle = 'manager' | 'chief-of-staff' | 'user'
+
+/**
+ * The reserved `issuer_agent_id` of a token minted by the HUMAN OWNER, who has no
+ * agent record.
+ *
+ * The issuer re-check (portfolio-check.issuerStillValid) exists to kill a token
+ * whose issuer was DEMOTED. The human owner has no title to lose and no registry
+ * row to look up, so a naive lookup finds nothing and denies — which would mean
+ * the owner's own approvals could never verify. This sentinel is what that check
+ * recognizes instead. It is not a hole: forging it requires forging the host's
+ * Ed25519 signature over the token, which is exactly what a forger cannot do.
+ */
+export const SYSTEM_OWNER_ISSUER = 'system-owner'
 
 /** Lifecycle status of a token record. */
 export type PortfolioTokenStatus = 'active' | 'consumed' | 'revoked' | 'expired'

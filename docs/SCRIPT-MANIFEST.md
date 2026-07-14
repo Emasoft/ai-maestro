@@ -110,6 +110,7 @@ HTML is capped at 2 MB; `javascript:` / `file:` / `data:` URLs are rejected 400.
 |---|---|
 | `search` | `--column C` `--id I` `--keyword K` `--zone proposals\|tasks\|archived\|refused` |
 | `read <id>` | — |
+| `verify <id>` | `--json` — **is this card's approval REAL?** exit `0` verified · **`2` NOT verified** · `1` error |
 | `edit <id>` | `--set k=v` (repeatable) — frontmatter in place, no folder move |
 | `approve <id>` | `--approver W` `--tier N` `--rationale R` — proposal → planned, `git mv` proposals/ → tasks/ |
 | `refuse <id>` | `--approver W` `--tier N` `--reason R` — → refused/ |
@@ -127,6 +128,22 @@ Nothing is committed for you.
 > tiers (`none < orchestrator < chief-of-staff < manager < user`): approval authority is
 > read from the TRDD's own `min-approval-requirement:`, no agent may approve a `user`-tier
 > TRDD, and **no one may approve their own proposal** — MANAGER included.
+>
+> **`approve` now MINTS a signed approval token, and `verify` reads it back
+> (ai-maestro#47).** The approval is recorded as `approval-token:` in the card's
+> frontmatter — a host-signed, ledger-anchored portfolio token PINNED to that card. `verify`
+> answers from the TOKEN, never from the card's prose: `approval-judge:` and the
+> `## Approval log` line are exactly what a forger rewrites, so the only thing taken from
+> the file is the token id. It checks the signature, the R34 ledger anchor, that the issuer
+> **still** holds its title, and that the issuer's authority **meets the card's
+> `min-approval-requirement:`** — so a COS-issued token cannot satisfy a manager-tier card,
+> and no agent token can ever satisfy a `user`-tier one.
+>
+> **What it does NOT prove:** the token binds an approval to the card's *identity*, not its
+> *content*. Someone with repo write can still edit the body after approval, and `verify`
+> will still say the approval is authentic — because it is. Freezing content needs a card
+> digest inside the token (`attestation_ref`, reserved). Do not describe a verified approval
+> as vouching for the body.
 
 #### `aimaestro-teams.sh <command> [flags]` — teams
 

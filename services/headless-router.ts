@@ -4001,6 +4001,15 @@ const routes: Route[] = [
       `/api/trdd/${encodeURIComponent(params.id)}/archive`, { method: 'POST', params: { id: params.id }, withBody: true })
   }},
 
+  // "Is this card's approval REAL?" (ai-maestro#47). A READ, so no sudo — and the
+  // caller who most needs it is the agent being handed the mandate. Must precede
+  // the bare `[id]` pattern below, which would otherwise swallow `/verify`.
+  { method: 'GET', pattern: /^\/api\/trdd\/([^/]+)\/verify$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const mod = await import('@/app/api/trdd/[id]/verify/route')
+    await delegateNextRoute(req, res, mod.GET as NextRouteHandler,
+      `/api/trdd/${encodeURIComponent(params.id)}/verify`, { method: 'GET', params: { id: params.id } })
+  }},
+
   // Parameterized `[id]` — MUST stay after `kanban` and the four sub-paths above.
   { method: 'GET', pattern: /^\/api\/trdd\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
     const mod = await import('@/app/api/trdd/[id]/route')

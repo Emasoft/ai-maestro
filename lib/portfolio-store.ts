@@ -205,6 +205,23 @@ export function getTokenById(tokenId: string): PortfolioToken | undefined {
 }
 
 /**
+ * Look up a token by id ANYWHERE on disk, loading whatever subject holds it.
+ *
+ * `getTokenById` only sees SUBJECTS ALREADY LOADED, so a caller who knows only a
+ * token id (and not whose enclave it sits in) silently gets `undefined` — which,
+ * to a verifier, is indistinguishable from "no such token" and therefore reads as
+ * "forged". A verifier must not reach that verdict by accident, and the TRDD
+ * verifier is exactly that caller: a card records a token id, and the field naming
+ * the approver is the very thing an attacker would rewrite, so the id is all we
+ * are willing to trust it for.
+ */
+export function findTokenAnywhere(tokenId: string): PortfolioToken | undefined {
+  const holder = findSubjectOf(tokenId)
+  if (!holder) return undefined
+  return loadPortfolio(holder).find(t => t.token_id === tokenId)
+}
+
+/**
  * Decrement a one-shot approval token's `uses_remaining`; flip to `consumed`
  * at 0. Mandate tokens (uses_remaining null) are never consumed — calling
  * this on one is a no-op. Returns true if a token was found and updated.

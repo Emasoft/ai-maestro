@@ -1,8 +1,9 @@
 ---
-version: "4.1.0"
+version: "4.2.0"
 date: 2026-07-14
 branch: governance-rules
 changelog:
+  - "4.2.0: R41 is now AUTHENTICATED, not just authorized — the second half of Emasoft/ai-maestro#47. Approving a card MINTS a portfolio token (R28): Ed25519-signed by the host, anchored in the host-signed ledger (R34), scoped `trdd:approve`, PINNED to that card's id, and recorded as `approval-token:` in its frontmatter. `aimaestro-trdd.sh verify <trdd-id>` (new) reads it back and exits NON-ZERO when the approval does not verify. It answers FROM THE TOKEN, never from the card's prose — `approval-judge:` and the `## Approval log` line are precisely what a forger rewrites, so only the token id is taken from the file; who approved, under what title, and for which card come from the signature. It also checks the issuer's authority against the card's `min-approval-requirement:` on the R41.4 ladder, so a COS-issued token cannot satisfy a manager-tier card and NO agent token can ever satisfy a `user`-tier one (the human owner's tokens record `issuer_title: user`; a latent bug made an owner-minted token unverifiable forever, and it is fixed here). A card with a perfectly-formed APPROVED line and no token now reports UNVERIFIED — which is the entire point. Also: `aimaestro-portfolio.sh` (new — mint/list/verify/revoke), and the portfolio routes gained the headless twins they never had (the whole surface 404'd on a worker node, so a verifier could not be reached at all — the worst failure direction, since the caller cannot tell 'forged' from 'verification unavailable'). LIMITS, stated rather than implied: (a) the token binds an approval to a card's IDENTITY, not its CONTENT — a body edited after approval still verifies, because that authority did approve that card; freezing content needs a card digest in the token (`attestation_ref`, reserved). (b) `OPERATIONS_REQUIRING_TOKEN` stays EMPTY: #47 asked for verification, and making a token MANDATORY for an operation is a separate governance decision, deliberately not slipped in beside a refactor."
   - "4.1.0: Added R41 (APPROVAL vs MANDATE — the two authorization protocols), closing Emasoft/ai-maestro#47. Pins the authority ladder as a total order (none(0) < orchestrator(1) < chief-of-staff(2) < manager(3) < user(4); no agent ever holds `user`), the `min-approval-requirement:` enum, the mandate invariant (a TRDD is born approved iff authority(mandated-by) >= authority(min-approval-requirement) — so a proposal exists ONLY when the author's authority is below the tier the card requires), the objective tier-floor criteria table, no-self-approval (MANAGER included), and GOLDEN-PRRD-always-MAESTRO. States honestly what is and is not enforced: authorization IS server-enforced as of d7531e53 (the manage-trdd AuthAction refuses under-authorized, user-tier, and self approvals), but the SIGNATURE is still convention — cryptographic verifiability needs mandate tokens + a `verify` CLI verb + the per-agent identity of #46, in that sequence. Also added R23.7/R23.8 (the frozen surface is docs/SCRIPT-MANIFEST.md generated from scripts/, never a host's ~/.local/bin; and announcing a verb is part of shipping it) — derived from the MANAGER staying blocked on 28 call sites while the three verbs it needed were already shipped and deployed. NOTE for the record: Emasoft/ai-maestro#37 (frozen-CLI decoupling + memory-adoption) asked for these as new R41/R42 — they were NOT added, because they ALREADY EXIST as R23 (Plugin<->Server Decoupling via the Frozen CLI Layer) and R24 (Proactive Global Memory), landed in 3.10.0 and renumbered in 3.11.0. Adding them again would have created two numbers for one rule and broken the property that a citation resolves to exactly one rule. #37 is satisfied by R23+R24; only #47 was a genuine gap."
   - "4.0.3: Landed the canonical text of R22 (GitHub Authorship Self-Identification), replacing the RESERVED placeholder created in 3.11.0. Text mirrors the already-ratified PRRD baseline golden rule G1.1 and the ai-maestro DEP overlay (rules/aimaestro/aimaestro-prrd-governance.md), per the #33 consensus (MANAGER + maintainer, 2026-06-02 — R22.3 refined to the `Agent: <plugin-slug>` commit trailer). No agent behavior changes (the fleet already self-identifies via G1.1); this only fills the reserved GOVERNANCE-RULES slot the placeholder pointed at. Closes Emasoft/ai-maestro#33."
   - "4.0.2: USER refinement of R38/R39 (2026-06-18). R38.2 — normal (non-MAESTRO) user messaging tightened: a user may message ONLY their own ASSISTANT + their own-team COS + the MANAGER; user↔user messaging is now FORBIDDEN (no send and no receive between users); a user may use the terminal only of their own ASSISTANT. R39.7 (new) — a user's ASSISTANT is invisible to the other agents but inherits all tasks + permissions sent to the user. (Enforcement note: the HUMAN node in the comm-graph, lib/communication-graph.ts, currently treats all users as full-Y; encoding the non-MAESTRO-user restriction there is a follow-up.)"
@@ -1442,15 +1443,35 @@ judgment call):
 > agent approving a `user`-tier card, and **any self-approval** (R41.5). Authorization is
 > therefore no longer a convention: the server says no.
 >
-> **What is NOT yet enforced: the signature.** R41's "the agent *verifies* the order is
-> authentic" is still convention — the evidence is the git-tracked `## Approval log` line,
-> which is auditable but forgeable by anyone with repo write. Cryptographic verifiability
-> needs (a) server-issued **mandate** tokens alongside `#27`'s approval tokens, (b) a `verify`
-> CLI verb so a receiving agent can confirm a signature was issued by the claimed authority
-> for that specific TRDD, and (c) a per-agent identity to root the signature in — which is
-> `ai-maestro#46`. **Sequence: #46 identity → signing + `verify` verbs → the protocols become
-> cryptographically enforceable.** Until then R41 is *authorized* but not *authenticated*, and
-> this section says so rather than implying otherwise.
+> **What IS enforced by the signature** (ai-maestro#47 ask 2, 2026-07-14): approving a card
+> now **mints a portfolio token** (R28) — Ed25519-signed by the HOST, anchored in the
+> host-signed ledger (R34), scoped `trdd:approve`, and **pinned to that card's id**. Its id is
+> recorded as `approval-token:` in the card's frontmatter, and
+> **`aimaestro-trdd.sh verify <trdd-id>`** reads it back: it checks the signature, the ledger
+> anchor, that the issuer **still holds** the title it minted under, and that the issuer's
+> authority **meets the card's `min-approval-requirement:`** on the R41.4 ladder. So a
+> COS-issued token cannot satisfy a manager-tier card, and **no agent token can ever satisfy a
+> `user`-tier one** (R41.4 — no agent holds the `user` rung; the human owner's tokens record
+> `issuer_title: user`). `verify` exits **non-zero** when the approval does not verify, so a
+> receiving agent can gate on it.
+>
+> Crucially, the verifier answers **from the token, not from the card's prose**. The
+> `## Approval log` line and `approval-judge:` are exactly what a forger rewrites, so the only
+> thing taken from the file is the token id; who approved, under what title, and for which
+> card all come from the signed token. A card carrying a perfectly-formed APPROVED line and no
+> token now reports **UNVERIFIED**.
+>
+> **The limit that remains — do not overstate this.** The token binds an approval to a card's
+> **identity**, not its **content**. Someone with repo write can still edit the body *after*
+> approval and `verify` will still say the approval is authentic — because it is: that
+> authority did approve that card. Freezing content requires a digest of the card inside the
+> token (`attestation_ref`, reserved in the token schema for exactly this). An agent must not
+> treat a verified approval as vouching for the body it is reading today.
+>
+> **Enforcement (`OPERATIONS_REQUIRING_TOKEN`) is still OFF, deliberately.** #47 asked for
+> *verification*; making a token *mandatory* for an operation is a separate governance
+> decision with its own blast radius, and it is a per-operation, reversible flip — not
+> something to slip in beside a refactor.
 
 ---
 

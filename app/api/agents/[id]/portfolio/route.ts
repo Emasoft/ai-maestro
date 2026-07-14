@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
 import { isValidUuid } from '@/lib/validation'
-import type { PortfolioToken } from '@/types/portfolio'
+import type { PortfolioToken, PortfolioIssuerTitle } from '@/types/portfolio'
+import { SYSTEM_OWNER_ISSUER } from '@/types/portfolio'
 import { canIssue } from '@/lib/portfolio-issue-guard'
 import { signPortfolioToken } from '@/lib/portfolio-sign'
 import {
@@ -110,10 +111,22 @@ export async function POST(
       )
     }
 
-    // Build the token. Issuer title comes from the AID-derived context; the
-    // system-owner mints "on behalf of" a manager grant (records 'manager').
-    const issuerTitle =
-      (ctx.governanceTitle || '').toLowerCase() === 'chief-of-staff' ? 'chief-of-staff' : 'manager'
+    // Build the token. The issuer title comes from the AID-derived context and is
+    // SIGNED, so it is the token's own claim about what authority minted it.
+    //
+    // The human owner records `user` (+ the SYSTEM_OWNER_ISSUER id), NOT `manager`.
+    // It used to record `manager`, which was wrong in both directions: it understated
+    // the owner's authority (a `user`-tier card approved by the owner would verify as
+    // "issuer rank 3 < required 4" — the one approval that must always hold, failing),
+    // and it left `issuer_agent_id: 'system-owner'` pointing at no registry row, so the
+    // issuer re-check denied it forever. Both were invisible while no operation was
+    // gated; the verifier surfaced them.
+    const callerTitle = (ctx.governanceTitle || '').toLowerCase()
+    const issuerTitle: PortfolioIssuerTitle = !ctx.agentId
+      ? 'user'
+      : callerTitle === 'chief-of-staff'
+        ? 'chief-of-staff'
+        : 'manager'
     const now = new Date()
 
     const ttlCeil = kind === 'approval' ? MAX_APPROVAL_TTL_SECONDS : MAX_MANDATE_TTL_SECONDS
@@ -146,7 +159,7 @@ export async function POST(
       // string compare, and "the mandate is forged" is the last verdict you want
       // to reach by accident.
       ...(targetTrddId ? { target_trdd_id: targetTrddId.toUpperCase() } : {}),
-      issuer_agent_id: ctx.agentId ?? 'system-owner',
+      issuer_agent_id: ctx.agentId ?? SYSTEM_OWNER_ISSUER,
       issuer_title: issuerTitle,
       ...(ctx.teamId ? { issuer_team_id: ctx.teamId } : {}),
       uses_remaining: uses,

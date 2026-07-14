@@ -122,6 +122,10 @@ Commands:
       --keyword K                Free-text match on title + body
       --zone Z                   proposals | tasks | archived | refused
   read <trdd-id>                 Print one TRDD (frontmatter + body)
+  verify <trdd-id>               Is this card's approval REAL? Checks the
+      --json                     host-signed, ledger-anchored token pinned to it —
+                                 not the (forgeable) prose in the file.
+                                 EXIT 0 = verified · 2 = NOT verified · 1 = error.
   edit <trdd-id> --set k=v ...   Edit frontmatter fields IN PLACE (no folder move)
   approve <trdd-id>              proposal → planned, git mv proposals/ → tasks/
       --approver W --tier N --rationale R
@@ -188,6 +192,57 @@ cmd_read() {
     local path="/api/trdd/${id}"
     [ -n "$agent" ] && path="${path}?agentId=$(_urlencode "$agent")"
     _api GET "$path"
+}
+
+# VERIFY a card's approval/mandate — the reason ai-maestro#47 exists.
+#
+# EXITS NON-ZERO WHEN THE APPROVAL DOES NOT VERIFY (2 = INVALID, distinct from
+# 1 = ERROR). That is the entire contract: it is what lets an agent handed a
+# mandate write
+#
+#     aimaestro-trdd.sh verify "$CARD" || { echo "unverified — refusing"; exit 1; }
+#
+# instead of believing a line of prose in a file that anyone with repo write can
+# type. A verifier that always exits 0 is not a verifier.
+cmd_verify() {
+    local id="${1:-}"; shift || true
+    _check_trdd_id "$id" || return 1
+    local agent="" as_json=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --agent) agent="$2"; shift 2 ;;
+            --json)  as_json=1;  shift ;;
+            *) echo "Error: unknown flag for 'verify': $1" >&2; return 1 ;;
+        esac
+    done
+    local path="/api/trdd/${id}/verify"
+    [ -n "$agent" ] && path="${path}?agentId=$(_urlencode "$agent")"
+
+    local out
+    out="$(_api GET "$path")" || return 1
+
+    if [ "$as_json" = "1" ]; then
+        printf '%s\n' "$out" | jq .
+    else
+        printf '%s\n' "$out" | jq -r '
+          if .verified then
+            "VERIFIED  TRDD-\(.trdd_id)",
+            (if .token_id then
+               "  approved by \(.issuer_agent_id) (\(.issuer_title)) — requires \(.min_approval_requirement)",
+               "  token \(.token_id): host-signed, ledger-anchored, pinned to this card"
+             else
+               "  \(.reasons[0] // "no approval required")"
+             end)
+          else
+            "UNVERIFIED  TRDD-\(.trdd_id)",
+            (.reasons[] | "  ✗ \(.)")
+          end'
+    fi
+
+    if [ "$(printf '%s' "$out" | jq -r '.verified // false')" = "true" ]; then
+        return 0
+    fi
+    return 2
 }
 
 cmd_edit() {
@@ -319,6 +374,7 @@ cmd_archive() {
 case "${1:-help}" in
     search)  shift; cmd_search "$@" ;;
     read)    shift; cmd_read "$@" ;;
+    verify)  shift; cmd_verify "$@" ;;
     edit)    shift; cmd_edit "$@" ;;
     approve) shift; _gate_verb approve rationale "$@" ;;
     refuse)  shift; _gate_verb refuse reason "$@" ;;

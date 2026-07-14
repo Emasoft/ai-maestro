@@ -106,7 +106,7 @@ export interface TrddAuthContext {
  * autonomous) have NO approval authority — they score 0 and may approve only a
  * `none`-tier TRDD, which by definition needs no approval at all.
  */
-const TRDD_AUTHORITY: Record<string, number> = {
+export const TRDD_AUTHORITY: Record<string, number> = {
   none: 0,
   orchestrator: 1,
   'chief-of-staff': 2,

@@ -20,6 +20,7 @@
 
 import type { AuthContext } from '@/lib/agent-auth'
 import type { PortfolioToken } from '@/types/portfolio'
+import { SYSTEM_OWNER_ISSUER } from '@/types/portfolio'
 import { findActiveTokens } from '@/lib/portfolio-store'
 import { verifyPortfolioToken } from '@/lib/portfolio-sign'
 import { ledgerHasIssue } from '@/lib/portfolio-ledger'
@@ -114,6 +115,14 @@ function scopeSatisfies(heldScope: string, requiredScope: string): boolean {
  * Synchronous registry read; fail closed on any error.
  */
 function issuerStillValid(token: PortfolioToken): boolean {
+  // The HUMAN OWNER has no registry row and no title to be demoted from, so the
+  // lookup below would find nothing and deny — silently making the owner's own
+  // approvals the only ones that can never verify. The host signature over the
+  // token (which already covers issuer_agent_id AND issuer_title) is what vouches
+  // for this branch: an attacker cannot claim it without the host key.
+  if (token.issuer_agent_id === SYSTEM_OWNER_ISSUER) {
+    return token.issuer_title === 'user'
+  }
   try {
     // Lazy CommonJS require (sync, inside this sync guard) to avoid a circular
     // import with agent-registry. (@typescript-eslint is not loaded by the current

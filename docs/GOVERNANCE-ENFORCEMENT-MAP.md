@@ -44,7 +44,7 @@ Row format is fixed so a regex parses each line:
 | R3.3 | ENFORCED | services/element-management-service.ts:2304-2309 | — |
 | R3.4 | ENFORCED | lib/team-registry.ts:133-138 | — |
 | R3.5 | ENFORCED | services/governance-service.ts:66-83 | — |
-| R3.6 | ENFORCED | lib/authorization.ts:321-326 | — |
+| R3.6 | ENFORCED | lib/authorization.ts:321-326 | tests/unit/headless-router-auth-mirror.test.ts |
 | R3.7 | ENFORCED | lib/communication-graph.ts:98 | — |
 | R3.8 | CONTRADICTED | — | — |
 | R3.9 | ENFORCED | lib/authorization.ts:285 | — |
@@ -94,7 +94,7 @@ Row format is fixed so a regex parses each line:
 | R7.8 | ENFORCED | components/teams/TeamOverviewSection.tsx | — |
 | R7.9 | ENFORCED | hooks/useGovernance.ts:48 | — |
 | R8.1 | ENFORCED | lib/team-registry.ts:306 | — |
-| R8.2 | ENFORCED | app/api/teams/[id]/route.ts:115 | — |
+| R8.2 | ENFORCED | app/api/teams/[id]/route.ts:115, services/headless-router.ts:2936 | tests/unit/headless-router-auth-mirror.test.ts |
 | R8.3 | ENFORCED | services/element-management-service.ts:6183-6205 | — |
 | R8.4 | ENFORCED | lib/authorization.ts:580-592 | — |
 | R9.1 | ENFORCED | services/teams-service.ts:279-282 | — |
@@ -115,7 +115,7 @@ Row format is fixed so a regex parses each line:
 | R10.3 | ENFORCED | lib/authorization.ts:456-466 | — |
 | R10.4 | CONTRADICTED | — | — |
 | R10.5 | ENFORCED | services/agents-core-service.ts:2019-2028 | — |
-| R10.6 | ENFORCED | app/api/sessions/[id]/restart/route.ts:88-91 | — |
+| R10.6 | ENFORCED | app/api/sessions/[id]/restart/route.ts:97-107, services/headless-router.ts:919 | — |
 | R10.7 | UNENFORCED | — | — |
 | R11.1 | CONTRADICTED | — | — |
 | R11.2 | ENFORCED | lib/ecosystem-constants.ts:330 | — |

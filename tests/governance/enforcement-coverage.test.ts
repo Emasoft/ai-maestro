@@ -63,12 +63,14 @@ const UNAUDITED_RULES = new Set<number>([
  * until you either write the test or lower nothing (you cannot). The pressure to prove every
  * guard is real and permanent, but it is applied as a monotone decrease, not a false cliff.
  *
- * Set to the actual count from the 2026-07-14 audit: of 141 ENFORCED rules, 136 cite a real
- * guard but name no adversarial test that watches it refuse the violation, and only 5 do. That
- * 136 is the debt this ratchet now caps. It may ONLY fall — write a refusal test for an enforced
- * rule, drop this number; the test prints the live count so you always know the new floor.
+ * Set from the 2026-07-14 audit: of 141 ENFORCED rules, 136 cited a real guard but no adversarial
+ * test. The headless-parity fixes (commit 1f1a53f1) then added tests proving the team-update
+ * manage-team gate (R3.6) and the strict-body / field-strip guard (R8.2) in the delegated headless
+ * path, paying the debt down to 134 (7 ENFORCED rules now carry a refusal test). It may ONLY fall —
+ * write a refusal test for an enforced rule, drop this number; the test prints the live count so
+ * you always know the new floor.
  */
-const MAX_ENFORCED_WITHOUT_TEST = 136
+const MAX_ENFORCED_WITHOUT_TEST = 134
 
 /** Verdicts a map row may carry. */
 const VERDICTS = [

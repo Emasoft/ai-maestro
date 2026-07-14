@@ -15,15 +15,23 @@ effort: medium
 release-via: none
 relevant-rules: [17, 23, 32]
 labels: [agents, lifecycle, script-layer, janitor, fleet]
-blocked-by: [D5XDT49I]
-pre-block-column: proposal
 ---
 
 # A fleet-wide stop and restart verb on the script layer so the janitor can cycle every agent
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-14
 
-**BLOCKED on `TRDD-D5XDT49I` — and the block is the point, not an obstacle.** A
+> **Frontmatter correction (2026-07-14).** This card carried `blocked-by: [D5XDT49I]` while
+> sitting in `design/proposals/` as `column: proposal`, and the corpus linter was right to
+> reject it: `blocked` is a WORKING column (zone `tasks`), so "a blocked proposal" is a state
+> the board has no square for. It is not a schema nit — **a PROPOSAL is not in the pipeline, so
+> nothing in the pipeline can be blocking it.** It is PENDING, which is a different thing:
+> pending on a human's decision, not on another card's completion. The dependency below is
+> real and is recorded from the other side, on `TRDD-D5XDT49I`'s `blocks: [SB5I53K1]` — one
+> greppable edge, stated once, on the card that can actually act.
+> **On approval, this card enters `blocked` (pre-block-column: `planned`) until D5XDT49I lands.**
+
+**DEPENDS on `TRDD-D5XDT49I` — and the dependency is the point, not an obstacle.** A
 `restart --all` that silently wipes every agent's conversation is *worse* than having no verb
 at all: it turns a recoverable annoyance (a human forgets to restart an agent) into an
 irreversible, one-command, fleet-wide data loss. Do NOT ship this verb until a restart

@@ -866,6 +866,19 @@ const routes: Route[] = [
     const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const sessionName = decodeURIComponent(params.id)
+    // TRDD-HGE9T6VT / TRDD-BF3JN4TL (R42): AUTHENTICATION IS NOT AUTHORIZATION.
+    // SVC2-MAJ-12 added the authenticate() above and stopped there — so in
+    // headless mode ANY authenticated agent could /exit the MANAGER and get a 200,
+    // while the SAME request in full mode was 403'd by the Next.js route's
+    // authorize(). Verified exploitable. 401 answers "who are you"; only 403
+    // answers "may you".
+    //
+    // Calling the SAME authorize() the Next.js route calls reproduces its decision
+    // by construction (drift-free) — and it now carries R42: self-only. Passing
+    // `agent?.id` (possibly undefined) is deliberate — see the /stop route.
+    const stopTarget = getAgentBySession(sessionName)
+    const stopAuthz = authorize(auth, 'send-command', stopTarget?.id)
+    if (!stopAuthz.allowed) { sendJson(res, 403, { error: stopAuthz.reason || 'Forbidden' }); return }
     try {
       // BUG-3 fix: mirror the 3-command sequence from the Next.js stop route
       // Ctrl+C clears any partial input, -l flag sends literal text (not key names)
@@ -884,6 +897,12 @@ const routes: Route[] = [
     if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
     const sessionName = decodeURIComponent(params.id)
     const agent = getAgentBySession(sessionName)
+
+    // TRDD-HGE9T6VT / TRDD-BF3JN4TL (R42): same missing-authz hole as /stop above —
+    // this route was authenticate-only, so headless mode 200'd a restart that full
+    // mode 403'd. Same authorize() as the Next.js route, so the two modes cannot drift.
+    const restartAuthz = authorize(auth, 'restart-session', agent?.id)
+    if (!restartAuthz.allowed) { sendJson(res, 403, { error: restartAuthz.reason || 'Forbidden' }); return }
 
     let body: { program?: string; programArgs?: string } = {}
     try { body = await readJsonBody(req) } catch { /* optional body */ }
@@ -1225,6 +1244,23 @@ const routes: Route[] = [
     }))
   }},
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/chat$/, paramNames: ['id'], handler: async (req, res, params) => {
+    // TRDD-BF3JN4TL (R42) — this handler had NO auth call AT ALL, not even
+    // authenticateAgent. It ends in `runtime.sendKeys(session, message, {literal,
+    // enter})` (services/agents-chat-service.ts): it types arbitrary text into a
+    // live agent's pane and presses Enter. The Next.js twin carries BOTH checks
+    // (app/api/agents/[id]/chat/route.ts) — so in headless mode the single most
+    // direct command-injection surface in the product was reachable by ANY caller
+    // that could open the port, on ANY agent, with no credential whatsoever.
+    // It is the route nobody guarded because it is called "chat".
+    //
+    // `sendChatMessage` does NOT authorize internally (unlike sendCommand and
+    // sendAgentSessionCommand, which both run their own Gate 0 — which is why
+    // those two headless routes inherit R42 for free and this one did not). The
+    // check therefore has to live here, mirroring the Next.js route exactly.
+    const auth = authenticateAgent(getHeader(req, 'Authorization'), getHeader(req, 'X-Agent-Id'), getHeader(req, 'Cookie'))
+    if (auth.error) { sendJson(res, auth.status || 401, { error: auth.error }); return }
+    const chatAuthz = authorize(auth, 'send-command', params.id)
+    if (!chatAuthz.allowed) { sendJson(res, 403, { error: chatAuthz.reason || 'Forbidden' }); return }
     const body = await readJsonBody(req)
     sendServiceResult(res, await sendChatMessage(params.id, body.message))
   }},

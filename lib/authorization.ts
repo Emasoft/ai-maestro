@@ -9,6 +9,12 @@
  *   MANAGER → all allowed
  *   CHIEF-OF-STAFF → own team agents only
  *   Others → self only
+ *
+ * …with ONE hierarchy-independent exception, and it is deliberately the first
+ * rule you read here: R42 (USER mandate, 2026-07-14). No agent may DRIVE
+ * another agent's session — not a MANAGER, not a CHIEF-OF-STAFF. See
+ * DRIVE_ACTIONS below. The hierarchy above governs who may act ON an agent;
+ * it never governs who may act AS one.
  */
 
 import type { AgentAuthResult } from './agent-auth'
@@ -155,6 +161,51 @@ function agentAuthority(title: string | undefined | null): number {
 const SELF_DRIVE_ACTIONS: ReadonlySet<AuthAction> = new Set<AuthAction>([
   'send-command',
   'hibernate-agent',
+])
+
+/**
+ * R42 — the actions that DRIVE a running agent's session. No agent may perform
+ * one of these on ANOTHER agent. No title is exempt: not CHIEF-OF-STAFF, not
+ * MANAGER. (USER mandate, 2026-07-14 — TRDD-BF3JN4TL, docs/GOVERNANCE-RULES.md
+ * R42.)
+ *
+ * WHY it is absolute, and why it outranks the title hierarchy: a MESSAGE lands
+ * in an inbox and the recipient decides whether to act on it. An INJECTED
+ * command IS the recipient's own action — it bypasses the victim's judgment,
+ * its rules, and its governance title. One agent typing into another's pane can
+ * make it do anything the victim is permitted to do, which makes every other
+ * rule in the system advisory: the R6 comm graph is only a boundary if messaging
+ * is the ONLY channel; R26 identity-immutability means nothing if I can type
+ * into your session; R30's mandate means nothing if I can make the MANAGER type
+ * it for me. So the capability is not restricted — it is REVOKED.
+ *
+ * Messaging (AMP, governed by the R6 comm graph) is the only channel of
+ * agent-to-agent influence. A MANAGER that needs an agent to act ASKS it.
+ *
+ * The boundary is DRIVE, not authority, and three things stay on the other side
+ * of it — do not fold them in here:
+ *   • CONFIGURATION (R42.6) — 'modify-agent', 'change-title', 'manage-skills'.
+ *     MANAGER/COS still reconfigure an agent's skills, plugins, team, title.
+ *     Configuring an agent is not driving it: it changes what the agent IS, and
+ *     the agent's own judgment still runs on top of the new configuration.
+ *   • LIFECYCLE — 'hibernate-agent', 'wake-agent', 'delete-session'. These stop
+ *     or start a process; they never make the victim ACT. R9/R10/R11 grant them
+ *     to MANAGER (any) and COS (own team), and R42 does not touch that.
+ *   • SELF-drive — an agent driving its OWN surface (the janitor's `/compact`,
+ *     answering its own prompt). That is SELF_DRIVE_ACTIONS above, and it is
+ *     exactly what the `targetAgentId !== auth.agentId` test preserves.
+ *
+ * ⚠ HONEST LIMIT — this closes the API, NOT the tmux channel. Every agent runs
+ * under one OS uid, so `tmux send-keys -t <other-agent>` still succeeds and no
+ * in-process guard can stop it. R42 therefore ships as API-enforced +
+ * rule-mandated (the directive seeded read-only into every agent workdir's
+ * .claude/rules/) — that is tamper-EVIDENT, not tamper-PROOF. Never describe it
+ * as a sandbox. Real containment needs OS-level isolation (TRDD-BF3JN4TL §
+ * honest limit; TRDD-a1019073).
+ */
+const DRIVE_ACTIONS: ReadonlySet<AuthAction> = new Set<AuthAction>([
+  'send-command',
+  'restart-session',
 ])
 
 // ============================================================================
@@ -427,6 +478,30 @@ export function authorize(
         const unknown: never = trdd.verb
         return { allowed: false, reason: `Unknown TRDD verb: ${String(unknown)}` }
       }
+    }
+  }
+
+  // ── R42: no agent may DRIVE another agent ───────────────────
+  // The USER's absolute rule (2026-07-14, TRDD-BF3JN4TL). See DRIVE_ACTIONS for
+  // the full argument. This MUST sit above the general "MANAGER → always
+  // allowed" and the COS own-team grant below — those are precisely the two
+  // titles it revokes, and it is the only rule here that binds a MANAGER.
+  //
+  // Fails CLOSED on an unresolved target: `undefined !== auth.agentId` denies.
+  // That matters — the session routes resolve `[id]` (a tmux session NAME) to an
+  // agent id via a registry read, and a stale/unknown session name yields
+  // `undefined`. "We could not prove this is you" must never read as "it is you".
+  //
+  // The human/system-owner never reaches this line (granted at `!auth.agentId`
+  // above), so the caller here is provably an AGENT. The USER driving an agent
+  // from the dashboard — including the chat box that carries the MANAGER its
+  // orders — is unaffected.
+  if (DRIVE_ACTIONS.has(action) && targetAgentId !== auth.agentId) {
+    return {
+      allowed: false,
+      reason:
+        `R42: no agent may ${action} on another agent — not even a MANAGER or CHIEF-OF-STAFF. ` +
+        `Messaging is the only channel of agent-to-agent influence: ask, never inject.`,
     }
   }
 

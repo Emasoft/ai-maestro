@@ -92,11 +92,21 @@ describe('an agent may not type into another agent\'s terminal via /chat', () =>
     expect(res.status).toBe(403)
   })
 
-  it('a MANAGER may chat any agent', async () => {
+  it('a MANAGER chatting ANOTHER agent is refused, and nothing is typed (R42 — was 200)', async () => {
+    // INVERTED by R42 (TRDD-BF3JN4TL, USER mandate 2026-07-14). This assertion
+    // used to read "a MANAGER may chat any agent" and expect 200.
+    //
+    // It is the load-bearing case, and it is the one everybody assumes is exempt.
+    // /chat ends in `sendKeys(session, message, {literal, enter})` — it types into
+    // a live pane and presses Enter. A MANAGER doing that is not *asking* the
+    // agent anything: the message becomes the agent's OWN action, bypassing its
+    // judgment, its rules and its title. If any title keeps that power, the R6
+    // comm graph stops being a boundary and R30's mandate stops meaning anything,
+    // because whoever can drive the MANAGER has the MANAGER's authority.
     as({ agentId: MANAGER, governanceTitle: 'manager', teamId: null })
     const res = await chat(TARGET)
-    expect(res.status).toBe(200)
-    expect(mockChat.sendChatMessage).toHaveBeenCalledWith(TARGET, 'echo hi')
+    expect(res.status).toBe(403)
+    expect(mockChat.sendChatMessage).not.toHaveBeenCalled()
   })
 
   it('an agent may chat ITSELF — self-drive, it can already type in its own pane', async () => {

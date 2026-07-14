@@ -64,10 +64,15 @@ export async function GET(
  *
  * Deliberately NOT classified strict: the dashboard's chat box is the human
  * typing to their own agent, and a sudo prompt per message would be absurd.
- * `authorize()` grants the system-owner, so the UI is unaffected; an agent is
- * now held to the same matrix as `PATCH /api/agents/[id]/session` — MANAGER
- * anywhere, COS in-team, and itself (self-drive: an agent can already type into
- * its own pane).
+ * `authorize()` grants the system-owner, so the UI is unaffected — including the
+ * chat box that carries the MANAGER its orders from the USER.
+ *
+ * TRDD-BF3JN4TL (R42, USER mandate 2026-07-14): an AGENT is held to the
+ * `send-command` matrix, which is now SELF-ONLY. It may type into its own pane
+ * (it can already do that); it may type into NOBODY else's — not a MANAGER into
+ * a MEMBER's, not a COS into its own team's. Messaging is the only channel of
+ * agent-to-agent influence. The earlier "MANAGER anywhere, COS in-team" grant is
+ * SUPERSEDED.
  */
 export async function POST(
   request: NextRequest,

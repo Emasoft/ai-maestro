@@ -100,12 +100,22 @@ describe('an agent may not cancel commands queued on OTHER agents', () => {
     expect(mockQueue.cancelEntry).not.toHaveBeenCalled()
   })
 
-  it('a MANAGER may cancel on any agent', async () => {
+  it('a MANAGER cancelling on ANOTHER agent is refused (R42 — was 200)', async () => {
+    // INVERTED by R42 (TRDD-BF3JN4TL, USER mandate 2026-07-14). This read "a
+    // MANAGER may cancel on any agent" and expected 200.
+    //
+    // The cross-agent branch of this route is the `send-command` matrix, and R42
+    // made that matrix SELF-ONLY — so another agent's queue is no longer any
+    // agent's to touch. Nothing is stranded by this: a MANAGER can no longer
+    // ENQUEUE on another agent either, so there is no longer a legitimate
+    // MANAGER-owned entry sitting in a peer's queue for it to retract. Any
+    // pre-R42 leftover is the system-owner's to clear from the dashboard — which
+    // the next test proves still works.
     as({ agentId: MANAGER, governanceTitle: 'manager', teamId: null })
     entryQueuedBy(MANAGER, MEMBER)
     const res = await cancel(MEMBER)
-    expect(res.status).toBe(200)
-    expect(mockQueue.cancelEntry).toHaveBeenCalledWith(MEMBER, ENTRY)
+    expect(res.status).toBe(403)
+    expect(mockQueue.cancelEntry).not.toHaveBeenCalled()
   })
 
   it('the system owner (web UI, no agentId) may cancel', async () => {

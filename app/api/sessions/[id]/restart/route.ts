@@ -84,11 +84,14 @@ export async function POST(
   // Look up the agent's stored program and args from the registry
   const agent = getAgentBySession(sessionName)
 
-  if (agent) {
-    const authz = authorize(auth, 'restart-session', agent.id)
-    if (!authz.allowed) {
-      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
-    }
+  // TRDD-BF3JN4TL (R42): authorize UNCONDITIONALLY — see the identical note in
+  // the /stop route. The old `if (agent)` guard skipped RBAC whenever the session
+  // name resolved to no registry agent (a fail-OPEN). `undefined` is the correct
+  // input: the system-owner is granted before the target is consulted, and an
+  // AGENT is denied unless the target is provably itself.
+  const authz = authorize(auth, 'restart-session', agent?.id)
+  if (!authz.allowed) {
+    return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
   }
 
   // Manager gate: team agents cannot restart without a MANAGER on the host

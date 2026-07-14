@@ -107,7 +107,7 @@ vi.mock('@/lib/agent-registry', () => ({
 }))
 
 import { issueGovernanceToken } from '@/lib/aid-token'
-import { authenticateFromRequest, buildAuthContext } from '@/lib/agent-auth'
+import { authenticateFromRequest, buildAuthContext, type AgentAuthResult } from '@/lib/agent-auth'
 import { authorize } from '@/lib/authorization'
 import { ChangeTitle } from '@/services/element-management-service'
 
@@ -241,29 +241,114 @@ describe('TRDD-D3RP7KQZ — an agent may drive its own surface', () => {
     expect(authorize(asMember(), 'hibernate-agent', 'member-a1').allowed).toBe(true)
   })
 
-  it('MEMBER sending a command to ANOTHER agent is still DENIED', () => {
+  it('MEMBER sending a command to ANOTHER agent is DENIED', () => {
     // The self-drive exemption must not become a general send-command grant:
     // driving your own terminal says nothing about driving a teammate's.
     const decision = authorize(asMember(), 'send-command', 'member-a2')
     expect(decision.allowed).toBe(false)
-    expect(decision.reason).toMatch(/other agents/i)
+    expect(decision.reason).toMatch(/^R42:/)
   })
+})
 
-  it('CHIEF-OF-STAFF driving an agent in its OWN team is ALLOWED', () => {
-    const auth = authenticateFromRequest(requestWith({ Authorization: `Bearer ${cosAToken}` }))
-    expect(authorize(auth, 'send-command', 'member-a2').allowed).toBe(true)
-  })
+/**
+ * R42 — NO AGENT MAY DRIVE ANOTHER AGENT (USER mandate, 2026-07-14).
+ * TRDD-BF3JN4TL · docs/GOVERNANCE-RULES.md R42.
+ *
+ * THIS BLOCK SUPERSEDES three assertions that used to live in the D3RP7KQZ
+ * describe above — "COS driving an agent in its OWN team is ALLOWED", "COS
+ * driving an agent OUTSIDE its team is DENIED" (denied for the wrong reason
+ * now), and "MANAGER driving any agent is ALLOWED". Those encoded the policy
+ * R42 revokes. They are not deleted quietly: they are INVERTED here, so the
+ * suite states the new rule as loudly as it once stated the old one.
+ *
+ * These are ADVERSARIAL tests, and they have to be. A missing authorization
+ * guard produces a SUCCESS, not an error — so a happy-path suite is
+ * constitutionally blind to one, and every hole R42 closes had been live for
+ * months under a fully green test run. The only test that can prove a
+ * prohibition is one that ATTEMPTS the forbidden act and asserts the REFUSAL.
+ *
+ * The MANAGER case is the load-bearing one: it is the title everyone assumes is
+ * exempt, and it is the title whose exemption would make the rule meaningless —
+ * an agent that can make the MANAGER type on its behalf has the MANAGER's
+ * authority without ever holding it.
+ */
+describe('R42 — no agent may drive another agent (not even MANAGER or COS)', () => {
+  const DRIVE_ACTIONS = ['send-command', 'restart-session'] as const
 
-  it('CHIEF-OF-STAFF driving an agent OUTSIDE its team is DENIED', () => {
-    const auth = authenticateFromRequest(requestWith({ Authorization: `Bearer ${cosAToken}` }))
-    const decision = authorize(auth, 'send-command', 'member-b1')
+  const asManager = () => authenticateFromRequest(requestWith({ Authorization: `Bearer ${managerToken}` }))
+  const asCosA = () => authenticateFromRequest(requestWith({ Authorization: `Bearer ${cosAToken}` }))
+  const asMember = () => authenticateFromRequest(requestWith({ Authorization: `Bearer ${memberToken}` }))
+
+  it.each(DRIVE_ACTIONS)('MANAGER attempting "%s" on ANOTHER agent is DENIED', (action) => {
+    const decision = authorize(asManager(), action, 'member-b1')
     expect(decision.allowed).toBe(false)
-    expect(decision.reason).toMatch(/own team/i)
+    expect(decision.reason).toMatch(/^R42:/)
   })
 
-  it('MANAGER driving any agent is ALLOWED', () => {
-    const auth = authenticateFromRequest(requestWith({ Authorization: `Bearer ${managerToken}` }))
-    expect(authorize(auth, 'send-command', 'member-b1').allowed).toBe(true)
+  it.each(DRIVE_ACTIONS)('CHIEF-OF-STAFF attempting "%s" on its OWN-TEAM agent is DENIED', (action) => {
+    // The sharpest inversion: this exact call was ALLOWED before R42. A COS
+    // owning its team is not a licence to act AS its members.
+    const decision = authorize(asCosA(), action, 'member-a2')
+    expect(decision.allowed).toBe(false)
+    expect(decision.reason).toMatch(/^R42:/)
+  })
+
+  it.each(DRIVE_ACTIONS)('MEMBER attempting "%s" on a peer is DENIED', (action) => {
+    expect(authorize(asMember(), action, 'member-a2').allowed).toBe(false)
+  })
+
+  it.each(DRIVE_ACTIONS)('an UNRESOLVED target for "%s" FAILS CLOSED', (action) => {
+    // The session routes resolve `[id]` (a tmux session NAME) to an agent id via
+    // a registry read; a drifted/unknown name yields undefined. If that read as
+    // "no target ⇒ no restriction", renaming a session would bypass R42 outright.
+    // "We could not prove this is you" must never read as "it is you".
+    expect(authorize(asManager(), action, undefined).allowed).toBe(false)
+    expect(authorize(asMember(), action, undefined).allowed).toBe(false)
+  })
+
+  it('SELF-drive must NOT regress — an agent may still send-command to ITSELF', () => {
+    // R42.4. This is what the janitor does (`/compact`, `/reload-plugins`), and
+    // it grants an agent nothing it could not already do by typing into its own
+    // terminal. A fix that closed the cross-agent path by breaking this one
+    // would have broken the product to enforce the rule.
+    expect(authorize(asMember(), 'send-command', 'member-a1').allowed).toBe(true)
+    expect(authorize(asManager(), 'send-command', 'manager-1').allowed).toBe(true)
+  })
+
+  it('CONFIGURATION authority must NOT regress — MANAGER may still reconfigure another agent', () => {
+    // R42.6. The boundary is DRIVE, not authority: configuring an agent changes
+    // what it IS and leaves its judgment intact; driving it replaces its judgment
+    // with yours. A fix that revoked configuration too would have gutted
+    // governance (R9/R10/R11) in the name of protecting it.
+    expect(authorize(asManager(), 'modify-agent', 'member-b1').allowed).toBe(true)
+    expect(authorize(asManager(), 'change-title', 'member-b1').allowed).toBe(true)
+    expect(authorize(asManager(), 'manage-skills', 'member-b1').allowed).toBe(true)
+  })
+
+  it('LIFECYCLE authority must NOT regress — MANAGER may still hibernate/wake another agent', () => {
+    // Hibernate/wake stop or start a PROCESS; they never make the victim ACT.
+    // R42 is about who may speak with an agent's own voice, not about who may
+    // turn it off.
+    expect(authorize(asManager(), 'hibernate-agent', 'member-b1').allowed).toBe(true)
+    expect(authorize(asManager(), 'wake-agent', 'member-b1').allowed).toBe(true)
+  })
+
+  it('the system-owner (the human) is UNAFFECTED — the dashboard still drives agents', () => {
+    // R42 binds AGENTS. The USER typing into the MANAGER's chat box is the
+    // ENTRY POINT of the whole fleet; a rule that closed it would have made the
+    // product unusable rather than safe.
+    //
+    // The system-owner's shape AT THE authorize() BOUNDARY is `{}` — no error,
+    // no agentId (lib/agent-auth.ts `authenticateAgent`, Case 1: a web session
+    // with the user-authority model off). We construct it directly rather than
+    // via authenticateFromRequest because this suite mints real AID Bearer
+    // tokens and has no session-cookie fixture; and authorize()'s contract is
+    // over the AgentAuthResult, not over how it was obtained. A header-less
+    // request would authenticate to an ERROR, which is a different case
+    // entirely (it is already covered above, and it fails closed).
+    const human = {} as AgentAuthResult
+    expect(authorize(human, 'send-command', 'manager-1').allowed).toBe(true)
+    expect(authorize(human, 'restart-session', 'member-b1').allowed).toBe(true)
   })
 })
 

@@ -1,9 +1,9 @@
 ---
 trdd-id: BF3JN4TL
 title: Revoke cross-agent command injection entirely (R42) — messaging becomes the only channel
-column: planned
+column: testing
 created: 2026-07-14T16:20:21+0200
-updated: 2026-07-14T16:20:21+0200
+updated: 2026-07-14T17:20:00+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: security
@@ -26,17 +26,53 @@ blocks: [HGE9T6VT]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-14
 
-**USER MANDATE, already approved. This SUPERSEDES the narrower fix in `TRDD-HGE9T6VT`.**
-HGE9T6VT proposed adding the missing `authorize()` to two headless handlers so that only
-MANAGER / own-team COS could drive another agent. **R42 says no agent may drive another agent
-AT ALL** — so the correct fix is not to restore the guard, it is to **delete the capability**.
+**CODE LANDED. R42 is enforced at the API in BOTH server modes.** Full suite green (176 files
+/ 2727 tests), `tsc --noEmit` clean. What remains is the *soak*: nothing has run against it yet
+(the fleet is stopped), so the operational-risk item at the bottom — "enumerate the flows that
+depended on a MANAGER/COS driving a pane" — is still open and is the reason this card is not
+`complete`.
 
-- **NEXT ACTION:** make `send-command` and `restart-session` **self-only** in
-  `lib/authorization.ts`. That single change closes all six routes in both server modes at
-  once, and makes HGE9T6VT's headless hole unreachable rather than merely guarded.
-- **DO NOT** ship the "add authorize() to headless" fix on its own — it would re-establish the
-  MANAGER/COS cross-agent path that R42 revokes, and it would look like a completed security
-  fix while doing so.
+**SUPERSEDED — do NOT carry forward:**
+
+- ~~"That single change closes all six routes in both server modes at once, and makes
+  HGE9T6VT's headless hole unreachable rather than merely guarded."~~ **This was WRONG, and it
+  was the most dangerous sentence on the card.** The headless router does not call the Next.js
+  route handlers — it REIMPLEMENTS `/stop` and `/restart` with raw `execSync("tmux send-keys
+  …")` and calls only `authenticateAgent`. A rule added to `lib/authorization.ts` cannot bind a
+  code path that never calls `authorize()`. Had the plan been executed as written, R42 would
+  have shipped enforced in full mode, unenforced in headless, and **green** — the exact
+  authn-substituting-for-authz shape the audit exists to catch, reintroduced by the fix for it.
+  Caught only by reading `services/headless-router.ts:864` instead of trusting the card.
+  **Lesson: a claim about what a central edit "closes" is a claim about the CALL GRAPH. Verify
+  the call graph, do not infer it from the architecture you expect.**
+- ~~`DO NOT ship the "add authorize() to headless" fix on its own.`~~ Correctly stated at the
+  time (it would have re-established the MANAGER/COS path R42 revokes), now moot: the R42 rule
+  landed FIRST, so wiring `authorize()` into headless lands R42 there rather than the old grant.
+  Both halves shipped together, in that order, deliberately.
+
+**What shipped (see `## Implementation` below for the file-by-file):**
+
+1. `lib/authorization.ts` — `DRIVE_ACTIONS = {send-command, restart-session}`; any caller whose
+   `targetAgentId !== auth.agentId` is DENIED, **for every title, MANAGER included**. Fails
+   CLOSED on an unresolved target.
+2. Headless `/stop`, `/restart`, **and `/chat`** now authorize. `/chat` had **no auth call at
+   all** — not even `authenticateAgent` — and it is the single most direct injection surface in
+   the product (`sendKeys(session, msg, {literal, enter})`). It was found by sweeping the
+   router for injection routes rather than by following the card. Worse than the bug the card
+   was written about, and adjacent to it.
+3. Both full-mode session routes had a **fail-OPEN**: `if (targetAgent) { authorize(…) }` — an
+   unresolvable session name SKIPPED RBAC entirely. Rename a session, bypass R42. Now
+   unconditional.
+4. `POST /api/agents/[id]/ensure-core` re-mapped `restart-session` → `modify-agent`. It is a
+   plugin *install* (configuration, R42.6), not a drive; the old label would have made
+   MANAGER/COS lose the R17 self-heal as collateral damage. Zero behaviour change.
+
+**The seam to NOT "harmonize" later:** `hibernate` also ends in a `sendKeys('/exit')`, and it
+stays MANAGER/COS-permitted. That is not an inconsistency with `/stop` being revoked — it is
+the DRIVE/LIFECYCLE line: hibernate injects ONE FIXED terminating key sequence and cannot make
+the victim *do* anything, whereas the send-command family carries arbitrary text into a live
+prompt. R9/R10/R11 grant hibernate/wake deliberately, and R31's freeze depends on it. Anyone
+who later "unifies" the two by re-opening `/stop` has reopened R42.
 
 ## The USER's ruling (verbatim, 2026-07-14)
 
@@ -150,6 +186,25 @@ risk is **operational**: if any real flow depends on the MANAGER or COS driving 
 it breaks the moment this ships. Enumerate those flows first — each must be re-expressed as a
 message, which is exactly the point of the rule, but it is real work and should be discovered
 now rather than in production.
+
+## Implementation
+
+| File | Change |
+|---|---|
+| `lib/authorization.ts` | `DRIVE_ACTIONS`; cross-agent drive DENIED for every title. Fails closed on an unresolved target. |
+| `lib/sudo-guard.ts` | `ensure-core` → `modify-agent` (config, not drive); stale policy comments corrected. |
+| `app/api/sessions/[id]/stop/route.ts` | authorize UNCONDITIONALLY (was fail-open on an unresolved session name). |
+| `app/api/sessions/[id]/restart/route.ts` | same fail-open closed. |
+| `app/api/agents/[id]/chat/route.ts` | doc comment: the MANAGER/COS grant is SUPERSEDED. |
+| `services/headless-router.ts` | `/stop` + `/restart` now authorize (TRDD-HGE9T6VT's hole); `/chat` now authenticates AND authorizes — it had NO auth call at all. |
+| `tests/authorization.test.ts` | the R42 adversarial block: MANAGER/COS refused; self-drive, configuration, lifecycle and the system-owner pinned as non-regressions. |
+| `tests/unit/{chat-send,queue-cancel}-authorization.test.ts` | the two "a MANAGER may …" assertions INVERTED, not deleted. |
+| `tests/unit/sudo-guard-strict-agent-coverage.test.ts` | "mapped" no longer proxied by "a MANAGER gets through" (R42 inverts that proxy); + the guard-layer R42 pin. |
+
+**Adversarial by construction, because it has to be.** A missing guard produces a SUCCESS, not
+an error, so a happy-path suite is *constitutionally blind* to one — every hole closed here was
+live for months under a fully green run. The only test that can prove a prohibition attempts the
+forbidden act and asserts the refusal. See `[[an-unenforced-rule-produces-a-success-not-an-error]]`.
 
 ## Approval log
 

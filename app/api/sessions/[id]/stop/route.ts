@@ -54,11 +54,21 @@ export async function POST(
   }
   const { getAgentBySession } = await import('@/lib/agent-registry')
   const targetAgent = getAgentBySession(sessionName)
-  if (targetAgent) {
-    const authz = authorize(auth, 'send-command', targetAgent.id)
-    if (!authz.allowed) {
-      return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
-    }
+  // TRDD-BF3JN4TL (R42): authorize UNCONDITIONALLY, even when the session name
+  // resolves to no registry agent. The old `if (targetAgent)` guard SKIPPED the
+  // check entirely on an unresolved name — so a session that had drifted out of
+  // registry sync could be /exit-ed by any authenticated agent. That is a
+  // fail-OPEN, and it is exactly the hole that would make R42 look enforced while
+  // it was not: rename a session, bypass the rule.
+  //
+  // Passing `undefined` is the correct, safe input: authorize() grants the
+  // system-owner before it ever looks at the target (so the dashboard is
+  // unaffected), and its R42 check denies an AGENT whose target is not provably
+  // itself — `undefined !== auth.agentId`. "We could not prove this is you" must
+  // never read as "it is you".
+  const authz = authorize(auth, 'send-command', targetAgent?.id)
+  if (!authz.allowed) {
+    return NextResponse.json({ error: authz.reason || 'Forbidden' }, { status: 403 })
   }
 
   // SCEN-013 fix: choose exit sequence based on the AI client. Claude Code uses

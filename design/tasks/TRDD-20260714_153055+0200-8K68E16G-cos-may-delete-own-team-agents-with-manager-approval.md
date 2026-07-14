@@ -1,9 +1,9 @@
 ---
 trdd-id: 8K68E16G
 title: A CHIEF-OF-STAFF may delete agents of its own team with MANAGER approval
-column: planned
+column: blocked
 created: 2026-07-14T15:30:55+0200
-updated: 2026-07-14T15:30:55+0200
+updated: 2026-07-14T17:05:00+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: feature
@@ -28,6 +28,14 @@ pre-block-column: planned
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-14
 
 **This is a USER MANDATE — it is already approved. Do not file it for approval; execute it.**
+
+> **Frontmatter correction (2026-07-14):** `column:` was `planned` while `blocked-by:` named a
+> live blocker — the corpus linter rejected it, correctly. A card that cannot proceed must SAY
+> so in the one field every board query reads: a `planned` card is *available to start*, and
+> this one is not. `pre-block-column: planned` was already set, so restoring it when F1SL03CK
+> lands is a one-field edit. Being approved and being unblocked are independent — a mandate is
+> born approved and can still be waiting on its prerequisite.
+
 It is BLOCKED on `TRDD-F1SL03CK` for a reason of substance, not sequencing: F1SL03CK builds
 the *approval mechanism* this rule depends on. Granting COS a delete power before the
 "ask the MANAGER first" half exists would ship the power without its condition.

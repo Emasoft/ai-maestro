@@ -344,7 +344,20 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   'POST /api/agents/[id]/transfer': { action: 'change-title', targetFromPathId: true },
   // TRDD-I75EMTK0: the "New Session" R17 self-heal route. Same shape as the
   // agent-UUID-targeted routes above — [id] is the agent, not a session name.
-  'POST /api/agents/[id]/ensure-core': { action: 'restart-session', targetFromPathId: true },
+  //
+  // TRDD-BF3JN4TL (R42): re-mapped from 'restart-session' to 'modify-agent'.
+  // Its handler runs ensureCorePluginInstalled — a PLUGIN (RE)INSTALL, i.e. a
+  // filesystem + registry write. It is CONFIGURATION, not a session drive: it
+  // never injects a keystroke into anyone's pane, and 'restart-session' was only
+  // ever a convenient label ("the caller will want to relaunch afterwards"), not
+  // a claim about what the route does. R42 revokes cross-agent DRIVE while R42.6
+  // explicitly preserves cross-agent CONFIGURATION, so leaving it on the drive
+  // action would have taken the R17 self-heal away from MANAGER/COS as collateral
+  // damage — a governance-legitimate operation lost to a mislabel.
+  // ZERO-REGRESSION: authorize() treats the two actions identically for every
+  // caller class here — self denied (neither is a SELF_DRIVE action), MANAGER
+  // (other) allowed, COS own-team allowed, everyone else denied.
+  'POST /api/agents/[id]/ensure-core': { action: 'modify-agent', targetFromPathId: true },
   'DELETE /api/agents/[id]/session': { action: 'delete-session', targetFromPathId: true },
   // TRDD-1LX5LMBD: team creation is a privileged operation (auto-creates an
   // agent + AID keypair + installs a role-plugin for the auto-COS) but was
@@ -370,10 +383,15 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   'DELETE /api/teams/[id]/orchestrator': { action: 'manage-team' },
   // TRDD-D3RP7KQZ (USER decision, 2026-07-09) — the agent-control surface.
   // These three DRIVE an agent's surface rather than change its configuration,
-  // so they share `send-command`: self is ALLOWED (SELF_DRIVE_ACTIONS in
-  // lib/authorization.ts), another agent needs MANAGER, or COS within its team.
-  // An agent enqueuing `/compact` on itself or painting its own panel is the
-  // primary use case — it is what the janitor does.
+  // so they share `send-command`.
+  //
+  // TRDD-BF3JN4TL / R42 (USER mandate, 2026-07-14) narrowed what that means:
+  // `send-command` is now SELF-ONLY. Self is ALLOWED (SELF_DRIVE_ACTIONS in
+  // lib/authorization.ts) — an agent enqueuing `/compact` on itself or painting
+  // its own panel is the primary use case, and it is what the janitor does.
+  // ANOTHER agent is DENIED for every title, MANAGER and own-team COS included:
+  // an injected command is the victim's own action, so it bypasses the victim's
+  // judgment entirely. Messaging is the only channel of agent-to-agent influence.
   //
   // CAUTION: unlike most entries here, `panel` has NO route-level authorize() of
   // its own, and `queue` has none at enqueue time (only later, on drain). For
@@ -386,8 +404,8 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   // arbitrary text straight into a live pane. Only its arbitrary-`command` branch
   // calls the guard (the curated `commandKey` allowlist branch stays open), so a
   // USER needs a fresh sudo token and an AGENT the same send-command matrix as
-  // queue (self-drive OK, another agent needs MANAGER / own-team COS). Without
-  // this entry the route would be strict-in-registry yet undeclared → the
+  // queue — which since R42 is SELF-ONLY (no title reaches another agent's pane).
+  // Without this entry the route would be strict-in-registry yet undeclared → the
   // coverage guardrail fails closed.
   'PATCH /api/agents/[id]/session': { action: 'send-command', targetFromPathId: true },
   // Configuration, not surface. PATCH is a router: it dispatches ChangeTitle /
@@ -403,7 +421,15 @@ const STRICT_AGENT_RULES: Record<string, StrictAgentRule> = {
   'POST /api/agents/role-plugins/install': { action: 'manage-skills' },
   'DELETE /api/agents/role-plugins/install': { action: 'manage-skills' },
   // Session routes — D1: `[id]` is a tmux SESSION name, resolved to an agentId
-  // inside the guard so an own-team COS restarting a session stays authorized.
+  // inside the guard. The resolution still matters under R42, but its purpose has
+  // INVERTED: it used to prove "the target is in the COS's team" (a grant); it now
+  // proves "the target IS the caller" (the only remaining grant). An unresolvable
+  // session name yields `undefined`, and authorize() denies — fail closed.
+  //
+  // R42: stop/restart do `tmux send-keys … C-c` + `-l '/exit'` + `Enter`. That is
+  // keystroke injection, whatever the route is named — so no agent may aim it at
+  // another agent. Killing a session at the PROCESS level is a different act and
+  // stays with MANAGER/COS: that is 'delete-session' / hibernate, below.
   'POST /api/sessions/[id]/stop': { action: 'restart-session', session: true },
   'POST /api/sessions/[id]/restart': { action: 'restart-session', session: true },
   'POST /api/sessions/[id]/kill': { action: 'delete-session', session: true },

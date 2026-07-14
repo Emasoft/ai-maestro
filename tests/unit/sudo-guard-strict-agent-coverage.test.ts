@@ -247,10 +247,62 @@ describe('strict-route agent-path coverage (TRDD-6A2I6ZO0)', () => {
       expect(AGENT_POLICY_PENDING.has(routeKey), `${routeKey} is still pending`).toBe(false)
 
       const [method, ...rest] = routeKey.split(' ')
-      // null ⇒ requireAidTitle allowed it outright. Any message here means the
-      // route resolved to a refusal — including the silent fall-through 403.
-      expect(await messageFor(method, rest.join(' ')), routeKey).toBeNull()
+      const message = await messageFor(method, rest.join(' '))
+
+      // "Mapped" means the guard reached a policy SOMEONE ACTUALLY WROTE — it
+      // either allowed the caller, or refused on a stated rule. What it must never
+      // be is one of the three no-decision refusals, which are how an undeclared
+      // route fails closed: silently, and indistinguishably from a real policy.
+      //
+      // This assertion used to be `toBeNull()` — i.e. "a MANAGER gets through" as a
+      // PROXY for "mapped". The proxy held only while a MANAGER was allowed on all
+      // four routes. R42 (TRDD-BF3JN4TL) revoked cross-agent drive, so the
+      // panel/queue/prompt-answer trio now REFUSES a MANAGER — on a decided rule,
+      // which is exactly what this test exists to confirm. A proxy that a policy
+      // change can invert was never testing what it claimed; assert the claim.
+      for (const noDecision of [UNDECLARED_MESSAGE, PENDING_MESSAGE, OWNER_ONLY_MESSAGE]) {
+        expect(message, routeKey).not.toBe(noDecision)
+      }
     }
+  })
+
+  it('R42: the guard refuses a MANAGER on every cross-agent DRIVE route, and still admits it on CONFIG', async () => {
+    // The R42 guarantee at the GUARD layer (TRDD-BF3JN4TL, USER mandate).
+    //
+    // Be precise about what this proves: `messageFor` calls requireAidTitle with no
+    // NextRequest, so the guard cannot resolve `[id]` and hands authorize() an
+    // UNDEFINED target. R42 fails closed on that — "we could not prove this is you"
+    // is not "it is you" — so a MANAGER is refused. That is the important half of
+    // the rule (an unresolvable tmux session name must not become a bypass), and it
+    // is the half a caller can actually reach by renaming a session. The
+    // genuinely-cross-agent case (a resolved target that is NOT the caller) is
+    // pinned at the authorize() boundary in tests/authorization.test.ts, where the
+    // identity fixtures exist.
+    //
+    // The config rows are not padding: they are what proves R42 cut along DRIVE and
+    // not along AUTHORITY. A "fix" that also revoked `modify-agent` would have
+    // gutted governance (R9/R10/R11) in the name of protecting it — and every drive
+    // assertion above would still have passed.
+    const DRIVE_ROUTES = [
+      'POST /api/agents/[id]/panel',
+      'POST /api/agents/[id]/queue',
+      'POST /api/agents/[id]/prompt/answer',
+      'PATCH /api/agents/[id]/session',
+      'POST /api/sessions/[id]/stop',
+      'POST /api/sessions/[id]/restart',
+    ]
+    for (const routeKey of DRIVE_ROUTES) {
+      const [method, ...rest] = routeKey.split(' ')
+      const message = await messageFor(method, rest.join(' '))
+      expect(message, `${routeKey} must refuse a MANAGER under R42`).toMatch(/^R42:/)
+    }
+
+    // CONFIGURATION (R42.6) — unchanged: a MANAGER still reconfigures other agents.
+    expect(await messageFor('PATCH', '/api/agents/[id]'), 'PATCH /api/agents/[id]').toBeNull()
+    expect(
+      await messageFor('POST', '/api/agents/[id]/ensure-core'),
+      'POST /api/agents/[id]/ensure-core',
+    ).toBeNull()
   })
 
   it('a genuinely unknown strict route still fails closed', async () => {

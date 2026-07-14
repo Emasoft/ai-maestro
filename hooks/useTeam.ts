@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Team } from '@/types/team'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface UseTeamResult {
   team: Team | null
@@ -12,6 +14,16 @@ interface UseTeamResult {
 }
 
 export function useTeam(teamId: string | null): UseTeamResult {
+  // SCEN-029 BUG-001 (2026-07-14): every mutating call below MUST go through
+  // sudoFetch. `PUT /api/teams/[id]` is classified "strict" in
+  // security-registry.json, and the route gates any body carrying a privileged
+  // field (`agentIds`, `githubProject`) behind requireSudoToken. A plain fetch()
+  // therefore gets a hard 403 `sudo_required` that NOTHING in the UI can recover
+  // from — which is exactly what happened: the team dashboard's "Add Agent"
+  // picker was completely non-functional (the row click 403'd and the failure was
+  // swallowed), so no agent could be added to a team from the team page at all.
+  // sudoFetch is what turns that 403 into the password modal + retry.
+  const { requestSudoToken } = useSudo()
   const [team, setTeam] = useState<Team | null>(null)
   const [loading, setLoading] = useState(!!teamId)  // Start true only when teamId is provided, preventing "Team not found" flash
   const [error, setError] = useState<string | null>(null)
@@ -87,11 +99,11 @@ export function useTeam(teamId: string | null): UseTeamResult {
       // team update from this hook to fail with HTTP 400 "Validation failed".
       // lastActivityAt is a server-side concern and should be updated by the API,
       // not dictated by the client.
-      const res = await fetch(`/api/teams/${teamId}`, {
+      const res = await sudoFetch(`/api/teams/${teamId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
-      })
+      }, requestSudoToken)
       if (!res.ok) {
         // CC-004: Don't call fetchTeam() here — the throw propagates to the catch block
         // which already calls fetchTeam() to revert the optimistic update
@@ -115,7 +127,7 @@ export function useTeam(teamId: string | null): UseTeamResult {
       await fetchTeam().catch(() => {})  // Revert optimistic update; ignore revert failures
       throw err
     }
-  }, [teamId, fetchTeam])
+  }, [teamId, fetchTeam, requestSudoToken])
 
   // CC-005: refreshTeam wraps fetchTeam with loading state for consistent UX
   // Stable reference via useCallback — inline closures in the return object create new

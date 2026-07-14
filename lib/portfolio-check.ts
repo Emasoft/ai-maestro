@@ -34,6 +34,14 @@ import { ledgerHasIssue } from '@/lib/portfolio-ledger'
 export const OPERATIONS_REQUIRING_TOKEN: Record<string, string> = {
   // EMPTY by default — see header. Do NOT add ops without the governance
   // decision (D2 / spec §7). Enabling an op here is the only behavior change.
+  //
+  // The v1 set (`CreateAgent: 'agent:create'`, `CreateTeam: 'team:create'`) is
+  // PROPOSED in TRDD-F1SL03CK and awaits a MANAGER decision. It is one line with a
+  // fleet-wide blast radius: it turns "a COS may create an agent" into "a COS may
+  // create an agent ONLY IF a MANAGER minted it a token saying so". That is a
+  // governance change dressed as a refactor, which is why it is a proposal and not
+  // a commit — and why ai-maestro#47, which asked for VERIFICATION, deliberately did
+  // not flip it. Read the TRDD before adding a key here.
 }
 
 /** Result of the granular match used by consume-after-success callers. */

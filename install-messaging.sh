@@ -678,7 +678,13 @@ if [ "$INSTALL_SCRIPTS" = true ]; then
         echo "  No old scripts found"
     fi
 
-    # Also install other AI Maestro tools (graph, memory, docs, agent management)
+    # Also install the rest of scripts/*.sh (the aimaestro-*/aid-* CLI + operator tools).
+    # NOTE: this used to claim "graph, memory, docs" — those scripts were deleted from the
+    # repo in b862c6b0 (TRDD-70a521d9, the RAG removal) and are NOT installed any more. The
+    # message stayed behind and became a lie; see docs/SCRIPT-MANIFEST.md §5. Because this
+    # loop only ever COPIES, a host that installed before b862c6b0 still carries the deleted
+    # scripts in ~/.local/bin as residue — which is exactly why a deployed bin dir must never
+    # be treated as the source of truth for what AI Maestro ships.
     echo ""
     print_info "Installing additional AI Maestro tools..."
 
@@ -701,7 +707,7 @@ if [ "$INSTALL_SCRIPTS" = true ]; then
     done
 
     echo ""
-    print_success "Installed $TOOL_COUNT additional tools (graph, memory, docs, agent management)"
+    print_success "Installed $TOOL_COUNT additional tools (agent management, identity, operator scripts)"
 
     # Install shell helpers
     echo ""

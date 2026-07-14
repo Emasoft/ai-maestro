@@ -23,9 +23,16 @@ The scripts live in **this repo** (`scripts/*.sh`), not in any plugin. A plugin
 that needs a call the layer does not offer does not reach past it — it asks for
 the script to gain a subcommand.
 
+> **The exhaustive inventory + the frozen signatures live in
+> [SCRIPT-MANIFEST.md](./SCRIPT-MANIFEST.md).** This file is the prose: why the
+> layer exists, what each main script *means*, and how authorization works. The
+> manifest is the contract: every script, every subcommand, every flag — plus the
+> scripts the plugins call that this repo does **not** ship (§5 there).
+
 ## The scripts
 
-Installed to `~/.local/bin/` and on `PATH`.
+Installed to `~/.local/bin/` and on `PATH`. This section covers the load-bearing
+ones; the manifest covers all 74.
 
 ### `aimaestro-session.sh` — drive an agent's terminal
 
@@ -165,19 +172,21 @@ agent's **own** id. Targeting *another* agent needs MANAGER, or CHIEF-OF-STAFF
 within its own team. Configuration — role plugin, extensions, MCP, hooks,
 sub-agents, title, team — is refused on self for every title, including MANAGER.
 
-### Two things that are NOT true yet
+The `aimaestro-trdd.sh` write verbs — `edit`, `approve`, `refuse`, `promote`,
+`archive` — **work for agents as of `d7531e53`** (TRDD-K2WJH7RF). They are governed
+by the `manage-trdd` AuthAction, whose matrix mirrors the approval tiers
+(`none < orchestrator < chief-of-staff < manager < user`): the required authority is
+read from the TRDD's own `min-approval-requirement:`, no agent may approve a
+`user`-tier TRDD, and **nobody may approve their own proposal** — MANAGER included.
+Until that landed they 403'd every agent with `agent_policy_undefined`, which made
+the CLI half a tool: read the board, never touch it.
 
-Documented here rather than discovered later:
+### One thing that is NOT true yet
 
-1. **The `aimaestro-trdd.sh` write verbs 403 for agents.** `edit`, `approve`,
-   `refuse`, `promote`, and `archive` are strict routes still sitting in
-   `AGENT_POLICY_PENDING` (`lib/sudo-guard.ts`) — they need a `manage-trdd`
-   AuthAction whose matrix mirrors the approval tiers. `search` and `read` work.
-   The refusal is explicit (`agent_policy_undefined`), not a silent failure.
-2. **There is no USER auth path in the scripts.** `scripts/shell-helpers/common.sh::get_auth_args`
-   emits only the AID bearer. A human running `aimaestro-panel.sh status <agent>`
-   from a terminal gets `401 auth_required`. Teaching `get_auth_args` about the
-   `aim_session` cookie is open work.
+**There is no USER auth path in the scripts.** `scripts/shell-helpers/common.sh::get_auth_args`
+emits only the AID bearer. A human running `aimaestro-panel.sh status <agent>` from a
+terminal gets `401 auth_required`. Teaching `get_auth_args` about the `aim_session`
+cookie is open work.
 
 ## How they reach `~/.local/bin/`
 

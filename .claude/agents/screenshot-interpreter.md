@@ -2,6 +2,7 @@
 name: screenshot-interpreter
 description: Opus vision specialist for ONE UI screenshot. Given an image path + one focused question, returns a CONCISE (≤5 line) factual answer about what is on screen — element presence, text content, layout/pixel regressions, canvas/chart contents, coordinates. Read-only, stateless, no browser, no reports. Invoked by the orchestrator (NOT nested-spawned) for the rare pixel-level question the scenario executor's accessibility-tree snapshot cannot answer. Keep invocations rare — the a11y tree answers almost everything.
 model: opus[1m]
+effort: low
 tools: Read, Glob
 color: violet
 ---

@@ -2,6 +2,7 @@
 name: scenario-runner
 description: Executes ONE UI scenario end-to-end in its own isolated forked context. Reads the scenario file at tests/scenarios/SCEN-NNN_*.scen.md, follows the 15 rules (0-14) in SCENARIOS_TESTS_RULES.md, drives the app UI via the dev-browser plugin (loaded via the dev-browser:dev-browser skill — sandboxed JS scripts piped to the dev-browser CLI; persistent named pages across invocations), applies FIX-AS-YOU-GO for any bug it finds, writes a structured report + authors each 11th-HOUR improvement proposal as its own TRDD-proposal file in design/proposals/ (Rule 11), and returns a 3-line summary. Invoked by the run-scenarios-batch skill OR directly by the user when they want to run one scenario. Accumulates cross-run knowledge in its project-scoped memory so repeated bug patterns are recognized instantly.
 model: opus[1m]
+effort: medium
 tools: Bash, Read, Write, Edit, Glob, Grep, Skill
 memory: project
 color: cyan

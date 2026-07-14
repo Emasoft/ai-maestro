@@ -168,7 +168,9 @@ import {
   listAllTeams,
   createNewTeam,
   getTeamById,
-  updateTeamById,
+  // updateTeamById removed — the PUT /api/teams/[id] handler now forwards through
+  // the hardened Next.js route (delegateNextRoute) so authorize('manage-team') +
+  // the zod .strict() body schema run in headless too (governance audit, 2026-07-14).
   // deleteTeamById removed — use DeleteTeam pipeline directly
   listTeamTasks,
   getTeamTask,
@@ -218,7 +220,7 @@ import { statePath, isCorePlugin } from '@/lib/ecosystem-constants'
 import { verifyHostAttestation } from '@/lib/host-keys'
 // Imports for chief-of-staff endpoint (mirrors app/api/teams/[id]/chief-of-staff/route.ts)
 import { verifyPassword, loadGovernance, getManagerId, isChiefOfStaffAnywhere, isManager, isChiefOfStaff } from '@/lib/governance'
-import { getTeam, updateTeam, TeamValidationException } from '@/lib/team-registry'
+import { getTeam, updateTeam, isAgentInAnyTeam, TeamValidationException } from '@/lib/team-registry'
 import { getAgent, getAgentBySession } from '@/lib/agent-registry'
 // SF2 drift-fix: the role-plugins install/delete headless handlers must mirror the
 // Next.js routes' agent-path RBAC. Those routes gate agents via requireSudoToken →
@@ -904,6 +906,20 @@ const routes: Route[] = [
     // mode 403'd. Same authorize() as the Next.js route, so the two modes cannot drift.
     const restartAuthz = authorize(auth, 'restart-session', agent?.id)
     if (!restartAuthz.allowed) { sendJson(res, 403, { error: restartAuthz.reason || 'Forbidden' }); return }
+
+    // R10 manager-gate (governance audit, 2026-07-14 — headless-parity): the
+    // Next.js twin (app/api/sessions/[id]/restart/route.ts:97-107) refuses to
+    // restart a team agent when no MANAGER exists on the host. R10's cascade
+    // hibernates every team agent until a MANAGER is assigned, and reviving one
+    // via restart would bypass that freeze. Headless authorize()'d the caller but
+    // dropped this second gate, so a team agent could be relaunched on a
+    // MANAGER-less host — an invariant enforced in full mode but not headless (the
+    // same class as the R17.14 core-plugin-uninstall parity fix). Mirror the exact
+    // full-mode decision: same helpers, same 403.
+    if (agent && !getManagerId() && isAgentInAnyTeam(agent.id)) {
+      sendJson(res, 403, { error: 'Cannot restart team agent: no MANAGER exists on this host. Assign a MANAGER first.' })
+      return
+    }
 
     let body: { program?: string; programArgs?: string } = {}
     try { body = await readJsonBody(req) } catch { /* optional body */ }
@@ -2890,19 +2906,35 @@ const routes: Route[] = [
     sendServiceResult(res, getTeamById(params.id, requestingAgentId, buildAuthContext(auth)))
   }},
   { method: 'PUT', pattern: /^\/api\/teams\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
-    const body = await readJsonBody(req)
-    const auth = authenticateAgent(
-      getHeader(req, 'Authorization'),
-      getHeader(req, 'X-Agent-Id'),
-      getHeader(req, 'Cookie')
-    )
-    if (auth.error) {
-      sendJson(res, auth.status || 401, { error: auth.error })
-      return
-    }
-    const requestingAgentId = auth.agentId
-    // LIB2-CRIT-02 (2026-05-06): forward AuthContext.
-    sendServiceResult(res, await updateTeamById(params.id, { ...body, requestingAgentId, authContext: buildAuthContext(auth) }))
+    // SECURITY (governance audit, 2026-07-14 — headless-parity RBAC bypass):
+    // this handler authenticated the caller and then called updateTeamById()
+    // directly. Its ONLY authorization was updateTeamById → checkTeamAccess,
+    // which admits ANY team MEMBER — so in headless a non-MANAGER member could
+    // PUT /api/teams/<own-team> to rename it, add/remove members, or relink
+    // team.githubProject (redirecting where the kanban gh CLI files issues). The
+    // body was a raw rest-spread {...body} with NO zod .strict(), so a member
+    // could also inject {"blocked":false} (clearing the manager-gated freeze) or
+    // {"id":…}.
+    //
+    // The Next.js twin (app/api/teams/[id]/route.ts) gates the SAME route with
+    // requireSudoToken → authorize('manage-team') (MANAGER-only for an agent
+    // caller), a zod .strict() schema (unknown keys rejected), stripping of
+    // type/chiefOfStaffId/orchestratorId, and the ChangeTeam auto-title
+    // transitions on membership change. The full-mode route's own comment
+    // documents that WITHOUT that gate the request "falls straight through to
+    // updateTeamById → checkTeamAccess — which authorizes ANY team MEMBER … an
+    // RBAC bypass." Headless was exactly that bypass.
+    //
+    // Same class and same fix as the mint-MANAGER / governance-password handlers:
+    // forward through the ONE hardened Next.js handler so its full gate stack runs
+    // in headless too. This route is classed strict in security-registry.json, so
+    // an X-Sudo-Token rides along via forwardAuthHeaders for the privileged-field /
+    // system-owner path — exactly as the strict /api/trdd/* and /portfolio
+    // handlers already forward. Do NOT "simplify" this back into a direct
+    // updateTeamById() call: that IS the bypass.
+    const mod = await import('@/app/api/teams/[id]/route')
+    await delegateNextRoute(req, res, mod.PUT as NextRouteHandler,
+      `/api/teams/${params.id}`, { method: 'PUT', params: { id: params.id }, withBody: true })
   }},
   { method: 'DELETE', pattern: /^\/api\/teams\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
     const auth = authenticateAgent(

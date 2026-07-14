@@ -450,3 +450,102 @@ describe('headless-router — /api/trdd/* is registered AND authenticates (TRDD-
     expect(res.bodyJson()?.error).toBe('auth_required')
   })
 })
+
+/**
+ * Headless-parity governance holes closed by the 2026-07-14 governance audit —
+ * same class as the mint-MANAGER (a5256fd8) and R17.14 core-plugin-uninstall
+ * (89b0d017) fixes: a guard present in the full-mode Next.js route was absent in
+ * the headless twin, so the invariant held in one serving mode and not the other.
+ *
+ *  1. PUT /api/teams/[id] — RBAC bypass. The headless handler authenticated the
+ *     caller and then called updateTeamById() directly. Its ONLY authorization was
+ *     updateTeamById → checkTeamAccess, which admits ANY team MEMBER, and the body
+ *     was a raw rest-spread with NO zod .strict() — so a non-MANAGER member could
+ *     rename a team, add/remove members, relink team.githubProject, or inject
+ *     {"blocked":false} (clearing the manager-gated freeze). The Next.js twin gates
+ *     the SAME route with requireSudoToken → authorize('manage-team') (MANAGER-only
+ *     for agents) + a zod .strict() schema. FIX: the headless handler now forwards
+ *     through the hardened Next.js PUT via delegateNextRoute, so the full gate stack
+ *     runs in headless too.
+ *
+ *  2. POST /api/sessions/[id]/restart — R10 manager-gate. Full mode refuses to
+ *     restart a team agent when no MANAGER exists on the host (reviving one would
+ *     bypass R10's hibernate-until-MANAGER freeze). Headless authorize()'d the
+ *     caller but dropped this second gate. FIX: mirror the exact full-mode check.
+ *     (The manager-gate runs AFTER authenticate+authorize, so the forged-token
+ *     harness below cannot reach it — it exercises the auth-layer parity the gate
+ *     builds on; the gate's condition is byte-identical to full mode's and is
+ *     covered there by the governance suite.)
+ *
+ * Same forged-bearer harness: `aim_tk_AAAA…` is shape-valid (passes the structural
+ * gate, reaches the per-handler / delegated auth) but cryptographically invalid
+ * (rejected → 401), and a credential-less request is bounced earlier by the
+ * structural gate (401 `auth_required`). No service mocking is needed — every
+ * rejection lands before any team/session mutation.
+ */
+describe('headless-router auth mirror — team-update + session-restart parity (governance audit 2026-07-14)', () => {
+  // A real, well-formed UUID so the delegated PUT's isValidUuid() gate passes and
+  // the request reaches the auth layer (the gate actually under test).
+  const VALID_UUID = '22222222-2222-4222-8222-222222222222'
+
+  // ── PUT /api/teams/[id] — now delegated to the hardened Next.js route ──────
+  it('team-update: credential-less PUT is bounced by the structural gate (401), no mutation', async () => {
+    const res = await call('PUT', `/api/teams/${VALID_UUID}`)
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).toBe('auth_required')
+    expect(res.bodyJson()?.team).toBeUndefined() // never renames / mutates
+  })
+
+  it('team-update: forged token is rejected by the delegated handler auth (401, not auth_required), no team data', async () => {
+    const res = await call('PUT', `/api/teams/${VALID_UUID}`, { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
+    expect(res.statusCode).toBe(401)
+    // The rejection comes from the delegated Next.js route's authenticateFromRequest,
+    // not the structural gate — so it is the token error, not 'auth_required'.
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.team).toBeUndefined()
+  })
+
+  it('team-update: DELEGATION proof — forged token + malformed id returns 400 (isValidUuid runs before auth in full mode)', async () => {
+    // This is the regression guard that a future "simplify back to a direct
+    // updateTeamById() call" turns red. The full-mode PUT validates isValidUuid
+    // BEFORE authenticateFromRequest, so a forged token on a malformed id is
+    // rejected at the UUID gate (400). The OLD headless handler authenticated
+    // FIRST, so the same request would have returned 401 — the two gate orders
+    // are distinguishable, and only the delegated (fixed) path yields 400 here.
+    const res = await call('PUT', '/api/teams/not-a-uuid', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
+    expect(res.statusCode).toBe(400)
+    expect(res.bodyJson()?.error).toMatch(/Invalid team ID format/i)
+  })
+
+  // ── session stop/restart — auth-layer parity the R10 gate builds on ────────
+  it('session-stop: forged token is rejected by handler auth (401, not auth_required), no stop', async () => {
+    const res = await call('POST', '/api/sessions/victim-session/stop', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.success).toBeUndefined()
+  })
+
+  it('session-stop: credential-less request is bounced by the structural gate (401), no stop', async () => {
+    const res = await call('POST', '/api/sessions/victim-session/stop')
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).toBe('auth_required')
+    expect(res.bodyJson()?.success).toBeUndefined()
+  })
+
+  it('session-restart: forged token is rejected by handler auth before the R10 manager-gate (401, not auth_required), no restart', async () => {
+    const res = await call('POST', '/api/sessions/victim-session/restart', { Authorization: FORGED_BEARER, 'Content-Type': 'application/json' })
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).not.toBe('auth_required')
+    expect(res.bodyJson()?.error).toMatch(/token|Authentication required/i)
+    expect(res.bodyJson()?.success).toBeUndefined()
+  })
+
+  it('session-restart: credential-less request is bounced by the structural gate (401), no restart', async () => {
+    const res = await call('POST', '/api/sessions/victim-session/restart')
+    expect(res.statusCode).toBe(401)
+    expect(res.bodyJson()?.error).toBe('auth_required')
+    expect(res.bodyJson()?.success).toBeUndefined()
+  })
+})

@@ -11,7 +11,7 @@ Generated from `scripts/*.sh` **in this repo** — deliberately *not* from a hos
 `~/.local/bin/`. A deployed directory is one machine's snapshot; using it as the source
 of truth is exactly what §5 shows going wrong.
 
-- Source of truth: `scripts/*.sh` (74 files at the time of writing)
+- Source of truth: `scripts/*.sh` (75 files at the time of writing)
 - Install target: `~/.local/bin/` (via `install-messaging.sh`, by glob)
 - Last reconciled: 2026-07-14 — commit `abc3514c`
 
@@ -38,20 +38,20 @@ MCP server. That rule has no element-level exception, including the core plugin.
 
 | Tier | Promise |
 |---|---|
-| **A — frozen CLI** (§2, 42 scripts) | a contract. Call these. |
+| **A — frozen CLI** (§2, 43 scripts) | a contract. Call these. |
 | **B — internal library** (§3, 12 files) | *sourced*, not executed. Not a contract; may change without notice. |
 | **C — operator/dev** (§4, 20 scripts) | ships to `~/.local/bin` by glob, but is **not** a plugin-facing API. Do not call from a plugin. |
 | **D — dead** (§5) | referenced by plugins, **absent from source**. Never call. Fix the caller. |
 
-42 + 12 + 20 = 74, the whole of `scripts/*.sh`. Every file is in exactly one tier.
+43 + 12 + 20 = 75, the whole of `scripts/*.sh`. Every file is in exactly one tier.
 
 ---
 
-## 2. Tier A — the frozen skill-facing CLI (42 scripts)
+## 2. Tier A — the frozen skill-facing CLI (43 scripts)
 
-### 2.1 `aimaestro-*` — the server surface (7)
+### 2.1 `aimaestro-*` — the server surface (8)
 
-Everything that touches the AI Maestro API goes through one of these seven. They all
+Everything that touches the AI Maestro API goes through one of these eight. They all
 accept `help`, all read `AID_AUTH` / `AIMAESTRO_SUDO_TOKEN` / `AIMAESTRO_API_BASE` (§6).
 
 #### `aimaestro-agent.sh <command> [options]` — agent lifecycle
@@ -155,6 +155,39 @@ Nothing is committed for you.
 | `transfer list` | `--team ID` `--agent ID` `--status S` |
 | `transfer create --agent ID --from-team ID --to-team ID` | `--note TEXT` |
 | `transfer resolve <transferId> --action approve\|reject` | `--reject-reason TEXT` |
+
+#### `aimaestro-portfolio.sh <command> [flags]` — approval / mandate tokens (R28)
+
+The **verification surface** (ai-maestro#47, ask 2). `--subject` is always the agent whose
+enclave HOLDS the token (the empowered agent), never the issuer.
+
+| Subcommand | Flags |
+|---|---|
+| `mint --subject A --kind approval\|mandate --scope <resource:action>` | `--binds <trdd-id>` `--binds-agent <id>` `--binds-team <id>` `--ttl <seconds>` |
+| `list --subject A` | — (that agent's ACTIVE tokens) |
+| `verify --subject A --token <uuid>` | `--binds <trdd-id>` `--binds-agent <id>` `--binds-team <id>` `--scope <resource:action>` `--json` |
+| `revoke --subject A --token <uuid>` | — (issuer or system-owner only) |
+
+`verify` re-checks the host's Ed25519 signature over the token, its R34 ledger anchor, that
+the issuer **still holds** the title it minted under, and its status / expiry / uses — then
+answers with a **verdict** (which checks passed, and what the token actually binds), never a
+bare boolean.
+
+**`verify` exit codes are the contract:** `0` VALID · **`2` INVALID** (the server answered:
+the token does not verify) · `1` ERROR (usage / transport / HTTP — the verdict is *unknown*).
+`0` vs `2` vs `1` is the whole point: *"not authentic"* and *"could not ask"* demand different
+responses, and collapsing them turns a verifier outage into a verifier **bypass**. So:
+
+```bash
+aimaestro-portfolio.sh verify --subject "$ME" --token "$TOK" --binds K3QX9P2W \
+  || { echo "unverified mandate — refusing to act"; exit 1; }
+```
+
+**Ask the specific question.** `--binds <trdd-id>` turns *"is this token real?"* into *"is this
+an approval **for this card**?"* — the vague question is the one a genuine token replayed from
+someone else's card passes.
+
+Agent-primary (R32): an agent authorizes by `AID_AUTH` + title and faces **no sudo gate** here.
 
 #### `aimaestro-hook.sh <command> --cwd <dir> [flags]` — the hook shim
 
@@ -373,8 +406,8 @@ the TTY — a password on `argv` leaks through `ps` and shell history (TRDD-E9BZ
 ## 8. Verifying this manifest
 
 ```bash
-# every Tier-A/B/C script this repo ships — must equal 42 + 12 + 20
-ls -1 scripts/*.sh | wc -l                     # 74
+# every Tier-A/B/C script this repo ships — must equal 43 + 12 + 20
+ls -1 scripts/*.sh | wc -l                     # 75
 
 # scripts a plugin calls but this repo does not ship (must be EMPTY — §5 is the debt)
 comm -13 <(ls -1 scripts/*.sh | xargs -n1 basename | sort) \

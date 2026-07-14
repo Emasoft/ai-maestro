@@ -48,6 +48,14 @@ export interface PortfolioToken {
   target_agent_id?: string
   /** Approval tokens MAY pin a single target team. */
   target_team_id?: string
+  /**
+   * Approval/mandate tokens MAY pin a single TRDD (`trdd-id`, 8-char base36).
+   * This is what makes a TRDD approval verifiable: the token says "the authority
+   * that signed me approved THIS card", so a forged `## Approval log` line on a
+   * different card cannot borrow it. Omitted when absent (omit-when-absent
+   * canonicalization), so every pre-existing token's signed bytes are unchanged.
+   */
+  target_trdd_id?: string
   /** The agent that minted this token. */
   issuer_agent_id: string
   /** The issuer's governance title AT MINT TIME. */

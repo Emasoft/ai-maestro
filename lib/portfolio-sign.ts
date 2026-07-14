@@ -55,6 +55,7 @@ export function canonicalPortfolioToken(
   const optional: Record<string, unknown> = {}
   if (token.target_agent_id !== undefined) optional.target_agent_id = token.target_agent_id
   if (token.target_team_id !== undefined) optional.target_team_id = token.target_team_id
+  if (token.target_trdd_id !== undefined) optional.target_trdd_id = token.target_trdd_id
   if (token.issuer_team_id !== undefined) optional.issuer_team_id = token.issuer_team_id
   if (token.attestation_ref !== undefined) optional.attestation_ref = token.attestation_ref
   if (Object.keys(optional).length > 0) {

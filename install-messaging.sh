@@ -1103,6 +1103,7 @@ if [ "$INSTALL_SCRIPTS" = true ]; then
         "aimaestro-session.sh"    # inject / slash / state / prompt / queue
         "aimaestro-panel.sh"      # dashboard HTML side panel
         "aimaestro-trdd.sh"       # TRDD search / read / edit / lifecycle
+        "aimaestro-portfolio.sh"  # mint / list / VERIFY / revoke approval+mandate tokens
         "amp-kanban-get.sh"       # read one kanban task
         "amp-kanban-edit.sh"      # full-field kanban task edit
     )

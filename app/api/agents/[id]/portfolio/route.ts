@@ -62,6 +62,7 @@ export async function POST(
       scope?: string
       target_agent_id?: string
       target_team_id?: string
+      target_trdd_id?: string
       ttl_seconds?: number
       uses?: number
     }
@@ -78,6 +79,20 @@ export async function POST(
     }
     if (!scope || typeof scope !== 'string' || !scope.includes(':')) {
       return NextResponse.json({ error: 'scope is required ("resource:action")' }, { status: 400 })
+    }
+
+    // A TRDD pin is what makes an approval verifiable AGAINST A SPECIFIC CARD, so
+    // a garbage pin is worse than none: it would mint a token nothing can ever
+    // satisfy, and the failure would surface far away at verify time. Validate the
+    // id's shape here (8-char base36, the canonical TRDD id).
+    const targetTrddId = body.target_trdd_id
+    if (targetTrddId !== undefined) {
+      if (typeof targetTrddId !== 'string' || !/^[A-Za-z0-9]{8}$/.test(targetTrddId)) {
+        return NextResponse.json(
+          { error: 'target_trdd_id must be an 8-char base36 TRDD id (e.g. K3QX9P2W)' },
+          { status: 400 },
+        )
+      }
     }
 
     // (2) MINT authority — TITLE + standing authority. R32: no sudo consulted.
@@ -125,6 +140,12 @@ export async function POST(
       scope,
       ...(body.target_agent_id ? { target_agent_id: body.target_agent_id } : {}),
       ...(body.target_team_id ? { target_team_id: body.target_team_id } : {}),
+      // Uppercased so `verify?binds=k3qx9p2w` and a card written `K3QX9P2W` agree.
+      // TRDD ids are matched case-insensitively but WRITTEN uppercase; a token that
+      // stored the caller's casing verbatim would refuse a correct card on a
+      // string compare, and "the mandate is forged" is the last verdict you want
+      // to reach by accident.
+      ...(targetTrddId ? { target_trdd_id: targetTrddId.toUpperCase() } : {}),
       issuer_agent_id: ctx.agentId ?? 'system-owner',
       issuer_title: issuerTitle,
       ...(ctx.teamId ? { issuer_team_id: ctx.teamId } : {}),
@@ -207,6 +228,7 @@ export async function GET(
       scope: t.scope,
       target_agent_id: t.target_agent_id ?? null,
       target_team_id: t.target_team_id ?? null,
+      target_trdd_id: t.target_trdd_id ?? null,
       issuer_agent_id: t.issuer_agent_id,
       issuer_title: t.issuer_title,
       uses_remaining: t.uses_remaining,

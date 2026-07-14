@@ -575,8 +575,10 @@ type NextRouteHandler = (
 ) => Promise<Response>
 
 /**
- * Serve one `/api/trdd/*` request by delegating to the SAME Next.js handler that
- * full mode runs (TRDD-KJQZEYXW).
+ * Serve one request by delegating to the SAME Next.js handler that full mode
+ * runs (TRDD-KJQZEYXW). Written for `/api/trdd/*`, but nothing in it is
+ * TRDD-specific — it is the general "do not fork the gate" delegator, and the
+ * `/api/agents/[id]/portfolio*` routes use it for exactly the same reason.
  *
  * Five of the eight TRDD handlers are classified `strict` in
  * security-registry.json, and this router has no sudo layer of its own (see the
@@ -595,7 +597,7 @@ type NextRouteHandler = (
  * its `status` (not `statusCode`) to a 500. Forwarding verbatim lets each
  * handler's own JSON handling produce the same answer it does in full mode.
  */
-async function delegateTrdd(
+async function delegateNextRoute(
   req: IncomingMessage,
   res: ServerResponse,
   handler: NextRouteHandler,
@@ -1575,6 +1577,42 @@ const routes: Route[] = [
     const response = await mod.GET(fakeReq)
     const data = await response.json()
     sendJson(res, response.status, data)
+  }},
+
+  // Portfolio / secure enclave (R28) — mint, list, revoke, and VERIFY the
+  // approval/mandate tokens that are the third authorization check.
+  //
+  // These had NO headless twin at all: the whole portfolio surface 404'd in
+  // headless mode. That is not a cosmetic gap — `aimaestro-portfolio.sh` and
+  // `aimaestro-trdd.sh verify` are how an agent checks a mandate before obeying
+  // it, and a verifier that is simply ABSENT on a worker node fails silently in
+  // the worst possible direction: the caller cannot tell "this mandate is
+  // forged" from "verification is not available here".
+  //
+  // Delegated, never re-implemented — the mint guard (canIssue) and the verdict
+  // engine are authorization decisions, and a second copy here would be free to
+  // drift from the first (the exact class of bug TRDD-YEE33F3A found across this
+  // file). More specific than the `[id]` CRUD patterns below, so they must
+  // precede them.
+  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/portfolio\/verify$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const mod = await import('@/app/api/agents/[id]/portfolio/verify/route')
+    await delegateNextRoute(req, res, mod.GET as NextRouteHandler,
+      `/api/agents/${params.id}/portfolio/verify`, { method: 'GET', params: { id: params.id } })
+  }},
+  { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/portfolio$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const mod = await import('@/app/api/agents/[id]/portfolio/route')
+    await delegateNextRoute(req, res, mod.POST as NextRouteHandler,
+      `/api/agents/${params.id}/portfolio`, { method: 'POST', params: { id: params.id }, withBody: true })
+  }},
+  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/portfolio$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const mod = await import('@/app/api/agents/[id]/portfolio/route')
+    await delegateNextRoute(req, res, mod.GET as NextRouteHandler,
+      `/api/agents/${params.id}/portfolio`, { method: 'GET', params: { id: params.id } })
+  }},
+  { method: 'DELETE', pattern: /^\/api\/agents\/([^/]+)\/portfolio$/, paramNames: ['id'], handler: async (req, res, params) => {
+    const mod = await import('@/app/api/agents/[id]/portfolio/route')
+    await delegateNextRoute(req, res, mod.DELETE as NextRouteHandler,
+      `/api/agents/${params.id}/portfolio`, { method: 'DELETE', params: { id: params.id } })
   }},
 
   // Agent CRUD (must be LAST among /api/agents/[id]/* routes)
@@ -3927,11 +3965,11 @@ const routes: Route[] = [
 
   // ── TRDD / 3-pillars task API (TRDD-KJQZEYXW) ──────────────────────────────
   // Every handler delegates to its Next.js twin so the strict routes' sudo gate
-  // runs in headless mode too — see delegateTrdd for why re-implementation is not
+  // runs in headless mode too — see delegateNextRoute for why re-implementation is not
   // an option here.
   { method: 'GET', pattern: /^\/api\/trdd$/, paramNames: [], handler: async (req, res) => {
     const mod = await import('@/app/api/trdd/route')
-    await delegateTrdd(req, res, mod.GET as NextRouteHandler, '/api/trdd', { method: 'GET' })
+    await delegateNextRoute(req, res, mod.GET as NextRouteHandler, '/api/trdd', { method: 'GET' })
   }},
 
   // The static `kanban` sub-path MUST precede the parameterized `[id]` GET below:
@@ -3939,39 +3977,39 @@ const routes: Route[] = [
   // yielding a 400 from isValidTrddId rather than the kanban index.
   { method: 'GET', pattern: /^\/api\/trdd\/kanban$/, paramNames: [], handler: async (req, res) => {
     const mod = await import('@/app/api/trdd/kanban/route')
-    await delegateTrdd(req, res, mod.GET as NextRouteHandler, '/api/trdd/kanban', { method: 'GET' })
+    await delegateNextRoute(req, res, mod.GET as NextRouteHandler, '/api/trdd/kanban', { method: 'GET' })
   }},
 
   { method: 'POST', pattern: /^\/api\/trdd\/([^/]+)\/approve$/, paramNames: ['id'], handler: async (req, res, params) => {
     const mod = await import('@/app/api/trdd/[id]/approve/route')
-    await delegateTrdd(req, res, mod.POST as NextRouteHandler,
+    await delegateNextRoute(req, res, mod.POST as NextRouteHandler,
       `/api/trdd/${encodeURIComponent(params.id)}/approve`, { method: 'POST', params: { id: params.id }, withBody: true })
   }},
   { method: 'POST', pattern: /^\/api\/trdd\/([^/]+)\/refuse$/, paramNames: ['id'], handler: async (req, res, params) => {
     const mod = await import('@/app/api/trdd/[id]/refuse/route')
-    await delegateTrdd(req, res, mod.POST as NextRouteHandler,
+    await delegateNextRoute(req, res, mod.POST as NextRouteHandler,
       `/api/trdd/${encodeURIComponent(params.id)}/refuse`, { method: 'POST', params: { id: params.id }, withBody: true })
   }},
   { method: 'POST', pattern: /^\/api\/trdd\/([^/]+)\/promote$/, paramNames: ['id'], handler: async (req, res, params) => {
     const mod = await import('@/app/api/trdd/[id]/promote/route')
-    await delegateTrdd(req, res, mod.POST as NextRouteHandler,
+    await delegateNextRoute(req, res, mod.POST as NextRouteHandler,
       `/api/trdd/${encodeURIComponent(params.id)}/promote`, { method: 'POST', params: { id: params.id }, withBody: true })
   }},
   { method: 'POST', pattern: /^\/api\/trdd\/([^/]+)\/archive$/, paramNames: ['id'], handler: async (req, res, params) => {
     const mod = await import('@/app/api/trdd/[id]/archive/route')
-    await delegateTrdd(req, res, mod.POST as NextRouteHandler,
+    await delegateNextRoute(req, res, mod.POST as NextRouteHandler,
       `/api/trdd/${encodeURIComponent(params.id)}/archive`, { method: 'POST', params: { id: params.id }, withBody: true })
   }},
 
   // Parameterized `[id]` — MUST stay after `kanban` and the four sub-paths above.
   { method: 'GET', pattern: /^\/api\/trdd\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
     const mod = await import('@/app/api/trdd/[id]/route')
-    await delegateTrdd(req, res, mod.GET as NextRouteHandler,
+    await delegateNextRoute(req, res, mod.GET as NextRouteHandler,
       `/api/trdd/${encodeURIComponent(params.id)}`, { method: 'GET', params: { id: params.id } })
   }},
   { method: 'PATCH', pattern: /^\/api\/trdd\/([^/]+)$/, paramNames: ['id'], handler: async (req, res, params) => {
     const mod = await import('@/app/api/trdd/[id]/route')
-    await delegateTrdd(req, res, mod.PATCH as NextRouteHandler,
+    await delegateNextRoute(req, res, mod.PATCH as NextRouteHandler,
       `/api/trdd/${encodeURIComponent(params.id)}`, { method: 'PATCH', params: { id: params.id }, withBody: true })
   }},
 ]

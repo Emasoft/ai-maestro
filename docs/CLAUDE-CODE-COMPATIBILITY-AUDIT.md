@@ -1,10 +1,10 @@
-# Claude Code 2.1.113 - 2.1.204 Compatibility Audit
+# Claude Code 2.1.113 - 2.1.209 Compatibility Audit
 
-**Audited:** 2026-05-07 (2.1.113–2.1.132), extended 2026-05-28 (2.1.133–2.1.154), extended 2026-06-16 (2.1.156–2.1.178), extended 2026-06-24 (2.1.179–2.1.187), extended 2026-07-08 (2.1.190–2.1.204)
+**Audited:** 2026-05-07 (2.1.113–2.1.132), extended 2026-05-28 (2.1.133–2.1.154), extended 2026-06-16 (2.1.156–2.1.178), extended 2026-06-24 (2.1.179–2.1.187), extended 2026-07-08 (2.1.190–2.1.204), extended 2026-07-14 (2.1.205–2.1.209)
 **Branch:** `governance-rules`
 **Server version:** v0.29.x
 
-This file enumerates every entry in the Claude Code 2.1.113-2.1.187
+This file enumerates every entry in the Claude Code 2.1.113-2.1.209
 changelog that COULD have affected AI Maestro, the audit verdict for
 each, and the action (or non-action) we took.
 
@@ -32,6 +32,30 @@ for 2.1.154.
                     integration, OAuth refinements not on our path)
 
 ## Per-entry verdicts
+
+### 2.1.205–2.1.209 — July 14, 2026 (sixth pass)
+
+CLI now at **2.1.209**. **Headline: no hard break, and no code change required.**
+The range contains exactly **one** change that can hard-break a consumer — the
+2.1.207 rejection of `${user_config.*}` in shell-form plugin hook/monitor/
+`headersHelper` commands — and it is **verified clean** both in this repo and
+across the AI Maestro plugin fleet. Every other entry is N/A, AWARENESS, or was
+already handled by an earlier pass. Verdicts below are grounded by reading the
+code, not by trusting a prior TRDD.
+
+| Change (version) | Verdict | Notes |
+|---|---|---|
+| **`${user_config.*}` in shell-form plugin hook / monitor / `headersHelper` commands is now REJECTED** (shell-injection fix) (2.1.207) | **N/A — verified, in-repo AND fleet-wide** | The only `user_config` hits in this repo are field names in `lib/converter/universal-ir.ts` (the IR models user-config as a plugin *component type*); **no emitter interpolates `${user_config.*}` into a hook command**, and our own project `SessionStart` hook uses `${CLAUDE_PROJECT_DIR}`, which is unaffected. Fleet check: no `ai-maestro-plugins` plugin uses the rejected form — they already read the SAFE `$CLAUDE_PLUGIN_OPTION_<KEY>` env vars. (CPV independently ships a `[RC-USERCFG-SHELL-INJECT]` CRITICAL validator for this rule, so a regression would be caught at publish.) Nothing to migrate. |
+| **`pluginConfigs` no longer read from project-level `.claude/settings.json`** (2.1.207) | **N/A** | Zero `pluginConfigs` hits. The workdir seeder writes plugin **enablement** (`enabledPlugins` in `.claude/settings.local.json`), never plugin **option values**, so no seeded config silently stops being honored. |
+| **Auto mode no longer reads `autoMode` from `.claude/settings.local.json`** (repo-resident) (2.1.207) | **N/A** | Zero `autoMode` hits in code. `lib/workdir-gitignore-seed.ts` / the settings seeder never write it. |
+| **The Agent tool now hard-errors when a subagent's `tools:` list resolves to nothing**, naming the unrecognized entries (2.1.208) | **VERIFIED-OK** | Both project agents carrying an explicit list resolve fully: `scenario-runner` (`Bash, Read, Write, Edit, Glob, Grep, Skill`) and `screenshot-interpreter` (`Read, Glob`); the other three omit `tools:` and inherit. A future typo now fails loudly instead of silently launching a tool-less agent — a net win for our fleet. |
+| **Sonnet 5 is the DEFAULT model** (2.1.197) · Bedrock/Vertex/Claude-on-AWS default to Opus 4.8 (2.1.207) | **ALREADY-APPLIED (verified in code)** | Agents launch without pinning `--model` (Haephestos is the exception: `--model sonnet`), so the fleet default moved to Sonnet 5. The real downstream risk was **context-window under-reporting**, and it is already closed: `lib/context-limits.ts` resolves the bare, untagged id `claude-sonnet-5` to 1M via `NATIVE_1M_FAMILY_RE = /sonnet-5(?![0-9])/` (TRDD-CS51MFIX), with a non-digit boundary so `claude-sonnet-50` stays 200K. Cross-client mapping (`lib/converter/rewrite/model.ts`) is family-based, so new Claude versions need no table edit. |
+| **Catastrophic removals (`rm -rf ~`) hidden inside `$(…)` / backticks / `<(…)` now prompt even under `--dangerously-skip-permissions` and auto mode** (2.1.208) | **AWARENESS — favourable** | AI Maestro launches agents with `bypassPermissions`, so the obfuscated form previously slipped a guard the plain form caught. CC now closes that gap for us at no cost; it reinforces (does not replace) `agent-shell-guard.sh`. |
+| **Background-task notifications now explicitly state that no human input occurred**, preventing fabricated in-transcript approvals from being acted on (2.1.205) | **AWARENESS — corroborates our governance** | The harness now asserts at runtime what R42 / the AMP comm-graph already assume: an agent's message is never the USER's approval. Nothing to change; useful when auditing approval provenance. |
+| `EnterWorktree` now confirms before entering a worktree **outside** `.claude/worktrees/` (2.1.206) | **AWARENESS** | Our worktree-isolated agents (`isolation: worktree`) create *inside* `.claude/worktrees/` and are unaffected; only a hand-driven `EnterWorktree` at an external path will prompt. |
+| Per-server `request_timeout_ms` in `.mcp.json` / `--mcp-config` is now honored (was capped at the 60 s default in fresh sessions) (2.1.206) | **AWARENESS — opportunity** | `app/api/settings/mcp-discover/route.ts` writes a temp `.mcp.json`; a slow MCP discovery can now raise its own timeout instead of dying at 60 s. |
+| Memory/perf: transcript size down up to **79x** (superseded file-history backups pruned), MCP stdio stderr capped, LSP docs LRU-bounded, edit cache bounded, permission-rule matchers cached (2.1.208); context-usage indicator no longer re-analyzes the whole transcript per turn (2.1.203) | **AWARENESS** | We read `~/.claude/projects/*.jsonl` (subconscious, token accounting, session browser). Pruning shrinks transcripts but changes **no record schema we consume**. Strictly favourable for our readers. |
+| Everything else in 2.1.205–2.1.209 — screen-reader mode, `vimInsertModeRemaps`, `CLAUDE_CODE_PROCESS_WRAPPER`, `/doctor` checkup, agent-view UX, `/model` picker, `/usage`, Remote Control, Bedrock/SSO, Windows fixes | **N/A** | Terminal / IDE / provider surfaces AI Maestro does not sit on. |
 
 ### 2.1.190–2.1.204 — July 8, 2026 (fifth pass)
 

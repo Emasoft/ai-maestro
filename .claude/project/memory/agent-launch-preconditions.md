@@ -105,3 +105,15 @@ not as a `[[wikilink]]`, per the link-hygiene rule).
   state. The truthful fallback is the agent's own launch args — `--agent
   <plugin>-main-agent` names precisely what the client will try (and fail) to load.
   Implemented in the `role-plugin` invariant row (lib/agent-invariants.ts).
+
+[^4]: [ocd:2026-07-14 lmd:2026-07-14] The janitor's `memory-scope-leak` detector flags
+  this page as `machine-host` and proposes demoting it to LOCAL. **Verified 2026-07-14:
+  false positive — do NOT demote it.** The page carries no username, no `$HOME` path, no
+  hostname, no credential and no one-box install state; it passes the write gate cleanly
+  (*"would this be TRUE and USEFUL for a stranger who clones this repo on a DIFFERENT
+  machine?"* — yes: it is ai-maestro's launch-path contract). The heuristic fires on the
+  vocabulary — "keychain", "macOS", "tmux server" — not on any private datum. Demoting it
+  would strip the fleet-outage lesson and the preflight contract from every contributor,
+  which is the opposite of what the scope rule protects. Lesson: a scope-leak finding is a
+  *candidate*, not a verdict; read the page before you move it, and record the verdict here
+  so the next sweep does not re-litigate it.

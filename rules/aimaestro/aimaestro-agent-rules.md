@@ -11,6 +11,7 @@ satisfy a rule is yours to decide.
 - Write only inside your working directory and `/tmp` — never another agent's workdir, never the ai-maestro install tree.
 - Reach the server only through the installed CLI (`aimaestro-*.sh`, `amp-*.sh`, `aid-*.sh`); never call its HTTP API directly.
 - Message only the titles your governance title permits; inside a team, route through your CHIEF-OF-STAFF. Subagents have no identity and never message.
+- NEVER drive another agent — no command, keystroke, or queued input into its session, by API, CLI or tmux. NO title exempts you. Messaging is the ONLY channel: ask, never inject.
 - Never weaken a security check, a quality gate, or a test to make something pass.
 
 ## Failure

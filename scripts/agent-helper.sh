@@ -886,11 +886,31 @@ check_api_running() {
         return 1
     fi
 
-    if [[ "$http_code" != "200" ]]; then
-        print_error "AI Maestro is not running at ${api_base} (HTTP $http_code)"
+    # A 401/403 means the server ANSWERED — it is running, and it rejected our identity.
+    # Reporting that as "not running" (and telling the caller to start the server) is a
+    # false diagnosis that sends them chasing a dead process while the real cause is auth.
+    # It cost a real debugging session; the fix is to say which of the two actually failed.
+    if [[ "$http_code" == "401" || "$http_code" == "403" ]]; then
+        print_error "AI Maestro is running at ${api_base}, but rejected this caller (HTTP $http_code)"
         echo "" >&2
-        echo "Start AI Maestro with:" >&2
-        echo "   cd ~/ai-maestro && pm2 start ai-maestro" >&2
+        if [[ -n "${AID_AUTH:-}" ]]; then
+            echo "An AID_AUTH token is set but was not accepted. It may be expired — re-issue with:" >&2
+            echo "   aid-maestro-token.sh --no-cache" >&2
+        else
+            echo "No AID_AUTH is set. An AGENT caller gets its bearer from the environment:" >&2
+            echo "   export AID_AUTH=\"\$(aid-auth.sh)\"" >&2
+            echo "" >&2
+            echo "A HUMAN caller has no auth path in the scripts yet (see docs/SCRIPT-LAYER.md)." >&2
+            echo "Use the dashboard at ${api_base} for now." >&2
+        fi
+        return 1
+    fi
+
+    if [[ "$http_code" != "200" ]]; then
+        print_error "AI Maestro at ${api_base} returned HTTP $http_code"
+        echo "" >&2
+        echo "The server answered, so it is running. If this persists, check its logs:" >&2
+        echo "   pm2 logs ai-maestro --lines 50" >&2
         return 1
     fi
 }

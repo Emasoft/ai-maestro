@@ -82,6 +82,13 @@ is the most dangerous, and it is the same shape as the `agent_policy_undefined` 
 4. **Found a mechanism that's built but switched off?** That is the sixth instance this week —
    see `[[agent-claims-the-api-was-never-delivered]]`. Check the switch beside the call site.
 
+## Applies to
+
+- `[[team-creation]]` — the canonical case. Every rule of the team-creation model (R12.1's
+  5-role base, R30.1's COS mandate, R31's incomplete-team freeze) is unenforced, and the
+  system reports healthy: a team is born at 1-of-5 and stays there, while *"the MANAGER
+  created a team"* passes every test. Read it as the worked example of this aspect.
+
 ## Notes and lessons learned
 
 [^1]: [ocd:2026-07-14 lmd:2026-07-14] All four holes above surfaced from **stopping and

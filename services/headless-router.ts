@@ -200,8 +200,9 @@ import type { KanbanColumnConfig } from '@/types/team'
 
 import {
   getGovernanceConfig,
-  setManagerRole,
-  setGovernancePassword,
+  // setManagerRole / setGovernancePassword are deliberately NOT imported: both handlers
+  // forward through their hardened Next.js route so enforceSystemOwner runs. Importing
+  // the service here again is how the unguarded call crept in the first time.
   getReachableAgents,
   listTransferRequests,
   createTransferReq,
@@ -1998,8 +1999,34 @@ const routes: Route[] = [
     sendServiceResult(res, getGovernanceConfig())
   }},
   { method: 'POST', pattern: /^\/api\/governance\/manager$/, paramNames: [], handler: async (req, res) => {
+    // SECURITY (governance audit, 2026-07-14 — privilege escalation to MANAGER):
+    // this handler called setManagerRole(body) directly with NO authentication and
+    // NO enforceSystemOwner. The Next.js POST (app/api/governance/manager/route.ts:15)
+    // gates it with enforceSystemOwner — so in FULL mode the governance password is
+    // NOT sufficient to mint a MANAGER: the caller must also be the human owner
+    // (no agent identity). Headless dropped that second half, leaving the password
+    // ALONE sufficient — and R16's own audit found the shipped agent CLI
+    // (scripts/aimaestro-teams.sh --password) REQUIRES agents to hold that password.
+    // Those two facts compose: an agent could POST {agentId: <self>, password} here
+    // and promote ITSELF to MANAGER, the most powerful title in the system.
+    //
+    // Same defect, same file, same class as the /api/governance/password handler
+    // directly below (C2 "host takeover") — which is why the fix is identical:
+    // forward through the ONE hardened Next.js handler so its gate runs here too.
+    // Do NOT "simplify" this back into a direct setManagerRole() call: the password
+    // check inside the service is authentication, and authentication is not
+    // authorization. enforceSystemOwner is the authorization, and it lives up there.
     const body = await readJsonBody(req)
-    sendServiceResult(res, await setManagerRole(body))
+    const { NextRequest } = await import('next/server')
+    const mod = await import('@/app/api/governance/manager/route')
+    const fakeReq = new NextRequest('http://localhost/api/governance/manager', {
+      method: 'POST',
+      headers: forwardAuthHeaders(req, { 'content-type': 'application/json' }),
+      body: JSON.stringify(body),
+    })
+    const response = await mod.POST(fakeReq)
+    const data = await response.json()
+    sendJson(res, response.status, data)
   }},
   { method: 'POST', pattern: /^\/api\/governance\/password$/, paramNames: [], handler: async (req, res) => {
     // C2 (audit CRITICAL — host takeover): this handler called

@@ -1,8 +1,9 @@
 ---
-version: "4.0.3"
-date: 2026-07-12
+version: "4.1.0"
+date: 2026-07-14
 branch: governance-rules
 changelog:
+  - "4.1.0: Added R41 (APPROVAL vs MANDATE — the two authorization protocols), closing Emasoft/ai-maestro#47. Pins the authority ladder as a total order (none(0) < orchestrator(1) < chief-of-staff(2) < manager(3) < user(4); no agent ever holds `user`), the `min-approval-requirement:` enum, the mandate invariant (a TRDD is born approved iff authority(mandated-by) >= authority(min-approval-requirement) — so a proposal exists ONLY when the author's authority is below the tier the card requires), the objective tier-floor criteria table, no-self-approval (MANAGER included), and GOLDEN-PRRD-always-MAESTRO. States honestly what is and is not enforced: authorization IS server-enforced as of d7531e53 (the manage-trdd AuthAction refuses under-authorized, user-tier, and self approvals), but the SIGNATURE is still convention — cryptographic verifiability needs mandate tokens + a `verify` CLI verb + the per-agent identity of #46, in that sequence. Also added R23.7/R23.8 (the frozen surface is docs/SCRIPT-MANIFEST.md generated from scripts/, never a host's ~/.local/bin; and announcing a verb is part of shipping it) — derived from the MANAGER staying blocked on 28 call sites while the three verbs it needed were already shipped and deployed. NOTE for the record: Emasoft/ai-maestro#37 (frozen-CLI decoupling + memory-adoption) asked for these as new R41/R42 — they were NOT added, because they ALREADY EXIST as R23 (Plugin<->Server Decoupling via the Frozen CLI Layer) and R24 (Proactive Global Memory), landed in 3.10.0 and renumbered in 3.11.0. Adding them again would have created two numbers for one rule and broken the property that a citation resolves to exactly one rule. #37 is satisfied by R23+R24; only #47 was a genuine gap."
   - "4.0.3: Landed the canonical text of R22 (GitHub Authorship Self-Identification), replacing the RESERVED placeholder created in 3.11.0. Text mirrors the already-ratified PRRD baseline golden rule G1.1 and the ai-maestro DEP overlay (rules/aimaestro/aimaestro-prrd-governance.md), per the #33 consensus (MANAGER + maintainer, 2026-06-02 — R22.3 refined to the `Agent: <plugin-slug>` commit trailer). No agent behavior changes (the fleet already self-identifies via G1.1); this only fills the reserved GOVERNANCE-RULES slot the placeholder pointed at. Closes Emasoft/ai-maestro#33."
   - "4.0.2: USER refinement of R38/R39 (2026-06-18). R38.2 — normal (non-MAESTRO) user messaging tightened: a user may message ONLY their own ASSISTANT + their own-team COS + the MANAGER; user↔user messaging is now FORBIDDEN (no send and no receive between users); a user may use the terminal only of their own ASSISTANT. R39.7 (new) — a user's ASSISTANT is invisible to the other agents but inherits all tasks + permissions sent to the user. (Enforcement note: the HUMAN node in the comm-graph, lib/communication-graph.ts, currently treats all users as full-Y; encoding the non-MAESTRO-user restriction there is a follow-up.)"
   - "4.0.1: USER correction to R38/R39 (2026-06-18). R38.1 — the 'non-MAESTRO users cannot change agents' prohibition has an EXCEPTION: a user (native or foreign) MAY edit their OWN ASSISTANT agent's profile panel (within R39.4 limits). R39.4 — the four locked fields (NAME/TITLE/ROLE-PLUGIN/TEAM) are not merely read-only to the user; they may be changed ONLY by the MAESTRO user with the sudo password (consistent with R26). R39.6 (new) — an ASSISTANT agent cannot be deleted INDEPENDENTLY; every user MUST always have exactly one ASSISTANT for as long as the user exists; its lifecycle is bound to its user — only deleting the USER cascades a (soft) delete to that user's ASSISTANT (cemetery model)."
@@ -1186,8 +1187,20 @@ Read-only operations (queries, lookups, calculations) do NOT need AIO functions 
 | R23.4 | The CLIs' skill-facing interface (name + args + output) is **FROZEN**. New capability = a NEW CLI (or an additive optional flag), NEVER a changed interface. Sole exception: a security fix | Explicit |
 | R23.5 | **No element-level exception — not even the core `ai-maestro-plugin`.** The boundary is the script layer, not a plugin; those scripts are owned by + shipped from the ai-maestro repo and are the only code allowed to call the API | Explicit |
 | R23.6 | **Bright-line test:** `grep -rn '/api/'` over a plugin tree shows no direct-call instructions. Conceptual references that route through the CLI layer are fine — the line is endpoint-syntax + actual calls/instructions, NOT the word "API" | Implicit (enforcement) |
+| R23.7 | **The frozen surface is `docs/SCRIPT-MANIFEST.md`, generated from `scripts/*.sh` — never a host's `~/.local/bin`.** The installer copies and never prunes, so a deployed dir accumulates scripts the source has already deleted; it therefore cannot be a source of truth, and a plugin conforming to it is conforming to one machine's residue | Derived (2026-07-14) |
+| R23.8 | **Announcing a new verb is part of shipping it.** A capability no plugin has been told about does not discharge this rule — an unannounced verb looks absent, and a plugin that believes the layer lacks what it needs is pushed back toward `/api/*` (or, correctly, blocks). The manifest is the announcement | Derived (2026-07-14) |
 
 **Rationale:** the CLI layer is the stability buffer — when the API changes, only ai-maestro's scripts change, never the plugins. One interface to keep stable instead of a dozen plugins to chase. If the layer lacks a call a plugin needs, ADD a CLI to ai-maestro — never reach past the layer.
+
+> **Implementation (R23.7 / R23.8, 2026-07-14).** `docs/SCRIPT-MANIFEST.md` (commit
+> `06c93b45`) is the canonical frozen surface: all 74 `scripts/*.sh` partitioned into **42
+> frozen skill-facing CLIs** (name + every subcommand + every flag), 12 sourced-only
+> libraries, and 20 operator scripts that are explicitly **not** a plugin API — plus §5, the
+> 24 scripts the plugins still call that this repo does not ship. R23.8 is not hypothetical:
+> `aimaestro-agent.sh presence`, `aimaestro-agent.sh session user-input`, and
+> `aimaestro-teams.sh tasks` all shipped, deployed byte-identical, and agent-callable while
+> the MANAGER believed they did not exist and stayed blocked on 28 call sites rather than
+> fake compliance. The rule was kept; the capability was simply never announced.
 
 ---
 
@@ -1391,6 +1404,53 @@ Read-only operations (queries, lookups, calculations) do NOT need AIO functions 
 > `{create_agent, create_team}`). The new `aid_*` ledger ops are additive in
 > `types/ledger.ts`. Full surface + the breaking foreign-import 202 contract:
 > `docs/API-CHANGES.md` §6.
+
+---
+
+## R41. APPROVAL vs MANDATE (the two authorization protocols)
+
+**Every governed action is authorized by exactly one of two protocols.** They differ only in
+*who initiates* and *which direction authority flows*; both are binding.
+
+| ID | Rule | Source |
+|----|------|--------|
+| R41.1 | **APPROVAL (bottom-up — the agent asks).** An agent authors a proposal (a TRDD in `design/proposals/`, `column: proposal`), routes it to the authority its tier requires, that authority approves, and the agent is then bound to execute | Explicit (USER, 2026-06-21) |
+| R41.2 | **MANDATE (top-down — the authority orders).** An authority issues an order (a TRDD authored directly in `design/tasks/`, `column: planned`, `mandate: true`); the receiving agent is bound to execute it. A verified, in-scope mandate **cannot be refused** — the agent may flag a genuine problem and wait, but it does not decline | Explicit (USER, 2026-06-21) |
+| R41.3 | **An authority may only mandate within its own tier.** A TRDD is born approved **iff** `authority(mandated-by) >= authority(min-approval-requirement)`. A proposal exists only when the author's authority is *below* the tier the TRDD requires | Explicit (USER) |
+| R41.4 | The authority ladder is total and fixed: `none(0) < orchestrator(1) < chief-of-staff(2) < manager(3) < user(4)`. **No agent may ever hold the `user` rung** | Explicit (USER) |
+| R41.5 | **Nobody may approve their own proposal — MANAGER included.** (`refuse` on one's own proposal is permitted: that is a withdrawal, not an approval) | Derived (enforced) |
+| R41.6 | A **GOLDEN** PRRD change always requires the **MAESTRO/USER**. The MANAGER cannot sign it, and no mandate can substitute for it | Explicit (USER) |
+
+**Which authority a category requires** (the tier floor — objective, so a watchdog needs no
+judgment call):
+
+| Required authority | Category |
+|---|---|
+| **none** (Tier 0 — self-mandate) | own-scope work; DERIVED tasks (NPT/EHT); reversible + local; applying the ratified baseline as-is |
+| **ORCHESTRATOR / CHIEF-OF-STAFF** (Tier 1) | team-internal coordination affecting other members of the same team (ORCHESTRATOR covers only the dispatch subset: assignment, priority, sequencing) |
+| **MANAGER** (Tier 2) | cross-team / cross-project; a SILVER PRRD or persona change; release to production; a baseline-ruleset deviation; `.github/`; another project's source |
+| **MAESTRO / USER** (Tier 3) | a GOLDEN PRRD change or a promote/demote; shared credentials or the owner identity; irreversible / highest-stakes |
+
+> **Implementation status (R41, 2026-07-14) — read this before claiming the protocols are
+> enforced.**
+>
+> **What IS enforced by the server** (`d7531e53`, TRDD-K2WJH7RF): the TRDD write verbs
+> (`edit`, `approve`, `refuse`, `promote`, `archive` — via `aimaestro-trdd.sh`) are gated by
+> the `manage-trdd` AuthAction. It reads the card's own `min-approval-requirement:` (enum:
+> `none | orchestrator | chief-of-staff | manager | user`), compares it to the caller's
+> governance title on the R41.4 ladder, and **refuses** an under-authorized approval, an
+> agent approving a `user`-tier card, and **any self-approval** (R41.5). Authorization is
+> therefore no longer a convention: the server says no.
+>
+> **What is NOT yet enforced: the signature.** R41's "the agent *verifies* the order is
+> authentic" is still convention — the evidence is the git-tracked `## Approval log` line,
+> which is auditable but forgeable by anyone with repo write. Cryptographic verifiability
+> needs (a) server-issued **mandate** tokens alongside `#27`'s approval tokens, (b) a `verify`
+> CLI verb so a receiving agent can confirm a signature was issued by the claimed authority
+> for that specific TRDD, and (c) a per-agent identity to root the signature in — which is
+> `ai-maestro#46`. **Sequence: #46 identity → signing + `verify` verbs → the protocols become
+> cryptographically enforceable.** Until then R41 is *authorized* but not *authenticated*, and
+> this section says so rather than implying otherwise.
 
 ---
 

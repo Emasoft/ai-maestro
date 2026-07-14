@@ -1,16 +1,16 @@
 ---
 trdd-id: HGE9T6VT
-title: Authentication is substituting for authorization — headless stop/restart let any agent silence the MANAGER
+title: Authentication is substituting for authorization — the headless router must be driven by the same table as the guard and fail closed
 column: planned
 created: 2026-07-14T15:52:55+0200
-updated: 2026-07-14T15:52:55+0200
+updated: 2026-07-14T17:25:00+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: security
 min-approval-requirement: manager
 approved: false
-priority: 0
-severity: critical
+priority: 1
+severity: high
 effort: medium
 release-via: none
 relevant-rules: [9, 10, 17, 27, 28, 30, 32]
@@ -21,14 +21,42 @@ labels: [security, authorization, headless, governance, root-cause]
 
 ## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-14
 
-**This is a VERIFIED, DIRECTLY EXPLOITABLE privilege escalation, and it is the ROOT CAUSE
-under a large share of the 2026-07-14 governance audit's 22 holes.** It is not three bugs; it
-is one confusion expressed three times.
+**RE-SCOPED. The bleeding is stopped; the CLASS is untouched, and the class was always the
+point of this card.**
 
-- **NEXT ACTION:** add the missing `authorize()` to the two headless handlers
-  (`services/headless-router.ts:864` and `:881`). That is the *bleeding* fix, ~10 lines.
-- **THEN** do the systemic fix (below), because patching three call sites leaves the class
-  intact and the next handler will make the same mistake.
+**SUPERSEDED — do NOT carry forward:**
+
+- ~~"NEXT ACTION: add the missing `authorize()` to the two headless handlers."~~ **DONE**, in
+  `6dcc57fd` (TRDD-BF3JN4TL), and deliberately AFTER R42 landed in `lib/authorization.ts` — so
+  what got wired into headless is the R42 self-only rule, not the MANAGER/COS grant this card
+  originally proposed to restore. Sequencing was the whole risk: the same ten lines, shipped
+  first, would have re-established exactly the cross-agent path the USER revoked, and would
+  have looked like a completed security fix while doing it.
+
+**WHAT REMAINS — and it is the more important half.** Patching those two handlers left the
+CLASS fully intact. The proof arrived within the hour: sweeping the router for injection routes
+turned up **`POST /api/agents/[id]/chat` with NO auth call at all** — not even
+`authenticateAgent` — ending in `sendKeys(session, msg, {literal, enter})`. Same file, same
+defect, *worse*, and it was not on anyone's list. It was closed in `6dcc57fd` too, but only
+because a human went looking. **That is not a process; that is luck.**
+
+- **NEXT ACTION (the systemic fix):** drive `services/headless-router.ts` from the SAME
+  declarative table the Next.js guard uses (`STRICT_AGENT_RULES` in `lib/sudo-guard.ts`), and
+  make an undeclared strict route **FAIL CLOSED** there exactly as it does in full mode. Today
+  the two modes are two independent hand-maintained lists of who-checks-what, and a route added
+  to one is simply *absent* from the other — silently, and in the permissive direction.
+- **The invariant to test:** for every route present in both modes, the two modes must reach
+  the SAME authorization decision for the same caller. A test that enumerates the headless
+  routes and asserts each one either authorizes or is provably non-strict would have caught all
+  three of these holes on the day they were written, and will catch the next one.
+
+**The root cause, stated once so it is not re-derived:** `401` answers *who are you*; `403`
+answers *may you*. Three sites, three authors, three months, three security-review IDs
+(SVC2-MAJ-12, SVC2-CRIT-01/02) — each wrote a comment naming the operation "privileged" and
+then added an **authn** check. The layer LOOKS present at every call site, which is precisely
+why nobody saw it missing. **And a missing guard produces a SUCCESS, not an error** — so the
+whole suite stayed green through all of it. See
+`[[an-unenforced-rule-produces-a-success-not-an-error]]`.
 
 ## The bug (verified by reading the code, 2026-07-14)
 

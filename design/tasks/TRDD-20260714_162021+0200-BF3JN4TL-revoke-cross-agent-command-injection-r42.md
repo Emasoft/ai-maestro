@@ -20,6 +20,7 @@ release-via: none
 relevant-rules: [6, 10, 26, 32, 42]
 labels: [security, governance, authorization, injection, r42]
 blocks: [HGE9T6VT]
+implementation-commits: [6dcc57fd]
 ---
 
 # Revoke cross-agent command injection entirely (R42) — messaging becomes the only channel

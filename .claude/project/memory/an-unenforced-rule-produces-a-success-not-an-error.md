@@ -88,6 +88,13 @@ is the most dangerous, and it is the same shape as the `agent_policy_undefined` 
   5-role base, R30.1's COS mandate, R31's incomplete-team freeze) is unenforced, and the
   system reports healthy: a team is born at 1-of-5 and stays there, while *"the MANAGER
   created a team"* passes every test. Read it as the worked example of this aspect.
+- `[[two-server-modes-the-headless-router-reimplements-routes]]` — the structural reason this
+  keeps happening HERE rather than everywhere. Every route is served twice, and the headless
+  copy reimplements the handler, so a guard can be genuinely present in one mode and genuinely
+  absent in the other. The absence shows up as a **200**, which is why three separate
+  security-review passes (SVC2-MAJ-12, SVC2-CRIT-01/02) each added an *authn* check, wrote a
+  comment calling the operation privileged, and left the *authz* hole wide open — under a fully
+  green suite.
 
 ## Notes and lessons learned
 

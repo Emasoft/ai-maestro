@@ -96,6 +96,12 @@ show_help() {
 aimaestro-governance.sh — AI Maestro governance CLI
 
 Commands:
+  login                        Log in as the human owner; stores a SESSION TOKEN at
+                               ~/.aimaestro/cli-session (0600) so every aimaestro-*.sh
+                               and amp-*.sh authenticates as you. Prompts on the TTY —
+                               the password is never an argument, never an env var, and
+                               never stored; only the token is. (ai-maestro#55)
+  logout                       Forget the stored session token.
   invalidate-password          Revoke the governance password (you must know it).
                                Prompts on the TTY — never takes it as an argument.
                                Must be run ON the machine hosting AI Maestro: the
@@ -347,7 +353,83 @@ cmd_invalidate_password() {
         "$(jq -nc --arg p "$password" --arg c "$code" '{password:$p, code:$c}')"
 }
 
+
+# LOG IN as the human owner and store the SESSION TOKEN (ai-maestro#55).
+#
+# Every `aimaestro-*.sh` used to send only an agent's AID bearer, so a HUMAN at a
+# terminal got 401 from all of them — the script layer was unusable by the person who
+# owns the machine. The scripts now also accept the dashboard's `aim_session` cookie;
+# this is how a human obtains one without a browser.
+#
+# THE PASSWORD NEVER BECOMES DATA. It is prompted on the TTY, sent once, and
+# discarded — never an argument (it would sit in `ps` and shell history), never an env
+# var (it would be inherited by every child process), never written to disk. Only the
+# resulting TOKEN is stored, 0600, and a token is revocable and expiring; a password is
+# neither.
+cmd_login() {
+    local password resp token file dir
+
+    if [ ! -t 0 ]; then
+        echo "Error: login needs a terminal — it prompts for the governance password." >&2
+        echo "       It is never accepted as an argument or an env var (it would leak via ps/history)." >&2
+        exit 1
+    fi
+
+    printf 'Governance password: ' >&2
+    read -rs password
+    printf '\n' >&2
+    [ -n "$password" ] || { echo "Error: empty password" >&2; exit 1; }
+
+    # -i so we can read Set-Cookie. jq --arg escapes the password into the JSON string:
+    # a quote or backslash in it must not be able to break out or forge extra fields.
+    local base
+    base="$(get_api_base)"
+    resp="$(curl -s -i --max-time 30 -X POST \
+        -H "Content-Type: application/json" \
+        -d "$(jq -nc --arg p "$password" '{password:$p}')" \
+        "${base}/api/auth/login")" || { echo "Error: login request failed (network)" >&2; exit 1; }
+    unset password
+
+    token="$(printf '%s' "$resp" \
+        | tr -d '\r' \
+        | sed -n 's/^[Ss]et-[Cc]ookie: *aim_session=\([^;]*\).*/\1/p' \
+        | head -n1)"
+
+    if [ -z "$token" ]; then
+        echo "Error: login failed — no session issued." >&2
+        printf '%s' "$resp" | sed -n 's/.*"error" *: *"\([^"]*\)".*/       \1/p' | head -n1 >&2
+        exit 1
+    fi
+
+    file="$(cli_session_file)"
+    dir="$(dirname "$file")"
+    mkdir -p "$dir"
+    # Write 0600 BEFORE the content lands: a token briefly world-readable is a token
+    # leaked. umask alone is not enough — the file may already exist with looser perms.
+    ( umask 077; : > "$file" )
+    chmod 600 "$file" 2>/dev/null || true
+    printf '%s' "$token" > "$file"
+
+    echo "Logged in. Session stored in ${file} (0600)."
+    echo "Every aimaestro-*.sh / amp-*.sh now authenticates as you. Use 'logout' to end it."
+}
+
+# Forget the stored session. (The server-side session expires on its own; this removes
+# the local token so the next call is unauthenticated rather than silently still you.)
+cmd_logout() {
+    local file
+    file="$(cli_session_file)"
+    if [ -e "$file" ]; then
+        rm -f "$file"
+        echo "Logged out — removed ${file}."
+    else
+        echo "Not logged in (no ${file})."
+    fi
+}
+
 case "${1:-help}" in
+    login)         shift; cmd_login "$@" ;;
+    logout)        shift; cmd_logout "$@" ;;
     invalidate-password) shift; cmd_invalidate_password "$@" ;;
     whoami|config|status) shift; cmd_whoami "$@" ;;
     requests)      shift; cmd_requests "$@" ;;

@@ -92,7 +92,8 @@ _api() {
         err="$(printf '%s' "$out" | jq -r '.error // .message // empty' 2>/dev/null)"
         echo "Error: HTTP ${code}${err:+ — ${err}}" >&2
         if [ "$code" = "401" ] || [ "$code" = "403" ]; then
-            echo "Hint: strict routes need AIMAESTRO_SUDO_TOKEN (user) or AID_AUTH (agent)." >&2
+            echo "Hint: agents authenticate with AID_AUTH (export AID_AUTH=\"\$(aid-auth.sh)\")." >&2
+            echo "      Humans: run 'aimaestro-governance.sh login' once. Strict routes also need AIMAESTRO_SUDO_TOKEN." >&2
         fi
         return 1
     fi

@@ -21,11 +21,11 @@ _init_self_host() {
     fi
 
     # Try identity API first (most reliable)
-    # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate
+    # SCEN-022 BUG-001 fix (P0): authenticate the caller. This inlined the AID bearer
+    # and so 401'd every HUMAN (#55); it now shares the one resolution order in
+    # get_auth_args — agent → bearer, human → aim_session cookie.
     local -a _id_auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then
-        _id_auth_args=(-H "Authorization: Bearer $AID_AUTH")
-    fi
+    get_auth_args _id_auth_args
     local identity
     identity=$(curl -s --max-time 5 "${_id_auth_args[@]}" "http://127.0.0.1:23000/api/hosts/identity" 2>/dev/null)
     if [ -n "$identity" ]; then
@@ -193,11 +193,9 @@ lookup_agent_by_session() {
     local api_url
     api_url=$(get_api_base)
 
-    # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate
+    # SCEN-022 BUG-001 fix (P0), extended for #55: agent → bearer, human → cookie.
     local -a _lookup_auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then
-        _lookup_auth_args=(-H "Authorization: Bearer $AID_AUTH")
-    fi
+    get_auth_args _lookup_auth_args
 
     local response
     response=$(curl -s --max-time 5 "${_lookup_auth_args[@]}" "${api_url}/api/agents" 2>/dev/null)
@@ -242,11 +240,9 @@ lookup_agent_by_directory() {
     local api_url
     api_url=$(get_api_base)
 
-    # SCEN-022 BUG-001 fix (P0): pass AID_AUTH so agent callers can authenticate
+    # SCEN-022 BUG-001 fix (P0), extended for #55: agent → bearer, human → cookie.
     local -a _lookup_auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then
-        _lookup_auth_args=(-H "Authorization: Bearer $AID_AUTH")
-    fi
+    get_auth_args _lookup_auth_args
 
     # Query the agents API and find agent with matching workingDirectory
     local response
@@ -367,13 +363,58 @@ init_common() {
     export HOST_ID
 }
 
-# Get AID auth header for API calls (if AID_AUTH env var is set)
-# Usage: AUTH_ARGS=($(get_auth_args))
-#        curl "${AUTH_ARGS[@]}" ...
-# Returns: -H "Authorization: Bearer <token>" or empty
+# ─────────────────────────────────────────────────────────────────────────────
+# THE TWO CALLERS (ai-maestro#55)
+#
+# An AGENT authenticates with its AID bearer token. A HUMAN authenticates with the
+# `aim_session` cookie the dashboard login issues. Until now these helpers emitted
+# ONLY the bearer, so every `aimaestro-*.sh` 401'd for a human — which is why the
+# MANAGER could not run the #46 identity test from a dev session, and why the script
+# layer was, for the human who owns the machine, unusable.
+#
+# Resolution order (first match wins):
+#   1. $AID_AUTH               — an agent presents its own identity; it must win.
+#   2. $AIMAESTRO_SESSION      — an explicit session token (CI, a one-off shell).
+#   3. ~/.aimaestro/cli-session — the token `aimaestro-governance.sh login` writes.
+#
+# THE PASSWORD IS NEVER PART OF THIS. It is not an argument, not an env var, and
+# never reaches these helpers: `login` prompts for it on the TTY, exchanges it for a
+# session token once, and only the TOKEN is ever stored or sent. A password on argv
+# leaks through `ps` and shell history (TRDD-E9BZ5P7S); an env var leaks into every
+# child process.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Path of the session token written by `aimaestro-governance.sh login`.
+cli_session_file() {
+    echo "${AIMAESTRO_SESSION_FILE:-${HOME}/.aimaestro/cli-session}"
+}
+
+# Read the human's session token: $AIMAESTRO_SESSION, else the login file. Empty if
+# neither exists (an unauthenticated human — the caller will get a 401 and a hint).
+get_session_token() {
+    if [ -n "${AIMAESTRO_SESSION:-}" ]; then
+        printf '%s' "$AIMAESTRO_SESSION"
+        return 0
+    fi
+    local f
+    f="$(cli_session_file)"
+    if [ -r "$f" ]; then
+        tr -d '\r\n' < "$f"
+    fi
+}
+
+# Get the auth header for API calls, as a quoted string.
+# DEPRECATED for new code — the quoting is unsafe to re-split. Use get_auth_args.
+# Returns: -H "Authorization: Bearer <aid>" | -H "Cookie: aim_session=<tok>" | empty
 get_auth_header() {
     if [ -n "${AID_AUTH:-}" ]; then
         echo "-H \"Authorization: Bearer $AID_AUTH\""
+        return 0
+    fi
+    local _tok
+    _tok="$(get_session_token)"
+    if [ -n "$_tok" ]; then
+        echo "-H \"Cookie: aim_session=$_tok\""
     fi
 }
 
@@ -384,23 +425,28 @@ get_auth_args() {
     _arr=()
     if [ -n "${AID_AUTH:-}" ]; then
         _arr=(-H "Authorization: Bearer $AID_AUTH")
+        return 0
+    fi
+    local _tok
+    _tok="$(get_session_token)"
+    if [ -n "$_tok" ]; then
+        _arr=(-H "Cookie: aim_session=$_tok")
     fi
 }
 
 # Make an API query with common error handling
 # Usage: api_query "GET" "/api/agents/${AGENT_ID}/endpoint" [extra_curl_args...]
-# Automatically includes AID_AUTH Bearer header if available.
+# Authenticates the caller: AID bearer for an agent, aim_session cookie for a human.
 api_query() {
     local method="$1"
     local endpoint="$2"
     shift 2
     local extra_args=("$@")
 
-    # Inject AID auth header if available
+    # ONE resolution order for every caller — see get_auth_args. This used to inline
+    # the bearer, so it 401'd every human even after the helper learned the cookie.
     local -a auth_args=()
-    if [ -n "${AID_AUTH:-}" ]; then
-        auth_args=(-H "Authorization: Bearer $AID_AUTH")
-    fi
+    get_auth_args auth_args
 
     local api_base
     api_base=$(get_api_base)

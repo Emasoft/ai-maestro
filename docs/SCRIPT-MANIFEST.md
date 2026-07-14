@@ -163,6 +163,8 @@ Nothing is committed for you.
 
 | Subcommand | Flags |
 |---|---|
+| `login` | — (prompts on the **TTY**) — **the human's way in** (#55). Stores a session TOKEN at `~/.aimaestro/cli-session` (0600); every `aimaestro-*.sh` / `amp-*.sh` then authenticates as you |
+| `logout` | — (forgets the stored token) |
 | `whoami` / `status` | — (manager, owner title, hasManager) |
 | `invalidate-password` | — (prompts on the **TTY**; never takes the password as an argument) |
 | `requests` | `--status S` `--type T` `--host H` `--agent A` |
@@ -388,9 +390,25 @@ repo, not in `~/.local/bin`. They are broken today, on every host:
 
 | Var | Used by |
 |---|---|
-| `AID_AUTH` | every `aimaestro-*` script — the agent's `Bearer` token. Optional for the local system owner (localhost is trusted). |
+| `AID_AUTH` | every `aimaestro-*` script — the **agent's** `Bearer` token. `export AID_AUTH="$(aid-auth.sh)"` |
+| `AIMAESTRO_SESSION` | the **human's** session token, sent as `Cookie: aim_session=…`. Normally you don't set it — `aimaestro-governance.sh login` writes it to `~/.aimaestro/cli-session` (0600) and the scripts read it from there. `AIMAESTRO_SESSION_FILE` overrides that path. |
 | `AIMAESTRO_SUDO_TOKEN` | passed through as `X-Sudo-Token` on strict routes — for **USER** callers. Agent callers never need one. |
 | `AIMAESTRO_API_BASE` | override the API base URL (default: this host) |
+
+**Resolution order in `get_auth_args` (first match wins):** `AID_AUTH` → `AIMAESTRO_SESSION`
+→ `~/.aimaestro/cli-session`. An agent's own identity must win, so the bearer is checked
+first.
+
+> **"Localhost is trusted" was never true, and this table used to say it was** (#55). An
+> unauthenticated call to `/api/sessions` from `127.0.0.1` returns **401** — SF-058 closed
+> that hole deliberately. So before `login` existed, a HUMAN got 401 from *every* script in
+> Tier A: the one sanctioned boundary to the API was unusable by the person who owns the
+> machine. A doc line asserting the opposite is what let it go unnoticed.
+
+**The governance password is never part of any of this.** `login` prompts for it on the TTY,
+exchanges it for a token once, and discards it. It is never an argument (it would sit in `ps`
+and shell history), never an env var (inherited by every child), and never written to disk —
+only the token is, and a token expires and can be revoked. A password can do neither.
 
 ### 6.3 Authorization (R32 dual path)
 

@@ -266,3 +266,11 @@ rust-tools/**/target/
 
 # SCEN fixture clones (local git repos — never commit; provisioned by setup scripts / TRDD-QB5PWIG3)
 /tests/scenarios/fixtures/git/
+
+# Janitor findings REPORTS that it writes INTO the memory dir (memory-reorg-proposed.md,
+# memory-scope-leak-proposed.md, ...). PROJECT memory is git-tracked and PUSHED, so a
+# findings report dropped in here would ship to every contributor's clone — and it is a
+# report, not knowledge: it is regenerated on each sweep and belongs in reports/. Ignoring
+# the pattern (rather than deleting the file, which RULE 0 forbids) stops it dirtying the
+# tree forever while leaving it readable on disk. The *pages* it refers to stay tracked.
+/.claude/project/memory/*-proposed.md

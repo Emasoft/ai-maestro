@@ -9,31 +9,47 @@ created-by: claude-opus-session
 task-type: security
 min-approval-requirement: manager
 approved: false
-priority: 2
-severity: medium
-effort: small
+priority: 0
+severity: high
+effort: medium
 release-via: none
-relevant-rules: [28, 29, 30, 32, 34, 41]
+relevant-rules: [28, 29, 30, 31, 32, 34, 41]
 labels: [governance, security, portfolio, enforcement]
 external-refs: [https://github.com/Emasoft/ai-maestro/issues/47]
 ---
 
 # Decide whether a portfolio token becomes MANDATORY for CreateAgent and CreateTeam
 
-## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-14
+## ⏵ STATE — READ THIS FIRST ON RESUME (authoritative; supersedes the body) — 2026-07-14 (REVISED)
 
-**This is a DECISION, not an implementation task.** The code already exists, is tested, and
-is switched off. Nothing here needs to be built; something here needs to be *chosen*.
+**⚠ THE BODY BELOW IS SUPERSEDED IN ITS FRAMING.** It calls this a "governance decision" whose
+answer is unknown. That was wrong on both counts, and the correction raises the severity:
 
-- **Current state:** `OPERATIONS_REQUIRING_TOKEN` in `lib/portfolio-check.ts` is `{}`. The
-  third authorization check (R28) therefore always passes. `CreateTeam`
-  (`services/teams-service.ts:305`) and `CreateAgent`
-  (`services/element-management-service.ts:6903`) already CALL `matchPortfolioToken`; it
-  returns `ok: true` because the map is empty.
-- **NEXT ACTION:** the MANAGER (or the USER) decides yes/no on the v1 set below. If yes, the
-  change is three lines and a test; if no, this TRDD is refused and the map's emptiness
-  becomes a recorded decision rather than an accident.
-- **Do NOT** flip the map as part of some other piece of work.
+1. **The open question is ANSWERED, and it was already answered when I asked it.** The body
+   asks *"does a COS ever create an agent in normal team operation?"* and says "I do not know
+   which is true." **R30.2 (IRON, USER-set) says yes** — a team-creation mandate authorizes the
+   COS to create the 5 base members plus specialized MEMBERs. That IS normal team operation.
+   I reasoned about what the MANAGER *would* have to tell me instead of reading the rule that
+   already said it. (Sixth instance of [[agent-claims-the-api-was-never-delivered]] — the
+   answer was on disk.)
+2. **This is not an optional hardening. It is the MISSING ENFORCEMENT OF AN IRON RULE.**
+   **R30.1: "The CHIEF-OF-STAFF requires the MANAGER's approval/mandate to create agents."**
+   There is no mandate check anywhere: `OPERATIONS_REQUIRING_TOKEN` is `{}`, so
+   `matchPortfolioToken` returns `ok:true` unconditionally. R30.1 is law with no enforcement.
+3. **And it is worse than R30.1 alone.** `POST /api/agents` (`app/api/agents/route.ts`) calls
+   `authenticateFromRequest` and **NOTHING ELSE** — no `authorize()`, no title check. There is
+   no `create-agent` AuthAction in the RBAC enum at all, and the route is absent from
+   `security-registry.json`. So **any authenticated agent of any title can create agents.**
+   The comment above the auth call reads *"CC-GOV-008: Auth required — agent creation is a
+   privileged mutation"* — it names the operation privileged and then checks only WHO the
+   caller is, never WHETHER they may. Authentication standing in for authorization.
+
+- **NEXT ACTION:** flip the map to the v1 set AND add the missing authorize() gate on
+  creation. The token gate alone is not sufficient — it enforces "has a mandate", not
+  "is allowed to hold one".
+- **Severity raised** to `high`, task-type to `security`. This is a fix, not a proposal.
+- **Still do NOT flip it silently as part of other work** — but it now needs to be scheduled,
+  not merely considered.
 
 ## Problem
 
@@ -82,19 +98,56 @@ minted by a MANAGER (`canIssue`, `lib/portfolio-issue-guard.ts`).
 That is the whole point — and it is also the whole risk. If any routine COS flow creates agents
 today without a mandate, this turns it into a 403 the moment it ships.
 
-## The question the decision actually turns on
+## The question the decision turns on — ANSWERED (2026-07-14)
 
-**Does a COS ever create an agent as part of normal team operation?** Two honest answers:
+**Does a COS ever create an agent as part of normal team operation?** — **YES.** R30.2 (IRON,
+USER-set): a team-creation mandate authorizes the COS to create the 5 basic members plus
+specialized MEMBER agents tailored to the project. That is the COS's defining job; the fleet
+org-chart calls the role *"per-team agent management"*.
 
-- **Yes** → flipping this breaks a working flow, and the flip must be preceded by the MANAGER
-  minting standing `agent:create` mandates to each COS (30-day TTL, revocable). That is real
-  operational work, not a config change, and it should be scheduled rather than discovered.
-- **No** → the flip is nearly free, and it closes a real gap: a compromised or confused COS can
-  currently create agents with no authority beyond its title.
+So the "Yes" branch below is the live one, and it says exactly what must happen:
 
-**I do not know which is true**, and I am not going to guess at it inside a security flip. The
-MANAGER does know, or can find out in one query. That asymmetry is the reason this is a
-proposal and not a commit.
+> flipping this breaks a working flow, and the flip must be preceded by the MANAGER minting
+> standing `agent:create` mandates to each COS (30-day TTL, revocable). That is real
+> operational work, not a config change, and it should be scheduled rather than discovered.
+
+**But the framing was still wrong.** I wrote "I do not know which is true, and the MANAGER can
+find out in one query." The answer was not in the MANAGER's head — it was in R30.2, in the
+repo, written by the USER. The correct move was to read the governance rules before declaring
+the question unanswerable. Recorded as a lesson, not just a correction.
+
+## The bigger hole this surfaced: creation has NO authorization at all
+
+The token gate is the *second* missing check. The first is that there is no check.
+
+```ts
+// app/api/agents/route.ts — the COMPLETE authorization of agent creation
+// CC-GOV-008: Auth required — agent creation is a privileged mutation
+const auth = authenticateFromRequest(request)
+if (auth.error) return NextResponse.json({ error: auth.error }, { status: 401 })
+// … validate body … then straight into CreateAgent(). No authorize(). No title check.
+```
+
+- No `create-agent` AuthAction exists in `lib/authorization.ts`'s enum (`modify-agent`,
+  `delete-agent`, `manage-team` — but nothing for create).
+- `POST /api/agents` is absent from `security-registry.json`, so it is not `strict` either.
+- `CreateAgent`'s `matchPortfolioToken` call is the only authority gate in the path, and it is
+  disarmed.
+
+**Therefore any authenticated agent — a MEMBER, an ORCHESTRATOR, anyone with an AID — can
+create agents today.** R29.3 reserves AUTONOMOUS/MAINTAINER creation to the MANAGER; R30.1
+requires a MANAGER mandate for a COS. Neither is enforced by anything.
+
+Flipping `OPERATIONS_REQUIRING_TOKEN` enforces *"you hold a mandate"*. It does **not** enforce
+*"you are entitled to hold one"* — a MEMBER handed a token would pass. Both checks are needed:
+
+1. **`authorize('create-agent', …)`** — a title gate: MANAGER always; COS only for its own
+   team; everyone else denied. (Add the AuthAction; add the route to the strict registry so
+   the USER path gets a sudo modal and the agent path gets the R28 three-check per R32.3.)
+2. **`OPERATIONS_REQUIRING_TOKEN = { CreateAgent: 'agent:create', CreateTeam: 'team:create' }`**
+   — the mandate gate, enforcing R30.1's "unless the MANAGER granted a team-creation mandate".
+
+Ship them together. Either alone is a half-gate that reads as a whole one.
 
 ## Verification (if approved)
 

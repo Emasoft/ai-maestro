@@ -1162,8 +1162,10 @@ agent is *enqueued*, not blocked on — `aimaestro-session.sh queue <agent>
 agent next reaches a safe idle prompt. So an enqueued `/janitor-arm` always
 succeeds: live agents run it now, hibernated agents run it on wake. Delivery is
 eventual, never conditional. The queue does not widen authorization — `queue`
-maps to `send-command`, so an agent may enqueue only on itself; fanning out
-across the fleet requires MANAGER or the USER.
+maps to `send-command`, which **R42 makes self-only for every title**: an agent
+may enqueue on itself and on nobody else, MANAGER and COS included. Fanning out
+across the fleet is the human USER's alone — and the scripts have no USER auth
+path yet, so today it has no working caller at all.
 
 `/janitor-arm` is per-project (it arms the heartbeat of the project whose session
 runs it), which is why it must be delivered into each agent's own session. It is

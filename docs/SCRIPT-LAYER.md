@@ -103,14 +103,23 @@ the `send-command` action. Who may enqueue *on whom* is the ordinary
 | Caller | May enqueue on |
 |---|---|
 | the human USER | any agent (needs a fresh sudo token) |
-| MANAGER | any agent |
-| CHIEF-OF-STAFF | agents of its own team |
-| any agent | **itself only** (`send-command` is a self-drive action) |
+| **every agent — MANAGER and CHIEF-OF-STAFF included** | **itself only** |
+
+**R42 (2026-07-14, USER-set) revoked the cross-agent grant this table used to
+carry** — the MANAGER could enqueue on any agent and a COS on its own team's.
+Both are now `403`. `send-command` is a DRIVE action, and no title drives another
+agent: a superior's directive is a *message* the recipient decides to act on, not
+a keystroke that acts for it. See R42 in `docs/GOVERNANCE-RULES.md`.
 
 So the janitor running inside a MEMBER's session can arm *that* agent and no
-other. A fleet-wide arm must run from the MANAGER's session, or from the human
-user. This is not a defect to route around: an agent that could enqueue commands
-into its peers' terminals would have bypassed the governance graph entirely.
+other — and now that is true of every session, including the MANAGER's.
+
+**The consequence, stated rather than discovered later: a fleet-wide arm has no
+working caller today.** The only principal R42 leaves able to drive another agent
+is the human USER — who, per *"One thing that is NOT true yet"* below, has **no
+auth path in these scripts at all**. That gap was a nuisance before R42; it is now
+the single thing standing between the USER and their own fleet, which is why
+teaching `get_auth_args` about the `aim_session` cookie stopped being optional.
 
 ### `aimaestro-panel.sh` — drive the dashboard HTML side panel
 
@@ -167,10 +176,19 @@ Since TRDD-D3RP7KQZ (2026-07-09) the rule for an agent is:
 
 > **An agent may drive its own surface. It may never reconfigure itself.**
 
+And since R42 (TRDD-BF3JN4TL, 2026-07-14) the other half is absolute:
+
+> **An agent may drive ONLY its own surface. No title drives another agent.**
+
 So `inject`, `slash`, `answer`, `queue`, and every `panel` verb work on the
-agent's **own** id. Targeting *another* agent needs MANAGER, or CHIEF-OF-STAFF
-within its own team. Configuration — role plugin, extensions, MCP, hooks,
-sub-agents, title, team — is refused on self for every title, including MANAGER.
+agent's **own** id and nowhere else — targeting *another* agent is `403` for every
+caller with an agent identity, MANAGER and CHIEF-OF-STAFF included. Configuration
+— role plugin, extensions, MCP, hooks, sub-agents, title, team — is the mirror
+image: refused on **self** for every title, and it remains a MANAGER/COS power
+over *others* (R42.6 — configuring an agent is not driving it).
+
+The two rules meet cleanly: **an agent shapes what another agent IS, and never
+what it DOES.**
 
 The `aimaestro-trdd.sh` write verbs — `edit`, `approve`, `refuse`, `promote`,
 `archive` — **work for agents as of `d7531e53`** (TRDD-K2WJH7RF). They are governed

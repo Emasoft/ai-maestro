@@ -3,7 +3,7 @@ trdd-id: SB5I53K1
 title: A fleet-wide stop and restart verb on the script layer so the janitor can cycle every agent
 column: proposal
 created: 2026-07-14T15:11:49+0200
-updated: 2026-07-14T15:11:49+0200
+updated: 2026-07-14T17:45:00+0200
 current-owner: claude-opus-session
 created-by: claude-opus-session
 task-type: feature
@@ -112,9 +112,36 @@ to invoke. Who may call it — USER only, MANAGER, or the janitor under a portfo
 commit. Note the shape it would take: this is precisely the kind of narrow, high-blast-radius
 operation `OPERATIONS_REQUIRING_TOKEN` exists to gate (see `TRDD-F1SL03CK`).
 
+> **▶ 2026-07-14 — R42 ANSWERED question 1 after this card was written. Read this before
+> approving.** `restart-session` is now a **DRIVE action** (`lib/authorization.ts`), and R42
+> (IRON, USER-set) forbids **any** agent from driving another — MANAGER and COS included. So
+> the menu below is no longer a menu:
+>
+> - **MANAGER — REVOKED.** Not a governance preference any more; `authorize()` returns 403.
+> - **The janitor under a portfolio token — REVOKED.** R42.5's sole exception is the janitor's
+>   *global switches* (disarm/re-arm, pause/unpause, reload plugins+skills). A fleet cycle is
+>   not a switch: it drives N agents' panes. A token cannot mint an exemption from an IRON rule.
+> - **USER only — the remaining answer,** and the sudo-gated `strict` route is exactly right for
+>   a fleet-wide destructive act.
+>
+> This also **answers question 2 in the negative**: the janitor may surface a
+> `[janitor-restart-needed]` marker; it may not cycle the fleet unattended. Under R42 that is
+> no longer a policy call about autonomy — it is simply not a thing an agent may do.
+>
+> **Approving this card as originally written would reopen R42 by the front door**, which is
+> why the answer is recorded here rather than left for the approver to re-derive. The USER may
+> of course overrule — but they would be amending R42, not merely picking option (b).
+>
+> Consequence to face when this is built: **the USER has no auth path in the scripts today**
+> (`docs/SCRIPT-LAYER.md` § *One thing that is NOT true yet*). The one principal R42 leaves
+> able to call `--all` is the one principal the CLI cannot authenticate. That gap is now this
+> card's real prerequisite, alongside `TRDD-D5XDT49I`.
+
 ## Open questions for the approver
 
-1. **Who may invoke `--all`?** USER only? MANAGER? The janitor with a minted mandate?
+1. ~~**Who may invoke `--all`?** USER only? MANAGER? The janitor with a minted mandate?~~
+   **DECIDED by R42 (see the block above): USER only.** Struck rather than deleted, so the
+   question's history survives — this is what a rule landing mid-proposal looks like.
 2. **Does the janitor get to invoke it autonomously**, or only surface a
    `[janitor-restart-needed]` marker for a human to action? Autonomy here means a background
    daemon can cycle the whole fleet unattended — a categorically larger promise than

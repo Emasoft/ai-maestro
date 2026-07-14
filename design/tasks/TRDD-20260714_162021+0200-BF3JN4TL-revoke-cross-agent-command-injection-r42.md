@@ -3,7 +3,7 @@ trdd-id: BF3JN4TL
 title: Revoke cross-agent command injection entirely (R42) — messaging becomes the only channel
 column: testing
 created: 2026-07-14T16:20:21+0200
-updated: 2026-07-14T17:20:00+0200
+updated: 2026-07-14T17:45:00+0200
 current-owner: claude-opus-session
 created-by: maestro
 task-type: security
@@ -187,6 +187,35 @@ risk is **operational**: if any real flow depends on the MANAGER or COS driving 
 it breaks the moment this ships. Enumerate those flows first — each must be re-expressed as a
 message, which is exactly the point of the rule, but it is real work and should be discovered
 now rather than in production.
+
+### ▶ 2026-07-14 — the enumeration, DONE. No shipped agent behaviour breaks.
+
+Swept the product, the script layer, the docs, and the installed plugin tree for anything that
+depended on a MANAGER or COS driving a pane. **Nothing does.** The revoked grant existed in the
+authorization matrix and in prose — no skill, agent, hook, or command was actually built on it:
+
+| Surface | Verdict |
+|---|---|
+| Role-plugins + core plugin (all versions in `~/.claude/plugins/cache/`) | **Clean.** Not one skill/agent/command instructs a cross-agent `session inject\|slash\|queue\|answer`, `panel`, or `stop/restart`. The grant was never taken up. |
+| Dashboard UI (restart queue, chat box, panel, stop/restart buttons) | **Unaffected.** The browser is the system-owner, granted at `authorization.ts:266` — long before the R42 gate at `:499`. |
+| Server-internal lifecycle (hibernate/wake, R9.8 cascade, R31 freeze) | **Unaffected.** LIFECYCLE, not DRIVE — see the seam warning in the STATE block. |
+| `docs/SCRIPT-LAYER.md` — the `queue` authorization table + the "targeting another agent needs MANAGER" rule | **Was lying.** Published the revoked grant as current policy. **Corrected.** |
+| `CLAUDE.md` — "fanning out across the fleet requires MANAGER or the USER" | **Was lying.** **Corrected** (the USER alone). |
+| `TRDD-SB5I53K1` (fleet-wide stop/restart verb, open proposal) | Its central open question — *"who may invoke `--all`: USER, MANAGER, or the janitor?"* — **R42 answered after the card was written.** Recorded on the card: approving it as drafted would have reopened R42 by the front door. |
+| Core plugin's vendored `skills/team-governance/references/GOVERNANCE-RULES.md` | **Stale** (frozen ~v3.x; R42 is 4.3.0), so an agent reading it learns the pre-R42 rules. **Separate repo** — file an issue, never patch (cross-project rule). Deeper point: a plugin vendoring a COPY of the server's governance is a second writer of one fact, and it will drift again. |
+
+**The one genuinely NEW consequence — and it is not doc drift.** R42 leaves exactly one
+principal able to drive another agent: the human USER. **The scripts cannot authenticate the
+USER at all** (`get_auth_args` emits only the AID bearer — `docs/SCRIPT-LAYER.md` § *One thing
+that is NOT true yet*). So the only permitted driver is the one caller the CLI does not support,
+and **a fleet-wide arm now has no working caller whatsoever**. Before R42 that gap was a
+nuisance a MANAGER could route around; R42 removed the workaround and turned it into the thing
+standing between the USER and their own fleet. It is now a prerequisite of `TRDD-SB5I53K1`, and
+the reason the USER auth path stopped being optional.
+
+**This is the good kind of finding:** the rule cost nothing to enforce because nobody was using
+the hole — and closing it surfaced a gap that was already there, hiding behind a permission that
+should not have existed.
 
 ## Implementation
 

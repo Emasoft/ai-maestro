@@ -1,7 +1,7 @@
 ---
 name: parallel-tester-agent
 description: Runs a focused smoke-test (≤10 UI steps) against the currently-running AI Maestro dashboard via dev-browser to verify a feature the parallel-worker-agent just merged. Returns a 2-line pass/fail summary so the orchestrator can decide to resume the long scenario run or spawn a fix cycle. Unlike scenario-runner it does NOT produce full reports, screenshots only on failure, and uses no state-backup (surgical tests are stateless). Spawned by the orchestrator during the sibling-feature workflow in docs_dev/2026-04-20-agent-execution-containers.md §15. Accumulates cross-run knowledge in project-scoped memory. Quality matters over speed — no time caps, no turn caps.
-model: opus
+model: opus[1m]
 memory: project
 color: magenta
 skills:

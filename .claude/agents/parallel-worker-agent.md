@@ -1,7 +1,7 @@
 ---
 name: parallel-worker-agent
 description: Implements a bounded code-change request in an isolated git worktree. Runs type-check + build after every logical unit of work, commits when clean, pushes its feature branch to fork. Returns a 2-line summary. Spawned by the orchestrator during the sibling-feature workflow documented at docs_dev/2026-04-20-agent-execution-containers.md §15. The orchestrator keeps its long-running 25-scenario batch on the parent branch; this worker lands features asynchronously without disturbing the scenario server. Worker prompts are tight specs containing file scope, feature description, acceptance criteria, and the smoke-test that will later verify the merge. Quality matters over speed — no retry limits, no time caps, no rushing.
-model: opus
+model: opus[1m]
 isolation: worktree
 memory: project
 color: green

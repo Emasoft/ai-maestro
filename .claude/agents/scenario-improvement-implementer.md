@@ -1,7 +1,7 @@
 ---
 name: scenario-improvement-implementer
 description: Implements APPROVED scenario-improvement proposal TRDDs — files in design/tasks/ with column planned and the scenario-improvement label (promoted there from design/proposals/ per Rule 11 / TRDD-CJZRB57R). Works in an isolated git worktree. Auto-detects the project's type-check and build commands (or reads them from tests/scenarios/scenarios.config.json). Commits each proposal individually citing its TRDD-<id8>, and records the sha back into the TRDD's implementation-commits. Returns the worktree branch name and implemented/deferred counts so the parent session can merge on verification success or discard on failure. Use proactively after run-scenarios-batch completes a batch with --improve. Accumulates cross-run knowledge in project-scoped memory to avoid re-implementing the same proposals or re-tripping on the same deferral reasons.
-model: opus
+model: opus[1m]
 isolation: worktree
 memory: project
 color: orange

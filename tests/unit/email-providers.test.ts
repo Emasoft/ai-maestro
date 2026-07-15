@@ -40,6 +40,24 @@ describe('detectProvider — known providers map to their real SMTP profile', ()
   })
 })
 
+describe('detectProvider — Asian providers (fixed hosts, 465 SSL, webmail guidance)', () => {
+  it('QQ Mail → smtp.qq.com:465 with Authorization Code guidance', () => {
+    const p = detectProvider('u@qq.com')!
+    expect(p).toMatchObject({ host: 'smtp.qq.com', port: 465, secure: true, known: true })
+    expect(p.note).toMatch(/Authorization Code/i)
+  })
+  it('NetEase 163/126 → smtp.163.com / smtp.126.com:465', () => {
+    expect(detectProvider('u@163.com')).toMatchObject({ host: 'smtp.163.com', port: 465, secure: true, known: true })
+    expect(detectProvider('u@126.com')).toMatchObject({ host: 'smtp.126.com', port: 465, secure: true, known: true })
+  })
+  it('Naver → smtp.naver.com:465', () => {
+    expect(detectProvider('u@naver.com')).toMatchObject({ host: 'smtp.naver.com', port: 465, secure: true, known: true })
+  })
+  it('Yahoo! JAPAN → smtp.mail.yahoo.co.jp:465', () => {
+    expect(detectProvider('u@yahoo.co.jp')).toMatchObject({ host: 'smtp.mail.yahoo.co.jp', port: 465, secure: true, known: true })
+  })
+})
+
 describe('detectProvider — unknown + malformed', () => {
   it('guesses smtp.<domain>:587 STARTTLS for an unknown domain and flags it not-known', () => {
     const p = detectProvider('admin@acme-corp.example')!

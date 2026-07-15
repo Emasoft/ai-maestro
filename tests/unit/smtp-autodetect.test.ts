@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseIspdbSmtp, mapMxToSmtp, autodetectSMTP } from '@/lib/smtp-autodetect'
+import { parseIspdbSmtp, mapMxToSmtp, autodetectSMTP, authRequiredInstructions } from '@/lib/smtp-autodetect'
 
 /**
  * Dynamic SMTP autodetection (TRDD-P7XKV3N9). Tests the OFFLINE, deterministic surface:
@@ -70,6 +70,32 @@ describe('mapMxToSmtp — fingerprints resolve to REAL hosts (not the snippet\'s
   })
   it('unknown infrastructure → guesses smtp.<domain>:587', () => {
     expect(mapMxToSmtp('mail.self-hosted.example', 'self-hosted.example')).toEqual({ host: 'smtp.self-hosted.example', port: 587, secure: false, usernameFormat: 'full' })
+  })
+  it('Tencent/QQ MX → smtp.qq.com:465', () => {
+    expect(mapMxToSmtp('mxbiz1.qq.com', 'acme.cn')).toEqual({ host: 'smtp.qq.com', port: 465, secure: true, usernameFormat: 'full' })
+  })
+  it('NetEase MX → smtp.163.com:465', () => {
+    expect(mapMxToSmtp('163mx00.mxmail.netease.com', 'acme.cn')).toEqual({ host: 'smtp.163.com', port: 465, secure: true, usernameFormat: 'full' })
+  })
+  it('Alibaba mxhichina MX → smtp.mxhichina.com:465', () => {
+    expect(mapMxToSmtp('mxn.mxhichina.com', 'acme.cn')).toEqual({ host: 'smtp.mxhichina.com', port: 465, secure: true, usernameFormat: 'full' })
+  })
+})
+
+describe('authRequiredInstructions — provider-specific guidance on auth rejection', () => {
+  it('QQ → enable POP3/IMAP/SMTP + 16-char Authorization Code', () => {
+    expect(authRequiredInstructions('u@qq.com')).toMatch(/QQ Mail[\s\S]*Authorization Code/i)
+  })
+  it('NetEase 163/126 → enable IMAP/SMTP + Authorization Code', () => {
+    expect(authRequiredInstructions('u@163.com')).toMatch(/NetEase[\s\S]*Authorization Code/i)
+    expect(authRequiredInstructions('u@126.com')).toMatch(/NetEase/i)
+  })
+  it('Naver → enable SMTP under mail settings', () => {
+    expect(authRequiredInstructions('u@naver.com')).toMatch(/Naver[\s\S]*SMTP/i)
+  })
+  it('generic (Gmail / unknown / malformed) → app-specific password guidance', () => {
+    expect(authRequiredInstructions('u@gmail.com')).toMatch(/app-specific password/i)
+    expect(authRequiredInstructions('malformed')).toMatch(/app-specific password/i)
   })
 })
 

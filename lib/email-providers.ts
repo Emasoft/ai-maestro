@@ -51,6 +51,19 @@ const PROVIDERS: Record<string, Omit<SmtpProvider, 'known'>> = {
   'zoho.com': { label: 'Zoho', host: 'smtp.zoho.com', port: 465, secure: true },
   'proton.me': { label: 'Proton Mail', host: '127.0.0.1', port: 1025, secure: false, note: 'requires the Proton Mail Bridge running locally' },
   'protonmail.com': { label: 'Proton Mail', host: '127.0.0.1', port: 1025, secure: false, note: 'requires the Proton Mail Bridge running locally' },
+  // China — nearly all force implicit TLS on 465 and require enabling SMTP in webmail +
+  // a generated "Authorization Code" used INSTEAD of the login password.
+  'qq.com': { label: 'QQ Mail', host: 'smtp.qq.com', port: 465, secure: true, note: 'enable POP3/IMAP/SMTP in webmail Settings and use the 16-char Authorization Code, not your login password' },
+  '163.com': { label: 'NetEase 163', host: 'smtp.163.com', port: 465, secure: true, note: 'enable IMAP/SMTP in webmail and use the generated Authorization Code, not your login password' },
+  '126.com': { label: 'NetEase 126', host: 'smtp.126.com', port: 465, secure: true, note: 'enable IMAP/SMTP in webmail and use the generated Authorization Code, not your login password' },
+  'sina.com': { label: 'Sina Mail', host: 'smtp.sina.com', port: 465, secure: true, note: 'enable SMTP in webmail settings' },
+  'aliyun.com': { label: 'Alibaba Mail', host: 'smtp.aliyun.com', port: 465, secure: true },
+  // Japan
+  'yahoo.co.jp': { label: 'Yahoo! JAPAN', host: 'smtp.mail.yahoo.co.jp', port: 465, secure: true, note: 'requires an app password' },
+  'softbank.ne.jp': { label: 'SoftBank', host: 'smtp.softbank.ne.jp', port: 465, secure: true },
+  // South Korea
+  'naver.com': { label: 'Naver', host: 'smtp.naver.com', port: 465, secure: true, note: 'enable SMTP under Mail settings → POP3/IMAP first' },
+  'daum.net': { label: 'Daum', host: 'smtp.daum.net', port: 465, secure: true, note: 'enable SMTP in webmail settings' },
 }
 
 /**

@@ -85,6 +85,11 @@ export function mapMxToSmtp(primaryMx: string, domain: string): SmtpConfig {
   if (mx.includes('zoho.eu')) return { host: 'smtp.zoho.eu', port: 465, secure: true, usernameFormat: full } // EU datacenter
   if (mx.includes('zoho')) return { host: 'smtp.zoho.com', port: 465, secure: true, usernameFormat: full }
   if (mx.includes('yahoodns.net')) return { host: 'smtp.mail.yahoo.com', port: 465, secure: true, usernameFormat: full }
+  // Asian infrastructures — force 465 SSL (carriers deep-packet-filter 587).
+  if (mx.includes('qq.com') || mx.includes('tencent')) return { host: 'smtp.qq.com', port: 465, secure: true, usernameFormat: full }
+  if (mx.includes('163.com') || mx.includes('126.com') || mx.includes('netease')) return { host: 'smtp.163.com', port: 465, secure: true, usernameFormat: full }
+  if (mx.includes('mxhichina') || mx.includes('alicloud') || mx.includes('aliyun')) return { host: 'smtp.mxhichina.com', port: 465, secure: true, usernameFormat: full } // Alibaba enterprise
+  if (mx.includes('naver.com')) return { host: 'smtp.naver.com', port: 465, secure: true, usernameFormat: full }
   return { host: `smtp.${domain}`, port: 587, secure: false, usernameFormat: full }
 }
 
@@ -149,43 +154,69 @@ export async function verifyConnection(cfg: SmtpConfig): Promise<SmtpConfig | nu
 
 export type SmtpAuthStatus = 'SUCCESS' | 'AUTH_REQUIRED' | 'FAILED'
 
+export interface VerifyCredsResult {
+  status: SmtpAuthStatus
+  config: SmtpConfig
+  /** On AUTH_REQUIRED: provider-specific English guidance for the UI (enable SMTP + app/authorization code). */
+  instructions?: string
+}
+
 /**
- * AUTHENTICATED verify — the real credential test the configure step runs before storing.
- * Distinguishes (per the EU-provider version): SUCCESS (host/port/creds all good),
- * AUTH_REQUIRED (host/port right but the password was rejected — SMTP 535 / "auth" — i.e.
- * an app-specific password is needed), and FAILED (host/port wrong or unreachable). Honors
- * usernameFormat when building auth.user, and keeps the 587→465 fallback. Returns the
- * (possibly port-switched) config so the caller stores exactly what worked.
+ * Provider-specific guidance shown when the server is right but auth was rejected. Many
+ * Asian providers ship SMTP DISABLED and require enabling it in webmail PLUS a generated
+ * "Authorization Code"; Gmail/iCloud/Yahoo need an app-specific password under 2FA. Exported
+ * (pure) so the domain→guidance mapping is unit-tested. `emailDomain` returns null for a
+ * dotless/malformed address; treat that as the generic case.
  */
-export async function verifyCredentials(config: SmtpConfig, email: string, password: string): Promise<{ status: SmtpAuthStatus; config: SmtpConfig }> {
-  const localPart = email.slice(0, email.lastIndexOf('@'))
-  const authUser = config.usernameFormat === 'local' ? localPart : email
-  const t = nodemailer.createTransport({
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    connectionTimeout: 3000,
-    greetingTimeout: 2500,
-    auth: { user: authUser, pass: password },
-  })
+export function authRequiredInstructions(email: string): string {
+  const domain = emailDomain(email) ?? ''
+  if (domain.includes('qq.com')) return 'QQ Mail: log into webmail → Settings → Accounts, ENABLE the POP3/IMAP/SMTP service, and generate a 16-character Authorization Code to use here instead of your login password.'
+  if (domain.includes('163.com') || domain.includes('126.com')) return 'NetEase (163/126) disables third-party SMTP by default: log into webmail, enable the IMAP/SMTP service, and use the generated Authorization Code instead of your main password.'
+  if (domain.includes('naver.com')) return 'Naver: enable SMTP under Mail settings → POP3/IMAP first, then use your password (or a generated app password if 2-step verification is on).'
+  return 'The server was found but the password was rejected. Your provider likely requires enabling SMTP access in your webmail settings and/or generating a dedicated app-specific password (Authorization Code) to use here instead of your login password.'
+}
+
+async function verifyOnce(config: SmtpConfig, authUser: string, password: string, email: string): Promise<VerifyCredsResult> {
+  const t = nodemailer.createTransport({ host: config.host, port: config.port, secure: config.secure, connectionTimeout: 3000, greetingTimeout: 2500, auth: { user: authUser, pass: password } })
   try {
     await t.verify()
     return { status: 'SUCCESS', config }
   } catch (e) {
     const err = e as { message?: string; responseCode?: number }
-    const msg = err.message ?? ''
+    const msg = (err.message ?? '').toLowerCase()
     const code = err.responseCode ?? 0
-    // Host/port correct, password rejected → the owner likely needs an APP-specific
-    // password (Gmail/iCloud/Yahoo with 2FA). This is the load-bearing UX distinction.
-    if (code === 535 || /auth/i.test(msg)) return { status: 'AUTH_REQUIRED', config }
-    // Port 587 blocked/timeout (some ISPs block submission) → immediate 465-SSL fallback.
-    if (config.port === 587 && !config.secure) {
-      return verifyCredentials({ ...config, port: 465, secure: true }, email, password)
+    // Host/port correct, but auth rejected OR SMTP disabled in webmail (the common Asian
+    // default) → ACTIONABLE: the owner enables SMTP and/or supplies an app/authorization code.
+    if (code === 535 || /auth|credential|not enable|disabled|denied/.test(msg)) {
+      return { status: 'AUTH_REQUIRED', config, instructions: authRequiredInstructions(email) }
     }
     return { status: 'FAILED', config }
   } finally {
     t.close()
   }
+}
+
+/**
+ * AUTHENTICATED verify — the real credential test the configure step runs before storing.
+ * Returns SUCCESS / AUTH_REQUIRED (host+port right; enable SMTP or use an app-code — carries
+ * provider guidance) / FAILED (wrong or unreachable). Honors usernameFormat, and on a
+ * reachability FAILED tries the OTHER submission profile ONCE — 587↔465 in BOTH directions
+ * (EU carriers block 587; some Asian hosts drop 465), with no infinite flip. Returns the
+ * config that actually worked so the caller stores exactly that.
+ */
+export async function verifyCredentials(config: SmtpConfig, email: string, password: string): Promise<VerifyCredsResult> {
+  const localPart = email.slice(0, email.lastIndexOf('@'))
+  const authUser = config.usernameFormat === 'local' ? localPart : email
+  const first = await verifyOnce(config, authUser, password, email)
+  if (first.status !== 'FAILED') return first // SUCCESS or AUTH_REQUIRED — host/port are right
+  // Reachability failed → try the alternate submission profile ONCE (guarded, no flip loop).
+  const alt: SmtpConfig | null =
+    config.port === 587 && !config.secure ? { ...config, port: 465, secure: true }
+    : config.port === 465 && config.secure ? { ...config, port: 587, secure: false }
+    : null
+  if (!alt) return first
+  const second = await verifyOnce(alt, authUser, password, email)
+  return second.status !== 'FAILED' ? second : first
 }
 
 /**

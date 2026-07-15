@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Server, Plus, Trash2, Edit2, CheckCircle, X, AlertCircle, Loader2, ArrowUpCircle, Package, Users, Wifi, RefreshCw, Link2, Building2, User, Smartphone, Copy, Check, LogOut, Image as ImageIcon } from 'lucide-react'
+import { Server, Plus, Trash2, Edit2, CheckCircle, X, AlertCircle, Loader2, ArrowUpCircle, Package, Users, Wifi, RefreshCw, Link2, Building2, User, Smartphone, Copy, Check, LogOut, KeyRound, Image as ImageIcon } from 'lucide-react'
 import type { Host } from '@/types/host'
 import localVersion from '@/version.json'
 import PasswordDialog from '@/components/governance/PasswordDialog'
 import RevokePasswordDialog from '@/components/governance/RevokePasswordDialog'
+import RecoveryEmailSection from './RecoveryEmailSection'
 import { sudoFetch } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
 import HostToolsSection from './HostToolsSection'
@@ -775,8 +776,9 @@ export default function HostsSection() {
                     )}
                   </div>
 
-                  {/* User sub-section — only for the local host */}
+                  {/* User + credentials sub-sections — only for the local host */}
                   {host.isSelf && (
+                    <>
                     <div className="mt-3 p-3 bg-gray-900/60 border border-gray-700/60 rounded-lg">
                       <div className="flex items-center justify-between gap-2 mb-3">
                         <div className="flex items-center gap-2">
@@ -911,6 +913,72 @@ export default function HostsSection() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Passkeys (TRDD-P7XKV3N9) — WebAuthn credentials for password-free
+                        reset/login. Register/Remove hit the webauthn routes; each mutation
+                        earns a fresh sudo token (getSudoTokenForPasskey) because adding a
+                        login factor is privileged. The logic already existed; this is the
+                        UI that surfaces it. */}
+                    <div className="mt-3 p-3 bg-gray-900/60 border border-gray-700/60 rounded-lg">
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2">
+                          <KeyRound className="w-3.5 h-3.5 text-gray-400" />
+                          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">Passkeys</span>
+                        </div>
+                        <button
+                          onClick={registerPasskey}
+                          disabled={registeringPasskey}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-emerald-700/40 hover:bg-emerald-700/60 text-emerald-200 rounded transition-colors disabled:opacity-50"
+                          title="Register a new passkey on this device"
+                        >
+                          {registeringPasskey ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                          Register
+                        </button>
+                      </div>
+
+                      {passkeyError && (
+                        <div className="flex items-start gap-1.5 mb-2 text-xs text-red-400">
+                          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                          <span>{passkeyError}</span>
+                        </div>
+                      )}
+
+                      {loadingPasskeys ? (
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Loading passkeys…
+                        </div>
+                      ) : passkeys.length === 0 ? (
+                        <p className="text-xs text-gray-500">
+                          No passkeys registered. A passkey lets you reset the password from this device without the old one.
+                        </p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {passkeys.map((pk) => (
+                            <li key={pk.credentialID} className="flex items-center justify-between gap-2 px-2 py-1.5 bg-gray-800/60 rounded">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <KeyRound className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                                <span className="text-xs text-gray-300 truncate">{pk.label}</span>
+                                <span className="text-xs text-gray-600 flex-shrink-0">{formatDate(pk.createdAt)}</span>
+                              </div>
+                              <button
+                                onClick={() => deletePasskey(pk.credentialID)}
+                                disabled={deletingPasskeyId === pk.credentialID}
+                                className="p-1 text-red-400 hover:text-red-300 disabled:opacity-50 flex-shrink-0"
+                                title="Remove this passkey"
+                              >
+                                {deletingPasskeyId === pk.credentialID ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    {/* Recovery email (TRDD-P7XKV3N9) — the config surface for the email
+                        password-reset channel; without a verified address the "Forgot? →
+                        email" method has nowhere to send a code. */}
+                    <RecoveryEmailSection />
+                    </>
                   )}
 
                   {/* Mobile Access URL — shown for all hosts with a Tailscale URL */}

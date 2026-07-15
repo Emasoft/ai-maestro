@@ -4,8 +4,10 @@ import { useState, useEffect, useRef } from 'react'
 import { Server, Plus, Trash2, Edit2, CheckCircle, X, AlertCircle, Loader2, ArrowUpCircle, Package, Users, Wifi, RefreshCw, Link2, Building2, User, Smartphone, Copy, Check, LogOut, Image as ImageIcon } from 'lucide-react'
 import type { Host } from '@/types/host'
 import localVersion from '@/version.json'
-import GovernancePasswordDialog from '@/components/governance/GovernancePasswordDialog'
+import PasswordDialog from '@/components/governance/PasswordDialog'
 import RevokePasswordDialog from '@/components/governance/RevokePasswordDialog'
+import { sudoFetch } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 import HostToolsSection from './HostToolsSection'
 import AvatarPicker from '@/components/AvatarPicker'
 
@@ -67,6 +69,12 @@ export default function HostsSection() {
   const [savingUserName, setSavingUserName] = useState(false)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  // Display-name draft for the setup-mode password dialog. The old
+  // GovernancePasswordDialog rendered a "Display Name" field in setup mode and
+  // POSTed it as `userName`; PasswordDialog has no such field, so we recreate it
+  // via extraFields and read this state inside onSubmit to preserve the behavior.
+  const [setupUserName, setSetupUserName] = useState('')
+  const { requestSudoToken } = useSudo()
 
   // Passkey state
   interface PasskeyCredential {
@@ -892,7 +900,7 @@ export default function HostsSection() {
                               <>
                                 <span className="text-xs text-gray-500">Password: Not set</span>
                                 <button
-                                  onClick={() => { setPasswordDialogMode('setup'); setShowPasswordDialog(true) }}
+                                  onClick={() => { setPasswordDialogMode('setup'); setSetupUserName(governanceUserName ?? ''); setShowPasswordDialog(true) }}
                                   className="px-2 py-0.5 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded transition-colors"
                                 >
                                   Set Password
@@ -1015,18 +1023,54 @@ export default function HostsSection() {
         />
       )}
 
-      {/* Governance password dialog — for local host user section */}
-      <GovernancePasswordDialog
-        isOpen={showPasswordDialog}
-        onClose={() => setShowPasswordDialog(false)}
-        mode={passwordDialogMode}
-        initialUserName={governanceUserName ?? undefined}
-        onPasswordConfirmed={async () => {
-          setShowPasswordDialog(false)
-          // Re-fetch governance so the UI reflects the updated state (userName + hasPassword)
-          await fetchGovernance()
-        }}
-      />
+      {/* Governance password dialog (unified — TRDD-P7XKV3N9) for the local host user section.
+          PasswordDialog has no isOpen prop — it always renders its modal when mounted — so it
+          is conditionally mounted here. setup mode recreates the old Display Name field via
+          extraFields + a sudoFetch POST; confirm mode keeps the old no-op-then-refetch flow. */}
+      {showPasswordDialog && (
+        <PasswordDialog
+          purpose={passwordDialogMode}
+          onCancel={() => setShowPasswordDialog(false)}
+          onSuccess={() => { setShowPasswordDialog(false); fetchGovernance() }}
+          extraFields={passwordDialogMode === 'setup' ? (
+            <div className="mb-3">
+              <label htmlFor="governance-setup-username" className="mb-2 block text-sm font-medium text-gray-300">
+                Display Name
+              </label>
+              <input
+                id="governance-setup-username"
+                type="text"
+                value={setupUserName}
+                onChange={(e) => setSetupUserName(e.target.value)}
+                placeholder="Your display name"
+                autoComplete="username"
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-white placeholder-gray-500 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          ) : undefined}
+          onSubmit={async (pw) => {
+            if (passwordDialogMode === 'setup') {
+              // Old setup mode: validate length, POST the new password (+ optional display
+              // name) via sudoFetch, then the caller refetched governance.
+              if (pw.length < 6) return { ok: false, error: 'Password must be at least 6 characters' }
+              const body: Record<string, string> = { password: pw }
+              if (setupUserName.trim()) body.userName = setupUserName.trim()
+              const res = await sudoFetch(
+                '/api/governance/password',
+                { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+                (reason) => requestSudoToken(reason),
+              )
+              if (!res.ok) {
+                const errBody = await res.json().catch(() => null)
+                return { ok: false, error: errBody?.error || `Failed to set password (${res.status})` }
+              }
+            }
+            // confirm mode: the old dialog performed no server call — it simply handed the
+            // password back to the caller, which closed + refetched. Preserve that no-op.
+            return { ok: true }
+          }}
+        />
+      )}
 
       {/* Revoke the password (TRDD-P7XKV3N9) — the dialog decides nothing; the endpoint does. */}
       {showRevokeDialog && (

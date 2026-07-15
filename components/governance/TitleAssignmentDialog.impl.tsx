@@ -32,9 +32,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { User, Shield, Crown, Megaphone, X, AlertTriangle, Compass, GitMerge, Bot, Wrench } from 'lucide-react'
-import GovernancePasswordDialog from './GovernancePasswordDialog'
+import PasswordDialog from './PasswordDialog'
 import type { GovernanceState, GovernanceTitle } from '@/hooks/useGovernance'
-import { mintSudoToken, sudoFetchWithToken } from '@/lib/sudo-fetch'
+import { mintSudoToken, sudoFetch, sudoFetchWithToken } from '@/lib/sudo-fetch'
+import { useSudo } from '@/contexts/SudoContext'
 
 interface TitleAssignmentDialogProps {
   isOpen: boolean
@@ -154,6 +155,10 @@ export default function TitleAssignmentDialog({
   const [error, setError] = useState<string | null>(null)
   // R19.2: githubRepo input is required only when selectedTitle === 'maintainer'
   const [githubRepo, setGithubRepo] = useState<string>('')
+  // Used only for the FIRST-TIME setup path below (no governance password yet):
+  // the setup POST to /api/governance/password goes through sudoFetch, exactly
+  // as the old GovernancePasswordDialog's setup mode did.
+  const { requestSudoToken } = useSudo()
 
   // SCEN-010 BUG-003 fix: `currentTitle` is the DERIVED display title from
   // useGovernance (e.g. an agent stored as "autonomous" but in a team is
@@ -734,15 +739,36 @@ export default function TitleAssignmentDialog({
   // Errors (wrong password OR operation failure) are re-thrown so the password dialog
   // displays them inline and stays open — the user sees exactly why it failed.
   if (isOpen && phase === 'password') {
+    // No governance password yet → PasswordDialog 'setup' (password + confirm); otherwise
+    // 'confirm' (single password). Mirrors the old `governance.hasPassword ? 'confirm' : 'setup'`.
+    const needsSetup = !governance.hasPassword
     return (
-      <GovernancePasswordDialog
-        isOpen={true}
-        mode={governance.hasPassword ? 'confirm' : 'setup'}
-        onClose={() => setPhase('select')}
-        onPasswordConfirmed={async (pw) => {
-          // handleRoleChange throws on any failure — the password dialog catches it
-          // and shows the error message inline, staying open for the user to read/retry
+      <PasswordDialog
+        purpose={needsSetup ? 'setup' : 'confirm'}
+        onCancel={() => setPhase('select')}
+        onSuccess={() => setPhase('select')}
+        onSubmit={async (pw) => {
+          // First-time setup: the old GovernancePasswordDialog set the governance password
+          // server-side BEFORE running the title change, so the mintSudoToken(pw) calls
+          // inside handleRoleChange authenticate against the freshly-set password. Preserve
+          // that ordering. (PasswordDialog already enforces password === confirmPassword.)
+          if (needsSetup) {
+            if (pw.length < 6) return { ok: false, error: 'Password must be at least 6 characters' }
+            const res = await sudoFetch(
+              '/api/governance/password',
+              { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) },
+              (reason) => requestSudoToken(reason),
+            )
+            if (!res.ok) {
+              const errBody = await res.json().catch(() => null)
+              return { ok: false, error: errBody?.error || `Failed to set password (${res.status})` }
+            }
+          }
+          // handleRoleChange throws on any failure — PasswordDialog's submit catch turns that
+          // into an inline error and keeps the dialog open for retry (matching the old flow).
+          // On success it already calls handleClose(), which closes the whole dialog.
           await handleRoleChange(pw)
+          return { ok: true }
         }}
       />
     )

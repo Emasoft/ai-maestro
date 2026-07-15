@@ -40,11 +40,15 @@ function credFile(): string {
 }
 
 /**
- * Use the macOS Keychain when we're on darwin and `security` exists — unless a test /
- * CI forces the file backend with AIM_SMTP_CRED_BACKEND=file (so unit tests never
- * pollute or prompt the developer's real login keychain).
+ * True when the macOS Keychain backend should be used — on darwin with `security`
+ * present — unless a test / CI forces the file backend via AIM_SMTP_CRED_BACKEND=file
+ * (so unit tests never pollute or prompt the developer's real login keychain).
+ *
+ * NAMING: must NOT start with `use` + Capital — ESLint's react-hooks/rules-of-hooks
+ * treats any `useX()` as a React Hook and errors when it is called outside a component
+ * (which fails `next build`, not just lint). It was `useKeychain` and broke the build.
  */
-function useKeychain(): boolean {
+function keychainAvailable(): boolean {
   if (process.env.AIM_SMTP_CRED_BACKEND === 'file') return false
   return process.platform === 'darwin' && existsSync(SECURITY_BIN)
 }
@@ -106,7 +110,7 @@ function acct(email: string): string {
 /** Persist (or update) the SMTP app-password for `email`. Throws if the store fails. */
 export function storeSmtpPassword(email: string, password: string): void {
   const account = acct(email)
-  if (useKeychain()) {
+  if (keychainAvailable()) {
     kcStore(account, password)
     return
   }
@@ -118,7 +122,7 @@ export function storeSmtpPassword(email: string, password: string): void {
 /** The stored SMTP app-password for `email`, or null when none is stored. */
 export function getSmtpPassword(email: string): string | null {
   const account = acct(email)
-  if (useKeychain()) return kcGet(account)
+  if (keychainAvailable()) return kcGet(account)
   return fileRead()[account] ?? null
 }
 
@@ -129,7 +133,7 @@ export function hasSmtpPassword(email: string): boolean {
 /** Remove the stored SMTP app-password for `email` (idempotent). */
 export function deleteSmtpPassword(email: string): void {
   const account = acct(email)
-  if (useKeychain()) {
+  if (keychainAvailable()) {
     kcDelete(account)
     return
   }

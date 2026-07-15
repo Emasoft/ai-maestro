@@ -41,9 +41,23 @@ interface PasswordDialogProps {
   /**
    * Purpose-specific submit for `sudo`/`confirm`/`setup`. When omitted, `login` posts
    * to /api/auth/login natively. Returning `{ ok:false, error }` shows the error.
+   * Returning `{ ok:true, secondStep }` transitions to a one-time-code step (handled by
+   * onSecondStep) — the general password→code shape the destructive revoke flow needs,
+   * mirroring the reset flow's own two-call design.
    */
-  onSubmit?: (password: string, confirmPassword?: string) => Promise<{ ok: boolean; error?: string; result?: PasswordDialogResult }>
-  /** Show the "Forgot your password?" reset link. Default: true for login/sudo/confirm. */
+  onSubmit?: (password: string, confirmPassword?: string) => Promise<{ ok: boolean; error?: string; result?: PasswordDialogResult; secondStep?: { hint?: string; expiresAt?: number | null } }>
+  /**
+   * Second-step handler reached when onSubmit returns `secondStep`. Receives the code
+   * AND the step-one password (the confirm/revoke endpoints need both). On ok → onSuccess.
+   */
+  onSecondStep?: (code: string, password: string) => Promise<{ ok: boolean; error?: string; result?: PasswordDialogResult }>
+  /** Override the primary-button label (default derives from purpose). */
+  submitLabel?: string
+  /** Label for the second-step (code) submit button. Default 'Confirm'. */
+  secondStepSubmitLabel?: string
+  /** Red destructive styling on the primary buttons (used by the revoke flow). */
+  destructive?: boolean
+  /** Show the "Did you forget your password?" reset link. Default: true except setup. */
   allowReset?: boolean
 }
 
@@ -94,6 +108,7 @@ type View =
   | { kind: 'password' }
   | { kind: 'reset-method' }
   | { kind: 'reset-code'; method: ResetMethod; channel: string; hint: string; expiresAt: number | null }
+  | { kind: 'confirm-code'; hint: string; expiresAt: number | null }
 
 export default function PasswordDialog({
   purpose,
@@ -104,6 +119,10 @@ export default function PasswordDialog({
   onCancel,
   extraFields,
   onSubmit,
+  onSecondStep,
+  submitLabel,
+  secondStepSubmitLabel,
+  destructive = false,
   allowReset = purpose !== 'setup',
 }: PasswordDialogProps) {
   const [view, setView] = useState<View>({ kind: 'password' })
@@ -116,7 +135,8 @@ export default function PasswordDialog({
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const countdown = useCountdown(view.kind === 'reset-code' ? view.expiresAt : null)
+  const countdown = useCountdown(view.kind === 'reset-code' || view.kind === 'confirm-code' ? view.expiresAt : null)
+  const primaryBtn = destructive ? 'bg-red-700 hover:bg-red-600' : 'bg-blue-600 hover:bg-blue-700'
 
   const heading = title ?? (purpose === 'login' ? 'AI Maestro' : purpose === 'setup' ? 'Set a governance password' : 'Confirm your password')
   const subtitle = description ?? (purpose === 'login' ? 'Enter governance password to continue' : undefined)
@@ -133,6 +153,13 @@ export default function PasswordDialog({
       if (onSubmit) {
         const r = await onSubmit(password, purpose === 'setup' ? confirmPassword : undefined)
         if (!r.ok) { setError(explain(r.error ?? 'unknown')); return }
+        if (r.secondStep) {
+          // password accepted, a one-time code was dispatched — move to the code step
+          // (keeps `password` in state; onSecondStep needs both code + password).
+          setCode('')
+          setView({ kind: 'confirm-code', hint: r.secondStep.hint ?? '', expiresAt: r.secondStep.expiresAt ?? null })
+          return
+        }
         onSuccess(r.result)
         return
       }
@@ -204,8 +231,25 @@ export default function PasswordDialog({
     }
   }
 
+  // ── Generic second step: a one-time code confirming a step-one password (revoke) ──
+  const submitSecondStep = async () => {
+    if (view.kind !== 'confirm-code' || !onSecondStep) return
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await onSecondStep(code, password)
+      if (!r.ok) { setError(explain(r.error ?? 'unknown')); return }
+      onSuccess(r.result)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Connection failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const canSubmitPassword = purpose === 'setup' ? !!password && !!confirmPassword : !!password
   const canSubmitReset = /^\d{6}$/.test(code) && newPassword.length >= 8 && !!newConfirm
+  const canSubmitSecondStep = /^\d{6}$/.test(code)
 
   const body = (
     <>
@@ -304,6 +348,27 @@ export default function PasswordDialog({
         </>
       )}
 
+      {view.kind === 'confirm-code' && (
+        <>
+          <p className="mb-3 text-xs leading-relaxed text-gray-400">
+            A confirmation code was delivered to <strong className="text-gray-200">this machine&rsquo;s desktop</strong>.
+            {view.hint && <span className="text-gray-500"> ({view.hint})</span>} If you are not sitting at it you will not see it — that is deliberate.
+            {countdown && <> Expires in <strong className="text-gray-200">{countdown}</strong>.</>}
+          </p>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            onKeyDown={(e) => e.key === 'Enter' && canSubmitSecondStep && !busy && submitSecondStep()}
+            placeholder="6-digit code"
+            autoFocus
+            disabled={busy}
+            className="mb-3 w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 tracking-[0.4em] text-white placeholder-gray-500 outline-none focus:border-red-600"
+          />
+        </>
+      )}
+
       {extraFields}
 
       {error && <div className="mb-3 rounded border border-red-900/60 bg-red-950/40 px-3 py-2 text-center text-sm text-red-300">{error}</div>}
@@ -314,9 +379,18 @@ export default function PasswordDialog({
         <button
           onClick={submitPassword}
           disabled={busy || !canSubmitPassword}
-          className="w-full rounded-lg bg-blue-600 py-3 font-medium text-white transition-colors hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500"
+          className={`w-full rounded-lg ${primaryBtn} py-3 font-medium text-white transition-colors disabled:bg-gray-700 disabled:text-gray-500`}
         >
-          {busy ? 'Working…' : purpose === 'login' ? 'Sign In' : purpose === 'setup' ? 'Set password' : 'Confirm'}
+          {busy ? 'Working…' : submitLabel ?? (purpose === 'login' ? 'Sign In' : purpose === 'setup' ? 'Set password' : 'Confirm')}
+        </button>
+      )}
+      {view.kind === 'confirm-code' && (
+        <button
+          onClick={submitSecondStep}
+          disabled={busy || !canSubmitSecondStep}
+          className={`w-full rounded-lg ${primaryBtn} py-3 font-medium text-white transition-colors disabled:bg-gray-700 disabled:text-gray-500`}
+        >
+          {busy ? 'Working…' : secondStepSubmitLabel ?? 'Confirm'}
         </button>
       )}
       {view.kind === 'reset-code' && (
@@ -346,6 +420,14 @@ export default function PasswordDialog({
           ← Back to sign in
         </button>
       )}
+      {view.kind === 'confirm-code' && (
+        <button
+          onClick={() => { setError(null); setCode(''); setView({ kind: 'password' }) }}
+          className="mt-4 block w-full text-center text-xs text-gray-500 transition-colors hover:text-gray-300"
+        >
+          ← Back
+        </button>
+      )}
     </>
   )
 
@@ -355,9 +437,9 @@ export default function PasswordDialog({
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="rounded-full bg-gray-800 p-2">
-              {view.kind === 'password' ? <Lock className="h-5 w-5 text-gray-400" /> : <KeyRound className="h-5 w-5 text-blue-400" />}
+              {view.kind === 'password' ? <Lock className="h-5 w-5 text-gray-400" /> : <KeyRound className={`h-5 w-5 ${destructive ? 'text-red-400' : 'text-blue-400'}`} />}
             </div>
-            <h1 className="text-lg font-bold text-white">{view.kind === 'password' ? heading : 'Reset password'}</h1>
+            <h1 className="text-lg font-bold text-white">{view.kind === 'password' ? heading : view.kind === 'confirm-code' ? (title ?? heading) : 'Reset password'}</h1>
           </div>
           {onCancel && (
             <button onClick={onCancel} className="text-gray-500 hover:text-gray-300" aria-label="Close">

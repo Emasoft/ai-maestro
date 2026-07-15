@@ -51,6 +51,14 @@ const PROVIDERS: Record<string, Omit<SmtpProvider, 'known'>> = {
   'gmx.com': { label: 'GMX', host: 'mail.gmx.com', port: 587, secure: false },
   'gmx.net': { label: 'GMX', host: 'mail.gmx.net', port: 587, secure: false },
   'zoho.com': { label: 'Zoho', host: 'smtp.zoho.com', port: 465, secure: true },
+  'zoho.eu': { label: 'Zoho (EU)', host: 'smtp.zoho.eu', port: 465, secure: true }, // regional datacenter — distinct host
+  'zoho.in': { label: 'Zoho (India)', host: 'smtp.zoho.in', port: 465, secure: true },
+  // Italy — telco / portal providers (Alice/TIM authenticates with the local part only)
+  'libero.it': { label: 'Libero', host: 'smtp.libero.it', port: 465, secure: true },
+  'virgilio.it': { label: 'Virgilio', host: 'smtp.virgilio.it', port: 465, secure: true },
+  'alice.it': { label: 'Alice/TIM', host: 'out.alice.it', port: 587, secure: false, usernameFormat: 'local' },
+  'fastwebnet.it': { label: 'Fastweb', host: 'smtp.fastwebnet.it', port: 465, secure: true },
+  'iliad.it': { label: 'Iliad', host: 'mail.iliad.it', port: 465, secure: true },
   'proton.me': { label: 'Proton Mail', host: '127.0.0.1', port: 1025, secure: false, note: 'requires the Proton Mail Bridge running locally' },
   'protonmail.com': { label: 'Proton Mail', host: '127.0.0.1', port: 1025, secure: false, note: 'requires the Proton Mail Bridge running locally' },
   // China — nearly all force implicit TLS on 465 and require enabling SMTP in webmail +

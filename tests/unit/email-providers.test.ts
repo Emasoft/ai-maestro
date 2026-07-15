@@ -73,6 +73,23 @@ describe('detectProvider — IMEA providers (India / Middle East / Africa, incl.
   })
 })
 
+describe('detectProvider — Italy/EU regional + Zoho regional split', () => {
+  it('Fastweb → smtp.fastwebnet.it:465', () => {
+    expect(detectProvider('u@fastwebnet.it')).toMatchObject({ host: 'smtp.fastwebnet.it', port: 465, secure: true, known: true })
+  })
+  it('Iliad → mail.iliad.it:465', () => {
+    expect(detectProvider('u@iliad.it')).toMatchObject({ host: 'mail.iliad.it', port: 465, secure: true, known: true })
+  })
+  it('Alice/TIM authenticates with the local part', () => {
+    expect(detectProvider('u@alice.it')).toMatchObject({ host: 'out.alice.it', port: 587, secure: false, known: true, usernameFormat: 'local' })
+  })
+  it('Zoho regional hosts differ: .com vs .eu vs .in', () => {
+    expect(detectProvider('u@zoho.com')).toMatchObject({ host: 'smtp.zoho.com', known: true })
+    expect(detectProvider('u@zoho.eu')).toMatchObject({ host: 'smtp.zoho.eu', known: true })
+    expect(detectProvider('u@zoho.in')).toMatchObject({ host: 'smtp.zoho.in', known: true })
+  })
+})
+
 describe('detectProvider — unknown + malformed', () => {
   it('guesses smtp.<domain>:587 STARTTLS for an unknown domain and flags it not-known', () => {
     const p = detectProvider('admin@acme-corp.example')!

@@ -623,6 +623,16 @@ When a MANAGER is assigned (via title change), the reverse cascade runs:
 
 **Implementation:** When an agent's API call returns HTTP 403 with `"Governance password required"`, the AI Maestro dashboard should intercept this and show a password entry popup to the user. The user enters the password, which is sent to complete the operation. The agent never sees the password.
 
+**Password recovery — forgot-password reset (TRDD-P7XKV3N9):** because the human owner can *forget* the governance password, `POST /api/governance/password/reset` recovers it with **no old password** — you cannot prove knowledge of a secret you have lost, so the factor is proof of control of a recovery channel, over **three methods**:
+
+- **console** (default) — a one-shot code goes to the HOST (a `0600` file + best-effort desktop notification), gated on console-locality (`isConsolePeer`, from the real TCP peer, never a client header). A remote VPN device cannot read it, so cannot reset: **console presence REPLACES the knowledge factor**.
+- **email** — a one-shot code is emailed to the owner's **verified** recovery address (configured once in Settings; SMTP is auto-detected from the address and the app-password is stored in the OS keychain / a `0600` file **independent of the governance password**, so it survives the very reset it enables). Deliberately remote-capable — the trust root shifts to *control of the registered email*, so the console gate is not applied.
+- **passkey** — a WebAuthn assertion (possession of a registered authenticator, verified against the owner's stored credential via `lib/webauthn-server`). Also remote-capable — the trust root is the private key. Refused when no passkey is registered.
+
+Every method runs the same tail: `setPassword` with no old-password check, then — if `security-config.enc` was still locked (the true forgot case, keyed to the *lost* password and undecryptable) — it re-initializes security **policy** to defaults (only tuning lives there; no secrets) and reports `securityPolicyReset`, then auto-logins. The route is rate-limited per peer (5 / 15 min) and fail-closed (no channel to prove control ⇒ refuse). This does **not** weaken R16: agents never see or handle the password — recovery is a human-only, curl-hardened flow, and the route is whitelisted logged-out **only** because the whole point is that you cannot log in.
+
+**One dialog for every prompt:** the reset flow and every governance-password prompt (login, sudo, confirm, setup, revoke) are served by a single component, `components/governance/PasswordDialog.tsx` — the five previously hand-rolled copies were unified into it, so there is exactly one auth-dialog code path to audit.
+
 ---
 
 ## R17. Mandatory Core Plugin Installation (CRITICAL)

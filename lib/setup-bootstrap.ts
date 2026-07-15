@@ -44,6 +44,7 @@ import { promisify } from 'util'
 import { writeFile, mkdir, chmod, unlink } from 'fs/promises'
 import { homedir } from 'os'
 import path from 'path'
+import { isMailerConfigured, sendCodeEmail } from './mailer'
 
 const SETUP_CODE_TTL_MS = 300_000 // 5 minutes
 const SETUP_CODE_LENGTH = 6
@@ -81,12 +82,17 @@ function generateCode(): string {
 }
 
 /**
- * Send the verification code via the most appropriate channel for the
- * current OS. Returns a short message describing where the user should
- * look for the code.
+ * Send the verification code via the most appropriate channel. Returns a short message
+ * describing where the user should look for the code.
+ *
+ * Channels, in order: (1) the 0600 host file — ALWAYS written, the reliable console
+ * channel; (2) EMAIL — when a configured recipient is supplied, delivered to the owner's
+ * registered address so a REMOTE device (iPad/iPhone) that isn't at the host can receive
+ * it; (3) a best-effort desktop notification. Email is the only remote-capable channel;
+ * a send failure degrades to the file/notification below rather than stranding the code.
  */
-async function dispatchCode(code: string): Promise<{ channel: string; hint: string }> {
-  // The 0600 file is written UNCONDITIONALLY and is the reliable channel.
+async function dispatchCode(code: string, opts?: { email?: string; purpose?: string }): Promise<{ channel: string; hint: string }> {
+  // The 0600 file is written UNCONDITIONALLY and is the reliable console channel.
   // A daemonized server (pm2/launchd/systemd) runs outside a GUI session,
   // where `osascript display notification` returns exit 0 but the banner
   // never reaches NotificationCenter — so the old notification-first path
@@ -95,6 +101,17 @@ async function dispatchCode(code: string): Promise<{ channel: string; hint: stri
   await mkdir(path.dirname(SETUP_CODE_FILE), { recursive: true })
   await writeFile(SETUP_CODE_FILE, `${code}\n`, { encoding: 'utf-8' })
   try { await chmod(SETUP_CODE_FILE, 0o600) } catch { /* best-effort */ }
+
+  // Remote channel: deliver to the owner's registered email when the mailer is
+  // configured for it, so a device NOT at the host can receive the code. The file above
+  // is still written (harmless — only the owner at the console can read it, and it's the
+  // console fallback). A send failure falls through to the notification/file channel.
+  if (opts?.email && isMailerConfigured(opts.email)) {
+    const sent = await sendCodeEmail(opts.email, code, opts.purpose ?? 'verification')
+    if (sent.ok) {
+      return { channel: 'email', hint: `A code was sent to ${opts.email}. It expires in 5 minutes.` }
+    }
+  }
 
   // Best-effort desktop notification ON TOP of the file — a convenience
   // when a GUI session is present, never the sole channel.
@@ -144,12 +161,12 @@ async function dispatchCode(code: string): Promise<{ channel: string; hint: stri
  * code. Returns the channel + hint so the API can echo them back to the
  * client.
  */
-export async function startSetupFlow(): Promise<{ channel: string; hint: string; expiresAt: number }> {
+export async function startSetupFlow(opts?: { email?: string; purpose?: string }): Promise<{ channel: string; hint: string; expiresAt: number }> {
   const code = generateCode()
   const codeHash = hashCode(code)
   const expiresAt = Date.now() + SETUP_CODE_TTL_MS
   g.__aiMaestroSetupCode = { codeHash, expiresAt, attempts: 0 }
-  const { channel, hint } = await dispatchCode(code)
+  const { channel, hint } = await dispatchCode(code, opts)
   return { channel, hint, expiresAt }
 }
 

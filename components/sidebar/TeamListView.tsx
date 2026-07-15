@@ -9,6 +9,7 @@ import TeamCard from './TeamCard'
 import { useGovernance } from '@/hooks/useGovernance'
 import { sudoFetch } from '@/lib/sudo-fetch'
 import { useSudo } from '@/contexts/SudoContext'
+import PasswordDialog from '@/components/governance/PasswordDialog'
 
 interface TeamListViewProps {
   agents: Agent[]
@@ -89,43 +90,55 @@ export default function TeamListView({ agents, searchQuery, onTeamsChanged }: Te
   const handleStartMeeting = (_team: Team) => { /* disabled */ }
 
   const [deleteTarget, setDeleteTarget] = useState<Team | null>(null)
-  const [deletePassword, setDeletePassword] = useState('')
-  const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState(false)
   // Proposal 7 (2026-04-20): cascade-delete team agents via the
   // DeleteAgent pipeline. Default false — preserves long-standing
   // "agents revert to AUTONOMOUS" behaviour. The cascade runs through
   // the full pipeline (never raw registry writes), hard=true,
   // deleteFolder=true, and emits a ledger entry per agent.
+  // TRDD-P7XKV3N9 Phase D: the former deletePassword/deleteError/deleting
+  // state now lives INSIDE the unified PasswordDialog (it owns the input,
+  // submit-in-flight, and error rendering). TeamListView keeps only the two
+  // facts PasswordDialog cannot own: WHICH team is being deleted
+  // (deleteTarget) and the cascade flag (read inside onSubmit).
   const [cascadeDeleteAgents, setCascadeDeleteAgents] = useState(false)
 
   const resetDeleteModal = () => {
     setDeleteTarget(null)
-    setDeletePassword('')
-    setDeleteError(null)
     setCascadeDeleteAgents(false)
   }
 
   // UI-MAJ-06 (2026-05-05): close the delete-team modal on Escape.
   // Only attach the global keydown listener while the modal is open,
-  // and detach it in cleanup. We don't close mid-request — pressing
-  // Escape while `deleting` is true is a no-op (the user can still
-  // wait for the request to complete and then close the modal).
+  // and detach it in cleanup. TRDD-P7XKV3N9 Phase D: the modal is now the
+  // unified PasswordDialog, which ships no Escape handler, so this stays the
+  // Escape-to-close path (alongside PasswordDialog's own X button → onCancel).
+  // The old `!deleting` guard is gone because submit-in-flight state now lives
+  // inside PasswordDialog and is not exposed here; pressing Escape closes the
+  // dialog and the already-issued DELETE still completes and updates the list.
   useEffect(() => {
     if (!deleteTarget) return
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !deleting) {
+      if (e.key === 'Escape') {
         resetDeleteModal()
       }
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [deleteTarget, deleting])
+  }, [deleteTarget])
 
-  const handleDelete = async () => {
-    if (!deleteTarget) return
-    setDeleting(true)
-    setDeleteError(null)
+  // TRDD-P7XKV3N9 Phase D: PasswordDialog's onSubmit for the team-delete flow.
+  // The WHOLE mint+DELETE lives here (not split mint→onSubmit / DELETE→onSuccess)
+  // because DELETE /api/teams/[id] needs BOTH the sudo token (header) AND the
+  // governance password IN THE BODY (the team governance layer verifies it —
+  // app/api/teams/[id]/route.ts). The plaintext password is only available inside
+  // onSubmit(pw); onSuccess receives just the token. So we mint the token from pw
+  // and immediately issue the DELETE with token+pw+cascade, exactly as the old
+  // inline modal did in one handler. Returning `{ ok:false, error }` on any mint
+  // or delete failure keeps the dialog open and shows the error — preserving the
+  // old "error keeps the modal open" behaviour. On success PasswordDialog fires
+  // onSuccess, which closes the dialog.
+  const handleDeleteSubmit = async (password: string): Promise<{ ok: boolean; error?: string }> => {
+    if (!deleteTarget) return { ok: false, error: 'No team selected' }
     try {
       // DELETE /api/teams/[id] is classified "strict" (sudo-mode required)
       // AND requires the governance password in the body for the team
@@ -134,16 +147,14 @@ export default function TeamListView({ agents, searchQuery, onTeamsChanged }: Te
       const sudoRes = await fetch('/api/auth/sudo-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: deletePassword }),
+        body: JSON.stringify({ password }),
       })
       if (sudoRes.status === 403) {
-        setDeleteError('Password does not match')
-        return
+        return { ok: false, error: 'Password does not match' }
       }
       if (!sudoRes.ok) {
         const err = await sudoRes.json().catch(() => ({ error: `HTTP ${sudoRes.status}` }))
-        setDeleteError(err.error || 'Sudo token request failed')
-        return
+        return { ok: false, error: err.error || 'Sudo token request failed' }
       }
       const { token: sudoToken } = await sudoRes.json() as { token: string }
 
@@ -154,24 +165,21 @@ export default function TeamListView({ agents, searchQuery, onTeamsChanged }: Te
           'X-Sudo-Token': sudoToken,
         },
         body: JSON.stringify({
-          password: deletePassword,
+          password,
           deleteAgents: cascadeDeleteAgents,
         }),
       })
       const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
       if (!res.ok) {
-        setDeleteError(data.error || 'Failed to delete team')
-        return
+        return { ok: false, error: data.error || 'Failed to delete team' }
       }
       setTeams(prev => prev.filter(t => t.id !== deleteTarget.id))
       // TRDD-1CMK59SB: deleted team's (possibly reverted-to-AUTONOMOUS)
       // members must fall back to NO-TEAM in the sidebar immediately.
       onTeamsChanged?.()
-      resetDeleteModal()
+      return { ok: true }
     } catch {
-      setDeleteError('Network error')
-    } finally {
-      setDeleting(false)
+      return { ok: false, error: 'Network error' }
     }
   }
 
@@ -326,7 +334,7 @@ export default function TeamListView({ agents, searchQuery, onTeamsChanged }: Te
               agents={agents}
               onStartMeeting={handleStartMeeting}
               onEdit={(t) => { setEditingTeam(t); setShowCreate(true) }}
-              onDelete={(t) => { setDeleteTarget(t); setDeletePassword(''); setDeleteError(null) }}
+              onDelete={(t) => setDeleteTarget(t)}
             />
           ))}
         </div>
@@ -342,78 +350,51 @@ export default function TeamListView({ agents, searchQuery, onTeamsChanged }: Te
         />
       )}
 
-      {/* Delete team confirmation modal with password */}
+      {/* Delete-team confirmation — the ONE unified PasswordDialog
+          (TRDD-P7XKV3N9 Phase D), replacing the hand-rolled inline modal
+          ("we cannot debug 5 versions of the same code"). Team delete has
+          always collected the governance password INLINE (this dialog IS the
+          sudo check — it does not pop the separate SudoContext modal), and
+          that single-dialog UX is preserved: PasswordDialog owns the password
+          input + submit-in-flight + error rendering; TeamListView owns which
+          team is targeted and the cascade flag. The cascade checkbox is
+          rendered via extraFields but its state stays a useState here so
+          onSubmit (handleDeleteSubmit) can read it. allowReset defaults on
+          (harmless — a completed reset just closes the dialog). */}
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={resetDeleteModal}>
-          <div className="bg-gray-900 rounded-xl w-full max-w-sm shadow-2xl border border-gray-700 p-5" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold text-red-400 mb-3">Delete Team</h3>
-            <p className="text-xs text-gray-300 mb-4">
-              Permanently delete <span className="font-semibold text-white">{deleteTarget.name}</span>
-              {cascadeDeleteAgents
-                ? ' and permanently DELETE all member agents (including their workdirs)?'
-                : ' and revert all member agents to AUTONOMOUS?'}
-            </p>
-
-            <div className="space-y-3 mb-4">
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Governance Password</label>
-                <input
-                  type="password"
-                  value={deletePassword}
-                  onChange={e => setDeletePassword(e.target.value)}
-                  placeholder="Enter governance password"
-                  className="w-full px-3 py-2 text-sm bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-                  autoFocus
-                />
-              </div>
-              {/* Proposal 7 (2026-04-20): cascade-delete checkbox. When
-                  checked, each team agent is deleted via the full
-                  DeleteAgent pipeline (hard + deleteFolder) after the
-                  team itself is removed. Without this, agents revert
-                  to AUTONOMOUS and stay in the registry (existing
-                  behaviour preserved). */}
-              <label className="flex items-start gap-2 text-xs text-gray-300 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={cascadeDeleteAgents}
-                  onChange={e => setCascadeDeleteAgents(e.target.checked)}
-                  className="mt-0.5 w-3.5 h-3.5 accent-red-500 cursor-pointer"
-                  disabled={deleting}
-                />
-                <span>
-                  <span className="font-semibold text-red-400">Delete member agents too</span>
-                  <span className="block text-[10px] text-gray-500 leading-tight mt-0.5">
-                    Permanently removes each member agent plus its <code className="text-gray-400">~/agents/&lt;name&gt;/</code> folder. Every delete goes through the full DeleteAgent pipeline with an audit-log entry. Cannot be undone.
-                  </span>
+        <PasswordDialog
+          purpose="sudo"
+          variant="modal"
+          title="Delete team"
+          description={`Permanently delete "${deleteTarget.name}"${
+            cascadeDeleteAgents
+              ? ' and permanently DELETE all member agents (including their workdirs)?'
+              : ' and revert all member agents to AUTONOMOUS?'
+          }`}
+          extraFields={
+            // Proposal 7 (2026-04-20): cascade-delete checkbox. When checked,
+            // each team agent is deleted via the full DeleteAgent pipeline
+            // (hard + deleteFolder) after the team itself is removed. Without
+            // it, agents revert to AUTONOMOUS and stay in the registry.
+            <label className="mb-3 flex items-start gap-2 text-xs text-gray-300 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={cascadeDeleteAgents}
+                onChange={e => setCascadeDeleteAgents(e.target.checked)}
+                className="mt-0.5 w-3.5 h-3.5 accent-red-500 cursor-pointer"
+              />
+              <span>
+                <span className="font-semibold text-red-400">Delete member agents too</span>
+                <span className="block text-[10px] text-gray-500 leading-tight mt-0.5">
+                  Permanently removes each member agent plus its <code className="text-gray-400">~/agents/&lt;name&gt;/</code> folder. Every delete goes through the full DeleteAgent pipeline with an audit-log entry. Cannot be undone.
                 </span>
-              </label>
-            </div>
-
-            {deleteError && (
-              <div className="bg-red-900/20 border border-red-800 rounded-lg p-2.5 text-xs text-red-400 mb-3">
-                {deleteError}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={resetDeleteModal}
-                className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg hover:bg-gray-800 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={!deletePassword || deleting}
-                className="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                {deleting
-                  ? (cascadeDeleteAgents ? 'Deleting team + agents…' : 'Deleting…')
-                  : (cascadeDeleteAgents ? 'Delete Team + Agents' : 'Delete Team')}
-              </button>
-            </div>
-          </div>
-        </div>
+              </span>
+            </label>
+          }
+          onSubmit={handleDeleteSubmit}
+          onSuccess={resetDeleteModal}
+          onCancel={resetDeleteModal}
+        />
       )}
     </div>
   )

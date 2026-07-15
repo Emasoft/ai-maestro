@@ -48,6 +48,8 @@
     "DELETE_/api/teams/[id]/orchestrator": "strict",
     "DELETE_/api/agents/cemetery": "strict",
     "POST_/api/governance/password": "strict",
+    "POST_/api/governance/email/configure": "strict",
+    "DELETE_/api/governance/email": "strict",
     "DELETE_/api/settings/marketplaces": "strict",
     "DELETE_/api/agents/role-plugins": "strict",
     "DELETE_/api/agents/role-plugins/install": "strict",

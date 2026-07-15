@@ -21,7 +21,7 @@
  * (Phase C/D refactors SudoContext + GovernancePasswordDialog + TeamListView onto it).
  */
 import { useState, useEffect, type ReactNode } from 'react'
-import { Lock, X, KeyRound, Monitor, Mail } from 'lucide-react'
+import { Lock, X, KeyRound, Monitor, Mail, Fingerprint } from 'lucide-react'
 
 export type PasswordPurpose = 'login' | 'sudo' | 'confirm' | 'setup'
 export type ResetMethod = 'console' | 'email'
@@ -78,6 +78,16 @@ function explain(err: string, message?: string): string {
       return 'That code is not correct.'
     case 'code_expired':
       return 'That code has expired. Start the reset again.'
+    case 'no_passkeys_registered':
+      return 'No passkeys are registered on this host, so a passkey reset cannot be performed.'
+    case 'challenge_unavailable':
+      return 'Could not start the passkey challenge. Try again.'
+    case 'webauthn_challenge_expired':
+      return 'The passkey challenge expired. Start again.'
+    case 'webauthn_unknown_credential':
+      return 'That passkey is not registered on this host.'
+    case 'webauthn_verification_failed':
+      return 'Passkey verification failed.'
     case 'not_implemented':
       return message ?? 'That recovery method is not available yet.'
     case 'invalid_request':
@@ -109,6 +119,7 @@ type View =
   | { kind: 'reset-method' }
   | { kind: 'reset-code'; method: ResetMethod; channel: string; hint: string; expiresAt: number | null }
   | { kind: 'confirm-code'; hint: string; expiresAt: number | null }
+  | { kind: 'passkey-newpw'; assertion: unknown }
 
 export default function PasswordDialog({
   purpose,
@@ -247,9 +258,66 @@ export default function PasswordDialog({
     }
   }
 
+  // ── Passkey reset call-1: get a challenge, prompt the authenticator, hold the assertion ──
+  const requestPasskey = async () => {
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const res = await fetch('/api/governance/password/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'passkey' }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(explain(data.error ?? 'unknown', data.message)); return }
+      // data.options are the server's WebAuthn request options — prompt the authenticator.
+      // Dynamic import so @simplewebauthn/browser stays out of the initial login bundle.
+      const { startAuthentication } = await import('@simplewebauthn/browser')
+      let assertion: unknown
+      try {
+        assertion = await startAuthentication({ optionsJSON: data.options })
+      } catch {
+        // User dismissed the prompt, no authenticator, or the platform refused.
+        setError('Passkey authentication was cancelled or no authenticator was available.')
+        return
+      }
+      setNewPassword('')
+      setNewConfirm('')
+      setView({ kind: 'passkey-newpw', assertion })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Connection failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // ── Passkey reset call-2: verified assertion + new password → reset (auto-logins) ──
+  const submitPasskeyReset = async () => {
+    if (view.kind !== 'passkey-newpw') return
+    setBusy(true)
+    setError(null)
+    try {
+      if (newPassword !== newConfirm) { setError('The two passwords do not match.'); return }
+      const res = await fetch('/api/governance/password/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'passkey', assertion: view.assertion, newPassword }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(explain(data.error ?? 'unknown', data.message)); return }
+      if (data.reset) onSuccess()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Connection failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const canSubmitPassword = purpose === 'setup' ? !!password && !!confirmPassword : !!password
   const canSubmitReset = /^\d{6}$/.test(code) && newPassword.length >= 8 && !!newConfirm
   const canSubmitSecondStep = /^\d{6}$/.test(code)
+  const canSubmitPasskeyReset = newPassword.length >= 8 && !!newConfirm
 
   const body = (
     <>
@@ -283,7 +351,8 @@ export default function PasswordDialog({
       {view.kind === 'reset-method' && (
         <>
           <p className="mb-4 text-sm text-gray-400">
-            Reset without your old password. A one-time code proves you control a recovery channel.
+            Reset without your old password. A one-time code or a registered passkey proves you
+            control a recovery factor.
           </p>
           <button
             onClick={() => requestCode('console')}
@@ -299,12 +368,23 @@ export default function PasswordDialog({
           <button
             onClick={() => requestCode('email')}
             disabled={busy}
-            className="flex w-full items-center gap-3 rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-left transition-colors hover:border-blue-500 disabled:opacity-40"
+            className="mb-2 flex w-full items-center gap-3 rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-left transition-colors hover:border-blue-500 disabled:opacity-40"
           >
             <Mail className="h-5 w-5 shrink-0 text-blue-400" />
             <span>
               <span className="block text-sm font-medium text-white">Recovery email</span>
               <span className="block text-xs text-gray-500">For remote devices — requires a verified email (set in Settings).</span>
+            </span>
+          </button>
+          <button
+            onClick={requestPasskey}
+            disabled={busy}
+            className="flex w-full items-center gap-3 rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-left transition-colors hover:border-blue-500 disabled:opacity-40"
+          >
+            <Fingerprint className="h-5 w-5 shrink-0 text-blue-400" />
+            <span>
+              <span className="block text-sm font-medium text-white">Passkey</span>
+              <span className="block text-xs text-gray-500">Touch ID / a security key — requires a registered passkey.</span>
             </span>
           </button>
         </>
@@ -369,6 +449,32 @@ export default function PasswordDialog({
         </>
       )}
 
+      {view.kind === 'passkey-newpw' && (
+        <>
+          <p className="mb-3 text-xs leading-relaxed text-gray-400">
+            <strong className="text-gray-200">Passkey verified.</strong> Set a new governance password.
+          </p>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="New governance password (min 8)"
+            autoFocus
+            disabled={busy}
+            className="mb-3 w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-blue-500"
+          />
+          <input
+            type="password"
+            value={newConfirm}
+            onChange={(e) => setNewConfirm(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && canSubmitPasskeyReset && !busy && submitPasskeyReset()}
+            placeholder="Confirm new password"
+            disabled={busy}
+            className="mb-3 w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-blue-500"
+          />
+        </>
+      )}
+
       {extraFields}
 
       {error && <div className="mb-3 rounded border border-red-900/60 bg-red-950/40 px-3 py-2 text-center text-sm text-red-300">{error}</div>}
@@ -402,6 +508,15 @@ export default function PasswordDialog({
           {busy ? 'Resetting…' : 'Set new password'}
         </button>
       )}
+      {view.kind === 'passkey-newpw' && (
+        <button
+          onClick={submitPasskeyReset}
+          disabled={busy || !canSubmitPasskeyReset}
+          className="w-full rounded-lg bg-blue-600 py-3 font-medium text-white transition-colors hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500"
+        >
+          {busy ? 'Resetting…' : 'Set new password'}
+        </button>
+      )}
 
       {/* Footer navigation */}
       {view.kind === 'password' && allowReset && (
@@ -412,7 +527,7 @@ export default function PasswordDialog({
           Did you forget your password?
         </button>
       )}
-      {(view.kind === 'reset-method' || view.kind === 'reset-code') && (
+      {(view.kind === 'reset-method' || view.kind === 'reset-code' || view.kind === 'passkey-newpw') && (
         <button
           onClick={() => { setError(null); setCode(''); setNewPassword(''); setNewConfirm(''); setView({ kind: 'password' }) }}
           className="mt-4 block w-full text-center text-xs text-gray-500 transition-colors hover:text-gray-300"

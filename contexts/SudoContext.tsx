@@ -25,8 +25,9 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
-import { Lock, X, AlertCircle, Loader2 } from 'lucide-react'
+import { X, AlertCircle } from 'lucide-react'
 import type { SudoOperation } from '@/lib/sudo-fetch'
+import PasswordDialog from '@/components/governance/PasswordDialog'
 
 // Proposal 32 (2026-04-20): auto-cancel window. If the user opens the
 // sudo modal, walks away, and the timer expires, the modal closes so
@@ -66,9 +67,6 @@ export function SudoProvider({ children }: { children: ReactNode }) {
   const [reason, setReason] = useState<string | null>(null)
   const [resolver, setResolver] = useState<Resolver | null>(null)
   const [operation, setOperation] = useState<SudoOperation | undefined>(undefined)
-  const [password, setPassword] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   // TRDD-HZDD1CUD: independent of the password-modal state above — the
   // mismatch happens AFTER a token was already successfully minted (the
@@ -87,8 +85,6 @@ export function SudoProvider({ children }: { children: ReactNode }) {
     return new Promise<string | null>((resolve) => {
       setReason(r)
       setOperation(op)
-      setPassword('')
-      setError(null)
       setResolver({ resolve })
     })
   }, [])
@@ -98,8 +94,6 @@ export function SudoProvider({ children }: { children: ReactNode }) {
     setResolver(null)
     setReason(null)
     setOperation(undefined)
-    setPassword('')
-    setError(null)
   }, [resolver])
 
   // Proposal 32 (2026-04-20): dismiss the sudo modal on:
@@ -126,46 +120,6 @@ export function SudoProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer)
   }, [resolver, cancel])
 
-  const submit = useCallback(async () => {
-    if (!resolver || !password || submitting) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/auth/sudo-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // SUDO-01: forward the operation (if any) so the minted token is bound
-        // to the action the user is confirming.
-        body: JSON.stringify(operation ? { password, operation } : { password }),
-      })
-      if (res.status === 403) {
-        setError('Password does not match — try again.')
-        setPassword('')
-        return
-      }
-      if (res.status === 503) {
-        setError('Governance password not configured on this host.')
-        return
-      }
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({ error: 'Unknown error' }))
-        setError(body.error || `HTTP ${res.status}`)
-        return
-      }
-      const data = await res.json() as { token: string; expiresAt: number }
-      resolver.resolve(data.token)
-      setResolver(null)
-      setReason(null)
-      setOperation(undefined)
-      setPassword('')
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setSubmitting(false)
-    }
-  }, [resolver, password, submitting, operation])
-
   const open = resolver !== null
 
   return (
@@ -190,88 +144,52 @@ export function SudoProvider({ children }: { children: ReactNode }) {
           </button>
         </div>
       )}
+      {/* TRDD-P7XKV3N9 Phase C: the sudo password prompt is now the ONE unified
+          PasswordDialog, not a hand-rolled modal. SudoContext keeps ownership of
+          the pending-promise + token contract; PasswordDialog owns the input,
+          submit-in-flight, and error rendering. `onSubmit` mints the token via
+          the SAME endpoint the old modal used, so the 60s one-shot semantics are
+          unchanged (they live server-side in /api/auth/sudo-password). */}
       {open && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-          onClick={cancel}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div
-            className="w-full max-w-sm rounded-xl border border-amber-500/40 bg-gray-900 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-              <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-amber-400" />
-                <h2 className="text-sm font-semibold text-gray-100">Confirm with password</h2>
-              </div>
-              <button
-                onClick={cancel}
-                className="p-1 rounded hover:bg-gray-800 text-gray-500 hover:text-gray-300"
-                title="Cancel"
-                disabled={submitting}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="p-4 space-y-3">
-              <p className="text-xs text-gray-400">
-                {reason ?? 'This action requires re-entering your governance password.'}
-              </p>
-              <p className="text-[10px] text-amber-400/80">
-                This confirmation is valid for 60 seconds and cannot be replayed.
-              </p>
-              <div>
-                <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wide">
-                  Governance password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && password && !submitting) submit()
-                    if (e.key === 'Escape') cancel()
-                  }}
-                  autoFocus
-                  disabled={submitting}
-                  autoComplete="current-password"
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-gray-100 text-sm focus:outline-none focus:border-amber-500/60 disabled:opacity-50"
-                  placeholder="••••••••"
-                />
-              </div>
-              {error && (
-                <div className="flex items-start gap-2 p-2 rounded bg-red-500/10 border border-red-500/30">
-                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-red-300">{error}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-800 justify-end">
-              <button
-                onClick={cancel}
-                disabled={submitting}
-                className="px-3 py-1.5 text-xs rounded border border-gray-700 text-gray-300 hover:bg-gray-800 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submit}
-                disabled={submitting || !password}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-              >
-                {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
+        <PasswordDialog
+          purpose="sudo"
+          variant="modal"
+          title="Confirm your identity"
+          description={reason ?? 'This action requires re-entering your governance password.'}
+          // The old sudo modal offered no password-reset path; keep it a pure
+          // confirmation prompt so success can only ever resolve with a token.
+          allowReset={false}
+          onSubmit={async (pw) => {
+            const res = await fetch('/api/auth/sudo-password', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              // SUDO-01: forward the operation (if any) so the minted token is
+              // bound to the action the user is confirming.
+              body: JSON.stringify(operation ? { password: pw, operation } : { password: pw }),
+            })
+            if (res.status === 403) {
+              return { ok: false, error: 'Password does not match — try again.' }
+            }
+            if (res.status === 503) {
+              return { ok: false, error: 'Governance password not configured on this host.' }
+            }
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({ error: 'Unknown error' }))
+              return { ok: false, error: (body as { error?: string }).error || `HTTP ${res.status}` }
+            }
+            const data = await res.json() as { token: string; expiresAt: number }
+            return { ok: true, result: { token: data.token } }
+          }}
+          onSuccess={(result) => {
+            // Hand the minted token back to the caller waiting on requestSudoToken
+            // and close, exactly as the old modal's success path did.
+            if (resolver) resolver.resolve(result?.token ?? null)
+            setResolver(null)
+            setReason(null)
+            setOperation(undefined)
+          }}
+          onCancel={cancel}
+        />
       )}
     </SudoContext.Provider>
   )

@@ -46,6 +46,13 @@ const WHITELIST: ReadonlyArray<RegExp> = [
   // a console-local connection, an OS-delivered one-shot code, and it rate-limits
   // per peer.
   /^\/api\/governance\/password\/invalidate(\/|$)/,
+  // Password RESET / forgot-password (TRDD-P7XKV3N9 sibling) — SELF-AUTHENTICATING by
+  // console presence + an OS-delivered one-shot code, with NO old password. It MUST be
+  // reachable while LOGGED OUT (the whole point is you cannot log in), so it cannot
+  // require a session. The handler enforces console-locality, verifies the code, and
+  // rate-limits per peer. Also used from Settings while logged in — a session, if
+  // present, is simply not required here.
+  /^\/api\/governance\/password\/reset(\/|$)/,
   // Public health + capability reporting (no secrets leaked, safe to probe)
   /^\/api\/v1\/health(\/|$)/,
   /^\/api\/v1\/info(\/|$)/,

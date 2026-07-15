@@ -25,22 +25,31 @@
  * restart the user must request a new code — that's by design so any
  * code captured by an attacker becomes useless after a server bounce.
  *
- * On non-Darwin platforms, osascript is unavailable. We fall back to
- * writing the code to a fixed file under ~/.aimaestro/setup-code.txt
- * with restrictive permissions and log the path to the server output.
- * This is a deliberate degraded fallback — the user MUST be on the
- * machine to read it.
+ * Delivery: the code is ALWAYS written to a 0600 file under
+ * ~/.aimaestro/setup-code.txt (the one channel that works from any
+ * context), and a desktop notification is attempted as a best-effort
+ * convenience on top. A daemonized server (pm2/launchd/systemd) runs
+ * outside a GUI session, where `osascript display notification` and
+ * `notify-send` return SUCCESS but the banner never reaches the user —
+ * so a notification-only delivery silently stranded the code and made
+ * rotation impossible on such hosts. The file is the reliable channel;
+ * the user MUST be on the machine (or its shell) to read it, which is
+ * exactly the "you are at the console" property this flow requires. The
+ * file is unlinked the moment the code is consumed.
  */
 
 import { randomInt, createHash, timingSafeEqual } from 'crypto'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import { writeFile, mkdir, chmod } from 'fs/promises'
+import { writeFile, mkdir, chmod, unlink } from 'fs/promises'
 import { homedir } from 'os'
 import path from 'path'
 
 const SETUP_CODE_TTL_MS = 300_000 // 5 minutes
 const SETUP_CODE_LENGTH = 6
+
+/** The one reliable delivery channel: a 0600 file the user reads on the host. */
+const SETUP_CODE_FILE = path.join(homedir(), '.aimaestro', 'setup-code.txt')
 
 interface SetupRecord {
   /** SHA-256 hash of the verification code */
@@ -77,7 +86,19 @@ function generateCode(): string {
  * look for the code.
  */
 async function dispatchCode(code: string): Promise<{ channel: string; hint: string }> {
-  // macOS — osascript display notification
+  // The 0600 file is written UNCONDITIONALLY and is the reliable channel.
+  // A daemonized server (pm2/launchd/systemd) runs outside a GUI session,
+  // where `osascript display notification` returns exit 0 but the banner
+  // never reaches NotificationCenter — so the old notification-first path
+  // (which wrote the file only when osascript *threw*) left the code
+  // undeliverable and made rotation impossible on such hosts.
+  await mkdir(path.dirname(SETUP_CODE_FILE), { recursive: true })
+  await writeFile(SETUP_CODE_FILE, `${code}\n`, { encoding: 'utf-8' })
+  try { await chmod(SETUP_CODE_FILE, 0o600) } catch { /* best-effort */ }
+
+  // Best-effort desktop notification ON TOP of the file — a convenience
+  // when a GUI session is present, never the sole channel.
+  let notified = false
   if (process.platform === 'darwin') {
     try {
       // LIB2-MAJ-07: Defensive AppleScript escape. The code field is currently
@@ -97,17 +118,9 @@ async function dispatchCode(code: string): Promise<{ channel: string; hint: stri
         '-e',
         `display notification "AI Maestro setup code: ${safeCode}" with title "AI Maestro" sound name "Submarine"`,
       ], { timeout: 5000 })
-      return {
-        channel: 'macOS notification',
-        hint: 'Check your macOS notification center (top-right corner).',
-      }
-    } catch {
-      // Fall through to file fallback
-    }
-  }
-
-  // Linux — try notify-send
-  if (process.platform === 'linux') {
+      notified = true
+    } catch { /* GUI session unavailable — the file still holds the code */ }
+  } else if (process.platform === 'linux') {
     try {
       await execFileAsync('notify-send', [
         '--app-name=AI Maestro',
@@ -115,26 +128,14 @@ async function dispatchCode(code: string): Promise<{ channel: string; hint: stri
         'AI Maestro setup',
         `Setup code: ${code}`,
       ], { timeout: 5000 })
-      return {
-        channel: 'libnotify',
-        hint: 'Check your desktop notifications.',
-      }
-    } catch {
-      // Fall through to file fallback
-    }
+      notified = true
+    } catch { /* desktop notifications unavailable — the file still holds the code */ }
   }
 
-  // Fallback: write to a file under ~/.aimaestro/setup-code.txt with 0600 perms
-  const fallbackDir = path.join(homedir(), '.aimaestro')
-  const fallbackPath = path.join(fallbackDir, 'setup-code.txt')
-  await mkdir(fallbackDir, { recursive: true })
-  await writeFile(fallbackPath, `${code}\n`, { encoding: 'utf-8' })
-  try { await chmod(fallbackPath, 0o600) } catch { /* best-effort */ }
-  // Also log to stderr — visible in pm2 logs
-  console.warn(`[setup-bootstrap] OS notification unavailable; setup code written to ${fallbackPath}`)
   return {
-    channel: 'file',
-    hint: `Setup code written to ${fallbackPath}. Open this file on the host machine to read the code.`,
+    channel: notified ? 'notification + file' : 'file',
+    hint: `Read the code on the host machine at ${SETUP_CODE_FILE}` +
+      (notified ? ' (a desktop notification was also sent).' : '.'),
   }
 }
 
@@ -182,8 +183,10 @@ export function verifySetupCode(code: string): VerifyResult {
     return { ok: false, reason: 'mismatch' }
   }
 
-  // Consume on success
+  // Consume on success — clear the in-memory record and best-effort remove
+  // the on-disk copy so a valid code never lingers on disk past its use.
   g.__aiMaestroSetupCode = null
+  void unlink(SETUP_CODE_FILE).catch(() => {})
   return { ok: true }
 }
 

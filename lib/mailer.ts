@@ -3,27 +3,33 @@
  *
  * Delivers a one-shot verification code to a user's registered email so a REMOTE
  * device (iPad/iPhone) can complete a password reset, or verify its email at
- * registration. It runs entirely IN-PROCESS — no third-party SaaS — but it must relay
- * through an AUTHENTICATED SMTP endpoint (your own email provider), because mail sent
- * directly from a residential Mac is rejected or spam-foldered by iCloud/Gmail (no
- * SPF/DKIM/DMARC, dynamic IP, no reverse DNS). It is SEND-ONLY: it never opens a
- * mailbox, never reads mail, holds no IMAP credentials.
+ * registration. Runs entirely IN-PROCESS — no third-party SaaS — relaying through the
+ * owner's OWN authenticated SMTP (mail sent directly from a residential Mac is rejected
+ * or spam-foldered by iCloud/Gmail: no SPF/DKIM/DMARC, dynamic IP, no reverse DNS). It
+ * is SEND-ONLY: never opens a mailbox, never reads mail, holds no IMAP credentials.
  *
- * DORMANT UNTIL CONFIGURED: with the SMTP env vars unset, isMailerConfigured() is
- * false and sendCodeEmail() is a no-op returning {ok:false, skipped:true}. Callers
- * then fall back to the console channel — so the feature builds, tests, and ships with
- * NO credentials, and the email channel lights up the moment the owner provides them.
- * This is deliberate: email is one recovery channel among three (console, email,
- * passkey), never a hard dependency.
+ * AUTO-CONFIGURED FROM THE EMAIL (the "autoconfigure it based on the user email"
+ * requirement): the owner registers their email and stores their provider app-password
+ * ONCE; the SMTP host/port/TLS are then DERIVED from the email domain (lib/email-providers)
+ * and the password read from the OS credential store (lib/smtp-credential). gmail →
+ * Gmail SMTP, icloud → iCloud SMTP, and so on — no manual server config.
  *
- * Config (ALL of host/port/user/pass required to enable):
+ * Resolution order (first that resolves wins):
+ *   1. AIM_SMTP_* env — an explicit override for a custom/self-hosted relay.
+ *   2. Auto-config — detectProvider(accountEmail) + the stored app-password.
+ *   3. Not configured → DORMANT: sendCodeEmail() is a no-op {ok:false, skipped:true}
+ *      and the caller falls back to the console channel. So the feature builds, tests,
+ *      and ships with NO credentials, lighting up the moment the owner adds them. Email
+ *      is one recovery channel among three (console, email, passkey), never a hard dep.
+ *
+ * Env override (ALL of host/port/user/pass required to enable it):
  *   AIM_SMTP_HOST, AIM_SMTP_PORT, AIM_SMTP_USER, AIM_SMTP_PASS
- * Optional:
- *   AIM_SMTP_FROM   — envelope From (defaults to AIM_SMTP_USER)
- *   AIM_SMTP_SECURE — 'true' for implicit TLS; defaults to true on port 465, else
- *                     STARTTLS. Set explicitly when your provider is non-standard.
+ * Optional: AIM_SMTP_FROM (defaults to AIM_SMTP_USER), AIM_SMTP_SECURE ('true' for
+ *   implicit TLS; defaults to true on port 465, else STARTTLS).
  */
 import nodemailer from 'nodemailer'
+import { detectProvider } from './email-providers'
+import { getSmtpPassword } from './smtp-credential'
 
 export interface MailerConfig {
   host: string
@@ -35,11 +41,11 @@ export interface MailerConfig {
 }
 
 /**
- * Resolve SMTP config from the environment, or null when it is not fully configured.
- * ALL of host/port/user/pass must be present — a partial config is treated as
- * "not configured" rather than half-enabling a channel that would fail at send time.
+ * Explicit SMTP override from the environment, or null when it is not fully set. ALL of
+ * host/port/user/pass must be present — a partial config is "not configured" rather
+ * than half-enabling a channel that would fail at send time.
  */
-export function getMailerConfig(): MailerConfig | null {
+function envConfig(): MailerConfig | null {
   const host = process.env.AIM_SMTP_HOST
   const portRaw = process.env.AIM_SMTP_PORT
   const user = process.env.AIM_SMTP_USER
@@ -53,13 +59,37 @@ export function getMailerConfig(): MailerConfig | null {
     user,
     pass,
     from: process.env.AIM_SMTP_FROM || user,
-    // Implicit TLS on 465; STARTTLS otherwise. An explicit AIM_SMTP_SECURE wins.
     secure: process.env.AIM_SMTP_SECURE ? process.env.AIM_SMTP_SECURE === 'true' : port === 465,
   }
 }
 
-export function isMailerConfigured(): boolean {
-  return getMailerConfig() !== null
+/**
+ * Auto-config for a registered email: SMTP settings derived from its domain, the owner's
+ * own address as the SMTP account + envelope-From, and the app-password from the
+ * credential store. Null when the domain isn't usable or no password is stored yet.
+ */
+function autoConfig(accountEmail: string): MailerConfig | null {
+  const provider = detectProvider(accountEmail)
+  if (!provider) return null
+  const pass = getSmtpPassword(accountEmail)
+  if (!pass) return null
+  return { host: provider.host, port: provider.port, user: accountEmail, pass, from: accountEmail, secure: provider.secure }
+}
+
+/**
+ * Resolve the SMTP config: the env override first, else auto-config for `accountEmail`
+ * (the owner's registered address), else null. Pass the registered email whenever you
+ * want the auto-config path — without it only the env override can resolve.
+ */
+export function getMailerConfig(accountEmail?: string): MailerConfig | null {
+  const env = envConfig()
+  if (env) return env
+  if (accountEmail) return autoConfig(accountEmail)
+  return null
+}
+
+export function isMailerConfigured(accountEmail?: string): boolean {
+  return getMailerConfig(accountEmail) !== null
 }
 
 export type SendResult =
@@ -68,15 +98,18 @@ export type SendResult =
   | { ok: false; error: string } // configured but the send failed
 
 /**
- * Send a one-shot verification code to `to`. Returns {ok:false, skipped:true} when the
- * mailer is not configured (the caller then delivers via the console channel instead).
+ * Send a one-shot verification code to `to`, using the owner's own SMTP account.
+ * `accountEmail` defaults to `to` — the recovery case sends the owner a code at their
+ * OWN registered address, which is also the SMTP account, so a single argument covers
+ * it. Returns {ok:false, skipped:true} when the mailer is not configured (the caller
+ * then delivers via the console channel instead).
  *
- * `code` is digits-only (see setup-bootstrap.generateCode), so interpolating it into
- * the subject/body is injection-safe. `purpose` is a short caller-supplied noun
- * ("password reset", "email verification") — keep it a literal, never user input.
+ * `code` is digits-only (setup-bootstrap.generateCode), so interpolating it into the
+ * subject/body is injection-safe. `purpose` is a short caller-supplied literal noun
+ * ("password reset", "email verification") — never user input.
  */
-export async function sendCodeEmail(to: string, code: string, purpose: string): Promise<SendResult> {
-  const cfg = getMailerConfig()
+export async function sendCodeEmail(to: string, code: string, purpose: string, accountEmail: string = to): Promise<SendResult> {
+  const cfg = getMailerConfig(accountEmail)
   if (!cfg) return { ok: false, skipped: true }
   try {
     const transport = nodemailer.createTransport({

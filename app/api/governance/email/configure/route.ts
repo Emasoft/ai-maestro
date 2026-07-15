@@ -58,5 +58,9 @@ export async function POST(request: NextRequest) {
   storeSmtpPassword(email, appPassword)
   await setRecoveryEmail(email, { host: config.host, port: config.port, secure: config.secure, usernameFormat: config.usernameFormat })
   const flow = await startSetupFlow({ email, purpose: 'email verification' })
-  return NextResponse.json({ status: 'SUCCESS', channel: flow.channel, hint: flow.hint, expiresAt: flow.expiresAt })
+  // The password is verified + stored; only the confirmation-code DELIVERY can still degrade.
+  // If the mailer fell back to the host file (channel !== 'email'), a REMOTE owner cannot read
+  // it, so the email will never verify — surface codeSent so the UI can warn "settings saved,
+  // but the confirmation email could not be sent; check your SMTP configuration."
+  return NextResponse.json({ status: 'SUCCESS', codeSent: flow.channel === 'email', channel: flow.channel, hint: flow.hint, expiresAt: flow.expiresAt })
 }

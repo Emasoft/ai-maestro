@@ -1,40 +1,41 @@
 /**
  * POST /api/governance/password/reset — FORGOT-PASSWORD recovery (TRDD-P7XKV3N9 sibling).
  *
- * Unlike /invalidate, this route requires NO old password. It is the "I forgot my
- * password" path: you cannot prove knowledge of a secret you have lost, so the ONLY
- * factor is PRESENCE — a one-shot code delivered to the host (local file + best-effort
- * desktop notification, lib/setup-bootstrap.ts). A remote device on the VPN cannot read
- * that code, so it cannot reset. Console presence REPLACES the knowledge factor; that
- * substitution is the entire security property, which is why the console check is first
- * and unconditional. Dropping it would turn "forgot password" into a remote takeover.
+ * Requires NO old password: you cannot prove knowledge of a secret you have lost, so the
+ * factor is a one-shot code delivered over a channel you demonstrably control. THREE methods:
  *
- * This is safe because anyone who can read a 0600 file in the owner's home (or see the
- * owner's desktop) already controls the machine — resetting the governance password
- * grants them nothing they could not already take.
+ *   - console (default): the code goes to the HOST (0600 file + best-effort notification),
+ *     gated on console presence. A remote VPN device cannot read it, so cannot reset.
+ *     Console presence REPLACES the knowledge factor — the entire security property.
+ *   - email: the code is emailed to the owner's VERIFIED recovery address, so a REMOTE
+ *     device (iPad/iPhone) can recover. The trust root shifts from "at the host" to
+ *     "controls the registered email"; the console gate is intentionally NOT applied.
+ *   - passkey: (not yet implemented) a WebAuthn assertion in place of a code.
  *
- * Flow (two calls):
- *   POST {}                    -> 200 { codeRequired: true, channel, hint, expiresAt }  (+ code on the host)
- *   POST { code, newPassword } -> 200 { reset: true, securityPolicyReset }  (+ session cookie: auto-login)
+ * Flow (two calls; console & email):
+ *   POST { method? }                    -> 200 { codeRequired, channel, hint, expiresAt }
+ *   POST { method?, code, newPassword } -> 200 { reset: true, securityPolicyReset }  (+ session: auto-login)
  *
- * Consequence surfaced to the caller: the governance password also keys
- * security-config.enc. When the config is not unlocked (the true forgot case) its blob
- * is keyed to the LOST password and can never be decrypted again, so we re-initialize
- * it to DEFAULTS under the new password and report securityPolicyReset:true. Only
- * security POLICY tuning is affected — no secrets or API keys live there.
+ * Consequence surfaced to the caller: the governance password also keys security-config.enc.
+ * When the config is not unlocked (the true forgot case) its blob is keyed to the LOST
+ * password and can never be decrypted again, so we re-initialize it to DEFAULTS under the new
+ * password and report securityPolicyReset:true. Only security POLICY tuning is affected — no
+ * secrets or API keys live there.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { setPassword } from '@/lib/governance'
+import { setPassword, getRecoveryEmail } from '@/lib/governance'
 import { isConsolePeer, peerAddress } from '@/lib/peer-address.mjs'
 import { startSetupFlow, verifySetupCode } from '@/lib/setup-bootstrap'
 import { checkAndRecordAttempt, resetRateLimit } from '@/lib/rate-limit'
 import { isUnlocked, saveSecurityConfig, getSecurityDefaults } from '@/lib/security-config'
 import { createSession, buildSessionCookie } from '@/lib/session-auth'
 
-// Call-1 sends {} (no fields). Call-2 sends { code, newPassword }. Password bounds
-// match the passwordPolicy DEFAULTS in lib/security-config.ts (min 8, max 256).
+// method defaults to 'console' (backward-compatible with the original single-method route).
+// Call-1 sends { method? }. Call-2 sends { method?, code, newPassword }. Password bounds match
+// the passwordPolicy DEFAULTS in lib/security-config.ts (min 8, max 256).
 const BodySchema = z.object({
+  method: z.enum(['console', 'email', 'passkey']).optional(),
   code: z.string().regex(/^\d{6}$/, 'code must be a 6-digit string').optional(),
   newPassword: z.string().min(8, 'password must be at least 8 characters').max(256).optional(),
 }).strict()
@@ -47,24 +48,53 @@ export async function POST(request: NextRequest) {
   const peer = peerAddress(request) ?? ''
   const rlKey = `pw-reset:${peer}`
 
-  // ── 1. Console presence — FIRST and unconditional. It is the ONLY factor here (no
-  // old password), so a remote caller must never get past this line, and must never
-  // receive a code. Same reasoning as /invalidate, but here the stakes are higher
-  // because there is no second factor behind it. ──
-  if (!isConsolePeer(peer)) {
-    return NextResponse.json(
-      {
-        error: 'console_required',
-        message:
-          'The password can only be reset from the machine running AI Maestro. ' +
-          'Remote devices on the VPN can use every other function — not this one.',
-      },
-      { status: 403 },
-    )
+  let body: z.infer<typeof BodySchema>
+  try {
+    body = BodySchema.parse(await request.json())
+  } catch {
+    return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
+  }
+  const method = body.method ?? 'console'
+
+  if (method === 'passkey') {
+    // A WebAuthn assertion replaces the code here; the challenge/verify wiring is a separate
+    // follow-up. Fail loudly rather than silently falling back to a weaker method.
+    return NextResponse.json({ error: 'not_implemented', message: 'Passkey reset is not available yet.' }, { status: 501 })
   }
 
-  // ── 2. Throttle — call-1 mints codes (and desktop notifications); call-2 is a
-  // code-guessing surface. Cap both per peer. ──
+  // ── 1. Method gate — FIRST, so a caller we will reject never consumes a rate-limit slot
+  // and never triggers code delivery. Also resolves the delivery target for call-1. ──
+  let recoveryEmail: string | null = null
+  if (method === 'console') {
+    // Console presence is the ONLY factor for this method (no old password), so a remote
+    // caller must never get past this line. Dropping it would be a remote takeover.
+    if (!isConsolePeer(peer)) {
+      return NextResponse.json(
+        {
+          error: 'console_required',
+          message:
+            'The password can only be reset from the machine running AI Maestro, or via a ' +
+            'configured recovery email. Remote devices on the VPN can use every other function.',
+        },
+        { status: 403 },
+      )
+    }
+  } else {
+    // email: the factor is control of the VERIFIED recovery address. No console gate — remote
+    // recovery is the entire point. Refuse when no verified email is configured.
+    const rec = getRecoveryEmail()
+    if (!rec || !rec.verified) {
+      return NextResponse.json(
+        { error: 'email_not_configured', message: 'No verified recovery email is configured on this host.' },
+        { status: 403 },
+      )
+    }
+    recoveryEmail = rec.email
+  }
+
+  // ── 2. Throttle — call-1 mints codes (and emails/notifications); call-2 is a code-guessing
+  // surface. Cap both per peer. The email method is remotely reachable, so this is its main
+  // anti-abuse control (that + one-shot codes the attacker cannot read). ──
   const rl = checkAndRecordAttempt(rlKey, MAX_ATTEMPTS, WINDOW_MS)
   if (!rl.allowed) {
     return NextResponse.json(
@@ -73,27 +103,29 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  let body: z.infer<typeof BodySchema>
-  try {
-    body = BodySchema.parse(await request.json())
-  } catch {
-    return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
-  }
-
-  // ── 3. No code yet ⇒ put one on the host. ──
+  // ── 3. No code yet ⇒ mint one and deliver it over the method's channel. ──
   if (!body.code) {
     let flow: Awaited<ReturnType<typeof startSetupFlow>>
     try {
-      flow = await startSetupFlow()
+      flow = recoveryEmail
+        ? await startSetupFlow({ email: recoveryEmail, purpose: 'password reset' })
+        : await startSetupFlow()
     } catch {
-      // FAIL CLOSED — no channel to the host ⇒ presence cannot be proven ⇒ refuse.
-      // Waving it through "because notifications are broken" reduces this to nothing,
-      // which for a no-old-password reset is a wide-open door.
+      // FAIL CLOSED — no channel to prove control ⇒ refuse. For a no-old-password reset,
+      // waving it through "because delivery is broken" is a wide-open door.
       return NextResponse.json(
         {
-          error: 'presence_channel_unavailable',
-          message: 'Could not deliver a confirmation code to this machine, so presence cannot be proven.',
+          error: 'delivery_channel_unavailable',
+          message: 'Could not deliver a confirmation code, so control of the recovery channel cannot be proven.',
         },
+        { status: 503 },
+      )
+    }
+    // For the EMAIL method the code MUST actually reach the email — a fallback to the host
+    // file is useless to a remote user, so treat that as a delivery failure, not success.
+    if (method === 'email' && flow.channel !== 'email') {
+      return NextResponse.json(
+        { error: 'email_delivery_failed', message: 'The recovery email could not be sent. Check the SMTP configuration.' },
         { status: 503 },
       )
     }
@@ -106,26 +138,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'new_password_required' }, { status: 400 })
   }
 
-  // ── 5. Verify the presence code (one-shot; setup-bootstrap consumes it + unlinks the file). ──
+  // ── 5. Verify the one-shot code (setup-bootstrap consumes it + unlinks the host file). ──
   const v = verifySetupCode(body.code)
   if (!v.ok) {
     return NextResponse.json({ error: `code_${v.reason}` }, { status: 401 })
   }
 
-  // ── 6. Set the new password with NO old-password check — the console + code IS the
+  // ── 6. Set the new password with NO old-password check — the verified code IS the
   // authorization. We deliberately call the low-level setPassword rather than the
-  // service-layer setGovernancePassword, because the latter demands the current
-  // password when a hash exists — which is exactly what the forgot-password user
-  // cannot supply. setPassword re-hashes, clears passwordInvalidatedAt, and re-encrypts
-  // security-config only if it is currently unlocked. ──
+  // service-layer setGovernancePassword, because the latter demands the current password
+  // when a hash exists — exactly what the forgot-password user cannot supply. ──
   const wasUnlocked = isUnlocked()
   await setPassword(body.newPassword)
 
-  // ── 7. If the config was locked (the true forgot case), its blob is keyed to the
-  // LOST password and can never be decrypted again — setPassword's re-encrypt was
-  // skipped. Re-initialize it to DEFAULTS under the new password so the host is not
-  // left with an unreadable config. Only security POLICY tuning resets — no secrets
-  // live there — so this is a safe, surfaced consequence, not data loss. ──
+  // ── 7. If the config was locked (the true forgot case), its blob is keyed to the LOST
+  // password and can never be decrypted again. Re-initialize it to DEFAULTS under the new
+  // password. Only security POLICY tuning resets — no secrets live there. ──
   let securityPolicyReset = false
   if (!wasUnlocked) {
     saveSecurityConfig(getSecurityDefaults(), body.newPassword)
@@ -134,8 +162,7 @@ export async function POST(request: NextRequest) {
 
   resetRateLimit(rlKey)
 
-  // ── 8. Auto-login — the user proved presence and set a fresh password; mint a session
-  // so they land in the app without a separate login round (mirrors setup-verify). ──
+  // ── 8. Auto-login — the user proved control and set a fresh password; mint a session. ──
   const token = await createSession()
   const response = NextResponse.json({
     reset: true,

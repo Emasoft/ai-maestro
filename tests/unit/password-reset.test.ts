@@ -32,7 +32,13 @@ function makeReq(peer: string, body: unknown): NextRequest {
 // GOOD_CODE) and the session minter — before importing the route, after resetModules.
 function stubChannelAndSession() {
   vi.doMock('@/lib/setup-bootstrap', () => ({
-    startSetupFlow: vi.fn(async () => ({ channel: 'file', hint: 'read ~/.aimaestro/setup-code.txt', expiresAt: FAR_FUTURE })),
+    // Channel-aware: the console method passes no email → 'file'; the email method passes
+    // { email } → 'email'. Mirrors the real dispatchCode branching.
+    startSetupFlow: vi.fn(async (opts?: { email?: string; purpose?: string }) => ({
+      channel: opts?.email ? 'email' : 'file',
+      hint: opts?.email ? 'sent to your recovery email' : 'read ~/.aimaestro/setup-code.txt',
+      expiresAt: FAR_FUTURE,
+    })),
     verifySetupCode: vi.fn((code: string) => (code === GOOD_CODE ? { ok: true } : { ok: false, reason: 'mismatch' })),
     isSetupCodePending: vi.fn(() => true),
   }))
@@ -141,5 +147,54 @@ describe('POST /api/governance/password/reset — presence-only forgot-password 
     const res = await POST(makeReq(CONSOLE, { code: GOOD_CODE }))
     expect(res.status).toBe(400)
     expect((await res.json()).error).toBe('new_password_required')
+  })
+
+  const VERIFIED_SMTP = { host: 'smtp.gmail.com', port: 465, secure: true, usernameFormat: 'full' as const }
+
+  it('email method (REMOTE) with a verified recovery email delivers a code via email — no console gate', async () => {
+    const POST = await loadRoute()
+    const g = await import('@/lib/governance')
+    await g.setRecoveryEmail('me@gmail.com', VERIFIED_SMTP)
+    await g.setRecoveryEmailVerified()
+    const res = await POST(makeReq(REMOTE, { method: 'email' }))
+    expect(res.status).toBe(200)
+    const j = await res.json()
+    expect(j.codeRequired).toBe(true)
+    expect(j.channel).toBe('email')
+  })
+
+  it('email method refuses (403) when no verified recovery email is configured', async () => {
+    const POST = await loadRoute()
+    const res = await POST(makeReq(REMOTE, { method: 'email' }))
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toBe('email_not_configured')
+  })
+
+  it('email method resets the password with a valid code from a REMOTE peer', async () => {
+    const POST = await loadRoute()
+    const g = await import('@/lib/governance')
+    await g.setPassword('the-forgotten-one')
+    await g.setRecoveryEmail('me@gmail.com', VERIFIED_SMTP)
+    await g.setRecoveryEmailVerified()
+    const res = await POST(makeReq(REMOTE, { method: 'email', code: GOOD_CODE, newPassword: 'a-brand-new-password' }))
+    expect(res.status).toBe(200)
+    expect((await res.json()).reset).toBe(true)
+    expect(await g.verifyPassword('a-brand-new-password')).toBe(true)
+  })
+
+  it('email method refuses (403) BEFORE minting a code when the email is configured but UNVERIFIED', async () => {
+    const POST = await loadRoute()
+    const sb = await import('@/lib/setup-bootstrap')
+    const g = await import('@/lib/governance')
+    await g.setRecoveryEmail('me@gmail.com', VERIFIED_SMTP) // stored but NOT verified
+    const res = await POST(makeReq(REMOTE, { method: 'email' }))
+    expect(res.status).toBe(403)
+    expect(sb.startSetupFlow).not.toHaveBeenCalled()
+  })
+
+  it('passkey method returns 501 (not implemented) rather than a weaker fallback', async () => {
+    const POST = await loadRoute()
+    const res = await POST(makeReq(REMOTE, { method: 'passkey' }))
+    expect(res.status).toBe(501)
   })
 })

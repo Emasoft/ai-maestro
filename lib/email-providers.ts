@@ -21,6 +21,8 @@ export interface SmtpProvider {
   secure: boolean
   /** true when the domain is a known provider; false for a best-effort guess. */
   known: boolean
+  /** 'local' = authenticate with the address's local-part only (some regional telco ISPs); default 'full'. */
+  usernameFormat?: 'full' | 'local'
   /** Where to generate an app-specific password, when the provider requires one. */
   appPasswordUrl?: string
   /** Short UI note (e.g. "requires an app password"). */
@@ -64,6 +66,22 @@ const PROVIDERS: Record<string, Omit<SmtpProvider, 'known'>> = {
   // South Korea
   'naver.com': { label: 'Naver', host: 'smtp.naver.com', port: 465, secure: true, note: 'enable SMTP under Mail settings → POP3/IMAP first' },
   'daum.net': { label: 'Daum', host: 'smtp.daum.net', port: 465, secure: true, note: 'enable SMTP in webmail settings' },
+  // India
+  'rediffmail.com': { label: 'Rediffmail', host: 'smtp.rediffmail.com', port: 465, secure: true },
+  'indiatimes.com': { label: 'IndiaTimes', host: 'smtp.indiatimes.com', port: 587, secure: false },
+  'bsnl.in': { label: 'BSNL', host: 'mail.bsnl.in', port: 587, secure: false, usernameFormat: 'local' },
+  // Middle East / Arabian region
+  'etisalat.ae': { label: 'Etisalat (UAE)', host: 'mail.etisalat.ae', port: 465, secure: true },
+  'du.ae': { label: 'du (UAE)', host: 'mail.du.ae', port: 587, secure: false },
+  'ooredoo.qa': { label: 'Ooredoo (Qatar)', host: 'smtp.ooredoo.qa', port: 465, secure: true },
+  'stc.com.sa': { label: 'STC (Saudi)', host: 'smtp.stc.com.sa', port: 587, secure: false },
+  'saudi.net.sa': { label: 'Saudi Net', host: 'securemail.saudi.net.sa', port: 465, secure: true },
+  // Africa
+  'telkomsa.net': { label: 'Telkom (SA)', host: 'smtp.telkomsa.net', port: 587, secure: false, usernameFormat: 'local' },
+  'safaricom.co.ke': { label: 'Safaricom (Kenya)', host: 'mail.safaricom.co.ke', port: 465, secure: true },
+  'webmail.co.za': { label: 'Webmail (SA)', host: 'smtp.webmail.co.za', port: 587, secure: false },
+  'vodamail.co.za': { label: 'Vodamail (SA)', host: 'smtp.vodamail.co.za', port: 587, secure: false },
+  'egypthost.com': { label: 'EgyptHost', host: 'smtp.egypthost.com', port: 465, secure: true },
 }
 
 /**

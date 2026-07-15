@@ -61,6 +61,14 @@ describe('getMailerConfig — resolution order', () => {
     })
   })
 
+  it('a curated local-part provider (BSNL) sets the auth user to the local part', async () => {
+    const { mailer, cred } = await load()
+    cred.storeSmtpPassword('ravi@bsnl.in', 'app-pw')
+    expect(mailer.getMailerConfig('ravi@bsnl.in')).toEqual({
+      host: 'mail.bsnl.in', port: 587, secure: false, user: 'ravi', from: 'ravi@bsnl.in', pass: 'app-pw',
+    })
+  })
+
   it('the env override wins over auto-config', async () => {
     const { mailer, cred } = await load()
     cred.storeSmtpPassword('me@gmail.com', 'app-pw') // an auto-config path exists…

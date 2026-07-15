@@ -90,6 +90,9 @@ export function mapMxToSmtp(primaryMx: string, domain: string): SmtpConfig {
   if (mx.includes('163.com') || mx.includes('126.com') || mx.includes('netease')) return { host: 'smtp.163.com', port: 465, secure: true, usernameFormat: full }
   if (mx.includes('mxhichina') || mx.includes('alicloud') || mx.includes('aliyun')) return { host: 'smtp.mxhichina.com', port: 465, secure: true, usernameFormat: full } // Alibaba enterprise
   if (mx.includes('naver.com')) return { host: 'smtp.naver.com', port: 465, secure: true, usernameFormat: full }
+  // India / Middle East / Africa transactional + regional cloud infrastructures.
+  if (mx.includes('pepipost') || mx.includes('netcore')) return { host: 'smtp.pepipost.com', port: 587, secure: false, usernameFormat: full }
+  if (mx.includes('liquidtelecom') || mx.includes('africaonline')) return { host: `mail.${domain}`, port: 465, secure: true, usernameFormat: full }
   return { host: `smtp.${domain}`, port: 587, secure: false, usernameFormat: full }
 }
 
@@ -232,10 +235,10 @@ export async function autodetectSMTP(email: string, opts?: { verify?: boolean })
   const doVerify = opts?.verify ?? true
 
   // Fast path: a curated known provider — trusted, offline, carries the app-password URL.
-  // Consumer providers all authenticate with the full address.
+  // Most authenticate with the full address; some regional telcos use the local part only.
   const table: SmtpProvider | null = detectProvider(email)
   if (table?.known) {
-    return { host: table.host, port: table.port, secure: table.secure, usernameFormat: 'full', source: 'table', label: table.label, known: true, appPasswordUrl: table.appPasswordUrl, note: table.note }
+    return { host: table.host, port: table.port, secure: table.secure, usernameFormat: table.usernameFormat ?? 'full', source: 'table', label: table.label, known: true, appPasswordUrl: table.appPasswordUrl, note: table.note }
   }
 
   const discovery: Array<{ fn: () => Promise<SmtpConfig | null>; source: DetectSource }> = [
@@ -256,5 +259,5 @@ export async function autodetectSMTP(email: string, opts?: { verify?: boolean })
 
   if (firstCandidate) return firstCandidate
   // detectProvider always returns a guess for a valid domain, so this is the true floor.
-  return table ? { host: table.host, port: table.port, secure: table.secure, usernameFormat: 'full', source: 'guess', label: table.label, known: false, note: table.note } : null
+  return table ? { host: table.host, port: table.port, secure: table.secure, usernameFormat: table.usernameFormat ?? 'full', source: 'guess', label: table.label, known: false, note: table.note } : null
 }

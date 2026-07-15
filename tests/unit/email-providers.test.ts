@@ -58,6 +58,21 @@ describe('detectProvider — Asian providers (fixed hosts, 465 SSL, webmail guid
   })
 })
 
+describe('detectProvider — IMEA providers (India / Middle East / Africa, incl. local-part auth)', () => {
+  it('Rediffmail → smtp.rediffmail.com:465', () => {
+    expect(detectProvider('u@rediffmail.com')).toMatchObject({ host: 'smtp.rediffmail.com', port: 465, secure: true, known: true })
+  })
+  it('Etisalat (UAE) → mail.etisalat.ae:465', () => {
+    expect(detectProvider('u@etisalat.ae')).toMatchObject({ host: 'mail.etisalat.ae', port: 465, secure: true, known: true })
+  })
+  it('BSNL (India) authenticates with the local part', () => {
+    expect(detectProvider('u@bsnl.in')).toMatchObject({ host: 'mail.bsnl.in', port: 587, secure: false, known: true, usernameFormat: 'local' })
+  })
+  it('Telkom (SA) authenticates with the local part', () => {
+    expect(detectProvider('u@telkomsa.net')).toMatchObject({ host: 'smtp.telkomsa.net', port: 587, secure: false, known: true, usernameFormat: 'local' })
+  })
+})
+
 describe('detectProvider — unknown + malformed', () => {
   it('guesses smtp.<domain>:587 STARTTLS for an unknown domain and flags it not-known', () => {
     const p = detectProvider('admin@acme-corp.example')!

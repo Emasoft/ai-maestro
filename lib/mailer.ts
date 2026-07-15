@@ -83,7 +83,7 @@ function autoConfig(accountEmail: string): MailerConfig | null {
     host = provider.host
     port = provider.port
     secure = provider.secure
-    usernameFormat = 'full' // curated consumer providers all use the full address
+    usernameFormat = provider.usernameFormat ?? 'full' // most providers use the full address; some regional telcos use the local part
   }
   // Some regional providers (Alice/TIM, …) authenticate with the local part only.
   const user = usernameFormat === 'local' ? accountEmail.slice(0, accountEmail.lastIndexOf('@')) : accountEmail

@@ -80,6 +80,9 @@ describe('mapMxToSmtp — fingerprints resolve to REAL hosts (not the snippet\'s
   it('Alibaba mxhichina MX → smtp.mxhichina.com:465', () => {
     expect(mapMxToSmtp('mxn.mxhichina.com', 'acme.cn')).toEqual({ host: 'smtp.mxhichina.com', port: 465, secure: true, usernameFormat: 'full' })
   })
+  it('Pepipost/Netcore MX → smtp.pepipost.com:587', () => {
+    expect(mapMxToSmtp('mx.pepipost.com', 'acme.in')).toEqual({ host: 'smtp.pepipost.com', port: 587, secure: false, usernameFormat: 'full' })
+  })
 })
 
 describe('authRequiredInstructions — provider-specific guidance on auth rejection', () => {
@@ -108,6 +111,10 @@ describe('autodetectSMTP — curated table fast-path (offline, no network)', () 
   it('iCloud resolves from the table to STARTTLS:587', async () => {
     const r = await autodetectSMTP('me@icloud.com')
     expect(r).toMatchObject({ host: 'smtp.mail.me.com', port: 587, secure: false, source: 'table', known: true })
+  })
+  it('a curated local-part provider (BSNL) surfaces usernameFormat local', async () => {
+    const r = await autodetectSMTP('u@bsnl.in')
+    expect(r).toMatchObject({ host: 'mail.bsnl.in', port: 587, secure: false, source: 'table', known: true, usernameFormat: 'local' })
   })
   it('returns null for a malformed address', async () => {
     expect(await autodetectSMTP('not-an-email')).toBeNull()

@@ -30,6 +30,7 @@
 import nodemailer from 'nodemailer'
 import { detectProvider } from './email-providers'
 import { getSmtpPassword } from './smtp-credential'
+import { getRecoveryEmail } from './governance'
 
 export interface MailerConfig {
   host: string
@@ -64,16 +65,29 @@ function envConfig(): MailerConfig | null {
 }
 
 /**
- * Auto-config for a registered email: SMTP settings derived from its domain, the owner's
- * own address as the SMTP account + envelope-From, and the app-password from the
- * credential store. Null when the domain isn't usable or no password is stored yet.
+ * Auto-config for a registered email: the app-password from the credential store, plus SMTP
+ * settings that PREFER the stored autodetected config (correct for corporate/regional domains
+ * and the local-part username quirk) and fall back to the curated table for a consumer
+ * provider whose settings were never explicitly stored. Null when no password is stored yet.
  */
 function autoConfig(accountEmail: string): MailerConfig | null {
-  const provider = detectProvider(accountEmail)
-  if (!provider) return null
   const pass = getSmtpPassword(accountEmail)
   if (!pass) return null
-  return { host: provider.host, port: provider.port, user: accountEmail, pass, from: accountEmail, secure: provider.secure }
+  let host: string, port: number, secure: boolean, usernameFormat: 'full' | 'local'
+  const rec = getRecoveryEmail()
+  if (rec && rec.email.toLowerCase() === accountEmail.toLowerCase() && rec.smtp) {
+    ({ host, port, secure, usernameFormat } = rec.smtp)
+  } else {
+    const provider = detectProvider(accountEmail)
+    if (!provider) return null
+    host = provider.host
+    port = provider.port
+    secure = provider.secure
+    usernameFormat = 'full' // curated consumer providers all use the full address
+  }
+  // Some regional providers (Alice/TIM, …) authenticate with the local part only.
+  const user = usernameFormat === 'local' ? accountEmail.slice(0, accountEmail.lastIndexOf('@')) : accountEmail
+  return { host, port, secure, user, from: accountEmail, pass }
 }
 
 /**

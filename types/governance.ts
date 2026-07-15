@@ -21,6 +21,19 @@ export type GovernanceTitle = AgentRole
 /** @deprecated Use GovernanceTitle instead */
 export type GovernanceRole = GovernanceTitle
 
+/**
+ * Resolved SMTP submission settings for the recovery email (TRDD-P7XKV3N9) — NON-secret.
+ * The app-password is stored separately in the OS credential store (lib/smtp-credential),
+ * NEVER here. Structurally mirrors lib/smtp-autodetect SmtpConfig; kept in types/ to avoid
+ * a types→lib import.
+ */
+export interface RecoverySmtpConfig {
+  host: string
+  port: number
+  secure: boolean // true = implicit TLS (465); false = STARTTLS (587)
+  usernameFormat: 'full' | 'local'
+}
+
 /** Governance configuration stored at ~/.aimaestro/governance.json */
 export interface GovernanceConfig {
   // Strict discriminant for future schema migrations
@@ -66,6 +79,17 @@ export interface GovernanceConfig {
   maestroUserId?: string | null
   /** R37.2: id of the currently-acting MAESTRO-DELEGATE user, or null when none. */
   maestroDelegateUserId?: string | null
+  /**
+   * Recovery email (TRDD-P7XKV3N9) — the address a password-reset 2FA code is sent to so a
+   * REMOTE device (iPad/iPhone) can recover when console presence isn't available. Non-secret.
+   * The SMTP app-password is NOT here — it lives in the OS credential store, independent of
+   * the governance password the reset flow may be resetting. null/absent = not configured.
+   */
+  recoveryEmail?: string | null
+  /** ISO timestamp when recoveryEmail was proven via a received 2FA code, else null. */
+  recoveryEmailVerifiedAt?: string | null
+  /** Resolved SMTP settings for recoveryEmail (from autodetect). null when unconfigured. */
+  recoverySmtp?: RecoverySmtpConfig | null
 }
 
 /** Default governance config for first-time initialization */

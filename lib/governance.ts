@@ -10,7 +10,7 @@ import path from 'path'
 import { compare as jsonPatchCompare } from 'fast-json-patch'
 import { loadTeams, getTeam } from './team-registry'
 import { withLock } from '@/lib/file-lock'
-import type { GovernanceConfig } from '@/types/governance'
+import type { GovernanceConfig, RecoverySmtpConfig } from '@/types/governance'
 import { DEFAULT_GOVERNANCE_CONFIG } from '@/types/governance'
 import { broadcastGovernanceSync } from '@/lib/governance-sync'
 import type { Team } from '@/types/team'
@@ -230,6 +230,53 @@ export async function invalidatePassword(): Promise<void> {
     config.passwordHash = null
     config.passwordSetAt = null
     config.passwordInvalidatedAt = new Date().toISOString()
+    saveGovernance(config)
+  })
+}
+
+/**
+ * Store the recovery email + its resolved SMTP settings (TRDD-P7XKV3N9). Marks the email
+ * UNVERIFIED — receipt is proven separately via a 2FA code (setRecoveryEmailVerified). The
+ * SMTP app-password is stored separately in the OS credential store (lib/smtp-credential),
+ * NEVER here — it must survive a governance-password reset.
+ */
+export async function setRecoveryEmail(email: string, smtp: RecoverySmtpConfig): Promise<void> {
+  return withLock('governance', async () => {
+    const config = loadGovernance()
+    config.recoveryEmail = email
+    config.recoverySmtp = smtp
+    config.recoveryEmailVerifiedAt = null // every (re)configure must re-prove receipt
+    saveGovernance(config)
+  })
+}
+
+/** Mark the configured recovery email as verified (after the owner enters a received code). */
+export async function setRecoveryEmailVerified(): Promise<void> {
+  return withLock('governance', async () => {
+    const config = loadGovernance()
+    if (!config.recoveryEmail) throw new Error('no recovery email configured')
+    config.recoveryEmailVerifiedAt = new Date().toISOString()
+    saveGovernance(config)
+  })
+}
+
+/** The configured recovery email + verification state + SMTP settings, or null when unset. */
+export function getRecoveryEmail(): { email: string; verified: boolean; smtp: RecoverySmtpConfig | null } | null {
+  const config = loadGovernance()
+  if (!config.recoveryEmail) return null
+  return { email: config.recoveryEmail, verified: !!config.recoveryEmailVerifiedAt, smtp: config.recoverySmtp ?? null }
+}
+
+/**
+ * Remove the recovery-email configuration. Does NOT delete the stored app-password — the
+ * caller (which knows the email) removes it from the credential store separately.
+ */
+export async function clearRecoveryEmail(): Promise<void> {
+  return withLock('governance', async () => {
+    const config = loadGovernance()
+    config.recoveryEmail = null
+    config.recoverySmtp = null
+    config.recoveryEmailVerifiedAt = null
     saveGovernance(config)
   })
 }

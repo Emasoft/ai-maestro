@@ -28,8 +28,16 @@ function makeReq(peer: string, body: unknown): NextRequest {
   })
 }
 
-// Stub the code channel (startSetupFlow "delivers"; verifySetupCode accepts only
-// GOOD_CODE) and the session minter — before importing the route, after resetModules.
+// Passkey stub state — set per test BEFORE loadRoute(). The webauthn mock's vi.fn closures read
+// these each call, so a passkey test controls whether a credential is "registered" and whether
+// the assertion "verifies", without touching real WebAuthn crypto (its own suite covers that).
+let passkeyHasCreds = false
+let passkeyVerify: () => Promise<unknown> = async () => ({ newCounter: 1 })
+
+// Stub the code channel (startSetupFlow "delivers"; verifySetupCode accepts only GOOD_CODE),
+// the session minter, AND the WebAuthn server module — before importing the route, after
+// resetModules. The webauthn stub mirrors how the code channel is stubbed: the route's gates
+// are exercised for real; only the external crypto/delivery is faked.
 function stubChannelAndSession() {
   vi.doMock('@/lib/setup-bootstrap', () => ({
     // Channel-aware: the console method passes no email → 'file'; the email method passes
@@ -45,6 +53,20 @@ function stubChannelAndSession() {
   vi.doMock('@/lib/session-auth', () => ({
     createSession: vi.fn(async () => 'test-session-token'),
     buildSessionCookie: vi.fn((t: string) => `aim_session=${t}; HttpOnly; Path=/`),
+  }))
+  vi.doMock('@/lib/webauthn-server', () => ({
+    hasRegisteredCredentials: vi.fn(() => passkeyHasCreds),
+    // Real generateWebAuthnAuthenticationOptions stores a challenge and returns request options;
+    // here we just return an options-shaped object so call-1 can hand it to the client.
+    generateWebAuthnAuthenticationOptions: vi.fn(async () => ({
+      challenge: 'stub-challenge',
+      rpId: 'localhost',
+      allowCredentials: [],
+      timeout: 60_000,
+      userVerification: 'preferred',
+    })),
+    // Resolves (assertion valid) or rejects (invalid) per the passkeyVerify the test installs.
+    verifyWebAuthnAuthentication: vi.fn(async () => passkeyVerify()),
   }))
 }
 
@@ -62,6 +84,9 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'aim-reset-'))
   vi.stubEnv('HOME', dir)
   vi.resetModules()
+  // Reset passkey stub state to safe defaults so a prior test can't leak into the next.
+  passkeyHasCreds = false
+  passkeyVerify = async () => ({ newCounter: 1 })
 })
 
 afterEach(() => {
@@ -192,9 +217,76 @@ describe('POST /api/governance/password/reset — presence-only forgot-password 
     expect(sb.startSetupFlow).not.toHaveBeenCalled()
   })
 
-  it('passkey method returns 501 (not implemented) rather than a weaker fallback', async () => {
+  // ── Passkey method (TRDD-P7XKV3N9): a WebAuthn assertion replaces the code. Two-call flow
+  // mirroring console/email — call-1 issues a challenge, call-2 verifies the assertion then runs
+  // the SAME setPassword + auto-login tail. Possession of the authenticator is remote-capable, so
+  // (like email) there is no console gate. The crypto is stubbed; these exercise the ROUTE's gates. ──
+
+  const STUB_ASSERTION = {
+    id: 'cred-1',
+    rawId: 'cred-1',
+    response: { clientDataJSON: 'eyJ0IjoxfQ', authenticatorData: 'YXV0aA', signature: 'c2ln' },
+    clientExtensionResults: {},
+    type: 'public-key',
+  }
+
+  it('passkey method refuses (403) when no passkey is registered — nothing to prove possession against', async () => {
+    passkeyHasCreds = false
     const POST = await loadRoute()
     const res = await POST(makeReq(REMOTE, { method: 'passkey' }))
-    expect(res.status).toBe(501)
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toBe('no_passkeys_registered')
+  })
+
+  it('passkey call-1 {method:passkey} with a registered passkey returns assertionRequired + options — never a secret', async () => {
+    passkeyHasCreds = true
+    const POST = await loadRoute()
+    const res = await POST(makeReq(REMOTE, { method: 'passkey' }))
+    expect(res.status).toBe(200)
+    const j = await res.json()
+    expect(j.assertionRequired).toBe(true)
+    expect(j.options).toBeTruthy()
+    expect(j).not.toHaveProperty('reset')
+  })
+
+  it('passkey resets the password with a valid assertion and NO old password — possession is the whole authorization', async () => {
+    passkeyHasCreds = true
+    passkeyVerify = async () => ({ newCounter: 2 })
+    const POST = await loadRoute()
+    const g = await import('@/lib/governance')
+    // A password the user has FORGOTTEN is sitting on disk; the request carries the assertion and
+    // the new password — but NOT the old one.
+    await g.setPassword('the-forgotten-one')
+    const res = await POST(makeReq(REMOTE, { method: 'passkey', assertion: STUB_ASSERTION, newPassword: 'a-brand-new-password' }))
+    expect(res.status).toBe(200)
+    const j = await res.json()
+    expect(j.reset).toBe(true)
+    // Auto-login — same tail as console/email.
+    expect(res.headers.get('set-cookie')).toMatch(/aim_session=/)
+    expect(await g.verifyPassword('a-brand-new-password')).toBe(true)
+    expect(await g.verifyPassword('the-forgotten-one')).toBe(false)
+  })
+
+  it('passkey rejects an invalid assertion with 401 and leaves the password untouched', async () => {
+    passkeyHasCreds = true
+    passkeyVerify = async () => {
+      throw new Error('webauthn_verification_failed: authentication response verification failed')
+    }
+    const POST = await loadRoute()
+    const g = await import('@/lib/governance')
+    await g.setPassword('keep-me')
+    const res = await POST(makeReq(REMOTE, { method: 'passkey', assertion: STUB_ASSERTION, newPassword: 'should-not-apply' }))
+    expect(res.status).toBe(401)
+    expect((await res.json()).error).toBe('webauthn_verification_failed')
+    expect(await g.verifyPassword('keep-me')).toBe(true)
+    expect(await g.verifyPassword('should-not-apply')).toBe(false)
+  })
+
+  it('passkey requires a new password once an assertion is supplied (the assertion alone resets nothing)', async () => {
+    passkeyHasCreds = true
+    const POST = await loadRoute()
+    const res = await POST(makeReq(REMOTE, { method: 'passkey', assertion: STUB_ASSERTION }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('new_password_required')
   })
 })

@@ -10,11 +10,17 @@
  *   - email: the code is emailed to the owner's VERIFIED recovery address, so a REMOTE
  *     device (iPad/iPhone) can recover. The trust root shifts from "at the host" to
  *     "controls the registered email"; the console gate is intentionally NOT applied.
- *   - passkey: (not yet implemented) a WebAuthn assertion in place of a code.
+ *   - passkey: a WebAuthn assertion (possession of a registered authenticator) in place of a
+ *     code. Like email it is deliberately remote-capable — the trust root is the private key
+ *     the owner holds, so the console gate is intentionally NOT applied.
  *
  * Flow (two calls; console & email):
  *   POST { method? }                    -> 200 { codeRequired, channel, hint, expiresAt }
  *   POST { method?, code, newPassword } -> 200 { reset: true, securityPolicyReset }  (+ session: auto-login)
+ *
+ * Flow (two calls; passkey):
+ *   POST { method: 'passkey' }                         -> 200 { assertionRequired: true, options }
+ *   POST { method: 'passkey', assertion, newPassword } -> 200 { reset: true, securityPolicyReset }  (+ session)
  *
  * Consequence surfaced to the caller: the governance password also keys security-config.enc.
  * When the config is not unlocked (the true forgot case) its blob is keyed to the LOST
@@ -30,19 +36,80 @@ import { startSetupFlow, verifySetupCode } from '@/lib/setup-bootstrap'
 import { checkAndRecordAttempt, resetRateLimit } from '@/lib/rate-limit'
 import { isUnlocked, saveSecurityConfig, getSecurityDefaults } from '@/lib/security-config'
 import { createSession, buildSessionCookie } from '@/lib/session-auth'
+import {
+  generateWebAuthnAuthenticationOptions,
+  verifyWebAuthnAuthentication,
+  hasRegisteredCredentials,
+} from '@/lib/webauthn-server'
+import type { AuthenticationResponseJSON } from '@simplewebauthn/types'
+
+// The passkey method carries a WebAuthn assertion (navigator.credentials.get() output) in
+// place of a code. Shape mirrors the working /api/auth/webauthn/authenticate route's schema;
+// intentionally NOT .strict() at the assertion level so valid WebAuthn extension fields are
+// tolerated — the simplewebauthn verifier validates the protocol semantics itself.
+const AssertionSchema = z.object({
+  id: z.string(),
+  rawId: z.string(),
+  response: z.object({
+    clientDataJSON: z.string(),
+    authenticatorData: z.string(),
+    signature: z.string(),
+    userHandle: z.string().optional(),
+  }),
+  authenticatorAttachment: z.string().optional(),
+  clientExtensionResults: z.record(z.string(), z.unknown()),
+  type: z.string(),
+})
 
 // method defaults to 'console' (backward-compatible with the original single-method route).
-// Call-1 sends { method? }. Call-2 sends { method?, code, newPassword }. Password bounds match
-// the passwordPolicy DEFAULTS in lib/security-config.ts (min 8, max 256).
+// Call-1 sends { method? }. Call-2 sends { method?, code, newPassword } (console/email) or
+// { method:'passkey', assertion, newPassword }. Password bounds match the passwordPolicy
+// DEFAULTS in lib/security-config.ts (min 8, max 256).
 const BodySchema = z.object({
   method: z.enum(['console', 'email', 'passkey']).optional(),
   code: z.string().regex(/^\d{6}$/, 'code must be a 6-digit string').optional(),
+  assertion: AssertionSchema.optional(),
   newPassword: z.string().min(8, 'password must be at least 8 characters').max(256).optional(),
 }).strict()
 
 /** Tight: this route mints codes and sets the master credential. 5 tries / 15 min / peer. */
 const MAX_ATTEMPTS = 5
 const WINDOW_MS = 15 * 60_000
+
+/**
+ * The SHARED tail of every reset method — console, email, AND passkey run it byte-identically.
+ * The caller has ALREADY proven authorization by this point (a one-shot code for console/email,
+ * a verified WebAuthn assertion for passkey), so there is deliberately NO old-password check
+ * here: we call the low-level setPassword rather than the service-layer setter that would demand
+ * the current password — exactly what a forgot-password user cannot supply. If the security-config
+ * blob was still locked (the true forgot case) it is keyed to the LOST password and can never be
+ * decrypted again, so it is re-initialized to DEFAULTS under the new password and reported
+ * honestly (only POLICY tuning resets — no secrets live there). Finally the rate-limit bucket is
+ * cleared and an auto-login session is minted.
+ */
+async function finalizeReset(newPassword: string, rlKey: string): Promise<NextResponse> {
+  const wasUnlocked = isUnlocked()
+  await setPassword(newPassword)
+
+  let securityPolicyReset = false
+  if (!wasUnlocked) {
+    saveSecurityConfig(getSecurityDefaults(), newPassword)
+    securityPolicyReset = true
+  }
+
+  resetRateLimit(rlKey)
+
+  const token = await createSession()
+  const response = NextResponse.json({
+    reset: true,
+    securityPolicyReset,
+    message: securityPolicyReset
+      ? 'Password reset. Custom security-policy settings reverted to their defaults.'
+      : 'Password reset. You are now logged in.',
+  })
+  response.headers.set('Set-Cookie', buildSessionCookie(token))
+  return response
+}
 
 export async function POST(request: NextRequest) {
   const peer = peerAddress(request) ?? ''
@@ -57,9 +124,82 @@ export async function POST(request: NextRequest) {
   const method = body.method ?? 'console'
 
   if (method === 'passkey') {
-    // A WebAuthn assertion replaces the code here; the challenge/verify wiring is a separate
-    // follow-up. Fail loudly rather than silently falling back to a weaker method.
-    return NextResponse.json({ error: 'not_implemented', message: 'Passkey reset is not available yet.' }, { status: 501 })
+    // Possession of a registered passkey's private key REPLACES the knowledge factor: signing
+    // the server challenge proves the owner holds the authenticator, exactly as a one-shot code
+    // proves control of the console/email channel. Like email, this is deliberately remote-capable
+    // — the trust root is the key, not console presence, so NO console gate is applied.
+    //
+    // GATE FIRST (mirrors the console/email method gate): refuse when nothing is registered —
+    // there is no credential to verify possession against — so a caller we will reject never
+    // consumes a rate-limit slot and never starts a challenge.
+    if (!hasRegisteredCredentials()) {
+      return NextResponse.json(
+        {
+          error: 'no_passkeys_registered',
+          message: 'No passkeys are registered on this host, so a passkey reset cannot be performed.',
+        },
+        { status: 403 },
+      )
+    }
+
+    // Throttle both calls (challenge issue + assertion verify) per peer, same cap/window as the
+    // code methods — the verify call is the credential-forgery surface, so cap it exactly as
+    // call-2 of the code methods is capped.
+    const rl = checkAndRecordAttempt(rlKey, MAX_ATTEMPTS, WINDOW_MS)
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'too_many_attempts', retryAfterMs: rl.retryAfterMs },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } },
+      )
+    }
+
+    // Call-1: no assertion yet ⇒ issue+store a one-shot WebAuthn challenge (60s TTL, in the same
+    // lib/webauthn-server store the login flow uses) and hand the client the request options for
+    // navigator.credentials.get(). The challenge is public by design — security rests on the
+    // private key that must sign it, which only the owner's authenticator holds.
+    if (!body.assertion) {
+      try {
+        const options = await generateWebAuthnAuthenticationOptions()
+        return NextResponse.json({ assertionRequired: true, options })
+      } catch {
+        // FAIL CLOSED — if a challenge cannot be started, the caller cannot prove possession.
+        return NextResponse.json(
+          { error: 'challenge_unavailable', message: 'Could not start the passkey challenge.' },
+          { status: 503 },
+        )
+      }
+    }
+
+    // Call-2: assertion supplied ⇒ a new password is mandatory (the assertion alone resets nothing).
+    if (!body.newPassword) {
+      return NextResponse.json({ error: 'new_password_required' }, { status: 400 })
+    }
+
+    // Verify the assertion against the owner's REGISTERED credential — this consumes the one-shot
+    // challenge and checks the signature. A forged, replayed, expired, or unknown-credential
+    // assertion is rejected here and resets NOTHING.
+    try {
+      await verifyWebAuthnAuthentication(body.assertion as unknown as AuthenticationResponseJSON)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : ''
+      // Surface only well-known webauthn protocol CODES (mirrors the authenticate route). Any
+      // other verify error is a 401 too — FAIL CLOSED, never wave a reset through on an
+      // unexpected failure.
+      if (message.includes('webauthn_challenge_expired')) {
+        return NextResponse.json({ error: 'webauthn_challenge_expired' }, { status: 401 })
+      }
+      if (message.includes('webauthn_unknown_credential')) {
+        return NextResponse.json({ error: 'webauthn_unknown_credential' }, { status: 401 })
+      }
+      if (message.includes('webauthn_verification_failed')) {
+        return NextResponse.json({ error: 'webauthn_verification_failed' }, { status: 401 })
+      }
+      console.error('[password/reset passkey verify]', err)
+      return NextResponse.json({ error: 'webauthn_verification_failed' }, { status: 401 })
+    }
+
+    // Proven possession ⇒ run the EXACT same tail as console/email.
+    return finalizeReset(body.newPassword, rlKey)
   }
 
   // ── 1. Method gate — FIRST, so a caller we will reject never consumes a rate-limit slot
@@ -144,33 +284,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `code_${v.reason}` }, { status: 401 })
   }
 
-  // ── 6. Set the new password with NO old-password check — the verified code IS the
-  // authorization. We deliberately call the low-level setPassword rather than the
-  // service-layer setGovernancePassword, because the latter demands the current password
-  // when a hash exists — exactly what the forgot-password user cannot supply. ──
-  const wasUnlocked = isUnlocked()
-  await setPassword(body.newPassword)
-
-  // ── 7. If the config was locked (the true forgot case), its blob is keyed to the LOST
-  // password and can never be decrypted again. Re-initialize it to DEFAULTS under the new
-  // password. Only security POLICY tuning resets — no secrets live there. ──
-  let securityPolicyReset = false
-  if (!wasUnlocked) {
-    saveSecurityConfig(getSecurityDefaults(), body.newPassword)
-    securityPolicyReset = true
-  }
-
-  resetRateLimit(rlKey)
-
-  // ── 8. Auto-login — the user proved control and set a fresh password; mint a session. ──
-  const token = await createSession()
-  const response = NextResponse.json({
-    reset: true,
-    securityPolicyReset,
-    message: securityPolicyReset
-      ? 'Password reset. Custom security-policy settings reverted to their defaults.'
-      : 'Password reset. You are now logged in.',
-  })
-  response.headers.set('Set-Cookie', buildSessionCookie(token))
-  return response
+  // ── 6. Verified code IS the authorization — run the shared tail (setPassword with NO
+  // old-password check + securityPolicyReset dance + rate-limit clear + auto-login). This is
+  // byte-identical to the passkey path, which reaches finalizeReset after verifying its assertion. ──
+  return finalizeReset(body.newPassword, rlKey)
 }

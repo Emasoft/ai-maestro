@@ -26,7 +26,14 @@ window_7d_pct, cache_ttl_minutes, next_action — a deliberate ceiling, no token
 `ensure-resume <self>` (idempotent; server owns the actuation). Everything else reuses existing
 `aimaestro-session.sh slash|queue`.
 
-## The 6 NPTs (ids assigned 2026-07-16, authored under KCRMSNL7 — depth-1 derived)
+## The 6 NPTs (AUTHORED + WIRED 2026-07-16, commit 975fa590 — depth-1 derived under KCRMSNL7)
+
+**STATUS: all 6 NPT files EXIST as `column: planned` TRDDs and all 6 ids are wired into
+KCRMSNL7.npt** (files first, then the parent list — orphan-platelet invariant clean). The two
+token-touching NPTs carry `mandate: true, mandated-by: user` (H24DF6ZC D4 sign-off datetime);
+the four others are Tier-0 self-mandates. **NEXT: implement in topological order, starting
+[[Y916N7WL]] (root, unblocked).**
+
 
 | id | NPT | one-line scope | blocked-by | status |
 |---|---|---|---|---|

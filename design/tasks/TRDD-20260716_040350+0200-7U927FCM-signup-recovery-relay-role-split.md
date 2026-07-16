@@ -1,9 +1,9 @@
 ---
 trdd-id: 7U927FCM
 title: Signup recovery-relay role-split — MAESTRO required relay + normal-user 2FA email
-column: planned
+column: testing
 created: 2026-07-16T04:03:50+0200
-updated: 2026-07-16T04:24:11+0200
+updated: 2026-07-16T04:31:46+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 parent-trdd: P7XKV3N9
@@ -47,9 +47,41 @@ either — a sudo re-prompt one screen after setting the password is friction wi
 `isRecoverySetupComplete()` is already false → the gate shows on the owner's next login. A full
 first-run test still needs the password-reset step (below).
 
-**NEXT ACTION:** implement **2B** — capture a foreign user's email at R40 admission
-(`app/api/v1/governance/requests/[id]/approve`) and send their 2FA via the MAESTRO relay
-(`sendCodeEmail(to = userEmail, accountEmail = MAESTRO email)`), gated on the relay existing.
+**▶ 2B CORE SHIPPED (2026-07-16), commit `10f910f4`.** The relay send-primitive is live and
+tested. What shipped:
+- `UserRecord.email?` (`types/user.ts`) — a 2FA DESTINATION address, never a credential —
+  with `setUserEmail(id, email)` (`lib/user-registry.ts`, locked, trims, null clears).
+- `sendUserCodeEmail(userEmail, code, purpose)` (`lib/mailer.ts`) — sends with `to` = the
+  user and SMTP `from`/account = the MAESTRO's VERIFIED recovery email. Gated on
+  `getRecoveryEmail().verified` (proof the relay sends); no verified relay ⇒ `{skipped:true}`,
+  caller falls back. Reuses Phase-1's `accountEmail`-vs-`to` split — no new SMTP logic.
+- 4 unit tests (`tests/unit/mailer-user-relay.test.ts`): no-relay / unverified /
+  missing-app-password all skip; verified relays from=MAESTRO,to=user. Full suite 188 files
+  green, `yarn build` exit 0.
+
+**CORRECTION — the §2B step-1 admission pointer was WRONG.**
+`app/api/v1/governance/requests/[id]/approve` is **cross-host governance** (peer-host
+manager/team state sync via `approveCrossHostRequest`), NOT foreign-USER admission. Foreign
+USERS are `UserRecord`s (`types/user.ts` / `lib/user-registry.ts`); their creation/approval is
+R40 territory in `services/element-management-service.ts` (grep `R40` there). Verified by
+reading the route: it takes a peer request id + the global governance password and derives an
+agent vote — it has no user-email surface at all. Do NOT wire 2B into that route.
+
+**REMAINING 2B — DESIGN/FUTURE (deliberately not built; the TRDD scoped it "small hook + design"):**
+1. **Capture the email at admission** — the foreign-user creation path (R40, in
+   `element-management-service.ts`) should call `setUserEmail(userId, email)` once a
+   normal-user admission UI collects an address. That UI does not exist yet (normal-user
+   signup is nascent), so there is no non-speculative hook site today.
+2. **The user-facing 2FA trigger** — a per-user password/sudo-reset flow (R37.4 gives each
+   user their own sudo password) that calls `sendUserCodeEmail(user.email, code, 'password
+   reset')`. No such per-user reset route exists yet.
+Both are gated by features that aren't built; `sendUserCodeEmail` + `UserRecord.email` are the
+primitives they will call. Building the callers now would be speculative UI (out of scope).
+
+**NEXT ACTION:** none required for this TRDD's shipped scope — 2A + 2B core are in `testing`.
+The remaining items above are future work that belongs to the normal-user-signup feature when
+it is built. Human step to fully exercise 2A live: owner resets password (Settings → Revoke)
+to re-enter first-run and type the MAESTRO relay creds (R16 — human-only).
 
 **Load-bearing facts:**
 - Reuse Phase 1 wholesale: `/api/governance/email/{autodetect,configure,verify}` +

@@ -98,6 +98,15 @@ export interface GovernanceConfig {
   recoveryEmailVerifiedAt?: string | null
   /** Resolved SMTP settings for recoveryEmail (from autodetect). null when unconfigured. */
   recoverySmtp?: RecoverySmtpConfig | null
+  /**
+   * R16/TRDD-7U927FCM: the owner explicitly chose to rely on console/passkey recovery
+   * INSTEAD of a recovery email at first-run. Set true when they take the "use
+   * console/passkey instead" opt-out on the required-recovery gate. Together with a verified
+   * recoveryEmail it is what makes recovery setup "complete" so the gate stops blocking app
+   * entry — never a hard block that locks the owner out on a host with no reachable SMTP.
+   * null/absent = not opted out.
+   */
+  recoveryOptOut?: boolean
 }
 
 /** Default governance config for first-time initialization */

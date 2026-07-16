@@ -287,6 +287,32 @@ export function isPasswordInvalidated(): boolean {
   return config.passwordHash === null && !!config.passwordInvalidatedAt
 }
 
+/**
+ * Record (or clear) the owner's explicit choice to rely on console/passkey recovery instead
+ * of a recovery email (TRDD-7U927FCM). This satisfies the first-run required-recovery gate
+ * WITHOUT an email, so the owner is never locked out on a host with no reachable SMTP.
+ */
+export async function setRecoveryOptOut(value: boolean): Promise<void> {
+  return withLock('governance', async () => {
+    const config = loadGovernance()
+    config.recoveryOptOut = value
+    saveGovernance(config)
+  })
+}
+
+/**
+ * Is the first-run required-recovery step satisfied? True when the owner has EITHER a verified
+ * recovery email OR explicitly opted out to console/passkey recovery (TRDD-7U927FCM). The UI
+ * gate (LoginGate) blocks app entry until this is true, so every new MAESTRO account makes a
+ * CONSCIOUS recovery decision — never a silent no-recovery state. Console presence (the OS
+ * setup code) is always available at the host, so the opt-out can never strand the owner.
+ */
+export function isRecoverySetupComplete(): boolean {
+  const config = loadGovernance()
+  const emailVerified = !!config.recoveryEmail && !!config.recoveryEmailVerifiedAt
+  return emailVerified || !!config.recoveryOptOut
+}
+
 // Phase 1: No lock on read. Minor TOCTOU with setPassword(). Acceptable for single-user localhost.
 // Returns false for both 'no password set' and 'wrong password'.
 // Callers should check hasPassword (config.passwordHash) separately if they need to distinguish.

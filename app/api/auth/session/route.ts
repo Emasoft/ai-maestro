@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   try {
     // If no governance password is set, allow open access (otherwise user is locked out
     // with no way to reach Settings to set the password — chicken-and-egg problem).
-    const { loadGovernance } = await import('@/lib/governance')
+    const { loadGovernance, isRecoverySetupComplete } = await import('@/lib/governance')
     const config = loadGovernance()
     if (!config.passwordHash) {
       // `passwordInvalidatedAt` distinguishes a FORCED ROTATION from a fresh
@@ -37,7 +37,10 @@ export async function GET(request: Request) {
     const token = extractSessionFromCookie(cookieHeader)
 
     if (token && validateSession(token)) {
-      const res = NextResponse.json({ authenticated: true })
+      // recoverySetupComplete gates the first-run required-recovery step (TRDD-7U927FCM):
+      // LoginGate keeps the owner on the recovery step until they configure a verified
+      // recovery email OR opt out to console/passkey recovery.
+      const res = NextResponse.json({ authenticated: true, recoverySetupComplete: isRecoverySetupComplete() })
       res.headers.set('Cache-Control', 'no-store')
       return res
     }

@@ -190,7 +190,11 @@ function compactJson(blob: CredentialBlob): string {
  * WRITE_FAILED (macOS `security` present but the write failed — the caller MUST fail closed).
  * macOS `security` (ACL-aware, keychain.ts) first; on absence, Linux `secret-tool` (raw JSON on stdin).
  */
-function slotKeychainWrite(
+// Exported so the LIVE-credential `-livebak` mirror (live.ts, Phase E) reuses the exact same
+// encrypted store + tier ladder — `account` is an email for slots, the macOS username for the
+// live mirror. `allowAny = service ∈ slot-family` correctly yields `-A` for slots and `-T` for
+// the live/live-backup families.
+export function slotKeychainWrite(
   email: string,
   blob: CredentialBlob,
   service: string = SLOT_KEYCHAIN_SERVICE,
@@ -213,7 +217,10 @@ function slotKeychainWrite(
 
 /** Read one account's slot token from the OS keychain under `service`, or null if absent /
  * unreadable. macOS `security -w` (raw JSON) → Linux `secret-tool lookup`. */
-function slotKeychainRead(email: string, service: string = SLOT_KEYCHAIN_SERVICE): CredentialBlob | null {
+export function slotKeychainRead(
+  email: string,
+  service: string = SLOT_KEYCHAIN_SERVICE,
+): CredentialBlob | null {
   const raw = securityReadRaw(service, email)
   if (raw !== null) {
     const t = raw.trim()

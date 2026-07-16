@@ -130,9 +130,15 @@ export function securityWrite(
 /** Read the RAW stored value for (service, account) via `security -w`, or null if absent /
  * latched / hung / denied / not-found. NOT base64-decoded — the rotator stores raw JSON. The
  * `security -w` trailing newline is stripped (only that, not interior whitespace). */
-export function securityReadRaw(service: string, account: string): string | null {
+export function securityReadRaw(
+  service: string,
+  account: string,
+  opts: { timeoutMs?: number } = {},
+): string | null {
   if (!macosActive()) return null // `security` absent (not macOS)
-  const run = runSecurity(macosRetrieveArgv(service, account), { timeoutMs: PROBE_TIMEOUT_MS })
+  const run = runSecurity(macosRetrieveArgv(service, account), {
+    timeoutMs: opts.timeoutMs ?? PROBE_TIMEOUT_MS,
+  })
   if (!run.ok) return null
   const out = run.stdout
   return out.endsWith('\n') ? out.slice(0, -1) : out

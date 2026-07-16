@@ -319,6 +319,32 @@ Row format is fixed so a regex parses each line:
 | R42.4 | UNENFORCED | — | — |
 | R42.5 | UNENFORCED | — | — |
 | R42.6 | UNENFORCED | — | — |
+<!-- R43-R48: multi-host governance (GOVERNANCE-RULES v4.4.0, committed bf70bf47). Design-stage —
+     these sub-rules are DECLARED but deliberately UNBUILT during the transition phase, so nothing
+     enforces them yet (Guard = —). Not from a governance-audit report: the verdict is the honest
+     present state (no code refuses the violation). Implementation is tracked by the cohort TRDDs
+     OEG0V589 (R44) · W9FA6ACZ (R39/role-plugin) · QR9FSL3Q (R45) · HR8CES7H (R47) · 40CUZA1Z (R46)
+     · PLOVIPZE (R48). When a rule's guard lands, flip its row to ENFORCED and cite the guard+test. -->
+| R43.1 | UNENFORCED | — | — |
+| R43.2 | UNENFORCED | — | — |
+| R43.3 | UNENFORCED | — | — |
+| R43.4 | UNENFORCED | — | — |
+| R44.1 | UNENFORCED | — | — |
+| R44.2 | UNENFORCED | — | — |
+| R44.3 | UNENFORCED | — | — |
+| R44.4 | UNENFORCED | — | — |
+| R44.5 | UNENFORCED | — | — |
+| R45.1 | UNENFORCED | — | — |
+| R45.2 | UNENFORCED | — | — |
+| R46.1 | UNENFORCED | — | — |
+| R46.2 | UNENFORCED | — | — |
+| R46.3 | UNENFORCED | — | — |
+| R47.1 | UNENFORCED | — | — |
+| R47.2 | UNENFORCED | — | — |
+| R48.1 | UNENFORCED | — | — |
+| R48.2 | UNENFORCED | — | — |
+| R48.3 | UNENFORCED | — | — |
+| R48.4 | UNENFORCED | — | — |
 
 ## Notes on individual rows
 

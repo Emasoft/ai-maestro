@@ -543,6 +543,63 @@ downstream surface and read it. A derived TRDD invented to look thorough dilutes
 the real ones and misstates the blast radius; a verified non-effect is recorded,
 not filed.
 
+### The refusal protocol — an approver is a GUIDE, not a GATE (USER, 2026-07-16, ai-maestro#71)
+
+The tiers above say WHO may approve a proposal; this says what happens when an
+approver says **no**. It is the refusal half of the same APPROVAL protocol
+(GOVERNANCE-RULES **R49**, canonical). A refusal is the **START** of the work on a
+proposal, not the end: a bare "denied" is a failure of the approver's role **even
+when the ruling is perfectly correct**, because the proposer cannot read the
+approver's mind — it hears "no", concludes the capability is forbidden, and tears
+out the work that depended on it.
+
+**Every refusal an approver issues (MANAGER at Tier 2, COS/ORCHESTRATOR at Tier 1,
+and the receiver-authored proposals above) MUST carry all three, or it is
+malpractice, not caution:**
+
+1. **The precise defect** — the exact command / input path / abuse / rule.
+   "Insufficiently secure" is not a finding; "`--exec` takes an unsanitized string a
+   malicious agent can pass to a shell" is. If you cannot name it, you do not
+   understand your own objection well enough to have refused yet.
+2. **The bar for acceptance** — what would make it approvable.
+3. **An explicit invitation to re-propose** — and, when the design cannot be saved,
+   a push toward the goal by another route. **Refuse the implementation; never
+   refuse the need.** A correct "no" that ends with the need abandoned is a *failed*
+   refusal — measure a refusal by what the proposer does NEXT.
+
+**The from-DRAFT corollary (binds the PROPOSER — including a MEMBER, a MAINTAINER, a
+plugin/consumer Claude, and YOU when your own proposal is refused).** A refusal that
+names no defect does **NOT** authorize stripping, deleting, or rewriting the
+dependent or derived work — the need it addresses **stands until a defect is
+named**. This corollary attaches the moment a proposal is **DRAFTED**, not when it
+is refused: never pre-concede destruction in the ask itself ("implement X, or I
+strip X from the skill"), which hands the approver the cheap exit. If a refusal's
+scope is unclear, **ASK before destroying anything** — RULE-0 discipline pointed at
+capabilities. The correct move on a refusal is: extract the defect, HARDEN the
+proposal with an explicit abuse-prevention contract (server-side authorization,
+field allowlist, no-secret-through-a-model, non-self-assignable), and RE-PROPOSE.
+
+**The MESSAGE is the channel; the tool is the paperwork.** The approver *persuades
+and guides* via inter-agent MESSAGES (per the R6 graph — agent↔MANAGER,
+COS↔MANAGER, agent↔ORCHESTRATOR), carrying the arguments and explanations, and
+stays in the thread through the revision rounds. The mechanical tool-approval —
+`column: refused`, the `## Approval log` line, an API `refuse` reason — only
+**records** the outcome; a decision that exists only in the file record was never
+communicated. Two, three, five message-and-reply rounds per proposal is the process
+working. **Where no AMP thread exists** between two parties (a plugin session ↔ the
+MANAGER), the **cross-repo GitHub issue IS the message channel** and carries the
+same duties — arguments, follow-ups, revision rounds — not a form filed once. Either
+way, the refusal **and its named defect** land on that channel (the governing GitHub
+issue and/or the TRDD `## Approval log`) so the proposer has a written bar to clear.
+
+**Why (the incident this came from).** The `ai-maestro` hub Claude correctly denied
+most of a set of scripts an `ai-maestro-plugin` skill needed, on security grounds —
+and the plugin Claude, hearing "no", began **deleting its own working skills** to
+strip the dependent features. The USER caught it by chance, named *where* the
+security was lacking, and a hardened re-proposal was then approved. A correct refusal
+and a destructive one look identical in the log, which is why the duty attaches to
+every refusal.
+
 ---
 
 ## Part B2 — Column-transition authority (extends the IND transition table)

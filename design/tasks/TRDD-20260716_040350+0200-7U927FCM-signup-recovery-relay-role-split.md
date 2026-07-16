@@ -3,7 +3,7 @@ trdd-id: 7U927FCM
 title: Signup recovery-relay role-split — MAESTRO required relay + normal-user 2FA email
 column: planned
 created: 2026-07-16T04:03:50+0200
-updated: 2026-07-16T04:03:50+0200
+updated: 2026-07-16T04:24:11+0200
 current-owner: opus-governance-rules-session
 task-type: feature
 parent-trdd: P7XKV3N9
@@ -28,10 +28,28 @@ of TRDD-P7XKV3N9 Phase 1 (the userid backfill, SHIPPED — commits `5c2b1636`, `
 `455340b4`): Phase 1 let the EXISTING MAESTRO backfill the relay; this makes it part of
 NEW-account registration.
 
-**NEXT ACTION:** implement **2A** first (the concrete, testable part) — a post-bootstrap
-REQUIRED-recovery gate. Do NOT touch the one-shot OS-code transaction in
-`app/api/auth/setup-verify/route.ts` (it consumes `verifySetupCode` atomically); instead
-gate *after* bootstrap in the UI.
+**▶ 2A SHIPPED (2026-07-16).** The post-bootstrap required-recovery gate is live. Commits:
+`84d5b072` (backend: `recoveryOptOut` flag + `setRecoveryOptOut`/`isRecoverySetupComplete` +
+session route exposes `recoverySetupComplete` + owner-gated `POST /api/governance/recovery-optout`)
+and `434c636e` (UI: LoginGate `'recovery'` state + `RecoveryGate` embedding `RecoveryEmailSection`
+with `onRecoveryComplete`). `setup-verify`'s atomic OS-code transaction was left untouched, as
+planned. tsc clean, full suite 187 files green, `yarn build` exit 0, server live.
+
+**CORRECTION to §2A step 5 (body line 87, now SUPERSEDED):** the opt-out route is **owner-gated
+ONLY — deliberately NOT console-gated.** Console-gating it would re-create the exact lockout the
+escape hatch exists to prevent: a REMOTE owner (iPad over Tailscale) on a host with unreachable
+SMTP could then neither configure email NOR opt out, and would be stranded mid-first-run. Waiving
+one's own recovery method is squarely within owner authority (the caller already holds an
+authenticated owner session), so a session check is the correct and sufficient gate. Not strict
+either — a sudo re-prompt one screen after setting the password is friction with no security gain.
+
+**Testable NOW without a password reset:** the existing MAESTRO account predates recovery, so
+`isRecoverySetupComplete()` is already false → the gate shows on the owner's next login. A full
+first-run test still needs the password-reset step (below).
+
+**NEXT ACTION:** implement **2B** — capture a foreign user's email at R40 admission
+(`app/api/v1/governance/requests/[id]/approve`) and send their 2FA via the MAESTRO relay
+(`sendCodeEmail(to = userEmail, accountEmail = MAESTRO email)`), gated on the relay existing.
 
 **Load-bearing facts:**
 - Reuse Phase 1 wholesale: `/api/governance/email/{autodetect,configure,verify}` +

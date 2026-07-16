@@ -3,7 +3,7 @@ trdd-id: RIFM4UXN
 title: COS-reassign route requires the governance password — contradicts R29/R32 and defeats MANAGER ruling #64
 column: proposal
 created: 2026-07-16T12:48:13+0200
-updated: 2026-07-16T12:48:13+0200
+updated: 2026-07-16T13:22:00+0200
 current-owner: ai-maestro
 task-type: audit
 scope: project
@@ -30,6 +30,20 @@ it. That contradicts the ratified design.
 follow-through is trivial either way (one route flag + one core-plugin doc marker).
 Held until then; do NOT edit the route or the core doc before the ruling (either
 would silently encode one side of a governance decision).
+
+**▶ 2026-07-16 — CORE INDEPENDENTLY CONFIRMED Option A + added a missing guard
+(`Emasoft/ai-maestro#69`, comment 11:05Z).** Told by the USER to "rewrite the
+requested commands to be secure", CORE restated the COS-assign verb as a security
+contract: **`aimaestro-teams.sh update --cos <id>` (+ clear-path `--cos ""`/`--remove-cos`)
+= MANAGER-title-by-AID ONLY (R29/R9.11 — no user approval, NO gov-password ever through
+a model, R32.3), NEVER self-assignable (an agent cannot make itself or its ally the
+COS).** That is Option A, and it adds a guard THIS TRDD missed: the **self-assign ban**
+("without it, it would be a fleet-takeover primitive"). So the ruling is effectively
+**A + self-assign ban**, pending the USER's nod. NOTE a verb-name choice remains: CORE/
+#64 want it under `aimaestro-teams.sh update --cos`; the repo currently ships it as the
+password-gated `reassign-cos`. Fold both into Option A: expose it AID-MANAGER + self-assign
+ban, under the #64-named `update --cos` (keep `reassign-cos` as an alias or retire it).
+This item is now part of the CORE #69 work package (4 server-side asks, all R23-mine).
 
 ## Problem — a contradiction, not a missing command
 

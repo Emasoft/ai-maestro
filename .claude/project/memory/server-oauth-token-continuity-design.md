@@ -45,6 +45,20 @@ build to THIS signed design, do not re-derive it.
 emits no token, has no rotation. The server reads account/window/cache METADATA from it to
 compute `status`; custody + rotation are this server's infra alone.
 
+**Concrete keychain/lock posture to MATCH (janitor#100 Q5 — the exact tested path the server
+must replicate, so server + `#N` daemon coordinate not fight):**
+- LIVE credential = macOS keychain `service="Claude Code-credentials"`, account=`<macOS user>`,
+  owned/written by Claude Code itself; rotation writes a slot back into it (`write_live_blob` —
+  the ONE irreversible op; a bug locks the owner out of Claude Code).
+- Slots = keychain `service="Claude Code-rotator-slot"` + `"Claude Code-rotator-slot-mirror"`
+  (corruption-recovery copy), via `safe_storage` (macOS `security`, Linux libsecret `secret-tool`,
+  Windows DPAPI). `state.json` index = non-secret metadata only.
+- Fail-closed: locked/declined keychain REFUSES the write, no plaintext fallback except
+  `NO_BACKEND`; a keychain-denied latch (circuit breaker) survives one transient lock.
+- One writer = the janitor's machine-wide `daemon.flock` — the server takes the SAME lock, and
+  the exact lock-FILE PATH is in the janitor repo (`oauth_rotator/`/`daemon.py`): a CROSS-REPO
+  item to obtain, never guessed. See [[family-a-continuity-absorption-plan]] (NPT 1GGQ4HWY).
+
 ## Notes and lessons learned
 [^1]: [id:ATOM-R16D-CASC, status:valid, keywords:"rotate_refresh_reauth cascade progressive_fallback the_only_human_step reauth_needs_new_cookie", ocd:2026-07-16, lmd:2026-07-16]
   DO NOT treat rotate/refresh/reauth as three interchangeable "renew" ops, BECAUSE they are an

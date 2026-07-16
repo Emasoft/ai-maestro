@@ -3,7 +3,7 @@ trdd-id: 1GGQ4HWY
 title: Server OAuth manager — ROTATE/REFRESH/REAUTH cascade, keychain custody, one-writer lock (built to H24DF6ZC)
 column: planned
 created: 2026-07-16T20:06:24+0200
-updated: 2026-07-16T20:06:24+0200
+updated: 2026-07-16T20:49:06+0200
 current-owner: ai-maestro
 task-type: security
 scope: project
@@ -32,10 +32,23 @@ release-via: none
 **Token-touching — the implement gate is CLEARED.** The USER signed off all four design
 decisions of [[TRDD-H24DF6ZC]] on 2026-07-16 (D1-D4), which explicitly UNBLOCKED this NPT. This
 is a **mandate** (`mandated-by: user`, `approval-datetime` = the D4 sign-off). **Build to the
-SIGNED design; do NOT re-derive it.** Blocked on [[DXJZM3BW]] (the `status.next_action` field
-this manager computes is emitted through that verb). **NEXT ACTION:** implement the cascade as a
-detached, model-free process that reads/writes the keychain directly under the daemon's
-machine-wide write mutex.
+SIGNED design; do NOT re-derive it.** [[DXJZM3BW]] is DONE (`03c40474`, testing) — the `status`
+verb + the `next_action` seam this manager feeds now exist.
+
+**▶ SPEC IS COMPLETE (H24DF6ZC signed + janitor#100 Q5 exact posture, captured below).** Two
+things make this the one NPT to build WITH the owner's awareness, not purely autonomously:
+1. **It writes the owner's LIVE Claude credential** (`Claude Code-credentials` keychain item) —
+   the single irreversible op in all of Family-A; a bug LOCKS THE OWNER OUT of Claude Code, and
+   it cannot be end-to-end tested without risking that live credential.
+2. **The one-writer lock needs the janitor's EXACT lock-FILE PATH** (`oauth_rotator/`/`daemon.py`)
+   — a CROSS-REPO item to get from the janitor, never guessed (a wrong path lets server + `#N`
+   daemon both write the live credential → corruption).
+
+**NEXT ACTION:** obtain the janitor's exact `daemon.flock` path (cross-repo), then implement the
+detached model-free cascade to the posture below — non-destructive parts FIRST (lock acquire,
+slot READ/index, cascade orchestration, `next_action` into `lib/continuity-status.ts`,
+validate-then-backup) and the single `write_live_blob` LAST, with the owner aware before it
+first runs live.
 
 ## Problem / Goal
 
@@ -73,6 +86,38 @@ write corrupts the live credential.
   release ordering shared with `#N`.
 - The `next_action` computation feeding [[DXJZM3BW]]'s `status` (e.g. `ok | rotating | reauth-needed`).
 - The `/login` REAUTH nudge (reuse `lib/setup-bootstrap.ts` presence channel).
+
+## The janitor's EXACT tested posture to MATCH (janitor#100 Q5 — the concrete keychain/lock spec)
+
+D3 says "take the daemon's EXACT tested lock; follow its proven keychain-ACCESS path." Here is
+that path, from janitor#100 Q5 — the server (Node) must replicate this posture the janitor
+daemon (Python) uses, so the two coordinate rather than fight:
+
+- **LIVE credential** = macOS keychain item `service="Claude Code-credentials"`, account=`<macOS
+  user>` — **owned and written by Claude Code itself**. The manager CAPTURES it after a
+  `/login` and, on rotation, WRITES the chosen slot back into that SAME item (the daemon's
+  `write_live_blob`). This is the ONE irreversible write — a bug here corrupts the owner's live
+  Claude login and locks them out. It cannot be end-to-end tested without risking the live
+  credential, so it needs validate-then-backup (below) and the owner's awareness before it
+  first runs live.
+- **Slots** (N-subscription backups) = keychain items `service="Claude Code-rotator-slot"`
+  **plus** `service="Claude Code-rotator-slot-mirror"` (a redundant copy for corruption
+  recovery), encrypted at rest by `safe_storage`: macOS `security add/find-generic-password`,
+  Linux libsecret (`secret-tool`), Windows DPAPI. A `state.json` index holds ONLY non-secret
+  metadata (emails, expiry, refresh-failure counts) — never token material.
+- **Fail-closed:** a present-but-locked/declined keychain REFUSES the write; the caller fails
+  closed with NO plaintext fallback. Plaintext is legitimate ONLY on a machine with no secret
+  store at all (`NO_BACKEND`), and even then must never silently drop a secret. A
+  **keychain-denied latch (circuit breaker)** keeps one transient lock from killing rotation
+  permanently.
+- **One writer, machine-wide:** the server takes the SAME machine-wide lock the `#N` daemon
+  uses (the `daemon.flock` equivalent) — NOT a second lock. The exact lock-FILE PATH lives in
+  the janitor's codebase (`oauth_rotator/` / `daemon.py`); it is a **cross-repo coordination
+  item** — get it from the janitor (do NOT guess a path, or the two owners could both write the
+  live credential and corrupt it). Never touch the OS keychain LOCK state (D3b).
+- **Cascade wording match:** the daemon's is ROTATE (swap to a safe alternate slot) → RENEW
+  (refresh the slot's OAuth token) → REAUTH (human `/login`). This TRDD's H24DF6ZC cascade
+  (ROTATE→REFRESH→REAUTH) is the same; REFRESH == the daemon's RENEW.
 
 ## Open issue this NPT must honor (likely spawns an EHT)
 
